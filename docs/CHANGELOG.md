@@ -37,7 +37,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Unlocked `npx chemx audit` command as 100% free, unauthenticated, and ungated public utility with conversion CTAs.
 - Added dual project scaffolder (`npm create chemx` / `create-chemx`) and in-repo capsule drop-in (`init`).
 - Gated `runScaffold` (`npm create chemx`) with upfront license validation prior to project directory name prompt.
-- Integrated interactive Gum CTA action buttons at the conclusion of public audit for instant checkout launch ($49 Standard / $99 Master) and key-gated scaffolding for license holders.
+- Integrated interactive Gum CTA action buttons at the conclusion of public audit for default portal browsing (`chemicalx.xophz.com`), instant checkout launch ($27 eBook w/ AGENTS.md / $47 Master Bundle), and key-gated scaffolding for license holders.
 
 ### Fixed
 - Removed embedded offline blueprint fallbacks and preview bypass keys from CLI executable (`cli/index.js`).
