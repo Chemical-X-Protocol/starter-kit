@@ -1,0 +1,23 @@
+{
+  "name": "@chemical-x-protocol/starter-kit",
+  "version": "1.0.0",
+  "description": "Chemical X Protocol: Private drop-in architecture starter kit and capsule generator",
+  "type": "module",
+  "bin": {
+    "chemical-x": "./cli/index.js"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "create-capsule": "node cli/index.js"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.5",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "typescript": "^5.7.3"
+  }
+}
