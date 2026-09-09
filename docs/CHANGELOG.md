@@ -15,3 +15,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - `useAsyncData`: 3-state async pipeline
   - `useSelfCleaningTimer`: unmount-safe interval and timeout utilities
 - Interactive CLI capsule generator (`cli/index.js`).
+
+## [2026-09-09]
+
+### Added
+- Edge-authenticated single-device project scaffolding command (`npx chemical-x init`) with machine fingerprinting and Cloudflare KV validation.
+- AST hazard line budget audit command (`npx chemical-x audit`) scanning project trees for > 500 line monolith hazards.
