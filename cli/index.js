@@ -129,22 +129,8 @@ const runInit = async () => {
       process.exit(1);
     }
   } catch (err) {
-    // Offline / Preview fallback for testing
-    if (normalizedKey === 'CX-DEV-PREVIEW' || normalizedKey === 'QUANTUM-VIP') {
-      responseData = {
-        valid: true,
-        githubUser: 'vibe.architect',
-        files: {
-          'hooks/toResult.ts': `export type Result<T, E = Error> = [T, null] | [null, E];\nexport const toResult = async <T, E = Error>(p: Promise<T>): Promise<Result<T, E>> => {\n  try { return [await p, null]; } catch (err: any) { return [null, err]; }\n};`,
-          'hooks/useSelfCleaningTimer.ts': `import { useEffect, useRef } from 'react';\nexport const useSelfCleaningInterval = (fn: () => void, ms: number | null) => {\n  useEffect(() => {\n    if (ms === null) return;\n    const id = setInterval(fn, ms);\n    return () => clearInterval(id);\n  }, [ms]);\n};`,
-          'blueprints/view-template.tsx': `import React from 'react';\nexport const ViewTemplate: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (\n  <main>{children}</main>\n);`,
-          'AGENTS.md': `# Quantum Engineering & Agent Architecture Directives\n\n## 1. Line Budget: Max 500 lines per file, max 100 lines per molecule capsule.\n## 2. Table-of-Contents Views: Top templates are declarative 10-20 line index layouts.\n## 3. Control Flow: 2-stage atomic booleans, discriminated unions, linear handlers, zero nested ternaries.\n## 4. Reactivity Contract: Safe destructuring, 3-5 property limit, autonomous teardown via onScopeDispose, TDZ declaration order.\n## 5. Type Integrity: Pure *.d.ts co-location, toResult tuple pattern, zero mock data, runtime boundary guards.\n## 6. Design System: 4-tier styling rule, zero inline styles, explicit slot forwarding, FontAwesome SVG safety.\n## 7. Timers & Hygiene: Zero setInterval, zero render-hack setTimeout (mandatory nextTick), zero em dashes.\n`
-        }
-      };
-    } else {
-      process.stderr.write(`\x1b[31mNetwork Error: Failed to reach verification endpoint (${err.message}).\x1b[0m\n`);
-      process.exit(1);
-    }
+    process.stderr.write(`\x1b[31mNetwork Error: Failed to reach verification endpoint (${err.message}).\x1b[0m\n`);
+    process.exit(1);
   }
 
   // Save valid license key
@@ -173,7 +159,7 @@ const runInit = async () => {
   process.stdout.write(`\n\x1b[1m\x1b[32m✔ Successfully installed ${fileCount} Chemical X blueprints & hooks!\x1b[0m\n`);
   process.stdout.write(`\nNext Steps:\n`);
   process.stdout.write(`  1. Import hooks: \x1b[36mimport { toResult } from './${targetSubDir}/hooks/toResult';\x1b[0m\n`);
-  process.stdout.write(`  2. Generate a capsule: \x1b[36mnpx chemical-x generate m-user-avatar\x1b[0m\n\n`);
+  process.stdout.write(`  2. Generate a capsule: \x1b[36mnpx chemx generate m-user-avatar\x1b[0m\n\n`);
 };
 
 const runGenerateCapsule = (capsuleName) => {
@@ -287,7 +273,7 @@ switch (command) {
   case 'capsule':
   case 'add':
     if (!args[1]) {
-      process.stderr.write('Usage: npx chemical-x generate <capsule-name>\nExample: npx chemical-x generate m-user-avatar\n');
+      process.stderr.write('Usage: npx chemx generate <capsule-name>\nExample: npx chemx generate m-user-avatar\n');
       process.exit(1);
     }
     runGenerateCapsule(args[1]);
@@ -299,10 +285,10 @@ switch (command) {
     if (command.startsWith('m-')) {
       runGenerateCapsule(command);
     } else {
-      process.stdout.write('\x1b[1mChemical X CLI Commands:\x1b[0m\n');
-      process.stdout.write('  \x1b[36mnpx chemical-x init [dir]\x1b[0m             Download authenticated starter-kit blueprints\n');
-      process.stdout.write('  \x1b[36mnpx chemical-x generate <m-name>\x1b[0m      Generate an isolated molecule capsule (< 100 lines)\n');
-      process.stdout.write('  \x1b[36mnpx chemical-x audit\x1b[0m                  Scan codebase for > 500 line monolith hazards\n\n');
+      process.stdout.write('\x1b[1mChemical X CLI Commands (chemx):\x1b[0m\n');
+      process.stdout.write('  \x1b[36mnpx chemx init [dir]\x1b[0m                 Download authenticated starter-kit blueprints\n');
+      process.stdout.write('  \x1b[36mnpx chemx generate <m-name>\x1b[0m          Generate an isolated molecule capsule (< 100 lines)\n');
+      process.stdout.write('  \x1b[36mnpx chemx audit\x1b[0m                      Scan codebase for > 500 line monolith hazards\n\n');
     }
     break;
 }

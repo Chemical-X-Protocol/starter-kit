@@ -1,0 +1,6 @@
+blueprints/
+hooks/
+scripts/
+tsconfig.json
+.git*
+.env*

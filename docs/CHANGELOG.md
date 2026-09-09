@@ -25,3 +25,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Changed
 - Updated default API endpoint in CLI (`cli/index.js`) to production custom domain `https://chemicalx.xophz.com`.
 - Expanded `AGENTS.md` blueprint in CLI (`cli/index.js`) to include all 7 Quantum Engineering Architecture pillars.
+- Configured npm package distribution for `@chemx/starter-kit` with `chemx`, `chem-x`, and `chemical-x` binary aliases.
+- Added public publish configuration for `@chemx` scope.
+
+### Fixed
+- Removed embedded offline blueprint fallbacks and preview bypass keys from CLI executable (`cli/index.js`).
+- Restricted npm package distribution via `files` whitelist and `.npmignore` to prevent leaking private blueprints and hooks in public tarballs.
