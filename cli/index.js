@@ -4,45 +4,77 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import readline from 'node:readline';
+import { spawnSync } from 'node:child_process';
 
-const args = process.argv.slice(2);
-const command = args[0] || 'help';
+const rawArgs = process.argv.slice(2);
+const invokedBin = path.basename(process.argv[1] || '');
+const isCreateInvoked = invokedBin.includes('create-chemx') || (rawArgs[0] && rawArgs[0] === 'create');
 
 const CONFIG_DIR = path.join(os.homedir(), '.chemical-x');
 const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
 const DEVICE_FILE = path.join(CONFIG_DIR, 'device_id');
 
 const API_BASE = process.env.CHEMICAL_X_API_URL || 'https://chemicalx.xophz.com';
+const URL_STANDARD = 'https://mycompassconsulting.com/buy/chemical-x/standard';
+const URL_MASTER = 'https://mycompassconsulting.com/buy/chemical-x/master';
 
-// Ensure config dir exists
 if (!fs.existsSync(CONFIG_DIR)) {
-  try {
-    fs.mkdirSync(CONFIG_DIR, { recursive: true });
-  } catch {
-    // Fallback
-  }
+  try { fs.mkdirSync(CONFIG_DIR, { recursive: true }); } catch {}
 }
 
-// Get or create persistent device ID
+const openBrowser = (url) => {
+  const platform = process.platform;
+  try {
+    if (platform === 'darwin') spawnSync('open', [url], { stdio: 'ignore' });
+    else if (platform === 'win32') spawnSync('cmd.exe', ['/c', 'start', '""', url], { stdio: 'ignore' });
+    else spawnSync('xdg-open', [url], { stdio: 'ignore' });
+  } catch {}
+};
+
+const hasGum = () => {
+  try {
+    return spawnSync('which', ['gum'], { stdio: 'ignore' }).status === 0;
+  } catch {
+    return false;
+  }
+};
+
+const gumChoose = (options, header = '') => {
+  const args = ['choose', ...options];
+  if (header) args.unshift(`--header=${header}`);
+  const res = spawnSync('gum', args, { encoding: 'utf-8', stdio: ['inherit', 'pipe', 'inherit'] });
+  return (res.stdout || '').trim();
+};
+
+const gumInput = (promptText, placeholder = '', isPassword = false) => {
+  const args = ['input', `--prompt=${promptText} `, `--placeholder=${placeholder}`];
+  if (isPassword) args.push('--password');
+  const res = spawnSync('gum', args, { encoding: 'utf-8', stdio: ['inherit', 'pipe', 'inherit'] });
+  return (res.stdout || '').trim();
+};
+
+const promptQuestion = (query) => {
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  return new Promise((resolve) => {
+    rl.question(query, (answer) => {
+      rl.close();
+      resolve(answer.trim());
+    });
+  });
+};
+
 const getOrCreateDeviceId = () => {
   if (fs.existsSync(DEVICE_FILE)) {
     try {
       const id = fs.readFileSync(DEVICE_FILE, 'utf-8').trim();
       if (id) return id;
-    } catch {
-      // Fallback
-    }
+    } catch {}
   }
   const newId = `cli_${Math.random().toString(36).substring(2, 12)}_${Date.now()}`;
-  try {
-    fs.writeFileSync(DEVICE_FILE, newId, 'utf-8');
-  } catch {
-    // Fallback
-  }
+  try { fs.writeFileSync(DEVICE_FILE, newId, 'utf-8'); } catch {}
   return newId;
 };
 
-// Read cached license key
 const getCachedLicenseKey = () => {
   if (fs.existsSync(CONFIG_FILE)) {
     try {
@@ -55,63 +87,119 @@ const getCachedLicenseKey = () => {
   return null;
 };
 
-// Save license key
 const saveLicenseKey = (licenseKey) => {
   try {
     fs.writeFileSync(CONFIG_FILE, JSON.stringify({ licenseKey, updatedAt: new Date().toISOString() }, null, 2), 'utf-8');
-  } catch {
-    // Fallback
+  } catch {}
+};
+
+const renderBanner = (title = 'Chemical X Protocol: Quantum Architecture') => {
+  if (hasGum()) {
+    spawnSync('gum', [
+      'style',
+      '--border=normal',
+      '--margin=1',
+      '--padding=1 2',
+      '--border-foreground=45',
+      '--foreground=81',
+      '--bold',
+      `  ${title}\n  Zero-Context-Rot Scaffolding & Engineering Directives`
+    ], { stdio: 'inherit' });
+  } else {
+    process.stdout.write('\n\x1b[38;2;98;201;255m=====================================================\x1b[0m\n');
+    process.stdout.write(`\x1b[1m\x1b[38;2;98;201;255m  ${title}\x1b[0m\n`);
+    process.stdout.write('  Zero-Context-Rot Scaffolding & Engineering Directives\n');
+    process.stdout.write('\x1b[38;2;98;201;255m=====================================================\x1b[0m\n\n');
   }
 };
 
-const promptQuestion = (query) => {
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout
-  });
-  return new Promise((resolve) => {
-    rl.question(query, (answer) => {
-      rl.close();
-      resolve(answer.trim());
-    });
-  });
+const obtainLicenseKey = async () => {
+  let cached = getCachedLicenseKey();
+  const cliFlagIdx = rawArgs.indexOf('--license');
+  if (cliFlagIdx !== -1 && rawArgs[cliFlagIdx + 1]) {
+    cached = rawArgs[cliFlagIdx + 1].trim();
+  }
+
+  if (cached) {
+    return cached;
+  }
+
+  const useGum = hasGum();
+
+  if (useGum) {
+    const choice = gumChoose([
+      '1. Enter Chemical X License Key',
+      '2. Buy Standard Edition ($49) [mycompassconsulting.com]',
+      '3. Buy Master Bundle ($99) [mycompassconsulting.com]',
+      '4. Run Free Public Audit (npx chemx audit)',
+      '5. Exit'
+    ], 'Select an option to proceed:');
+
+    if (choice.startsWith('2.')) {
+      process.stdout.write(`\x1b[36mOpening checkout in default browser:\x1b[0m ${URL_STANDARD}\n`);
+      openBrowser(URL_STANDARD);
+      process.stdout.write('\nOnce completed, paste your Sponsor / VIP License Key below.\n');
+      return gumInput('License Key (CX-XXXX-XXXX-XXXX):', 'CX-XXXX-XXXX-XXXX');
+    }
+
+    if (choice.startsWith('3.')) {
+      process.stdout.write(`\x1b[36mOpening checkout in default browser:\x1b[0m ${URL_MASTER}\n`);
+      openBrowser(URL_MASTER);
+      process.stdout.write('\nOnce completed, paste your Sponsor / VIP License Key below.\n');
+      return gumInput('License Key (CX-XXXX-XXXX-XXXX):', 'CX-XXXX-XXXX-XXXX');
+    }
+
+    if (choice.startsWith('4.')) {
+      runAudit();
+      process.exit(0);
+    }
+
+    if (choice.startsWith('5.') || !choice) {
+      process.exit(0);
+    }
+
+    return gumInput('License Key (CX-XXXX-XXXX-XXXX):', 'CX-XXXX-XXXX-XXXX');
+  }
+
+  process.stdout.write('\x1b[1mAuthentication Options:\x1b[0m\n');
+  process.stdout.write('  [1] Enter License Key\n');
+  process.stdout.write('  [2] Buy Standard Edition ($49) - Opens browser\n');
+  process.stdout.write('  [3] Buy Master Bundle ($99) - Opens browser\n');
+  process.stdout.write('  [4] Run Free Public Audit (npx chemx audit)\n');
+  process.stdout.write('  [5] Exit\n\n');
+
+  const selection = await promptQuestion('Select option [1-5]: ');
+
+  if (selection === '2') {
+    process.stdout.write(`Opening: ${URL_STANDARD}\n`);
+    openBrowser(URL_STANDARD);
+    return promptQuestion('Enter License Key after purchase: ');
+  }
+
+  if (selection === '3') {
+    process.stdout.write(`Opening: ${URL_MASTER}\n`);
+    openBrowser(URL_MASTER);
+    return promptQuestion('Enter License Key after purchase: ');
+  }
+
+  if (selection === '4') {
+    runAudit();
+    process.exit(0);
+  }
+
+  if (selection === '5') {
+    process.exit(0);
+  }
+
+  return promptQuestion('Enter Chemical X Sponsor License Key (CX-XXXX-XXXX-XXXX): ');
 };
 
-const runInit = async () => {
-  process.stdout.write('\n\x1b[36m=====================================================\x1b[0m\n');
-  process.stdout.write('\x1b[1m\x1b[36m  Chemical X: Starter Kit Edge Installer\x1b[0m\n');
-  process.stdout.write('  Quantum Architecture & Engineering Standards\n');
-  process.stdout.write('\x1b[36m=====================================================\x1b[0m\n\n');
-
-  // Parse flags
-  let licenseKey = getCachedLicenseKey();
-  const licenseArgIdx = args.indexOf('--license');
-  if (licenseArgIdx !== -1 && args[licenseArgIdx + 1]) {
-    licenseKey = args[licenseArgIdx + 1].trim();
-  }
-
-  // Find target directory
-  const targetDirArg = args.find((a, i) => i > 0 && !a.startsWith('--') && args[i - 1] !== '--license');
-  const targetSubDir = targetDirArg || 'src/chemical-x';
-  const targetDir = path.resolve(process.cwd(), targetSubDir);
-
-  if (!licenseKey) {
-    licenseKey = await promptQuestion('\x1b[33m? Enter Chemical X Sponsor License Key (CX-XXXX-XXXX-XXXX): \x1b[0m');
-  }
-
-  if (!licenseKey) {
-    process.stderr.write('\x1b[31mError: A valid sponsor license key is required.\x1b[0m\n');
-    process.stderr.write('Sponsor on GitHub to get a key: https://github.com/sponsors/Chemical-X-Protocol\n\n');
-    process.exit(1);
-  }
-
+const fetchStarterKitFiles = async (licenseKey) => {
   const normalizedKey = licenseKey.trim().toUpperCase();
   const deviceId = getOrCreateDeviceId();
 
-  process.stdout.write(`\nConnecting to edge: ${API_BASE}/api/starter-kit/download...\n`);
-  process.stdout.write(`Machine Signature: \x1b[90m${deviceId.substring(0, 16)}...\x1b[0m\n\n`);
+  process.stdout.write(`\nVerifying license via edge: ${API_BASE}...\n`);
 
-  let responseData;
   try {
     const res = await fetch(`${API_BASE}/api/starter-kit/download`, {
       method: 'POST',
@@ -119,47 +207,106 @@ const runInit = async () => {
       body: JSON.stringify({ licenseKey: normalizedKey, deviceId })
     });
 
-    responseData = await res.json();
+    const responseData = await res.json();
 
     if (!res.ok || !responseData.valid) {
-      process.stderr.write(`\x1b[31mLicense Verification Failed: ${responseData.error || 'Invalid key.'}\x1b[0m\n`);
-      if (responseData.deviceMismatch) {
-        process.stderr.write('\x1b[33mSingle-device license violation. Contact admin to transfer devices.\x1b[0m\n');
-      }
+      process.stderr.write(`\x1b[31m✕ License Verification Failed: ${responseData.error || 'Invalid key.'}\x1b[0m\n`);
+      process.stderr.write(`Purchase key at: ${URL_STANDARD}\n\n`);
       process.exit(1);
     }
+
+    saveLicenseKey(normalizedKey);
+    process.stdout.write(`\x1b[32m✔ Verified License for @${responseData.githubUser || 'sponsor'}\x1b[0m\n\n`);
+    return responseData.files || {};
   } catch (err) {
-    process.stderr.write(`\x1b[31mNetwork Error: Failed to reach verification endpoint (${err.message}).\x1b[0m\n`);
+    process.stderr.write(`\x1b[31m✕ Network Error: Failed to reach edge server (${err.message}).\x1b[0m\n`);
+    process.exit(1);
+  }
+};
+
+const runScaffold = async (projectName) => {
+  renderBanner('Chemical X: Quantum Scaffolder (npm create chemx)');
+
+  let targetName = projectName;
+  if (!targetName) {
+    if (hasGum()) {
+      targetName = gumInput('Project directory name:', 'my-quantum-app');
+    } else {
+      targetName = await promptQuestion('Project directory name [my-quantum-app]: ');
+    }
+  }
+
+  const finalDirName = targetName.trim() || 'my-quantum-app';
+  const targetDir = path.resolve(process.cwd(), finalDirName);
+
+  if (fs.existsSync(targetDir) && fs.readdirSync(targetDir).length > 0) {
+    process.stderr.write(`\x1b[31m✕ Error: Directory '${finalDirName}' already exists and is not empty.\x1b[0m\n`);
     process.exit(1);
   }
 
-  // Save valid license key
-  saveLicenseKey(normalizedKey);
+  const licenseKey = await obtainLicenseKey();
+  if (!licenseKey) {
+    process.stderr.write('\x1b[31m✕ Valid license key is required to scaffold blueprints.\x1b[0m\n');
+    process.exit(1);
+  }
 
-  // Unpack files
-  process.stdout.write(`\x1b[32m✔ Verified License for @${responseData.githubUser || 'sponsor'}\x1b[0m\n`);
-  process.stdout.write(`Unpacking starter-kit blueprints into: \x1b[36m${targetSubDir}/\x1b[0m\n\n`);
+  const files = await fetchStarterKitFiles(licenseKey);
 
-  const files = responseData.files || {};
-  let fileCount = 0;
+  process.stdout.write(`Scaffolding Quantum Architecture into: \x1b[36m${finalDirName}/\x1b[0m\n`);
+  fs.mkdirSync(targetDir, { recursive: true });
 
   for (const [relPath, content] of Object.entries(files)) {
     const fullPath = path.join(targetDir, relPath);
     const dirName = path.dirname(fullPath);
-
     if (!fs.existsSync(dirName)) {
       fs.mkdirSync(dirName, { recursive: true });
     }
-
     fs.writeFileSync(fullPath, content, 'utf-8');
-    process.stdout.write(`  \x1b[32m✔\x1b[0m created ${relPath}\n`);
-    fileCount++;
+    process.stdout.write(`  \x1b[32m✔\x1b[0m ${relPath}\n`);
   }
 
-  process.stdout.write(`\n\x1b[1m\x1b[32m✔ Successfully installed ${fileCount} Chemical X blueprints & hooks!\x1b[0m\n`);
-  process.stdout.write(`\nNext Steps:\n`);
-  process.stdout.write(`  1. Import hooks: \x1b[36mimport { toResult } from './${targetSubDir}/hooks/toResult';\x1b[0m\n`);
-  process.stdout.write(`  2. Generate a capsule: \x1b[36mnpx chemx generate m-user-avatar\x1b[0m\n\n`);
+  const cursorRulesPath = path.join(targetDir, '.cursorrules');
+  if (!fs.existsSync(cursorRulesPath)) {
+    const rules = `# Chemical X Quantum Architecture Directives\nStrictly follow AGENTS.md rules. Never exceed 500 lines per file. All molecule capsules must stay under 100 lines.\n`;
+    fs.writeFileSync(cursorRulesPath, rules, 'utf-8');
+    process.stdout.write(`  \x1b[32m✔\x1b[0m .cursorrules\n`);
+  }
+
+  process.stdout.write(`\n\x1b[1m\x1b[32m✔ Quantum project created successfully at ${finalDirName}!\x1b[0m\n\n`);
+  process.stdout.write('Next Steps:\n');
+  process.stdout.write(`  1. cd ${finalDirName}\n`);
+  process.stdout.write('  2. Review AGENTS.md for line budgets and architecture standards\n');
+  process.stdout.write('  3. Run npx chemx generate m-<feature> to create capsules\n');
+  process.stdout.write('  4. Run npx chemx audit to scan for line budget compliance\n\n');
+};
+
+const runInit = async (targetSubDir = 'src/chemical-x') => {
+  renderBanner('Chemical X: In-Repo Capsule Drop-in');
+
+  const targetDir = path.resolve(process.cwd(), targetSubDir);
+  const licenseKey = await obtainLicenseKey();
+  if (!licenseKey) {
+    process.stderr.write('\x1b[31m✕ Valid license key is required.\x1b[0m\n');
+    process.exit(1);
+  }
+
+  const files = await fetchStarterKitFiles(licenseKey);
+
+  process.stdout.write(`Unpacking blueprints and hooks into: \x1b[36m${targetSubDir}/\x1b[0m\n`);
+
+  let count = 0;
+  for (const [relPath, content] of Object.entries(files)) {
+    const fullPath = path.join(targetDir, relPath);
+    const dirName = path.dirname(fullPath);
+    if (!fs.existsSync(dirName)) {
+      fs.mkdirSync(dirName, { recursive: true });
+    }
+    fs.writeFileSync(fullPath, content, 'utf-8');
+    process.stdout.write(`  \x1b[32m✔\x1b[0m ${relPath}\n`);
+    count++;
+  }
+
+  process.stdout.write(`\n\x1b[1m\x1b[32m✔ Successfully installed ${count} Chemical X assets into ${targetSubDir}!\x1b[0m\n\n`);
 };
 
 const runGenerateCapsule = (capsuleName) => {
@@ -167,7 +314,7 @@ const runGenerateCapsule = (capsuleName) => {
   const targetDir = path.resolve(process.cwd(), normalizedName);
 
   if (fs.existsSync(targetDir)) {
-    process.stderr.write(`\x1b[31mError: Directory ${normalizedName} already exists.\x1b[0m\n`);
+    process.stderr.write(`\x1b[31m✕ Error: Directory ${normalizedName} already exists.\x1b[0m\n`);
     process.exit(1);
   }
 
@@ -208,20 +355,21 @@ export type { ${pascalName}Props } from './types';
   process.stdout.write(`\x1b[32m✔ Successfully generated crystalline capsule:\x1b[0m ${normalizedName}/\n`);
   process.stdout.write(`  - ${normalizedName}/${normalizedName}.tsx (< 50 lines)\n`);
   process.stdout.write(`  - ${normalizedName}/types.d.ts\n`);
-  process.stdout.write(`  - ${normalizedName}/index.ts\n`);
+  process.stdout.write(`  - ${normalizedName}/index.ts\n\n`);
 };
 
-const runAudit = () => {
-  process.stdout.write('\n\x1b[36mScanning project for Chemical X line budget hazards...\x1b[0m\n');
+export const runAudit = () => {
+  process.stdout.write('\n\x1b[38;2;98;201;255m[Chemical X Public Audit]\x1b[0m Scanning codebase for line-budget hazards...\n');
   const targetDir = process.cwd();
 
   let scanned = 0;
   let violations = 0;
+  const offendingFiles = [];
 
   const checkFile = (filePath) => {
     const ext = path.extname(filePath);
     if (!['.ts', '.tsx', '.js', '.jsx', '.vue'].includes(ext)) return;
-    if (filePath.includes('node_modules') || filePath.includes('.next') || filePath.includes('dist')) return;
+    if (filePath.includes('node_modules') || filePath.includes('.next') || filePath.includes('dist') || filePath.includes('.git')) return;
 
     try {
       const content = fs.readFileSync(filePath, 'utf-8');
@@ -229,7 +377,8 @@ const runAudit = () => {
       scanned++;
 
       if (lines > 500) {
-        process.stdout.write(`  \x1b[31m✕ LINE OVERFLOW (> 500 lines):\x1b[0m ${path.relative(targetDir, filePath)} (${lines} lines)\n`);
+        const rel = path.relative(targetDir, filePath);
+        offendingFiles.push({ file: rel, lines });
         violations++;
       }
     } catch {
@@ -258,37 +407,80 @@ const runAudit = () => {
 
   walk(targetDir);
 
-  process.stdout.write(`\nScanned ${scanned} source files. Found ${violations} line budget hazards.\n`);
+  process.stdout.write(`Scanned ${scanned} source files.\n\n`);
+
   if (violations === 0) {
-    process.stdout.write('\x1b[32m✔ 100% Quantum Compliant: All source files under 500 lines.\x1b[0m\n\n');
+    process.stdout.write('\x1b[1m\x1b[32m✔ 100% Quantum Compliant: All source files meet the 500-line budget ceiling.\x1b[0m\n\n');
+  } else {
+    process.stdout.write(`\x1b[31m✕ Found ${violations} Monolith Line-Budget Hazards (> 500 lines):\x1b[0m\n`);
+    for (const item of offendingFiles) {
+      process.stdout.write(`  - \x1b[33m${item.file}\x1b[0m (${item.lines} lines)\n`);
+    }
+
+    process.stdout.write('\n\x1b[1m\x1b[38;2;98;201;255mEliminate AI Context Rot with Chemical X Architecture:\x1b[0m\n');
+    process.stdout.write(`  * Book & Standards:  ${URL_STANDARD}\n`);
+    process.stdout.write(`  * Master Bundle:     ${URL_MASTER}\n`);
+    process.stdout.write('  * Create Starter:    npm create chemx\n');
+    process.stdout.write('  * Drop-in Capsules:  npx @chemx/starter-kit init\n\n');
   }
 };
 
-// Main routing
-switch (command) {
-  case 'init':
-    runInit();
-    break;
-  case 'generate':
-  case 'capsule':
-  case 'add':
-    if (!args[1]) {
-      process.stderr.write('Usage: npx chemx generate <capsule-name>\nExample: npx chemx generate m-user-avatar\n');
-      process.exit(1);
-    }
-    runGenerateCapsule(args[1]);
-    break;
-  case 'audit':
-    runAudit();
-    break;
-  default:
-    if (command.startsWith('m-')) {
-      runGenerateCapsule(command);
-    } else {
-      process.stdout.write('\x1b[1mChemical X CLI Commands (chemx):\x1b[0m\n');
-      process.stdout.write('  \x1b[36mnpx chemx init [dir]\x1b[0m                 Download authenticated starter-kit blueprints\n');
-      process.stdout.write('  \x1b[36mnpx chemx generate <m-name>\x1b[0m          Generate an isolated molecule capsule (< 100 lines)\n');
-      process.stdout.write('  \x1b[36mnpx chemx audit\x1b[0m                      Scan codebase for > 500 line monolith hazards\n\n');
-    }
-    break;
-}
+const printHelp = () => {
+  renderBanner();
+  process.stdout.write('\x1b[1mAvailable Commands:\x1b[0m\n');
+  process.stdout.write('  \x1b[36mnpm create chemx [dir]\x1b[0m              Scaffold complete Quantum Architecture project\n');
+  process.stdout.write('  \x1b[36mnpx @chemx/starter-kit init [dir]\x1b[0m   Drop blueprints & hooks into existing project\n');
+  process.stdout.write('  \x1b[36mnpx chemx generate <m-name>\x1b[0m         Generate isolated molecule capsule (< 100 lines)\n');
+  process.stdout.write('  \x1b[36mnpx chemx audit\x1b[0m                     [FREE] Scan codebase for line-budget hazards\n\n');
+};
+
+const main = async () => {
+  const firstArg = rawArgs[0];
+
+  if (isCreateInvoked) {
+    const dirArg = firstArg === 'create' ? rawArgs[1] : firstArg;
+    await runScaffold(dirArg);
+    return;
+  }
+
+  switch (firstArg) {
+    case 'audit':
+      runAudit();
+      break;
+    case 'init':
+      await runInit(rawArgs[1] || 'src/chemical-x');
+      break;
+    case 'create':
+      await runScaffold(rawArgs[1]);
+      break;
+    case 'generate':
+    case 'capsule':
+    case 'add':
+      if (!rawArgs[1]) {
+        process.stderr.write('Usage: npx chemx generate <capsule-name>\nExample: npx chemx generate m-user-avatar\n');
+        process.exit(1);
+      }
+      runGenerateCapsule(rawArgs[1]);
+      break;
+    case 'help':
+    case '--help':
+    case '-h':
+      printHelp();
+      break;
+    default:
+      if (firstArg && firstArg.startsWith('m-')) {
+        runGenerateCapsule(firstArg);
+      } else if (firstArg && !firstArg.startsWith('-')) {
+        await runScaffold(firstArg);
+      } else {
+        printHelp();
+      }
+      break;
+  }
+};
+
+main().catch((err) => {
+  process.stderr.write(`\x1b[31m✕ Unexpected Error: ${err.message}\x1b[0m\n`);
+  process.exit(1);
+});
+

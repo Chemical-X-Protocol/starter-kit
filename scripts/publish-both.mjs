@@ -16,10 +16,51 @@ const otpArg = args.find((a) => a.startsWith('--otp='));
 const otp = otpArg ? otpArg.split('=')[1] : null;
 
 const TARGETS = [
-  { name: '@chemx/starter-kit', isScoped: true },
-  { name: '@chem-x/starter-kit', isScoped: true },
-  { name: 'chemx', isScoped: false, binKey: 'chemx' },
-  { name: 'chem-x', isScoped: false, binKey: 'chem-x' }
+  {
+    name: 'create-chemx',
+    isScoped: false,
+    bin: { 'create-chemx': 'cli/index.js', chemx: 'cli/index.js' }
+  },
+  {
+    name: '@chemx/starter-kit',
+    isScoped: true,
+    bin: {
+      'create-chemx': 'cli/index.js',
+      chemx: 'cli/index.js',
+      'chem-x': 'cli/index.js',
+      'chemical-x': 'cli/index.js'
+    }
+  },
+  {
+    name: '@chem-x/starter-kit',
+    isScoped: true,
+    bin: {
+      'create-chemx': 'cli/index.js',
+      chemx: 'cli/index.js',
+      'chem-x': 'cli/index.js',
+      'chemical-x': 'cli/index.js'
+    }
+  },
+  {
+    name: '@chemx/create-chemx',
+    isScoped: true,
+    bin: { 'create-chemx': 'cli/index.js', chemx: 'cli/index.js' }
+  },
+  {
+    name: '@chem-x/create-chemx',
+    isScoped: true,
+    bin: { 'create-chemx': 'cli/index.js', chemx: 'cli/index.js' }
+  },
+  {
+    name: 'chemx',
+    isScoped: false,
+    bin: { chemx: 'cli/index.js', 'create-chemx': 'cli/index.js' }
+  },
+  {
+    name: 'chem-x',
+    isScoped: false,
+    bin: { 'chem-x': 'cli/index.js', 'create-chemx': 'cli/index.js' }
+  }
 ];
 
 const originalContent = fs.readFileSync(PKG_JSON, 'utf-8');
@@ -31,16 +72,7 @@ try {
   for (const target of TARGETS) {
     pkg.name = target.name;
     pkg.publishConfig = { access: 'public' };
-
-    if (!target.isScoped && target.binKey && pkg.bin) {
-      pkg.bin = { [target.binKey]: 'cli/index.js' };
-    } else if (target.isScoped) {
-      pkg.bin = {
-        chemx: 'cli/index.js',
-        'chem-x': 'cli/index.js',
-        'chemical-x': 'cli/index.js'
-      };
-    }
+    pkg.bin = target.bin;
 
     fs.writeFileSync(PKG_JSON, JSON.stringify(pkg, null, 2) + '\n', 'utf-8');
 
