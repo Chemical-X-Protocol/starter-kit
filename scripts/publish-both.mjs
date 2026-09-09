@@ -14,6 +14,13 @@ const args = process.argv.slice(2);
 const isDryRun = args.includes('--dry-run');
 const otpArg = args.find((a) => a.startsWith('--otp='));
 const otp = otpArg ? otpArg.split('=')[1] : null;
+const tagArg = args.find((a) => a.startsWith('--tag='));
+const tagIndex = args.indexOf('--tag');
+const explicitTag = tagArg
+  ? tagArg.split('=')[1]
+  : tagIndex !== -1 && args[tagIndex + 1] && !args[tagIndex + 1].startsWith('-')
+    ? args[tagIndex + 1]
+    : null;
 
 const TARGETS = [
   {
@@ -65,6 +72,8 @@ const TARGETS = [
 
 const originalContent = fs.readFileSync(PKG_JSON, 'utf-8');
 const pkg = JSON.parse(originalContent);
+const isPrerelease = Boolean(pkg.version && pkg.version.includes('-'));
+const tag = explicitTag || (isPrerelease ? 'latest' : null);
 
 const results = [];
 
@@ -72,6 +81,9 @@ try {
   for (const target of TARGETS) {
     pkg.name = target.name;
     pkg.publishConfig = { access: 'public' };
+    if (tag) {
+      pkg.publishConfig.tag = tag;
+    }
     pkg.bin = target.bin;
 
     fs.writeFileSync(PKG_JSON, JSON.stringify(pkg, null, 2) + '\n', 'utf-8');
@@ -79,8 +91,9 @@ try {
     const publishArgs = ['publish', '--access', 'public'];
     if (isDryRun) publishArgs.push('--dry-run');
     if (otp) publishArgs.push(`--otp=${otp}`);
+    if (tag) publishArgs.push('--tag', tag);
 
-    console.log(`\n\x1b[36m[starter-kit] Publishing: ${target.name} (dry-run: ${isDryRun})\x1b[0m`);
+    console.log(`\n\x1b[36m[starter-kit] Publishing: ${target.name} (dry-run: ${isDryRun}${tag ? `, tag: ${tag}` : ''})\x1b[0m`);
     const proc = spawnSync('npm', publishArgs, {
       cwd: PKG_DIR,
       stdio: 'inherit'
