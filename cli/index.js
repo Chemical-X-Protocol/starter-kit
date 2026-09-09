@@ -12,7 +12,7 @@ const CONFIG_DIR = path.join(os.homedir(), '.chemical-x');
 const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
 const DEVICE_FILE = path.join(CONFIG_DIR, 'device_id');
 
-const API_BASE = process.env.CHEMICAL_X_API_URL || 'https://awesome-secret-sauce.pages.dev';
+const API_BASE = process.env.CHEMICAL_X_API_URL || 'https://chemicalx.xophz.com';
 
 // Ensure config dir exists
 if (!fs.existsSync(CONFIG_DIR)) {
