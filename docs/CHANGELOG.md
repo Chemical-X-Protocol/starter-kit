@@ -43,5 +43,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Removed embedded offline blueprint fallbacks and preview bypass keys from CLI executable (`cli/index.js`).
 - Restricted npm package distribution via `files` whitelist and `.npmignore` to prevent leaking private blueprints and hooks in public tarballs.
 - Added explicit `--tag` support and automatic default fallback for prerelease/CalVer versions in multi-target publisher (`scripts/publish-both.mjs`).
+- Removed unscoped `chem-x` target from publisher script due to npm registry similarity protection with `chemx`.
+- Excluded 3rd-party `vendor` and `build` directories, as well as minified bundles (`*.min.*`), from the AST context hazard audit to eliminate false positives on bundled external libraries.
+- Fixed argument ordering in `gumChoose` to pass `--header` and styling flags to the `choose` subcommand rather than prepending to the parent binary.
 
 

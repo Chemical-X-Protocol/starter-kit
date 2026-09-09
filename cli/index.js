@@ -41,10 +41,11 @@ const hasGum = () => {
 };
 
 const gumChoose = (options, header = '') => {
-  const args = ['choose', ...options, '--cursor.foreground=81'];
+  const args = ['choose'];
   if (header) {
-    args.unshift(`--header=${header}`, '--header.foreground=81');
+    args.push(`--header=${header}`, '--header.foreground=81');
   }
+  args.push('--cursor.foreground=81', ...options);
   const res = spawnSync('gum', args, { encoding: 'utf-8', stdio: ['inherit', 'pipe', 'inherit'] });
   return (res.stdout || '').trim();
 };

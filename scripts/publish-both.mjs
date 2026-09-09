@@ -62,11 +62,6 @@ const TARGETS = [
     name: 'chemx',
     isScoped: false,
     bin: { chemx: 'cli/index.js', 'create-chemx': 'cli/index.js' }
-  },
-  {
-    name: 'chem-x',
-    isScoped: false,
-    bin: { 'chem-x': 'cli/index.js', 'create-chemx': 'cli/index.js' }
   }
 ];
 

@@ -183,6 +183,18 @@ export const auditFile = (filePath, relativePath) => {
   return violations;
 };
 
+const IGNORED_DIRS = new Set(['node_modules', 'dist', 'build', 'vendor', '.git', '.next', '.turbo', '.output', 'out']);
+
+const isSourceFile = (name) => {
+  return (
+    /\.(tsx|ts|jsx|js|vue)$/.test(name) &&
+    !name.endsWith('.d.ts') &&
+    !name.includes('.test.') &&
+    !name.includes('.spec.') &&
+    !name.includes('.min.')
+  );
+};
+
 export const scanDirectory = (targetDir, baseDir) => {
   let results = [];
   if (!fs.existsSync(targetDir)) return results;
@@ -193,10 +205,10 @@ export const scanDirectory = (targetDir, baseDir) => {
     const relPath = path.relative(baseDir, fullPath);
 
     if (entry.isDirectory()) {
-      if (!['node_modules', 'dist', '.git', '.next', 'out'].includes(entry.name)) {
+      if (!IGNORED_DIRS.has(entry.name)) {
         results = results.concat(scanDirectory(fullPath, baseDir));
       }
-    } else if (/\.(tsx|ts|jsx|js|vue)$/.test(entry.name) && !entry.name.endsWith('.d.ts') && !entry.name.includes('.test.')) {
+    } else if (isSourceFile(entry.name)) {
       results = results.concat(auditFile(fullPath, relPath));
     }
   }
@@ -211,10 +223,10 @@ const countTotalScannedFiles = (targetDir) => {
   for (const entry of entries) {
     const fullPath = path.join(targetDir, entry.name);
     if (entry.isDirectory()) {
-      if (!['node_modules', 'dist', '.git', '.next', 'out'].includes(entry.name)) {
+      if (!IGNORED_DIRS.has(entry.name)) {
         count += countTotalScannedFiles(fullPath);
       }
-    } else if (/\.(tsx|ts|jsx|js|vue)$/.test(entry.name) && !entry.name.endsWith('.d.ts') && !entry.name.includes('.test.')) {
+    } else if (isSourceFile(entry.name)) {
       count += 1;
     }
   }

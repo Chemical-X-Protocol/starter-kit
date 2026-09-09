@@ -1,0 +1,5 @@
+node_modules/.bin/parser
+node_modules/@babel/parser
+node_modules/@babel/traverse
+node_modules/@babel/types
+node_modules/@types/babel__traverse
