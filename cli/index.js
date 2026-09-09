@@ -5,6 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import readline from 'node:readline';
 import { spawnSync } from 'node:child_process';
+import { runAudit as executeAstAudit, auditFile } from './audit.js';
 
 const rawArgs = process.argv.slice(2);
 const invokedBin = path.basename(process.argv[1] || '');
@@ -40,8 +41,10 @@ const hasGum = () => {
 };
 
 const gumChoose = (options, header = '') => {
-  const args = ['choose', ...options];
-  if (header) args.unshift(`--header=${header}`);
+  const args = ['choose', ...options, '--cursor.foreground=81'];
+  if (header) {
+    args.unshift(`--header=${header}`, '--header.foreground=81');
+  }
   const res = spawnSync('gum', args, { encoding: 'utf-8', stdio: ['inherit', 'pipe', 'inherit'] });
   return (res.stdout || '').trim();
 };
@@ -128,30 +131,33 @@ const obtainLicenseKey = async () => {
 
   if (useGum) {
     const choice = gumChoose([
-      '1. Enter Chemical X License Key',
-      '2. Buy Standard Edition ($49) [mycompassconsulting.com]',
-      '3. Buy Master Bundle ($99) [mycompassconsulting.com]',
+      '1. Buy Standard Edition ($49) -> Launch Checkout',
+      '2. Buy Master Bundle ($99) -> Launch Checkout',
+      '3. Enter License Key (CX-XXXX-XXXX-XXXX)',
       '4. Run Free Public Audit (npx chemx audit)',
       '5. Exit'
-    ], 'Select an option to proceed:');
+    ], 'Chemical X Scaffolding Requires a Paid License:');
 
-    if (choice.startsWith('2.')) {
+    if (choice.startsWith('1.')) {
       process.stdout.write(`\x1b[36mOpening checkout in default browser:\x1b[0m ${URL_STANDARD}\n`);
       openBrowser(URL_STANDARD);
       process.stdout.write('\nOnce completed, paste your Sponsor / VIP License Key below.\n');
       return gumInput('License Key (CX-XXXX-XXXX-XXXX):', 'CX-XXXX-XXXX-XXXX');
     }
 
-    if (choice.startsWith('3.')) {
+    if (choice.startsWith('2.')) {
       process.stdout.write(`\x1b[36mOpening checkout in default browser:\x1b[0m ${URL_MASTER}\n`);
       openBrowser(URL_MASTER);
       process.stdout.write('\nOnce completed, paste your Sponsor / VIP License Key below.\n');
       return gumInput('License Key (CX-XXXX-XXXX-XXXX):', 'CX-XXXX-XXXX-XXXX');
     }
 
+    if (choice.startsWith('3.')) {
+      return gumInput('License Key (CX-XXXX-XXXX-XXXX):', 'CX-XXXX-XXXX-XXXX');
+    }
+
     if (choice.startsWith('4.')) {
-      runAudit();
-      process.exit(0);
+      await runAudit(null, true);
     }
 
     if (choice.startsWith('5.') || !choice) {
@@ -161,30 +167,33 @@ const obtainLicenseKey = async () => {
     return gumInput('License Key (CX-XXXX-XXXX-XXXX):', 'CX-XXXX-XXXX-XXXX');
   }
 
-  process.stdout.write('\x1b[1mAuthentication Options:\x1b[0m\n');
-  process.stdout.write('  [1] Enter License Key\n');
-  process.stdout.write('  [2] Buy Standard Edition ($49) - Opens browser\n');
-  process.stdout.write('  [3] Buy Master Bundle ($99) - Opens browser\n');
+  process.stdout.write('\x1b[1mChemical X Scaffolding Requires a Paid License:\x1b[0m\n');
+  process.stdout.write('  [1] Buy Standard Edition ($49) - Opens browser\n');
+  process.stdout.write('  [2] Buy Master Bundle ($99) - Opens browser\n');
+  process.stdout.write('  [3] Enter License Key\n');
   process.stdout.write('  [4] Run Free Public Audit (npx chemx audit)\n');
   process.stdout.write('  [5] Exit\n\n');
 
   const selection = await promptQuestion('Select option [1-5]: ');
 
-  if (selection === '2') {
+  if (selection === '1') {
     process.stdout.write(`Opening: ${URL_STANDARD}\n`);
     openBrowser(URL_STANDARD);
     return promptQuestion('Enter License Key after purchase: ');
   }
 
-  if (selection === '3') {
+  if (selection === '2') {
     process.stdout.write(`Opening: ${URL_MASTER}\n`);
     openBrowser(URL_MASTER);
     return promptQuestion('Enter License Key after purchase: ');
   }
 
+  if (selection === '3') {
+    return promptQuestion('Enter License Key (CX-XXXX-XXXX-XXXX): ');
+  }
+
   if (selection === '4') {
-    runAudit();
-    process.exit(0);
+    await runAudit(null, true);
   }
 
   if (selection === '5') {
@@ -227,6 +236,12 @@ const fetchStarterKitFiles = async (licenseKey) => {
 const runScaffold = async (projectName) => {
   renderBanner('Chemical X: Quantum Scaffolder (npm create chemx)');
 
+  const licenseKey = await obtainLicenseKey();
+  if (!licenseKey) {
+    process.stderr.write('\x1b[31m✕ Valid license key is required to scaffold blueprints.\x1b[0m\n');
+    process.exit(1);
+  }
+
   let targetName = projectName;
   if (!targetName) {
     if (hasGum()) {
@@ -241,12 +256,6 @@ const runScaffold = async (projectName) => {
 
   if (fs.existsSync(targetDir) && fs.readdirSync(targetDir).length > 0) {
     process.stderr.write(`\x1b[31m✕ Error: Directory '${finalDirName}' already exists and is not empty.\x1b[0m\n`);
-    process.exit(1);
-  }
-
-  const licenseKey = await obtainLicenseKey();
-  if (!licenseKey) {
-    process.stderr.write('\x1b[31m✕ Valid license key is required to scaffold blueprints.\x1b[0m\n');
     process.exit(1);
   }
 
@@ -358,80 +367,107 @@ export type { ${pascalName}Props } from './types';
   process.stdout.write(`  - ${normalizedName}/index.ts\n\n`);
 };
 
-export const runAudit = () => {
-  process.stdout.write('\n\x1b[38;2;98;201;255m[Chemical X Public Audit]\x1b[0m Scanning codebase for line-budget hazards...\n');
-  const targetDir = process.cwd();
+export const runAudit = async (customDir = null, isCli = false) => {
+  const isJson = rawArgs.includes('--json');
+  const dirFlag = rawArgs.find((arg) => arg.startsWith('--dir='));
+  const targetDir = customDir || (dirFlag ? dirFlag.split('=')[1] : (fs.existsSync('src') ? 'src' : '.'));
 
-  let scanned = 0;
-  let violations = 0;
-  const offendingFiles = [];
+  const report = executeAstAudit(targetDir);
 
-  const checkFile = (filePath) => {
-    const ext = path.extname(filePath);
-    if (!['.ts', '.tsx', '.js', '.jsx', '.vue'].includes(ext)) return;
-    if (filePath.includes('node_modules') || filePath.includes('.next') || filePath.includes('dist') || filePath.includes('.git')) return;
-
-    try {
-      const content = fs.readFileSync(filePath, 'utf-8');
-      const lines = content.split('\n').length;
-      scanned++;
-
-      if (lines > 500) {
-        const rel = path.relative(targetDir, filePath);
-        offendingFiles.push({ file: rel, lines });
-        violations++;
-      }
-    } catch {
-      // Fallback
-    }
-  };
-
-  const walk = (dir) => {
-    try {
-      const files = fs.readdirSync(dir);
-      for (const file of files) {
-        const full = path.join(dir, file);
-        const stat = fs.statSync(full);
-        if (stat.isDirectory()) {
-          if (!['node_modules', '.git', '.next', 'dist', 'out'].includes(file)) {
-            walk(full);
-          }
-        } else {
-          checkFile(full);
-        }
-      }
-    } catch {
-      // Fallback
-    }
-  };
-
-  walk(targetDir);
-
-  process.stdout.write(`Scanned ${scanned} source files.\n\n`);
-
-  if (violations === 0) {
-    process.stdout.write('\x1b[1m\x1b[32m✔ 100% Quantum Compliant: All source files meet the 500-line budget ceiling.\x1b[0m\n\n');
-  } else {
-    process.stdout.write(`\x1b[31m✕ Found ${violations} Monolith Line-Budget Hazards (> 500 lines):\x1b[0m\n`);
-    for (const item of offendingFiles) {
-      process.stdout.write(`  - \x1b[33m${item.file}\x1b[0m (${item.lines} lines)\n`);
-    }
-
-    process.stdout.write('\n\x1b[1m\x1b[38;2;98;201;255mEliminate AI Context Rot with Chemical X Architecture:\x1b[0m\n');
-    process.stdout.write(`  * Book & Standards:  ${URL_STANDARD}\n`);
-    process.stdout.write(`  * Master Bundle:     ${URL_MASTER}\n`);
-    process.stdout.write('  * Create Starter:    npm create chemx\n');
-    process.stdout.write('  * Drop-in Capsules:  npx @chemx/starter-kit init\n\n');
+  if (isJson) {
+    process.stdout.write(JSON.stringify(report, null, 2) + '\n');
+    if (isCli) process.exit(report.violations.length > 0 ? 1 : 0);
+    return report;
   }
+
+  process.stdout.write('\n\x1b[38;2;98;201;255m[Chemical X Context Hazard Audit]\x1b[0m Scanning codebase for AST architectural hazards...\n');
+  process.stdout.write(`Target Directory: ${targetDir}\n`);
+  process.stdout.write(`Scanned ${report.scannedFiles} source files.\n\n`);
+
+  if (report.violations.length === 0) {
+    process.stdout.write('\x1b[1m\x1b[32m✔ 100% Quantum Compliant: Zero context hazard violations detected across all line budgets, hooks, and AST rules.\x1b[0m\n\n');
+  } else {
+    process.stdout.write(`\x1b[31m✕ FAILED: ${report.totalViolations} context hazard violations detected:\x1b[0m\n\n`);
+    for (const v of report.violations) {
+      process.stdout.write(`  \x1b[31m[${v.rule}]\x1b[0m \x1b[33m${v.filePath}:${v.line}\x1b[0m\n`);
+      process.stdout.write(`    Hazard:    ${v.hazard}\n`);
+      process.stdout.write(`    Directive: ${v.directive}\n\n`);
+    }
+  }
+
+  if (isCli) {
+    while (true) {
+      if (hasGum()) {
+        spawnSync('gum', [
+          'style',
+          '--border=rounded',
+          '--border-foreground=81',
+          '--padding=0 1',
+          '--bold',
+          'Eliminate AI Context Rot with Chemical X Architecture'
+        ], { stdio: 'inherit' });
+
+        const choice = gumChoose([
+          '1. Buy Standard Edition ($49) -> Launch Checkout',
+          '2. Buy Master Bundle ($99) -> Launch Checkout',
+          '3. Enter License Key to Scaffold (Paid License Holders)',
+          '4. Exit'
+        ], 'Select a CTA action:');
+
+        if (choice.startsWith('1.')) {
+          process.stdout.write(`\n\x1b[36mOpening Standard Edition checkout in browser:\x1b[0m ${URL_STANDARD}\n\n`);
+          openBrowser(URL_STANDARD);
+          continue;
+        }
+        if (choice.startsWith('2.')) {
+          process.stdout.write(`\n\x1b[36mOpening Master Bundle checkout in browser:\x1b[0m ${URL_MASTER}\n\n`);
+          openBrowser(URL_MASTER);
+          continue;
+        }
+        if (choice.startsWith('3.')) {
+          await runScaffold();
+          break;
+        }
+        break;
+      } else {
+        process.stdout.write('\x1b[1m\x1b[38;2;98;201;255mEliminate AI Context Rot with Chemical X Architecture:\x1b[0m\n');
+        process.stdout.write(`  [1] Buy Standard Edition ($49) - ${URL_STANDARD}\n`);
+        process.stdout.write(`  [2] Buy Master Bundle ($99) - ${URL_MASTER}\n`);
+        process.stdout.write('  [3] Enter License Key to Scaffold (Paid License Holders)\n');
+        process.stdout.write('  [4] Exit\n\n');
+
+        const selection = await promptQuestion('Select option [1-4]: ');
+        if (selection === '1') {
+          process.stdout.write(`\nOpening: ${URL_STANDARD}\n\n`);
+          openBrowser(URL_STANDARD);
+          continue;
+        }
+        if (selection === '2') {
+          process.stdout.write(`\nOpening: ${URL_MASTER}\n\n`);
+          openBrowser(URL_MASTER);
+          continue;
+        }
+        if (selection === '3') {
+          await runScaffold();
+          break;
+        }
+        break;
+      }
+    }
+    process.exit(report.violations.length > 0 ? 1 : 0);
+  }
+  return report;
 };
+
+export { auditFile };
 
 const printHelp = () => {
   renderBanner();
   process.stdout.write('\x1b[1mAvailable Commands:\x1b[0m\n');
-  process.stdout.write('  \x1b[36mnpm create chemx [dir]\x1b[0m              Scaffold complete Quantum Architecture project\n');
-  process.stdout.write('  \x1b[36mnpx @chemx/starter-kit init [dir]\x1b[0m   Drop blueprints & hooks into existing project\n');
+  process.stdout.write('  \x1b[36mnpm create chemx [dir]\x1b[0m              [PAID] Scaffold complete Quantum Architecture project\n');
+  process.stdout.write('  \x1b[36mnpx @chemx/starter-kit init [dir]\x1b[0m   [PAID] Drop blueprints & hooks into existing project\n');
   process.stdout.write('  \x1b[36mnpx chemx generate <m-name>\x1b[0m         Generate isolated molecule capsule (< 100 lines)\n');
-  process.stdout.write('  \x1b[36mnpx chemx audit\x1b[0m                     [FREE] Scan codebase for line-budget hazards\n\n');
+  process.stdout.write('  \x1b[36mnpx chemx audit [--json] [--dir=src]\x1b[0m[FREE] Scan codebase for AST architectural hazards\n\n');
 };
 
 const main = async () => {
@@ -445,7 +481,7 @@ const main = async () => {
 
   switch (firstArg) {
     case 'audit':
-      runAudit();
+      await runAudit(null, true);
       break;
     case 'init':
       await runInit(rawArgs[1] || 'src/chemical-x');

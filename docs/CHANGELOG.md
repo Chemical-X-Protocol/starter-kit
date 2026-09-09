@@ -21,9 +21,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Added
 - Edge-authenticated single-device project scaffolding command (`npx chemical-x init`) with machine fingerprinting and Cloudflare KV validation.
 - AST hazard line budget audit command (`npx chemical-x audit`) scanning project trees for > 500 line monolith hazards.
+- AST Context Hazard Audit engine module (`cli/audit.js`, `cli/audit.d.ts`) supporting 5 AST rules: line budget, hook saturation, control flow complexity, timer discipline, and type co-location.
+- `./audit` subpath export in `package.json` for programmatic consumption by test suites and benchmarks.
+- CLI flags `--json` and `--dir=<path>` for `npx chemx audit`.
 - Automated NPM publish GitHub Actions workflow (`.github/workflows/publish.yml`) chained to `Auto Version` completion via `workflow_run`.
 
 ### Changed
+- Upgraded `runAudit` in `cli/index.js` from basic line counting to full Babel AST static analysis engine.
 - Updated default API endpoint in CLI (`cli/index.js`) to production custom domain `https://chemicalx.xophz.com`.
 - Expanded `AGENTS.md` blueprint in CLI (`cli/index.js`) to include all 7 Quantum Engineering Architecture pillars.
 - Configured npm package distribution for `@chemx/starter-kit` with `create-chemx`, `chemx`, `chem-x`, and `chemical-x` binary aliases.
@@ -32,6 +36,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Added cross-platform browser checkout launcher for `mycompassconsulting.com/buy/chemical-x/standard` and `master`.
 - Unlocked `npx chemx audit` command as 100% free, unauthenticated, and ungated public utility with conversion CTAs.
 - Added dual project scaffolder (`npm create chemx` / `create-chemx`) and in-repo capsule drop-in (`init`).
+- Gated `runScaffold` (`npm create chemx`) with upfront license validation prior to project directory name prompt.
+- Integrated interactive Gum CTA action buttons at the conclusion of public audit for instant checkout launch ($49 Standard / $99 Master) and key-gated scaffolding for license holders.
 
 ### Fixed
 - Removed embedded offline blueprint fallbacks and preview bypass keys from CLI executable (`cli/index.js`).

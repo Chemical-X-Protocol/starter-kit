@@ -15,16 +15,24 @@
     "README.md",
     "docs"
   ],
+  "exports": {
+    ".": "./cli/index.js",
+    "./audit": "./cli/audit.js"
+  },
   "scripts": {
     "publish:both": "node scripts/publish-both.mjs",
     "typecheck": "tsc --noEmit",
     "create-capsule": "node cli/index.js"
   },
   "dependencies": {
+    "@babel/parser": "^7.26.9",
+    "@babel/traverse": "^7.26.9",
+    "@babel/types": "^7.26.9",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@types/babel__traverse": "^7.20.6",
     "@types/node": "^22.13.5",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
