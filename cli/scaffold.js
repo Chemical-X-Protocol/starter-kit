@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { hasGum, gumInput, promptQuestion, renderBanner } from './terminal.js';
-import { obtainLicenseKey, fetchStarterKitFiles } from './license.js';
+import { obtainLicenseKey, fetchStarterKitFiles, checkOrPromptEvaluation } from './license.js';
 
 export const runScaffold = async (projectName, rawArgs = [], onRunAudit = null) => {
   renderBanner('Chemical X: Molecular Architecture Scaffolder (npm create chemx)');
@@ -92,7 +92,9 @@ export const runInit = async (targetSubDir = 'src/chemical-x', rawArgs = [], onR
   );
 };
 
-export const runGenerateCapsule = (capsuleName) => {
+export const runGenerateCapsule = async (capsuleName) => {
+  await checkOrPromptEvaluation('generate capsule');
+
   const normalizedName = capsuleName.startsWith('m-') ? capsuleName : `m-${capsuleName}`;
   const targetDir = path.resolve(process.cwd(), normalizedName);
 
@@ -143,14 +145,4 @@ export type { ${pascalName}Props } from './types';
   process.stdout.write(`  - ${normalizedName}/index.ts\n\n`);
 };
 
-export const printHelp = () => {
-  renderBanner();
-  process.stdout.write('\x1b[1mAvailable Commands:\x1b[0m\n');
-  process.stdout.write('  \x1b[36mnpm create chemx [dir]\x1b[0m              [PAID] Scaffold complete Molecular Architecture project\n');
-  process.stdout.write('  \x1b[36mnpx @chemx/starter-kit init [dir]\x1b[0m   [PAID] Drop blueprints & hooks into existing project\n');
-  process.stdout.write('  \x1b[36mnpx chemx generate <m-name>\x1b[0m         Generate isolated molecule capsule (< 100 lines)\n');
-  process.stdout.write(
-    '  \x1b[36mnpx chemx audit [--json] [--markdown] [--unroll] [--share] [--dir=src]\x1b[0m\n' +
-    '                                      [FREE] Run interactive Gum or unrolled architectural audit\n\n'
-  );
-};
+export { printHelp } from './help.js';

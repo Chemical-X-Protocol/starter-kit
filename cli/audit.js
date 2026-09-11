@@ -12,6 +12,7 @@ import {
   formatTerminalReport,
   generateMarkdownReport,
   groupViolationsBySeverity,
+  resolveTopSectionColor,
   formatScorecardSection,
   formatCriticalSection,
   formatHighMediumSection,
@@ -153,7 +154,7 @@ export const runAudit = (targetDir = 'src', options = {}) => {
 
   const health = calculateMolecularHealthScore(violations, scannedFiles);
   const pillars = calculatePillarBreakdown(violations);
-  const contextAnalysis = calculateTokenBurnAnalytics(fileStats);
+  const contextAnalysis = calculateTokenBurnAnalytics(fileStats, options);
   const hotspots = calculateHotspots(violations, fileStats, 5);
 
   const report = {
@@ -191,6 +192,7 @@ export {
   formatTerminalReport,
   generateMarkdownReport,
   groupViolationsBySeverity,
+  resolveTopSectionColor,
   formatScorecardSection,
   formatCriticalSection,
   formatHighMediumSection,
@@ -215,6 +217,7 @@ export default {
   formatTerminalReport,
   generateMarkdownReport,
   groupViolationsBySeverity,
+  resolveTopSectionColor,
   formatScorecardSection,
   formatCriticalSection,
   formatHighMediumSection,

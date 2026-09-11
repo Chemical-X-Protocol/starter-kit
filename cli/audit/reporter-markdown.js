@@ -28,6 +28,10 @@ export const generateMarkdownReport = (report) => {
   lines.push(`| **Largest File** | \`${metrics.largestFile.filePath || 'None'}\` | ${metrics.largestFile.lineCount} lines |`);
   lines.push(`| **Context Token Overhead** | ~${contextAnalysis.estimatedTokens.toLocaleString()} tokens | Est. Bloat: ~${contextAnalysis.estimatedExcessTokens.toLocaleString()} tokens |`);
   lines.push(`| **Token Reduction Target** | **${contextAnalysis.potentialSavingsPct}%** | Risk Level: **${contextAnalysis.riskLevel}** |`);
+  if (contextAnalysis.excessCostPerPass !== undefined) {
+    lines.push(`| **Monolith Cost per Turn** | **$${contextAnalysis.excessCostPerPass.toFixed(3)}** | Model: ${contextAnalysis.pricingModel} |`);
+    lines.push(`| **Projected Dev Context Tax** | **$${contextAnalysis.monthlyWastePerDev.toFixed(2)} / mo** | Est. $${contextAnalysis.weeklyWastePerDev.toFixed(2)} / week per engineer |`);
+  }
   lines.push(`| **Total Hazards Flagged** | **${violations.length}** | Critical: ${critical.length}, High: ${high.length}, Med: ${medium.length}, Low: ${low.length} |`);
   lines.push('');
   lines.push('---');

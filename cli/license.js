@@ -15,6 +15,7 @@ export const DEVICE_FILE = path.join(CONFIG_DIR, 'device_id');
 
 export const API_BASE = process.env.CHEMICAL_X_API_URL || 'https://chemicalx.xophz.com';
 export const URL_LEARN = 'https://chemicalx.xophz.com';
+export const URL_SPONSOR = 'https://github.com/sponsors/Chemical-X-Protocol';
 export const URL_STANDARD = 'https://mycompassconsulting.com/buy/chemical-x/standard';
 export const URL_MASTER = 'https://mycompassconsulting.com/buy/chemical-x/master';
 
@@ -81,8 +82,8 @@ export const obtainLicenseKey = async (rawArgs = [], onRunAudit = null) => {
     const choice = gumChoose(
       [
         '1. Visit chemicalx.xophz.com to learn more',
-        '2. Buy eBook w/ AGENTS.md Rule Book ($27) -> Launch Checkout',
-        '3. Buy Master Bundle ($47) -> Launch Checkout',
+        '2. Buy Standard Vault: Single Dev License ($27) -> Launch Checkout',
+        '3. Buy Team Power Puff: 100 Devs / Seats ($47) -> Launch Checkout',
         '4. Enter License Key (CX-XXXX-XXXX-XXXX)',
         '5. Run Free Public Audit (npx chemx audit)',
         '6. Exit'
@@ -98,14 +99,14 @@ export const obtainLicenseKey = async (rawArgs = [], onRunAudit = null) => {
     }
 
     if (choice.startsWith('2.')) {
-      process.stdout.write(`\x1b[36mOpening Standard Vault checkout in default browser:\x1b[0m ${URL_STANDARD}\n`);
+      process.stdout.write(`\x1b[36mOpening Standard Vault checkout (Single Dev License) in default browser:\x1b[0m ${URL_STANDARD}\n`);
       openBrowser(URL_STANDARD);
       process.stdout.write('\nOnce completed, paste your Sponsor / VIP License Key below.\n');
       return gumInput('License Key (CX-XXXX-XXXX-XXXX):', 'CX-XXXX-XXXX-XXXX');
     }
 
     if (choice.startsWith('3.')) {
-      process.stdout.write(`\x1b[36mOpening Master Bundle checkout in default browser:\x1b[0m ${URL_MASTER}\n`);
+      process.stdout.write(`\x1b[36mOpening Team Power Puff checkout (100 Devs / 100 Seats) in default browser:\x1b[0m ${URL_MASTER}\n`);
       openBrowser(URL_MASTER);
       process.stdout.write('\nOnce completed, paste your Sponsor / VIP License Key below.\n');
       return gumInput('License Key (CX-XXXX-XXXX-XXXX):', 'CX-XXXX-XXXX-XXXX');
@@ -129,8 +130,8 @@ export const obtainLicenseKey = async (rawArgs = [], onRunAudit = null) => {
 
   process.stdout.write('\x1b[1mChemical X Scaffolding Requires a Paid License:\x1b[0m\n');
   process.stdout.write('  [1] Visit chemicalx.xophz.com to learn more\n');
-  process.stdout.write('  [2] Buy eBook w/ AGENTS.md Rule Book ($27) - Opens browser\n');
-  process.stdout.write('  [3] Buy Master Bundle ($47) - Opens browser\n');
+  process.stdout.write('  [2] Buy Standard Vault: Single Dev License ($27) - Opens browser\n');
+  process.stdout.write('  [3] Buy Team Power Puff: 100 Devs / Seats ($47) - Opens browser\n');
   process.stdout.write('  [4] Enter License Key\n');
   process.stdout.write('  [5] Run Free Public Audit (npx chemx audit)\n');
   process.stdout.write('  [6] Exit\n\n');
@@ -169,6 +170,116 @@ export const obtainLicenseKey = async (rawArgs = [], onRunAudit = null) => {
   }
 
   return promptQuestion('Enter Chemical X Sponsor License Key (CX-XXXX-XXXX-XXXX): ');
+};
+
+export const checkOrPromptEvaluation = async (actionLabel = 'generate capsule') => {
+  const cachedKey = getCachedLicenseKey();
+  if (cachedKey) {
+    return { licensed: true, key: cachedKey };
+  }
+
+  const useGum = hasGum();
+  if (useGum) {
+    spawnSync(
+      'gum',
+      [
+        'style',
+        '--border=rounded',
+        '--border-foreground=81',
+        '--padding=0 1',
+        '--bold',
+        '⚡ Chemical X: Evaluation Mode (Unlicensed)\n' +
+        'Support vibe coding standards: chemicalx.xophz.com\n' +
+        'Single Dev ($27) | Team Power Puff 💯 (100 Seats: $47)'
+      ],
+      { stdio: 'inherit' }
+    );
+
+    const choice = gumChoose(
+      [
+        `1. ⚡ Continue in Evaluation Mode (Press Enter to ${actionLabel})`,
+        '2. 🔑 Enter License Key (Power Puff Team 💯 or Single Dev)',
+        '3. 💎 Buy License ($27 Solo / $47 Team Power Puff 100 Seats)',
+        '4. 🚪 Cancel'
+      ],
+      `Evaluation Mode: ${actionLabel}`
+    );
+
+    if (choice.startsWith('1.') || !choice) {
+      return { licensed: false, proceed: true };
+    }
+
+    if (choice.startsWith('2.')) {
+      const enteredKey = gumInput('License Key (CX-XXXX-XXXX-XXXX):', 'CX-XXXX-XXXX-XXXX');
+      if (enteredKey && enteredKey !== 'CX-XXXX-XXXX-XXXX') {
+        saveLicenseKey(enteredKey.trim().toUpperCase());
+        process.stdout.write('\x1b[32m✔ License saved to ~/.chemical-x/config.json!\x1b[0m\n\n');
+        return { licensed: true, key: enteredKey.trim().toUpperCase() };
+      }
+      return { licensed: false, proceed: true };
+    }
+
+    if (choice.startsWith('3.')) {
+      openBrowser(URL_MASTER);
+      process.stdout.write(`\x1b[36mOpened checkout in default browser:\x1b[0m ${URL_MASTER}\n`);
+      const keyAfterBuy = gumInput('Enter License Key once purchased (or press Enter to skip):');
+      if (keyAfterBuy) {
+        saveLicenseKey(keyAfterBuy.trim().toUpperCase());
+        process.stdout.write('\x1b[32m✔ License saved to ~/.chemical-x/config.json!\x1b[0m\n\n');
+        return { licensed: true, key: keyAfterBuy.trim().toUpperCase() };
+      }
+      return { licensed: false, proceed: true };
+    }
+
+    if (choice.startsWith('4.')) {
+      process.exit(0);
+    }
+
+    return { licensed: false, proceed: true };
+  }
+
+  process.stdout.write(
+    '\n\x1b[38;5;208;1m⚡ Chemical X: Evaluation Mode (Unlicensed)\x1b[0m\n' +
+    'Support vibe coding standards: chemicalx.xophz.com\n' +
+    `  [1] Continue in Evaluation Mode (Press Enter to ${actionLabel})\n` +
+    '  [2] Enter License Key (Power Puff Team 💯 or Single Dev)\n' +
+    '  [3] Buy License ($27 Solo / $47 Team Power Puff 100 Seats)\n' +
+    '  [4] Cancel\n\n'
+  );
+
+  const sel = await promptQuestion('Select option [1-4] (default: 1): ');
+  const choice = sel.trim() || '1';
+
+  if (choice === '1') {
+    return { licensed: false, proceed: true };
+  }
+
+  if (choice === '2') {
+    const entered = await promptQuestion('Enter License Key (CX-XXXX-XXXX-XXXX): ');
+    if (entered) {
+      saveLicenseKey(entered.trim().toUpperCase());
+      process.stdout.write('\x1b[32m✔ License saved to ~/.chemical-x/config.json!\x1b[0m\n\n');
+      return { licensed: true, key: entered.trim().toUpperCase() };
+    }
+    return { licensed: false, proceed: true };
+  }
+
+  if (choice === '3') {
+    openBrowser(URL_MASTER);
+    const entered = await promptQuestion('Enter License Key after purchase (or Enter to skip): ');
+    if (entered) {
+      saveLicenseKey(entered.trim().toUpperCase());
+      process.stdout.write('\x1b[32m✔ License saved to ~/.chemical-x/config.json!\x1b[0m\n\n');
+      return { licensed: true, key: entered.trim().toUpperCase() };
+    }
+    return { licensed: false, proceed: true };
+  }
+
+  if (choice === '4') {
+    process.exit(0);
+  }
+
+  return { licensed: false, proceed: true };
 };
 
 export const fetchStarterKitFiles = async (licenseKey) => {

@@ -7,7 +7,9 @@ import {
   auditFile,
   formatTerminalReport,
   generateMarkdownReport,
-  saveAuditSnapshot
+  saveAuditSnapshot,
+  copyToClipboard,
+  buildMasterPrompt
 } from './audit.js';
 import {
   runScaffold,
@@ -20,9 +22,20 @@ import {
   showConversionMenu,
   handleShareToDiscussions
 } from './navigator.js';
+import { runInstallWizard } from './installer.js';
 
 const rawArgs = process.argv.slice(2);
 const invokedBin = path.basename(process.argv[1] || '');
+
+const loadProjectConfig = () => {
+  try {
+    const cfgPath = path.resolve(process.cwd(), '.chemx', 'config.json');
+    if (fs.existsSync(cfgPath)) {
+      return JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
+    }
+  } catch {}
+  return {};
+};
 const isCreateInvoked =
   invokedBin.includes('create-chemx') || (rawArgs[0] && rawArgs[0] === 'create');
 
@@ -34,29 +47,52 @@ const resolveTargetDir = (custom, flag) => {
 };
 
 export const runAudit = async (customDir = null, isCli = false) => {
+  const projectConfig = loadProjectConfig();
   const isJson = rawArgs.includes('--json');
   const isMarkdown = rawArgs.includes('--markdown') || rawArgs.includes('--md');
   const isUnroll = rawArgs.includes('--unroll') || rawArgs.includes('--all');
   const isShare = rawArgs.includes('--share') || rawArgs.includes('--post');
   const isStrict = rawArgs.includes('--strict');
+  const isPromptOnFail = rawArgs.includes('--prompt-on-fail');
+  const isCopyPrompt = rawArgs.includes('--copy-prompt');
+
   const dirFlag = rawArgs.find((arg) => arg.startsWith('--dir='));
   const outputFlag = rawArgs.find((arg) => arg.startsWith('--output=') || arg.startsWith('-o='));
   const outputFile = outputFlag ? outputFlag.split('=')[1] : null;
 
+  const minGradeFlag = rawArgs.find((arg) => arg.startsWith('--min-grade='));
+  const minGrade = (minGradeFlag ? minGradeFlag.split('=')[1] : (process.env.CHEMX_MIN_GRADE || projectConfig.minGrade || '')).toUpperCase();
+
+  const minScoreFlag = rawArgs.find((arg) => arg.startsWith('--min-score='));
+  const minScoreRaw = minScoreFlag ? minScoreFlag.split('=')[1] : (process.env.CHEMX_MIN_SCORE || projectConfig.minScore || null);
+  const minScore = minScoreRaw !== null && minScoreRaw !== undefined ? parseInt(String(minScoreRaw), 10) : null;
+
+  const modelFlag = rawArgs.find((arg) => arg.startsWith('--model='));
+  const model = modelFlag ? modelFlag.split('=')[1] : (projectConfig.model || 'blended');
+  const costFlag = rawArgs.find((arg) => arg.startsWith('--cost-per-million='));
+  const costPerMillion = costFlag ? parseFloat(costFlag.split('=')[1]) : null;
+
   const targetDir = resolveTargetDir(customDir, dirFlag);
-  const report = executeAstAudit(targetDir, { outputFile });
+  const report = executeAstAudit(targetDir, { outputFile, model, costPerMillion });
   saveAuditSnapshot(report);
+
+  const GRADE_RANKS = { 'A+': 5, 'A': 4, 'B': 3, 'C': 2, 'D': 1, 'F': 0 };
+  const hasCriticalOrHigh = report.violations.some((v) => v.severity === 'CRITICAL' || v.severity === 'HIGH');
+  const isStrictFail = isStrict && report.violations.length > 0;
+  const isGradeFail = Boolean(minGrade && GRADE_RANKS[report.health.grade] !== undefined && GRADE_RANKS[minGrade] !== undefined && GRADE_RANKS[report.health.grade] < GRADE_RANKS[minGrade]);
+  const isScoreFail = minScore !== null && !isNaN(minScore) && report.health.score < minScore;
+  const hasFailingViolations = isStrictFail || hasCriticalOrHigh || isGradeFail || isScoreFail;
 
   if (isJson) {
     process.stdout.write(JSON.stringify(report, null, 2) + '\n');
-    if (isCli) process.exit(report.violations.length > 0 ? 1 : 0);
+    if (isCli) process.exit(hasFailingViolations ? 1 : 0);
     return report;
   }
 
   if (isMarkdown) {
     const md = generateMarkdownReport(report);
     process.stdout.write(md + '\n');
-    if (isCli) process.exit(report.violations.length > 0 ? 1 : 0);
+    if (isCli) process.exit(hasFailingViolations ? 1 : 0);
     return report;
   }
 
@@ -81,9 +117,15 @@ export const runAudit = async (customDir = null, isCli = false) => {
       }
     }
 
-    const hasFailingViolations = isStrict
-      ? report.violations.length > 0
-      : report.violations.some((v) => v.severity === 'CRITICAL' || v.severity === 'HIGH');
+    if (hasFailingViolations && (isPromptOnFail || isCopyPrompt)) {
+      const prompt = buildMasterPrompt(report);
+      const copied = copyToClipboard(prompt);
+      if (copied) {
+        process.stdout.write('\n\x1b[1m\x1b[32m✔ AI Agent refactoring prompt copied to clipboard!\x1b[0m\n');
+        process.stdout.write('\x1b[36mPaste directly into Cursor, Claude, or Windsurf to resolve architectural hazards.\x1b[0m\n\n');
+      }
+    }
+
     process.exit(hasFailingViolations ? 1 : 0);
   }
 
@@ -112,6 +154,12 @@ const main = async () => {
     case 'create':
       await runScaffold(rawArgs[1], rawArgs, runAudit);
       break;
+    case 'hook':
+    case 'hooks':
+    case 'install-hooks':
+    case 'setup-ci':
+      await runInstallWizard(rawArgs[1] || process.cwd());
+      break;
     case 'generate':
     case 'capsule':
     case 'add':
@@ -121,7 +169,7 @@ const main = async () => {
         );
         process.exit(1);
       }
-      runGenerateCapsule(rawArgs[1]);
+      await runGenerateCapsule(rawArgs[1]);
       break;
     case 'help':
     case '--help':
@@ -130,7 +178,7 @@ const main = async () => {
       break;
     default:
       if (firstArg && firstArg.startsWith('m-')) {
-        runGenerateCapsule(firstArg);
+        await runGenerateCapsule(firstArg);
       } else if (firstArg && !firstArg.startsWith('-')) {
         await runScaffold(firstArg, rawArgs, runAudit);
       } else {

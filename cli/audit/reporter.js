@@ -8,6 +8,7 @@ import {
   GREEN,
   YELLOW,
   RED,
+  ORANGE,
   DIM,
   BOLD,
   RESET,
@@ -34,6 +35,7 @@ export {
   GREEN,
   YELLOW,
   RED,
+  ORANGE,
   DIM,
   BOLD,
   RESET
@@ -49,22 +51,31 @@ export {
   formatGradeASection
 } from './reporter-grades.js';
 
-export const formatScorecardSection = (report) => {
+export const resolveTopSectionColor = (report) => {
+  const hasNoViolations = (report?.violations?.length ?? 0) === 0;
+  const hasNoHotspots = (report?.hotspots?.length ?? 0) === 0;
+  const areAllPillarsPassed = Object.values(report?.pillars ?? {}).every((p) => p.status === 'PASSED');
+  const isAllPassed = hasNoViolations && hasNoHotspots && areAllPillarsPassed;
+  return isAllPassed ? GREEN : CYAN;
+};
+
+export const formatScorecardSection = (report, themeColor = null) => {
   const { metrics, health } = report;
+  const sectionColor = themeColor || resolveTopSectionColor(report);
   const gradeColor = resolveGradeColor(health.score);
   const lines = [];
 
   lines.push('');
-  lines.push(`${CYAN}======================================================================${RESET}`);
-  lines.push(`${BOLD}${CYAN}   MOLECULAR HEALTH INDEX & CODEBASE OVERVIEW${RESET}`);
-  lines.push(`${CYAN}======================================================================${RESET}`);
+  lines.push(`${sectionColor}======================================================================${RESET}`);
+  lines.push(`${BOLD}${sectionColor}   MOLECULAR HEALTH INDEX & CODEBASE OVERVIEW${RESET}`);
+  lines.push(`${sectionColor}======================================================================${RESET}`);
   lines.push(`   Health Score:        ${gradeColor}${BOLD}${health.score} / 100${RESET} (Grade: ${gradeColor}${BOLD}${health.grade}${RESET} - ${health.label})`);
   lines.push(`   Files Scanned:       ${BOLD}${metrics.scannedFiles}${RESET} source files`);
   lines.push(`   Total Lines of Code: ${BOLD}${metrics.totalLoc}${RESET} LOC (avg: ${metrics.avgLoc} lines/file)`);
   lines.push(`   Largest File:        ${BOLD}${metrics.largestFile.filePath || 'None'}${RESET} (${metrics.largestFile.lineCount} lines)`);
   lines.push(`   Molecule Capsules:   ${metrics.moleculeCount} found (${metrics.moleculeCompliantPct}% compliant < 100 lines)`);
   lines.push(`   Custom Hooks:        ${metrics.hookCount} detected`);
-  lines.push(`${CYAN}======================================================================${RESET}\n`);
+  lines.push(`${sectionColor}======================================================================${RESET}\n`);
 
   return lines.join('\n');
 };
@@ -101,10 +112,10 @@ export const formatHighMediumSection = (report) => {
   const lines = [];
 
   lines.push('');
-  lines.push(`${YELLOW}======================================================================${RESET}`);
-  lines.push(`${BOLD}${YELLOW}   HIGH & MEDIUM HAZARDS (${totalCount} TOTAL) : ARCHITECTURE DEBTS${RESET}`);
+  lines.push(`${ORANGE}======================================================================${RESET}`);
+  lines.push(`${BOLD}${ORANGE}   HIGH & MEDIUM HAZARDS (${totalCount} TOTAL) : ARCHITECTURE DEBTS${RESET}`);
   lines.push(`${DIM}   Saturation, complex control flow booleans, and raw inline styles${RESET}`);
-  lines.push(`${YELLOW}======================================================================${RESET}`);
+  lines.push(`${ORANGE}======================================================================${RESET}`);
 
   if (totalCount === 0) {
     lines.push(`   ${GREEN}✔ Zero high or medium architecture hazards detected.${RESET}`);
@@ -112,7 +123,7 @@ export const formatHighMediumSection = (report) => {
     if (high.length > 0) {
       lines.push(`\n   ${BOLD}--- High Severity (${high.length} items) ---${RESET}`);
       high.forEach((v, idx) => {
-        lines.push(`   ${RED}[#${idx + 1} HIGH]${RESET} [${v.rule}] ${YELLOW}${v.filePath}:${v.line}:${v.column}${RESET}`);
+        lines.push(`   ${ORANGE}[#${idx + 1} HIGH]${RESET} [${v.rule}] ${YELLOW}${v.filePath}:${v.line}:${v.column}${RESET}`);
         lines.push(`      Hazard:    ${v.hazard}`);
         lines.push(`      Directive: ${CYAN}${v.directive}${RESET}\n`);
       });
@@ -121,13 +132,13 @@ export const formatHighMediumSection = (report) => {
     if (medium.length > 0) {
       lines.push(`\n   ${BOLD}--- Medium Severity (${medium.length} items) ---${RESET}`);
       medium.forEach((v, idx) => {
-        lines.push(`   ${YELLOW}[#${idx + 1} MED]${RESET} [${v.rule}] ${YELLOW}${v.filePath}:${v.line}:${v.column}${RESET}`);
+        lines.push(`   ${ORANGE}[#${idx + 1} MED]${RESET} [${v.rule}] ${YELLOW}${v.filePath}:${v.line}:${v.column}${RESET}`);
         lines.push(`      Hazard:    ${v.hazard}`);
         lines.push(`      Directive: ${CYAN}${v.directive}${RESET}\n`);
       });
     }
   }
-  lines.push(`${YELLOW}======================================================================${RESET}\n`);
+  lines.push(`${ORANGE}======================================================================${RESET}\n`);
 
   return lines.join('\n');
 };
@@ -138,33 +149,34 @@ export const formatLowSection = (report) => {
   const lines = [];
 
   lines.push('');
-  lines.push(`${CYAN}======================================================================${RESET}`);
-  lines.push(`${BOLD}${CYAN}   LOW & HYGIENE ISSUES (${low.length} TOTAL) : TYPOGRAPHY & LOGGING${RESET}`);
+  lines.push(`${YELLOW}======================================================================${RESET}`);
+  lines.push(`${BOLD}${YELLOW}   LOW & HYGIENE ISSUES (${low.length} TOTAL) : TYPOGRAPHY & LOGGING${RESET}`);
   lines.push(`${DIM}   Em dash typography violations and unguarded console statements${RESET}`);
-  lines.push(`${CYAN}======================================================================${RESET}`);
+  lines.push(`${YELLOW}======================================================================${RESET}`);
 
   if (low.length === 0) {
     lines.push(`   ${GREEN}✔ Zero typography or logging hygiene issues detected.${RESET}`);
   } else {
     low.forEach((v, idx) => {
-      lines.push(`   ${DIM}[#${idx + 1} LOW]${RESET} [${v.rule}] ${YELLOW}${v.filePath}:${v.line}:${v.column}${RESET}`);
+      lines.push(`   ${YELLOW}[#${idx + 1} LOW]${RESET} [${v.rule}] ${YELLOW}${v.filePath}:${v.line}:${v.column}${RESET}`);
       lines.push(`      Hazard:    ${v.hazard}`);
       lines.push(`      Directive: ${CYAN}${v.directive}${RESET}\n`);
     });
   }
-  lines.push(`${CYAN}======================================================================${RESET}\n`);
+  lines.push(`${YELLOW}======================================================================${RESET}\n`);
 
   return lines.join('\n');
 };
 
-export const formatPillarsSection = (report) => {
+export const formatPillarsSection = (report, themeColor = null) => {
   const { pillars } = report;
+  const sectionColor = themeColor || resolveTopSectionColor(report);
   const lines = [];
 
   lines.push('');
-  lines.push(`${CYAN}======================================================================${RESET}`);
-  lines.push(`${BOLD}${CYAN}   7-PILLAR ARCHITECTURAL COMPLIANCE MATRIX${RESET}`);
-  lines.push(`${CYAN}======================================================================${RESET}`);
+  lines.push(`${sectionColor}======================================================================${RESET}`);
+  lines.push(`${BOLD}${sectionColor}   7-PILLAR ARCHITECTURAL COMPLIANCE MATRIX${RESET}`);
+  lines.push(`${sectionColor}======================================================================${RESET}`);
   lines.push(`   ${DIM}Pillar Name                                   Status     Violations${RESET}`);
   lines.push(`   ${DIM}------------------------------------------------------------------${RESET}`);
   for (const [pillarName, data] of Object.entries(pillars)) {
@@ -173,19 +185,20 @@ export const formatPillarsSection = (report) => {
     const countStr = data.violations === 0 ? `${GREEN}0${RESET}` : `${RED}${data.violations}${RESET}`;
     lines.push(`   ${padName} ${badge} ${countStr}`);
   }
-  lines.push(`${CYAN}======================================================================${RESET}\n`);
+  lines.push(`${sectionColor}======================================================================${RESET}\n`);
 
   return lines.join('\n');
 };
 
-export const formatHotspotsSection = (report) => {
+export const formatHotspotsSection = (report, themeColor = null) => {
   const { hotspots } = report;
+  const sectionColor = themeColor || resolveTopSectionColor(report);
   const lines = [];
 
   lines.push('');
-  lines.push(`${CYAN}======================================================================${RESET}`);
-  lines.push(`${BOLD}${CYAN}   TOP REFACTORING HOTSPOTS (PRIORITY RANKING)${RESET}`);
-  lines.push(`${CYAN}======================================================================${RESET}`);
+  lines.push(`${sectionColor}======================================================================${RESET}`);
+  lines.push(`${BOLD}${sectionColor}   TOP REFACTORING HOTSPOTS (PRIORITY RANKING)${RESET}`);
+  lines.push(`${sectionColor}======================================================================${RESET}`);
 
   if (hotspots.length === 0) {
     lines.push(`   ${GREEN}✔ Zero hotspot files. All files stay within architectural budgets.${RESET}`);
@@ -195,30 +208,43 @@ export const formatHotspotsSection = (report) => {
       lines.push(`   [#${idx + 1}] ${YELLOW}${h.filePath}${RESET} (${h.lineCount} lines, ${h.violationCount} hazards)${monolithBadge}`);
     });
   }
-  lines.push(`${CYAN}======================================================================${RESET}\n`);
+  lines.push(`${sectionColor}======================================================================${RESET}\n`);
 
   return lines.join('\n');
 };
 
-export const formatContextAnalysisSection = (report) => {
+export const formatContextAnalysisSection = (report, themeColor = null) => {
   const { contextAnalysis } = report;
+  const sectionColor = themeColor || resolveTopSectionColor(report);
   const riskColor = resolveRiskColor(contextAnalysis.riskLevel);
   const lines = [];
 
   lines.push('');
-  lines.push(`${CYAN}======================================================================${RESET}`);
-  lines.push(`${BOLD}${CYAN}   CONTEXT ROT & TOKEN BURN ANALYTICS${RESET}`);
-  lines.push(`${CYAN}======================================================================${RESET}`);
+  lines.push(`${sectionColor}======================================================================${RESET}`);
+  lines.push(`${BOLD}${sectionColor}   CONTEXT ROT & TOKEN BURN ANALYTICS${RESET}`);
+  lines.push(`${sectionColor}======================================================================${RESET}`);
   lines.push(`   Estimated Codebase Tokens:  ~${contextAnalysis.estimatedTokens.toLocaleString()} tokens`);
   lines.push(`   Estimated Monolith Bloat:   ~${contextAnalysis.estimatedExcessTokens.toLocaleString()} tokens`);
   lines.push(`   Target Architecture Cut:    ${BOLD}${contextAnalysis.potentialSavingsPct}%${RESET} token reduction potential`);
   lines.push(`   Agent Hallucination Risk:   ${riskColor}${BOLD}${contextAnalysis.riskLevel}${RESET}`);
-  lines.push(`${CYAN}======================================================================${RESET}\n`);
+  if (contextAnalysis.excessCostPerPass !== undefined) {
+    const costPass = contextAnalysis.excessCostPerPass.toFixed(3);
+    const costMonth = contextAnalysis.monthlyWastePerDev.toFixed(2);
+    const costWeek = contextAnalysis.weeklyWastePerDev.toFixed(2);
+    lines.push(`   Pricing Model Baseline:     ${contextAnalysis.pricingModel}`);
+    lines.push(`   Monolith Bloat per AI Turn: \x1b[38;5;208;1m$${costPass}\x1b[0m / prompt turn`);
+    lines.push(`   Projected Dev Context Tax:  \x1b[31;1m$${costMonth}/mo\x1b[0m per engineer ($${costWeek}/wk)`);
+  }
+  lines.push(`${sectionColor}======================================================================${RESET}\n`);
 
   return lines.join('\n');
 };
 
-export const getChemicalXAsciiBanner = () => {
+export const getChemicalXAsciiBanner = (gradeOrReport = null) => {
+  const grade = typeof gradeOrReport === 'object' && gradeOrReport !== null
+    ? gradeOrReport.health?.grade
+    : gradeOrReport;
+
   const art = [
     ' ██████╗██╗  ██╗███████╗███╗   ███╗██╗ ██████╗ █████╗ ██╗         ██╗  ██╗',
     '██╔════╝██║  ██║██╔════╝████╗ ████║██║██╔════╝██╔══██╗██║         ╚██╗██╔╝',
@@ -233,7 +259,8 @@ export const getChemicalXAsciiBanner = () => {
 
   lines.push('                     \x1b[1m\x1b[37mThe Secret Sauce to \x1b[38;2;98;201;255mVibe Coding\x1b[0m');
 
-  for (const line of art) {
+  for (let lineIdx = 0; lineIdx < art.length; lineIdx++) {
+    const line = art[lineIdx];
     let out = '';
     for (let i = 0; i < line.length; i++) {
       const ch = line[i];
@@ -256,6 +283,12 @@ export const getChemicalXAsciiBanner = () => {
       }
       out += `\x1b[38;2;${r};${g};${b}m\x1b[1m${ch}\x1b[0m`;
     }
+
+    if (grade && lineIdx === 2) {
+      const gColor = resolveGradeColor(grade);
+      out += `   \x1b[1m\x1b[37m=\x1b[0m ${gColor}\x1b[1mGrade ${grade}\x1b[0m`;
+    }
+
     lines.push(out);
   }
 
@@ -267,18 +300,19 @@ export const getChemicalXAsciiBanner = () => {
 
 export const formatTerminalReport = (report) => {
   const lines = [];
+  const topColor = resolveTopSectionColor(report);
 
   lines.push('');
-  lines.push(getChemicalXAsciiBanner());
-  lines.push(`${CYAN}======================================================================${RESET}`);
-  lines.push(`${BOLD}${CYAN}   CHEMICAL X PROTOCOL : FULL CODEBASE ARCHITECTURAL AUDIT REPORT${RESET}`);
+  lines.push(getChemicalXAsciiBanner(report?.health?.grade));
+  lines.push(`${topColor}======================================================================${RESET}`);
+  lines.push(`${BOLD}${topColor}   CHEMICAL X PROTOCOL : FULL CODEBASE ARCHITECTURAL AUDIT REPORT${RESET}`);
   lines.push(`${DIM}   Molecular Architecture Standards & Context Hazard Verification${RESET}`);
-  lines.push(`${CYAN}======================================================================${RESET}`);
+  lines.push(`${topColor}======================================================================${RESET}`);
 
-  lines.push(formatScorecardSection(report));
-  lines.push(formatContextAnalysisSection(report));
-  lines.push(formatPillarsSection(report));
-  lines.push(formatHotspotsSection(report));
+  lines.push(formatScorecardSection(report, topColor));
+  lines.push(formatContextAnalysisSection(report, topColor));
+  lines.push(formatPillarsSection(report, topColor));
+  lines.push(formatHotspotsSection(report, topColor));
   lines.push(formatCriticalSection(report));
   lines.push(formatHighMediumSection(report));
   lines.push(formatLowSection(report));
@@ -313,9 +347,9 @@ export const formatFailuresSection = (report) => {
   const critDesc = critical.length > 0 ? `${RED}${BOLD}${critical.length} (Immediate Action Required)${RESET}` : `${GREEN}0${RESET}`;
   lines.push(`   Critical Hazards:        ${critDesc}`);
   const debtsTotal = high.length + medium.length;
-  const debtsDesc = debtsTotal > 0 ? `${YELLOW}${BOLD}${debtsTotal}${RESET}` : `${GREEN}0${RESET}`;
+  const debtsDesc = debtsTotal > 0 ? `${ORANGE}${BOLD}${debtsTotal}${RESET}` : `${GREEN}0${RESET}`;
   lines.push(`   High/Med Debts:          ${debtsDesc}`);
-  const lowDesc = low.length > 0 ? `${DIM}${low.length}${RESET}` : `${GREEN}0${RESET}`;
+  const lowDesc = low.length > 0 ? `${YELLOW}${low.length}${RESET}` : `${GREEN}0${RESET}`;
   lines.push(`   Low Hygiene Issues:      ${lowDesc}`);
   const hotspotsDesc = hotspots.length > 0 ? `${YELLOW}${hotspots.length}${RESET}` : `${GREEN}0${RESET}`;
   lines.push(`   Hotspot Files:           ${hotspotsDesc}`);
@@ -331,10 +365,10 @@ export const formatFailuresSection = (report) => {
   }
 
   if (debtsTotal > 0) {
-    lines.push(`   ${BOLD}${YELLOW}⚠️  HIGH & MEDIUM HAZARDS (${debtsTotal}) : ARCHITECTURE DEBTS${RESET}`);
+    lines.push(`   ${BOLD}${ORANGE}⚠️  HIGH & MEDIUM HAZARDS (${debtsTotal}) : ARCHITECTURE DEBTS${RESET}`);
     [...high, ...medium].forEach((v, idx) => {
       const isHigh = v.severity === 'HIGH';
-      const badge = isHigh ? `${RED}[#${idx + 1} HIGH]${RESET}` : `${YELLOW}[#${idx + 1} MED]${RESET}`;
+      const badge = isHigh ? `${ORANGE}[#${idx + 1} HIGH]${RESET}` : `${ORANGE}[#${idx + 1} MED]${RESET}`;
       lines.push(`   ${badge} [${v.rule}] ${YELLOW}${v.filePath}:${v.line}:${v.column}${RESET}`);
       lines.push(`      Hazard:    ${v.hazard}`);
       lines.push(`      Directive: ${CYAN}${v.directive}${RESET}\n`);
@@ -342,9 +376,9 @@ export const formatFailuresSection = (report) => {
   }
 
   if (low.length > 0) {
-    lines.push(`   ${BOLD}${DIM}🧹 LOW & HYGIENE ISSUES (${low.length})${RESET}`);
+    lines.push(`   ${BOLD}${YELLOW}🧹 LOW & HYGIENE ISSUES (${low.length})${RESET}`);
     low.forEach((v, idx) => {
-      lines.push(`   ${DIM}[#${idx + 1} LOW]${RESET} [${v.rule}] ${YELLOW}${v.filePath}:${v.line}:${v.column}${RESET}`);
+      lines.push(`   ${YELLOW}[#${idx + 1} LOW]${RESET} [${v.rule}] ${YELLOW}${v.filePath}:${v.line}:${v.column}${RESET}`);
       lines.push(`      Hazard:    ${v.hazard}`);
       lines.push(`      Directive: ${CYAN}${v.directive}${RESET}\n`);
     });

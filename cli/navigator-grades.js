@@ -1,6 +1,6 @@
 export const resolveGradeColor = (grade) => {
   if (grade === 'A+' || grade === 'A') return '\x1b[32;1m';
-  if (grade === 'B') return '\x1b[36;1m';
+  if (grade === 'B') return '\x1b[33;1m';
   if (grade === 'C') return '\x1b[33;1m';
   if (grade === 'D') return '\x1b[38;5;208;1m';
   return '\x1b[31;1m';

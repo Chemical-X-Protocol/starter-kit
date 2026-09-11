@@ -10,6 +10,7 @@ import {
   GREEN,
   YELLOW,
   RED,
+  ORANGE,
   DIM,
   BOLD,
   RESET,
@@ -82,14 +83,14 @@ export const formatGradeDSection = (report) => {
   const lines = [];
 
   lines.push('');
-  lines.push(`${YELLOW}======================================================================${RESET}`);
-  lines.push(`${BOLD}${YELLOW}   GRADE D : HIGH SEVERITY DEBTS & SEVERE MONOLITHS${RESET}`);
+  lines.push(`${ORANGE}======================================================================${RESET}`);
+  lines.push(`${BOLD}${ORANGE}   GRADE D : HIGH SEVERITY DEBTS & SEVERE MONOLITHS${RESET}`);
   lines.push(`${DIM}   Refactoring priorities: 1,000 to 1,999 LOC files and hook saturation > 5${RESET}`);
-  lines.push(`${YELLOW}======================================================================${RESET}`);
-  lines.push(`   High Severity Debts:  ${high.length > 0 ? `${YELLOW}${BOLD}${high.length}${RESET}` : `${GREEN}0${RESET}`}`);
-  lines.push(`   Severe Monoliths:     ${severeMonoliths.length > 0 ? `${YELLOW}${BOLD}${severeMonoliths.length}${RESET}` : `${GREEN}0${RESET}`}`);
-  lines.push(`   Degraded Pillars:     ${warnPillars.length > 0 ? `${YELLOW}${BOLD}${warnPillars.length}${RESET}` : `${GREEN}0${RESET}`}`);
-  lines.push(`${YELLOW}----------------------------------------------------------------------${RESET}`);
+  lines.push(`${ORANGE}======================================================================${RESET}`);
+  lines.push(`   High Severity Debts:  ${high.length > 0 ? `${ORANGE}${BOLD}${high.length}${RESET}` : `${GREEN}0${RESET}`}`);
+  lines.push(`   Severe Monoliths:     ${severeMonoliths.length > 0 ? `${ORANGE}${BOLD}${severeMonoliths.length}${RESET}` : `${GREEN}0${RESET}`}`);
+  lines.push(`   Degraded Pillars:     ${warnPillars.length > 0 ? `${ORANGE}${BOLD}${warnPillars.length}${RESET}` : `${GREEN}0${RESET}`}`);
+  lines.push(`${ORANGE}----------------------------------------------------------------------${RESET}`);
 
   const totalGradeDItems = high.length + severeMonoliths.length + warnPillars.length;
   if (totalGradeDItems === 0) {
@@ -97,24 +98,24 @@ export const formatGradeDSection = (report) => {
     lines.push(`   ${DIM}No severe monoliths (1k-2k LOC) or saturated hook anti-patterns.${RESET}`);
   } else {
     if (high.length > 0) {
-      lines.push(`\n   ${BOLD}${YELLOW}⚠️  HIGH SEVERITY VIOLATIONS (${high.length}):${RESET}`);
+      lines.push(`\n   ${BOLD}${ORANGE}⚠️  HIGH SEVERITY VIOLATIONS (${high.length}):${RESET}`);
       high.forEach((v, idx) => {
-        lines.push(`   ${RED}[#${idx + 1} HIGH]${RESET} [${v.rule}] ${YELLOW}${v.filePath}:${v.line}:${v.column}${RESET}`);
+        lines.push(`   ${ORANGE}[#${idx + 1} HIGH]${RESET} [${v.rule}] ${YELLOW}${v.filePath}:${v.line}:${v.column}${RESET}`);
         lines.push(`      Hazard:    ${v.hazard}`);
         lines.push(`      Directive: ${CYAN}${v.directive}${RESET}\n`);
       });
     }
 
     if (severeMonoliths.length > 0) {
-      lines.push(`   ${BOLD}${YELLOW}🔥 SEVERE MONOLITHS (1,000 - 1,999 LINES):${RESET}`);
+      lines.push(`   ${BOLD}${ORANGE}🔥 SEVERE MONOLITHS (1,000 - 1,999 LINES):${RESET}`);
       severeMonoliths.forEach((h, idx) => {
-        lines.push(`   [#${idx + 1}] ${YELLOW}${h.filePath}${RESET} (${h.lineCount} lines, ${h.violationCount} hazards) ${YELLOW}[SEVERE MONOLITH]${RESET}`);
+        lines.push(`   [#${idx + 1}] ${YELLOW}${h.filePath}${RESET} (${h.lineCount} lines, ${h.violationCount} hazards) ${ORANGE}[SEVERE MONOLITH]${RESET}`);
       });
       lines.push('');
     }
 
     if (warnPillars.length > 0) {
-      lines.push(`   ${BOLD}${YELLOW}🏛️  DEGRADED PILLARS (MULTIPLE HIGH/MED DEBTS):${RESET}`);
+      lines.push(`   ${BOLD}${ORANGE}🏛️  DEGRADED PILLARS (MULTIPLE HIGH/MED DEBTS):${RESET}`);
       for (const [name, p] of warnPillars) {
         lines.push(`   ⚠ ${YELLOW}${name}${RESET}: ${p.violations} violations (${p.high} High, ${p.medium} Med)`);
       }
@@ -127,7 +128,7 @@ export const formatGradeDSection = (report) => {
     lines.push(formatPromptBox('🤖 AI AGENT REFACTORING PROMPT (GRADE D DEBTS)', promptD));
   }
 
-  lines.push(`${YELLOW}======================================================================${RESET}\n`);
+  lines.push(`${ORANGE}======================================================================${RESET}\n`);
   return lines.join('\n');
 };
 
@@ -184,20 +185,20 @@ export const formatGradeBSection = (report) => {
   const lines = [];
 
   lines.push('');
-  lines.push(`${CYAN}======================================================================${RESET}`);
-  lines.push(`${BOLD}${CYAN}   GRADE B : LOW SEVERITY HYGIENE & MINOR CODE SMELLS${RESET}`);
+  lines.push(`${YELLOW}======================================================================${RESET}`);
+  lines.push(`${BOLD}${YELLOW}   GRADE B : LOW SEVERITY HYGIENE & MINOR CODE SMELLS${RESET}`);
   lines.push(`${DIM}   Hygiene & polish: Em dash typography leaks and unguarded console logging${RESET}`);
-  lines.push(`${CYAN}======================================================================${RESET}`);
-  lines.push(`   Low Hygiene Issues:   ${low.length > 0 ? `${DIM}${BOLD}${low.length}${RESET}` : `${GREEN}0${RESET}`}`);
-  lines.push(`${CYAN}----------------------------------------------------------------------${RESET}`);
+  lines.push(`${YELLOW}======================================================================${RESET}`);
+  lines.push(`   Low Hygiene Issues:   ${low.length > 0 ? `${YELLOW}${BOLD}${low.length}${RESET}` : `${GREEN}0${RESET}`}`);
+  lines.push(`${YELLOW}----------------------------------------------------------------------${RESET}`);
 
   if (low.length === 0) {
     lines.push(`\n   ${GREEN}✔ Outstanding hygiene! Zero Grade B issues detected.${RESET}`);
     lines.push(`   ${DIM}Zero em dashes and zero unguarded console statements found.${RESET}`);
   } else {
-    lines.push(`\n   ${BOLD}${DIM}ℹ️  LOW HYGIENE VIOLATIONS (${low.length}):${RESET}`);
+    lines.push(`\n   ${BOLD}${YELLOW}ℹ️  LOW HYGIENE VIOLATIONS (${low.length}):${RESET}`);
     low.forEach((v, idx) => {
-      lines.push(`   ${DIM}[#${idx + 1} LOW]${RESET} [${v.rule}] ${YELLOW}${v.filePath}:${v.line}:${v.column}${RESET}`);
+      lines.push(`   ${YELLOW}[#${idx + 1} LOW]${RESET} [${v.rule}] ${YELLOW}${v.filePath}:${v.line}:${v.column}${RESET}`);
       lines.push(`      Hazard:    ${v.hazard}`);
       lines.push(`      Directive: ${CYAN}${v.directive}${RESET}\n`);
     });
@@ -208,7 +209,7 @@ export const formatGradeBSection = (report) => {
     lines.push(formatPromptBox('🤖 AI AGENT REFACTORING PROMPT (GRADE B HYGIENE)', promptB));
   }
 
-  lines.push(`${CYAN}======================================================================${RESET}\n`);
+  lines.push(`${YELLOW}======================================================================${RESET}\n`);
   return lines.join('\n');
 };
 

@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import {
@@ -16,6 +17,8 @@ import {
   generateTransformationDiscussionContent,
   generateDiscussionContent,
   publishDiscussion,
+  publishOrUpdateDiscussion,
+  getStoredDiscussion,
   copyToClipboard,
   ORG_DISCUSSIONS_URL,
   DISCUSSION_CATEGORY,
@@ -53,8 +56,23 @@ export const handleShareToDiscussions = async (report) => {
     }
   }
 
+  let detectedSite = '';
+  try {
+    const pkgPath = path.resolve(process.cwd(), 'package.json');
+    if (fs.existsSync(pkgPath)) {
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+      detectedSite = pkg.homepage || pkg.website || '';
+    }
+  } catch {}
+
+  const stored = getStoredDiscussion();
+  if (!detectedSite && stored?.website) {
+    detectedSite = stored.website;
+  }
+
   let user = detectedUser;
   let projectName = defaultProject;
+  let liveUrl = detectedSite;
   const modeLabel = shareType === 'transformation' ? 'Transformation Showcase (Delta)' : 'Single Audit Scorecard';
 
   if (hasGum()) {
@@ -64,30 +82,43 @@ export const handleShareToDiscussions = async (report) => {
 
     user = gumInput('Your GitHub username:', detectedUser) || detectedUser;
     projectName = gumInput('Project name for audit post:', defaultProject) || defaultProject;
+    liveUrl = gumInput('Website URL (optional):', detectedSite) || detectedSite;
   } else {
     process.stdout.write(`\n\x1b[1m\x1b[38;2;98;201;255mPost Audit to GitHub Discussions (${DISCUSSION_CATEGORY})\x1b[0m\n`);
     user = (await promptQuestion(`Your GitHub username [@${detectedUser}]: `)) || detectedUser;
     projectName = (await promptQuestion(`Project name for audit post [${defaultProject}]: `)) || defaultProject;
+    liveUrl = (await promptQuestion(`Website URL (optional) [${detectedSite}]: `)) || detectedSite;
   }
 
   const isTransformationPost = shareType === 'transformation' && Boolean(baseline);
   const { title, category, categorySlug, body } = isTransformationPost
-    ? generateTransformationDiscussionContent(baseline, currentSnapshot, user, projectName, repoInfo.url)
-    : generateDiscussionContent(report, user, projectName, repoInfo.url);
+    ? generateTransformationDiscussionContent(baseline, currentSnapshot, user, projectName, repoInfo.url, liveUrl)
+    : generateDiscussionContent(report, user, projectName, repoInfo.url, liveUrl);
 
-  process.stdout.write('\nAttempting automatic publish to GitHub Discussions...\n');
-  const pubResult = await publishDiscussion(DEFAULT_DISCUSSION_REPO, title, body, category);
+  process.stdout.write('\nAttempting publish to GitHub Discussions...\n');
+  const pubResult = await publishOrUpdateDiscussion(DEFAULT_DISCUSSION_REPO, title, body, category, {
+    projectName,
+    website: liveUrl
+  });
 
   if (pubResult.success && pubResult.url) {
-    process.stdout.write(`\n\x1b[1m\x1b[32m✔ Successfully published discussion!\x1b[0m\nDiscussion URL: \x1b[36m${pubResult.url}\x1b[0m\n\n`);
+    if (pubResult.updated) {
+      process.stdout.write(`\n\x1b[1m\x1b[32m✔ Successfully updated discussion topic #${pubResult.discussionNumber}!\x1b[0m\n`);
+      process.stdout.write('  \x1b[33mPrevious audit report was archived as a comment in the thread.\x1b[0m\n');
+      process.stdout.write(`Discussion URL: \x1b[36m${pubResult.url}\x1b[0m\n\n`);
+    } else {
+      process.stdout.write(`\n\x1b[1m\x1b[32m✔ Successfully published discussion topic!\x1b[0m\nDiscussion URL: \x1b[36m${pubResult.url}\x1b[0m\n\n`);
+    }
     openBrowser(pubResult.url);
   } else {
     copyToClipboard(body);
     const targetSlug = categorySlug || DISCUSSION_CATEGORY_SLUG || 'npx-chemx-audit';
-    const discussionUrl = `${ORG_DISCUSSIONS_URL}/new?category=${encodeURIComponent(targetSlug)}&title=${encodeURIComponent(title)}`;
+    const fallbackUrl = pubResult.discussionNumber
+      ? `https://github.com/${DEFAULT_DISCUSSION_REPO}/discussions/${pubResult.discussionNumber}`
+      : `${ORG_DISCUSSIONS_URL}/new?category=${encodeURIComponent(targetSlug)}&title=${encodeURIComponent(title)}`;
     process.stdout.write('\n\x1b[32m✔ Formatted audit report copied to your system clipboard!\x1b[0m\n');
-    process.stdout.write(`Opening GitHub Discussions composer in default browser:\n  \x1b[36m${discussionUrl}\x1b[0m\n\n`);
-    openBrowser(discussionUrl);
+    process.stdout.write(`Opening GitHub Discussions in default browser:\n  \x1b[36m${fallbackUrl}\x1b[0m\n\n`);
+    openBrowser(fallbackUrl);
   }
 
   if (hasGum()) {

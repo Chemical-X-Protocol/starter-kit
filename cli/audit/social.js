@@ -11,7 +11,19 @@ export {
 export {
   publishDiscussionViaHttp,
   publishDiscussionViaGh,
-  publishDiscussion
+  publishDiscussion,
+  publishOrUpdateDiscussion,
+  viewDiscussionViaGh,
+  viewDiscussionViaHttp,
+  postDiscussionCommentViaGh,
+  postDiscussionCommentViaHttp,
+  editDiscussionViaGh,
+  editDiscussionViaHttp,
+  findExistingDiscussionViaGh,
+  formatArchiveComment,
+  getStoredDiscussion,
+  saveStoredDiscussion,
+  clearStoredDiscussion
 } from './social-publisher.js';
 
 export const DISCUSSION_CATEGORY = 'npx chemx audit';
@@ -42,7 +54,15 @@ const isExtremeMonolith = (h) => h.lineCount >= 2000;
 const isSevereMonolith = (h) => h.lineCount >= 1000 && h.lineCount < 2000;
 const isWarningMonolith = (h) => h.lineCount >= 500 && h.lineCount < 1000;
 
-export const generateDiscussionContent = (report, username, projectName = 'Codebase', repoUrl = '') => {
+export const formatWebUrl = (url) => {
+  if (!url || typeof url !== 'string') return '';
+  const trimmed = url.trim();
+  if (!trimmed) return '';
+  const href = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  return `[${href}](${href})`;
+};
+
+export const generateDiscussionContent = (report, username, projectName = 'Codebase', repoUrl = '', liveUrl = '') => {
   const { health, metrics, pillars, hotspots, contextAnalysis, violations } = report;
   const isHighScoring = health.score >= 80;
   const badgeColor = resolveBadgeColor(health.score);
@@ -61,7 +81,13 @@ export const generateDiscussionContent = (report, username, projectName = 'Codeb
   lines.push(`* **Audited by**: @${username}`);
   const resolvedRepoUrl = repoUrl || (/^[\w\-.]+\/[\w\-.]+$/.test(projectName) ? `https://github.com/${projectName}` : '');
   if (resolvedRepoUrl) {
-    lines.push(`* **Repository**: ${resolvedRepoUrl}`);
+    lines.push(`* **Repository**: [${resolvedRepoUrl}](${resolvedRepoUrl})`);
+  }
+  if (liveUrl) {
+    const formattedWeb = formatWebUrl(liveUrl);
+    if (formattedWeb) {
+      lines.push(`* **Website**: ${formattedWeb}`);
+    }
   }
   lines.push(`* **Molecular Health Index**: **${health.score} / 100** (Grade: **${health.grade}** - ${health.label})`);
   lines.push(`* **Source Files Analyzed**: ${metrics.scannedFiles} files (${metrics.totalLoc} total LOC)`);
@@ -138,7 +164,8 @@ export const generateTransformationDiscussionContent = (
   afterSnapshot,
   username,
   projectName = 'Codebase',
-  repoUrl = ''
+  repoUrl = '',
+  liveUrl = ''
 ) => {
   const scoreBefore = beforeSnapshot.health.score;
   const scoreAfter = afterSnapshot.health.score;
@@ -168,7 +195,13 @@ export const generateTransformationDiscussionContent = (
   lines.push(`* **Audited by**: @${username}`);
   const resolvedRepoUrl = repoUrl || (/^[\w\-.]+\/[\w\-.]+$/.test(projectName) ? `https://github.com/${projectName}` : '');
   if (resolvedRepoUrl) {
-    lines.push(`* **Repository**: ${resolvedRepoUrl}`);
+    lines.push(`* **Repository**: [${resolvedRepoUrl}](${resolvedRepoUrl})`);
+  }
+  if (liveUrl) {
+    const formattedWeb = formatWebUrl(liveUrl);
+    if (formattedWeb) {
+      lines.push(`* **Website**: ${formattedWeb}`);
+    }
   }
   lines.push(`* **Transformation Summary**: Upgraded codebase from **Grade ${beforeSnapshot.health.grade} (${scoreBefore}/100)** to **Grade ${afterSnapshot.health.grade} (${scoreAfter}/100)**.`);
   lines.push('');

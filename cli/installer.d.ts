@@ -1,0 +1,20 @@
+export interface InstallOptions {
+  minGrade?: string;
+  minScore?: number;
+  maxLines?: number;
+  maxMoleculeLines?: number;
+}
+
+export interface ProjectConfig {
+  minGrade: string;
+  minScore: number;
+  maxLineCount: number;
+  maxMoleculeLineCount: number;
+}
+
+export declare function buildPreCommitHookScript(minGrade?: string, minScore?: number): string;
+export declare function buildGitHubWorkflowScript(minGrade?: string, minScore?: number): string;
+export declare function installPreCommitHook(targetDir?: string, options?: InstallOptions): boolean;
+export declare function installGitHubWorkflow(targetDir?: string, options?: InstallOptions): boolean;
+export declare function saveProjectConfig(targetDir?: string, config?: Partial<ProjectConfig>): void;
+export declare function runInstallWizard(targetDir?: string): Promise<void>;

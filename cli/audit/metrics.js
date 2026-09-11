@@ -89,7 +89,13 @@ export const calculatePillarBreakdown = (violations) => {
   return breakdown;
 };
 
-export const calculateTokenBurnAnalytics = (fileStats) => {
+export const MODEL_PRICING_RATES = {
+  blended: { name: 'Frontier Blended ($3.00/1M)', costPerMillion: 3.0 },
+  claude: { name: 'Claude 3.5 Sonnet ($3.00/1M)', costPerMillion: 3.0 },
+  gpt4o: { name: 'GPT-4o ($2.50/1M)', costPerMillion: 2.5 }
+};
+
+export const calculateTokenBurnAnalytics = (fileStats, options = {}) => {
   let totalRawChars = 0;
   let excessChars = 0;
 
@@ -114,11 +120,24 @@ export const calculateTokenBurnAnalytics = (fileStats) => {
     return 'LOW';
   };
 
+  const selectedModel = options?.model?.toLowerCase() || 'blended';
+  const modelConfig = MODEL_PRICING_RATES[selectedModel] || MODEL_PRICING_RATES.blended;
+  const costPerMillion = options?.costPerMillion ? Number(options.costPerMillion) : modelConfig.costPerMillion;
+
+  const excessCostPerPass = Number(((estimatedExcessTokens / 1000000) * costPerMillion).toFixed(3));
+  const weeklyWastePerDev = Number((excessCostPerPass * 20 * 5).toFixed(2));
+  const monthlyWastePerDev = Number((weeklyWastePerDev * 4).toFixed(2));
+
   return {
     estimatedTokens,
     estimatedExcessTokens,
     potentialSavingsPct,
-    riskLevel: resolveRiskLevel(potentialSavingsPct)
+    riskLevel: resolveRiskLevel(potentialSavingsPct),
+    pricingModel: modelConfig.name,
+    costPerMillion,
+    excessCostPerPass,
+    weeklyWastePerDev,
+    monthlyWastePerDev
   };
 };
 

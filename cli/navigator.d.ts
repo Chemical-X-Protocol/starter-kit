@@ -13,4 +13,12 @@ export declare function extractPromptFromContent(content: string): string | null
 export declare function showPagedContent(content: string, promptText?: string | null): Promise<void>;
 export declare function showConversionMenu(onScaffold?: (() => Promise<void>) | null): Promise<void>;
 export declare function handleShareToDiscussions(report: AuditReport): Promise<void>;
+export declare function renderDashboardBanner(
+  health: AuditReport['health'],
+  metrics: AuditReport['metrics'],
+  violations: AuditReport['violations'],
+  critical: readonly unknown[],
+  highMediumCount: number,
+  low: readonly unknown[]
+): void;
 export declare function runInteractiveAuditNavigator(report: AuditReport, onScaffold?: (() => Promise<void>) | null): Promise<void>;

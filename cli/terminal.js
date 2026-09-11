@@ -1,46 +1,46 @@
-import readline from 'node:readline';
-import { spawnSync } from 'node:child_process';
+import readline from "node:readline";
+import { spawnSync } from "node:child_process";
 
 export const openBrowser = (url) => {
   const platform = process.platform;
   try {
-    if (platform === 'darwin') {
-      spawnSync('open', [url], { stdio: 'ignore' });
-    } else if (platform === 'win32') {
-      spawnSync('cmd.exe', ['/c', 'start', '""', url], { stdio: 'ignore' });
+    if (platform === "darwin") {
+      spawnSync("open", [url], { stdio: "ignore" });
+    } else if (platform === "win32") {
+      spawnSync("cmd.exe", ["/c", "start", '""', url], { stdio: "ignore" });
     } else {
-      spawnSync('xdg-open', [url], { stdio: 'ignore' });
+      spawnSync("xdg-open", [url], { stdio: "ignore" });
     }
   } catch {}
 };
 
 export const hasGum = () => {
   try {
-    return spawnSync('which', ['gum'], { stdio: 'ignore' }).status === 0;
+    return spawnSync("which", ["gum"], { stdio: "ignore" }).status === 0;
   } catch {
     return false;
   }
 };
 
-export const gumChoose = (options, header = '') => {
-  const args = ['choose'];
+export const gumChoose = (options, header = "") => {
+  const args = ["choose"];
   if (header) {
-    args.push(`--header=${header}`, '--header.foreground=81');
+    args.push(`--header=${header}`, "--header.foreground=81");
   }
   const headerPadding = header ? 3 : 1;
   const listHeight = options.length + headerPadding;
-  args.push('--cursor.foreground=81', `--height=${listHeight}`, ...options);
-  const res = spawnSync('gum', args, { encoding: 'utf-8', stdio: ['inherit', 'pipe', 'inherit'] });
-  return (res.stdout || '').trim();
+  args.push("--cursor.foreground=81", `--height=${listHeight}`, ...options);
+  const res = spawnSync("gum", args, { encoding: "utf-8", stdio: ["inherit", "pipe", "inherit"] });
+  return (res.stdout || "").trim();
 };
 
-export const gumInput = (promptText, placeholder = '', isPassword = false) => {
-  const args = ['input', `--prompt=${promptText} `, `--placeholder=${placeholder}`];
+export const gumInput = (promptText, placeholder = "", isPassword = false) => {
+  const args = ["input", `--prompt=${promptText} `, `--placeholder=${placeholder}`];
   if (isPassword) {
-    args.push('--password');
+    args.push("--password");
   }
-  const res = spawnSync('gum', args, { encoding: 'utf-8', stdio: ['inherit', 'pipe', 'inherit'] });
-  return (res.stdout || '').trim();
+  const res = spawnSync("gum", args, { encoding: "utf-8", stdio: ["inherit", "pipe", "inherit"] });
+  return (res.stdout || "").trim();
 };
 
 export const promptQuestion = (query) => {
@@ -53,28 +53,74 @@ export const promptQuestion = (query) => {
   });
 };
 
-export const stripAnsi = (text) => text.replace(/\x1b\[[0-9;]*m/g, '');
+export const stripAnsi = (text) => text.replace(/\x1b\[[0-9;]*m/g, "");
 
-export const renderBanner = (title = 'Chemical X Protocol: Molecular Architecture') => {
+export const renderBanner = (title = "Chemical X Protocol: Molecular Architecture") => {
   if (hasGum()) {
     spawnSync(
-      'gum',
+      "gum",
       [
-        'style',
-        '--border=normal',
-        '--margin=1',
-        '--padding=1 2',
-        '--border-foreground=45',
-        '--foreground=81',
-        '--bold',
+        "style",
+        "--border=normal",
+        "--margin=1",
+        "--padding=1 2",
+        "--border-foreground=45",
+        "--foreground=81",
+        "--bold",
         `  ${title}\n  Zero-Context-Rot Scaffolding & Engineering Directives`
       ],
-      { stdio: 'inherit' }
+      { stdio: "inherit" }
     );
   } else {
-    process.stdout.write('\n\x1b[38;2;98;201;255m=====================================================\x1b[0m\n');
+    process.stdout.write(
+      "\n\x1b[38;2;98;201;255m=====================================================\x1b[0m\n"
+    );
     process.stdout.write(`\x1b[1m\x1b[38;2;98;201;255m  ${title}\x1b[0m\n`);
-    process.stdout.write('  Zero-Context-Rot Scaffolding & Engineering Directives\n');
-    process.stdout.write('\x1b[38;2;98;201;255m=====================================================\x1b[0m\n\n');
+    process.stdout.write("  Zero-Context-Rot Scaffolding & Engineering Directives\n");
+    process.stdout.write(
+      "\x1b[38;2;98;201;255m=====================================================\x1b[0m\n\n"
+    );
   }
+};
+
+export const gumConfirm = (
+  promptText = "Plug your website and publish your audit report to our GitHub Discussions Audits Forum?",
+  affirmative = "Publish Report",
+  negative = "Skip to Menu",
+  defaultVal = true
+) => {
+  const args = [
+    "confirm",
+    promptText,
+    `--default=${defaultVal}`,
+    `--affirmative=${affirmative}`,
+    `--negative=${negative}`,
+    "--prompt.foreground=81",
+    "--selected.background=81",
+    "--selected.foreground=0"
+  ];
+  const res = spawnSync("gum", args, { stdio: "inherit" });
+  return res.status === 0;
+};
+
+export const promptConfirm = async (
+  query = "Plug your website and publish your audit report to our GitHub Discussions Audits Forum?",
+  defaultVal = true
+) => {
+  const suffix = defaultVal ? " [Y/n]: " : " [y/N]: ";
+  const answer = await promptQuestion(`${query}${suffix}`);
+  if (!answer) return defaultVal;
+  return /^(y|yes)$/i.test(answer);
+};
+
+export const confirmAction = async (
+  promptText = "Plug your website and publish your audit report to our GitHub Discussions Audits Forum?",
+  affirmative = "Publish Report",
+  negative = "Skip to Menu",
+  defaultVal = true
+) => {
+  if (hasGum()) {
+    return gumConfirm(promptText, affirmative, negative, defaultVal);
+  }
+  return promptConfirm(promptText, defaultVal);
 };

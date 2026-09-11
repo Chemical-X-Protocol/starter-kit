@@ -2,6 +2,7 @@ export const CYAN = '\x1b[38;2;98;201;255m';
 export const GREEN = '\x1b[32m';
 export const YELLOW = '\x1b[33m';
 export const RED = '\x1b[31m';
+export const ORANGE = '\x1b[38;5;208m';
 export const DIM = '\x1b[2m';
 export const BOLD = '\x1b[1m';
 export const RESET = '\x1b[0m';
@@ -27,11 +28,11 @@ export const getSeverityBadge = (severity) => {
     case 'CRITICAL':
       return `${RED}[CRITICAL]${RESET}`;
     case 'HIGH':
-      return `${RED}[HIGH]${RESET}`;
+      return `${ORANGE}[HIGH]${RESET}`;
     case 'MEDIUM':
-      return `${YELLOW}[MEDIUM]${RESET}`;
+      return `${ORANGE}[MEDIUM]${RESET}`;
     case 'LOW':
-      return `${DIM}[LOW]${RESET}`;
+      return `${YELLOW}[LOW]${RESET}`;
     default:
       return `[${severity}]`;
   }
@@ -50,9 +51,16 @@ export const getStatusBadge = (status) => {
   }
 };
 
-export const resolveGradeColor = (score) => {
-  if (score >= 90) return GREEN;
-  if (score >= 70) return YELLOW;
+export const resolveGradeColor = (scoreOrGrade) => {
+  if (typeof scoreOrGrade === 'string') {
+    const g = scoreOrGrade.toUpperCase();
+    if (g.startsWith('A')) return GREEN;
+    if (g === 'B' || g === 'C') return YELLOW;
+    if (g === 'D') return ORANGE;
+    return RED;
+  }
+  if (scoreOrGrade >= 90) return GREEN;
+  if (scoreOrGrade >= 70) return YELLOW;
   return RED;
 };
 
@@ -64,7 +72,7 @@ export const resolveRiskColor = (riskLevel) => {
 
 export const resolveHotspotBadge = (lineCount) => {
   if (lineCount >= 2000) return ` ${RED}[CRITICAL MONOLITH >= 2,000 LOC]${RESET}`;
-  if (lineCount >= 1000) return ` ${RED}[SEVERE MONOLITH >= 1,000 LOC]${RESET}`;
+  if (lineCount >= 1000) return ` ${ORANGE}[SEVERE MONOLITH >= 1,000 LOC]${RESET}`;
   if (lineCount > 500) return ` ${YELLOW}[MONOLITH WARNING > 500 LOC]${RESET}`;
   return '';
 };

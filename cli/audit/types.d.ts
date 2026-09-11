@@ -101,13 +101,14 @@ export declare function scanDirectory(targetDir: string, baseDir: string): Hazar
 export declare function runAudit(targetDir?: string, options?: AuditOptions): AuditReport;
 export declare function formatTerminalReport(report: AuditReport): string;
 export declare function generateMarkdownReport(report: AuditReport): string;
-export declare function formatScorecardSection(report: AuditReport): string;
+export declare function resolveTopSectionColor(report: AuditReport): string;
+export declare function formatScorecardSection(report: AuditReport, themeColor?: string | null): string;
 export declare function formatCriticalSection(report: AuditReport): string;
 export declare function formatHighMediumSection(report: AuditReport): string;
 export declare function formatLowSection(report: AuditReport): string;
-export declare function formatPillarsSection(report: AuditReport): string;
-export declare function formatHotspotsSection(report: AuditReport): string;
-export declare function formatContextAnalysisSection(report: AuditReport): string;
+export declare function formatPillarsSection(report: AuditReport, themeColor?: string | null): string;
+export declare function formatHotspotsSection(report: AuditReport, themeColor?: string | null): string;
+export declare function formatContextAnalysisSection(report: AuditReport, themeColor?: string | null): string;
 export declare function formatFailuresSection(report: AuditReport): string;
 export declare function formatPassesSection(report: AuditReport): string;
 export declare function formatGradeFSection(report: AuditReport): string;
@@ -115,7 +116,7 @@ export declare function formatGradeDSection(report: AuditReport): string;
 export declare function formatGradeCSection(report: AuditReport): string;
 export declare function formatGradeBSection(report: AuditReport): string;
 export declare function formatGradeASection(report: AuditReport): string;
-export declare function getChemicalXAsciiBanner(): string;
+export declare function getChemicalXAsciiBanner(gradeOrReport?: string | AuditReport | null): string;
 
 export * from './social';
 
