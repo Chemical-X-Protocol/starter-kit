@@ -55,11 +55,21 @@ if [ "$LINE_BUDGET_FAILED" -eq 1 ]; then
   printf "Decompose large files into single-purpose crystalline capsules before committing.\n\n"
 fi
 
-# Run Chemical X audit with minimum grade and score thresholds
-if command -v npx >/dev/null 2>&1; then
+AUDIT_BIN=""
+if [ -f "./cli/index.js" ]; then
+  AUDIT_BIN="node ./cli/index.js"
+elif [ -x "./node_modules/.bin/chemx" ]; then
+  AUDIT_BIN="./node_modules/.bin/chemx"
+elif command -v chemx >/dev/null 2>&1; then
+  AUDIT_BIN="chemx"
+elif command -v npx >/dev/null 2>&1; then
+  AUDIT_BIN="npx chemx"
+fi
+
+if [ -n "$AUDIT_BIN" ]; then
   printf "\033[38;2;98;201;255m[Chemical X] Verifying architectural health (Min Grade: %s, Min Score: %s)...\033[0m\n" "$MIN_GRADE" "$MIN_SCORE"
   
-  AUDIT_CMD="npx chemx audit --min-grade=$MIN_GRADE --min-score=$MIN_SCORE --prompt-on-fail"
+  AUDIT_CMD="$AUDIT_BIN audit --min-grade=$MIN_GRADE --min-score=$MIN_SCORE --prompt-on-fail"
   
   if ! $AUDIT_CMD; then
     printf "\n\033[1m\033[31m[Chemical X] Commit Blocked: Codebase falls below required Grade %s (Score %s)\033[0m\n" "$MIN_GRADE" "$MIN_SCORE"

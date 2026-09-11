@@ -1,0 +1,32 @@
+name: Chemical X Architectural Gatekeeper
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  molecular-audit:
+    name: Chemical X Architecture & Line Budget Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Run Chemical X Architectural Audit
+        run: npx chemx audit --min-grade=${{ vars.CHEMX_MIN_GRADE || 'B' }} --min-score=${{ vars.CHEMX_MIN_SCORE || 80 }} --markdown --output=AUDIT_REPORT.md
+      - name: Upload Audit Scorecard Artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chemical-x-audit-report
+          path: AUDIT_REPORT.md
