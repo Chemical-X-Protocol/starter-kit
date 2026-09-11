@@ -49,7 +49,7 @@ export const runInteractiveAuditNavigator = async (report, onScaffold = null) =>
   renderDashboardBanner(health, metrics, violations, critical, highMediumCount, low, contextAnalysis);
 
   const shouldPublish = await confirmAction(
-    "Publish audit report and promote your project and p to our GitHub Discussions Audits Forum?",
+    "Publish audit report and promote your project to our GitHub Discussions Audits Forum?",
     "Publish Report",
     "Skip to Menu",
     true

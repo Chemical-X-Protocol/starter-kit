@@ -83,7 +83,7 @@ export const obtainLicenseKey = async (rawArgs = [], onRunAudit = null) => {
       [
         '1. Visit chemicalx.xophz.com to learn more',
         '2. Buy Standard Vault: Single Dev License ($27) -> Launch Checkout',
-        '3. Buy Team Power Puff: 100 Devs / Seats ($47) -> Launch Checkout',
+        '3. Buy Team Power Puff: Unlimited Lifetime ($97) -> Launch Checkout',
         '4. Enter License Key (CX-XXXX-XXXX-XXXX)',
         '5. Run Free Public Audit (npx chemx audit)',
         '6. Exit'
@@ -106,7 +106,7 @@ export const obtainLicenseKey = async (rawArgs = [], onRunAudit = null) => {
     }
 
     if (choice.startsWith('3.')) {
-      process.stdout.write(`\x1b[36mOpening Team Power Puff checkout (100 Devs / 100 Seats) in default browser:\x1b[0m ${URL_MASTER}\n`);
+      process.stdout.write(`\x1b[36mOpening Team Power Puff checkout (Unlimited Lifetime) in default browser:\x1b[0m ${URL_MASTER}\n`);
       openBrowser(URL_MASTER);
       process.stdout.write('\nOnce completed, paste your Sponsor / VIP License Key below.\n');
       return gumInput('License Key (CX-XXXX-XXXX-XXXX):', 'CX-XXXX-XXXX-XXXX');
@@ -131,7 +131,7 @@ export const obtainLicenseKey = async (rawArgs = [], onRunAudit = null) => {
   process.stdout.write('\x1b[1mChemical X Scaffolding Requires a Paid License:\x1b[0m\n');
   process.stdout.write('  [1] Visit chemicalx.xophz.com to learn more\n');
   process.stdout.write('  [2] Buy Standard Vault: Single Dev License ($27) - Opens browser\n');
-  process.stdout.write('  [3] Buy Team Power Puff: 100 Devs / Seats ($47) - Opens browser\n');
+  process.stdout.write('  [3] Buy Team Power Puff: Unlimited Lifetime ($97) - Opens browser\n');
   process.stdout.write('  [4] Enter License Key\n');
   process.stdout.write('  [5] Run Free Public Audit (npx chemx audit)\n');
   process.stdout.write('  [6] Exit\n\n');

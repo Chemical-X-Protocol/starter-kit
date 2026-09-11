@@ -84,7 +84,7 @@ export const renderBanner = (title = "Chemical X Protocol: Molecular Architectur
 };
 
 export const gumConfirm = (
-  promptText = "Publish audit report and promote your project and p to our GitHub Discussions Audits Forum?",
+  promptText = "Publish audit report and promote your project to our GitHub Discussions Audits Forum?",
   affirmative = "Publish Report",
   negative = "Skip to Menu",
   defaultVal = true
@@ -104,7 +104,7 @@ export const gumConfirm = (
 };
 
 export const promptConfirm = async (
-  query = "Publish audit report and promote your project and p to our GitHub Discussions Audits Forum?",
+  query = "Publish audit report and promote your project to our GitHub Discussions Audits Forum?",
   defaultVal = true
 ) => {
   const suffix = defaultVal ? " [Y/n]: " : " [y/N]: ";
@@ -114,7 +114,7 @@ export const promptConfirm = async (
 };
 
 export const confirmAction = async (
-  promptText = "Publish audit report and promote your project and p to our GitHub Discussions Audits Forum?",
+  promptText = "Publish audit report and promote your project to our GitHub Discussions Audits Forum?",
   affirmative = "Publish Report",
   negative = "Skip to Menu",
   defaultVal = true
