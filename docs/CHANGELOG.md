@@ -18,11 +18,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [2026-09-11]
 
+### Added
+- Interactive Molecular Capsule Generator wizard for `npx chemx generate` (and aliases `capsule`, `add`), supporting Gum and ANSI fallbacks (`cli/generator.js`, `cli/generator.d.ts`).
+- Multi-framework scaffolding support for React 19 (`.tsx`), Vue 3.4+ (`.vue`), and Svelte 5 (`.svelte`) with scoped SCSS, controllers, and discriminated union types (`cli/generator-templates.js`).
+- CLI flags for non-interactive and fast capsule generation (`--tier`, `--framework`, `--dir`, `--lean`, `-y` / `--yes`).
+
 ### Changed
 - Conditioned `[  Prompt   ] 📋 Copy AI Prompt Fix to Clipboard` dashboard action to hide when the codebase earns a pristine Grade A+ with no pending refactoring prompt (`cli/navigator.js`, `cli/navigator-actions.js`).
 - Added early-return guard clause to `handleCopyPromptAction` preventing empty clipboard copy operations on pristine Grade A+ audits (`cli/navigator-actions.js`).
 
 ### Fixed
+- Fixed missing `spawnSync` import from `node:child_process` in evaluation check prompt causing runtime reference error (`cli/license.js`).
 - Fixed typographical artifact (`and p`) in the interactive audit publication confirmation prompt across navigator and terminal handlers (`cli/navigator.js`, `cli/terminal.js`).
 
 ## [2026-09-10]

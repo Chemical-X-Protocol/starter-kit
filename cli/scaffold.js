@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { hasGum, gumInput, promptQuestion, renderBanner } from './terminal.js';
-import { obtainLicenseKey, fetchStarterKitFiles, checkOrPromptEvaluation } from './license.js';
+import { obtainLicenseKey, fetchStarterKitFiles } from './license.js';
 
 export const runScaffold = async (projectName, rawArgs = [], onRunAudit = null) => {
   renderBanner('Chemical X: Molecular Architecture Scaffolder (npm create chemx)');
@@ -92,57 +92,6 @@ export const runInit = async (targetSubDir = 'src/chemical-x', rawArgs = [], onR
   );
 };
 
-export const runGenerateCapsule = async (capsuleName) => {
-  await checkOrPromptEvaluation('generate capsule');
-
-  const normalizedName = capsuleName.startsWith('m-') ? capsuleName : `m-${capsuleName}`;
-  const targetDir = path.resolve(process.cwd(), normalizedName);
-
-  if (fs.existsSync(targetDir)) {
-    process.stderr.write(`\x1b[31m✕ Error: Directory ${normalizedName} already exists.\x1b[0m\n`);
-    process.exit(1);
-  }
-
-  fs.mkdirSync(targetDir, { recursive: true });
-
-  const pascalName = normalizedName
-    .split('-')
-    .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
-    .join('');
-
-  const componentCode = `import React from 'react';
-import type { ${pascalName}Props } from './types';
-
-export const ${pascalName}: React.FC<${pascalName}Props> = ({ label }) => {
-  return (
-    <div className="${normalizedName}">
-      <span>{label}</span>
-    </div>
-  );
-};
-
-export default ${pascalName};
-`;
-
-  const typesCode = `export interface ${pascalName}Props {
-  readonly label: string;
-}
-`;
-
-  const indexCode = `export { ${pascalName} } from './${normalizedName}';
-export type { ${pascalName}Props } from './types';
-`;
-
-  fs.writeFileSync(path.join(targetDir, `${normalizedName}.tsx`), componentCode, 'utf-8');
-  fs.writeFileSync(path.join(targetDir, 'types.d.ts'), typesCode, 'utf-8');
-  fs.writeFileSync(path.join(targetDir, 'index.ts'), indexCode, 'utf-8');
-
-  process.stdout.write(
-    `\x1b[32m✔ Successfully generated crystalline capsule:\x1b[0m ${normalizedName}/\n`
-  );
-  process.stdout.write(`  - ${normalizedName}/${normalizedName}.tsx (< 50 lines)\n`);
-  process.stdout.write(`  - ${normalizedName}/types.d.ts\n`);
-  process.stdout.write(`  - ${normalizedName}/index.ts\n\n`);
-};
-
+export { runGenerateCapsule, runGenerateWizard } from './generator.js';
 export { printHelp } from './help.js';
+

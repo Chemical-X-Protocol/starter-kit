@@ -15,6 +15,7 @@ import {
   runScaffold,
   runInit,
   runGenerateCapsule,
+  runGenerateWizard,
   printHelp
 } from './scaffold.js';
 import {
@@ -163,13 +164,7 @@ const main = async () => {
     case 'generate':
     case 'capsule':
     case 'add':
-      if (!rawArgs[1]) {
-        process.stderr.write(
-          'Usage: npx chemx generate <capsule-name>\nExample: npx chemx generate m-user-avatar\n'
-        );
-        process.exit(1);
-      }
-      await runGenerateCapsule(rawArgs[1]);
+      await runGenerateWizard(rawArgs.slice(1));
       break;
     case 'help':
     case '--help':
@@ -177,8 +172,8 @@ const main = async () => {
       printHelp();
       break;
     default:
-      if (firstArg && firstArg.startsWith('m-')) {
-        await runGenerateCapsule(firstArg);
+      if (firstArg && (firstArg.startsWith('m-') || firstArg.startsWith('a-') || firstArg.startsWith('o-') || firstArg.startsWith('t-'))) {
+        await runGenerateWizard(rawArgs);
       } else if (firstArg && !firstArg.startsWith('-')) {
         await runScaffold(firstArg, rawArgs, runAudit);
       } else {
