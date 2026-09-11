@@ -117,6 +117,8 @@ export declare function formatGradeCSection(report: AuditReport): string;
 export declare function formatGradeBSection(report: AuditReport): string;
 export declare function formatGradeASection(report: AuditReport): string;
 export declare function getChemicalXAsciiBanner(gradeOrReport?: string | AuditReport | null): string;
+export declare function getAsciiGradeLines(grade?: string, color?: string): readonly string[];
+export declare function formatAsciiGrade(grade?: string, color?: string, indent?: string): string;
 
 export * from './social';
 

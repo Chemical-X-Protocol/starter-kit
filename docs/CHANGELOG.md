@@ -19,6 +19,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [2026-09-10]
 
 ### Added
+- Six-line ANSI block ASCII art grade header (`cli/audit/reporter-ascii.js`, `cli/audit/reporter-ascii.d.ts`) rendering dynamic grade scorecards (`GRADE A+`, `GRADE A`, `GRADE B`, `GRADE C`, `GRADE D`, `GRADE F`) matching the typography of the Chemical X banner.
+- Integrated ASCII art grade scorecard banner into `formatScorecardSection` in `cli/audit/reporter.js`.
 - Free, standalone POSIX git pre-commit hook script (`scripts/pre-commit.sh`) enforcing 500-line file budgets, 100-line molecule capsule limits, and configurable minimum grade/score thresholds with automatic AI refactoring prompt clipboard copying.
 - Production GitHub Actions CI workflow blueprint (`blueprints/workflows/chemx-audit.yml`) executing architectural audits with configurable grade thresholds and artifact uploads.
 - Modular CLI installer capsule (`cli/installer.js`, `cli/installer.d.ts`) enabling interactive Gum and ANSI installation of pre-commit hooks, GitHub workflows, and `.chemx/config.json` project configurations.

@@ -51,6 +51,13 @@ export {
   formatGradeASection
 } from './reporter-grades.js';
 
+export {
+  getAsciiGradeLines,
+  formatAsciiGrade
+} from './reporter-ascii.js';
+
+import { getAsciiGradeLines } from './reporter-ascii.js';
+
 export const resolveTopSectionColor = (report) => {
   const hasNoViolations = (report?.violations?.length ?? 0) === 0;
   const hasNoHotspots = (report?.hotspots?.length ?? 0) === 0;
@@ -62,13 +69,24 @@ export const resolveTopSectionColor = (report) => {
 export const formatScorecardSection = (report, themeColor = null) => {
   const { metrics, health } = report;
   const sectionColor = themeColor || resolveTopSectionColor(report);
-  const gradeColor = resolveGradeColor(health.score);
+  const gradeColor = resolveGradeColor(health?.score ?? health?.grade ?? 'A');
   const lines = [];
 
   lines.push('');
   lines.push(`${sectionColor}======================================================================${RESET}`);
   lines.push(`${BOLD}${sectionColor}   MOLECULAR HEALTH INDEX & CODEBASE OVERVIEW${RESET}`);
   lines.push(`${sectionColor}======================================================================${RESET}`);
+
+  const asciiGradeLines = getAsciiGradeLines(health?.grade || 'A', gradeColor);
+  if (asciiGradeLines.length > 0) {
+    lines.push('');
+    for (const asciiLine of asciiGradeLines) {
+      lines.push(`   ${asciiLine}`);
+    }
+    lines.push('');
+    lines.push(`${sectionColor}----------------------------------------------------------------------${RESET}`);
+  }
+
   lines.push(`   Health Score:        ${gradeColor}${BOLD}${health.score} / 100${RESET} (Grade: ${gradeColor}${BOLD}${health.grade}${RESET} - ${health.label})`);
   lines.push(`   Files Scanned:       ${BOLD}${metrics.scannedFiles}${RESET} source files`);
   lines.push(`   Total Lines of Code: ${BOLD}${metrics.totalLoc}${RESET} LOC (avg: ${metrics.avgLoc} lines/file)`);
