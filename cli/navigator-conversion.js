@@ -23,7 +23,7 @@ export const showConversionMenu = async (onScaffold = null) => {
       const choice = gumChoose([
         '1. Sponsor on GitHub: $9/mo Solo / $49/mo Team Unlimited -> Launch Sponsors',
         '2. Buy Standard Vault: Single Dev License ($27) -> Launch Checkout',
-        '3. Buy Team Power Puff: 100 Devs / Team Honor System 💯 ($47) -> Launch Checkout',
+        '3. Buy Team Power Puff: Unlimited Lifetime ($97) -> Launch Checkout',
         '4. Enter License Key to Scaffold (Sponsors & License Holders)',
         '5. Visit chemicalx.xophz.com to learn more',
         '6. Back to Navigator'
@@ -40,7 +40,7 @@ export const showConversionMenu = async (onScaffold = null) => {
         continue;
       }
       if (choice.startsWith('3.')) {
-        process.stdout.write(`\n\x1b[36mOpening Team Power Puff checkout (100 Devs / Team Honor System 💯):\x1b[0m ${URL_MASTER}\n\n`);
+        process.stdout.write(`\n\x1b[36mOpening Team Power Puff checkout (Unlimited Lifetime):\x1b[0m ${URL_MASTER}\n\n`);
         openBrowser(URL_MASTER);
         continue;
       }
@@ -64,7 +64,7 @@ export const showConversionMenu = async (onScaffold = null) => {
     );
     process.stdout.write(`  [1] Sponsor on GitHub ($9/mo Solo / $49/mo Team Unlimited) - ${URL_SPONSOR}\n      Includes: Instant GitHub org access to private starter-kit, continuous model prompt updates\n`);
     process.stdout.write(`  [2] Buy Standard Vault: Single Dev License ($27) - ${URL_STANDARD}\n      Includes: Kindle/Print PDF eBook, 7 Molecular Architecture Chapters, Universal AGENTS.md\n`);
-    process.stdout.write(`  [3] Buy Team Power Puff: 100 Devs / Team Honor System 💯 ($47) - ${URL_MASTER}\n      Includes: 100 Team Seats (Honor System), Private Starter-Kit Repo, Pre-Commit Line Budget Hooks, VIP Discord\n`);
+    process.stdout.write(`  [3] Buy Team Power Puff: Unlimited Lifetime ($97) - ${URL_MASTER}\n      Includes: Unlimited Team Seats, Private Starter-Kit Repo, Pre-Commit Line Budget Hooks, VIP Discord\n`);
     process.stdout.write('  [4] Enter License Key to Scaffold (Sponsors & License Holders)\n');
     process.stdout.write(`  [5] Visit chemicalx.xophz.com to learn more - ${URL_LEARN}\n`);
     process.stdout.write('  [6] Back to Navigator\n\n');

@@ -190,7 +190,7 @@ export const checkOrPromptEvaluation = async (actionLabel = 'generate capsule') 
         '--bold',
         '⚡ Chemical X: Evaluation Mode (Unlicensed)\n' +
         'Support vibe coding standards: chemicalx.xophz.com\n' +
-        'Single Dev ($27) | Team Power Puff 💯 (100 Seats: $47)'
+        'Single Dev ($27) | Team Power Puff ($97: Unlimited Lifetime)'
       ],
       { stdio: 'inherit' }
     );
@@ -198,8 +198,8 @@ export const checkOrPromptEvaluation = async (actionLabel = 'generate capsule') 
     const choice = gumChoose(
       [
         `1. ⚡ Continue in Evaluation Mode (Press Enter to ${actionLabel})`,
-        '2. 🔑 Enter License Key (Power Puff Team 💯 or Single Dev)',
-        '3. 💎 Buy License ($27 Solo / $47 Team Power Puff 100 Seats)',
+        '2. 🔑 Enter License Key (Team Power Puff or Single Dev)',
+        '3. 💎 Buy License ($27 Solo / $97 Team Power Puff Unlimited Lifetime)',
         '4. 🚪 Cancel'
       ],
       `Evaluation Mode: ${actionLabel}`
@@ -242,8 +242,8 @@ export const checkOrPromptEvaluation = async (actionLabel = 'generate capsule') 
     '\n\x1b[38;5;208;1m⚡ Chemical X: Evaluation Mode (Unlicensed)\x1b[0m\n' +
     'Support vibe coding standards: chemicalx.xophz.com\n' +
     `  [1] Continue in Evaluation Mode (Press Enter to ${actionLabel})\n` +
-    '  [2] Enter License Key (Power Puff Team 💯 or Single Dev)\n' +
-    '  [3] Buy License ($27 Solo / $47 Team Power Puff 100 Seats)\n' +
+    '  [2] Enter License Key (Team Power Puff or Single Dev)\n' +
+    '  [3] Buy License ($27 Solo / $97 Team Power Puff Unlimited Lifetime)\n' +
     '  [4] Cancel\n\n'
   );
 

@@ -22,6 +22,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Conditioned `[  Prompt   ] 📋 Copy AI Prompt Fix to Clipboard` dashboard action to hide when the codebase earns a pristine Grade A+ with no pending refactoring prompt (`cli/navigator.js`, `cli/navigator-actions.js`).
 - Added early-return guard clause to `handleCopyPromptAction` preventing empty clipboard copy operations on pristine Grade A+ audits (`cli/navigator-actions.js`).
 
+### Fixed
+- Fixed typographical artifact (`and p`) in the interactive audit publication confirmation prompt across navigator and terminal handlers (`cli/navigator.js`, `cli/terminal.js`).
+
 ## [2026-09-10]
 
 ### Changed
