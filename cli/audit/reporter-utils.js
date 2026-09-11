@@ -71,10 +71,28 @@ export const resolveRiskColor = (riskLevel) => {
 };
 
 export const resolveHotspotBadge = (lineCount) => {
-  if (lineCount >= 2000) return ` ${RED}[CRITICAL MONOLITH >= 2,000 LOC]${RESET}`;
-  if (lineCount >= 1000) return ` ${ORANGE}[SEVERE MONOLITH >= 1,000 LOC]${RESET}`;
-  if (lineCount > 500) return ` ${YELLOW}[MONOLITH WARNING > 500 LOC]${RESET}`;
+  if (lineCount >= 2000) return ` ${RED}[CRITICAL MONOLITH >= 2,000 lines of code]${RESET}`;
+  if (lineCount >= 1000) return ` ${ORANGE}[SEVERE MONOLITH >= 1,000 lines of code]${RESET}`;
+  if (lineCount > 500) return ` ${YELLOW}[MONOLITH WARNING > 500 lines of code]${RESET}`;
   return '';
+};
+
+export const resolveHealthHearts = (grade, score = 0, isAnsi = true) => {
+  const g = String(grade || '').toUpperCase();
+  let filled = 1;
+  if (g.startsWith('A') || score >= 90) filled = 5;
+  else if (g.startsWith('B') || score >= 80) filled = 4;
+  else if (g.startsWith('C') || score >= 70) filled = 3;
+  else if (g.startsWith('D') || score >= 60) filled = 2;
+  else filled = score === 0 ? 0 : 1;
+
+  const empty = 5 - filled;
+  if (!isAnsi) {
+    return '❤︎'.repeat(filled) + '♡'.repeat(empty);
+  }
+  const redHearts = `${RED}${BOLD}` + '❤︎'.repeat(filled) + RESET;
+  const dimHearts = `${DIM}` + '♡'.repeat(empty) + RESET;
+  return `${redHearts}${dimHearts}`;
 };
 
 export const PILLAR_EMOJIS = {
@@ -100,8 +118,8 @@ export const resolveMarkdownStatusIcon = (status) => {
 };
 
 export const resolveMarkdownMonolithText = (lineCount) => {
-  if (lineCount >= 2000) return '🔴 **CRITICAL (>= 2,000 LOC)**';
-  if (lineCount >= 1000) return '🟠 **SEVERE (>= 1,000 LOC)**';
-  if (lineCount > 500) return '🟡 **WARNING (> 500 LOC)**';
+  if (lineCount >= 2000) return '🔴 **CRITICAL (>= 2,000 lines of code)**';
+  if (lineCount >= 1000) return '🟠 **SEVERE (>= 1,000 lines of code)**';
+  if (lineCount > 500) return '🟡 **WARNING (> 500 lines of code)**';
   return '🟢 Compliant';
 };

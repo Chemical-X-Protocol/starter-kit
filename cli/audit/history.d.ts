@@ -40,6 +40,12 @@ export interface TransformationDelta {
   readonly totalDelta: number;
   readonly monolithDelta: number;
   readonly tokensDelta: number;
+  readonly costPassBefore?: number;
+  readonly costPassAfter?: number;
+  readonly costPassDelta?: number;
+  readonly monthlyTaxBefore?: number;
+  readonly monthlyTaxAfter?: number;
+  readonly monthlyTaxDelta?: number;
   readonly pillarDeltas: Record<string, PillarDelta>;
   readonly isImproved: boolean;
 }

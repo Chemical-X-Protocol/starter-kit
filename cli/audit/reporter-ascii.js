@@ -1,12 +1,12 @@
 import { BOLD, RESET } from './reporter-utils.js';
 
-const GRADE_BANNER = [
-  ' ██████╗ ██████╗  █████╗ ██████╗ ███████╗',
-  '██╔════╝ ██╔══██╗██╔══██╗██╔══██╗██╔════╝',
-  '██║  ███╗██████╔╝███████║██║  ██║█████╗  ',
-  '██║   ██║██╔══██╗██╔══██║██║  ██║██╔══╝  ',
-  '╚██████╔╝██║  ██║██║  ██║██████╔╝███████╗',
-  ' ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚══════╝'
+const EQUALS_GLYPH = [
+  '        ',
+  '███████╗',
+  '╚══════╝',
+  '███████╗',
+  '╚══════╝',
+  '        '
 ];
 
 const LETTER_GLYPHS = {
@@ -60,7 +60,7 @@ const LETTER_GLYPHS = {
   ]
 };
 
-export const getAsciiGradeLines = (grade = 'A', color = '') => {
+export const getAsciiGradeLines = (grade = 'A', color = '', withEquals = false) => {
   const normGrade = String(grade || 'A').trim().toUpperCase();
   const letter = normGrade.replace('+', '');
   const hasPlus = normGrade.includes('+');
@@ -68,16 +68,32 @@ export const getAsciiGradeLines = (grade = 'A', color = '') => {
 
   const lines = [];
   for (let i = 0; i < 6; i++) {
-    let row = `${GRADE_BANNER[i]}    ${glyph[i]}`;
+    let letterPart = glyph[i];
     if (hasPlus) {
-      row += ` ${LETTER_GLYPHS.PLUS[i]}`;
+      letterPart += ` ${LETTER_GLYPHS.PLUS[i]}`;
     }
-    lines.push(color ? `${color}${BOLD}${row}${RESET}` : row);
+    const coloredLetter = color ? `${color}${BOLD}${letterPart}${RESET}` : letterPart;
+
+    if (withEquals) {
+      const eqPart = `${BOLD}\x1b[37m${EQUALS_GLYPH[i]}${RESET}`;
+      lines.push(`${eqPart}  ${coloredLetter}`);
+    } else {
+      lines.push(coloredLetter);
+    }
   }
   return lines;
 };
 
-export const formatAsciiGrade = (grade = 'A', color = '', indent = '   ') => {
-  const lines = getAsciiGradeLines(grade, color);
-  return lines.map((l) => `${indent}${l}`).join('\n');
-};
+export const formatAsciiGrade = (grade = 'A', color = '', indent = '   ', withEquals = false) =>
+  getAsciiGradeLines(grade, color, withEquals).map((l) => `${indent}${l}`).join('\n');
+
+export const REPORT_CARD_ASCII = [
+  '▗▄▄▖ ▗▄▄▄▖▗▄▄▖  ▗▄▖ ▗▄▄▖▗▄▄▄▖     ▗▄▄▖ ▗▄▖ ▗▄▄▖ ▗▄▄▄ ',
+  '▐▌ ▐▌▐▌   ▐▌ ▐▌▐▌ ▐▌▐▌ ▐▌ █      ▐▌   ▐▌ ▐▌▐▌ ▐▌▐▌  █',
+  '▐▛▀▚▖▐▛▀▀▘▐▛▀▘ ▐▌ ▐▌▐▛▀▚▖ █      ▐▌   ▐▛▀▜▌▐▛▀▚▖▐▌  █',
+  '▐▌ ▐▌▐▙▄▄▖▐▌   ▝▚▄▞▘▐▌ ▐▌ █      ▝▚▄▄▖▐▌ ▐▌▐▌ ▐▌▐▙▄▄▀'
+];
+
+export const getReportCardAsciiLines = (color = '') =>
+  REPORT_CARD_ASCII.map((row) => (color ? `${color}${BOLD}${row}${RESET}` : row));
+

@@ -88,7 +88,12 @@ export const createSnapshotFromReport = (report) => {
       estimatedTokens: contextAnalysis.estimatedTokens || 0,
       estimatedExcessTokens: contextAnalysis.estimatedExcessTokens || 0,
       potentialSavingsPct: contextAnalysis.potentialSavingsPct || 0,
-      riskLevel: contextAnalysis.riskLevel || 'LOW'
+      riskLevel: contextAnalysis.riskLevel || 'LOW',
+      pricingModel: contextAnalysis.pricingModel || 'Frontier Blended ($3.00/1M)',
+      costPerMillion: contextAnalysis.costPerMillion !== undefined ? contextAnalysis.costPerMillion : 3.0,
+      excessCostPerPass: contextAnalysis.excessCostPerPass !== undefined ? contextAnalysis.excessCostPerPass : 0,
+      weeklyWastePerDev: contextAnalysis.weeklyWastePerDev !== undefined ? contextAnalysis.weeklyWastePerDev : 0,
+      monthlyWastePerDev: contextAnalysis.monthlyWastePerDev !== undefined ? contextAnalysis.monthlyWastePerDev : 0
     },
     pillars: pillarSummaries
   };
@@ -196,6 +201,28 @@ export const calculateTransformationDelta = (beforeSnapshot, afterSnapshot) => {
   const tokensAfter = afterSnapshot.tokens.estimatedExcessTokens;
   const tokensDelta = tokensAfter - tokensBefore;
 
+  const costPerMillion = afterSnapshot.tokens?.costPerMillion || beforeSnapshot.tokens?.costPerMillion || 3.0;
+
+  const resolveCostPass = (tokensObj) => {
+    if (tokensObj?.excessCostPerPass !== undefined) return tokensObj.excessCostPerPass;
+    const excess = tokensObj?.estimatedExcessTokens || 0;
+    return Number(((excess / 1000000) * costPerMillion).toFixed(3));
+  };
+
+  const resolveMonthlyTax = (tokensObj) => {
+    if (tokensObj?.monthlyWastePerDev !== undefined) return tokensObj.monthlyWastePerDev;
+    const costPass = resolveCostPass(tokensObj);
+    return Number((costPass * 20 * 5 * 4).toFixed(2));
+  };
+
+  const costPassBefore = resolveCostPass(beforeSnapshot.tokens);
+  const costPassAfter = resolveCostPass(afterSnapshot.tokens);
+  const costPassDelta = Number((costPassAfter - costPassBefore).toFixed(3));
+
+  const monthlyTaxBefore = resolveMonthlyTax(beforeSnapshot.tokens);
+  const monthlyTaxAfter = resolveMonthlyTax(afterSnapshot.tokens);
+  const monthlyTaxDelta = Number((monthlyTaxAfter - monthlyTaxBefore).toFixed(2));
+
   const pillarDeltas = {};
   const allPillars = new Set([
     ...Object.keys(beforeSnapshot.pillars || {}),
@@ -220,6 +247,12 @@ export const calculateTransformationDelta = (beforeSnapshot, afterSnapshot) => {
     totalDelta,
     monolithDelta,
     tokensDelta,
+    costPassBefore,
+    costPassAfter,
+    costPassDelta,
+    monthlyTaxBefore,
+    monthlyTaxAfter,
+    monthlyTaxDelta,
     pillarDeltas,
     isImproved: scoreDelta > 0 || critDelta < 0 || totalDelta < 0
   };
@@ -237,6 +270,14 @@ export const formatTransformationTerminal = (beforeSnapshot, afterSnapshot) => {
     return `${color}${BOLD}${sign}${RESET}`;
   };
 
+  const formatDeltaCurrency = (val, perUnit = '') => {
+    if (val === 0) return `${DIM}0 (No change)${RESET}`;
+    const isGood = val < 0;
+    const sign = val > 0 ? `+$${val.toFixed(2)}` : `-$${Math.abs(val).toFixed(2)}`;
+    const color = isGood ? GREEN : RED;
+    return `${color}${BOLD}${sign}${perUnit}${RESET}`;
+  };
+
   lines.push('');
   lines.push(`${CYAN}======================================================================${RESET}`);
   lines.push(`${BOLD}${CYAN}   ARCHITECTURAL TRANSFORMATION : BEFORE & AFTER PROGRESSION${RESET}`);
@@ -252,31 +293,35 @@ export const formatTransformationTerminal = (beforeSnapshot, afterSnapshot) => {
   lines.push('');
 
   lines.push(`${BOLD}   METRIC COMPARISON TABLE${RESET}`);
-  lines.push(`   ------------------------------------------------------------------`);
-  lines.push(`   ${'Metric'.padEnd(26)} ${'Before'.padEnd(16)} ${'After'.padEnd(16)} Delta`);
-  lines.push(`   ------------------------------------------------------------------`);
+  lines.push(`   ----------------------------------------------------------------------------`);
+  lines.push(`   ${'Metric'.padEnd(40)} ${'Before'.padEnd(16)} ${'After'.padEnd(16)} Delta`);
+  lines.push(`   ----------------------------------------------------------------------------`);
 
   const scoreBeforeStr = `${beforeSnapshot.health.score} (${beforeSnapshot.health.grade})`;
   const scoreAfterStr = `${afterSnapshot.health.score} (${afterSnapshot.health.grade})`;
-  lines.push(`   ${'Molecular Health (MHI)'.padEnd(26)} ${scoreBeforeStr.padEnd(16)} ${scoreAfterStr.padEnd(16)} ${formatDeltaNumber(delta.scoreDelta)}`);
+  lines.push(`   ${'Molecular Health (MHI)'.padEnd(40)} ${scoreBeforeStr.padEnd(16)} ${scoreAfterStr.padEnd(16)} ${formatDeltaNumber(delta.scoreDelta)}`);
 
   const critBeforeStr = `${beforeSnapshot.violations.critical}`;
   const critAfterStr = `${afterSnapshot.violations.critical}`;
-  lines.push(`   ${'Critical Hazards'.padEnd(26)} ${critBeforeStr.padEnd(16)} ${critAfterStr.padEnd(16)} ${formatDeltaNumber(delta.critDelta, true)}`);
+  lines.push(`   ${'Critical Hazards'.padEnd(40)} ${critBeforeStr.padEnd(16)} ${critAfterStr.padEnd(16)} ${formatDeltaNumber(delta.critDelta, true)}`);
 
   const totalBeforeStr = `${beforeSnapshot.violations.total}`;
   const totalAfterStr = `${afterSnapshot.violations.total}`;
-  lines.push(`   ${'Total Violations'.padEnd(26)} ${totalBeforeStr.padEnd(16)} ${totalAfterStr.padEnd(16)} ${formatDeltaNumber(delta.totalDelta, true)}`);
+  lines.push(`   ${'Total Violations'.padEnd(40)} ${totalBeforeStr.padEnd(16)} ${totalAfterStr.padEnd(16)} ${formatDeltaNumber(delta.totalDelta, true)}`);
 
   const monoBeforeStr = `${beforeSnapshot.monoliths.total}`;
   const monoAfterStr = `${afterSnapshot.monoliths.total}`;
-  lines.push(`   ${'Monolith Files (>500 LOC)'.padEnd(26)} ${monoBeforeStr.padEnd(16)} ${monoAfterStr.padEnd(16)} ${formatDeltaNumber(delta.monolithDelta, true)}`);
+  lines.push(`   ${'Monolith Files (>500 lines of code)'.padEnd(40)} ${monoBeforeStr.padEnd(16)} ${monoAfterStr.padEnd(16)} ${formatDeltaNumber(delta.monolithDelta, true)}`);
 
   const excessBeforeStr = `${beforeSnapshot.tokens.estimatedExcessTokens.toLocaleString()} tok`;
   const excessAfterStr = `${afterSnapshot.tokens.estimatedExcessTokens.toLocaleString()} tok`;
-  lines.push(`   ${'Excess Token Burn'.padEnd(26)} ${excessBeforeStr.padEnd(16)} ${excessAfterStr.padEnd(16)} ${formatDeltaNumber(delta.tokensDelta, true)}`);
+  lines.push(`   ${'Excess Token Burn'.padEnd(40)} ${excessBeforeStr.padEnd(16)} ${excessAfterStr.padEnd(16)} ${formatDeltaNumber(delta.tokensDelta, true)}`);
 
-  lines.push(`   ------------------------------------------------------------------`);
+  const taxBeforeStr = `$${delta.monthlyTaxBefore.toFixed(2)}/mo`;
+  const taxAfterStr = `$${delta.monthlyTaxAfter.toFixed(2)}/mo`;
+  lines.push(`   ${'Dev Context Tax (Monthly)'.padEnd(40)} ${taxBeforeStr.padEnd(16)} ${taxAfterStr.padEnd(16)} ${formatDeltaCurrency(delta.monthlyTaxDelta, '/mo')}`);
+
+  lines.push(`   ----------------------------------------------------------------------------`);
   lines.push('');
 
   const resolvePillarDeltaArrow = (pDelta) => {
@@ -290,12 +335,12 @@ export const formatTransformationTerminal = (beforeSnapshot, afterSnapshot) => {
   };
 
   lines.push(`${BOLD}   7-PILLAR PROGRESSION${RESET}`);
-  lines.push(`   ------------------------------------------------------------------`);
+  lines.push(`   ----------------------------------------------------------------------------`);
   for (const [pillar, pDelta] of Object.entries(delta.pillarDeltas)) {
     const arrow = resolvePillarDeltaArrow(pDelta);
-    lines.push(`   ${pillar.padEnd(28)} ${pDelta.beforeStatus.padEnd(10)} -> ${pDelta.afterStatus.padEnd(10)} ${arrow}`);
+    lines.push(`   ${pillar.padEnd(40)} ${pDelta.beforeStatus.padEnd(8)} -> ${pDelta.afterStatus.padEnd(8)} ${arrow}`);
   }
-  lines.push(`   ------------------------------------------------------------------`);
+  lines.push(`   ----------------------------------------------------------------------------`);
   lines.push('');
 
   if (delta.isImproved) {
@@ -325,7 +370,7 @@ export const formatHistoryTimelineTerminal = (history) => {
   }
 
   lines.push(`   ${'#'.padEnd(4)} ${'Date/Time'.padEnd(22)} ${'Score'.padEnd(12)} ${'Grade'.padEnd(10)} ${'Monoliths'.padEnd(12)} Hazards`);
-  lines.push(`   ------------------------------------------------------------------`);
+  lines.push(`   ----------------------------------------------------------------------------`);
 
   const resolveScoreGradeColor = (score) => {
     if (score >= 90) return GREEN;
@@ -346,7 +391,7 @@ export const formatHistoryTimelineTerminal = (history) => {
 
   history.forEach(renderTimelineRow);
 
-  lines.push(`   ------------------------------------------------------------------`);
+  lines.push(`   ----------------------------------------------------------------------------`);
   lines.push('');
   return lines.join('\n');
 };

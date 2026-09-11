@@ -58,6 +58,11 @@ export interface ContextTokenAnalysis {
   readonly estimatedExcessTokens: number;
   readonly potentialSavingsPct: number;
   readonly riskLevel: RiskLevel;
+  readonly pricingModel?: string;
+  readonly costPerMillion?: number;
+  readonly excessCostPerPass?: number;
+  readonly weeklyWastePerDev?: number;
+  readonly monthlyWastePerDev?: number;
 }
 
 export interface HotspotFile {
@@ -117,8 +122,10 @@ export declare function formatGradeCSection(report: AuditReport): string;
 export declare function formatGradeBSection(report: AuditReport): string;
 export declare function formatGradeASection(report: AuditReport): string;
 export declare function getChemicalXAsciiBanner(gradeOrReport?: string | AuditReport | null): string;
-export declare function getAsciiGradeLines(grade?: string, color?: string): readonly string[];
-export declare function formatAsciiGrade(grade?: string, color?: string, indent?: string): string;
+export declare function getAsciiGradeLines(grade?: string, color?: string, withEquals?: boolean): readonly string[];
+export declare function formatAsciiGrade(grade?: string, color?: string, indent?: string, withEquals?: boolean): string;
+export declare const REPORT_CARD_ASCII: readonly string[];
+export declare function getReportCardAsciiLines(color?: string): readonly string[];
 
 export * from './social';
 

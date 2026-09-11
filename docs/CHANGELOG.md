@@ -16,18 +16,41 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - `useSelfCleaningTimer`: unmount-safe interval and timeout utilities
 - Interactive CLI capsule generator (`cli/index.js`).
 
+## [2026-09-11]
+
+### Changed
+- Conditioned `[  Prompt   ] 📋 Copy AI Prompt Fix to Clipboard` dashboard action to hide when the codebase earns a pristine Grade A+ with no pending refactoring prompt (`cli/navigator.js`, `cli/navigator-actions.js`).
+- Added early-return guard clause to `handleCopyPromptAction` preventing empty clipboard copy operations on pristine Grade A+ audits (`cli/navigator-actions.js`).
+
 ## [2026-09-10]
 
+### Changed
+- Decomposed warning monolith `cli/navigator.js` (515 lines to 123 lines) by extracting single-responsibility capsules: `cli/navigator-banner.js` (84 lines: Gamer HUD terminal rendering), `cli/navigator-menu.js` (115 lines: button tags, menu assembly, selection matching), and `cli/navigator-actions.js` (165 lines: grade drill-downs and dashboard actions), preserving all public exports and type declarations.
+- Extracted anonymous inline callbacks into named functions across navigator modules adhering to Chemical X code syntax standards.
+- Replaced all abbreviated `LOC` acronym references across dashboard banners, reports, Markdown exports, and refactoring prompts with fully spelled-out `lines of code` (`cli/navigator.js`, `cli/audit/reporter.js`, `cli/audit/reporter-grades.js`, `cli/audit/reporter-utils.js`, `cli/audit/reporter-markdown.js`, `cli/audit/prompts.js`, `cli/audit/social.js`, `cli/audit/history.js`, `cli/help.js`).
+- Reordered interactive Audit Navigator dashboard menu (`cli/navigator.js`) into four distinct operational sections separated by clean dividers: top actions (`[  Install  ]`, `[  Upgrade  ]`, `[Full Report]`), grade drill-downs (`[ Grade: A  ]`), community and metrics actions (`[   Share   ]`, `[ Progress  ]`, `[  Export   ]`), and footer actions (`[  Prompt   ]`, `[   Exit    ]`).
+- Conditioned `[  Install  ]` action to display only when git pre-commit hooks and GitHub Actions CI workflow are not already installed (`areGuardrailsInstalled` in `cli/installer.js`, `cli/navigator.js`).
+- Centered button bracket text across all dashboard actions and grade tags for uniform 13-character button width and column alignment (`formatButtonTag` in `cli/navigator.js`, `resolveGradeBadge` in `cli/navigator-grades.js`).
+- Renamed prompt copy menu item to `[  Prompt   ] 📋 Copy AI Prompt Fix to Clipboard` (`cli/navigator.js`).
+- Renamed full report menu button to `[Full Report]` and share option label to plug website and post to GitHub Discussions (`cli/navigator.js`).
+- Aligned terminal output columns across `METRIC COMPARISON TABLE` and `7-PILLAR PROGRESSION` in `formatTransformationTerminal` (`cli/audit/history.js`), expanding pillar and metric padding to 40 characters with uniform divider widths.
+
 ### Added
-- Six-line ANSI block ASCII art grade header (`cli/audit/reporter-ascii.js`, `cli/audit/reporter-ascii.d.ts`) rendering dynamic grade scorecards (`GRADE A+`, `GRADE A`, `GRADE B`, `GRADE C`, `GRADE D`, `GRADE F`) matching the typography of the Chemical X banner.
-- Integrated ASCII art grade scorecard banner into `formatScorecardSection` in `cli/audit/reporter.js`.
+- Integrated real-time Token Estimate (`-TOKEN EST-`) and Currency Cost (`-CURRENCY-`) metrics into Gamer HUD (`cli/navigator-banner.js`, `cli/navigator.js`).
+- Embedded project name in top rounded border and project working directory (`pwd`) in bottom rounded border of Gamer HUD (`cli/navigator-banner.js`).
+- Swapped Gamer HUD column positions in `renderDashboardBanner` (`cli/navigator-banner.js`): `-FILES-` and `-LINES OF CODE-` on the left column, and `-HEALTH-` and `-HAZARDS-` on the right column.
+- Hazard emojis (💥 for Critical, 🔥 for High/Med, 💣 for Low) in `-HAZARDS-` HUD status row (`cli/navigator-banner.js`) and interactive grade drilldown actions (`cli/navigator-actions.js`).
+- Gamer HUD with 2-column layout in `renderDashboardBanner` (`cli/navigator.js`) grouping `-HEALTH-` and `-HAZARDS-` on the left and `-FILES-` and `-LINES OF CODE-` on the right, removing HUD title banner and quote text.
+- Heart emoji container display (`❤️❤️❤️❤️❤️` to `🖤🖤🖤🖤🖤`) in `resolveHealthHearts` (`cli/navigator-grades.js`).
+- Compact `X = [Grade]` ASCII art banner in `getChemicalXAsciiBanner` (`cli/audit/reporter.js`, `cli/audit/reporter-ascii.js`) removing the redundant `GRADE` text and linking Chemical X with bold ASCII `=` and dynamic letter grade typography (`A+`, `A`, `B`, etc.).
+- Four-line compact block `REPORT CARD` ASCII art banner (`REPORT_CARD_ASCII` in `cli/audit/reporter-ascii.js`) added to the top of all grade report card sections (`formatGradeASection`, `formatGradeBSection`, `formatGradeCSection`, `formatGradeDSection`, `formatGradeFSection`) and the audit scorecard overview (`formatScorecardSection`).
 - Free, standalone POSIX git pre-commit hook script (`scripts/pre-commit.sh`) enforcing 500-line file budgets, 100-line molecule capsule limits, and configurable minimum grade/score thresholds with automatic AI refactoring prompt clipboard copying.
 - Production GitHub Actions CI workflow blueprint (`blueprints/workflows/chemx-audit.yml`) executing architectural audits with configurable grade thresholds and artifact uploads.
 - Modular CLI installer capsule (`cli/installer.js`, `cli/installer.d.ts`) enabling interactive Gum and ANSI installation of pre-commit hooks, GitHub workflows, and `.chemx/config.json` project configurations.
 - Dedicated `[Install  ] 🪝 Install Pre-Commit Hook & GitHub CI Workflow` action in the interactive Audit Navigator dashboard (`cli/navigator.js`).
 - Standalone CLI subcommands `hook`, `hooks`, `install-hooks`, and `setup-ci` in `cli/index.js` for direct non-interactive setup.
 - Token financial telemetry engine in `cli/audit/metrics.js` translating context bloat into real-world dollar waste per AI prompt turn, weekly developer waste, and monthly team context tax based on configurable model baselines (`--model=claude|gpt4o|blended` or custom rate).
-- Financial metrics reporting in terminal reports (`formatContextAnalysisSection` in `cli/audit/reporter.js`) and Markdown reports (`cli/audit/reporter-markdown.js`).
+- Financial metrics reporting in terminal reports (`formatContextAnalysisSection` in `cli/audit/reporter.js`), Markdown reports (`cli/audit/reporter-markdown.js`), and published GitHub Discussion reports (`generateDiscussionContent` and `generateTransformationDiscussionContent` in `cli/audit/social.js`).
 - Flexible audit threshold flags: `--min-grade`, `--min-score`, `--prompt-on-fail`, and `--copy-prompt`.
 - Hybrid GitHub Sponsors licensing CTAs in `cli/navigator-conversion.js` and `cli/license.js` spotlighting $9/mo solo and $49/mo team unlimited sponsorship.
 - Robust 7-pillar Quantum Engineering Architecture static analysis rule engine (`cli/audit/rules.js`) covering line budgets, control flow booleans, nested ternaries, hook saturation and return budgets, timer disposal, render-hack timeouts, type co-location, type monoliths, mock data patterns, inline styles, icon SVG leaks, and typography hygiene.

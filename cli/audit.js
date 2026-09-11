@@ -29,7 +29,9 @@ import {
   formatGradeASection,
   getChemicalXAsciiBanner,
   getAsciiGradeLines,
-  formatAsciiGrade
+  formatAsciiGrade,
+  getReportCardAsciiLines,
+  REPORT_CARD_ASCII
 } from './audit/reporter.js';
 
 const IGNORED_DIRS = new Set([
@@ -211,7 +213,9 @@ export {
   formatGradeASection,
   getChemicalXAsciiBanner,
   getAsciiGradeLines,
-  formatAsciiGrade
+  formatAsciiGrade,
+  getReportCardAsciiLines,
+  REPORT_CARD_ASCII
 };
 
 export default {
@@ -239,6 +243,8 @@ export default {
   getChemicalXAsciiBanner,
   getAsciiGradeLines,
   formatAsciiGrade,
+  getReportCardAsciiLines,
+  REPORT_CARD_ASCII,
   PILLARS,
   RULE_REGISTRY
 };

@@ -30,6 +30,54 @@ export const saveProjectConfig = (targetDir = '.', config = {}) => {
   process.stdout.write(`  \x1b[32m✔\x1b[0m Saved project settings to: .chemx/config.json\n`);
 };
 
+export const areGuardrailsInstalled = (targetDir = '.') => {
+  const resolvedTarget = path.resolve(targetDir);
+  const wfPath = path.join(resolvedTarget, '.github', 'workflows', 'chemx-audit.yml');
+  const hasWf = fs.existsSync(wfPath);
+
+  const gitPath = path.join(resolvedTarget, '.git');
+  let hasGit = false;
+  let hooksDir = null;
+
+  if (fs.existsSync(gitPath)) {
+    try {
+      const stat = fs.statSync(gitPath);
+      if (stat.isDirectory()) {
+        hasGit = true;
+        hooksDir = path.join(gitPath, 'hooks');
+      } else if (stat.isFile()) {
+        hasGit = true;
+        const gitContent = fs.readFileSync(gitPath, 'utf-8');
+        const match = gitContent.match(/gitdir:\s*(.+)/);
+        if (match) {
+          hooksDir = path.resolve(resolvedTarget, match[1].trim(), 'hooks');
+        }
+      }
+    } catch {
+      hasGit = false;
+    }
+  }
+
+  if (!hasGit) {
+    return hasWf;
+  }
+
+  let hasHook = false;
+  if (hooksDir) {
+    const hookPath = path.join(hooksDir, 'pre-commit');
+    if (fs.existsSync(hookPath)) {
+      try {
+        const hookContent = fs.readFileSync(hookPath, 'utf-8');
+        hasHook = hookContent.includes('Chemical X') || hookContent.includes('chemx');
+      } catch {
+        hasHook = false;
+      }
+    }
+  }
+
+  return hasWf && hasHook;
+};
+
 export const runInstallWizard = async (targetDir = '.') => {
   const isGit = fs.existsSync(path.resolve(targetDir, '.git'));
   process.stdout.write('\n\x1b[1m\x1b[38;2;98;201;255mChemical X: Architecture Guardrail Installer\x1b[0m\n\n');

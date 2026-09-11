@@ -38,9 +38,9 @@ export const resolveBadgeColor = (score) => {
 };
 
 export const resolveHotspotTierText = (lineCount) => {
-  if (lineCount >= 2000) return '🔴 **CRITICAL (>= 2,000 LOC)**';
-  if (lineCount >= 1000) return '🟠 **SEVERE (>= 1,000 LOC)**';
-  if (lineCount > 500) return '🟡 **WARNING (> 500 LOC)**';
+  if (lineCount >= 2000) return '🔴 **CRITICAL (>= 2,000 lines of code)**';
+  if (lineCount >= 1000) return '🟠 **SEVERE (>= 1,000 lines of code)**';
+  if (lineCount > 500) return '🟡 **WARNING (> 500 lines of code)**';
   return '🟢 Compliant';
 };
 
@@ -60,6 +60,25 @@ export const formatWebUrl = (url) => {
   if (!trimmed) return '';
   const href = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
   return `[${href}](${href})`;
+};
+
+export const resolveExcessCostPerPass = (tokensObj, fallbackCostPerMillion = 3.0) => {
+  if (tokensObj?.excessCostPerPass !== undefined) return tokensObj.excessCostPerPass;
+  const costPerMillion = tokensObj?.costPerMillion || fallbackCostPerMillion;
+  const excess = tokensObj?.estimatedExcessTokens || 0;
+  return Number(((excess / 1000000) * costPerMillion).toFixed(3));
+};
+
+export const resolveMonthlyWastePerDev = (tokensObj, fallbackCostPerMillion = 3.0) => {
+  if (tokensObj?.monthlyWastePerDev !== undefined) return tokensObj.monthlyWastePerDev;
+  const pass = resolveExcessCostPerPass(tokensObj, fallbackCostPerMillion);
+  return Number((pass * 20 * 5 * 4).toFixed(2));
+};
+
+export const resolveWeeklyWastePerDev = (tokensObj, fallbackCostPerMillion = 3.0) => {
+  if (tokensObj?.weeklyWastePerDev !== undefined) return tokensObj.weeklyWastePerDev;
+  const pass = resolveExcessCostPerPass(tokensObj, fallbackCostPerMillion);
+  return Number((pass * 20 * 5).toFixed(2));
 };
 
 export const generateDiscussionContent = (report, username, projectName = 'Codebase', repoUrl = '', liveUrl = '') => {
@@ -90,8 +109,14 @@ export const generateDiscussionContent = (report, username, projectName = 'Codeb
     }
   }
   lines.push(`* **Molecular Health Index**: **${health.score} / 100** (Grade: **${health.grade}** - ${health.label})`);
-  lines.push(`* **Source Files Analyzed**: ${metrics.scannedFiles} files (${metrics.totalLoc} total LOC)`);
+  lines.push(`* **Source Files Analyzed**: ${metrics.scannedFiles} files (${metrics.totalLoc} total lines of code)`);
   lines.push(`* **Token Reduction Potential**: **${contextAnalysis.potentialSavingsPct}%** (Estimated ${contextAnalysis.estimatedTokens.toLocaleString()} tokens)`);
+  const costPass = resolveExcessCostPerPass(contextAnalysis);
+  const costMonth = resolveMonthlyWastePerDev(contextAnalysis);
+  const costWeek = resolveWeeklyWastePerDev(contextAnalysis);
+  const pricingModel = contextAnalysis?.pricingModel || 'Frontier Blended ($3.00/1M)';
+  lines.push(`* **Monolith Cost per Turn**: **$${costPass.toFixed(3)}** (${pricingModel})`);
+  lines.push(`* **Projected Dev Context Tax**: **$${costMonth.toFixed(2)} / mo** per engineer ($${costWeek.toFixed(2)} / wk)`);
   lines.push('');
   lines.push('---');
   lines.push('');
@@ -130,11 +155,11 @@ export const generateDiscussionContent = (report, username, projectName = 'Codeb
   lines.push('');
   lines.push('## 2. Monolith & Architectural Hazard Summary');
   lines.push('');
-  lines.push(`* **Monolith Files (> 500 LOC)**: **${totalMonoliths} files**`);
+  lines.push(`* **Monolith Files (> 500 lines of code)**: **${totalMonoliths} files**`);
   if (totalMonoliths > 0) {
-    lines.push(`  * Warning Tier (500 - 999 LOC): ${warningMonoliths} files`);
-    lines.push(`  * Severe Tier (1,000 - 1,999 LOC): ${severeMonoliths} files`);
-    lines.push(`  * Extreme Monoliths (2,000+ LOC): ${extremeMonoliths} files`);
+    lines.push(`  * Warning Tier (500 - 999 lines of code): ${warningMonoliths} files`);
+    lines.push(`  * Severe Tier (1,000 - 1,999 lines of code): ${severeMonoliths} files`);
+    lines.push(`  * Extreme Monoliths (2,000+ lines of code): ${extremeMonoliths} files`);
   }
   lines.push(`* **Hazard Breakdown**: Critical: **${critical.length}** | High/Med: **${high.length + medium.length}** | Low: **${low.length}**`);
   lines.push('');
@@ -146,7 +171,7 @@ export const generateDiscussionContent = (report, username, projectName = 'Codeb
     lines.push('This project follows Chemical X Molecular Architecture principles with isolated capsules and self-cleaning hooks.');
   } else {
     lines.push('### Seeking Refactoring Feedback');
-    lines.push('Looking for recommendations on breaking down flagged monolithic debts into crystalline molecule capsules (< 100 LOC). Any advice is welcome!');
+    lines.push('Looking for recommendations on breaking down flagged monolithic debts into crystalline molecule capsules (< 100 lines of code). Any advice is welcome!');
   }
   lines.push('');
   lines.push('*Audited using [Chemical X Protocol Starter Kit](https://github.com/Chemical-X-Protocol/awesome-secret-sauce).*');
@@ -187,6 +212,28 @@ export const generateTransformationDiscussionContent = (
     return isGood ? `🟢 **${sign}**` : `🔴 **${sign}**`;
   };
 
+  const costPassBefore = resolveExcessCostPerPass(beforeSnapshot.tokens);
+  const costPassAfter = resolveExcessCostPerPass(afterSnapshot.tokens);
+  const costPassDelta = Number((costPassAfter - costPassBefore).toFixed(3));
+
+  const monthlyTaxBefore = resolveMonthlyWastePerDev(beforeSnapshot.tokens);
+  const monthlyTaxAfter = resolveMonthlyWastePerDev(afterSnapshot.tokens);
+  const monthlyTaxDelta = Number((monthlyTaxAfter - monthlyTaxBefore).toFixed(2));
+
+  const formatCostPassDelta = (val) => {
+    if (val === 0) return '0 (No change)';
+    const isGood = val < 0;
+    const sign = val > 0 ? `+$${val.toFixed(3)}` : `-$${Math.abs(val).toFixed(3)}`;
+    return isGood ? `🟢 **${sign}**` : `🔴 **${sign}**`;
+  };
+
+  const formatMonthlyTaxDelta = (val) => {
+    if (val === 0) return '0 (No change)';
+    const isGood = val < 0;
+    const sign = val > 0 ? `+$${val.toFixed(2)}/mo` : `-$${Math.abs(val).toFixed(2)}/mo`;
+    return isGood ? `🟢 **${sign}**` : `🔴 **${sign}**`;
+  };
+
   const lines = [];
   lines.push(`# 🚀 Architectural Transformation: ${projectName}`);
   lines.push('');
@@ -214,8 +261,10 @@ export const generateTransformationDiscussionContent = (
   lines.push(`| **Molecular Health (MHI)** | ${scoreBefore} / 100 (${beforeSnapshot.health.grade}) | ${scoreAfter} / 100 (${afterSnapshot.health.grade}) | ${formatDelta(scoreDelta)} |`);
   lines.push(`| **Critical Hazards** | ${beforeSnapshot.violations.critical} | ${afterSnapshot.violations.critical} | ${formatDelta(critDelta, true)} |`);
   lines.push(`| **Total Violations** | ${beforeSnapshot.violations.total} | ${afterSnapshot.violations.total} | ${formatDelta(totalDelta, true)} |`);
-  lines.push(`| **Monolith Files (>500 LOC)** | ${beforeSnapshot.monoliths.total} | ${afterSnapshot.monoliths.total} | ${formatDelta(monoDelta, true)} |`);
+  lines.push(`| **Monolith Files (> 500 lines of code)** | ${beforeSnapshot.monoliths.total} | ${afterSnapshot.monoliths.total} | ${formatDelta(monoDelta, true)} |`);
   lines.push(`| **Excess Token Burn** | ${beforeSnapshot.tokens.estimatedExcessTokens.toLocaleString()} tok | ${afterSnapshot.tokens.estimatedExcessTokens.toLocaleString()} tok | ${formatDelta(tokensDelta, true)} |`);
+  lines.push(`| **Monolith Cost per Turn** | $${costPassBefore.toFixed(3)} | $${costPassAfter.toFixed(3)} | ${formatCostPassDelta(costPassDelta)} |`);
+  lines.push(`| **Dev Context Tax (Monthly)** | $${monthlyTaxBefore.toFixed(2)}/mo | $${monthlyTaxAfter.toFixed(2)}/mo | ${formatMonthlyTaxDelta(monthlyTaxDelta)} |`);
   lines.push('');
   lines.push('---');
   lines.push('');
@@ -241,7 +290,7 @@ export const generateTransformationDiscussionContent = (
   lines.push('---');
   lines.push('');
   lines.push('### Community Takeaway');
-  lines.push('Refactored using Chemical X Molecular Architecture standards. Monoliths decomposed into crystalline domain capsules (< 100 LOC) with self-cleaning hooks.');
+  lines.push('Refactored using Chemical X Molecular Architecture standards. Monoliths decomposed into crystalline domain capsules (< 100 lines of code) with self-cleaning hooks.');
   lines.push('');
   lines.push('*Transformation tracked via [Chemical X Protocol Starter Kit](https://github.com/Chemical-X-Protocol/awesome-secret-sauce).*');
 

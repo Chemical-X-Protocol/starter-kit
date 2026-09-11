@@ -6,10 +6,27 @@ export const resolveGradeColor = (grade) => {
   return '\x1b[31;1m';
 };
 
-export const resolveGradeBadge = (grade) => {
+export const resolveGradeBadge = (grade, width = 11) => {
   const color = resolveGradeColor(grade);
-  const padded = grade.length === 1 ? `${grade} ` : grade;
-  return `${color}[Grade: ${padded}]\x1b[0m`;
+  const text = `Grade: ${grade}`;
+  const totalPadding = Math.max(0, width - text.length);
+  const leftPad = Math.floor(totalPadding / 2);
+  const rightPad = totalPadding - leftPad;
+  const padded = `${' '.repeat(leftPad)}${text}${' '.repeat(rightPad)}`;
+  return `${color}[${padded}]\x1b[0m`;
+};
+
+export const resolveHealthHearts = (grade, score = 0) => {
+  const g = String(grade || '').toUpperCase();
+  let filled = 1;
+  if (g.startsWith('A') || score >= 90) filled = 5;
+  else if (g.startsWith('B') || score >= 80) filled = 4;
+  else if (g.startsWith('C') || score >= 70) filled = 3;
+  else if (g.startsWith('D') || score >= 60) filled = 2;
+  else filled = score === 0 ? 0 : 1;
+
+  const empty = 5 - filled;
+  return '❤️'.repeat(filled) + '🖤'.repeat(empty);
 };
 
 export const resolveCriticalGrade = (count) => {

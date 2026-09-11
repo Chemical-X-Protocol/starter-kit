@@ -16,6 +16,7 @@ import {
   RESET,
   groupViolationsBySeverity
 } from './reporter-utils.js';
+import { getReportCardAsciiLines } from './reporter-ascii.js';
 
 export const formatGradeFSection = (report) => {
   const { violations, hotspots, pillars } = report;
@@ -25,9 +26,12 @@ export const formatGradeFSection = (report) => {
   const lines = [];
 
   lines.push('');
+  for (const rcLine of getReportCardAsciiLines(RED)) {
+    lines.push(`   ${rcLine}`);
+  }
   lines.push(`${RED}======================================================================${RESET}`);
   lines.push(`${BOLD}${RED}   GRADE F : CRITICAL ARCHITECTURAL HAZARDS & EXTREME MONOLITHS${RESET}`);
-  lines.push(`${DIM}   Immediate action required: >2,000 LOC monoliths, render hacks, mock data${RESET}`);
+  lines.push(`${DIM}   Immediate action required: >2,000 lines of code monoliths, render hacks, mock data${RESET}`);
   lines.push(`${RED}======================================================================${RESET}`);
   lines.push(`   Critical Violations:  ${critical.length > 0 ? `${RED}${BOLD}${critical.length}${RESET}` : `${GREEN}0${RESET}`}`);
   lines.push(`   Extreme Monoliths:    ${extremeMonoliths.length > 0 ? `${RED}${BOLD}${extremeMonoliths.length}${RESET}` : `${GREEN}0${RESET}`}`);
@@ -37,7 +41,7 @@ export const formatGradeFSection = (report) => {
   const totalGradeFItems = critical.length + extremeMonoliths.length + failedPillars.length;
   if (totalGradeFItems === 0) {
     lines.push(`\n   ${GREEN}✔ Outstanding! Zero Grade F hazards detected.${RESET}`);
-    lines.push(`   ${DIM}Codebase is free of extreme monoliths (>2k LOC) and critical violations.${RESET}`);
+    lines.push(`   ${DIM}Codebase is free of extreme monoliths (>2,000 lines of code) and critical violations.${RESET}`);
   } else {
     if (critical.length > 0) {
       lines.push(`\n   ${BOLD}${RED}🚨 CRITICAL AST VIOLATIONS (${critical.length}):${RESET}`);
@@ -83,9 +87,12 @@ export const formatGradeDSection = (report) => {
   const lines = [];
 
   lines.push('');
+  for (const rcLine of getReportCardAsciiLines(ORANGE)) {
+    lines.push(`   ${rcLine}`);
+  }
   lines.push(`${ORANGE}======================================================================${RESET}`);
   lines.push(`${BOLD}${ORANGE}   GRADE D : HIGH SEVERITY DEBTS & SEVERE MONOLITHS${RESET}`);
-  lines.push(`${DIM}   Refactoring priorities: 1,000 to 1,999 LOC files and hook saturation > 5${RESET}`);
+  lines.push(`${DIM}   Refactoring priorities: 1,000 to 1,999 lines of code files and hook saturation > 5${RESET}`);
   lines.push(`${ORANGE}======================================================================${RESET}`);
   lines.push(`   High Severity Debts:  ${high.length > 0 ? `${ORANGE}${BOLD}${high.length}${RESET}` : `${GREEN}0${RESET}`}`);
   lines.push(`   Severe Monoliths:     ${severeMonoliths.length > 0 ? `${ORANGE}${BOLD}${severeMonoliths.length}${RESET}` : `${GREEN}0${RESET}`}`);
@@ -95,7 +102,7 @@ export const formatGradeDSection = (report) => {
   const totalGradeDItems = high.length + severeMonoliths.length + warnPillars.length;
   if (totalGradeDItems === 0) {
     lines.push(`\n   ${GREEN}✔ Zero Grade D debts detected.${RESET}`);
-    lines.push(`   ${DIM}No severe monoliths (1k-2k LOC) or saturated hook anti-patterns.${RESET}`);
+    lines.push(`   ${DIM}No severe monoliths (1,000-1,999 lines of code) or saturated hook anti-patterns.${RESET}`);
   } else {
     if (high.length > 0) {
       lines.push(`\n   ${BOLD}${ORANGE}⚠️  HIGH SEVERITY VIOLATIONS (${high.length}):${RESET}`);
@@ -139,9 +146,12 @@ export const formatGradeCSection = (report) => {
   const lines = [];
 
   lines.push('');
+  for (const rcLine of getReportCardAsciiLines(CYAN)) {
+    lines.push(`   ${rcLine}`);
+  }
   lines.push(`${CYAN}======================================================================${RESET}`);
   lines.push(`${BOLD}${CYAN}   GRADE C : MEDIUM SEVERITY DEBTS & MONOLITHIC DRIFT${RESET}`);
-  lines.push(`${DIM}   Architecture debts: 500 to 999 LOC files and raw inline style attributes${RESET}`);
+  lines.push(`${DIM}   Architecture debts: 500 to 999 lines of code files and raw inline style attributes${RESET}`);
   lines.push(`${CYAN}======================================================================${RESET}`);
   lines.push(`   Medium Debts:         ${medium.length > 0 ? `${YELLOW}${BOLD}${medium.length}${RESET}` : `${GREEN}0${RESET}`}`);
   lines.push(`   Warning Monoliths:    ${warningMonoliths.length > 0 ? `${YELLOW}${BOLD}${warningMonoliths.length}${RESET}` : `${GREEN}0${RESET}`}`);
@@ -185,6 +195,9 @@ export const formatGradeBSection = (report) => {
   const lines = [];
 
   lines.push('');
+  for (const rcLine of getReportCardAsciiLines(YELLOW)) {
+    lines.push(`   ${rcLine}`);
+  }
   lines.push(`${YELLOW}======================================================================${RESET}`);
   lines.push(`${BOLD}${YELLOW}   GRADE B : LOW SEVERITY HYGIENE & MINOR CODE SMELLS${RESET}`);
   lines.push(`${DIM}   Hygiene & polish: Em dash typography leaks and unguarded console logging${RESET}`);
@@ -219,13 +232,16 @@ export const formatGradeASection = (report) => {
   const lines = [];
 
   lines.push('');
+  for (const rcLine of getReportCardAsciiLines(GREEN)) {
+    lines.push(`   ${rcLine}`);
+  }
   lines.push(`${GREEN}======================================================================${RESET}`);
   lines.push(`${BOLD}${GREEN}   GRADE A : COMPLIANT ARCHITECTURE & PASSING PILLARS${RESET}`);
   lines.push(`${DIM}   Molecular Architecture verified clean areas and crystalline modules${RESET}`);
   lines.push(`${GREEN}======================================================================${RESET}`);
   lines.push(`   Molecular Health Score:  ${BOLD}${GREEN}${health.score}/100${RESET} [Grade: ${BOLD}${GREEN}${health.grade}${RESET}]`);
   lines.push(`   Passing Pillars:       ${BOLD}${GREEN}${passedPillars.length} / 7 Pillars PASSED${RESET}`);
-  lines.push(`   Capsule Compliance:    ${BOLD}${GREEN}${metrics.moleculeCompliantPct}%${RESET} compliant (< 100 LOC)`);
+  lines.push(`   Capsule Compliance:    ${BOLD}${GREEN}${metrics.moleculeCompliantPct}%${RESET} compliant (< 100 lines of code)`);
   lines.push(`${GREEN}----------------------------------------------------------------------${RESET}`);
 
   lines.push(`\n   ${BOLD}${GREEN}✔ COMPLIANT PILLARS (${passedPillars.length} / 7):${RESET}`);
@@ -244,11 +260,11 @@ export const formatGradeASection = (report) => {
   }
   const hasExtremeMonolith = hotspots.some((h) => h.lineCount >= 2000);
   if (!hasExtremeMonolith) {
-    lines.push(`   ${GREEN}✔${RESET} Zero Extreme Monoliths (0 files >= 2,000 LOC)`);
+    lines.push(`   ${GREEN}✔${RESET} Zero Extreme Monoliths (0 files >= 2,000 lines of code)`);
   }
   const hasSevereMonolith = hotspots.some((h) => h.lineCount >= 1000);
   if (!hasSevereMonolith) {
-    lines.push(`   ${GREEN}✔${RESET} Zero Severe Monoliths (0 files >= 1,000 LOC)`);
+    lines.push(`   ${GREEN}✔${RESET} Zero Severe Monoliths (0 files >= 1,000 lines of code)`);
   }
   if (contextAnalysis.riskLevel === 'LOW') {
     lines.push(`   ${GREEN}✔${RESET} Low Context Hazard & Token Burn Risk`);

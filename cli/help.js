@@ -25,7 +25,7 @@ export const printHelp = () => {
     '',
     `  ${CYAN}generate${RESET} <m-name>  ${DIM}(aliases: capsule, add)${RESET}`,
     `      Scaffold an isolated crystalline molecule capsule directory:`,
-    `        ${DIM}- ${RESET}<m-name>/<m-name>.tsx  ${DIM}(declarative component < 50 LOC)${RESET}`,
+    `        ${DIM}- ${RESET}<m-name>/<m-name>.tsx  ${DIM}(declarative component < 50 lines of code)${RESET}`,
     `        ${DIM}- ${RESET}<m-name>/types.d.ts     ${DIM}(props and emits interfaces)${RESET}`,
     `        ${DIM}- ${RESET}<m-name>/index.ts        ${DIM}(clean public barrel export)${RESET}`,
     `      Free evaluation mode supported with non-blocking license reminder.`,

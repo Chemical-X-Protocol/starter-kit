@@ -14,7 +14,7 @@ export const buildGradeFPrompt = (report) => {
   lines.push('Act as a Principal Systems Architect. Surgically refactor the following Grade F Critical Context Hazards in our codebase according to Chemical X Molecular Architecture Standards:\n');
 
   if (extremeMonoliths.length > 0) {
-    lines.push('### EXTREME MONOLITHS (>= 2,000 LOC) : MONOLITH DECOMPOSITION');
+    lines.push('### EXTREME MONOLITHS (>= 2,000 lines of code) : MONOLITH DECOMPOSITION');
     extremeMonoliths.forEach((h, i) => {
       lines.push(`${i + 1}. File: \`${h.filePath}\` (${h.lineCount} lines)`);
       lines.push('   Action: Decompose this monolith into crystalline single-responsibility capsules (< 100 lines per molecule). Convert top-level view into a declarative Table-of-Contents view.');
@@ -53,10 +53,10 @@ export const buildGradeDPrompt = (report) => {
   lines.push('Act as a Principal Systems Architect. Refactor the following Grade D High-Severity Architectural Debts according to Chemical X Molecular Architecture Standards:\n');
 
   if (severeMonoliths.length > 0) {
-    lines.push('### SEVERE MONOLITHS (1,000 - 1,999 LOC)');
+    lines.push('### SEVERE MONOLITHS (1,000 - 1,999 lines of code)');
     severeMonoliths.forEach((h, i) => {
       lines.push(`${i + 1}. File: \`${h.filePath}\` (${h.lineCount} lines)`);
-      lines.push('   Action: Extract sub-features into isolated molecule capsules (< 100 LOC) and domain composables.');
+      lines.push('   Action: Extract sub-features into isolated molecule capsules (< 100 lines of code) and domain composables.');
     });
     lines.push('');
   }
@@ -90,7 +90,7 @@ export const buildGradeCPrompt = (report) => {
   lines.push('Act as a Senior Frontend Engineer. Refactor the following Grade C Medium-Severity Technical Debts according to Chemical X Molecular Architecture Standards:\n');
 
   if (warningMonoliths.length > 0) {
-    lines.push('### WARNING MONOLITHS (500 - 999 LOC)');
+    lines.push('### WARNING MONOLITHS (500 - 999 lines of code)');
     warningMonoliths.forEach((h, i) => {
       lines.push(`${i + 1}. File: \`${h.filePath}\` (${h.lineCount} lines)`);
       lines.push('   Action: Bring file under 500 line budget by extracting helper functions, types, and child molecules.');
@@ -111,7 +111,7 @@ export const buildGradeCPrompt = (report) => {
   lines.push('### STRICT EXECUTION RULES:');
   lines.push('1. Zero raw inline styles: Replace style={{...}} with atom props, SCSS mixins (@include glass), or scoped BEM classes.');
   lines.push('2. Extract anonymous inline callbacks into named functions before passing as props.');
-  lines.push('3. Co-locate granular types (*.d.ts) inside feature capsules (< 100 LOC). Avoid type monoliths.');
+  lines.push('3. Co-locate granular types (*.d.ts) inside feature capsules (< 100 lines of code). Avoid type monoliths.');
 
   return lines.join('\n');
 };

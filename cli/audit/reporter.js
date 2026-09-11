@@ -15,6 +15,7 @@ import {
   groupViolationsBySeverity,
   getStatusBadge,
   resolveGradeColor,
+  resolveHealthHearts,
   resolveRiskColor,
   resolveHotspotBadge
 } from './reporter-utils.js';
@@ -24,6 +25,7 @@ export {
   getSeverityBadge,
   getStatusBadge,
   resolveGradeColor,
+  resolveHealthHearts,
   resolveRiskColor,
   resolveHotspotBadge,
   resolveMarkdownStatusIcon,
@@ -53,10 +55,12 @@ export {
 
 export {
   getAsciiGradeLines,
-  formatAsciiGrade
+  formatAsciiGrade,
+  getReportCardAsciiLines,
+  REPORT_CARD_ASCII
 } from './reporter-ascii.js';
 
-import { getAsciiGradeLines } from './reporter-ascii.js';
+import { getAsciiGradeLines, getReportCardAsciiLines } from './reporter-ascii.js';
 
 export const resolveTopSectionColor = (report) => {
   const hasNoViolations = (report?.violations?.length ?? 0) === 0;
@@ -73,6 +77,9 @@ export const formatScorecardSection = (report, themeColor = null) => {
   const lines = [];
 
   lines.push('');
+  for (const rcLine of getReportCardAsciiLines(sectionColor)) {
+    lines.push(`   ${rcLine}`);
+  }
   lines.push(`${sectionColor}======================================================================${RESET}`);
   lines.push(`${BOLD}${sectionColor}   MOLECULAR HEALTH INDEX & CODEBASE OVERVIEW${RESET}`);
   lines.push(`${sectionColor}======================================================================${RESET}`);
@@ -87,11 +94,12 @@ export const formatScorecardSection = (report, themeColor = null) => {
     lines.push(`${sectionColor}----------------------------------------------------------------------${RESET}`);
   }
 
-  lines.push(`   Health Score:        ${gradeColor}${BOLD}${health.score} / 100${RESET} (Grade: ${gradeColor}${BOLD}${health.grade}${RESET} - ${health.label})`);
+  const hearts = resolveHealthHearts(health?.grade, health?.score);
+  lines.push(`   Life / Health Meter: ${hearts} ${gradeColor}${BOLD}${health.score} / 100${RESET} (Grade: ${gradeColor}${BOLD}${health.grade}${RESET} - ${health.label})`);
   lines.push(`   Files Scanned:       ${BOLD}${metrics.scannedFiles}${RESET} source files`);
-  lines.push(`   Total Lines of Code: ${BOLD}${metrics.totalLoc}${RESET} LOC (avg: ${metrics.avgLoc} lines/file)`);
+  lines.push(`   Total Lines of Code: ${BOLD}${metrics.totalLoc}${RESET} lines of code (avg: ${metrics.avgLoc} lines/file)`);
   lines.push(`   Largest File:        ${BOLD}${metrics.largestFile.filePath || 'None'}${RESET} (${metrics.largestFile.lineCount} lines)`);
-  lines.push(`   Molecule Capsules:   ${metrics.moleculeCount} found (${metrics.moleculeCompliantPct}% compliant < 100 lines)`);
+  lines.push(`   Molecule Capsules:   ${metrics.moleculeCount} found (${metrics.moleculeCompliantPct}% compliant < 100 lines of code)`);
   lines.push(`   Custom Hooks:        ${metrics.hookCount} detected`);
   lines.push(`${sectionColor}======================================================================${RESET}\n`);
 
@@ -277,6 +285,11 @@ export const getChemicalXAsciiBanner = (gradeOrReport = null) => {
 
   lines.push('                     \x1b[1m\x1b[37mThe Secret Sauce to \x1b[38;2;98;201;255mVibe Coding\x1b[0m');
 
+  const gColor = grade ? resolveGradeColor(grade) : '';
+  const gradeLines = grade ? getAsciiGradeLines(grade, gColor, true) : [];
+  const termWidth = process.stdout.columns || 0;
+  const isSideBySide = Boolean(!termWidth || termWidth >= 105);
+
   for (let lineIdx = 0; lineIdx < art.length; lineIdx++) {
     const line = art[lineIdx];
     let out = '';
@@ -302,9 +315,8 @@ export const getChemicalXAsciiBanner = (gradeOrReport = null) => {
       out += `\x1b[38;2;${r};${g};${b}m\x1b[1m${ch}\x1b[0m`;
     }
 
-    if (grade && lineIdx === 2) {
-      const gColor = resolveGradeColor(grade);
-      out += `   \x1b[1m\x1b[37m=\x1b[0m ${gColor}\x1b[1mGrade ${grade}\x1b[0m`;
+    if (isSideBySide && gradeLines.length > lineIdx) {
+      out += `   ${gradeLines[lineIdx]}`;
     }
 
     lines.push(out);
@@ -313,6 +325,14 @@ export const getChemicalXAsciiBanner = (gradeOrReport = null) => {
   const subtitle = 'Architectural guardrails to eliminate token burn and AI hallucinations.';
   const pad = ' '.repeat(Math.max(0, Math.floor((maxLen - subtitle.length) / 2)));
   lines.push(`${pad}\x1b[2m${subtitle}\x1b[0m\n`);
+
+  if (!isSideBySide && gradeLines.length > 0) {
+    for (const gl of gradeLines) {
+      lines.push(`   ${gl}`);
+    }
+    lines.push('');
+  }
+
   return lines.join('\n');
 };
 
@@ -442,8 +462,8 @@ export const formatPassesSection = (report) => {
 
   lines.push(`   Molecular Health Score:    ${BOLD}${GREEN}${health.score}/100${RESET} [Grade: ${BOLD}${GREEN}${health.grade}${RESET}]`);
   lines.push(`   Passing Pillars:         ${BOLD}${GREEN}${passedPillars.length} / 7 Pillars PASSED${RESET}`);
-  lines.push(`   Capsule Compliance:      ${BOLD}${GREEN}${metrics.moleculeCompliantPct}%${RESET} molecules compliant (< 100 LOC)`);
-  lines.push(`   Total Files Scanned:     ${metrics.scannedFiles} source files (${metrics.totalLoc} total LOC)`);
+  lines.push(`   Capsule Compliance:      ${BOLD}${GREEN}${metrics.moleculeCompliantPct}%${RESET} molecules compliant (< 100 lines of code)`);
+  lines.push(`   Total Files Scanned:     ${metrics.scannedFiles} source files (${metrics.totalLoc} total lines of code)`);
   lines.push(`${GREEN}----------------------------------------------------------------------${RESET}`);
 
   lines.push(`\n   ${BOLD}${GREEN}✔ COMPLIANT ARCHITECTURAL PILLARS:${RESET}`);
@@ -462,11 +482,11 @@ export const formatPassesSection = (report) => {
   }
   const hasExtremeMonolith = hotspots.some((h) => h.lineCount >= 2000);
   if (!hasExtremeMonolith) {
-    lines.push(`   ${GREEN}✔${RESET} Zero Extreme Monoliths (0 files >= 2,000 LOC)`);
+    lines.push(`   ${GREEN}✔${RESET} Zero Extreme Monoliths (0 files >= 2,000 lines of code)`);
   }
   const hasSevereMonolith = hotspots.some((h) => h.lineCount >= 1000);
   if (!hasSevereMonolith) {
-    lines.push(`   ${GREEN}✔${RESET} Zero Severe Monoliths (0 files >= 1,000 LOC)`);
+    lines.push(`   ${GREEN}✔${RESET} Zero Severe Monoliths (0 files >= 1,000 lines of code)`);
   }
   if (contextAnalysis.riskLevel === 'LOW') {
     lines.push(`   ${GREEN}✔${RESET} Low Context Hazard & Token Burn Risk`);

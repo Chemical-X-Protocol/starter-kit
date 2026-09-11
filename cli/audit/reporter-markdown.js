@@ -1,6 +1,7 @@
 import { buildMasterPrompt } from './prompts.js';
 import {
   groupViolationsBySeverity,
+  resolveHealthHearts,
   resolveMarkdownStatusIcon,
   resolveMarkdownMonolithText,
   PILLAR_EMOJIS,
@@ -14,17 +15,17 @@ export const generateMarkdownReport = (report) => {
 
   lines.push('# Chemical X Protocol: Architectural Audit Report');
   lines.push('');
-  lines.push(`**Generated**: ${new Date().toISOString()}`);
-  lines.push('');
-  lines.push('---');
+  lines.push('> *Comprehensive static analysis report enforcing Chemical X Molecular Architecture standards.*');
   lines.push('');
   lines.push('## 1. Executive Summary & Scorecard');
   lines.push('');
   lines.push('| Metric | Value | Status |');
   lines.push('| :--- | :--- | :--- |');
+  const hearts = resolveHealthHearts(health?.grade, health?.score, false);
+  lines.push(`| **Life / Health Meter** | ${hearts} (Grade **${health.grade}**) | ${health.score} / 100 (${health.label}) |`);
   lines.push(`| **Molecular Health Index** | **${health.score} / 100** | Grade: **${health.grade}** (${health.label}) |`);
   lines.push(`| **Scanned Files** | ${metrics.scannedFiles} source files | Verified |`);
-  lines.push(`| **Total Lines of Code** | ${metrics.totalLoc} LOC | Avg ${metrics.avgLoc} LOC/file |`);
+  lines.push(`| **Total Lines of Code** | ${metrics.totalLoc} lines of code | Avg ${metrics.avgLoc} lines/file |`);
   lines.push(`| **Largest File** | \`${metrics.largestFile.filePath || 'None'}\` | ${metrics.largestFile.lineCount} lines |`);
   lines.push(`| **Context Token Overhead** | ~${contextAnalysis.estimatedTokens.toLocaleString()} tokens | Est. Bloat: ~${contextAnalysis.estimatedExcessTokens.toLocaleString()} tokens |`);
   lines.push(`| **Token Reduction Target** | **${contextAnalysis.potentialSavingsPct}%** | Risk Level: **${contextAnalysis.riskLevel}** |`);
