@@ -163,19 +163,25 @@ To eliminate Temporal Dead Zone (TDZ) ReferenceErrors, `<script setup>` and cont
 Raw inline `style="..."` attributes are strictly prohibited. Visual styling flows through the standardized 4-tier hierarchy:
 1. **Level 1 (Atom Props)**: Semantic props on atoms (`:color="brandColor"`, `variant="glass"`, `size="lg"`).
 2. **Level 2 (Mixins & Utilities)**: Centralized SCSS mixins (`@include glass;`, `@include glass-hover;`) and utility classes.
-3. **Level 3 (Scoped BEM Classes)**: Scoped classes in component stylesheets referencing design tokens.
+3. **Level 3 (Scoped BEM Classes)**: Scoped classes in component stylesheets referencing design tokens or encapsulating shorthand via `@apply`.
 4. **Level 4 (Dynamic Root Variables)**: Dynamic runtime coordinates passed exclusively as root CSS custom properties (`:style="{ '--win-x': \`${x}px\`, '--win-y': \`${y}px\` }"`).
 
-### B. Wrapper Atoms & Explicit Slot Forwarding
+### B. The Anti-Tailwind-Soup Directive (Class Decoupling)
+- Prohibit monolithic utility class chains (> 4-5 classes per element) directly inside HTML templates.
+- Long strings of utility shorthand recreate the exact cognitive noise and AI context degradation of inline styles.
+- Decouple visual styling into scoped classes via `@apply` or centralized SCSS mixins (`@include glass;`).
+- Templates must read like a clean, semantic outline rather than an unreadable wall of styling shorthand.
+
+### C. Wrapper Atoms & Explicit Slot Forwarding
 - Never use dynamic slot iteration with `v-for="(_, slot) in $slots"` in wrapper components.
 - Explicitly forward named slots: `<template #<slot-name>="scope"><slot :name="<slot-name>" v-bind="scope || {}" /></template>`.
 - Always wrap default slot in `<template #default="scope"><slot v-bind="scope || {}" /></template>`.
 
-### C. Flat CSS Specificity & Icon Safety
+### D. Flat CSS Specificity & Icon Safety
 - Single-depth BEM semantic class naming. Never use `!important` overrides.
 - **FontAwesome SVG Compliance**: Never attach `text-*` utility classes to FontAwesome icons (breaks SVG rendering). Use native `:color` prop or inline CSS.
 
-### D. 60 FPS Non-Blocking UI Offloading
+### E. 60 FPS Non-Blocking UI Offloading
 - Heavy computational operations (parsing, sorting, cryptographic hashing) must be offloaded to Web Workers or chunked micro-batches via `requestIdleCallback`.
 
 ---

@@ -72,7 +72,7 @@ export const RULE_REGISTRY = {
   RAW_INLINE_STYLE: {
     pillar: PILLARS.PILLAR_5,
     severity: 'MEDIUM',
-    directive: 'Use atom props, SCSS mixins, or CSS custom properties instead of inline styles'
+    directive: 'Decouple into Level 1 atom props, SCSS mixins, or scoped classes via @apply'
   },
   ICON_SVG_STYLE_LEAK: {
     pillar: PILLARS.PILLAR_5,

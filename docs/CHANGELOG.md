@@ -43,6 +43,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Automatic git repository and owner detection (`detectGitRepoInfo`, `parseGitRemoteUrl` in `cli/audit/social.js`), resolving `owner/repo` (e.g. `Chemical-X-Protocol/starter-kit`) for discussion post titles, headers, and canonical repository URLs, while keeping auditor username detection strictly bound to the developer's personal GitHub account.
 
 ### Changed
+- Codified the Anti-Tailwind-Soup Directive into Pillar 5 across agent directives (`AGENTS.md`) and static audit rules registry (`cli/audit/rules-registry.js`): restricts inline utility chains to 4-5 classes maximum, prohibiting monolithic Tailwind class soup in templates and mandating visual decoupling into Level 1 atom props, Level 2 mixins, or Level 3 scoped classes utilizing `@apply`.
 - Updated ASCII banner subtitle in `cli/audit/reporter.js` to "Architectural guardrails to eliminate token burn and AI hallucinations" with dynamic column centering.
 - Updated default GitHub Discussions category to `npx chemx audit` in `cli/audit/social.js` with expanded case-insensitive and fallback resolution.
 - Modularized starter kit audit engine under `cli/audit/` while maintaining 100% backward compatibility with `cli/audit.js` and `./audit` subpath export.
