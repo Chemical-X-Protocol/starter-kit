@@ -66,6 +66,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - Decomposed warning monolith `cli/audit/reporter.js` (831 LOC to 352 LOC) by extracting `cli/audit/reporter-utils.js` (88 LOC), `cli/audit/reporter-markdown.js` (122 LOC), and `cli/audit/reporter-grades.js` (243 LOC) with 100% backward-compatible re-exports.
   - Decomposed warning monolith `cli/audit/rules.js` (554 LOC to 118 LOC) by extracting `cli/audit/rules-registry.js` (102 LOC), `cli/audit/rules-helpers.js` (109 LOC), and `cli/audit/ast-visitors.js` (230 LOC).
   - Enhanced published and exported audit reports in `cli/audit/social.js` and `cli/audit/reporter-markdown.js`: added pillar icons and colored status/hazard emojis (`🟢`, `🟡`, `🔴`) to the 7-Pillar Architectural Matrix, replaced `#1`/`#2` priority tags with number emojis (`1️⃣`, `2️⃣`, `3️⃣`, etc.) to prevent GitHub Discussions auto-linking conflicts, and styled monolith tiers with severity indicator circles.
+  - Fixed Grade F critical AST nested ternary violations in `cli/audit/history.js` (`resolvePillarDeltaArrow` and `resolveScoreGradeColor`) and `cli/audit/social.js` (`resolvePillarProgressionBadge`).
+  - Decomposed warning monolith `cli/audit/social.js` (572 LOC to 221 LOC) by extracting `cli/audit/social-git.js` (214 LOC) and `cli/audit/social-publisher.js` (188 LOC) while preserving all public exports.
+  - Decomposed warning monolith `cli/navigator.js` (666 LOC to 343 LOC) by extracting focused sub-100 LOC capsules: `cli/navigator-grades.js` (70 LOC), `cli/navigator-paged.js` (86 LOC), `cli/navigator-conversion.js` (87 LOC), and `cli/navigator-share.js` (98 LOC) with full backward compatibility.
+  - Extracted anonymous inline callbacks into named functions across audit persistence and dashboard navigator modules.
+  - Co-located granular TypeScript definitions in `cli/audit/history.d.ts`, `cli/audit/social.d.ts`, and `cli/navigator.d.ts`, eliminating monolithic type hazards.
 
 ## [2026-09-09]
 

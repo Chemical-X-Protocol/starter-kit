@@ -1,1 +1,3 @@
 node_modules
+# Chemical X local telemetry & audit history
+.chemx/

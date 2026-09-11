@@ -36,9 +36,13 @@ export const createSnapshotFromReport = (report) => {
   const { metrics, health, hotspots = [], violations = [], pillars = {}, contextAnalysis = {} } = report;
   const { critical, high, medium, low } = groupViolationsBySeverity(violations);
 
-  const extremeMonoliths = hotspots.filter((h) => h.lineCount >= 2000).length;
-  const severeMonoliths = hotspots.filter((h) => h.lineCount >= 1000 && h.lineCount < 2000).length;
-  const warningMonoliths = hotspots.filter((h) => h.lineCount >= 500 && h.lineCount < 1000).length;
+  const isExtremeMonolith = (h) => h.lineCount >= 2000;
+  const isSevereMonolith = (h) => h.lineCount >= 1000 && h.lineCount < 2000;
+  const isWarningMonolith = (h) => h.lineCount >= 500 && h.lineCount < 1000;
+
+  const extremeMonoliths = hotspots.filter(isExtremeMonolith).length;
+  const severeMonoliths = hotspots.filter(isSevereMonolith).length;
+  const warningMonoliths = hotspots.filter(isWarningMonolith).length;
   const totalMonoliths = extremeMonoliths + severeMonoliths + warningMonoliths;
 
   const pillarSummaries = {};
@@ -275,10 +279,20 @@ export const formatTransformationTerminal = (beforeSnapshot, afterSnapshot) => {
   lines.push(`   ------------------------------------------------------------------`);
   lines.push('');
 
+  const resolvePillarDeltaArrow = (pDelta) => {
+    if (pDelta.improved) {
+      return `${GREEN}▲ RESOLVED${RESET}`;
+    }
+    if (pDelta.beforeStatus === pDelta.afterStatus) {
+      return `${DIM}━ UNCHANGED${RESET}`;
+    }
+    return `${RED}▼ DEGRADED${RESET}`;
+  };
+
   lines.push(`${BOLD}   7-PILLAR PROGRESSION${RESET}`);
   lines.push(`   ------------------------------------------------------------------`);
   for (const [pillar, pDelta] of Object.entries(delta.pillarDeltas)) {
-    const arrow = pDelta.improved ? `${GREEN}▲ RESOLVED${RESET}` : pDelta.beforeStatus === pDelta.afterStatus ? `${DIM}━ UNCHANGED${RESET}` : `${RED}▼ DEGRADED${RESET}`;
+    const arrow = resolvePillarDeltaArrow(pDelta);
     lines.push(`   ${pillar.padEnd(28)} ${pDelta.beforeStatus.padEnd(10)} -> ${pDelta.afterStatus.padEnd(10)} ${arrow}`);
   }
   lines.push(`   ------------------------------------------------------------------`);
@@ -313,16 +327,24 @@ export const formatHistoryTimelineTerminal = (history) => {
   lines.push(`   ${'#'.padEnd(4)} ${'Date/Time'.padEnd(22)} ${'Score'.padEnd(12)} ${'Grade'.padEnd(10)} ${'Monoliths'.padEnd(12)} Hazards`);
   lines.push(`   ------------------------------------------------------------------`);
 
-  history.forEach((snap, idx) => {
+  const resolveScoreGradeColor = (score) => {
+    if (score >= 90) return GREEN;
+    if (score >= 70) return YELLOW;
+    return RED;
+  };
+
+  const renderTimelineRow = (snap, idx) => {
     const num = `${idx + 1}`.padEnd(4);
     const dateStr = new Date(snap.timestamp).toLocaleString().slice(0, 20).padEnd(22);
     const scoreStr = `${snap.health.score}/100`.padEnd(12);
-    const gradeColor = snap.health.score >= 90 ? GREEN : snap.health.score >= 70 ? YELLOW : RED;
+    const gradeColor = resolveScoreGradeColor(snap.health.score);
     const gradeStr = `${gradeColor}${snap.health.grade.padEnd(10)}${RESET}`;
     const monoStr = `${snap.monoliths.total} files`.padEnd(12);
     const hazStr = `${snap.violations.total} (Crit: ${snap.violations.critical})`;
     lines.push(`   ${num} ${dateStr} ${scoreStr} ${gradeStr} ${monoStr} ${hazStr}`);
-  });
+  };
+
+  history.forEach(renderTimelineRow);
 
   lines.push(`   ------------------------------------------------------------------`);
   lines.push('');
