@@ -20,3 +20,6 @@ export declare function formatGradeBSection(report: AuditReport, options?: Forma
 export declare function formatGradeASection(report: AuditReport): string;
 export declare function formatPillarReactionBadgesTerminal(pillars?: Record<string, unknown>): string;
 export declare function formatPillarReactionBadgesMarkdown(pillars?: Record<string, unknown>): string;
+export declare const PILLAR_SHORT_NAMES: Record<string, string>;
+export declare function resolveBadgeColor(score: number): string;
+export declare function formatPillarShieldBadges(pillars?: Record<string, unknown>): string;

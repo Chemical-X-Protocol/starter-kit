@@ -5,6 +5,8 @@ import {
   resolveMarkdownStatusIcon,
   resolveMarkdownMonolithText,
   formatPillarReactionBadgesMarkdown,
+  formatPillarShieldBadges,
+  resolveBadgeColor,
   PILLAR_EMOJIS,
   NUMBER_EMOJIS
 } from './reporter-utils.js';
@@ -19,8 +21,23 @@ export const generateMarkdownReport = (report) => {
   const { critical, high, medium, low } = groupViolationsBySeverity(violations);
   const lines = [];
 
+  const badgeColor = resolveBadgeColor(health.score);
+  const encodedGrade = encodeURIComponent(`${health.score}/100 (${health.grade})`);
+  const slopScore = aiSlop?.score ?? 100;
+  const slopGrade = aiSlop?.grade ?? 'A+';
+  const slopLabel = aiSlop?.label ?? 'Pure Artisanal';
+  const slopBadgeColor = resolveBadgeColor(slopScore);
+  const encodedSlop = encodeURIComponent(`${slopScore}/100 (${slopGrade})`);
+
   lines.push('# Chemical X Protocol: Architectural Audit Report');
   lines.push('');
+  lines.push(`[![Chemical X Protocol](https://img.shields.io/badge/Chemical%20X-Architecture%20Audit-62c9ff?style=for-the-badge)](https://chemicalx.xophz.com) [![Chemical X MHI](https://img.shields.io/badge/Chemical%20X%20MHI-${encodedGrade}-${badgeColor}?style=for-the-badge)](https://chemicalx.xophz.com) [![AI Slop Index](https://img.shields.io/badge/AI%20Slop%20Index-${encodedSlop}-${slopBadgeColor}?style=for-the-badge)](https://chemicalx.xophz.com)`);
+  lines.push('');
+  const pillarShields = formatPillarShieldBadges(pillars);
+  if (pillarShields) {
+    lines.push(pillarShields);
+    lines.push('');
+  }
   lines.push('> *Comprehensive static analysis report enforcing Chemical X Molecular Architecture standards.*');
   lines.push('');
   lines.push('## 1. Executive Summary & Scorecard');
@@ -30,9 +47,6 @@ export const generateMarkdownReport = (report) => {
   const hearts = resolveHealthHearts(health?.grade, health?.score, false);
   lines.push(`| **Life / Health Meter** | ${hearts} (Grade **${health.grade}**) | ${health.score} / 100 (${health.label}) |`);
   lines.push(`| **Molecular Health Index** | **${health.score} / 100** | Grade: **${health.grade}** (${health.label}) |`);
-  const slopScore = aiSlop?.score ?? 100;
-  const slopGrade = aiSlop?.grade ?? 'A+';
-  const slopLabel = aiSlop?.label ?? 'Pure Artisanal';
   lines.push(`| **AI Slop Index (ASI)** | **${slopScore} / 100** | Grade: **${slopGrade}** (${slopLabel}) |`);
   lines.push(`| **Scanned Files** | ${metrics.scannedFiles} source files | Verified |`);
   lines.push(`| **Total Lines of Code** | ${metrics.totalLoc} lines of code | Avg ${metrics.avgLoc} lines/file |`);
@@ -49,11 +63,6 @@ export const generateMarkdownReport = (report) => {
   lines.push('');
   lines.push('## 2. 7-Pillar Architectural Compliance Matrix');
   lines.push('');
-  const reactionStrip = formatPillarReactionBadgesMarkdown(pillars);
-  if (reactionStrip) {
-    lines.push(`> **Pillar Reaction Badges:** ${reactionStrip}`);
-    lines.push('');
-  }
   lines.push('| Pillar | Status | Violations | Critical | High | Med | Low |');
   lines.push('| :--- | :---: | :---: | :---: | :---: | :---: | :---: |');
 

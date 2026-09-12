@@ -1,7 +1,9 @@
 import { groupViolationsBySeverity } from './reporter.js';
 import {
   PILLAR_EMOJIS,
-  formatPillarReactionBadgesMarkdown
+  formatPillarReactionBadgesMarkdown,
+  formatPillarShieldBadges,
+  resolveBadgeColor
 } from './reporter-utils.js';
 
 export {
@@ -34,11 +36,7 @@ export const DISCUSSION_CATEGORY_SLUG = 'npx-chemx-audit';
 export const ORG_DISCUSSIONS_URL = 'https://github.com/orgs/Chemical-X-Protocol/discussions';
 export const DEFAULT_DISCUSSION_REPO = 'Chemical-X-Protocol/.github';
 
-export const resolveBadgeColor = (score) => {
-  if (score >= 90) return '06b6d4';
-  if (score >= 70) return 'f59e0b';
-  return 'ef4444';
-};
+export { resolveBadgeColor };
 
 export const resolveHotspotTierText = (lineCount) => {
   if (lineCount >= 2000) return '🔴 **CRITICAL (>= 2,000 lines of code)**';
@@ -104,8 +102,13 @@ export const generateDiscussionContent = (report, username, projectName = 'Codeb
   const lines = [];
   lines.push(`# ${isHighScoring ? 'Crystalline' : 'Architecture'} Audit Report: ${projectName}`);
   lines.push('');
-  lines.push(`[![Chemical X MHI](https://img.shields.io/badge/Chemical%20X%20MHI-${encodedGrade}-${badgeColor}?style=for-the-badge)](https://chemicalx.xophz.com) [![AI Slop Index](https://img.shields.io/badge/AI%20Slop%20Index-${encodedSlop}-${slopBadgeColor}?style=for-the-badge)](https://chemicalx.xophz.com)`);
+  lines.push(`[![Chemical X Showcase](https://img.shields.io/badge/Chemical%20X-Showcase-62c9ff?style=for-the-badge)](https://chemicalx.xophz.com) [![Chemical X MHI](https://img.shields.io/badge/Chemical%20X%20MHI-${encodedGrade}-${badgeColor}?style=for-the-badge)](https://chemicalx.xophz.com) [![AI Slop Index](https://img.shields.io/badge/AI%20Slop%20Index-${encodedSlop}-${slopBadgeColor}?style=for-the-badge)](https://chemicalx.xophz.com)`);
   lines.push('');
+  const pillarShields = formatPillarShieldBadges(pillars);
+  if (pillarShields) {
+    lines.push(pillarShields);
+    lines.push('');
+  }
   lines.push(`* **Audited by**: @${username}`);
   const resolvedRepoUrl = repoUrl || (/^[\w\-.]+\/[\w\-.]+$/.test(projectName) ? `https://github.com/${projectName}` : '');
   if (resolvedRepoUrl) {
@@ -132,11 +135,6 @@ export const generateDiscussionContent = (report, username, projectName = 'Codeb
   lines.push('');
   lines.push('## 1. 7-Pillar Architectural Matrix');
   lines.push('');
-  const reactionStrip = formatPillarReactionBadgesMarkdown(pillars);
-  if (reactionStrip) {
-    lines.push(`> **Pillar Reaction Badges:** ${reactionStrip}`);
-    lines.push('');
-  }
   lines.push('| Pillar | Status | Hazards |');
   lines.push('| :--- | :---: | :---: |');
 
@@ -249,11 +247,21 @@ export const generateTransformationDiscussionContent = (
     return isGood ? `🟢 **${sign}**` : `🔴 **${sign}**`;
   };
 
+  const beforeColor = resolveBadgeColor(scoreBefore);
+  const afterColor = resolveBadgeColor(scoreAfter);
+  const encodedBeforeGrade = encodeURIComponent(`${scoreBefore}/100 (${beforeSnapshot.health.grade})`);
+  const encodedAfterGrade = encodeURIComponent(`${scoreAfter}/100 (${afterSnapshot.health.grade})`);
+
   const lines = [];
   lines.push(`# 🚀 Architectural Transformation: ${projectName}`);
   lines.push('');
-  lines.push(`[![Chemical X Transformation](https://img.shields.io/badge/Chemical%20X-Transformation%20Showcase-62c9ff?style=for-the-badge)](https://chemicalx.xophz.com)`);
+  lines.push(`[![Chemical X Transformation](https://img.shields.io/badge/Chemical%20X-Transformation%20Showcase-62c9ff?style=for-the-badge)](https://chemicalx.xophz.com) [![Before MHI](https://img.shields.io/badge/Before%20MHI-${encodedBeforeGrade}-${beforeColor}?style=for-the-badge)](https://chemicalx.xophz.com) [![After MHI](https://img.shields.io/badge/After%20MHI-${encodedAfterGrade}-${afterColor}?style=for-the-badge)](https://chemicalx.xophz.com)`);
   lines.push('');
+  const afterPillarShields = formatPillarShieldBadges(afterSnapshot.pillars);
+  if (afterPillarShields) {
+    lines.push(afterPillarShields);
+    lines.push('');
+  }
   lines.push(`* **Audited by**: @${username}`);
   const resolvedRepoUrl = repoUrl || (/^[\w\-.]+\/[\w\-.]+$/.test(projectName) ? `https://github.com/${projectName}` : '');
   if (resolvedRepoUrl) {
@@ -291,11 +299,6 @@ export const generateTransformationDiscussionContent = (
   lines.push('');
   lines.push('## 2. 7-Pillar Progression');
   lines.push('');
-  const afterReactionStrip = formatPillarReactionBadgesMarkdown(afterSnapshot.pillars);
-  if (afterReactionStrip) {
-    lines.push(`> **Latest Reaction Badges:** ${afterReactionStrip}`);
-    lines.push('');
-  }
   lines.push('| Pillar | Before Status | After Status | Progression |');
   lines.push('| :--- | :---: | :---: | :---: |');
 

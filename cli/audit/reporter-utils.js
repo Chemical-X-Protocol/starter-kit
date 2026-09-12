@@ -129,6 +129,49 @@ export const PILLAR_EMOJIS = {
   'Naming Conventions': '🏷️'
 };
 
+export const PILLAR_SHORT_NAMES = {
+  'Line Budgets & Monolith Decomposition': 'Monoliths',
+  'Control Flow & Boolean Logic': 'Logic',
+  'Reactivity & Composable Contracts': 'Reactivity',
+  'Type Architecture & Data Integrity': 'Types',
+  'Design System & Styling Hygiene': 'Styling',
+  'Timers & Macro-Task Discipline': 'Timers',
+  'Global Hygiene & Typography': 'Hygiene',
+  'Accessibility & Semantic Integrity': 'A11y',
+  'Security & Content Safety': 'Security',
+  'Testing Discipline': 'Testing',
+  'Naming Conventions': 'Naming'
+};
+
+export const resolveBadgeColor = (score) => {
+  if (score >= 90) return '06b6d4';
+  if (score >= 70) return 'f59e0b';
+  return 'ef4444';
+};
+
+export const formatPillarShieldBadges = (pillars = {}) => {
+  const badges = [];
+  for (const [pillarName, data] of Object.entries(pillars)) {
+    const icon = PILLAR_EMOJIS[pillarName] || '🏛️';
+    const shortName = PILLAR_SHORT_NAMES[pillarName] || pillarName.split(' ')[0];
+    const rawLabel = `${icon} ${shortName}`.replace(/-/g, '--').replace(/ /g, '_');
+    const label = encodeURIComponent(rawLabel);
+    let statusText = 'PASS';
+    let color = '06b6d4';
+    if (data?.status === 'WARN') {
+      const v = data?.violations || 0;
+      statusText = encodeURIComponent(`WARN ${v}`.replace(/-/g, '--').replace(/ /g, '_'));
+      color = 'f59e0b';
+    } else if (data?.status === 'FAILED') {
+      const v = data?.violations || 0;
+      statusText = encodeURIComponent(`FAIL ${v}`.replace(/-/g, '--').replace(/ /g, '_'));
+      color = 'ef4444';
+    }
+    badges.push(`[![${shortName}](https://img.shields.io/badge/${label}-${statusText}-${color}?style=for-the-badge)](https://chemicalx.xophz.com)`);
+  }
+  return badges.join(' ');
+};
+
 export const NUMBER_EMOJIS = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
 
 export const resolvePriorityBadge = (idx) => {

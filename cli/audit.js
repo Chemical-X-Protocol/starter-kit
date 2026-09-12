@@ -47,7 +47,10 @@ import {
   getReportCardAsciiLines,
   REPORT_CARD_ASCII,
   formatPillarReactionBadgesTerminal,
-  formatPillarReactionBadgesMarkdown
+  formatPillarReactionBadgesMarkdown,
+  formatPillarShieldBadges,
+  resolveBadgeColor,
+  PILLAR_SHORT_NAMES
 } from './audit/reporter.js';
 import {
   buildGradeFPrompt,
@@ -262,6 +265,9 @@ export {
   REPORT_CARD_ASCII,
   formatPillarReactionBadgesTerminal,
   formatPillarReactionBadgesMarkdown,
+  formatPillarShieldBadges,
+  resolveBadgeColor,
+  PILLAR_SHORT_NAMES,
   buildGradeFPrompt,
   buildGradeDPrompt,
   buildGradeCPrompt,
@@ -315,6 +321,9 @@ export default {
   REPORT_CARD_ASCII,
   formatPillarReactionBadgesTerminal,
   formatPillarReactionBadgesMarkdown,
+  formatPillarShieldBadges,
+  resolveBadgeColor,
+  PILLAR_SHORT_NAMES,
   PILLARS,
   RULE_REGISTRY,
   buildGradeFPrompt,

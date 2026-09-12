@@ -4,6 +4,12 @@ All notable changes to the Chemical X Starter Kit repository will be documented 
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [2026-09-12]
+
+### Fixed
+- Fixed GitHub Actions runner failure in `chemx-audit.yml` workflows by removing `cache: npm` when no package lockfile exists.
+- Upgraded runner `node-version` from deprecated 20 to 22 across CI workflows and installer templates (`.github/workflows/chemx-audit.yml`, `blueprints/workflows/chemx-audit.yml`, `cli/installer-templates.js`).
+
 ## [2026-09-08]
 
 ### Added
@@ -221,3 +227,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Markdown compliance matrix and GitHub Discussions integration (`formatPillarReactionBadgesMarkdown` in `cli/audit/reporter-utils.js`, `generateMarkdownReport` in `cli/audit/reporter-markdown.js`, `generateDiscussionContent` and `generateTransformationDiscussionContent` in `cli/audit/social.js`), embedding formatted reaction badge strips above compliance and progression tables in exports and checkpoint comments.
 - Public API exports and typings for `formatPillarReactionBadgesTerminal` and `formatPillarReactionBadgesMarkdown` in `cli/audit/reporter.js`, `cli/audit/reporter.d.ts`, and `cli/audit.js`.
 - Git Branching & Pull Request Workflow added to self-healing remediation roadmap (`buildRemediationRoadmap` and `buildSelfHealingRoadmapPrompt` in `cli/audit/roadmap.js`), hotspots refactoring prompt execution rules (`cli/audit/prompts.js`), and `AGENTS.md` (Section 1.G): instructs developers and agents to change to a dedicated branch prefixed with `chem-x/NAMEOFIMPROVEMENT` before modifying code, commit changes atomically on the branch, and create a Pull Request to `main`.
+- Shields.io pillar and showcase badge strips across the top of audit reports:
+  - Added `formatPillarShieldBadges(pillars)` and `PILLAR_SHORT_NAMES` in `cli/audit/reporter-utils.js` to render Shields.io `style=for-the-badge` badges for all 11 pillars with emojis, compact short names, live status (`PASS`, `WARN <count>`, `FAIL <count>`), and signature Chemical X colors.
+  - Positioned prominent Shields.io showcase badges and the 11-pillar badge strip across the top of GitHub Discussions single audit showcase reports (`generateDiscussionContent` in `cli/audit/social.js`), Before vs. After transformation showcase reports (`generateTransformationDiscussionContent` in `cli/audit/social.js`), and Markdown audit exports (`generateMarkdownReport` in `cli/audit/reporter-markdown.js`).
+  - Added public exports and TypeScript declarations for `formatPillarShieldBadges`, `resolveBadgeColor`, and `PILLAR_SHORT_NAMES` in `cli/audit/reporter.js`, `cli/audit/reporter.d.ts`, and `cli/audit.js`.

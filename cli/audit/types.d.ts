@@ -85,6 +85,8 @@ export interface AiSlopScore {
     readonly medium: number;
     readonly low: number;
   };
+}
+
 export interface PatternOccurrence {
   readonly filePath: string;
   readonly line: number;
