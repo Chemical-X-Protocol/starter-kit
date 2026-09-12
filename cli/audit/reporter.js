@@ -49,6 +49,7 @@ export {
   resolveDirectory,
   groupViolationsByDirectory,
   groupViolationsByRule,
+  buildPathTree,
   formatCompactLocations,
   renderGroupedViolationsTerminal,
   formatDirectoryDistributionSection

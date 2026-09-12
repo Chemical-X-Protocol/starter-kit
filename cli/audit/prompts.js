@@ -1,36 +1,19 @@
-import { groupViolationsByRule } from './reporter-grouping.js';
+import { groupViolationsByRule, buildPathTree } from './reporter-grouping.js';
+import {
+  CYAN,
+  YELLOW,
+  RED,
+  ORANGE,
+  DIM,
+  BOLD,
+  RESET
+} from './reporter-utils.js';
 
-const CYAN = '\x1b[38;2;98;201;255m';
-const BOLD = '\x1b[1m';
-const DIM = '\x1b[2m';
-const RESET = '\x1b[0m';
-
-const buildPathTree = (violations) => {
-  const root = { dirs: new Map(), files: new Map() };
-
-  for (const v of violations) {
-    const rawPath = v.filePath || '';
-    const normalized = rawPath.replace(/\\/g, '/').replace(/^\.\//, '');
-    const segments = normalized.split('/');
-    const fileName = segments.pop();
-
-    let current = root;
-    for (const seg of segments) {
-      const segName = seg.endsWith('/') ? seg : `${seg}/`;
-      if (!current.dirs.has(segName)) {
-        current.dirs.set(segName, { dirs: new Map(), files: new Map() });
-      }
-      current = current.dirs.get(segName);
-    }
-
-    if (!current.files.has(fileName)) {
-      current.files.set(fileName, []);
-    }
-    const loc = v.column ? `${v.line}:${v.column}` : `${v.line}`;
-    current.files.get(fileName).push(loc);
-  }
-
-  return root;
+const SEVERITY_COLORS = {
+  CRITICAL: RED,
+  HIGH: ORANGE,
+  MEDIUM: YELLOW,
+  LOW: DIM
 };
 
 const renderTreeLines = (node, depth = 0) => {
@@ -39,7 +22,7 @@ const renderTreeLines = (node, depth = 0) => {
 
   const sortedDirs = Array.from(node.dirs.entries()).sort((a, b) => a[0].localeCompare(b[0]));
   for (const [dirName, childNode] of sortedDirs) {
-    lines.push(`${indent}* ${dirName}`);
+    lines.push(`${indent}📁 ${BOLD}${dirName}${RESET}`);
     const childLines = renderTreeLines(childNode, depth + 1);
     lines.push(...childLines);
   }
@@ -47,7 +30,7 @@ const renderTreeLines = (node, depth = 0) => {
   const sortedFiles = Array.from(node.files.entries()).sort((a, b) => a[0].localeCompare(b[0]));
   for (const [fileName, locs] of sortedFiles) {
     const uniqueLocs = Array.from(new Set(locs)).join(', ');
-    lines.push(`${indent}- \`${fileName}:${uniqueLocs}\``);
+    lines.push(`${indent}- \`${YELLOW}${fileName}:${uniqueLocs}${RESET}\``);
   }
 
   return lines;
@@ -61,10 +44,11 @@ export const formatGroupedPromptViolations = (violations = []) => {
   const lines = [];
 
   ruleGroups.forEach((rg, idx) => {
+    const sevColor = SEVERITY_COLORS[rg.severity] || YELLOW;
     const countLabel = rg.total === 1 ? '1 item' : `${rg.total} items`;
-    lines.push(`${idx + 1}. [${rg.rule}] (${countLabel})`);
-    lines.push(`   Hazard: ${rg.hazard}`);
-    lines.push(`   Directive: ${rg.directive}`);
+    lines.push(`${idx + 1}. ${sevColor}[${rg.rule}]${RESET} ${BOLD}(${countLabel})${RESET}`);
+    lines.push(`   Hazard:    ${rg.hazard}`);
+    lines.push(`   Directive: ${CYAN}${rg.directive}${RESET}`);
     lines.push('   Locations:');
 
     const tree = buildPathTree(rg.violations);

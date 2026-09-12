@@ -157,6 +157,34 @@ const resolveSeverityColor = (severity) => {
   return DIM;
 };
 
+export const buildPathTree = (violations = []) => {
+  const root = { dirs: new Map(), files: new Map() };
+
+  for (const v of violations) {
+    const rawPath = v.filePath || '';
+    const normalized = rawPath.replace(/\\/g, '/').replace(/^\.\//, '');
+    const segments = normalized.split('/');
+    const fileName = segments.pop();
+
+    let current = root;
+    for (const seg of segments) {
+      const segName = seg.endsWith('/') ? seg : `${seg}/`;
+      if (!current.dirs.has(segName)) {
+        current.dirs.set(segName, { dirs: new Map(), files: new Map() });
+      }
+      current = current.dirs.get(segName);
+    }
+
+    if (!current.files.has(fileName)) {
+      current.files.set(fileName, []);
+    }
+    const loc = v.column ? `${v.line}:${v.column}` : `${v.line}`;
+    current.files.get(fileName).push(loc);
+  }
+
+  return root;
+};
+
 export const formatCompactLocations = (violations, maxShown = 4) => {
   const formatLocationItem = (v) => {
     const base = path.basename(v.filePath);
@@ -186,7 +214,8 @@ export const renderGroupedViolationsTerminal = (violations) => {
 
     if (isSingleOccurrence) {
       const v = rg.violations[0];
-      lines.push(`   ${sevColor}[#${idx + 1} ${rg.severity}]${RESET} [${rg.rule}] ${YELLOW}${v.filePath}:${v.line}:${v.column}${RESET}`);
+      const colStr = v.column ? `:${v.column}` : '';
+      lines.push(`   ${sevColor}[#${idx + 1} ${rg.severity}]${RESET} [${rg.rule}] ${YELLOW}${v.filePath}:${v.line}${colStr}${RESET}`);
       lines.push(`      Hazard:    ${rg.hazard}`);
       lines.push(`      Directive: ${CYAN}${rg.directive}${RESET}\n`);
       return;
@@ -199,10 +228,24 @@ export const renderGroupedViolationsTerminal = (violations) => {
     lines.push(`      Directive: ${CYAN}${rg.directive}${RESET}`);
     lines.push(`      Locations:`);
 
-    for (const d of rg.directories) {
-      const locs = formatCompactLocations(d.violations, 4);
-      lines.push(`        📁 ${d.directory} (${d.count}): ${locs}`);
-    }
+    const tree = buildPathTree(rg.violations);
+    const renderTerminalTree = (node, depth = 0) => {
+      const indent = '        ' + '  '.repeat(depth);
+
+      const sortedDirs = Array.from(node.dirs.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+      for (const [dirName, childNode] of sortedDirs) {
+        lines.push(`${indent}📁 ${BOLD}${dirName}${RESET}`);
+        renderTerminalTree(childNode, depth + 1);
+      }
+
+      const sortedFiles = Array.from(node.files.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+      for (const [fileName, locs] of sortedFiles) {
+        const uniqueLocs = Array.from(new Set(locs)).join(', ');
+        lines.push(`${indent}- ${YELLOW}${fileName}:${uniqueLocs}${RESET}`);
+      }
+    };
+
+    renderTerminalTree(tree, 0);
     lines.push('');
   });
 

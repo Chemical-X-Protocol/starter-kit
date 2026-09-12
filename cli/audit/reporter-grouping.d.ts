@@ -29,9 +29,15 @@ export interface RuleHazardSummary {
   readonly directories: readonly RuleDirectoryOccurrence[];
 }
 
+export interface PathTreeNode {
+  readonly dirs: Map<string, PathTreeNode>;
+  readonly files: Map<string, string[]>;
+}
+
 export declare function resolveDirectory(filePath?: string): string;
 export declare function groupViolationsByDirectory(violations?: readonly HazardViolation[]): readonly DirectoryHazardSummary[];
 export declare function groupViolationsByRule(violations?: readonly HazardViolation[]): readonly RuleHazardSummary[];
+export declare function buildPathTree(violations?: readonly HazardViolation[]): PathTreeNode;
 export declare function formatCompactLocations(violations: readonly HazardViolation[], maxShown?: number): string;
 export declare function renderGroupedViolationsTerminal(violations: readonly HazardViolation[]): string;
 export declare function formatDirectoryDistributionSection(report: AuditReport, themeColor?: string | null): string;
