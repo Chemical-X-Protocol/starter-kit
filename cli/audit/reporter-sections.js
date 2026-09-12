@@ -17,6 +17,11 @@ import {
 } from './reporter-utils.js';
 import { getAsciiGradeLines, getReportCardAsciiLines } from './reporter-ascii.js';
 import { renderGroupedViolationsTerminal } from './reporter-grouping.js';
+import {
+  buildAiSlopPrompt,
+  buildHotspotsPrompt,
+  formatPromptBox
+} from './prompts.js';
 
 const isSlopViolation = (v) => Boolean(v.isAiSlop);
 
@@ -178,6 +183,12 @@ export const formatHotspotsSection = (report, themeColor = null) => {
       lines.push(formatHotspotItem(hotspots[idx], idx));
     }
   }
+
+  const promptHotspots = buildHotspotsPrompt(report);
+  if (promptHotspots) {
+    lines.push(formatPromptBox('🤖 AI AGENT REFACTORING PROMPT (MONOLITH DECOMPOSITION)', promptHotspots));
+  }
+
   lines.push(`${sectionColor}======================================================================${RESET}\n`);
 
   return lines.join('\n');
@@ -230,6 +241,11 @@ export const formatAiSlopSection = (report, themeColor = null) => {
     lines.push(`   ${GREEN}✔ Zero AI slop detected. Codebase is free of conversational residue and echo comments.${RESET}`);
   } else {
     lines.push(renderGroupedViolationsTerminal(slopViolations));
+  }
+
+  const promptSlop = buildAiSlopPrompt(report);
+  if (promptSlop) {
+    lines.push(formatPromptBox('🤖 AI AGENT REFACTORING PROMPT (AI SLOP & AUTHENTICITY)', promptSlop));
   }
 
   lines.push(`${sectionColor}======================================================================${RESET}\n`);

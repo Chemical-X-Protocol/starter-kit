@@ -62,7 +62,6 @@ export const parseGitRemoteUrl = (url) => {
 };
 
 export const detectGitRepoInfo = (cwd = process.cwd()) => {
-  // 1. Try git remote get-url origin
   const [res1] = safeSpawnSync('git', ['remote', 'get-url', 'origin'], {
     cwd,
     encoding: 'utf-8',
@@ -73,7 +72,6 @@ export const detectGitRepoInfo = (cwd = process.cwd()) => {
     if (parsed) return parsed;
   }
 
-  // 2. Try git config --get remote.origin.url
   const [res2] = safeSpawnSync('git', ['config', '--get', 'remote.origin.url'], {
     cwd,
     encoding: 'utf-8',
@@ -84,7 +82,6 @@ export const detectGitRepoInfo = (cwd = process.cwd()) => {
     if (parsed) return parsed;
   }
 
-  // 3. Try any available remote if origin is not configured
   const [remotesRes] = safeSpawnSync('git', ['remote'], {
     cwd,
     encoding: 'utf-8',
@@ -105,7 +102,6 @@ export const detectGitRepoInfo = (cwd = process.cwd()) => {
     }
   }
 
-  // 4. Try package.json repository or name field
   const pkgPath = path.resolve(cwd, 'package.json');
   const [pkg] = safeReadJson(pkgPath);
   if (pkg) {
@@ -133,7 +129,6 @@ export const detectGitRepoInfo = (cwd = process.cwd()) => {
     }
   }
 
-  // 5. Try git rev-parse toplevel folder name
   const [topRes] = safeSpawnSync('git', ['rev-parse', '--show-toplevel'], {
     cwd,
     encoding: 'utf-8',
@@ -167,14 +162,12 @@ export const detectGitHubUser = (preferredUser) => {
     if (trimmed && trimmed !== 'Architect') return trimmed;
   }
 
-  // 1. Try gh api if authenticated with valid token
   const [res] = safeSpawnSync('gh', ['api', 'user', '-q', '.login'], { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] });
   if (res?.status === 0) {
     const user = (res.stdout || '').trim();
     if (user && /^[a-zA-Z0-9_\-]+$/.test(user)) return user;
   }
 
-  // 2. Try gh auth status account name (persists in config even if token is temporarily expired)
   const [statusRes] = safeSpawnSync('gh', ['auth', 'status'], { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] });
   if (statusRes) {
     const output = `${statusRes.stdout || ''} ${statusRes.stderr || ''}`.trim();
@@ -185,14 +178,12 @@ export const detectGitHubUser = (preferredUser) => {
     }
   }
 
-  // 3. Try git config github.user
   const [ghUser] = safeSpawnSync('git', ['config', 'github.user'], { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] });
   if (ghUser?.stdout) {
     const u = ghUser.stdout.trim();
     if (u && /^[a-zA-Z0-9_\-]+$/.test(u)) return u;
   }
 
-  // 4. Try git config user.name
   const [gitRes] = safeSpawnSync('git', ['config', 'user.name'], { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] });
   if (gitRes?.stdout) {
     const name = gitRes.stdout.trim();
@@ -211,7 +202,6 @@ export const copyToClipboard = (text) => {
     const [res] = safeSpawnSync('clip', [], { input: text, stdio: ['pipe', 'ignore', 'ignore'] });
     return res?.status === 0;
   }
-  // Linux: try wl-copy then xclip
   const [wlWhich] = safeSpawnSync('which', ['wl-copy'], { stdio: 'ignore' });
   if (wlWhich?.status === 0) {
     const [res] = safeSpawnSync('wl-copy', [], { input: text, stdio: ['pipe', 'ignore', 'ignore'] });

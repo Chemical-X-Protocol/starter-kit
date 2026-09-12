@@ -1,2 +1,2 @@
-export { MSampleCard } from './m-sample-card';
-export type { MSampleCardProps } from './types';
+export { MSampleCard, resolveBadgeDescriptor } from './m-sample-card';
+export type { MSampleCardProps, SampleCardBadgeDescriptor } from './types';

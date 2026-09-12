@@ -1,7 +1,7 @@
 import React from 'react';
 import type { MChemxBadgeProps } from './types';
 
-const resolveGradeClass = (grade: string) => {
+export const resolveGradeClass = (grade: string): string => {
   const g = grade.toUpperCase();
   if (g.startsWith('A')) return 'm-chemx-badge__grade--a';
   if (g.startsWith('B')) return 'm-chemx-badge__grade--b';

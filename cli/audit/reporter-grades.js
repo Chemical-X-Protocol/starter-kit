@@ -225,11 +225,11 @@ export const formatGradeASection = (report) => {
   lines.push(`${DIM}   Molecular Architecture verified clean areas and crystalline modules${RESET}`);
   lines.push(`${GREEN}======================================================================${RESET}`);
   lines.push(`   Molecular Health Score:  ${BOLD}${GREEN}${health.score}/100${RESET} [Grade: ${BOLD}${GREEN}${health.grade}${RESET}]`);
-  lines.push(`   Passing Pillars:       ${BOLD}${GREEN}${passedPillars.length} / 7 Pillars PASSED${RESET}`);
+  lines.push(`   Passing Pillars:       ${BOLD}${GREEN}${passedPillars.length} / ${Object.keys(pillars).length} Pillars PASSED${RESET}`);
   lines.push(`   Capsule Compliance:    ${BOLD}${GREEN}${metrics.moleculeCompliantPct}%${RESET} compliant (< 100 lines of code)`);
   lines.push(`${GREEN}----------------------------------------------------------------------${RESET}`);
 
-  lines.push(`\n   ${BOLD}${GREEN}✔ COMPLIANT PILLARS (${passedPillars.length} / 7):${RESET}`);
+  lines.push(`\n   ${BOLD}${GREEN}✔ COMPLIANT PILLARS (${passedPillars.length} / ${Object.keys(pillars).length}):${RESET}`);
   if (passedPillars.length === 0) {
     lines.push(`   ${YELLOW}No pillars are currently 100% compliant.${RESET}\n`);
   } else {

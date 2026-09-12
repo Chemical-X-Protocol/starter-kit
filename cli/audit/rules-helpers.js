@@ -107,3 +107,19 @@ export const resolveMoleculeTier = (lineCount) => {
     directive: 'Split molecule into focused sub-molecules or extract state to hook'
   };
 };
+
+/**
+ * Executes a synchronous operation returning a Go/Rust-style [data, error] tuple.
+ * @template T
+ * @param {() => T} operation
+ * @returns {[T, null] | [null, Error]}
+ */
+export const toResultSync = (operation) => {
+  try {
+    const value = operation();
+    return [value, null];
+  } catch (err) {
+    const normalizedError = err instanceof Error ? err : new Error(String(err));
+    return [null, normalizedError];
+  }
+};

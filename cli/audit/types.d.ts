@@ -127,6 +127,8 @@ export declare function buildGradeFPrompt(report: AuditReport): string;
 export declare function buildGradeDPrompt(report: AuditReport): string;
 export declare function buildGradeCPrompt(report: AuditReport): string;
 export declare function buildGradeBPrompt(report: AuditReport): string;
+export declare function buildAiSlopPrompt(report: AuditReport): string;
+export declare function buildHotspotsPrompt(report: AuditReport): string;
 export declare function buildMasterPrompt(report: AuditReport): string;
 export declare function formatPromptBox(title: string, promptText: string): string;
 

@@ -102,7 +102,11 @@ export const runInteractiveAuditNavigator = async (initialReport, onScaffold = n
     }
     topActions.push(actions.upgradeAction, actions.reportAction, actions.rerunAction);
 
-    const midActions = [actions.shareAction, actions.progressAction, actions.exportAction, actions.badgeAction];
+    const midActions = [];
+    if (actions.hasHotspots) {
+      midActions.push(actions.hotspotsAction);
+    }
+    midActions.push(actions.shareAction, actions.progressAction, actions.exportAction, actions.badgeAction);
     const bottomActions = [];
     if (actions.shouldShowPromptAction) {
       bottomActions.push(actions.copyPromptAction);

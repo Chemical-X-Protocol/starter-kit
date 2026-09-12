@@ -60,6 +60,12 @@ const isChoiceMatchingItem = (cleanChoice) => (item) => {
   ) {
     return true;
   }
+  if (
+    item.key === "hotspots" &&
+    (cleanChoice.includes("Hotspots") || cleanChoice.includes("Monoliths"))
+  ) {
+    return true;
+  }
   if (item.key === "progress" && cleanChoice.includes("Progress")) return true;
   if (
     item.key === "share" &&
@@ -138,6 +144,12 @@ const isEffectiveMatchingItem = (effective, exitIndex) => (item) => {
     return true;
   }
   if (item.key === "share" && (effective === "share" || effective === "post")) return true;
+  if (
+    item.key === "hotspots" &&
+    (effective === "hotspots" || effective === "hotspot" || effective === "h" || effective === "monoliths")
+  ) {
+    return true;
+  }
   if (item.key === effective) return true;
   if (item.grade && (effective === item.grade || effective === `grade ${item.grade}`)) {
     return true;

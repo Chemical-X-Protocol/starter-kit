@@ -5,10 +5,62 @@ export const PILLARS = {
   PILLAR_4: 'Type Architecture & Data Integrity',
   PILLAR_5: 'Design System & Styling Hygiene',
   PILLAR_6: 'Timers & Macro-Task Discipline',
-  PILLAR_7: 'Global Hygiene & Typography'
+  PILLAR_7: 'Global Hygiene & Typography',
+  PILLAR_8: 'Accessibility & Semantic Integrity',
+  PILLAR_9: 'Security & Content Safety',
+  PILLAR_10: 'Testing Discipline',
+  PILLAR_11: 'Naming Conventions'
 };
 
 export const RULE_REGISTRY = {
+  // Pillar 8: Accessibility & Semantic Integrity
+  A11Y_CLICKABLE_NON_SEMANTIC: {
+    pillar: PILLARS.PILLAR_8,
+    severity: 'MEDIUM',
+    directive: 'Replace clickable generic container with native interactive element (<button> or <a>)'
+  },
+  A11Y_IMAGE_MISSING_ALT: {
+    pillar: PILLARS.PILLAR_8,
+    severity: 'MEDIUM',
+    directive: 'Provide meaningful alt text or alt="" for decorative images'
+  },
+
+  // Pillar 9: Security & Content Safety
+  SECURITY_RAW_HTML_INJECTION: {
+    pillar: PILLARS.PILLAR_9,
+    severity: 'CRITICAL',
+    directive: 'Sanitize dynamic HTML via DOMPurify before injecting into v-html or dangerouslySetInnerHTML'
+  },
+  SECURITY_HARDCODED_SECRET: {
+    pillar: PILLARS.PILLAR_9,
+    severity: 'CRITICAL',
+    directive: 'Extract hardcoded API keys and secrets into environment variables or secrets manager'
+  },
+
+  // Pillar 10: Testing Discipline
+  TEST_FAKE_GREEN: {
+    pillar: PILLARS.PILLAR_10,
+    severity: 'HIGH',
+    directive: 'Replace trivial truthy assertions with genuine assertions testing real logic'
+  },
+  TEST_MISSING_COLOCATED: {
+    pillar: PILLARS.PILLAR_10,
+    severity: 'MEDIUM',
+    directive: 'Co-locate *.spec.ts or *.test.ts alongside the molecule capsule'
+  },
+
+  // Pillar 11: Naming Conventions
+  NAMING_BARE_BOOLEAN: {
+    pillar: PILLARS.PILLAR_11,
+    severity: 'MEDIUM',
+    directive: 'Prefix boolean variables with is, has, can, or should'
+  },
+  NAMING_HANDLER_PREFIX: {
+    pillar: PILLARS.PILLAR_11,
+    severity: 'LOW',
+    directive: 'Prefix action handler functions with handle (e.g. handleCheckout)'
+  },
+
   LINE_BUDGET_FILE: {
     pillar: PILLARS.PILLAR_1,
     severity: 'MEDIUM',

@@ -1,7 +1,10 @@
 import React from 'react';
-import type { MSampleCardProps } from './types';
+import type { MSampleCardProps, SampleCardBadgeDescriptor } from './types';
 
-const resolveBadgeDescriptor = (status: 'active' | 'archived', isHighValue: boolean) => {
+export const resolveBadgeDescriptor = (
+  status: 'active' | 'archived',
+  isHighValue: boolean
+): SampleCardBadgeDescriptor => {
   if (status !== 'active') {
     return {
       text: status,

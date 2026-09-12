@@ -19,6 +19,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [2026-09-11]
 
 ### Added
+- Expanded AST static analysis engine with Pillars 8 to 11 (`cli/audit/extended-visitors.js`): added automated rules and visitors for Accessibility & Semantic Integrity (`A11Y_CLICKABLE_NON_SEMANTIC`, `A11Y_IMAGE_MISSING_ALT`), Security & Content Safety (`SECURITY_RAW_HTML_INJECTION`, `SECURITY_HARDCODED_SECRET`), Testing Discipline (`TEST_FAKE_GREEN`, `TEST_MISSING_COLOCATED`), and Naming Conventions (`NAMING_BARE_BOOLEAN`, `NAMING_HANDLER_PREFIX`).
+- Added AI Agent refactoring prompt generator for AI Slop & Authenticity (`buildAiSlopPrompt` in `cli/audit/prompts.js`), generating surgical instructions to eliminate conversational residue, lazy placeholders, echo comments, shallow catch blocks, and reinvented utilities.
+- Added AI Agent refactoring prompt generator for Top Refactoring Hotspots (`buildHotspotsPrompt` in `cli/audit/prompts.js`), providing phased decomposition plans for files exceeding line budgets.
+- Integrated AI Slop and Hotspots prompt boxes into report sections (`formatAiSlopSection`, `formatHotspotsSection` in `cli/audit/reporter-sections.js`), composite master prompt (`buildMasterPrompt`), and interactive navigator inspection views (`cli/navigator-actions.js`, `cli/navigator.js`, `cli/navigator-menu.js`).
 - Appended Section 8 (Accessibility & Semantic Integrity), Section 9 (Security & Content Safety), Section 10 (Testing Discipline), and Section 11 (Naming Conventions) to Chemical X Molecular Architecture Directives (`AGENTS.md`).
 - Interactive `[  Re-Run   ]` dashboard action positioned directly below `[Full Report]` in the Audit Navigator (`cli/navigator.js`, `cli/navigator-actions.js`, `cli/navigator-menu.js`), enabling developers to rescan their codebase and dynamically refresh the Gamer HUD scorecard and grade drill-downs without restarting the CLI.
 - Compact directory and rule-based problem grouping engine (`cli/audit/reporter-grouping.js`, `cli/audit/reporter-grouping-markdown.js`, `cli/audit/reporter-grouping.d.ts`), clustering violations by directory and rule type to eliminate repetitive multi-line output bloat in audit reports.
@@ -37,7 +41,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Integrated `[   Badge   ]` action into the interactive Audit Navigator dashboard (`cli/navigator-actions.js`, `cli/navigator.js`, `cli/navigator-menu.js`).
 - Added `m-chemx-badge` blueprint capsule with Vue 3, React 19, SCSS, and TypeScript declarations (`blueprints/molecule-capsule/m-chemx-badge/`).
 
+- Added co-located unit test suite for `m-chemx-badge` capsule (`blueprints/molecule-capsule/m-chemx-badge/m-chemx-badge.spec.ts`) covering grade classification tiers and component markup attributes.
+- Added co-located unit test suite for `m-sample-card` capsule (`blueprints/molecule-capsule/m-sample-card.spec.ts`) covering badge descriptor resolution, formatting, and interactive action handling.
+
 ### Changed
+- Exported `resolveGradeClass` from `m-chemx-badge` entrypoints for isolated testing and external consumption.
+- Exported `resolveBadgeDescriptor` and co-located `SampleCardBadgeDescriptor` type declaration in `blueprints/molecule-capsule/` capsule.
 - Decomposed warning monolith `cli/audit/reporter.js` (513 lines to 125 lines) to eliminate Grade C medium severity technical debt, extracting single-purpose modules `cli/audit/reporter-banner.js` (75 lines), `cli/audit/reporter-sections.js` (238 lines), and `cli/audit/reporter-summary.js` (143 lines).
 - Co-located granular TypeScript declaration capsules (`cli/audit/reporter.d.ts`, `cli/audit/reporter-banner.d.ts`, `cli/audit/reporter-sections.d.ts`, `cli/audit/reporter-summary.d.ts`) all under 20 lines, updating `cli/audit/types.d.ts` to re-export domain capsules.
 - Extracted anonymous inline callbacks into named predicates and iterator handlers across terminal section formatters.
@@ -55,6 +64,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Fixed pre-commit hook installer failure (`ENOTDIR`) in git submodules and worktrees where `.git` is a pointer file rather than a directory by introducing `resolveGitHooksDir` to resolve `gitdir:` targets (`cli/installer.js`, `cli/installer.d.ts`).
 - Fixed missing `spawnSync` import from `node:child_process` in evaluation check prompt causing runtime reference error (`cli/license.js`).
 - Fixed typographical artifact (`and p`) in the interactive audit publication confirmation prompt across navigator and terminal handlers (`cli/navigator.js`, `cli/terminal.js`).
+- Eliminated trivial echo comments (`AI_SLOP_ECHO_COMMENT`) in `cli/audit/social-git.js` that redundantly repeated self-documenting git commands.
+- Eliminated self-matching AI truncation placeholder hazard in `cli/audit/prompts.js` (`AI_SLOP_LAZY_PLACEHOLDER`) to prevent self-audit false positive.
+- Eliminated self-matching `A11Y_IMAGE_MISSING_ALT` hazard on `cli/audit/extended-visitors.js` by assembling tokenized template regexes and scoping template tag checks to template files.
+- Replaced shallow catch paranoia wrapper (`AI_SLOP_SHALLOW_CATCH`) in `cli/audit/extended-visitors.js` with `toResultSync` Result Tuple pattern and 2-stage atomic boolean composition per Chemical X Section 2.C and 3.A.
+- Exported shared `toResultSync` synchronous Result Tuple helper from `cli/audit/rules-helpers.js`.
 
 
 ## [2026-09-10]

@@ -14,6 +14,10 @@ import {
   checkSlopTextPatterns,
   createAiSlopVisitors
 } from './ai-slop-detector.js';
+import {
+  checkExtendedTextPatterns,
+  createExtendedVisitors
+} from './extended-visitors.js';
 
 export { PILLARS, RULE_REGISTRY };
 
@@ -94,6 +98,9 @@ export const auditCode = (content, filePath, relativePath) => {
   // AI Slop Fast Checks (conversational residue, code fences, echo comments)
   checkSlopTextPatterns(content, lines, relativePath, violations);
 
+  // Pillars 8-11: Extended Fast Checks (A11y, Security secrets, Fake tests, Co-located specs)
+  checkExtendedTextPatterns(content, lines, relativePath, filePath, violations);
+
   const codeToParse = extractParseableCode(content, ext);
   if (!codeToParse.trim()) {
     return violations;
@@ -124,17 +131,20 @@ export const auditCode = (content, filePath, relativePath) => {
   const traverseFn = traverse.default || traverse;
   const visitors = createAstVisitors({ relativePath, violations });
   const slopVisitors = createAiSlopVisitors({ relativePath, violations });
+  const extendedVisitors = createExtendedVisitors({ relativePath, violations });
 
   const mergedVisitors = { ...visitors };
-  for (const [key, fn] of Object.entries(slopVisitors)) {
-    if (mergedVisitors[key]) {
-      const orig = mergedVisitors[key];
-      mergedVisitors[key] = (p, s) => {
-        orig(p, s);
-        fn(p, s);
-      };
-    } else {
-      mergedVisitors[key] = fn;
+  for (const visitorSet of [slopVisitors, extendedVisitors]) {
+    for (const [key, fn] of Object.entries(visitorSet)) {
+      if (mergedVisitors[key]) {
+        const orig = mergedVisitors[key];
+        mergedVisitors[key] = (p, s) => {
+          orig(p, s);
+          fn(p, s);
+        };
+      } else {
+        mergedVisitors[key] = fn;
+      }
     }
   }
 

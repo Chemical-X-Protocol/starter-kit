@@ -16,6 +16,7 @@ import {
   formatGradeBSection,
   formatGradeASection,
   formatAiSlopSection,
+  formatHotspotsSection,
   getAuditHistory,
   getAuditBaseline,
   createSnapshotFromReport,
@@ -25,6 +26,8 @@ import {
   buildGradeDPrompt,
   buildGradeCPrompt,
   buildGradeBPrompt,
+  buildAiSlopPrompt,
+  buildHotspotsPrompt,
   buildMasterPrompt,
   copyToClipboard
 } from "./audit.js";
@@ -75,7 +78,7 @@ export const buildActiveGrades = (report) => {
   };
   const slopViolations = (violations || []).filter((v) => v.isAiSlop);
   const handleSlopAction = async () => {
-    await showPagedContent(formatAiSlopSection(report));
+    await showPagedContent(formatAiSlopSection(report), buildAiSlopPrompt(report));
   };
 
   const gradeTiers = [
@@ -225,7 +228,19 @@ export const buildDashboardActionGroups = ({ report, onScaffold = null, onRerun 
     }
   };
 
+  const handleHotspotsAction = async () => {
+    await showPagedContent(formatHotspotsSection(report), buildHotspotsPrompt(report));
+  };
+
   const handleExitAction = async () => {};
+
+  const monolithHotspots = (report?.hotspots || []).filter((h) => h.isMonolith || h.lineCount > 500);
+  const hotspotsAction = {
+    key: "hotspots",
+    tag: formatButtonTag("Hotspots", "\x1b[38;5;208m"),
+    label: `🔥 Top Refactoring Hotspots & Monoliths (${monolithHotspots.length} files)`,
+    action: handleHotspotsAction
+  };
 
   const installAction = {
     key: "install",
@@ -312,6 +327,8 @@ export const buildDashboardActionGroups = ({ report, onScaffold = null, onRerun 
     progressAction,
     exportAction,
     badgeAction,
+    hotspotsAction,
+    hasHotspots: monolithHotspots.length > 0,
     copyPromptAction,
     exitAction,
     shouldShowPromptAction

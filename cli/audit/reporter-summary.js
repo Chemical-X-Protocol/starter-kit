@@ -36,7 +36,7 @@ export const formatFailuresSection = (report) => {
 
   if (violations.length === 0 && hotspots.length === 0) {
     lines.push(`\n   ${GREEN}${BOLD}✔ ZERO FAILURES DETECTED!${RESET}`);
-    lines.push('   All 7 Chemical X Molecular Architecture Pillars are 100% Compliant.\n');
+    lines.push(`   All ${Object.keys(pillars).length} Chemical X Molecular Architecture Pillars are 100% Compliant.\n`);
     lines.push(`${RED}======================================================================${RESET}\n`);
     return lines.join('\n');
   }
@@ -106,7 +106,7 @@ export const formatPassesSection = (report) => {
   lines.push(`${GREEN}======================================================================${RESET}`);
 
   lines.push(`   Molecular Health Score:    ${BOLD}${GREEN}${health.score}/100${RESET} [Grade: ${BOLD}${GREEN}${health.grade}${RESET}]`);
-  lines.push(`   Passing Pillars:         ${BOLD}${GREEN}${passedPillars.length} / 7 Pillars PASSED${RESET}`);
+  lines.push(`   Passing Pillars:         ${BOLD}${GREEN}${passedPillars.length} / ${Object.keys(pillars).length} Pillars PASSED${RESET}`);
   lines.push(`   Capsule Compliance:      ${BOLD}${GREEN}${metrics.moleculeCompliantPct}%${RESET} molecules compliant (< 100 lines of code)`);
   lines.push(`   Total Files Scanned:     ${metrics.scannedFiles} source files (${metrics.totalLoc} total lines of code)`);
   lines.push(`${GREEN}----------------------------------------------------------------------${RESET}`);

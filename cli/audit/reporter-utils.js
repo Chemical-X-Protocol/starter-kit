@@ -110,7 +110,11 @@ export const PILLAR_EMOJIS = {
   'Type Architecture & Data Integrity': '🛡️',
   'Design System & Styling Hygiene': '🎨',
   'Timers & Macro-Task Discipline': '⏱️',
-  'Global Hygiene & Typography': '🧹'
+  'Global Hygiene & Typography': '🧹',
+  'Accessibility & Semantic Integrity': '♿',
+  'Security & Content Safety': '🔒',
+  'Testing Discipline': '🧪',
+  'Naming Conventions': '🏷️'
 };
 
 export const NUMBER_EMOJIS = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];

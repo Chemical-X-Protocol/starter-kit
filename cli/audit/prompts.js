@@ -141,12 +141,69 @@ export const buildGradeBPrompt = (report) => {
   return lines.join('\n');
 };
 
+export const buildAiSlopPrompt = (report) => {
+  const { violations = [] } = report;
+  const slopViolations = violations.filter((v) => Boolean(v.isAiSlop));
+
+  if (slopViolations.length === 0) return '';
+
+  const lines = [];
+  lines.push('Act as a Clean Code Specialist and Code Authenticity Guardian. Eliminate the following AI Slop and conversational artifacts from our codebase according to Chemical X standards:\n');
+
+  lines.push('### AI SLOP & CODE AUTHENTICITY VIOLATIONS');
+  slopViolations.forEach((v, i) => {
+    lines.push(`${i + 1}. \`${v.filePath}:${v.line}:${v.column}\` [${v.rule}]`);
+    lines.push(`   Hazard: ${v.hazard}`);
+    lines.push(`   Directive: ${v.directive}`);
+  });
+  lines.push('');
+
+  lines.push('### STRICT EXECUTION RULES:');
+  lines.push('1. Conversational Residue: Completely remove leaked AI conversational preambles, assistant markdown code fences, and pleasantry comments.');
+  lines.push('2. Truncation Placeholders: Replace lazy AI truncation placeholders with complete, robust, and verifiable implementations.');
+  lines.push('3. Echo Comments: Delete trivial parroting comments that merely restate adjacent self-documenting code.');
+  lines.push('4. Paranoia Catch Wrappers: Replace shallow or empty catch blocks with intentional error propagation or ResultTuple ([data, error]).');
+  lines.push('5. Inline Utility Reinventions: Replace reinvented inline helper utilities with shared project utilities or native methods.');
+  lines.push('6. Type Widening: Eliminate lazy "any" type casts on error parameters or variables; enforce strict typing.');
+
+  return lines.join('\n');
+};
+
+export const buildHotspotsPrompt = (report) => {
+  const { hotspots = [] } = report;
+  const monolithHotspots = hotspots.filter((h) => h.isMonolith || h.lineCount > 500);
+
+  if (monolithHotspots.length === 0) return '';
+
+  const lines = [];
+  lines.push('Act as a Principal Systems Architect. Surgically decompose the following monolithic hotspot files according to Chemical X Molecular Architecture Standards:\n');
+
+  lines.push('### MONOLITHIC REFACTORING HOTSPOTS');
+  monolithHotspots.forEach((h, i) => {
+    const tier = h.monolithTier ? `[${h.monolithTier} MONOLITH]` : '[MONOLITH]';
+    lines.push(`${i + 1}. File: \`${h.filePath}\` (${h.lineCount} lines, ${h.violationCount} hazards) ${tier}`);
+    lines.push('   Action: Decompose into single-responsibility crystalline molecule capsules (< 100 lines) and dedicated domain composables.');
+  });
+  lines.push('');
+
+  lines.push('### STRICT EXECUTION RULES:');
+  lines.push('1. Molecular Limits: Molecule capsules must strictly remain under 100 lines per file.');
+  lines.push('2. Table-of-Contents Views: Top-level page views must be 10 to 20 line declarative Table of Contents assembling molecules via named slots.');
+  lines.push('3. Composable Return Contracts: Custom hooks/composables must strictly limit returns to 3 to 5 properties (State + Status + Actions).');
+  lines.push('4. Type Co-location: Co-locate granular types/*.d.ts files inside each feature capsule (< 100 lines per type file) instead of creating type monoliths.');
+  lines.push('5. Zero breaking changes to external component APIs, route exports, or existing props.');
+
+  return lines.join('\n');
+};
+
 export const buildMasterPrompt = (report) => {
   const sections = [
     buildGradeFPrompt(report),
     buildGradeDPrompt(report),
     buildGradeCPrompt(report),
-    buildGradeBPrompt(report)
+    buildGradeBPrompt(report),
+    buildAiSlopPrompt(report),
+    buildHotspotsPrompt(report)
   ].filter(Boolean);
 
   if (sections.length === 0) return '';
