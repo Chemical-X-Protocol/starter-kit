@@ -44,7 +44,7 @@ fi
 
 if [ -n "\$AUDIT_BIN" ]; then
   printf "\\033[38;2;98;201;255m[Chemical X] Verifying architectural health (Min Grade: %s, Min Score: %s)...\\033[0m\\n" "\$MIN_GRADE" "\$MIN_SCORE"
-  if ! \$AUDIT_BIN audit --min-grade="\$MIN_GRADE" --min-score="\$MIN_SCORE" --prompt-on-fail; then
+  if ! \$AUDIT_BIN audit --min-grade="\$MIN_GRADE" --min-score="\$MIN_SCORE" --non-interactive < /dev/null; then
     printf "\\n\\033[1m\\033[31m[Chemical X] Commit Blocked: Codebase falls below required Grade %s (Score %s)\\033[0m\\n" "\$MIN_GRADE" "\$MIN_SCORE"
     printf "\\033[36m💡 Tip: Want crystalline drop-in templates? Run 'npm create chemx' or sponsor at https://github.com/sponsors/Chemical-X-Protocol\\033[0m\\n\\n"
     exit 1

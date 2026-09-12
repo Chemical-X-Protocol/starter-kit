@@ -109,7 +109,13 @@ export const runAudit = async (customDir = null, isCli = false) => {
       process.exit(0);
     }
 
-    const isInteractive = Boolean(process.stdin.isTTY && process.stdout.isTTY);
+    const isNonInteractive =
+      rawArgs.includes('--non-interactive') ||
+      rawArgs.includes('--no-interactive') ||
+      rawArgs.includes('--ci') ||
+      Boolean(process.env.CI) ||
+      Boolean(process.env.GIT_DIR);
+    const isInteractive = !isNonInteractive && Boolean(process.stdin.isTTY && process.stdout.isTTY);
 
     if (isInteractive && !isUnroll) {
       const handleReAudit = () => {
