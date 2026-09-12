@@ -23,6 +23,11 @@ import {
   showConversionMenu,
   handleShareToDiscussions
 } from './navigator.js';
+import {
+  isGradeBelowMinimum,
+  evaluateAuditFailure,
+  isNonInteractiveSession
+} from './audit/rules-predicates.js';
 import { runInstallWizard } from './installer.js';
 import { runBadgeCommand } from './badge.js';
 
@@ -79,12 +84,11 @@ export const runAudit = async (customDir = null, isCli = false) => {
   const report = executeAstAudit(targetDir, { outputFile, model, costPerMillion });
   saveAuditSnapshot(report);
 
-  const GRADE_RANKS = { 'A+': 5, 'A': 4, 'B': 3, 'C': 2, 'D': 1, 'F': 0 };
   const hasCriticalOrHigh = report.violations.some((v) => v.severity === 'CRITICAL' || v.severity === 'HIGH');
   const isStrictFail = isStrict && report.violations.length > 0;
-  const isGradeFail = Boolean(minGrade && GRADE_RANKS[report.health.grade] !== undefined && GRADE_RANKS[minGrade] !== undefined && GRADE_RANKS[report.health.grade] < GRADE_RANKS[minGrade]);
+  const isGradeFail = isGradeBelowMinimum(report.health.grade, minGrade);
   const isScoreFail = minScore !== null && !isNaN(minScore) && report.health.score < minScore;
-  const hasFailingViolations = isStrictFail || hasCriticalOrHigh || isGradeFail || isScoreFail;
+  const hasFailingViolations = evaluateAuditFailure([isStrictFail, hasCriticalOrHigh, isGradeFail, isScoreFail]);
 
   if (isJson) {
     process.stdout.write(JSON.stringify(report, null, 2) + '\n');
@@ -109,12 +113,7 @@ export const runAudit = async (customDir = null, isCli = false) => {
       process.exit(0);
     }
 
-    const isNonInteractive =
-      rawArgs.includes('--non-interactive') ||
-      rawArgs.includes('--no-interactive') ||
-      rawArgs.includes('--ci') ||
-      Boolean(process.env.CI) ||
-      Boolean(process.env.GIT_DIR);
+    const isNonInteractive = isNonInteractiveSession(rawArgs);
     const isInteractive = !isNonInteractive && Boolean(process.stdin.isTTY && process.stdout.isTTY);
 
     if (isInteractive && !isUnroll) {

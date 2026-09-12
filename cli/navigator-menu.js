@@ -52,6 +52,12 @@ const isChoiceMatchingItem = (cleanChoice) => (item) => {
     return true;
   }
   if (
+    item.key === "roadmap" &&
+    (cleanChoice.includes("Roadmap") || cleanChoice.includes("Healing") || cleanChoice.includes("Self-Healing"))
+  ) {
+    return true;
+  }
+  if (
     item.key === "rerun" &&
     (cleanChoice.includes("Re-Run") ||
       cleanChoice.includes("Rerun") ||
@@ -96,6 +102,12 @@ const isChoiceMatchingItem = (cleanChoice) => (item) => {
       cleanChoice.includes("Power Puff") ||
       cleanChoice.includes("Team Power Puff") ||
       cleanChoice.includes("Molecular Rules"))
+  ) {
+    return true;
+  }
+  if (
+    item.key === "grade_slop" &&
+    (cleanChoice.includes("Slop") || cleanChoice.includes("Authenticity") || cleanChoice.includes("ASI"))
   ) {
     return true;
   }
@@ -147,6 +159,12 @@ const isEffectiveMatchingItem = (effective, exitIndex) => (item) => {
   if (
     item.key === "hotspots" &&
     (effective === "hotspots" || effective === "hotspot" || effective === "h" || effective === "monoliths")
+  ) {
+    return true;
+  }
+  if (
+    item.key === "grade_slop" &&
+    (effective === "slop" || effective === "asi" || effective === "authenticity")
   ) {
     return true;
   }

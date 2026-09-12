@@ -90,11 +90,12 @@ export const buildGradeFPrompt = (report, options = {}) => {
   }
 
   lines.push('### STRICT EXECUTION RULES:');
-  lines.push('1. Every new molecule component must stay under 100 lines.');
-  lines.push('2. Top-level page views must be 10-20 line declarative Table-of-Contents templates assembling components via named slots.');
-  lines.push('3. Zero synthetic or mock data: return live data or explicit empty states.');
-  lines.push('4. Zero render-hack setTimeout: replace with await nextTick() or flush: post.');
-  lines.push('5. Output surgical diffs or modular replacements. Preserve existing external exports.');
+  lines.push('1. Pre-Split Pattern Discovery: Survey cross-file patterns before slicing; extract canonical shared capsules first to avoid proliferating duplicate one-off patterns.');
+  lines.push('2. Every new molecule component must stay under 100 lines.');
+  lines.push('3. Top-level page views must be 10-20 line declarative Table-of-Contents templates assembling components via named slots.');
+  lines.push('4. Zero synthetic or mock data: return live data or explicit empty states.');
+  lines.push('5. Zero render-hack setTimeout: replace with await nextTick() or flush: post.');
+  lines.push('6. Output surgical diffs or modular replacements. Preserve existing external exports.');
 
   return lines.join('\n');
 };
@@ -240,11 +241,13 @@ export const buildHotspotsPrompt = (report) => {
   lines.push('');
 
   lines.push('### STRICT EXECUTION RULES:');
-  lines.push('1. Molecular Limits: Molecule capsules must strictly remain under 100 lines per file.');
-  lines.push('2. Table-of-Contents Views: Top-level page views must be 10 to 20 line declarative Table of Contents assembling molecules via named slots.');
-  lines.push('3. Composable Return Contracts: Custom hooks/composables must strictly limit returns to 3 to 5 properties (State + Status + Actions).');
-  lines.push('4. Type Co-location: Co-locate granular types/*.d.ts files inside each feature capsule (< 100 lines per type file) instead of creating type monoliths.');
-  lines.push('5. Zero breaking changes to external component APIs, route exports, or existing props.');
+  lines.push('1. Branch First: Change to a new branch prefixed with `chem-x/NAMEOFIMPROVEMENT` before making changes, then commit the branch and create a PR to main.');
+  lines.push('2. Pre-Split Pattern Discovery: Audit recurring UI layouts, state machines, and predicates across monoliths first; extract canonical shared capsules before slicing to prevent bespoke pattern duplication.');
+  lines.push('3. Molecular Limits: Molecule capsules must strictly remain under 100 lines per file.');
+  lines.push('4. Table-of-Contents Views: Top-level page views must be 10 to 20 line declarative Table of Contents assembling molecules via named slots.');
+  lines.push('5. Composable Return Contracts: Custom hooks/composables must strictly limit returns to 3 to 5 properties (State + Status + Actions).');
+  lines.push('6. Type Co-location: Co-locate granular types/*.d.ts files inside each feature capsule (< 100 lines per type file) instead of creating type monoliths.');
+  lines.push('7. Zero breaking changes to external component APIs, route exports, or existing props.');
 
   return lines.join('\n');
 };

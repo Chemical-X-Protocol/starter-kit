@@ -107,7 +107,7 @@ export const handleShareToDiscussions = async (report) => {
   if (pubResult.success && pubResult.url) {
     if (pubResult.updated) {
       process.stdout.write(`\n\x1b[1m\x1b[32m✔ Successfully updated discussion topic #${pubResult.discussionNumber}!\x1b[0m\n`);
-      process.stdout.write('  \x1b[33mPrevious audit report was archived as a comment in the thread.\x1b[0m\n');
+      process.stdout.write('  \x1b[33mPrevious audit checkpoint was archived as a comment in the thread.\x1b[0m\n');
       process.stdout.write(`Discussion URL: \x1b[36m${pubResult.url}\x1b[0m\n\n`);
     } else {
       process.stdout.write(`\n\x1b[1m\x1b[32m✔ Successfully published discussion topic!\x1b[0m\nDiscussion URL: \x1b[36m${pubResult.url}\x1b[0m\n\n`);

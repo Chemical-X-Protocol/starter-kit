@@ -87,6 +87,41 @@ export interface AiSlopScore {
   };
 }
 
+export interface PatternOccurrence {
+  readonly filePath: string;
+  readonly line: number;
+  readonly column?: number;
+}
+
+export interface PatternCandidate {
+  readonly id: string;
+  readonly type: 'UI_STRUCTURE' | 'STATE_UNION' | 'PREDICATE_LOGIC' | 'HOOK_SIGNATURE';
+  readonly label: string;
+  readonly detail: string;
+  readonly suggestedCapsule: string;
+  readonly recommendation: string;
+  readonly fileCount: number;
+  readonly totalHits: number;
+  readonly hasHotspot: boolean;
+  readonly impactScore: number;
+  readonly occurrences: readonly PatternOccurrence[];
+}
+
+export interface RoadmapItem {
+  readonly title: string;
+  readonly target: string;
+  readonly action: string;
+  readonly locations: readonly string[];
+}
+
+export interface RoadmapPhase {
+  readonly step: number;
+  readonly phase: string;
+  readonly roi: string;
+  readonly rationale: string;
+  readonly items: readonly RoadmapItem[];
+}
+
 export interface AuditReport {
   readonly scannedFiles: number;
   readonly totalViolations: number;
@@ -96,6 +131,8 @@ export interface AuditReport {
   readonly pillars: Record<string, PillarData>;
   readonly contextAnalysis: ContextTokenAnalysis;
   readonly hotspots: readonly HotspotFile[];
+  readonly patterns?: readonly PatternCandidate[];
+  readonly roadmap?: readonly RoadmapPhase[];
   readonly violations: readonly HazardViolation[];
 }
 
@@ -137,5 +174,10 @@ export declare function buildHotspotsPrompt(report: AuditReport): string;
 export declare function buildMasterPrompt(report: AuditReport): string;
 export declare function formatPromptBox(title: string, promptText: string): string;
 
-export * from './history';
+export declare function buildRemediationRoadmap(report: AuditReport): RoadmapPhase[];
+export declare function formatRoadmapSection(report: AuditReport, themeColor?: string | null): string;
+export declare function formatRoadmapMarkdown(report: AuditReport): string;
+export declare function buildSelfHealingRoadmapPrompt(report: AuditReport): string;
 
+export * from './history';
+export * from './rules-predicates';

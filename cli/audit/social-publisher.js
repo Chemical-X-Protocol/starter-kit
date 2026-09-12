@@ -59,7 +59,7 @@ export {
 export const formatArchiveComment = (previousTitle, previousBody) => {
   const archiveTimestamp = new Date().toUTCString();
   return [
-    '## 📜 Previous Audit Snapshot (Archived)',
+    '## ⏱️ Audit Checkpoint Snapshot (Archived)',
     '',
     `> **Archived on:** ${archiveTimestamp}`,
     `> **Previous Status:** ${previousTitle || 'Prior Report'}`,

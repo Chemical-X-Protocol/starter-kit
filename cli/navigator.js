@@ -100,7 +100,7 @@ export const runInteractiveAuditNavigator = async (initialReport, onScaffold = n
     if (!guardrailsInstalled) {
       topActions.push(actions.installAction);
     }
-    topActions.push(actions.upgradeAction, actions.reportAction, actions.rerunAction);
+    topActions.push(actions.roadmapAction, actions.upgradeAction, actions.reportAction, actions.rerunAction);
 
     const midActions = [];
     if (actions.hasHotspots) {
