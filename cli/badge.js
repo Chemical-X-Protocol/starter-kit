@@ -53,7 +53,7 @@ export const generateHtmlBadgeSnippet = (label, grade, discussionUrl = null) => 
   const targetHref = discussionUrl || 'https://chemicalx.xophz.com';
   const targetTitle = discussionUrl ? 'Verified Chemical X Audit Report on GitHub Discussions' : 'Verified by Chemical X Protocol';
 
-  return `<a href="${targetHref}" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:8px;padding:4px 12px;border-radius:9999px;font-family:monospace;font-size:11px;text-decoration:none;border:1px solid rgba(255,255,255,0.15);background:rgba(15,23,42,0.65);backdrop-filter:blur(8px);color:#e2e8f0;transition:all 0.2s ease;" title="${targetTitle}">
+  return `<a href="${targetHref}" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:8px;padding:4px 12px;border-radius:9999px;font-family:monospace;font-size:11px;text-decoration:none;border:1px solid rgba(56,189,248,0.35);background:rgba(9,13,22,0.85);backdrop-filter:blur(8px);color:#e2e8f0;transition:all 0.2s ease;" title="${targetTitle}">
   <span style="width:8px;height:8px;border-radius:50%;background:#a3e635;box-shadow:0 0 6px rgba(163,230,53,0.6);"></span>
   <span>${label}</span>
   <span style="padding:2px 7px;border-radius:9999px;font-weight:bold;font-size:10px;background:rgba(163,230,53,0.15);color:#a3e635;border:1px solid rgba(163,230,53,0.3);">${grade}</span>
@@ -155,7 +155,14 @@ export default ChemicalXBadge;
 export const generateSvgBadgeSnippet = (label, grade) => {
   const width = Math.max(280, label.length * 8 + 60);
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="28" viewBox="0 0 ${width} 28" fill="none">
-  <rect width="${width}" height="28" rx="14" fill="#090d16" stroke="#26354a" stroke-width="1"/>
+  <defs>
+    <linearGradient id="chemx-comic" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#f43f85"/>
+      <stop offset="50%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#a3e635"/>
+    </linearGradient>
+  </defs>
+  <rect width="${width}" height="28" rx="14" fill="#090d16" stroke="url(#chemx-comic)" stroke-width="1.2"/>
   <circle cx="16" cy="14" r="4" fill="#a3e635"/>
   <text x="28" y="17" fill="#cbd5e1" font-family="monospace" font-size="11" font-weight="500">${label}</text>
   <rect x="${width - 44}" y="6" width="34" height="16" rx="8" fill="#a3e635" fill-opacity="0.18" stroke="#a3e635" stroke-opacity="0.4"/>

@@ -19,6 +19,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [2026-09-11]
 
 ### Added
+- Standardized the Chemical X color palette across the starter kit to match the official Hall of the Gods Chemical X Vol. 1 Comic Book cover:
+  - Created centralized palette module (`cli/theme.js`, `cli/theme.d.ts`) codifying Blossom Pink (`#f43f85`), Power Purple (`#a855f7`), Bubbles Cyan (`#38bdf8`), Chemical Mint (`#2dd4bf`), Buttercup Lime (`#a3e635`), Vibe Gold (`#fbbf24`), Golden Ribbon (`#f59e0b`), and Midnight Violet armor (`#181126`).
+  - Updated 24-bit TrueColor ASCII art banner (`getChemicalXAsciiBanner` in `cli/audit/reporter-banner.js`) with 3-phase gradient (Blossom Pink -> Bubbles Cyan -> Buttercup Lime) and golden ribbon motto styling (`The Secret Sauce to Vibe Coding!`).
+  - Upgraded terminal banner renderer (`renderBanner` in `cli/terminal.js`) with TrueColor gradient border and title formatting.
+  - Enhanced Verified Chemical X Footer Badge SVG asset generator (`generateSvgBadgeSnippet` in `cli/badge.js`) with embedded `<linearGradient id="chemx-comic">` border and updated HTML snippet.
+  - Aligned `m-chemx-badge` blueprint capsule styles (`_m-chemx-badge.scss`) with the official comic palette for hover glow and grade badges.
 - Expanded AST static analysis engine with Pillars 8 to 11 (`cli/audit/extended-visitors.js`): added automated rules and visitors for Accessibility & Semantic Integrity (`A11Y_CLICKABLE_NON_SEMANTIC`, `A11Y_IMAGE_MISSING_ALT`), Security & Content Safety (`SECURITY_RAW_HTML_INJECTION`, `SECURITY_HARDCODED_SECRET`), Testing Discipline (`TEST_FAKE_GREEN`, `TEST_MISSING_COLOCATED`), and Naming Conventions (`NAMING_BARE_BOOLEAN`, `NAMING_HANDLER_PREFIX`).
 - Implemented nested bullet tree path-chain formatter (`formatGroupedPromptViolations` in `cli/audit/prompts.js` and `renderGroupedViolationsTerminal` in `cli/audit/reporter-grouping.js`), clustering violations by rule and rendering folder hierarchy steps as indented bullet chains with `📁` folder emojis and ANSI severity colors (`📁 app/` -> `📁 components/` -> `📁 molecules/` -> leaf files with line hits) to eliminate boilerplate repetitions and slash AI prompt token consumption by up to 85%.
 - Consolidated monolith refactoring action directives across `buildHotspotsPrompt`, `buildGradeFPrompt`, `buildGradeDPrompt`, and `buildGradeCPrompt`, stating action requirements once per section.

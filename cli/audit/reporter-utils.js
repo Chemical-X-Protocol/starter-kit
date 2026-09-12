@@ -1,4 +1,16 @@
-export const CYAN = '\x1b[38;2;98;201;255m';
+export {
+  CHEMX_COLORS,
+  CHEMX_RGB,
+  getChemicalXGradientColor,
+  formatChemicalXGradient
+} from '../theme.js';
+
+export const CYAN = '\x1b[38;2;56;189;248m';
+export const PINK = '\x1b[38;2;244;63;133m';
+export const PURPLE = '\x1b[38;2;168;85;247m';
+export const MINT = '\x1b[38;2;45;212;191m';
+export const LIME = '\x1b[38;2;163;230;53m';
+export const GOLD = '\x1b[38;2;251;191;36m';
 export const GREEN = '\x1b[32m';
 export const YELLOW = '\x1b[33m';
 export const RED = '\x1b[31m';

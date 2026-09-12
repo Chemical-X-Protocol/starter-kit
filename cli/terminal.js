@@ -1,5 +1,6 @@
 import readline from "node:readline";
 import { spawnSync } from "node:child_process";
+import { formatChemicalXGradient, ANSI } from "./theme.js";
 
 export const openBrowser = (url) => {
   const platform = process.platform;
@@ -70,18 +71,18 @@ export const renderBanner = (title = "Chemical X Protocol: Molecular Architectur
         "--border-foreground=45",
         "--foreground=81",
         "--bold",
-        `  ${title}\n  Zero-Context-Rot Scaffolding & Engineering Directives`
+        `  ${title}\n  The Secret Sauce to Vibe Coding | Zero-Context-Rot Directives`
       ],
       { stdio: "inherit" }
     );
   } else {
     process.stdout.write(
-      "\n\x1b[38;2;98;201;255m=====================================================\x1b[0m\n"
+      `\n${formatChemicalXGradient("=====================================================")}\n`
     );
-    process.stdout.write(`\x1b[1m\x1b[38;2;98;201;255m  ${title}\x1b[0m\n`);
-    process.stdout.write("  Zero-Context-Rot Scaffolding & Engineering Directives\n");
+    process.stdout.write(`  ${formatChemicalXGradient(title)}\n`);
+    process.stdout.write(`  ${ANSI.BOLD}${ANSI.GOLD}The Secret Sauce to Vibe Coding!${ANSI.RESET} ${ANSI.DIM}| Zero-Context-Rot Directives${ANSI.RESET}\n`);
     process.stdout.write(
-      "\x1b[38;2;98;201;255m=====================================================\x1b[0m\n\n"
+      `${formatChemicalXGradient("=====================================================")}\n\n`
     );
   }
 };
