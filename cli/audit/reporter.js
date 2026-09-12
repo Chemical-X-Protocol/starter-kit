@@ -20,6 +20,24 @@ import {
   formatContextAnalysisSection,
   formatAiSlopSection
 } from './reporter-sections.js';
+import {
+  formatRoadmapSection,
+  formatRoadmapMarkdown,
+  buildSelfHealingRoadmapPrompt
+} from './roadmap.js';
+import {
+  formatGradeASection,
+  formatGradeBSection,
+  formatGradeCSection,
+  formatGradeDSection,
+  formatGradeFSection
+} from './reporter-grades.js';
+
+export {
+  formatRoadmapSection,
+  formatRoadmapMarkdown,
+  buildSelfHealingRoadmapPrompt
+};
 
 export {
   groupViolationsBySeverity,
@@ -32,6 +50,8 @@ export {
   resolveTopSectionColor,
   resolveMarkdownStatusIcon,
   resolveMarkdownMonolithText,
+  formatPillarReactionBadgesTerminal,
+  formatPillarReactionBadgesMarkdown,
   PILLAR_EMOJIS,
   NUMBER_EMOJIS,
   resolvePriorityBadge,
@@ -112,9 +132,12 @@ export const formatTerminalReport = (report) => {
   lines.push(formatHotspotsSection(report, topColor, { includePrompt: false }));
   lines.push(formatDirectoryDistributionSection(report, topColor));
   lines.push(formatAiSlopSection(report, topColor, { includePrompt: false }));
-  lines.push(formatCriticalSection(report));
-  lines.push(formatHighMediumSection(report));
-  lines.push(formatLowSection(report));
+  lines.push(formatRoadmapSection(report, topColor));
+  lines.push(formatGradeASection(report));
+  lines.push(formatGradeBSection(report, { includePrompt: false }));
+  lines.push(formatGradeCSection(report, { includePrompt: false }));
+  lines.push(formatGradeDSection(report, { includePrompt: false }));
+  lines.push(formatGradeFSection(report, { includePrompt: false }));
 
   const masterPrompt = buildMasterPrompt(report);
   if (masterPrompt) {

@@ -19,7 +19,8 @@ import {
 import { getReportCardAsciiLines } from './reporter-ascii.js';
 import { renderGroupedViolationsTerminal } from './reporter-grouping.js';
 
-export const formatGradeFSection = (report) => {
+export const formatGradeFSection = (report, options = {}) => {
+  const { includePrompt = true } = options;
   const { violations, hotspots, pillars } = report;
   const { critical } = groupViolationsBySeverity(violations);
   const extremeMonoliths = hotspots.filter((h) => h.lineCount >= 2000);
@@ -67,16 +68,19 @@ export const formatGradeFSection = (report) => {
     }
   }
 
-  const promptF = buildGradeFPrompt(report);
-  if (promptF) {
-    lines.push(formatPromptBox('🤖 AI AGENT REFACTORING PROMPT (GRADE F HAZARDS)', promptF));
+  if (includePrompt) {
+    const promptF = buildGradeFPrompt(report);
+    if (promptF) {
+      lines.push(formatPromptBox('🤖 AI AGENT REFACTORING PROMPT (GRADE F HAZARDS)', promptF));
+    }
   }
 
   lines.push(`${RED}======================================================================${RESET}\n`);
   return lines.join('\n');
 };
 
-export const formatGradeDSection = (report) => {
+export const formatGradeDSection = (report, options = {}) => {
+  const { includePrompt = true } = options;
   const { violations, hotspots, pillars } = report;
   const { high } = groupViolationsBySeverity(violations);
   const severeMonoliths = hotspots.filter((h) => h.lineCount >= 1000 && h.lineCount < 2000);
@@ -123,16 +127,19 @@ export const formatGradeDSection = (report) => {
     }
   }
 
-  const promptD = buildGradeDPrompt(report);
-  if (promptD) {
-    lines.push(formatPromptBox('🤖 AI AGENT REFACTORING PROMPT (GRADE D DEBTS)', promptD));
+  if (includePrompt) {
+    const promptD = buildGradeDPrompt(report);
+    if (promptD) {
+      lines.push(formatPromptBox('🤖 AI AGENT REFACTORING PROMPT (GRADE D DEBTS)', promptD));
+    }
   }
 
   lines.push(`${ORANGE}======================================================================${RESET}\n`);
   return lines.join('\n');
 };
 
-export const formatGradeCSection = (report) => {
+export const formatGradeCSection = (report, options = {}) => {
+  const { includePrompt = true } = options;
   const { violations, hotspots } = report;
   const { medium } = groupViolationsBySeverity(violations);
   const warningMonoliths = hotspots.filter((h) => h.lineCount >= 500 && h.lineCount < 1000);
@@ -169,16 +176,19 @@ export const formatGradeCSection = (report) => {
     }
   }
 
-  const promptC = buildGradeCPrompt(report);
-  if (promptC) {
-    lines.push(formatPromptBox('🤖 AI AGENT REFACTORING PROMPT (GRADE C DEBTS)', promptC));
+  if (includePrompt) {
+    const promptC = buildGradeCPrompt(report);
+    if (promptC) {
+      lines.push(formatPromptBox('🤖 AI AGENT REFACTORING PROMPT (GRADE C DEBTS)', promptC));
+    }
   }
 
   lines.push(`${CYAN}======================================================================${RESET}\n`);
   return lines.join('\n');
 };
 
-export const formatGradeBSection = (report) => {
+export const formatGradeBSection = (report, options = {}) => {
+  const { includePrompt = true } = options;
   const { violations } = report;
   const { low } = groupViolationsBySeverity(violations);
   const lines = [];
@@ -202,9 +212,11 @@ export const formatGradeBSection = (report) => {
     lines.push(renderGroupedViolationsTerminal(low));
   }
 
-  const promptB = buildGradeBPrompt(report);
-  if (promptB) {
-    lines.push(formatPromptBox('🤖 AI AGENT REFACTORING PROMPT (GRADE B HYGIENE)', promptB));
+  if (includePrompt) {
+    const promptB = buildGradeBPrompt(report);
+    if (promptB) {
+      lines.push(formatPromptBox('🤖 AI AGENT REFACTORING PROMPT (GRADE B HYGIENE)', promptB));
+    }
   }
 
   lines.push(`${YELLOW}======================================================================${RESET}\n`);

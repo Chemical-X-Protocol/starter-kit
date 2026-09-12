@@ -3,6 +3,7 @@ import {
   DISCUSSION_CATEGORY,
   DISCUSSION_CATEGORY_SLUG
 } from './social-constants.js';
+import { matchesDiscussionTitle } from './rules-predicates.js';
 
 export const publishDiscussionViaGh = (repo, title, body, category = DISCUSSION_CATEGORY) => {
   try {
@@ -110,12 +111,7 @@ export const findExistingDiscussionViaGh = (repo, projectName) => {
       const targetLower = projectName.toLowerCase();
       const match = list.find((d) => {
         const titleLower = (d.title || '').toLowerCase();
-        return (
-          titleLower.includes(` ${targetLower} :`) ||
-          titleLower.includes(` ${targetLower} [`) ||
-          titleLower.includes(`: ${targetLower}`) ||
-          titleLower.includes(`${targetLower} audit`)
-        );
+        return matchesDiscussionTitle(titleLower, targetLower);
       });
       return match || null;
     }

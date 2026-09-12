@@ -4,6 +4,7 @@ import {
   resolveHealthHearts,
   resolveMarkdownStatusIcon,
   resolveMarkdownMonolithText,
+  formatPillarReactionBadgesMarkdown,
   PILLAR_EMOJIS,
   NUMBER_EMOJIS
 } from './reporter-utils.js';
@@ -11,6 +12,7 @@ import {
   formatDirectoryRollupMarkdown,
   renderGroupedViolationsMarkdown
 } from './reporter-grouping-markdown.js';
+import { formatRoadmapMarkdown } from './roadmap.js';
 
 export const generateMarkdownReport = (report) => {
   const { metrics, health, pillars, contextAnalysis, hotspots, violations, aiSlop } = report;
@@ -47,6 +49,11 @@ export const generateMarkdownReport = (report) => {
   lines.push('');
   lines.push('## 2. 7-Pillar Architectural Compliance Matrix');
   lines.push('');
+  const reactionStrip = formatPillarReactionBadgesMarkdown(pillars);
+  if (reactionStrip) {
+    lines.push(`> **Pillar Reaction Badges:** ${reactionStrip}`);
+    lines.push('');
+  }
   lines.push('| Pillar | Status | Violations | Critical | High | Med | Low |');
   lines.push('| :--- | :---: | :---: | :---: | :---: | :---: | :---: |');
 
@@ -86,19 +93,25 @@ export const generateMarkdownReport = (report) => {
     lines.push(formatDirectoryRollupMarkdown(violations));
 
     if (critical.length > 0) {
-      lines.push('### Critical Hazards (Immediate Action Required)');
+      lines.push('### Grade F: Critical Hazards & Extreme Monoliths (Immediate Action Required)');
       lines.push('');
       lines.push(renderGroupedViolationsMarkdown(critical, { showSeverity: false }));
     }
 
-    if (high.length > 0 || medium.length > 0) {
-      lines.push('### High & Medium Hazards (Architecture Debts)');
+    if (high.length > 0) {
+      lines.push('### Grade D: High Severity Debts & Severe Monoliths');
       lines.push('');
-      lines.push(renderGroupedViolationsMarkdown([...high, ...medium], { showSeverity: true }));
+      lines.push(renderGroupedViolationsMarkdown(high, { showSeverity: false }));
+    }
+
+    if (medium.length > 0) {
+      lines.push('### Grade C: Medium Severity Debts & Monolithic Drift');
+      lines.push('');
+      lines.push(renderGroupedViolationsMarkdown(medium, { showSeverity: false }));
     }
 
     if (low.length > 0) {
-      lines.push('### Low & Hygiene Issues (Typography & Logging)');
+      lines.push('### Grade B: Low Severity Hygiene & Minor Debts');
       lines.push('');
       lines.push(renderGroupedViolationsMarkdown(low, { showSeverity: false }));
     }
@@ -122,14 +135,7 @@ export const generateMarkdownReport = (report) => {
 
   lines.push('---');
   lines.push('');
-  lines.push('## 6. Remediation Roadmap');
-  lines.push('');
-  lines.push('1. **Decompose Monoliths**: Break down any file exceeding 500 lines into single-responsibility capsules.');
-  lines.push('2. **Cap Molecule Size**: Ensure all molecule components (`m-*`) remain strictly under 100 lines.');
-  lines.push('3. **Two-Stage Boolean Logic**: Replace complex multi-clause expressions with atomic boolean variables.');
-  lines.push('4. **Lifecycle-Safe Timers**: Migrate raw `setInterval` and `setTimeout` calls to self-cleaning composables.');
-  lines.push('5. **Purge AI Slop**: Remove conversational residue, eliminate echo comments, and inline single-use passthrough assignments.');
-  lines.push('');
+  lines.push(formatRoadmapMarkdown(report));
 
   const masterPrompt = buildMasterPrompt(report);
   if (masterPrompt) {

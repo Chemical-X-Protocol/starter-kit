@@ -13,7 +13,9 @@ import {
   resolveHealthHearts,
   resolveRiskColor,
   resolveHotspotBadge,
-  resolveTopSectionColor
+  resolveTopSectionColor,
+  PILLAR_EMOJIS,
+  formatPillarReactionBadgesTerminal
 } from './reporter-utils.js';
 import { getAsciiGradeLines, getReportCardAsciiLines } from './reporter-ascii.js';
 import { renderGroupedViolationsTerminal } from './reporter-grouping.js';
@@ -153,10 +155,18 @@ export const formatPillarsSection = (report, themeColor = null) => {
   lines.push(`${sectionColor}======================================================================${RESET}`);
   lines.push(`${BOLD}${sectionColor}   7-PILLAR ARCHITECTURAL COMPLIANCE MATRIX${RESET}`);
   lines.push(`${sectionColor}======================================================================${RESET}`);
-  lines.push(`   ${DIM}Pillar Name                                   Status     Violations${RESET}`);
-  lines.push(`   ${DIM}------------------------------------------------------------------${RESET}`);
+
+  const reactionStrip = formatPillarReactionBadgesTerminal(pillars);
+  if (reactionStrip) {
+    lines.push(`   ${BOLD}Reaction Badges:${RESET} ${reactionStrip}`);
+    lines.push(`${sectionColor}----------------------------------------------------------------------${RESET}`);
+  }
+
+  lines.push(`   ${DIM}Pillar Name                                         Status     Violations${RESET}`);
+  lines.push(`   ${DIM}------------------------------------------------------------------------${RESET}`);
   for (const [pillarName, data] of Object.entries(pillars)) {
-    const padName = pillarName.padEnd(45, ' ');
+    const icon = PILLAR_EMOJIS[pillarName] || '🏛️';
+    const padName = `[ ${icon} ] ${pillarName}`.padEnd(51, ' ');
     const badge = getStatusBadge(data.status).padEnd(16, ' ');
     const countStr = data.violations === 0 ? `${GREEN}0${RESET}` : `${RED}${data.violations}${RESET}`;
     lines.push(`   ${padName} ${badge} ${countStr}`);

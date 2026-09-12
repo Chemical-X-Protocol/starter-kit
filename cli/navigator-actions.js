@@ -29,6 +29,8 @@ import {
   buildAiSlopPrompt,
   buildHotspotsPrompt,
   buildMasterPrompt,
+  formatRoadmapSection,
+  buildSelfHealingRoadmapPrompt,
   copyToClipboard
 } from "./audit.js";
 import { resolveGradeBadge } from "./navigator-grades.js";
@@ -43,20 +45,23 @@ const isExtremeMonolith = (h) => h.lineCount >= 2000;
 const isSevereMonolith = (h) => h.lineCount >= 1000 && h.lineCount < 2000;
 const isWarningMonolith = (h) => h.lineCount >= 500 && h.lineCount < 1000;
 const isPassedPillar = (p) => p.status === "PASSED";
-const hasGradeItems = (g) => g.count > 0;
+const isFailedPillar = (p) => p.status === "FAILED";
+const isWarnPillar = (p) => p.status === "WARN";
 
 export const buildActiveGrades = (report) => {
   const { hotspots, violations, pillars } = report;
   const { critical, high, medium, low } = groupViolationsBySeverity(violations);
 
   const passedPillarsCount = Object.values(pillars || {}).filter(isPassedPillar).length;
+  const failedPillarsCount = Object.values(pillars || {}).filter(isFailedPillar).length;
+  const warnPillarsCount = Object.values(pillars || {}).filter(isWarnPillar).length;
 
   const extremeMonoliths = hotspots.filter(isExtremeMonolith);
   const severeMonoliths = hotspots.filter(isSevereMonolith);
   const warningMonoliths = hotspots.filter(isWarningMonolith);
 
-  const gradeFCount = critical.length + extremeMonoliths.length;
-  const gradeDCount = high.length + severeMonoliths.length;
+  const gradeFCount = critical.length + extremeMonoliths.length + failedPillarsCount;
+  const gradeDCount = high.length + severeMonoliths.length + warnPillarsCount;
   const gradeCCount = medium.length + warningMonoliths.length;
   const gradeBCount = low.length;
   const gradeACount = passedPillarsCount;
@@ -83,6 +88,7 @@ export const buildActiveGrades = (report) => {
 
   const gradeTiers = [
     {
+      key: "grade_a",
       grade: "A",
       count: gradeACount,
       icon: "✅",
@@ -90,6 +96,7 @@ export const buildActiveGrades = (report) => {
       action: handleGradeAAction
     },
     {
+      key: "grade_slop",
       grade: report.aiSlop?.grade || (slopViolations.length > 0 ? "D" : "A"),
       count: slopViolations.length,
       icon: "🤖",
@@ -97,6 +104,7 @@ export const buildActiveGrades = (report) => {
       action: handleSlopAction
     },
     {
+      key: "grade_b",
       grade: "B",
       count: gradeBCount,
       icon: "💣",
@@ -104,6 +112,7 @@ export const buildActiveGrades = (report) => {
       action: handleGradeBAction
     },
     {
+      key: "grade_c",
       grade: "C",
       count: gradeCCount,
       icon: "⚡",
@@ -111,6 +120,7 @@ export const buildActiveGrades = (report) => {
       action: handleGradeCAction
     },
     {
+      key: "grade_d",
       grade: "D",
       count: gradeDCount,
       icon: "🔥",
@@ -118,6 +128,7 @@ export const buildActiveGrades = (report) => {
       action: handleGradeDAction
     },
     {
+      key: "grade_f",
       grade: "F",
       count: gradeFCount,
       icon: "💥",
@@ -127,14 +138,14 @@ export const buildActiveGrades = (report) => {
   ];
 
   const createActiveGradeItem = (g) => ({
-    key: `grade_${g.grade.toLowerCase()}`,
+    key: g.key || `grade_${g.grade.toLowerCase()}`,
     grade: g.grade.toLowerCase(),
     tag: resolveGradeBadge(g.grade, 11),
     label: `${g.icon} Grade ${g.grade}: ${g.description} (${g.count} ${g.grade === "A" ? "clean" : "items"})`,
     action: g.action
   });
 
-  return gradeTiers.filter(hasGradeItems).map(createActiveGradeItem);
+  return gradeTiers.map(createActiveGradeItem);
 };
 
 export const buildDashboardActionGroups = ({ report, onScaffold = null, onRerun = null }) => {
@@ -147,6 +158,10 @@ export const buildDashboardActionGroups = ({ report, onScaffold = null, onRerun 
 
   const handleUpgradeAction = async () => {
     await showConversionMenu(onScaffold);
+  };
+
+  const handleRoadmapAction = async () => {
+    await showPagedContent(formatRoadmapSection(report), buildSelfHealingRoadmapPrompt(report));
   };
 
   const handleReportAction = async () => {
@@ -173,7 +188,12 @@ export const buildDashboardActionGroups = ({ report, onScaffold = null, onRerun 
       output += formatTransformationTerminal(baseline, currentSnapshot);
     } else {
       output +=
-        "\n\x1b[33mNo baseline audit found. Current audit established as baseline.\x1b[0m\n";
+        "\n\x1b[33mNo baseline audit found. Current audit established as baseline floor.\x1b[0m\n";
+    }
+
+    const previousSnapshot = history.length > 1 ? history[history.length - 2] : null;
+    if (previousSnapshot && previousSnapshot.id !== baseline?.id) {
+      output += "\n\n" + formatTransformationTerminal(previousSnapshot, currentSnapshot, { isStepDelta: true });
     }
 
     if (history.length > 0) {
@@ -256,6 +276,13 @@ export const buildDashboardActionGroups = ({ report, onScaffold = null, onRerun 
     action: handleUpgradeAction
   };
 
+  const roadmapAction = {
+    key: "roadmap",
+    tag: formatButtonTag("Roadmap", "\x1b[38;2;45;212;191m"),
+    label: "🌱 Self-Healing Fix Roadmap (Optimal Remediation Order & Pattern Harvesting)",
+    action: handleRoadmapAction
+  };
+
   const reportAction = {
     key: "report",
     tag: formatButtonTag("Full Report", "\x1b[36m"),
@@ -320,6 +347,7 @@ export const buildDashboardActionGroups = ({ report, onScaffold = null, onRerun 
 
   return {
     installAction,
+    roadmapAction,
     upgradeAction,
     reportAction,
     rerunAction,

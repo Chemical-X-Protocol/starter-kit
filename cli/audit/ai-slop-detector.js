@@ -1,5 +1,12 @@
 import * as t from '@babel/types';
 import { RULE_REGISTRY } from './rules-registry.js';
+import {
+  isComponentPath,
+  isCodeLine,
+  isShallowCatchBody,
+  hasAnyTypeAnnotation,
+  isRedundantPassthroughReturn
+} from './rules-predicates.js';
 
 const RESIDUE_PATTERNS = [
   ['hope this', 'helps'].join(' '),
@@ -95,7 +102,7 @@ export const checkSlopTextPatterns = (content, lines, relativePath, violations) 
         let nextIdx = idx + 1;
         while (nextIdx < lines.length) {
           const nextTrim = lines[nextIdx].trim();
-          if (nextTrim && !nextTrim.startsWith('//') && !nextTrim.startsWith('/*')) {
+          if (isCodeLine(nextTrim)) {
             const nextWords = new Set(normalizeWords(nextTrim));
             let matchCount = 0;
             for (const cw of commentWords) {
@@ -126,25 +133,12 @@ export const checkSlopTextPatterns = (content, lines, relativePath, violations) 
 };
 
 export const createAiSlopVisitors = ({ relativePath, violations }) => {
-  const isComponentFile = (
-    relativePath.includes('molecules') ||
-    relativePath.includes('components') ||
-    relativePath.includes('/m-') ||
-    relativePath.includes('/views/') ||
-    relativePath.includes('/pages/')
-  );
+  const isComponentFile = isComponentPath(relativePath);
 
   return {
     CatchClause(astPath) {
       const body = astPath.node.body?.body || [];
-      const isShallowCatch = (
-        body.length === 0 ||
-        (body.length === 1 &&
-          t.isExpressionStatement(body[0]) &&
-          t.isCallExpression(body[0].expression) &&
-          t.isMemberExpression(body[0].expression.callee) &&
-          t.isIdentifier(body[0].expression.callee.object, { name: 'console' }))
-      );
+      const isShallowCatch = isShallowCatchBody(body, t);
 
       if (isShallowCatch) {
         const line = astPath.node.loc?.start.line || 1;
@@ -162,23 +156,20 @@ export const createAiSlopVisitors = ({ relativePath, violations }) => {
         });
       }
 
-      const param = astPath.node.param;
-      if (param && t.isIdentifier(param) && param.typeAnnotation) {
-        if (t.isTSTypeAnnotation(param.typeAnnotation) && t.isTSAnyKeyword(param.typeAnnotation.typeAnnotation)) {
-          const line = astPath.node.loc?.start.line || 1;
-          const meta = RULE_REGISTRY.AI_SLOP_LAZY_ANY;
-          violations.push({
-            filePath: relativePath,
-            line,
-            column: astPath.node.loc?.start.column || 1,
-            hazard: 'Lazy any catch parameter widening detected',
-            rule: 'AI_SLOP_LAZY_ANY',
-            severity: meta.severity,
-            pillar: meta.pillar,
-            directive: meta.directive,
-            isAiSlop: true
-          });
-        }
+      if (hasAnyTypeAnnotation(astPath.node.param, t)) {
+        const line = astPath.node.loc?.start.line || 1;
+        const meta = RULE_REGISTRY.AI_SLOP_LAZY_ANY;
+        violations.push({
+          filePath: relativePath,
+          line,
+          column: astPath.node.loc?.start.column || 1,
+          hazard: 'Lazy any catch parameter widening detected',
+          rule: 'AI_SLOP_LAZY_ANY',
+          severity: meta.severity,
+          pillar: meta.pillar,
+          directive: meta.directive,
+          isAiSlop: true
+        });
       }
     },
 
@@ -188,14 +179,7 @@ export const createAiSlopVisitors = ({ relativePath, violations }) => {
         for (let i = 0; i < stmts.length - 1; i++) {
           const curr = stmts[i];
           const next = stmts[i + 1];
-          if (
-            t.isVariableDeclaration(curr) &&
-            curr.declarations.length === 1 &&
-            t.isIdentifier(curr.declarations[0].id) &&
-            t.isReturnStatement(next) &&
-            t.isIdentifier(next.argument) &&
-            curr.declarations[0].id.name === next.argument.name
-          ) {
+          if (isRedundantPassthroughReturn(curr, next, t)) {
             const varName = curr.declarations[0].id.name;
             const line = curr.loc?.start.line || 1;
             const meta = RULE_REGISTRY.AI_SLOP_REDUNDANT_PASSTHROUGH;

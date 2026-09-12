@@ -126,18 +126,39 @@ export const getAuditHistory = (cwd = process.cwd()) => {
 };
 
 export const getAuditBaseline = (cwd = process.cwd()) => {
+  const history = getAuditHistory(cwd);
   const baselinePath = path.resolve(cwd, '.chemx', 'baseline.json');
+  let explicitBaseline = null;
   if (fs.existsSync(baselinePath)) {
     try {
       const raw = fs.readFileSync(baselinePath, 'utf-8');
-      return JSON.parse(raw);
+      explicitBaseline = JSON.parse(raw);
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
-      return null;
+      explicitBaseline = null;
     }
   }
-  const history = getAuditHistory(cwd);
-  return history.length > 0 ? history[0] : null;
+
+  if (history.length === 0) {
+    return explicitBaseline;
+  }
+
+  // Find the lowest scoring snapshot in history (the true debt floor)
+  let lowestSnapshot = history[0];
+  for (const s of history) {
+    const currentScore = s.health?.score ?? 100;
+    const lowestScore = lowestSnapshot.health?.score ?? 100;
+    if (currentScore < lowestScore) {
+      lowestSnapshot = s;
+    }
+  }
+
+  if (!explicitBaseline) return lowestSnapshot;
+
+  // Use the lowest score between explicit baseline and history floor
+  const explicitScore = explicitBaseline.health?.score ?? 100;
+  const minScore = lowestSnapshot.health?.score ?? 100;
+  return minScore < explicitScore ? lowestSnapshot : explicitBaseline;
 };
 
 export const setAuditBaseline = (snapshot, cwd = process.cwd()) => {
@@ -179,10 +200,14 @@ export const saveAuditSnapshot = (report, cwd = process.cwd()) => {
   const historyPath = path.resolve(cwd, '.chemx', 'history.json');
   fs.writeFileSync(historyPath, JSON.stringify(trimmed, null, 2), 'utf-8');
 
-  // Auto-establish first run as baseline if none exists
+  // Auto-establish first run or lower score as baseline floor
   const baselinePath = path.resolve(cwd, '.chemx', 'baseline.json');
   let isNewBaseline = false;
-  if (!fs.existsSync(baselinePath)) {
+  const currentBaseline = getAuditBaseline(cwd);
+  const currentScore = snapshot.health?.score ?? 100;
+  const baselineScore = currentBaseline?.health?.score ?? 101;
+
+  if (!currentBaseline || currentScore < baselineScore) {
     fs.writeFileSync(baselinePath, JSON.stringify(snapshot, null, 2), 'utf-8');
     isNewBaseline = true;
   }
@@ -275,7 +300,8 @@ export const calculateTransformationDelta = (beforeSnapshot, afterSnapshot) => {
   };
 };
 
-export const formatTransformationTerminal = (beforeSnapshot, afterSnapshot) => {
+export const formatTransformationTerminal = (beforeSnapshot, afterSnapshot, options = {}) => {
+  const { isStepDelta = false } = options;
   const delta = calculateTransformationDelta(beforeSnapshot, afterSnapshot);
   const lines = [];
 
@@ -295,18 +321,26 @@ export const formatTransformationTerminal = (beforeSnapshot, afterSnapshot) => {
     return `${color}${BOLD}${sign}${perUnit}${RESET}`;
   };
 
+  const title = isStepDelta
+    ? 'STEP PROGRESSION : INCREMENTAL CHECKPOINT DELTA'
+    : 'ARCHITECTURAL TRANSFORMATION : BEFORE & AFTER PROGRESSION';
+  const subtitle = isStepDelta
+    ? 'Comparing immediately preceding audit vs. latest refactored audit'
+    : 'Comparing baseline floor snapshot vs. latest refactored audit';
+  const beforeLabel = isStepDelta ? 'Previous Audit:' : 'Baseline Floor:';
+
   lines.push('');
   lines.push(`${CYAN}======================================================================${RESET}`);
-  lines.push(`${BOLD}${CYAN}   ARCHITECTURAL TRANSFORMATION : BEFORE & AFTER PROGRESSION${RESET}`);
-  lines.push(`${DIM}   Comparing baseline snapshot vs. latest refactored audit${RESET}`);
+  lines.push(`${BOLD}${CYAN}   ${title}${RESET}`);
+  lines.push(`${DIM}   ${subtitle}${RESET}`);
   lines.push(`${CYAN}======================================================================${RESET}`);
   lines.push('');
 
   const dateBefore = new Date(beforeSnapshot.timestamp).toLocaleDateString();
   const dateAfter = new Date(afterSnapshot.timestamp).toLocaleDateString();
 
-  lines.push(`   ${BOLD}Baseline Audit:${RESET}    ${DIM}${dateBefore} [${beforeSnapshot.id}]${RESET}`);
-  lines.push(`   ${BOLD}Latest Audit:${RESET}      ${GREEN}${dateAfter} [${afterSnapshot.id}]${RESET}`);
+  lines.push(`   ${BOLD}${beforeLabel.padEnd(18)}${RESET} ${DIM}${dateBefore} [${beforeSnapshot.id}]${RESET}`);
+  lines.push(`   ${BOLD}${'Latest Audit:'.padEnd(18)}${RESET} ${GREEN}${dateAfter} [${afterSnapshot.id}]${RESET}`);
   lines.push('');
 
   lines.push(`${BOLD}   METRIC COMPARISON TABLE${RESET}`);

@@ -41,6 +41,18 @@
   `<SparkKpiStrip {metrics} {records} {canRefresh} />`
 - **React 19 (JSX)**: Explicitly bind `prop={prop}`. Never write `<Comp prop />` for variables (JSX evaluates bare attributes to boolean `true`).
 
+### F. Pre-Split Pattern Discovery & Harmonization Protocol
+- **Survey Before Slicing**: Before decomposing any monolithic file or collection of files, the AI must first conduct a cross-file pattern discovery audit across all candidate monoliths.
+- **Identify Recurring Structures**: Map shared UI layouts, duplicate controllers, repeated predicates, common state machines, and mirrored type definitions across files before writing any split code.
+- **Map to Existing Foundations**: Check the design system, shared atom catalog (`x-*`), central composables, and core utilities first. Never invent a bespoke one-off atom or utility if an equivalent foundation exists.
+- **Canonical Extraction First**: Consolidate and extract shared atoms, molecules, or composables once into canonical capsules before splitting consumer monoliths.
+- **Zero Bespoke Pattern Proliferation**: Decompose consumer monoliths by binding directly to the extracted canonical capsules, preventing the proliferation of duplicate, slightly divergent patterns across spliced views.
+
+### G. Git Branching & Pull Request Protocol
+- **Branch First**: Change to a dedicated feature branch prefixed with `chem-x/NAMEOFIMPROVEMENT` (e.g. `git checkout -b chem-x/<name-of-improvement>`) before making any code modifications.
+- **Atomic Commits**: Commit atomic, intention-revealing changes directly on the dedicated feature branch.
+- **PR to Main**: Create a Pull Request targeting `main` upon completing the architectural remediation phases.
+
 ---
 
 ## 2. Domain-Based Type Architecture & Data Integrity

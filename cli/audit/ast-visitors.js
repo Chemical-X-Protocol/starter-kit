@@ -1,14 +1,17 @@
 import * as t from '@babel/types';
 import { RULE_REGISTRY } from './rules-registry.js';
 import { countLogicalOperators } from './rules-helpers.js';
+import {
+  isCustomHookFunction,
+  resolveStartLine,
+  isZeroDelayTimeout,
+  isUnguardedConsoleCall
+} from './rules-predicates.js';
 
 export const createAstVisitors = ({ relativePath, violations }) => {
   return {
     Function(astPath) {
-      const isCustomHook = (
-        (astPath.node.id && /^use[A-Z0-9]/.test(astPath.node.id.name)) ||
-        (astPath.parentPath?.node?.id && /^use[A-Z0-9]/.test(astPath.parentPath.node.id.name))
-      );
+      const isCustomHook = isCustomHookFunction(astPath);
 
       // Pillar 3: Hook Saturation
       let hookCount = 0;
@@ -70,7 +73,7 @@ export const createAstVisitors = ({ relativePath, violations }) => {
       if (t.isLogicalExpression(expr) || t.isUnaryExpression(expr)) {
         const opCount = countLogicalOperators(expr);
         if (opCount > 2) {
-          const line = expr.loc?.start.line || astPath.node.loc?.start.line || 1;
+          const line = resolveStartLine(expr, astPath.node, 1);
           const meta = RULE_REGISTRY.CONTROL_FLOW_INLINE_BOOLEAN;
           violations.push({
             filePath: relativePath,
@@ -154,7 +157,7 @@ export const createAstVisitors = ({ relativePath, violations }) => {
         const delayArg = args[1];
 
         // Render-hack check: setTimeout(fn, 0)
-        if (callee.name === 'setTimeout' && delayArg && t.isNumericLiteral(delayArg) && delayArg.value === 0) {
+        if (isZeroDelayTimeout(callee, delayArg, t)) {
           const line = astPath.node.loc?.start.line || 1;
           const meta = RULE_REGISTRY.RENDER_HACK_TIMEOUT;
           violations.push({
@@ -198,13 +201,7 @@ export const createAstVisitors = ({ relativePath, violations }) => {
       }
 
       // Unguarded Logging
-      if (
-        t.isMemberExpression(callee) &&
-        t.isIdentifier(callee.object) &&
-        callee.object.name === 'console' &&
-        t.isIdentifier(callee.property) &&
-        ['log', 'info', 'warn'].includes(callee.property.name)
-      ) {
+      if (isUnguardedConsoleCall(callee, t)) {
         const line = astPath.node.loc?.start.line || 1;
         const meta = RULE_REGISTRY.UNGUARDED_LOGGING;
         violations.push({

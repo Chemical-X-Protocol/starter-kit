@@ -147,3 +147,35 @@ export const resolveMarkdownMonolithText = (lineCount) => {
   if (lineCount > 500) return '🟡 **WARNING (> 500 lines of code)**';
   return '🟢 Compliant';
 };
+
+export const formatPillarReactionBadgesTerminal = (pillars = {}) => {
+  const badges = [];
+  for (const [pillarName, data] of Object.entries(pillars)) {
+    const icon = PILLAR_EMOJIS[pillarName] || '🏛️';
+    const violations = data?.violations || 0;
+    if (data?.status === 'PASSED') {
+      badges.push(`${GREEN}[ ${icon} PASS ]${RESET}`);
+    } else if (data?.status === 'WARN') {
+      badges.push(`${YELLOW}[ ${icon} WARN (${violations}) ]${RESET}`);
+    } else {
+      badges.push(`${RED}[ ${icon} FAIL (${violations}) ]${RESET}`);
+    }
+  }
+  return badges.join(' ');
+};
+
+export const formatPillarReactionBadgesMarkdown = (pillars = {}) => {
+  const badges = [];
+  for (const [pillarName, data] of Object.entries(pillars)) {
+    const icon = PILLAR_EMOJIS[pillarName] || '🏛️';
+    const violations = data?.violations || 0;
+    if (data?.status === 'PASSED') {
+      badges.push(`\`[ ${icon} PASS ]\``);
+    } else if (data?.status === 'WARN') {
+      badges.push(`\`[ ${icon} WARN: ${violations} ]\``);
+    } else {
+      badges.push(`\`[ ${icon} FAIL: ${violations} ]\``);
+    }
+  }
+  return badges.join(' ');
+};

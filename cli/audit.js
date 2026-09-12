@@ -1,6 +1,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { auditCode, PILLARS, RULE_REGISTRY } from './audit/rules.js';
+import { createPatternRegistry } from './audit/pattern-detector.js';
+import {
+  buildRemediationRoadmap,
+  formatRoadmapSection,
+  formatRoadmapMarkdown,
+  buildSelfHealingRoadmapPrompt
+} from './audit/roadmap.js';
 import {
   calculateMolecularHealthScore,
   calculateQuantumHealthScore,
@@ -38,7 +45,9 @@ import {
   getAsciiGradeLines,
   formatAsciiGrade,
   getReportCardAsciiLines,
-  REPORT_CARD_ASCII
+  REPORT_CARD_ASCII,
+  formatPillarReactionBadgesTerminal,
+  formatPillarReactionBadgesMarkdown
 } from './audit/reporter.js';
 import {
   buildGradeFPrompt,
@@ -81,10 +90,11 @@ export const auditFile = (filePath, relativePath) => {
   return auditCode(content, filePath, relativePath);
 };
 
-export const scanTree = (targetDir, baseDir) => {
+export const scanTree = (targetDir, baseDir, scanOptions = {}) => {
   let violations = [];
   let fileStats = [];
   let totalHooks = 0;
+  const { patternRegistry } = scanOptions;
 
   if (!fs.existsSync(targetDir)) {
     return { violations, fileStats, totalHooks };
@@ -97,7 +107,7 @@ export const scanTree = (targetDir, baseDir) => {
 
     if (entry.isDirectory()) {
       if (!IGNORED_DIRS.has(entry.name)) {
-        const sub = scanTree(fullPath, baseDir);
+        const sub = scanTree(fullPath, baseDir, scanOptions);
         violations = violations.concat(sub.violations);
         fileStats = fileStats.concat(sub.fileStats);
         totalHooks += sub.totalHooks;
@@ -121,7 +131,7 @@ export const scanTree = (targetDir, baseDir) => {
         totalHooks += hookMatches.length;
       }
 
-      const fileViolations = auditCode(content, fullPath, relPath);
+      const fileViolations = auditCode(content, fullPath, relPath, { patternRegistry });
       violations = violations.concat(fileViolations);
     }
   }
@@ -137,7 +147,8 @@ export const scanDirectory = (targetDir, baseDir) => {
 export const runAudit = (targetDir = 'src', options = {}) => {
   const cwd = process.cwd();
   const absoluteTarget = path.resolve(cwd, targetDir);
-  const { violations, fileStats, totalHooks } = scanTree(absoluteTarget, cwd);
+  const patternRegistry = createPatternRegistry();
+  const { violations, fileStats, totalHooks } = scanTree(absoluteTarget, cwd, { patternRegistry });
 
   const scannedFiles = fileStats.length;
   const totalLoc = fileStats.reduce((acc, f) => acc + f.lineCount, 0);
@@ -179,6 +190,8 @@ export const runAudit = (targetDir = 'src', options = {}) => {
   const contextAnalysis = calculateTokenBurnAnalytics(fileStats, options);
   const hotspots = calculateHotspots(violations, fileStats, 5);
   const aiSlop = calculateAiSlopScore(violations, scannedFiles);
+  const patterns = patternRegistry.resolveHarmonizationCandidates(hotspots);
+  const roadmap = buildRemediationRoadmap({ hotspots, violations, patterns });
 
   const report = {
     targetDir,
@@ -191,6 +204,8 @@ export const runAudit = (targetDir = 'src', options = {}) => {
     pillars,
     contextAnalysis,
     hotspots,
+    patterns,
+    roadmap,
     violations
   };
 
@@ -245,6 +260,8 @@ export {
   formatAsciiGrade,
   getReportCardAsciiLines,
   REPORT_CARD_ASCII,
+  formatPillarReactionBadgesTerminal,
+  formatPillarReactionBadgesMarkdown,
   buildGradeFPrompt,
   buildGradeDPrompt,
   buildGradeCPrompt,
@@ -253,8 +270,15 @@ export {
   buildHotspotsPrompt,
   buildMasterPrompt,
   formatPromptBox,
-  formatGroupedPromptViolations
+  formatGroupedPromptViolations,
+  createPatternRegistry,
+  buildRemediationRoadmap,
+  formatRoadmapSection,
+  formatRoadmapMarkdown,
+  buildSelfHealingRoadmapPrompt
 };
+
+export * from './audit/rules-predicates.js';
 
 export default {
   auditFile,
@@ -289,6 +313,8 @@ export default {
   formatAsciiGrade,
   getReportCardAsciiLines,
   REPORT_CARD_ASCII,
+  formatPillarReactionBadgesTerminal,
+  formatPillarReactionBadgesMarkdown,
   PILLARS,
   RULE_REGISTRY,
   buildGradeFPrompt,
@@ -299,5 +325,10 @@ export default {
   buildHotspotsPrompt,
   buildMasterPrompt,
   formatPromptBox,
-  formatGroupedPromptViolations
+  formatGroupedPromptViolations,
+  createPatternRegistry,
+  buildRemediationRoadmap,
+  formatRoadmapSection,
+  formatRoadmapMarkdown,
+  buildSelfHealingRoadmapPrompt
 };

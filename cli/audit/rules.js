@@ -18,10 +18,11 @@ import {
   checkExtendedTextPatterns,
   createExtendedVisitors
 } from './extended-visitors.js';
+import { createPatternVisitors } from './pattern-detector.js';
 
 export { PILLARS, RULE_REGISTRY };
 
-export const auditCode = (content, filePath, relativePath) => {
+export const auditCode = (content, filePath, relativePath, options = {}) => {
   const violations = [];
   const lines = content.split('\n');
   const lineCount = lines.length;
@@ -132,9 +133,12 @@ export const auditCode = (content, filePath, relativePath) => {
   const visitors = createAstVisitors({ relativePath, violations });
   const slopVisitors = createAiSlopVisitors({ relativePath, violations });
   const extendedVisitors = createExtendedVisitors({ relativePath, violations });
+  const patternVisitors = options.patternRegistry
+    ? createPatternVisitors(options.patternRegistry, relativePath)
+    : {};
 
   const mergedVisitors = { ...visitors };
-  for (const visitorSet of [slopVisitors, extendedVisitors]) {
+  for (const visitorSet of [slopVisitors, extendedVisitors, patternVisitors]) {
     for (const [key, fn] of Object.entries(visitorSet)) {
       if (mergedVisitors[key]) {
         const orig = mergedVisitors[key];

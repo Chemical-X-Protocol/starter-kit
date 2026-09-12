@@ -1,5 +1,8 @@
 import { groupViolationsBySeverity } from './reporter.js';
-import { PILLAR_EMOJIS } from './reporter-utils.js';
+import {
+  PILLAR_EMOJIS,
+  formatPillarReactionBadgesMarkdown
+} from './reporter-utils.js';
 
 export {
   parseGitRemoteUrl,
@@ -129,6 +132,11 @@ export const generateDiscussionContent = (report, username, projectName = 'Codeb
   lines.push('');
   lines.push('## 1. 7-Pillar Architectural Matrix');
   lines.push('');
+  const reactionStrip = formatPillarReactionBadgesMarkdown(pillars);
+  if (reactionStrip) {
+    lines.push(`> **Pillar Reaction Badges:** ${reactionStrip}`);
+    lines.push('');
+  }
   lines.push('| Pillar | Status | Hazards |');
   lines.push('| :--- | :---: | :---: |');
 
@@ -263,7 +271,7 @@ export const generateTransformationDiscussionContent = (
   lines.push('');
   lines.push('## 1. Before vs. After Metric Comparison');
   lines.push('');
-  lines.push('| Metric | Before (Baseline) | After (Refactored) | Delta |');
+  lines.push('| Metric | Before (Baseline Floor) | After (Refactored) | Delta |');
   lines.push('| :--- | :---: | :---: | :---: |');
   lines.push(`| **Molecular Health (MHI)** | ${scoreBefore} / 100 (${beforeSnapshot.health.grade}) | ${scoreAfter} / 100 (${afterSnapshot.health.grade}) | ${formatDelta(scoreDelta)} |`);
   const slopBefore = beforeSnapshot.aiSlop?.score ?? 100;
@@ -283,6 +291,11 @@ export const generateTransformationDiscussionContent = (
   lines.push('');
   lines.push('## 2. 7-Pillar Progression');
   lines.push('');
+  const afterReactionStrip = formatPillarReactionBadgesMarkdown(afterSnapshot.pillars);
+  if (afterReactionStrip) {
+    lines.push(`> **Latest Reaction Badges:** ${afterReactionStrip}`);
+    lines.push('');
+  }
   lines.push('| Pillar | Before Status | After Status | Progression |');
   lines.push('| :--- | :---: | :---: | :---: |');
 
