@@ -96,4 +96,35 @@ jobs:
         with:
           name: chemical-x-audit-report
           path: AUDIT_REPORT.md
+
+      - name: Post Architectural Audit Comment on PR
+        if: always() && github.event_name == 'pull_request' && hashFiles('AUDIT_REPORT.md') != ''
+        continue-on-error: true
+        env:
+          GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: \${{ github.event.pull_request.number }}
+          REPO: \${{ github.repository }}
+        run: |
+          DISCUSSION_URL="\${{ vars.CHEMX_DISCUSSION_URL }}"
+          if [ -z "\$DISCUSSION_URL" ] && [ -f .chemx/discussion.json ]; then
+            DISCUSSION_URL=\$(node -e "try { const d = JSON.parse(require('fs').readFileSync('.chemx/discussion.json')); console.log(d.url || ''); } catch (e) {}")
+          fi
+          if [ -z "\$DISCUSSION_URL" ]; then
+            DISCUSSION_URL="https://github.com/orgs/Chemical-X-Protocol/discussions/categories/npx-chemx-audit"
+          fi
+
+          {
+            echo "<!-- chemical-x-audit-pr-comment -->"
+            echo "> 💬 **Architectural Discussion Topic:** [View Discussion & Community Showcase](\$DISCUSSION_URL)"
+            echo ""
+            cat AUDIT_REPORT.md
+          } > PR_COMMENT.md
+
+          EXISTING_COMMENT_ID=\$(gh api "repos/\$REPO/issues/\$PR_NUMBER/comments" --jq '.[] | select(.body | contains("<!-- chemical-x-audit-pr-comment -->")) | .id' | head -n 1)
+
+          if [ -n "\$EXISTING_COMMENT_ID" ]; then
+            gh api --method PATCH "repos/\$REPO/issues/comments/\$EXISTING_COMMENT_ID" -F body=@PR_COMMENT.md
+          else
+            gh pr comment "\$PR_NUMBER" --body-file PR_COMMENT.md
+          fi
 `;

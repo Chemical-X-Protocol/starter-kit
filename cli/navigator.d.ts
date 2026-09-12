@@ -31,6 +31,11 @@ export declare function extractPromptFromContent(content: string): string | null
 export declare function showPagedContent(content: string, promptText?: string | null): Promise<void>;
 export declare function showConversionMenu(onScaffold?: (() => Promise<void>) | null): Promise<void>;
 export declare function handleShareToDiscussions(report: AuditReport): Promise<void>;
+export interface DashboardBannerOptions {
+  readonly clear?: boolean;
+  readonly interactive?: boolean;
+}
+
 export declare function renderDashboardBanner(
   health: AuditReport['health'],
   metrics: AuditReport['metrics'],
@@ -38,7 +43,9 @@ export declare function renderDashboardBanner(
   critical: readonly unknown[],
   highMediumCount: number,
   low: readonly unknown[],
-  contextAnalysis?: AuditReport['contextAnalysis'] | null
+  contextAnalysis?: AuditReport['contextAnalysis'] | null,
+  aiSlop?: AuditReport['aiSlop'] | null,
+  options?: DashboardBannerOptions
 ): void;
 export declare function runInteractiveAuditNavigator(
   report: AuditReport,

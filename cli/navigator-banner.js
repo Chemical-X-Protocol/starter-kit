@@ -38,9 +38,11 @@ export const renderDashboardBanner = (
   highMediumCount,
   low,
   contextAnalysis = null,
-  aiSlop = null
+  aiSlop = null,
+  options = {}
 ) => {
-  if (process.stdout.isTTY) console.clear();
+  const shouldClear = options.clear ?? Boolean(options.interactive && process.stdout.isTTY);
+  if (shouldClear && process.stdout.isTTY) console.clear();
   process.stdout.write(getChemicalXAsciiBanner(health.grade));
 
   const gColor = resolveGradeColor(health.grade);

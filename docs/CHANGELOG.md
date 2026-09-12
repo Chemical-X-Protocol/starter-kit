@@ -6,10 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [2026-09-12]
 
+### Added
+- Added automated pull request comment step to Chemical X Gatekeeper workflows (`.github/workflows/chemx-audit.yml`, `blueprints/workflows/chemx-audit.yml`, `cli/installer-templates.js`) that renders the full audit report with an architectural discussion topic link, updating existing PR comments idempotently.
+
 ### Fixed
-- Added dependency installation step (`npm ci` or `npm install`) to GitHub Actions CI workflows (`.github/workflows/chemx-audit.yml`, `blueprints/workflows/chemx-audit.yml`, `cli/installer-templates.js`) to resolve `@babel/parser` and runtime dependencies before running `chemx audit`.
 - Fixed GitHub Actions runner failure in `chemx-audit.yml` workflows by removing `cache: npm` when no package lockfile exists.
 - Upgraded runner `node-version` from deprecated 20 to 22 across CI workflows and installer templates (`.github/workflows/chemx-audit.yml`, `blueprints/workflows/chemx-audit.yml`, `cli/installer-templates.js`).
+- Standardized non-interactive CLI audit mode to output the clean Gamer HUD scorecard banner without interactive menu options.
+- Preserved clean stdout in workflows by writing markdown reports to `--output` files without dumping raw markdown to the terminal.
+- Replaced top-level synchronous config directory creation in `cli/license.js` with lazy `ensureConfigDir` and `toResultSync` Result Tuple pattern.
 
 ## [2026-09-08]
 

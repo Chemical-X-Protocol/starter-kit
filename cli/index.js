@@ -9,7 +9,8 @@ import {
   generateMarkdownReport,
   saveAuditSnapshot,
   copyToClipboard,
-  buildMasterPrompt
+  buildMasterPrompt,
+  groupViolationsBySeverity
 } from './audit.js';
 import {
   runScaffold,
@@ -23,6 +24,7 @@ import {
   showConversionMenu,
   handleShareToDiscussions
 } from './navigator.js';
+import { renderDashboardBanner } from './navigator-banner.js';
 import {
   isGradeBelowMinimum,
   evaluateAuditFailure,
@@ -96,15 +98,11 @@ export const runAudit = async (customDir = null, isCli = false) => {
     return report;
   }
 
-  if (isMarkdown) {
+  if (isMarkdown && !outputFile) {
     const md = generateMarkdownReport(report);
     process.stdout.write(md + '\n');
     if (isCli) process.exit(hasFailingViolations ? 1 : 0);
     return report;
-  }
-
-  if (outputFile) {
-    process.stdout.write(`\x1b[32m✔ Exported markdown audit report to:\x1b[0m ${outputFile}\n\n`);
   }
 
   if (isCli) {
@@ -128,9 +126,25 @@ export const runAudit = async (customDir = null, isCli = false) => {
         handleReAudit
       );
     } else {
-      process.stdout.write(formatTerminalReport(report));
-      if (isInteractive && isUnroll) {
-        await showConversionMenu(() => runScaffold(undefined, rawArgs, runAudit));
+      if (isUnroll) {
+        process.stdout.write(formatTerminalReport(report));
+        if (isInteractive) {
+          await showConversionMenu(() => runScaffold(undefined, rawArgs, runAudit));
+        }
+      } else {
+        const { critical, high, medium, low } = groupViolationsBySeverity(report.violations);
+        const highMediumCount = high.length + medium.length;
+        renderDashboardBanner(
+          report.health,
+          report.metrics,
+          report.violations,
+          critical,
+          highMediumCount,
+          low,
+          report.contextAnalysis,
+          report.aiSlop,
+          { clear: false }
+        );
       }
     }
 

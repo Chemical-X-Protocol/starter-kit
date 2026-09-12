@@ -100,6 +100,8 @@ export const evaluateAuditFailure = (conditions = []) => {
 
 export const isNonInteractiveSession = (rawArgs, env = process.env) => {
   const hasCliFlag = NON_INTERACTIVE_FLAGS.some((flag) => rawArgs.includes(flag));
+  const hasOutputFlag = rawArgs.some((arg) => arg.startsWith('--output=') || arg.startsWith('-o='));
+  const hasFormatFlag = rawArgs.includes('--markdown') || rawArgs.includes('--md') || rawArgs.includes('--json');
   const hasCiEnv = Boolean(env.CI || env.GIT_DIR);
-  return hasCliFlag || hasCiEnv;
+  return hasCliFlag || hasOutputFlag || hasFormatFlag || hasCiEnv;
 };

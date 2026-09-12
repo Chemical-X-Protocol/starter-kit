@@ -79,7 +79,7 @@ export const runInteractiveAuditNavigator = async (initialReport, onScaffold = n
   let activeGrades = buildActiveGrades(report);
   let actions = buildDashboardActionGroups({ report, onScaffold, onRerun: handleRerun });
 
-  renderDashboardBanner(health, metrics, violations, critical, highMediumCount, low, contextAnalysis, aiSlop);
+  renderDashboardBanner(health, metrics, violations, critical, highMediumCount, low, contextAnalysis, aiSlop, { interactive: true });
 
   const shouldPublish = await confirmAction(
     "Publish audit report and promote your project to our GitHub Discussions Audits Forum?",
@@ -93,7 +93,7 @@ export const runInteractiveAuditNavigator = async (initialReport, onScaffold = n
   }
 
   while (true) {
-    renderDashboardBanner(health, metrics, violations, critical, highMediumCount, low, contextAnalysis, aiSlop);
+    renderDashboardBanner(health, metrics, violations, critical, highMediumCount, low, contextAnalysis, aiSlop, { interactive: true, clear: true });
 
     const guardrailsInstalled = areGuardrailsInstalled(process.cwd());
     const topActions = [];

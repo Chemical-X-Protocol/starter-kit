@@ -9,6 +9,7 @@ import {
   promptQuestion,
   openBrowser
 } from './terminal.js';
+import { toResultSync } from './audit/rules-helpers.js';
 
 export const CONFIG_DIR = path.join(os.homedir(), '.chemical-x');
 export const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
@@ -20,14 +21,14 @@ export const URL_SPONSOR = 'https://github.com/sponsors/Chemical-X-Protocol';
 export const URL_STANDARD = 'https://mycompassconsulting.com/buy/chemical-x/standard';
 export const URL_MASTER = 'https://mycompassconsulting.com/buy/chemical-x/master';
 
-if (!fs.existsSync(CONFIG_DIR)) {
-  try {
-    fs.mkdirSync(CONFIG_DIR, { recursive: true });
-  } catch (err) {
-    const error = err instanceof Error ? err : new Error(String(err));
-    process.stderr.write(`Failed to create config directory: ${error.message}\n`);
+export const ensureConfigDir = () => {
+  if (fs.existsSync(CONFIG_DIR)) return true;
+  const [, err] = toResultSync(() => fs.mkdirSync(CONFIG_DIR, { recursive: true }));
+  if (err) {
+    return false;
   }
-}
+  return true;
+};
 
 export const getOrCreateDeviceId = () => {
   if (fs.existsSync(DEVICE_FILE)) {
@@ -40,6 +41,7 @@ export const getOrCreateDeviceId = () => {
     }
   }
   const newId = `cli_${Math.random().toString(36).substring(2, 12)}_${Date.now()}`;
+  ensureConfigDir();
   try {
     fs.writeFileSync(DEVICE_FILE, newId, 'utf-8');
   } catch (err) {
@@ -62,6 +64,7 @@ export const getCachedLicenseKey = () => {
 };
 
 export const saveLicenseKey = (licenseKey) => {
+  ensureConfigDir();
   try {
     fs.writeFileSync(
       CONFIG_FILE,
