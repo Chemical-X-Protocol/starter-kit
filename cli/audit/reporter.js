@@ -108,9 +108,9 @@ export const formatTerminalReport = (report) => {
   lines.push(formatScorecardSection(report, topColor));
   lines.push(formatContextAnalysisSection(report, topColor));
   lines.push(formatPillarsSection(report, topColor));
-  lines.push(formatHotspotsSection(report, topColor));
+  lines.push(formatHotspotsSection(report, topColor, { includePrompt: false }));
   lines.push(formatDirectoryDistributionSection(report, topColor));
-  lines.push(formatAiSlopSection(report, topColor));
+  lines.push(formatAiSlopSection(report, topColor, { includePrompt: false }));
   lines.push(formatCriticalSection(report));
   lines.push(formatHighMediumSection(report));
   lines.push(formatLowSection(report));

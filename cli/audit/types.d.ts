@@ -123,10 +123,15 @@ export declare function calculateAiSlopScore(violations: readonly HazardViolatio
 export * from './reporter';
 export * from './social';
 
-export declare function buildGradeFPrompt(report: AuditReport): string;
-export declare function buildGradeDPrompt(report: AuditReport): string;
-export declare function buildGradeCPrompt(report: AuditReport): string;
-export declare function buildGradeBPrompt(report: AuditReport): string;
+export interface PromptOptions {
+  readonly excludeAiSlop?: boolean;
+}
+
+export declare function formatGroupedPromptViolations(violations?: readonly HazardViolation[]): string[];
+export declare function buildGradeFPrompt(report: AuditReport, options?: PromptOptions): string;
+export declare function buildGradeDPrompt(report: AuditReport, options?: PromptOptions): string;
+export declare function buildGradeCPrompt(report: AuditReport, options?: PromptOptions): string;
+export declare function buildGradeBPrompt(report: AuditReport, options?: PromptOptions): string;
 export declare function buildAiSlopPrompt(report: AuditReport): string;
 export declare function buildHotspotsPrompt(report: AuditReport): string;
 export declare function buildMasterPrompt(report: AuditReport): string;

@@ -166,7 +166,8 @@ export const formatPillarsSection = (report, themeColor = null) => {
   return lines.join('\n');
 };
 
-export const formatHotspotsSection = (report, themeColor = null) => {
+export const formatHotspotsSection = (report, themeColor = null, options = {}) => {
+  const { includePrompt = true } = typeof options === 'boolean' ? { includePrompt: options } : options;
   const { hotspots } = report;
   const sectionColor = themeColor || resolveTopSectionColor(report);
   const lines = [];
@@ -184,9 +185,11 @@ export const formatHotspotsSection = (report, themeColor = null) => {
     }
   }
 
-  const promptHotspots = buildHotspotsPrompt(report);
-  if (promptHotspots) {
-    lines.push(formatPromptBox('🤖 AI AGENT REFACTORING PROMPT (MONOLITH DECOMPOSITION)', promptHotspots));
+  if (includePrompt) {
+    const promptHotspots = buildHotspotsPrompt(report);
+    if (promptHotspots) {
+      lines.push(formatPromptBox('🤖 AI AGENT REFACTORING PROMPT (MONOLITH DECOMPOSITION)', promptHotspots));
+    }
   }
 
   lines.push(`${sectionColor}======================================================================${RESET}\n`);
@@ -221,7 +224,8 @@ export const formatContextAnalysisSection = (report, themeColor = null) => {
   return lines.join('\n');
 };
 
-export const formatAiSlopSection = (report, themeColor = null) => {
+export const formatAiSlopSection = (report, themeColor = null, options = {}) => {
+  const { includePrompt = true } = typeof options === 'boolean' ? { includePrompt: options } : options;
   const { aiSlop, violations = [] } = report;
   const slopViolations = violations.filter(isSlopViolation);
   const sectionColor = themeColor || resolveTopSectionColor(report);
@@ -243,9 +247,11 @@ export const formatAiSlopSection = (report, themeColor = null) => {
     lines.push(renderGroupedViolationsTerminal(slopViolations));
   }
 
-  const promptSlop = buildAiSlopPrompt(report);
-  if (promptSlop) {
-    lines.push(formatPromptBox('🤖 AI AGENT REFACTORING PROMPT (AI SLOP & AUTHENTICITY)', promptSlop));
+  if (includePrompt) {
+    const promptSlop = buildAiSlopPrompt(report);
+    if (promptSlop) {
+      lines.push(formatPromptBox('🤖 AI AGENT REFACTORING PROMPT (AI SLOP & AUTHENTICITY)', promptSlop));
+    }
   }
 
   lines.push(`${sectionColor}======================================================================${RESET}\n`);

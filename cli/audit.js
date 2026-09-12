@@ -40,6 +40,17 @@ import {
   getReportCardAsciiLines,
   REPORT_CARD_ASCII
 } from './audit/reporter.js';
+import {
+  buildGradeFPrompt,
+  buildGradeDPrompt,
+  buildGradeCPrompt,
+  buildGradeBPrompt,
+  buildAiSlopPrompt,
+  buildHotspotsPrompt,
+  buildMasterPrompt,
+  formatPromptBox,
+  formatGroupedPromptViolations
+} from './audit/prompts.js';
 
 const IGNORED_DIRS = new Set([
   'node_modules',
@@ -233,7 +244,16 @@ export {
   getAsciiGradeLines,
   formatAsciiGrade,
   getReportCardAsciiLines,
-  REPORT_CARD_ASCII
+  REPORT_CARD_ASCII,
+  buildGradeFPrompt,
+  buildGradeDPrompt,
+  buildGradeCPrompt,
+  buildGradeBPrompt,
+  buildAiSlopPrompt,
+  buildHotspotsPrompt,
+  buildMasterPrompt,
+  formatPromptBox,
+  formatGroupedPromptViolations
 };
 
 export default {
@@ -270,5 +290,14 @@ export default {
   getReportCardAsciiLines,
   REPORT_CARD_ASCII,
   PILLARS,
-  RULE_REGISTRY
+  RULE_REGISTRY,
+  buildGradeFPrompt,
+  buildGradeDPrompt,
+  buildGradeCPrompt,
+  buildGradeBPrompt,
+  buildAiSlopPrompt,
+  buildHotspotsPrompt,
+  buildMasterPrompt,
+  formatPromptBox,
+  formatGroupedPromptViolations
 };

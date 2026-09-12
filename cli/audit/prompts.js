@@ -1,35 +1,108 @@
+import { groupViolationsByRule } from './reporter-grouping.js';
+
 const CYAN = '\x1b[38;2;98;201;255m';
 const BOLD = '\x1b[1m';
 const DIM = '\x1b[2m';
 const RESET = '\x1b[0m';
 
-export const buildGradeFPrompt = (report) => {
-  const { violations, hotspots } = report;
-  const critical = violations.filter((v) => v.severity === 'CRITICAL');
+const buildPathTree = (violations) => {
+  const root = { dirs: new Map(), files: new Map() };
+
+  for (const v of violations) {
+    const rawPath = v.filePath || '';
+    const normalized = rawPath.replace(/\\/g, '/').replace(/^\.\//, '');
+    const segments = normalized.split('/');
+    const fileName = segments.pop();
+
+    let current = root;
+    for (const seg of segments) {
+      const segName = seg.endsWith('/') ? seg : `${seg}/`;
+      if (!current.dirs.has(segName)) {
+        current.dirs.set(segName, { dirs: new Map(), files: new Map() });
+      }
+      current = current.dirs.get(segName);
+    }
+
+    if (!current.files.has(fileName)) {
+      current.files.set(fileName, []);
+    }
+    const loc = v.column ? `${v.line}:${v.column}` : `${v.line}`;
+    current.files.get(fileName).push(loc);
+  }
+
+  return root;
+};
+
+const renderTreeLines = (node, depth = 0) => {
+  const lines = [];
+  const indent = '   ' + '  '.repeat(depth);
+
+  const sortedDirs = Array.from(node.dirs.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  for (const [dirName, childNode] of sortedDirs) {
+    lines.push(`${indent}* ${dirName}`);
+    const childLines = renderTreeLines(childNode, depth + 1);
+    lines.push(...childLines);
+  }
+
+  const sortedFiles = Array.from(node.files.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  for (const [fileName, locs] of sortedFiles) {
+    const uniqueLocs = Array.from(new Set(locs)).join(', ');
+    lines.push(`${indent}- \`${fileName}:${uniqueLocs}\``);
+  }
+
+  return lines;
+};
+
+export const formatGroupedPromptViolations = (violations = []) => {
+  const hasNoViolations = violations.length === 0;
+  if (hasNoViolations) return [];
+
+  const ruleGroups = groupViolationsByRule(violations);
+  const lines = [];
+
+  ruleGroups.forEach((rg, idx) => {
+    const countLabel = rg.total === 1 ? '1 item' : `${rg.total} items`;
+    lines.push(`${idx + 1}. [${rg.rule}] (${countLabel})`);
+    lines.push(`   Hazard: ${rg.hazard}`);
+    lines.push(`   Directive: ${rg.directive}`);
+    lines.push('   Locations:');
+
+    const tree = buildPathTree(rg.violations);
+    const treeLines = renderTreeLines(tree, 0);
+    lines.push(...treeLines);
+    lines.push('');
+  });
+
+  return lines;
+};
+
+export const buildGradeFPrompt = (report, options = {}) => {
+  const { excludeAiSlop = false } = options;
+  const { violations = [], hotspots = [] } = report;
+  const critical = violations
+    .filter((v) => v.severity === 'CRITICAL')
+    .filter((v) => (excludeAiSlop ? !v.isAiSlop : true));
   const extremeMonoliths = hotspots.filter((h) => h.lineCount >= 2000);
 
-  if (critical.length === 0 && extremeMonoliths.length === 0) return '';
+  const hasNoCritical = critical.length === 0;
+  const hasNoMonoliths = extremeMonoliths.length === 0;
+  if (hasNoCritical && hasNoMonoliths) return '';
 
   const lines = [];
   lines.push('Act as a Principal Systems Architect. Surgically refactor the following Grade F Critical Context Hazards in our codebase according to Chemical X Molecular Architecture Standards:\n');
 
   if (extremeMonoliths.length > 0) {
     lines.push('### EXTREME MONOLITHS (>= 2,000 lines of code) : MONOLITH DECOMPOSITION');
+    lines.push('Action: Decompose into crystalline single-responsibility capsules (< 100 lines per molecule). Convert top-level view into a declarative Table-of-Contents view.\n');
     extremeMonoliths.forEach((h, i) => {
       lines.push(`${i + 1}. File: \`${h.filePath}\` (${h.lineCount} lines)`);
-      lines.push('   Action: Decompose this monolith into crystalline single-responsibility capsules (< 100 lines per molecule). Convert top-level view into a declarative Table-of-Contents view.');
     });
     lines.push('');
   }
 
   if (critical.length > 0) {
     lines.push('### CRITICAL AST VIOLATIONS');
-    critical.forEach((v, i) => {
-      lines.push(`${i + 1}. \`${v.filePath}:${v.line}:${v.column}\` [${v.rule}]`);
-      lines.push(`   Hazard: ${v.hazard}`);
-      lines.push(`   Directive: ${v.directive}`);
-    });
-    lines.push('');
+    lines.push(...formatGroupedPromptViolations(critical));
   }
 
   lines.push('### STRICT EXECUTION RULES:');
@@ -42,33 +115,33 @@ export const buildGradeFPrompt = (report) => {
   return lines.join('\n');
 };
 
-export const buildGradeDPrompt = (report) => {
-  const { violations, hotspots } = report;
-  const high = violations.filter((v) => v.severity === 'HIGH');
+export const buildGradeDPrompt = (report, options = {}) => {
+  const { excludeAiSlop = false } = options;
+  const { violations = [], hotspots = [] } = report;
+  const high = violations
+    .filter((v) => v.severity === 'HIGH')
+    .filter((v) => (excludeAiSlop ? !v.isAiSlop : true));
   const severeMonoliths = hotspots.filter((h) => h.lineCount >= 1000 && h.lineCount < 2000);
 
-  if (high.length === 0 && severeMonoliths.length === 0) return '';
+  const hasNoHigh = high.length === 0;
+  const hasNoMonoliths = severeMonoliths.length === 0;
+  if (hasNoHigh && hasNoMonoliths) return '';
 
   const lines = [];
   lines.push('Act as a Principal Systems Architect. Refactor the following Grade D High-Severity Architectural Debts according to Chemical X Molecular Architecture Standards:\n');
 
   if (severeMonoliths.length > 0) {
     lines.push('### SEVERE MONOLITHS (1,000 - 1,999 lines of code)');
+    lines.push('Action: Extract sub-features into isolated molecule capsules (< 100 lines of code) and domain composables.\n');
     severeMonoliths.forEach((h, i) => {
       lines.push(`${i + 1}. File: \`${h.filePath}\` (${h.lineCount} lines)`);
-      lines.push('   Action: Extract sub-features into isolated molecule capsules (< 100 lines of code) and domain composables.');
     });
     lines.push('');
   }
 
   if (high.length > 0) {
     lines.push('### HIGH SEVERITY VIOLATIONS');
-    high.forEach((v, i) => {
-      lines.push(`${i + 1}. \`${v.filePath}:${v.line}:${v.column}\` [${v.rule}]`);
-      lines.push(`   Hazard: ${v.hazard}`);
-      lines.push(`   Directive: ${v.directive}`);
-    });
-    lines.push('');
+    lines.push(...formatGroupedPromptViolations(high));
   }
 
   lines.push('### STRICT EXECUTION RULES:');
@@ -79,33 +152,33 @@ export const buildGradeDPrompt = (report) => {
   return lines.join('\n');
 };
 
-export const buildGradeCPrompt = (report) => {
-  const { violations, hotspots } = report;
-  const medium = violations.filter((v) => v.severity === 'MEDIUM');
+export const buildGradeCPrompt = (report, options = {}) => {
+  const { excludeAiSlop = false } = options;
+  const { violations = [], hotspots = [] } = report;
+  const medium = violations
+    .filter((v) => v.severity === 'MEDIUM')
+    .filter((v) => (excludeAiSlop ? !v.isAiSlop : true));
   const warningMonoliths = hotspots.filter((h) => h.lineCount >= 500 && h.lineCount < 1000);
 
-  if (medium.length === 0 && warningMonoliths.length === 0) return '';
+  const hasNoMedium = medium.length === 0;
+  const hasNoMonoliths = warningMonoliths.length === 0;
+  if (hasNoMedium && hasNoMonoliths) return '';
 
   const lines = [];
   lines.push('Act as a Senior Frontend Engineer. Refactor the following Grade C Medium-Severity Technical Debts according to Chemical X Molecular Architecture Standards:\n');
 
   if (warningMonoliths.length > 0) {
     lines.push('### WARNING MONOLITHS (500 - 999 lines of code)');
+    lines.push('Action: Bring file under 500 line budget by extracting helper functions, types, and child molecules.\n');
     warningMonoliths.forEach((h, i) => {
       lines.push(`${i + 1}. File: \`${h.filePath}\` (${h.lineCount} lines)`);
-      lines.push('   Action: Bring file under 500 line budget by extracting helper functions, types, and child molecules.');
     });
     lines.push('');
   }
 
   if (medium.length > 0) {
     lines.push('### MEDIUM SEVERITY VIOLATIONS');
-    medium.forEach((v, i) => {
-      lines.push(`${i + 1}. \`${v.filePath}:${v.line}:${v.column}\` [${v.rule}]`);
-      lines.push(`   Hazard: ${v.hazard}`);
-      lines.push(`   Directive: ${v.directive}`);
-    });
-    lines.push('');
+    lines.push(...formatGroupedPromptViolations(medium));
   }
 
   lines.push('### STRICT EXECUTION RULES:');
@@ -116,22 +189,21 @@ export const buildGradeCPrompt = (report) => {
   return lines.join('\n');
 };
 
-export const buildGradeBPrompt = (report) => {
-  const { violations } = report;
-  const low = violations.filter((v) => v.severity === 'LOW');
+export const buildGradeBPrompt = (report, options = {}) => {
+  const { excludeAiSlop = false } = options;
+  const { violations = [] } = report;
+  const low = violations
+    .filter((v) => v.severity === 'LOW')
+    .filter((v) => (excludeAiSlop ? !v.isAiSlop : true));
 
-  if (low.length === 0) return '';
+  const hasNoLow = low.length === 0;
+  if (hasNoLow) return '';
 
   const lines = [];
   lines.push('Act as a Clean Code Specialist. Clean up the following Grade B Low-Severity Hygiene Issues according to Chemical X standards:\n');
 
   lines.push('### LOW HYGIENE VIOLATIONS');
-  low.forEach((v, i) => {
-    lines.push(`${i + 1}. \`${v.filePath}:${v.line}:${v.column}\` [${v.rule}]`);
-    lines.push(`   Hazard: ${v.hazard}`);
-    lines.push(`   Directive: ${v.directive}`);
-  });
-  lines.push('');
+  lines.push(...formatGroupedPromptViolations(low));
 
   lines.push('### STRICT EXECUTION RULES:');
   lines.push('1. Typography Hygiene: Replace all em dashes with standard hyphens (-) or colons (:).');
@@ -145,18 +217,14 @@ export const buildAiSlopPrompt = (report) => {
   const { violations = [] } = report;
   const slopViolations = violations.filter((v) => Boolean(v.isAiSlop));
 
-  if (slopViolations.length === 0) return '';
+  const hasNoSlop = slopViolations.length === 0;
+  if (hasNoSlop) return '';
 
   const lines = [];
   lines.push('Act as a Clean Code Specialist and Code Authenticity Guardian. Eliminate the following AI Slop and conversational artifacts from our codebase according to Chemical X standards:\n');
 
   lines.push('### AI SLOP & CODE AUTHENTICITY VIOLATIONS');
-  slopViolations.forEach((v, i) => {
-    lines.push(`${i + 1}. \`${v.filePath}:${v.line}:${v.column}\` [${v.rule}]`);
-    lines.push(`   Hazard: ${v.hazard}`);
-    lines.push(`   Directive: ${v.directive}`);
-  });
-  lines.push('');
+  lines.push(...formatGroupedPromptViolations(slopViolations));
 
   lines.push('### STRICT EXECUTION RULES:');
   lines.push('1. Conversational Residue: Completely remove leaked AI conversational preambles, assistant markdown code fences, and pleasantry comments.');
@@ -173,16 +241,17 @@ export const buildHotspotsPrompt = (report) => {
   const { hotspots = [] } = report;
   const monolithHotspots = hotspots.filter((h) => h.isMonolith || h.lineCount > 500);
 
-  if (monolithHotspots.length === 0) return '';
+  const hasNoMonoliths = monolithHotspots.length === 0;
+  if (hasNoMonoliths) return '';
 
   const lines = [];
   lines.push('Act as a Principal Systems Architect. Surgically decompose the following monolithic hotspot files according to Chemical X Molecular Architecture Standards:\n');
 
   lines.push('### MONOLITHIC REFACTORING HOTSPOTS');
+  lines.push('Action: Decompose into single-responsibility crystalline molecule capsules (< 100 lines) and dedicated domain composables.\n');
   monolithHotspots.forEach((h, i) => {
     const tier = h.monolithTier ? `[${h.monolithTier} MONOLITH]` : '[MONOLITH]';
     lines.push(`${i + 1}. File: \`${h.filePath}\` (${h.lineCount} lines, ${h.violationCount} hazards) ${tier}`);
-    lines.push('   Action: Decompose into single-responsibility crystalline molecule capsules (< 100 lines) and dedicated domain composables.');
   });
   lines.push('');
 
@@ -198,15 +267,16 @@ export const buildHotspotsPrompt = (report) => {
 
 export const buildMasterPrompt = (report) => {
   const sections = [
-    buildGradeFPrompt(report),
-    buildGradeDPrompt(report),
-    buildGradeCPrompt(report),
-    buildGradeBPrompt(report),
+    buildGradeFPrompt(report, { excludeAiSlop: true }),
+    buildGradeDPrompt(report, { excludeAiSlop: true }),
+    buildGradeCPrompt(report, { excludeAiSlop: true }),
+    buildGradeBPrompt(report, { excludeAiSlop: true }),
     buildAiSlopPrompt(report),
     buildHotspotsPrompt(report)
   ].filter(Boolean);
 
-  if (sections.length === 0) return '';
+  const hasNoSections = sections.length === 0;
+  if (hasNoSections) return '';
 
   const header = `Act as a Principal Systems Architect. Execute a phased architectural refactoring of our codebase according to Chemical X Molecular Architecture Standards.\n\n`;
   return header + sections.join('\n\n---\n\n');
