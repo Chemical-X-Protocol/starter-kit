@@ -1,0 +1,75 @@
+.m-chemx-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.7rem;
+  text-decoration: none;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: #cbd5e1;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+
+  &:hover {
+    border-color: rgba(98, 201, 255, 0.4);
+    transform: scale(1.02);
+    color: #f8fafc;
+  }
+
+  &__dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background-color: #a3e635;
+    box-shadow: 0 0 8px rgba(163, 230, 53, 0.6);
+    animation: chemx-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  &__label {
+    font-weight: 500;
+  }
+
+  &__grade {
+    padding: 0.1rem 0.4rem;
+    border-radius: 9999px;
+    font-weight: 700;
+    font-size: 0.65rem;
+    letter-spacing: -0.02em;
+
+    &--a {
+      background: rgba(163, 230, 53, 0.15);
+      color: #a3e635;
+      border: 1px solid rgba(163, 230, 53, 0.3);
+    }
+    &--b {
+      background: rgba(98, 201, 255, 0.15);
+      color: #62c9ff;
+      border: 1px solid rgba(98, 201, 255, 0.3);
+    }
+    &--c {
+      background: rgba(245, 158, 11, 0.15);
+      color: #f59e0b;
+      border: 1px solid rgba(245, 158, 11, 0.3);
+    }
+    &--d {
+      background: rgba(249, 115, 22, 0.15);
+      color: #f97316;
+      border: 1px solid rgba(249, 115, 22, 0.3);
+    }
+    &--f {
+      background: rgba(244, 63, 94, 0.15);
+      color: #f43f5e;
+      border: 1px solid rgba(244, 63, 94, 0.3);
+    }
+  }
+}
+
+@keyframes chemx-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.9); }
+}

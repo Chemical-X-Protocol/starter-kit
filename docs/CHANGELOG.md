@@ -19,17 +19,43 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [2026-09-11]
 
 ### Added
+- Appended Section 8 (Accessibility & Semantic Integrity), Section 9 (Security & Content Safety), Section 10 (Testing Discipline), and Section 11 (Naming Conventions) to Chemical X Molecular Architecture Directives (`AGENTS.md`).
+- Interactive `[  Re-Run   ]` dashboard action positioned directly below `[Full Report]` in the Audit Navigator (`cli/navigator.js`, `cli/navigator-actions.js`, `cli/navigator-menu.js`), enabling developers to rescan their codebase and dynamically refresh the Gamer HUD scorecard and grade drill-downs without restarting the CLI.
+- Compact directory and rule-based problem grouping engine (`cli/audit/reporter-grouping.js`, `cli/audit/reporter-grouping-markdown.js`, `cli/audit/reporter-grouping.d.ts`), clustering violations by directory and rule type to eliminate repetitive multi-line output bloat in audit reports.
+- `HAZARD DISTRIBUTION BY DIRECTORY` terminal scorecard (`formatDirectoryDistributionSection`) and Markdown directory rollup table (`formatDirectoryRollupMarkdown`) displaying total hazard density and severity breakdown per directory.
+- Compact location formatter (`formatCompactLocations`) clustering affected files and line numbers under folder badges.
+- Pure deterministic AI Slop Index (ASI) and code authenticity engine (`cli/audit/ai-slop-detector.js`) detecting LLM conversational preambles, leaked markdown fences, lazy truncation placeholders, shallow catch paranoia wrappers, redundant passthrough assignments, inline utility reinventions, and trivial echo comments.
+- Registered AI slop rules (`AI_SLOP_CONVERSATIONAL_ARTIFACT`, `AI_SLOP_LAZY_PLACEHOLDER`, `AI_SLOP_SHALLOW_CATCH`, `AI_SLOP_UTILITY_REINVENTION`, `AI_SLOP_ECHO_COMMENT`, `AI_SLOP_LAZY_ANY`, `AI_SLOP_REDUNDANT_PASSTHROUGH`) in `RULE_REGISTRY` (`cli/audit/rules-registry.js`).
+- Added `calculateAiSlopScore` to compute dedicated 0 to 100 authenticity score and letter grades (`A+` to `F`), isolating slop penalties from architectural Molecular Health Index (`cli/audit/metrics.js`).
+- Integrated AI Slop Index (ASI) metrics and dedicated audit section into full terminal report (`formatAiSlopSection` in `cli/audit/reporter.js`) and Markdown audit report (`cli/audit/reporter-markdown.js`).
+- Added Shields.io AI Slop badge and Before vs. After delta progression rows to GitHub Discussions shared social cards (`cli/audit/social.js`).
+- Added AI Slop score indicator to Gamer HUD banner (`cli/navigator-banner.js`), active grade navigator actions (`cli/navigator-actions.js`), and grade resolution helpers (`cli/navigator-grades.js`, `cli/navigator.js`).
 - Interactive Molecular Capsule Generator wizard for `npx chemx generate` (and aliases `capsule`, `add`), supporting Gum and ANSI fallbacks (`cli/generator.js`, `cli/generator.d.ts`).
 - Multi-framework scaffolding support for React 19 (`.tsx`), Vue 3.4+ (`.vue`), and Svelte 5 (`.svelte`) with scoped SCSS, controllers, and discriminated union types (`cli/generator-templates.js`).
 - CLI flags for non-interactive and fast capsule generation (`--tier`, `--framework`, `--dir`, `--lean`, `-y` / `--yes`).
+- Verified Chemical X Footer Badge command and generator (`npx chemx badge` / `cli/badge.js`), providing copyable snippets for Vue 3 SFC, React 19 TSX, Svelte 5, HTML/CSS, Markdown Shields, and SVG asset export.
+- Integrated `[   Badge   ]` action into the interactive Audit Navigator dashboard (`cli/navigator-actions.js`, `cli/navigator.js`, `cli/navigator-menu.js`).
+- Added `m-chemx-badge` blueprint capsule with Vue 3, React 19, SCSS, and TypeScript declarations (`blueprints/molecule-capsule/m-chemx-badge/`).
 
 ### Changed
+- Decomposed warning monolith `cli/audit/reporter.js` (513 lines to 125 lines) to eliminate Grade C medium severity technical debt, extracting single-purpose modules `cli/audit/reporter-banner.js` (75 lines), `cli/audit/reporter-sections.js` (238 lines), and `cli/audit/reporter-summary.js` (143 lines).
+- Co-located granular TypeScript declaration capsules (`cli/audit/reporter.d.ts`, `cli/audit/reporter-banner.d.ts`, `cli/audit/reporter-sections.d.ts`, `cli/audit/reporter-summary.d.ts`) all under 20 lines, updating `cli/audit/types.d.ts` to re-export domain capsules.
+- Extracted anonymous inline callbacks into named predicates and iterator handlers across terminal section formatters.
+- Preserved 100% backward-compatible re-exports in `cli/audit/reporter.js` for seamless consumption across CLI actions and tools.
+- Streamlined terminal reports (`formatTerminalReport`, `formatCriticalSection`, `formatHighMediumSection`, `formatLowSection`, `formatFailuresSection` in `cli/audit/reporter.js`) and grade drill-down views (`formatGradeFSection`, `formatGradeDSection`, `formatGradeCSection`, `formatGradeBSection` in `cli/audit/reporter-grades.js`) to display deduplicated rule descriptions and directives once with grouped directory location paths.
+- Streamlined Markdown audit report (`cli/audit/reporter-markdown.js`) Section 4 to group problems by directory and rule with concise location links, eliminating hundreds of repetitive table rows.
 - Conditioned `[  Prompt   ] 📋 Copy AI Prompt Fix to Clipboard` dashboard action to hide when the codebase earns a pristine Grade A+ with no pending refactoring prompt (`cli/navigator.js`, `cli/navigator-actions.js`).
 - Added early-return guard clause to `handleCopyPromptAction` preventing empty clipboard copy operations on pristine Grade A+ audits (`cli/navigator-actions.js`).
 
 ### Fixed
+- Remediated 22 AI Slop hazards across `cli/` and `cli/audit/` to restore AI Slop Index (ASI) from 31/100 (Grade F) to 100/100 (Grade A+):
+  - Fixed self-matching regex detection patterns in `cli/audit/ai-slop-detector.js` (`AI_SLOP_CONVERSATIONAL_ARTIFACT`) by assembling detection patterns from string token arrays.
+  - Replaced 10 shallow catch blocks in `cli/audit/social-git.js` with functional Result Tuple helpers (`safeSpawnSync` and `safeReadJson`) per Chemical X Section 2.C.
+  - Eliminated 10 shallow catch paranoia wrappers with normalized error diagnostics and explicit fallback returns across `cli/audit/history.js`, `cli/index.js`, `cli/license.js`, `cli/navigator-banner.js`, `cli/navigator-share.js`, and `cli/terminal.js`.
+- Fixed pre-commit hook installer failure (`ENOTDIR`) in git submodules and worktrees where `.git` is a pointer file rather than a directory by introducing `resolveGitHooksDir` to resolve `gitdir:` targets (`cli/installer.js`, `cli/installer.d.ts`).
 - Fixed missing `spawnSync` import from `node:child_process` in evaluation check prompt causing runtime reference error (`cli/license.js`).
 - Fixed typographical artifact (`and p`) in the interactive audit publication confirmation prompt across navigator and terminal handlers (`cli/navigator.js`, `cli/terminal.js`).
+
 
 ## [2026-09-10]
 

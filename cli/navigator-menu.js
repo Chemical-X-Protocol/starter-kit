@@ -51,6 +51,15 @@ const isChoiceMatchingItem = (cleanChoice) => (item) => {
   ) {
     return true;
   }
+  if (
+    item.key === "rerun" &&
+    (cleanChoice.includes("Re-Run") ||
+      cleanChoice.includes("Rerun") ||
+      cleanChoice.includes("Re-run") ||
+      cleanChoice.includes("Re-Audit"))
+  ) {
+    return true;
+  }
   if (item.key === "progress" && cleanChoice.includes("Progress")) return true;
   if (
     item.key === "share" &&
@@ -61,6 +70,12 @@ const isChoiceMatchingItem = (cleanChoice) => (item) => {
     return true;
   }
   if (item.key === "export" && cleanChoice.includes("Export")) return true;
+  if (
+    item.key === "badge" &&
+    (cleanChoice.includes("Badge") || cleanChoice.includes("Footer Badge"))
+  ) {
+    return true;
+  }
   if (
     item.key === "install" &&
     (cleanChoice.includes("Install") ||
@@ -110,6 +125,15 @@ const isEffectiveMatchingItem = (effective, exitIndex) => (item) => {
   if (
     item.key === "report" &&
     (effective === "report" || effective === "full report" || effective === "full")
+  ) {
+    return true;
+  }
+  if (
+    item.key === "rerun" &&
+    (effective === "rerun" ||
+      effective === "re-run" ||
+      effective === "r" ||
+      effective === "reaudit")
   ) {
     return true;
   }

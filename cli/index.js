@@ -24,18 +24,20 @@ import {
   handleShareToDiscussions
 } from './navigator.js';
 import { runInstallWizard } from './installer.js';
+import { runBadgeCommand } from './badge.js';
 
 const rawArgs = process.argv.slice(2);
 const invokedBin = path.basename(process.argv[1] || '');
 
 const loadProjectConfig = () => {
+  const cfgPath = path.resolve(process.cwd(), '.chemx', 'config.json');
+  if (!fs.existsSync(cfgPath)) return {};
   try {
-    const cfgPath = path.resolve(process.cwd(), '.chemx', 'config.json');
-    if (fs.existsSync(cfgPath)) {
-      return JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
-    }
-  } catch {}
-  return {};
+    return JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
+  } catch (err) {
+    const error = err instanceof Error ? err : new Error(String(err));
+    return {};
+  }
 };
 const isCreateInvoked =
   invokedBin.includes('create-chemx') || (rawArgs[0] && rawArgs[0] === 'create');
@@ -110,7 +112,16 @@ export const runAudit = async (customDir = null, isCli = false) => {
     const isInteractive = Boolean(process.stdin.isTTY && process.stdout.isTTY);
 
     if (isInteractive && !isUnroll) {
-      await runInteractiveAuditNavigator(report, () => runScaffold(undefined, rawArgs, runAudit));
+      const handleReAudit = () => {
+        const refreshed = executeAstAudit(targetDir, { outputFile, model, costPerMillion });
+        saveAuditSnapshot(refreshed);
+        return refreshed;
+      };
+      await runInteractiveAuditNavigator(
+        report,
+        () => runScaffold(undefined, rawArgs, runAudit),
+        handleReAudit
+      );
     } else {
       process.stdout.write(formatTerminalReport(report));
       if (isInteractive && isUnroll) {
@@ -165,6 +176,10 @@ const main = async () => {
     case 'capsule':
     case 'add':
       await runGenerateWizard(rawArgs.slice(1));
+      break;
+    case 'badge':
+    case 'badges':
+      await runBadgeCommand(rawArgs.slice(1));
       break;
     case 'help':
     case '--help':

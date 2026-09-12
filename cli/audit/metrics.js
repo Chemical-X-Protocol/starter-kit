@@ -7,6 +7,7 @@ export const calculateMolecularHealthScore = (violations, totalFiles) => {
 
   let penalty = 0;
   for (const v of violations) {
+    if (v.isAiSlop) continue;
     if (v.severity === 'CRITICAL') penalty += 8;
     else if (v.severity === 'HIGH') penalty += 4;
     else if (v.severity === 'MEDIUM') penalty += 2;
@@ -56,6 +57,7 @@ export const calculatePillarBreakdown = (violations) => {
   }
 
   for (const v of violations) {
+    if (v.isAiSlop) continue;
     const pillarName = v.pillar || PILLARS.PILLAR_1;
     if (!breakdown[pillarName]) {
       breakdown[pillarName] = {
@@ -177,3 +179,70 @@ export const calculateHotspots = (violations, fileStats, limit = 5) => {
 };
 
 export const calculateQuantumHealthScore = calculateMolecularHealthScore;
+
+export const calculateAiSlopScore = (violations, totalFiles) => {
+  const slopViolations = violations.filter((v) => v.isAiSlop);
+  if (totalFiles === 0) {
+    return {
+      score: 100,
+      grade: 'A+',
+      label: 'Pure Artisanal',
+      violationsCount: 0,
+      breakdown: { critical: 0, high: 0, medium: 0, low: 0 }
+    };
+  }
+
+  let penalty = 0;
+  let critical = 0;
+  let high = 0;
+  let medium = 0;
+  let low = 0;
+
+  for (const v of slopViolations) {
+    if (v.severity === 'CRITICAL') {
+      penalty += 10;
+      critical += 1;
+    } else if (v.severity === 'HIGH') {
+      penalty += 5;
+      high += 1;
+    } else if (v.severity === 'MEDIUM') {
+      penalty += 2;
+      medium += 1;
+    } else {
+      penalty += 1;
+      low += 1;
+    }
+  }
+
+  const scale = Math.max(1, Math.log10(totalFiles + 1));
+  const adjustedPenalty = penalty / scale;
+  const score = Math.max(0, Math.min(100, Math.round(100 - adjustedPenalty)));
+
+  let grade = 'F';
+  let label = 'Severe AI Slop Infection';
+
+  if (score >= 95) {
+    grade = 'A+';
+    label = 'Pure Artisanal';
+  } else if (score >= 90) {
+    grade = 'A';
+    label = 'Near-Zero Slop';
+  } else if (score >= 80) {
+    grade = 'B';
+    label = 'Low AI Residue';
+  } else if (score >= 70) {
+    grade = 'C';
+    label = 'Moderate Slop Drift';
+  } else if (score >= 60) {
+    grade = 'D';
+    label = 'High AI Slop Hazard';
+  }
+
+  return {
+    score,
+    grade,
+    label,
+    violationsCount: slopViolations.length,
+    breakdown: { critical, high, medium, low }
+  };
+};

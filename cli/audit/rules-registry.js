@@ -93,5 +93,40 @@ export const RULE_REGISTRY = {
     pillar: PILLARS.PILLAR_1,
     severity: 'CRITICAL',
     directive: 'Fix syntax errors before static analysis'
+  },
+  AI_SLOP_CONVERSATIONAL_ARTIFACT: {
+    pillar: 'AI Slop & Code Authenticity',
+    severity: 'CRITICAL',
+    directive: 'Remove LLM assistant conversational residue and markdown leaks from comments and code'
+  },
+  AI_SLOP_LAZY_PLACEHOLDER: {
+    pillar: 'AI Slop & Code Authenticity',
+    severity: 'CRITICAL',
+    directive: 'Replace lazy AI truncation placeholders with complete, verifiable implementations'
+  },
+  AI_SLOP_SHALLOW_CATCH: {
+    pillar: 'AI Slop & Code Authenticity',
+    severity: 'HIGH',
+    directive: 'Replace shallow catch paranoia wrappers with intentional error propagation or ResultTuple'
+  },
+  AI_SLOP_UTILITY_REINVENTION: {
+    pillar: 'AI Slop & Code Authenticity',
+    severity: 'HIGH',
+    directive: 'Import shared domain utilities instead of reinventing boilerplate helpers inline'
+  },
+  AI_SLOP_ECHO_COMMENT: {
+    pillar: 'AI Slop & Code Authenticity',
+    severity: 'MEDIUM',
+    directive: 'Eliminate trivial parroting comments that merely restate self-documenting code'
+  },
+  AI_SLOP_LAZY_ANY: {
+    pillar: 'AI Slop & Code Authenticity',
+    severity: 'MEDIUM',
+    directive: 'Replace lazy any widening with strict domain types or unknown guards'
+  },
+  AI_SLOP_REDUNDANT_PASSTHROUGH: {
+    pillar: 'AI Slop & Code Authenticity',
+    severity: 'LOW',
+    directive: 'Inline redundant single-use passthrough assignments directly into return expressions'
   }
 };

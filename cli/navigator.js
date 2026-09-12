@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import {
   hasGum,
   gumChoose,
@@ -5,7 +6,7 @@ import {
   stripAnsi,
   confirmAction
 } from "./terminal.js";
-import { saveAuditSnapshot, groupViolationsBySeverity } from "./audit.js";
+import { runAudit, saveAuditSnapshot, groupViolationsBySeverity } from "./audit.js";
 import { areGuardrailsInstalled } from "./installer.js";
 import { renderDashboardBanner } from "./navigator-banner.js";
 import {
@@ -29,7 +30,8 @@ export {
   resolveLowGrade,
   resolvePillarGrade,
   resolveHotspotGrade,
-  resolveContextGrade
+  resolveContextGrade,
+  resolveAiSlopGrade
 } from "./navigator-grades.js";
 export { extractPromptFromContent, showPagedContent } from "./navigator-paged.js";
 export { showConversionMenu } from "./navigator-conversion.js";
@@ -37,16 +39,47 @@ export { handleShareToDiscussions } from "./navigator-share.js";
 export { formatButtonTag, buildNavigatorMenu } from "./navigator-menu.js";
 export { renderDashboardBanner } from "./navigator-banner.js";
 
-export const runInteractiveAuditNavigator = async (report, onScaffold = null) => {
+export const runInteractiveAuditNavigator = async (initialReport, onScaffold = null, onReAudit = null) => {
+  let report = initialReport;
   saveAuditSnapshot(report);
-  const { metrics, health, violations, contextAnalysis } = report;
-  const { critical, high, medium, low } = groupViolationsBySeverity(violations);
-  const highMediumCount = high.length + medium.length;
+  let { metrics, health, violations, contextAnalysis, aiSlop } = report;
+  let { critical, high, medium, low } = groupViolationsBySeverity(violations);
+  let highMediumCount = high.length + medium.length;
 
-  const activeGrades = buildActiveGrades(report);
-  const actions = buildDashboardActionGroups({ report, onScaffold });
+  const handleRerun = async () => {
+    process.stdout.write("\n\x1b[36m⟳ Re-running architectural audit...\x1b[0m\n");
+    if (onReAudit) {
+      report = await onReAudit();
+    } else {
+      const targetDir = report?.targetDir || (fs.existsSync("src") ? "src" : ".");
+      const options = report?.options || {};
+      report = runAudit(targetDir, options);
+    }
+    saveAuditSnapshot(report);
 
-  renderDashboardBanner(health, metrics, violations, critical, highMediumCount, low, contextAnalysis);
+    metrics = report.metrics;
+    health = report.health;
+    violations = report.violations;
+    contextAnalysis = report.contextAnalysis;
+    aiSlop = report.aiSlop;
+
+    const grouped = groupViolationsBySeverity(violations);
+    critical = grouped.critical;
+    high = grouped.high;
+    medium = grouped.medium;
+    low = grouped.low;
+    highMediumCount = high.length + medium.length;
+
+    activeGrades = buildActiveGrades(report);
+    actions = buildDashboardActionGroups({ report, onScaffold, onRerun: handleRerun });
+
+    process.stdout.write(`\x1b[32m✔ Audit refreshed: ${health.score}/100 [Grade: ${health.grade}]\x1b[0m\n\n`);
+  };
+
+  let activeGrades = buildActiveGrades(report);
+  let actions = buildDashboardActionGroups({ report, onScaffold, onRerun: handleRerun });
+
+  renderDashboardBanner(health, metrics, violations, critical, highMediumCount, low, contextAnalysis, aiSlop);
 
   const shouldPublish = await confirmAction(
     "Publish audit report and promote your project to our GitHub Discussions Audits Forum?",
@@ -60,16 +93,16 @@ export const runInteractiveAuditNavigator = async (report, onScaffold = null) =>
   }
 
   while (true) {
-    renderDashboardBanner(health, metrics, violations, critical, highMediumCount, low, contextAnalysis);
+    renderDashboardBanner(health, metrics, violations, critical, highMediumCount, low, contextAnalysis, aiSlop);
 
     const guardrailsInstalled = areGuardrailsInstalled(process.cwd());
     const topActions = [];
     if (!guardrailsInstalled) {
       topActions.push(actions.installAction);
     }
-    topActions.push(actions.upgradeAction, actions.reportAction);
+    topActions.push(actions.upgradeAction, actions.reportAction, actions.rerunAction);
 
-    const midActions = [actions.shareAction, actions.progressAction, actions.exportAction];
+    const midActions = [actions.shareAction, actions.progressAction, actions.exportAction, actions.badgeAction];
     const bottomActions = [];
     if (actions.shouldShowPromptAction) {
       bottomActions.push(actions.copyPromptAction);

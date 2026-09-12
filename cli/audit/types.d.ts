@@ -11,6 +11,7 @@ export interface HazardViolation {
   readonly severity: SeverityLevel;
   readonly pillar: string;
   readonly directive: string;
+  readonly isAiSlop?: boolean;
 }
 
 export interface FileStat {
@@ -73,11 +74,25 @@ export interface HotspotFile {
   readonly monolithTier?: 'CRITICAL' | 'SEVERE' | 'WARNING' | null;
 }
 
+export interface AiSlopScore {
+  readonly score: number;
+  readonly grade: string;
+  readonly label: string;
+  readonly violationsCount: number;
+  readonly breakdown: {
+    readonly critical: number;
+    readonly high: number;
+    readonly medium: number;
+    readonly low: number;
+  };
+}
+
 export interface AuditReport {
   readonly scannedFiles: number;
   readonly totalViolations: number;
   readonly metrics: CodebaseMetrics;
   readonly health: MolecularHealthScore;
+  readonly aiSlop?: AiSlopScore;
   readonly pillars: Record<string, PillarData>;
   readonly contextAnalysis: ContextTokenAnalysis;
   readonly hotspots: readonly HotspotFile[];
@@ -104,29 +119,8 @@ export declare function auditCode(content: string, filePath: string, relativePat
 export declare function auditFile(filePath: string, relativePath: string): HazardViolation[];
 export declare function scanDirectory(targetDir: string, baseDir: string): HazardViolation[];
 export declare function runAudit(targetDir?: string, options?: AuditOptions): AuditReport;
-export declare function formatTerminalReport(report: AuditReport): string;
-export declare function generateMarkdownReport(report: AuditReport): string;
-export declare function resolveTopSectionColor(report: AuditReport): string;
-export declare function formatScorecardSection(report: AuditReport, themeColor?: string | null): string;
-export declare function formatCriticalSection(report: AuditReport): string;
-export declare function formatHighMediumSection(report: AuditReport): string;
-export declare function formatLowSection(report: AuditReport): string;
-export declare function formatPillarsSection(report: AuditReport, themeColor?: string | null): string;
-export declare function formatHotspotsSection(report: AuditReport, themeColor?: string | null): string;
-export declare function formatContextAnalysisSection(report: AuditReport, themeColor?: string | null): string;
-export declare function formatFailuresSection(report: AuditReport): string;
-export declare function formatPassesSection(report: AuditReport): string;
-export declare function formatGradeFSection(report: AuditReport): string;
-export declare function formatGradeDSection(report: AuditReport): string;
-export declare function formatGradeCSection(report: AuditReport): string;
-export declare function formatGradeBSection(report: AuditReport): string;
-export declare function formatGradeASection(report: AuditReport): string;
-export declare function getChemicalXAsciiBanner(gradeOrReport?: string | AuditReport | null): string;
-export declare function getAsciiGradeLines(grade?: string, color?: string, withEquals?: boolean): readonly string[];
-export declare function formatAsciiGrade(grade?: string, color?: string, indent?: string, withEquals?: boolean): string;
-export declare const REPORT_CARD_ASCII: readonly string[];
-export declare function getReportCardAsciiLines(color?: string): readonly string[];
-
+export declare function calculateAiSlopScore(violations: readonly HazardViolation[], totalFiles: number): AiSlopScore;
+export * from './reporter';
 export * from './social';
 
 export declare function buildGradeFPrompt(report: AuditReport): string;

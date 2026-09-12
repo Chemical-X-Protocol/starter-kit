@@ -11,7 +11,10 @@ export const openBrowser = (url) => {
     } else {
       spawnSync("xdg-open", [url], { stdio: "ignore" });
     }
-  } catch {}
+  } catch (err) {
+    const error = err instanceof Error ? err : new Error(String(err));
+    process.stderr.write(`Failed to open browser: ${error.message}\n`);
+  }
 };
 
 export const hasGum = () => {

@@ -70,6 +70,14 @@ export const resolveRiskColor = (riskLevel) => {
   return GREEN;
 };
 
+export const resolveTopSectionColor = (report) => {
+  const hasNoViolations = (report?.violations?.length ?? 0) === 0;
+  const hasNoHotspots = (report?.hotspots?.length ?? 0) === 0;
+  const areAllPillarsPassed = Object.values(report?.pillars ?? {}).every((p) => p.status === 'PASSED');
+  const isAllPassed = hasNoViolations && hasNoHotspots && areAllPillarsPassed;
+  return isAllPassed ? GREEN : CYAN;
+};
+
 export const resolveHotspotBadge = (lineCount) => {
   if (lineCount >= 2000) return ` ${RED}[CRITICAL MONOLITH >= 2,000 lines of code]${RESET}`;
   if (lineCount >= 1000) return ` ${ORANGE}[SEVERE MONOLITH >= 1,000 lines of code]${RESET}`;

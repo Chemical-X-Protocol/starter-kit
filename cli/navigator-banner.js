@@ -15,10 +15,16 @@ const visualWidth = (s) => {
 };
 
 const resolveProjectName = () => {
-  try {
-    const pkgPath = path.resolve(process.cwd(), "package.json");
-    if (fs.existsSync(pkgPath)) return JSON.parse(fs.readFileSync(pkgPath, "utf-8")).name || path.basename(process.cwd());
-  } catch {}
+  const pkgPath = path.resolve(process.cwd(), "package.json");
+  if (fs.existsSync(pkgPath)) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
+      return parsed.name || path.basename(process.cwd());
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      return path.basename(process.cwd()) || "Project";
+    }
+  }
   return path.basename(process.cwd()) || "Project";
 };
 
@@ -31,7 +37,8 @@ export const renderDashboardBanner = (
   critical,
   highMediumCount,
   low,
-  contextAnalysis = null
+  contextAnalysis = null,
+  aiSlop = null
 ) => {
   if (process.stdout.isTTY) console.clear();
   process.stdout.write(getChemicalXAsciiBanner(health.grade));
@@ -44,7 +51,11 @@ export const renderDashboardBanner = (
   const hearts = resolveHealthHearts(health.grade, health.score);
   const scoreBadge = `${health.score}/100 [Grade: ${health.grade}]`;
   const labelStr = health.label ? ` (${health.label})` : "";
-  const healthStr = `${hearts}  ${gColor}${scoreBadge}\x1b[0m${gColor}${labelStr}\x1b[0m`;
+  const slopScore = aiSlop?.score ?? 100;
+  const slopGrade = aiSlop?.grade ?? "A+";
+  const slopColor = resolveGradeColor(slopGrade);
+  const slopStr = aiSlop ? ` | ASI: ${slopColor}${slopScore}/100 [${slopGrade}]\x1b[0m` : "";
+  const healthStr = `${hearts}  ${gColor}${scoreBadge}\x1b[0m${gColor}${labelStr}\x1b[0m${slopStr}`;
 
   const filesStr = `${metrics.scannedFiles} Files`;
   const locStr = `${(metrics.totalLoc || 0).toLocaleString()}`;

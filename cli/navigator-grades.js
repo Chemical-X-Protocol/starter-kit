@@ -85,3 +85,12 @@ export const resolveContextGrade = (riskTier) => {
   if (riskTier === 'HIGH') return 'D';
   return 'F';
 };
+
+export const resolveAiSlopGrade = (score = 100) => {
+  if (score >= 95) return 'A+';
+  if (score >= 90) return 'A';
+  if (score >= 80) return 'B';
+  if (score >= 70) return 'C';
+  if (score >= 60) return 'D';
+  return 'F';
+};

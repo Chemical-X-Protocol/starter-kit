@@ -210,3 +210,80 @@ Raw inline `style="..."` attributes are strictly prohibited. Visual styling flow
 
 ### B. Typography Hygiene
 - Never use em dashes anywhere in code, copy, markdown, or documentation. Use standard hyphens or colons.
+
+---
+
+## 8. Accessibility & Semantic Integrity
+
+### A. Semantic HTML First
+- Never reach for a generic `<div>` or `<span>` with a click handler where a native element (`<button>`, `<a>`, `<label>`, `<nav>`) already carries the correct behavior and semantics for free.
+- Interactive elements must be genuinely interactive elements. A clickable `<div>` requires manually re-implementing keyboard focus, Enter/Space activation, and role semantics that native elements provide automatically.
+
+### B. Keyboard & Focus Management
+- Every interactive element must be reachable and operable via keyboard alone: Tab to focus, Enter/Space to activate, Esc to dismiss modals and overlays.
+- Modals, drawers, and dropdowns must trap focus while open and return focus to the triggering element on close.
+- Never remove default focus outlines (`outline: none`) without providing a visible, equivalent custom focus state.
+
+### C. ARIA as a Last Resort, Not a First Layer
+- Use ARIA attributes (`aria-label`, `aria-expanded`, `role`) only to fill genuine gaps semantic HTML cannot cover, not as a substitute for correct markup.
+- Every image conveying meaning requires alt text; purely decorative images use `alt=""`.
+- Form inputs require an associated `<label>`, not a placeholder alone.
+
+### D. Color & Motion Safety
+- Text and interactive elements must meet WCAG AA contrast ratios in both light and dark modes; verify new color tokens against both themes, not just one.
+- Respect `prefers-reduced-motion` for non-essential animations and transitions.
+
+---
+
+## 9. Security & Content Safety
+
+### A. Zero Unsanitized HTML Injection
+- Never render user-supplied or externally-fetched content via `v-html`, `dangerouslySetInnerHTML`, or equivalent raw-HTML injection without passing it through a sanitizer (e.g. DOMPurify) first.
+- Treat all externally-fetched content (API responses, user uploads, third-party embeds) as untrusted by default.
+
+### B. Output Encoding & Injection Boundaries
+- Never interpolate user input directly into constructed HTML strings, SQL queries, or shell commands. Use parameterized queries and framework-native escaping.
+- Never build URLs for redirects or API calls by concatenating unvalidated user input; validate against an allowlist.
+
+### C. Secrets & Credential Hygiene
+- Never hardcode API keys, tokens, or credentials in source files, even temporarily during development. Use environment variables or a secrets manager.
+- Never log full request/response payloads that may contain auth tokens, passwords, or PII.
+
+### D. CSRF & Auth Boundaries
+- State-changing requests (POST/PUT/DELETE) must carry CSRF protection appropriate to the framework's convention, not be assumed safe because they're behind a login.
+- Never trust client-side role or permission checks as the sole gate for sensitive actions; the server must re-verify authorization independently.
+
+---
+
+## 10. Testing Discipline
+
+### A. Co-located Test Files
+- Test files live alongside the capsule they cover (`m-<feature>-card.spec.ts` inside the capsule directory), not in a separate parallel test tree that drifts from the source structure.
+
+### B. What Must Be Covered
+- Every exported pure function, composable, and domain type guard requires at least one test exercising its primary path and one exercising a failure/edge path.
+- UI components require at least a render smoke test; interactive components require a test covering their primary user action.
+
+### C. Refactor Discipline
+- When decomposing a file per Section 1, existing tests move and are updated to match the new file boundaries in the same pass; a refactor is not complete until its tests pass against the new structure.
+- Never delete or skip a failing test to unblock a commit; fix the code or the test, or flag the failure explicitly.
+
+### D. No Fake Green
+- Never write a test that trivially passes without exercising real logic (e.g. asserting `true === true`, mocking away the exact behavior under test).
+
+---
+
+## 11. Naming Conventions
+
+### A. Casing
+- Files: kebab-case (`m-user-card.controller.ts`).
+- Variables, functions, composables: camelCase (`isLoading`, `useAsyncData`).
+- Types, interfaces, components: PascalCase (`SessionState`, `UserCard`).
+- Constants meant to be immutable module-level config: SCREAMING_SNAKE_CASE (`MAX_RETRY_COUNT`).
+
+### B. Boolean & Predicate Prefixes
+- Booleans use `is`, `has`, `can`, or `should` prefixes (`isLoading`, `hasItems`, `canCheckout`, `shouldShowEmptyState`), matching the pattern already used in Section 3.A and 4.B examples. Never name a boolean as a bare noun or adjective (`loading`, `valid`) that hides its type at the call site.
+
+### C. Event & Handler Naming
+- Emitted events describe what happened, not what to do (`item-selected`, not `select-item`).
+- Handler functions describe the action taken, prefixed `handle` (`handleCheckout`), matching Section 3.C.

@@ -23,7 +23,10 @@ export const URL_MASTER = 'https://mycompassconsulting.com/buy/chemical-x/master
 if (!fs.existsSync(CONFIG_DIR)) {
   try {
     fs.mkdirSync(CONFIG_DIR, { recursive: true });
-  } catch {}
+  } catch (err) {
+    const error = err instanceof Error ? err : new Error(String(err));
+    process.stderr.write(`Failed to create config directory: ${error.message}\n`);
+  }
 }
 
 export const getOrCreateDeviceId = () => {
@@ -31,12 +34,18 @@ export const getOrCreateDeviceId = () => {
     try {
       const id = fs.readFileSync(DEVICE_FILE, 'utf-8').trim();
       if (id) return id;
-    } catch {}
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      process.stderr.write(`Failed to read device id: ${error.message}\n`);
+    }
   }
   const newId = `cli_${Math.random().toString(36).substring(2, 12)}_${Date.now()}`;
   try {
     fs.writeFileSync(DEVICE_FILE, newId, 'utf-8');
-  } catch {}
+  } catch (err) {
+    const error = err instanceof Error ? err : new Error(String(err));
+    process.stderr.write(`Failed to write device id: ${error.message}\n`);
+  }
   return newId;
 };
 
@@ -59,7 +68,10 @@ export const saveLicenseKey = (licenseKey) => {
       JSON.stringify({ licenseKey, updatedAt: new Date().toISOString() }, null, 2),
       'utf-8'
     );
-  } catch {}
+  } catch (err) {
+    const error = err instanceof Error ? err : new Error(String(err));
+    process.stderr.write(`Failed to cache license key: ${error.message}\n`);
+  }
 };
 
 const resolveFlagLicense = (args) => {

@@ -5,12 +5,50 @@ import { buildPreCommitHookScript, buildGitHubWorkflowScript } from './installer
 
 export { buildPreCommitHookScript, buildGitHubWorkflowScript } from './installer-templates.js';
 
+export const resolveGitHooksDir = (targetDir = '.') => {
+  const resolvedTarget = path.resolve(targetDir);
+  const gitPath = path.join(resolvedTarget, '.git');
+  if (!fs.existsSync(gitPath)) return null;
+
+  try {
+    const stat = fs.statSync(gitPath);
+    if (stat.isDirectory()) {
+      return path.join(gitPath, 'hooks');
+    }
+    if (stat.isFile()) {
+      const gitContent = fs.readFileSync(gitPath, 'utf-8');
+      const match = gitContent.match(/gitdir:\s*(.+)/);
+      if (!match) return null;
+
+      const gitDir = path.resolve(resolvedTarget, match[1].trim());
+      const commonDirFile = path.join(gitDir, 'commondir');
+      const actualGitDir = fs.existsSync(commonDirFile)
+        ? path.resolve(gitDir, fs.readFileSync(commonDirFile, 'utf-8').trim())
+        : gitDir;
+
+      return path.join(actualGitDir, 'hooks');
+    }
+  } catch {
+    return null;
+  }
+  return null;
+};
+
 export const installPreCommitHook = (targetDir = '.', options = {}) => {
-  const gitHooksDir = path.resolve(targetDir, '.git', 'hooks');
-  if (!fs.existsSync(gitHooksDir)) fs.mkdirSync(gitHooksDir, { recursive: true });
+  const gitHooksDir = resolveGitHooksDir(targetDir);
+  if (!gitHooksDir) {
+    process.stdout.write('  \x1b[33m⚠\x1b[0m Skipped .git/hooks (current directory is not a git repository root or submodule).\n');
+    return false;
+  }
+
+  if (!fs.existsSync(gitHooksDir)) {
+    fs.mkdirSync(gitHooksDir, { recursive: true });
+  }
+
   const hookPath = path.join(gitHooksDir, 'pre-commit');
   fs.writeFileSync(hookPath, buildPreCommitHookScript(options.minGrade, options.minScore), { mode: 0o755 });
-  process.stdout.write(`  \x1b[32m✔\x1b[0m Installed git pre-commit hook: .git/hooks/pre-commit (chmod +x)\n`);
+  const relativeHook = path.relative(path.resolve(targetDir), hookPath);
+  process.stdout.write(`  \x1b[32m✔\x1b[0m Installed git pre-commit hook: ${relativeHook} (chmod +x)\n`);
   return true;
 };
 
@@ -35,43 +73,19 @@ export const areGuardrailsInstalled = (targetDir = '.') => {
   const wfPath = path.join(resolvedTarget, '.github', 'workflows', 'chemx-audit.yml');
   const hasWf = fs.existsSync(wfPath);
 
-  const gitPath = path.join(resolvedTarget, '.git');
-  let hasGit = false;
-  let hooksDir = null;
-
-  if (fs.existsSync(gitPath)) {
-    try {
-      const stat = fs.statSync(gitPath);
-      if (stat.isDirectory()) {
-        hasGit = true;
-        hooksDir = path.join(gitPath, 'hooks');
-      } else if (stat.isFile()) {
-        hasGit = true;
-        const gitContent = fs.readFileSync(gitPath, 'utf-8');
-        const match = gitContent.match(/gitdir:\s*(.+)/);
-        if (match) {
-          hooksDir = path.resolve(resolvedTarget, match[1].trim(), 'hooks');
-        }
-      }
-    } catch {
-      hasGit = false;
-    }
-  }
-
-  if (!hasGit) {
+  const hooksDir = resolveGitHooksDir(resolvedTarget);
+  if (!hooksDir) {
     return hasWf;
   }
 
+  const hookPath = path.join(hooksDir, 'pre-commit');
   let hasHook = false;
-  if (hooksDir) {
-    const hookPath = path.join(hooksDir, 'pre-commit');
-    if (fs.existsSync(hookPath)) {
-      try {
-        const hookContent = fs.readFileSync(hookPath, 'utf-8');
-        hasHook = hookContent.includes('Chemical X') || hookContent.includes('chemx');
-      } catch {
-        hasHook = false;
-      }
+  if (fs.existsSync(hookPath)) {
+    try {
+      const hookContent = fs.readFileSync(hookPath, 'utf-8');
+      hasHook = hookContent.includes('Chemical X') || hookContent.includes('chemx');
+    } catch {
+      hasHook = false;
     }
   }
 
@@ -79,7 +93,7 @@ export const areGuardrailsInstalled = (targetDir = '.') => {
 };
 
 export const runInstallWizard = async (targetDir = '.') => {
-  const isGit = fs.existsSync(path.resolve(targetDir, '.git'));
+  const isGit = Boolean(resolveGitHooksDir(targetDir));
   process.stdout.write('\n\x1b[1m\x1b[38;2;98;201;255mChemical X: Architecture Guardrail Installer\x1b[0m\n\n');
   const targetChoice = hasGum()
     ? gumChoose(['1. Install All Guardrails (Git Pre-Commit Hook + GitHub CI Workflow)', '2. Git Pre-Commit Hook only (.git/hooks/pre-commit)', '3. GitHub Actions CI Workflow only (.github/workflows/chemx-audit.yml)', '4. Cancel'])
@@ -96,7 +110,7 @@ export const runInstallWizard = async (targetDir = '.') => {
 
   if (shouldHook) {
     if (isGit) installPreCommitHook(targetDir, opts);
-    else process.stdout.write('  \x1b[33m⚠\x1b[0m Skipped .git/hooks (current directory is not a git repository root).\n');
+    else process.stdout.write('  \x1b[33m⚠\x1b[0m Skipped .git/hooks (current directory is not a git repository root or submodule).\n');
   }
   if (shouldWf) installGitHubWorkflow(targetDir, opts);
   saveProjectConfig(targetDir, { minGrade: opts.minGrade, minScore: opts.minScore, maxLineCount: 500, maxMoleculeLineCount: 100 });

@@ -6,14 +6,21 @@ import {
   calculateQuantumHealthScore,
   calculatePillarBreakdown,
   calculateTokenBurnAnalytics,
-  calculateHotspots
+  calculateHotspots,
+  calculateAiSlopScore
 } from './audit/metrics.js';
 import {
   formatTerminalReport,
   generateMarkdownReport,
   groupViolationsBySeverity,
+  groupViolationsByDirectory,
+  groupViolationsByRule,
+  formatDirectoryDistributionSection,
+  formatDirectoryRollupMarkdown,
+  renderGroupedViolationsMarkdown,
   resolveTopSectionColor,
   formatScorecardSection,
+  formatAiSlopSection,
   formatCriticalSection,
   formatHighMediumSection,
   formatLowSection,
@@ -160,12 +167,16 @@ export const runAudit = (targetDir = 'src', options = {}) => {
   const pillars = calculatePillarBreakdown(violations);
   const contextAnalysis = calculateTokenBurnAnalytics(fileStats, options);
   const hotspots = calculateHotspots(violations, fileStats, 5);
+  const aiSlop = calculateAiSlopScore(violations, scannedFiles);
 
   const report = {
+    targetDir,
+    options,
     scannedFiles,
     totalViolations: violations.length,
     metrics,
     health,
+    aiSlop,
     pillars,
     contextAnalysis,
     hotspots,
@@ -188,6 +199,7 @@ export * from './audit/history.js';
 export {
   calculateMolecularHealthScore,
   calculateQuantumHealthScore,
+  calculateAiSlopScore,
   calculatePillarBreakdown,
   calculateTokenBurnAnalytics,
   calculateHotspots,
@@ -196,8 +208,14 @@ export {
   formatTerminalReport,
   generateMarkdownReport,
   groupViolationsBySeverity,
+  groupViolationsByDirectory,
+  groupViolationsByRule,
+  formatDirectoryDistributionSection,
+  formatDirectoryRollupMarkdown,
+  renderGroupedViolationsMarkdown,
   resolveTopSectionColor,
   formatScorecardSection,
+  formatAiSlopSection,
   formatCriticalSection,
   formatHighMediumSection,
   formatLowSection,
@@ -225,8 +243,14 @@ export default {
   formatTerminalReport,
   generateMarkdownReport,
   groupViolationsBySeverity,
+  groupViolationsByDirectory,
+  groupViolationsByRule,
+  formatDirectoryDistributionSection,
+  formatDirectoryRollupMarkdown,
+  renderGroupedViolationsMarkdown,
   resolveTopSectionColor,
   formatScorecardSection,
+  formatAiSlopSection,
   formatCriticalSection,
   formatHighMediumSection,
   formatLowSection,

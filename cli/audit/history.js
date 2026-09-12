@@ -26,7 +26,10 @@ export const ensureChemxDir = (cwd = process.cwd()) => {
         const trailingNewline = content.endsWith('\n') || content.length === 0 ? '' : '\n';
         fs.appendFileSync(gitignorePath, `${trailingNewline}# Chemical X local telemetry & audit history\n.chemx/\n`, 'utf-8');
       }
-    } catch {}
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      return dir;
+    }
   }
 
   return dir;
@@ -61,6 +64,17 @@ export const createSnapshotFromReport = (report) => {
       score: health.score,
       grade: health.grade,
       label: health.label
+    },
+    aiSlop: report.aiSlop ? {
+      score: report.aiSlop.score,
+      grade: report.aiSlop.grade,
+      label: report.aiSlop.label,
+      violationsCount: report.aiSlop.violationsCount || 0
+    } : {
+      score: 100,
+      grade: 'A+',
+      label: 'Pure Artisanal',
+      violationsCount: 0
     },
     metrics: {
       scannedFiles: metrics.scannedFiles,
@@ -117,7 +131,10 @@ export const getAuditBaseline = (cwd = process.cwd()) => {
     try {
       const raw = fs.readFileSync(baselinePath, 'utf-8');
       return JSON.parse(raw);
-    } catch {}
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      return null;
+    }
   }
   const history = getAuditHistory(cwd);
   return history.length > 0 ? history[0] : null;

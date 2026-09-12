@@ -40,4 +40,8 @@ export declare function renderDashboardBanner(
   low: readonly unknown[],
   contextAnalysis?: AuditReport['contextAnalysis'] | null
 ): void;
-export declare function runInteractiveAuditNavigator(report: AuditReport, onScaffold?: (() => Promise<void>) | null): Promise<void>;
+export declare function runInteractiveAuditNavigator(
+  report: AuditReport,
+  onScaffold?: (() => Promise<void>) | null,
+  onReAudit?: (() => Promise<AuditReport> | AuditReport) | null
+): Promise<void>;

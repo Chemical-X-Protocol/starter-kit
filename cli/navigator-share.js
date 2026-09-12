@@ -57,13 +57,16 @@ export const handleShareToDiscussions = async (report) => {
   }
 
   let detectedSite = '';
-  try {
-    const pkgPath = path.resolve(process.cwd(), 'package.json');
-    if (fs.existsSync(pkgPath)) {
+  const pkgPath = path.resolve(process.cwd(), 'package.json');
+  if (fs.existsSync(pkgPath)) {
+    try {
       const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
       detectedSite = pkg.homepage || pkg.website || '';
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      detectedSite = '';
     }
-  } catch {}
+  }
 
   const stored = getStoredDiscussion();
   if (!detectedSite && stored?.website) {

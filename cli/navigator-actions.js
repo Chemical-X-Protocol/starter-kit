@@ -15,6 +15,7 @@ import {
   formatGradeCSection,
   formatGradeBSection,
   formatGradeASection,
+  formatAiSlopSection,
   getAuditHistory,
   getAuditBaseline,
   createSnapshotFromReport,
@@ -33,6 +34,7 @@ import { showConversionMenu } from "./navigator-conversion.js";
 import { handleShareToDiscussions } from "./navigator-share.js";
 import { runInstallWizard } from "./installer.js";
 import { formatButtonTag } from "./navigator-menu.js";
+import { runBadgeCommand } from "./badge.js";
 
 const isExtremeMonolith = (h) => h.lineCount >= 2000;
 const isSevereMonolith = (h) => h.lineCount >= 1000 && h.lineCount < 2000;
@@ -71,6 +73,10 @@ export const buildActiveGrades = (report) => {
   const handleGradeFAction = async () => {
     await showPagedContent(formatGradeFSection(report), buildGradeFPrompt(report));
   };
+  const slopViolations = (violations || []).filter((v) => v.isAiSlop);
+  const handleSlopAction = async () => {
+    await showPagedContent(formatAiSlopSection(report));
+  };
 
   const gradeTiers = [
     {
@@ -79,6 +85,13 @@ export const buildActiveGrades = (report) => {
       icon: "✅",
       description: "Compliant Checks & Passing Pillars",
       action: handleGradeAAction
+    },
+    {
+      grade: report.aiSlop?.grade || (slopViolations.length > 0 ? "D" : "A"),
+      count: slopViolations.length,
+      icon: "🤖",
+      description: `AI Slop & Authenticity (${report.aiSlop?.score ?? 100}/100 - ${report.aiSlop?.label ?? "Pure Artisanal"})`,
+      action: handleSlopAction
     },
     {
       grade: "B",
@@ -121,7 +134,7 @@ export const buildActiveGrades = (report) => {
   return gradeTiers.filter(hasGradeItems).map(createActiveGradeItem);
 };
 
-export const buildDashboardActionGroups = ({ report, onScaffold = null }) => {
+export const buildDashboardActionGroups = ({ report, onScaffold = null, onRerun = null }) => {
   const handleInstallAction = async () => {
     await runInstallWizard(process.cwd());
     if (hasGum()) {
@@ -135,6 +148,12 @@ export const buildDashboardActionGroups = ({ report, onScaffold = null }) => {
 
   const handleReportAction = async () => {
     await showPagedContent(formatTerminalReport(report), buildMasterPrompt(report));
+  };
+
+  const handleRerunAction = async () => {
+    if (onRerun) {
+      await onRerun();
+    }
   };
 
   const handleShareAction = async () => {
@@ -170,6 +189,16 @@ export const buildDashboardActionGroups = ({ report, onScaffold = null }) => {
     process.stdout.write(`\x1b[32m✔ Exported markdown audit report to ${outName}\x1b[0m\n\n`);
     if (hasGum()) {
       gumChoose(["<-- Back to Audit Dashboard"]);
+    }
+  };
+
+  const handleBadgeAction = async () => {
+    const grade = report?.health?.grade || 'A+';
+    await runBadgeCommand([`--grade=${grade}`]);
+    if (hasGum()) {
+      gumChoose(["<-- Back to Audit Dashboard"]);
+    } else {
+      await promptQuestion("Press Enter to return to menu...");
     }
   };
 
@@ -219,6 +248,13 @@ export const buildDashboardActionGroups = ({ report, onScaffold = null }) => {
     action: handleReportAction
   };
 
+  const rerunAction = {
+    key: "rerun",
+    tag: formatButtonTag("Re-Run", "\x1b[32m"),
+    label: "🔄 Re-Run Architecture Audit & Refresh Scorecard",
+    action: handleRerunAction
+  };
+
   const shareAction = {
     key: "share",
     tag: formatButtonTag("Share", "\x1b[35m"),
@@ -238,6 +274,13 @@ export const buildDashboardActionGroups = ({ report, onScaffold = null }) => {
     tag: formatButtonTag("Export", "\x1b[36m"),
     label: "💾 Export Markdown Report to File",
     action: handleExportAction
+  };
+
+  const badgeAction = {
+    key: "badge",
+    tag: formatButtonTag("Badge", "\x1b[38;2;98;201;255m"),
+    label: "🏷️  Get Chemical X Footer Badge (Vue, React, HTML)",
+    action: handleBadgeAction
   };
 
   const copyPromptAction = {
@@ -264,9 +307,11 @@ export const buildDashboardActionGroups = ({ report, onScaffold = null }) => {
     installAction,
     upgradeAction,
     reportAction,
+    rerunAction,
     shareAction,
     progressAction,
     exportAction,
+    badgeAction,
     copyPromptAction,
     exitAction,
     shouldShowPromptAction

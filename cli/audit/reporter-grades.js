@@ -17,6 +17,7 @@ import {
   groupViolationsBySeverity
 } from './reporter-utils.js';
 import { getReportCardAsciiLines } from './reporter-ascii.js';
+import { renderGroupedViolationsTerminal } from './reporter-grouping.js';
 
 export const formatGradeFSection = (report) => {
   const { violations, hotspots, pillars } = report;
@@ -44,12 +45,8 @@ export const formatGradeFSection = (report) => {
     lines.push(`   ${DIM}Codebase is free of extreme monoliths (>2,000 lines of code) and critical violations.${RESET}`);
   } else {
     if (critical.length > 0) {
-      lines.push(`\n   ${BOLD}${RED}🚨 CRITICAL AST VIOLATIONS (${critical.length}):${RESET}`);
-      critical.forEach((v, idx) => {
-        lines.push(`   ${RED}[#${idx + 1} CRITICAL]${RESET} [${v.rule}] ${YELLOW}${v.filePath}:${v.line}:${v.column}${RESET}`);
-        lines.push(`      Hazard:    ${v.hazard}`);
-        lines.push(`      Directive: ${CYAN}${v.directive}${RESET}\n`);
-      });
+      lines.push(`\n   ${BOLD}${RED}🚨 CRITICAL AST VIOLATIONS (${critical.length}):${RESET}\n`);
+      lines.push(renderGroupedViolationsTerminal(critical));
     }
 
     if (extremeMonoliths.length > 0) {
@@ -105,12 +102,8 @@ export const formatGradeDSection = (report) => {
     lines.push(`   ${DIM}No severe monoliths (1,000-1,999 lines of code) or saturated hook anti-patterns.${RESET}`);
   } else {
     if (high.length > 0) {
-      lines.push(`\n   ${BOLD}${ORANGE}⚠️  HIGH SEVERITY VIOLATIONS (${high.length}):${RESET}`);
-      high.forEach((v, idx) => {
-        lines.push(`   ${ORANGE}[#${idx + 1} HIGH]${RESET} [${v.rule}] ${YELLOW}${v.filePath}:${v.line}:${v.column}${RESET}`);
-        lines.push(`      Hazard:    ${v.hazard}`);
-        lines.push(`      Directive: ${CYAN}${v.directive}${RESET}\n`);
-      });
+      lines.push(`\n   ${BOLD}${ORANGE}⚠️  HIGH SEVERITY VIOLATIONS (${high.length}):${RESET}\n`);
+      lines.push(renderGroupedViolationsTerminal(high));
     }
 
     if (severeMonoliths.length > 0) {
@@ -163,12 +156,8 @@ export const formatGradeCSection = (report) => {
     lines.push(`   ${DIM}All files remain under 500 lines with clean styling and handlers.${RESET}`);
   } else {
     if (medium.length > 0) {
-      lines.push(`\n   ${BOLD}${CYAN}⚡ MEDIUM SEVERITY VIOLATIONS (${medium.length}):${RESET}`);
-      medium.forEach((v, idx) => {
-        lines.push(`   ${YELLOW}[#${idx + 1} MED]${RESET} [${v.rule}] ${YELLOW}${v.filePath}:${v.line}:${v.column}${RESET}`);
-        lines.push(`      Hazard:    ${v.hazard}`);
-        lines.push(`      Directive: ${CYAN}${v.directive}${RESET}\n`);
-      });
+      lines.push(`\n   ${BOLD}${CYAN}⚡ MEDIUM SEVERITY VIOLATIONS (${medium.length}):${RESET}\n`);
+      lines.push(renderGroupedViolationsTerminal(medium));
     }
 
     if (warningMonoliths.length > 0) {
@@ -209,12 +198,8 @@ export const formatGradeBSection = (report) => {
     lines.push(`\n   ${GREEN}✔ Outstanding hygiene! Zero Grade B issues detected.${RESET}`);
     lines.push(`   ${DIM}Zero em dashes and zero unguarded console statements found.${RESET}`);
   } else {
-    lines.push(`\n   ${BOLD}${YELLOW}ℹ️  LOW HYGIENE VIOLATIONS (${low.length}):${RESET}`);
-    low.forEach((v, idx) => {
-      lines.push(`   ${YELLOW}[#${idx + 1} LOW]${RESET} [${v.rule}] ${YELLOW}${v.filePath}:${v.line}:${v.column}${RESET}`);
-      lines.push(`      Hazard:    ${v.hazard}`);
-      lines.push(`      Directive: ${CYAN}${v.directive}${RESET}\n`);
-    });
+    lines.push(`\n   ${BOLD}${YELLOW}ℹ️  LOW HYGIENE VIOLATIONS (${low.length}):${RESET}\n`);
+    lines.push(renderGroupedViolationsTerminal(low));
   }
 
   const promptB = buildGradeBPrompt(report);

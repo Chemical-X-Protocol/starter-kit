@@ -82,10 +82,16 @@ export const resolveWeeklyWastePerDev = (tokensObj, fallbackCostPerMillion = 3.0
 };
 
 export const generateDiscussionContent = (report, username, projectName = 'Codebase', repoUrl = '', liveUrl = '') => {
-  const { health, metrics, pillars, hotspots, contextAnalysis, violations } = report;
+  const { health, metrics, pillars, hotspots, contextAnalysis, violations, aiSlop } = report;
   const isHighScoring = health.score >= 80;
   const badgeColor = resolveBadgeColor(health.score);
   const encodedGrade = encodeURIComponent(`${health.score}/100 (${health.grade})`);
+
+  const slopScore = aiSlop?.score ?? 100;
+  const slopGrade = aiSlop?.grade ?? 'A+';
+  const slopLabel = aiSlop?.label ?? 'Pure Artisanal';
+  const slopBadgeColor = resolveBadgeColor(slopScore);
+  const encodedSlop = encodeURIComponent(`${slopScore}/100 (${slopGrade})`);
 
   const category = DISCUSSION_CATEGORY;
   const categorySlug = DISCUSSION_CATEGORY_SLUG;
@@ -95,7 +101,7 @@ export const generateDiscussionContent = (report, username, projectName = 'Codeb
   const lines = [];
   lines.push(`# ${isHighScoring ? 'Crystalline' : 'Architecture'} Audit Report: ${projectName}`);
   lines.push('');
-  lines.push(`[![Chemical X MHI](https://img.shields.io/badge/Chemical%20X%20MHI-${encodedGrade}-${badgeColor}?style=for-the-badge)](https://chemicalx.xophz.com)`);
+  lines.push(`[![Chemical X MHI](https://img.shields.io/badge/Chemical%20X%20MHI-${encodedGrade}-${badgeColor}?style=for-the-badge)](https://chemicalx.xophz.com) [![AI Slop Index](https://img.shields.io/badge/AI%20Slop%20Index-${encodedSlop}-${slopBadgeColor}?style=for-the-badge)](https://chemicalx.xophz.com)`);
   lines.push('');
   lines.push(`* **Audited by**: @${username}`);
   const resolvedRepoUrl = repoUrl || (/^[\w\-.]+\/[\w\-.]+$/.test(projectName) ? `https://github.com/${projectName}` : '');
@@ -109,6 +115,7 @@ export const generateDiscussionContent = (report, username, projectName = 'Codeb
     }
   }
   lines.push(`* **Molecular Health Index**: **${health.score} / 100** (Grade: **${health.grade}** - ${health.label})`);
+  lines.push(`* **AI Slop Index**: **${slopScore} / 100** (Grade: **${slopGrade}** - ${slopLabel})`);
   lines.push(`* **Source Files Analyzed**: ${metrics.scannedFiles} files (${metrics.totalLoc} total lines of code)`);
   lines.push(`* **Token Reduction Potential**: **${contextAnalysis.potentialSavingsPct}%** (Estimated ${contextAnalysis.estimatedTokens.toLocaleString()} tokens)`);
   const costPass = resolveExcessCostPerPass(contextAnalysis);
@@ -259,6 +266,12 @@ export const generateTransformationDiscussionContent = (
   lines.push('| Metric | Before (Baseline) | After (Refactored) | Delta |');
   lines.push('| :--- | :---: | :---: | :---: |');
   lines.push(`| **Molecular Health (MHI)** | ${scoreBefore} / 100 (${beforeSnapshot.health.grade}) | ${scoreAfter} / 100 (${afterSnapshot.health.grade}) | ${formatDelta(scoreDelta)} |`);
+  const slopBefore = beforeSnapshot.aiSlop?.score ?? 100;
+  const slopBeforeGrade = beforeSnapshot.aiSlop?.grade ?? 'A+';
+  const slopAfter = afterSnapshot.aiSlop?.score ?? 100;
+  const slopAfterGrade = afterSnapshot.aiSlop?.grade ?? 'A+';
+  const slopDelta = slopAfter - slopBefore;
+  lines.push(`| **AI Slop Index (ASI)** | ${slopBefore} / 100 (${slopBeforeGrade}) | ${slopAfter} / 100 (${slopAfterGrade}) | ${formatDelta(slopDelta)} |`);
   lines.push(`| **Critical Hazards** | ${beforeSnapshot.violations.critical} | ${afterSnapshot.violations.critical} | ${formatDelta(critDelta, true)} |`);
   lines.push(`| **Total Violations** | ${beforeSnapshot.violations.total} | ${afterSnapshot.violations.total} | ${formatDelta(totalDelta, true)} |`);
   lines.push(`| **Monolith Files (> 500 lines of code)** | ${beforeSnapshot.monoliths.total} | ${afterSnapshot.monoliths.total} | ${formatDelta(monoDelta, true)} |`);

@@ -10,6 +10,10 @@ import {
   resolveMoleculeTier
 } from './rules-helpers.js';
 import { createAstVisitors } from './ast-visitors.js';
+import {
+  checkSlopTextPatterns,
+  createAiSlopVisitors
+} from './ai-slop-detector.js';
 
 export { PILLARS, RULE_REGISTRY };
 
@@ -87,6 +91,9 @@ export const auditCode = (content, filePath, relativePath) => {
   checkTypographyEmDash(content, lines, relativePath, violations);
   checkMockDataPatterns(content, lines, relativePath, violations);
 
+  // AI Slop Fast Checks (conversational residue, code fences, echo comments)
+  checkSlopTextPatterns(content, lines, relativePath, violations);
+
   const codeToParse = extractParseableCode(content, ext);
   if (!codeToParse.trim()) {
     return violations;
@@ -116,8 +123,22 @@ export const auditCode = (content, filePath, relativePath) => {
 
   const traverseFn = traverse.default || traverse;
   const visitors = createAstVisitors({ relativePath, violations });
+  const slopVisitors = createAiSlopVisitors({ relativePath, violations });
 
-  traverseFn(ast, visitors);
+  const mergedVisitors = { ...visitors };
+  for (const [key, fn] of Object.entries(slopVisitors)) {
+    if (mergedVisitors[key]) {
+      const orig = mergedVisitors[key];
+      mergedVisitors[key] = (p, s) => {
+        orig(p, s);
+        fn(p, s);
+      };
+    } else {
+      mergedVisitors[key] = fn;
+    }
+  }
+
+  traverseFn(ast, mergedVisitors);
 
   return violations;
 };
