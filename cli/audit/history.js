@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { groupViolationsBySeverity } from './reporter.js';
+import { hasMatchingAuditMetrics } from './rules-predicates.js';
 
 const RESET = '\x1b[0m';
 const BOLD = '\x1b[1m';
@@ -177,10 +178,7 @@ export const saveAuditSnapshot = (report, cwd = process.cwd()) => {
   if (history.length > 0) {
     const last = history[history.length - 1];
     const timeDiff = Math.abs(Date.now() - new Date(last.timestamp).getTime());
-    const isSameMetrics =
-      last.health?.score === snapshot.health?.score &&
-      last.metrics?.totalLoc === snapshot.metrics?.totalLoc &&
-      last.violations?.total === snapshot.violations?.total;
+    const isSameMetrics = hasMatchingAuditMetrics(last, snapshot);
 
     if (timeDiff < 5000 && isSameMetrics) {
       return {

@@ -34,6 +34,9 @@ const detectBaseDir = () => {
   return '.';
 };
 
+const IGNORED_NAME_TOKENS = new Set(['generate', 'capsule', 'add']);
+const isCapsuleNameArg = (arg) => !arg.startsWith('-') && !IGNORED_NAME_TOKENS.has(arg);
+
 export const runGenerateWizard = async (rawArgs = []) => {
   renderBanner('Chemical X: Molecular Capsule Wizard');
   await checkOrPromptEvaluation('generate capsule');
@@ -41,7 +44,7 @@ export const runGenerateWizard = async (rawArgs = []) => {
   const useGum = hasGum();
   const isYes = rawArgs.includes('-y') || rawArgs.includes('--yes');
 
-  const nameArg = rawArgs.find((a) => !a.startsWith('-') && a !== 'generate' && a !== 'capsule' && a !== 'add');
+  const nameArg = rawArgs.find(isCapsuleNameArg);
   const frameworkArg = (rawArgs.find((a) => a.startsWith('--framework=')) || '').split('=')[1]
     || (rawArgs.includes('-f') ? rawArgs[rawArgs.indexOf('-f') + 1] : null);
   const tierArg = (rawArgs.find((a) => a.startsWith('--tier=')) || '').split('=')[1];

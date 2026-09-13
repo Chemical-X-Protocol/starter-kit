@@ -81,14 +81,14 @@ const IGNORED_DIRS = new Set([
   'out'
 ]);
 
+const EXCLUDED_NAME_PATTERNS = ['.test.', '.spec.', '.min.'];
+
 const isSourceFile = (name) => {
-  return (
-    /\.(tsx|ts|jsx|js|vue)$/.test(name) &&
-    !name.endsWith('.d.ts') &&
-    !name.includes('.test.') &&
-    !name.includes('.spec.') &&
-    !name.includes('.min.')
-  );
+  const isExtensionValid = /\.(tsx|ts|jsx|js|vue)$/.test(name);
+  if (!isExtensionValid) return false;
+  if (name.endsWith('.d.ts')) return false;
+  const isExcluded = EXCLUDED_NAME_PATTERNS.some((pat) => name.includes(pat));
+  return !isExcluded;
 };
 
 export const auditFile = (filePath, relativePath) => {

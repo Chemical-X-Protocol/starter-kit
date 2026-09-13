@@ -24,6 +24,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Preserved clean stdout in workflows by writing markdown reports to `--output` files without dumping raw markdown to the terminal.
 - Replaced top-level synchronous config directory creation in `cli/license.js` with lazy `ensureConfigDir` and `toResultSync` Result Tuple pattern.
 
+### Refactored
+- Harmonized multi-clause boolean predicate topologies across CLI and audit modules:
+  - Extracted canonical extension helpers (`isComponentExtension`, `isTemplateExtension`, `isCommentLine`), metric comparison (`hasMatchingAuditMetrics`), and fallback resolution (`resolveFirstDefined`) in `cli/audit/rules-predicates.js` and `cli/audit/rules-predicates.d.ts`.
+  - Refactored `checkMoleculeCoLocatedTest` and `checkExtendedTextPatterns` in `cli/audit/extended-visitors.js` to use canonical predicate helpers and 2-stage atomic booleans.
+  - Refactored `VariableDeclarator` in `cli/audit/ai-slop-detector.js` to use sequential guard clauses for reinvented utility detection.
+  - Refactored `saveAuditSnapshot` in `cli/audit/history.js` using `hasMatchingAuditMetrics`.
+  - Refactored capsule prefix detection in `cli/index.js` and CLI build/generate argument parsing in `cli/build.js` and `cli/generator.js` using predicate helpers.
+  - Refactored menu choice matching in `cli/navigator-menu.js` using `isAnyKeywordPresent` and keyword catalogs.
+  - Refactored scorecard grade target resolution in `cli/audit/reporter-sections.js` using `resolveFirstDefined`.
+  - Refactored source file detection in `cli/audit.js` using early return guard clauses and exclusion arrays.
+
 ## [2026-09-08]
 
 ### Added

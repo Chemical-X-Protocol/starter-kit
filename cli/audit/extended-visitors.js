@@ -3,6 +3,11 @@ import path from 'node:path';
 import * as t from '@babel/types';
 import { RULE_REGISTRY } from './rules-registry.js';
 import { toResultSync } from './rules-helpers.js';
+import {
+  isComponentExtension,
+  isTemplateExtension,
+  isCommentLine
+} from './rules-predicates.js';
 
 const BARE_BOOLEANS = new Set([
   'loading', 'valid', 'active', 'visible', 'open', 'disabled',
@@ -37,11 +42,12 @@ const checkMoleculeCoLocatedTest = (filePath, relativePath, violations) => {
 
   // Stage 1: Atomic Concept Declarations
   const isMoleculePath = relativePath.includes('molecules') || baseName.startsWith('m-');
-  const isComponentExt = ext === '.vue' || ext === '.tsx' || ext === '.jsx';
+  const isComponentExt = isComponentExtension(ext);
   const isTestOrSpecFile = baseName.includes('.spec.') || baseName.includes('.test.');
 
   // Stage 2: Unified Decision Variable & Early Guard Clause
-  const isMoleculeComponent = isMoleculePath && isComponentExt && !isTestOrSpecFile;
+  const isCandidateComponent = isMoleculePath && isComponentExt;
+  const isMoleculeComponent = isCandidateComponent && !isTestOrSpecFile;
   if (!isMoleculeComponent) return;
 
   const dir = path.dirname(filePath);
@@ -75,12 +81,12 @@ export const checkExtendedTextPatterns = (content, lines, relativePath, filePath
 
   const isTestFile = /\.(test|spec)\.[jt]sx?$/.test(filePath);
   const ext = path.extname(filePath);
-  const isTemplateFile = ext === '.vue' || ext === '.html' || ext === '.svelte';
+  const isTemplateFile = isTemplateExtension(ext);
 
   lines.forEach((lineText, idx) => {
     const lineNum = idx + 1;
     const trimmed = lineText.trim();
-    const isComment = trimmed.startsWith('//') || trimmed.startsWith('*') || trimmed.startsWith('/*');
+    const isComment = isCommentLine(trimmed);
 
     // Pillar 9: Hardcoded Secret Detection
     const hasEnvReference = trimmed.includes('process.env') || trimmed.includes('import.meta.env');

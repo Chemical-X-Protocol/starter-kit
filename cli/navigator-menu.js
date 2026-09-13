@@ -30,6 +30,12 @@ export const buildNavigatorMenu = (topActions, activeGrades, midActions, bottomA
   return { menuItems, menuOptions };
 };
 
+const ROADMAP_KEYWORDS = ['Roadmap', 'Healing', 'Self-Healing'];
+const RERUN_KEYWORDS = ['Re-Run', 'Rerun', 'Re-run', 'Re-Audit'];
+const SHARE_KEYWORDS = ['Share', 'Discussions', 'Plug your'];
+
+const isAnyKeywordPresent = (text, keywords) => keywords.some((kw) => text.includes(kw));
+
 const isChoiceMatchingItem = (cleanChoice) => (item) => {
   const prefix = `${item.index}.`;
   if (cleanChoice.startsWith(prefix) || cleanChoice === String(item.index)) return true;
@@ -51,19 +57,10 @@ const isChoiceMatchingItem = (cleanChoice) => (item) => {
   ) {
     return true;
   }
-  if (
-    item.key === "roadmap" &&
-    (cleanChoice.includes("Roadmap") || cleanChoice.includes("Healing") || cleanChoice.includes("Self-Healing"))
-  ) {
+  if (item.key === "roadmap" && isAnyKeywordPresent(cleanChoice, ROADMAP_KEYWORDS)) {
     return true;
   }
-  if (
-    item.key === "rerun" &&
-    (cleanChoice.includes("Re-Run") ||
-      cleanChoice.includes("Rerun") ||
-      cleanChoice.includes("Re-run") ||
-      cleanChoice.includes("Re-Audit"))
-  ) {
+  if (item.key === "rerun" && isAnyKeywordPresent(cleanChoice, RERUN_KEYWORDS)) {
     return true;
   }
   if (
@@ -73,12 +70,7 @@ const isChoiceMatchingItem = (cleanChoice) => (item) => {
     return true;
   }
   if (item.key === "progress" && cleanChoice.includes("Progress")) return true;
-  if (
-    item.key === "share" &&
-    (cleanChoice.includes("Share") ||
-      cleanChoice.includes("Discussions") ||
-      cleanChoice.includes("Plug your"))
-  ) {
+  if (item.key === "share" && isAnyKeywordPresent(cleanChoice, SHARE_KEYWORDS)) {
     return true;
   }
   if (item.key === "export" && cleanChoice.includes("Export")) return true;
