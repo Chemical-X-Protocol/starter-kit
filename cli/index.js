@@ -32,6 +32,7 @@ import {
 } from './audit/rules-predicates.js';
 import { runInstallWizard } from './installer.js';
 import { runBadgeCommand } from './badge.js';
+import { runBuildAudit } from './build.js';
 
 const rawArgs = process.argv.slice(2);
 const invokedBin = path.basename(process.argv[1] || '');
@@ -164,7 +165,7 @@ export const runAudit = async (customDir = null, isCli = false) => {
   return report;
 };
 
-export { auditFile };
+export { auditFile, runBuildAudit };
 
 const main = async () => {
   const firstArg = rawArgs[0];
@@ -176,6 +177,11 @@ const main = async () => {
   }
 
   switch (firstArg) {
+    case 'build':
+    case 'run':
+    case 'wrap':
+      await runBuildAudit(rawArgs.slice(1), true);
+      break;
     case 'audit':
       await runAudit(null, true);
       break;

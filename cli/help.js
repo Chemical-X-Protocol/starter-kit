@@ -16,6 +16,14 @@ export const printHelp = () => {
     `  ${CYAN}npm create chemx${RESET} [directory]`,
     '',
     `${BOLD}COMMANDS${RESET}`,
+    `  ${CYAN}build${RESET} [options] [-- <command>]  ${DIM}(aliases: run, wrap)${RESET}`,
+    `      Wrap and audit arbitrary build scripts with token-conserving silent execution.`,
+    `      Suppresses multi-thousand-line compiler noise, catalogs diagnostics into`,
+    `      grouped categories (TypeScript, Vite/Rollup, Style, Budget), and provides`,
+    `      actionable remediation hints and machine-readable JSON for AI agents.`,
+    `      Flags: ${CYAN}--json${RESET}, ${CYAN}--silent${RESET}, ${CYAN}--raw${RESET}, ${CYAN}--summary${RESET}`,
+    `      Examples: ${CYAN}npx chemx build${RESET} or ${CYAN}npx chemx build -- pnpm build${RESET}`,
+    '',
     `  ${CYAN}audit${RESET} [options]`,
     `      Run the 7-Pillar Molecular Architecture static analysis audit.`,
     `      Scans AST for line budgets, control flow booleans, nested ternaries,`,
@@ -139,6 +147,12 @@ export const printHelp = () => {
     '',
     `  ${DIM}# Scaffold a new project:${RESET}`,
     `  ${CYAN}npm create chemx my-awesome-app${RESET}`,
+    '',
+    `  ${DIM}# Run token-conserving silent build audit with structured diagnostics:${RESET}`,
+    `  ${CYAN}npx chemx build --silent${RESET}`,
+    '',
+    `  ${DIM}# Wrap arbitrary build command and output AI-ready JSON:${RESET}`,
+    `  ${CYAN}npx chemx build --json -- pnpm run build${RESET}`,
     ''
   ].join('\n');
 
