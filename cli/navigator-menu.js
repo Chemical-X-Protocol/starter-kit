@@ -111,6 +111,12 @@ const isChoiceMatchingItem = (cleanChoice) => (item) => {
   ) {
     return true;
   }
+  if (item.name && cleanChoice.toLowerCase().includes(item.name.toLowerCase())) {
+    return true;
+  }
+  if (item.shortName && cleanChoice.toLowerCase().includes(item.shortName.toLowerCase())) {
+    return true;
+  }
   if (
     item.grade &&
     (cleanChoice.toLowerCase().includes(`grade ${item.grade}`) ||
@@ -168,6 +174,9 @@ const isEffectiveMatchingItem = (effective, exitIndex) => (item) => {
   ) {
     return true;
   }
+  if (item.name && effective === item.name.toLowerCase()) return true;
+  if (item.shortName && effective === item.shortName.toLowerCase()) return true;
+  if (item.key && (effective === item.key.toLowerCase() || effective === item.key.replace(/^pillar_/, '').toLowerCase())) return true;
   if (item.key === effective) return true;
   if (item.grade && (effective === item.grade || effective === `grade ${item.grade}`)) {
     return true;

@@ -252,6 +252,43 @@ export const buildHotspotsPrompt = (report) => {
   return lines.join('\n');
 };
 
+export const buildPillarPrompt = (report, pillarName) => {
+  const { violations = [], hotspots = [] } = report;
+  const pillarViolations = violations.filter((v) => v.pillar === pillarName);
+  const isPillar1 = pillarName === 'Line Budgets & Monolith Decomposition';
+  const relevantHotspots = isPillar1 ? hotspots.filter((h) => h.isMonolith || h.lineCount > 500) : [];
+
+  const hasNoViolations = pillarViolations.length === 0;
+  const hasNoHotspots = relevantHotspots.length === 0;
+  if (hasNoViolations && hasNoHotspots) return '';
+
+  const lines = [];
+  lines.push(`Act as a Principal Systems Architect. Surgically refactor the following ${pillarName} violations according to Chemical X Molecular Architecture Standards:\n`);
+
+  if (relevantHotspots.length > 0) {
+    lines.push('### MONOLITHIC REFACTORING HOTSPOTS');
+    lines.push('Action: Decompose into crystalline molecule capsules (< 100 lines) and declarative Table-of-Contents views.\n');
+    relevantHotspots.forEach((h, i) => {
+      lines.push(`${i + 1}. File: \`${h.filePath}\` (${h.lineCount} lines, ${h.violationCount} hazards)`);
+    });
+    lines.push('');
+  }
+
+  if (pillarViolations.length > 0) {
+    lines.push(`### ${pillarName.toUpperCase()} HAZARD VIOLATIONS`);
+    lines.push(...formatGroupedPromptViolations(pillarViolations));
+  }
+
+  lines.push('### STRICT EXECUTION RULES:');
+  lines.push('1. Branch First: Change to a new branch prefixed with `chem-x/NAMEOFIMPROVEMENT` before making changes.');
+  lines.push('2. Pre-Split Pattern Discovery: Survey cross-file patterns before slicing; extract canonical shared capsules first.');
+  lines.push('3. Molecular Capsule Limit: Maximum 100 lines per molecule capsule file.');
+  lines.push('4. Table-of-Contents Views: Top-level page views must be 10 to 20 line declarative templates assembling components via named slots.');
+  lines.push('5. Zero breaking changes to external component APIs, route exports, or existing props.');
+
+  return lines.join('\n');
+};
+
 export const buildMasterPrompt = (report) => {
   const sections = [
     buildGradeFPrompt(report, { excludeAiSlop: true }),

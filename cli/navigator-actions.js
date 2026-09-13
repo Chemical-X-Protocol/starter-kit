@@ -27,13 +27,21 @@ import {
   buildGradeCPrompt,
   buildGradeBPrompt,
   buildAiSlopPrompt,
+  formatSinglePillarSection,
+  buildPillarPrompt,
+  PILLAR_EMOJIS,
+  PILLAR_SHORT_NAMES,
   buildHotspotsPrompt,
   buildMasterPrompt,
   formatRoadmapSection,
   buildSelfHealingRoadmapPrompt,
   copyToClipboard
 } from "./audit.js";
-import { resolveGradeBadge } from "./navigator-grades.js";
+import {
+  resolveGradeBadge,
+  resolveIndividualPillarGrade,
+  resolvePillarRiskWeight
+} from "./navigator-grades.js";
 import { showPagedContent } from "./navigator-paged.js";
 import { showConversionMenu } from "./navigator-conversion.js";
 import { handleShareToDiscussions } from "./navigator-share.js";
@@ -41,111 +49,99 @@ import { runInstallWizard } from "./installer.js";
 import { formatButtonTag } from "./navigator-menu.js";
 import { runBadgeCommand } from "./badge.js";
 
-const isExtremeMonolith = (h) => h.lineCount >= 2000;
-const isSevereMonolith = (h) => h.lineCount >= 1000 && h.lineCount < 2000;
-const isWarningMonolith = (h) => h.lineCount >= 500 && h.lineCount < 1000;
-const isPassedPillar = (p) => p.status === "PASSED";
-const isFailedPillar = (p) => p.status === "FAILED";
-const isWarnPillar = (p) => p.status === "WARN";
+const GRADE_RISK_RANKS = {
+  F: 5,
+  D: 4,
+  C: 3,
+  B: 2,
+  A: 1,
+  'A+': 0
+};
+
+const comparePillarsByRisk = (a, b) => {
+  const rankA = GRADE_RISK_RANKS[a.grade] ?? 0;
+  const rankB = GRADE_RISK_RANKS[b.grade] ?? 0;
+  if (rankA !== rankB) {
+    return rankB - rankA;
+  }
+
+  if (b.riskWeight !== a.riskWeight) {
+    return b.riskWeight - a.riskWeight;
+  }
+
+  if (b.violations !== a.violations) {
+    return b.violations - a.violations;
+  }
+
+  return a.originalIndex - b.originalIndex;
+};
 
 export const buildActiveGrades = (report) => {
-  const { hotspots, violations, pillars } = report;
-  const { critical, high, medium, low } = groupViolationsBySeverity(violations);
+  const { pillars = {}, violations = [], aiSlop } = report;
+  const pillarEntries = Object.entries(pillars);
+  const items = [];
 
-  const passedPillarsCount = Object.values(pillars || {}).filter(isPassedPillar).length;
-  const failedPillarsCount = Object.values(pillars || {}).filter(isFailedPillar).length;
-  const warnPillarsCount = Object.values(pillars || {}).filter(isWarnPillar).length;
+  pillarEntries.forEach(([pillarName, data], index) => {
+    const grade = resolveIndividualPillarGrade(data);
+    const riskWeight = resolvePillarRiskWeight(data);
+    const icon = PILLAR_EMOJIS[pillarName] || '🏛️';
+    const shortName = PILLAR_SHORT_NAMES[pillarName] || pillarName;
+    const isClean = data.violations === 0;
+    const countLabel = isClean
+      ? '0 items'
+      : `${data.violations} ${data.violations === 1 ? 'item' : 'items'}`;
 
-  const extremeMonoliths = hotspots.filter(isExtremeMonolith);
-  const severeMonoliths = hotspots.filter(isSevereMonolith);
-  const warningMonoliths = hotspots.filter(isWarningMonolith);
+    const handlePillarAction = async () => {
+      await showPagedContent(
+        formatSinglePillarSection(report, pillarName),
+        buildPillarPrompt(report, pillarName)
+      );
+    };
 
-  const gradeFCount = critical.length + extremeMonoliths.length + failedPillarsCount;
-  const gradeDCount = high.length + severeMonoliths.length + warnPillarsCount;
-  const gradeCCount = medium.length + warningMonoliths.length;
-  const gradeBCount = low.length;
-  const gradeACount = passedPillarsCount;
-
-  const handleGradeAAction = async () => {
-    await showPagedContent(formatGradeASection(report));
-  };
-  const handleGradeBAction = async () => {
-    await showPagedContent(formatGradeBSection(report), buildGradeBPrompt(report));
-  };
-  const handleGradeCAction = async () => {
-    await showPagedContent(formatGradeCSection(report), buildGradeCPrompt(report));
-  };
-  const handleGradeDAction = async () => {
-    await showPagedContent(formatGradeDSection(report), buildGradeDPrompt(report));
-  };
-  const handleGradeFAction = async () => {
-    await showPagedContent(formatGradeFSection(report), buildGradeFPrompt(report));
-  };
-  const slopViolations = (violations || []).filter((v) => v.isAiSlop);
-  const handleSlopAction = async () => {
-    await showPagedContent(formatAiSlopSection(report), buildAiSlopPrompt(report));
-  };
-
-  const gradeTiers = [
-    {
-      key: "grade_a",
-      grade: "A",
-      count: gradeACount,
-      icon: "✅",
-      description: "Compliant Checks & Passing Pillars",
-      action: handleGradeAAction
-    },
-    {
-      key: "grade_slop",
-      grade: report.aiSlop?.grade || (slopViolations.length > 0 ? "D" : "A"),
-      count: slopViolations.length,
-      icon: "🤖",
-      description: `AI Slop & Authenticity (${report.aiSlop?.score ?? 100}/100 - ${report.aiSlop?.label ?? "Pure Artisanal"})`,
-      action: handleSlopAction
-    },
-    {
-      key: "grade_b",
-      grade: "B",
-      count: gradeBCount,
-      icon: "💣",
-      description: "Low Hygiene Issues & Minor Debts",
-      action: handleGradeBAction
-    },
-    {
-      key: "grade_c",
-      grade: "C",
-      count: gradeCCount,
-      icon: "⚡",
-      description: "Medium Severity Debts & Monolith Drift",
-      action: handleGradeCAction
-    },
-    {
-      key: "grade_d",
-      grade: "D",
-      count: gradeDCount,
-      icon: "🔥",
-      description: "High Severity Debts & Severe Monoliths",
-      action: handleGradeDAction
-    },
-    {
-      key: "grade_f",
-      grade: "F",
-      count: gradeFCount,
-      icon: "💥",
-      description: "Critical Hazards & Extreme Monoliths",
-      action: handleGradeFAction
-    }
-  ];
-
-  const createActiveGradeItem = (g) => ({
-    key: g.key || `grade_${g.grade.toLowerCase()}`,
-    grade: g.grade.toLowerCase(),
-    tag: resolveGradeBadge(g.grade, 11),
-    label: `${g.icon} Grade ${g.grade}: ${g.description} (${g.count} ${g.grade === "A" ? "clean" : "items"})`,
-    action: g.action
+    items.push({
+      key: `pillar_${data.pillarKey || index + 1}`,
+      name: pillarName,
+      shortName,
+      grade,
+      riskWeight,
+      violations: data.violations || 0,
+      originalIndex: index,
+      tag: resolveGradeBadge(grade, 11),
+      label: `${icon} ${pillarName} (${countLabel})`,
+      action: handlePillarAction
+    });
   });
 
-  return gradeTiers.map(createActiveGradeItem);
+  if (aiSlop) {
+    const slopViolations = violations.filter((v) => v.isAiSlop);
+    const slopGrade = aiSlop.grade || (slopViolations.length > 0 ? 'D' : 'A+');
+    const slopRiskWeight = resolvePillarRiskWeight(aiSlop.breakdown);
+    const slopCount = slopViolations.length;
+    const isSlopClean = slopCount === 0;
+    const slopCountLabel = isSlopClean
+      ? '0 items'
+      : `${slopCount} ${slopCount === 1 ? 'item' : 'items'}`;
+
+    const handleSlopAction = async () => {
+      await showPagedContent(formatAiSlopSection(report), buildAiSlopPrompt(report));
+    };
+
+    items.push({
+      key: 'grade_slop',
+      name: 'AI Slop & Code Authenticity',
+      shortName: 'Slop',
+      grade: slopGrade,
+      riskWeight: slopRiskWeight,
+      violations: slopCount,
+      originalIndex: pillarEntries.length,
+      tag: resolveGradeBadge(slopGrade, 11),
+      label: `🤖 AI Slop & Authenticity (${aiSlop.score ?? 100}/100 - ${aiSlop.label ?? 'Pure Artisanal'}) (${slopCountLabel})`,
+      action: handleSlopAction
+    });
+  }
+
+  items.sort(comparePillarsByRisk);
+  return items;
 };
 
 export const buildDashboardActionGroups = ({ report, onScaffold = null, onRerun = null }) => {

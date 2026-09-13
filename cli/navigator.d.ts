@@ -7,6 +7,8 @@ export declare function resolveCriticalGrade(count: number): string;
 export declare function resolveHighMedGrade(count: number): string;
 export declare function resolveLowGrade(count: number): string;
 export declare function resolvePillarGrade(pillars: Record<string, unknown>): string;
+export declare function resolveIndividualPillarGrade(pillarData: unknown): string;
+export declare function resolvePillarRiskWeight(pillarData: unknown): number;
 export declare function resolveHotspotGrade(hotspots: readonly { readonly lineCount: number }[]): string;
 export declare function resolveContextGrade(riskTier: string): string;
 

@@ -63,6 +63,34 @@ export const getStatusBadge = (status) => {
   }
 };
 
+export const resolveIndividualPillarGrade = (pillarData) => {
+  const hasNoViolations = !pillarData || pillarData.violations === 0;
+  if (hasNoViolations) return 'A+';
+
+  const hasCritical = (pillarData.critical || 0) > 0;
+  if (hasCritical) return 'F';
+
+  const hasHigh = (pillarData.high || 0) > 0;
+  if (hasHigh) return 'D';
+
+  const hasMedium = (pillarData.medium || 0) > 0;
+  if (hasMedium) return 'C';
+
+  const hasLow = (pillarData.low || 0) > 0;
+  if (hasLow) return 'B';
+
+  return 'A+';
+};
+
+export const resolvePillarRiskWeight = (pillarData) => {
+  if (!pillarData) return 0;
+  const critical = pillarData.critical || 0;
+  const high = pillarData.high || 0;
+  const medium = pillarData.medium || 0;
+  const low = pillarData.low || 0;
+  return critical * 8 + high * 4 + medium * 2 + low * 1;
+};
+
 export const resolveGradeColor = (scoreOrGrade) => {
   if (typeof scoreOrGrade === 'string') {
     const g = scoreOrGrade.toUpperCase();

@@ -29,6 +29,8 @@ export {
   resolveHighMedGrade,
   resolveLowGrade,
   resolvePillarGrade,
+  resolveIndividualPillarGrade,
+  resolvePillarRiskWeight,
   resolveHotspotGrade,
   resolveContextGrade,
   resolveAiSlopGrade

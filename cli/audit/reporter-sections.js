@@ -14,6 +14,7 @@ import {
   resolveRiskColor,
   resolveHotspotBadge,
   resolveTopSectionColor,
+  resolveIndividualPillarGrade,
   PILLAR_EMOJIS,
   formatPillarReactionBadgesTerminal
 } from './reporter-utils.js';
@@ -173,6 +174,57 @@ export const formatPillarsSection = (report, themeColor = null) => {
   }
   lines.push(`${sectionColor}======================================================================${RESET}\n`);
 
+  return lines.join('\n');
+};
+
+export const formatSinglePillarSection = (report, pillarName, themeColor = null) => {
+  const pillarData = report?.pillars?.[pillarName] || {
+    violations: 0,
+    critical: 0,
+    high: 0,
+    medium: 0,
+    low: 0,
+    status: 'PASSED'
+  };
+  const grade = resolveIndividualPillarGrade(pillarData);
+  const gradeColor = resolveGradeColor(grade);
+  const sectionColor = themeColor || gradeColor;
+  const icon = PILLAR_EMOJIS[pillarName] || '🏛️';
+  const lines = [];
+
+  lines.push('');
+  lines.push(`${sectionColor}======================================================================${RESET}`);
+  lines.push(`${BOLD}${sectionColor}   [ ${icon} ] PILLAR ARCHITECTURAL AUDIT : ${pillarName.toUpperCase()}${RESET}`);
+  lines.push(`${sectionColor}======================================================================${RESET}`);
+  lines.push(`   Pillar Grade:      ${gradeColor}${BOLD}Grade: ${grade}${RESET}`);
+  lines.push(`   Compliance Status: ${getStatusBadge(pillarData.status)}`);
+  lines.push(`   Violations:        ${pillarData.violations} total (${pillarData.critical} Critical, ${pillarData.high} High, ${pillarData.medium} Medium, ${pillarData.low} Low)`);
+  lines.push(`${sectionColor}----------------------------------------------------------------------${RESET}`);
+
+  if (pillarData.violations === 0) {
+    lines.push(`\n   ${GREEN}✔ Outstanding! Zero violations detected for this pillar.${RESET}`);
+    lines.push(`   ${DIM}All inspected modules adhere strictly to Chemical X standards for ${pillarName}.${RESET}\n`);
+  } else {
+    const pillarViolations = (report.violations || []).filter((v) => v.pillar === pillarName);
+    if (pillarViolations.length > 0) {
+      lines.push(`\n   ${BOLD}${sectionColor}🚨 DETECTED VIOLATIONS (${pillarViolations.length}):${RESET}\n`);
+      lines.push(renderGroupedViolationsTerminal(pillarViolations));
+    }
+  }
+
+  const isPillar1 = pillarName === 'Line Budgets & Monolith Decomposition';
+  if (isPillar1) {
+    const monolithHotspots = (report?.hotspots || []).filter((h) => h.isMonolith || h.lineCount > 500);
+    if (monolithHotspots.length > 0) {
+      lines.push(`   ${BOLD}${sectionColor}🔥 MONOLITHIC HOTSPOTS (${monolithHotspots.length}):${RESET}`);
+      monolithHotspots.forEach((h, idx) => {
+        lines.push(formatHotspotItem(h, idx));
+      });
+      lines.push('');
+    }
+  }
+
+  lines.push(`${sectionColor}======================================================================${RESET}\n`);
   return lines.join('\n');
 };
 

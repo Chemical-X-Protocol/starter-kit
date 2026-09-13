@@ -7,6 +7,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [2026-09-12]
 
 ### Added
+- Added individual pillar grading and risk-ordered navigation menu (`cli/navigator-actions.js`, `cli/navigator-menu.js`, `cli/navigator-grades.js`):
+  - Replaced generic letter-grade buckets with individual architectural pillar categories, dynamically displaying each pillar's specific grade tag (`A+` to `F`) and item counts.
+  - Sorted pillar categories dynamically from highest to lowest risk based on severity weight (`critical * 8 + high * 4 + medium * 2 + low * 1`), while preserving canonical 1 to 11 order when all pillars pass with Grade A+.
+  - Added dedicated individual pillar report view (`formatSinglePillarSection` in `cli/audit/reporter-sections.js`) and pillar AI refactoring prompt generator (`buildPillarPrompt` in `cli/audit/prompts.js`).
 - Added Build Auditor wrapper command (`chemx build`, aliases `run`, `wrap`) with token-optimized silent execution (`cli/build.js`, `cli/build/`):
   - Wraps arbitrary or auto-detected build scripts (`pnpm run build`, `yarn build`, `bun run build`, `npm run build`, `vite build`, `tsc --noEmit`).
   - Automatically parses and catalogs TypeScript (`TS*`), Rollup/Vite resolution, Sass/PostCSS syntax, and bundle budget errors into structured diagnostic categories with 1-line remediation hints.
