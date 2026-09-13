@@ -7,6 +7,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [2026-09-12]
 
 ### Added
+- Added Build Auditor wrapper command (`chemx build`, aliases `run`, `wrap`) with token-optimized silent execution (`cli/build.js`, `cli/build/`):
+  - Wraps arbitrary or auto-detected build scripts (`pnpm run build`, `yarn build`, `bun run build`, `npm run build`, `vite build`, `tsc --noEmit`).
+  - Automatically parses and catalogs TypeScript (`TS*`), Rollup/Vite resolution, Sass/PostCSS syntax, and bundle budget errors into structured diagnostic categories with 1-line remediation hints.
+  - Implemented `--json` output flag emitting structured machine-readable error envelopes for AI agents, and `--silent` flag for zero-noise terminal output on successful builds.
 - Added automated pull request comment step to Chemical X Gatekeeper workflows (`.github/workflows/chemx-audit.yml`, `blueprints/workflows/chemx-audit.yml`, `cli/installer-templates.js`) that renders the full audit report with an architectural discussion topic link, updating existing PR comments idempotently.
 
 ### Fixed

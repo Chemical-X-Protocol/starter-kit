@@ -18,7 +18,8 @@
   ],
   "exports": {
     ".": "./cli/index.js",
-    "./audit": "./cli/audit.js"
+    "./audit": "./cli/audit.js",
+    "./build": "./cli/build.js"
   },
   "scripts": {
     "publish:both": "node scripts/publish-both.mjs",
