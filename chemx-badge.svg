@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="308" height="28" viewBox="0 0 308 28" fill="none">
+  <defs>
+    <linearGradient id="chemx-comic" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#f43f85"/>
+      <stop offset="50%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#a3e635"/>
+    </linearGradient>
+  </defs>
+  <rect width="308" height="28" rx="14" fill="#090d16" stroke="url(#chemx-comic)" stroke-width="1.2"/>
+  <circle cx="16" cy="14" r="4" fill="#a3e635"/>
+  <text x="28" y="17" fill="#cbd5e1" font-family="monospace" font-size="11" font-weight="500">AI Slop cleaned with Chemical X</text>
+  <rect x="264" y="6" width="34" height="16" rx="8" fill="#a3e635" fill-opacity="0.18" stroke="#a3e635" stroke-opacity="0.4"/>
+  <text x="281" y="17" text-anchor="middle" fill="#a3e635" font-family="monospace" font-size="10" font-weight="700">A+</text>
+</svg>

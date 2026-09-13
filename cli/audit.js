@@ -32,6 +32,7 @@ import {
   formatHighMediumSection,
   formatLowSection,
   formatPillarsSection,
+  formatSinglePillarSection,
   formatHotspotsSection,
   formatContextAnalysisSection,
   formatFailuresSection,
@@ -50,6 +51,7 @@ import {
   formatPillarReactionBadgesMarkdown,
   formatPillarShieldBadges,
   resolveBadgeColor,
+  PILLAR_EMOJIS,
   PILLAR_SHORT_NAMES
 } from './audit/reporter.js';
 import {
@@ -59,6 +61,7 @@ import {
   buildGradeBPrompt,
   buildAiSlopPrompt,
   buildHotspotsPrompt,
+  buildPillarPrompt,
   buildMasterPrompt,
   formatPromptBox,
   formatGroupedPromptViolations
@@ -249,6 +252,7 @@ export {
   formatHighMediumSection,
   formatLowSection,
   formatPillarsSection,
+  formatSinglePillarSection,
   formatHotspotsSection,
   formatContextAnalysisSection,
   formatFailuresSection,
@@ -267,6 +271,7 @@ export {
   formatPillarReactionBadgesMarkdown,
   formatPillarShieldBadges,
   resolveBadgeColor,
+  PILLAR_EMOJIS,
   PILLAR_SHORT_NAMES,
   buildGradeFPrompt,
   buildGradeDPrompt,
@@ -274,6 +279,7 @@ export {
   buildGradeBPrompt,
   buildAiSlopPrompt,
   buildHotspotsPrompt,
+  buildPillarPrompt,
   buildMasterPrompt,
   formatPromptBox,
   formatGroupedPromptViolations,

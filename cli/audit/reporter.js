@@ -16,6 +16,7 @@ import {
   formatHighMediumSection,
   formatLowSection,
   formatPillarsSection,
+  formatSinglePillarSection,
   formatHotspotsSection,
   formatContextAnalysisSection,
   formatAiSlopSection
@@ -108,6 +109,7 @@ export {
   formatHighMediumSection,
   formatLowSection,
   formatPillarsSection,
+  formatSinglePillarSection,
   formatHotspotsSection,
   formatContextAnalysisSection,
   formatAiSlopSection
