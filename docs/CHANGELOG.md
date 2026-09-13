@@ -4,6 +4,13 @@ All notable changes to the Chemical X Starter Kit repository will be documented 
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [2026-09-13]
+
+### Added
+- **Gatekeeper SaaS & Sponsor Verification**: Integrated client license validation in `cli/license.js` with `Xophz Gatekeeper` (`/wp-json/compass/v1/gatekeeper/licenses/validate`), allowing verification of both license keys (`CX-ST-`, `CX-SP-`) and GitHub Sponsor handles.
+- **Community Edition Flow**: Added reciprocal free Community Edition scaffolding in `cli/scaffold.js` allowing developers to unpack blueprints locally while sharing scorecards with community GitHub Discussions.
+- **Local Blueprint Fallback**: Added `loadLocalBlueprintFiles` in `cli/license.js` enabling offline and community blueprint scaffolding without remote edge download dependencies.
+
 ## [2026-09-12]
 
 ### Added

@@ -16,10 +16,27 @@ export const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
 export const DEVICE_FILE = path.join(CONFIG_DIR, 'device_id');
 
 export const API_BASE = process.env.CHEMICAL_X_API_URL || 'https://chemicalx.xophz.com';
+export const GATEKEEPER_API_URL = process.env.COMPASS_GATEKEEPER_URL || 'https://mycompassconsulting.com/wp-json/compass/v1/gatekeeper';
 export const URL_LEARN = 'https://chemicalx.xophz.com';
 export const URL_SPONSOR = 'https://github.com/sponsors/Chemical-X-Protocol';
 export const URL_STANDARD = 'https://mycompassconsulting.com/buy/chemical-x/standard';
 export const URL_MASTER = 'https://mycompassconsulting.com/buy/chemical-x/master';
+
+export const verifyWithGatekeeper = async (keyOrUser, deviceId = null) => {
+  const effectiveDeviceId = deviceId || getOrCreateDeviceId();
+  try {
+    const res = await fetch(`${GATEKEEPER_API_URL}/licenses/validate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: keyOrUser, deviceId: effectiveDeviceId })
+    });
+    if (!res.ok) return { valid: false };
+    return await res.json();
+  } catch {
+    return { valid: false };
+  }
+};
+
 
 export const ensureConfigDir = () => {
   if (fs.existsSync(CONFIG_DIR)) return true;
@@ -328,9 +345,42 @@ export const fetchStarterKitFiles = async (licenseKey) => {
     );
     return responseData.files || {};
   } catch (err) {
+    // Fallback: Verify with Gatekeeper or local blueprints
+    const gatekeeperCheck = await verifyWithGatekeeper(normalizedKey, deviceId);
+    if (gatekeeperCheck.valid) {
+      saveLicenseKey(normalizedKey);
+      process.stdout.write(
+        `\x1b[32m✔ Verified via Gatekeeper for @${gatekeeperCheck.github_user || 'sponsor'} [Tier: ${gatekeeperCheck.tier}]\x1b[0m\n\n`
+      );
+      const localFiles = loadLocalBlueprintFiles();
+      if (Object.keys(localFiles).length > 0) return localFiles;
+    }
+
     process.stderr.write(
       `\x1b[31m✕ Network Error: Failed to reach edge server (${err.message}).\x1b[0m\n`
     );
     process.exit(1);
   }
 };
+
+export const loadLocalBlueprintFiles = () => {
+  const blueprintsDir = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../blueprints');
+  const files = {};
+  if (!fs.existsSync(blueprintsDir)) return files;
+
+  const walk = (dir, base = '') => {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const rel = base ? `${base}/${entry.name}` : entry.name;
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(full, rel);
+      } else {
+        files[rel] = fs.readFileSync(full, 'utf-8');
+      }
+    }
+  };
+  walk(blueprintsDir);
+  return files;
+};
+
