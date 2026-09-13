@@ -36,6 +36,9 @@ import { runBuildAudit } from './build.js';
 
 const rawArgs = process.argv.slice(2);
 const invokedBin = path.basename(process.argv[1] || '');
+const CAPSULE_PREFIXES = ['m-', 'a-', 'o-', 't-'];
+
+const isCapsulePrefix = (arg) => CAPSULE_PREFIXES.some((prefix) => arg.startsWith(prefix));
 
 const loadProjectConfig = () => {
   const cfgPath = path.resolve(process.cwd(), '.chemx', 'config.json');
@@ -212,7 +215,7 @@ const main = async () => {
       printHelp();
       break;
     default:
-      if (firstArg && (firstArg.startsWith('m-') || firstArg.startsWith('a-') || firstArg.startsWith('o-') || firstArg.startsWith('t-'))) {
+      if (firstArg && isCapsulePrefix(firstArg)) {
         await runGenerateWizard(rawArgs);
       } else if (firstArg && !firstArg.startsWith('-')) {
         await runScaffold(firstArg, rawArgs, runAudit);

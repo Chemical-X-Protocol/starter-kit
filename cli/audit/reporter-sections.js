@@ -25,6 +25,7 @@ import {
   buildHotspotsPrompt,
   formatPromptBox
 } from './prompts.js';
+import { resolveFirstDefined } from './rules-predicates.js';
 
 const isSlopViolation = (v) => Boolean(v.isAiSlop);
 
@@ -36,7 +37,8 @@ const formatHotspotItem = (h, idx) => {
 export const formatScorecardSection = (report, themeColor = null) => {
   const { metrics, health } = report;
   const sectionColor = themeColor || resolveTopSectionColor(report);
-  const gradeColor = resolveGradeColor(health?.score ?? health?.grade ?? 'A');
+  const gradeTarget = resolveFirstDefined(health?.score, health?.grade, 'A');
+  const gradeColor = resolveGradeColor(gradeTarget);
   const lines = [];
 
   lines.push('');

@@ -5,6 +5,10 @@ import { groupBuildDiagnostics } from './build/grouper.js';
 import { formatTerminalBuildReport, formatJsonBuildReport } from './build/reporter.js';
 import { ANSI } from './theme.js';
 
+const IGNORED_COMMAND_TOKENS = new Set(['build', 'run', 'wrap']);
+
+const isCommandCandidate = (arg) => !arg.startsWith('-') && !IGNORED_COMMAND_TOKENS.has(arg);
+
 const parseCommandFromArgs = (args) => {
   const dashDashIndex = args.indexOf('--');
   if (dashDashIndex !== -1) {
@@ -12,7 +16,7 @@ const parseCommandFromArgs = (args) => {
     if (afterDash.length > 0) return afterDash;
   }
 
-  const candidate = args.find((a) => !a.startsWith('-') && a !== 'build' && a !== 'run' && a !== 'wrap');
+  const candidate = args.find(isCommandCandidate);
   return candidate ? candidate.trim() : null;
 };
 

@@ -4,12 +4,25 @@
  */
 
 const COMPONENT_PATH_SEGMENTS = ['molecules', 'components', '/m-', '/views/', '/pages/'];
+const COMPONENT_EXTENSIONS = new Set(['.vue', '.tsx', '.jsx']);
+const TEMPLATE_EXTENSIONS = new Set(['.vue', '.html', '.svelte']);
+const COMMENT_PREFIXES = ['//', '*', '/*'];
 const CONSOLE_LOG_METHODS = ['log', 'info', 'warn'];
 const NON_INTERACTIVE_FLAGS = ['--non-interactive', '--no-interactive', '--ci'];
+const FORMAT_FLAGS = ['--markdown', '--md', '--json'];
 const GRADE_RANKS = { 'A+': 5, 'A': 4, 'B': 3, 'C': 2, 'D': 1, 'F': 0 };
 
 export const isComponentPath = (path) => {
   return COMPONENT_PATH_SEGMENTS.some((segment) => path.includes(segment));
+};
+
+export const isComponentExtension = (ext) => COMPONENT_EXTENSIONS.has(ext);
+
+export const isTemplateExtension = (ext) => TEMPLATE_EXTENSIONS.has(ext);
+
+export const isCommentLine = (line) => {
+  if (!line) return false;
+  return COMMENT_PREFIXES.some((prefix) => line.startsWith(prefix));
 };
 
 export const isCodeLine = (line) => {
@@ -60,7 +73,26 @@ export const isCustomHookFunction = (astPath) => {
 };
 
 export const resolveStartLine = (primaryNode, fallbackNode, defaultLine = 1) => {
-  return primaryNode?.loc?.start?.line ?? fallbackNode?.loc?.start?.line ?? defaultLine;
+  const primaryLine = primaryNode?.loc?.start?.line;
+  if (primaryLine !== undefined) return primaryLine;
+  const fallbackLine = fallbackNode?.loc?.start?.line;
+  if (fallbackLine !== undefined) return fallbackLine;
+  return defaultLine;
+};
+
+export const resolveFirstDefined = (...candidates) => {
+  for (const val of candidates) {
+    if (val !== null && val !== undefined) return val;
+  }
+  return undefined;
+};
+
+export const hasMatchingAuditMetrics = (a, b) => {
+  const isScoreMatch = a.health?.score === b.health?.score;
+  if (!isScoreMatch) return false;
+  const isLocMatch = a.metrics?.totalLoc === b.metrics?.totalLoc;
+  if (!isLocMatch) return false;
+  return a.violations?.total === b.violations?.total;
 };
 
 export const isZeroDelayTimeout = (callee, delayArg, t) => {
@@ -101,7 +133,7 @@ export const evaluateAuditFailure = (conditions = []) => {
 export const isNonInteractiveSession = (rawArgs, env = process.env) => {
   const hasCliFlag = NON_INTERACTIVE_FLAGS.some((flag) => rawArgs.includes(flag));
   const hasOutputFlag = rawArgs.some((arg) => arg.startsWith('--output=') || arg.startsWith('-o='));
-  const hasFormatFlag = rawArgs.includes('--markdown') || rawArgs.includes('--md') || rawArgs.includes('--json');
+  const hasFormatFlag = FORMAT_FLAGS.some((flag) => rawArgs.includes(flag));
   const hasCiEnv = Boolean(env.CI || env.GIT_DIR);
-  return hasCliFlag || hasOutputFlag || hasFormatFlag || hasCiEnv;
+  return [hasCliFlag, hasOutputFlag, hasFormatFlag, hasCiEnv].some(Boolean);
 };

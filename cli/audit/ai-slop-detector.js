@@ -222,12 +222,13 @@ export const createAiSlopVisitors = ({ relativePath, violations }) => {
     VariableDeclarator(astPath) {
       if (!isComponentFile) return;
       const idName = astPath.node.id?.name?.toLowerCase();
-      if (
-        idName &&
-        REINVENTED_UTILS.has(idName) &&
-        (t.isArrowFunctionExpression(astPath.node.init) || t.isFunctionExpression(astPath.node.init))
-      ) {
-        const line = astPath.node.loc?.start.line || 1;
+      if (!idName || !REINVENTED_UTILS.has(idName)) return;
+
+      const initNode = astPath.node.init;
+      const isFunction = t.isArrowFunctionExpression(initNode) || t.isFunctionExpression(initNode);
+      if (!isFunction) return;
+
+      const line = astPath.node.loc?.start.line || 1;
         const meta = RULE_REGISTRY.AI_SLOP_UTILITY_REINVENTION;
         violations.push({
           filePath: relativePath,
@@ -240,7 +241,6 @@ export const createAiSlopVisitors = ({ relativePath, violations }) => {
           directive: meta.directive,
           isAiSlop: true
         });
-      }
     }
   };
 };
