@@ -13,8 +13,27 @@ export const toCamelCase = (str) => {
   return p.charAt(0).toLowerCase() + p.slice(1);
 };
 
-export const buildReactComponent = (name, pascalName) => `import React from 'react';
-import type { ${pascalName}Props } from './types';
+export const buildReactComponent = (name, pascalName, options = {}) => {
+  const atomsPackage = options.atomsPackage || null;
+  const atomImport = atomsPackage ? `import { AtomButton } from '${atomsPackage}';\n` : '';
+  const actionButton = atomsPackage
+    ? `        <AtomButton
+          disabled={!canProceed}
+          onClick={handleAction}
+        >
+          {variant}
+        </AtomButton>`
+    : `        <button
+          type="button"
+          className="${name}__action"
+          disabled={!canProceed}
+          onClick={handleAction}
+        >
+          {variant}
+        </button>`;
+
+  return `import React from 'react';
+${atomImport}import type { ${pascalName}Props } from './types';
 import { use${pascalName}Controller } from './${name}.controller';
 
 export const ${pascalName}: React.FC<${pascalName}Props> = ({
@@ -36,14 +55,7 @@ export const ${pascalName}: React.FC<${pascalName}Props> = ({
         <span className={descriptor.className}>{descriptor.text}</span>
       </div>
       <div className="${name}__body">
-        <button
-          type="button"
-          className="${name}__action"
-          disabled={!canProceed}
-          onClick={handleAction}
-        >
-          {variant}
-        </button>
+${actionButton}
       </div>
     </div>
   );
@@ -51,8 +63,27 @@ export const ${pascalName}: React.FC<${pascalName}Props> = ({
 
 export default ${pascalName};
 `;
+};
 
-export const buildVueComponent = (name, pascalName) => `<script setup lang="ts">
+export const buildVueComponent = (name, pascalName, options = {}) => {
+  const atomsPackage = options.atomsPackage || null;
+  const actionButton = atomsPackage
+    ? `      <a-button
+        :disabled="!canProceed"
+        @click="handleAction"
+      >
+        {{ variant }}
+      </a-button>`
+    : `      <button
+        type="button"
+        class="${name}__action"
+        :disabled="!canProceed"
+        @click="handleAction"
+      >
+        {{ variant }}
+      </button>`;
+
+  return `<script setup lang="ts">
 import type { ${pascalName}Props, ${pascalName}Emits } from './types';
 import { use${pascalName}Controller } from './${name}.controller';
 
@@ -76,14 +107,7 @@ const { state, canProceed, descriptor, handleAction } = use${pascalName}Controll
       <span :class="descriptor.className">{{ descriptor.text }}</span>
     </div>
     <div class="${name}__body">
-      <button
-        type="button"
-        class="${name}__action"
-        :disabled="!canProceed"
-        @click="handleAction"
-      >
-        {{ variant }}
-      </button>
+${actionButton}
     </div>
   </div>
 </template>
@@ -92,10 +116,30 @@ const { state, canProceed, descriptor, handleAction } = use${pascalName}Controll
 @use './_${name}.scss';
 </style>
 `;
+};
 
-export const buildSvelteComponent = (name, pascalName) => `<script lang="ts">
+export const buildSvelteComponent = (name, pascalName, options = {}) => {
+  const atomsPackage = options.atomsPackage || null;
+  const atomImport = atomsPackage ? `import { AtomButton } from '${atomsPackage}';\n` : '';
+  const actionButton = atomsPackage
+    ? `    <AtomButton
+      disabled={!controller.canProceed}
+      onclick={controller.handleAction}
+    >
+      {variant}
+    </AtomButton>`
+    : `    <button
+      type="button"
+      class="${name}__action"
+      disabled={!controller.canProceed}
+      onclick={controller.handleAction}
+    >
+      {variant}
+    </button>`;
+
+  return `<script lang="ts">
 import type { ${pascalName}Props } from './types';
-import { create${pascalName}Controller } from './${name}.controller';
+${atomImport}import { create${pascalName}Controller } from './${name}.controller';
 
 const {
   title,
@@ -119,14 +163,7 @@ const controller = create${pascalName}Controller({
     <span class={controller.descriptor.className}>{controller.descriptor.text}</span>
   </div>
   <div class="${name}__body">
-    <button
-      type="button"
-      class="${name}__action"
-      disabled={!controller.canProceed}
-      onclick={controller.handleAction}
-    >
-      {variant}
-    </button>
+${actionButton}
   </div>
 </div>
 
@@ -134,6 +171,7 @@ const controller = create${pascalName}Controller({
 @use './_${name}.scss';
 </style>
 `;
+};
 
 export const buildController = (name, pascalName) => `import { useState, useMemo } from 'react';
 import type { ${pascalName}State, ${pascalName}Descriptor } from './types';

@@ -3,7 +3,13 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
 import { runGenerateWizard } from './generator.js';
-import { toPascalCase, toCamelCase } from './generator-templates.js';
+import {
+  toPascalCase,
+  toCamelCase,
+  buildReactComponent,
+  buildVueComponent,
+  buildSvelteComponent
+} from './generator-templates.js';
 import { handleCheckCommand } from './search-commands.js';
 
 test('generator-templates: toPascalCase and toCamelCase convert slugs correctly', () => {
@@ -100,4 +106,20 @@ test('handleCheckCommand: performs instant single-file audit', () => {
   assert.strictEqual(res.isClean, true);
   assert.strictEqual(res.criticalCount, 0);
   assert.ok(typeof res.durationMs === 'number');
+});
+
+test('generator-templates: binds to @chemx/x-atoms when atomsPackage option is provided', () => {
+  const reactCode = buildReactComponent('m-test', 'Test', { atomsPackage: '@chemx/x-atoms' });
+  assert.ok(reactCode.includes("import { AtomButton } from '@chemx/x-atoms';"));
+  assert.ok(reactCode.includes('<AtomButton'));
+  assert.ok(!reactCode.includes('<button'));
+
+  const vueCode = buildVueComponent('m-test', 'Test', { atomsPackage: '@chemx/x-atoms' });
+  assert.ok(vueCode.includes('<a-button'));
+  assert.ok(!vueCode.includes('<button'));
+
+  const svelteCode = buildSvelteComponent('m-test', 'Test', { atomsPackage: '@chemx/x-atoms' });
+  assert.ok(svelteCode.includes("import { AtomButton } from '@chemx/x-atoms';"));
+  assert.ok(svelteCode.includes('<AtomButton'));
+  assert.ok(!svelteCode.includes('<button'));
 });

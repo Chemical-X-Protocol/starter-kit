@@ -35,6 +35,33 @@ export const detectFramework = (cwd = process.cwd()) => {
   return 'react';
 };
 
+const ATOMS_PACKAGES = ['@chemx/x-atoms', '@chemx/atoms', 'x-atoms', '@chem-x/x-atoms'];
+const PALETTE_PACKAGES = ['@chemx/o-command-palette', '@chemx/command-palette', 'o-command-palette', '@chem-x/o-command-palette'];
+
+export const detectInstalledFamily = (cwd = process.cwd()) => {
+  const pkgPath = path.resolve(cwd, 'package.json');
+  if (!fs.existsSync(pkgPath)) {
+    return { hasAtoms: false, atomsPackage: null, hasPalette: false, palettePackage: null };
+  }
+
+  try {
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+    const deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
+
+    const atomsCandidate = ATOMS_PACKAGES.find((name) => Boolean(deps[name]));
+    const paletteCandidate = PALETTE_PACKAGES.find((name) => Boolean(deps[name]));
+
+    return {
+      hasAtoms: Boolean(atomsCandidate),
+      atomsPackage: atomsCandidate || null,
+      hasPalette: Boolean(paletteCandidate),
+      palettePackage: paletteCandidate || null
+    };
+  } catch {
+    return { hasAtoms: false, atomsPackage: null, hasPalette: false, palettePackage: null };
+  }
+};
+
 const TIER_DIRECTORY_MAPS = {
   hook: [
     'src/hooks',

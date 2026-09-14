@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert';
 import {
   deduplicateRolePreambles,
+  deduplicateRefactoringCommands,
   buildGradeFPrompt,
   buildGradeDPrompt,
   buildGradeCPrompt,
@@ -288,4 +289,28 @@ test('buildMasterPrompt: has single top-level role preamble and no repeated Act 
   // Ensure "Act as" occurs exactly once in the entire composite prompt
   const matches = prompt.match(/Act as\b/g) || [];
   assert.strictEqual(matches.length, 1, `Expected exactly 1 "Act as", found ${matches.length}`);
+
+  // Ensure refactoring commands section occurs exactly once
+  const commandMatches = prompt.match(/### AI AGENT DISCOVERY & REFACTORING COMMANDS:/g) || [];
+  assert.strictEqual(commandMatches.length, 1, `Expected exactly 1 refactoring commands section, found ${commandMatches.length}`);
+});
+
+test('deduplicateRefactoringCommands: collapses multiple occurrences to single block', () => {
+  const header = '### AI AGENT DISCOVERY & REFACTORING COMMANDS:';
+  const input = [
+    'Section 1 content',
+    header,
+    '- Command A',
+    '---',
+    'Section 2 content',
+    header,
+    '- Command B'
+  ].join('\n');
+
+  const result = deduplicateRefactoringCommands(input);
+  const matches = result.match(/### AI AGENT DISCOVERY & REFACTORING COMMANDS:/g) || [];
+  assert.strictEqual(matches.length, 1);
+  assert.ok(result.includes('Section 1 content'));
+  assert.ok(result.includes('Section 2 content'));
+  assert.ok(result.includes('- Command B'));
 });

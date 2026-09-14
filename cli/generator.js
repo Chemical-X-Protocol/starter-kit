@@ -27,7 +27,7 @@ import {
   buildViewIndex,
   buildViewSpec
 } from './generator-templates.js';
-import { detectFramework, detectTierBaseDir } from './project-detector.js';
+import { detectFramework, detectTierBaseDir, detectInstalledFamily } from './project-detector.js';
 
 const TIERS = [
   { prefix: 'm-', tier: 'molecule', label: '1. m- Molecule (Self-contained feature block < 100 lines - Recommended)' },
@@ -206,7 +206,9 @@ export const runGenerateWizard = async (rawArgs = []) => {
     const compFile = `${capsuleName}.${selectedFramework.ext}`;
     const specFile = `${capsuleName}.spec.ts`;
     const hasController = !isLean && selectedTier.tier !== 'atom';
-    fs.writeFileSync(path.join(targetDir, compFile), selectedFramework.compBuilder(capsuleName, pascalName), 'utf-8');
+    const installedFamily = detectInstalledFamily(process.cwd());
+    const templateOpts = { atomsPackage: installedFamily.atomsPackage };
+    fs.writeFileSync(path.join(targetDir, compFile), selectedFramework.compBuilder(capsuleName, pascalName, templateOpts), 'utf-8');
     fs.writeFileSync(path.join(targetDir, 'index.ts'), buildIndex(capsuleName, pascalName, selectedFramework.ext), 'utf-8');
     fs.writeFileSync(path.join(targetDir, specFile), buildComponentSpec(capsuleName, pascalName, hasController), 'utf-8');
 
