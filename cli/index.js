@@ -94,7 +94,9 @@ export const runAudit = async (customDir = null, isCli = false) => {
   const isStrictFail = isStrict && report.violations.length > 0;
   const isGradeFail = isGradeBelowMinimum(report.health.grade, minGrade);
   const isScoreFail = minScore !== null && !isNaN(minScore) && report.health.score < minScore;
-  const hasFailingViolations = evaluateAuditFailure([isStrictFail, hasCriticalOrHigh, isGradeFail, isScoreFail]);
+  const hasThreshold = Boolean(minGrade) || (minScore !== null && !isNaN(minScore));
+  const isDefaultFail = !hasThreshold && !isStrict && hasCriticalOrHigh;
+  const hasFailingViolations = evaluateAuditFailure([isStrictFail, isDefaultFail, isGradeFail, isScoreFail]);
 
   if (isJson) {
     process.stdout.write(JSON.stringify(report, null, 2) + '\n');
@@ -149,6 +151,22 @@ export const runAudit = async (customDir = null, isCli = false) => {
           report.aiSlop,
           { clear: false }
         );
+
+        if (hasFailingViolations && !isInteractive) {
+          process.stdout.write('\n\x1b[1m\x1b[31m✕ [Chemical X] Architectural health verification failed:\x1b[0m\n');
+          if (isGradeFail) {
+            process.stdout.write(`  \x1b[31m•\x1b[0m Grade ${report.health.grade} is below required minimum tier ${minGrade}\n`);
+          }
+          if (isScoreFail) {
+            process.stdout.write(`  \x1b[31m•\x1b[0m Score ${report.health.score}/100 is below required minimum score ${minScore}/100\n`);
+          }
+          if (isDefaultFail) {
+            process.stdout.write(`  \x1b[31m•\x1b[0m Unresolved hazards: ${critical.length} Critical, ${high.length} High (run 'chemx audit --unroll' to inspect)\n`);
+          }
+          if (isStrictFail) {
+            process.stdout.write(`  \x1b[31m•\x1b[0m Strict mode: ${report.violations.length} total violation(s) detected\n`);
+          }
+        }
       }
     }
 
