@@ -2,9 +2,13 @@ import fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 
-const safeSpawnSync = (command, args, options) => {
+const safeSpawnSync = (command, args, options = {}) => {
   try {
-    const res = spawnSync(command, args, options);
+    const optsWithDefaults = {
+      timeout: 1000,
+      ...options
+    };
+    const res = spawnSync(command, args, optsWithDefaults);
     if (res.error) {
       return [null, res.error];
     }
@@ -193,24 +197,92 @@ export const detectGitHubUser = (preferredUser) => {
   return 'Architect';
 };
 
+export const copyViaOsc52 = (text) => {
+  if (typeof text !== 'string' || !text) return false;
+  try {
+    const base64 = Buffer.from(text, 'utf-8').toString('base64');
+    const isTmux = Boolean(process.env.TMUX);
+    const isScreen = Boolean(process.env.TERM && process.env.TERM.startsWith('screen'));
+
+    let seq = `\x1b]52;c;${base64}\x07`;
+    if (isTmux) {
+      seq = `\x1bPtmux;\x1b\x1b]52;c;${base64}\x07\x1b\\`;
+    } else if (isScreen) {
+      seq = `\x1bP\x1b]52;c;${base64}\x07\x1b\\`;
+    }
+
+    if (process.stdout.isTTY) {
+      process.stdout.write(seq);
+      return true;
+    }
+    if (process.stderr.isTTY) {
+      process.stderr.write(seq);
+      return true;
+    }
+    try {
+      const fd = fs.openSync('/dev/tty', 'w');
+      fs.writeSync(fd, seq);
+      fs.closeSync(fd);
+      return true;
+    } catch {
+      return false;
+    }
+  } catch {
+    return false;
+  }
+};
+
 export const copyToClipboard = (text) => {
+  if (typeof text !== 'string' || !text) return false;
+
+  let copied = false;
+
   if (process.platform === 'darwin') {
-    const [res] = safeSpawnSync('pbcopy', [], { input: text, stdio: ['pipe', 'ignore', 'ignore'] });
-    return res?.status === 0;
+    const [res] = safeSpawnSync('pbcopy', [], { input: text, stdio: ['pipe', 'ignore', 'ignore'], timeout: 1000 });
+    if (res?.status === 0) copied = true;
+  } else if (process.platform === 'win32') {
+    const [res] = safeSpawnSync('clip', [], { input: text, stdio: ['pipe', 'ignore', 'ignore'], timeout: 1000 });
+    if (res?.status === 0) copied = true;
+  } else {
+    // Linux / BSD / Unix environments
+    const isWsl = Boolean(process.env.WSL_DISTRO_NAME || process.env.WSL_INTEROP);
+    const isSommelier = Boolean(process.env.SOMMELIER_VM_IDENTIFIER || process.env.SOMMELIER_VERSION);
+
+    if (isWsl) {
+      const [wslRes] = safeSpawnSync('clip.exe', [], { input: text, stdio: ['pipe', 'ignore', 'ignore'], timeout: 1000 });
+      if (wslRes?.status === 0) copied = true;
+    }
+
+    // wl-copy hangs in Sommelier / ChromeOS containers due to lack of unfocused data-control support
+    if (!copied && !isSommelier) {
+      const [wlWhich] = safeSpawnSync('which', ['wl-copy'], { stdio: 'ignore', timeout: 500 });
+      if (wlWhich?.status === 0) {
+        const [res] = safeSpawnSync('wl-copy', [], { input: text, stdio: ['pipe', 'ignore', 'ignore'], timeout: 800 });
+        if (res?.status === 0) copied = true;
+      }
+    }
+
+    if (!copied) {
+      const [xcWhich] = safeSpawnSync('which', ['xclip'], { stdio: 'ignore', timeout: 500 });
+      if (xcWhich?.status === 0) {
+        const [res] = safeSpawnSync('xclip', ['-selection', 'clipboard'], { input: text, stdio: ['pipe', 'ignore', 'ignore'], timeout: 800 });
+        if (res?.status === 0) copied = true;
+      }
+    }
+
+    if (!copied) {
+      const [xsWhich] = safeSpawnSync('which', ['xsel'], { stdio: 'ignore', timeout: 500 });
+      if (xsWhich?.status === 0) {
+        const [res] = safeSpawnSync('xsel', ['--clipboard', '--input'], { input: text, stdio: ['pipe', 'ignore', 'ignore'], timeout: 800 });
+        if (res?.status === 0) copied = true;
+      }
+    }
   }
-  if (process.platform === 'win32') {
-    const [res] = safeSpawnSync('clip', [], { input: text, stdio: ['pipe', 'ignore', 'ignore'] });
-    return res?.status === 0;
-  }
-  const [wlWhich] = safeSpawnSync('which', ['wl-copy'], { stdio: 'ignore' });
-  if (wlWhich?.status === 0) {
-    const [res] = safeSpawnSync('wl-copy', [], { input: text, stdio: ['pipe', 'ignore', 'ignore'] });
-    if (res?.status === 0) return true;
-  }
-  const [xcWhich] = safeSpawnSync('which', ['xclip'], { stdio: 'ignore' });
-  if (xcWhich?.status === 0) {
-    const [res] = safeSpawnSync('xclip', ['-selection', 'clipboard'], { input: text, stdio: ['pipe', 'ignore', 'ignore'] });
-    if (res?.status === 0) return true;
-  }
-  return false;
+
+  // OSC 52 ANSI escape sequence: universally supported across modern terminal emulators
+  // (ChromeOS Terminal, iTerm2, Alacritty, Kitty, WezTerm, VS Code, Windows Terminal, tmux, screen).
+  // This provides zero-hang clipboard access over SSH, Crostini containers, Docker, and remote sessions.
+  const oscCopied = copyViaOsc52(text);
+
+  return copied || oscCopied;
 };

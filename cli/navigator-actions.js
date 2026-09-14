@@ -86,10 +86,9 @@ export const buildActiveGrades = (report) => {
     const riskWeight = resolvePillarRiskWeight(data);
     const icon = PILLAR_EMOJIS[pillarName] || '🏛️';
     const shortName = PILLAR_SHORT_NAMES[pillarName] || pillarName;
-    const isClean = data.violations === 0;
-    const countLabel = isClean
-      ? '0 items'
-      : `${data.violations} ${data.violations === 1 ? 'item' : 'items'}`;
+    const count = data.violations || 0;
+    const paddedCount = String(count).padStart(2, '0');
+    const countLabel = `(${paddedCount} Items)`;
 
     const handlePillarAction = async () => {
       await showPagedContent(
@@ -104,10 +103,10 @@ export const buildActiveGrades = (report) => {
       shortName,
       grade,
       riskWeight,
-      violations: data.violations || 0,
+      violations: count,
       originalIndex: index,
       tag: resolveGradeBadge(grade, 11),
-      label: `${icon} ${pillarName} (${countLabel})`,
+      label: `${countLabel} ${icon} ${pillarName}`,
       action: handlePillarAction
     });
   });
@@ -117,10 +116,8 @@ export const buildActiveGrades = (report) => {
     const slopGrade = aiSlop.grade || (slopViolations.length > 0 ? 'D' : 'A+');
     const slopRiskWeight = resolvePillarRiskWeight(aiSlop.breakdown);
     const slopCount = slopViolations.length;
-    const isSlopClean = slopCount === 0;
-    const slopCountLabel = isSlopClean
-      ? '0 items'
-      : `${slopCount} ${slopCount === 1 ? 'item' : 'items'}`;
+    const paddedSlopCount = String(slopCount).padStart(2, '0');
+    const slopCountLabel = `(${paddedSlopCount} Items)`;
 
     const handleSlopAction = async () => {
       await showPagedContent(formatAiSlopSection(report), buildAiSlopPrompt(report));
@@ -135,7 +132,7 @@ export const buildActiveGrades = (report) => {
       violations: slopCount,
       originalIndex: pillarEntries.length,
       tag: resolveGradeBadge(slopGrade, 11),
-      label: `🤖 AI Slop & Authenticity (${aiSlop.score ?? 100}/100 - ${aiSlop.label ?? 'Pure Artisanal'}) (${slopCountLabel})`,
+      label: `${slopCountLabel} 🤖 AI Slop & Authenticity (${aiSlop.score ?? 100}/100 - ${aiSlop.label ?? 'Pure Artisanal'})`,
       action: handleSlopAction
     });
   }
@@ -251,10 +248,11 @@ export const buildDashboardActionGroups = ({ report, onScaffold = null, onRerun 
   const handleExitAction = async () => {};
 
   const monolithHotspots = (report?.hotspots || []).filter((h) => h.isMonolith || h.lineCount > 500);
+  const monoCount = String(monolithHotspots.length).padStart(2, '0');
   const hotspotsAction = {
     key: "hotspots",
     tag: formatButtonTag("Hotspots", "\x1b[38;5;208m"),
-    label: `🔥 Top Refactoring Hotspots & Monoliths (${monolithHotspots.length} files)`,
+    label: `🔥 Top Refactoring Hotspots & Monoliths (${monoCount} Files)`,
     action: handleHotspotsAction
   };
 
