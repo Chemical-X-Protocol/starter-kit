@@ -7,6 +7,15 @@
     "create-chemx": "cli/index.js",
     "chemx": "cli/index.js"
   },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Chemical-X-Protocol/starter-kit.git"
+  },
+  "homepage": "https://chemicalx.xophz.com",
+  "bugs": {
+    "url": "https://github.com/Chemical-X-Protocol/starter-kit/issues"
+  },
   "publishConfig": {
     "access": "public",
     "tag": "latest"
@@ -14,6 +23,7 @@
   "files": [
     "cli",
     "README.md",
+    "LICENSE",
     "docs"
   ],
   "exports": {

@@ -53,6 +53,19 @@
 - **Atomic Commits**: Commit atomic, intention-revealing changes directly on the dedicated feature branch.
 - **PR to Main**: Create a Pull Request targeting `main` upon completing the architectural remediation phases.
 
+### H. Strict Architectural Tier Separation & The Zero-Raw-DOM Rule
+- **Atoms / Foundations**: Single, foundational UI elements. (The ONLY tier where raw DOM/HTML elements like `<button>`, `<input>`, `<textarea>`, or raw layout `<div>` are permitted).
+- **Molecules / Blocks**: Groups of foundational elements. (NO raw DOM elements).
+- **Organisms / Modules**: Complex groupings of components. (NO raw DOM elements).
+- **Templates / Layouts**: Structural blueprints for pages. (NO raw DOM elements).
+- **Views / Pages**: High-level components that implement layouts and inject state.
+- **Tab List Decomposition Pattern**:
+  - *Anti-Pattern*: Inlining repeated raw `<button>` elements with ternary class chains and icons directly inside molecules or views.
+  - *Quantum Solution*:
+    1. Foundation: Encapsulate the raw `<button>` element inside a foundational Atom (`AtomButton` or `a-button`).
+    2. Capsule: Encapsulate the tab button UI pattern into `m-tab-button` with scoped BEM modifier classes (e.g. `.m-tab-button--pink`, `.m-tab-button--flexible`) using `@apply`. Never place utility selector strings in JavaScript.
+    3. Composition: In the consumer showcase or organism, declaratively render `<m-tab-button>` instances inside an atom surface, with zero raw HTML tags in the template.
+
 ---
 
 ## 2. Domain-Based Type Architecture & Data Integrity

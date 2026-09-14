@@ -30,9 +30,21 @@ starter-kit/
     └── index.js                # Interactive capsule generator
 ```
 
+## Release Versioning: Minute-Precision CalVer
+
+This package adheres to **Minute-Precision Calendar Versioning** (`YY.MM.DD-MMMM`):
+- `YY.MM.DD`: Release date (e.g. `26.9.14` for Sept 14, 2026).
+- `MMMM`: Minute of the day (0 to 1439).
+
+Because autonomous coding agent models update frequently, this package is continuously integrated and deployed via automated CI whenever new agent directives, AST checks, or framework rules are tuned. Rapid version iterations reflect active, daily alignment rather than breaking SemVer shifts.
+
+> [!NOTE]
+> Download statistics on npm reflect continuous automated test matrix verification and test runner execution across automated environments.
+
 ---
 
-## Licensing & Access
+## License
 
-Unlocked for verified GitHub Sponsors and VIP license key holders of `chemical-x-protocol`.  
-Explore activation details at [https://chemicalx.xophz.com/#starter-kit](https://chemicalx.xophz.com/#starter-kit).
+Core CLI tools and capsule generators are distributed under the **MIT License**.  
+Private production monorepos and extended starter suites are unlocked for verified GitHub Sponsors.  
+Explore sponsorship details at [https://chemicalx.xophz.com](https://chemicalx.xophz.com).

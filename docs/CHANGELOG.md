@@ -4,6 +4,15 @@ All notable changes to the Chemical X Starter Kit repository will be documented 
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [2026-09-14]
+
+### Added
+- **Foundational Atom Blueprint**: Added `blueprints/atoms/a-button.vue` codifying the foundational atom tier as the sole permitted layer for raw DOM elements (`<button>`).
+- **Tab Button Molecule Capsule**: Added crystalline `m-tab-button` molecule capsule (`blueprints/molecule-capsule/m-tab-button/`) containing `m-tab-button.vue`, `m-tab-button.controller.ts`, `_m-tab-button.scss`, `types.d.ts`, and `m-tab-button.spec.ts`.
+- **Zero-Raw-DOM Directives**: Codified Section 1.H in `AGENTS.md` establishing the strict prohibition of raw DOM elements in molecules and organisms, and documenting the Tab List Decomposition Pattern.
+- **MIT License & Open-Source Packaging**: Added standard MIT `LICENSE` file and configured `"license": "MIT"`, `"repository"`, `"homepage"`, and `"bugs"` in `package.json` across all publishable packages (`starter-kit`, `benchmarks`, `x-atoms`, `o-command-palette`).
+- **CalVer & CI Transparency Documentation**: Documented Minute-Precision Calendar Versioning (`YY.MM.DD-MMMM`) and automated CI registry fetch behavior in `README.md`.
+
 ## [2026-09-13]
 
 ### Added
