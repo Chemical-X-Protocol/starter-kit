@@ -98,9 +98,23 @@ export const runInteractiveAuditNavigator = async (initialReport, onScaffold = n
     renderDashboardBanner(health, metrics, violations, critical, highMediumCount, low, contextAnalysis, aiSlop, { interactive: true, clear: true });
 
     const guardrailsInstalled = areGuardrailsInstalled(process.cwd());
+    const hasQueryScript = (() => {
+      try {
+        const pkgPath = path.resolve(process.cwd(), 'package.json');
+        if (!fs.existsSync(pkgPath)) return false;
+        const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+        return Boolean(pkg?.scripts?.q);
+      } catch {
+        return false;
+      }
+    })();
+
     const topActions = [];
     if (!guardrailsInstalled) {
       topActions.push(actions.installAction);
+    }
+    if (!hasQueryScript) {
+      topActions.push(actions.installSearchAction);
     }
     topActions.push(actions.roadmapAction, actions.upgradeAction, actions.reportAction, actions.rerunAction);
 

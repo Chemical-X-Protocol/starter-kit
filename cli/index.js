@@ -33,6 +33,7 @@ import {
 import { runInstallWizard } from './installer.js';
 import { runBadgeCommand } from './badge.js';
 import { runBuildAudit } from './build.js';
+import { runSearch, syncSearchIndex } from './search.js';
 
 const rawArgs = process.argv.slice(2);
 const invokedBin = path.basename(process.argv[1] || '');
@@ -89,6 +90,7 @@ export const runAudit = async (customDir = null, isCli = false) => {
   const targetDir = resolveTargetDir(customDir, dirFlag);
   const report = executeAstAudit(targetDir, { outputFile, model, costPerMillion });
   saveAuditSnapshot(report);
+  syncSearchIndex(targetDir, process.cwd());
 
   const hasCriticalOrHigh = report.violations.some((v) => v.severity === 'CRITICAL' || v.severity === 'HIGH');
   const isStrictFail = isStrict && report.violations.length > 0;
@@ -190,7 +192,7 @@ export const runAudit = async (customDir = null, isCli = false) => {
   return report;
 };
 
-export { auditFile, runBuildAudit };
+export { auditFile, runBuildAudit, runSearch, syncSearchIndex };
 
 const main = async () => {
   const firstArg = rawArgs[0];
@@ -202,6 +204,12 @@ const main = async () => {
   }
 
   switch (firstArg) {
+    case 'search':
+    case 'q':
+    case 'query':
+    case 'find':
+      await runSearch(rawArgs.slice(1), true);
+      break;
     case 'build':
     case 'run':
     case 'wrap':

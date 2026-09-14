@@ -89,6 +89,14 @@ const isChoiceMatchingItem = (cleanChoice) => (item) => {
     return true;
   }
   if (
+    item.key === "install_search" &&
+    (cleanChoice.includes("Query Machine") ||
+      cleanChoice.includes("pnpm q") ||
+      cleanChoice.includes("Agent Query Tool"))
+  ) {
+    return true;
+  }
+  if (
     item.key === "upgrade" &&
     (cleanChoice.includes("Upgrade") ||
       cleanChoice.includes("Power Puff") ||
@@ -164,6 +172,9 @@ const isEffectiveMatchingItem = (effective, exitIndex) => (item) => {
     item.key === "grade_slop" &&
     (effective === "slop" || effective === "asi" || effective === "authenticity")
   ) {
+    return true;
+  }
+  if (item.key === "install_search" && (effective === "q" || effective === "query" || effective === "search")) {
     return true;
   }
   if (item.name && effective === item.name.toLowerCase()) return true;
