@@ -27,6 +27,7 @@ import {
   buildViewIndex,
   buildViewSpec
 } from './generator-templates.js';
+import { detectFramework, detectTierBaseDir } from './project-detector.js';
 
 const TIERS = [
   { prefix: 'm-', tier: 'molecule', label: '1. m- Molecule (Self-contained feature block < 100 lines - Recommended)' },
@@ -45,28 +46,6 @@ const FRAMEWORKS = [
 
 const KNOWN_TIER_NAMES = new Set(['molecule', 'atom', 'organism', 'template', 'hook', 'composable', 'view', 'page']);
 const IGNORED_NAME_TOKENS = new Set(['generate', 'capsule', 'add', 'g', 'gen']);
-
-const detectBaseDir = (tier) => {
-  if (tier === 'hook') {
-    const hookCandidates = ['src/hooks', 'src/composables', 'hooks', 'composables', 'src'];
-    for (const c of hookCandidates) {
-      if (fs.existsSync(path.resolve(process.cwd(), c))) return c;
-    }
-    return '.';
-  }
-  if (tier === 'view') {
-    const viewCandidates = ['src/views', 'src/pages', 'src/routes', 'views', 'pages', 'src'];
-    for (const c of viewCandidates) {
-      if (fs.existsSync(path.resolve(process.cwd(), c))) return c;
-    }
-    return '.';
-  }
-  const compCandidates = ['src/components/molecules', 'src/components', 'components', 'src'];
-  for (const c of compCandidates) {
-    if (fs.existsSync(path.resolve(process.cwd(), c))) return c;
-  }
-  return '.';
-};
 
 const resolveSelectedTier = (explicitTier, cleanName) => {
   if (explicitTier) {
@@ -125,14 +104,17 @@ export const runGenerateWizard = async (rawArgs = []) => {
   const cleanName = (rawName || 'user-avatar').trim().toLowerCase();
   const selectedTier = resolveSelectedTier(explicitTier, cleanName);
 
-  let selectedFramework = FRAMEWORKS[0];
+  const autoFramework = detectFramework(process.cwd());
+  const defaultFw = FRAMEWORKS.find((f) => f.id === autoFramework) || FRAMEWORKS[0];
+  let selectedFramework = defaultFw;
+
   if (frameworkArg) {
     const found = FRAMEWORKS.find((f) => f.id === frameworkArg.toLowerCase() || f.ext === frameworkArg.toLowerCase());
     if (found) selectedFramework = found;
   } else if (!isYes) {
     const fwChoice = useGum
       ? gumChoose(FRAMEWORKS.map((f) => f.label), 'Select Framework Flavor')
-      : await promptQuestion('Select Framework Flavor [1=React, 2=Vue 3, 3=Svelte 5] (default: 1): ');
+      : await promptQuestion(`Select Framework Flavor [1=React, 2=Vue 3, 3=Svelte 5] (default: ${defaultFw.id}): `);
     const found = FRAMEWORKS.find((f) => fwChoice && (fwChoice.includes(f.label) || fwChoice.toLowerCase().includes(f.id)));
     if (found) selectedFramework = found;
   }
@@ -153,7 +135,7 @@ export const runGenerateWizard = async (rawArgs = []) => {
   const pascalName = toPascalCase(baseSlug);
   const camelName = toCamelCase(capsuleName);
 
-  const detectedDir = detectBaseDir(selectedTier.tier);
+  const detectedDir = detectTierBaseDir(selectedTier.tier, process.cwd());
   let targetParent = dirArg || (isYes ? detectedDir : null);
   if (!targetParent) {
     const dirChoices = [
