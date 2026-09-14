@@ -12,8 +12,14 @@ export const resolveCapsuleFiles = (targetPath, cwd = process.cwd()) => {
   const granularState = path.join(dir, 'types', 'state.d.ts');
   const flatTypes = path.join(dir, 'types.d.ts');
 
-  const typesPropsFile = fs.existsSync(granularProps) ? granularProps : (fs.existsSync(flatTypes) ? flatTypes : null);
-  const typesStateFile = fs.existsSync(granularState) ? granularState : (fs.existsSync(flatTypes) ? flatTypes : null);
+  const resolveTypesFile = (granularPath, flatPath) => {
+    if (fs.existsSync(granularPath)) return granularPath;
+    if (fs.existsSync(flatPath)) return flatPath;
+    return null;
+  };
+
+  const typesPropsFile = resolveTypesFile(granularProps, flatTypes);
+  const typesStateFile = resolveTypesFile(granularState, flatTypes);
 
   const files = fs.existsSync(dir) ? fs.readdirSync(dir) : [];
   const compFile = files.find((f) => f.endsWith('.tsx') || f.endsWith('.vue') || f.endsWith('.svelte'));
@@ -113,9 +119,12 @@ export const addStateToCapsule = (targetPath, statusName, payload = '', options 
   }
 
   const cleanPayload = (typeof payload === 'string' ? payload : '').trim();
-  const payloadStr = cleanPayload
-    ? (cleanPayload.startsWith('readonly') ? `; ${cleanPayload}` : `; readonly ${cleanPayload}`)
-    : '';
+  const resolvePayloadString = (p) => {
+    if (!p) return '';
+    if (p.startsWith('readonly')) return `; ${p}`;
+    return `; readonly ${p}`;
+  };
+  const payloadStr = resolvePayloadString(cleanPayload);
   const newMember = `  | { readonly status: '${cleanStatus}'${payloadStr} }`;
 
   stateContent = stateContent.replace(/(export\s+type\s+\w+State\s*=[\s\S]*?)(\s*;)/, `$1\n${newMember}$2`);

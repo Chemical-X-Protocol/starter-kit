@@ -127,8 +127,9 @@ export const installAgentSearchConfig = async (targetDir = '.') => {
         fs.appendFileSync(agentsPath, `\n${searchDirective}\n`, 'utf-8');
         process.stdout.write('  \x1b[32m✔\x1b[0m Injected search-first directive into AGENTS.md\n');
       }
-    } catch {
-      // ignore
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      process.stderr.write(`[installer] Skipped AGENTS.md injection: ${error.message}\n`);
     }
   }
 
@@ -140,8 +141,9 @@ export const installAgentSearchConfig = async (targetDir = '.') => {
     if (res) {
       process.stdout.write(`  \x1b[32m✔\x1b[0m Initialized SQLite query index (.chemx/index.db) across ${res.totalFiles} files\n`);
     }
-  } catch {
-    // ignore
+  } catch (err) {
+    const error = err instanceof Error ? err : new Error(String(err));
+    process.stderr.write(`[installer] Skipped SQLite indexing: ${error.message}\n`);
   }
 
   return true;
