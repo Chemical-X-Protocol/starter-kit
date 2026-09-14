@@ -34,6 +34,7 @@ import { runInstallWizard } from './installer.js';
 import { runBadgeCommand } from './badge.js';
 import { runBuildAudit } from './build.js';
 import { runSearch, syncSearchIndex, resolveTargetDir, syncViolationsIndex, recordAuditSnapshot, handleCheckCommand } from './search.js';
+import { runMutatorCli } from './mutators.js';
 
 const rawArgs = process.argv.slice(2);
 const invokedBin = path.basename(process.argv[1] || '');
@@ -236,11 +237,23 @@ const main = async () => {
         isCli: true
       });
       break;
+    case 'add:prop':
+    case 'add:state':
+    case 'add:action':
+    case 'fix':
+      await runMutatorCli(rawArgs, true);
+      break;
+    case 'add':
+      if (['prop', 'state', 'action'].includes(rawArgs[1])) {
+        await runMutatorCli(rawArgs, true);
+      } else {
+        await runGenerateWizard(rawArgs.slice(1));
+      }
+      break;
     case 'g':
     case 'gen':
     case 'generate':
     case 'capsule':
-    case 'add':
       await runGenerateWizard(rawArgs.slice(1));
       break;
     case 'badge':

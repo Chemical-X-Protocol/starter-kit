@@ -28,6 +28,7 @@ import {
   handleCheckCommand
 } from './search-commands.js';
 import { runGenerateWizard } from './generator.js';
+import { runMutatorCli } from './mutators.js';
 import { ANSI } from './theme.js';
 
 export {
@@ -206,6 +207,10 @@ export const runSearch = async (rawArgs = [], isCli = true) => {
 
   if (firstArg === 'check' || firstArg === 'verify') {
     return handleCheckCommand(secondArg, { isJson, isCli });
+  }
+
+  if (firstArg === 'fix' || firstArg.startsWith('add:') || (firstArg === 'add' && ['prop', 'state', 'action'].includes(secondArg))) {
+    return runMutatorCli(rawArgs, isCli);
   }
 
   if (firstArg === 'gen' || firstArg === 'g' || firstArg === 'generate') {
