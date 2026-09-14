@@ -228,6 +228,18 @@ export const handlePackCommand = (db, target, { isJson = false, isCli = true } =
   return pack;
 };
 
+const resolveGradeColor = (score) => {
+  if (score >= 90) return ANSI.LIME;
+  if (score >= 80) return ANSI.CYAN;
+  return ANSI.GOLD;
+};
+
+const resolveHealthScoreColor = (score) => {
+  if (score >= 90) return ANSI.LIME;
+  if (score >= 70) return ANSI.GOLD;
+  return ANSI.RED;
+};
+
 export const handleProgressionCommand = (db, { isJson = false, isCli = true } = {}) => {
   const history = getAuditProgression(db, 15);
   const payload = {
@@ -250,7 +262,7 @@ export const handleProgressionCommand = (db, { isJson = false, isCli = true } = 
 
   for (const s of history) {
     const dateStr = new Date(s.timestamp).toLocaleTimeString();
-    const gradeColor = s.score >= 90 ? ANSI.LIME : s.score >= 80 ? ANSI.CYAN : ANSI.GOLD;
+    const gradeColor = resolveGradeColor(s.score);
     process.stdout.write(`  ${ANSI.DIM}[${dateStr}]${ANSI.RESET} ${gradeColor}${s.score}/100 [Grade: ${s.grade}]${ANSI.RESET} | ${ANSI.MINT}ASI: ${s.asi}/100${ANSI.RESET} | ${ANSI.RED}${s.criticalCount} Crit${ANSI.RESET} | ${ANSI.GOLD}${s.highMedCount} Med${ANSI.RESET} | ${ANSI.DIM}${s.totalLoc}L (${s.scannedFiles} files)${ANSI.RESET}\n`);
   }
   process.stdout.write('\n');
@@ -287,7 +299,7 @@ export const handleHealthFilterCommand = (db, status, { isJson = false, isCli = 
   }
 
   for (const f of files) {
-    const scoreColor = f.healthScore >= 90 ? ANSI.LIME : f.healthScore >= 70 ? ANSI.GOLD : ANSI.RED;
+    const scoreColor = resolveHealthScoreColor(f.healthScore);
     const hazardBadge = f.hazardCount > 0 ? `${ANSI.RED}[${f.hazardCount} hazards]${ANSI.RESET} ` : `${ANSI.LIME}[clean]${ANSI.RESET} `;
     process.stdout.write(`  ${scoreColor}${String(f.healthScore).padStart(3, ' ')}/100${ANSI.RESET} ${hazardBadge}${ANSI.BOLD}${f.path}${ANSI.RESET} ${ANSI.DIM}(${f.lines} lines, ${f.tier})${ANSI.RESET}\n`);
   }

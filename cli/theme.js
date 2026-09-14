@@ -33,6 +33,7 @@ export const ANSI = Object.freeze({
   MINT: '\x1b[38;2;45;212;191m',
   LIME: '\x1b[38;2;163;230;53m',
   GOLD: '\x1b[38;2;251;191;36m',
+  RED: '\x1b[38;2;239;68;68m',
   BOLD: '\x1b[1m',
   DIM: '\x1b[2m',
   RESET: '\x1b[0m'
