@@ -33,11 +33,11 @@ import {
 import { runInstallWizard } from './installer.js';
 import { runBadgeCommand } from './badge.js';
 import { runBuildAudit } from './build.js';
-import { runSearch, syncSearchIndex, resolveTargetDir, syncViolationsIndex, recordAuditSnapshot } from './search.js';
+import { runSearch, syncSearchIndex, resolveTargetDir, syncViolationsIndex, recordAuditSnapshot, handleCheckCommand } from './search.js';
 
 const rawArgs = process.argv.slice(2);
 const invokedBin = path.basename(process.argv[1] || '');
-const CAPSULE_PREFIXES = ['m-', 'a-', 'o-', 't-'];
+const CAPSULE_PREFIXES = ['m-', 'a-', 'o-', 't-', 'use-', 'v-'];
 
 const isCapsulePrefix = (arg) => CAPSULE_PREFIXES.some((prefix) => arg.startsWith(prefix));
 
@@ -229,6 +229,15 @@ const main = async () => {
     case 'setup-ci':
       await runInstallWizard(rawArgs[1] || process.cwd());
       break;
+    case 'check':
+    case 'verify':
+      handleCheckCommand(rawArgs[1], {
+        isJson: rawArgs.includes('--json'),
+        isCli: true
+      });
+      break;
+    case 'g':
+    case 'gen':
     case 'generate':
     case 'capsule':
     case 'add':

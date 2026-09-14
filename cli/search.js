@@ -24,8 +24,10 @@ import {
   handleHazardsCommand,
   handlePackCommand,
   handleProgressionCommand,
-  handleHealthFilterCommand
+  handleHealthFilterCommand,
+  handleCheckCommand
 } from './search-commands.js';
+import { runGenerateWizard } from './generator.js';
 import { ANSI } from './theme.js';
 
 export {
@@ -42,6 +44,7 @@ export {
   getAuditProgression,
   queryFilesByHealth
 } from './search-db.js';
+export { handleCheckCommand } from './search-commands.js';
 
 const IGNORED_DIRS = new Set([
   'node_modules',
@@ -200,6 +203,14 @@ export const runSearch = async (rawArgs = [], isCli = true) => {
   const nonFlagArgs = rawArgs.filter((a) => !a.startsWith('-'));
   const firstArg = nonFlagArgs[0] || '';
   const secondArg = nonFlagArgs[1] || '';
+
+  if (firstArg === 'check' || firstArg === 'verify') {
+    return handleCheckCommand(secondArg, { isJson, isCli });
+  }
+
+  if (firstArg === 'gen' || firstArg === 'g' || firstArg === 'generate') {
+    return runGenerateWizard(rawArgs.slice(1));
+  }
 
   if (firstArg === 'def') {
     return handleDefCommand(db, secondArg, { isJson, isCli });
