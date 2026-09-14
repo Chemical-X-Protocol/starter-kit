@@ -162,15 +162,22 @@ export * from './social';
 
 export interface PromptOptions {
   readonly excludeAiSlop?: boolean;
+  readonly isSubSection?: boolean;
 }
 
+export interface DeduplicatePromptOptions {
+  readonly onlyIdentical?: boolean;
+}
+
+export declare function deduplicateRolePreambles(promptText: string, options?: DeduplicatePromptOptions): string;
 export declare function formatGroupedPromptViolations(violations?: readonly HazardViolation[]): string[];
 export declare function buildGradeFPrompt(report: AuditReport, options?: PromptOptions): string;
 export declare function buildGradeDPrompt(report: AuditReport, options?: PromptOptions): string;
 export declare function buildGradeCPrompt(report: AuditReport, options?: PromptOptions): string;
 export declare function buildGradeBPrompt(report: AuditReport, options?: PromptOptions): string;
-export declare function buildAiSlopPrompt(report: AuditReport): string;
-export declare function buildHotspotsPrompt(report: AuditReport): string;
+export declare function buildAiSlopPrompt(report: AuditReport, options?: PromptOptions): string;
+export declare function buildHotspotsPrompt(report: AuditReport, options?: PromptOptions): string;
+export declare function buildPillarPrompt(report: AuditReport, pillarName: string, options?: PromptOptions): string;
 export declare function buildMasterPrompt(report: AuditReport): string;
 export declare function formatPromptBox(title: string, promptText: string): string;
 
