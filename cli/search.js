@@ -117,6 +117,28 @@ const formatTierBadge = (tier) => {
   return map[tier] || `${ANSI.DIM}[${tier}]${ANSI.RESET}`;
 };
 
+export const resolveTargetDir = (customOrFlag = null, dirFlag = null) => {
+  const isCustomPath = Boolean(customOrFlag && !customOrFlag.startsWith('--dir='));
+  if (isCustomPath) {
+    return customOrFlag;
+  }
+
+  const effectiveFlag = dirFlag || (customOrFlag?.startsWith('--dir=') ? customOrFlag : null);
+  if (effectiveFlag) {
+    const [, flagValue] = effectiveFlag.split('=');
+    if (flagValue !== undefined) {
+      return flagValue;
+    }
+  }
+
+  const hasSrcDirectory = fs.existsSync('src');
+  if (hasSrcDirectory) {
+    return 'src';
+  }
+
+  return '.';
+};
+
 export const runSearch = async (rawArgs = [], isCli = true) => {
   const isJson = rawArgs.includes('--json');
   const isInspect = rawArgs.includes('--inspect') || rawArgs.includes('-i');
@@ -124,7 +146,7 @@ export const runSearch = async (rawArgs = [], isCli = true) => {
   const tierFlag = rawArgs.find((a) => a.startsWith('--tier='));
   const tier = tierFlag ? tierFlag.split('=')[1] : null;
   const dirFlag = rawArgs.find((a) => a.startsWith('--dir='));
-  const targetDir = dirFlag ? dirFlag.split('=')[1] : (fs.existsSync('src') ? 'src' : '.');
+  const targetDir = resolveTargetDir(dirFlag);
 
   const queryArg = rawArgs.find((a) => !a.startsWith('-')) || '';
   const cleanQuery = queryArg.trim();

@@ -33,7 +33,7 @@ import {
 import { runInstallWizard } from './installer.js';
 import { runBadgeCommand } from './badge.js';
 import { runBuildAudit } from './build.js';
-import { runSearch, syncSearchIndex } from './search.js';
+import { runSearch, syncSearchIndex, resolveTargetDir } from './search.js';
 
 const rawArgs = process.argv.slice(2);
 const invokedBin = path.basename(process.argv[1] || '');
@@ -53,13 +53,6 @@ const loadProjectConfig = () => {
 };
 const isCreateInvoked =
   invokedBin.includes('create-chemx') || (rawArgs[0] && rawArgs[0] === 'create');
-
-const resolveTargetDir = (custom, flag) => {
-  if (custom) return custom;
-  if (flag) return flag.split('=')[1];
-  if (fs.existsSync('src')) return 'src';
-  return '.';
-};
 
 export const runAudit = async (customDir = null, isCli = false) => {
   const projectConfig = loadProjectConfig();

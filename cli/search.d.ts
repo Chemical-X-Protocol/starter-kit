@@ -49,3 +49,8 @@ export declare function runSearch(
   rawArgs?: string[],
   isCli?: boolean
 ): Promise<readonly FileIndexRecord[]>;
+
+export declare function resolveTargetDir(
+  customOrFlag?: string | null,
+  dirFlag?: string | null
+): string;
