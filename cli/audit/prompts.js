@@ -61,7 +61,7 @@ export const formatGroupedPromptViolations = (violations = []) => {
 };
 
 export const buildGradeFPrompt = (report, options = {}) => {
-  const { excludeAiSlop = false } = options;
+  const { excludeAiSlop = false, isSubSection = false } = options;
   const { violations = [], hotspots = [] } = report;
   const critical = violations
     .filter((v) => v.severity === 'CRITICAL')
@@ -73,7 +73,10 @@ export const buildGradeFPrompt = (report, options = {}) => {
   if (hasNoCritical && hasNoMonoliths) return '';
 
   const lines = [];
-  lines.push('Act as a Principal Systems Architect. Surgically refactor the following Grade F Critical Context Hazards in our codebase according to Chemical X Molecular Architecture Standards:\n');
+  const preamble = isSubSection
+    ? 'Surgically refactor the following Grade F Critical Context Hazards in our codebase according to Chemical X Molecular Architecture Standards:\n'
+    : 'Act as a Principal Systems Architect. Surgically refactor the following Grade F Critical Context Hazards in our codebase according to Chemical X Molecular Architecture Standards:\n';
+  lines.push(preamble);
 
   if (extremeMonoliths.length > 0) {
     lines.push('### EXTREME MONOLITHS (>= 2,000 lines of code) : MONOLITH DECOMPOSITION');
@@ -101,7 +104,7 @@ export const buildGradeFPrompt = (report, options = {}) => {
 };
 
 export const buildGradeDPrompt = (report, options = {}) => {
-  const { excludeAiSlop = false } = options;
+  const { excludeAiSlop = false, isSubSection = false } = options;
   const { violations = [], hotspots = [] } = report;
   const high = violations
     .filter((v) => v.severity === 'HIGH')
@@ -113,7 +116,10 @@ export const buildGradeDPrompt = (report, options = {}) => {
   if (hasNoHigh && hasNoMonoliths) return '';
 
   const lines = [];
-  lines.push('Act as a Principal Systems Architect. Refactor the following Grade D High-Severity Architectural Debts according to Chemical X Molecular Architecture Standards:\n');
+  const preamble = isSubSection
+    ? 'Refactor the following Grade D High-Severity Architectural Debts according to Chemical X Molecular Architecture Standards:\n'
+    : 'Act as a Principal Systems Architect. Refactor the following Grade D High-Severity Architectural Debts according to Chemical X Molecular Architecture Standards:\n';
+  lines.push(preamble);
 
   if (severeMonoliths.length > 0) {
     lines.push('### SEVERE MONOLITHS (1,000 - 1,999 lines of code)');
@@ -138,7 +144,7 @@ export const buildGradeDPrompt = (report, options = {}) => {
 };
 
 export const buildGradeCPrompt = (report, options = {}) => {
-  const { excludeAiSlop = false } = options;
+  const { excludeAiSlop = false, isSubSection = false } = options;
   const { violations = [], hotspots = [] } = report;
   const medium = violations
     .filter((v) => v.severity === 'MEDIUM')
@@ -150,7 +156,10 @@ export const buildGradeCPrompt = (report, options = {}) => {
   if (hasNoMedium && hasNoMonoliths) return '';
 
   const lines = [];
-  lines.push('Act as a Senior Frontend Engineer. Refactor the following Grade C Medium-Severity Technical Debts according to Chemical X Molecular Architecture Standards:\n');
+  const preamble = isSubSection
+    ? 'Refactor the following Grade C Medium-Severity Technical Debts according to Chemical X Molecular Architecture Standards:\n'
+    : 'Act as a Senior Frontend Engineer. Refactor the following Grade C Medium-Severity Technical Debts according to Chemical X Molecular Architecture Standards:\n';
+  lines.push(preamble);
 
   if (warningMonoliths.length > 0) {
     lines.push('### WARNING MONOLITHS (500 - 999 lines of code)');
@@ -175,7 +184,7 @@ export const buildGradeCPrompt = (report, options = {}) => {
 };
 
 export const buildGradeBPrompt = (report, options = {}) => {
-  const { excludeAiSlop = false } = options;
+  const { excludeAiSlop = false, isSubSection = false } = options;
   const { violations = [] } = report;
   const low = violations
     .filter((v) => v.severity === 'LOW')
@@ -185,7 +194,10 @@ export const buildGradeBPrompt = (report, options = {}) => {
   if (hasNoLow) return '';
 
   const lines = [];
-  lines.push('Act as a Clean Code Specialist. Clean up the following Grade B Low-Severity Hygiene Issues according to Chemical X standards:\n');
+  const preamble = isSubSection
+    ? 'Clean up the following Grade B Low-Severity Hygiene Issues according to Chemical X standards:\n'
+    : 'Act as a Clean Code Specialist. Clean up the following Grade B Low-Severity Hygiene Issues according to Chemical X standards:\n';
+  lines.push(preamble);
 
   lines.push('### LOW HYGIENE VIOLATIONS');
   lines.push(...formatGroupedPromptViolations(low));
@@ -198,7 +210,8 @@ export const buildGradeBPrompt = (report, options = {}) => {
   return lines.join('\n');
 };
 
-export const buildAiSlopPrompt = (report) => {
+export const buildAiSlopPrompt = (report, options = {}) => {
+  const { isSubSection = false } = options;
   const { violations = [] } = report;
   const slopViolations = violations.filter((v) => Boolean(v.isAiSlop));
 
@@ -206,7 +219,10 @@ export const buildAiSlopPrompt = (report) => {
   if (hasNoSlop) return '';
 
   const lines = [];
-  lines.push('Act as a Clean Code Specialist and Code Authenticity Guardian. Eliminate the following AI Slop and conversational artifacts from our codebase according to Chemical X standards:\n');
+  const preamble = isSubSection
+    ? 'Eliminate the following AI Slop and conversational artifacts from our codebase according to Chemical X standards:\n'
+    : 'Act as a Clean Code Specialist and Code Authenticity Guardian. Eliminate the following AI Slop and conversational artifacts from our codebase according to Chemical X standards:\n';
+  lines.push(preamble);
 
   lines.push('### AI SLOP & CODE AUTHENTICITY VIOLATIONS');
   lines.push(...formatGroupedPromptViolations(slopViolations));
@@ -222,7 +238,8 @@ export const buildAiSlopPrompt = (report) => {
   return lines.join('\n');
 };
 
-export const buildHotspotsPrompt = (report) => {
+export const buildHotspotsPrompt = (report, options = {}) => {
+  const { isSubSection = false } = options;
   const { hotspots = [] } = report;
   const monolithHotspots = hotspots.filter((h) => h.isMonolith || h.lineCount > 500);
 
@@ -230,7 +247,10 @@ export const buildHotspotsPrompt = (report) => {
   if (hasNoMonoliths) return '';
 
   const lines = [];
-  lines.push('Act as a Principal Systems Architect. Surgically decompose the following monolithic hotspot files according to Chemical X Molecular Architecture Standards:\n');
+  const preamble = isSubSection
+    ? 'Surgically decompose the following monolithic hotspot files according to Chemical X Molecular Architecture Standards:\n'
+    : 'Act as a Principal Systems Architect. Surgically decompose the following monolithic hotspot files according to Chemical X Molecular Architecture Standards:\n';
+  lines.push(preamble);
 
   lines.push('### MONOLITHIC REFACTORING HOTSPOTS');
   lines.push('Action: Decompose into single-responsibility crystalline molecule capsules (< 100 lines) and dedicated domain composables.\n');
@@ -252,7 +272,8 @@ export const buildHotspotsPrompt = (report) => {
   return lines.join('\n');
 };
 
-export const buildPillarPrompt = (report, pillarName) => {
+export const buildPillarPrompt = (report, pillarName, options = {}) => {
+  const { isSubSection = false } = options;
   const { violations = [], hotspots = [] } = report;
   const pillarViolations = violations.filter((v) => v.pillar === pillarName);
   const isPillar1 = pillarName === 'Line Budgets & Monolith Decomposition';
@@ -263,7 +284,10 @@ export const buildPillarPrompt = (report, pillarName) => {
   if (hasNoViolations && hasNoHotspots) return '';
 
   const lines = [];
-  lines.push(`Act as a Principal Systems Architect. Surgically refactor the following ${pillarName} violations according to Chemical X Molecular Architecture Standards:\n`);
+  const preamble = isSubSection
+    ? `Surgically refactor the following ${pillarName} violations according to Chemical X Molecular Architecture Standards:\n`
+    : `Act as a Principal Systems Architect. Surgically refactor the following ${pillarName} violations according to Chemical X Molecular Architecture Standards:\n`;
+  lines.push(preamble);
 
   if (relevantHotspots.length > 0) {
     lines.push('### MONOLITHIC REFACTORING HOTSPOTS');
@@ -289,21 +313,47 @@ export const buildPillarPrompt = (report, pillarName) => {
   return lines.join('\n');
 };
 
+export const deduplicateRolePreambles = (promptText, options = {}) => {
+  if (typeof promptText !== 'string' || !promptText) return '';
+  const { onlyIdentical = false } = options;
+  let firstRole = null;
+  const seenRoles = new Set();
+
+  return promptText.replace(/(^|\n\s*)Act as (?:an?|the)\s+([^.\n]+?)\.\s+(?=[A-Z])/gi, (match, prefix, role) => {
+    const normalizedRole = role.trim().toLowerCase();
+    if (!firstRole) {
+      firstRole = normalizedRole;
+      seenRoles.add(normalizedRole);
+      return match;
+    }
+
+    if (onlyIdentical) {
+      if (seenRoles.has(normalizedRole)) {
+        return prefix;
+      }
+      return match;
+    }
+
+    return prefix;
+  });
+};
+
 export const buildMasterPrompt = (report) => {
   const sections = [
-    buildGradeFPrompt(report, { excludeAiSlop: true }),
-    buildGradeDPrompt(report, { excludeAiSlop: true }),
-    buildGradeCPrompt(report, { excludeAiSlop: true }),
-    buildGradeBPrompt(report, { excludeAiSlop: true }),
-    buildAiSlopPrompt(report),
-    buildHotspotsPrompt(report)
+    buildGradeFPrompt(report, { excludeAiSlop: true, isSubSection: true }),
+    buildGradeDPrompt(report, { excludeAiSlop: true, isSubSection: true }),
+    buildGradeCPrompt(report, { excludeAiSlop: true, isSubSection: true }),
+    buildGradeBPrompt(report, { excludeAiSlop: true, isSubSection: true }),
+    buildAiSlopPrompt(report, { isSubSection: true }),
+    buildHotspotsPrompt(report, { isSubSection: true })
   ].filter(Boolean);
 
   const hasNoSections = sections.length === 0;
   if (hasNoSections) return '';
 
-  const header = `Act as a Principal Systems Architect. Execute a phased architectural refactoring of our codebase according to Chemical X Molecular Architecture Standards.\n\n`;
-  return header + sections.join('\n\n---\n\n');
+  const header = 'Act as a Principal Systems Architect. Execute a phased architectural refactoring of our codebase according to Chemical X Molecular Architecture Standards.\n\n';
+  const rawPrompt = header + sections.join('\n\n---\n\n');
+  return deduplicateRolePreambles(rawPrompt);
 };
 
 export const formatPromptBox = (title, promptText) => {

@@ -63,6 +63,7 @@ import {
   buildHotspotsPrompt,
   buildPillarPrompt,
   buildMasterPrompt,
+  deduplicateRolePreambles,
   formatPromptBox,
   formatGroupedPromptViolations
 } from './audit/prompts.js';
@@ -281,6 +282,7 @@ export {
   buildHotspotsPrompt,
   buildPillarPrompt,
   buildMasterPrompt,
+  deduplicateRolePreambles,
   formatPromptBox,
   formatGroupedPromptViolations,
   createPatternRegistry,
@@ -338,7 +340,9 @@ export default {
   buildGradeBPrompt,
   buildAiSlopPrompt,
   buildHotspotsPrompt,
+  buildPillarPrompt,
   buildMasterPrompt,
+  deduplicateRolePreambles,
   formatPromptBox,
   formatGroupedPromptViolations,
   createPatternRegistry,

@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Community Edition Flow**: Added reciprocal free Community Edition scaffolding in `cli/scaffold.js` allowing developers to unpack blueprints locally while sharing scorecards with community GitHub Discussions.
 - **Local Blueprint Fallback**: Added `loadLocalBlueprintFiles` in `cli/license.js` enabling offline and community blueprint scaffolding without remote edge download dependencies.
 - **Co-located Social-Git Test Suite**: Added test suite (`cli/audit/social-git.spec.js`) covering clipboard copying, OSC 52 escape sequences, and remote Git repository parsing.
+- **Pass-through Role Preamble Deduplication**: Added `deduplicateRolePreambles` in `cli/audit/prompts.js` (and re-exported in `cli/audit.js`) along with a dedicated co-located test suite (`cli/audit/prompts.spec.js`) to eliminate repeated "Act as a..." persona preambles across composite and master refactoring prompts.
 
 ### Fixed
 - **Zero-Hang Clipboard Copying**: Resolved indefinite process hangs during prompt copying in `cli/audit/social-git.js` by adding default timeouts (`timeout: 1000`) to `safeSpawnSync`, preventing child processes from blocking the Node event loop.
@@ -18,6 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **ChromeOS Sommelier & Wayland Protection**: Added Sommelier container detection in `cli/audit/social-git.js` to avoid `wl-copy` window focus deadlocks, alongside timeouts for `wl-copy`, `xclip`, `xsel`, and WSL `clip.exe`.
 - **Positional Audit Directory Arguments**: Updated `cli/index.js` to accept positional directory paths for `chemx audit <dir>` and added empty prompt guard clause to skip clipboard writes on pristine Grade A+ codebases.
 - **Browser Launch Timeout**: Added explicit timeout guard (`timeout: 3000`) to `openBrowser` in `cli/terminal.js`.
+- **Redundant AI Persona Repetition**: Added `isSubSection` option across all prompt builders (`buildGradeFPrompt`, `buildGradeDPrompt`, `buildGradeCPrompt`, `buildGradeBPrompt`, `buildAiSlopPrompt`, `buildHotspotsPrompt`, `buildPillarPrompt`) so section prompts start directly with imperative action verbs when composed into master prompts.
 
 ### Changed
 - **Menu Alignment & Double-Padded Item Counts**: Reordered grade menu options in `cli/navigator-actions.js` to place double-padded count tags `(## Items)` directly following `[ Grade: X  ]` badges, ensuring pixel-perfect column alignment across all architectural pillar categories and hotspot files.
