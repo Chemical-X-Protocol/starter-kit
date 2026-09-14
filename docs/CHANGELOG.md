@@ -4,6 +4,13 @@ All notable changes to the Chemical X Starter Kit repository will be documented 
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [2026-09-14]
+
+### Fixed
+- **Audit Threshold Gating**: Corrected audit failure evaluation in `cli/index.js` so that `hasCriticalOrHigh` acts as a fallback default only when neither `--min-grade` nor `--min-score` is provided. This prevents codebases passing explicit grade/score thresholds (e.g. Grade A+, Score 95+) from being falsely rejected.
+- **Non-Interactive Audit Diagnostics**: Added explicit diagnostic error logging in `cli/index.js` when non-interactive audits fail, clarifying whether a failure was caused by grade rank, score threshold, unresolved hazards, or strict mode.
+- **Pre-Commit Hook Failure Messages**: Updated pre-commit hook scripts in `cli/installer-templates.js` and `scripts/pre-commit.sh` to report general architectural verification failure instead of asserting a false score drop.
+
 ## [2026-09-13]
 
 ### Added
