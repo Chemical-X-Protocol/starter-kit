@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { ANSI } from './theme.js';
+import { auditFile } from './audit.js';
 import {
   findSymbolDefinition,
   findSymbolReferences,
@@ -306,6 +307,78 @@ export const handleHealthFilterCommand = (db, status, { isJson = false, isCli = 
   process.stdout.write('\n');
 
   if (isCli) process.exit(0);
+  return payload;
+};
+
+export const handleCheckCommand = (targetFile, { isJson = false, isCli = true } = {}) => {
+  const startTime = Date.now();
+  if (!targetFile) {
+    const errorMsg = 'Please specify a target file to check. Example: chemx check src/components/m-card.vue';
+    if (isJson) {
+      process.stdout.write(JSON.stringify({ error: errorMsg, success: false }) + '\n');
+    } else {
+      process.stderr.write(`\x1b[31m✕ ${errorMsg}\x1b[0m\n`);
+    }
+    if (isCli) process.exit(1);
+    return null;
+  }
+
+  const absPath = path.resolve(process.cwd(), targetFile);
+  if (!fs.existsSync(absPath)) {
+    const errorMsg = `File not found: ${targetFile}`;
+    if (isJson) {
+      process.stdout.write(JSON.stringify({ error: errorMsg, success: false }) + '\n');
+    } else {
+      process.stderr.write(`\x1b[31m✕ ${errorMsg}\x1b[0m\n`);
+    }
+    if (isCli) process.exit(1);
+    return null;
+  }
+
+  const relPath = path.relative(process.cwd(), absPath);
+  const violations = auditFile(absPath, relPath);
+  const durationMs = Date.now() - startTime;
+
+  const criticalCount = violations.filter((v) => v.severity === 'CRITICAL').length;
+  const highMedCount = violations.filter((v) => ['HIGH', 'MEDIUM'].includes(v.severity)).length;
+  const isClean = violations.length === 0;
+
+  const payload = {
+    file: relPath,
+    isClean,
+    durationMs,
+    violationsCount: violations.length,
+    criticalCount,
+    highMedCount,
+    violations
+  };
+
+  if (isJson) {
+    process.stdout.write(JSON.stringify(payload) + '\n');
+    if (isCli) process.exit(isClean ? 0 : 1);
+    return payload;
+  }
+
+  if (isClean) {
+    process.stdout.write(`\n${ANSI.BOLD}${ANSI.LIME}✔ Crystalline:${ANSI.RESET} ${relPath} ${ANSI.DIM}(0 hazards, ${durationMs}ms)${ANSI.RESET}\n\n`);
+    if (isCli) process.exit(0);
+    return payload;
+  }
+
+  process.stdout.write(`\n${ANSI.BOLD}${ANSI.GOLD}Chemical X Micro-Check:${ANSI.RESET} ${ANSI.BOLD}${relPath}${ANSI.RESET} ${ANSI.DIM}(${durationMs}ms)${ANSI.RESET}\n`);
+  process.stdout.write(`  ${ANSI.RED}💥 ${criticalCount} Critical${ANSI.RESET} | ${ANSI.GOLD}🔥 ${highMedCount} High/Med${ANSI.RESET}\n\n`);
+
+  for (const v of violations) {
+    const color = v.severity === 'CRITICAL' ? ANSI.RED : ANSI.GOLD;
+    process.stdout.write(`  ${color}[${v.severity}]${ANSI.RESET} Line ${v.line}: ${v.rule}\n`);
+    process.stdout.write(`    ${ANSI.DIM}Hazard: ${v.hazard}${ANSI.RESET}\n`);
+    if (v.directive) {
+      process.stdout.write(`    ${ANSI.CYAN}Directive: ${v.directive}${ANSI.RESET}\n`);
+    }
+  }
+  process.stdout.write('\n');
+
+  if (isCli) process.exit(1);
   return payload;
 };
 

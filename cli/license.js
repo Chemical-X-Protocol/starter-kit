@@ -205,10 +205,15 @@ export const obtainLicenseKey = async (rawArgs = [], onRunAudit = null) => {
   return promptQuestion('Enter Chemical X Sponsor License Key (CX-XXXX-XXXX-XXXX): ');
 };
 
-export const checkOrPromptEvaluation = async (actionLabel = 'generate capsule') => {
+export const checkOrPromptEvaluation = async (actionLabel = 'generate capsule', options = {}) => {
   const cachedKey = getCachedLicenseKey();
   if (cachedKey) {
     return { licensed: true, key: cachedKey };
+  }
+
+  const isNonInteractive = options.isYes || Boolean(process.env.CI) || !process.stdin.isTTY;
+  if (isNonInteractive) {
+    return { licensed: false, proceed: true };
   }
 
   const useGum = hasGum();

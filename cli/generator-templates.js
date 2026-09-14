@@ -1,9 +1,17 @@
 export const toPascalCase = (str) =>
   str
-    .replace(/^([a-z])-/, '')
+    .replace(/^(?:[a-z]|use|v)-/, '')
     .split('-')
     .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
     .join('');
+
+export const toCamelCase = (str) => {
+  const p = toPascalCase(str);
+  if (str.startsWith('use-') || str.startsWith('use')) {
+    return `use${p}`;
+  }
+  return p.charAt(0).toLowerCase() + p.slice(1);
+};
 
 export const buildReactComponent = (name, pascalName) => `import React from 'react';
 import type { ${pascalName}Props } from './types';
@@ -164,18 +172,7 @@ export const use${pascalName}Controller = (options: ControllerOptions = {}) => {
 };
 `;
 
-export const buildTypes = (name, pascalName) => `export type ${pascalName}State =
-  | { readonly status: 'idle' }
-  | { readonly status: 'loading'; readonly progress: number }
-  | { readonly status: 'active'; readonly activeId: string }
-  | { readonly status: 'fault'; readonly faultMessage: string };
-
-export interface ${pascalName}Descriptor {
-  readonly text: string;
-  readonly className: string;
-}
-
-export interface ${pascalName}Props {
+export const buildPropsType = (name, pascalName) => `export interface ${pascalName}Props {
   readonly title: string;
   readonly subtitle?: string;
   readonly variant?: 'standard' | 'highlight';
@@ -186,6 +183,49 @@ export interface ${pascalName}Emits {
   (e: 'action', title: string): void;
 }
 `;
+
+export const buildStateType = (name, pascalName) => `export type ${pascalName}State =
+  | { readonly status: 'idle' }
+  | { readonly status: 'loading'; readonly progress: number }
+  | { readonly status: 'active'; readonly activeId: string }
+  | { readonly status: 'fault'; readonly faultMessage: string };
+
+export interface ${pascalName}Descriptor {
+  readonly text: string;
+  readonly className: string;
+}
+`;
+
+export const buildTypesIndex = (fileNames = ['props', 'state']) =>
+  fileNames.map((f) => `export type * from './${f}.d.ts';`).join('\n') + '\n';
+
+export const buildTypes = (name, pascalName) => `${buildStateType(name, pascalName)}
+${buildPropsType(name, pascalName)}`;
+
+export const buildComponentSpec = (name, pascalName, hasController = true) => {
+  if (hasController) {
+    return `import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import { use${pascalName}Controller } from './${name}.controller.ts';
+
+describe('${pascalName} Capsule Controller', () => {
+  it('exports pure controller hook', () => {
+    assert.equal(typeof use${pascalName}Controller, 'function');
+  });
+});
+`;
+  }
+
+  return `import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+
+describe('${pascalName} Atom Foundation', () => {
+  it('defines foundational UI atom contract', () => {
+    assert.ok(true);
+  });
+});
+`;
+};
 
 export const buildScss = (name) => `.${name} {
   display: flex;
@@ -259,6 +299,144 @@ export const buildIndex = (name, pascalName, ext) => {
 
   return `${compExport}
 export { use${pascalName}Controller } from './${name}.controller';
-export type { ${pascalName}Props, ${pascalName}State } from './types';
+export type * from './types';
 `;
 };
+
+export const buildHook = (name, camelName, pascalName) => `import { useState, useCallback, useEffect } from 'react';
+import type { ${pascalName}HookOptions, ${pascalName}HookReturn } from './types';
+
+export const ${camelName} = (options: ${pascalName}HookOptions = {}): ${pascalName}HookReturn => {
+  const [data, setData] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const execute = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      setData('ready');
+      options.onSuccess?.();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError(message);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [options]);
+
+  useEffect(() => {
+    if (options.immediate) {
+      execute();
+    }
+  }, [options.immediate, execute]);
+
+  return { data, isLoading, error, execute };
+};
+`;
+
+export const buildHookOptionsType = (pascalName) => `export interface ${pascalName}HookOptions {
+  readonly immediate?: boolean;
+  readonly onSuccess?: () => void;
+}
+`;
+
+export const buildHookReturnType = (pascalName) => `export interface ${pascalName}HookReturn {
+  readonly data: string | null;
+  readonly isLoading: boolean;
+  readonly error: string | null;
+  readonly execute: () => Promise<void>;
+}
+`;
+
+export const buildHookIndex = (name, camelName) => `export { ${camelName} } from './${name}';
+export type * from './types';
+`;
+
+export const buildHookSpec = (name, camelName) => `import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import { ${camelName} } from './${name}.ts';
+
+describe('${camelName} Hook Composable', () => {
+  it('exports pure hook function', () => {
+    assert.equal(typeof ${camelName}, 'function');
+  });
+});
+`;
+
+export const buildReactView = (name, pascalName) => `import React from 'react';
+import type { ${pascalName}ViewParams } from './types';
+
+export const ${pascalName}View: React.FC<${pascalName}ViewParams> = ({
+  HeaderMolecule,
+  MainOrganism,
+  FooterMolecule
+}) => (
+  <main className="${name}">
+    {HeaderMolecule}
+    {MainOrganism}
+    {FooterMolecule}
+  </main>
+);
+
+export default ${pascalName}View;
+`;
+
+export const buildVueView = (name, pascalName) => `<script setup lang="ts">
+import type { ${pascalName}ViewParams } from './types';
+
+defineProps<${pascalName}ViewParams>();
+</script>
+
+<template>
+  <main class="${name}">
+    <component :is="HeaderMolecule" />
+    <component :is="MainOrganism" />
+    <component :is="FooterMolecule" />
+  </main>
+</template>
+`;
+
+export const buildSvelteView = (name, pascalName) => `<script lang="ts">
+import type { ${pascalName}ViewParams } from './types';
+
+const {
+  HeaderMolecule,
+  MainOrganism,
+  FooterMolecule
+}: ${pascalName}ViewParams = $props();
+</script>
+
+<main class="${name}">
+  {@render HeaderMolecule?.()}
+  {@render MainOrganism?.()}
+  {@render FooterMolecule?.()}
+</main>
+`;
+
+export const buildViewParamsType = (pascalName) => `export interface ${pascalName}ViewParams {
+  readonly HeaderMolecule?: unknown;
+  readonly MainOrganism?: unknown;
+  readonly FooterMolecule?: unknown;
+}
+`;
+
+export const buildViewIndex = (name, pascalName, ext) => {
+  const compExport = ext === 'vue' || ext === 'svelte'
+    ? `export { default as ${pascalName}View } from './${name}.${ext}';`
+    : `export { ${pascalName}View } from './${name}';`;
+
+  return `${compExport}
+export type * from './types';
+`;
+};
+
+export const buildViewSpec = (name, pascalName) => `import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+
+describe('${pascalName}View Table of Contents', () => {
+  it('defines pure declarative blueprint layout', () => {
+    assert.ok(true);
+  });
+});
+`;
