@@ -92,27 +92,98 @@ export const areGuardrailsInstalled = (targetDir = '.') => {
   return hasWf && hasHook;
 };
 
+export const installAgentSearchConfig = async (targetDir = '.') => {
+  const resolvedTarget = path.resolve(targetDir);
+
+  // 1. Update package.json scripts
+  const pkgPath = path.join(resolvedTarget, 'package.json');
+  if (fs.existsSync(pkgPath)) {
+    try {
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+      pkg.scripts = pkg.scripts || {};
+      pkg.scripts.q = 'chemx search';
+      pkg.scripts.search = 'chemx search';
+      fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n', 'utf-8');
+      process.stdout.write('  \x1b[32m✔\x1b[0m Configured "q" and "search" scripts in package.json (run via pnpm q <query>)\n');
+    } catch {
+      process.stdout.write('  \x1b[33m⚠\x1b[0m Could not update package.json scripts\n');
+    }
+  }
+
+  // 2. Inject rule into AGENTS.md
+  const agentsPath = path.join(resolvedTarget, 'AGENTS.md');
+  const searchDirective = `
+## Chemical X Codebase Query Machine Protocol
+- Search First Rule: AI agents MUST invoke 'pnpm q "<query>"' (or 'npx chemx search "<query>"') before running broad ripgrep, find, or file dumping.
+- AST Architecture Intelligence: Always leverage 'pnpm q' to inspect component tiers, exported symbols, props, and hooks with minimal token burn.
+- Inspect Mode: Use 'pnpm q "<capsule-name>" --inspect' to examine props and hooks without catting entire source files.
+- JSON Mode: Use 'pnpm q "<query>" --json' for zero-overhead, machine-readable agent lookups.
+`;
+
+  if (fs.existsSync(agentsPath)) {
+    try {
+      const content = fs.readFileSync(agentsPath, 'utf-8');
+      if (!content.includes('Chemical X Codebase Query Machine Protocol')) {
+        fs.appendFileSync(agentsPath, `\n${searchDirective}\n`, 'utf-8');
+        process.stdout.write('  \x1b[32m✔\x1b[0m Injected search-first directive into AGENTS.md\n');
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  // 3. Prime SQLite query index
+  try {
+    const { syncSearchIndex } = await import('./search.js');
+    const targetSource = fs.existsSync(path.join(resolvedTarget, 'src')) ? 'src' : '.';
+    const res = syncSearchIndex(targetSource, resolvedTarget);
+    if (res) {
+      process.stdout.write(`  \x1b[32m✔\x1b[0m Initialized SQLite query index (.chemx/index.db) across ${res.totalFiles} files\n`);
+    }
+  } catch {
+    // ignore
+  }
+
+  return true;
+};
+
 export const runInstallWizard = async (targetDir = '.') => {
   const isGit = Boolean(resolveGitHooksDir(targetDir));
-  process.stdout.write('\n\x1b[1m\x1b[38;2;98;201;255mChemical X: Architecture Guardrail Installer\x1b[0m\n\n');
+  process.stdout.write('\n\x1b[1m\x1b[38;2;98;201;255mChemical X: Architecture Guardrail & Query Installer\x1b[0m\n\n');
   const targetChoice = hasGum()
-    ? gumChoose(['1. Install All Guardrails (Git Pre-Commit Hook + GitHub CI Workflow)', '2. Git Pre-Commit Hook only (.git/hooks/pre-commit)', '3. GitHub Actions CI Workflow only (.github/workflows/chemx-audit.yml)', '4. Cancel'])
-    : await promptQuestion('Select target: [1] All, [2] Hook, [3] CI, [4] Cancel (default: 1): ');
-  if (targetChoice?.includes('Cancel') || targetChoice === '4') return;
+    ? gumChoose([
+        '1. Install All (Pre-Commit Hook + GitHub CI Workflow + Agent Query Machine)',
+        '2. Agent Query Machine only ("pnpm q" script + AGENTS.md rule + SQLite index)',
+        '3. Git Pre-Commit Hook only (.git/hooks/pre-commit)',
+        '4. GitHub Actions CI Workflow only (.github/workflows/chemx-audit.yml)',
+        '5. Cancel'
+      ])
+    : await promptQuestion('Select target: [1] All, [2] Query Machine, [3] Hook, [4] CI, [5] Cancel (default: 1): ');
+  if (targetChoice?.includes('Cancel') || targetChoice === '5') return;
+
+  if (targetChoice?.includes('Query Machine only') || targetChoice === '2') {
+    process.stdout.write('\n\x1b[1mInstalling AI Agent Query Machine...\x1b[0m\n');
+    await installAgentSearchConfig(targetDir);
+    process.stdout.write('\n\x1b[1m\x1b[32m✔ Chemical X Agent Query Machine installed successfully!\x1b[0m\n\n');
+    return;
+  }
 
   const minGrade = (hasGum() ? gumInput('Minimum required Grade [A+, A, B, C, D] (default: B):', 'B') : await promptQuestion('Minimum required Grade [default: B]: ')) || 'B';
   const minScore = parseInt((hasGum() ? gumInput('Minimum required Score [0-100] (default: 80):', '80') : await promptQuestion('Minimum required Score [default: 80]: ')) || '80', 10);
   const opts = { minGrade: minGrade.trim().toUpperCase(), minScore };
 
   process.stdout.write('\n\x1b[1mInstalling guardrails...\x1b[0m\n');
-  const shouldHook = !targetChoice.includes('CI only') && targetChoice !== '3';
-  const shouldWf = !targetChoice.includes('Hook only') && targetChoice !== '2';
+  const shouldHook = !targetChoice.includes('CI only') && targetChoice !== '4';
+  const shouldWf = !targetChoice.includes('Hook only') && targetChoice !== '3';
+  const shouldQuery = targetChoice.includes('All') || targetChoice === '1';
 
   if (shouldHook) {
     if (isGit) installPreCommitHook(targetDir, opts);
     else process.stdout.write('  \x1b[33m⚠\x1b[0m Skipped .git/hooks (current directory is not a git repository root or submodule).\n');
   }
   if (shouldWf) installGitHubWorkflow(targetDir, opts);
+  if (shouldQuery) await installAgentSearchConfig(targetDir);
+
   saveProjectConfig(targetDir, { minGrade: opts.minGrade, minScore: opts.minScore, maxLineCount: 500, maxMoleculeLineCount: 100 });
-  process.stdout.write('\n\x1b[1m\x1b[32m✔ Chemical X guardrails installed successfully!\x1b[0m\n\n');
+  process.stdout.write('\n\x1b[1m\x1b[32m✔ Chemical X configuration installed successfully!\x1b[0m\n\n');
 };

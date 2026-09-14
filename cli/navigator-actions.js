@@ -45,7 +45,7 @@ import {
 import { showPagedContent } from "./navigator-paged.js";
 import { showConversionMenu } from "./navigator-conversion.js";
 import { handleShareToDiscussions } from "./navigator-share.js";
-import { runInstallWizard } from "./installer.js";
+import { runInstallWizard, installAgentSearchConfig } from "./installer.js";
 import { formatButtonTag } from "./navigator-menu.js";
 import { runBadgeCommand } from "./badge.js";
 
@@ -146,6 +146,16 @@ export const buildDashboardActionGroups = ({ report, onScaffold = null, onRerun 
     await runInstallWizard(process.cwd());
     if (hasGum()) {
       gumChoose(["<-- Back to Audit Dashboard"]);
+    }
+  };
+
+  const handleInstallSearchAction = async () => {
+    process.stdout.write('\n\x1b[1mInstalling AI Agent Query Machine...\x1b[0m\n');
+    await installAgentSearchConfig(process.cwd());
+    if (hasGum()) {
+      gumChoose(["<-- Back to Audit Dashboard"]);
+    } else {
+      await promptQuestion("Press Enter to return to menu...");
     }
   };
 
@@ -263,6 +273,13 @@ export const buildDashboardActionGroups = ({ report, onScaffold = null, onRerun 
     action: handleInstallAction
   };
 
+  const installSearchAction = {
+    key: "install_search",
+    tag: formatButtonTag("Query Machine", "\x1b[38;2;56;189;248m"),
+    label: "⚡ Install AI Agent Query Tool (\"pnpm q\" script + AGENTS.md rule)",
+    action: handleInstallSearchAction
+  };
+
   const upgradeAction = {
     key: "upgrade",
     tag: formatButtonTag("Upgrade", "\x1b[33m"),
@@ -341,6 +358,7 @@ export const buildDashboardActionGroups = ({ report, onScaffold = null, onRerun 
 
   return {
     installAction,
+    installSearchAction,
     roadmapAction,
     upgradeAction,
     reportAction,

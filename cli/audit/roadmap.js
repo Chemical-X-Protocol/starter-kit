@@ -209,6 +209,12 @@ export const buildSelfHealingRoadmapPrompt = (report) => {
   lines.push('3. Commit the branch with atomic, intention-revealing commit messages.');
   lines.push('4. Create a Pull Request (PR) to `main` upon completing the remediation phases.\n');
 
+  lines.push('### AI AGENT DISCOVERY & REFACTORING COMMANDS:');
+  lines.push('- Discovery & Inspect: Run `pnpm q "<target>" --inspect` (or `npx chemx search "<target>" --inspect`) to inspect component props and hooks before editing.');
+  lines.push('- Tier Filter: Run `pnpm q "<query>" --tier=molecule` (or `atom`, `organism`, `hook`) to find related capsules.');
+  lines.push('- Zero-Overhead JSON: Run `pnpm q "<query>" --json` for minified AST metadata without burning context tokens on whole files.');
+  lines.push('- Re-Verify Score: Run `npx chemx audit` after completing each phase to verify health score improvements.\n');
+
   phases.forEach((p) => {
     lines.push(`### STEP ${p.step}: ${p.phase}`);
     lines.push(`Goal: ${p.rationale}\n`);
@@ -218,6 +224,10 @@ export const buildSelfHealingRoadmapPrompt = (report) => {
       lines.push(`   Execution: ${item.action}`);
       if (item.locations.length > 0) {
         lines.push(`   Files: ${item.locations.join(', ')}`);
+      }
+      const rawTarget = item.target.split(' ')[0].replace(/->.*/, '').trim();
+      if (rawTarget && !rawTarget.includes('*')) {
+        lines.push(`   Command: pnpm q "${rawTarget}" --inspect`);
       }
     });
     lines.push('');

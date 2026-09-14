@@ -66,6 +66,13 @@
     2. Capsule: Encapsulate the tab button UI pattern into `m-tab-button` with scoped BEM modifier classes (e.g. `.m-tab-button--pink`, `.m-tab-button--flexible`) using `@apply`. Never place utility selector strings in JavaScript.
     3. Composition: In the consumer showcase or organism, declaratively render `<m-tab-button>` instances inside an atom surface, with zero raw HTML tags in the template.
 
+### I. AI Agent Codebase Query Machine Protocol
+- **Search First Rule**: AI agents MUST invoke `pnpm q "<query>"` (or `npx chemx search "<query>"`) before running broad ripgrep, find, or file dumping.
+- **AST Architecture Intelligence**: Always leverage `pnpm q` to inspect component tiers, exported symbols, props, and hooks with minimal token burn.
+- **Inspect Mode**: Use `pnpm q "<capsule-name>" --inspect` to examine props and hooks without reading entire source files into context.
+- **JSON Mode**: Use `pnpm q "<query>" --json` for zero-overhead, machine-readable agent lookups.
+- **Tier Filtering**: Use `pnpm q "<query>" --tier=molecule` (or `atom`, `organism`, `hook`) to narrow scope instantly.
+
 ---
 
 ## 2. Domain-Based Type Architecture & Data Integrity
