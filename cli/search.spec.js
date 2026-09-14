@@ -10,14 +10,19 @@ import {
   findFileDependencies,
   findFileDependents,
   syncViolationsIndex,
-  queryViolations
+  queryViolations,
+  recordAuditSnapshot,
+  getAuditProgression,
+  queryFilesByHealth
 } from './search.js';
 import {
   handleDefCommand,
   handleRefsCommand,
   handleDepsCommand,
   handleHazardsCommand,
-  handlePackCommand
+  handlePackCommand,
+  handleProgressionCommand,
+  handleHealthFilterCommand
 } from './search-commands.js';
 
 test('resolveTargetDir: returns custom directory if provided as first argument', () => {
@@ -173,3 +178,42 @@ test('search-commands: def, refs, deps, hazards, pack return valid payloads in J
   assert.ok(Array.isArray(packRes?.dependencies));
   assert.ok(Array.isArray(packRes?.dependents));
 });
+
+test('search-db: records snapshots, progression, and stamps file health', () => {
+  const db = openIndexDb();
+  assert.ok(db);
+
+  const mockReport = {
+    health: { score: 98, grade: 'A+' },
+    aiSlop: { asiScore: 94 },
+    metrics: { totalLoc: 500 },
+    scannedFiles: 10,
+    violations: [
+      { filePath: 'cli/fixtures/consumer-module.js', severity: 'HIGH', rule: 'AI_SLOP_SHALLOW_CATCH' }
+    ]
+  };
+
+  const snapshotRes = recordAuditSnapshot(db, mockReport);
+  assert.strictEqual(snapshotRes?.score, 98);
+  assert.strictEqual(snapshotRes?.grade, 'A+');
+
+  const history = getAuditProgression(db, 5);
+  assert.ok(history.length >= 1);
+  assert.strictEqual(history[history.length - 1].score, 98);
+
+  const failingFiles = queryFilesByHealth(db, { status: 'failing' });
+  assert.ok(failingFiles.some((f) => f.path === 'cli/fixtures/consumer-module.js'));
+
+  const crystallineFiles = queryFilesByHealth(db, { status: 'crystalline' });
+  assert.ok(crystallineFiles.every((f) => f.hazardCount === 0));
+
+  const progressionCli = handleProgressionCommand(db, { isJson: true, isCli: false });
+  assert.ok(progressionCli?.progression.length >= 1);
+
+  const failingCli = handleHealthFilterCommand(db, 'failing', { isJson: true, isCli: false });
+  assert.strictEqual(failingCli?.filter, 'failing');
+
+  const cleanCli = handleHealthFilterCommand(db, 'crystalline', { isJson: true, isCli: false });
+  assert.strictEqual(cleanCli?.filter, 'crystalline');
+});
+

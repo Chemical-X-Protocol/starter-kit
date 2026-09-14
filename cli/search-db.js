@@ -12,7 +12,10 @@ export {
   findFileDependencies,
   findFileDependents,
   syncViolationsIndex,
-  queryViolations
+  queryViolations,
+  recordAuditSnapshot,
+  getAuditProgression,
+  queryFilesByHealth
 } from './search-queries.js';
 
 export const getAllIndexedFiles = (db) => {

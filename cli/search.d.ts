@@ -29,6 +29,8 @@ export interface FileIndexRecord {
   readonly props: readonly PropRecord[];
   readonly hooks: readonly string[];
   readonly imports?: readonly ImportRecord[];
+  readonly healthScore?: number;
+  readonly hazardCount?: number;
 }
 
 export interface ViolationRecord {
@@ -136,3 +138,34 @@ export declare function queryViolations(
     limit?: number;
   }
 ): readonly ViolationRecord[];
+
+export interface AuditSnapshotRecord {
+  readonly timestamp: number;
+  readonly score: number;
+  readonly grade: string;
+  readonly asi: number;
+  readonly totalLoc: number;
+  readonly scannedFiles: number;
+  readonly criticalCount: number;
+  readonly highMedCount: number;
+  readonly lowCount: number;
+}
+
+export declare function recordAuditSnapshot(
+  db: any,
+  report: any
+): { timestamp: number; score: number; grade: string; asi: number } | null;
+
+export declare function getAuditProgression(
+  db: any,
+  limit?: number
+): readonly AuditSnapshotRecord[];
+
+export declare function queryFilesByHealth(
+  db: any,
+  options?: {
+    status?: string;
+    limit?: number;
+  }
+): readonly any[];
+

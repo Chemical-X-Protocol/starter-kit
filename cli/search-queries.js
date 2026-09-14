@@ -142,3 +142,95 @@ export const queryViolations = (db, options = {}) => {
     directive: r.directive
   }));
 };
+
+export const recordAuditSnapshot = (db, report) => {
+  if (!db || !report) return null;
+  const timestamp = Date.now();
+  const score = Number(report.health?.score || 0);
+  const grade = report.health?.grade || 'F';
+  const asi = Number(report.aiSlop?.asiScore || 0);
+  const totalLoc = Number(report.metrics?.totalLoc || 0);
+  const scannedFiles = Number(report.scannedFiles || 0);
+
+  const criticalCount = report.violations?.filter((v) => v.severity === 'CRITICAL').length || 0;
+  const highMedCount = report.violations?.filter((v) => v.severity === 'HIGH' || v.severity === 'MEDIUM').length || 0;
+  const lowCount = report.violations?.filter((v) => v.severity === 'LOW').length || 0;
+
+  const insertStmt = db.prepare(`
+    INSERT INTO audit_snapshots (
+      timestamp, score, grade, asi, total_loc, scanned_files, critical_count, high_med_count, low_count
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  insertStmt.run(timestamp, score, grade, asi, totalLoc, scannedFiles, criticalCount, highMedCount, lowCount);
+
+  // Stamp file health in files table
+  const hazardCountsByFile = new Map();
+  for (const v of report.violations || []) {
+    if (v.filePath) {
+      const current = hazardCountsByFile.get(v.filePath) || 0;
+      hazardCountsByFile.set(v.filePath, current + 1);
+    }
+  }
+
+  const updateStmt = db.prepare(`
+    UPDATE files
+    SET health_score = ?, hazard_count = ?
+    WHERE path = ?
+  `);
+
+  const allFiles = db.prepare('SELECT path FROM files').all() || [];
+  for (const f of allFiles) {
+    const hazards = hazardCountsByFile.get(f.path) || 0;
+    const fileScore = Math.max(0, 100 - hazards * 15);
+    updateStmt.run(fileScore, hazards, f.path);
+  }
+
+  return { timestamp, score, grade, asi, criticalCount, highMedCount };
+};
+
+export const getAuditProgression = (db, limit = 10) => {
+  if (!db) return [];
+  const rows = db.prepare(`
+    SELECT timestamp, score, grade, asi, total_loc, scanned_files, critical_count, high_med_count, low_count
+    FROM audit_snapshots
+    ORDER BY timestamp DESC
+    LIMIT ?
+  `).all(limit);
+
+  return rows.reverse().map((r) => ({
+    timestamp: Number(r.timestamp),
+    score: Number(r.score),
+    grade: r.grade,
+    asi: Number(r.asi),
+    totalLoc: Number(r.total_loc),
+    scannedFiles: Number(r.scanned_files),
+    criticalCount: Number(r.critical_count),
+    highMedCount: Number(r.high_med_count),
+    lowCount: Number(r.low_count)
+  }));
+};
+
+export const queryFilesByHealth = (db, { status = 'all', limit = 50 } = {}) => {
+  if (!db) return [];
+  let sql = 'SELECT path, tier, lines, chars, health_score, hazard_count FROM files';
+  if (status === 'failing' || status === 'degraded') {
+    sql += ' WHERE hazard_count > 0 ORDER BY health_score ASC, hazard_count DESC, lines DESC';
+  } else if (status === 'crystalline' || status === 'clean') {
+    sql += ' WHERE hazard_count = 0 ORDER BY lines ASC';
+  } else {
+    sql += ' ORDER BY path ASC';
+  }
+  sql += ' LIMIT ?';
+
+  const rows = db.prepare(sql).all(limit);
+  return rows.map((r) => ({
+    path: r.path,
+    tier: r.tier,
+    lines: Number(r.lines),
+    chars: Number(r.chars),
+    healthScore: Number(r.health_score ?? 100),
+    hazardCount: Number(r.hazard_count ?? 0)
+  }));
+};
+

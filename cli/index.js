@@ -33,7 +33,7 @@ import {
 import { runInstallWizard } from './installer.js';
 import { runBadgeCommand } from './badge.js';
 import { runBuildAudit } from './build.js';
-import { runSearch, syncSearchIndex, resolveTargetDir, syncViolationsIndex } from './search.js';
+import { runSearch, syncSearchIndex, resolveTargetDir, syncViolationsIndex, recordAuditSnapshot } from './search.js';
 
 const rawArgs = process.argv.slice(2);
 const invokedBin = path.basename(process.argv[1] || '');
@@ -86,6 +86,7 @@ export const runAudit = async (customDir = null, isCli = false) => {
   const syncRes = syncSearchIndex(targetDir, process.cwd());
   if (syncRes?.db) {
     syncViolationsIndex(syncRes.db, report.violations);
+    recordAuditSnapshot(syncRes.db, report);
   }
 
   const hasCriticalOrHigh = report.violations.some((v) => v.severity === 'CRITICAL' || v.severity === 'HIGH');

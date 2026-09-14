@@ -31,7 +31,9 @@ export const openIndexDb = (cwd = process.cwd()) => {
       size INTEGER NOT NULL,
       tier TEXT NOT NULL,
       lines INTEGER NOT NULL,
-      chars INTEGER NOT NULL
+      chars INTEGER NOT NULL,
+      health_score INTEGER NOT NULL DEFAULT 100,
+      hazard_count INTEGER NOT NULL DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS symbols (
@@ -81,16 +83,18 @@ export const openIndexDb = (cwd = process.cwd()) => {
       directive TEXT NOT NULL
     );
 
-    CREATE INDEX IF NOT EXISTS idx_files_tier ON files(tier);
-    CREATE INDEX IF NOT EXISTS idx_symbols_name ON symbols(name);
-    CREATE INDEX IF NOT EXISTS idx_symbols_file ON symbols(file_path);
-    CREATE INDEX IF NOT EXISTS idx_props_name ON props(name);
-    CREATE INDEX IF NOT EXISTS idx_hooks_name ON hooks(name);
-    CREATE INDEX IF NOT EXISTS idx_imports_symbol ON imports(imported_symbol);
-    CREATE INDEX IF NOT EXISTS idx_imports_path ON imports(importer_path);
-    CREATE INDEX IF NOT EXISTS idx_violations_file ON violations(file_path);
-    CREATE INDEX IF NOT EXISTS idx_violations_rule ON violations(rule);
-    CREATE INDEX IF NOT EXISTS idx_violations_severity ON violations(severity);
+    CREATE TABLE IF NOT EXISTS audit_snapshots (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      timestamp INTEGER NOT NULL,
+      score INTEGER NOT NULL,
+      grade TEXT NOT NULL,
+      asi INTEGER NOT NULL,
+      total_loc INTEGER NOT NULL,
+      scanned_files INTEGER NOT NULL,
+      critical_count INTEGER NOT NULL,
+      high_med_count INTEGER NOT NULL,
+      low_count INTEGER NOT NULL
+    );
 
     CREATE VIRTUAL TABLE IF NOT EXISTS fts_index USING fts5(
       file_path UNINDEXED,
@@ -101,17 +105,43 @@ export const openIndexDb = (cwd = process.cwd()) => {
     );
   `);
 
+  // Column migrations for existing databases before creating indexes
   const symbolCols = db.prepare('PRAGMA table_info(symbols)').all() || [];
-  const colNames = new Set(symbolCols.map((c) => c.name));
-  if (!colNames.has('start_line')) {
+  const symbolColNames = new Set(symbolCols.map((c) => c.name));
+  if (!symbolColNames.has('start_line')) {
     db.exec('ALTER TABLE symbols ADD COLUMN start_line INTEGER NOT NULL DEFAULT 1;');
   }
-  if (!colNames.has('end_line')) {
+  if (!symbolColNames.has('end_line')) {
     db.exec('ALTER TABLE symbols ADD COLUMN end_line INTEGER NOT NULL DEFAULT 1;');
   }
-  if (!colNames.has('signature')) {
+  if (!symbolColNames.has('signature')) {
     db.exec("ALTER TABLE symbols ADD COLUMN signature TEXT NOT NULL DEFAULT '';");
   }
+
+  const fileCols = db.prepare('PRAGMA table_info(files)').all() || [];
+  const fileColNames = new Set(fileCols.map((c) => c.name));
+  if (!fileColNames.has('health_score')) {
+    db.exec('ALTER TABLE files ADD COLUMN health_score INTEGER NOT NULL DEFAULT 100;');
+  }
+  if (!fileColNames.has('hazard_count')) {
+    db.exec('ALTER TABLE files ADD COLUMN hazard_count INTEGER NOT NULL DEFAULT 0;');
+  }
+
+  // Safely create all indexes
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_files_tier ON files(tier);
+    CREATE INDEX IF NOT EXISTS idx_files_health ON files(health_score);
+    CREATE INDEX IF NOT EXISTS idx_symbols_name ON symbols(name);
+    CREATE INDEX IF NOT EXISTS idx_symbols_file ON symbols(file_path);
+    CREATE INDEX IF NOT EXISTS idx_props_name ON props(name);
+    CREATE INDEX IF NOT EXISTS idx_hooks_name ON hooks(name);
+    CREATE INDEX IF NOT EXISTS idx_imports_symbol ON imports(imported_symbol);
+    CREATE INDEX IF NOT EXISTS idx_imports_path ON imports(importer_path);
+    CREATE INDEX IF NOT EXISTS idx_violations_file ON violations(file_path);
+    CREATE INDEX IF NOT EXISTS idx_violations_rule ON violations(rule);
+    CREATE INDEX IF NOT EXISTS idx_violations_severity ON violations(severity);
+    CREATE INDEX IF NOT EXISTS idx_snapshots_time ON audit_snapshots(timestamp);
+  `);
 
   return db;
 };

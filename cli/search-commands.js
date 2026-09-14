@@ -8,7 +8,9 @@ import {
   findFileDependents,
   queryViolations,
   inspectIndexedFile,
-  queryIndex
+  queryIndex,
+  getAuditProgression,
+  queryFilesByHealth
 } from './search-db.js';
 
 export const handleDefCommand = (db, targetSymbol, { isJson = false, isCli = true } = {}) => {
@@ -225,3 +227,73 @@ export const handlePackCommand = (db, target, { isJson = false, isCli = true } =
   if (isCli) process.exit(0);
   return pack;
 };
+
+export const handleProgressionCommand = (db, { isJson = false, isCli = true } = {}) => {
+  const history = getAuditProgression(db, 15);
+  const payload = {
+    count: history.length,
+    progression: history
+  };
+
+  if (isJson) {
+    process.stdout.write(JSON.stringify(payload) + '\n');
+    if (isCli) process.exit(0);
+    return payload;
+  }
+
+  process.stdout.write(`\n${ANSI.BOLD}${ANSI.CYAN}Chemical X Health Progression:${ANSI.RESET} ${ANSI.DIM}(${history.length} snapshots in SQLite)${ANSI.RESET}\n`);
+  if (history.length === 0) {
+    process.stdout.write(`  ${ANSI.DIM}No audit snapshots recorded yet. Run an audit to log your baseline.${ANSI.RESET}\n\n`);
+    if (isCli) process.exit(0);
+    return payload;
+  }
+
+  for (const s of history) {
+    const dateStr = new Date(s.timestamp).toLocaleTimeString();
+    const gradeColor = s.score >= 90 ? ANSI.LIME : s.score >= 80 ? ANSI.CYAN : ANSI.GOLD;
+    process.stdout.write(`  ${ANSI.DIM}[${dateStr}]${ANSI.RESET} ${gradeColor}${s.score}/100 [Grade: ${s.grade}]${ANSI.RESET} | ${ANSI.MINT}ASI: ${s.asi}/100${ANSI.RESET} | ${ANSI.RED}${s.criticalCount} Crit${ANSI.RESET} | ${ANSI.GOLD}${s.highMedCount} Med${ANSI.RESET} | ${ANSI.DIM}${s.totalLoc}L (${s.scannedFiles} files)${ANSI.RESET}\n`);
+  }
+  process.stdout.write('\n');
+
+  if (isCli) process.exit(0);
+  return payload;
+};
+
+export const handleHealthFilterCommand = (db, status, { isJson = false, isCli = true } = {}) => {
+  const files = queryFilesByHealth(db, { status, limit: 100 });
+  const payload = {
+    filter: status,
+    count: files.length,
+    files
+  };
+
+  if (isJson) {
+    process.stdout.write(JSON.stringify(payload) + '\n');
+    if (isCli) process.exit(0);
+    return payload;
+  }
+
+  const title = status === 'failing' ? 'Degraded Files Requiring Attention' : 'Crystalline Verified Components (Grade A+)';
+  const headerColor = status === 'failing' ? ANSI.GOLD : ANSI.LIME;
+
+  process.stdout.write(`\n${ANSI.BOLD}${headerColor}${title}:${ANSI.RESET} ${ANSI.DIM}(${files.length} files)${ANSI.RESET}\n`);
+  if (files.length === 0) {
+    const emptyMsg = status === 'failing'
+      ? 'Outstanding! Zero degraded files found. All files are crystalline.'
+      : 'No crystalline files recorded.';
+    process.stdout.write(`  ${ANSI.LIME}✔ ${emptyMsg}${ANSI.RESET}\n\n`);
+    if (isCli) process.exit(0);
+    return payload;
+  }
+
+  for (const f of files) {
+    const scoreColor = f.healthScore >= 90 ? ANSI.LIME : f.healthScore >= 70 ? ANSI.GOLD : ANSI.RED;
+    const hazardBadge = f.hazardCount > 0 ? `${ANSI.RED}[${f.hazardCount} hazards]${ANSI.RESET} ` : `${ANSI.LIME}[clean]${ANSI.RESET} `;
+    process.stdout.write(`  ${scoreColor}${String(f.healthScore).padStart(3, ' ')}/100${ANSI.RESET} ${hazardBadge}${ANSI.BOLD}${f.path}${ANSI.RESET} ${ANSI.DIM}(${f.lines} lines, ${f.tier})${ANSI.RESET}\n`);
+  }
+  process.stdout.write('\n');
+
+  if (isCli) process.exit(0);
+  return payload;
+};
+

@@ -22,7 +22,9 @@ import {
   handleRefsCommand,
   handleDepsCommand,
   handleHazardsCommand,
-  handlePackCommand
+  handlePackCommand,
+  handleProgressionCommand,
+  handleHealthFilterCommand
 } from './search-commands.js';
 import { ANSI } from './theme.js';
 
@@ -35,7 +37,10 @@ export {
   findFileDependencies,
   findFileDependents,
   syncViolationsIndex,
-  queryViolations
+  queryViolations,
+  recordAuditSnapshot,
+  getAuditProgression,
+  queryFilesByHealth
 } from './search-db.js';
 
 const IGNORED_DIRS = new Set([
@@ -218,6 +223,18 @@ export const runSearch = async (rawArgs = [], isCli = true) => {
 
   if (firstArg === 'pack' || firstArg === 'context') {
     return handlePackCommand(db, secondArg, { isJson, isCli });
+  }
+
+  if (firstArg === 'progression' || firstArg === 'history' || rawArgs.includes('--progression')) {
+    return handleProgressionCommand(db, { isJson, isCli });
+  }
+
+  if (firstArg === 'failing' || firstArg === 'degraded' || rawArgs.includes('--failing') || rawArgs.includes('--degraded')) {
+    return handleHealthFilterCommand(db, 'failing', { isJson, isCli });
+  }
+
+  if (firstArg === 'crystalline' || firstArg === 'clean' || rawArgs.includes('--crystalline') || rawArgs.includes('--clean')) {
+    return handleHealthFilterCommand(db, 'crystalline', { isJson, isCli });
   }
 
   const cleanQuery = firstArg.trim();
