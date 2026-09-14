@@ -23,6 +23,7 @@ export declare const DEFAULT_DISCUSSION_REPO: string;
 export declare function parseGitRemoteUrl(url: string): GitRepoInfo | null;
 export declare function detectGitRepoInfo(cwd?: string): GitRepoInfo;
 export declare function detectGitHubUser(preferredUser?: string): string;
+export declare function copyViaOsc52(text: string): boolean;
 export declare function copyToClipboard(text: string): boolean;
 export declare function resolveBadgeColor(score: number): string;
 export declare function resolveHotspotTierText(lineCount: number): string;
