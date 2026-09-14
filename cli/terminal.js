@@ -6,11 +6,11 @@ export const openBrowser = (url) => {
   const platform = process.platform;
   try {
     if (platform === "darwin") {
-      spawnSync("open", [url], { stdio: "ignore" });
+      spawnSync("open", [url], { stdio: "ignore", timeout: 3000 });
     } else if (platform === "win32") {
-      spawnSync("cmd.exe", ["/c", "start", '""', url], { stdio: "ignore" });
+      spawnSync("cmd.exe", ["/c", "start", '""', url], { stdio: "ignore", timeout: 3000 });
     } else {
-      spawnSync("xdg-open", [url], { stdio: "ignore" });
+      spawnSync("xdg-open", [url], { stdio: "ignore", timeout: 3000 });
     }
   } catch (err) {
     const error = err instanceof Error ? err : new Error(String(err));

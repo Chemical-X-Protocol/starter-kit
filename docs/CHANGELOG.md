@@ -12,6 +12,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Zero-Raw-DOM Directives**: Codified Section 1.H in `AGENTS.md` establishing the strict prohibition of raw DOM elements in molecules and organisms, and documenting the Tab List Decomposition Pattern.
 - **MIT License & Open-Source Packaging**: Added standard MIT `LICENSE` file and configured `"license": "MIT"`, `"repository"`, `"homepage"`, and `"bugs"` in `package.json` across all publishable packages (`starter-kit`, `benchmarks`, `x-atoms`, `o-command-palette`).
 - **CalVer & CI Transparency Documentation**: Documented Minute-Precision Calendar Versioning (`YY.MM.DD-MMMM`) and automated CI registry fetch behavior in `README.md`.
+### Fixed
+- **Audit Threshold Gating**: Corrected audit failure evaluation in `cli/index.js` so that `hasCriticalOrHigh` acts as a fallback default only when neither `--min-grade` nor `--min-score` is provided. This prevents codebases passing explicit grade/score thresholds (e.g. Grade A+, Score 95+) from being falsely rejected.
+- **Non-Interactive Audit Diagnostics**: Added explicit diagnostic error logging in `cli/index.js` when non-interactive audits fail, clarifying whether a failure was caused by grade rank, score threshold, unresolved hazards, or strict mode.
+- **Pre-Commit Hook Failure Messages**: Updated pre-commit hook scripts in `cli/installer-templates.js` and `scripts/pre-commit.sh` to report general architectural verification failure instead of asserting a false score drop.
 
 ## [2026-09-13]
 
@@ -19,6 +23,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Gatekeeper SaaS & Sponsor Verification**: Integrated client license validation in `cli/license.js` with `Xophz Gatekeeper` (`/wp-json/compass/v1/gatekeeper/licenses/validate`), allowing verification of both license keys (`CX-ST-`, `CX-SP-`) and GitHub Sponsor handles.
 - **Community Edition Flow**: Added reciprocal free Community Edition scaffolding in `cli/scaffold.js` allowing developers to unpack blueprints locally while sharing scorecards with community GitHub Discussions.
 - **Local Blueprint Fallback**: Added `loadLocalBlueprintFiles` in `cli/license.js` enabling offline and community blueprint scaffolding without remote edge download dependencies.
+- **Co-located Social-Git Test Suite**: Added test suite (`cli/audit/social-git.spec.js`) covering clipboard copying, OSC 52 escape sequences, and remote Git repository parsing.
+
+### Fixed
+- **Zero-Hang Clipboard Copying**: Resolved indefinite process hangs during prompt copying in `cli/audit/social-git.js` by adding default timeouts (`timeout: 1000`) to `safeSpawnSync`, preventing child processes from blocking the Node event loop.
+- **ANSI OSC 52 Universal Clipboard Support**: Added `copyViaOsc52` in `cli/audit/social-git.js`, enabling instant, zero-hang prompt copying directly to system clipboards via ANSI OSC 52 sequences across modern terminal emulators (ChromeOS Terminal, iTerm2, Alacritty, Kitty, WezTerm, VS Code, Windows Terminal, tmux).
+- **ChromeOS Sommelier & Wayland Protection**: Added Sommelier container detection in `cli/audit/social-git.js` to avoid `wl-copy` window focus deadlocks, alongside timeouts for `wl-copy`, `xclip`, `xsel`, and WSL `clip.exe`.
+- **Positional Audit Directory Arguments**: Updated `cli/index.js` to accept positional directory paths for `chemx audit <dir>` and added empty prompt guard clause to skip clipboard writes on pristine Grade A+ codebases.
+- **Browser Launch Timeout**: Added explicit timeout guard (`timeout: 3000`) to `openBrowser` in `cli/terminal.js`.
+
+### Changed
+- **Menu Alignment & Double-Padded Item Counts**: Reordered grade menu options in `cli/navigator-actions.js` to place double-padded count tags `(## Items)` directly following `[ Grade: X  ]` badges, ensuring pixel-perfect column alignment across all architectural pillar categories and hotspot files.
 
 ## [2026-09-12]
 

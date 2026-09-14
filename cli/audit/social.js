@@ -10,6 +10,7 @@ export {
   parseGitRemoteUrl,
   detectGitRepoInfo,
   detectGitHubUser,
+  copyViaOsc52,
   copyToClipboard
 } from './social-git.js';
 
