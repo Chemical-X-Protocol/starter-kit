@@ -1,7 +1,24 @@
 import test from 'node:test';
 import assert from 'node:assert';
 import fs from 'node:fs';
-import { resolveTargetDir } from './search.js';
+import {
+  resolveTargetDir,
+  openIndexDb,
+  upsertFileIndex,
+  findSymbolDefinition,
+  findSymbolReferences,
+  findFileDependencies,
+  findFileDependents,
+  syncViolationsIndex,
+  queryViolations
+} from './search.js';
+import {
+  handleDefCommand,
+  handleRefsCommand,
+  handleDepsCommand,
+  handleHazardsCommand,
+  handlePackCommand
+} from './search-commands.js';
 
 test('resolveTargetDir: returns custom directory if provided as first argument', () => {
   const result = resolveTargetDir('packages/core', '--dir=other/path');
@@ -30,4 +47,129 @@ test('resolveTargetDir: defaults to src if present, otherwise . when no flags pr
 
   assert.strictEqual(resultNullArgs, expectedDefault);
   assert.strictEqual(resultNoArgs, expectedDefault);
+});
+
+test('search-db: indexes symbols with line ranges and finds definition', () => {
+  const db = openIndexDb();
+  assert.ok(db, 'Expected sqlite database to be open');
+
+  upsertFileIndex(db, {
+    path: 'cli/fixtures/sample-module.js',
+    mtime: Date.now(),
+    size: 250,
+    tier: 'utility',
+    lines: 15,
+    chars: 250,
+    symbols: [
+      { name: 'sampleFunction', kind: 'function', isExport: true, startLine: 3, endLine: 8, signature: 'export const sampleFunction = () => {' },
+      { name: 'helperFunction', kind: 'function', isExport: false, startLine: 10, endLine: 14, signature: 'const helperFunction = () => {' }
+    ],
+    props: [],
+    hooks: [],
+    imports: [
+      { importedSymbol: 'openIndexDb', sourceModule: './search-schema.js', line: 1 }
+    ]
+  });
+
+  const def = findSymbolDefinition(db, 'sampleFunction');
+  assert.ok(def, 'Expected symbol definition to be found');
+  assert.strictEqual(def.name, 'sampleFunction');
+  assert.strictEqual(def.startLine, 3);
+  assert.strictEqual(def.endLine, 8);
+  assert.strictEqual(def.filePath, 'cli/fixtures/sample-module.js');
+
+  const defNotFound = findSymbolDefinition(db, 'nonExistentSymbolXYZ');
+  assert.strictEqual(defNotFound, null);
+});
+
+test('search-db: tracks imports and references accurately', () => {
+  const db = openIndexDb();
+  assert.ok(db, 'Expected sqlite database to be open');
+
+  upsertFileIndex(db, {
+    path: 'cli/fixtures/consumer-module.js',
+    mtime: Date.now(),
+    size: 150,
+    tier: 'utility',
+    lines: 10,
+    chars: 150,
+    symbols: [],
+    props: [],
+    hooks: [],
+    imports: [
+      { importedSymbol: 'sampleFunction', sourceModule: './sample-module.js', line: 2 }
+    ]
+  });
+
+  const refs = findSymbolReferences(db, 'sampleFunction');
+  assert.ok(Array.isArray(refs));
+  assert.ok(refs.some((r) => r.importerPath === 'cli/fixtures/consumer-module.js'));
+
+  const deps = findFileDependencies(db, 'cli/fixtures/consumer-module.js');
+  assert.ok(deps.length >= 1);
+  assert.strictEqual(deps[0].importedSymbol, 'sampleFunction');
+
+  const dependents = findFileDependents(db, 'sample-module.js');
+  assert.ok(Array.isArray(dependents));
+});
+
+test('search-db: syncs and queries violations index', () => {
+  const db = openIndexDb();
+  assert.ok(db, 'Expected sqlite database to be open');
+
+  const testViolations = [
+    {
+      filePath: 'cli/fixtures/hazard-test.js',
+      rule: 'CONTROL_FLOW_NESTED_TERNARY',
+      severity: 'CRITICAL',
+      pillar: 'Control Flow & Boolean Logic',
+      line: 42,
+      hazard: 'Nested ternary detected',
+      directive: 'Extract display states'
+    },
+    {
+      filePath: 'cli/fixtures/hazard-test.js',
+      rule: 'NAMING_BARE_BOOLEAN',
+      severity: 'MEDIUM',
+      pillar: 'Naming Conventions',
+      line: 12,
+      hazard: 'Bare boolean variable',
+      directive: 'Prefix boolean with is/has'
+    }
+  ];
+
+  const syncedCount = syncViolationsIndex(db, testViolations);
+  assert.strictEqual(syncedCount, 2);
+
+  const allHazards = queryViolations(db);
+  assert.ok(allHazards.length >= 2);
+
+  const criticalHazards = queryViolations(db, { severity: 'CRITICAL' });
+  assert.ok(criticalHazards.every((h) => h.severity === 'CRITICAL'));
+
+  const ruleHazards = queryViolations(db, { rule: 'CONTROL_FLOW_NESTED_TERNARY' });
+  assert.ok(ruleHazards.every((h) => h.rule === 'CONTROL_FLOW_NESTED_TERNARY'));
+});
+
+test('search-commands: def, refs, deps, hazards, pack return valid payloads in JSON mode', () => {
+  const db = openIndexDb();
+  assert.ok(db);
+
+  const defRes = handleDefCommand(db, 'sampleFunction', { isJson: true, isCli: false });
+  assert.strictEqual(defRes?.symbol, 'sampleFunction');
+
+  const refsRes = handleRefsCommand(db, 'sampleFunction', { isJson: true, isCli: false });
+  assert.strictEqual(refsRes?.symbol, 'sampleFunction');
+  assert.ok(Array.isArray(refsRes?.references));
+
+  const depsRes = handleDepsCommand(db, 'cli/fixtures/consumer-module.js', { isJson: true, isCli: false });
+  assert.strictEqual(depsRes?.target, 'cli/fixtures/consumer-module.js');
+
+  const hazardsRes = handleHazardsCommand(db, {}, { isJson: true, isCli: false });
+  assert.ok(Array.isArray(hazardsRes?.hazards));
+
+  const packRes = handlePackCommand(db, 'consumer-module.js', { isJson: true, isCli: false });
+  assert.ok(packRes?.file);
+  assert.ok(Array.isArray(packRes?.dependencies));
+  assert.ok(Array.isArray(packRes?.dependents));
 });

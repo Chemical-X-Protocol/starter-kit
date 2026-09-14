@@ -1,81 +1,19 @@
 import path from 'node:path';
-import fs from 'node:fs';
-import { ensureChemxDir } from './audit/history.js';
 
-let DatabaseSync = null;
-try {
-  const sqliteModule = await import('node:sqlite');
-  DatabaseSync = sqliteModule.DatabaseSync;
-} catch {
-  DatabaseSync = null;
-}
+export {
+  isSqliteAvailable,
+  resolveIndexDbPath,
+  openIndexDb
+} from './search-schema.js';
 
-export const isSqliteAvailable = () => Boolean(DatabaseSync);
-
-export const resolveIndexDbPath = (cwd = process.cwd()) => {
-  const dir = ensureChemxDir(cwd);
-  return path.join(dir, 'index.db');
-};
-
-export const openIndexDb = (cwd = process.cwd()) => {
-  if (!DatabaseSync) return null;
-  const dbPath = resolveIndexDbPath(cwd);
-  const db = new DatabaseSync(dbPath);
-
-  db.exec('PRAGMA journal_mode = WAL;');
-  db.exec('PRAGMA foreign_keys = ON;');
-
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS files (
-      path TEXT PRIMARY KEY,
-      mtime INTEGER NOT NULL,
-      size INTEGER NOT NULL,
-      tier TEXT NOT NULL,
-      lines INTEGER NOT NULL,
-      chars INTEGER NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS symbols (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      file_path TEXT NOT NULL,
-      name TEXT NOT NULL,
-      kind TEXT NOT NULL,
-      is_export INTEGER NOT NULL DEFAULT 0,
-      FOREIGN KEY(file_path) REFERENCES files(path) ON DELETE CASCADE
-    );
-
-    CREATE TABLE IF NOT EXISTS props (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      file_path TEXT NOT NULL,
-      name TEXT NOT NULL,
-      prop_type TEXT,
-      FOREIGN KEY(file_path) REFERENCES files(path) ON DELETE CASCADE
-    );
-
-    CREATE TABLE IF NOT EXISTS hooks (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      file_path TEXT NOT NULL,
-      name TEXT NOT NULL,
-      FOREIGN KEY(file_path) REFERENCES files(path) ON DELETE CASCADE
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_files_tier ON files(tier);
-    CREATE INDEX IF NOT EXISTS idx_symbols_name ON symbols(name);
-    CREATE INDEX IF NOT EXISTS idx_symbols_file ON symbols(file_path);
-    CREATE INDEX IF NOT EXISTS idx_props_name ON props(name);
-    CREATE INDEX IF NOT EXISTS idx_hooks_name ON hooks(name);
-
-    CREATE VIRTUAL TABLE IF NOT EXISTS fts_index USING fts5(
-      file_path UNINDEXED,
-      name,
-      kind,
-      tier,
-      tokens
-    );
-  `);
-
-  return db;
-};
+export {
+  findSymbolDefinition,
+  findSymbolReferences,
+  findFileDependencies,
+  findFileDependents,
+  syncViolationsIndex,
+  queryViolations
+} from './search-queries.js';
 
 export const getAllIndexedFiles = (db) => {
   if (!db) return new Map();
@@ -95,12 +33,14 @@ export const removeDeletedFiles = (db, currentFilePaths) => {
 
   const deleteStmt = db.prepare('DELETE FROM files WHERE path = ?');
   const deleteFtsStmt = db.prepare('DELETE FROM fts_index WHERE file_path = ?');
+  const deleteImportsStmt = db.prepare('DELETE FROM imports WHERE importer_path = ?');
 
   for (const [filePath] of indexed.entries()) {
     const isFileMissing = !currentSet.has(filePath);
     if (isFileMissing) {
       deleteStmt.run(filePath);
       deleteFtsStmt.run(filePath);
+      deleteImportsStmt.run(filePath);
       removedCount += 1;
     }
   }
@@ -110,11 +50,23 @@ export const removeDeletedFiles = (db, currentFilePaths) => {
 
 export const upsertFileIndex = (db, record) => {
   if (!db) return;
-  const { path: filePath, mtime, size, tier, lines, chars, symbols = [], props = [], hooks = [] } = record;
+  const {
+    path: filePath,
+    mtime,
+    size,
+    tier,
+    lines,
+    chars,
+    symbols = [],
+    props = [],
+    hooks = [],
+    imports = []
+  } = record;
 
   // Clean old entries for this file
   db.prepare('DELETE FROM files WHERE path = ?').run(filePath);
   db.prepare('DELETE FROM fts_index WHERE file_path = ?').run(filePath);
+  db.prepare('DELETE FROM imports WHERE importer_path = ?').run(filePath);
 
   // Insert file record
   const insertFileStmt = db.prepare(`
@@ -123,14 +75,22 @@ export const upsertFileIndex = (db, record) => {
   `);
   insertFileStmt.run(filePath, mtime, size, tier, lines, chars);
 
-  // Insert symbols
+  // Insert symbols with line locations and signature
   if (symbols.length > 0) {
     const insertSymbolStmt = db.prepare(`
-      INSERT INTO symbols (file_path, name, kind, is_export)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO symbols (file_path, name, kind, is_export, start_line, end_line, signature)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `);
     for (const sym of symbols) {
-      insertSymbolStmt.run(filePath, sym.name, sym.kind, sym.isExport ? 1 : 0);
+      insertSymbolStmt.run(
+        filePath,
+        sym.name,
+        sym.kind,
+        sym.isExport ? 1 : 0,
+        sym.startLine || 1,
+        sym.endLine || sym.startLine || 1,
+        sym.signature || ''
+      );
     }
   }
 
@@ -156,11 +116,23 @@ export const upsertFileIndex = (db, record) => {
     }
   }
 
+  // Insert imports
+  if (imports.length > 0) {
+    const insertImportStmt = db.prepare(`
+      INSERT INTO imports (importer_path, imported_symbol, source_module, line)
+      VALUES (?, ?, ?, ?)
+    `);
+    for (const imp of imports) {
+      insertImportStmt.run(filePath, imp.importedSymbol, imp.sourceModule, imp.line || 1);
+    }
+  }
+
   // Insert into FTS index
   const tokenList = [
     ...symbols.map((s) => s.name),
     ...props.map((p) => p.name),
     ...hooks,
+    ...imports.map((i) => i.importedSymbol),
     filePath
   ];
   const tokensText = tokenList.join(' ');
@@ -182,7 +154,7 @@ export const queryIndex = (db, { query = '', tier = null, kind = null, limit = 5
     let sql = 'SELECT * FROM files';
     const params = [];
     if (tier) {
-      sql += ' WHERE tier = ?';
+      sql = 'SELECT * FROM files WHERE tier = ?';
       params.push(tier);
     }
     sql += ' ORDER BY path ASC LIMIT ?';
@@ -229,23 +201,37 @@ export const inspectIndexedFile = (db, filePath) => {
 };
 
 export const getIndexStats = (db) => {
-  if (!db) return { totalFiles: 0, totalSymbols: 0, totalProps: 0, totalHooks: 0 };
+  if (!db) {
+    return {
+      totalFiles: 0,
+      totalSymbols: 0,
+      totalProps: 0,
+      totalHooks: 0,
+      totalImports: 0,
+      totalViolations: 0
+    };
+  }
   const fileCount = db.prepare('SELECT COUNT(*) as count FROM files').get()?.count || 0;
   const symbolCount = db.prepare('SELECT COUNT(*) as count FROM symbols').get()?.count || 0;
   const propCount = db.prepare('SELECT COUNT(*) as count FROM props').get()?.count || 0;
   const hookCount = db.prepare('SELECT COUNT(*) as count FROM hooks').get()?.count || 0;
+  const importCount = db.prepare('SELECT COUNT(*) as count FROM imports').get()?.count || 0;
+  const violationCount = db.prepare('SELECT COUNT(*) as count FROM violations').get()?.count || 0;
   return {
     totalFiles: Number(fileCount),
     totalSymbols: Number(symbolCount),
     totalProps: Number(propCount),
-    totalHooks: Number(hookCount)
+    totalHooks: Number(hookCount),
+    totalImports: Number(importCount),
+    totalViolations: Number(violationCount)
   };
 };
 
 const populateFileDetails = (db, fileRow) => {
-  const symbols = db.prepare('SELECT name, kind, is_export FROM symbols WHERE file_path = ?').all(fileRow.path);
+  const symbols = db.prepare('SELECT name, kind, is_export, start_line, end_line, signature FROM symbols WHERE file_path = ?').all(fileRow.path);
   const props = db.prepare('SELECT name, prop_type FROM props WHERE file_path = ?').all(fileRow.path);
   const hooks = db.prepare('SELECT name FROM hooks WHERE file_path = ?').all(fileRow.path);
+  const imports = db.prepare('SELECT imported_symbol, source_module, line FROM imports WHERE importer_path = ?').all(fileRow.path);
 
   return {
     path: fileRow.path,
@@ -254,8 +240,20 @@ const populateFileDetails = (db, fileRow) => {
     chars: Number(fileRow.chars),
     mtime: Number(fileRow.mtime),
     size: Number(fileRow.size),
-    symbols: symbols.map((s) => ({ name: s.name, kind: s.kind, isExport: Boolean(s.is_export) })),
+    symbols: symbols.map((s) => ({
+      name: s.name,
+      kind: s.kind,
+      isExport: Boolean(s.is_export),
+      startLine: Number(s.start_line || 1),
+      endLine: Number(s.end_line || 1),
+      signature: s.signature || ''
+    })),
     props: props.map((p) => ({ name: p.name, type: p.prop_type })),
-    hooks: hooks.map((h) => h.name)
+    hooks: hooks.map((h) => h.name),
+    imports: imports.map((i) => ({
+      importedSymbol: i.imported_symbol,
+      sourceModule: i.source_module,
+      line: Number(i.line || 1)
+    }))
   };
 };

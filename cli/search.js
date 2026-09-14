@@ -8,10 +8,35 @@ import {
   queryIndex,
   inspectIndexedFile,
   getIndexStats,
-  isSqliteAvailable
+  isSqliteAvailable,
+  findSymbolDefinition,
+  findSymbolReferences,
+  findFileDependencies,
+  findFileDependents,
+  syncViolationsIndex,
+  queryViolations
 } from './search-db.js';
 import { resolveArchitectureTier, extractAstMetadata } from './search-ast.js';
+import {
+  handleDefCommand,
+  handleRefsCommand,
+  handleDepsCommand,
+  handleHazardsCommand,
+  handlePackCommand
+} from './search-commands.js';
 import { ANSI } from './theme.js';
+
+export {
+  openIndexDb,
+  upsertFileIndex,
+  getIndexStats,
+  findSymbolDefinition,
+  findSymbolReferences,
+  findFileDependencies,
+  findFileDependents,
+  syncViolationsIndex,
+  queryViolations
+} from './search-db.js';
 
 const IGNORED_DIRS = new Set([
   'node_modules',
@@ -81,7 +106,7 @@ export const syncSearchIndex = (targetDir = 'src', cwd = process.cwd(), options 
       const lines = content.split('\n').length;
       const chars = content.length;
       const tier = resolveArchitectureTier(relPath);
-      const { symbols, props, hooks } = extractAstMetadata(content, fullPath);
+      const { symbols, props, hooks, imports } = extractAstMetadata(content, fullPath);
 
       upsertFileIndex(db, {
         path: relPath,
@@ -92,11 +117,15 @@ export const syncSearchIndex = (targetDir = 'src', cwd = process.cwd(), options 
         chars,
         symbols,
         props,
-        hooks
+        hooks,
+        imports
       });
       updatedCount += 1;
-    } catch {
-      // Skip unreadable files safely
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      if (process.env.CHEMX_DEBUG) {
+        process.stderr.write(`[search-index] Skipped ${relPath}: ${error.message}\n`);
+      }
     }
   }
 
@@ -148,9 +177,6 @@ export const runSearch = async (rawArgs = [], isCli = true) => {
   const dirFlag = rawArgs.find((a) => a.startsWith('--dir='));
   const targetDir = resolveTargetDir(dirFlag);
 
-  const queryArg = rawArgs.find((a) => !a.startsWith('-')) || '';
-  const cleanQuery = queryArg.trim();
-
   const startTime = Date.now();
   const syncRes = syncSearchIndex(targetDir, process.cwd(), { reindex: isReindex });
   const db = syncRes?.db;
@@ -166,6 +192,35 @@ export const runSearch = async (rawArgs = [], isCli = true) => {
     return [];
   }
 
+  const nonFlagArgs = rawArgs.filter((a) => !a.startsWith('-'));
+  const firstArg = nonFlagArgs[0] || '';
+  const secondArg = nonFlagArgs[1] || '';
+
+  if (firstArg === 'def') {
+    return handleDefCommand(db, secondArg, { isJson, isCli });
+  }
+
+  if (firstArg === 'refs') {
+    return handleRefsCommand(db, secondArg, { isJson, isCli });
+  }
+
+  if (firstArg === 'deps' || firstArg === 'dependencies') {
+    return handleDepsCommand(db, secondArg, { isJson, isCli });
+  }
+
+  if (firstArg === 'hazards') {
+    const ruleFlag = rawArgs.find((a) => a.startsWith('--rule='));
+    const rule = ruleFlag ? ruleFlag.split('=')[1] : null;
+    const isCritical = rawArgs.includes('--critical');
+    const severity = isCritical ? 'CRITICAL' : null;
+    return handleHazardsCommand(db, { rule, severity, filePath: secondArg || null }, { isJson, isCli });
+  }
+
+  if (firstArg === 'pack' || firstArg === 'context') {
+    return handlePackCommand(db, secondArg, { isJson, isCli });
+  }
+
+  const cleanQuery = firstArg.trim();
   const results = queryIndex(db, { query: cleanQuery, tier, limit: 50 });
   const durationMs = Date.now() - startTime;
 

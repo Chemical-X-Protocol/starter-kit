@@ -38,6 +38,8 @@
     "typecheck": "tsc --noEmit",
     "create-capsule": "node cli/index.js",
     "audit": "node cli/index.js audit",
+    "ci:audit": "node cli/index.js audit --ci --dir=cli",
+    "chemx": "node cli/index.js",
     "q": "node cli/index.js q",
     "search": "node cli/index.js search"
   },
