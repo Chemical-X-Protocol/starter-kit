@@ -60,6 +60,14 @@ export const formatGroupedPromptViolations = (violations = []) => {
   return lines;
 };
 
+export const buildAgentCommandsSection = () => [
+  '### AI AGENT DISCOVERY & REFACTORING COMMANDS:',
+  '- Query & Inspect: Run `pnpm q "<target>" --inspect` (or `npx chemx search "<target>" --inspect`) to inspect component props, symbols, and hooks before editing.',
+  '- Tier Filter: Run `pnpm q "<query>" --tier=molecule` (or `atom`, `organism`, `hook`) to find related capsules.',
+  '- Zero-Overhead JSON: Run `pnpm q "<query>" --json` for minified AST metadata without burning context tokens on whole files.',
+  '- Re-Verify Score: Run `npx chemx audit` after refactoring to ensure Molecular Health Index (MHI) and letter grades improve.'
+].join('\n');
+
 export const buildGradeFPrompt = (report, options = {}) => {
   const { excludeAiSlop = false } = options;
   const { violations = [], hotspots = [] } = report;
@@ -96,6 +104,8 @@ export const buildGradeFPrompt = (report, options = {}) => {
   lines.push('4. Zero synthetic or mock data: return live data or explicit empty states.');
   lines.push('5. Zero render-hack setTimeout: replace with await nextTick() or flush: post.');
   lines.push('6. Output surgical diffs or modular replacements. Preserve existing external exports.');
+  lines.push('');
+  lines.push(buildAgentCommandsSection());
 
   return lines.join('\n');
 };
@@ -133,6 +143,8 @@ export const buildGradeDPrompt = (report, options = {}) => {
   lines.push('1. Hook Saturation: Extract component hooks into dedicated domain composables adhering to the 3-5 property return limit (State + Status + Actions).');
   lines.push('2. Complex Control Flow: Break multi-clause conditionals into 2-stage atomic boolean variables with early-return guard clauses.');
   lines.push('3. Zero breaking changes to caller APIs or existing props.');
+  lines.push('');
+  lines.push(buildAgentCommandsSection());
 
   return lines.join('\n');
 };
@@ -170,6 +182,8 @@ export const buildGradeCPrompt = (report, options = {}) => {
   lines.push('1. Zero raw inline styles: Replace style={{...}} with atom props, SCSS mixins (@include glass), or scoped BEM classes.');
   lines.push('2. Extract anonymous inline callbacks into named functions before passing as props.');
   lines.push('3. Co-locate granular types (*.d.ts) inside feature capsules (< 100 lines of code). Avoid type monoliths.');
+  lines.push('');
+  lines.push(buildAgentCommandsSection());
 
   return lines.join('\n');
 };
@@ -194,6 +208,8 @@ export const buildGradeBPrompt = (report, options = {}) => {
   lines.push('1. Typography Hygiene: Replace all em dashes with standard hyphens (-) or colons (:).');
   lines.push('2. Logging Hygiene: Remove unguarded console.log calls or route through central debug proxy.');
   lines.push('3. FontAwesome Compliance: Remove text-* utility classes from icons; use :color prop or inline CSS.');
+  lines.push('');
+  lines.push(buildAgentCommandsSection());
 
   return lines.join('\n');
 };
@@ -208,8 +224,10 @@ export const buildAiSlopPrompt = (report) => {
   const lines = [];
   lines.push('Act as a Clean Code Specialist and Code Authenticity Guardian. Eliminate the following AI Slop and conversational artifacts from our codebase according to Chemical X standards:\n');
 
-  lines.push('### AI SLOP & CODE AUTHENTICITY VIOLATIONS');
-  lines.push(...formatGroupedPromptViolations(slopViolations));
+  if (slopViolations.length > 0) {
+    lines.push('### AI SLOP & CODE AUTHENTICITY VIOLATIONS');
+    lines.push(...formatGroupedPromptViolations(slopViolations));
+  }
 
   lines.push('### STRICT EXECUTION RULES:');
   lines.push('1. Conversational Residue: Completely remove leaked AI conversational preambles, assistant markdown code fences, and pleasantry comments.');
@@ -218,6 +236,8 @@ export const buildAiSlopPrompt = (report) => {
   lines.push('4. Paranoia Catch Wrappers: Replace shallow or empty catch blocks with intentional error propagation or ResultTuple ([data, error]).');
   lines.push('5. Inline Utility Reinventions: Replace reinvented inline helper utilities with shared project utilities or native methods.');
   lines.push('6. Type Widening: Eliminate lazy "any" type casts on error parameters or variables; enforce strict typing.');
+  lines.push('');
+  lines.push(buildAgentCommandsSection());
 
   return lines.join('\n');
 };
@@ -232,13 +252,15 @@ export const buildHotspotsPrompt = (report) => {
   const lines = [];
   lines.push('Act as a Principal Systems Architect. Surgically decompose the following monolithic hotspot files according to Chemical X Molecular Architecture Standards:\n');
 
-  lines.push('### MONOLITHIC REFACTORING HOTSPOTS');
-  lines.push('Action: Decompose into single-responsibility crystalline molecule capsules (< 100 lines) and dedicated domain composables.\n');
-  monolithHotspots.forEach((h, i) => {
-    const tier = h.monolithTier ? `[${h.monolithTier} MONOLITH]` : '[MONOLITH]';
-    lines.push(`${i + 1}. File: \`${h.filePath}\` (${h.lineCount} lines, ${h.violationCount} hazards) ${tier}`);
-  });
-  lines.push('');
+  if (monolithHotspots.length > 0) {
+    lines.push('### MONOLITHIC REFACTORING HOTSPOTS');
+    lines.push('Action: Decompose into single-responsibility crystalline molecule capsules (< 100 lines) and dedicated domain composables.\n');
+    monolithHotspots.forEach((h, i) => {
+      const tier = h.monolithTier ? `[${h.monolithTier} MONOLITH]` : '[MONOLITH]';
+      lines.push(`${i + 1}. File: \`${h.filePath}\` (${h.lineCount} lines, ${h.violationCount} hazards) ${tier}`);
+    });
+    lines.push('');
+  }
 
   lines.push('### STRICT EXECUTION RULES:');
   lines.push('1. Branch First: Change to a new branch prefixed with `chem-x/NAMEOFIMPROVEMENT` before making changes, then commit the branch and create a PR to main.');
@@ -248,6 +270,8 @@ export const buildHotspotsPrompt = (report) => {
   lines.push('5. Composable Return Contracts: Custom hooks/composables must strictly limit returns to 3 to 5 properties (State + Status + Actions).');
   lines.push('6. Type Co-location: Co-locate granular types/*.d.ts files inside each feature capsule (< 100 lines per type file) instead of creating type monoliths.');
   lines.push('7. Zero breaking changes to external component APIs, route exports, or existing props.');
+  lines.push('');
+  lines.push(buildAgentCommandsSection());
 
   return lines.join('\n');
 };
@@ -285,6 +309,8 @@ export const buildPillarPrompt = (report, pillarName) => {
   lines.push('3. Molecular Capsule Limit: Maximum 100 lines per molecule capsule file.');
   lines.push('4. Table-of-Contents Views: Top-level page views must be 10 to 20 line declarative templates assembling components via named slots.');
   lines.push('5. Zero breaking changes to external component APIs, route exports, or existing props.');
+  lines.push('');
+  lines.push(buildAgentCommandsSection());
 
   return lines.join('\n');
 };
