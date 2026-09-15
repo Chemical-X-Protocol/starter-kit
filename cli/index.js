@@ -33,6 +33,7 @@ import {
 import { runInstallWizard } from './installer.js';
 import { runBadgeCommand } from './badge.js';
 import { runBuildAudit } from './build.js';
+import { runMcpServer } from './mcp/index.js';
 
 const rawArgs = process.argv.slice(2);
 const invokedBin = path.basename(process.argv[1] || '');
@@ -232,6 +233,10 @@ const main = async () => {
     case 'badge':
     case 'badges':
       await runBadgeCommand(rawArgs.slice(1));
+      break;
+    case 'mcp':
+    case 'mcp-server':
+      await runMcpServer(rawArgs.slice(1));
       break;
     case 'help':
     case '--help':

@@ -29,14 +29,16 @@
   "exports": {
     ".": "./cli/index.js",
     "./audit": "./cli/audit.js",
-    "./build": "./cli/build.js"
+    "./build": "./cli/build.js",
+    "./mcp": "./cli/mcp/index.js"
   },
   "scripts": {
     "publish:both": "node scripts/publish-both.mjs",
-    "test": "node --test cli/audit/*.spec.js",
+    "test": "node --test 'cli/**/*.spec.js'",
     "typecheck": "tsc --noEmit",
     "create-capsule": "node cli/index.js",
-    "audit": "node cli/index.js audit"
+    "audit": "node cli/index.js audit",
+    "mcp": "node cli/index.js mcp"
   },
   "dependencies": {
     "@babel/parser": "^7.29.8",
