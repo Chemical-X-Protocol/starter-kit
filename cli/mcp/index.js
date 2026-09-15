@@ -2,12 +2,24 @@ import { startStdioServer, createMcpHandler } from './server.js';
 import { MCP_TOOLS, executeMcpTool } from './tools.js';
 import { MCP_RESOURCES, readMcpResource } from './resources.js';
 import { MCP_PROMPTS, getMcpPrompt } from './prompts.js';
+import {
+  mergeMcpServerConfig,
+  resolveMcpServerCommand,
+  installProjectMcpConfig,
+  installAntigravityMcpConfig,
+  installAllMcpConfigs
+} from './installer.js';
 
 export const runMcpServer = async (rawArgs = []) => {
   // Stdio server must keep stdout strictly reserved for JSON-RPC messages.
   // Informative logs go to stderr.
   process.stderr.write('⚡ Chemical X Protocol MCP Server active (stdio transport)\n');
   startStdioServer({ cwd: process.cwd() });
+};
+
+export const runMcpInstaller = async (rawArgs = []) => {
+  const targetDir = rawArgs[0] || process.cwd();
+  return installAllMcpConfigs(targetDir, { silent: false });
 };
 
 export {
@@ -18,5 +30,10 @@ export {
   MCP_RESOURCES,
   readMcpResource,
   MCP_PROMPTS,
-  getMcpPrompt
+  getMcpPrompt,
+  mergeMcpServerConfig,
+  resolveMcpServerCommand,
+  installProjectMcpConfig,
+  installAntigravityMcpConfig,
+  installAllMcpConfigs
 };

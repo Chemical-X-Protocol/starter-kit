@@ -38,7 +38,9 @@
     "typecheck": "tsc --noEmit",
     "create-capsule": "node cli/index.js",
     "audit": "node cli/index.js audit",
-    "mcp": "node cli/index.js mcp"
+    "mcp": "node cli/index.js mcp",
+    "install-mcp": "node cli/index.js install-mcp",
+    "postinstall": "node scripts/postinstall.mjs"
   },
   "dependencies": {
     "@babel/parser": "^7.29.8",
