@@ -12,6 +12,7 @@ export const PROTOCOL_VERSION = '2024-11-05';
 
 export const createMcpHandler = (options = {}) => {
   const cwd = options.cwd || process.cwd();
+  const subscriptions = new Set();
   let isInitialized = false;
 
   const handleRequest = async (request) => {
@@ -26,7 +27,9 @@ export const createMcpHandler = (options = {}) => {
           protocolVersion: PROTOCOL_VERSION,
           capabilities: {
             tools: {},
-            resources: {},
+            resources: {
+              subscribe: true
+            },
             prompts: {}
           },
           serverInfo: SERVER_INFO
@@ -128,6 +131,30 @@ export const createMcpHandler = (options = {}) => {
       }
     }
 
+    if (method === 'resources/subscribe') {
+      const uri = params?.uri;
+      if (uri) {
+        subscriptions.add(uri);
+      }
+      return {
+        jsonrpc: '2.0',
+        id,
+        result: {}
+      };
+    }
+
+    if (method === 'resources/unsubscribe') {
+      const uri = params?.uri;
+      if (uri) {
+        subscriptions.delete(uri);
+      }
+      return {
+        jsonrpc: '2.0',
+        id,
+        result: {}
+      };
+    }
+
     if (method === 'prompts/list') {
       return {
         jsonrpc: '2.0',
@@ -173,7 +200,18 @@ export const createMcpHandler = (options = {}) => {
 
   return {
     handleRequest,
-    isInitialized: () => isInitialized
+    isInitialized: () => isInitialized,
+    getSubscriptions: () => Array.from(subscriptions),
+    notifyResourceUpdated: (uri) => {
+      if (subscriptions.has(uri)) {
+        return {
+          jsonrpc: '2.0',
+          method: 'notifications/resources/updated',
+          params: { uri }
+        };
+      }
+      return null;
+    }
   };
 };
 
@@ -181,6 +219,13 @@ export const startStdioServer = (options = {}) => {
   const input = options.input || process.stdin;
   const output = options.output || process.stdout;
   const handler = createMcpHandler(options);
+
+  const notifyResourceUpdated = (uri) => {
+    const notification = handler.notifyResourceUpdated(uri);
+    if (notification) {
+      output.write(JSON.stringify(notification) + '\n');
+    }
+  };
 
   const rl = readline.createInterface({
     input,
@@ -210,5 +255,5 @@ export const startStdioServer = (options = {}) => {
     }
   });
 
-  return { rl, handler };
+  return { rl, handler, notifyResourceUpdated };
 };

@@ -4,6 +4,17 @@ All notable changes to the Chemical X Starter Kit repository will be documented 
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [2026-09-15]
+
+### Added
+- **Deterministic Autofix Engine (`chemx_autofix`)**: Added standalone remediation module (`cli/audit/autofix.js`) and corresponding MCP tool `chemx_autofix`. Provides safe, deterministic remediation for typography em dashes (`\u2014` to standard hyphen), leaked markdown code fences, conversational residue comments, and lazy truncation placeholders. Returns token-compact summaries (15 to 30 tokens) optimized for AI agent consumption without context bloat.
+- **Vue Template Structural Pattern Discovery**: Extended `pattern-detector.js` with zero-dependency Vue SFC `<template>` tag hierarchy parsing. Automatically discovers recurrent UI layouts across `.vue` templates (`UI_STRUCTURE`), harmonizing layout clone detection across TSX, JSX, and Vue SFC files.
+- **MCP Resource Subscriptions**: Added `resources/subscribe` and `resources/unsubscribe` JSON-RPC handlers in `cli/mcp/server.js`, setting `capabilities.resources.subscribe = true` and enabling live resource change notifications (`notifications/resources/updated`).
+
+### Changed
+- **Token-Conservative Pattern Queries**: Enhanced `chemx_query_patterns` with a default `compact: true` mode that lists unique files and sample occurrences (capped at 3 samples), eliminating bulky raw AST occurrence objects and drastically reducing token burn.
+- **Streamlined Health Scorecard Resource**: Optimized `chemx://scorecard` in `cli/mcp/resources.js` to return a concise, high-density rollup of health grade, score, status, severity counts, and top 3 hotspots under 150 tokens.
+
 ## [2026-09-14]
 
 ### Added

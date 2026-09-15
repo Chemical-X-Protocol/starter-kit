@@ -18,7 +18,7 @@ import {
   checkExtendedTextPatterns,
   createExtendedVisitors
 } from './extended-visitors.js';
-import { createPatternVisitors } from './pattern-detector.js';
+import { createPatternVisitors, recordTemplatePatterns } from './pattern-detector.js';
 
 export { PILLARS, RULE_REGISTRY };
 
@@ -101,6 +101,17 @@ export const auditCode = (content, filePath, relativePath, options = {}) => {
 
   // Pillars 8-11: Extended Fast Checks (A11y, Security secrets, Fake tests, Co-located specs)
   checkExtendedTextPatterns(content, lines, relativePath, filePath, violations);
+
+  // Vue template structural pattern discovery
+  if (ext === '.vue' && options.patternRegistry) {
+    const templateMatch = content.match(/<template\b[^>]*>([\s\S]*?)<\/template>/i);
+    if (templateMatch) {
+      const templateContent = templateMatch[1];
+      const templateStartIndex = templateMatch.index || 0;
+      const startLineOffset = content.slice(0, templateStartIndex).split('\n').length - 1;
+      recordTemplatePatterns(options.patternRegistry, templateContent, relativePath, startLineOffset);
+    }
+  }
 
   const codeToParse = extractParseableCode(content, ext);
   if (!codeToParse.trim()) {
