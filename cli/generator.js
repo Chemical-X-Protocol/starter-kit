@@ -46,6 +46,7 @@ const FRAMEWORKS = [
 
 const KNOWN_TIER_NAMES = new Set(['molecule', 'atom', 'organism', 'template', 'hook', 'composable', 'view', 'page']);
 const IGNORED_NAME_TOKENS = new Set(['generate', 'capsule', 'add', 'g', 'gen']);
+export const isCapsuleNameArg = (arg) => !arg.startsWith('-') && !IGNORED_NAME_TOKENS.has(arg);
 
 const resolveSelectedTier = (explicitTier, cleanName) => {
   if (explicitTier) {
@@ -66,6 +67,130 @@ const resolveSelectedTier = (explicitTier, cleanName) => {
     if (matched) return matched;
   }
   return TIERS[0];
+};
+
+export const detectBaseDir = (cwd = process.cwd()) => {
+  return detectTierBaseDir('molecule', cwd);
+};
+
+export const createCapsuleFiles = ({
+  name = 'user-avatar',
+  framework = 'react',
+  tier = 'm',
+  targetParent = null,
+  isLean = false,
+  cwd = process.cwd()
+}) => {
+  const cleanName = (name || 'user-avatar').trim().toLowerCase();
+  const selectedTier = resolveSelectedTier(tier, cleanName);
+
+  const selectedFramework = FRAMEWORKS.find(
+    (f) => f.id === framework.toLowerCase() || f.ext === framework.toLowerCase()
+  ) || FRAMEWORKS[0];
+
+  let capsuleName = cleanName;
+  if (selectedTier.tier === 'hook') {
+    const stripped = cleanName.replace(/^use-?/, '');
+    capsuleName = `use-${stripped}`;
+  } else if (selectedTier.tier === 'view') {
+    const stripped = cleanName.replace(/^v-?/, '').replace(/-view$/, '');
+    capsuleName = `v-${stripped}`;
+  } else {
+    const stripped = cleanName.replace(/^[a-z]-/, '');
+    capsuleName = `${selectedTier.prefix}${stripped}`;
+  }
+
+  const baseSlug = capsuleName.replace(/^[a-z]+-/, '');
+  const pascalName = toPascalCase(baseSlug);
+  const camelName = toCamelCase(capsuleName);
+
+  const detectedDir = detectTierBaseDir(selectedTier.tier, cwd);
+  const parentDir = targetParent || detectedDir;
+  const resolvedParent = path.resolve(cwd, parentDir || '.');
+  const targetDir = path.resolve(resolvedParent, capsuleName);
+
+  if (fs.existsSync(targetDir)) {
+    throw new Error(`Directory ${capsuleName} already exists at ${targetDir}.`);
+  }
+
+  fs.mkdirSync(targetDir, { recursive: true });
+  const typesDir = path.join(targetDir, 'types');
+  fs.mkdirSync(typesDir, { recursive: true });
+
+  const filesCreated = [];
+
+  if (selectedTier.tier === 'hook') {
+    const hookFile = `${capsuleName}.ts`;
+    const specFile = `${capsuleName}.spec.ts`;
+
+    fs.writeFileSync(path.join(targetDir, hookFile), buildHook(capsuleName, camelName, pascalName), 'utf-8');
+    fs.writeFileSync(path.join(targetDir, 'index.ts'), buildHookIndex(capsuleName, camelName), 'utf-8');
+    fs.writeFileSync(path.join(targetDir, specFile), buildHookSpec(capsuleName, camelName), 'utf-8');
+
+    fs.writeFileSync(path.join(typesDir, 'options.d.ts'), buildHookOptionsType(pascalName), 'utf-8');
+    fs.writeFileSync(path.join(typesDir, 'return.d.ts'), buildHookReturnType(pascalName), 'utf-8');
+    fs.writeFileSync(path.join(typesDir, 'index.ts'), buildTypesIndex(['options', 'return']), 'utf-8');
+    fs.writeFileSync(path.join(targetDir, 'types.d.ts'), "export * from './types/index';\n", 'utf-8');
+
+    filesCreated.push(hookFile, specFile, 'index.ts', 'types.d.ts', 'types/options.d.ts', 'types/return.d.ts', 'types/index.ts');
+  } else if (selectedTier.tier === 'view') {
+    const viewFile = `${capsuleName}.${selectedFramework.ext}`;
+    const specFile = `${capsuleName}.spec.ts`;
+
+    fs.writeFileSync(path.join(targetDir, viewFile), selectedFramework.viewBuilder(capsuleName, pascalName), 'utf-8');
+    fs.writeFileSync(path.join(targetDir, 'index.ts'), buildViewIndex(capsuleName, pascalName, selectedFramework.ext), 'utf-8');
+    fs.writeFileSync(path.join(targetDir, specFile), buildViewSpec(capsuleName, pascalName), 'utf-8');
+
+    fs.writeFileSync(path.join(typesDir, 'params.d.ts'), buildViewParamsType(pascalName), 'utf-8');
+    fs.writeFileSync(path.join(typesDir, 'index.ts'), buildTypesIndex(['params']), 'utf-8');
+    fs.writeFileSync(path.join(targetDir, 'types.d.ts'), "export * from './types/index';\n", 'utf-8');
+
+    filesCreated.push(viewFile, specFile, 'index.ts', 'types.d.ts', 'types/params.d.ts', 'types/index.ts');
+  } else {
+    const compFile = `${capsuleName}.${selectedFramework.ext}`;
+    const specFile = `${capsuleName}.spec.ts`;
+    const hasController = !isLean && selectedTier.tier !== 'atom';
+    const installedFamily = detectInstalledFamily(cwd);
+    const templateOpts = { atomsPackage: installedFamily.atomsPackage };
+
+    fs.writeFileSync(path.join(targetDir, compFile), selectedFramework.compBuilder(capsuleName, pascalName, templateOpts), 'utf-8');
+    fs.writeFileSync(path.join(targetDir, 'index.ts'), buildIndex(capsuleName, pascalName, selectedFramework.ext), 'utf-8');
+    fs.writeFileSync(path.join(targetDir, specFile), buildComponentSpec(capsuleName, pascalName, hasController), 'utf-8');
+
+    fs.writeFileSync(path.join(typesDir, 'props.d.ts'), buildPropsType(capsuleName, pascalName), 'utf-8');
+    fs.writeFileSync(path.join(typesDir, 'state.d.ts'), buildStateType(capsuleName, pascalName), 'utf-8');
+    fs.writeFileSync(path.join(typesDir, 'index.ts'), buildTypesIndex(['props', 'state']), 'utf-8');
+    fs.writeFileSync(path.join(targetDir, 'types.d.ts'), "export * from './types/index';\n", 'utf-8');
+
+    filesCreated.push(compFile, specFile, 'index.ts', 'types.d.ts', 'types/props.d.ts', 'types/state.d.ts', 'types/index.ts');
+
+    if (hasController) {
+      const controllerFile = `${capsuleName}.controller.ts`;
+      fs.writeFileSync(path.join(targetDir, controllerFile), buildController(capsuleName, pascalName), 'utf-8');
+      filesCreated.push(controllerFile);
+    }
+
+    if (!isLean) {
+      const scssFile = `_${capsuleName}.scss`;
+      fs.writeFileSync(path.join(targetDir, scssFile), buildScss(capsuleName), 'utf-8');
+      filesCreated.push(scssFile);
+    }
+  }
+
+  const relTargetDir = path.relative(cwd, targetDir);
+
+  return {
+    success: true,
+    capsuleName,
+    pascalName,
+    framework: selectedFramework.id,
+    tier: selectedTier.tier,
+    targetDir,
+    relativeDir: relTargetDir,
+    directory: relTargetDir,
+    files: filesCreated,
+    filesCreated
+  };
 };
 
 export const runGenerateWizard = async (rawArgs = []) => {
@@ -131,10 +256,6 @@ export const runGenerateWizard = async (rawArgs = []) => {
     capsuleName = `${selectedTier.prefix}${stripped}`;
   }
 
-  const baseSlug = capsuleName.replace(/^[a-z]+-/, '');
-  const pascalName = toPascalCase(baseSlug);
-  const camelName = toCamelCase(capsuleName);
-
   const detectedDir = detectTierBaseDir(selectedTier.tier, process.cwd());
   let targetParent = dirArg || (isYes ? detectedDir : null);
   if (!targetParent) {
@@ -158,11 +279,18 @@ export const runGenerateWizard = async (rawArgs = []) => {
     }
   }
 
-  const resolvedParent = path.resolve(process.cwd(), targetParent || '.');
-  const targetDir = path.resolve(resolvedParent, capsuleName);
-
-  if (fs.existsSync(targetDir)) {
-    const errMessage = `Directory ${capsuleName} already exists at ${targetDir}.`;
+  let result;
+  try {
+    result = createCapsuleFiles({
+      name: cleanName,
+      framework: selectedFramework.id,
+      tier: selectedTier.tier,
+      targetParent,
+      isLean,
+      cwd: process.cwd()
+    });
+  } catch (err) {
+    const errMessage = err instanceof Error ? err.message : String(err);
     if (isJson) {
       process.stdout.write(JSON.stringify({ error: errMessage, success: false }) + '\n');
       process.exit(1);
@@ -171,90 +299,19 @@ export const runGenerateWizard = async (rawArgs = []) => {
     process.exit(1);
   }
 
-  fs.mkdirSync(targetDir, { recursive: true });
-  const typesDir = path.join(targetDir, 'types');
-  fs.mkdirSync(typesDir, { recursive: true });
-
-  const filesCreated = [];
-
-  if (selectedTier.tier === 'hook') {
-    const hookFile = `${capsuleName}.ts`;
-    const specFile = `${capsuleName}.spec.ts`;
-
-    fs.writeFileSync(path.join(targetDir, hookFile), buildHook(capsuleName, camelName, pascalName), 'utf-8');
-    fs.writeFileSync(path.join(targetDir, 'index.ts'), buildHookIndex(capsuleName, camelName), 'utf-8');
-    fs.writeFileSync(path.join(targetDir, specFile), buildHookSpec(capsuleName, camelName), 'utf-8');
-
-    fs.writeFileSync(path.join(typesDir, 'options.d.ts'), buildHookOptionsType(pascalName), 'utf-8');
-    fs.writeFileSync(path.join(typesDir, 'return.d.ts'), buildHookReturnType(pascalName), 'utf-8');
-    fs.writeFileSync(path.join(typesDir, 'index.ts'), buildTypesIndex(['options', 'return']), 'utf-8');
-
-    filesCreated.push(hookFile, specFile, 'index.ts', 'types/options.d.ts', 'types/return.d.ts', 'types/index.ts');
-  } else if (selectedTier.tier === 'view') {
-    const viewFile = `${capsuleName}.${selectedFramework.ext}`;
-    const specFile = `${capsuleName}.spec.ts`;
-
-    fs.writeFileSync(path.join(targetDir, viewFile), selectedFramework.viewBuilder(capsuleName, pascalName), 'utf-8');
-    fs.writeFileSync(path.join(targetDir, 'index.ts'), buildViewIndex(capsuleName, pascalName, selectedFramework.ext), 'utf-8');
-    fs.writeFileSync(path.join(targetDir, specFile), buildViewSpec(capsuleName, pascalName), 'utf-8');
-
-    fs.writeFileSync(path.join(typesDir, 'params.d.ts'), buildViewParamsType(pascalName), 'utf-8');
-    fs.writeFileSync(path.join(typesDir, 'index.ts'), buildTypesIndex(['params']), 'utf-8');
-
-    filesCreated.push(viewFile, specFile, 'index.ts', 'types/params.d.ts', 'types/index.ts');
-  } else {
-    const compFile = `${capsuleName}.${selectedFramework.ext}`;
-    const specFile = `${capsuleName}.spec.ts`;
-    const hasController = !isLean && selectedTier.tier !== 'atom';
-    const installedFamily = detectInstalledFamily(process.cwd());
-    const templateOpts = { atomsPackage: installedFamily.atomsPackage };
-    fs.writeFileSync(path.join(targetDir, compFile), selectedFramework.compBuilder(capsuleName, pascalName, templateOpts), 'utf-8');
-    fs.writeFileSync(path.join(targetDir, 'index.ts'), buildIndex(capsuleName, pascalName, selectedFramework.ext), 'utf-8');
-    fs.writeFileSync(path.join(targetDir, specFile), buildComponentSpec(capsuleName, pascalName, hasController), 'utf-8');
-
-    fs.writeFileSync(path.join(typesDir, 'props.d.ts'), buildPropsType(capsuleName, pascalName), 'utf-8');
-    fs.writeFileSync(path.join(typesDir, 'state.d.ts'), buildStateType(capsuleName, pascalName), 'utf-8');
-    fs.writeFileSync(path.join(typesDir, 'index.ts'), buildTypesIndex(['props', 'state']), 'utf-8');
-
-    filesCreated.push(compFile, specFile, 'index.ts', 'types/props.d.ts', 'types/state.d.ts', 'types/index.ts');
-
-    if (!isLean && selectedTier.tier !== 'atom') {
-      const controllerFile = `${capsuleName}.controller.ts`;
-      fs.writeFileSync(path.join(targetDir, controllerFile), buildController(capsuleName, pascalName), 'utf-8');
-      filesCreated.push(controllerFile);
-    }
-
-    if (!isLean) {
-      const scssFile = `_${capsuleName}.scss`;
-      fs.writeFileSync(path.join(targetDir, scssFile), buildScss(capsuleName), 'utf-8');
-      filesCreated.push(scssFile);
-    }
-  }
-
-  const relTargetDir = path.relative(process.cwd(), targetDir);
-  const payload = {
-    success: true,
-    capsuleName,
-    tier: selectedTier.tier,
-    framework: selectedFramework.id,
-    directory: relTargetDir,
-    files: filesCreated
-  };
-
   if (isJson) {
-    process.stdout.write(JSON.stringify(payload) + '\n');
-    return payload;
+    process.stdout.write(JSON.stringify(result) + '\n');
+    return result;
   }
 
-  process.stdout.write(`\n\x1b[1m\x1b[32m✔ Successfully generated crystalline capsule:\x1b[0m \x1b[36m${relTargetDir}/\x1b[0m\n`);
-  for (const f of filesCreated) {
+  process.stdout.write(`\n\x1b[1m\x1b[32m✔ Successfully generated crystalline capsule:\x1b[0m \x1b[36m${result.relativeDir}/\x1b[0m\n`);
+  for (const f of result.filesCreated) {
     process.stdout.write(`  \x1b[32m✔\x1b[0m ${f}\n`);
   }
   process.stdout.write('\n\x1b[2mChemical X Standards verified: < 100 lines per file, granular domain types, co-located spec tests.\x1b[0m\n\n');
-  return payload;
+  return result;
 };
 
 export const runGenerateCapsule = async (capsuleName) => {
   return runGenerateWizard([capsuleName, '-y']);
 };
-

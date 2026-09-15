@@ -35,9 +35,9 @@ import { runBadgeCommand } from './badge.js';
 import { runBuildAudit } from './build.js';
 import { runSearch, syncSearchIndex, resolveTargetDir, syncViolationsIndex, recordAuditSnapshot, handleCheckCommand } from './search.js';
 import { runMutatorCli } from './mutators.js';
-import { startMcpServer } from './mcp.js';
 import { runReaderCli, readTokenOptimized } from './reader.js';
 import { runPatcherCli, patchFile } from './patcher.js';
+import { runMcpServer } from './mcp/index.js';
 
 const rawArgs = process.argv.slice(2);
 const invokedBin = path.basename(process.argv[1] || '');
@@ -216,8 +216,9 @@ const main = async () => {
 
   switch (firstArg) {
     case 'mcp':
+    case 'mcp-server':
     case 'server':
-      startMcpServer();
+      await runMcpServer(rawArgs.slice(1));
       break;
     case 'read':
     case 'view':
