@@ -73,6 +73,7 @@ export const createPatternRegistry = () => {
         totalHits: bucket.occurrences.length,
         hasHotspot,
         impactScore,
+        uniqueFiles,
         occurrences: bucket.occurrences
       });
     }
@@ -82,6 +83,150 @@ export const createPatternRegistry = () => {
 
   return { record, resolveHarmonizationCandidates };
 };
+
+const VOID_ELEMENTS = new Set([
+  'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'param', 'source', 'track', 'wbr'
+]);
+
+export const extractTemplateTokens = (html) => {
+  const tokens = [];
+  let i = 0;
+  let line = 1;
+
+  while (i < html.length) {
+    if (html[i] === '\n') {
+      line++;
+      i++;
+      continue;
+    }
+
+    if (html.startsWith('<!--', i)) {
+      const endComment = html.indexOf('-->', i + 4);
+      if (endComment === -1) break;
+      for (let c = i; c < endComment + 3; c++) {
+        if (html[c] === '\n') line++;
+      }
+      i = endComment + 3;
+      continue;
+    }
+
+    if (html[i] === '<') {
+      const tagLine = line;
+      let j = i + 1;
+      const isClosing = html[j] === '/';
+      if (isClosing) j++;
+
+      const nameStart = j;
+      while (j < html.length && /[a-zA-Z0-9_-]/.test(html[j])) {
+        j++;
+      }
+      const tagName = html.slice(nameStart, j);
+
+      if (tagName) {
+        let isSelfClosing = false;
+        let inQuote = null;
+
+        while (j < html.length) {
+          const ch = html[j];
+          if (ch === '\n') line++;
+
+          if (inQuote) {
+            if (ch === inQuote && html[j - 1] !== '\\') {
+              inQuote = null;
+            }
+          } else {
+            if (ch === '"' || ch === "'") {
+              inQuote = ch;
+            } else if (ch === '/' && html[j + 1] === '>') {
+              isSelfClosing = true;
+              j += 2;
+              break;
+            } else if (ch === '>') {
+              j++;
+              break;
+            }
+          }
+          j++;
+        }
+
+        const isVoid = VOID_ELEMENTS.has(tagName.toLowerCase());
+        tokens.push({
+          tag: tagName,
+          isClosing,
+          isSelfClosing: isSelfClosing || isVoid,
+          line: tagLine
+        });
+
+        i = j;
+        continue;
+      }
+    }
+
+    i++;
+  }
+
+  return tokens;
+};
+
+export const buildTagTree = (tokens) => {
+  const root = { tag: 'ROOT', line: 1, children: [] };
+  const stack = [root];
+
+  for (const token of tokens) {
+    if (token.isClosing) {
+      for (let s = stack.length - 1; s > 0; s--) {
+        if (stack[s].tag === token.tag) {
+          stack.length = s;
+          break;
+        }
+      }
+    } else {
+      const node = { tag: token.tag, line: token.line, children: [] };
+      stack[stack.length - 1].children.push(node);
+      if (!token.isSelfClosing) {
+        stack.push(node);
+      }
+    }
+  }
+
+  return root.children;
+};
+
+const getHierarchy = (node, depth = 0) => {
+  if (depth > 2 || !node) return '';
+  const childHierarchy = (node.children || [])
+    .map((c) => getHierarchy(c, depth + 1))
+    .filter(Boolean);
+  if (childHierarchy.length === 0) return node.tag;
+  return `${node.tag}>(${childHierarchy.join('+')})`;
+};
+
+export const recordTemplatePatterns = (registry, templateHtml, relativePath, startLineOffset = 0) => {
+  if (!registry || !templateHtml) return;
+  const tokens = extractTemplateTokens(templateHtml);
+  const nodes = buildTagTree(tokens);
+
+  const traverseNodes = (nodeList) => {
+    for (const node of nodeList) {
+      if (node.children && node.children.length >= MIN_CHILD_NODES) {
+        const hierarchy = getHierarchy(node);
+        if (hierarchy && hierarchy.includes('>')) {
+          registry.record('UI_STRUCTURE', hierarchy, {
+            filePath: relativePath,
+            line: node.line + startLineOffset,
+            detail: hierarchy
+          });
+        }
+      }
+      if (node.children && node.children.length > 0) {
+        traverseNodes(node.children);
+      }
+    }
+  };
+
+  traverseNodes(nodes);
+};
+
 
 export const createPatternVisitors = (registry, relativePath) => {
   if (!registry) return {};

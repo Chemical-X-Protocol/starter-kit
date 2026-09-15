@@ -25,6 +25,7 @@ test('MCP Server: initialize handshake', async () => {
   assert.strictEqual(res.result.protocolVersion, '2024-11-05');
   assert.ok(res.result.capabilities.tools);
   assert.ok(res.result.capabilities.resources);
+  assert.strictEqual(res.result.capabilities.resources.subscribe, true);
   assert.ok(res.result.capabilities.prompts);
   assert.strictEqual(res.result.serverInfo.name, 'chemical-x-mcp');
 });
@@ -57,6 +58,7 @@ test('MCP Server: tools/list enumerates all Chemical X tools', async () => {
   assert.ok(toolNames.includes('chemx_generate_capsule'));
   assert.ok(toolNames.includes('chemx_get_refactor_prompt'));
   assert.ok(toolNames.includes('chemx_audit_build'));
+  assert.ok(toolNames.includes('chemx_autofix'));
 });
 
 test('MCP Server: tools/call chemx_query_patterns executes AST discovery', async () => {
@@ -205,6 +207,122 @@ test('MCP Server: prompts/list and prompts/get', async () => {
 
   assert.strictEqual(getRes.jsonrpc, '2.0');
   assert.ok(getRes.result.messages[0].content.text.includes('src/views/Monolith.vue'));
+});
+
+test('MCP Server: tools/call chemx_autofix performs deterministic cleanup', async () => {
+  const handler = createMcpHandler();
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-mcp-autofix-'));
+  const testFile = path.join(tempDir, 'sample.ts');
+  fs.writeFileSync(testFile, 'const title = "Dashboard — Analytics";\n// hope this helps', 'utf-8');
+
+  // Dry run
+  const dryRes = await handler.handleRequest({
+    jsonrpc: '2.0',
+    id: 15,
+    method: 'tools/call',
+    params: {
+      name: 'chemx_autofix',
+      arguments: { path: testFile, dryRun: true }
+    }
+  });
+
+  assert.strictEqual(dryRes.result.isError, false);
+  const dryData = JSON.parse(dryRes.result.content[0].text);
+  assert.strictEqual(dryData.dryRun, true);
+  assert.strictEqual(dryData.totalFixes, 2);
+  assert.strictEqual(dryData.filesChanged, 1);
+
+  // Live run
+  const liveRes = await handler.handleRequest({
+    jsonrpc: '2.0',
+    id: 16,
+    method: 'tools/call',
+    params: {
+      name: 'chemx_autofix',
+      arguments: { path: testFile, dryRun: false }
+    }
+  });
+
+  assert.strictEqual(liveRes.result.isError, false);
+  const liveData = JSON.parse(liveRes.result.content[0].text);
+  assert.strictEqual(liveData.dryRun, false);
+  assert.strictEqual(liveData.totalFixes, 2);
+  assert.strictEqual(fs.readFileSync(testFile, 'utf-8'), 'const title = "Dashboard - Analytics";');
+
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});
+
+test('MCP Server: tools/call chemx_query_patterns supports compact mode', async () => {
+  const handler = createMcpHandler();
+  const res = await handler.handleRequest({
+    jsonrpc: '2.0',
+    id: 17,
+    method: 'tools/call',
+    params: {
+      name: 'chemx_query_patterns',
+      arguments: {
+        dir: 'blueprints',
+        compact: true,
+        minOccurrences: 1
+      }
+    }
+  });
+
+  assert.strictEqual(res.result.isError, false);
+  const data = JSON.parse(res.result.content[0].text);
+  assert.strictEqual(data.compact, true);
+  if (data.candidates.length > 0) {
+    const first = data.candidates[0];
+    assert.ok(Array.isArray(first.files));
+    assert.ok(Array.isArray(first.sampleOccurrences));
+    assert.strictEqual(first.occurrences, undefined);
+  }
+});
+
+test('MCP Server: resources/subscribe and resources/unsubscribe', async () => {
+  const handler = createMcpHandler();
+
+  const subRes = await handler.handleRequest({
+    jsonrpc: '2.0',
+    id: 18,
+    method: 'resources/subscribe',
+    params: { uri: 'chemx://scorecard' }
+  });
+  assert.strictEqual(subRes.jsonrpc, '2.0');
+  assert.deepStrictEqual(subRes.result, {});
+  assert.ok(handler.getSubscriptions().includes('chemx://scorecard'));
+
+  const notification = handler.notifyResourceUpdated('chemx://scorecard');
+  assert.strictEqual(notification.method, 'notifications/resources/updated');
+  assert.strictEqual(notification.params.uri, 'chemx://scorecard');
+
+  const unsubRes = await handler.handleRequest({
+    jsonrpc: '2.0',
+    id: 19,
+    method: 'resources/unsubscribe',
+    params: { uri: 'chemx://scorecard' }
+  });
+  assert.strictEqual(unsubRes.jsonrpc, '2.0');
+  assert.deepStrictEqual(unsubRes.result, {});
+  assert.ok(!handler.getSubscriptions().includes('chemx://scorecard'));
+});
+
+test('MCP Server: resources/read chemx://scorecard returns streamlined summary', async () => {
+  const handler = createMcpHandler();
+  const readRes = await handler.handleRequest({
+    jsonrpc: '2.0',
+    id: 20,
+    method: 'resources/read',
+    params: { uri: 'chemx://scorecard' }
+  });
+
+  assert.strictEqual(readRes.jsonrpc, '2.0');
+  const scorecard = JSON.parse(readRes.result.contents[0].text);
+  assert.ok(typeof scorecard.grade === 'string');
+  assert.ok(typeof scorecard.score === 'number');
+  assert.ok(scorecard.severityRollup);
+  assert.ok(Array.isArray(scorecard.topHotspots));
+  assert.ok(typeof scorecard.totalViolations === 'number');
 });
 
 test('MCP Server: handles unknown method with -32601', async () => {

@@ -77,13 +77,29 @@ export const readMcpResource = async (uri, cwd = process.cwd()) => {
     case 'chemx://scorecard': {
       const targetDir = fs.existsSync(path.resolve(cwd, 'src')) ? 'src' : '.';
       const report = executeAstAudit(targetDir, {});
+      const severityRollup = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 };
+      for (const v of report.violations || []) {
+        if (severityRollup[v.severity] !== undefined) {
+          severityRollup[v.severity]++;
+        }
+      }
+      const topHotspots = (report.hotspots || []).slice(0, 3).map((h) => ({
+        file: h.filePath,
+        lines: h.lineCount,
+        violations: h.violationsCount
+      }));
+
       const scorecard = {
-        timestamp: new Date().toISOString(),
-        health: report.health,
-        metrics: report.metrics,
-        totalViolations: report.totalViolations,
-        hotspotCount: (report.hotspots || []).length,
-        patternCandidates: (report.patterns || []).length
+        grade: report.health?.grade || 'N/A',
+        score: report.health?.score ?? 100,
+        status: report.health?.isPassing ? 'PASS' : 'FAIL',
+        scannedFiles: report.metrics?.scannedFiles || 0,
+        totalLoc: report.metrics?.totalLoc || 0,
+        moleculeCompliantPct: report.metrics?.moleculeCompliantPct ?? 100,
+        severityRollup,
+        totalViolations: report.totalViolations || 0,
+        topHotspots,
+        patternCandidatesCount: (report.patterns || []).length
       };
       return {
         uri,

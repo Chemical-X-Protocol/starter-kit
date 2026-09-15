@@ -52,6 +52,13 @@ export interface QueryPatternsArgs {
   readonly dir?: string;
   readonly type?: 'ALL' | 'STATE_UNION' | 'UI_STRUCTURE' | 'PREDICATE_LOGIC' | 'HOOK_SIGNATURE';
   readonly minOccurrences?: number;
+  readonly compact?: boolean;
+}
+
+export interface AutofixArgs {
+  readonly path?: string;
+  readonly dryRun?: boolean;
+  readonly rules?: string[];
 }
 
 export interface AuditArgs {

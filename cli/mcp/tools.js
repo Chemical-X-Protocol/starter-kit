@@ -12,6 +12,7 @@ import {
 } from '../audit/prompts.js';
 import { createCapsuleFiles } from '../generator.js';
 import { runBuildAudit } from '../build.js';
+import { runAutofix } from '../audit/autofix.js';
 
 export const MCP_TOOLS = [
   {
@@ -32,6 +33,32 @@ export const MCP_TOOLS = [
         minOccurrences: {
           type: 'number',
           description: 'Minimum file occurrences required to qualify as a candidate (default: 2).'
+        },
+        compact: {
+          type: 'boolean',
+          description: 'Enable token-conserving compact output (unique files and top 3 samples only, defaults to true).'
+        }
+      }
+    }
+  },
+  {
+    name: 'chemx_autofix',
+    description: 'Execute deterministic remediation of safe code violations (typography em dashes, leaked markdown fences, conversational residue comments, and lazy truncation placeholders) with token-compact summaries.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description: 'Target file or directory path to autofix (defaults to "src").'
+        },
+        dryRun: {
+          type: 'boolean',
+          description: 'Simulate changes without writing files to disk (defaults to false).'
+        },
+        rules: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Optional rule filters (TYPOGRAPHY_EM_DASH, AI_SLOP_CONVERSATIONAL_ARTIFACT, AI_SLOP_LAZY_PLACEHOLDER).'
         }
       }
     }
@@ -136,28 +163,47 @@ const handleQueryPatterns = (args = {}, cwd = process.cwd()) => {
   const rawPatterns = report.patterns || [];
   const filterType = args.type || 'ALL';
   const minOccurrences = typeof args.minOccurrences === 'number' ? args.minOccurrences : 2;
+  const isCompact = args.compact !== false;
 
   const matchesType = (p) => filterType === 'ALL' || p.type === filterType;
   const matchesCount = (p) => p.fileCount >= minOccurrences;
 
   const candidates = rawPatterns
     .filter((p) => matchesType(p) && matchesCount(p))
-    .map((p) => ({
-      id: p.id,
-      type: p.type,
-      label: p.label,
-      detail: p.detail,
-      suggestedCapsule: p.suggestedCapsule,
-      recommendation: p.recommendation,
-      fileCount: p.fileCount,
-      totalHits: p.totalHits,
-      impactScore: p.impactScore,
-      occurrences: p.occurrences
-    }));
+    .map((p) => {
+      const base = {
+        id: p.id,
+        type: p.type,
+        label: p.label,
+        detail: p.detail,
+        suggestedCapsule: p.suggestedCapsule,
+        recommendation: p.recommendation,
+        fileCount: p.fileCount,
+        totalHits: p.totalHits,
+        impactScore: p.impactScore
+      };
+
+      if (isCompact) {
+        return {
+          ...base,
+          files: p.uniqueFiles || Array.from(new Set((p.occurrences || []).map((o) => o.filePath))),
+          sampleOccurrences: (p.occurrences || []).slice(0, 3).map((o) => ({
+            file: o.filePath,
+            line: o.line
+          }))
+        };
+      }
+
+      return {
+        ...base,
+        occurrences: p.occurrences
+      };
+    });
 
   return {
     scannedDir: targetDir,
     totalCandidates: candidates.length,
+    compact: isCompact,
     candidates
   };
 };
@@ -278,6 +324,14 @@ const handleAuditBuild = async (args = {}) => {
   return runBuildAudit(rawArgs, false);
 };
 
+const handleAutofix = (args = {}, cwd = process.cwd()) => {
+  return runAutofix(args.path, {
+    dryRun: Boolean(args.dryRun),
+    rules: args.rules,
+    cwd
+  });
+};
+
 export const executeMcpTool = async (name, args = {}, cwd = process.cwd()) => {
   switch (name) {
     case 'chemx_query_patterns':
@@ -290,6 +344,8 @@ export const executeMcpTool = async (name, args = {}, cwd = process.cwd()) => {
       return handleGetRefactorPrompt(args, cwd);
     case 'chemx_audit_build':
       return handleAuditBuild(args);
+    case 'chemx_autofix':
+      return handleAutofix(args, cwd);
     default:
       throw new Error(`Unknown tool: ${name}`);
   }
