@@ -37,7 +37,7 @@ import { runSearch, syncSearchIndex, resolveTargetDir, syncViolationsIndex, reco
 import { runMutatorCli } from './mutators.js';
 import { runReaderCli, readTokenOptimized } from './reader.js';
 import { runPatcherCli, patchFile } from './patcher.js';
-import { runMcpServer } from './mcp/index.js';
+import { runMcpServer, runMcpInstaller } from './mcp/index.js';
 
 const rawArgs = process.argv.slice(2);
 const invokedBin = path.basename(process.argv[1] || '');
@@ -285,6 +285,10 @@ const main = async () => {
     case 'badge':
     case 'badges':
       await runBadgeCommand(rawArgs.slice(1));
+      break;
+    case 'install-mcp':
+    case 'setup-mcp':
+      await runMcpInstaller(rawArgs.slice(1));
       break;
     case 'help':
     case '--help':

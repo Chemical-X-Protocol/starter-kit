@@ -2,8 +2,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { hasGum, gumChoose, gumInput, promptQuestion } from './terminal.js';
 import { buildPreCommitHookScript, buildGitHubWorkflowScript } from './installer-templates.js';
+import { installAllMcpConfigs } from './mcp/installer.js';
 
 export { buildPreCommitHookScript, buildGitHubWorkflowScript } from './installer-templates.js';
+export { installAllMcpConfigs } from './mcp/installer.js';
 
 export const resolveGitHooksDir = (targetDir = '.') => {
   const resolvedTarget = path.resolve(targetDir);
@@ -154,16 +156,24 @@ export const runInstallWizard = async (targetDir = '.') => {
   process.stdout.write('\n\x1b[1m\x1b[38;2;98;201;255mChemical X: Architecture Guardrail & Query Installer\x1b[0m\n\n');
   const targetChoice = hasGum()
     ? gumChoose([
-        '1. Install All (Pre-Commit Hook + GitHub CI Workflow + Agent Query Machine)',
-        '2. Agent Query Machine only ("pnpm q" script + AGENTS.md rule + SQLite index)',
-        '3. Git Pre-Commit Hook only (.git/hooks/pre-commit)',
-        '4. GitHub Actions CI Workflow only (.github/workflows/chemx-audit.yml)',
-        '5. Cancel'
+        '1. Install All Guardrails (Pre-Commit Hook + GitHub CI + MCP Server + Query Machine)',
+        '2. Model Context Protocol (MCP) Server only (.cursor, .vscode, Antigravity)',
+        '3. Agent Query Machine only ("pnpm q" script + AGENTS.md rule + SQLite index)',
+        '4. Git Pre-Commit Hook only (.git/hooks/pre-commit)',
+        '5. GitHub Actions CI Workflow only (.github/workflows/chemx-audit.yml)',
+        '6. Cancel'
       ])
-    : await promptQuestion('Select target: [1] All, [2] Query Machine, [3] Hook, [4] CI, [5] Cancel (default: 1): ');
-  if (targetChoice?.includes('Cancel') || targetChoice === '5') return;
+    : await promptQuestion('Select target: [1] All, [2] MCP, [3] Query Machine, [4] Hook, [5] CI, [6] Cancel (default: 1): ');
+  if (targetChoice?.includes('Cancel') || targetChoice === '6') return;
 
-  if (targetChoice?.includes('Query Machine only') || targetChoice === '2') {
+  const isMcpOnly = targetChoice.includes('MCP Server only') || targetChoice === '2';
+  if (isMcpOnly) {
+    installAllMcpConfigs(targetDir, { silent: false });
+    return;
+  }
+
+  const isQueryOnly = targetChoice.includes('Query Machine only') || targetChoice === '3';
+  if (isQueryOnly) {
     process.stdout.write('\n\x1b[1mInstalling AI Agent Query Machine...\x1b[0m\n');
     await installAgentSearchConfig(targetDir);
     process.stdout.write('\n\x1b[1m\x1b[32m✔ Chemical X Agent Query Machine installed successfully!\x1b[0m\n\n');
@@ -175,15 +185,18 @@ export const runInstallWizard = async (targetDir = '.') => {
   const opts = { minGrade: minGrade.trim().toUpperCase(), minScore };
 
   process.stdout.write('\n\x1b[1mInstalling guardrails...\x1b[0m\n');
-  const shouldHook = !targetChoice.includes('CI only') && targetChoice !== '4';
-  const shouldWf = !targetChoice.includes('Hook only') && targetChoice !== '3';
-  const shouldQuery = targetChoice.includes('All') || targetChoice === '1';
+  const shouldHook = !targetChoice.includes('CI Workflow only') && targetChoice !== '5';
+  const shouldWf = !targetChoice.includes('Hook only') && targetChoice !== '4';
+  const isAll = targetChoice.includes('All') || targetChoice === '1';
+  const shouldMcp = isAll;
+  const shouldQuery = isAll;
 
   if (shouldHook) {
     if (isGit) installPreCommitHook(targetDir, opts);
     else process.stdout.write('  \x1b[33m⚠\x1b[0m Skipped .git/hooks (current directory is not a git repository root or submodule).\n');
   }
   if (shouldWf) installGitHubWorkflow(targetDir, opts);
+  if (shouldMcp) installAllMcpConfigs(targetDir, { silent: false });
   if (shouldQuery) await installAgentSearchConfig(targetDir);
 
   saveProjectConfig(targetDir, { minGrade: opts.minGrade, minScore: opts.minScore, maxLineCount: 500, maxMoleculeLineCount: 100 });

@@ -23,7 +23,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - Implemented `chemx_audit_build` wrapping arbitrary build scripts with token-conserving silent diagnostics.
   - Exposed living resources (`chemx://directives`, `chemx://scorecard`, `chemx://blueprints/*`) and automated refactoring prompts.
   - Added CLI `mcp` / `mcp-server` command dispatcher and documented configuration in `cli/help.js`.
-  - Added comprehensive co-located test suite (`cli/mcp/server.spec.js`).
+  - Added automated MCP installer (`cli/mcp/installer.js`) and CLI command `chemx install-mcp` (aliases `setup-mcp`).
+  - Added fail-safe postinstall hook (`scripts/postinstall.mjs`) to auto-configure `.cursor/mcp.json`, `.vscode/mcp.json`, and `~/.gemini/config/mcp_config.json` upon `npm/pnpm install`.
+  - Added comprehensive co-located test suites (`cli/mcp/server.spec.js`, `cli/mcp/installer.spec.js`).
 - **Foundational Atom Blueprint**: Added `blueprints/atoms/a-button.vue` codifying the foundational atom tier as the sole permitted layer for raw DOM elements (`<button>`).
 - **Tab Button Molecule Capsule**: Added crystalline `m-tab-button` molecule capsule (`blueprints/molecule-capsule/m-tab-button/`) containing `m-tab-button.vue`, `m-tab-button.controller.ts`, `_m-tab-button.scss`, `types.d.ts`, and `m-tab-button.spec.ts`.
 - **Zero-Raw-DOM Directives**: Codified Section 1.H in `AGENTS.md` establishing the strict prohibition of raw DOM elements in molecules and organisms, and documenting the Tab List Decomposition Pattern.

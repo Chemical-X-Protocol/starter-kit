@@ -46,6 +46,8 @@
     "q": "node cli/index.js q",
     "search": "node cli/index.js search",
     "mcp": "node cli/index.js mcp",
+    "install-mcp": "node cli/index.js install-mcp",
+    "postinstall": "node scripts/postinstall.mjs",
     "read": "node cli/index.js read",
     "patch": "node cli/index.js patch"
   },
