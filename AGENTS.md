@@ -48,12 +48,7 @@
 - **Canonical Extraction First**: Consolidate and extract shared atoms, molecules, or composables once into canonical capsules before splitting consumer monoliths.
 - **Zero Bespoke Pattern Proliferation**: Decompose consumer monoliths by binding directly to the extracted canonical capsules, preventing the proliferation of duplicate, slightly divergent patterns across spliced views.
 
-### G. Git Branching & Pull Request Protocol
-- **Branch First**: Change to a dedicated feature branch prefixed with `chem-x/NAMEOFIMPROVEMENT` (e.g. `git checkout -b chem-x/<name-of-improvement>`) before making any code modifications.
-- **Atomic Commits**: Commit atomic, intention-revealing changes directly on the dedicated feature branch.
-- **PR to Main**: Create a Pull Request targeting `main` upon completing the architectural remediation phases.
-
-### H. Strict Architectural Tier Separation & The Zero-Raw-DOM Rule
+### G. Strict Architectural Tier Separation & The Zero-Raw-DOM Rule
 - **Atoms / Foundations**: Single, foundational UI elements. (The ONLY tier where raw DOM/HTML elements like `<button>`, `<input>`, `<textarea>`, or raw layout `<div>` are permitted).
 - **Molecules / Blocks**: Groups of foundational elements. (NO raw DOM elements).
 - **Organisms / Modules**: Complex groupings of components. (NO raw DOM elements).
@@ -66,20 +61,20 @@
     2. Capsule: Encapsulate the tab button UI pattern into `m-tab-button` with scoped BEM modifier classes (e.g. `.m-tab-button--pink`, `.m-tab-button--flexible`) using `@apply`. Never place utility selector strings in JavaScript.
     3. Composition: In the consumer showcase or organism, declaratively render `<m-tab-button>` instances inside an atom surface, with zero raw HTML tags in the template.
 
-### I. AI Agent Codebase Query Machine Protocol
+### H. AI Agent Codebase Query Machine Protocol
 - **Search First Rule**: AI agents MUST invoke `pnpm q "<query>"` (or `npx chemx search "<query>"`) before running broad ripgrep, find, or file dumping.
 - **AST Architecture Intelligence**: Always leverage `pnpm q` to inspect component tiers, exported symbols, props, and hooks with minimal token burn.
 - **Inspect Mode**: Use `pnpm q "<capsule-name>" --inspect` to examine props and hooks without reading entire source files into context.
 - **JSON Mode**: Use `pnpm q "<query>" --json` for zero-overhead, machine-readable agent lookups.
 - **Tier Filtering**: Use `pnpm q "<query>" --tier=molecule` (or `atom`, `organism`, `hook`) to narrow scope instantly.
 
-### J. Capsule Trust-Tier Classification & Audit Escalation
+### I. Capsule Trust-Tier Classification & Audit Escalation
 - **Tier 1 (Pure / Stateless)**: Atoms, formatters, pure validators, and API client wrappers. Agents may trust exported interface contracts without inspecting internal implementation details.
 - **Tier 2 (Stateful / Side-Effecting)**: Auth, payments, data mutation, session lifecycle, and transactional service layers. Declared explicitly in capsule `index.ts` metadata or capsule frontmatter (`trustTier: 2`).
 - **Exemption from Shallow Interface Trust**: Tier 2 capsules are strictly exempted from "agent trusts interface, never reads implementation". Agents must inspect implementation details for state invariants and side-effect guarantees.
 - **Automated Audit Escalation**: Query tools and audits automatically escalate review strictness for Tier 2 capsules, requiring deep verification of state transitions, mutation boundaries, and failure recoverability.
 
-### K. Stateful Class & Shared Instance State Carve-Out
+### J. Stateful Class & Shared Instance State Carve-Out
 - **Atomic Unit Protection**: Stateful classes and services holding shared instance state across methods are treated as a single atomic unit.
 - **Prohibition on Method Slicing**: Never split methods sharing internal instance state into isolated files or micro-functions. Atomization must not destroy the cohesive state machine.
 - **Decomposition Protocol**: When approaching file line limits, decompose exclusively by extracting pure, stateless helper functions, mathematical derivations, and boundary validators out of the class into standalone utility capsules, preserving the class methods and instance state together.
@@ -202,7 +197,7 @@
 
 ### A. The Molecular Composable Destructuring Contract
 1. **Safe Destructuring**: Composables must always return plain objects containing individual `ref()`, `computed()`, and pure functions. Never return a raw `reactive()` object.
-2. **The 3 to 5 Property Limit**: Strictly limit return values to State + Status + Actions (maximum 3 to 5 return properties). Multi-responsibility hooks must be split into single-purpose verbs. (Note: For stateful service classes holding shared instance state, refer to the Section 1.K carve-out).
+2. **The 3 to 5 Property Limit**: Strictly limit return values to State + Status + Actions (maximum 3 to 5 return properties). Multi-responsibility hooks must be split into single-purpose verbs. (Note: For stateful service classes holding shared instance state, refer to the Section 1.J carve-out).
 3. **Standardized Aliasing**: Use standardized names (`data`, `isLoading`, `error`, `execute`) to enable clean concurrent destructuring.
 4. **Autonomous Lifecycle Teardown**: Side effects (listeners, timers, observers) must be cleaned up automatically using `onScopeDispose()` or effect cleanup functions.
 5. **Flexible Input Ergonomics**: Accept raw values, refs, or getters interchangeably via `toValue()` / `MaybeRefOrGetter<T>`.

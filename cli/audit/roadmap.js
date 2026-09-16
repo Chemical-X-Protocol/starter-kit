@@ -128,12 +128,6 @@ export const buildRemediationRoadmap = (report) => {
         target: '.git/hooks/pre-commit & .github/workflows/',
         action: 'Run npx chemx install to lock in line budgets and prevent future monolith regressions.',
         locations: []
-      },
-      {
-        title: 'Branch, Commit & Pull Request Workflow',
-        target: 'git checkout -b chem-x/NAMEOFIMPROVEMENT',
-        action: 'Change to a branch prefixed with chem-x/NAMEOFIMPROVEMENT to make changes, commit the branch, and create a PR to main.',
-        locations: []
       }
     ]
   });
@@ -202,13 +196,6 @@ export const buildSelfHealingRoadmapPrompt = (report) => {
 
   lines.push('Act as a Principal Systems Architect. Execute a self-healing architectural remediation of our codebase by following this strict multi-phase sequence in order:\n');
 
-  lines.push('### MANDATORY GIT BRANCHING & PR WORKFLOW:');
-  lines.push('1. Before modifying any files, change to a dedicated feature branch prefixed with `chem-x/NAMEOFIMPROVEMENT`:');
-  lines.push('   `git checkout -b chem-x/NAMEOFIMPROVEMENT`');
-  lines.push('2. Execute each remediation phase sequentially on this branch.');
-  lines.push('3. Commit the branch with atomic, intention-revealing commit messages.');
-  lines.push('4. Create a Pull Request (PR) to `main` upon completing the remediation phases.\n');
-
   lines.push('### AI AGENT DISCOVERY & REFACTORING COMMANDS:');
   lines.push('- Discovery & Inspect: Run `pnpm q "<target>" --inspect` (or `npx chemx search "<target>" --inspect`) to inspect component props and hooks before editing.');
   lines.push('- Tier Filter: Run `pnpm q "<query>" --tier=molecule` (or `atom`, `organism`, `hook`) to find related capsules.');
@@ -234,13 +221,11 @@ export const buildSelfHealingRoadmapPrompt = (report) => {
   });
 
   lines.push('### EXECUTION DISCIPLINE:');
-  lines.push('1. Branch First: Change to a new branch prefixed with `chem-x/NAMEOFIMPROVEMENT` (e.g. `git checkout -b chem-x/<name-of-improvement>`) before making any changes.');
-  lines.push('2. Complete Step 1 (Pattern Harvesting) completely before touching any monolithic file in Step 3.');
-  lines.push('3. Spliced views in Step 3 must directly import and bind to the canonical capsules created in Step 1.');
-  lines.push('4. Every new molecule component must stay under 100 lines.');
-  lines.push('5. Top-level page views must be 10-20 line declarative Table-of-Contents templates assembling molecules via named slots.');
-  lines.push('6. Zero synthetic or mock data; zero em dashes (use hyphens or colons).');
-  lines.push('7. PR to Main: Commit the branch and create a Pull Request to main.');
+  lines.push('1. Complete Step 1 (Pattern Harvesting) completely before touching any monolithic file in Step 3.');
+  lines.push('2. Spliced views in Step 3 must directly import and bind to the canonical capsules created in Step 1.');
+  lines.push('3. Every new molecule component must stay under 100 lines.');
+  lines.push('4. Top-level page views must be 10-20 line declarative Table-of-Contents templates assembling molecules via named slots.');
+  lines.push('5. Zero synthetic or mock data; zero em dashes (use hyphens or colons).');
 
   return lines.join('\n');
 };
