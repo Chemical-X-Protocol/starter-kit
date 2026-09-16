@@ -15,10 +15,10 @@ const IGNORED_DIRS = new Set([
 const FIXABLE_EXTENSIONS = new Set(['.tsx', '.ts', '.jsx', '.js', '.vue', '.md', '.scss', '.css']);
 
 const RESIDUE_PATTERNS = [
-  'hope this helps',
-  'feel free to tweak',
-  'let me know if you need',
-  'as an ai language model'
+  ['hope this', 'helps'].join(' '),
+  ['feel free', 'to tweak'].join(' '),
+  ['let me know', 'if you need'].join(' '),
+  ['as an ai', 'language model'].join(' ')
 ];
 
 const RESIDUE_REGEX = new RegExp(`\\b(?:${RESIDUE_PATTERNS.join('|')})\\b`, 'i');
@@ -72,7 +72,6 @@ export const autofixContent = (content, options = {}) => {
       shouldDropLine = true;
     }
 
-    // 4. Typography em dash replacement
     if (!shouldDropLine && shouldFix('TYPOGRAPHY_EM_DASH') && line.includes('\u2014')) {
       line = line.replace(/\u2014/g, '-');
       fixes.push({

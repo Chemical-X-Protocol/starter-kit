@@ -36,6 +36,23 @@ export const compactCode = (code) => {
     .join('\n');
 };
 
+const resolveDeclarationKind = (declaration) => {
+  const initType = declaration.init?.type || 'unknown';
+  if (initType !== 'CallExpression') {
+    return 'const';
+  }
+
+  const calleeName = declaration.init?.callee?.name;
+  if (calleeName === 'computed') {
+    return 'computed';
+  }
+  if (calleeName === 'ref') {
+    return 'ref';
+  }
+
+  return 'const';
+};
+
 /**
  * Extracts an AST structural outline of a file (types, exports, props, signatures).
  *
@@ -80,10 +97,7 @@ export const generateAstOutline = (code, filePath) => {
           decl.declarations.forEach((d) => {
             const name = d.id?.name;
             if (name) {
-              const initType = d.init?.type || 'unknown';
-              const isComputed = initType === 'CallExpression' && d.init?.callee?.name === 'computed';
-              const isRef = initType === 'CallExpression' && d.init?.callee?.name === 'ref';
-              const kind = isComputed ? 'computed' : (isRef ? 'ref' : 'const');
+              const kind = resolveDeclarationKind(d);
               lines.push(`export ${kind} ${name}`);
             }
           });

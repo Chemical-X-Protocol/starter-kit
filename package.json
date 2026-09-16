@@ -22,6 +22,7 @@
   },
   "files": [
     "cli",
+    "scripts",
     "README.md",
     "LICENSE",
     "docs"
@@ -47,7 +48,7 @@
     "search": "node cli/index.js search",
     "mcp": "node cli/index.js mcp",
     "install-mcp": "node cli/index.js install-mcp",
-    "postinstall": "node scripts/postinstall.mjs",
+    "postinstall": "node cli/postinstall.js",
     "read": "node cli/index.js read",
     "patch": "node cli/index.js patch"
   },

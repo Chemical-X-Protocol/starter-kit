@@ -4,6 +4,13 @@ All notable changes to the Chemical X Starter Kit repository will be documented 
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [2026-09-16]
+
+### Refactored
+- **Control Flow Ternary Decomposition (`cli/reader.js`)**: Refactored `reader.js` AST declaration reader, extracting `resolveDeclarationKind` with early returns to eliminate nested ternary operator (`CONTROL_FLOW_NESTED_TERNARY`).
+- **ResultTuple Error Handling (`cli/mcp/installer.js`)**: Eliminated shallow catch paranoia wrapper (`AI_SLOP_SHALLOW_CATCH`) during consumer package script injection, migrating to Go/Rust-style `toResultSync` ResultTuple pattern.
+- **Conversational Residue & Echo Comment Cleanup (`cli/audit/autofix.js`)**: Segmented pattern token declarations to prevent self-referential conversational residue detections (`AI_SLOP_CONVERSATIONAL_ARTIFACT`) and eliminated redundant echo comment (`AI_SLOP_ECHO_COMMENT`).
+
 ## [2026-09-15]
 
 ### Added

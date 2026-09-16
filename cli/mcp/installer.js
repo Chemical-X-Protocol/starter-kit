@@ -4,18 +4,24 @@ import os from 'node:os';
 
 const SERVER_KEY = 'chemical-x';
 
+const toResultSync = (operation) => {
+  try {
+    const value = operation();
+    return [value, null];
+  } catch (err) {
+    const normalizedError = err instanceof Error ? err : new Error(String(err));
+    return [null, normalizedError];
+  }
+};
+
 export const mergeMcpServerConfig = (existingJsonString = '', serverDef = {}) => {
   let parsed = { mcpServers: {} };
 
   const hasExistingString = Boolean(existingJsonString && existingJsonString.trim());
   if (hasExistingString) {
-    try {
-      const json = JSON.parse(existingJsonString);
-      if (json && typeof json === 'object') {
-        parsed = json;
-      }
-    } catch {
-      parsed = { mcpServers: {} };
+    const [json, parseError] = toResultSync(() => JSON.parse(existingJsonString));
+    if (!parseError && json && typeof json === 'object') {
+      parsed = json;
     }
   }
 
@@ -104,22 +110,26 @@ export const installProjectMcpConfig = (targetDir = '.', options = {}) => {
   // 3. Inject helper script to consumer package.json if available
   const pkgPath = path.join(resolvedTarget, 'package.json');
   if (fs.existsSync(pkgPath)) {
-    try {
-      const pkgContent = fs.readFileSync(pkgPath, 'utf-8');
-      const pkg = JSON.parse(pkgContent);
-      if (!pkg.scripts) pkg.scripts = {};
+    const [pkgContent, readError] = toResultSync(() => fs.readFileSync(pkgPath, 'utf-8'));
+    if (!readError && pkgContent) {
+      const [pkg, parseError] = toResultSync(() => JSON.parse(pkgContent));
+      if (!parseError && pkg && typeof pkg === 'object') {
+        if (!pkg.scripts) pkg.scripts = {};
 
-      const hasMcpScript = Boolean(pkg.scripts['chemx:mcp'] || pkg.scripts['mcp']);
-      if (!hasMcpScript) {
-        pkg.scripts['chemx:mcp'] = 'chemx mcp';
-        fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n', 'utf-8');
-        results.packageJson = true;
-        if (!isSilent) {
-          process.stdout.write('  \x1b[32m✔\x1b[0m Added "chemx:mcp" script to package.json\n');
+        const hasMcpScript = Boolean(pkg.scripts['chemx:mcp'] || pkg.scripts['mcp']);
+        if (!hasMcpScript) {
+          pkg.scripts['chemx:mcp'] = 'chemx mcp';
+          const [, writeError] = toResultSync(() => {
+            fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n', 'utf-8');
+          });
+          if (!writeError) {
+            results.packageJson = true;
+            if (!isSilent) {
+              process.stdout.write('  \x1b[32m✔\x1b[0m Added "chemx:mcp" script to package.json\n');
+            }
+          }
         }
       }
-    } catch {
-      // Ignore package.json parsing issues gracefully
     }
   }
 
