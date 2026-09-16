@@ -25,7 +25,8 @@
     "scripts",
     "README.md",
     "LICENSE",
-    "docs"
+    "docs",
+    "assets"
   ],
   "exports": {
     ".": "./cli/index.js",
