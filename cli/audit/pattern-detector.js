@@ -49,9 +49,10 @@ export const createPatternRegistry = () => {
         suggestedCapsule = 'types/state.d.ts';
         recommendation = 'Extract shared discriminated union into domain types to eliminate duplicate definitions';
       } else if (bucket.type === 'UI_STRUCTURE') {
-        label = `Shared UI Layout Structure (${bucket.detail})`;
-        suggestedCapsule = 'm-feature-card';
-        recommendation = 'Extract canonical molecule capsule before slicing consumer monoliths';
+        const categorization = categorizeUiStructure(bucket.detail);
+        label = categorization.label;
+        suggestedCapsule = categorization.suggestedCapsule;
+        recommendation = categorization.recommendation;
       } else if (bucket.type === 'PREDICATE_LOGIC') {
         label = `Duplicated Boolean Predicate Topology (${bucket.detail})`;
         suggestedCapsule = 'usePredicateFilter.ts';
@@ -82,6 +83,92 @@ export const createPatternRegistry = () => {
   };
 
   return { record, resolveHarmonizationCandidates };
+};
+
+export const categorizeUiStructure = (signature = '') => {
+  const normalized = signature.toLowerCase();
+
+  const isSvg =
+    normalized.startsWith('svg>') ||
+    normalized.includes('path+path') ||
+    normalized.includes('polygon') ||
+    normalized.includes('circle');
+  if (isSvg) {
+    const isMultiLayer = (normalized.match(/path|circle|rect|polygon|g/g) || []).length > 3;
+    return {
+      label: `Shared Vector Glyph (${signature})`,
+      suggestedCapsule: isMultiLayer ? 'm-vector-glyph' : 'a-icon',
+      recommendation: 'Extract foundational icon atom or vector glyph capsule'
+    };
+  }
+
+  const hasButton =
+    normalized.includes('btn') ||
+    normalized.includes('button');
+  if (hasButton) {
+    const hasTextOrTitle =
+      normalized.includes('span') ||
+      normalized.includes('title') ||
+      normalized.includes('h1') ||
+      normalized.includes('h2') ||
+      normalized.includes('h3') ||
+      normalized.includes('h4') ||
+      normalized.includes('p');
+
+    if (hasTextOrTitle) {
+      return {
+        label: `Shared Action Header (${signature})`,
+        suggestedCapsule: 'm-action-header',
+        recommendation: 'Extract action header molecule capsule to standardize button actions'
+      };
+    }
+
+    return {
+      label: `Shared Button Row (${signature})`,
+      suggestedCapsule: 'm-button-row',
+      recommendation: 'Extract button row molecule capsule to consolidate action bar'
+    };
+  }
+
+  const hasChipOrBadge =
+    normalized.includes('chip') ||
+    normalized.includes('badge') ||
+    normalized.includes('pill') ||
+    normalized.includes('tag');
+  if (hasChipOrBadge) {
+    const chipCount = (normalized.match(/chip|badge|pill|tag/g) || []).length;
+    if (chipCount > 1) {
+      return {
+        label: `Shared Pill Row (${signature})`,
+        suggestedCapsule: 'm-pill-row',
+        recommendation: 'Extract pill row molecule capsule to group status indicators'
+      };
+    }
+
+    return {
+      label: `Shared Status Badge (${signature})`,
+      suggestedCapsule: 'm-status-badge',
+      recommendation: 'Extract status badge atom or capsule to unify state tags'
+    };
+  }
+
+  const hasFormInput =
+    normalized.includes('input') ||
+    normalized.includes('textarea') ||
+    normalized.includes('select');
+  if (hasFormInput) {
+    return {
+      label: `Shared Form Field (${signature})`,
+      suggestedCapsule: 'm-form-field',
+      recommendation: 'Extract form field molecule encapsulating label and input atom'
+    };
+  }
+
+  return {
+    label: `Shared UI Layout Structure (${signature})`,
+    suggestedCapsule: 'm-feature-card',
+    recommendation: 'Extract canonical molecule capsule before slicing consumer monoliths'
+  };
 };
 
 const VOID_ELEMENTS = new Set([

@@ -4,7 +4,8 @@ import {
   createPatternRegistry,
   extractTemplateTokens,
   buildTagTree,
-  recordTemplatePatterns
+  recordTemplatePatterns,
+  categorizeUiStructure
 } from './pattern-detector.js';
 
 test('extractTemplateTokens: extracts tags, ignoring comments and handling quotes', () => {
@@ -56,6 +57,40 @@ test('buildTagTree and recordTemplatePatterns: captures UI_STRUCTURE from Vue te
 
   assert.ok(uiCandidate, 'Expected UI_STRUCTURE candidate to be found');
   assert.equal(uiCandidate.detail, 'v-sheet>(x-btn+x-btn)');
+  assert.equal(uiCandidate.suggestedCapsule, 'm-button-row');
   assert.equal(uiCandidate.fileCount, 2);
   assert.deepEqual(uiCandidate.uniqueFiles.sort(), ['src/components/A.vue', 'src/components/B.vue']);
 });
+
+test('categorizeUiStructure: maps semantic AST topologies to specialized capsules', () => {
+  // SVG dual path -> a-icon
+  const svgRes = categorizeUiStructure('svg>(path+path)');
+  assert.equal(svgRes.suggestedCapsule, 'a-icon');
+  assert.ok(svgRes.label.includes('Vector Glyph'));
+
+  // Action header -> m-action-header
+  const actionRes = categorizeUiStructure('div>(span+v-btn)');
+  assert.equal(actionRes.suggestedCapsule, 'm-action-header');
+  assert.ok(actionRes.label.includes('Action Header'));
+
+  // Button row -> m-button-row
+  const btnRowRes = categorizeUiStructure('div>(v-btn+v-btn)');
+  assert.equal(btnRowRes.suggestedCapsule, 'm-button-row');
+
+  // Status badge -> m-status-badge
+  const badgeRes = categorizeUiStructure('div>(span+v-chip)');
+  assert.equal(badgeRes.suggestedCapsule, 'm-status-badge');
+
+  // Pill row -> m-pill-row
+  const pillRowRes = categorizeUiStructure('div>(v-chip+v-chip)');
+  assert.equal(pillRowRes.suggestedCapsule, 'm-pill-row');
+
+  // Form field -> m-form-field
+  const formRes = categorizeUiStructure('div>(label+input)');
+  assert.equal(formRes.suggestedCapsule, 'm-form-field');
+
+  // Fallback -> m-feature-card
+  const fallbackRes = categorizeUiStructure('div>(div+div)');
+  assert.equal(fallbackRes.suggestedCapsule, 'm-feature-card');
+});
+

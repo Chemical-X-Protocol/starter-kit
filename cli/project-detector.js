@@ -51,9 +51,15 @@ export const detectInstalledFamily = (cwd = process.cwd()) => {
     const atomsCandidate = ATOMS_PACKAGES.find((name) => Boolean(deps[name]));
     const paletteCandidate = PALETTE_PACKAGES.find((name) => Boolean(deps[name]));
 
+    const localAtomsCandidate =
+      fs.existsSync(path.resolve(cwd, 'src/components/atoms')) ? '@/components/atoms' :
+      fs.existsSync(path.resolve(cwd, 'src/atoms')) ? '@/atoms' : null;
+
+    const resolvedAtomsPackage = atomsCandidate || localAtomsCandidate || null;
+
     return {
-      hasAtoms: Boolean(atomsCandidate),
-      atomsPackage: atomsCandidate || null,
+      hasAtoms: Boolean(resolvedAtomsPackage),
+      atomsPackage: resolvedAtomsPackage,
       hasPalette: Boolean(paletteCandidate),
       palettePackage: paletteCandidate || null
     };

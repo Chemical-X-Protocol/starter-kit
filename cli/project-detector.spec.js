@@ -102,3 +102,22 @@ test('project-detector: detectInstalledFamily discovers @chemx/x-atoms and @chem
 
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
+
+test('project-detector: detectInstalledFamily falls back to local components/atoms facade', () => {
+  const tmpDir = path.resolve(process.cwd(), 'scratch/test-detector-local-atoms');
+  if (fs.existsSync(tmpDir)) fs.rmSync(tmpDir, { recursive: true, force: true });
+  fs.mkdirSync(path.join(tmpDir, 'src/components/atoms'), { recursive: true });
+
+  fs.writeFileSync(
+    path.join(tmpDir, 'package.json'),
+    JSON.stringify({ dependencies: {} }),
+    'utf-8'
+  );
+
+  const family = detectInstalledFamily(tmpDir);
+  assert.strictEqual(family.hasAtoms, true);
+  assert.strictEqual(family.atomsPackage, '@/components/atoms');
+
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+});
+

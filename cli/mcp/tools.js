@@ -184,13 +184,23 @@ const handleQueryPatterns = (args = {}, cwd = process.cwd()) => {
       };
 
       if (isCompact) {
+        const sampleOccurrences = [];
+        const seenSampleFiles = new Set();
+        for (const occ of (p.occurrences || [])) {
+          if (!seenSampleFiles.has(occ.filePath)) {
+            seenSampleFiles.add(occ.filePath);
+            sampleOccurrences.push({
+              file: occ.filePath,
+              line: occ.line
+            });
+            if (sampleOccurrences.length >= 3) break;
+          }
+        }
+
         return {
           ...base,
           files: p.uniqueFiles || Array.from(new Set((p.occurrences || []).map((o) => o.filePath))),
-          sampleOccurrences: (p.occurrences || []).slice(0, 3).map((o) => ({
-            file: o.filePath,
-            line: o.line
-          }))
+          sampleOccurrences
         };
       }
 
