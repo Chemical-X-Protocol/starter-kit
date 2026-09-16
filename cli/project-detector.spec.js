@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
-import { detectFramework, detectTierBaseDir, loadProjectConfig } from './project-detector.js';
+import { detectFramework, detectTierBaseDir, loadProjectConfig, detectInstalledFamily } from './project-detector.js';
 
 test('project-detector: detectFramework identifies Vue from package dependencies', () => {
   const tmpDir = path.resolve(process.cwd(), 'scratch/test-detector-vue');
@@ -74,6 +74,31 @@ test('project-detector: detectTierBaseDir uses configured directory mapping', ()
 
   const baseDir = detectTierBaseDir('molecule', tmpDir);
   assert.strictEqual(baseDir, 'custom/ui');
+
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+});
+
+test('project-detector: detectInstalledFamily discovers @chemx/x-atoms and @chemx/o-command-palette', () => {
+  const tmpDir = path.resolve(process.cwd(), 'scratch/test-detector-family');
+  if (fs.existsSync(tmpDir)) fs.rmSync(tmpDir, { recursive: true, force: true });
+  fs.mkdirSync(tmpDir, { recursive: true });
+
+  fs.writeFileSync(
+    path.join(tmpDir, 'package.json'),
+    JSON.stringify({
+      dependencies: {
+        '@chemx/x-atoms': '^1.0.0',
+        '@chemx/o-command-palette': '^1.0.0'
+      }
+    }),
+    'utf-8'
+  );
+
+  const family = detectInstalledFamily(tmpDir);
+  assert.strictEqual(family.hasAtoms, true);
+  assert.strictEqual(family.atomsPackage, '@chemx/x-atoms');
+  assert.strictEqual(family.hasPalette, true);
+  assert.strictEqual(family.palettePackage, '@chemx/o-command-palette');
 
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });

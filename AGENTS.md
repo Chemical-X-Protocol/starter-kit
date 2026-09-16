@@ -73,6 +73,17 @@
 - **JSON Mode**: Use `pnpm q "<query>" --json` for zero-overhead, machine-readable agent lookups.
 - **Tier Filtering**: Use `pnpm q "<query>" --tier=molecule` (or `atom`, `organism`, `hook`) to narrow scope instantly.
 
+### J. Capsule Trust-Tier Classification & Audit Escalation
+- **Tier 1 (Pure / Stateless)**: Atoms, formatters, pure validators, and API client wrappers. Agents may trust exported interface contracts without inspecting internal implementation details.
+- **Tier 2 (Stateful / Side-Effecting)**: Auth, payments, data mutation, session lifecycle, and transactional service layers. Declared explicitly in capsule `index.ts` metadata or capsule frontmatter (`trustTier: 2`).
+- **Exemption from Shallow Interface Trust**: Tier 2 capsules are strictly exempted from "agent trusts interface, never reads implementation". Agents must inspect implementation details for state invariants and side-effect guarantees.
+- **Automated Audit Escalation**: Query tools and audits automatically escalate review strictness for Tier 2 capsules, requiring deep verification of state transitions, mutation boundaries, and failure recoverability.
+
+### K. Stateful Class & Shared Instance State Carve-Out
+- **Atomic Unit Protection**: Stateful classes and services holding shared instance state across methods are treated as a single atomic unit.
+- **Prohibition on Method Slicing**: Never split methods sharing internal instance state into isolated files or micro-functions. Atomization must not destroy the cohesive state machine.
+- **Decomposition Protocol**: When approaching file line limits, decompose exclusively by extracting pure, stateless helper functions, mathematical derivations, and boundary validators out of the class into standalone utility capsules, preserving the class methods and instance state together.
+
 ---
 
 ## 2. Domain-Based Type Architecture & Data Integrity
@@ -115,6 +126,11 @@
 ### F. Runtime API Boundary Guards
 - External API and network payloads must be verified through pure, atomic runtime type guards before ingestion into reactive state.
 
+### G. Backend Schema Ground-Truth Hierarchy
+- **Schema as Single Source of Truth**: Backend database schemas (SQL/Prisma/migrations) and OpenAPI specifications constitute ground truth: domain types are strictly derived views.
+- **Bidirectional Schema Validation**: Domain types and boundary interfaces must be validated against the active schema or OpenAPI contract rather than treated as independently authoritative.
+- **Drift Prevention**: Never hand-craft unvalidated entity definitions. Mismatches in nullability, default values, or field mutations must fail compile-time checks or contract test suites before ingestion.
+
 ---
 
 ## 3. Control Flow & Self-Documenting Logic
@@ -141,7 +157,30 @@
   ```
 - In React, booleans are pure in-render derivations: never use `useEffect` for computed/derived state.
 
-### B. Single-Action Command Handlers
+### B. Named Predicates & Higher-Order Filter Extraction
+- Never repeat raw `.filter()` loops with inline multi-clause comparisons across multiple derived collections.
+- Extract the atomic predicate callback (`isTierFile(file, tier)`), compose a reusable named filter function (`const filterFiles = (tier) => filteredFiles.value.filter(f => isTierFile(f, tier))`), and declare clean derived computeds:
+  ```typescript
+  // ❌ Bad: Inlined multi-clause predicates repeated across derivations
+  const viewsFiles = computed(() => filteredFiles.value.filter(f => f.path.startsWith("src/") && (f.path.startsWith("src/views") || f.tier === "views")));
+  const templatesFiles = computed(() => filteredFiles.value.filter(f => f.path.startsWith("src/") && (f.path.includes("templates/") || f.tier === "templates")));
+  const organismsFiles = computed(() => filteredFiles.value.filter(f => f.path.startsWith("src/") && (f.path.includes("organisms/") || f.tier === "organisms")));
+
+  // ✅ Good: Atomic predicate + named higher-order filter + declarative derivations
+  const isTierFile = (file: Capsule, tier: string): boolean => {
+    const isSrc = file.path.startsWith("src/");
+    if (!isSrc) return false;
+    return file.path.includes(`${tier}/`) || file.tier === tier;
+  };
+
+  const filterFiles = (tier: string) => filteredFiles.value.filter(f => isTierFile(f, tier));
+
+  const viewsFiles = computed(() => filterFiles("views"));
+  const templatesFiles = computed(() => filterFiles("templates"));
+  const organismsFiles = computed(() => filterFiles("organisms"));
+  ```
+
+### C. Single-Action Command Handlers
 - Event handlers are linear, unnested orchestrations of pure atomic verbs:
   ```typescript
   const handleAction = async (id: string) => {
@@ -153,7 +192,7 @@
   };
   ```
 
-### C. Ban on Nested Ternaries in Templates
+### D. Ban on Nested Ternaries in Templates
 - Never use nested ternaries in templates (`a ? (b ? 'x' : 'y') : 'z'`).
 - Extract complex UI display states into dedicated computed descriptor objects returning `{ text: string, color: string }`.
 
@@ -163,7 +202,7 @@
 
 ### A. The Molecular Composable Destructuring Contract
 1. **Safe Destructuring**: Composables must always return plain objects containing individual `ref()`, `computed()`, and pure functions. Never return a raw `reactive()` object.
-2. **The 3 to 5 Property Limit**: Strictly limit return values to State + Status + Actions (maximum 3 to 5 return properties). Multi-responsibility hooks must be split into single-purpose verbs.
+2. **The 3 to 5 Property Limit**: Strictly limit return values to State + Status + Actions (maximum 3 to 5 return properties). Multi-responsibility hooks must be split into single-purpose verbs. (Note: For stateful service classes holding shared instance state, refer to the Section 1.K carve-out).
 3. **Standardized Aliasing**: Use standardized names (`data`, `isLoading`, `error`, `execute`) to enable clean concurrent destructuring.
 4. **Autonomous Lifecycle Teardown**: Side effects (listeners, timers, observers) must be cleaned up automatically using `onScopeDispose()` or effect cleanup functions.
 5. **Flexible Input Ergonomics**: Accept raw values, refs, or getters interchangeably via `toValue()` / `MaybeRefOrGetter<T>`.
@@ -319,3 +358,19 @@ Raw inline `style="..."` attributes are strictly prohibited. Visual styling flow
 ### C. Event & Handler Naming
 - Emitted events describe what happened, not what to do (`item-selected`, not `select-item`).
 - Handler functions describe the action taken, prefixed `handle` (`handleCheckout`), matching Section 3.C.
+
+---
+
+## 12. Documentation Discipline
+
+### A. Derived Contract Synchronization
+- Derived contract fields (signatures, parameters, payload structures, return types) in capsule documentation must be extracted directly from `types.d.ts`, never manually duplicated or hand-typed.
+- Any change to `types.d.ts` must automatically propagate to or be validated against the capsule reference documentation.
+
+### B. Mandatory Doc-Touch CI Gate
+- A commit that modifies a capsule's implementation or controller without updating the corresponding documentation prose section must fail CI validation.
+- Refactors and behavioral changes are not complete until documentation accurately reflects updated semantics, mirroring Section 10.C.
+
+### C. "No Fake Doc-Sync" Anti-Pattern
+- Mirroring the "No Fake Green" testing rule in Section 10.D, superficial doc edits (whitespace tweaks, comment formatting, minor typo fixes) made merely to pass CI touch-checks without addressing substantive semantic changes are strictly prohibited.
+- Documentation reviews must verify substantive alignment between code behavior and documented contracts.

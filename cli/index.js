@@ -35,6 +35,9 @@ import { runBadgeCommand } from './badge.js';
 import { runBuildAudit } from './build.js';
 import { runSearch, syncSearchIndex, resolveTargetDir, syncViolationsIndex, recordAuditSnapshot, handleCheckCommand } from './search.js';
 import { runMutatorCli } from './mutators.js';
+import { startMcpServer } from './mcp.js';
+import { runReaderCli, readTokenOptimized } from './reader.js';
+import { runPatcherCli, patchFile } from './patcher.js';
 
 const rawArgs = process.argv.slice(2);
 const invokedBin = path.basename(process.argv[1] || '');
@@ -190,7 +193,17 @@ export const runAudit = async (customDir = null, isCli = false) => {
   return report;
 };
 
-export { auditFile, runBuildAudit, runSearch, syncSearchIndex };
+export {
+  auditFile,
+  runBuildAudit,
+  runSearch,
+  syncSearchIndex,
+  startMcpServer,
+  runReaderCli,
+  readTokenOptimized,
+  runPatcherCli,
+  patchFile
+};
 
 const main = async () => {
   const firstArg = rawArgs[0];
@@ -202,6 +215,18 @@ const main = async () => {
   }
 
   switch (firstArg) {
+    case 'mcp':
+    case 'server':
+      startMcpServer();
+      break;
+    case 'read':
+    case 'view':
+      runReaderCli(rawArgs.slice(1), true);
+      break;
+    case 'patch':
+    case 'edit':
+      runPatcherCli(rawArgs.slice(1), true);
+      break;
     case 'search':
     case 'q':
     case 'query':
