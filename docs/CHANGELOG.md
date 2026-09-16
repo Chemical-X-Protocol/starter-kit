@@ -4,12 +4,25 @@ All notable changes to the Chemical X Starter Kit repository will be documented 
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [2026-09-15]
+
+### Added
+- **Token-Minified File Reader Capsule (`cli/reader.js`)**: Added `chemx read` / `chemx view` command with AST structural outline extraction (`--outline`), targeted symbol extraction (`--symbol=<name>`), comment stripping (`--strip-comments`), blank line collapsing (`--compact`), line slicing (`--start`, `--end`), and minified JSON support (`--json`). Yields 70% to 90% context token reductions over raw file streaming.
+- **Surgical File Patcher Capsule (`cli/patcher.js`)**: Added `chemx patch` / `chemx edit` command executing surgical search-and-replace blocks with match uniqueness verification, line delta tracking, and compact status output (`{ file, status: "ok", lineDelta }`).
+- **Native Stdio Model Context Protocol (MCP) Server (`cli/mcp.js`)**: Added zero-dependency JSON-RPC 2.0 Stdio MCP server (`chemx mcp` / `chemx server`) exposing `chemx_q`, `chemx_read`, `chemx_patch`, `chemx_audit`, and `chemx_check` directly to AI coding agents.
+- **Workspace Monorepo Script Shortcuts (`package.json`)**: Wired `"q"`, `"chemx"`, and `"chemx:mcp"` directly into the monorepo root package scripts for workspace-wide execution.
+
 ## [2026-09-14]
 
 ### Added
 - **Foundational Atom Blueprint**: Added `blueprints/atoms/a-button.vue` codifying the foundational atom tier as the sole permitted layer for raw DOM elements (`<button>`).
 - **Tab Button Molecule Capsule**: Added crystalline `m-tab-button` molecule capsule (`blueprints/molecule-capsule/m-tab-button/`) containing `m-tab-button.vue`, `m-tab-button.controller.ts`, `_m-tab-button.scss`, `types.d.ts`, and `m-tab-button.spec.ts`.
 - **Zero-Raw-DOM Directives**: Codified Section 1.H in `AGENTS.md` establishing the strict prohibition of raw DOM elements in molecules and organisms, and documenting the Tab List Decomposition Pattern.
+- **Capsule Trust-Tier Classification & Audit Escalation**: Codified Section 1.J in `AGENTS.md` designating Tier 1 (stateless/pure) versus Tier 2 (stateful/side-effecting) capsules, exempting Tier 2 from shallow interface trust and enforcing automated deep audit escalation.
+- **Stateful Class & Shared Instance State Carve-Out**: Codified Section 1.K in `AGENTS.md` treating stateful classes and services as single atomic units, prohibiting method slicing, and adding a cross-reference in Section 4.A.2.
+- **Backend Schema Ground-Truth Hierarchy**: Codified Section 2.G in `AGENTS.md` designating backend database schemas and OpenAPI specs as canonical ground truth for derived domain types.
+- **Named Predicates & Higher-Order Filter Extraction**: Codified Section 3.B in `AGENTS.md` requiring atomic predicate callbacks and reusable higher-order filter compositions.
+- **Documentation Discipline**: Codified Section 12 in `AGENTS.md` establishing derived contract extraction from `types.d.ts`, mandatory doc-touch CI gates, and the "No Fake Doc-Sync" anti-pattern rule.
 - **MIT License & Open-Source Packaging**: Added standard MIT `LICENSE` file and configured `"license": "MIT"`, `"repository"`, `"homepage"`, and `"bugs"` in `package.json` across all publishable packages (`starter-kit`, `benchmarks`, `x-atoms`, `o-command-palette`).
 - **CalVer & CI Transparency Documentation**: Documented Minute-Precision Calendar Versioning (`YY.MM.DD-MMMM`) and automated CI registry fetch behavior in `README.md`.
 ### Fixed

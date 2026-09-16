@@ -30,7 +30,10 @@
     ".": "./cli/index.js",
     "./audit": "./cli/audit.js",
     "./build": "./cli/build.js",
-    "./search": "./cli/search.js"
+    "./search": "./cli/search.js",
+    "./mcp": "./cli/mcp.js",
+    "./reader": "./cli/reader.js",
+    "./patcher": "./cli/patcher.js"
   },
   "scripts": {
     "publish:both": "node scripts/publish-both.mjs",
@@ -41,7 +44,10 @@
     "ci:audit": "node cli/index.js audit --ci --dir=cli",
     "chemx": "node cli/index.js",
     "q": "node cli/index.js q",
-    "search": "node cli/index.js search"
+    "search": "node cli/index.js search",
+    "mcp": "node cli/index.js mcp",
+    "read": "node cli/index.js read",
+    "patch": "node cli/index.js patch"
   },
   "dependencies": {
     "@babel/parser": "^7.29.8",
