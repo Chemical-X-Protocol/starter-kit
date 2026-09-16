@@ -2,14 +2,45 @@ export const buildPreCommitHookScript = (minGrade = 'B', minScore = 80) => `#!/b
 # Chemical X Protocol: Pre-Commit Line Budget & Architecture Gatekeeper
 # Free architectural guardrail preventing context bloat and monolith sprawl.
 
-MIN_GRADE="\${CHEMX_MIN_GRADE:-${minGrade}}"
-MIN_SCORE="\${CHEMX_MIN_SCORE:-${minScore}}"
-MAX_LINES="\${CHEMX_MAX_LINES:-500}"
-MAX_MOLECULE_LINES="\${CHEMX_MAX_MOLECULE_LINES:-100}"
-
 REPO_ROOT="\$(git rev-parse --show-toplevel 2>/dev/null)"
 [ -z "\$REPO_ROOT" ] && exit 0
 cd "\$REPO_ROOT" || exit 1
+
+# Delegate to version-controlled script if present
+if [ -f "\$REPO_ROOT/scripts/pre-commit.sh" ]; then
+  exec "\$REPO_ROOT/scripts/pre-commit.sh" "\$@"
+fi
+
+# Load thresholds from .chemx/config.json if available
+CONF_MAX_LINES=""
+CONF_MAX_MOL=""
+CONF_MIN_GRADE=""
+CONF_MIN_SCORE=""
+CONFIG_FILE="\$REPO_ROOT/.chemx/config.json"
+
+if [ -f "\$CONFIG_FILE" ]; then
+  if command -v node >/dev/null 2>&1; then
+    eval \$(node -e "
+      try {
+        const c = JSON.parse(require('fs').readFileSync('\$CONFIG_FILE', 'utf8'));
+        if (c.maxLineCount || c.maxLines) console.log('CONF_MAX_LINES=' + (c.maxLineCount || c.maxLines));
+        if (c.maxMoleculeLineCount || c.maxMoleculeLines) console.log('CONF_MAX_MOL=' + (c.maxMoleculeLineCount || c.maxMoleculeLines));
+        if (c.minGrade) console.log('CONF_MIN_GRADE=' + c.minGrade);
+        if (c.minScore) console.log('CONF_MIN_SCORE=' + c.minScore);
+      } catch (e) {}
+    ")
+  else
+    CONF_MAX_LINES=\$(grep -o '"maxLineCount"[[:space:]]*:[[:space:]]*[0-9]*' "\$CONFIG_FILE" 2>/dev/null | grep -o '[0-9]*\$')
+    CONF_MAX_MOL=\$(grep -o '"maxMoleculeLineCount"[[:space:]]*:[[:space:]]*[0-9]*' "\$CONFIG_FILE" 2>/dev/null | grep -o '[0-9]*\$')
+    CONF_MIN_GRADE=\$(grep -o '"minGrade"[[:space:]]*:[[:space:]]*"[^"]*"' "\$CONFIG_FILE" 2>/dev/null | sed 's/.*"minGrade"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\\1/')
+    CONF_MIN_SCORE=\$(grep -o '"minScore"[[:space:]]*:[[:space:]]*[0-9]*' "\$CONFIG_FILE" 2>/dev/null | grep -o '[0-9]*\$')
+  fi
+fi
+
+MIN_GRADE="\${CHEMX_MIN_GRADE:-\${CONF_MIN_GRADE:-${minGrade}}}"
+MIN_SCORE="\${CHEMX_MIN_SCORE:-\${CONF_MIN_SCORE:-${minScore}}}"
+MAX_LINES="\${CHEMX_MAX_LINES:-\${CONF_MAX_LINES:-500}}"
+MAX_MOLECULE_LINES="\${CHEMX_MAX_MOLECULE_LINES:-\${CONF_MAX_MOL:-100}}"
 
 STAGED_FILES=\$(git diff --cached --name-only --diff-filter=ACM | grep -E '\\.(jsx?|tsx?|vue|svelte)\$' | grep -vE '(\\.(d\\.ts|min\\.|test\\.|spec\\.))')
 [ -z "\$STAGED_FILES" ] && exit 0
@@ -29,6 +60,9 @@ done
 
 if [ "\$FAILED" -eq 1 ]; then
   printf "\\n\\033[1m\\033[31m[Chemical X] Commit Blocked: Staged files exceed architectural line budgets\\033[0m\\n\$ERRORS\\n\\n"
+  printf "\\033[33mMonolithic files degrade AI context windows and cause hallucination loops.\\033[0m\\n"
+  printf "Decompose large files into single-purpose crystalline capsules or configure thresholds in .chemx/config.json before committing.\\n\\n"
+  exit 1
 fi
 
 AUDIT_BIN=""
@@ -51,7 +85,6 @@ if [ -n "\$AUDIT_BIN" ]; then
   fi
 fi
 
-[ "\$FAILED" -eq 1 ] && exit 1
 printf "\\033[32m✔ [Chemical X] Pre-commit architectural guardrails passed.\\033[0m\\n"
 exit 0
 `;

@@ -4,17 +4,43 @@
 #
 # Free, open-source architectural gatekeeper preventing context bloat and monolith sprawl.
 
-MIN_GRADE="${CHEMX_MIN_GRADE:-B}"
-MIN_SCORE="${CHEMX_MIN_SCORE:-80}"
-MAX_LINES="${CHEMX_MAX_LINES:-500}"
-MAX_MOLECULE_LINES="${CHEMX_MAX_MOLECULE_LINES:-100}"
-
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
 if [ -z "$REPO_ROOT" ]; then
   exit 0
 fi
 
 cd "$REPO_ROOT" || exit 1
+
+# Load thresholds from .chemx/config.json if available
+CONF_MAX_LINES=""
+CONF_MAX_MOL=""
+CONF_MIN_GRADE=""
+CONF_MIN_SCORE=""
+CONFIG_FILE="$REPO_ROOT/.chemx/config.json"
+
+if [ -f "$CONFIG_FILE" ]; then
+  if command -v node >/dev/null 2>&1; then
+    eval $(node -e "
+      try {
+        const c = JSON.parse(require('fs').readFileSync('$CONFIG_FILE', 'utf8'));
+        if (c.maxLineCount || c.maxLines) console.log('CONF_MAX_LINES=' + (c.maxLineCount || c.maxLines));
+        if (c.maxMoleculeLineCount || c.maxMoleculeLines) console.log('CONF_MAX_MOL=' + (c.maxMoleculeLineCount || c.maxMoleculeLines));
+        if (c.minGrade) console.log('CONF_MIN_GRADE=' + c.minGrade);
+        if (c.minScore) console.log('CONF_MIN_SCORE=' + c.minScore);
+      } catch (e) {}
+    ")
+  else
+    CONF_MAX_LINES=$(grep -o '"maxLineCount"[[:space:]]*:[[:space:]]*[0-9]*' "$CONFIG_FILE" 2>/dev/null | grep -o '[0-9]*$')
+    CONF_MAX_MOL=$(grep -o '"maxMoleculeLineCount"[[:space:]]*:[[:space:]]*[0-9]*' "$CONFIG_FILE" 2>/dev/null | grep -o '[0-9]*$')
+    CONF_MIN_GRADE=$(grep -o '"minGrade"[[:space:]]*:[[:space:]]*"[^"]*"' "$CONFIG_FILE" 2>/dev/null | sed 's/.*"minGrade"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
+    CONF_MIN_SCORE=$(grep -o '"minScore"[[:space:]]*:[[:space:]]*[0-9]*' "$CONFIG_FILE" 2>/dev/null | grep -o '[0-9]*$')
+  fi
+fi
+
+MIN_GRADE="${CHEMX_MIN_GRADE:-${CONF_MIN_GRADE:-B}}"
+MIN_SCORE="${CHEMX_MIN_SCORE:-${CONF_MIN_SCORE:-80}}"
+MAX_LINES="${CHEMX_MAX_LINES:-${CONF_MAX_LINES:-500}}"
+MAX_MOLECULE_LINES="${CHEMX_MAX_MOLECULE_LINES:-${CONF_MAX_MOL:-100}}"
 
 # Detect staged source files
 STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(jsx?|tsx?|vue|svelte)$' | grep -vE '(\.d\.ts|\.min\.|\.test\.|\.spec\.)')
