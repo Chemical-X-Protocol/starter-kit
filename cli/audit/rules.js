@@ -102,6 +102,10 @@ export const auditCode = (content, filePath, relativePath, options = {}) => {
   // Pillars 8-11: Extended Fast Checks (A11y, Security secrets, Fake tests, Co-located specs)
   checkExtendedTextPatterns(content, lines, relativePath, filePath, violations);
 
+  if (options.fast) {
+    return violations;
+  }
+
   const codeToParse = extractParseableCode(content, ext);
   if (!codeToParse.trim()) {
     return violations;

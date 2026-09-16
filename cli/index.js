@@ -30,6 +30,7 @@ import {
   evaluateAuditFailure,
   isNonInteractiveSession
 } from './audit/rules-predicates.js';
+import { runAuditPreflight, resolveGitAuditScope } from './audit-preflight.js';
 import { runInstallWizard } from './installer.js';
 import { runBadgeCommand } from './badge.js';
 import { runBuildAudit } from './build.js';
@@ -84,8 +85,42 @@ export const runAudit = async (customDir = null, isCli = false) => {
   const costFlag = rawArgs.find((arg) => arg.startsWith('--cost-per-million='));
   const costPerMillion = costFlag ? parseFloat(costFlag.split('=')[1]) : null;
 
-  const targetDir = resolveTargetDir(customDir, dirFlag);
-  const report = executeAstAudit(targetDir, { outputFile, model, costPerMillion });
+  const isNonInteractive = isNonInteractiveSession(rawArgs);
+  const isInteractive = !isNonInteractive && Boolean(process.stdin.isTTY && process.stdout.isTTY);
+
+  let targetDir = resolveTargetDir(customDir, dirFlag);
+  let isFast = rawArgs.includes('--fast') || rawArgs.includes('--quick');
+  let fileList = null;
+
+  const hasGitFlag = rawArgs.includes('--git') || rawArgs.includes('--changed');
+  if (hasGitFlag) {
+    const gitScope = resolveGitAuditScope(process.cwd());
+    if (gitScope.ok) {
+      fileList = gitScope.files;
+    }
+  }
+
+  const shouldRunPreflight = isCli && isInteractive && !isJson && !isMarkdown && !isShare;
+  if (shouldRunPreflight) {
+    const preflight = await runAuditPreflight(rawArgs, {
+      customDir,
+      defaultDir: targetDir,
+      cwd: process.cwd()
+    });
+    targetDir = preflight.targetDir;
+    isFast = preflight.fast;
+    fileList = preflight.fileList;
+  }
+
+  const auditOptions = {
+    outputFile,
+    model,
+    costPerMillion,
+    fast: isFast,
+    fileList
+  };
+
+  const report = executeAstAudit(targetDir, auditOptions);
   saveAuditSnapshot(report);
   const syncRes = syncSearchIndex(targetDir, process.cwd());
   if (syncRes?.db) {
@@ -120,12 +155,9 @@ export const runAudit = async (customDir = null, isCli = false) => {
       process.exit(0);
     }
 
-    const isNonInteractive = isNonInteractiveSession(rawArgs);
-    const isInteractive = !isNonInteractive && Boolean(process.stdin.isTTY && process.stdout.isTTY);
-
     if (isInteractive && !isUnroll) {
       const handleReAudit = () => {
-        const refreshed = executeAstAudit(targetDir, { outputFile, model, costPerMillion });
+        const refreshed = executeAstAudit(targetDir, auditOptions);
         saveAuditSnapshot(refreshed);
         return refreshed;
       };
