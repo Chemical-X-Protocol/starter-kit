@@ -97,11 +97,48 @@ export const auditFile = (filePath, relativePath) => {
   return auditCode(content, filePath, relativePath);
 };
 
+const auditFileEntry = (fullPath, relPath, scanOptions) => {
+  const content = fs.readFileSync(fullPath, 'utf-8');
+  const lines = content.split('\n');
+  const baseName = path.basename(fullPath);
+  const isMolecule = relPath.includes('molecules') || relPath.includes('/m-') || baseName.startsWith('m-');
+
+  const fileStat = {
+    fullPath,
+    relativePath: relPath,
+    lineCount: lines.length,
+    charCount: content.length,
+    isMolecule
+  };
+
+  const hookMatches = content.match(/\buse[A-Z0-9]\w*\b/g);
+  const hookCount = hookMatches ? hookMatches.length : 0;
+  const fileViolations = auditCode(content, fullPath, relPath, {
+    patternRegistry: scanOptions.patternRegistry,
+    fast: scanOptions.fast
+  });
+
+  return { fileStat, hookCount, fileViolations };
+};
+
 export const scanTree = (targetDir, baseDir, scanOptions = {}) => {
   let violations = [];
   let fileStats = [];
   let totalHooks = 0;
-  const { patternRegistry } = scanOptions;
+
+  if (scanOptions.fileList && scanOptions.fileList.length > 0) {
+    for (const item of scanOptions.fileList) {
+      const fullPath = path.isAbsolute(item) ? item : path.resolve(baseDir, item);
+      const relPath = path.relative(baseDir, fullPath);
+      if (fs.existsSync(fullPath) && isSourceFile(path.basename(fullPath))) {
+        const result = auditFileEntry(fullPath, relPath, scanOptions);
+        violations = violations.concat(result.fileViolations);
+        fileStats.push(result.fileStat);
+        totalHooks += result.hookCount;
+      }
+    }
+    return { violations, fileStats, totalHooks };
+  }
 
   if (!fs.existsSync(targetDir)) {
     return { violations, fileStats, totalHooks };
@@ -120,26 +157,10 @@ export const scanTree = (targetDir, baseDir, scanOptions = {}) => {
         totalHooks += sub.totalHooks;
       }
     } else if (isSourceFile(entry.name)) {
-      const content = fs.readFileSync(fullPath, 'utf-8');
-      const lines = content.split('\n');
-      const isMolecule = relPath.includes('molecules') || relPath.includes('/m-') || entry.name.startsWith('m-');
-
-      fileStats.push({
-        fullPath,
-        relativePath: relPath,
-        lineCount: lines.length,
-        charCount: content.length,
-        isMolecule
-      });
-
-      // Count hook declarations / invocations for metric
-      const hookMatches = content.match(/\buse[A-Z0-9]\w*\b/g);
-      if (hookMatches) {
-        totalHooks += hookMatches.length;
-      }
-
-      const fileViolations = auditCode(content, fullPath, relPath, { patternRegistry });
-      violations = violations.concat(fileViolations);
+      const result = auditFileEntry(fullPath, relPath, scanOptions);
+      violations = violations.concat(result.fileViolations);
+      fileStats.push(result.fileStat);
+      totalHooks += result.hookCount;
     }
   }
 
@@ -155,7 +176,11 @@ export const runAudit = (targetDir = 'src', options = {}) => {
   const cwd = process.cwd();
   const absoluteTarget = path.resolve(cwd, targetDir);
   const patternRegistry = createPatternRegistry();
-  const { violations, fileStats, totalHooks } = scanTree(absoluteTarget, cwd, { patternRegistry });
+  const { violations, fileStats, totalHooks } = scanTree(absoluteTarget, cwd, {
+    patternRegistry,
+    fast: Boolean(options.fast),
+    fileList: options.fileList || null
+  });
 
   const scannedFiles = fileStats.length;
   const totalLoc = fileStats.reduce((acc, f) => acc + f.lineCount, 0);
