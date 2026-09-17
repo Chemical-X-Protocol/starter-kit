@@ -1,0 +1,27 @@
+.m-lock-chip {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  margin-bottom: 8px;
+  transition: all 0.15s ease-in-out;
+
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  &__details {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: #94a3b8;
+  }
+
+  &--urgent {
+    border-color: rgba(245, 158, 11, 0.4);
+  }
+}

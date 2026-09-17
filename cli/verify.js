@@ -4,6 +4,7 @@ import { executeBuild } from './build/executor.js';
 import { matchTypeScriptError } from './build/parser-matchers.js';
 import { runAudit as executeAstAudit } from './audit.js';
 import { runBuildAudit } from './build.js';
+import { resolvePackageManager, loadLocalPackageJson, findProjectRoot } from './build/detector.js';
 import { ANSI } from './theme.js';
 
 const parseCommandFromArgs = (args = []) => {
@@ -13,23 +14,6 @@ const parseCommandFromArgs = (args = []) => {
     if (afterDash.length > 0) return afterDash;
   }
   return null;
-};
-
-const loadLocalPackageJson = (cwd) => {
-  const pkgPath = path.join(cwd, 'package.json');
-  if (!fs.existsSync(pkgPath)) return null;
-  try {
-    return JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
-  } catch {
-    return null;
-  }
-};
-
-const resolvePackageManager = (cwd) => {
-  if (fs.existsSync(path.join(cwd, 'pnpm-lock.yaml'))) return 'pnpm';
-  if (fs.existsSync(path.join(cwd, 'yarn.lock'))) return 'yarn';
-  if (fs.existsSync(path.join(cwd, 'bun.lockb')) || fs.existsSync(path.join(cwd, 'bun.lock'))) return 'bun';
-  return 'npm';
 };
 
 export const detectTypecheckCommand = (customCmd, cwd = process.cwd()) => {
@@ -57,13 +41,13 @@ export const detectTestCommand = (customCmd, cwd = process.cwd()) => {
   const pm = resolvePackageManager(cwd);
 
   const isLegitTest = scripts.test && !scripts.test.includes('no test specified');
-  if (isLegitTest) return `${pm} test`;
+  if (isLegitTest) return pm === 'yarn' ? 'yarn test' : `${pm} run test`;
 
   if (fs.existsSync(path.join(cwd, 'vitest.config.ts')) || fs.existsSync(path.join(cwd, 'vitest.config.js'))) {
     return 'npx vitest run';
   }
 
-  return `${pm} test`;
+  return pm === 'yarn' ? 'yarn test' : `${pm} run test`;
 };
 
 export const parseTypecheckOutput = (stdout = '', stderr = '') => {
@@ -189,7 +173,7 @@ export const runTypecheckAudit = async (rawArgs = [], isCli = false, options = {
   const isJson = rawArgs.includes('--json') || options.json === true;
   const isRaw = rawArgs.includes('--raw') || options.raw === true;
   const customCmd = parseCommandFromArgs(rawArgs) || options.command;
-  const cwd = options.cwd || process.cwd();
+  const cwd = findProjectRoot(options.cwd || process.cwd());
 
   const command = detectTypecheckCommand(customCmd, cwd);
   const execution = await executeBuild(command, cwd, { raw: isRaw });
@@ -236,7 +220,7 @@ export const runTestAudit = async (rawArgs = [], isCli = false, options = {}) =>
   const isJson = rawArgs.includes('--json') || options.json === true;
   const isRaw = rawArgs.includes('--raw') || options.raw === true;
   const customCmd = parseCommandFromArgs(rawArgs) || options.command;
-  const cwd = options.cwd || process.cwd();
+  const cwd = findProjectRoot(options.cwd || process.cwd());
 
   const command = detectTestCommand(customCmd, cwd);
   const execution = await executeBuild(command, cwd, { raw: isRaw });
@@ -281,15 +265,21 @@ export const runTestAudit = async (rawArgs = [], isCli = false, options = {}) =>
   return report;
 };
 
+const resolveDefaultTargetDir = (cwd) => {
+  const hasSrc = fs.existsSync(path.resolve(cwd, 'src'));
+  if (hasSrc) return 'src';
+  const hasBlueprints = fs.existsSync(path.resolve(cwd, 'blueprints'));
+  if (hasBlueprints) return 'blueprints';
+  return '.';
+};
+
 export const runProjectVerify = async (rawArgs = [], isCli = false, options = {}) => {
   const isJson = rawArgs.includes('--json') || options.json === true;
   const includeBuild = rawArgs.includes('--build') || options.includeBuild === true;
-  const cwd = options.cwd || process.cwd();
-
   const dirFlag = rawArgs.find((a) => a.startsWith('--dir='));
-  const targetDir = (dirFlag ? dirFlag.split('=')[1] : null) ||
-    options.targetDir ||
-    (fs.existsSync(path.resolve(cwd, 'src')) ? 'src' : fs.existsSync(path.resolve(cwd, 'blueprints')) ? 'blueprints' : '.');
+  const explicitDir = dirFlag ? dirFlag.split('=')[1] : options.targetDir;
+  const cwd = findProjectRoot(explicitDir || options.cwd || process.cwd());
+  const targetDir = explicitDir || resolveDefaultTargetDir(cwd);
 
   if (!isJson && options.print !== false) {
     process.stdout.write(`\n  ${ANSI.BOLD}${ANSI.CYAN}⚡ Chemical X: Token-Conserving Project Verification${ANSI.RESET}\n\n`);

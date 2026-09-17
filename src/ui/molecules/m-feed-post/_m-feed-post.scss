@@ -1,0 +1,38 @@
+.m-feed-post {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  margin-bottom: 12px;
+  transition: all 0.2s ease-in-out;
+
+  &__top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  &__author-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  &__content {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  &__meta-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  &--highlight {
+    border-color: rgba(98, 201, 255, 0.4);
+    box-shadow: 0 0 20px rgba(98, 201, 255, 0.1);
+  }
+}

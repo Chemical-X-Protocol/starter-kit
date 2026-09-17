@@ -1,0 +1,62 @@
+.a-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  border: 1px solid transparent;
+  transition: all 0.15s ease-in-out;
+  letter-spacing: 0.02em;
+
+  &--primary {
+    background: rgba(98, 201, 255, 0.15);
+    border-color: rgba(98, 201, 255, 0.35);
+    color: #62c9ff;
+  }
+
+  &--secondary {
+    background: rgba(168, 85, 247, 0.15);
+    border-color: rgba(168, 85, 247, 0.35);
+    color: #c084fc;
+  }
+
+  &--success, &--lime {
+    background: rgba(16, 185, 129, 0.15);
+    border-color: rgba(16, 185, 129, 0.35);
+    color: #34d399;
+  }
+
+  &--warning {
+    background: rgba(245, 158, 11, 0.15);
+    border-color: rgba(245, 158, 11, 0.35);
+    color: #fbbf24;
+  }
+
+  &--error, &--pink {
+    background: rgba(244, 63, 94, 0.15);
+    border-color: rgba(244, 63, 94, 0.35);
+    color: #fb7185;
+  }
+
+  &--slate {
+    background: rgba(100, 116, 139, 0.15);
+    border-color: rgba(100, 116, 139, 0.35);
+    color: #94a3b8;
+  }
+
+  &--sky {
+    background: rgba(56, 189, 248, 0.15);
+    border-color: rgba(56, 189, 248, 0.35);
+    color: #38bdf8;
+  }
+
+  &--dot {
+    width: 8px;
+    height: 8px;
+    padding: 0;
+    min-width: 8px;
+  }
+}

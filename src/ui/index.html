@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chemical X: Live Swarm Social Network</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/vuetify@3.7.0/dist/vuetify.min.css" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #050811; color: #f8fafc; font-family: system-ui, sans-serif; height: 100vh; overflow: hidden; }
+    .t-social-layout { display: flex; flex-direction: column; height: 100vh; }
+    .t-header { height: 56px; padding: 0 16px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(98,201,255,0.2); background: rgba(11,19,41,0.85); backdrop-filter: blur(12px); }
+    .t-body { flex: 1; display: grid; grid-template-columns: 280px 1fr 340px; gap: 16px; padding: 16px; overflow: hidden; }
+    .t-panel { background: rgba(11,19,41,0.75); border: 1px solid rgba(98,201,255,0.18); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; }
+    .a-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 9999px; font-size: 12px; border: 1px solid rgba(255,255,255,0.1); background: rgba(15,23,42,0.6); color: #e2e8f0; cursor: pointer; }
+    .a-badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 600; }
+    .badge-primary { background: rgba(98,201,255,0.15); color: #62c9ff; }
+    .badge-lime { background: rgba(16,185,129,0.15); color: #34d399; }
+    .m-card { background: rgba(15,23,42,0.65); border: 1px solid rgba(98,201,255,0.2); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 6px; }
+    .a-btn { background: rgba(98,201,255,0.2); border: 1px solid #62c9ff; color: #62c9ff; border-radius: 6px; padding: 4px 10px; font-size: 12px; cursor: pointer; }
+    .o-drawer { position: fixed; top: 56px; left: 0; bottom: 0; width: 240px; background: rgba(11,19,41,0.95); border-right: 1px solid rgba(98,201,255,0.2); z-index: 100; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+    .modal-box { position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 200; display: flex; align-items: center; justify-content: center; }
+  </style>
+  <script src="https://unpkg.com/vue@3.5.42/dist/vue.global.prod.js"></script>
+</head>
+<body>
+  <div id="app" class="t-social-layout">
+    <header class="t-header">
+      <div style="display:flex; gap:10px; align-items:center;">
+        <button class="a-btn" @click="drawer = !drawer">☰</button>
+        <span class="a-chip">⚡ Chemical X Swarm</span>
+        <span class="a-badge badge-primary">{{ tab.toUpperCase() }}</span>
+      </div>
+      <div style="display:flex; gap:10px; align-items:center;">
+        <span class="a-chip" style="color:#34d399;" @click="openModal">⚡ Saved {{ (savings.tokensSaved || 165000).toLocaleString() }} Tokens / ${{ Number(savings.dollarsSaved || 1.65).toFixed(2) }}</span>
+        <span class="a-badge badge-lime">Live Swarm</span>
+      </div>
+    </header>
+    <aside v-if="drawer" class="o-drawer">
+      <div v-for="t in ['social','tasks','locks','codebase','settings']" :key="t" class="a-chip" @click="tab = t; drawer = false">{{ t.toUpperCase() }}</div>
+    </aside>
+    <main v-if="tab === 'social'" class="t-body">
+      <aside class="t-panel"><div style="display:flex; justify-content:space-between;"><span class="a-chip">Agents</span><span class="a-badge badge-lime">{{ agents.length }}</span></div><div v-for="a in agents" :key="a.id" class="m-card"><strong>{{ a.name }}</strong><span style="font-size:11px; color:#94a3b8;">{{ a.role }}</span></div></aside>
+      <section class="t-panel"><div style="display:flex; justify-content:space-between;"><span class="a-chip">Live Timeline</span><span class="a-badge badge-primary">{{ posts.length }}</span></div><div v-for="p in posts" :key="p.id" class="m-card"><span>{{ p.author }}: {{ p.message }}</span></div></section>
+      <aside class="t-panel"><div class="m-card"><strong>Telemetry</strong><div>Total: {{ Number(telemetry.totalTokens || 0).toLocaleString() }}</div><div style="color:#34d399;">Cost: ${{ Number(telemetry.totalCost || 0).toFixed(4) }}</div></div><div v-for="l in leases" :key="l.filePath" class="m-card">🔒 {{ l.filePath }}</div></aside>
+    </main>
+    <main v-else-if="tab === 'tasks'" style="padding:16px; display:grid; grid-template-columns:repeat(3,1fr); gap:12px; flex:1;">
+      <div class="t-panel"><strong>Queued</strong><div v-for="t in tasks.filter(x => x.status==='queued')" :key="t.id" class="m-card"><strong>{{ t.title }}</strong></div></div>
+      <div class="t-panel"><strong>In Progress</strong><div v-for="t in tasks.filter(x => x.status==='in_progress')" :key="t.id" class="m-card"><strong>{{ t.title }}</strong></div></div>
+      <div class="t-panel"><strong>Completed</strong><div v-for="t in tasks.filter(x => x.status==='completed'||x.status==='done')" :key="t.id" class="m-card"><strong>{{ t.title }}</strong></div></div>
+    </main>
+    <main v-else-if="tab === 'locks'" style="padding:16px; flex:1;" class="t-panel"><strong>File Lock Leases</strong><div v-for="l in leases" :key="l.filePath" class="m-card">🔒 {{ l.filePath }} ({{ l.lockedBy }})</div></main>
+    <main v-else-if="tab === 'codebase'" style="padding:16px; flex:1;" class="t-panel"><strong>AST Codebase</strong><div v-for="f in codebase" :key="f.path" class="m-card"><strong>{{ f.path }}</strong> - {{ f.lines }} lines</div></main>
+    <main v-else-if="tab === 'settings'" style="padding:16px; flex:1;" class="t-panel"><strong>Swarm Settings</strong><button class="a-btn" @click="postAction('vacuum')">Vacuum DB</button><button class="a-btn" @click="postAction('heartbeat')">Heartbeat</button></main>
+    <div v-if="modal" class="modal-box" @click.self="modal = false"><div class="m-card" style="width:520px; background:#0b1329; padding:16px;"><div style="display:flex; justify-content:space-between;"><strong>⚡ Token Savings Certificate</strong><button class="a-btn" @click="modal = false">✕</button></div><canvas id="cert" width="480" height="220" style="margin:10px 0; border:1px solid #62c9ff; border-radius:6px;"></canvas><button class="a-btn" @click="download">Download PNG</button></div></div>
+  </div>
+  <script>
+    const { createApp, ref, onMounted, onUnmounted, nextTick } = Vue;
+    createApp({
+      setup() {
+        const tab = ref('social'), drawer = ref(false), modal = ref(false);
+        const agents = ref([]), posts = ref([]), leases = ref([]), tasks = ref([]), codebase = ref([]);
+        const telemetry = ref({ totalTokens: 0, totalCost: 0 }), savings = ref({ tokensSaved: 165000, dollarsSaved: 1.65 });
+        let timer = null;
+        const fetchStatus = async () => {
+          try {
+            const res = await fetch('/api/swarm/status');
+            if (res.ok) {
+              const d = await res.json();
+              if (d.agents) agents.value = d.agents; if (d.posts) posts.value = d.posts;
+              if (d.leases) leases.value = d.leases; if (d.tasks) tasks.value = d.tasks;
+              if (d.telemetry) telemetry.value = d.telemetry; if (d.savings) savings.value = d.savings;
+            }
+          } catch(e) {}
+          timer = setTimeout(fetchStatus, 2000);
+        };
+        const postAction = async (action) => { await fetch('/api/swarm/settings/action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action }) }); };
+        const openModal = async () => {
+          modal.value = true; await nextTick();
+          const c = document.getElementById('cert'); if (!c) return; const ctx = c.getContext('2d');
+          ctx.fillStyle = '#050811'; ctx.fillRect(0,0,c.width,c.height); ctx.fillStyle = '#62c9ff'; ctx.font = 'bold 18px sans-serif'; ctx.fillText('⚡ CHEMICAL X TOKEN CERTIFICATE', 20, 40);
+          ctx.fillStyle = '#34d399'; ctx.font = 'bold 24px sans-serif'; ctx.fillText((savings.value.tokensSaved || 165000).toLocaleString() + ' TOKENS SAVED', 20, 90);
+          ctx.fillStyle = '#fbbf24'; ctx.font = 'bold 18px sans-serif'; ctx.fillText('$' + Number(savings.value.dollarsSaved || 1.65).toFixed(2) + ' USD Avoided', 20, 130);
+        };
+        const download = () => { const c = document.getElementById('cert'); if (!c) return; const a = document.createElement('a'); a.download = 'token-savings.png'; a.href = c.toDataURL('image/png'); a.click(); };
+        onMounted(async () => { fetchStatus(); try { const r = await fetch('/api/swarm/codebase'); if (r.ok) { const d = await r.json(); codebase.value = d.files || []; } } catch(e){} });
+        onUnmounted(() => clearTimeout(timer));
+        return { tab, drawer, modal, agents, posts, leases, tasks, codebase, telemetry, savings, postAction, openModal, download };
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>

@@ -62,11 +62,11 @@
     3. Composition: In the consumer showcase or organism, declaratively render `<m-tab-button>` instances inside an atom surface, with zero raw HTML tags in the template.
 
 ### H. AI Agent Codebase Query Machine Protocol
-- **Search First Rule**: AI agents MUST invoke `pnpm q "<query>"` (or `npx chemx search "<query>"`) before running broad ripgrep, find, or file dumping.
-- **AST Architecture Intelligence**: Always leverage `pnpm q` to inspect component tiers, exported symbols, props, and hooks with minimal token burn.
-- **Inspect Mode**: Use `pnpm q "<capsule-name>" --inspect` to examine props and hooks without reading entire source files into context.
-- **JSON Mode**: Use `pnpm q "<query>" --json` for zero-overhead, machine-readable agent lookups.
-- **Tier Filtering**: Use `pnpm q "<query>" --tier=molecule` (or `atom`, `organism`, `hook`) to narrow scope instantly.
+- **Search First Rule**: AI agents MUST invoke `pnpm chemx q "<query>"` (or `npx chemx search "<query>"`) before running broad ripgrep, find, or file dumping.
+- **AST Architecture Intelligence**: Always leverage `pnpm chemx q` to inspect component tiers, exported symbols, props, and hooks with minimal token burn.
+- **Inspect Mode**: Use `pnpm chemx q "<capsule-name>" --inspect` to examine props and hooks without reading entire source files into context.
+- **JSON Mode**: Use `pnpm chemx q "<query>" --json` for zero-overhead, machine-readable agent lookups.
+- **Tier Filtering**: Use `pnpm chemx q "<query>" --tier=molecule` (or `atom`, `organism`, `hook`) to narrow scope instantly.
 
 ### I. Capsule Trust-Tier Classification & Audit Escalation
 - **Tier 1 (Pure / Stateless)**: Atoms, formatters, pure validators, and API client wrappers. Agents may trust exported interface contracts without inspecting internal implementation details.
@@ -81,12 +81,29 @@
 
 ### K. The Verification-First Protocol & Zero-Token-Burn Pipeline
 - **Verification First Rule**: AI agents MUST NEVER execute raw, unthrottled `npm test`, `pnpm test`, `vitest`, `tsc --noEmit`, or `npm run build` directly in a bash subshell. Raw shell executions flood the context window with hundreds of lines of passing checkmarks, compiler noise, and bundle asset tables, burning thousands of tokens and causing premature context exhaustion.
-- **MCP Verification Tools First**: Agents MUST invoke the dedicated Chemical X MCP tools or CLI wrappers:
-  1. `chemx_verify` (or `npx chemx verify --json`): Runs the full verification pipeline (AST Audit + Typecheck + Tests) and returns a single token-compact status card (~45 tokens if green).
-  2. `chemx_typecheck` (or `npx chemx typecheck --json`): Runs silent TypeScript typecheck; returns structured diagnostics only if errors exist.
-  3. `chemx_test` (or `npx chemx test --json`): Runs silent project tests; suppresses passing tests and returns ONLY failing test assertions and stack diffs.
-  4. `chemx_audit_build` (or `npx chemx build --json`): Runs silent production builds; catalogs diagnostics into TypeScript, Rollup, and style budgets.
+- **MCP Verification Tools First**: Agents MUST invoke the dedicated Chemical X MCP tools or CLI wrappers (`pnpm chemx <subcommand>` or `npx chemx <subcommand>`):
+  1. `chemx_verify` (or `pnpm chemx verify --json` / `npx chemx verify --json`): Runs the full verification pipeline (AST Audit + Typecheck + Tests) and returns a single token-compact status card (~45 tokens if green).
+  2. `chemx_typecheck` (or `pnpm chemx typecheck --json` / `npx chemx typecheck --json`): Runs silent TypeScript typecheck; returns structured diagnostics only if errors exist.
+  3. `chemx_test` (or `pnpm chemx test --json` / `npx chemx test --json`): Runs silent project tests; suppresses passing tests and returns ONLY failing test assertions and stack diffs.
+  4. `chemx_audit_build` (or `pnpm chemx build --json` / `npx chemx build --json`): Runs silent production builds; catalogs diagnostics into TypeScript, Rollup, and style budgets.
 - **Actionable Failure Focus**: If a verification step fails, agents consume the exact failure line and diff, fix the code surgically, and re-verify without ever paying the token penalty of passing checks.
+
+### L. Database-First Swarm Coordination & The Zero-Markdown-Monolith Directive
+- **Database as the Master Source of Truth**: The multi-agent orchestrator and subagents MUST record all milestones, task assignments, status changes, file locks, and architectural contracts directly in `.chemx/index.db` (`agent_tasks`, `file_lock_queue`, `agent_feed`) rather than creating monolithic, multi-thousand-token markdown specification files.
+- **Prohibition on Monolithic Project Markdown Parsing**: Subagents MUST NOT load giant monolithic `PROJECT.md` or status markdown files into context. Subagents query only their assigned task slice and dependencies via `pnpm chemx team task list --agent=@my-id` or MCP `chemx_team_task`, slashing token consumption by 80%+.
+- **Project Markdown as a Generated Read-Only Projection**: If a human-readable `PROJECT.md` is requested, it MUST be generated on-demand as a read-only projection compiled from the database state via `pnpm chemx team status` or export tools.
+
+### M. The Master MCP Tool Protocol & Zero-Permission Dispatch
+- **Master Gateway Rule**: When operating inside environments with per-tool permission controls (e.g. Antigravity, Claude Desktop, Cursor), AI agents MUST invoke the unified master MCP tool `chemx` (or `chemx({ action, params })`) rather than invoking fragmented tool names or dropping down to bash subshells.
+- **One-Time Approval Advantage**: The `chemx` master tool provides a single authorization point for the user. Once approved, all sub-operations (`audit`, `verify`, `typecheck`, `test`, `check`, `patch`, `write`, `read`, `team`, `q`, `autofix`) execute silently in-process with zero terminal confirmation prompts.
+- **Command Forwarding Syntax**: Agents may invoke either structured action objects (`chemx({ action: 'audit', params: { path: 'src' } })`) or CLI command strings (`chemx({ command: 'audit src' })`).
+- **Strict Prohibition on Bash Escalation**: Agents MUST NOT spawn bash subshells (`run_command` with `pnpm chemx ...` or `node cli/...`) when an equivalent in-process `chemx` MCP action exists.
+
+### N. Database-First Navigation, Symbol Connections & The Zero-Native-File-Dump Directive
+- **Database Master Index First**: Before inspecting or modifying any file, AI agents MUST query the SQLite database (`.chemx/index.db`) or the AST Query Machine (`chemx({ action: 'team', params: { action: 'list' } })`, `chemx({ action: 'q', params: { query } })`) rather than exploring the filesystem with broad find or ripgrep commands.
+- **Targeted Symbol-Only Extraction**: AI agents MUST NEVER dump entire source files into context. When an agent needs to inspect a function, hook, interface, or class, it MUST request only that specific symbol: `chemx({ action: 'read', params: { path, symbol: '<name>' } })`.
+- **Symbol Connection Graph Over Multi-File Dumps**: Rather than reading multiple files to understand imports and consumers, agents MUST request symbol connections: `chemx({ action: 'read', params: { path, symbol: '<name>', connections: true } })` or `chemx({ action: 'q', params: { query, connections: true } })`. This instantly returns the definition, imported dependencies, and caller references in ~45 tokens.
+- **Prohibition on Native File Analyzers (`view_file` Ban)**: AI agents are strictly prohibited from using native IDE file-viewing tools (`view_file`, `read_file`, `cat`, `head`, `tail`, or full-file context dumps). Dumping raw files burns thousands of tokens, causes premature context exhaustion, and defeats the token economics of the molecular architecture. All inspections MUST flow through Chemical X AST readers.
 
 ---
 
@@ -395,8 +412,12 @@ Raw inline `style="..."` attributes are strictly prohibited. Visual styling flow
 
 
 ## Chemical X Codebase Query Machine Protocol
-- Search First Rule: AI agents MUST invoke 'pnpm q "<query>"' (or 'npx chemx search "<query>"') before running broad ripgrep, find, or file dumping.
-- AST Architecture Intelligence: Always leverage 'pnpm q' to inspect component tiers, exported symbols, props, and hooks with minimal token burn.
-- Inspect Mode: Use 'pnpm q "<capsule-name>" --inspect' to examine props and hooks without catting entire source files.
-- JSON Mode: Use 'pnpm q "<query>" --json' for zero-overhead, machine-readable agent lookups.
+- Search First Rule: AI agents MUST invoke 'pnpm chemx q "<query>"' (or 'npx chemx search "<query>"') before running broad ripgrep, find, or file dumping.
+- AST Architecture Intelligence: Always leverage 'pnpm chemx q' to inspect component tiers, exported symbols, props, and hooks with minimal token burn.
+- Inspect Mode: Use 'pnpm chemx q "<capsule-name>" --inspect' to examine props and hooks without reading entire source files.
+- JSON Mode: Use 'pnpm chemx q "<query>" --json' for zero-overhead, machine-readable agent lookups.
+
+## Chemical X Verification-First Protocol & Zero-Token-Burn Pipeline
+- Verification First Rule: AI agents MUST NEVER run raw, unthrottled "npm test", "pnpm test", "vitest", "tsc --noEmit", or "npm run build" directly in a bash subshell.
+- MCP Verification Tools First: AI agents MUST invoke dedicated Chemical X MCP tools or CLI wrappers ('pnpm chemx verify', 'npx chemx verify', 'pnpm chemx build', 'npx chemx build') before running terminal commands.
 

@@ -1,0 +1,12 @@
+.m-savings-badge {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  border-radius: 9999px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+
+  &:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 0 12px rgba(52, 211, 153, 0.4);
+  }
+}

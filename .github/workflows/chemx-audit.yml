@@ -26,12 +26,12 @@ jobs:
         run: |
           if [ -f package-lock.json ]; then
             npm ci
-          else
+          elif [ -f package.json ]; then
             npm install
           fi
 
       - name: Run Chemical X Architectural Audit
-        run: npx chemx audit --min-grade=${{ vars.CHEMX_MIN_GRADE || 'B' }} --min-score=${{ vars.CHEMX_MIN_SCORE || 80 }} --markdown --output=AUDIT_REPORT.md
+        run: npx --yes chemx audit --min-grade=${{ vars.CHEMX_MIN_GRADE || 'B' }} --min-score=${{ vars.CHEMX_MIN_SCORE || 80 }} --markdown --output=AUDIT_REPORT.md
       - name: Upload Audit Scorecard Artifact
         if: always()
         uses: actions/upload-artifact@v4
@@ -57,16 +57,15 @@ jobs:
 
           {
             echo "<!-- chemical-x-audit-pr-comment -->"
-            echo "> 💬 **Architectural Discussion Topic:** [View Discussion & Community Showcase](\${DISCUSSION_URL})"
+            echo "> 💬 **Architectural Discussion Topic:** [View Discussion & Community Showcase]($DISCUSSION_URL)"
             echo ""
             cat AUDIT_REPORT.md
           } > PR_COMMENT.md
 
-          EXISTING_COMMENT_ID=$(gh api "repos/\${REPO}/issues/\${PR_NUMBER}/comments" --jq '.[] | select(.body | contains("<!-- chemical-x-audit-pr-comment -->")) | .id' | head -n 1)
+          EXISTING_COMMENT_ID=$(gh api "repos/$REPO/issues/$PR_NUMBER/comments" --jq '.[] | select(.body | contains("<!-- chemical-x-audit-pr-comment -->")) | .id' | head -n 1)
 
           if [ -n "$EXISTING_COMMENT_ID" ]; then
-            gh api --method PATCH "repos/\${REPO}/issues/comments/\${EXISTING_COMMENT_ID}" -F body=@PR_COMMENT.md
+            gh api --method PATCH "repos/$REPO/issues/comments/$EXISTING_COMMENT_ID" -F body=@PR_COMMENT.md
           else
-            gh pr comment "\${PR_NUMBER}" --body-file PR_COMMENT.md
+            gh pr comment "$PR_NUMBER" --body-file PR_COMMENT.md
           fi
-

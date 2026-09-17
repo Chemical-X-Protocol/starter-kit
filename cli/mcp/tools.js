@@ -13,17 +13,39 @@ import {
 import { createCapsuleFiles } from '../generator.js';
 import { runBuildAudit } from '../build.js';
 import { runAutofix } from '../audit/autofix.js';
-import { syncSearchIndex } from '../search.js';
-import { openIndexDb, queryIndex } from '../search-db.js';
-import { readTokenOptimized } from '../reader.js';
-import { patchFile, writeFile } from '../patcher.js';
-import { toColumnar } from '../columnar.js';
-import { handleCheckCommand } from '../search-commands.js';
 import { runTypecheckAudit, runTestAudit, runProjectVerify } from '../verify.js';
 import { MCP_TOOLS } from './manifests.js';
+import {
+  resolveTargetCwd,
+  handleChemxQ,
+  handleChemxRead,
+  handleChemxPatch,
+  handleChemxCheck,
+  handleChemxWrite
+} from './tools-search.js';
+import {
+  handleChemxTeamStatus,
+  handleChemxTeamFeed,
+  handleChemxTeamPost,
+  handleChemxTeamTask,
+  handleChemxTeamLock,
+  handleChemxReportIssue
+} from './tools-team.js';
 
-export { MCP_TOOLS };
-
+export {
+  MCP_TOOLS,
+  handleChemxQ,
+  handleChemxRead,
+  handleChemxPatch,
+  handleChemxCheck,
+  handleChemxWrite,
+  handleChemxTeamStatus,
+  handleChemxTeamFeed,
+  handleChemxTeamPost,
+  handleChemxTeamTask,
+  handleChemxTeamLock,
+  handleChemxReportIssue
+};
 
 const handleQueryPatterns = (args = {}, cwd = process.cwd()) => {
   const targetDir = args.dir || (fs.existsSync(path.resolve(cwd, 'src')) ? 'src' : '.');
@@ -195,12 +217,13 @@ const handleGetRefactorPrompt = (args = {}, cwd = process.cwd()) => {
   };
 };
 
-const handleAuditBuild = async (args = {}) => {
+const handleAuditBuild = async (args = {}, cwd = process.cwd()) => {
+  const targetCwd = args.dir ? path.resolve(cwd, args.dir) : cwd;
   const rawArgs = ['--json'];
   if (args.command) {
     rawArgs.push('--', args.command);
   }
-  return runBuildAudit(rawArgs, false, { print: false });
+  return runBuildAudit(rawArgs, false, { print: false, cwd: targetCwd });
 };
 
 const handleAutofix = (args = {}, cwd = process.cwd()) => {
@@ -211,194 +234,110 @@ const handleAutofix = (args = {}, cwd = process.cwd()) => {
   });
 };
 
-const handleChemxQ = (args = {}, cwd = process.cwd()) => {
-  const query = args.query;
-  if (!query) {
-    throw new Error('chemx_q requires "query" argument.');
-  }
-  const db = openIndexDb(cwd);
-  if (!db) {
-    syncSearchIndex('src', cwd);
-  }
-  const activeDb = openIndexDb(cwd);
-  if (!activeDb) {
-    throw new Error('Unable to initialize Chemical X AST search index database.');
-  }
-
-  const limit = typeof args.limit === 'number' ? args.limit : 20;
-  const results = queryIndex(activeDb, {
-    query,
-    tier: args.tier || 'all',
-    limit
-  });
-
-  if (args.columnar) {
-    return toColumnar(results, ['path', 'tier', 'lines', 'symbols', 'props', 'hooks'], {
-      symbols: (r) => (r.symbols || []).map((s) => s.name),
-      props: (r) => (r.props || []).map((p) => p.name),
-      hooks: (r) => r.hooks || []
-    });
-  }
-
-  if (args.inspect) {
-    return results.map((r) => ({
-      path: r.path,
-      tier: r.tier,
-      lines: r.lines,
-      symbols: (r.symbols || []).map((s) => s.name),
-      props: (r.props || []).map((p) => p.name),
-      hooks: r.hooks || []
-    }));
-  }
-
-  const lines = results.map((r) => {
-    const mainSym = (r.symbols || []).find((s) => s.isExport)?.name || '';
-    const symPart = mainSym ? ` (${mainSym})` : '';
-    const hookPart = (r.hooks && r.hooks.length > 0) ? ` [${r.hooks.slice(0, 2).join(',')}]` : '';
-    return `[${r.tier.toUpperCase()}] ${r.path}:${r.lines}L${symPart}${hookPart}`;
-  });
-
-  return lines.length > 0 ? lines.join('\n') : `No matching capsules or symbols for "${query}"`;
-};
-
-const handleChemxRead = (args = {}, cwd = process.cwd()) => {
-  if (!args.path) {
-    throw new Error('chemx_read requires "path" argument.');
-  }
-  const targetPath = path.isAbsolute(args.path) ? args.path : path.resolve(cwd, args.path);
-  const res = readTokenOptimized(targetPath, {
-    outline: args.outline,
-    symbol: args.symbol,
-    stripComments: args.stripComments,
-    compact: args.compact,
-    startLine: args.startLine,
-    endLine: args.endLine
-  });
-
-  const header = `// ${res.file} (${res.lineCount || res.totalLines} lines, ~${res.tokensEst} tokens)\n`;
-  return header + res.content;
-};
-
-const isSevereViolation = (v) => {
-  const isCritical = v.severity === 'CRITICAL';
-  const isHigh = v.severity === 'HIGH';
-  return isCritical || isHigh;
-};
-
-const formatPatchWarnings = (result) => {
-  const warnings = [];
-
-  // Stage 1: Atomic Concept Declarations
-  const hasLineBudget = Boolean(result.lineBudget);
-  const isBudgetExceeded = hasLineBudget && !result.lineBudget.passed;
-
-  // Stage 2: Clean Conditionals
-  if (isBudgetExceeded) {
-    warnings.push(`[Directive 1.A] ${result.lineBudget.warning}`);
-  }
-
-  const violations = result.violations || [];
-  for (const v of violations) {
-    const isSevere = isSevereViolation(v);
-    if (isSevere) {
-      warnings.push(`[${v.severity} - ${v.rule}] Line ${v.line}: ${v.hazard} -> ${v.directive || ''}`);
-    }
-  }
-
-  const hasWarnings = warnings.length > 0;
-  return hasWarnings ? warnings : undefined;
-};
-
-const handleChemxPatch = (args = {}, cwd = process.cwd()) => {
-  // Stage 1: Atomic Concept Declarations
-  const hasPath = Boolean(args.path);
-  const hasTargetContent = args.targetContent !== undefined;
-  const hasReplacementContent = args.replacementContent !== undefined;
-
-  // Stage 2: Unified Decision Variable
-  const hasRequiredArgs = hasPath && hasTargetContent && hasReplacementContent;
-
-  // Stage 3: Early-Return Guard Clause
-  if (!hasRequiredArgs) {
-    throw new Error('chemx_patch requires "path", "targetContent", and "replacementContent" arguments.');
-  }
-
-  const targetPath = path.isAbsolute(args.path) ? args.path : path.resolve(cwd, args.path);
-  const result = patchFile(targetPath, {
-    targetContent: args.targetContent,
-    replacementContent: args.replacementContent,
-    allowMultiple: Boolean(args.allowMultiple),
-    cwd
-  });
-
-  return {
-    ...result,
-    warnings: formatPatchWarnings(result)
-  };
-};
-
-const handleChemxCheck = (args = {}, cwd = process.cwd()) => {
-  if (!args.path) {
-    throw new Error('chemx_check requires "path" argument.');
-  }
-  const targetPath = path.isAbsolute(args.path) ? args.path : path.resolve(cwd, args.path);
-  return handleCheckCommand(targetPath, { isJson: true, isCli: false });
-};
-
-const handleChemxWrite = (args = {}, cwd = process.cwd()) => {
-  // Stage 1: Atomic Concept Declarations
-  const hasPath = Boolean(args.path);
-  const hasContent = args.content !== undefined;
-
-  // Stage 2: Unified Decision Variable
-  const hasRequiredArgs = hasPath && hasContent;
-
-  // Stage 3: Early-Return Guard Clause
-  if (!hasRequiredArgs) {
-    throw new Error('chemx_write requires "path" and "content" arguments.');
-  }
-
-  const targetPath = path.isAbsolute(args.path) ? args.path : path.resolve(cwd, args.path);
-  const result = writeFile(targetPath, {
-    content: args.content,
-    cwd
-  });
-
-  return {
-    ...result,
-    warnings: formatPatchWarnings(result)
-  };
-};
-
 const handleChemxTypecheck = async (args = {}, cwd = process.cwd()) => {
+  const baseCwd = resolveTargetCwd(cwd);
+  const targetCwd = args.dir ? path.resolve(baseCwd, args.dir) : baseCwd;
   return runTypecheckAudit([], false, {
     json: true,
     command: args.command,
     print: false,
-    cwd
+    cwd: targetCwd
   });
 };
 
 const handleChemxTest = async (args = {}, cwd = process.cwd()) => {
+  const baseCwd = resolveTargetCwd(cwd);
+  const targetCwd = args.dir ? path.resolve(baseCwd, args.dir) : baseCwd;
   return runTestAudit([], false, {
     json: true,
     command: args.command,
     print: false,
-    cwd
+    cwd: targetCwd
   });
 };
 
 const handleChemxVerify = async (args = {}, cwd = process.cwd()) => {
+  const baseCwd = resolveTargetCwd(cwd);
   return runProjectVerify([], false, {
     json: true,
     targetDir: args.dir,
     includeBuild: Boolean(args.includeBuild),
     print: false,
-    cwd
+    cwd: baseCwd
   });
 };
 
+const handleChemx = async (args = {}, cwd = process.cwd()) => {
+  let action = args.action;
+  let params = args.params || {};
+
+  if (args.command && typeof args.command === 'string') {
+    const parts = args.command.trim().split(/\s+/);
+    const subCmd = parts[0];
+    if (subCmd === 'audit') {
+      action = 'audit';
+      params = { path: parts[1] || 'src', ...params };
+    } else if (subCmd === 'verify') {
+      action = 'verify';
+    } else if (subCmd === 'typecheck') {
+      action = 'typecheck';
+    } else if (subCmd === 'test') {
+      action = 'test';
+    } else if (subCmd === 'check') {
+      action = 'check';
+      params = { path: parts[1] || 'src', ...params };
+    } else if (subCmd === 'q' || subCmd === 'search') {
+      action = 'q';
+      params = { query: parts.slice(1).join(' '), ...params };
+    } else if (subCmd === 'team') {
+      const teamAction = parts[1] || 'status';
+      if (teamAction === 'status') action = 'team_status';
+      else if (teamAction === 'feed') action = 'team_feed';
+      else if (teamAction === 'task') action = 'team_task';
+      else if (teamAction === 'lock') action = 'team_lock';
+      else action = 'team_task';
+    } else if (subCmd === 'autofix') {
+      action = 'autofix';
+      params = { path: parts[1] || 'src', ...params };
+    }
+  }
+
+  const DISPATCHER = {
+    audit: handleAudit,
+    verify: handleChemxVerify,
+    typecheck: handleChemxTypecheck,
+    test: handleChemxTest,
+    check: handleChemxCheck,
+    patch: handleChemxPatch,
+    write: handleChemxWrite,
+    read: handleChemxRead,
+    team: handleChemxTeamTask,
+    team_status: handleChemxTeamStatus,
+    team_feed: handleChemxTeamFeed,
+    team_post: handleChemxTeamPost,
+    team_task: handleChemxTeamTask,
+    team_lock: handleChemxTeamLock,
+    q: handleChemxQ,
+    search: handleChemxQ,
+    autofix: handleAutofix,
+    generate: handleGenerateCapsule,
+    patterns: handleQueryPatterns,
+    issue: handleChemxReportIssue
+  };
+
+  const handler = Object.prototype.hasOwnProperty.call(DISPATCHER, action)
+    ? DISPATCHER[action]
+    : Tools[`chemx_${action}`];
+
+  if (!handler) {
+    throw new Error(`Unknown Chemical X action: "${action}". Valid actions: ${Object.keys(DISPATCHER).join(', ')}`);
+  }
+
+  return handler(params, cwd);
+};
+
 export const Tools = {
+  chemx: handleChemx,
   chemx_query_patterns: handleQueryPatterns,
   chemx_audit: handleAudit,
   chemx_generate_capsule: handleGenerateCapsule,
@@ -412,11 +351,18 @@ export const Tools = {
   chemx_check: handleChemxCheck,
   chemx_typecheck: handleChemxTypecheck,
   chemx_test: handleChemxTest,
-  chemx_verify: handleChemxVerify
+  chemx_verify: handleChemxVerify,
+  chemx_team_status: handleChemxTeamStatus,
+  chemx_team_feed: handleChemxTeamFeed,
+  chemx_team_post: handleChemxTeamPost,
+  chemx_team_task: handleChemxTeamTask,
+  chemx_team_lock: handleChemxTeamLock,
+  chemx_report_issue: handleChemxReportIssue
 };
 
 export const executeMcpTool = async (name, args = {}, cwd = process.cwd()) => {
-  const handle = Object.prototype.hasOwnProperty.call(Tools, name) ? Tools[name] : null;
+  const toolName = name === 'chemx_master' ? 'chemx' : name;
+  const handle = Object.prototype.hasOwnProperty.call(Tools, toolName) ? Tools[toolName] : null;
   if (!handle) {
     throw new Error(`Unknown tool: ${name}`);
   }

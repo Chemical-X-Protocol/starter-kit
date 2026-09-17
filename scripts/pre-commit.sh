@@ -78,7 +78,7 @@ for FILE in $STAGED_FILES; do
     
     # Check if file is a molecule capsule
     case "$FILE" in
-      *molecules*|*/m-*|*m-*)
+      *molecules*|*/m-*|m-*)
         if [ "$LINES" -gt "$MAX_MOLECULE_LINES" ]; then
           LINE_BUDGET_FAILED=1
           LINE_BUDGET_ERRORS="${LINE_BUDGET_ERRORS}\n  ${C_RED}✕${C_RESET} $FILE ($LINES LOC > $MAX_MOLECULE_LINES LOC molecule capsule limit)"

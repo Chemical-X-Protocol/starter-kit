@@ -1,0 +1,22 @@
+.o-app-header {
+  height: 56px;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(98, 201, 255, 0.2);
+  background: rgba(11, 19, 41, 0.85);
+  backdrop-filter: blur(12px);
+
+  &__left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  &__right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+}

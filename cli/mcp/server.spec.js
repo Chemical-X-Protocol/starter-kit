@@ -53,7 +53,7 @@ test('MCP Server: tools/list enumerates all Chemical X tools', async () => {
 
   assert.strictEqual(res.jsonrpc, '2.0');
   const toolNames = res.result.tools.map((t) => t.name);
-  assert.strictEqual(toolNames.length, 14);
+  assert.strictEqual(toolNames.length, MCP_TOOLS.length);
   assert.ok(toolNames.includes('chemx_query_patterns'));
   assert.ok(toolNames.includes('chemx_audit'));
   assert.ok(toolNames.includes('chemx_generate_capsule'));
@@ -594,7 +594,7 @@ test('MCP Server: prompts/get chemx_remediate_hotspot dynamically hydrates diagn
 test('MCP Tools: keyed Tools map contains all handlers and executes mapped methods', async () => {
   assert.strictEqual(typeof Tools, 'object');
   const toolKeys = Object.keys(Tools);
-  assert.strictEqual(toolKeys.length, 14);
+  assert.strictEqual(toolKeys.length, MCP_TOOLS.length);
 
   for (const tool of MCP_TOOLS) {
     assert.strictEqual(typeof Tools[tool.name], 'function', `Tools.${tool.name} must be a function`);

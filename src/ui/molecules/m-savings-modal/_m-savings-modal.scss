@@ -1,0 +1,35 @@
+.m-savings-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+
+  &__grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  &__stat {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    background: rgba(15, 23, 42, 0.7);
+    border: 1px solid rgba(98, 201, 255, 0.2);
+    border-radius: 8px;
+    padding: 10px 14px;
+  }
+
+  &__canvas-wrapper {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-top: 8px;
+  }
+
+  &__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-top: 12px;
+  }
+}

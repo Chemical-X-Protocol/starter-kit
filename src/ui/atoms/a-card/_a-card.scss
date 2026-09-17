@@ -1,0 +1,43 @@
+.a-card {
+  position: relative;
+  border-radius: 12px;
+  color: #f8fafc;
+  transition: all 0.2s ease-in-out;
+  overflow: hidden;
+
+  &--padding-none { padding: 0; }
+  &--padding-sm { padding: 8px 12px; }
+  &--padding-md { padding: 16px; }
+  &--padding-lg { padding: 24px; }
+
+  &--glass {
+    background: rgba(11, 19, 41, 0.75);
+    border: 1px solid rgba(98, 201, 255, 0.18);
+    backdrop-filter: blur(12px);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  }
+
+  &--surface {
+    background: #0b1329;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  &--outlined {
+    background: transparent;
+    border: 1px solid rgba(98, 201, 255, 0.25);
+  }
+
+  &--subtle {
+    background: rgba(15, 23, 42, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  &--interactive {
+    cursor: pointer;
+    &:hover {
+      border-color: rgba(98, 201, 255, 0.45);
+      transform: translateY(-1px);
+      box-shadow: 0 12px 36px 0 rgba(0, 0, 0, 0.45);
+    }
+  }
+}

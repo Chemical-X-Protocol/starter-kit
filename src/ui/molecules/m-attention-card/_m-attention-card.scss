@@ -1,0 +1,39 @@
+.m-attention-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: rgba(15, 23, 42, 0.75);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  border-radius: 10px;
+  padding: 14px;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+
+  &:hover {
+    border-color: rgba(251, 191, 36, 0.6);
+    transform: translateY(-2px);
+  }
+
+  &__header, &__actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  &__source {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  &__body {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  &__actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+  }
+}

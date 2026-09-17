@@ -1,0 +1,54 @@
+.o-db-studio {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+
+  &__metrics {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  &__metric-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    background: rgba(15, 23, 42, 0.7);
+    border: 1px solid rgba(98, 201, 255, 0.2);
+    border-radius: 8px;
+    padding: 10px 16px;
+    flex: 1;
+    min-width: 120px;
+  }
+
+  &__presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+  }
+
+  &__editor {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  &__results {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    background: rgba(15, 23, 42, 0.85);
+    border: 1px solid rgba(98, 201, 255, 0.25);
+    border-radius: 10px;
+    padding: 16px;
+    overflow-x: auto;
+  }
+
+  &__row {
+    display: flex;
+    gap: 12px;
+    padding: 6px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "chemical-x": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "chemx",
+        "mcp"
+      ]
+    }
+  }
+}

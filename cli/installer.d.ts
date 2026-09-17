@@ -19,5 +19,7 @@ export declare function installPreCommitHook(targetDir?: string, options?: Insta
 export declare function installGitHubWorkflow(targetDir?: string, options?: InstallOptions): boolean;
 export declare function saveProjectConfig(targetDir?: string, config?: Partial<ProjectConfig>): void;
 export declare function areGuardrailsInstalled(targetDir?: string): boolean;
+export declare function ensurePackageScripts(targetDir?: string): boolean;
+export declare function installAgentSearchConfig(targetDir?: string): Promise<boolean>;
 export declare function runInstallWizard(targetDir?: string): Promise<void>;
 

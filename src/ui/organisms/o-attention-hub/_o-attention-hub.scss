@@ -1,0 +1,37 @@
+.o-attention-hub {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+
+  &__banner {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(15, 23, 42, 0.7);
+    border: 1px solid rgba(251, 191, 36, 0.3);
+    border-radius: 12px;
+    padding: 16px 20px;
+  }
+
+  &__status {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+
+  &__list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  &__empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 48px 24px;
+    text-align: center;
+    gap: 12px;
+  }
+}

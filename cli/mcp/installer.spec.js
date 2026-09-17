@@ -10,6 +10,7 @@ import {
   installAllMcpConfigs,
   syncAntigravityMcpSchemas
 } from './installer.js';
+import { MCP_TOOLS } from './manifests.js';
 
 test('mergeMcpServerConfig: creates valid config when input is empty', () => {
   const res = mergeMcpServerConfig('', { command: 'npx', args: ['chemx', 'mcp'] });
@@ -93,7 +94,7 @@ test('syncAntigravityMcpSchemas: writes all 14 tool schemas and instructions.md'
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-antigravity-test-'));
   try {
     const res = syncAntigravityMcpSchemas(tmpDir, { silent: true });
-    assert.strictEqual(res.toolCount, 14);
+    assert.strictEqual(res.toolCount, MCP_TOOLS.length);
     assert.ok(fs.existsSync(path.join(tmpDir, 'chemx_verify.json')));
     assert.ok(fs.existsSync(path.join(tmpDir, 'chemx_typecheck.json')));
     assert.ok(fs.existsSync(path.join(tmpDir, 'chemx_test.json')));

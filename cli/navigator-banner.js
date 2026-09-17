@@ -1,34 +1,6 @@
-import fs from "node:fs";
-import path from "node:path";
 import { getChemicalXAsciiBanner } from "./audit.js";
 import { resolveGradeColor, resolveHealthHearts } from "./navigator-grades.js";
-
-const visualWidth = (s) => {
-  const stripped = s.replace(/\x1b\[[0-9;]*m/g, "");
-  let w = 0;
-  for (const seg of new Intl.Segmenter().segment(stripped)) {
-    const char = seg.segment;
-    const isDoubleWidth = char === "❤️" || char === "🖤" || char.codePointAt(0) > 0x1f000;
-    w += isDoubleWidth ? 2 : char.length;
-  }
-  return w;
-};
-
-const resolveProjectName = () => {
-  const pkgPath = path.resolve(process.cwd(), "package.json");
-  if (fs.existsSync(pkgPath)) {
-    try {
-      const parsed = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
-      return parsed.name || path.basename(process.cwd());
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error(String(err));
-      return path.basename(process.cwd()) || "Project";
-    }
-  }
-  return path.basename(process.cwd()) || "Project";
-};
-
-const truncatePath = (p, maxLen) => (p.length <= maxLen ? p : `…${p.slice(p.length - maxLen + 1)}`);
+import { resolveProjectName, truncatePath, visualWidth } from "./navigator-banner-helpers.js";
 
 export const renderDashboardBanner = (
   health,
@@ -41,8 +13,10 @@ export const renderDashboardBanner = (
   aiSlop = null,
   options = {}
 ) => {
-  const shouldClear = options.clear ?? Boolean(options.interactive && process.stdout.isTTY);
-  if (shouldClear && process.stdout.isTTY) console.clear();
+  const isInteractiveTty = Boolean(options.interactive) && Boolean(process.stdout.isTTY);
+  const shouldClear = options.clear ?? isInteractiveTty;
+  const canClearConsole = shouldClear && Boolean(process.stdout.isTTY);
+  if (canClearConsole) console.clear();
   process.stdout.write(getChemicalXAsciiBanner(health.grade));
 
   const gColor = resolveGradeColor(health.grade);
@@ -65,15 +39,20 @@ export const renderDashboardBanner = (
 
   const tokens = contextAnalysis?.estimatedTokens || 0;
   const pct = contextAnalysis?.potentialSavingsPct || 0;
-  const costPass = contextAnalysis?.excessCostPerPass !== undefined
+  const hasCostPass = contextAnalysis?.excessCostPerPass !== undefined;
+  const costPass = hasCostPass
     ? contextAnalysis.excessCostPerPass
     : Number((((contextAnalysis?.estimatedExcessTokens || 0) / 1000000) * 3.0).toFixed(3));
-  const costMonth = contextAnalysis?.monthlyWastePerDev !== undefined
+  const hasCostMonth = contextAnalysis?.monthlyWastePerDev !== undefined;
+  const costMonth = hasCostMonth
     ? contextAnalysis.monthlyWastePerDev
     : Number((costPass * 20 * 5 * 4).toFixed(2));
 
-  const tokensStr = `~${tokens.toLocaleString()} tokens` + (pct > 0 ? ` (${pct}% cut)` : "");
-  const costStr = costPass > 0
+  const hasPct = pct > 0;
+  const pctStr = hasPct ? ` (${pct}% cut)` : "";
+  const tokensStr = `~${tokens.toLocaleString()} tokens${pctStr}`;
+  const isCostPositive = costPass > 0;
+  const costStr = isCostPositive
     ? `\x1b[38;5;208;1m$${costPass.toFixed(3)}\x1b[0m\x1b[2m/turn\x1b[0m | \x1b[31;1m$${costMonth.toFixed(2)}\x1b[0m\x1b[2m/mo\x1b[0m`
     : `\x1b[32;1m$0.000\x1b[0m\x1b[2m/turn\x1b[0m | \x1b[32;1m$0.00\x1b[0m\x1b[2m/mo\x1b[0m`;
 
@@ -105,6 +84,9 @@ export const renderDashboardBanner = (
   const topBorder = `${bColor}╭── \x1b[1;37m${projectName}${bColor} ${"─".repeat(Math.max(2, innerWidth - visualWidth(projectName)))}╮\x1b[0m`;
   const displayPwd = truncatePath(process.cwd(), Math.max(10, innerWidth - 4));
   const botBorder = `${bColor}╰── \x1b[36m${displayPwd}${bColor} ${"─".repeat(Math.max(2, innerWidth - visualWidth(displayPwd)))}╯\x1b[0m`;
+  const bodyLines = rows.map(
+    (r) => `${bColor}│\x1b[0m  ${r.content}${" ".repeat(Math.max(0, innerWidth - r.width))}  ${bColor}│\x1b[0m`
+  );
   process.stdout.write(`\n${[topBorder, ...bodyLines, botBorder].join("\n")}\n`);
   process.stdout.write(`  \x1b[2m💡 New to Chemical X? Select \x1b[1m[Guide]\x1b[0m\x1b[2m below to explore architecture, AI token gains & quickstart.\x1b[0m\n\n`);
 };

@@ -41,9 +41,18 @@ import { runReaderCli, readTokenOptimized } from './reader.js';
 import { runPatcherCli, patchFile, runWriterCli, writeFile } from './patcher.js';
 import { runMcpServer, runMcpInstaller } from './mcp/index.js';
 import { runTypecheckAudit, runTestAudit, runProjectVerify } from './verify.js';
+import { runTeamCli } from './team/index.js';
+import { startUiServer } from './ui-server.js';
 import { sanitizeOutputStreams } from './terminal.js';
+import {
+  handleError,
+  installGlobalErrorCatcher,
+  withErrorCatcher,
+  publishIssue
+} from './errors/index.js';
 
 sanitizeOutputStreams();
+installGlobalErrorCatcher();
 
 const getPackageVersion = () => {
   try {
@@ -262,7 +271,11 @@ export {
   runPatcherCli,
   patchFile,
   runWriterCli,
-  writeFile
+  writeFile,
+  runTeamCli,
+  handleError,
+  withErrorCatcher,
+  publishIssue
 };
 
 const main = async () => {
@@ -275,6 +288,11 @@ const main = async () => {
   }
 
   switch (firstArg) {
+    case 'team':
+    case 'swarm':
+    case 'feed':
+      runTeamCli(rawArgs.slice(1), true);
+      break;
     case 'mcp':
     case 'mcp-server':
     case 'server':
@@ -371,6 +389,15 @@ const main = async () => {
     case 'check:test':
       await runTestAudit(rawArgs.slice(1), true);
       break;
+    case 'ui':
+    case 'preview':
+    case 'dashboard':
+      {
+        const portArg = rawArgs.find((a) => a.startsWith('--port='));
+        const port = portArg ? parseInt(portArg.split('=')[1], 10) : 4173;
+        await startUiServer({ port, isCli: true, cwd: process.cwd() });
+      }
+      break;
     case 'help':
     case '--help':
     case '-h':
@@ -388,7 +415,11 @@ const main = async () => {
   }
 };
 
-main().catch((err) => {
-  process.stderr.write(`\x1b[31m✕ Unexpected Error: ${err.message}\x1b[0m\n`);
+main().catch(async (err) => {
+  await handleError(err, {
+    command: process.argv.slice(2).join(' '),
+    cwd: process.cwd(),
+    exitCode: 1
+  });
   process.exit(1);
 });

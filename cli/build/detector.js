@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const findFileUpward = (fileName, startDir) => {
+export const findFileUpward = (fileName, startDir) => {
   let currentDir = path.resolve(startDir);
   while (true) {
     const candidate = path.join(currentDir, fileName);
@@ -13,18 +13,17 @@ const findFileUpward = (fileName, startDir) => {
   return null;
 };
 
-const resolvePackageManager = (cwd) => {
-  const hasPnpmLock = Boolean(findFileUpward('pnpm-lock.yaml', cwd));
-  const hasYarnLock = Boolean(findFileUpward('yarn.lock', cwd));
-  const hasBunLock = Boolean(findFileUpward('bun.lockb', cwd) || findFileUpward('bun.lock', cwd));
-
-  if (hasPnpmLock) return 'pnpm';
-  if (hasYarnLock) return 'yarn';
-  if (hasBunLock) return 'bun';
-  return 'npm';
+export const findProjectRoot = (startDir = process.cwd()) => {
+  const pkgFile = findFileUpward('package.json', startDir);
+  if (pkgFile) return path.dirname(pkgFile);
+  const chemxDir = findFileUpward('.chemx', startDir);
+  if (chemxDir) return path.dirname(chemxDir);
+  const cardVault = '/home/xopher/www/elysium/apps/my-card-vault';
+  if (fs.existsSync(cardVault)) return cardVault;
+  return startDir;
 };
 
-const loadLocalPackageJson = (cwd) => {
+export const loadLocalPackageJson = (cwd) => {
   const pkgPath = path.join(cwd, 'package.json');
   if (!fs.existsSync(pkgPath)) return null;
   try {
@@ -32,6 +31,31 @@ const loadLocalPackageJson = (cwd) => {
   } catch {
     return null;
   }
+};
+
+export const resolvePackageManager = (cwd) => {
+  const pkg = loadLocalPackageJson(cwd);
+  if (pkg && typeof pkg.packageManager === 'string') {
+    const pmField = pkg.packageManager.toLowerCase();
+    if (pmField.startsWith('pnpm')) return 'pnpm';
+    if (pmField.startsWith('bun')) return 'bun';
+    if (pmField.startsWith('yarn')) return 'yarn';
+    if (pmField.startsWith('npm')) return 'npm';
+  }
+
+  let currentDir = path.resolve(cwd);
+  while (true) {
+    if (fs.existsSync(path.join(currentDir, 'pnpm-lock.yaml'))) return 'pnpm';
+    if (fs.existsSync(path.join(currentDir, 'bun.lockb')) || fs.existsSync(path.join(currentDir, 'bun.lock'))) return 'bun';
+    if (fs.existsSync(path.join(currentDir, 'yarn.lock'))) return 'yarn';
+    if (fs.existsSync(path.join(currentDir, 'package-lock.json'))) return 'npm';
+
+    const parent = path.dirname(currentDir);
+    if (parent === currentDir) break;
+    currentDir = parent;
+  }
+
+  return 'npm';
 };
 
 export const detectProjectBuildCommand = (customCmd, cwd = process.cwd()) => {
@@ -42,18 +66,11 @@ export const detectProjectBuildCommand = (customCmd, cwd = process.cwd()) => {
   const pkg = loadLocalPackageJson(cwd);
   const scripts = (pkg && pkg.scripts) || {};
 
-  const hasBuildScript = Boolean(scripts.build);
-  const hasBuildPublicScript = Boolean(scripts['build:public']);
-  const hasBuildProdScript = Boolean(scripts['build:prod']);
-
-  if (hasBuildScript) {
-    return pm === 'yarn' ? 'yarn build' : `${pm} run build`;
-  }
-  if (hasBuildPublicScript) {
-    return pm === 'yarn' ? 'yarn build:public' : `${pm} run build:public`;
-  }
-  if (hasBuildProdScript) {
-    return pm === 'yarn' ? 'yarn build:prod' : `${pm} run build:prod`;
+  const scriptCandidates = ['build', 'build:prod', 'build:public', 'bundle'];
+  for (const scriptName of scriptCandidates) {
+    if (scripts[scriptName]) {
+      return pm === 'yarn' ? `yarn ${scriptName}` : `${pm} run ${scriptName}`;
+    }
   }
 
   const hasViteConfig = fs.existsSync(path.join(cwd, 'vite.config.js')) ||

@@ -1,0 +1,71 @@
+.a-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(15, 23, 42, 0.6);
+  color: #e2e8f0;
+  transition: all 0.15s ease-in-out;
+  user-select: none;
+
+  &--clickable {
+    cursor: pointer;
+    &:hover {
+      background: rgba(15, 23, 42, 0.85);
+      border-color: rgba(98, 201, 255, 0.4);
+    }
+  }
+
+  &--active {
+    background: rgba(98, 201, 255, 0.2);
+    border-color: rgba(98, 201, 255, 0.5);
+    color: #62c9ff;
+    font-weight: 600;
+  }
+
+  &--primary {
+    border-color: rgba(98, 201, 255, 0.3);
+    color: #62c9ff;
+  }
+
+  &--success, &--lime {
+    border-color: rgba(16, 185, 129, 0.3);
+    color: #34d399;
+  }
+
+  &--warning {
+    border-color: rgba(245, 158, 11, 0.3);
+    color: #fbbf24;
+  }
+
+  &--error, &--pink {
+    border-color: rgba(244, 63, 94, 0.3);
+    color: #fb7185;
+  }
+
+  &__icon {
+    font-size: 12px;
+    display: inline-flex;
+  }
+
+  &__remove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    opacity: 0.7;
+    margin-left: 2px;
+    font-size: 11px;
+    border-radius: 9999px;
+    width: 14px;
+    height: 14px;
+    &:hover {
+      opacity: 1;
+      background: rgba(255, 255, 255, 0.2);
+    }
+  }
+}

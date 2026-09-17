@@ -93,6 +93,7 @@ const isSourceFile = (name) => {
 };
 
 export const auditFile = (filePath, relativePath) => {
+  if (!isSourceFile(path.basename(filePath))) return [];
   const content = fs.readFileSync(filePath, 'utf-8');
   return auditCode(content, filePath, relativePath);
 };

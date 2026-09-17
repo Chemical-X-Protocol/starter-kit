@@ -71,7 +71,7 @@ for F in \$STAGED_FILES; do
   [ ! -f "\$F" ] && continue
   L=\$(wc -l < "\$F" | tr -d ' ')
   case "\$F" in
-    *molecules*|*/m-*|*m-*)
+    *molecules*|*/m-*|m-*)
       [ "\$L" -gt "\$MAX_MOLECULE_LINES" ] && FAILED=1 && ERRORS="\${ERRORS}\\n  \${C_RED}✕\${C_RESET} \$F (\$L LOC > \$MAX_MOLECULE_LINES molecule limit)" ;;
     *)
       [ "\$L" -gt "\$MAX_LINES" ] && FAILED=1 && ERRORS="\${ERRORS}\\n  \${C_RED}✕\${C_RESET} \$F (\$L LOC > \$MAX_LINES file budget)" ;;

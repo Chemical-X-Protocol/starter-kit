@@ -51,6 +51,7 @@ export const installPreCommitHook = (targetDir = '.', options = {}) => {
   fs.writeFileSync(hookPath, buildPreCommitHookScript(options.minGrade, options.minScore), { mode: 0o755 });
   const relativeHook = path.relative(path.resolve(targetDir), hookPath);
   process.stdout.write(`  \x1b[32m✔\x1b[0m Installed git pre-commit hook: ${relativeHook} (chmod +x)\n`);
+  ensurePackageScripts(targetDir);
   return true;
 };
 
@@ -94,38 +95,45 @@ export const areGuardrailsInstalled = (targetDir = '.') => {
   return hasWf && hasHook;
 };
 
+export const ensurePackageScripts = (targetDir = '.') => {
+  const resolvedTarget = path.resolve(targetDir);
+  const pkgPath = path.join(resolvedTarget, 'package.json');
+  if (!fs.existsSync(pkgPath)) return false;
+
+  try {
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+    pkg.scripts = pkg.scripts || {};
+    if (!pkg.scripts.chemx) {
+      pkg.scripts.chemx = 'chemx';
+      fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n', 'utf-8');
+      process.stdout.write('  \x1b[32m✔\x1b[0m Configured minimal "chemx": "chemx" entry in package.json\n');
+    }
+    return true;
+  } catch {
+    process.stdout.write('  \x1b[33m⚠\x1b[0m Could not update package.json scripts\n');
+    return false;
+  }
+};
+
 export const installAgentSearchConfig = async (targetDir = '.') => {
   const resolvedTarget = path.resolve(targetDir);
 
-  // 1. Update package.json scripts
-  const pkgPath = path.join(resolvedTarget, 'package.json');
-  if (fs.existsSync(pkgPath)) {
-    try {
-      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
-      pkg.scripts = pkg.scripts || {};
-      pkg.scripts.q = 'chemx search';
-      pkg.scripts.search = 'chemx search';
-      pkg.scripts.verify = 'chemx verify';
-      pkg.scripts.check = 'chemx verify';
-      fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n', 'utf-8');
-      process.stdout.write('  \x1b[32m✔\x1b[0m Configured "q", "search", and "verify" scripts in package.json\n');
-    } catch {
-      process.stdout.write('  \x1b[33m⚠\x1b[0m Could not update package.json scripts\n');
-    }
-  }
+  // 1. Update package.json with minimal single entry
+  ensurePackageScripts(resolvedTarget);
 
   // 2. Inject rule into AGENTS.md
   const agentsPath = path.join(resolvedTarget, 'AGENTS.md');
   const agentDirectives = `
-## Chemical X Codebase Query Machine Protocol
-- Search First Rule: AI agents MUST invoke 'pnpm q "<query>"' (or 'npx chemx search "<query>"') before running broad ripgrep, find, or file dumping.
-- AST Architecture Intelligence: Always leverage 'pnpm q' to inspect component tiers, exported symbols, props, and hooks with minimal token burn.
-- Inspect Mode: Use 'pnpm q "<capsule-name>" --inspect' to examine props and hooks without reading entire source files.
-- JSON Mode: Use 'pnpm q "<query>" --json' for zero-overhead, machine-readable agent lookups.
+## Chemical X Database-First Navigation & Targeted Symbol Extraction Protocol
+- Database Master Index First: Before inspecting or modifying files, AI agents MUST query the SQLite database ('.chemx/index.db') or the AST Query Machine ('chemx({ action: "team", params: { action: "list" } })', 'chemx({ action: "q", params: { query } })') before broad ripgrep or file scans.
+- Targeted Symbol Reading Only: AI agents MUST NEVER dump entire source files into context. Extract only specific symbols: 'chemx({ action: "read", params: { path, symbol: "<name>" } })'.
+- Symbol Connections: Inspect callers and dependencies via 'connections: true' ('chemx({ action: "read", params: { path, symbol: "<name>", connections: true } })') to understand integration without loading multiple files.
+- Prohibition on Native File Analyzers: NEVER invoke native IDE file-viewing tools ('view_file', 'read_file', 'cat', 'head') or full-file context dumps on Chemical X projects. All inspection must flow through Chemical X AST readers.
 
-## Chemical X Verification-First Protocol & Zero-Token-Burn Pipeline
+## Chemical X Master MCP Gateway & Verification-First Protocol
+- Master MCP Gateway Rule: In AI IDE environments (Antigravity, Cursor, Claude Desktop), invoke the unified master "chemx" MCP tool (e.g. chemx({ action: 'verify' })) to avoid per-tool permission prompts and eliminate bash subshell overhead.
 - Verification First Rule: AI agents MUST NEVER run raw, unthrottled "npm test", "pnpm test", "vitest", "tsc --noEmit", or "npm run build" directly in a bash subshell.
-- MCP Verification Tools First: AI agents MUST invoke dedicated Chemical X MCP tools or CLI wrappers ('npx chemx verify', 'npx chemx test', 'npx chemx typecheck', 'npx chemx build') before running terminal commands.
+- MCP Verification Tools First: AI agents MUST invoke dedicated Chemical X MCP tools or CLI wrappers ('chemx verify', 'npx chemx verify', 'pnpm chemx build', 'npx chemx build') before running terminal commands.
 `;
 
   if (fs.existsSync(agentsPath)) {
@@ -134,14 +142,15 @@ export const installAgentSearchConfig = async (targetDir = '.') => {
       const hasQueryProtocol = content.includes('Chemical X Codebase Query Machine Protocol');
       const hasVerifyProtocol = content.includes('Chemical X Verification-First Protocol');
 
-      if (!hasQueryProtocol && !hasVerifyProtocol) {
+      const isMissingBoth = !hasQueryProtocol && !hasVerifyProtocol;
+      if (isMissingBoth) {
         fs.appendFileSync(agentsPath, `\n${agentDirectives}\n`, 'utf-8');
         process.stdout.write('  \x1b[32m✔\x1b[0m Injected query and verification directives into AGENTS.md\n');
       } else if (!hasVerifyProtocol) {
         const verifyOnly = `
 ## Chemical X Verification-First Protocol & Zero-Token-Burn Pipeline
 - Verification First Rule: AI agents MUST NEVER run raw, unthrottled "npm test", "pnpm test", "vitest", "tsc --noEmit", or "npm run build" directly in a bash subshell.
-- MCP Verification Tools First: AI agents MUST invoke dedicated Chemical X MCP tools or CLI wrappers ('npx chemx verify', 'npx chemx test', 'npx chemx typecheck', 'npx chemx build') before running terminal commands.
+- MCP Verification Tools First: AI agents MUST invoke dedicated Chemical X MCP tools or CLI wrappers ('pnpm chemx verify', 'npx chemx verify', 'pnpm chemx build', 'npx chemx build') before running terminal commands.
 `;
         fs.appendFileSync(agentsPath, `\n${verifyOnly}\n`, 'utf-8');
         process.stdout.write('  \x1b[32m✔\x1b[0m Injected verification-first directive into AGENTS.md\n');
@@ -210,7 +219,10 @@ export const runInstallWizard = async (targetDir = '.') => {
 
   if (shouldHook) {
     if (isGit) installPreCommitHook(targetDir, opts);
-    else process.stdout.write('  \x1b[33m⚠\x1b[0m Skipped .git/hooks (current directory is not a git repository root or submodule).\n');
+    else {
+      process.stdout.write('  \x1b[33m⚠\x1b[0m Skipped .git/hooks (current directory is not a git repository root or submodule).\n');
+      ensurePackageScripts(targetDir);
+    }
   }
   if (shouldWf) installGitHubWorkflow(targetDir, opts);
   if (shouldMcp) installAllMcpConfigs(targetDir, { silent: false });

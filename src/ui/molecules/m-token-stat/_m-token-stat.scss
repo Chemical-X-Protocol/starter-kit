@@ -1,0 +1,28 @@
+.m-token-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  transition: all 0.2s ease-in-out;
+
+  &__top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  &__center {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin: 4px 0;
+  }
+
+  &__bottom {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+}

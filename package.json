@@ -36,25 +36,19 @@
     "./search": "./cli/search.js",
     "./mcp": "./cli/mcp/index.js",
     "./reader": "./cli/reader.js",
-    "./patcher": "./cli/patcher.js"
+    "./patcher": "./cli/patcher.js",
+    "./errors": "./cli/errors/index.js"
   },
   "scripts": {
-    "publish:both": "node scripts/publish-both.mjs",
-    "verify": "node cli/index.js verify",
-    "check": "node cli/index.js verify",
-    "test": "node --test cli/audit/*.spec.js cli/mcp/*.spec.js cli/*.spec.js",
-    "typecheck": "tsc --noEmit",
-    "create-capsule": "node cli/index.js",
-    "audit": "node cli/index.js audit",
-    "ci:audit": "node cli/index.js audit --ci --dir=cli",
     "chemx": "node cli/index.js",
-    "q": "chemx search",
-    "search": "chemx search",
-    "mcp": "node cli/index.js mcp",
-    "install-mcp": "node cli/index.js install-mcp",
+    "test": "node --test cli/audit/*.spec.js cli/mcp/*.spec.js cli/build/*.spec.js cli/team/*.spec.js cli/errors/*.spec.js cli/*.spec.js",
+    "typecheck": "tsc --noEmit",
+    "publish:both": "node scripts/publish-both.mjs",
     "postinstall": "node cli/postinstall.js",
-    "read": "node cli/index.js read",
-    "patch": "node cli/index.js patch"
+    "chemx:mcp": "chemx mcp",
+    "chemx:verify": "chemx verify",
+    "chemx:test": "chemx test",
+    "chemx:typecheck": "chemx typecheck"
   },
   "dependencies": {
     "@babel/parser": "^7.29.8",
@@ -68,6 +62,7 @@
     "@types/node": "^22.20.2",
     "@types/react": "^18.3.31",
     "@types/react-dom": "^18.3.7",
+    "chemx": "26.9.17-1100",
     "typescript": "^5.9.3"
   }
 }

@@ -1,0 +1,22 @@
+.m-file-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: rgba(15, 23, 42, 0.75);
+  border: 1px solid rgba(98, 201, 255, 0.2);
+  border-radius: 8px;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+
+  &:hover {
+    border-color: rgba(98, 201, 255, 0.5);
+    background: rgba(15, 23, 42, 0.9);
+  }
+
+  &__header, &__meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+}

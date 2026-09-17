@@ -1,0 +1,27 @@
+.m-task-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: rgba(15, 23, 42, 0.75);
+  border: 1px solid rgba(98, 201, 255, 0.2);
+  border-radius: 10px;
+  padding: 12px;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+
+  &:hover {
+    border-color: rgba(98, 201, 255, 0.45);
+    transform: translateY(-2px);
+  }
+
+  &__header, &__footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  &__meta {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+}

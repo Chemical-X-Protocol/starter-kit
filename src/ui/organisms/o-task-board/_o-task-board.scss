@@ -1,0 +1,40 @@
+.o-task-board {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  height: 100%;
+  overflow: hidden;
+
+  &__controls {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+
+  &__columns {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  &__column {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    background: rgba(11, 19, 41, 0.6);
+    border: 1px solid rgba(98, 201, 255, 0.15);
+    border-radius: 12px;
+    padding: 14px;
+    overflow-y: auto;
+  }
+
+  &__col-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  }
+}

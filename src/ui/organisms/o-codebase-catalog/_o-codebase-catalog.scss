@@ -1,0 +1,35 @@
+.o-codebase-catalog {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  height: 100%;
+  overflow-y: auto;
+
+  &__stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+
+  &__stat-box {
+    background: rgba(15, 23, 42, 0.7);
+    border: 1px solid rgba(98, 201, 255, 0.2);
+    border-radius: 8px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  &__filters {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  &__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 12px;
+  }
+}

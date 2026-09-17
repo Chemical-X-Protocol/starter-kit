@@ -1,0 +1,54 @@
+.m-agent-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  transition: all 0.15s ease-in-out;
+
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  &__identity {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  &__meta {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  &__handle {
+    font-size: 13px;
+    font-weight: 600;
+    color: #f8fafc;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__role {
+    font-size: 11px;
+    color: #94a3b8;
+  }
+
+  &__footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 4px;
+  }
+
+  &--selected {
+    border-color: rgba(98, 201, 255, 0.6);
+    background: rgba(15, 23, 42, 0.95);
+  }
+}

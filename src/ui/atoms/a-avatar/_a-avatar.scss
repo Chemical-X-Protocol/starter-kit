@@ -1,0 +1,46 @@
+.a-avatar {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(98, 201, 255, 0.25);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  font-weight: 600;
+  color: #f8fafc;
+  user-select: none;
+  overflow: visible;
+
+  &--xs { width: 24px; height: 24px; font-size: 10px; }
+  &--sm { width: 32px; height: 32px; font-size: 12px; }
+  &--md { width: 40px; height: 40px; font-size: 14px; }
+  &--lg { width: 48px; height: 48px; font-size: 16px; }
+  &--xl { width: 64px; height: 64px; font-size: 20px; }
+
+  &__img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 9999px;
+  }
+
+  &__initials {
+    letter-spacing: 0.05em;
+  }
+
+  &__status {
+    position: absolute;
+    bottom: -1px;
+    right: -1px;
+    width: 10px;
+    height: 10px;
+    border-radius: 9999px;
+    border: 2px solid #050811;
+
+    &--active { background-color: #10b981; }
+    &--busy { background-color: #f59e0b; }
+    &--idle { background-color: #62c9ff; }
+    &--offline { background-color: #64748b; }
+  }
+}

@@ -3,11 +3,15 @@
 Strictly adhere to the directives codified in AGENTS.md:
 
 1. ZERO-TOKEN-BURN VERIFICATION FIRST:
+- In MCP mode, invoke the unified master `chemx` tool (e.g. `chemx({ action: 'verify' })`) to bypass terminal approval modals.
 - NEVER run raw unthrottled `npm test`, `pnpm test`, `vitest`, `tsc --noEmit`, or `npm run build` in terminal shells.
 - ALWAYS run `npx chemx verify` (or `npx chemx test`, `npx chemx typecheck`, `npx chemx build`) to consume pinpoint failure diffs while suppressing passing noise.
 
-2. SEARCH-FIRST PROTOCOL:
-- ALWAYS invoke `pnpm q "<query>"` (or `npx chemx search "<query>"`) before broad ripgrep or file dumping.
+2. SEARCH-FIRST & DATABASE-FIRST PROTOCOL:
+- Query database tasks and symbols via `chemx({ action: 'team', params: { action: 'list' } })` or `pnpm q "<query>"` before touching files.
+- ALWAYS extract specific symbols: `chemx({ action: 'read', params: { path, symbol: '<name>' } })` instead of dumping files.
+- Inspect callers and connections via `connections: true` without reading other files.
+- STRICT BAN ON NATIVE FILE ANALYZERS: NEVER use `view_file` or raw file dumping tools. Use Chemical X AST tools exclusively.
 - Use `pnpm q "<capsule>" --inspect` to examine props and hooks without reading entire files.
 
 3. MOLECULAR ARCHITECTURE GUARDRAILS:

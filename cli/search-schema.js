@@ -1,6 +1,7 @@
 import './silence-warnings.js';
 import path from 'node:path';
 import { ensureChemxDir } from './audit/history.js';
+import { initTeamSchema } from './team/team-schema.js';
 
 let DatabaseSync = null;
 try {
@@ -23,6 +24,7 @@ export const openIndexDb = (cwd = process.cwd()) => {
   const db = new DatabaseSync(dbPath);
 
   db.exec('PRAGMA journal_mode = WAL;');
+  db.exec('PRAGMA busy_timeout = 5000;');
   db.exec('PRAGMA foreign_keys = ON;');
 
   db.exec(`
@@ -143,6 +145,8 @@ export const openIndexDb = (cwd = process.cwd()) => {
     CREATE INDEX IF NOT EXISTS idx_violations_severity ON violations(severity);
     CREATE INDEX IF NOT EXISTS idx_snapshots_time ON audit_snapshots(timestamp);
   `);
+
+  initTeamSchema(db);
 
   return db;
 };
