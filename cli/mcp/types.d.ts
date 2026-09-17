@@ -115,3 +115,11 @@ export interface ChemxCheckArgs {
   readonly path: string;
 }
 
+export type McpToolHandler = (args?: any, cwd?: string) => Promise<any> | any;
+
+export type McpToolMap = Record<string, McpToolHandler>;
+
+export declare const Tools: McpToolMap;
+
+export declare function executeMcpTool(name: string, args?: Record<string, any>, cwd?: string): Promise<any>;
+

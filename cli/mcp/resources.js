@@ -138,85 +138,88 @@ export const MSampleCard: React.FC<MSampleCardProps> = ({
 export default MSampleCard;
 `;
 
-export const readMcpResource = async (uri, cwd = process.cwd()) => {
-  switch (uri) {
-    case 'chemx://directives': {
-      const projectAgents = path.resolve(cwd, 'AGENTS.md');
-      const rootAgents = path.resolve(starterKitRoot, 'AGENTS.md');
-      const content = readLocalFileSafely(projectAgents) || readLocalFileSafely(rootAgents);
-      return {
-        uri,
-        mimeType: 'text/markdown',
-        text: content || '# Chemical X Molecular Architecture Directives\nNo AGENTS.md found.'
-      };
-    }
+export const Resources = {
+  'chemx://directives': (uri, cwd) => {
+    const projectAgents = path.resolve(cwd, 'AGENTS.md');
+    const rootAgents = path.resolve(starterKitRoot, 'AGENTS.md');
+    const content = readLocalFileSafely(projectAgents) || readLocalFileSafely(rootAgents);
+    return {
+      uri,
+      mimeType: 'text/markdown',
+      text: content || '# Chemical X Molecular Architecture Directives\nNo AGENTS.md found.'
+    };
+  },
 
-    case 'chemx://blueprints/view-template': {
-      const candidatePaths = [
-        path.resolve(cwd, '.chemx', 'blueprints', 'view-template.tsx'),
-        path.resolve(cwd, 'blueprints', 'view-template.tsx'),
-        path.resolve(starterKitRoot, 'blueprints', 'view-template.tsx')
-      ];
-      const foundPath = candidatePaths.find((p) => fs.existsSync(p));
-      const content = foundPath ? fs.readFileSync(foundPath, 'utf-8') : FALLBACK_VIEW_TEMPLATE;
-      return {
-        uri,
-        mimeType: 'text/plain',
-        text: content
-      };
-    }
+  'chemx://blueprints/view-template': (uri, cwd) => {
+    const candidatePaths = [
+      path.resolve(cwd, '.chemx', 'blueprints', 'view-template.tsx'),
+      path.resolve(cwd, 'blueprints', 'view-template.tsx'),
+      path.resolve(starterKitRoot, 'blueprints', 'view-template.tsx')
+    ];
+    const foundPath = candidatePaths.find((p) => fs.existsSync(p));
+    const content = foundPath ? fs.readFileSync(foundPath, 'utf-8') : FALLBACK_VIEW_TEMPLATE;
+    return {
+      uri,
+      mimeType: 'text/plain',
+      text: content
+    };
+  },
 
-    case 'chemx://blueprints/molecule': {
-      const candidatePaths = [
-        path.resolve(cwd, '.chemx', 'blueprints', 'molecule-capsule', 'm-tab-button', 'm-tab-button.vue'),
-        path.resolve(cwd, '.chemx', 'blueprints', 'molecule-capsule', 'm-sample-card.tsx'),
-        path.resolve(cwd, 'blueprints', 'molecule-capsule', 'm-tab-button', 'm-tab-button.vue'),
-        path.resolve(cwd, 'blueprints', 'molecule-capsule', 'm-sample-card.tsx')
-      ];
-      const foundPath = candidatePaths.find((p) => fs.existsSync(p));
-      const content = foundPath ? fs.readFileSync(foundPath, 'utf-8') : FALLBACK_MOLECULE_TEMPLATE;
-      return {
-        uri,
-        mimeType: 'text/plain',
-        text: content
-      };
-    }
+  'chemx://blueprints/molecule': (uri, cwd) => {
+    const candidatePaths = [
+      path.resolve(cwd, '.chemx', 'blueprints', 'molecule-capsule', 'm-tab-button', 'm-tab-button.vue'),
+      path.resolve(cwd, '.chemx', 'blueprints', 'molecule-capsule', 'm-sample-card.tsx'),
+      path.resolve(cwd, 'blueprints', 'molecule-capsule', 'm-tab-button', 'm-tab-button.vue'),
+      path.resolve(cwd, 'blueprints', 'molecule-capsule', 'm-sample-card.tsx')
+    ];
+    const foundPath = candidatePaths.find((p) => fs.existsSync(p));
+    const content = foundPath ? fs.readFileSync(foundPath, 'utf-8') : FALLBACK_MOLECULE_TEMPLATE;
+    return {
+      uri,
+      mimeType: 'text/plain',
+      text: content
+    };
+  },
 
-    case 'chemx://scorecard': {
-      const targetDir = fs.existsSync(path.resolve(cwd, 'src')) ? 'src' : '.';
-      const report = executeAstAudit(targetDir, {});
-      const severityRollup = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 };
-      for (const v of report.violations || []) {
-        if (severityRollup[v.severity] !== undefined) {
-          severityRollup[v.severity]++;
-        }
+  'chemx://scorecard': (uri, cwd) => {
+    const targetDir = fs.existsSync(path.resolve(cwd, 'src')) ? 'src' : '.';
+    const report = executeAstAudit(targetDir, {});
+    const severityRollup = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 };
+    for (const v of report.violations || []) {
+      if (severityRollup[v.severity] !== undefined) {
+        severityRollup[v.severity]++;
       }
-      const topHotspots = (report.hotspots || []).slice(0, 3).map((h) => ({
-        file: h.filePath,
-        lines: h.lineCount,
-        violations: h.violationsCount
-      }));
-
-      const scorecard = {
-        grade: report.health?.grade || 'N/A',
-        score: report.health?.score ?? 100,
-        status: report.health?.isPassing ? 'PASS' : 'FAIL',
-        scannedFiles: report.metrics?.scannedFiles || 0,
-        totalLoc: report.metrics?.totalLoc || 0,
-        moleculeCompliantPct: report.metrics?.moleculeCompliantPct ?? 100,
-        severityRollup,
-        totalViolations: report.totalViolations || 0,
-        topHotspots,
-        patternCandidatesCount: (report.patterns || []).length
-      };
-      return {
-        uri,
-        mimeType: 'application/json',
-        text: JSON.stringify(scorecard, null, 2)
-      };
     }
+    const topHotspots = (report.hotspots || []).slice(0, 3).map((h) => ({
+      file: h.filePath,
+      lines: h.lineCount,
+      violations: h.violationsCount
+    }));
 
-    default:
-      throw new Error(`Resource not found: ${uri}`);
+    const scorecard = {
+      grade: report.health?.grade || 'N/A',
+      score: report.health?.score ?? 100,
+      status: report.health?.isPassing ? 'PASS' : 'FAIL',
+      scannedFiles: report.metrics?.scannedFiles || 0,
+      totalLoc: report.metrics?.totalLoc || 0,
+      moleculeCompliantPct: report.metrics?.moleculeCompliantPct ?? 100,
+      severityRollup,
+      totalViolations: report.totalViolations || 0,
+      topHotspots,
+      patternCandidatesCount: (report.patterns || []).length
+    };
+    return {
+      uri,
+      mimeType: 'application/json',
+      text: JSON.stringify(scorecard, null, 2)
+    };
   }
+};
+
+export const readMcpResource = async (uri, cwd = process.cwd()) => {
+  const handler = Object.prototype.hasOwnProperty.call(Resources, uri) ? Resources[uri] : null;
+  if (!handler) {
+    throw new Error(`Resource not found: ${uri}`);
+  }
+  return handler(uri, cwd);
 };

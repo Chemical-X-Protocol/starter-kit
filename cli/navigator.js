@@ -110,6 +110,7 @@ export const runInteractiveAuditNavigator = async (initialReport, onScaffold = n
     })();
 
     const topActions = [];
+    topActions.push(actions.guideAction);
     if (!guardrailsInstalled) {
       topActions.push(actions.installAction);
     }

@@ -16,7 +16,8 @@ import { runAutofix } from '../audit/autofix.js';
 import { syncSearchIndex } from '../search.js';
 import { openIndexDb, queryIndex } from '../search-db.js';
 import { readTokenOptimized } from '../reader.js';
-import { patchFile } from '../patcher.js';
+import { patchFile, writeFile } from '../patcher.js';
+import { toColumnar } from '../columnar.js';
 import { handleCheckCommand } from '../search-commands.js';
 import { MCP_TOOLS } from './manifests.js';
 
@@ -105,9 +106,20 @@ const handleAudit = (args = {}, cwd = process.cwd()) => {
   };
 
   const report = executeAstAudit(rawTarget, options);
-  const hasCriticalOrHigh = report.violations.some((v) => v.severity === 'CRITICAL' || v.severity === 'HIGH');
-  const isStrictFail = Boolean(args.strict) && report.violations.length > 0;
-  const isScoreFail = typeof args.minScore === 'number' && report.health.score < args.minScore;
+  const isSevereViolation = (v) => {
+    const isCritical = v.severity === 'CRITICAL';
+    const isHigh = v.severity === 'HIGH';
+    return isCritical || isHigh;
+  };
+
+  const hasCriticalOrHigh = report.violations.some(isSevereViolation);
+  const hasViolations = report.violations.length > 0;
+  const isStrictFail = Boolean(args.strict) && hasViolations;
+  const hasMinScore = typeof args.minScore === 'number';
+  const isScoreFail = hasMinScore && report.health.score < args.minScore;
+
+  const hasFailingCondition = isStrictFail || isScoreFail || hasCriticalOrHigh;
+  const isPassing = !hasFailingCondition;
 
   return {
     type: 'directory',
@@ -119,7 +131,7 @@ const handleAudit = (args = {}, cwd = process.cwd()) => {
     totalViolations: report.totalViolations,
     violations: report.violations,
     contextAnalysis: report.contextAnalysis,
-    isPassing: !isStrictFail && !isScoreFail && !hasCriticalOrHigh
+    isPassing
   };
 };
 
@@ -127,9 +139,10 @@ const handleGenerateCapsule = (args = {}, cwd = process.cwd()) => {
   const { name, framework, tier = 'm', targetDir = null, lean = false } = args;
 
   const hasName = Boolean(name && name.trim());
-  const hasFramework = Boolean(framework && ['react', 'vue', 'svelte'].includes(framework.toLowerCase()));
+  const hasValidFramework = Boolean(framework && ['react', 'vue', 'svelte'].includes(framework.toLowerCase()));
+  const canGenerate = hasName && hasValidFramework;
 
-  if (!hasName || !hasFramework) {
+  if (!canGenerate) {
     throw new Error('chemx_generate_capsule requires "name" and "framework" (react, vue, svelte).');
   }
 
@@ -159,31 +172,20 @@ const handleGetRefactorPrompt = (args = {}, cwd = process.cwd()) => {
   const scope = args.scope || 'master';
   const report = executeAstAudit(targetDir, {});
 
-  let prompt = '';
-  switch (scope) {
-    case 'grade-f':
-      prompt = buildGradeFPrompt(report);
-      break;
-    case 'grade-d':
-      prompt = buildGradeDPrompt(report);
-      break;
-    case 'grade-c':
-      prompt = buildGradeCPrompt(report);
-      break;
-    case 'grade-b':
-      prompt = buildGradeBPrompt(report);
-      break;
-    case 'ai-slop':
-      prompt = buildAiSlopPrompt(report);
-      break;
-    case 'hotspots':
-      prompt = buildHotspotsPrompt(report);
-      break;
-    case 'master':
-    default:
-      prompt = buildMasterPrompt(report);
-      break;
-  }
+  const PROMPT_BUILDERS = {
+    'grade-f': buildGradeFPrompt,
+    'grade-d': buildGradeDPrompt,
+    'grade-c': buildGradeCPrompt,
+    'grade-b': buildGradeBPrompt,
+    'ai-slop': buildAiSlopPrompt,
+    'hotspots': buildHotspotsPrompt,
+    'master': buildMasterPrompt
+  };
+
+  const builder = Object.prototype.hasOwnProperty.call(PROMPT_BUILDERS, scope)
+    ? PROMPT_BUILDERS[scope]
+    : buildMasterPrompt;
+  const prompt = builder(report);
 
   return {
     targetDir,
@@ -229,6 +231,14 @@ const handleChemxQ = (args = {}, cwd = process.cwd()) => {
     limit
   });
 
+  if (args.columnar) {
+    return toColumnar(results, ['path', 'tier', 'lines', 'symbols', 'props', 'hooks'], {
+      symbols: (r) => (r.symbols || []).map((s) => s.name),
+      props: (r) => (r.props || []).map((p) => p.name),
+      hooks: (r) => r.hooks || []
+    });
+  }
+
   if (args.inspect) {
     return results.map((r) => ({
       path: r.path,
@@ -268,16 +278,62 @@ const handleChemxRead = (args = {}, cwd = process.cwd()) => {
   return header + res.content;
 };
 
+const isSevereViolation = (v) => {
+  const isCritical = v.severity === 'CRITICAL';
+  const isHigh = v.severity === 'HIGH';
+  return isCritical || isHigh;
+};
+
+const formatPatchWarnings = (result) => {
+  const warnings = [];
+
+  // Stage 1: Atomic Concept Declarations
+  const hasLineBudget = Boolean(result.lineBudget);
+  const isBudgetExceeded = hasLineBudget && !result.lineBudget.passed;
+
+  // Stage 2: Clean Conditionals
+  if (isBudgetExceeded) {
+    warnings.push(`[Directive 1.A] ${result.lineBudget.warning}`);
+  }
+
+  const violations = result.violations || [];
+  for (const v of violations) {
+    const isSevere = isSevereViolation(v);
+    if (isSevere) {
+      warnings.push(`[${v.severity} - ${v.rule}] Line ${v.line}: ${v.hazard} -> ${v.directive || ''}`);
+    }
+  }
+
+  const hasWarnings = warnings.length > 0;
+  return hasWarnings ? warnings : undefined;
+};
+
 const handleChemxPatch = (args = {}, cwd = process.cwd()) => {
-  if (!args.path || args.targetContent === undefined || args.replacementContent === undefined) {
+  // Stage 1: Atomic Concept Declarations
+  const hasPath = Boolean(args.path);
+  const hasTargetContent = args.targetContent !== undefined;
+  const hasReplacementContent = args.replacementContent !== undefined;
+
+  // Stage 2: Unified Decision Variable
+  const hasRequiredArgs = hasPath && hasTargetContent && hasReplacementContent;
+
+  // Stage 3: Early-Return Guard Clause
+  if (!hasRequiredArgs) {
     throw new Error('chemx_patch requires "path", "targetContent", and "replacementContent" arguments.');
   }
+
   const targetPath = path.isAbsolute(args.path) ? args.path : path.resolve(cwd, args.path);
-  return patchFile(targetPath, {
+  const result = patchFile(targetPath, {
     targetContent: args.targetContent,
     replacementContent: args.replacementContent,
-    allowMultiple: Boolean(args.allowMultiple)
+    allowMultiple: Boolean(args.allowMultiple),
+    cwd
   });
+
+  return {
+    ...result,
+    warnings: formatPatchWarnings(result)
+  };
 };
 
 const handleChemxCheck = (args = {}, cwd = process.cwd()) => {
@@ -288,29 +344,50 @@ const handleChemxCheck = (args = {}, cwd = process.cwd()) => {
   return handleCheckCommand(targetPath, { isJson: true, isCli: false });
 };
 
-export const executeMcpTool = async (name, args = {}, cwd = process.cwd()) => {
-  switch (name) {
-    case 'chemx_query_patterns':
-      return handleQueryPatterns(args, cwd);
-    case 'chemx_audit':
-      return handleAudit(args, cwd);
-    case 'chemx_generate_capsule':
-      return handleGenerateCapsule(args, cwd);
-    case 'chemx_get_refactor_prompt':
-      return handleGetRefactorPrompt(args, cwd);
-    case 'chemx_audit_build':
-      return handleAuditBuild(args);
-    case 'chemx_autofix':
-      return handleAutofix(args, cwd);
-    case 'chemx_q':
-      return handleChemxQ(args, cwd);
-    case 'chemx_read':
-      return handleChemxRead(args, cwd);
-    case 'chemx_patch':
-      return handleChemxPatch(args, cwd);
-    case 'chemx_check':
-      return handleChemxCheck(args, cwd);
-    default:
-      throw new Error(`Unknown tool: ${name}`);
+const handleChemxWrite = (args = {}, cwd = process.cwd()) => {
+  // Stage 1: Atomic Concept Declarations
+  const hasPath = Boolean(args.path);
+  const hasContent = args.content !== undefined;
+
+  // Stage 2: Unified Decision Variable
+  const hasRequiredArgs = hasPath && hasContent;
+
+  // Stage 3: Early-Return Guard Clause
+  if (!hasRequiredArgs) {
+    throw new Error('chemx_write requires "path" and "content" arguments.');
   }
+
+  const targetPath = path.isAbsolute(args.path) ? args.path : path.resolve(cwd, args.path);
+  const result = writeFile(targetPath, {
+    content: args.content,
+    cwd
+  });
+
+  return {
+    ...result,
+    warnings: formatPatchWarnings(result)
+  };
 };
+
+export const Tools = {
+  chemx_query_patterns: handleQueryPatterns,
+  chemx_audit: handleAudit,
+  chemx_generate_capsule: handleGenerateCapsule,
+  chemx_get_refactor_prompt: handleGetRefactorPrompt,
+  chemx_audit_build: handleAuditBuild,
+  chemx_autofix: handleAutofix,
+  chemx_q: handleChemxQ,
+  chemx_read: handleChemxRead,
+  chemx_patch: handleChemxPatch,
+  chemx_write: handleChemxWrite,
+  chemx_check: handleChemxCheck
+};
+
+export const executeMcpTool = async (name, args = {}, cwd = process.cwd()) => {
+  const handle = Object.prototype.hasOwnProperty.call(Tools, name) ? Tools[name] : null;
+  if (!handle) {
+    throw new Error(`Unknown tool: ${name}`);
+  }
+  return handle(args, cwd);
+};
+

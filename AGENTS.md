@@ -191,6 +191,16 @@
 - Never use nested ternaries in templates (`a ? (b ? 'x' : 'y') : 'z'`).
 - Extract complex UI display states into dedicated computed descriptor objects returning `{ text: string, color: string }`.
 
+### E. Keyed Map Dispatch Over Monolithic Switch Statements
+- Prohibit monolithic `switch` statements used as procedural dispatch tables or value lookups.
+- When branching performs uniform operations (e.g. mapping string keys to action handlers, CSS classes, prompt builders, or payload converters), extract into an O(1) keyed dictionary or method map (`const Registry = { ... }; Registry[key](...)`).
+- **Prototype Pollution Guardrail**: Always guard dynamic object key access using `Object.hasOwn(Registry, key)` or `Object.prototype.hasOwnProperty.call(Registry, key)` before invoking mapped methods.
+- **Architectural Benefits**:
+  - O(1) constant time lookup instead of O(N) linear string comparison branching.
+  - Eliminates boilerplate syntax duplication, drastically slashing token burn and AI context footprint.
+  - Complies with the Open-Closed Principle (OCP): new handlers can be registered dynamically without modifying the dispatcher AST.
+  - Enables granular unit testing and mocking of individual handlers in isolation.
+
 ---
 
 ## 4. Reactivity, Composables & Hooks

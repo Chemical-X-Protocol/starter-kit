@@ -5,7 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { PassThrough } from 'node:stream';
 import { createMcpHandler, startStdioServer } from './server.js';
-import { MCP_TOOLS } from './tools.js';
+import { MCP_TOOLS, Tools, executeMcpTool } from './tools.js';
 
 test('MCP Server: initialize handshake', async () => {
   const handler = createMcpHandler();
@@ -53,7 +53,7 @@ test('MCP Server: tools/list enumerates all Chemical X tools', async () => {
 
   assert.strictEqual(res.jsonrpc, '2.0');
   const toolNames = res.result.tools.map((t) => t.name);
-  assert.strictEqual(toolNames.length, 10);
+  assert.strictEqual(toolNames.length, 11);
   assert.ok(toolNames.includes('chemx_query_patterns'));
   assert.ok(toolNames.includes('chemx_audit'));
   assert.ok(toolNames.includes('chemx_generate_capsule'));
@@ -63,6 +63,7 @@ test('MCP Server: tools/list enumerates all Chemical X tools', async () => {
   assert.ok(toolNames.includes('chemx_q'));
   assert.ok(toolNames.includes('chemx_read'));
   assert.ok(toolNames.includes('chemx_patch'));
+  assert.ok(toolNames.includes('chemx_write'));
   assert.ok(toolNames.includes('chemx_check'));
 });
 
@@ -480,6 +481,55 @@ test('MCP Server: tools/call chemx_patch surgically modifies target content', as
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
+test('MCP Server: tools/call chemx_write creates and indexes file', async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-mcp-write-'));
+  const testFile = path.join(tmpDir, 'sample-written.ts');
+  const handler = createMcpHandler();
+
+  const res = await handler.handleRequest({
+    jsonrpc: '2.0',
+    id: 1031,
+    method: 'tools/call',
+    params: {
+      name: 'chemx_write',
+      arguments: {
+        path: testFile,
+        content: 'export const writtenConstant = 123;\n'
+      }
+    }
+  });
+
+  assert.strictEqual(res.jsonrpc, '2.0');
+  assert.strictEqual(res.result.isError, false);
+  const written = fs.readFileSync(testFile, 'utf-8');
+  assert.ok(written.includes('export const writtenConstant = 123;'));
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+});
+
+test('MCP Server: tools/call chemx_q supports columnar format', async () => {
+  const handler = createMcpHandler();
+  const res = await handler.handleRequest({
+    jsonrpc: '2.0',
+    id: 1032,
+    method: 'tools/call',
+    params: {
+      name: 'chemx_q',
+      arguments: {
+        query: 'tab',
+        columnar: true
+      }
+    }
+  });
+
+  assert.strictEqual(res.jsonrpc, '2.0');
+  assert.strictEqual(res.result.isError, false);
+  const payload = JSON.parse(res.result.content[0].text);
+  assert.ok(Array.isArray(payload.cols));
+  assert.ok(Array.isArray(payload.rows));
+  assert.ok(payload.cols.includes('path'));
+  assert.ok(payload.cols.includes('tier'));
+});
+
 test('MCP Server: tools/call chemx_check verifies single file boundary rules', async () => {
   const handler = createMcpHandler();
   const res = await handler.handleRequest({
@@ -537,4 +587,28 @@ test('MCP Server: prompts/get chemx_remediate_hotspot dynamically hydrates diagn
   assert.ok(userText.includes('LIVE AST DIAGNOSTICS'));
   assert.ok(userText.includes('Total Lines:'));
 });
+
+test('MCP Tools: keyed Tools map contains all handlers and executes mapped methods', async () => {
+  assert.strictEqual(typeof Tools, 'object');
+  const toolKeys = Object.keys(Tools);
+  assert.strictEqual(toolKeys.length, 11);
+
+  for (const tool of MCP_TOOLS) {
+    assert.strictEqual(typeof Tools[tool.name], 'function', `Tools.${tool.name} must be a function`);
+  }
+
+  // Direct keyed execution: const handle = Tools[n]; handle(args, cwd)
+  const handle = Tools['chemx_q'];
+  const res = handle({ query: 'badge', columnar: true });
+  assert.ok(res);
+  assert.ok(Array.isArray(res.cols));
+  assert.ok(Array.isArray(res.rows));
+
+  // executeMcpTool throws for unmapped tool names
+  await assert.rejects(
+    async () => executeMcpTool('unknown_nonexistent_tool'),
+    /Unknown tool: unknown_nonexistent_tool/
+  );
+});
+
 

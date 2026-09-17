@@ -169,3 +169,19 @@ export declare function queryFilesByHealth(
   }
 ): readonly any[];
 
+export interface SingleFileIndexResult {
+  readonly db: any;
+  readonly status: 'indexed' | 'deleted';
+  readonly path: string;
+  readonly tier?: string;
+  readonly lines?: number;
+  readonly symbolsCount?: number;
+  readonly propsCount?: number;
+  readonly hooksCount?: number;
+}
+
+export declare function syncSingleFileIndex(
+  targetPath: string,
+  cwd?: string
+): SingleFileIndexResult | null;
+

@@ -36,31 +36,22 @@ export const groupViolationsBySeverity = (violations) => {
 };
 
 export const getSeverityBadge = (severity) => {
-  switch (severity) {
-    case 'CRITICAL':
-      return `${RED}[CRITICAL]${RESET}`;
-    case 'HIGH':
-      return `${ORANGE}[HIGH]${RESET}`;
-    case 'MEDIUM':
-      return `${ORANGE}[MEDIUM]${RESET}`;
-    case 'LOW':
-      return `${YELLOW}[LOW]${RESET}`;
-    default:
-      return `[${severity}]`;
-  }
+  const SEVERITY_BADGES = {
+    CRITICAL: `${RED}[CRITICAL]${RESET}`,
+    HIGH: `${ORANGE}[HIGH]${RESET}`,
+    MEDIUM: `${ORANGE}[MEDIUM]${RESET}`,
+    LOW: `${YELLOW}[LOW]${RESET}`
+  };
+  return SEVERITY_BADGES[severity] || `[${severity}]`;
 };
 
 export const getStatusBadge = (status) => {
-  switch (status) {
-    case 'PASSED':
-      return `${GREEN}✔ PASS${RESET}`;
-    case 'WARN':
-      return `${YELLOW}⚠ WARN${RESET}`;
-    case 'FAILED':
-      return `${RED}✕ FAIL${RESET}`;
-    default:
-      return status;
-  }
+  const STATUS_BADGES = {
+    PASSED: `${GREEN}✔ PASS${RESET}`,
+    WARN: `${YELLOW}⚠ WARN${RESET}`,
+    FAILED: `${RED}✕ FAIL${RESET}`
+  };
+  return STATUS_BADGES[status] || status;
 };
 
 export const resolveIndividualPillarGrade = (pillarData) => {

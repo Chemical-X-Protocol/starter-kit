@@ -157,6 +157,7 @@ export const MCP_TOOLS = [
           description: 'Architectural tier filter'
         },
         inspect: { type: 'boolean', description: 'Include props and hooks breakdown' },
+        columnar: { type: 'boolean', description: 'Return results in compact Columnar JSON format (cols + rows) to eliminate repeated keys and reduce tokens by 60%' },
         limit: { type: 'integer', description: 'Maximum results to return (default: 20)' }
       },
       required: ['query']
@@ -181,7 +182,7 @@ export const MCP_TOOLS = [
   },
   {
     name: 'chemx_patch',
-    description: 'Surgically patch a file using exact search and replace without dumping entire file contents into context.',
+    description: 'Surgically patch a file using exact search and replace without dumping entire file contents into context. Automatically updates SQLite AST index in real-time and evaluates Chemical X architectural guardrails (Directive 1.A line budgets and Directive 1.G Zero-Raw-DOM).',
     inputSchema: {
       type: 'object',
       properties: {
@@ -202,6 +203,18 @@ export const MCP_TOOLS = [
         path: { type: 'string', description: 'File or capsule path to verify' }
       },
       required: ['path']
+    }
+  },
+  {
+    name: 'chemx_write',
+    description: 'Create or overwrite a file with automatic SQLite AST micro-indexing and architectural boundary verification (100-line limit and Zero-Raw-DOM).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Target file path to write' },
+        content: { type: 'string', description: 'Code content to write' }
+      },
+      required: ['path', 'content']
     }
   }
 ];

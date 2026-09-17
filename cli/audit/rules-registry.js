@@ -86,6 +86,11 @@ export const RULE_REGISTRY = {
     severity: 'CRITICAL',
     directive: 'Extract display states into computed descriptor objects or early returns'
   },
+  CONTROL_FLOW_DISPATCH_SWITCH: {
+    pillar: PILLARS.PILLAR_2,
+    severity: 'MEDIUM',
+    directive: 'Replace repetitive dispatch switch with an O(1) keyed dictionary or method map (Directive 3.E)'
+  },
   HOOK_SATURATION: {
     pillar: PILLARS.PILLAR_3,
     severity: 'HIGH',

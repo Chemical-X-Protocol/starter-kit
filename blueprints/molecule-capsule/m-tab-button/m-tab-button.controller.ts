@@ -1,21 +1,18 @@
 import { computed } from 'vue';
 import type { TabButtonProps, TabTone } from './types';
 
+const TONE_CLASSES: Record<TabTone, string> = {
+  lime: 'm-tab-button--lime',
+  pink: 'm-tab-button--pink',
+  slate: 'm-tab-button--slate',
+  sky: 'm-tab-button--sky'
+};
+
 export function useTabButtonController(props: TabButtonProps, emit: (event: 'click' | 'select') => void) {
   const isSelected = computed((): boolean => Boolean(props.isActive));
 
   const resolveToneClass = (tone: TabTone = 'sky'): string => {
-    switch (tone) {
-      case 'lime':
-        return 'm-tab-button--lime';
-      case 'pink':
-        return 'm-tab-button--pink';
-      case 'slate':
-        return 'm-tab-button--slate';
-      case 'sky':
-      default:
-        return 'm-tab-button--sky';
-    }
+    return TONE_CLASSES[tone] || TONE_CLASSES.sky;
   };
 
   const stateClass = computed((): string => {

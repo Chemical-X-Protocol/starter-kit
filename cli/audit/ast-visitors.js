@@ -89,6 +89,29 @@ export const createAstVisitors = ({ relativePath, violations }) => {
       }
     },
 
+    IfStatement(astPath) {
+      const expr = astPath.node.test;
+      if (t.isLogicalExpression(expr)) {
+        const opCount = countLogicalOperators(expr);
+        const hasBinaryClauses = (t.isBinaryExpression(expr.left) || t.isLogicalExpression(expr.left)) &&
+                                 (t.isBinaryExpression(expr.right) || t.isLogicalExpression(expr.right));
+        if (opCount > 2 || (opCount >= 2 && hasBinaryClauses)) {
+          const line = resolveStartLine(expr, astPath.node, 1);
+          const meta = RULE_REGISTRY.CONTROL_FLOW_INLINE_BOOLEAN;
+          violations.push({
+            filePath: relativePath,
+            line,
+            column: expr.loc?.start.column || 1,
+            hazard: `Inline multi-clause boolean comparison in if statement (${opCount} operators). Decompose into 2-stage booleans per Directive 3.A.`,
+            rule: 'CONTROL_FLOW_INLINE_BOOLEAN',
+            severity: meta.severity,
+            pillar: meta.pillar,
+            directive: meta.directive
+          });
+        }
+      }
+    },
+
     ConditionalExpression(astPath) {
       if (t.isConditionalExpression(astPath.node.consequent) || t.isConditionalExpression(astPath.node.alternate)) {
         const line = astPath.node.loc?.start.line || 1;
@@ -99,6 +122,56 @@ export const createAstVisitors = ({ relativePath, violations }) => {
           column: astPath.node.loc?.start.column || 1,
           hazard: 'Nested ternary operator detected',
           rule: 'CONTROL_FLOW_NESTED_TERNARY',
+          severity: meta.severity,
+          pillar: meta.pillar,
+          directive: meta.directive
+        });
+      }
+    },
+
+    SwitchStatement(astPath) {
+      const cases = astPath.node.cases || [];
+      if (cases.length < 3) return;
+
+      const isDispatchConsequent = (statements) => {
+        if (!statements || statements.length === 0) return false;
+        if (statements.length === 1) {
+          const s = statements[0];
+          if (t.isReturnStatement(s)) return true;
+          if (t.isBlockStatement(s)) {
+            return s.body.length === 1 && t.isReturnStatement(s.body[0]);
+          }
+        }
+        if (statements.length === 2) {
+          const [first, second] = statements;
+          if (t.isBreakStatement(second)) {
+            return t.isExpressionStatement(first) || t.isAssignmentExpression(first);
+          }
+        }
+        return false;
+      };
+
+      let dispatchCaseCount = 0;
+      let nonDefaultCount = 0;
+
+      for (const switchCase of cases) {
+        if (!switchCase.test) continue;
+        nonDefaultCount += 1;
+        if (isDispatchConsequent(switchCase.consequent)) {
+          dispatchCaseCount += 1;
+        }
+      }
+
+      const isDispatchSmell = nonDefaultCount >= 3 && (dispatchCaseCount / nonDefaultCount) >= 0.7;
+      if (isDispatchSmell) {
+        const line = astPath.node.loc?.start.line || 1;
+        const meta = RULE_REGISTRY.CONTROL_FLOW_DISPATCH_SWITCH;
+        violations.push({
+          filePath: relativePath,
+          line,
+          column: astPath.node.loc?.start.column || 1,
+          hazard: `Dispatch switch smell detected (${dispatchCaseCount} repetitive case branches)`,
+          rule: 'CONTROL_FLOW_DISPATCH_SWITCH',
           severity: meta.severity,
           pillar: meta.pillar,
           directive: meta.directive

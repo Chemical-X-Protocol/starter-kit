@@ -29,7 +29,10 @@ import {
 } from './search-commands.js';
 import { runGenerateWizard } from './generator.js';
 import { runMutatorCli } from './mutators.js';
+import { toColumnar } from './columnar.js';
 import { ANSI } from './theme.js';
+
+export { toColumnar, fromColumnar } from './columnar.js';
 
 export {
   openIndexDb,
@@ -142,6 +145,54 @@ export const syncSearchIndex = (targetDir = 'src', cwd = process.cwd(), options 
   return { db, updatedCount, totalFiles: scanned.length };
 };
 
+export const syncSingleFileIndex = (targetPath, cwd = process.cwd()) => {
+  const db = openIndexDb(cwd);
+  if (!db) return null;
+
+  const fullPath = path.isAbsolute(targetPath) ? targetPath : path.resolve(cwd, targetPath);
+  const relPath = path.relative(cwd, fullPath);
+
+  if (!fs.existsSync(fullPath)) {
+    db.prepare('DELETE FROM files WHERE path = ?').run(relPath);
+    db.prepare('DELETE FROM fts_index WHERE file_path = ?').run(relPath);
+    db.prepare('DELETE FROM imports WHERE importer_path = ?').run(relPath);
+    return { db, status: 'deleted', path: relPath };
+  }
+
+  const stat = fs.statSync(fullPath);
+  const mtime = Math.floor(stat.mtimeMs);
+  const size = stat.size;
+  const content = fs.readFileSync(fullPath, 'utf-8');
+  const lines = content.split('\n').length;
+  const chars = content.length;
+  const tier = resolveArchitectureTier(relPath);
+  const { symbols, props, hooks, imports } = extractAstMetadata(content, fullPath);
+
+  upsertFileIndex(db, {
+    path: relPath,
+    mtime,
+    size,
+    tier,
+    lines,
+    chars,
+    symbols,
+    props,
+    hooks,
+    imports
+  });
+
+  return {
+    db,
+    status: 'indexed',
+    path: relPath,
+    tier,
+    lines,
+    symbolsCount: symbols.length,
+    propsCount: props.length,
+    hooksCount: hooks.length
+  };
+};
+
 const formatTierBadge = (tier) => {
   const map = {
     atom: `${ANSI.LIME}[atom]${ANSI.RESET}`,
@@ -179,6 +230,7 @@ export const resolveTargetDir = (customOrFlag = null, dirFlag = null) => {
 
 export const runSearch = async (rawArgs = [], isCli = true) => {
   const isJson = rawArgs.includes('--json');
+  const isColumnar = rawArgs.includes('--columnar');
   const isInspect = rawArgs.includes('--inspect') || rawArgs.includes('-i');
   const isReindex = rawArgs.includes('--reindex');
   const tierFlag = rawArgs.find((a) => a.startsWith('--tier='));
@@ -205,31 +257,41 @@ export const runSearch = async (rawArgs = [], isCli = true) => {
   const firstArg = nonFlagArgs[0] || '';
   const secondArg = nonFlagArgs[1] || '';
 
-  if (firstArg === 'check' || firstArg === 'verify') {
+  const isCheckCommand = firstArg === 'check' || firstArg === 'verify';
+  if (isCheckCommand) {
     return handleCheckCommand(secondArg, { isJson, isCli });
   }
 
-  if (firstArg === 'fix' || firstArg.startsWith('add:') || (firstArg === 'add' && ['prop', 'state', 'action'].includes(secondArg))) {
+  const isFixCommand = firstArg === 'fix';
+  const isAddPrefix = firstArg.startsWith('add:');
+  const isAddTarget = firstArg === 'add' && ['prop', 'state', 'action'].includes(secondArg);
+  const isMutatorAction = isFixCommand || isAddPrefix || isAddTarget;
+  if (isMutatorAction) {
     return runMutatorCli(rawArgs, isCli);
   }
 
-  if (firstArg === 'gen' || firstArg === 'g' || firstArg === 'generate') {
+  const isGenerateCommand = ['gen', 'g', 'generate'].includes(firstArg);
+  if (isGenerateCommand) {
     return runGenerateWizard(rawArgs.slice(1));
   }
 
-  if (firstArg === 'def') {
+  const isDefCommand = firstArg === 'def';
+  if (isDefCommand) {
     return handleDefCommand(db, secondArg, { isJson, isCli });
   }
 
-  if (firstArg === 'refs') {
+  const isRefsCommand = firstArg === 'refs';
+  if (isRefsCommand) {
     return handleRefsCommand(db, secondArg, { isJson, isCli });
   }
 
-  if (firstArg === 'deps' || firstArg === 'dependencies') {
+  const isDepsCommand = firstArg === 'deps' || firstArg === 'dependencies';
+  if (isDepsCommand) {
     return handleDepsCommand(db, secondArg, { isJson, isCli });
   }
 
-  if (firstArg === 'hazards') {
+  const isHazardsCommand = firstArg === 'hazards';
+  if (isHazardsCommand) {
     const ruleFlag = rawArgs.find((a) => a.startsWith('--rule='));
     const rule = ruleFlag ? ruleFlag.split('=')[1] : null;
     const isCritical = rawArgs.includes('--critical');
@@ -237,19 +299,29 @@ export const runSearch = async (rawArgs = [], isCli = true) => {
     return handleHazardsCommand(db, { rule, severity, filePath: secondArg || null }, { isJson, isCli });
   }
 
-  if (firstArg === 'pack' || firstArg === 'context') {
+  const isPackCommand = firstArg === 'pack' || firstArg === 'context';
+  if (isPackCommand) {
     return handlePackCommand(db, secondArg, { isJson, isCli });
   }
 
-  if (firstArg === 'progression' || firstArg === 'history' || rawArgs.includes('--progression')) {
+  const hasProgressionFlag = rawArgs.includes('--progression');
+  const isProgressionAlias = firstArg === 'progression' || firstArg === 'history';
+  const isProgressionCommand = isProgressionAlias || hasProgressionFlag;
+  if (isProgressionCommand) {
     return handleProgressionCommand(db, { isJson, isCli });
   }
 
-  if (firstArg === 'failing' || firstArg === 'degraded' || rawArgs.includes('--failing') || rawArgs.includes('--degraded')) {
+  const hasFailingFlag = rawArgs.includes('--failing') || rawArgs.includes('--degraded');
+  const isFailingAlias = firstArg === 'failing' || firstArg === 'degraded';
+  const isFailingCommand = isFailingAlias || hasFailingFlag;
+  if (isFailingCommand) {
     return handleHealthFilterCommand(db, 'failing', { isJson, isCli });
   }
 
-  if (firstArg === 'crystalline' || firstArg === 'clean' || rawArgs.includes('--crystalline') || rawArgs.includes('--clean')) {
+  const hasCleanFlag = rawArgs.includes('--crystalline') || rawArgs.includes('--clean');
+  const isCleanAlias = firstArg === 'crystalline' || firstArg === 'clean';
+  const isCleanCommand = isCleanAlias || hasCleanFlag;
+  if (isCleanCommand) {
     return handleHealthFilterCommand(db, 'crystalline', { isJson, isCli });
   }
 
@@ -258,6 +330,26 @@ export const runSearch = async (rawArgs = [], isCli = true) => {
   const durationMs = Date.now() - startTime;
 
   if (isJson) {
+    if (isColumnar) {
+      const columnarData = toColumnar(results, ['path', 'tier', 'lines', 'symbols', 'props', 'hooks'], {
+        symbols: (r) => (r.symbols || []).map((s) => s.name),
+        props: (r) => (r.props || []).map((p) => p.name),
+        hooks: (r) => r.hooks || []
+      });
+      const payload = {
+        query: cleanQuery,
+        tier,
+        count: results.length,
+        durationMs,
+        format: 'columnar',
+        cols: columnarData.cols,
+        rows: columnarData.rows
+      };
+      process.stdout.write(JSON.stringify(payload) + '\n');
+      if (isCli) process.exit(0);
+      return payload;
+    }
+
     const payload = {
       query: cleanQuery,
       tier,

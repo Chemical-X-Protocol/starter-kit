@@ -48,6 +48,7 @@ import { handleShareToDiscussions } from "./navigator-share.js";
 import { runInstallWizard, installAgentSearchConfig } from "./installer.js";
 import { formatButtonTag } from "./navigator-menu.js";
 import { runBadgeCommand } from "./badge.js";
+import { formatSystemGuide } from "./navigator-guide.js";
 
 const GRADE_RISK_RANKS = {
   F: 5,
@@ -255,7 +256,18 @@ export const buildDashboardActionGroups = ({ report, onScaffold = null, onRerun 
     await showPagedContent(formatHotspotsSection(report), buildHotspotsPrompt(report));
   };
 
+  const handleGuideAction = async () => {
+    await showPagedContent(formatSystemGuide());
+  };
+
   const handleExitAction = async () => {};
+
+  const guideAction = {
+    key: "guide",
+    tag: formatButtonTag("Guide", "\x1b[38;2;98;201;255m"),
+    label: "📖 Why Chemical X? (Architecture, Token Gains & Quickstart)",
+    action: handleGuideAction
+  };
 
   const monolithHotspots = (report?.hotspots || []).filter((h) => h.isMonolith || h.lineCount > 500);
   const monoCount = String(monolithHotspots.length).padStart(2, '0');
@@ -269,29 +281,29 @@ export const buildDashboardActionGroups = ({ report, onScaffold = null, onRerun 
   const installAction = {
     key: "install",
     tag: formatButtonTag("Install", "\x1b[32m"),
-    label: "🪝 Install Pre-Commit Hook & GitHub CI Workflow",
+    label: "🪝 Step 1: Install Pre-Commit Hook & GitHub CI Workflow",
     action: handleInstallAction
   };
 
   const installSearchAction = {
     key: "install_search",
     tag: formatButtonTag("Query Machine", "\x1b[38;2;56;189;248m"),
-    label: "⚡ Install AI Agent Query Tool (\"pnpm q\" script + AGENTS.md rule)",
+    label: "⚡ Step 2: Install AI Agent Query Tool (\"pnpm q\" script + AGENTS.md rule)",
     action: handleInstallSearchAction
-  };
-
-  const upgradeAction = {
-    key: "upgrade",
-    tag: formatButtonTag("Upgrade", "\x1b[33m"),
-    label: "💎 Unlock Full Molecular Rules & Scaffolding (Chemical X: Team Power Puff)",
-    action: handleUpgradeAction
   };
 
   const roadmapAction = {
     key: "roadmap",
     tag: formatButtonTag("Roadmap", "\x1b[38;2;45;212;191m"),
-    label: "🌱 Self-Healing Fix Roadmap (Optimal Remediation Order & Pattern Harvesting)",
+    label: "🌱 Step 3: Self-Healing Fix Roadmap (Remediation Order & AI Prompts)",
     action: handleRoadmapAction
+  };
+
+  const upgradeAction = {
+    key: "upgrade",
+    tag: formatButtonTag("Upgrade", "\x1b[33m"),
+    label: "💎 Step 4: Unlock Full Molecular Blueprints & Generator (Team Power Puff)",
+    action: handleUpgradeAction
   };
 
   const reportAction = {
@@ -357,6 +369,7 @@ export const buildDashboardActionGroups = ({ report, onScaffold = null, onRerun 
   const shouldShowPromptAction = hasPromptToCopy && !isCleanAPlus;
 
   return {
+    guideAction,
     installAction,
     installSearchAction,
     roadmapAction,

@@ -40,6 +40,15 @@ const isChoiceMatchingItem = (cleanChoice) => (item) => {
   const prefix = `${item.index}.`;
   if (cleanChoice.startsWith(prefix) || cleanChoice === String(item.index)) return true;
   if (
+    item.key === "guide" &&
+    (cleanChoice.includes("Why Chemical X") ||
+      cleanChoice.includes("Guide") ||
+      cleanChoice.includes("Quickstart") ||
+      cleanChoice.includes("Token Gains"))
+  ) {
+    return true;
+  }
+  if (
     item.key === "exit" &&
     (cleanChoice.includes("Exit") || cleanChoice.toLowerCase() === "exit")
   ) {
@@ -134,6 +143,17 @@ export const matchGumChoice = (cleanChoice, menuItems) => {
 
 const isEffectiveMatchingItem = (effective, exitIndex) => (item) => {
   if (effective === String(item.index)) return true;
+  if (
+    item.key === "guide" &&
+    (effective === "guide" ||
+      effective === "quickstart" ||
+      effective === "help" ||
+      effective === "g" ||
+      effective === "w" ||
+      effective === "why")
+  ) {
+    return true;
+  }
   if (item.key === "exit" && (effective === "exit" || effective === String(exitIndex))) {
     return true;
   }

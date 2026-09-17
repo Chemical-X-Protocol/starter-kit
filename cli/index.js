@@ -37,7 +37,7 @@ import { runBuildAudit } from './build.js';
 import { runSearch, syncSearchIndex, resolveTargetDir, syncViolationsIndex, recordAuditSnapshot, handleCheckCommand } from './search.js';
 import { runMutatorCli } from './mutators.js';
 import { runReaderCli, readTokenOptimized } from './reader.js';
-import { runPatcherCli, patchFile } from './patcher.js';
+import { runPatcherCli, patchFile, runWriterCli, writeFile } from './patcher.js';
 import { runMcpServer, runMcpInstaller } from './mcp/index.js';
 import { sanitizeOutputStreams } from './terminal.js';
 
@@ -131,11 +131,19 @@ export const runAudit = async (customDir = null, isCli = false) => {
     recordAuditSnapshot(syncRes.db, report);
   }
 
-  const hasCriticalOrHigh = report.violations.some((v) => v.severity === 'CRITICAL' || v.severity === 'HIGH');
-  const isStrictFail = isStrict && report.violations.length > 0;
+  const isSevereViolation = (v) => {
+    const isCritical = v.severity === 'CRITICAL';
+    const isHigh = v.severity === 'HIGH';
+    return isCritical || isHigh;
+  };
+
+  const hasCriticalOrHigh = report.violations.some(isSevereViolation);
+  const hasViolations = report.violations.length > 0;
+  const isStrictFail = isStrict && hasViolations;
   const isGradeFail = isGradeBelowMinimum(report.health.grade, minGrade);
-  const isScoreFail = minScore !== null && !isNaN(minScore) && report.health.score < minScore;
-  const hasThreshold = Boolean(minGrade) || (minScore !== null && !isNaN(minScore));
+  const hasMinScore = minScore !== null && !isNaN(minScore);
+  const isScoreFail = hasMinScore && report.health.score < minScore;
+  const hasThreshold = Boolean(minGrade) || hasMinScore;
   const isDefaultFail = !hasThreshold && !isStrict && hasCriticalOrHigh;
   const hasFailingViolations = evaluateAuditFailure([isStrictFail, isDefaultFail, isGradeFail, isScoreFail]);
 
@@ -239,7 +247,9 @@ export {
   runReaderCli,
   readTokenOptimized,
   runPatcherCli,
-  patchFile
+  patchFile,
+  runWriterCli,
+  writeFile
 };
 
 const main = async () => {
@@ -264,6 +274,9 @@ const main = async () => {
     case 'patch':
     case 'edit':
       runPatcherCli(rawArgs.slice(1), true);
+      break;
+    case 'write':
+      runWriterCli(rawArgs.slice(1), true);
       break;
     case 'search':
     case 'q':

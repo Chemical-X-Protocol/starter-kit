@@ -105,7 +105,6 @@ export const renderDashboardBanner = (
   const topBorder = `${bColor}╭── \x1b[1;37m${projectName}${bColor} ${"─".repeat(Math.max(2, innerWidth - visualWidth(projectName)))}╮\x1b[0m`;
   const displayPwd = truncatePath(process.cwd(), Math.max(10, innerWidth - 4));
   const botBorder = `${bColor}╰── \x1b[36m${displayPwd}${bColor} ${"─".repeat(Math.max(2, innerWidth - visualWidth(displayPwd)))}╯\x1b[0m`;
-  const bodyLines = rows.map((r) => `${bColor}│\x1b[0m  ${r.content}${" ".repeat(innerWidth - r.width)}  ${bColor}│\x1b[0m`);
-
-  process.stdout.write(`\n${[topBorder, ...bodyLines, botBorder].join("\n")}\n\n`);
+  process.stdout.write(`\n${[topBorder, ...bodyLines, botBorder].join("\n")}\n`);
+  process.stdout.write(`  \x1b[2m💡 New to Chemical X? Select \x1b[1m[Guide]\x1b[0m\x1b[2m below to explore architecture, AI token gains & quickstart.\x1b[0m\n\n`);
 };

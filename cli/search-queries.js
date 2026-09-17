@@ -152,9 +152,14 @@ export const recordAuditSnapshot = (db, report) => {
   const totalLoc = Number(report.metrics?.totalLoc || 0);
   const scannedFiles = Number(report.scannedFiles || 0);
 
-  const criticalCount = report.violations?.filter((v) => v.severity === 'CRITICAL').length || 0;
-  const highMedCount = report.violations?.filter((v) => v.severity === 'HIGH' || v.severity === 'MEDIUM').length || 0;
-  const lowCount = report.violations?.filter((v) => v.severity === 'LOW').length || 0;
+  const isCritical = (v) => v.severity === 'CRITICAL';
+  const isHighOrMedium = (v) => v.severity === 'HIGH' || v.severity === 'MEDIUM';
+  const isLow = (v) => v.severity === 'LOW';
+
+  const violations = report.violations || [];
+  const criticalCount = violations.filter(isCritical).length;
+  const highMedCount = violations.filter(isHighOrMedium).length;
+  const lowCount = violations.filter(isLow).length;
 
   const insertStmt = db.prepare(`
     INSERT INTO audit_snapshots (
