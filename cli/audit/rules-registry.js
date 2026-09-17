@@ -36,6 +36,26 @@ export const RULE_REGISTRY = {
     severity: 'CRITICAL',
     directive: 'Extract hardcoded API keys and secrets into environment variables or secrets manager'
   },
+  SECURITY_REVERSE_TABNABBING: {
+    pillar: PILLARS.PILLAR_9,
+    severity: 'MEDIUM',
+    directive: 'Add rel="noopener noreferrer" to external links with target="_blank" to prevent tab hijacking'
+  },
+  SECURITY_JAVASCRIPT_URL: {
+    pillar: PILLARS.PILLAR_9,
+    severity: 'CRITICAL',
+    directive: 'Do not use javascript: pseudo-protocol in links or action attributes; use event handlers'
+  },
+  SECURITY_DYNAMIC_CODE_EXECUTION: {
+    pillar: PILLARS.PILLAR_9,
+    severity: 'CRITICAL',
+    directive: 'Avoid eval(), new Function(), and string-based setTimeout/setInterval code execution'
+  },
+  SECURITY_SENSITIVE_LOGGING: {
+    pillar: PILLARS.PILLAR_9,
+    severity: 'HIGH',
+    directive: 'Never log sensitive credentials, tokens, or passwords to console diagnostics'
+  },
 
   // Pillar 10: Testing Discipline
   TEST_FAKE_GREEN: {

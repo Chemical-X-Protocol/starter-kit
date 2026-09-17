@@ -33,6 +33,55 @@ const FAKE_GREEN_PATTERNS = [
 const IMG_WITHOUT_ALT_PATTERN = new RegExp(['<', 'img\\b', '(?![^>]*\\balt\\s*=)', '[^>]*>'].join(''), 'i');
 const CLICKABLE_CONTAINER_PATTERN = new RegExp(['<', '(div|span)\\b', '(?![^>]*\\brole\\s*=\\s*[\'"](?:button|link|tab)[\'"])', '[^>]*\\b(?:@click|v-on:click)\\s*='].join(''), 'i');
 
+const SENSITIVE_KEYWORDS = new Set([
+  'password', 'passwd', 'secret', 'token', 'apikey', 'api_key',
+  'authtoken', 'auth_token', 'accesstoken', 'access_token',
+  'refreshtoken', 'refresh_token', 'privatekey', 'private_key',
+  'creditcard', 'credit_card', 'ssn'
+]);
+
+const isSensitiveName = (name = '') => {
+  const normalized = String(name).toLowerCase();
+  if (SENSITIVE_KEYWORDS.has(normalized)) return true;
+  return /^(pass(word)?|token|secret|api[_-]?key)$/i.test(normalized);
+};
+
+const JAVASCRIPT_URL_REGEX = /^\s*javascript:/i;
+const TABNABBING_TEMPLATE_PATTERN = /<a\b[^>]*\btarget\s*=\s*["']_blank["'][^>]*>/i;
+const JAVASCRIPT_URL_TEMPLATE_PATTERN = /\b(?:href|src|action|formaction)\s*=\s*["']\s*javascript:/i;
+
+const isSensitiveExpression = (node) => {
+  if (!node) return false;
+  if (t.isIdentifier(node)) {
+    return isSensitiveName(node.name);
+  }
+  if (t.isMemberExpression(node)) {
+    if (t.isIdentifier(node.property)) {
+      return isSensitiveName(node.property.name);
+    }
+    if (t.isStringLiteral(node.property)) {
+      return isSensitiveName(node.property.value);
+    }
+  }
+  if (t.isObjectExpression(node)) {
+    return node.properties.some((prop) => {
+      if (t.isObjectProperty(prop)) {
+        const keyName = t.isIdentifier(prop.key)
+          ? prop.key.name
+          : t.isStringLiteral(prop.key)
+          ? prop.key.value
+          : '';
+        return isSensitiveName(keyName);
+      }
+      return false;
+    });
+  }
+  if (t.isTemplateLiteral(node)) {
+    return node.expressions.some(isSensitiveExpression);
+  }
+  return false;
+};
+
 /**
  * Pillar 10: Check for co-located test files for molecule capsules.
  */
@@ -134,6 +183,41 @@ export const checkExtendedTextPatterns = (content, lines, relativePath, filePath
           directive: meta.directive
         });
       }
+    }
+
+    // Pillar 9: Reverse Tabnabbing in HTML / Vue templates
+    const hasTargetBlank = isTemplateFile && TABNABBING_TEMPLATE_PATTERN.test(lineText);
+    if (hasTargetBlank) {
+      const hasRelProtection = /\brel\s*=\s*["'][^"']*(?:noopener|noreferrer)[^"']*["']/i.test(lineText);
+      if (!hasRelProtection) {
+        const meta = RULE_REGISTRY.SECURITY_REVERSE_TABNABBING;
+        violations.push({
+          filePath: relativePath,
+          line: lineNum,
+          column: 1,
+          hazard: 'External link with target="_blank" missing rel="noopener noreferrer"',
+          rule: 'SECURITY_REVERSE_TABNABBING',
+          severity: meta.severity,
+          pillar: meta.pillar,
+          directive: meta.directive
+        });
+      }
+    }
+
+    // Pillar 9: javascript: pseudo-protocol in HTML / Vue templates
+    const hasJsUrl = isTemplateFile && JAVASCRIPT_URL_TEMPLATE_PATTERN.test(lineText);
+    if (hasJsUrl) {
+      const meta = RULE_REGISTRY.SECURITY_JAVASCRIPT_URL;
+      violations.push({
+        filePath: relativePath,
+        line: lineNum,
+        column: 1,
+        hazard: 'javascript: pseudo-protocol detected in template attribute',
+        rule: 'SECURITY_JAVASCRIPT_URL',
+        severity: meta.severity,
+        pillar: meta.pillar,
+        directive: meta.directive
+      });
     }
 
     // Pillar 8: Non-semantic clickable containers in templates (@click on div/span)
@@ -244,6 +328,49 @@ export const createExtendedVisitors = ({ relativePath, violations }) => {
           });
         }
       }
+
+      // Pillar 9: External link target="_blank" without rel="noopener noreferrer"
+      const isAnchorElement = tagName === 'a';
+      if (isAnchorElement) {
+        const targetAttr = astPath.node.attributes.find((attr) => t.isJSXAttribute(attr) && attr.name?.name === 'target');
+        let isTargetBlank = false;
+        if (targetAttr) {
+          if (t.isStringLiteral(targetAttr.value)) {
+            isTargetBlank = targetAttr.value.value.trim().toLowerCase() === '_blank';
+          } else if (t.isJSXExpressionContainer(targetAttr.value) && t.isStringLiteral(targetAttr.value.expression)) {
+            isTargetBlank = targetAttr.value.expression.value.trim().toLowerCase() === '_blank';
+          }
+        }
+
+        if (isTargetBlank) {
+          const relAttr = astPath.node.attributes.find((attr) => t.isJSXAttribute(attr) && attr.name?.name === 'rel');
+          let hasRelProtection = false;
+          if (relAttr) {
+            if (t.isStringLiteral(relAttr.value)) {
+              const val = relAttr.value.value.toLowerCase();
+              hasRelProtection = val.includes('noopener') || val.includes('noreferrer');
+            } else if (t.isJSXExpressionContainer(relAttr.value) && t.isStringLiteral(relAttr.value.expression)) {
+              const val = relAttr.value.expression.value.toLowerCase();
+              hasRelProtection = val.includes('noopener') || val.includes('noreferrer');
+            }
+          }
+
+          if (!hasRelProtection) {
+            const line = astPath.node.loc?.start.line || 1;
+            const meta = RULE_REGISTRY.SECURITY_REVERSE_TABNABBING;
+            violations.push({
+              filePath: relativePath,
+              line,
+              column: astPath.node.loc?.start.column || 1,
+              hazard: 'External link with target="_blank" missing rel="noopener noreferrer"',
+              rule: 'SECURITY_REVERSE_TABNABBING',
+              severity: meta.severity,
+              pillar: meta.pillar,
+              directive: meta.directive
+            });
+          }
+        }
+      }
     },
 
     JSXAttribute(astPath) {
@@ -313,6 +440,118 @@ export const createExtendedVisitors = ({ relativePath, violations }) => {
             });
           }
         }
+      }
+
+      // Pillar 9: javascript: pseudo-protocol URL in JSX
+      const isUrlAttribute = ['href', 'src', 'action', 'formAction'].includes(attrName);
+      if (isUrlAttribute) {
+        let isJsUrl = false;
+        const val = astPath.node.value;
+        if (t.isStringLiteral(val)) {
+          isJsUrl = JAVASCRIPT_URL_REGEX.test(val.value);
+        } else if (t.isJSXExpressionContainer(val)) {
+          const expr = val.expression;
+          if (t.isStringLiteral(expr)) {
+            isJsUrl = JAVASCRIPT_URL_REGEX.test(expr.value);
+          } else if (t.isTemplateLiteral(expr) && expr.quasis.length > 0) {
+            isJsUrl = JAVASCRIPT_URL_REGEX.test(expr.quasis[0].value.raw);
+          }
+        }
+
+        if (isJsUrl) {
+          const line = astPath.node.loc?.start.line || 1;
+          const meta = RULE_REGISTRY.SECURITY_JAVASCRIPT_URL;
+          violations.push({
+            filePath: relativePath,
+            line,
+            column: astPath.node.loc?.start.column || 1,
+            hazard: `javascript: pseudo-protocol detected in ${attrName} attribute`,
+            rule: 'SECURITY_JAVASCRIPT_URL',
+            severity: meta.severity,
+            pillar: meta.pillar,
+            directive: meta.directive
+          });
+        }
+      }
+    },
+
+    CallExpression(astPath) {
+      const callee = astPath.node.callee;
+
+      // Pillar 9: Dynamic code execution via eval()
+      if (t.isIdentifier(callee) && callee.name === 'eval') {
+        const line = astPath.node.loc?.start.line || 1;
+        const meta = RULE_REGISTRY.SECURITY_DYNAMIC_CODE_EXECUTION;
+        violations.push({
+          filePath: relativePath,
+          line,
+          column: astPath.node.loc?.start.column || 1,
+          hazard: 'Dynamic code execution via eval() detected',
+          rule: 'SECURITY_DYNAMIC_CODE_EXECUTION',
+          severity: meta.severity,
+          pillar: meta.pillar,
+          directive: meta.directive
+        });
+      }
+
+      // Pillar 9: String-based code execution in setTimeout/setInterval
+      if (t.isIdentifier(callee) && (callee.name === 'setTimeout' || callee.name === 'setInterval')) {
+        const firstArg = astPath.node.arguments[0];
+        const isStringExecution = t.isStringLiteral(firstArg) || t.isTemplateLiteral(firstArg);
+        if (isStringExecution) {
+          const line = astPath.node.loc?.start.line || 1;
+          const meta = RULE_REGISTRY.SECURITY_DYNAMIC_CODE_EXECUTION;
+          violations.push({
+            filePath: relativePath,
+            line,
+            column: astPath.node.loc?.start.column || 1,
+            hazard: `String-based dynamic code execution in ${callee.name} detected`,
+            rule: 'SECURITY_DYNAMIC_CODE_EXECUTION',
+            severity: meta.severity,
+            pillar: meta.pillar,
+            directive: meta.directive
+          });
+        }
+      }
+
+      // Pillar 9: Sensitive credential/token logging in console
+      const isConsoleCall = t.isMemberExpression(callee) && t.isIdentifier(callee.object) && callee.object.name === 'console';
+      if (isConsoleCall) {
+        const args = astPath.node.arguments || [];
+        const hasSensitiveArg = args.some(isSensitiveExpression);
+        if (hasSensitiveArg) {
+          const line = astPath.node.loc?.start.line || 1;
+          const meta = RULE_REGISTRY.SECURITY_SENSITIVE_LOGGING;
+          violations.push({
+            filePath: relativePath,
+            line,
+            column: astPath.node.loc?.start.column || 1,
+            hazard: 'Sensitive variable (credential, token, or password) logged to console',
+            rule: 'SECURITY_SENSITIVE_LOGGING',
+            severity: meta.severity,
+            pillar: meta.pillar,
+            directive: meta.directive
+          });
+        }
+      }
+    },
+
+    NewExpression(astPath) {
+      // Pillar 9: Dynamic code execution via new Function()
+      const callee = astPath.node.callee;
+      if (t.isIdentifier(callee) && callee.name === 'Function') {
+        const line = astPath.node.loc?.start.line || 1;
+        const meta = RULE_REGISTRY.SECURITY_DYNAMIC_CODE_EXECUTION;
+        violations.push({
+          filePath: relativePath,
+          line,
+          column: astPath.node.loc?.start.column || 1,
+          hazard: 'Dynamic code execution via new Function() constructor detected',
+          rule: 'SECURITY_DYNAMIC_CODE_EXECUTION',
+          severity: meta.severity,
+          pillar: meta.pillar,
+          directive: meta.directive
+        });
       }
     },
 

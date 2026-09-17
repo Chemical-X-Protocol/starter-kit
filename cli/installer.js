@@ -105,8 +105,10 @@ export const installAgentSearchConfig = async (targetDir = '.') => {
       pkg.scripts = pkg.scripts || {};
       pkg.scripts.q = 'chemx search';
       pkg.scripts.search = 'chemx search';
+      pkg.scripts.verify = 'chemx verify';
+      pkg.scripts.check = 'chemx verify';
       fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n', 'utf-8');
-      process.stdout.write('  \x1b[32m✔\x1b[0m Configured "q" and "search" scripts in package.json (run via pnpm q <query>)\n');
+      process.stdout.write('  \x1b[32m✔\x1b[0m Configured "q", "search", and "verify" scripts in package.json\n');
     } catch {
       process.stdout.write('  \x1b[33m⚠\x1b[0m Could not update package.json scripts\n');
     }
@@ -114,20 +116,35 @@ export const installAgentSearchConfig = async (targetDir = '.') => {
 
   // 2. Inject rule into AGENTS.md
   const agentsPath = path.join(resolvedTarget, 'AGENTS.md');
-  const searchDirective = `
+  const agentDirectives = `
 ## Chemical X Codebase Query Machine Protocol
 - Search First Rule: AI agents MUST invoke 'pnpm q "<query>"' (or 'npx chemx search "<query>"') before running broad ripgrep, find, or file dumping.
 - AST Architecture Intelligence: Always leverage 'pnpm q' to inspect component tiers, exported symbols, props, and hooks with minimal token burn.
-- Inspect Mode: Use 'pnpm q "<capsule-name>" --inspect' to examine props and hooks without catting entire source files.
+- Inspect Mode: Use 'pnpm q "<capsule-name>" --inspect' to examine props and hooks without reading entire source files.
 - JSON Mode: Use 'pnpm q "<query>" --json' for zero-overhead, machine-readable agent lookups.
+
+## Chemical X Verification-First Protocol & Zero-Token-Burn Pipeline
+- Verification First Rule: AI agents MUST NEVER run raw, unthrottled "npm test", "pnpm test", "vitest", "tsc --noEmit", or "npm run build" directly in a bash subshell.
+- MCP Verification Tools First: AI agents MUST invoke dedicated Chemical X MCP tools or CLI wrappers ('npx chemx verify', 'npx chemx test', 'npx chemx typecheck', 'npx chemx build') before running terminal commands.
 `;
 
   if (fs.existsSync(agentsPath)) {
     try {
       const content = fs.readFileSync(agentsPath, 'utf-8');
-      if (!content.includes('Chemical X Codebase Query Machine Protocol')) {
-        fs.appendFileSync(agentsPath, `\n${searchDirective}\n`, 'utf-8');
-        process.stdout.write('  \x1b[32m✔\x1b[0m Injected search-first directive into AGENTS.md\n');
+      const hasQueryProtocol = content.includes('Chemical X Codebase Query Machine Protocol');
+      const hasVerifyProtocol = content.includes('Chemical X Verification-First Protocol');
+
+      if (!hasQueryProtocol && !hasVerifyProtocol) {
+        fs.appendFileSync(agentsPath, `\n${agentDirectives}\n`, 'utf-8');
+        process.stdout.write('  \x1b[32m✔\x1b[0m Injected query and verification directives into AGENTS.md\n');
+      } else if (!hasVerifyProtocol) {
+        const verifyOnly = `
+## Chemical X Verification-First Protocol & Zero-Token-Burn Pipeline
+- Verification First Rule: AI agents MUST NEVER run raw, unthrottled "npm test", "pnpm test", "vitest", "tsc --noEmit", or "npm run build" directly in a bash subshell.
+- MCP Verification Tools First: AI agents MUST invoke dedicated Chemical X MCP tools or CLI wrappers ('npx chemx verify', 'npx chemx test', 'npx chemx typecheck', 'npx chemx build') before running terminal commands.
+`;
+        fs.appendFileSync(agentsPath, `\n${verifyOnly}\n`, 'utf-8');
+        process.stdout.write('  \x1b[32m✔\x1b[0m Injected verification-first directive into AGENTS.md\n');
       }
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));

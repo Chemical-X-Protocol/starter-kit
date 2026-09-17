@@ -1,3 +1,4 @@
+import './silence-warnings.js';
 import path from 'node:path';
 import { ensureChemxDir } from './audit/history.js';
 

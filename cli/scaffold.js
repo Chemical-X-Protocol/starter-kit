@@ -72,7 +72,13 @@ export const runScaffold = async (projectName, rawArgs = [], onRunAudit = null) 
 
   const cursorRulesPath = path.join(targetDir, '.cursorrules');
   if (!fs.existsSync(cursorRulesPath)) {
-    const rules = '# Chemical X Molecular Architecture Directives\nStrictly follow AGENTS.md rules. Never exceed 500 lines per file. All molecule capsules must stay under 100 lines.\n';
+    const rules = [
+      '# Chemical X Molecular Architecture Directives',
+      'Strictly follow AGENTS.md rules. Never exceed 100 lines for molecule capsules.',
+      'Mandatory Verification-First: Never run raw unthrottled "npm test", "vitest", or "tsc --noEmit" in terminal.',
+      'Always use "npx chemx verify", "npx chemx test", "npx chemx typecheck", or MCP tools to conserve tokens.',
+      'Search-First: Use "pnpm q <query>" before broad grep/find.'
+    ].join('\n') + '\n';
     fs.writeFileSync(cursorRulesPath, rules, 'utf-8');
     process.stdout.write('  \x1b[32m✔\x1b[0m .cursorrules\n');
   }

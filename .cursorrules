@@ -1,0 +1,17 @@
+# Chemical X Protocol: Mandatory Agent Directives
+
+Strictly adhere to the directives codified in AGENTS.md:
+
+1. ZERO-TOKEN-BURN VERIFICATION FIRST:
+- NEVER run raw unthrottled `npm test`, `pnpm test`, `vitest`, `tsc --noEmit`, or `npm run build` in terminal shells.
+- ALWAYS run `npx chemx verify` (or `npx chemx test`, `npx chemx typecheck`, `npx chemx build`) to consume pinpoint failure diffs while suppressing passing noise.
+
+2. SEARCH-FIRST PROTOCOL:
+- ALWAYS invoke `pnpm q "<query>"` (or `npx chemx search "<query>"`) before broad ripgrep or file dumping.
+- Use `pnpm q "<capsule>" --inspect` to examine props and hooks without reading entire files.
+
+3. MOLECULAR ARCHITECTURE GUARDRAILS:
+- 100-line outer bound per molecule capsule file.
+- Zero raw DOM elements in molecules or organisms: raw HTML elements (`<button>`, `<input>`, `<div>`) are restricted exclusively to foundational atoms.
+- Two-stage atomic boolean composition: break multi-clause logic into named booleans before decision computeds.
+- Zero typography em dashes in code or documentation. Use hyphens or colons.

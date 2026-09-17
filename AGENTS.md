@@ -79,6 +79,15 @@
 - **Prohibition on Method Slicing**: Never split methods sharing internal instance state into isolated files or micro-functions. Atomization must not destroy the cohesive state machine.
 - **Decomposition Protocol**: When approaching file line limits, decompose exclusively by extracting pure, stateless helper functions, mathematical derivations, and boundary validators out of the class into standalone utility capsules, preserving the class methods and instance state together.
 
+### K. The Verification-First Protocol & Zero-Token-Burn Pipeline
+- **Verification First Rule**: AI agents MUST NEVER execute raw, unthrottled `npm test`, `pnpm test`, `vitest`, `tsc --noEmit`, or `npm run build` directly in a bash subshell. Raw shell executions flood the context window with hundreds of lines of passing checkmarks, compiler noise, and bundle asset tables, burning thousands of tokens and causing premature context exhaustion.
+- **MCP Verification Tools First**: Agents MUST invoke the dedicated Chemical X MCP tools or CLI wrappers:
+  1. `chemx_verify` (or `npx chemx verify --json`): Runs the full verification pipeline (AST Audit + Typecheck + Tests) and returns a single token-compact status card (~45 tokens if green).
+  2. `chemx_typecheck` (or `npx chemx typecheck --json`): Runs silent TypeScript typecheck; returns structured diagnostics only if errors exist.
+  3. `chemx_test` (or `npx chemx test --json`): Runs silent project tests; suppresses passing tests and returns ONLY failing test assertions and stack diffs.
+  4. `chemx_audit_build` (or `npx chemx build --json`): Runs silent production builds; catalogs diagnostics into TypeScript, Rollup, and style budgets.
+- **Actionable Failure Focus**: If a verification step fails, agents consume the exact failure line and diff, fix the code surgically, and re-verify without ever paying the token penalty of passing checks.
+
 ---
 
 ## 2. Domain-Based Type Architecture & Data Integrity
@@ -346,6 +355,10 @@ Raw inline `style="..."` attributes are strictly prohibited. Visual styling flow
 
 ### D. No Fake Green
 - Never write a test that trivially passes without exercising real logic (e.g. asserting `true === true`, mocking away the exact behavior under test).
+
+### E. Silent Verification & Zero Passing Noise
+- AI agents executing tests or verifying code MUST invoke `chemx_test` (or `npx chemx test --json`) and `chemx_verify` (or `npx chemx verify --json`).
+- Strictly prohibit executing verbose raw `npm test` or `pnpm test` in the shell: hundreds of passing test markers pollute context. If tests pass, agents consume a ~25-token green acknowledgment; if tests fail, agents consume only the failing test name, assertion message, and diff.
 
 ---
 

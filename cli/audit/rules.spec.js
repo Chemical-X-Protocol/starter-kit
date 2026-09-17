@@ -70,3 +70,136 @@ export const resolveColor = (type) => {
   const dispatchViolation = violations.find((v) => v.rule === "CONTROL_FLOW_DISPATCH_SWITCH");
   assert.strictEqual(dispatchViolation, undefined);
 });
+
+test("Audit Security: flags external link target=_blank missing rel=noopener noreferrer in JSX", () => {
+  const code = `
+export const ExternalLink = () => (
+  <a href="https://example.com" target="_blank">External</a>
+);
+`;
+  const violations = auditCode(code, "src/Link.tsx", "src/Link.tsx");
+  const violation = violations.find((v) => v.rule === "SECURITY_REVERSE_TABNABBING");
+  assert.ok(violation, "Expected SECURITY_REVERSE_TABNABBING violation in JSX");
+  assert.strictEqual(violation.severity, "MEDIUM");
+});
+
+test("Audit Security: passes external link with rel=noopener noreferrer in JSX", () => {
+  const code = `
+export const ExternalLink = () => (
+  <a href="https://example.com" target="_blank" rel="noopener noreferrer">External</a>
+);
+`;
+  const violations = auditCode(code, "src/Link.tsx", "src/Link.tsx");
+  const violation = violations.find((v) => v.rule === "SECURITY_REVERSE_TABNABBING");
+  assert.strictEqual(violation, undefined);
+});
+
+test("Audit Security: flags target=_blank missing rel in Vue template", () => {
+  const code = `
+<template>
+  <a href="https://example.com" target="_blank">External</a>
+</template>
+`;
+  const violations = auditCode(code, "src/Link.vue", "src/Link.vue");
+  const violation = violations.find((v) => v.rule === "SECURITY_REVERSE_TABNABBING");
+  assert.ok(violation, "Expected SECURITY_REVERSE_TABNABBING in Vue template");
+});
+
+test("Audit Security: flags javascript: pseudo-protocol in JSX href", () => {
+  const code = `
+export const BadLink = () => (
+  <a href="javascript:alert(1)">Click Me</a>
+);
+`;
+  const violations = auditCode(code, "src/BadLink.tsx", "src/BadLink.tsx");
+  const violation = violations.find((v) => v.rule === "SECURITY_JAVASCRIPT_URL");
+  assert.ok(violation, "Expected SECURITY_JAVASCRIPT_URL violation");
+  assert.strictEqual(violation.severity, "CRITICAL");
+});
+
+test("Audit Security: flags javascript: in template attributes", () => {
+  const code = `
+<template>
+  <form action="javascript:void(0)">
+    <button type="submit">Submit</button>
+  </form>
+</template>
+`;
+  const violations = auditCode(code, "src/Form.vue", "src/Form.vue");
+  const violation = violations.find((v) => v.rule === "SECURITY_JAVASCRIPT_URL");
+  assert.ok(violation, "Expected SECURITY_JAVASCRIPT_URL in template");
+});
+
+test("Audit Security: flags dynamic code execution via eval()", () => {
+  const code = `
+export const runDynamic = (str: string) => {
+  return eval(str);
+};
+`;
+  const violations = auditCode(code, "src/eval.ts", "src/eval.ts");
+  const violation = violations.find((v) => v.rule === "SECURITY_DYNAMIC_CODE_EXECUTION");
+  assert.ok(violation, "Expected SECURITY_DYNAMIC_CODE_EXECUTION for eval()");
+  assert.strictEqual(violation.severity, "CRITICAL");
+});
+
+test("Audit Security: flags dynamic code execution via new Function()", () => {
+  const code = `
+export const buildFn = (code: string) => {
+  return new Function("return " + code);
+};
+`;
+  const violations = auditCode(code, "src/fn.ts", "src/fn.ts");
+  const violation = violations.find((v) => v.rule === "SECURITY_DYNAMIC_CODE_EXECUTION");
+  assert.ok(violation, "Expected SECURITY_DYNAMIC_CODE_EXECUTION for new Function()");
+  assert.strictEqual(violation.severity, "CRITICAL");
+});
+
+test("Audit Security: flags string-based execution in setTimeout", () => {
+  const code = `
+export const scheduleCode = () => {
+  setTimeout("alert('hello')", 1000);
+};
+`;
+  const violations = auditCode(code, "src/timer.ts", "src/timer.ts");
+  const violation = violations.find((v) => v.rule === "SECURITY_DYNAMIC_CODE_EXECUTION");
+  assert.ok(violation, "Expected SECURITY_DYNAMIC_CODE_EXECUTION for string setTimeout");
+});
+
+test("Audit Security: does NOT flag function callback setTimeout", () => {
+  const code = `
+export const scheduleCode = () => {
+  const timer = setTimeout(() => {
+    // legitimate callback
+  }, 1000);
+  return () => clearTimeout(timer);
+};
+`;
+  const violations = auditCode(code, "src/timer.ts", "src/timer.ts");
+  const violation = violations.find((v) => v.rule === "SECURITY_DYNAMIC_CODE_EXECUTION");
+  assert.strictEqual(violation, undefined);
+});
+
+test("Audit Security: flags sensitive variable logging in console", () => {
+  const code = `
+export const debugAuth = (authToken: string, user: any) => {
+  console.log("Authenticated with token:", authToken);
+  console.info("User details:", { password: user.password });
+};
+`;
+  const violations = auditCode(code, "src/auth.ts", "src/auth.ts");
+  const loggingViolations = violations.filter((v) => v.rule === "SECURITY_SENSITIVE_LOGGING");
+  assert.strictEqual(loggingViolations.length >= 1, true, "Expected SECURITY_SENSITIVE_LOGGING violation");
+  assert.strictEqual(loggingViolations[0].severity, "HIGH");
+});
+
+test("Audit Security: does NOT flag normal non-sensitive console logging", () => {
+  const code = `
+export const debugCount = (itemCount: number) => {
+  console.log("Items rendered:", itemCount);
+};
+`;
+  const violations = auditCode(code, "src/items.ts", "src/items.ts");
+  const violation = violations.find((v) => v.rule === "SECURITY_SENSITIVE_LOGGING");
+  assert.strictEqual(violation, undefined);
+});
+

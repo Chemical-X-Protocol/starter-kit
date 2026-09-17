@@ -1,6 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { syncAntigravityMcpSchemas } from './antigravity.js';
+
+export { syncAntigravityMcpSchemas } from './antigravity.js';
 
 const SERVER_KEY = 'chemical-x';
 
@@ -107,7 +110,7 @@ export const installProjectMcpConfig = (targetDir = '.', options = {}) => {
     process.stdout.write('  \x1b[32m✔\x1b[0m Configured VS Code MCP server in: .vscode/mcp.json\n');
   }
 
-  // 3. Inject helper script to consumer package.json if available
+  // 3. Inject helper scripts to consumer package.json if available
   const pkgPath = path.join(resolvedTarget, 'package.json');
   if (fs.existsSync(pkgPath)) {
     const [pkgContent, readError] = toResultSync(() => fs.readFileSync(pkgPath, 'utf-8'));
@@ -116,16 +119,32 @@ export const installProjectMcpConfig = (targetDir = '.', options = {}) => {
       if (!parseError && pkg && typeof pkg === 'object') {
         if (!pkg.scripts) pkg.scripts = {};
 
-        const hasMcpScript = Boolean(pkg.scripts['chemx:mcp'] || pkg.scripts['mcp']);
-        if (!hasMcpScript) {
+        let modified = false;
+        if (!pkg.scripts['chemx:mcp'] && !pkg.scripts['mcp']) {
           pkg.scripts['chemx:mcp'] = 'chemx mcp';
+          modified = true;
+        }
+        if (!pkg.scripts['chemx:verify']) {
+          pkg.scripts['chemx:verify'] = 'chemx verify';
+          modified = true;
+        }
+        if (!pkg.scripts['chemx:test']) {
+          pkg.scripts['chemx:test'] = 'chemx test';
+          modified = true;
+        }
+        if (!pkg.scripts['chemx:typecheck']) {
+          pkg.scripts['chemx:typecheck'] = 'chemx typecheck';
+          modified = true;
+        }
+
+        if (modified) {
           const [, writeError] = toResultSync(() => {
             fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n', 'utf-8');
           });
           if (!writeError) {
             results.packageJson = true;
             if (!isSilent) {
-              process.stdout.write('  \x1b[32m✔\x1b[0m Added "chemx:mcp" script to package.json\n');
+              process.stdout.write('  \x1b[32m✔\x1b[0m Added chemx verification & MCP scripts to package.json\n');
             }
           }
         }
@@ -157,6 +176,9 @@ export const installAntigravityMcpConfig = (targetDir = '.', options = {}) => {
     const existing = fs.existsSync(configFile) ? fs.readFileSync(configFile, 'utf-8') : '';
     const merged = mergeMcpServerConfig(existing, serverDef);
     fs.writeFileSync(configFile, merged, 'utf-8');
+
+    // Synchronize full 14-tool schemas and instructions.md for Antigravity agents
+    syncAntigravityMcpSchemas(null, { silent: isSilent });
 
     if (!isSilent) {
       process.stdout.write('  \x1b[32m✔\x1b[0m Registered Chemical X in Antigravity: ~/.gemini/config/mcp_config.json\n');

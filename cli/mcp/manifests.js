@@ -216,5 +216,36 @@ export const MCP_TOOLS = [
       },
       required: ['path', 'content']
     }
+  },
+  {
+    name: 'chemx_typecheck',
+    description: 'Execute silent, token-conserving TypeScript typecheck audit. AI agents MUST use this tool first instead of running raw tsc or terminal commands to avoid dumping noisy compiler output into context. Returns structured diagnostics only if errors exist.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        command: { type: 'string', description: 'Optional custom typecheck command (e.g. "pnpm run typecheck" or "npx tsc --noEmit")' }
+      }
+    }
+  },
+  {
+    name: 'chemx_test',
+    description: 'Execute silent, token-conserving project test runner. AI agents MUST use this tool first instead of running raw npm/pnpm test in the shell to avoid burning thousands of tokens on passing tests. Suppresses passing checkmarks; returns ONLY failing test assertions and diffs.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        command: { type: 'string', description: 'Optional custom test command (e.g. "pnpm test" or "npx vitest run")' }
+      }
+    }
+  },
+  {
+    name: 'chemx_verify',
+    description: 'Execute the complete zero-token-burn project verification pipeline (7-Pillar AST Audit + Typecheck + Tests). AI agents MUST invoke this tool first before launching expensive raw terminal test/build commands. Emits a compact status card (~45 tokens if all pass) or pinpoint failure diagnostics.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dir: { type: 'string', description: 'Target directory for architectural audit (defaults to "src" or "blueprints")' },
+        includeBuild: { type: 'boolean', description: 'Whether to also run production build verification (defaults to false)' }
+      }
+    }
   }
 ];

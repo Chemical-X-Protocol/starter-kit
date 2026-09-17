@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import './silence-warnings.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
@@ -39,9 +40,21 @@ import { runMutatorCli } from './mutators.js';
 import { runReaderCli, readTokenOptimized } from './reader.js';
 import { runPatcherCli, patchFile, runWriterCli, writeFile } from './patcher.js';
 import { runMcpServer, runMcpInstaller } from './mcp/index.js';
+import { runTypecheckAudit, runTestAudit, runProjectVerify } from './verify.js';
 import { sanitizeOutputStreams } from './terminal.js';
 
 sanitizeOutputStreams();
+
+const getPackageVersion = () => {
+  try {
+    const pkgPath = new URL('../package.json', import.meta.url);
+    const pkgContent = fs.readFileSync(pkgPath, 'utf-8');
+    const pkg = JSON.parse(pkgContent);
+    return pkg.version || 'unknown';
+  } catch {
+    return 'unknown';
+  }
+};
 
 const rawArgs = process.argv.slice(2);
 const invokedBin = path.basename(process.argv[1] || '');
@@ -307,7 +320,6 @@ const main = async () => {
       await runInstallWizard(rawArgs[1] || process.cwd());
       break;
     case 'check':
-    case 'verify':
       handleCheckCommand(rawArgs[1], {
         isJson: rawArgs.includes('--json'),
         isCli: true
@@ -339,6 +351,25 @@ const main = async () => {
     case 'install-mcp':
     case 'setup-mcp':
       await runMcpInstaller(rawArgs.slice(1));
+      break;
+    case '-v':
+    case '--version':
+    case 'version':
+      process.stdout.write(`create-chemx v${getPackageVersion()}\n`);
+      break;
+    case 'verify':
+    case 'check:all':
+      await runProjectVerify(rawArgs.slice(1), true);
+      break;
+    case 'typecheck':
+    case 'check:types':
+    case 'tsc':
+      await runTypecheckAudit(rawArgs.slice(1), true);
+      break;
+    case 'test':
+    case 'tests':
+    case 'check:test':
+      await runTestAudit(rawArgs.slice(1), true);
       break;
     case 'help':
     case '--help':

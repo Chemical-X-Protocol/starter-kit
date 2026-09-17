@@ -19,6 +19,7 @@ import { readTokenOptimized } from '../reader.js';
 import { patchFile, writeFile } from '../patcher.js';
 import { toColumnar } from '../columnar.js';
 import { handleCheckCommand } from '../search-commands.js';
+import { runTypecheckAudit, runTestAudit, runProjectVerify } from '../verify.js';
 import { MCP_TOOLS } from './manifests.js';
 
 export { MCP_TOOLS };
@@ -369,6 +370,34 @@ const handleChemxWrite = (args = {}, cwd = process.cwd()) => {
   };
 };
 
+const handleChemxTypecheck = async (args = {}, cwd = process.cwd()) => {
+  return runTypecheckAudit([], false, {
+    json: true,
+    command: args.command,
+    print: false,
+    cwd
+  });
+};
+
+const handleChemxTest = async (args = {}, cwd = process.cwd()) => {
+  return runTestAudit([], false, {
+    json: true,
+    command: args.command,
+    print: false,
+    cwd
+  });
+};
+
+const handleChemxVerify = async (args = {}, cwd = process.cwd()) => {
+  return runProjectVerify([], false, {
+    json: true,
+    targetDir: args.dir,
+    includeBuild: Boolean(args.includeBuild),
+    print: false,
+    cwd
+  });
+};
+
 export const Tools = {
   chemx_query_patterns: handleQueryPatterns,
   chemx_audit: handleAudit,
@@ -380,7 +409,10 @@ export const Tools = {
   chemx_read: handleChemxRead,
   chemx_patch: handleChemxPatch,
   chemx_write: handleChemxWrite,
-  chemx_check: handleChemxCheck
+  chemx_check: handleChemxCheck,
+  chemx_typecheck: handleChemxTypecheck,
+  chemx_test: handleChemxTest,
+  chemx_verify: handleChemxVerify
 };
 
 export const executeMcpTool = async (name, args = {}, cwd = process.cwd()) => {

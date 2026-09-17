@@ -40,6 +40,8 @@
   },
   "scripts": {
     "publish:both": "node scripts/publish-both.mjs",
+    "verify": "node cli/index.js verify",
+    "check": "node cli/index.js verify",
     "test": "node --test cli/audit/*.spec.js cli/mcp/*.spec.js cli/*.spec.js",
     "typecheck": "tsc --noEmit",
     "create-capsule": "node cli/index.js",

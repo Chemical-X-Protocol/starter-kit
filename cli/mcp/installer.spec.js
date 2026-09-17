@@ -7,7 +7,8 @@ import {
   mergeMcpServerConfig,
   resolveMcpServerCommand,
   installProjectMcpConfig,
-  installAllMcpConfigs
+  installAllMcpConfigs,
+  syncAntigravityMcpSchemas
 } from './installer.js';
 
 test('mergeMcpServerConfig: creates valid config when input is empty', () => {
@@ -80,6 +81,27 @@ test('installProjectMcpConfig: creates .cursor and .vscode configs and updates p
 
     const updatedPkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
     assert.strictEqual(updatedPkg.scripts['chemx:mcp'], 'chemx mcp');
+    assert.strictEqual(updatedPkg.scripts['chemx:verify'], 'chemx verify');
+    assert.strictEqual(updatedPkg.scripts['chemx:test'], 'chemx test');
+    assert.strictEqual(updatedPkg.scripts['chemx:typecheck'], 'chemx typecheck');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('syncAntigravityMcpSchemas: writes all 14 tool schemas and instructions.md', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-antigravity-test-'));
+  try {
+    const res = syncAntigravityMcpSchemas(tmpDir, { silent: true });
+    assert.strictEqual(res.toolCount, 14);
+    assert.ok(fs.existsSync(path.join(tmpDir, 'chemx_verify.json')));
+    assert.ok(fs.existsSync(path.join(tmpDir, 'chemx_typecheck.json')));
+    assert.ok(fs.existsSync(path.join(tmpDir, 'chemx_test.json')));
+    assert.ok(fs.existsSync(path.join(tmpDir, 'instructions.md')));
+
+    const instructions = fs.readFileSync(path.join(tmpDir, 'instructions.md'), 'utf-8');
+    assert.ok(instructions.includes('chemx_verify'));
+    assert.ok(instructions.includes('MANDATORY VERIFICATION'));
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
