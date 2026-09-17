@@ -60,7 +60,39 @@ export const promptQuestion = (query) => {
   });
 };
 
-export const stripAnsi = (text) => text.replace(/\x1b\[[0-9;]*m/g, "");
+export const stripAnsi = (text) => {
+  if (!text || typeof text !== "string") return "";
+  return text
+    .replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, "")
+    .replace(/\x1b\][^\x07\x1b]*(\x07|\x1b\\)/g, "");
+};
+
+export const isColorSupported = () => {
+  const hasNoColorArg = Boolean(process.argv && process.argv.some((arg) => arg === "--no-color" || arg === "--color=false"));
+  const hasNoColorEnv = Boolean(process.env.NO_COLOR);
+  const isDumbTerminal = process.env.TERM === "dumb";
+  const isPipedStdout = Boolean(process.stdout && process.stdout.isTTY === false);
+  const shouldDisableColor = hasNoColorArg || hasNoColorEnv || isDumbTerminal || isPipedStdout;
+  return !shouldDisableColor;
+};
+
+export const sanitizeOutputStreams = () => {
+  if (isColorSupported()) return;
+
+  const wrapStream = (stream) => {
+    if (!stream || !stream.write) return;
+    const origWrite = stream.write.bind(stream);
+    stream.write = (chunk, encoding, callback) => {
+      if (typeof chunk === "string") {
+        return origWrite(stripAnsi(chunk), encoding, callback);
+      }
+      return origWrite(chunk, encoding, callback);
+    };
+  };
+
+  wrapStream(process.stdout);
+  wrapStream(process.stderr);
+};
 
 export const renderBanner = (title = "Chemical X Protocol: Molecular Architecture") => {
   if (hasGum()) {

@@ -39,6 +39,9 @@ import { runMutatorCli } from './mutators.js';
 import { runReaderCli, readTokenOptimized } from './reader.js';
 import { runPatcherCli, patchFile } from './patcher.js';
 import { runMcpServer, runMcpInstaller } from './mcp/index.js';
+import { sanitizeOutputStreams } from './terminal.js';
+
+sanitizeOutputStreams();
 
 const rawArgs = process.argv.slice(2);
 const invokedBin = path.basename(process.argv[1] || '');
