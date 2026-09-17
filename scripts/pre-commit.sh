@@ -11,6 +11,26 @@ fi
 
 cd "$REPO_ROOT" || exit 1
 
+# Detect TTY and color support (respect NO_COLOR and dumb terminals)
+if [ -t 1 ] && [ -z "$NO_COLOR" ] && [ "$TERM" != "dumb" ]; then
+  C_RESET="$(printf '\033[0m')"
+  C_BOLD="$(printf '\033[1m')"
+  C_RED="$(printf '\033[31m')"
+  C_GREEN="$(printf '\033[32m')"
+  C_YELLOW="$(printf '\033[33m')"
+  C_CYAN="$(printf '\033[36m')"
+  C_BLUE="$(printf '\033[38;2;98;201;255m')"
+else
+  C_RESET=""
+  C_BOLD=""
+  C_RED=""
+  C_GREEN=""
+  C_YELLOW=""
+  C_CYAN=""
+  C_BLUE=""
+  export NO_COLOR=1
+fi
+
 # Load thresholds from .chemx/config.json if available
 CONF_MAX_LINES=""
 CONF_MAX_MOL=""
@@ -61,13 +81,13 @@ for FILE in $STAGED_FILES; do
       *molecules*|*/m-*|*m-*)
         if [ "$LINES" -gt "$MAX_MOLECULE_LINES" ]; then
           LINE_BUDGET_FAILED=1
-          LINE_BUDGET_ERRORS="${LINE_BUDGET_ERRORS}\n  \033[31m✕\033[0m $FILE ($LINES LOC > $MAX_MOLECULE_LINES LOC molecule capsule limit)"
+          LINE_BUDGET_ERRORS="${LINE_BUDGET_ERRORS}\n  ${C_RED}✕${C_RESET} $FILE ($LINES LOC > $MAX_MOLECULE_LINES LOC molecule capsule limit)"
         fi
         ;;
       *)
         if [ "$LINES" -gt "$MAX_LINES" ]; then
           LINE_BUDGET_FAILED=1
-          LINE_BUDGET_ERRORS="${LINE_BUDGET_ERRORS}\n  \033[31m✕\033[0m $FILE ($LINES LOC > $MAX_LINES LOC file budget)"
+          LINE_BUDGET_ERRORS="${LINE_BUDGET_ERRORS}\n  ${C_RED}✕${C_RESET} $FILE ($LINES LOC > $MAX_LINES LOC file budget)"
         fi
         ;;
     esac
@@ -75,9 +95,9 @@ for FILE in $STAGED_FILES; do
 done
 
 if [ "$LINE_BUDGET_FAILED" -eq 1 ]; then
-  printf "\n\033[1m\033[31m[Chemical X] Commit Blocked: Staged files exceed architectural line budgets\033[0m\n"
-  printf "$LINE_BUDGET_ERRORS\n\n"
-  printf "\033[33mMonolithic files degrade AI context windows and cause hallucination loops.\033[0m\n"
+  printf "\n%s%s[Chemical X] Commit Blocked: Staged files exceed architectural line budgets%s\n" "$C_BOLD" "$C_RED" "$C_RESET"
+  printf "%b\n\n" "$LINE_BUDGET_ERRORS"
+  printf "%sMonolithic files degrade AI context windows and cause hallucination loops.%s\n" "$C_YELLOW" "$C_RESET"
   printf "Decompose large files into single-purpose crystalline capsules before committing.\n\n"
 fi
 
@@ -93,23 +113,23 @@ elif command -v npx >/dev/null 2>&1; then
 fi
 
 if [ -n "$AUDIT_BIN" ]; then
-  printf "\033[38;2;98;201;255m[Chemical X] Verifying architectural health (Min Grade: %s, Min Score: %s)...\033[0m\n" "$MIN_GRADE" "$MIN_SCORE"
+  printf "%s[Chemical X] Verifying architectural health (Min Grade: %s, Min Score: %s)...%s\n" "$C_BLUE" "$MIN_GRADE" "$MIN_SCORE" "$C_RESET"
   
   AUDIT_CMD="$AUDIT_BIN audit --min-grade=$MIN_GRADE --min-score=$MIN_SCORE --non-interactive"
   
   if ! eval "$AUDIT_CMD < /dev/null"; then
-    printf "\n\033[1m\033[31m[Chemical X] Commit Blocked: Architectural health verification failed\033[0m\n"
-    printf "\033[36m💡 Tip: Want crystalline drop-in templates to refactor in minutes?\033[0m\n"
+    printf "\n%s%s[Chemical X] Commit Blocked: Architectural health verification failed%s\n" "$C_BOLD" "$C_RED" "$C_RESET"
+    printf "%s💡 Tip: Want crystalline drop-in templates to refactor in minutes?%s\n" "$C_CYAN" "$C_RESET"
     printf "   Run 'npm create chemx' or sponsor at https://github.com/sponsors/Chemical-X-Protocol\n\n"
     exit 1
   fi
 fi
 
 if [ "$LINE_BUDGET_FAILED" -eq 1 ]; then
-  printf "\033[36m💡 Tip: Want crystalline drop-in templates to refactor in minutes?\033[0m\n"
+  printf "%s💡 Tip: Want crystalline drop-in templates to refactor in minutes?%s\n" "$C_CYAN" "$C_RESET"
   printf "   Run 'npm create chemx' or sponsor at https://github.com/sponsors/Chemical-X-Protocol\n\n"
   exit 1
 fi
 
-printf "\033[32m✔ [Chemical X] Pre-commit architectural guardrails passed.\033[0m\n"
+printf "%s✔ [Chemical X] Pre-commit architectural guardrails passed.%s\n" "$C_GREEN" "$C_RESET"
 exit 0

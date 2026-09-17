@@ -369,3 +369,11 @@ Raw inline `style="..."` attributes are strictly prohibited. Visual styling flow
 ### C. "No Fake Doc-Sync" Anti-Pattern
 - Mirroring the "No Fake Green" testing rule in Section 10.D, superficial doc edits (whitespace tweaks, comment formatting, minor typo fixes) made merely to pass CI touch-checks without addressing substantive semantic changes are strictly prohibited.
 - Documentation reviews must verify substantive alignment between code behavior and documented contracts.
+
+
+## Chemical X Codebase Query Machine Protocol
+- Search First Rule: AI agents MUST invoke 'pnpm q "<query>"' (or 'npx chemx search "<query>"') before running broad ripgrep, find, or file dumping.
+- AST Architecture Intelligence: Always leverage 'pnpm q' to inspect component tiers, exported symbols, props, and hooks with minimal token burn.
+- Inspect Mode: Use 'pnpm q "<capsule-name>" --inspect' to examine props and hooks without catting entire source files.
+- JSON Mode: Use 'pnpm q "<query>" --json' for zero-overhead, machine-readable agent lookups.
+

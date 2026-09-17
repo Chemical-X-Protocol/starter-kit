@@ -109,6 +109,22 @@ export const obtainLicenseKey = async (rawArgs = [], onRunAudit = null) => {
     return effectiveKey;
   }
 
+  const isHeadless =
+    rawArgs.includes('--headless') ||
+    rawArgs.includes('--yes') ||
+    rawArgs.includes('-y') ||
+    rawArgs.includes('--ci') ||
+    rawArgs.includes('--non-interactive') ||
+    rawArgs.includes('--no-interactive') ||
+    Boolean(process.env.CI) ||
+    process.stdout?.isTTY === false ||
+    process.stdin?.isTTY === false ||
+    Boolean(process.argv?.some((arg) => arg === '--headless' || arg === '--ci' || arg === '--yes' || arg === '-y'));
+
+  if (isHeadless) {
+    return null;
+  }
+
   const useGum = hasGum();
 
   if (useGum) {
@@ -211,7 +227,12 @@ export const checkOrPromptEvaluation = async (actionLabel = 'generate capsule', 
     return { licensed: true, key: cachedKey };
   }
 
-  const isNonInteractive = options.isYes || Boolean(process.env.CI) || !process.stdin.isTTY;
+  const isNonInteractive =
+    options.isYes ||
+    Boolean(process.env.CI) ||
+    process.stdin?.isTTY === false ||
+    process.stdout?.isTTY === false ||
+    Boolean(process.argv?.some((arg) => arg === '--headless' || arg === '--yes' || arg === '-y' || arg === '--ci' || arg === '--non-interactive'));
   if (isNonInteractive) {
     return { licensed: false, proceed: true };
   }

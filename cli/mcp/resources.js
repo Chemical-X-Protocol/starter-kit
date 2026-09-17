@@ -40,6 +40,103 @@ const readLocalFileSafely = (filePath) => {
   return '';
 };
 
+const FALLBACK_VIEW_TEMPLATE = `import React from 'react';
+
+export interface ViewTemplateProps {
+  readonly title: string;
+  readonly children: React.ReactNode;
+}
+
+export const ViewTemplate: React.FC<ViewTemplateProps> = ({ title, children }) => {
+  return (
+    <main className="view-template">
+      <header className="view-template__header">
+        <h1 className="view-template__title">{title}</h1>
+      </header>
+      <div className="view-template__content">
+        {children}
+      </div>
+    </main>
+  );
+};
+
+export default ViewTemplate;
+`;
+
+const FALLBACK_MOLECULE_TEMPLATE = `import React from 'react';
+import type { MSampleCardProps, SampleCardBadgeDescriptor } from './types';
+
+export const resolveBadgeDescriptor = (
+  status: 'active' | 'archived',
+  isHighValue: boolean
+): SampleCardBadgeDescriptor => {
+  if (status !== 'active') {
+    return {
+      text: status,
+      className: 'm-sample-card__badge m-sample-card__badge--archived'
+    };
+  }
+
+  if (isHighValue) {
+    return {
+      text: status,
+      className: 'm-sample-card__badge m-sample-card__badge--high-value'
+    };
+  }
+
+  return {
+    text: status,
+    className: 'm-sample-card__badge m-sample-card__badge--standard'
+  };
+};
+
+export const MSampleCard: React.FC<MSampleCardProps> = ({
+  title,
+  subtitle,
+  value,
+  status = 'active',
+  onAction
+}) => {
+  const isHighValue = value > 1000;
+  const badge = resolveBadgeDescriptor(status, isHighValue);
+
+  const handleActionClick = () => {
+    if (!onAction) return;
+    onAction();
+  };
+
+  return (
+    <div className="m-sample-card">
+      <div className="m-sample-card__header">
+        <div className="m-sample-card__title-group">
+          <h3 className="m-sample-card__title">{title}</h3>
+          {subtitle && <p className="m-sample-card__subtitle">{subtitle}</p>}
+        </div>
+        <span className={badge.className}>
+          {badge.text}
+        </span>
+      </div>
+      <div className="m-sample-card__body">
+        <div className="m-sample-card__value">
+          \${value.toLocaleString()}
+        </div>
+        {onAction && (
+          <button
+            type="button"
+            className="m-sample-card__action"
+            onClick={handleActionClick}
+          >
+            Action
+          </button>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default MSampleCard;
+`;
+
 export const readMcpResource = async (uri, cwd = process.cwd()) => {
   switch (uri) {
     case 'chemx://directives': {
@@ -54,23 +151,35 @@ export const readMcpResource = async (uri, cwd = process.cwd()) => {
     }
 
     case 'chemx://blueprints/view-template': {
-      const blueprintPath = path.resolve(starterKitRoot, 'blueprints', 'view-template.tsx');
-      const content = readLocalFileSafely(blueprintPath);
+      const candidatePaths = [
+        path.resolve(cwd, '.chemx', 'blueprints', 'view-template.tsx'),
+        path.resolve(cwd, 'blueprints', 'view-template.tsx'),
+        path.resolve(starterKitRoot, 'blueprints', 'view-template.tsx')
+      ];
+      const foundPath = candidatePaths.find((p) => fs.existsSync(p));
+      const content = foundPath ? fs.readFileSync(foundPath, 'utf-8') : FALLBACK_VIEW_TEMPLATE;
       return {
         uri,
         mimeType: 'text/plain',
-        text: content || '// view-template.tsx blueprint not found'
+        text: content
       };
     }
 
     case 'chemx://blueprints/molecule': {
-      const sampleVue = path.resolve(starterKitRoot, 'blueprints', 'molecule-capsule', 'm-tab-button', 'm-tab-button.vue');
-      const sampleTsx = path.resolve(starterKitRoot, 'blueprints', 'molecule-capsule', 'm-sample-card.tsx');
-      const content = readLocalFileSafely(sampleVue) || readLocalFileSafely(sampleTsx);
+      const candidatePaths = [
+        path.resolve(cwd, '.chemx', 'blueprints', 'molecule-capsule', 'm-tab-button', 'm-tab-button.vue'),
+        path.resolve(cwd, '.chemx', 'blueprints', 'molecule-capsule', 'm-sample-card.tsx'),
+        path.resolve(cwd, 'blueprints', 'molecule-capsule', 'm-tab-button', 'm-tab-button.vue'),
+        path.resolve(cwd, 'blueprints', 'molecule-capsule', 'm-sample-card.tsx'),
+        path.resolve(starterKitRoot, 'blueprints', 'molecule-capsule', 'm-tab-button', 'm-tab-button.vue'),
+        path.resolve(starterKitRoot, 'blueprints', 'molecule-capsule', 'm-sample-card.tsx')
+      ];
+      const foundPath = candidatePaths.find((p) => fs.existsSync(p));
+      const content = foundPath ? fs.readFileSync(foundPath, 'utf-8') : FALLBACK_MOLECULE_TEMPLATE;
       return {
         uri,
         mimeType: 'text/plain',
-        text: content || '// molecule blueprint not found'
+        text: content
       };
     }
 

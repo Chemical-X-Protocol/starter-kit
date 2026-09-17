@@ -26,9 +26,25 @@ export const runScaffold = async (projectName, rawArgs = [], onRunAudit = null) 
 
   let targetName = projectName;
   if (!targetName) {
-    targetName = hasGum()
-      ? gumInput('Project directory name:', 'my-molecular-app')
-      : await promptQuestion('Project directory name [my-molecular-app]: ');
+    const isHeadless =
+      rawArgs.includes('--headless') ||
+      rawArgs.includes('--yes') ||
+      rawArgs.includes('-y') ||
+      rawArgs.includes('--ci') ||
+      rawArgs.includes('--non-interactive') ||
+      rawArgs.includes('--no-interactive') ||
+      Boolean(process.env.CI) ||
+      process.stdout?.isTTY === false ||
+      process.stdin?.isTTY === false ||
+      Boolean(process.argv?.some((arg) => arg === '--headless' || arg === '--ci' || arg === '--yes' || arg === '-y'));
+
+    if (isHeadless) {
+      targetName = 'my-molecular-app';
+    } else {
+      targetName = hasGum()
+        ? gumInput('Project directory name:', 'my-molecular-app')
+        : await promptQuestion('Project directory name [my-molecular-app]: ');
+    }
   }
 
   const finalDirName = targetName.trim() || 'my-molecular-app';

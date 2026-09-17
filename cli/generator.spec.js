@@ -8,9 +8,11 @@ import {
   toCamelCase,
   buildReactComponent,
   buildVueComponent,
-  buildSvelteComponent
+  buildSvelteComponent,
+  buildIndex
 } from './generator-templates.js';
 import { handleCheckCommand } from './search-commands.js';
+import { obtainLicenseKey } from './license.js';
 
 test('generator-templates: toPascalCase and toCamelCase convert slugs correctly', () => {
   assert.strictEqual(toPascalCase('m-user-avatar'), 'UserAvatar');
@@ -123,3 +125,61 @@ test('generator-templates: binds to @chemx/x-atoms when atomsPackage option is p
   assert.ok(svelteCode.includes('<AtomButton'));
   assert.ok(!svelteCode.includes('<button'));
 });
+
+test('generator-templates: supports hasController = false for atom/lean capsules', () => {
+  const reactCode = buildReactComponent('a-badge', 'Badge', { hasController: false });
+  assert.ok(!reactCode.includes('.controller'));
+  assert.ok(!reactCode.includes('useBadgeController'));
+  assert.ok(reactCode.includes('canProceed = true'));
+
+  const vueCode = buildVueComponent('a-badge', 'Badge', { hasController: false });
+  assert.ok(!vueCode.includes('.controller'));
+  assert.ok(!vueCode.includes('useBadgeController'));
+  assert.ok(vueCode.includes('canProceed = true'));
+
+  const svelteCode = buildSvelteComponent('a-badge', 'Badge', { hasController: false });
+  assert.ok(!svelteCode.includes('.controller'));
+  assert.ok(!svelteCode.includes('createBadgeController'));
+  assert.ok(svelteCode.includes('canProceed: true'));
+
+  const indexCode = buildIndex('a-badge', 'Badge', 'tsx', false);
+  assert.ok(!indexCode.includes('useBadgeController'));
+  assert.ok(indexCode.includes("export { Badge } from './a-badge';"));
+});
+
+test('runGenerateWizard: scaffolds atom capsule without controller or controller import', async () => {
+  const tmpDir = path.resolve(process.cwd(), 'scratch/test-gen-atom');
+  if (fs.existsSync(tmpDir)) fs.rmSync(tmpDir, { recursive: true, force: true });
+
+  const res = await runGenerateWizard([
+    'atom',
+    'badge-pill',
+    '-y',
+    `--dir=${tmpDir}`,
+    '--framework=react'
+  ]);
+
+  assert.strictEqual(res.success, true);
+  assert.strictEqual(res.tier, 'atom');
+  assert.strictEqual(res.capsuleName, 'a-badge-pill');
+
+  const capsuleDir = path.join(tmpDir, 'a-badge-pill');
+  assert.ok(fs.existsSync(path.join(capsuleDir, 'a-badge-pill.tsx')));
+  assert.ok(!fs.existsSync(path.join(capsuleDir, 'a-badge-pill.controller.ts')));
+
+  const compContent = fs.readFileSync(path.join(capsuleDir, 'a-badge-pill.tsx'), 'utf-8');
+  assert.ok(!compContent.includes('useBadgePillController'));
+  assert.ok(!compContent.includes('.controller'));
+
+  const indexContent = fs.readFileSync(path.join(capsuleDir, 'index.ts'), 'utf-8');
+  assert.ok(!indexContent.includes('useBadgePillController'));
+
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+});
+
+test('obtainLicenseKey: returns null immediately when --headless is passed without interactive prompts', async () => {
+  const key = await obtainLicenseKey(['--headless']);
+  assert.strictEqual(key, null);
+});
+
+

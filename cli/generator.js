@@ -151,10 +151,10 @@ export const createCapsuleFiles = ({
     const specFile = `${capsuleName}.spec.ts`;
     const hasController = !isLean && selectedTier.tier !== 'atom';
     const installedFamily = detectInstalledFamily(cwd);
-    const templateOpts = { atomsPackage: installedFamily.atomsPackage };
+    const templateOpts = { atomsPackage: installedFamily.atomsPackage, hasController };
 
     fs.writeFileSync(path.join(targetDir, compFile), selectedFramework.compBuilder(capsuleName, pascalName, templateOpts), 'utf-8');
-    fs.writeFileSync(path.join(targetDir, 'index.ts'), buildIndex(capsuleName, pascalName, selectedFramework.ext), 'utf-8');
+    fs.writeFileSync(path.join(targetDir, 'index.ts'), buildIndex(capsuleName, pascalName, selectedFramework.ext, hasController), 'utf-8');
     fs.writeFileSync(path.join(targetDir, specFile), buildComponentSpec(capsuleName, pascalName, hasController), 'utf-8');
 
     fs.writeFileSync(path.join(typesDir, 'props.d.ts'), buildPropsType(capsuleName, pascalName), 'utf-8');

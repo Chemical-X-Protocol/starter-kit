@@ -183,6 +183,40 @@ test('MCP Server: resources/list and resources/read', async () => {
   assert.strictEqual(readRes.jsonrpc, '2.0');
   assert.strictEqual(readRes.result.contents[0].uri, 'chemx://directives');
   assert.ok(readRes.result.contents[0].text.length > 50);
+
+  const viewBlueprintRes = await handler.handleRequest({
+    jsonrpc: '2.0',
+    id: 91,
+    method: 'resources/read',
+    params: { uri: 'chemx://blueprints/view-template' }
+  });
+  assert.strictEqual(viewBlueprintRes.jsonrpc, '2.0');
+  assert.ok(viewBlueprintRes.result.contents[0].text.includes('ViewTemplate'));
+
+  const molBlueprintRes = await handler.handleRequest({
+    jsonrpc: '2.0',
+    id: 92,
+    method: 'resources/read',
+    params: { uri: 'chemx://blueprints/molecule' }
+  });
+  assert.strictEqual(molBlueprintRes.jsonrpc, '2.0');
+  assert.ok(molBlueprintRes.result.contents[0].text.length > 50);
+
+  // Test fallback in an isolated directory with no .chemx or blueprints directory
+  const emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-empty-'));
+  try {
+    const isolatedHandler = createMcpHandler({ cwd: emptyDir });
+    const fallbackRes = await isolatedHandler.handleRequest({
+      jsonrpc: '2.0',
+      id: 93,
+      method: 'resources/read',
+      params: { uri: 'chemx://blueprints/molecule' }
+    });
+    assert.strictEqual(fallbackRes.jsonrpc, '2.0');
+    assert.ok(fallbackRes.result.contents[0].text.includes('MSampleCard'));
+  } finally {
+    fs.rmSync(emptyDir, { recursive: true, force: true });
+  }
 });
 
 test('MCP Server: prompts/list and prompts/get', async () => {

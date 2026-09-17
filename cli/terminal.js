@@ -19,6 +19,9 @@ export const openBrowser = (url) => {
 };
 
 export const hasGum = () => {
+  if (process.stdout && process.stdout.isTTY === false) return false;
+  if (process.stdin && process.stdin.isTTY === false) return false;
+  if (process.argv && process.argv.some((arg) => arg === '--headless' || arg === '--ci' || arg === '--non-interactive' || arg === '--no-interactive' || arg === '--yes' || arg === '-y')) return false;
   try {
     return spawnSync("which", ["gum"], { stdio: "ignore" }).status === 0;
   } catch {

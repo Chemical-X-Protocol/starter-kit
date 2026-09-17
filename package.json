@@ -22,6 +22,7 @@
   },
   "files": [
     "cli",
+    "blueprints",
     "scripts",
     "README.md",
     "LICENSE",
@@ -45,8 +46,8 @@
     "audit": "node cli/index.js audit",
     "ci:audit": "node cli/index.js audit --ci --dir=cli",
     "chemx": "node cli/index.js",
-    "q": "node cli/index.js q",
-    "search": "node cli/index.js search",
+    "q": "chemx search",
+    "search": "chemx search",
     "mcp": "node cli/index.js mcp",
     "install-mcp": "node cli/index.js install-mcp",
     "postinstall": "node cli/postinstall.js",

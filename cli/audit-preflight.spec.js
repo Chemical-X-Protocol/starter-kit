@@ -102,3 +102,14 @@ test('runAudit: fast mode returns valid health metrics with zero AST traversal',
   assert.ok(typeof report.health.score === 'number');
   assert.ok(typeof report.health.grade === 'string');
 });
+
+test('runAuditPreflight: headless flag resolves immediately without interactive prompts', async () => {
+  const result = await runAuditPreflight(['--headless'], {
+    defaultDir: 'cli',
+    cwd: process.cwd()
+  });
+
+  assert.strictEqual(result.targetDir, 'cli');
+  assert.strictEqual(result.fast, false);
+  assert.strictEqual(result.fileList, null);
+});

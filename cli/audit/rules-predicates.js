@@ -8,7 +8,7 @@ const COMPONENT_EXTENSIONS = new Set(['.vue', '.tsx', '.jsx']);
 const TEMPLATE_EXTENSIONS = new Set(['.vue', '.html', '.svelte']);
 const COMMENT_PREFIXES = ['//', '*', '/*'];
 const CONSOLE_LOG_METHODS = ['log', 'info', 'warn'];
-const NON_INTERACTIVE_FLAGS = ['--non-interactive', '--no-interactive', '--ci'];
+const NON_INTERACTIVE_FLAGS = ['--non-interactive', '--no-interactive', '--ci', '--headless', '--yes', '-y'];
 const FORMAT_FLAGS = ['--markdown', '--md', '--json'];
 const GRADE_RANKS = { 'A+': 5, 'A': 4, 'B': 3, 'C': 2, 'D': 1, 'F': 0 };
 
@@ -135,5 +135,6 @@ export const isNonInteractiveSession = (rawArgs, env = process.env) => {
   const hasOutputFlag = rawArgs.some((arg) => arg.startsWith('--output=') || arg.startsWith('-o='));
   const hasFormatFlag = FORMAT_FLAGS.some((flag) => rawArgs.includes(flag));
   const hasCiEnv = Boolean(env.CI || env.GIT_DIR);
-  return [hasCliFlag, hasOutputFlag, hasFormatFlag, hasCiEnv].some(Boolean);
+  const isNotTTY = Boolean(process.stdout && process.stdout.isTTY === false);
+  return [hasCliFlag, hasOutputFlag, hasFormatFlag, hasCiEnv, isNotTTY].some(Boolean);
 };
