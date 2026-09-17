@@ -13,149 +13,15 @@ import {
 import { createCapsuleFiles } from '../generator.js';
 import { runBuildAudit } from '../build.js';
 import { runAutofix } from '../audit/autofix.js';
+import { syncSearchIndex } from '../search.js';
+import { openIndexDb, queryIndex } from '../search-db.js';
+import { readTokenOptimized } from '../reader.js';
+import { patchFile } from '../patcher.js';
+import { handleCheckCommand } from '../search-commands.js';
+import { MCP_TOOLS } from './manifests.js';
 
-export const MCP_TOOLS = [
-  {
-    name: 'chemx_query_patterns',
-    description: 'Execute single-pass AST fingerprinting across candidate files or directory to discover cross-file clones, duplicated predicates, shared state machines, and parallel controller returns before decomposing monoliths (Chemical X Directive 1.F Pre-Split Pattern Discovery).',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        dir: {
-          type: 'string',
-          description: 'Target directory or path to scan (defaults to "src" or current working directory).'
-        },
-        type: {
-          type: 'string',
-          enum: ['ALL', 'STATE_UNION', 'UI_STRUCTURE', 'PREDICATE_LOGIC', 'HOOK_SIGNATURE'],
-          description: 'Filter pattern types: STATE_UNION (shared state machines), UI_STRUCTURE (cloned JSX layouts), PREDICATE_LOGIC (duplicated booleans), HOOK_SIGNATURE (parallel hooks).'
-        },
-        minOccurrences: {
-          type: 'number',
-          description: 'Minimum file occurrences required to qualify as a candidate (default: 2).'
-        },
-        compact: {
-          type: 'boolean',
-          description: 'Enable token-conserving compact output (unique files and top 3 samples only, defaults to true).'
-        }
-      }
-    }
-  },
-  {
-    name: 'chemx_autofix',
-    description: 'Execute deterministic remediation of safe code violations (typography em dashes, leaked markdown fences, conversational residue comments, and lazy truncation placeholders) with token-compact summaries.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        path: {
-          type: 'string',
-          description: 'Target file or directory path to autofix (defaults to "src").'
-        },
-        dryRun: {
-          type: 'boolean',
-          description: 'Simulate changes without writing files to disk (defaults to false).'
-        },
-        rules: {
-          type: 'array',
-          items: { type: 'string' },
-          description: 'Optional rule filters (TYPOGRAPHY_EM_DASH, AI_SLOP_CONVERSATIONAL_ARTIFACT, AI_SLOP_LAZY_PLACEHOLDER).'
-        }
-      }
-    }
-  },
-  {
-    name: 'chemx_audit',
-    description: 'Run the 7-Pillar Chemical X static AST audit on a file or directory. Analyzes line budgets, 2-stage booleans, hook saturation, self-cleaning timers, anti-Tailwind soup, AI slop, and token burn metrics.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        path: {
-          type: 'string',
-          description: 'Target file or directory path to audit (defaults to "src").'
-        },
-        strict: {
-          type: 'boolean',
-          description: 'Strict mode: fail on any violation including low-severity hygiene issues.'
-        },
-        minGrade: {
-          type: 'string',
-          description: 'Minimum acceptable health grade tier (A+, A, B, C, D).'
-        },
-        minScore: {
-          type: 'number',
-          description: 'Minimum acceptable score out of 100.'
-        },
-        model: {
-          type: 'string',
-          description: 'Pricing baseline for token context burn analysis (claude, gpt4o, blended).'
-        }
-      }
-    }
-  },
-  {
-    name: 'chemx_generate_capsule',
-    description: 'Deterministically generate a compliant Chemical X crystalline capsule directory (component, controller hook, mixin-only SCSS, co-located types, barrel index) for React 19, Vue 3.4+, or Svelte 5.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        name: {
-          type: 'string',
-          description: 'Capsule feature name (e.g. "m-spark-kpi", "a-action-button", "user-avatar").'
-        },
-        framework: {
-          type: 'string',
-          enum: ['react', 'vue', 'svelte'],
-          description: 'Target framework flavor: React 19 (TSX), Vue 3.4+ (SFC script setup), or Svelte 5 (Runes).'
-        },
-        tier: {
-          type: 'string',
-          enum: ['m', 'a', 'o', 't'],
-          description: 'Architectural tier: m (molecule < 100 lines), a (atom), o (organism), t (template).'
-        },
-        targetDir: {
-          type: 'string',
-          description: 'Destination parent directory. Defaults to detected components directory.'
-        },
-        lean: {
-          type: 'boolean',
-          description: 'When true, skip generating controller and SCSS files (useful for minimal UI atoms).'
-        }
-      },
-      required: ['name', 'framework']
-    }
-  },
-  {
-    name: 'chemx_get_refactor_prompt',
-    description: 'Synthesize targeted Chemical X AI refactoring prompts for Grade F critical hazards, Grade D high debts, Grade C medium debts, AI slop artifacts, or monolithic hotspots.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        dir: {
-          type: 'string',
-          description: 'Target directory to analyze (defaults to "src").'
-        },
-        scope: {
-          type: 'string',
-          enum: ['master', 'grade-f', 'grade-d', 'grade-c', 'grade-b', 'ai-slop', 'hotspots'],
-          description: 'Prompt scope to generate (default: "master").'
-        }
-      }
-    }
-  },
-  {
-    name: 'chemx_audit_build',
-    description: 'Wrap and audit a build command with token-conserving silent execution. Suppresses compiler noise and catalogs diagnostics into structured categories (TypeScript, Vite/Rollup, Style, Budget).',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        command: {
-          type: 'string',
-          description: 'Build command to run (defaults to project build script e.g. "npm run build").'
-        }
-      }
-    }
-  }
-];
+export { MCP_TOOLS };
+
 
 const handleQueryPatterns = (args = {}, cwd = process.cwd()) => {
   const targetDir = args.dir || (fs.existsSync(path.resolve(cwd, 'src')) ? 'src' : '.');
@@ -331,7 +197,7 @@ const handleAuditBuild = async (args = {}) => {
   if (args.command) {
     rawArgs.push('--', args.command);
   }
-  return runBuildAudit(rawArgs, false);
+  return runBuildAudit(rawArgs, false, { print: false });
 };
 
 const handleAutofix = (args = {}, cwd = process.cwd()) => {
@@ -340,6 +206,86 @@ const handleAutofix = (args = {}, cwd = process.cwd()) => {
     rules: args.rules,
     cwd
   });
+};
+
+const handleChemxQ = (args = {}, cwd = process.cwd()) => {
+  const query = args.query;
+  if (!query) {
+    throw new Error('chemx_q requires "query" argument.');
+  }
+  const db = openIndexDb(cwd);
+  if (!db) {
+    syncSearchIndex('src', cwd);
+  }
+  const activeDb = openIndexDb(cwd);
+  if (!activeDb) {
+    throw new Error('Unable to initialize Chemical X AST search index database.');
+  }
+
+  const limit = typeof args.limit === 'number' ? args.limit : 20;
+  const results = queryIndex(activeDb, {
+    query,
+    tier: args.tier || 'all',
+    limit
+  });
+
+  if (args.inspect) {
+    return results.map((r) => ({
+      path: r.path,
+      tier: r.tier,
+      lines: r.lines,
+      symbols: (r.symbols || []).map((s) => s.name),
+      props: (r.props || []).map((p) => p.name),
+      hooks: r.hooks || []
+    }));
+  }
+
+  const lines = results.map((r) => {
+    const mainSym = (r.symbols || []).find((s) => s.isExport)?.name || '';
+    const symPart = mainSym ? ` (${mainSym})` : '';
+    const hookPart = (r.hooks && r.hooks.length > 0) ? ` [${r.hooks.slice(0, 2).join(',')}]` : '';
+    return `[${r.tier.toUpperCase()}] ${r.path}:${r.lines}L${symPart}${hookPart}`;
+  });
+
+  return lines.length > 0 ? lines.join('\n') : `No matching capsules or symbols for "${query}"`;
+};
+
+const handleChemxRead = (args = {}, cwd = process.cwd()) => {
+  if (!args.path) {
+    throw new Error('chemx_read requires "path" argument.');
+  }
+  const targetPath = path.isAbsolute(args.path) ? args.path : path.resolve(cwd, args.path);
+  const res = readTokenOptimized(targetPath, {
+    outline: args.outline,
+    symbol: args.symbol,
+    stripComments: args.stripComments,
+    compact: args.compact,
+    startLine: args.startLine,
+    endLine: args.endLine
+  });
+
+  const header = `// ${res.file} (${res.lineCount || res.totalLines} lines, ~${res.tokensEst} tokens)\n`;
+  return header + res.content;
+};
+
+const handleChemxPatch = (args = {}, cwd = process.cwd()) => {
+  if (!args.path || args.targetContent === undefined || args.replacementContent === undefined) {
+    throw new Error('chemx_patch requires "path", "targetContent", and "replacementContent" arguments.');
+  }
+  const targetPath = path.isAbsolute(args.path) ? args.path : path.resolve(cwd, args.path);
+  return patchFile(targetPath, {
+    targetContent: args.targetContent,
+    replacementContent: args.replacementContent,
+    allowMultiple: Boolean(args.allowMultiple)
+  });
+};
+
+const handleChemxCheck = (args = {}, cwd = process.cwd()) => {
+  if (!args.path) {
+    throw new Error('chemx_check requires "path" argument.');
+  }
+  const targetPath = path.isAbsolute(args.path) ? args.path : path.resolve(cwd, args.path);
+  return handleCheckCommand(targetPath, { isJson: true, isCli: false });
 };
 
 export const executeMcpTool = async (name, args = {}, cwd = process.cwd()) => {
@@ -356,6 +302,14 @@ export const executeMcpTool = async (name, args = {}, cwd = process.cwd()) => {
       return handleAuditBuild(args);
     case 'chemx_autofix':
       return handleAutofix(args, cwd);
+    case 'chemx_q':
+      return handleChemxQ(args, cwd);
+    case 'chemx_read':
+      return handleChemxRead(args, cwd);
+    case 'chemx_patch':
+      return handleChemxPatch(args, cwd);
+    case 'chemx_check':
+      return handleChemxCheck(args, cwd);
     default:
       throw new Error(`Unknown tool: ${name}`);
   }

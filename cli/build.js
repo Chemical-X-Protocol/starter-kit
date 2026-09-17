@@ -20,16 +20,17 @@ const parseCommandFromArgs = (args) => {
   return candidate ? candidate.trim() : null;
 };
 
-export const runBuildAudit = async (rawArgs = [], isCli = false) => {
+export const runBuildAudit = async (rawArgs = [], isCli = false, options = {}) => {
   const isJson = rawArgs.includes('--json');
-  const isSilent = rawArgs.includes('--silent');
+  const isSilent = rawArgs.includes('--silent') || options.silent === true;
   const isRaw = rawArgs.includes('--raw');
   const isSummary = rawArgs.includes('--summary');
+  const shouldPrint = options.print !== false;
 
   const customCommand = parseCommandFromArgs(rawArgs);
   const command = detectProjectBuildCommand(customCommand, process.cwd());
 
-  const shouldPrintStart = !isJson && !isSilent && !isRaw;
+  const shouldPrintStart = shouldPrint && !isJson && !isSilent && !isRaw;
   if (shouldPrintStart) {
     process.stdout.write(`${ANSI.CYAN}Auditing build:${ANSI.RESET} ${ANSI.DIM}${command}${ANSI.RESET}\n`);
   }
@@ -39,13 +40,15 @@ export const runBuildAudit = async (rawArgs = [], isCli = false) => {
   const report = groupBuildDiagnostics(rawDiagnostics, executionResult);
 
   if (isJson) {
-    process.stdout.write(formatJsonBuildReport(report) + '\n');
+    if (shouldPrint) {
+      process.stdout.write(formatJsonBuildReport(report) + '\n');
+    }
     if (isCli) process.exit(report.exitCode);
     return report;
   }
 
   const terminalOutput = formatTerminalBuildReport(report, { silent: isSilent, summary: isSummary });
-  if (terminalOutput) {
+  if (terminalOutput && shouldPrint) {
     process.stdout.write(terminalOutput);
   }
 

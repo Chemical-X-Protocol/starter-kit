@@ -53,12 +53,17 @@ test('MCP Server: tools/list enumerates all Chemical X tools', async () => {
 
   assert.strictEqual(res.jsonrpc, '2.0');
   const toolNames = res.result.tools.map((t) => t.name);
+  assert.strictEqual(toolNames.length, 10);
   assert.ok(toolNames.includes('chemx_query_patterns'));
   assert.ok(toolNames.includes('chemx_audit'));
   assert.ok(toolNames.includes('chemx_generate_capsule'));
   assert.ok(toolNames.includes('chemx_get_refactor_prompt'));
   assert.ok(toolNames.includes('chemx_audit_build'));
   assert.ok(toolNames.includes('chemx_autofix'));
+  assert.ok(toolNames.includes('chemx_q'));
+  assert.ok(toolNames.includes('chemx_read'));
+  assert.ok(toolNames.includes('chemx_patch'));
+  assert.ok(toolNames.includes('chemx_check'));
 });
 
 test('MCP Server: tools/call chemx_query_patterns executes AST discovery', async () => {
@@ -403,3 +408,133 @@ test('MCP Server: stdio streaming handles line-buffered JSON-RPC', async () => {
   assert.strictEqual(parsed.id, 100);
   assert.deepStrictEqual(parsed.result, {});
 });
+
+test('MCP Server: tools/call chemx_q searches symbols and capsules', async () => {
+  const handler = createMcpHandler();
+  const res = await handler.handleRequest({
+    jsonrpc: '2.0',
+    id: 101,
+    method: 'tools/call',
+    params: {
+      name: 'chemx_q',
+      arguments: {
+        query: 'badge',
+        tier: 'all',
+        inspect: true
+      }
+    }
+  });
+
+  assert.strictEqual(res.jsonrpc, '2.0');
+  assert.strictEqual(res.result.isError, false);
+  const results = JSON.parse(res.result.content[0].text);
+  assert.ok(Array.isArray(results));
+});
+
+test('MCP Server: tools/call chemx_read extracts outline without full file dump', async () => {
+  const handler = createMcpHandler();
+  const res = await handler.handleRequest({
+    jsonrpc: '2.0',
+    id: 102,
+    method: 'tools/call',
+    params: {
+      name: 'chemx_read',
+      arguments: {
+        path: 'blueprints/molecule-capsule/m-chemx-badge/m-chemx-badge.tsx',
+        outline: true
+      }
+    }
+  });
+
+  assert.strictEqual(res.jsonrpc, '2.0');
+  assert.strictEqual(res.result.isError, false);
+  const text = res.result.content[0].text;
+  assert.ok(text.includes('m-chemx-badge.tsx'));
+  assert.ok(text.includes('tokens'));
+});
+
+test('MCP Server: tools/call chemx_patch surgically modifies target content', async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-patch-mcp-'));
+  const testFile = path.join(tmpDir, 'sample.ts');
+  fs.writeFileSync(testFile, 'const greeting = "hello world";\n', 'utf-8');
+
+  const handler = createMcpHandler();
+  const res = await handler.handleRequest({
+    jsonrpc: '2.0',
+    id: 103,
+    method: 'tools/call',
+    params: {
+      name: 'chemx_patch',
+      arguments: {
+        path: testFile,
+        targetContent: 'hello world',
+        replacementContent: 'hello chemical-x'
+      }
+    }
+  });
+
+  assert.strictEqual(res.jsonrpc, '2.0');
+  assert.strictEqual(res.result.isError, false);
+  const updated = fs.readFileSync(testFile, 'utf-8');
+  assert.ok(updated.includes('hello chemical-x'));
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+});
+
+test('MCP Server: tools/call chemx_check verifies single file boundary rules', async () => {
+  const handler = createMcpHandler();
+  const res = await handler.handleRequest({
+    jsonrpc: '2.0',
+    id: 104,
+    method: 'tools/call',
+    params: {
+      name: 'chemx_check',
+      arguments: {
+        path: 'blueprints/molecule-capsule/m-chemx-badge/m-chemx-badge.tsx'
+      }
+    }
+  });
+
+  assert.strictEqual(res.jsonrpc, '2.0');
+  assert.strictEqual(res.result.isError, false);
+  const checkRes = JSON.parse(res.result.content[0].text);
+  assert.strictEqual(typeof checkRes.file, 'string');
+  assert.strictEqual(typeof checkRes.isClean, 'boolean');
+  assert.strictEqual(typeof checkRes.violationsCount, 'number');
+});
+
+test('MCP Server: resources/read chemx://blueprints/molecule enforces Zero Raw DOM', async () => {
+  const handler = createMcpHandler();
+  const res = await handler.handleRequest({
+    jsonrpc: '2.0',
+    id: 105,
+    method: 'resources/read',
+    params: { uri: 'chemx://blueprints/molecule' }
+  });
+
+  assert.strictEqual(res.jsonrpc, '2.0');
+  const blueprintText = res.result.contents[0].text;
+  assert.ok(blueprintText.length > 0);
+  assert.ok(!blueprintText.includes('<div className="m-sample-card">'));
+  assert.ok(!blueprintText.includes('<button type="button"'));
+});
+
+test('MCP Server: prompts/get chemx_remediate_hotspot dynamically hydrates diagnostics', async () => {
+  const handler = createMcpHandler();
+  const res = await handler.handleRequest({
+    jsonrpc: '2.0',
+    id: 106,
+    method: 'prompts/get',
+    params: {
+      name: 'chemx_remediate_hotspot',
+      arguments: {
+        filePath: 'blueprints/molecule-capsule/m-chemx-badge/m-chemx-badge.tsx'
+      }
+    }
+  });
+
+  assert.strictEqual(res.jsonrpc, '2.0');
+  const userText = res.result.messages[0].content.text;
+  assert.ok(userText.includes('LIVE AST DIAGNOSTICS'));
+  assert.ok(userText.includes('Total Lines:'));
+});
+

@@ -64,6 +64,7 @@ export default ViewTemplate;
 `;
 
 const FALLBACK_MOLECULE_TEMPLATE = `import React from 'react';
+import { AtomSurface, AtomText, AtomBadge, AtomButton } from '../../atoms';
 import type { MSampleCardProps, SampleCardBadgeDescriptor } from './types';
 
 export const resolveBadgeDescriptor = (
@@ -106,31 +107,31 @@ export const MSampleCard: React.FC<MSampleCardProps> = ({
   };
 
   return (
-    <div className="m-sample-card">
-      <div className="m-sample-card__header">
-        <div className="m-sample-card__title-group">
-          <h3 className="m-sample-card__title">{title}</h3>
-          {subtitle && <p className="m-sample-card__subtitle">{subtitle}</p>}
-        </div>
-        <span className={badge.className}>
+    <AtomSurface className="m-sample-card">
+      <AtomSurface className="m-sample-card__header">
+        <AtomSurface className="m-sample-card__title-group">
+          <AtomText as="h3" className="m-sample-card__title">{title}</AtomText>
+          {subtitle && <AtomText as="p" className="m-sample-card__subtitle">{subtitle}</AtomText>}
+        </AtomSurface>
+        <AtomBadge className={badge.className}>
           {badge.text}
-        </span>
-      </div>
-      <div className="m-sample-card__body">
-        <div className="m-sample-card__value">
+        </AtomBadge>
+      </AtomSurface>
+      <AtomSurface className="m-sample-card__body">
+        <AtomText className="m-sample-card__value">
           \${value.toLocaleString()}
-        </div>
+        </AtomText>
         {onAction && (
-          <button
+          <AtomButton
             type="button"
             className="m-sample-card__action"
             onClick={handleActionClick}
           >
             Action
-          </button>
+          </AtomButton>
         )}
-      </div>
-    </div>
+      </AtomSurface>
+    </AtomSurface>
   );
 };
 

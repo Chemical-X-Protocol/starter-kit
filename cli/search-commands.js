@@ -314,25 +314,25 @@ export const handleCheckCommand = (targetFile, { isJson = false, isCli = true } 
   const startTime = Date.now();
   if (!targetFile) {
     const errorMsg = 'Please specify a target file to check. Example: chemx check src/components/m-card.vue';
-    if (isJson) {
+    if (isJson && isCli) {
       process.stdout.write(JSON.stringify({ error: errorMsg, success: false }) + '\n');
-    } else {
+    } else if (isCli) {
       process.stderr.write(`\x1b[31m✕ ${errorMsg}\x1b[0m\n`);
     }
     if (isCli) process.exit(1);
-    return null;
+    return { error: errorMsg, success: false };
   }
 
   const absPath = path.resolve(process.cwd(), targetFile);
   if (!fs.existsSync(absPath)) {
     const errorMsg = `File not found: ${targetFile}`;
-    if (isJson) {
+    if (isJson && isCli) {
       process.stdout.write(JSON.stringify({ error: errorMsg, success: false }) + '\n');
-    } else {
+    } else if (isCli) {
       process.stderr.write(`\x1b[31m✕ ${errorMsg}\x1b[0m\n`);
     }
     if (isCli) process.exit(1);
-    return null;
+    return { error: errorMsg, success: false };
   }
 
   const relPath = path.relative(process.cwd(), absPath);
@@ -354,8 +354,10 @@ export const handleCheckCommand = (targetFile, { isJson = false, isCli = true } 
   };
 
   if (isJson) {
-    process.stdout.write(JSON.stringify(payload) + '\n');
-    if (isCli) process.exit(isClean ? 0 : 1);
+    if (isCli) {
+      process.stdout.write(JSON.stringify(payload) + '\n');
+      process.exit(isClean ? 0 : 1);
+    }
     return payload;
   }
 

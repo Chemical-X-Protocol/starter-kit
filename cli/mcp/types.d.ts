@@ -86,3 +86,32 @@ export interface AuditBuildArgs {
   readonly command?: string;
   readonly raw?: boolean;
 }
+
+export interface ChemxQArgs {
+  readonly query: string;
+  readonly tier?: 'atom' | 'molecule' | 'organism' | 'template' | 'view' | 'hook' | 'all';
+  readonly inspect?: boolean;
+  readonly limit?: number;
+}
+
+export interface ChemxReadArgs {
+  readonly path: string;
+  readonly outline?: boolean;
+  readonly symbol?: string;
+  readonly stripComments?: boolean;
+  readonly compact?: boolean;
+  readonly startLine?: number;
+  readonly endLine?: number;
+}
+
+export interface ChemxPatchArgs {
+  readonly path: string;
+  readonly targetContent: string;
+  readonly replacementContent: string;
+  readonly allowMultiple?: boolean;
+}
+
+export interface ChemxCheckArgs {
+  readonly path: string;
+}
+

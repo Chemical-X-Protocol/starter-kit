@@ -220,6 +220,19 @@ export const startStdioServer = (options = {}) => {
   const output = options.output || process.stdout;
   const handler = createMcpHandler(options);
 
+  // Stdio isolation: guard process.stdout so any non-JSON-RPC writes are routed to stderr
+  if (output === process.stdout) {
+    const originalStdoutWrite = process.stdout.write.bind(process.stdout);
+    process.stdout.write = (chunk, encoding, callback) => {
+      const str = typeof chunk === 'string' ? chunk : String(chunk);
+      const isJsonRpc = str.startsWith('{"jsonrpc":"2.0"') || str.startsWith('{\n  "jsonrpc": "2.0"');
+      if (isJsonRpc) {
+        return originalStdoutWrite(chunk, encoding, callback);
+      }
+      return process.stderr.write(chunk, encoding, callback);
+    };
+  }
+
   const notifyResourceUpdated = (uri) => {
     const notification = handler.notifyResourceUpdated(uri);
     if (notification) {

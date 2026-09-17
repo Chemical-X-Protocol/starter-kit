@@ -1,3 +1,7 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { auditFile } from '../audit.js';
+
 export const MCP_PROMPTS = [
   {
     name: 'chemx_remediate_hotspot',
@@ -37,6 +41,29 @@ export const getMcpPrompt = async (name, args = {}) => {
       }
       const framework = args.targetFramework || 'React/Vue';
 
+      const resolvedPath = path.isAbsolute(filePath) ? filePath : path.resolve(process.cwd(), filePath);
+      const relPath = path.relative(process.cwd(), resolvedPath);
+      const diagnosticLines = [];
+
+      if (fs.existsSync(resolvedPath) && fs.statSync(resolvedPath).isFile()) {
+        const fileContent = fs.readFileSync(resolvedPath, 'utf-8');
+        const lineCount = fileContent.split(/\r?\n/).length;
+        const violations = auditFile(resolvedPath, relPath);
+        diagnosticLines.push(
+          '',
+          '### LIVE AST DIAGNOSTICS:',
+          `- Target File: \`${relPath}\``,
+          `- Total Lines: ${lineCount}L (Molecular limit: 100L)`,
+          `- Active Violations: ${violations.length}`
+        );
+        if (violations.length > 0) {
+          diagnosticLines.push('Critical & High Hazards:');
+          for (const v of violations.slice(0, 10)) {
+            diagnosticLines.push(`  * Line ${v.line}: [${v.ruleId}] ${v.message} (${v.severity})`);
+          }
+        }
+      }
+
       const userText = [
         `Act as a Principal Systems Architect. Surgically refactor the monolithic file \`${filePath}\` according to Chemical X Molecular Architecture Standards:`,
         '',
@@ -49,6 +76,7 @@ export const getMcpPrompt = async (name, args = {}) => {
         '6. Co-located Types: Co-locate granular types/*.d.ts inside each capsule (< 100 lines). Avoid type monoliths.',
         '7. Zero synthetic or mock data: Return live data or explicit empty states.',
         `8. Framework: Calibrate bindings for ${framework}.`,
+        ...diagnosticLines,
         '',
         `Target file: \`${filePath}\`. Please produce a phased decomposition plan followed by modular capsule implementations.`
       ].join('\n');

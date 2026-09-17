@@ -2,7 +2,8 @@ import type { BuildAuditReport, BuildOptions } from './build/types.js';
 
 export function runBuildAudit(
   rawArgs?: readonly string[],
-  isCli?: boolean
+  isCli?: boolean,
+  options?: { readonly print?: boolean; readonly silent?: boolean }
 ): Promise<BuildAuditReport>;
 
 export {
