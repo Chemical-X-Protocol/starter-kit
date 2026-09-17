@@ -170,9 +170,7 @@ export const readMcpResource = async (uri, cwd = process.cwd()) => {
         path.resolve(cwd, '.chemx', 'blueprints', 'molecule-capsule', 'm-tab-button', 'm-tab-button.vue'),
         path.resolve(cwd, '.chemx', 'blueprints', 'molecule-capsule', 'm-sample-card.tsx'),
         path.resolve(cwd, 'blueprints', 'molecule-capsule', 'm-tab-button', 'm-tab-button.vue'),
-        path.resolve(cwd, 'blueprints', 'molecule-capsule', 'm-sample-card.tsx'),
-        path.resolve(starterKitRoot, 'blueprints', 'molecule-capsule', 'm-tab-button', 'm-tab-button.vue'),
-        path.resolve(starterKitRoot, 'blueprints', 'molecule-capsule', 'm-sample-card.tsx')
+        path.resolve(cwd, 'blueprints', 'molecule-capsule', 'm-sample-card.tsx')
       ];
       const foundPath = candidatePaths.find((p) => fs.existsSync(p));
       const content = foundPath ? fs.readFileSync(foundPath, 'utf-8') : FALLBACK_MOLECULE_TEMPLATE;
