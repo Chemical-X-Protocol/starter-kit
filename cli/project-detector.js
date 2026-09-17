@@ -38,6 +38,20 @@ export const detectFramework = (cwd = process.cwd()) => {
 const ATOMS_PACKAGES = ['@chemx/x-atoms', '@chemx/atoms', 'x-atoms', '@chem-x/x-atoms'];
 const PALETTE_PACKAGES = ['@chemx/o-command-palette', '@chemx/command-palette', 'o-command-palette', '@chem-x/o-command-palette'];
 
+const resolveLocalAtomsCandidate = (cwd) => {
+  const componentAtomsPath = path.resolve(cwd, 'src/components/atoms');
+  if (fs.existsSync(componentAtomsPath)) {
+    return '@/components/atoms';
+  }
+
+  const directAtomsPath = path.resolve(cwd, 'src/atoms');
+  if (fs.existsSync(directAtomsPath)) {
+    return '@/atoms';
+  }
+
+  return null;
+};
+
 export const detectInstalledFamily = (cwd = process.cwd()) => {
   const pkgPath = path.resolve(cwd, 'package.json');
   if (!fs.existsSync(pkgPath)) {
@@ -51,9 +65,7 @@ export const detectInstalledFamily = (cwd = process.cwd()) => {
     const atomsCandidate = ATOMS_PACKAGES.find((name) => Boolean(deps[name]));
     const paletteCandidate = PALETTE_PACKAGES.find((name) => Boolean(deps[name]));
 
-    const localAtomsCandidate =
-      fs.existsSync(path.resolve(cwd, 'src/components/atoms')) ? '@/components/atoms' :
-      fs.existsSync(path.resolve(cwd, 'src/atoms')) ? '@/atoms' : null;
+    const localAtomsCandidate = resolveLocalAtomsCandidate(cwd);
 
     const resolvedAtomsPackage = atomsCandidate || localAtomsCandidate || null;
 

@@ -7,6 +7,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [2026-09-16]
 
 ### Refactored
+- **Control Flow Ternary Decomposition (`cli/project-detector.js`)**: Extracted `resolveLocalAtomsCandidate` helper with clean early return guard clauses, eliminating nested ternary operator (`CONTROL_FLOW_NESTED_TERNARY`).
+- **Generator Templates Monolith Decomposition (`cli/generator-templates.js`)**: Decomposed 518-line monolith into single-responsibility capsules under `cli/generator-templates/` (< 100 lines each) and retained a clean barrel facade (< 30 lines) re-exporting canonical modules with 100% backward compatibility (`LINE_BUDGET_FILE`).
+- **Generator Templates Type Co-location (`cli/generator-templates.d.ts`)**: Co-located granular TypeScript declarations (< 50 lines) for all template builder functions.
 - **Control Flow Ternary Decomposition (`cli/reader.js`)**: Refactored `reader.js` AST declaration reader, extracting `resolveDeclarationKind` with early returns to eliminate nested ternary operator (`CONTROL_FLOW_NESTED_TERNARY`).
 - **ResultTuple Error Handling (`cli/mcp/installer.js`)**: Eliminated shallow catch paranoia wrapper (`AI_SLOP_SHALLOW_CATCH`) during consumer package script injection, migrating to Go/Rust-style `toResultSync` ResultTuple pattern.
 - **Conversational Residue & Echo Comment Cleanup (`cli/audit/autofix.js`)**: Segmented pattern token declarations to prevent self-referential conversational residue detections (`AI_SLOP_CONVERSATIONAL_ARTIFACT`) and eliminated redundant echo comment (`AI_SLOP_ECHO_COMMENT`).

@@ -1,10 +1,28 @@
-export * from './generator-templates/naming.js';
-export * from './generator-templates/react.js';
-export * from './generator-templates/vue.js';
-export * from './generator-templates/svelte.js';
-export * from './generator-templates/controller.js';
-export * from './generator-templates/types.js';
-export * from './generator-templates/specs.js';
-export * from './generator-templates/styles.js';
-export * from './generator-templates/hooks.js';
-export * from './generator-templates/views.js';
+export { toPascalCase, toCamelCase } from './generator-templates/naming.js';
+export { buildReactComponent } from './generator-templates/react.js';
+export { buildVueComponent } from './generator-templates/vue.js';
+export { buildSvelteComponent } from './generator-templates/svelte.js';
+export { buildController } from './generator-templates/controller.js';
+export { buildComponentSpec, buildIndex } from './generator-templates/specs.js';
+export {
+  buildPropsType,
+  buildStateType,
+  buildTypesIndex,
+  buildTypes
+} from './generator-templates/types.js';
+export { buildScss } from './generator-templates/styles.js';
+export {
+  buildHook,
+  buildHookOptionsType,
+  buildHookReturnType,
+  buildHookIndex,
+  buildHookSpec
+} from './generator-templates/hooks.js';
+export {
+  buildReactView,
+  buildVueView,
+  buildSvelteView,
+  buildViewParamsType,
+  buildViewIndex,
+  buildViewSpec
+} from './generator-templates/views.js';
