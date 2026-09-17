@@ -1,6 +1,6 @@
 {
   "name": "create-chemx",
-  "version": "26.9.17-309",
+  "version": "26.9.17-329",
   "description": "Chemical X Protocol: Private drop-in architecture starter kit and capsule generator",
   "type": "module",
   "bin": {
