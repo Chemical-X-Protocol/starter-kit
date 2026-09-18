@@ -51,7 +51,8 @@ export const createMcpHandler = (options = {}) => {
       };
     }
 
-    if (method === 'notifications/initialized') {
+    // Notifications (no id): MUST NOT reply per JSON-RPC 2.0 specification
+    if (typeof id === 'undefined' || id === null) {
       return null;
     }
 

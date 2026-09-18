@@ -165,11 +165,14 @@ export const installAntigravityMcpConfig = (targetDir = '.', options = {}) => {
 
   const configFile = path.join(configDir, 'mcp_config.json');
   const resolvedTarget = path.resolve(targetDir);
-  const localStarter = path.join(resolvedTarget, 'apps', 'chemical-x', 'starter-kit', 'cli', 'index.js');
-  const hasLocalStarter = fs.existsSync(localStarter);
+  const directStarter = path.join(resolvedTarget, 'cli', 'index.js');
+  const monorepoStarter = path.join(resolvedTarget, 'apps', 'chemical-x', 'starter-kit', 'cli', 'index.js');
+  const localStarter = fs.existsSync(directStarter)
+    ? directStarter
+    : (fs.existsSync(monorepoStarter) ? monorepoStarter : null);
 
-  const serverDef = hasLocalStarter
-    ? { command: 'node', args: [localStarter, 'mcp'] }
+  const serverDef = localStarter
+    ? { command: process.execPath, args: [localStarter, 'mcp'] }
     : { command: 'npx', args: ['-y', 'chemx', 'mcp'] };
 
   try {
