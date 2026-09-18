@@ -95,7 +95,9 @@
 
 ### M. The Master MCP Tool Protocol & Zero-Permission Dispatch
 - **Master Gateway Rule**: When operating inside environments with per-tool permission controls (e.g. Antigravity, Claude Desktop, Cursor), AI agents MUST invoke the unified master MCP tool `chemx` (or `chemx({ action, params })`) rather than invoking fragmented tool names or dropping down to bash subshells.
-- **One-Time Approval Advantage**: The `chemx` master tool provides a single authorization point for the user. Once approved, all sub-operations (`audit`, `verify`, `typecheck`, `test`, `check`, `patch`, `write`, `read`, `team`, `q`, `autofix`) execute silently in-process with zero terminal confirmation prompts.
+- **Strict Ban on Fragmented Sub-Tool Calls**: Agents are strictly prohibited from calling individual tool names (such as `chemx_read`, `chemx_audit`, or `chemx_write`) directly when the master gateway tool is available. Every distinct tool name triggers a separate permission confirmation dialog for the user, resulting in severe prompt fatigue. Calling `chemx({ action, params })` routes through a single authorization point.
+- **One-Time Approval Advantage**: The `chemx` master tool provides a single authorization point for the user. Once approved, all sub-operations (`audit`, `verify`, `typecheck`, `test`, `check`, `patch`, `write`, `read`, `team`, `q`, `autofix`, `issue`) execute silently in-process with zero terminal confirmation prompts.
+- **In-Band JSON-RPC Communication (Zero Disk Dumps)**: All query, inspection, and verification tools must communicate strictly in-band via MCP `CallToolResult` objects (`content: [{ type: "text", text: "..." }]`). Tools must never dump intermediate text files (.txt/.md) or scratch files to disk for AI consumption.
 - **Command Forwarding Syntax**: Agents may invoke either structured action objects (`chemx({ action: 'audit', params: { path: 'src' } })`) or CLI command strings (`chemx({ command: 'audit src' })`).
 - **Strict Prohibition on Bash Escalation**: Agents MUST NOT spawn bash subshells (`run_command` with `pnpm chemx ...` or `node cli/...`) when an equivalent in-process `chemx` MCP action exists.
 

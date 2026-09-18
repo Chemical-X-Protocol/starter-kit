@@ -47,7 +47,7 @@ export const handleError = async (err, options = {}) => {
   };
 
   const issue = formatIssueContent(report, targetRepo, options.labels);
-  const savedPath = saveIssueArtifact(cwd, issue);
+  const savedPath = saveIssueArtifact(cwd, issue, options);
 
   const hasToken = Boolean(process.env.GH_TOKEN || process.env.GITHUB_TOKEN);
   const isCiEnv = Boolean(process.env.CI || process.env.GITHUB_ACTIONS);

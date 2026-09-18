@@ -213,6 +213,7 @@ test('MCP Server: resources/list and resources/read', async () => {
 
   // Test fallback in an isolated directory with no .chemx or blueprints directory
   const emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-empty-'));
+  fs.writeFileSync(path.join(emptyDir, 'package.json'), JSON.stringify({ name: 'empty' }), 'utf-8');
   try {
     const isolatedHandler = createMcpHandler({ cwd: emptyDir });
     const fallbackRes = await isolatedHandler.handleRequest({
@@ -613,5 +614,43 @@ test('MCP Tools: keyed Tools map contains all handlers and executes mapped metho
     /Unknown tool: unknown_nonexistent_tool/
   );
 });
+
+test('MCP Server: master tool chemx communicates strictly in-band with zero disk output', async () => {
+  const handler = createMcpHandler();
+  const testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-mcp-test-'));
+  fs.writeFileSync(path.join(testDir, 'package.json'), JSON.stringify({ name: 'mcp-test' }), 'utf-8');
+
+  try {
+    const issueRes = await handler.handleRequest({
+      jsonrpc: '2.0',
+      id: 101,
+      method: 'tools/call',
+      params: {
+        name: 'chemx',
+        arguments: {
+          action: 'issue',
+          params: {
+            error: 'Test in-band MCP error',
+            command: 'chemx test'
+          }
+        }
+      }
+    });
+
+    assert.strictEqual(issueRes.jsonrpc, '2.0');
+    assert.strictEqual(issueRes.result.isError, false);
+    assert.strictEqual(issueRes.result.content[0].type, 'text');
+    const parsed = JSON.parse(issueRes.result.content[0].text);
+    assert.strictEqual(parsed.success, true);
+    assert.ok(parsed.issue.body.includes('Test in-band MCP error'));
+    assert.strictEqual(parsed.savedPath, null);
+
+    const issuesDir = path.join(testDir, '.chemx', 'issues');
+    assert.strictEqual(fs.existsSync(issuesDir), false);
+  } finally {
+    fs.rmSync(testDir, { recursive: true, force: true });
+  }
+});
+
 
 

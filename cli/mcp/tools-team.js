@@ -124,13 +124,15 @@ export const handleChemxReportIssue = async (args = {}, cwd = process.cwd()) => 
     autoPost: Boolean(args.autoPost),
     labels: args.labels,
     silent: true,
-    context: args.context
+    context: args.context,
+    skipFileWrite: true
   });
 
   return {
     success: true,
     issue: {
       title: result.issue.title,
+      body: result.issue.body,
       webUrl: result.issue.webUrl,
       targetRepo: result.issue.targetRepo,
       labels: result.issue.labels
@@ -138,6 +140,6 @@ export const handleChemxReportIssue = async (args = {}, cwd = process.cwd()) => 
     published: result.publishResult.success,
     publishedUrl: result.publishResult.url,
     issueNumber: result.publishResult.issueNumber,
-    savedPath: result.savedPath
+    savedPath: result.savedPath || null
   };
 };

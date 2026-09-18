@@ -17,7 +17,10 @@ export const resolveTargetIssuesRepo = (options = {}, cwd = process.cwd()) => {
   return DEFAULT_REPO;
 };
 
-export const saveIssueArtifact = (cwd, issue) => {
+export const saveIssueArtifact = (cwd, issue, options = {}) => {
+  if (options.skipFileWrite) {
+    return null;
+  }
   try {
     const issuesDir = path.resolve(cwd, '.chemx', 'issues');
     if (!fs.existsSync(issuesDir)) {

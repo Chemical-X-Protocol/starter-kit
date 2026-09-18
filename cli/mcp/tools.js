@@ -125,7 +125,8 @@ const handleAudit = (args = {}, cwd = process.cwd()) => {
   }
 
   const options = {
-    model: args.model || 'blended'
+    model: args.model || 'blended',
+    outputFile: null
   };
 
   const report = executeAstAudit(rawTarget, options);
