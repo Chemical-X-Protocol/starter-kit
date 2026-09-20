@@ -64,8 +64,11 @@
 ### H. AI Agent Codebase Query Machine Protocol
 - **Search First Rule**: AI agents MUST invoke `pnpm chemx q "<query>"` (or `npx chemx search "<query>"`) before running broad ripgrep, find, or file dumping.
 - **AST Architecture Intelligence**: Always leverage `pnpm chemx q` to inspect component tiers, exported symbols, props, and hooks with minimal token burn.
+- **Mandatory Blast Radius Pre-Refactor Check**: Prior to modifying any foundational atom (`a-*`), shared molecule, or central composable (`use*`), agents MUST calculate the transitive blast radius (`pnpm chemx q <target> --blast-radius --json` or `chemx({ action: 'q', params: { query: '<target>', blastRadius: true } })`). Never perform blind refactors without mapping direct consumers, transitive dependents, and impacted tiers.
+- **Hybrid RRF Discovery Protocol**: When discovering components, controllers, or state machines without an exact symbol name, agents MUST use hybrid search (`pnpm chemx q "<concept>" --hybrid --json` or `chemx({ action: 'q', params: { query: '<concept>', hybrid: true } })`). This blends BM25 keyword matching and vector cosine similarity via Reciprocal Rank Fusion (RRF), eliminating keyword misses and semantic hallucinations.
+- **Semantic Vector Discovery**: Use `pnpm chemx q "<query>" --semantic --json` for purely conceptual lookups.
 - **Inspect Mode**: Use `pnpm chemx q "<capsule-name>" --inspect` to examine props and hooks without reading entire source files into context.
-- **JSON Mode**: Use `pnpm chemx q "<query>" --json` for zero-overhead, machine-readable agent lookups.
+- **JSON & Columnar Mode**: Use `pnpm chemx q "<query>" --json` for zero-overhead, machine-readable agent lookups in token-compact columnar format (`cols` and `rows`).
 - **Tier Filtering**: Use `pnpm chemx q "<query>" --tier=molecule` (or `atom`, `organism`, `hook`) to narrow scope instantly.
 
 ### I. Capsule Trust-Tier Classification & Audit Escalation
@@ -99,6 +102,28 @@
 - **One-Time Approval Advantage**: The `chemx` master tool provides a single authorization point for the user. Once approved, all operations (`test`, `build`, `verify`, `typecheck`, `audit`, `check`, `patch`, `write`, `read`, `team`, `q`, `autofix`, `issue`) execute silently in-process with zero terminal confirmation prompts.
 - **In-Band JSON-RPC Communication (Zero Disk Dumps)**: All query, inspection, and verification tools must communicate strictly in-band via MCP `CallToolResult` objects (`content: [{ type: "text", text: "..." }]`). Tools must never dump intermediate text files (.txt/.md) or scratch files to disk for AI consumption.
 - **Command Forwarding Syntax**: Agents may invoke either structured action objects (`chemx({ action: 'test' })`, `chemx({ action: 'build' })`, `chemx({ action: 'audit', params: { path: 'src' } })`) or CLI command strings (`chemx({ command: 'test' })`, `chemx({ command: 'build' })`, `chemx({ command: 'audit src' })`).
+- **Master Action & Parameter Dispatch Matrix**:
+  ```typescript
+  // Discovery & Impact Analysis
+  chemx({ action: 'q', params: { query: 'a-button', blastRadius: true } });
+  chemx({ action: 'q', params: { query: 'button state', semantic: true } });
+  chemx({ action: 'q', params: { query: 'useAttentionCardController', hybrid: true } });
+
+  // Surgical AST Reading & Connections
+  chemx({ action: 'read', params: { path: 'src/...', symbol: 'ButtonVariant', connections: true } });
+  chemx({ action: 'read', params: { path: 'src/...', outline: true } });
+
+  // Surgical Modification & Rules Check
+  chemx({ action: 'patch', params: { path: 'src/...', target: 'oldCode', replacement: 'newCode' } });
+  chemx({ action: 'write', params: { path: 'src/...', content: '...' } });
+  chemx({ action: 'check', params: { path: 'src/...' } });
+
+  // Verification & Multi-Agent Swarm
+  chemx({ action: 'verify' });
+  chemx({ action: 'team', params: { action: 'task', subAction: 'claim', taskId: 1, as: '@agent' } });
+  chemx({ action: 'team', params: { action: 'task', subAction: 'done', taskId: 1, as: '@agent', force: true } });
+  chemx({ action: 'team', params: { action: 'lock', subAction: 'acquire', filePath: 'src/...', agentId: '@agent' } });
+  ```
 - **Strict Prohibition on Bash Escalation**: Agents MUST NOT spawn bash subshells (`run_command` with `pnpm chemx ...` or `node cli/...`) when an equivalent in-process `chemx` MCP action exists.
 
 ### N. Database-First Navigation, Symbol Connections & The Zero-Native-File-Dump Directive

@@ -239,7 +239,57 @@ export const resolveTargetDir = (customOrFlag = null, dirFlag = null) => {
   return '.';
 };
 
+export const printSearchHelp = () => {
+  const BOLD = '\x1b[1m';
+  const CYAN = '\x1b[36m';
+  const DIM = '\x1b[2m';
+  const RESET = '\x1b[0m';
+
+  const help = [
+    `\n${BOLD}${CYAN}Chemical X Query Machine: Codebase & AST Search${RESET}`,
+    `Architecture-aware AST indexer powered by SQLite (.chemx/index.db).\n`,
+    `${BOLD}USAGE${RESET}`,
+    `  ${CYAN}npx chemx q${RESET} <query|symbol|file> [options]`,
+    `  ${CYAN}pnpm chemx search${RESET} <query> [options]\n`,
+    `${BOLD}DISCOVERY & IMPACT MODES${RESET}`,
+    `  ${CYAN}--blast-radius, --blast, --impact${RESET}`,
+    `      Calculate direct and transitive dependent blast radius across architectural tiers.`,
+    `      Optional: ${CYAN}--max-depth=<N>${RESET} (traversal depth, default: 5)`,
+    `      Example: ${DIM}pnpm chemx q a-button --blast-radius --json${RESET}\n`,
+    `  ${CYAN}--semantic${RESET}`,
+    `      Concept search via vector cosine similarity.`,
+    `      Example: ${DIM}pnpm chemx q "button click handler state" --semantic --json${RESET}\n`,
+    `  ${CYAN}--hybrid${RESET}`,
+    `      Blended keyword (BM25) and vector cosine ranking via Reciprocal Rank Fusion (RRF).`,
+    `      Example: ${DIM}pnpm chemx q "useAttentionCardController" --hybrid --json${RESET}\n`,
+    `  ${CYAN}refs <symbol>${RESET} / ${CYAN}deps <symbol|file>${RESET}`,
+    `      Inspect caller references or imported dependencies for a given symbol or file.\n`,
+    `  ${CYAN}--hazards${RESET}`,
+    `      Query unresolved architectural rule violations.`,
+    `      Optional: ${CYAN}--rule=<id>${RESET}, ${CYAN}--critical${RESET}\n`,
+    `  ${CYAN}--pack, context <target>${RESET}`,
+    `      Bundle token-optimized context payload for target capsule and consumers.\n`,
+    `${BOLD}OUTPUT & FILTER FLAGS${RESET}`,
+    `  ${CYAN}--json${RESET}                 Structured JSON output for AI agent workflows`,
+    `  ${CYAN}--columnar${RESET}             Token-compact columnar format (cols/rows)`,
+    `  ${CYAN}-i, --inspect${RESET}          Inspect props, exported symbols, and hooks breakdown`,
+    `  ${CYAN}--tier=<tier>${RESET}          Filter by tier (atom, molecule, organism, view, hook)`,
+    `  ${CYAN}--reindex${RESET}              Force re-index before executing query`,
+    `  ${CYAN}--failing, --clean${RESET}     Filter capsules by architectural health status\n`
+  ];
+  process.stdout.write(help.join('\n'));
+};
+
 export const runSearch = async (rawArgs = [], isCli = true) => {
+  const hasHelpFlag = rawArgs.includes('--help') || rawArgs.includes('-h');
+  const isHelpAlias = rawArgs[0] === 'help';
+  const isHelpRequested = hasHelpFlag || isHelpAlias;
+  if (isHelpRequested) {
+    printSearchHelp();
+    if (isCli) process.exit(0);
+    return [];
+  }
+
   const isRawJson = rawArgs.includes('--raw-json') || rawArgs.includes('--no-columnar');
   const isExplicitColumnar = rawArgs.includes('--columnar');
   const isJson = rawArgs.includes('--json') || isExplicitColumnar;

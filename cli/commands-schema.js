@@ -12,12 +12,22 @@ export const COMMANDS_SCHEMA = [
     description: 'Instantly indexes component tiers (atom/molecule/organism), exported symbols, props, and hooks. Designed for AI agents to replace token-heavy grep/cat scans.',
     flags: [
       { flag: '--json', desc: 'Minified JSON format for LLM agents' },
+      { flag: '--columnar', desc: 'Token-compact columnar format (cols/rows) for agent pipelines' },
       { flag: '-i, --inspect', desc: 'Inspect props and hooks without full source' },
       { flag: '--tier=<tier>', desc: 'Filter by tier: atom, molecule, organism, hook, view' },
+      { flag: '--blast-radius', desc: 'Map direct consumers, transitive dependents & impacted tiers (aliases: --blast, --impact)' },
+      { flag: '--max-depth=<N>', desc: 'Max depth for blast radius traversal (default: 5)' },
+      { flag: '--semantic', desc: 'Concept search via vector cosine similarity' },
+      { flag: '--hybrid', desc: 'Blended BM25 keyword + Vector RRF ranking' },
+      { flag: '--hazards', desc: 'Query architectural rule violations directly (flags: --rule=<id>, --critical)' },
+      { flag: '--pack', desc: 'Assemble token-packed context bundle for target symbol or file' },
       { flag: '--reindex', desc: 'Force re-index before running query' }
     ],
     examples: [
       'npx chemx search "badge"',
+      'pnpm q a-button --blast-radius --json',
+      'pnpm q "button click handler" --semantic',
+      'pnpm q "useAttentionCardController" --hybrid --json',
       'pnpm q "useTheme" --inspect',
       'npx chemx search "card" --tier=molecule'
     ]
@@ -31,6 +41,7 @@ export const COMMANDS_SCHEMA = [
     flags: [
       { flag: '--outline', desc: 'Signatures only (80%+ token savings)' },
       { flag: '--symbol=<name>', desc: 'Target a specific symbol definition' },
+      { flag: '--connections', desc: 'Include caller graph and dependent references alongside symbol' },
       { flag: '--strip-comments', desc: 'Remove all code comments' },
       { flag: '--compact', desc: 'Remove blank lines and indentation' },
       { flag: '--start=<N>', desc: 'Starting line number' },
@@ -39,7 +50,8 @@ export const COMMANDS_SCHEMA = [
     ],
     examples: [
       'npx chemx read src/store.ts --outline',
-      'npx chemx read api.ts --symbol=login'
+      'npx chemx read api.ts --symbol=login --connections',
+      'npx chemx read src/ui/atoms/a-button/types.d.ts --symbol=ButtonVariant'
     ]
   },
   {
@@ -66,10 +78,14 @@ export const COMMANDS_SCHEMA = [
     usage: 'npx chemx mcp [options]',
     summary: 'Launch the native Chemical X Model Context Protocol (MCP) Stdio server.',
     description: 'Exposes token-minified tools (chemx_q, chemx_read, chemx_patch, chemx_audit, chemx_team_task) over JSON-RPC 2.0 stdio transport.',
-    flags: [],
+    flags: [
+      { flag: '--install', desc: 'Install and register MCP server in host client settings' },
+      { flag: '--sync', desc: 'Sync Antigravity MCP tool schema definitions and instructions' }
+    ],
     examples: [
       'npx chemx mcp',
-      'pnpm chemx:mcp'
+      'pnpm chemx:mcp',
+      'npx chemx mcp --sync'
     ]
   },
   {

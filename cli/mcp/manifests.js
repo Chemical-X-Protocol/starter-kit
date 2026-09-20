@@ -38,11 +38,57 @@ export const MASTER_MCP_TOOL = {
       },
       params: {
         type: 'object',
-        description: 'Parameter payload for the specific action (e.g., { path, symbol, outline, startLine, endLine } for read; { path, search, replace } for patch; { dir, command } for test/build).'
+        description: 'Parameter payload for the specific action (e.g., { path, symbol, outline, connections } for read; { query, blastRadius, semantic, hybrid } for q; { path, search, replace } for patch; { dir, command } for test/build).',
+        properties: {
+          query: { type: 'string', description: 'Search term, symbol name, or conceptual query (for q/search)' },
+          blastRadius: { type: 'boolean', description: 'Map direct consumers, transitive dependents & impacted tiers (for q)' },
+          semantic: { type: 'boolean', description: 'Search conceptually related components via vector cosine similarity (for q)' },
+          hybrid: { type: 'boolean', description: 'Blend BM25 keyword matching + Vector RRF ranking (for q)' },
+          connections: { type: 'boolean', description: 'Include caller graph and dependent references (for q, read)' },
+          tier: { type: 'string', enum: ['atom', 'molecule', 'organism', 'hook', 'view'], description: 'Filter by architectural tier (for q, generate)' },
+          inspect: { type: 'boolean', description: 'Inspect props, exported symbols, and hooks breakdown (for q)' },
+          maxDepth: { type: 'number', description: 'Max traversal depth for blast radius (default: 5)' },
+          limit: { type: 'number', description: 'Maximum search results to return (for q)' },
+          reindex: { type: 'boolean', description: 'Force re-index before running query (for q)' },
+          path: { type: 'string', description: 'Target file path (for read, patch, write, check, lock)' },
+          symbol: { type: 'string', description: 'Target symbol declaration to extract (for read)' },
+          outline: { type: 'boolean', description: 'Extract AST signatures only (80%+ token reduction) (for read)' },
+          startLine: { type: 'number', description: 'Starting line number (1-indexed) (for read)' },
+          endLine: { type: 'number', description: 'Ending line number (1-indexed) (for read)' },
+          stripComments: { type: 'boolean', description: 'Remove comments to minimize tokens (for read)' },
+          compact: { type: 'boolean', description: 'Collapse empty lines and whitespace (for read)' },
+          target: { type: 'string', description: 'Exact text block to replace (for patch)' },
+          search: { type: 'string', description: 'Alias for target text block to replace (for patch)' },
+          replacement: { type: 'string', description: 'New replacement content (for patch)' },
+          replace: { type: 'string', description: 'Alias for replacement content (for patch)' },
+          multiple: { type: 'boolean', description: 'Allow replacing multiple occurrences (for patch)' },
+          dryRun: { type: 'boolean', description: 'Preview change without writing to disk (for patch, generate)' },
+          content: { type: 'string', description: 'File content to write (for write)' },
+          overwrite: { type: 'boolean', description: 'Allow overwriting existing file (for write)' },
+          dir: { type: 'string', description: 'Target directory (for audit, test, build, patterns)' },
+          command: { type: 'string', description: 'Explicit execution command (for build, test)' },
+          subAction: { type: 'string', description: 'Sub-action for team operations (e.g. list, claim, done, triage, acquire, release)' },
+          taskId: { type: 'number', description: 'Target task ID (for team task claim/done)' },
+          agentId: { type: 'string', description: 'Agent handle (e.g. @antigravity, @coder)' },
+          as: { type: 'string', description: 'Agent handle alias (e.g. @antigravity)' },
+          title: { type: 'string', description: 'Task title (for team task add)' },
+          priority: { type: 'number', description: 'Priority weight 1-3 (for team task add)' },
+          force: { type: 'boolean', description: 'Force complete task even if hazards remain (for team task done)' },
+          tokens: { type: 'number', description: 'Prompt tokens consumed by task' },
+          cost: { type: 'number', description: 'Estimated dollar cost for task' },
+          name: { type: 'string', description: 'Capsule name (for generate)' },
+          desc: { type: 'string', description: 'Functional description to tailor archetype (for generate)' },
+          framework: { type: 'string', enum: ['vue', 'react', 'svelte'], description: 'Framework flavor (for generate)' },
+          lean: { type: 'boolean', description: 'Generate minimal capsule without controller/spec (for generate)' },
+          error: { type: 'string', description: 'Error message or description (for issue)' },
+          stack: { type: 'string', description: 'Stack trace (for issue)' },
+          repo: { type: 'string', description: 'Target GitHub repository in owner/repo format (for issue)' },
+          autoPost: { type: 'boolean', description: 'Automatically publish to GitHub Issues (for issue)' }
+        }
       },
       command: {
         type: 'string',
-        description: 'Optional CLI command string format (e.g., "test", "build", "verify", "typecheck", "audit src", "read src/foo.vue --outline", "check src/bar.ts", "team task list").'
+        description: 'Optional CLI command string format (e.g., "test", "build", "verify", "typecheck", "audit src", "q a-button --blast-radius --json", "q \\"button state\\" --semantic --json", "read src/foo.vue --outline", "check src/bar.ts", "team task list").'
       }
     }
   }
