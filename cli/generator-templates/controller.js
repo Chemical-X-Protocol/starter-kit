@@ -1,7 +1,7 @@
 import { resolveArchetype } from './archetypes/index.js';
 
-export const buildController = (name, pascalName) => {
-  const archetype = resolveArchetype(name);
+export const buildController = (name, pascalName, options = {}) => {
+  const archetype = resolveArchetype(name, options.description || options.desc);
   if (archetype && typeof archetype.buildController === 'function') {
     return archetype.buildController(name, pascalName);
   }

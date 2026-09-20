@@ -3,6 +3,7 @@ import path from 'node:path';
 import { hasGum, gumChoose, gumInput, promptQuestion } from './terminal.js';
 import { buildPreCommitHookScript, buildGitHubWorkflowScript } from './installer-templates.js';
 import { installAllMcpConfigs } from './mcp/installer.js';
+import { runPillarsWizard } from './pillars-wizard.js';
 
 export { buildPreCommitHookScript, buildGitHubWorkflowScript } from './installer-templates.js';
 export { installAllMcpConfigs } from './mcp/installer.js';
@@ -184,13 +185,14 @@ export const runInstallWizard = async (targetDir = '.') => {
     ? gumChoose([
         '1. Install All Guardrails (Pre-Commit Hook + GitHub CI + MCP Server + Query Machine)',
         '2. Model Context Protocol (MCP) Server only (.cursor, .vscode, Antigravity)',
-        '3. Agent Query Machine only ("pnpm q" script + AGENTS.md rule + SQLite index)',
-        '4. Git Pre-Commit Hook only (.git/hooks/pre-commit)',
-        '5. GitHub Actions CI Workflow only (.github/workflows/chemx-audit.yml)',
-        '6. Cancel'
+        '3. Architectural Pillars & Agent Steering Wizard (AGENTS.md, .cursorrules)',
+        '4. Agent Query Machine only ("pnpm q" script + AGENTS.md rule + SQLite index)',
+        '5. Git Pre-Commit Hook only (.git/hooks/pre-commit)',
+        '6. GitHub Actions CI Workflow only (.github/workflows/chemx-audit.yml)',
+        '7. Cancel'
       ])
-    : await promptQuestion('Select target: [1] All, [2] MCP, [3] Query Machine, [4] Hook, [5] CI, [6] Cancel (default: 1): ');
-  if (targetChoice?.includes('Cancel') || targetChoice === '6') return;
+    : await promptQuestion('Select target: [1] All, [2] MCP, [3] Pillars Wizard, [4] Query Machine, [5] Hook, [6] CI, [7] Cancel (default: 1): ');
+  if (targetChoice?.includes('Cancel') || targetChoice === '7') return;
 
   const isMcpOnly = targetChoice.includes('MCP Server only') || targetChoice === '2';
   if (isMcpOnly) {
@@ -198,7 +200,13 @@ export const runInstallWizard = async (targetDir = '.') => {
     return;
   }
 
-  const isQueryOnly = targetChoice.includes('Query Machine only') || targetChoice === '3';
+  const isPillarsOnly = targetChoice.includes('Pillars & Agent Steering') || targetChoice === '3';
+  if (isPillarsOnly) {
+    await runPillarsWizard([], targetDir);
+    return;
+  }
+
+  const isQueryOnly = targetChoice.includes('Query Machine only') || targetChoice === '4';
   if (isQueryOnly) {
     process.stdout.write('\n\x1b[1mInstalling AI Agent Query Machine...\x1b[0m\n');
     await installAgentSearchConfig(targetDir);
@@ -211,8 +219,8 @@ export const runInstallWizard = async (targetDir = '.') => {
   const opts = { minGrade: minGrade.trim().toUpperCase(), minScore };
 
   process.stdout.write('\n\x1b[1mInstalling guardrails...\x1b[0m\n');
-  const shouldHook = !targetChoice.includes('CI Workflow only') && targetChoice !== '5';
-  const shouldWf = !targetChoice.includes('Hook only') && targetChoice !== '4';
+  const shouldHook = !targetChoice.includes('CI Workflow only') && targetChoice !== '6';
+  const shouldWf = !targetChoice.includes('Hook only') && targetChoice !== '5';
   const isAll = targetChoice.includes('All') || targetChoice === '1';
   const shouldMcp = isAll;
   const shouldQuery = isAll;

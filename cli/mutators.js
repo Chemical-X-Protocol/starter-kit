@@ -58,6 +58,7 @@ export const addPropToCapsule = (targetPath, propDefinition, options = {}) => {
   }
 
   const opts = typeof options === 'object' ? options : {};
+  const isDryRun = Boolean(opts.dryRun || opts['dry-run']);
   const files = resolveCapsuleFiles(targetPath, opts.cwd || process.cwd());
   const updatedFiles = [];
 
@@ -73,7 +74,9 @@ export const addPropToCapsule = (targetPath, propDefinition, options = {}) => {
 
   const propDeclaration = `  readonly ${propName}${isOptional ? '?' : ''}: ${propType};\n`;
   typesContent = typesContent.replace(/(interface\s+\w+Props\s*\{[\s\S]*?)(\n\s*\})/, `$1\n${propDeclaration}$2`);
-  fs.writeFileSync(files.typesPropsFile, typesContent, 'utf-8');
+  if (!isDryRun) {
+    fs.writeFileSync(files.typesPropsFile, typesContent, 'utf-8');
+  }
   updatedFiles.push(path.relative(process.cwd(), files.typesPropsFile));
 
   if (files.compPath && fs.existsSync(files.compPath)) {
@@ -95,17 +98,20 @@ export const addPropToCapsule = (targetPath, propDefinition, options = {}) => {
     }
 
     if (compModified) {
-      fs.writeFileSync(files.compPath, compContent, 'utf-8');
+      if (!isDryRun) {
+        fs.writeFileSync(files.compPath, compContent, 'utf-8');
+      }
       updatedFiles.push(path.relative(process.cwd(), files.compPath));
     }
   }
 
-  return { success: true, propName, propType, updatedFiles };
+  return { success: true, dryRun: isDryRun, propName, propType, updatedFiles };
 };
 
 export const addStateToCapsule = (targetPath, statusName, payload = '', options = {}) => {
   const cleanStatus = statusName.trim().toLowerCase();
   const opts = typeof options === 'object' ? options : {};
+  const isDryRun = Boolean(opts.dryRun || opts['dry-run']);
   const files = resolveCapsuleFiles(targetPath, opts.cwd || process.cwd());
   const updatedFiles = [];
 
@@ -128,10 +134,12 @@ export const addStateToCapsule = (targetPath, statusName, payload = '', options 
   const newMember = `  | { readonly status: '${cleanStatus}'${payloadStr} }`;
 
   stateContent = stateContent.replace(/(export\s+type\s+\w+State\s*=[\s\S]*?)(\s*;)/, `$1\n${newMember}$2`);
-  fs.writeFileSync(files.typesStateFile, stateContent, 'utf-8');
+  if (!isDryRun) {
+    fs.writeFileSync(files.typesStateFile, stateContent, 'utf-8');
+  }
   updatedFiles.push(path.relative(process.cwd(), files.typesStateFile));
 
-  return { success: true, statusName: cleanStatus, updatedFiles };
+  return { success: true, dryRun: isDryRun, statusName: cleanStatus, updatedFiles };
 };
 
 export const addActionToController = (targetPath, actionName, options = {}) => {
@@ -141,6 +149,7 @@ export const addActionToController = (targetPath, actionName, options = {}) => {
 
   const files = resolveCapsuleFiles(targetPath, options.cwd || process.cwd());
   const updatedFiles = [];
+  const isDryRun = Boolean(options.dryRun || options['dry-run']);
 
   if (!files.controllerPath || !fs.existsSync(files.controllerPath)) {
     throw new Error(`No controller file found in capsule at ${targetPath}.`);
@@ -171,10 +180,12 @@ export const addActionToController = (targetPath, actionName, options = {}) => {
     }
   );
 
-  fs.writeFileSync(files.controllerPath, controllerContent, 'utf-8');
+  if (!isDryRun) {
+    fs.writeFileSync(files.controllerPath, controllerContent, 'utf-8');
+  }
   updatedFiles.push(path.relative(process.cwd(), files.controllerPath));
 
-  return { success: true, handlerName, updatedFiles };
+  return { success: true, dryRun: isDryRun, handlerName, updatedFiles };
 };
 
 export const autoFixFile = (targetFile, options = {}) => {
@@ -211,6 +222,7 @@ export const autoFixFile = (targetFile, options = {}) => {
 
 export const runMutatorCli = async (rawArgs = [], isCli = true) => {
   const isJson = rawArgs.includes('--json');
+  const isDryRun = rawArgs.includes('--dry-run') || rawArgs.includes('-n');
   const nonFlags = rawArgs.filter((a) => !a.startsWith('-'));
   const first = nonFlags[0] || '';
   const second = nonFlags[1] || '';
@@ -234,17 +246,17 @@ export const runMutatorCli = async (rawArgs = [], isCli = true) => {
       if (!target || !value) {
         throw new Error('Usage: chemx add:prop <capsule-path> <name>:<type>');
       }
-      result = addPropToCapsule(target, value);
+      result = addPropToCapsule(target, value, { dryRun: isDryRun });
     } else if (command === 'add:state') {
       if (!target || !value) {
         throw new Error('Usage: chemx add:state <capsule-path> <statusName> [payload]');
       }
-      result = addStateToCapsule(target, value, extra);
+      result = addStateToCapsule(target, value, extra, { dryRun: isDryRun });
     } else if (command === 'add:action') {
       if (!target || !value) {
         throw new Error('Usage: chemx add:action <capsule-path> <actionName>');
       }
-      result = addActionToController(target, value);
+      result = addActionToController(target, value, { dryRun: isDryRun });
     } else if (command === 'fix') {
       if (!target) {
         throw new Error('Usage: chemx fix <file-path>');
@@ -256,6 +268,16 @@ export const runMutatorCli = async (rawArgs = [], isCli = true) => {
 
     if (isJson) {
       process.stdout.write(JSON.stringify({ success: true, command, ...result }) + '\n');
+      if (isCli) process.exit(0);
+      return result;
+    }
+
+    if (result.dryRun) {
+      process.stdout.write(`\n\x1b[1m\x1b[33m[DRY RUN]\x1b[0m Would update ${result.updatedFiles?.length || 0} file(s):\n`);
+      for (const f of result.updatedFiles || []) {
+        process.stdout.write(`  \x1b[33m•\x1b[0m ${f}\n`);
+      }
+      process.stdout.write('\n\x1b[2mDry run complete. No files were written to disk.\x1b[0m\n\n');
       if (isCli) process.exit(0);
       return result;
     }

@@ -104,7 +104,7 @@ export const handleChemxTeamTask = async (args = {}, cwd = process.cwd()) => {
   if (action === 'done' || action === 'complete') {
     const agentHandle = args.agentId || '@agent';
     registerAgent(db, { id: agentHandle, role: 'executor' });
-    return completeTaskWithAudit(db, args.taskId, agentHandle, { cwd });
+    return completeTaskWithAudit(db, args.taskId, agentHandle, { cwd, force: args.force, tokens: args.tokens });
   }
   if (action === 'block') {
     return updateTaskStatus(db, args.taskId, 'blocked', { blockedReason: args.blockedReason || 'Blocked' });
@@ -114,7 +114,7 @@ export const handleChemxTeamTask = async (args = {}, cwd = process.cwd()) => {
     const agentHandle = args.agentId || '@agent';
     registerAgent(db, { id: agentHandle, role: 'executor' });
     if (targetStatus === 'done' || targetStatus === 'completed') {
-      return completeTaskWithAudit(db, args.taskId, agentHandle, { cwd });
+      return completeTaskWithAudit(db, args.taskId, agentHandle, { cwd, force: args.force, tokens: args.tokens });
     }
     return updateTaskStatus(db, args.taskId, targetStatus, { blockedReason: args.blockedReason || '' });
   }

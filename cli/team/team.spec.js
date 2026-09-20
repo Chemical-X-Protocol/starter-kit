@@ -219,10 +219,16 @@ test('team-triage: cross-queries codebase hazards and generates tasks', () => {
   const hazardsAfter = queryUnassignedHazards(db);
   assert.strictEqual(hazardsAfter.length, 0);
 
-  // Complete task with audit attestation
-  const completed = completeTaskWithAudit(db, generated[0].id, '@refactor-bot');
+  // Attempting to complete task with unresolved hazards without force is refused
+  const refused = completeTaskWithAudit(db, generated[0].id, '@refactor-bot');
+  assert.strictEqual(refused.refused, true);
+  assert.strictEqual(refused.hazardCount, 4);
+
+  // Completing with force overrides hazard refusal
+  const completed = completeTaskWithAudit(db, generated[0].id, '@refactor-bot', { force: true });
   assert.strictEqual(completed.status, 'done');
   assert.strictEqual(completed.result_payload.completedBy, '@refactor-bot');
+  assert.strictEqual(completed.result_payload.forced, true);
 });
 
 test('team-db: getSwarmStatus compiles complete control panel overview', () => {

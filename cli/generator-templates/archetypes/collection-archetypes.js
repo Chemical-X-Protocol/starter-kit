@@ -6,7 +6,7 @@ export const COLLECTION_ARCHETYPES = [
   {
     id: 'task-list',
     name: 'Collection & Task List',
-    keywords: ['task', 'todo', 'tasklist', 'checklist', 'item', 'queue'],
+    keywords: ['task', 'todo', 'tasklist', 'checklist', 'item', 'queue', 'list', 'add', 'toggle', 'remove', 'delete'],
     destructure: 'items, activeCount, setFilter, toggleItem, removeItem',
     buildState: (name, pascal) => `export interface ${pascal}Item {
   readonly id: string;

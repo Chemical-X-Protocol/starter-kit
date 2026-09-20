@@ -47,7 +47,7 @@ jobs:
           path: AUDIT_REPORT.md
 
       - name: Post Architectural Audit Comment on PR
-        if: always() && github.event_name == 'pull_request' && hashFiles('AUDIT_REPORT.md') != ''
+        if: always() && github.event_name == 'pull_request' && hashFiles('AUDIT_REPORT.md') != '' && vars.CHEMX_ENABLE_PR_COMMENTS == 'true'
         continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -169,3 +169,14 @@ test('archetypes: semantic code generation for task-list archetype', () => {
   assert.ok(withAtoms.includes('<AtomButton'));
   assert.ok(!withAtoms.includes('<button'));
 });
+
+test('archetypes: resolveArchetype matches from description keywords', () => {
+  const matched = resolveArchetype('m-backlog', 'add, toggle, remove task items');
+  assert.equal(matched.id, 'task-list');
+
+  const chat = resolveArchetype('m-widget', 'chat messages, send message, thread');
+  assert.equal(chat.id, 'chat-messaging');
+
+  const cart = resolveArchetype('m-box', 'shopping cart checkout billing payment');
+  assert.equal(cart.id, 'cart-billing');
+});

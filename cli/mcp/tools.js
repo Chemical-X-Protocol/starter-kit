@@ -174,7 +174,7 @@ const handleAudit = (args = {}, cwd = process.cwd()) => {
 };
 
 const handleGenerateCapsule = (args = {}, cwd = process.cwd()) => {
-  const { name, framework, tier = 'm', targetDir = null, lean = false } = args;
+  const { name, framework, tier = 'm', targetDir = null, lean = false, desc = '', description = '', dryRun = false } = args;
 
   const hasName = Boolean(name && name.trim());
   const hasValidFramework = Boolean(framework && ['react', 'vue', 'svelte'].includes(framework.toLowerCase()));
@@ -190,18 +190,22 @@ const handleGenerateCapsule = (args = {}, cwd = process.cwd()) => {
     tier: tier.toLowerCase(),
     targetParent: targetDir,
     isLean: Boolean(lean),
-    cwd
+    cwd,
+    desc: desc || description,
+    dryRun: Boolean(dryRun)
   });
 
   return {
     success: true,
+    dryRun: result.dryRun,
     capsuleName: result.capsuleName,
     pascalName: result.pascalName,
     framework: result.framework,
     tier: result.tier,
     targetDir: result.targetDir,
     relativeDir: result.relativeDir,
-    filesCreated: result.filesCreated
+    filesCreated: result.filesCreated,
+    previews: result.previews
   };
 };
 

@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { hasGum, gumInput, promptQuestion, renderBanner } from './terminal.js';
 import { obtainLicenseKey, fetchStarterKitFiles, loadLocalBlueprintFiles } from './license.js';
+import { runPillarsWizard } from './pillars-wizard.js';
 
 export const runScaffold = async (projectName, rawArgs = [], onRunAudit = null) => {
   renderBanner('Chemical X: Molecular Architecture Scaffolder (npm create chemx)');
@@ -79,25 +80,8 @@ export const runScaffold = async (projectName, rawArgs = [], onRunAudit = null) 
     process.stdout.write(`  \x1b[32m✔\x1b[0m ${targetRel}\n`);
   }
 
-  const cursorRulesPath = path.join(targetDir, '.cursorrules');
-  if (!fs.existsSync(cursorRulesPath)) {
-    const rules = [
-      '# Chemical X Molecular Architecture Directives',
-      'Strictly follow AGENTS.md rules. Never exceed 100 lines for molecule capsules.',
-      'Mandatory Verification-First: Never run raw unthrottled "npm test", "vitest", or "tsc --noEmit" in terminal.',
-      'Always use "npx chemx verify", "npx chemx test", "npx chemx typecheck", or MCP tools to conserve tokens.',
-      'Search-First: Use "pnpm q <query>" before broad grep/find.'
-    ].join('\n') + '\n';
-    fs.writeFileSync(cursorRulesPath, rules, 'utf-8');
-    process.stdout.write('  \x1b[32m✔\x1b[0m .cursorrules\n');
-  }
-
-  const agentsMdSrc = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../AGENTS.md');
-  const agentsMdDest = path.join(targetDir, 'AGENTS.md');
-  if (fs.existsSync(agentsMdSrc) && !fs.existsSync(agentsMdDest)) {
-    fs.copyFileSync(agentsMdSrc, agentsMdDest);
-    process.stdout.write('  \x1b[32m✔\x1b[0m AGENTS.md\n');
-  }
+  const isYes = rawArgs.includes('-y') || rawArgs.includes('--yes') || !process.stdin.isTTY;
+  await runPillarsWizard(isYes ? ['--preset=recommended', '-y'] : [], targetDir);
 
   process.stdout.write(
     `\n\x1b[1m\x1b[32m✔ Molecular Architecture project created successfully at ${finalDirName}!\x1b[0m\n\n`

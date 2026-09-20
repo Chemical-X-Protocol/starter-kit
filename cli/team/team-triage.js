@@ -148,6 +148,23 @@ export const completeTaskWithAudit = (db, taskId, agentId, options = {}) => {
         resultPayload.healthAfter = healthScore;
         resultPayload.remainingViolations = remainingHazards.map((v) => v.hazard || v.rule);
 
+        if (hazardCount > 0 && options.force !== true) {
+          return {
+            refused: true,
+            taskId: Number(taskId),
+            taskTitle: task.title,
+            hazardCount,
+            targetPath: task.target_path,
+            healthScore,
+            violations: remainingHazards.map((v) => ({ line: v.line, hazard: v.hazard || v.rule, rule: v.rule })),
+            message: `Cannot complete task #${taskId}: ${hazardCount} hazard(s) remain in ${task.target_path}. Fix the hazards or pass --force to complete anyway.`
+          };
+        }
+
+        if (hazardCount > 0 && options.force === true) {
+          resultPayload.forced = true;
+        }
+
         // Update database files and violations state
         db.prepare('DELETE FROM violations WHERE file_path = ?').run(task.target_path);
         if (hazardCount > 0) {
@@ -164,17 +181,45 @@ export const completeTaskWithAudit = (db, taskId, agentId, options = {}) => {
         // Fallback to cached file row if audit fails
         const fileRow = db.prepare('SELECT health_score, hazard_count, lines FROM files WHERE path = ?').get(task.target_path);
         if (fileRow) {
+          if (fileRow.hazard_count > 0 && options.force !== true) {
+            return {
+              refused: true,
+              taskId: Number(taskId),
+              taskTitle: task.title,
+              hazardCount: fileRow.hazard_count,
+              targetPath: task.target_path,
+              healthScore: fileRow.health_score,
+              message: `Cannot complete task #${taskId}: ${fileRow.hazard_count} hazard(s) remain in ${task.target_path}. Fix the hazards or pass --force to complete anyway.`
+            };
+          }
           resultPayload.healthAfter = fileRow.health_score;
           resultPayload.hazardCountAfter = fileRow.hazard_count;
           resultPayload.linesAfter = fileRow.lines;
+          if (fileRow.hazard_count > 0 && options.force === true) {
+            resultPayload.forced = true;
+          }
         }
       }
     } else {
       const fileRow = db.prepare('SELECT health_score, hazard_count, lines FROM files WHERE path = ?').get(task.target_path);
       if (fileRow) {
+        if (fileRow.hazard_count > 0 && options.force !== true) {
+          return {
+            refused: true,
+            taskId: Number(taskId),
+            taskTitle: task.title,
+            hazardCount: fileRow.hazard_count,
+            targetPath: task.target_path,
+            healthScore: fileRow.health_score,
+            message: `Cannot complete task #${taskId}: ${fileRow.hazard_count} hazard(s) remain in ${task.target_path}. Fix the hazards or pass --force to complete anyway.`
+          };
+        }
         resultPayload.healthAfter = fileRow.health_score;
         resultPayload.hazardCountAfter = fileRow.hazard_count;
         resultPayload.linesAfter = fileRow.lines;
+        if (fileRow.hazard_count > 0 && options.force === true) {
+          resultPayload.forced = true;
+        }
       }
     }
     releaseFileLock(db, task.target_path, agentId);

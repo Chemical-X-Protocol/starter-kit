@@ -165,3 +165,26 @@ test('ANSI.GREEN: exists and is defined in theme.js', async () => {
   assert.ok(typeof ANSI.GREEN === 'string');
 });
 
+test('patchFile: dryRun previews changes without writing to disk', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-patch-dry-'));
+  const testFile = path.join(tmpDir, 'sample.ts');
+  const original = 'export const initial = 1;\n';
+  fs.writeFileSync(testFile, original, 'utf-8');
+
+  try {
+    const result = patchFile(testFile, {
+      targetContent: 'export const initial = 1;',
+      replacementContent: 'export const updated = 2;',
+      cwd: tmpDir,
+      dryRun: true
+    });
+
+    assert.strictEqual(result.dryRun, true);
+    assert.strictEqual(result.status, 'ok');
+    const diskContent = fs.readFileSync(testFile, 'utf-8');
+    assert.strictEqual(diskContent, original, 'File on disk should remain unchanged in dry-run mode');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+

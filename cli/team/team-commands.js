@@ -21,7 +21,11 @@ import { autoGenerateTasksFromAudit, completeTaskWithAudit, queryUnassignedHazar
 import { formatSwarmStatusCard, formatFeedTimeline } from './team-format.js';
 
 const parseFlags = (args = []) => {
-  const flags = { isJson: args.includes('--json'), isCompact: args.includes('--compact') };
+  const flags = {
+    isJson: args.includes('--json'),
+    isCompact: args.includes('--compact'),
+    force: args.includes('--force') || args.includes('-f')
+  };
   for (const arg of args) {
     if (arg.startsWith('--as=')) flags.as = arg.split('=')[1];
     if (arg.startsWith('--to=')) flags.to = arg.split('=')[1];
@@ -35,6 +39,12 @@ const parseFlags = (args = []) => {
     if (arg.startsWith('--tier=')) flags.tier = arg.split('=')[1];
     if (arg.startsWith('--prio=')) flags.priority = parseInt(arg.split('=')[1], 10);
     if (arg.startsWith('--purpose=')) flags.purpose = arg.split('=')[1];
+    if (arg.startsWith('--tokens=')) flags.tokens = parseInt(arg.split('=')[1], 10);
+    if (arg.startsWith('--prompt-tokens=')) flags.promptTokens = parseInt(arg.split('=')[1], 10);
+    if (arg.startsWith('--completion-tokens=')) flags.completionTokens = parseInt(arg.split('=')[1], 10);
+    if (arg.startsWith('--cached-tokens=')) flags.cachedTokens = parseInt(arg.split('=')[1], 10);
+    if (arg.startsWith('--cost=')) flags.cost = parseFloat(arg.split('=')[1]);
+    if (arg.startsWith('--model=')) flags.model = arg.split('=')[1];
     if (arg.startsWith('--metadata=')) {
       const raw = arg.slice('--metadata='.length);
       try {
@@ -154,10 +164,28 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
       const taskId = nonFlagPositional[1];
       const agentHandle = flags.as || '@agent';
       registerAgent(db, { id: agentHandle, role: 'executor' });
-      const res = completeTaskWithAudit(db, taskId, agentHandle, { cwd });
+      const tokensOption = (flags.tokens || flags.promptTokens || flags.completionTokens || flags.cost) ? {
+        prompt: flags.promptTokens || flags.tokens || 0,
+        completion: flags.completionTokens || 0,
+        cached: flags.cachedTokens || 0,
+        cost_usd: flags.cost,
+        model: flags.model
+      } : undefined;
+
+      const res = completeTaskWithAudit(db, taskId, agentHandle, {
+        cwd,
+        force: flags.force,
+        tokens: tokensOption
+      });
+
       if (isCli) {
-        if (flags.isJson) process.stdout.write(`${JSON.stringify(res, null, 2)}\n`);
-        else if (res?.result_payload?.verified) {
+        if (flags.isJson) {
+          process.stdout.write(`${JSON.stringify(res, null, 2)}\n`);
+        } else if (res?.refused) {
+          process.stderr.write(`\x1b[31m✕ Cannot complete task #${taskId}: ${res.hazardCount} hazard(s) remain in ${res.targetPath}. Fix the hazards or pass --force to complete anyway.\x1b[0m\n`);
+        } else if (res?.result_payload?.forced) {
+          process.stdout.write(`\x1b[33m⚠\x1b[0m Completed task #${taskId} with --force \x1b[33m(Note: ${res.result_payload.hazardCountAfter} hazard(s) still remain in ${res.target_path})\x1b[0m\n`);
+        } else if (res?.result_payload?.verified) {
           process.stdout.write(`\x1b[32m✔\x1b[0m Completed task #${taskId} (Verified clean: 0 hazards in ${res.target_path || 'target'})\n`);
         } else if (res?.result_payload?.hazardCountAfter > 0) {
           process.stdout.write(`\x1b[32m✔\x1b[0m Completed task #${taskId} \x1b[33m(Note: ${res.result_payload.hazardCountAfter} hazard(s) still remain in ${res.target_path})\x1b[0m\n`);
@@ -175,7 +203,19 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
 
       let res;
       if (targetStatus === 'done' || targetStatus === 'completed') {
-        res = completeTaskWithAudit(db, taskId, agentHandle, { cwd });
+        const tokensOption = (flags.tokens || flags.promptTokens || flags.completionTokens || flags.cost) ? {
+          prompt: flags.promptTokens || flags.tokens || 0,
+          completion: flags.completionTokens || 0,
+          cached: flags.cachedTokens || 0,
+          cost_usd: flags.cost,
+          model: flags.model
+        } : undefined;
+
+        res = completeTaskWithAudit(db, taskId, agentHandle, {
+          cwd,
+          force: flags.force,
+          tokens: tokensOption
+        });
       } else {
         res = updateTaskStatus(db, taskId, targetStatus, { blockedReason: flags.reason || '' });
         if (res) {
@@ -189,8 +229,13 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
       }
 
       if (isCli) {
-        if (flags.isJson) process.stdout.write(`${JSON.stringify(res, null, 2)}\n`);
-        else if (res?.result_payload?.verified) {
+        if (flags.isJson) {
+          process.stdout.write(`${JSON.stringify(res, null, 2)}\n`);
+        } else if (res?.refused) {
+          process.stderr.write(`\x1b[31m✕ Cannot complete task #${taskId}: ${res.hazardCount} hazard(s) remain in ${res.targetPath}. Fix the hazards or pass --force to complete anyway.\x1b[0m\n`);
+        } else if (res?.result_payload?.forced) {
+          process.stdout.write(`\x1b[33m⚠\x1b[0m Updated task #${taskId} to status "done" with --force \x1b[33m(Note: ${res.result_payload.hazardCountAfter} hazard(s) still remain in ${res.target_path})\x1b[0m\n`);
+        } else if (res?.result_payload?.verified) {
           process.stdout.write(`\x1b[32m✔\x1b[0m Updated task #${taskId} to status "done" (Verified clean: 0 hazards in ${res.target_path || 'target'})\n`);
         } else if (res?.result_payload?.hazardCountAfter > 0) {
           process.stdout.write(`\x1b[32m✔\x1b[0m Updated task #${taskId} to status "done" \x1b[33m(Note: ${res.result_payload.hazardCountAfter} hazard(s) still remain in ${res.target_path})\x1b[0m\n`);

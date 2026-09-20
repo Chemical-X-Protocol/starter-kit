@@ -33,6 +33,7 @@ import {
 } from './audit/rules-predicates.js';
 import { runAuditPreflight, resolveGitAuditScope } from './audit-preflight.js';
 import { runInstallWizard } from './installer.js';
+import { runPillarsWizard } from './pillars-wizard.js';
 import { runBadgeCommand } from './badge.js';
 import { runBuildAudit } from './build.js';
 import { runSearch, syncSearchIndex, resolveTargetDir, syncViolationsIndex, recordAuditSnapshot, handleCheckCommand } from './search.js';
@@ -282,6 +283,7 @@ export {
   runWriterCli,
   writeFile,
   runTeamCli,
+  runPillarsWizard,
   handleError,
   withErrorCatcher,
   publishIssue
@@ -345,6 +347,11 @@ const main = async () => {
     case 'install-hooks':
     case 'setup-ci':
       await runInstallWizard(rawArgs[1] || process.cwd());
+      break;
+    case 'pillars':
+    case 'rules':
+    case 'config:pillars':
+      await runPillarsWizard(rawArgs.slice(1), process.cwd());
       break;
     case 'check':
       handleCheckCommand(rawArgs[1], {

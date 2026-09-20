@@ -25,7 +25,8 @@ export const patchFile = (targetPath, params = {}) => {
     allowMultiple = false,
     cwd = process.cwd(),
     skipIndex = false,
-    skipCheck = false
+    skipCheck = false,
+    dryRun = false
   } = params;
 
   if (targetContent === undefined || targetContent === null) {
@@ -62,11 +63,13 @@ export const patchFile = (targetPath, params = {}) => {
 
   const newLines = patchedContent.split('\n').length;
 
-  fs.writeFileSync(resolvedPath, patchedContent, 'utf-8');
+  if (!dryRun) {
+    fs.writeFileSync(resolvedPath, patchedContent, 'utf-8');
+  }
 
   // Continuous micro-indexing: keep SQLite index.db fresh in ~2ms
   let indexed = false;
-  if (!skipIndex) {
+  if (!skipIndex && !dryRun) {
     try {
       const indexDetails = syncSingleFileIndex(resolvedPath, cwd);
       indexed = Boolean(indexDetails);
@@ -130,6 +133,7 @@ export const patchFile = (targetPath, params = {}) => {
   return {
     file: relPath,
     status: 'ok',
+    dryRun: Boolean(dryRun),
     replaced: allowMultiple ? 'all' : 1,
     originalLines,
     newLines,
@@ -164,6 +168,7 @@ export const runPatcherCli = (args, isCli = false) => {
         `  --target="<text>"        Exact text block to replace`,
         `  --replacement="<new>"    New replacement content`,
         `  --multiple               Allow replacing multiple occurrences`,
+        `  --dry-run                Preview patch without writing to disk`,
         `  --json                   Output result as minified JSON`,
         `  -h, --help               Show this help message`,
         ''
@@ -184,6 +189,7 @@ export const runPatcherCli = (args, isCli = false) => {
 
   const isJson = args.includes('--json');
   const allowMultiple = args.includes('--multiple') || args.includes('--allow-multiple');
+  const isDryRun = args.includes('--dry-run') || args.includes('-n');
 
   const targetFlag = args.find((a) => a.startsWith('--target='));
   const replacementFlag = args.find((a) => a.startsWith('--replacement=') || a.startsWith('--replace='));
@@ -196,10 +202,14 @@ export const runPatcherCli = (args, isCli = false) => {
       targetContent,
       replacementContent,
       allowMultiple,
+      dryRun: isDryRun
     });
 
     if (isJson) {
       process.stdout.write(JSON.stringify(res, null, 2) + '\n');
+    } else if (res.dryRun) {
+      process.stdout.write(`${ANSI.GOLD}[DRY RUN] Would patch ${res.file}: ${res.originalLines}L -> ${res.newLines}L (${res.lineDelta >= 0 ? '+' : ''}${res.lineDelta} lines)${ANSI.RESET}\n`);
+      process.stdout.write(`No changes were written to disk.\n`);
     } else {
       process.stdout.write(`${ANSI.GREEN}✔ Patched ${res.file}: ${res.originalLines}L -> ${res.newLines}L (${res.lineDelta >= 0 ? '+' : ''}${res.lineDelta} lines)${ANSI.RESET}\n`);
       if (res.lineBudget && !res.lineBudget.passed) {
