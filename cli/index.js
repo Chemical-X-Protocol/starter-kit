@@ -83,11 +83,6 @@ const loadProjectConfig = () => {
     return {};
   }
 };
-const isCreateInvoked =
-  invokedBin.includes('create') ||
-  Boolean(process.argv[1] && process.argv[1].includes('create-chemx')) ||
-  Boolean(process.env.npm_lifecycle_event && process.env.npm_lifecycle_event.includes('create')) ||
-  Boolean(rawArgs[0] && (rawArgs[0] === 'create' || rawArgs[0] === 'init' || rawArgs[0] === 'scaffold'));
 
 export const runAudit = async (customDir = null, isCli = false) => {
   const projectConfig = loadProjectConfig();
@@ -296,15 +291,6 @@ export {
 const main = async () => {
   const firstArg = rawArgs[0];
 
-  if (isCreateInvoked) {
-    const nonFlagArgs = rawArgs.filter((arg) => !arg.startsWith('-'));
-    const dirArg = (nonFlagArgs[0] === 'create' || nonFlagArgs[0] === 'init' || nonFlagArgs[0] === 'scaffold')
-      ? nonFlagArgs[1]
-      : nonFlagArgs[0];
-    await runScaffold(dirArg, rawArgs, runAudit);
-    return;
-  }
-
   switch (firstArg) {
     case 'team':
     case 'swarm':
@@ -346,7 +332,8 @@ const main = async () => {
     case 'init':
       await runInit(rawArgs[1] || 'src/chemical-x', rawArgs, runAudit);
       break;
-    case 'create': {
+    case 'create':
+    case 'scaffold': {
       const nonFlagArgs = rawArgs.slice(1).filter((arg) => !arg.startsWith('-'));
       await runScaffold(nonFlagArgs[0], rawArgs, runAudit);
       break;
