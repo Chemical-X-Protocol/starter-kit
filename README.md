@@ -179,6 +179,106 @@ $ npx chemx verify --dir=blueprints
 
 ---
 
+## CLI Command Reference & Workflow
+
+The `chemx` command suite is specifically tailored for token conservation, instant feedback, and zero terminal clutter:
+
+### 1. Verification & Quality
+```bash
+# Full verification pipeline (AST Audit + Typecheck + Tests) -> ~45 token status card
+chemx verify
+chemx verify --json
+
+# Run 7-Pillar static AST audit
+chemx audit
+chemx audit --unroll        # Inspect individual hazard lines and explanations
+chemx audit --strict        # Fail on any violation, including minor style warnings
+chemx audit --json          # Machine-readable format for agent pipelines
+
+# Silent TypeScript compilation check (suppresses passing noise, returns error lines)
+chemx typecheck
+chemx typecheck --json
+
+# Silent test runner (suppresses passing tests, extracts only failing assertions & stack diffs)
+chemx test
+chemx test --json
+
+# Silent build audit (categorizes diagnostics into TypeScript, Rollup, and style budgets)
+chemx build
+chemx build --json
+```
+
+### 2. AST Query Engine & Surgical Inspection
+```bash
+# Hybrid search (BM25 keyword + cosine vector similarity via Reciprocal Rank Fusion)
+chemx q "useAttentionCardController" --hybrid --json
+
+# Transitive blast radius analysis before refactoring foundational capsules
+chemx q "a-button" --blast-radius --json
+
+# Inspect component props, hooks, and types without reading entire files
+chemx q "m-task-list" --inspect
+
+# Surgical token-optimized file reader (AST outlines, stripped comments, specific symbols)
+chemx read src/components/m-card.vue --symbol=useCardController
+chemx read src/components/m-card.vue --outline
+chemx read src/components/m-card.vue --start=10 --end=40
+
+# Surgical file patching without full-file rewrites
+chemx patch <file> --target="oldCode" --replacement="newCode"
+```
+
+### 3. Crystalline Capsule Generator
+Scaffold production-ready component capsules matching strict zero-raw-DOM standards:
+```bash
+# Molecule capsule (component, controller, glass styling, types, spec)
+chemx m-task-card
+
+# Atom foundation (the only tier permitted raw HTML elements)
+chemx a-status-pill
+
+# Organism module (complex grouping of molecules and atoms)
+chemx o-workspace-header
+
+# Pure reactive hook / domain composable
+chemx use-task-filter
+```
+
+### 4. Database-Driven Multi-Agent Swarm Coordination
+Coordinate multi-agent swarms using the local SQLite store (`.chemx/index.db`) without multi-thousand-token markdown specification bloat:
+```bash
+# Auto-triage: convert AST audit hazards directly into assignable team tasks
+chemx team task triage
+
+# List tasks assigned to a specific agent
+chemx team task list --agent=@agent-alpha
+
+# Claim an open task
+chemx team task claim 1 --as=@agent-alpha
+
+# Mark task complete (automatically re-audits target file on disk to guarantee zero hazards)
+chemx team task done 1 --as=@agent-alpha
+
+# Inspect multi-agent swarm status and lock queues
+chemx team status
+```
+
+---
+
+## The 7 Molecular Architecture Pillars
+
+Chemical X enforces seven core architectural directives configured via `chemx pillars`:
+
+1. **Strict Molecular Line Budgets (< 100 Lines)**: Single-purpose files. Approaching 100 lines is a decomposition trigger. Eliminates context rot and cuts token ingestion costs.
+2. **Strict Component Tiers & Zero-Raw-DOM**: Raw HTML elements (`<button>`, `<input>`, `<div>`) are strictly isolated inside foundational **Atoms** (`a-*`). Molecules, Organisms, Templates, and Views assemble atoms and never contain raw tags.
+3. **Table-of-Contents Views**: Top-level page views are clean, 10–20 line declarative blueprints assembling self-contained molecules and organisms via named slots (`#header`, `#default`, `#modals`).
+4. **Molecular Composable Contracts**: Composables return plain destructurable objects with a strict 3-to-5 property limit (State + Status + Actions). Domain types use discriminated unions (zero impossible states).
+5. **Silent Verification Pipeline**: Verification tools suppress passing checkmarks and compiler banners, returning token-compact summaries (~45 tokens) to protect AI agent context windows.
+6. **AST Codebase Query Engine**: In-band AST symbol graph lookups, blast radius calculations, and outline extraction eliminate blind full-file context dumps.
+7. **Database-First Swarm Coordination**: Task backlogs, file locks, and agent communications live in local SQLite (`.chemx/index.db`) rather than monolithic markdown specifications.
+
+---
+
 ## Model Context Protocol (MCP) Server
 
 Chemical X includes a high-performance, zero-dependency JSON-RPC 2.0 Stdio MCP server that connects directly to AI agent hosts (Cursor, Claude Desktop, Windsurf, Antigravity, VS Code).
