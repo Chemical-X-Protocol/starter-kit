@@ -11,28 +11,48 @@ export const loadProjectConfig = (cwd = process.cwd()) => {
   }
 };
 
-export const detectFramework = (cwd = process.cwd()) => {
+export const normalizeFramework = (val) => {
+  if (!val) return null;
+  const str = String(val).toLowerCase().trim();
+  if (['react', 'tsx', 'jsx'].includes(str)) return 'react';
+  if (['vue', 'vue3', 'nuxt'].includes(str)) return 'vue';
+  if (['svelte', 'svelte5', 'kit'].includes(str)) return 'svelte';
+  return null;
+};
+
+export const resolveFramework = ({ frameworkArg = null, cwd = process.cwd() } = {}) => {
+  // 1. Explicit flag
+  const explicit = normalizeFramework(frameworkArg);
+  if (explicit) return explicit;
+
+  // 2. Project config in .chemx/config.json
   const config = loadProjectConfig(cwd);
   if (config.framework) {
-    const fw = String(config.framework).toLowerCase();
-    if (['react', 'vue', 'svelte'].includes(fw)) return fw;
+    const fromConfig = normalizeFramework(config.framework);
+    if (fromConfig) return fromConfig;
   }
 
+  // 3. Auto-detect from package.json dependencies
   const pkgPath = path.resolve(cwd, 'package.json');
-  if (!fs.existsSync(pkgPath)) return 'react';
+  if (fs.existsSync(pkgPath)) {
+    try {
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+      const deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
 
-  try {
-    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
-    const deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
-
-    if (deps.vue || deps.nuxt || deps['@nuxt/kit']) return 'vue';
-    if (deps.svelte || deps['@sveltejs/kit']) return 'svelte';
-    if (deps.react || deps.next) return 'react';
-  } catch {
-    return 'react';
+      if (deps.vue || deps.nuxt || deps['@nuxt/kit']) return 'vue';
+      if (deps.svelte || deps['@sveltejs/kit']) return 'svelte';
+      if (deps.react || deps.next) return 'react';
+    } catch {
+      // ignore
+    }
   }
 
+  // 4. Hard default
   return 'react';
+};
+
+export const detectFramework = (cwd = process.cwd()) => {
+  return resolveFramework({ cwd });
 };
 
 export const detectTestRunner = (startDir = process.cwd()) => {

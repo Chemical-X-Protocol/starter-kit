@@ -27,7 +27,7 @@ import {
   buildViewIndex,
   buildViewSpec
 } from './generator-templates.js';
-import { detectFramework, detectTierBaseDir, detectInstalledFamily, detectTestRunner } from './project-detector.js';
+import { detectFramework, resolveFramework, detectTierBaseDir, detectInstalledFamily, detectTestRunner } from './project-detector.js';
 
 const TIERS = [
   { prefix: 'm-', tier: 'molecule', label: '1. m- Molecule (Self-contained feature block < 100 lines - Recommended)' },
@@ -75,7 +75,7 @@ export const detectBaseDir = (cwd = process.cwd()) => {
 
 export const createCapsuleFiles = ({
   name = 'user-avatar',
-  framework = 'react',
+  framework = null,
   tier = 'm',
   targetParent = null,
   isLean = false,
@@ -88,8 +88,9 @@ export const createCapsuleFiles = ({
   const cleanName = (name || 'user-avatar').trim().toLowerCase();
   const selectedTier = resolveSelectedTier(tier, cleanName);
 
+  const resolvedFrameworkId = resolveFramework({ frameworkArg: framework, cwd });
   const selectedFramework = FRAMEWORKS.find(
-    (f) => f.id === framework.toLowerCase() || f.ext === framework.toLowerCase()
+    (f) => f.id === resolvedFrameworkId || f.ext === resolvedFrameworkId
   ) || FRAMEWORKS[0];
 
   let capsuleName = cleanName;
@@ -165,20 +166,25 @@ export const createCapsuleFiles = ({
     const specFile = `${capsuleName}.spec.ts`;
     const hasController = !isLean && selectedTier.tier !== 'atom';
     const installedFamily = detectInstalledFamily(cwd);
-    const templateOpts = { atomsPackage: installedFamily.atomsPackage, hasController, description: capsuleDesc };
+    const templateOpts = {
+      atomsPackage: installedFamily.atomsPackage,
+      hasController,
+      description: capsuleDesc,
+      framework: selectedFramework.id
+    };
 
     recordFile(compFile, path.join(targetDir, compFile), selectedFramework.compBuilder(capsuleName, pascalName, templateOpts));
     recordFile('index.ts', path.join(targetDir, 'index.ts'), buildIndex(capsuleName, pascalName, selectedFramework.ext, hasController));
     recordFile(specFile, path.join(targetDir, specFile), buildComponentSpec(capsuleName, pascalName, hasController, runner));
 
-    recordFile('types/props.d.ts', path.join(typesDir, 'props.d.ts'), buildPropsType(capsuleName, pascalName, { description: capsuleDesc }));
-    recordFile('types/state.d.ts', path.join(typesDir, 'state.d.ts'), buildStateType(capsuleName, pascalName, { description: capsuleDesc }));
+    recordFile('types/props.d.ts', path.join(typesDir, 'props.d.ts'), buildPropsType(capsuleName, pascalName, { description: capsuleDesc, framework: selectedFramework.id }));
+    recordFile('types/state.d.ts', path.join(typesDir, 'state.d.ts'), buildStateType(capsuleName, pascalName, { description: capsuleDesc, framework: selectedFramework.id }));
     recordFile('types/index.ts', path.join(typesDir, 'index.ts'), buildTypesIndex(['props', 'state']));
     recordFile('types.d.ts', path.join(targetDir, 'types.d.ts'), "export * from './types/index';\n");
 
     if (hasController) {
       const controllerFile = `${capsuleName}.controller.ts`;
-      recordFile(controllerFile, path.join(targetDir, controllerFile), buildController(capsuleName, pascalName, { description: capsuleDesc }));
+      recordFile(controllerFile, path.join(targetDir, controllerFile), buildController(capsuleName, pascalName, { description: capsuleDesc, framework: selectedFramework.id }));
     }
 
     if (!isLean) {
@@ -307,14 +313,12 @@ export const runGenerateWizard = async (rawArgs = []) => {
   const cleanName = (rawName || 'user-avatar').trim().toLowerCase();
   const selectedTier = resolveSelectedTier(explicitTier, cleanName);
 
-  const autoFramework = detectFramework(process.cwd());
-  const defaultFw = FRAMEWORKS.find((f) => f.id === autoFramework) || FRAMEWORKS[0];
+  const targetCwd = dirArg ? path.resolve(process.cwd(), dirArg) : process.cwd();
+  const resolvedFrameworkId = resolveFramework({ frameworkArg, cwd: targetCwd });
+  const defaultFw = FRAMEWORKS.find((f) => f.id === resolvedFrameworkId || f.ext === resolvedFrameworkId) || FRAMEWORKS[0];
   let selectedFramework = defaultFw;
 
-  if (frameworkArg) {
-    const found = FRAMEWORKS.find((f) => f.id === frameworkArg.toLowerCase() || f.ext === frameworkArg.toLowerCase());
-    if (found) selectedFramework = found;
-  } else if (!isYes) {
+  if (!frameworkArg && !isYes) {
     const fwChoice = useGum
       ? gumChoose(FRAMEWORKS.map((f) => f.label), 'Select Framework Flavor')
       : await promptQuestion(`Select Framework Flavor [1=React, 2=Vue 3, 3=Svelte 5] (default: ${defaultFw.id}): `);

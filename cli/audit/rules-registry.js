@@ -121,6 +121,11 @@ export const RULE_REGISTRY = {
     severity: 'HIGH',
     directive: 'Limit hook return values to 3 to 5 properties (State + Status + Actions)'
   },
+  CONTROLLER_VIEW_MISMATCH: {
+    pillar: PILLARS.PILLAR_3,
+    severity: 'CRITICAL',
+    directive: 'Ensure view destructuring matches properties returned by the co-located controller'
+  },
   TIMER_DISCIPLINE: {
     pillar: PILLARS.PILLAR_6,
     severity: 'CRITICAL',

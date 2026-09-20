@@ -3,7 +3,16 @@ import { resolveArchetype } from './archetypes/index.js';
 export const buildPropsType = (name, pascalName, options = {}) => {
   const archetype = resolveArchetype(name, options.description || options.desc);
   if (archetype && typeof archetype.buildProps === 'function') {
-    return archetype.buildProps(name, pascalName);
+    const rawProps = archetype.buildProps(name, pascalName);
+    if (!rawProps.includes(`${pascalName}Emits`)) {
+      return `${rawProps}
+export interface ${pascalName}Emits {
+  (e: 'action', payload?: unknown): void;
+  (e: 'change', payload?: unknown): void;
+}
+`;
+    }
+    return rawProps;
   }
   return `export interface ${pascalName}Props {
   readonly title: string;

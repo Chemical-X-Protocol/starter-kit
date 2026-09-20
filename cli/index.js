@@ -288,8 +288,51 @@ export {
   publishIssue
 };
 
+export const ALLOWED_COMMANDS = new Set([
+  'search', 'q', 'query', 'find',
+  'read', 'view',
+  'patch', 'edit',
+  'write',
+  'generate', 'g', 'gen', 'capsule', 'add',
+  'audit',
+  'verify', 'check:all',
+  'team', 'swarm', 'feed',
+  'pillars', 'rules', 'config:pillars',
+  'mcp', 'mcp-server', 'server', 'install-mcp', 'setup-mcp',
+  'build', 'run', 'wrap',
+  'typecheck', 'check:types', 'tsc',
+  'test', 'tests', 'check:test',
+  'check',
+  'badge', 'badges',
+  'ui', 'preview', 'dashboard',
+  'create', 'scaffold',
+  'init',
+  'hook', 'hooks', 'install-hooks', 'setup-ci',
+  'add:prop', 'add:state', 'add:action', 'fix',
+  'help', '--help', '-h',
+  'version', '--version', '-v'
+]);
+
 const main = async () => {
   const firstArg = rawArgs[0];
+
+  if (!firstArg || firstArg === 'help' || firstArg === '--help' || firstArg === '-h') {
+    printHelp();
+    return;
+  }
+
+  if (firstArg === 'version' || firstArg === '--version' || firstArg === '-v') {
+    process.stdout.write(`create-chemx v${getPackageVersion()}\n`);
+    return;
+  }
+
+  const isCapsule = isCapsulePrefix(firstArg);
+  const isAllowed = ALLOWED_COMMANDS.has(firstArg) || isCapsule;
+
+  if (!isAllowed) {
+    process.stderr.write(`Unknown command "${firstArg}". Run --help for usage.\n`);
+    process.exit(1);
+  }
 
   switch (firstArg) {
     case 'team':
@@ -416,13 +459,10 @@ const main = async () => {
       printHelp();
       break;
     default:
-      if (!firstArg) {
-        printHelp();
-      } else if (isCapsulePrefix(firstArg)) {
+      if (isCapsulePrefix(firstArg)) {
         await runGenerateWizard(rawArgs);
       } else {
-        process.stderr.write(`\x1b[31mError:\x1b[0m Unknown command "${firstArg}".\n`);
-        process.stderr.write(`Run "chemx --help" for a list of available commands.\n\n`);
+        process.stderr.write(`Unknown command "${firstArg}". Run --help for usage.\n`);
         process.exit(1);
       }
       break;

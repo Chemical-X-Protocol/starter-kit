@@ -66,8 +66,104 @@ export const checkMoleculeCoLocatedTest = (filePath, relativePath, violations) =
   });
 };
 
+/**
+ * Pillar 3: Return-shape diff check to ensure view only references identifiers
+ * present in the co-located controller's return object.
+ */
+export const checkControllerViewContract = (filePath, relativePath, content, violations) => {
+  const baseName = path.basename(filePath);
+  const ext = path.extname(filePath);
+
+  const isMoleculePath = relativePath.includes('molecules') || baseName.startsWith('m-') || baseName.startsWith('o-');
+  const isComponentExt = isComponentExtension(ext);
+  const isTestOrSpecFile = baseName.includes('.spec.') || baseName.includes('.test.');
+
+  const isComponent = isMoleculePath && isComponentExt && !isTestOrSpecFile;
+  if (!isComponent) return;
+
+  const controllerImportMatch = content.match(/from\s+['"]\.\/([a-zA-Z0-9_-]+\.controller)(?:\.ts)?['"]/);
+  if (!controllerImportMatch) return;
+
+  const controllerRel = controllerImportMatch[1];
+  const dir = path.dirname(filePath);
+  const controllerFullPath = path.join(dir, `${controllerRel}.ts`);
+
+  const [controllerContent, readErr] = toResultSync(() => {
+    if (fs.existsSync(controllerFullPath)) {
+      return fs.readFileSync(controllerFullPath, 'utf-8');
+    }
+    return null;
+  });
+
+  if (readErr || !controllerContent) return;
+
+  const returnMatch = controllerContent.match(/return\s*\{([\s\S]*?)\};?/);
+  if (!returnMatch) return;
+
+  const returnBody = returnMatch[1];
+  const returnedKeys = new Set();
+
+  const returnEntries = returnBody.split(/,\s*(?![^{}]*\})/);
+  for (const entry of returnEntries) {
+    const trimmed = entry.trim();
+    if (!trimmed) continue;
+    const getterMatch = trimmed.match(/^get\s+([a-zA-Z0-9_]+)\s*\(/);
+    if (getterMatch) {
+      returnedKeys.add(getterMatch[1]);
+      continue;
+    }
+    const keyMatch = trimmed.match(/^([a-zA-Z0-9_]+)/);
+    if (keyMatch) {
+      returnedKeys.add(keyMatch[1]);
+    }
+  }
+
+  const destructuredMatches = content.matchAll(/(?:const|let)\s*\{([\s\S]*?)\}\s*=\s*(?:\{[^}]*\}\s*,\s*|\{\s*\.\.\.props\s*,\s*\.\.\.)?(?:use|create)[A-Z0-9]\w*Controller/g);
+  const destructuredKeys = new Set();
+  for (const match of destructuredMatches) {
+    const keysStr = match[1];
+    const rawKeys = keysStr.split(',').map((k) => k.trim()).filter(Boolean);
+    for (const rawKey of rawKeys) {
+      const cleanKey = rawKey.split(':')[0].trim();
+      if (cleanKey && !cleanKey.startsWith('...')) {
+        destructuredKeys.add(cleanKey);
+      }
+    }
+  }
+
+  const controllerVarMatch = content.match(/(?:const|let)\s+([a-zA-Z0-9_]+)\s*=\s*(?:use|create)[A-Z0-9]\w*Controller/);
+  if (controllerVarMatch) {
+    const varName = controllerVarMatch[1];
+    const propAccesses = content.matchAll(new RegExp(`\\b${varName}\\.([a-zA-Z0-9_]+)`, 'g'));
+    for (const pa of propAccesses) {
+      destructuredKeys.add(pa[1]);
+    }
+  }
+
+  const missing = [];
+  for (const key of destructuredKeys) {
+    if (!returnedKeys.has(key)) {
+      missing.push(key);
+    }
+  }
+
+  if (missing.length > 0) {
+    violations.push({
+      filePath: relativePath,
+      line: 1,
+      column: 1,
+      hazard: `View references undefined controller exports: ${missing.join(', ')} (controller returns: ${[...returnedKeys].join(', ')})`,
+      rule: 'CONTROLLER_VIEW_MISMATCH',
+      severity: 'CRITICAL',
+      pillar: 'Reactivity & Composable Contracts',
+      directive: 'Ensure view destructuring matches properties returned by the co-located controller'
+    });
+  }
+};
+
 export const checkExtendedTextPatterns = (content, lines, relativePath, filePath, violations) => {
   checkMoleculeCoLocatedTest(filePath, relativePath, violations);
+  checkControllerViewContract(filePath, relativePath, content, violations);
 
   const isTestFile = /\.(test|spec)\.[jt]sx?$/.test(filePath);
   const ext = path.extname(filePath);

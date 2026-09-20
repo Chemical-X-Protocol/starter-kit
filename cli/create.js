@@ -47,6 +47,23 @@ if (rawArgs.includes('--version') || rawArgs.includes('-v')) {
   process.exit(0);
 }
 
+const KNOWN_FLAGS = new Set([
+  '--yes', '-y',
+  '--headless',
+  '-h', '--help',
+  '-v', '--version',
+  '--ci',
+  '--non-interactive',
+  '--no-interactive'
+]);
+
+for (const arg of rawArgs) {
+  if (arg.startsWith('-') && !KNOWN_FLAGS.has(arg)) {
+    process.stderr.write(`Unknown option "${arg}". Run --help for usage.\n`);
+    process.exit(1);
+  }
+}
+
 const nonFlagArgs = rawArgs.filter((arg) => !arg.startsWith('-'));
 const dirArg = (nonFlagArgs[0] === 'create' || nonFlagArgs[0] === 'init' || nonFlagArgs[0] === 'scaffold')
   ? nonFlagArgs[1]
