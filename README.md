@@ -18,6 +18,47 @@ Access the interactive book, prompt generator, and asset vault at [https://chemi
 
 ---
 
+## Quickstart: Scaffolding a New Project
+
+Create a brand new molecular architecture project in seconds using your preferred package manager:
+
+```bash
+# npm (interactive or pass project directory)
+npm create chemx my-molecular-app
+
+# Automated / Agent / Headless mode (skips prompts, scaffolds Community Edition immediately)
+npm create chemx my-molecular-app -- --yes
+
+# npx
+npx create-chemx my-molecular-app --yes
+
+# pnpm / yarn / bun
+pnpm create chemx my-molecular-app
+yarn create chemx my-molecular-app
+bun create chemx my-molecular-app
+```
+
+### Headless & Autonomous Agent Mode
+When running in unattended environments (CI/CD pipelines, Cursor Agent, Windsurf, Claude Code, Antigravity), pass `--yes` (or `-y`, `--ci`, `--headless`) to bypass interactive terminal menus and immediately scaffold the free Community Edition with recommended architectural pillars:
+
+```bash
+npx create-chemx my-molecular-app --yes
+```
+
+### Package Architecture: Scaffolder vs Command Engine
+Chemical X provides two coordinated packages:
+- **`create-chemx`**: Dedicated zero-dependency project scaffolder (`npm create chemx`). Directly provisions project templates, test suites, and architectural configurations.
+- **`chemx`**: The full Molecular Architecture CLI & AST Query Engine. Manages audits, verifications, AST query lookups, code patching, and multi-agent swarm task coordination.
+
+```bash
+# Install chemx CLI globally or in your project:
+npm install -g chemx
+# or run on-demand:
+npx chemx --help
+```
+
+---
+
 ## Structure
 
 ```
