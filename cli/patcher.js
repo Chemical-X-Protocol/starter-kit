@@ -151,6 +151,28 @@ export const patchFile = (targetPath, params = {}) => {
  * @param {boolean} isCli Whether invoked directly from CLI.
  */
 export const runPatcherCli = (args, isCli = false) => {
+  if (args.includes('--help') || args.includes('-h') || args.includes('help')) {
+    const isJson = args.includes('--json');
+    if (isJson) {
+      process.stdout.write(JSON.stringify({ help: true, success: true }) + '\n');
+    } else {
+      process.stdout.write([
+        `${ANSI.BOLD}USAGE${ANSI.RESET}`,
+        `  chemx patch <file> --target="text" --replacement="new" [options]`,
+        '',
+        `${ANSI.BOLD}OPTIONS${ANSI.RESET}`,
+        `  --target="<text>"        Exact text block to replace`,
+        `  --replacement="<new>"    New replacement content`,
+        `  --multiple               Allow replacing multiple occurrences`,
+        `  --json                   Output result as minified JSON`,
+        `  -h, --help               Show this help message`,
+        ''
+      ].join('\n'));
+    }
+    if (isCli) process.exit(0);
+    return { help: true, success: true };
+  }
+
   const nonFlagArgs = args.filter((a) => !a.startsWith('-'));
   const filePath = nonFlagArgs[0];
 
@@ -317,6 +339,26 @@ export const writeFile = (targetPath, params = {}) => {
  * @param {boolean} isCli Whether invoked directly from CLI.
  */
 export const runWriterCli = (args, isCli = false) => {
+  if (args.includes('--help') || args.includes('-h') || args.includes('help')) {
+    const isJson = args.includes('--json');
+    if (isJson) {
+      process.stdout.write(JSON.stringify({ help: true, success: true }) + '\n');
+    } else {
+      process.stdout.write([
+        `${ANSI.BOLD}USAGE${ANSI.RESET}`,
+        `  chemx write <file> --content="text" [options]`,
+        '',
+        `${ANSI.BOLD}OPTIONS${ANSI.RESET}`,
+        `  --content="<text>"       File content to write`,
+        `  --json                   Output result as minified JSON`,
+        `  -h, --help               Show this help message`,
+        ''
+      ].join('\n'));
+    }
+    if (isCli) process.exit(0);
+    return { help: true, success: true };
+  }
+
   const nonFlagArgs = args.filter((a) => !a.startsWith('-'));
   const filePath = nonFlagArgs[0];
 

@@ -182,4 +182,21 @@ test('obtainLicenseKey: returns null immediately when --headless is passed witho
   assert.strictEqual(key, null);
 });
 
+test('runGenerateWizard: --help displays help and never writes files to disk', async () => {
+  const tmpDir = path.resolve(process.cwd(), 'scratch/test-gen-help');
+  if (fs.existsSync(tmpDir)) fs.rmSync(tmpDir, { recursive: true, force: true });
+
+  const res = await runGenerateWizard(['--help', `--dir=${tmpDir}`]);
+  assert.strictEqual(res.success, true);
+  assert.strictEqual(res.help, true);
+  assert.strictEqual(fs.existsSync(tmpDir), false);
+});
+
+test('runGenerateWizard: --json with --help returns help object without mutation', async () => {
+  const res = await runGenerateWizard(['--help', '--json']);
+  assert.strictEqual(res.success, true);
+  assert.strictEqual(res.help, true);
+});
+
+
 

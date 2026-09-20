@@ -342,6 +342,31 @@ export const readTokenOptimized = (targetPath, options = {}) => {
  * @param {boolean} isCli Whether invoked directly from CLI.
  */
 export const runReaderCli = (args, isCli = false) => {
+  if (args.includes('--help') || args.includes('-h') || args.includes('help')) {
+    const isJson = args.includes('--json');
+    if (isJson) {
+      process.stdout.write(JSON.stringify({ help: true, success: true }) + '\n');
+    } else {
+      process.stdout.write([
+        `${ANSI.BOLD}USAGE${ANSI.RESET}`,
+        `  chemx read <file> [options]`,
+        '',
+        `${ANSI.BOLD}OPTIONS${ANSI.RESET}`,
+        `  --outline                AST structure outline only (80%+ token savings)`,
+        `  --symbol=<name>          Extract specific function/hook/interface declaration`,
+        `  --start=<N>              Start line number (1-indexed)`,
+        `  --end=<N>                End line number (1-indexed)`,
+        `  --strip-comments         Remove comments to minimize tokens`,
+        `  --compact                Collapse empty whitespace lines`,
+        `  --json                   Output result as minified JSON`,
+        `  -h, --help               Show this help message`,
+        ''
+      ].join('\n'));
+    }
+    if (isCli) process.exit(0);
+    return { help: true, success: true };
+  }
+
   const nonFlagArgs = args.filter((a) => !a.startsWith('-'));
   const filePath = nonFlagArgs[0];
 

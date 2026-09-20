@@ -90,19 +90,17 @@ test('installProjectMcpConfig: creates .cursor and .vscode configs and updates p
   }
 });
 
-test('syncAntigravityMcpSchemas: writes all 14 tool schemas and instructions.md', () => {
+test('syncAntigravityMcpSchemas: writes master gateway schema and instructions.md', () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-antigravity-test-'));
   try {
     const res = syncAntigravityMcpSchemas(tmpDir, { silent: true });
     assert.strictEqual(res.toolCount, MCP_TOOLS.length);
-    assert.ok(fs.existsSync(path.join(tmpDir, 'chemx_verify.json')));
-    assert.ok(fs.existsSync(path.join(tmpDir, 'chemx_typecheck.json')));
-    assert.ok(fs.existsSync(path.join(tmpDir, 'chemx_test.json')));
+    assert.ok(fs.existsSync(path.join(tmpDir, 'chemx.json')));
     assert.ok(fs.existsSync(path.join(tmpDir, 'instructions.md')));
 
     const instructions = fs.readFileSync(path.join(tmpDir, 'instructions.md'), 'utf-8');
-    assert.ok(instructions.includes('chemx_verify'));
-    assert.ok(instructions.includes('MANDATORY VERIFICATION'));
+    assert.ok(instructions.includes('chemx'));
+    assert.ok(instructions.includes('MASTER TOOL'));
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }

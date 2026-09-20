@@ -7,33 +7,7 @@ import { createTask, claimTask, requestFileLock, releaseFileLock } from './team/
 import { completeTaskWithAudit } from './team/team-triage.js';
 import { executeSettingsAction } from './ui-actions-helpers.js';
 
-export const handleCodebaseIndex = (db) => {
-  if (!db) return { success: false, error: 'Database unavailable' };
-  const files = db.prepare(`
-    SELECT path, tier, lines, health_score, hazard_count
-    FROM files ORDER BY health_score ASC, lines DESC
-  `).all().map((f) => ({
-    path: f.path,
-    tier: f.tier || 'utility',
-    lines: Number(f.lines || 0),
-    healthScore: Number(f.health_score || 0),
-    hazardCount: Number(f.hazard_count || 0)
-  }));
-
-  const violations = db.prepare(`
-    SELECT file_path, rule, severity, line, hazard, directive
-    FROM violations ORDER BY id DESC LIMIT 50
-  `).all().map((v) => ({
-    filePath: v.file_path,
-    rule: v.rule,
-    severity: v.severity,
-    line: Number(v.line || 0),
-    hazard: v.hazard,
-    directive: v.directive
-  }));
-
-  return { success: true, files, violations };
-};
+export { handleCodebaseIndex, handleCodebaseTree, handleCodebaseFile } from './ui-actions-codebase.js';
 
 export const handleCreateTask = (db, body = {}) => {
   if (!db) return { success: false, error: 'Database unavailable' };
@@ -83,3 +57,13 @@ export const handleReleaseLock = (db, body = {}) => {
 export const handleSettingsAction = (db, body = {}) => {
   return executeSettingsAction(db, body.action, body);
 };
+
+export { handleUpdateTaskStatus, handleAssignTask, handleOverrideLock } from './ui-actions-tasks.js';
+export {
+  handleGeneratePrompt,
+  handleDbTables,
+  handleDbBrowse,
+  handleDbStructure,
+  handleDbQuery
+} from './ui-actions-studio.js';
+

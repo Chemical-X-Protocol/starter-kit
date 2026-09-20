@@ -193,7 +193,55 @@ export const createCapsuleFiles = ({
   };
 };
 
+export const printGenerateHelp = () => {
+  renderBanner('Chemical X: Capsule Generator Usage');
+  const BOLD = '\x1b[1m';
+  const CYAN = '\x1b[36m';
+  const DIM = '\x1b[2m';
+  const RESET = '\x1b[0m';
+
+  const out = [
+    `${BOLD}USAGE${RESET}`,
+    `  ${CYAN}npx chemx generate${RESET} <name> [options]`,
+    `  ${CYAN}npx chemx generate${RESET} <tier> <name> [options]`,
+    '',
+    `${BOLD}TIERS${RESET}`,
+    `  ${CYAN}atom${RESET} (a-)       Foundational UI elements (raw HTML permitted)`,
+    `  ${CYAN}molecule${RESET} (m-)   Groups of atoms (no raw HTML, co-located controller)`,
+    `  ${CYAN}organism${RESET} (o-)   Complex feature modules`,
+    `  ${CYAN}hook${RESET} (use-)     Domain state / headless composables (< 5 return properties)`,
+    `  ${CYAN}view${RESET} (v-)       Declarative Table-of-Contents views`,
+    '',
+    `${BOLD}OPTIONS${RESET}`,
+    `  ${CYAN}--tier=<tier>${RESET}                    Specify component tier`,
+    `  ${CYAN}--framework=<react|vue|svelte>${RESET}  Framework flavor (default: auto-detected or react)`,
+    `  ${CYAN}--dir=<path>${RESET}                     Target directory (default: src/components/<tier>s)`,
+    `  ${CYAN}--lean${RESET}                           Generate minimal capsule without controller/spec`,
+    `  ${CYAN}--json${RESET}                           Output result as minified JSON`,
+    `  ${CYAN}-y, --yes${RESET}                        Non-interactive mode with defaults`,
+    `  ${CYAN}-h, --help${RESET}                       Show this help message`,
+    '',
+    `${BOLD}EXAMPLES${RESET}`,
+    `  ${CYAN}npx chemx generate m-task-list --framework=react${RESET}`,
+    `  ${CYAN}npx chemx generate hook use-task-filter${RESET}`,
+    `  ${CYAN}npx chemx generate atom badge --dir=src/ui/atoms${RESET}`,
+    ''
+  ].join('\n');
+
+  process.stdout.write(out);
+};
+
 export const runGenerateWizard = async (rawArgs = []) => {
+  const isHelp = rawArgs.includes('--help') || rawArgs.includes('-h') || rawArgs.includes('help');
+  if (isHelp) {
+    if (rawArgs.includes('--json')) {
+      process.stdout.write(JSON.stringify({ help: true, success: true }) + '\n');
+    } else {
+      printGenerateHelp();
+    }
+    return { success: true, help: true };
+  }
+
   const isJson = rawArgs.includes('--json');
   const isYes = rawArgs.includes('-y') || rawArgs.includes('--yes') || !process.stdin.isTTY;
   if (!isJson) renderBanner('Chemical X: Molecular Capsule Wizard');
@@ -225,6 +273,17 @@ export const runGenerateWizard = async (rawArgs = []) => {
     rawName = useGum
       ? gumInput('Capsule feature name (e.g. user-avatar, spark-kpi, auth-status):', 'user-avatar')
       : await promptQuestion('Capsule feature name [user-avatar]: ');
+  } else if (!rawName && isYes) {
+    const hasExplicitFlags = rawArgs.some((a) => a.startsWith('-'));
+    if (hasExplicitFlags) {
+      const err = new Error('Missing capsule name. Usage: npx chemx generate <name> [options]');
+      if (isJson) {
+        process.stdout.write(JSON.stringify({ error: err.message, success: false }) + '\n');
+        process.exit(1);
+      }
+      process.stderr.write(`\x1b[31m✕ Error: ${err.message}\x1b[0m\n`);
+      process.exit(1);
+    }
   }
   const cleanName = (rawName || 'user-avatar').trim().toLowerCase();
   const selectedTier = resolveSelectedTier(explicitTier, cleanName);

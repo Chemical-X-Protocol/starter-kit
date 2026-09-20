@@ -146,3 +146,22 @@ test('patchFile: detects Directive 1.G raw DOM violations in molecule files', ()
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });
+
+test('runPatcherCli: --help displays usage and returns success without error', () => {
+  import('./patcher.js').then(({ runPatcherCli, runWriterCli }) => {
+    const patchRes = runPatcherCli(['--help'], false);
+    assert.strictEqual(patchRes.success, true);
+    assert.strictEqual(patchRes.help, true);
+
+    const writeRes = runWriterCli(['--help'], false);
+    assert.strictEqual(writeRes.success, true);
+    assert.strictEqual(writeRes.help, true);
+  });
+});
+
+test('ANSI.GREEN: exists and is defined in theme.js', async () => {
+  const { ANSI } = await import('./theme.js');
+  assert.notStrictEqual(ANSI.GREEN, undefined);
+  assert.ok(typeof ANSI.GREEN === 'string');
+});
+

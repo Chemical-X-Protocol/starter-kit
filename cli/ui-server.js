@@ -10,22 +10,28 @@ export const createUiServer = (cwd = process.cwd()) => {
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
     const pathname = url.pathname;
+    const isGet = req.method === 'GET';
+    const isPost = req.method === 'POST';
+    const isRootPath = pathname === '/' || pathname === '/index.html';
+    const isFavicon = pathname === '/favicon.ico';
+    const shouldServeHtml = isGet && isRootPath;
+    const shouldServeFavicon = isGet && isFavicon;
 
-    if (req.method === 'GET' && (pathname === '/' || pathname === '/index.html')) {
+    if (shouldServeHtml) {
       const state = handleSwarmStatus(db);
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(generateSwarmHtml(state));
       return;
     }
 
-    if (req.method === 'GET' && pathname === '/favicon.ico') {
+    if (shouldServeFavicon) {
       res.writeHead(204);
       res.end();
       return;
     }
 
-    if (req.method === 'GET') {
-      const result = routeGet(pathname, db, cwd);
+    if (isGet) {
+      const result = routeGet(req.url, db, cwd);
       if (result) {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(result));
@@ -33,10 +39,10 @@ export const createUiServer = (cwd = process.cwd()) => {
       }
     }
 
-    if (req.method === 'POST') {
+    if (isPost) {
       try {
         const body = await parseJsonBody(req);
-        const result = routePost(pathname, db, body, cwd);
+        const result = routePost(req.url, db, body, cwd);
         if (result) {
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify(result));

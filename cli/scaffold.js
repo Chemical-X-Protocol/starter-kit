@@ -13,10 +13,10 @@ export const runScaffold = async (projectName, rawArgs = [], onRunAudit = null) 
   if (!licenseKey) {
     process.stdout.write(
       '\n\x1b[38;2;98;201;255m⚡ Chemical X: Community Edition (Free)\x1b[0m\n' +
-      'The Community version is free because you tell us about your project\n' +
-      'and the app will automatically post your scorecard to our GitHub Discussions.\n' +
-      'You get a free plug, we get data to prove Chemical X works and brings real value.\n' +
-      'Everybody wins! Thank you for supporting our Community version.\n\n'
+      'Open-source molecular architecture standard for high-velocity AI coding.\n' +
+      'Scorecards can be shared with the community via PR checks or the share menu.\n' +
+      'No background telemetry is exfiltrated without your explicit consent.\n' +
+      'Thank you for supporting Chemical X!\n\n'
     );
     files = loadLocalBlueprintFiles();
     isCommunity = true;
@@ -57,17 +57,26 @@ export const runScaffold = async (projectName, rawArgs = [], onRunAudit = null) 
     process.exit(1);
   }
 
+  const resolveScaffoldTarget = (rel) => {
+    if (rel === '_package.json') return 'package.json';
+    if (rel === '_tsconfig.json') return 'tsconfig.json';
+    if (rel === '_vitest.config.ts') return 'vitest.config.ts';
+    if (rel === '_gitignore') return '.gitignore';
+    return rel;
+  };
+
   process.stdout.write(`Scaffolding Molecular Architecture into: \x1b[36m${finalDirName}/\x1b[0m\n`);
   fs.mkdirSync(targetDir, { recursive: true });
 
   for (const [relPath, content] of Object.entries(files)) {
-    const fullPath = path.join(targetDir, relPath);
+    const targetRel = resolveScaffoldTarget(relPath);
+    const fullPath = path.join(targetDir, targetRel);
     const dirName = path.dirname(fullPath);
     if (!fs.existsSync(dirName)) {
       fs.mkdirSync(dirName, { recursive: true });
     }
     fs.writeFileSync(fullPath, content, 'utf-8');
-    process.stdout.write(`  \x1b[32m✔\x1b[0m ${relPath}\n`);
+    process.stdout.write(`  \x1b[32m✔\x1b[0m ${targetRel}\n`);
   }
 
   const cursorRulesPath = path.join(targetDir, '.cursorrules');
@@ -83,6 +92,13 @@ export const runScaffold = async (projectName, rawArgs = [], onRunAudit = null) 
     process.stdout.write('  \x1b[32m✔\x1b[0m .cursorrules\n');
   }
 
+  const agentsMdSrc = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../AGENTS.md');
+  const agentsMdDest = path.join(targetDir, 'AGENTS.md');
+  if (fs.existsSync(agentsMdSrc) && !fs.existsSync(agentsMdDest)) {
+    fs.copyFileSync(agentsMdSrc, agentsMdDest);
+    process.stdout.write('  \x1b[32m✔\x1b[0m AGENTS.md\n');
+  }
+
   process.stdout.write(
     `\n\x1b[1m\x1b[32m✔ Molecular Architecture project created successfully at ${finalDirName}!\x1b[0m\n\n`
   );
@@ -90,7 +106,8 @@ export const runScaffold = async (projectName, rawArgs = [], onRunAudit = null) 
   process.stdout.write(`  1. cd ${finalDirName}\n`);
   process.stdout.write('  2. Review AGENTS.md for line budgets and architecture standards\n');
   process.stdout.write('  3. Run npx chemx generate m-<feature> to create capsules\n');
-  process.stdout.write('  4. Run npx chemx audit to scan for line budget compliance\n\n');
+  process.stdout.write('  4. Run npx chemx audit to scan for line budget compliance\n');
+  process.stdout.write('  5. Run npx chemx verify to verify AST rules, typecheck, and tests\n\n');
 };
 
 export const runInit = async (targetSubDir = 'src/chemical-x', rawArgs = [], onRunAudit = null) => {
@@ -114,6 +131,9 @@ export const runInit = async (targetSubDir = 'src/chemical-x', rawArgs = [], onR
 
   let count = 0;
   for (const [relPath, content] of Object.entries(files)) {
+    if (relPath === '_package.json' || relPath === '_tsconfig.json' || relPath === '_vitest.config.ts') {
+      continue;
+    }
     const fullPath = path.join(targetDir, relPath);
     const dirName = path.dirname(fullPath);
     if (!fs.existsSync(dirName)) {

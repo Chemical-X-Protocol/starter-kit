@@ -1,49 +1,77 @@
 /**
  * Chemical X UI Server Route Handlers
- * Dispatches API requests to corresponding database action handlers
  */
-
-import { handleSwarmStatus, handlePostFeed } from './ui-handlers.js';
 import {
-  handleCodebaseIndex,
-  handleCreateTask,
-  handleClaimTask,
-  handleCompleteTask,
-  handleAcquireLock,
-  handleReleaseLock,
-  handleSettingsAction
+  handleSwarmStatus, handlePostFeed, handleCreateFeedPost, handleUpdateSignature,
+  handleGetTopics, handleGetTopicPosts, handleCreateTopic
+} from './ui-handlers.js';
+import { queryFeed, listTasks } from './team/team-db.js';
+import { getForumCategories } from './ui-forum-data.js';
+import {
+  handleCodebaseIndex, handleCodebaseTree, handleCodebaseFile,
+  handleCreateTask, handleClaimTask, handleCompleteTask,
+  handleUpdateTaskStatus, handleAssignTask, handleAcquireLock,
+  handleReleaseLock, handleOverrideLock, handleSettingsAction,
+  handleGeneratePrompt, handleDbTables, handleDbBrowse,
+  handleDbStructure, handleDbQuery
 } from './ui-actions.js';
 import { getDatabaseMetrics, executeSqlQuery } from './ui-db-studio.js';
 import { scanAttentionItems, confirmAttentionItem } from './ui-attention.js';
 
-export const routeGet = (pathname, db, cwd = process.cwd()) => {
+export const routeGet = (pathname, db, cwd = process.cwd(), queryParams = {}) => {
+  const [cleanPath, search] = (pathname || '').split('?');
+  const parsedParams = search ? Object.fromEntries(new URLSearchParams(search)) : queryParams;
+  const normPath = cleanPath.replace(/^\/api\/swarm\//, '/api/');
+
   const routes = {
-    '/api/swarm/status': () => handleSwarmStatus(db),
-    '/api/swarm/codebase': () => handleCodebaseIndex(db),
-    '/api/swarm/database/metrics': () => getDatabaseMetrics(db, cwd),
-    '/api/swarm/attention': () => scanAttentionItems(db, cwd)
+    '/api/status': () => handleSwarmStatus(db, cwd),
+    '/api/feed': () => ({ success: true, feed: queryFeed(db, parsedParams) }),
+    '/api/tasks': () => ({ success: true, tasks: listTasks(db, parsedParams) }),
+    '/api/categories': () => ({ success: true, categories: getForumCategories(db) }),
+    '/api/agents': () => ({ success: true, agents: handleSwarmStatus(db, cwd).agents }),
+    '/api/codebase': () => handleCodebaseIndex(db),
+    '/api/codebase/tree': () => handleCodebaseTree(db),
+    '/api/codebase/file': () => handleCodebaseFile(db, parsedParams.path, cwd),
+    '/api/database/metrics': () => getDatabaseMetrics(db, cwd),
+    '/api/topics': () => handleGetTopics(db, parsedParams.category),
+    '/api/topics/posts': () => handleGetTopicPosts(db, parsedParams.topicId || parsedParams.topic_id),
+    '/api/attention': () => scanAttentionItems(db, cwd),
+    '/api/db/tables': () => handleDbTables(db, cwd),
+    '/api/db/browse': () => handleDbBrowse(db, parsedParams),
+    '/api/db/structure': () => handleDbStructure(db, parsedParams)
   };
 
-  const hasRoute = Object.prototype.hasOwnProperty.call(routes, pathname);
-  if (hasRoute) return routes[pathname]();
+  const hasRoute = Object.prototype.hasOwnProperty.call(routes, normPath);
+  if (hasRoute) return routes[normPath]();
   return null;
 };
 
 export const routePost = (pathname, db, body, cwd = process.cwd()) => {
+  const [cleanPath] = (pathname || '').split('?');
+  const postFeedHandler = handleCreateFeedPost || handlePostFeed;
+  const normPath = cleanPath.replace(/^\/api\/swarm\//, '/api/');
+
   const routes = {
-    '/api/swarm/feed': () => handlePostFeed(db, body),
-    '/api/swarm/tasks': () => handleCreateTask(db, body),
-    '/api/swarm/tasks/claim': () => handleClaimTask(db, body),
-    '/api/swarm/tasks/done': () => handleCompleteTask(db, body, cwd),
-    '/api/swarm/locks/acquire': () => handleAcquireLock(db, body),
-    '/api/swarm/locks/release': () => handleReleaseLock(db, body),
-    '/api/swarm/settings/action': () => handleSettingsAction(db, body),
-    '/api/swarm/database/query': () => executeSqlQuery(db, body.query),
-    '/api/swarm/attention/action': () => confirmAttentionItem(db, body.itemId, body.action)
+    '/api/feed': () => postFeedHandler(db, body),
+    '/api/tasks': () => handleCreateTask(db, body),
+    '/api/tasks/claim': () => handleClaimTask(db, body),
+    '/api/tasks/done': () => handleCompleteTask(db, body, cwd),
+    '/api/tasks/update': () => handleUpdateTaskStatus(db, body),
+    '/api/tasks/assign': () => handleAssignTask(db, body),
+    '/api/locks/acquire': () => handleAcquireLock(db, body),
+    '/api/locks/release': () => handleReleaseLock(db, body),
+    '/api/locks/override': () => handleOverrideLock(db, body),
+    '/api/agents/signature': () => handleUpdateSignature(db, body),
+    '/api/topics': () => handleCreateTopic(db, body),
+    '/api/settings/action': () => handleSettingsAction(db, body),
+    '/api/database/query': () => executeSqlQuery(db, body.query),
+    '/api/attention/action': () => confirmAttentionItem(db, body.itemId, body.action),
+    '/api/prompts/generate': () => handleGeneratePrompt(db, body, cwd),
+    '/api/db/query': () => handleDbQuery(db, body)
   };
 
-  const hasRoute = Object.prototype.hasOwnProperty.call(routes, pathname);
-  if (hasRoute) return routes[pathname]();
+  const hasRoute = Object.prototype.hasOwnProperty.call(routes, normPath);
+  if (hasRoute) return routes[normPath]();
   return null;
 };
 

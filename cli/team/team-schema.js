@@ -57,6 +57,12 @@ export const initTeamSchema = (db) => {
       requested_at INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'waiting',
       priority INTEGER NOT NULL DEFAULT 2, purpose TEXT NOT NULL DEFAULT ''
     );
+    CREATE TABLE IF NOT EXISTS forum_topics (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, category_id TEXT NOT NULL, title TEXT NOT NULL,
+      feature_tag TEXT NOT NULL DEFAULT '', author_id TEXT NOT NULL, created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL, pinned INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_forum_topics_cat ON forum_topics(category_id);
     CREATE INDEX IF NOT EXISTS idx_agent_tasks_status ON agent_tasks(status);
     CREATE INDEX IF NOT EXISTS idx_agent_tasks_agent ON agent_tasks(assigned_agent_id);
     CREATE INDEX IF NOT EXISTS idx_agent_tasks_path ON agent_tasks(target_path);

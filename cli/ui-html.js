@@ -6,6 +6,9 @@ import { UI_STYLES } from './ui-styles.js';
 import { UI_TEMPLATE } from './ui-template.js';
 import { UI_CLIENT_CERT_SCRIPT } from './ui-client-cert.js';
 import { UI_CLIENT_API_SCRIPT } from './ui-client-api.js';
+import { UI_CLIENT_FILETREE_SCRIPT } from './ui-client-filetree.js';
+import { UI_CLIENT_STUDIO_SCRIPT } from './ui-client-studio.js';
+import { UI_CLIENT_FORUM_SCRIPT } from './ui-client-forum.js';
 import { UI_CLIENT_SCRIPT } from './ui-client-script.js';
 
 export const generateSwarmHtml = (initialState = {}) => {
@@ -28,6 +31,9 @@ ${UI_TEMPLATE}
     window.__CHEMX_HYDRATED_STATE__ = ${jsonState};
 ${UI_CLIENT_CERT_SCRIPT}
 ${UI_CLIENT_API_SCRIPT}
+${UI_CLIENT_FILETREE_SCRIPT}
+${UI_CLIENT_STUDIO_SCRIPT}
+${UI_CLIENT_FORUM_SCRIPT}
 ${UI_CLIENT_SCRIPT}
   </script>
 </body>
