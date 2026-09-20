@@ -163,14 +163,13 @@ jobs:
           if [ -z "\$DISCUSSION_URL" ] && [ -f .chemx/discussion.json ]; then
             DISCUSSION_URL=\$(node -e "try { const d = JSON.parse(require('fs').readFileSync('.chemx/discussion.json')); console.log(d.url || ''); } catch (e) {}")
           fi
-          if [ -z "\$DISCUSSION_URL" ]; then
-            DISCUSSION_URL="https://github.com/orgs/Chemical-X-Protocol/discussions/categories/npx-chemx-audit"
-          fi
 
           {
             echo "<!-- chemical-x-audit-pr-comment -->"
-            echo "> 💬 **Architectural Discussion Topic:** [View Discussion & Community Showcase](\$DISCUSSION_URL)"
-            echo ""
+            if [ -n "\$DISCUSSION_URL" ]; then
+              echo "> 💬 **Architectural Discussion Topic:** [View Discussion & Community Showcase](\$DISCUSSION_URL)"
+              echo ""
+            fi
             cat AUDIT_REPORT.md
           } > PR_COMMENT.md
 

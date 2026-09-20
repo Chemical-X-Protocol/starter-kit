@@ -1,4 +1,11 @@
-export const buildPropsType = (name, pascalName) => `export interface ${pascalName}Props {
+import { resolveArchetype } from './archetypes/index.js';
+
+export const buildPropsType = (name, pascalName) => {
+  const archetype = resolveArchetype(name);
+  if (archetype && typeof archetype.buildProps === 'function') {
+    return archetype.buildProps(name, pascalName);
+  }
+  return `export interface ${pascalName}Props {
   readonly title: string;
   readonly subtitle?: string;
   readonly variant?: 'standard' | 'highlight';
@@ -9,8 +16,14 @@ export interface ${pascalName}Emits {
   (e: 'action', title: string): void;
 }
 `;
+};
 
-export const buildStateType = (name, pascalName) => `export type ${pascalName}State =
+export const buildStateType = (name, pascalName) => {
+  const archetype = resolveArchetype(name);
+  if (archetype && typeof archetype.buildState === 'function') {
+    return archetype.buildState(name, pascalName);
+  }
+  return `export type ${pascalName}State =
   | { readonly status: 'idle' }
   | { readonly status: 'loading'; readonly progress: number }
   | { readonly status: 'active'; readonly activeId: string }
@@ -21,6 +34,7 @@ export interface ${pascalName}Descriptor {
   readonly className: string;
 }
 `;
+};
 
 export const buildTypesIndex = (fileNames = ['props', 'state']) =>
   fileNames.map((f) => `export type * from './${f}.d.ts';`).join('\n') + '\n';

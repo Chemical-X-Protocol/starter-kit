@@ -24,7 +24,9 @@ import {
   buildSvelteView,
   buildViewParamsType,
   buildViewIndex,
-  buildViewSpec
+  buildViewSpec,
+  resolveArchetype,
+  ALL_ARCHETYPES
 } from './generator-templates.js';
 
 test('naming: toPascalCase and toCamelCase handle prefixes and hyphens', () => {
@@ -105,4 +107,65 @@ test('views: buildReactView, buildVueView, buildSvelteView, and view helpers gen
   assert.ok(buildViewParamsType('Home').includes('HomeViewParams'));
   assert.ok(buildViewIndex('v-home', 'Home', 'tsx').includes("export { HomeView } from './v-home';"));
   assert.ok(buildViewSpec('v-home', 'Home').includes("describe('HomeView Table of Contents'"));
+});
+
+test('archetypes: ALL_ARCHETYPES contains exactly 22 canonical UI archetypes', () => {
+  assert.equal(ALL_ARCHETYPES.length, 22);
+
+  const ids = new Set(ALL_ARCHETYPES.map((a) => a.id));
+  assert.equal(ids.size, 22);
+
+  for (const arch of ALL_ARCHETYPES) {
+    assert.ok(arch.id, 'Archetype must have an id');
+    assert.ok(arch.name, `Archetype ${arch.id} must have a name`);
+    assert.ok(Array.isArray(arch.keywords) && arch.keywords.length > 0, `Archetype ${arch.id} must have keywords`);
+    assert.ok(typeof arch.destructure === 'string' && arch.destructure.length > 0, `Archetype ${arch.id} must have destructure`);
+    assert.ok(typeof arch.buildState === 'function', `Archetype ${arch.id} must have buildState`);
+    assert.ok(typeof arch.buildProps === 'function', `Archetype ${arch.id} must have buildProps`);
+    assert.ok(typeof arch.buildController === 'function', `Archetype ${arch.id} must have buildController`);
+    assert.ok(typeof arch.buildReactBody === 'function', `Archetype ${arch.id} must have buildReactBody`);
+  }
+});
+
+test('archetypes: resolveArchetype matches IDs, prefixes, and keywords with fallback', () => {
+  assert.equal(resolveArchetype('task-list').id, 'task-list');
+  assert.equal(resolveArchetype('m-task-list').id, 'task-list');
+  assert.equal(resolveArchetype('m-todos').id, 'task-list');
+
+  assert.equal(resolveArchetype('m-data-table').id, 'data-table');
+  assert.equal(resolveArchetype('m-user-avatar').id, 'user-profile');
+  assert.equal(resolveArchetype('m-search-bar').id, 'search-filter');
+  assert.equal(resolveArchetype('m-modal-dialog').id, 'modal-dialog');
+  assert.equal(resolveArchetype('m-chat-inbox').id, 'chat-messaging');
+  assert.equal(resolveArchetype('m-pricing-cart').id, 'cart-billing');
+  assert.equal(resolveArchetype('m-timer-countdown').id, 'timer-countdown');
+
+  // Fallback to state-boundary
+  assert.equal(resolveArchetype('m-unknown-xyz').id, 'state-boundary');
+  assert.equal(resolveArchetype('m-card').id, 'state-boundary');
+});
+
+test('archetypes: semantic code generation for task-list archetype', () => {
+  const controller = buildController('m-task-list', 'TaskList');
+  assert.ok(controller.includes('useTaskListController'));
+  assert.ok(controller.includes('toggleItem'));
+  assert.ok(controller.includes('removeItem'));
+
+  const props = buildPropsType('m-task-list', 'TaskList');
+  assert.ok(props.includes('TaskListProps'));
+  assert.ok(props.includes('initialItems?: readonly TaskListItem[]'));
+
+  const state = buildStateType('m-task-list', 'TaskList');
+  assert.ok(state.includes('TaskListItem'));
+  assert.ok(state.includes('TaskListState'));
+
+  const react = buildReactComponent('m-task-list', 'TaskList');
+  assert.ok(react.includes('useTaskListController'));
+  assert.ok(react.includes('items, activeCount, setFilter, toggleItem, removeItem'));
+  assert.ok(react.includes('m-task-list__list'));
+
+  const withAtoms = buildReactComponent('m-task-list', 'TaskList', { atomsPackage: '@chemx/x-atoms' });
+  assert.ok(withAtoms.includes("import { AtomButton } from '@chemx/x-atoms';"));
+  assert.ok(withAtoms.includes('<AtomButton'));
+  assert.ok(!withAtoms.includes('<button'));
 });

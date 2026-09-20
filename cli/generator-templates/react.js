@@ -1,7 +1,44 @@
+import { resolveArchetype } from './archetypes/index.js';
+
 export const buildReactComponent = (name, pascalName, options = {}) => {
   const atomsPackage = options.atomsPackage || null;
   const hasController = options.hasController !== false;
+  const archetype = resolveArchetype(name);
+
   const atomImport = atomsPackage ? `import { AtomButton } from '${atomsPackage}';\n` : '';
+  const controllerImport = hasController
+    ? `import { use${pascalName}Controller } from './${name}.controller';\n`
+    : '';
+
+  if (archetype && archetype.id !== 'state-boundary' && typeof archetype.buildReactBody === 'function') {
+    let bodyContent = archetype.buildReactBody(name, pascalName);
+    if (atomsPackage) {
+      bodyContent = bodyContent
+        .replace(/<button\b/g, '<AtomButton')
+        .replace(/<\/button>/g, '</AtomButton>');
+    }
+
+    const stateBindings = hasController
+      ? `  const { ${archetype.destructure} } = { ...props, ...use${pascalName}Controller(props as any) };`
+      : `  const { ${archetype.destructure} } = props as any;`;
+
+    return `import React from 'react';
+${atomImport}import type { ${pascalName}Props } from './types';
+${controllerImport}
+export const ${pascalName}: React.FC<${pascalName}Props> = (props) => {
+${stateBindings}
+
+  return (
+    <div className="${name}">
+${bodyContent}
+    </div>
+  );
+};
+
+export default ${pascalName};
+`;
+  }
+
   const actionButton = atomsPackage
     ? `        <AtomButton
           disabled={!canProceed}
@@ -17,10 +54,6 @@ export const buildReactComponent = (name, pascalName, options = {}) => {
         >
           {variant}
         </button>`;
-
-  const controllerImport = hasController
-    ? `import { use${pascalName}Controller } from './${name}.controller';\n`
-    : '';
 
   const controllerLogic = hasController
     ? `  const { state, canProceed, descriptor, handleAction } = use${pascalName}Controller({

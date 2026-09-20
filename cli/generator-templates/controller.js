@@ -1,4 +1,12 @@
-export const buildController = (name, pascalName) => `import { useState, useMemo } from 'react';
+import { resolveArchetype } from './archetypes/index.js';
+
+export const buildController = (name, pascalName) => {
+  const archetype = resolveArchetype(name);
+  if (archetype && typeof archetype.buildController === 'function') {
+    return archetype.buildController(name, pascalName);
+  }
+
+  return `import { useState, useMemo } from 'react';
 import type { ${pascalName}State, ${pascalName}Descriptor } from './types';
 
 interface ControllerOptions {
@@ -34,3 +42,4 @@ export const use${pascalName}Controller = (options: ControllerOptions = {}) => {
   return { state, canProceed, descriptor, handleAction };
 };
 `;
+};

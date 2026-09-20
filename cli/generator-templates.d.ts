@@ -3,6 +3,20 @@ export interface TemplateOptions {
   readonly hasController?: boolean;
 }
 
+export interface ArchetypeDefinition {
+  readonly id: string;
+  readonly name: string;
+  readonly keywords: readonly string[];
+  readonly destructure?: string;
+  readonly buildState?: (name: string, pascal: string) => string;
+  readonly buildProps?: (name: string, pascal: string) => string;
+  readonly buildController?: (name: string, pascal: string) => string;
+  readonly buildReactBody?: (name: string, pascal: string) => string;
+}
+
+export declare const ALL_ARCHETYPES: readonly ArchetypeDefinition[];
+export declare function resolveArchetype(slug?: string): ArchetypeDefinition;
+
 export declare function toPascalCase(str: string): string;
 export declare function toCamelCase(str: string): string;
 
