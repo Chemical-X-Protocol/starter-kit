@@ -25,7 +25,7 @@ export const runScaffold = async (projectName, rawArgs = [], onRunAudit = null) 
     files = await fetchStarterKitFiles(licenseKey);
   }
 
-  let targetName = projectName;
+  let targetName = (projectName && !projectName.startsWith('-')) ? projectName : null;
   if (!targetName) {
     const isHeadless =
       rawArgs.includes('--headless') ||

@@ -26,13 +26,13 @@ const TARGETS = [
   {
     name: 'create-chemx',
     isScoped: false,
-    bin: { 'create-chemx': 'cli/index.js', chemx: 'cli/index.js' }
+    bin: { 'create-chemx': 'cli/create.js', chemx: 'cli/index.js' }
   },
   {
     name: '@chemx/starter-kit',
     isScoped: true,
     bin: {
-      'create-chemx': 'cli/index.js',
+      'create-chemx': 'cli/create.js',
       chemx: 'cli/index.js',
       'chem-x': 'cli/index.js',
       'chemical-x': 'cli/index.js'
@@ -42,7 +42,7 @@ const TARGETS = [
     name: '@chem-x/starter-kit',
     isScoped: true,
     bin: {
-      'create-chemx': 'cli/index.js',
+      'create-chemx': 'cli/create.js',
       chemx: 'cli/index.js',
       'chem-x': 'cli/index.js',
       'chemical-x': 'cli/index.js'
@@ -51,17 +51,17 @@ const TARGETS = [
   {
     name: '@chemx/create-chemx',
     isScoped: true,
-    bin: { 'create-chemx': 'cli/index.js', chemx: 'cli/index.js' }
+    bin: { 'create-chemx': 'cli/create.js', chemx: 'cli/index.js' }
   },
   {
     name: '@chem-x/create-chemx',
     isScoped: true,
-    bin: { 'create-chemx': 'cli/index.js', chemx: 'cli/index.js' }
+    bin: { 'create-chemx': 'cli/create.js', chemx: 'cli/index.js' }
   },
   {
     name: 'chemx',
     isScoped: false,
-    bin: { chemx: 'cli/index.js', 'create-chemx': 'cli/index.js' }
+    bin: { chemx: 'cli/index.js', 'create-chemx': 'cli/create.js' }
   }
 ];
 

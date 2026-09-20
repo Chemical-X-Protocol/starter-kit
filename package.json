@@ -4,7 +4,7 @@
   "description": "Chemical X Protocol: Private drop-in architecture starter kit and capsule generator",
   "type": "module",
   "bin": {
-    "create-chemx": "cli/index.js",
+    "create-chemx": "cli/create.js",
     "chemx": "cli/index.js"
   },
   "license": "MIT",

@@ -3,6 +3,7 @@
 import './silence-warnings.js';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   runAudit as executeAstAudit,
   auditFile,
@@ -83,7 +84,10 @@ const loadProjectConfig = () => {
   }
 };
 const isCreateInvoked =
-  invokedBin.includes('create-chemx') || (rawArgs[0] && rawArgs[0] === 'create');
+  invokedBin.includes('create') ||
+  Boolean(process.argv[1] && process.argv[1].includes('create-chemx')) ||
+  Boolean(process.env.npm_lifecycle_event && process.env.npm_lifecycle_event.includes('create')) ||
+  Boolean(rawArgs[0] && (rawArgs[0] === 'create' || rawArgs[0] === 'init' || rawArgs[0] === 'scaffold'));
 
 export const runAudit = async (customDir = null, isCli = false) => {
   const projectConfig = loadProjectConfig();
@@ -293,7 +297,10 @@ const main = async () => {
   const firstArg = rawArgs[0];
 
   if (isCreateInvoked) {
-    const dirArg = firstArg === 'create' ? rawArgs[1] : firstArg;
+    const nonFlagArgs = rawArgs.filter((arg) => !arg.startsWith('-'));
+    const dirArg = (nonFlagArgs[0] === 'create' || nonFlagArgs[0] === 'init' || nonFlagArgs[0] === 'scaffold')
+      ? nonFlagArgs[1]
+      : nonFlagArgs[0];
     await runScaffold(dirArg, rawArgs, runAudit);
     return;
   }
@@ -339,9 +346,11 @@ const main = async () => {
     case 'init':
       await runInit(rawArgs[1] || 'src/chemical-x', rawArgs, runAudit);
       break;
-    case 'create':
-      await runScaffold(rawArgs[1], rawArgs, runAudit);
+    case 'create': {
+      const nonFlagArgs = rawArgs.slice(1).filter((arg) => !arg.startsWith('-'));
+      await runScaffold(nonFlagArgs[0], rawArgs, runAudit);
       break;
+    }
     case 'hook':
     case 'hooks':
     case 'install-hooks':
@@ -433,11 +442,24 @@ const main = async () => {
   }
 };
 
-main().catch(async (err) => {
-  await handleError(err, {
-    command: process.argv.slice(2).join(' '),
-    cwd: process.cwd(),
-    exitCode: 1
+const isDirectExecution = () => {
+  if (!process.argv[1]) return false;
+  try {
+    const currentFile = fileURLToPath(import.meta.url);
+    const invokedFile = fs.realpathSync(process.argv[1]);
+    return currentFile === invokedFile;
+  } catch {
+    return false;
+  }
+};
+
+if (isDirectExecution()) {
+  main().catch(async (err) => {
+    await handleError(err, {
+      command: process.argv.slice(2).join(' '),
+      cwd: process.cwd(),
+      exitCode: 1
+    });
+    process.exit(1);
   });
-  process.exit(1);
-});
+}
