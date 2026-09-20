@@ -37,6 +37,8 @@ import {
   autoGenerateTasksFromAudit,
   completeTaskWithAudit
 } from './team-triage.js';
+import { runTeamCli } from './team-commands.js';
+import { openIndexDb } from '../search-db.js';
 import { executeMcpTool } from '../mcp/tools.js';
 import { parseTranscriptFile, ingestTaskTelemetry } from './team-telemetry.js';
 
@@ -340,5 +342,106 @@ test('team-telemetry: ingests token metrics into SQLite during completeTaskWithA
   assert.strictEqual(swarmStatus.tokens.completion, 200);
   assert.strictEqual(swarmStatus.tokens.total, 700);
   assert.strictEqual(swarmStatus.tokens.cost_usd, 0.00325);
+});
+
+test('team-commands: runTeamCli handles task triage, add alias, and agent auto-registration', () => {
+  const tmpCwd = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-team-cli-test-'));
+  try {
+    const db = openIndexDb(tmpCwd);
+    assert.ok(db, 'Database should be created');
+
+    // Test empty list output
+    const emptyList = runTeamCli(['task', 'list'], false, tmpCwd);
+    assert.deepStrictEqual(emptyList, []);
+
+    // Test task add alias
+    const created = runTeamCli(['task', 'add', 'Fix', 'architectural', 'monolith', '--as=@architect', '--prio=1'], false, tmpCwd);
+    assert.ok(created);
+    assert.strictEqual(created.id, 1);
+    assert.strictEqual(created.title, 'Fix architectural monolith');
+    assert.strictEqual(created.priority, 1);
+
+    // Verify agent was registered automatically
+    const agent = getAgent(db, '@architect');
+    assert.ok(agent, 'Author agent should be registered in agents table');
+    assert.strictEqual(agent.role, 'contributor');
+
+    // Verify task_created event was posted to agent_feed
+    const feed = queryFeed(db, { task_id: 1 });
+    assert.strictEqual(feed.length, 1);
+    assert.strictEqual(feed[0].author_id, '@architect');
+    assert.strictEqual(feed[0].event_type, 'task_created');
+
+    // Seed a violation into violations table without pre-populating files table
+    db.prepare(`
+      INSERT INTO violations (file_path, rule, severity, pillar, line, hazard, directive)
+      VALUES ('src/components/BrokenCard.tsx', 'NO_RAW_DOM', 'HIGH', 'FOUNDATIONS', 14, 'Raw button used', 'Wrap in AtomButton')
+    `).run();
+
+    // Test task triage command: should pick up unassigned hazard and generate task
+    const triaged = runTeamCli(['task', 'triage'], false, tmpCwd);
+    assert.ok(Array.isArray(triaged));
+    assert.strictEqual(triaged.length, 1);
+    assert.strictEqual(triaged[0].target_path, 'src/components/BrokenCard.tsx');
+
+    // Verify triage bot registered in agents table
+    const triageBot = getAgent(db, '@triage-bot');
+    assert.ok(triageBot, 'Triage bot should be registered in agents table');
+
+    // Verify triage feed event
+    const triageFeed = queryFeed(db, { event_type: 'triage_generated' });
+    assert.strictEqual(triageFeed.length, 1);
+
+    // Test task list now shows both tasks
+    const allTasks = runTeamCli(['task', 'list'], false, tmpCwd);
+    assert.strictEqual(allTasks.length, 2);
+  } finally {
+    fs.rmSync(tmpCwd, { recursive: true, force: true });
+  }
+});
+
+test('mcp-tools: chemx_team_task supports action triage and add with agent auto-registration', async () => {
+  const tmpCwd = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-mcp-team-test-'));
+  try {
+    const db = openIndexDb(tmpCwd);
+    assert.ok(db);
+
+    // Create task via MCP
+    const created = await executeMcpTool('chemx_team_task', {
+      action: 'add',
+      title: 'Decompose Search Monolith',
+      agentId: '@planner-bot',
+      priority: 1
+    }, tmpCwd);
+    assert.ok(created);
+    assert.strictEqual(created.title, 'Decompose Search Monolith');
+
+    // Verify agent auto-registered
+    const agent = getAgent(db, '@planner-bot');
+    assert.ok(agent);
+
+    // Seed violation
+    db.prepare(`
+      INSERT INTO violations (file_path, rule, severity, pillar, line, hazard, directive)
+      VALUES ('src/views/HugeView.tsx', 'LINE_LIMIT', 'CRITICAL', 'MOLECULAR', 1, 'Exceeds line limit', 'Decompose')
+    `).run();
+
+    // Triage via MCP
+    const triaged = await executeMcpTool('chemx_team_task', {
+      action: 'triage'
+    }, tmpCwd);
+    assert.ok(Array.isArray(triaged));
+    assert.strictEqual(triaged.length, 1);
+    assert.strictEqual(triaged[0].target_path, 'src/views/HugeView.tsx');
+
+    // List via MCP
+    const listRes = await executeMcpTool('chemx_team_task', {
+      action: 'list'
+    }, tmpCwd);
+    assert.strictEqual(listRes.total, 2);
+    assert.strictEqual(listRes.rows.length, 2);
+  } finally {
+    fs.rmSync(tmpCwd, { recursive: true, force: true });
+  }
 });
 

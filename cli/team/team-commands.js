@@ -126,15 +126,23 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
         return col;
       }
       if (isCli) {
-        for (const t of tasks) {
-          process.stdout.write(`  #${t.id} [${t.status}] (${t.assigned_agent_id || 'unassigned'}): ${t.title}\n`);
+        if (tasks.length === 0) {
+          process.stdout.write('  (No tasks found in backlog. Run "chemx team task triage" or "chemx team task add" to create tasks.)\n');
+        } else {
+          for (const t of tasks) {
+            const assignee = t.assigned_agent_id ? `(${t.assigned_agent_id})` : '(unassigned)';
+            const target = t.target_path ? ` [${t.target_path}]` : '';
+            process.stdout.write(`  #${t.id} [${t.status}] ${assignee}${target}: ${t.title}\n`);
+          }
         }
       }
       return tasks;
     }
     if (taskAction === 'claim') {
       const taskId = nonFlagPositional[1];
-      const res = claimTask(db, taskId, flags.as || '@agent');
+      const agentHandle = flags.as || '@agent';
+      registerAgent(db, { id: agentHandle, role: 'executor' });
+      const res = claimTask(db, taskId, agentHandle);
       if (isCli) {
         if (flags.isJson) process.stdout.write(`${JSON.stringify(res, null, 2)}\n`);
         else if (res.success) process.stdout.write(`\x1b[32m✔\x1b[0m Claimed task #${taskId}\n`);
@@ -142,23 +150,59 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
       }
       return res;
     }
-    if (taskAction === 'done') {
+    if (taskAction === 'done' || taskAction === 'complete') {
       const taskId = nonFlagPositional[1];
-      const res = completeTaskWithAudit(db, taskId, flags.as || '@agent', { cwd });
-      if (isCli) process.stdout.write(`\x1b[32m✔\x1b[0m Completed task #${taskId}\n`);
+      const agentHandle = flags.as || '@agent';
+      registerAgent(db, { id: agentHandle, role: 'executor' });
+      const res = completeTaskWithAudit(db, taskId, agentHandle, { cwd });
+      if (isCli) {
+        if (flags.isJson) process.stdout.write(`${JSON.stringify(res, null, 2)}\n`);
+        else process.stdout.write(`\x1b[32m✔\x1b[0m Completed task #${taskId}\n`);
+      }
       return res;
     }
-    if (taskAction === 'create') {
+    if (taskAction === 'create' || taskAction === 'add' || taskAction === 'new') {
       const title = nonFlagPositional.slice(1).join(' ') || 'Untitled Task';
+      const authorHandle = flags.as || '@agent';
+      registerAgent(db, { id: authorHandle, role: 'contributor' });
+      if (flags.agent) {
+        registerAgent(db, { id: flags.agent, role: 'executor' });
+      }
       const task = createTask(db, {
         title,
-        tier: flags.tier,
+        tier: flags.tier || 'molecule',
         target_path: flags.target,
-        priority: flags.priority || 2
+        priority: flags.priority || 2,
+        assigned_agent_id: flags.agent || null
       });
-      if (isCli) process.stdout.write(`\x1b[32m✔\x1b[0m Created task #${task.id}: ${task.title}\n`);
+      if (task) {
+        postFeedEvent(db, {
+          author_id: authorHandle,
+          task_id: task.id,
+          event_type: 'task_created',
+          message: `Created task #${task.id}: ${task.title}`
+        });
+      }
+      if (isCli) {
+        if (flags.isJson) process.stdout.write(`${JSON.stringify(task, null, 2)}\n`);
+        else process.stdout.write(`\x1b[32m✔\x1b[0m Created task #${task.id}: ${task.title}\n`);
+      }
       return task;
     }
+    if (taskAction === 'triage') {
+      const tasks = autoGenerateTasksFromAudit(db, { cwd, maxTasks: flags.priority || 10 });
+      if (isCli) {
+        if (flags.isJson) process.stdout.write(`${JSON.stringify(tasks, null, 2)}\n`);
+        else if (tasks.length > 0) process.stdout.write(`\x1b[32m✔\x1b[0m Triage generated ${tasks.length} task(s) from AST index\n`);
+        else process.stdout.write('\x1b[34mℹ\x1b[0m Triage found 0 architectural hazards to convert into tasks. (All files compliant!)\n');
+      }
+      return tasks;
+    }
+
+    if (isCli) {
+      process.stderr.write(`\x1b[31m✕ Unknown task action: "${taskAction}". Available actions: list, add, claim, done, triage\x1b[0m\n`);
+    }
+    return { error: `Unknown task action: ${taskAction}` };
   }
 
   if (subCommand === 'lock') {
@@ -187,13 +231,17 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
   }
 
   if (subCommand === 'triage') {
-    const tasks = autoGenerateTasksFromAudit(db);
+    const tasks = autoGenerateTasksFromAudit(db, { cwd, maxTasks: flags.priority || 10 });
     if (isCli) {
       if (flags.isJson) process.stdout.write(`${JSON.stringify(tasks, null, 2)}\n`);
-      else process.stdout.write(`\x1b[32m✔\x1b[0m Triage generated ${tasks.length} task(s) from AST index\n`);
+      else if (tasks.length > 0) process.stdout.write(`\x1b[32m✔\x1b[0m Triage generated ${tasks.length} task(s) from AST index\n`);
+      else process.stdout.write('\x1b[34mℹ\x1b[0m Triage found 0 architectural hazards to convert into tasks. (All files compliant!)\n');
     }
     return tasks;
   }
 
-  return null;
+  if (isCli) {
+    process.stderr.write(`\x1b[31m✕ Unknown team command: "${subCommand}". Available commands: status, task, feed, post, lock, unlock, triage\x1b[0m\n`);
+  }
+  return { error: `Unknown team command: ${subCommand}` };
 };

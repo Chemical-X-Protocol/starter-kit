@@ -10,9 +10,10 @@ import {
   updateTaskStatus,
   requestFileLock,
   releaseFileLock,
-  getFileLockStatus
+  getFileLockStatus,
+  registerAgent
 } from '../team/team-db.js';
-import { completeTaskWithAudit } from '../team/team-triage.js';
+import { completeTaskWithAudit, autoGenerateTasksFromAudit } from '../team/team-triage.js';
 import { handleError } from '../errors/index.js';
 
 export const handleChemxTeamStatus = async (args = {}, cwd = process.cwd()) => {
@@ -49,9 +50,11 @@ export const handleChemxTeamFeed = async (args = {}, cwd = process.cwd()) => {
 export const handleChemxTeamPost = async (args = {}, cwd = process.cwd()) => {
   const db = openIndexDb(cwd);
   if (!db) return { error: 'sqlite_unavailable' };
+  const authorHandle = args.authorId || '@agent';
+  registerAgent(db, { id: authorHandle, role: 'contributor' });
   return postFeedEvent(db, {
     message: args.message,
-    author_id: args.authorId,
+    author_id: authorHandle,
     recipient_id: args.recipientId,
     thread_id: args.threadId,
     task_id: args.taskId,
@@ -67,24 +70,47 @@ export const handleChemxTeamTask = async (args = {}, cwd = process.cwd()) => {
 
   if (action === 'list') {
     const tasks = listTasks(db, { status: args.status, assigned_agent_id: args.agentId });
-    return toColumnar(tasks, ['id', 'title', 'tier', 'status', 'priority', 'assigned_agent_id', 'target_path']);
+    const col = toColumnar(tasks, ['id', 'title', 'tier', 'status', 'priority', 'assigned_agent_id', 'target_path']);
+    return { ...col, total: tasks.length };
   }
-  if (action === 'create') {
-    return createTask(db, {
+  if (action === 'create' || action === 'add') {
+    const authorHandle = args.agentId || '@agent';
+    registerAgent(db, { id: authorHandle, role: 'contributor' });
+    if (args.assignedAgentId) {
+      registerAgent(db, { id: args.assignedAgentId, role: 'executor' });
+    }
+    const task = createTask(db, {
       title: args.title,
       target_path: args.targetPath,
-      tier: args.tier,
-      priority: args.priority || 2
+      tier: args.tier || 'molecule',
+      priority: args.priority || 2,
+      assigned_agent_id: args.assignedAgentId || null
     });
+    if (task) {
+      postFeedEvent(db, {
+        author_id: authorHandle,
+        task_id: task.id,
+        event_type: 'task_created',
+        message: `Created task #${task.id}: ${task.title}`
+      });
+    }
+    return task;
   }
   if (action === 'claim') {
-    return claimTask(db, args.taskId, args.agentId || '@agent');
+    const agentHandle = args.agentId || '@agent';
+    registerAgent(db, { id: agentHandle, role: 'executor' });
+    return claimTask(db, args.taskId, agentHandle);
   }
-  if (action === 'done') {
-    return completeTaskWithAudit(db, args.taskId, args.agentId || '@agent', { cwd });
+  if (action === 'done' || action === 'complete') {
+    const agentHandle = args.agentId || '@agent';
+    registerAgent(db, { id: agentHandle, role: 'executor' });
+    return completeTaskWithAudit(db, args.taskId, agentHandle, { cwd });
   }
   if (action === 'block') {
     return updateTaskStatus(db, args.taskId, 'blocked', { blockedReason: args.blockedReason || 'Blocked' });
+  }
+  if (action === 'triage') {
+    return autoGenerateTasksFromAudit(db, { cwd, maxTasks: args.maxTasks || 10 });
   }
   return { error: `Unknown task action: ${action}` };
 };

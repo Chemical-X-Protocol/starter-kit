@@ -41,7 +41,7 @@ import { runReaderCli, readTokenOptimized } from './reader.js';
 import { runPatcherCli, patchFile, runWriterCli, writeFile } from './patcher.js';
 import { runMcpServer, runMcpInstaller } from './mcp/index.js';
 import { runTypecheckAudit, runTestAudit, runProjectVerify } from './verify.js';
-import { runTeamCli } from './team/index.js';
+import { runTeamCli, autoGenerateTasksFromAudit } from './team/index.js';
 import { startUiServer } from './ui-server.js';
 import { sanitizeOutputStreams } from './terminal.js';
 import {
@@ -151,6 +151,14 @@ export const runAudit = async (customDir = null, isCli = false) => {
   if (syncRes?.db) {
     syncViolationsIndex(syncRes.db, report.violations);
     recordAuditSnapshot(syncRes.db, report);
+
+    const isTriage = rawArgs.includes('--triage');
+    if (isTriage) {
+      const createdTasks = autoGenerateTasksFromAudit(syncRes.db, { cwd: process.cwd(), targetDir });
+      if (isCli && !isJson) {
+        process.stdout.write(`\x1b[32m✔\x1b[0m Auto-triage generated ${createdTasks.length} team task(s) from audit violations.\n`);
+      }
+    }
   }
 
   const isSevereViolation = (v) => {
@@ -234,6 +242,7 @@ export const runAudit = async (customDir = null, isCli = false) => {
           if (isStrictFail) {
             process.stdout.write(`  \x1b[31m•\x1b[0m Strict mode: ${report.violations.length} total violation(s) detected\n`);
           }
+          process.stdout.write('  \x1b[36m💡 Convert hazards into team tasks: chemx team task triage\x1b[0m\n');
         }
       }
     }

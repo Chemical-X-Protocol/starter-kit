@@ -14,6 +14,7 @@ import { createCapsuleFiles } from '../generator.js';
 import { runBuildAudit } from '../build.js';
 import { runAutofix } from '../audit/autofix.js';
 import { runTypecheckAudit, runTestAudit, runProjectVerify } from '../verify.js';
+import { syncSearchIndex, syncViolationsIndex, recordAuditSnapshot } from '../search.js';
 import { MCP_TOOLS, ALL_MCP_TOOLS } from './manifests.js';
 import {
   resolveTargetCwd,
@@ -131,6 +132,18 @@ const handleAudit = (args = {}, cwd = process.cwd()) => {
   };
 
   const report = executeAstAudit(rawTarget, options);
+
+  // Sync AST audit results to SQLite index database
+  try {
+    const syncRes = syncSearchIndex(rawTarget, cwd);
+    if (syncRes?.db) {
+      syncViolationsIndex(syncRes.db, report.violations);
+      recordAuditSnapshot(syncRes.db, report);
+    }
+  } catch {
+    // Continue if SQLite synchronization fails
+  }
+
   const isSevereViolation = (v) => {
     const isCritical = v.severity === 'CRITICAL';
     const isHigh = v.severity === 'HIGH';
