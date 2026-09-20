@@ -276,6 +276,10 @@ export const startStdioServer = (options = {}) => {
     }
   };
 
+  input.on('error', (err) => {
+    process.stderr.write(`[mcp:stdio] stdin error: ${err?.message || err}\n`);
+  });
+
   const rl = readline.createInterface({
     input,
     terminal: false

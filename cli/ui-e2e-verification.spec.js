@@ -117,7 +117,8 @@ test('E2E: GET /api/codebase/tree and /api/codebase/file inspect AST and connect
     assert.ok(Array.isArray(treeData.tree));
     assert.ok(Array.isArray(treeData.files));
 
-    const resFile = await fetch(`${base}/api/codebase/file?path=cli/ui-server.js`);
+    const samplePath = treeData.files[0]?.path || 'src/ui/atoms/a-button/a-button.vue';
+    const resFile = await fetch(`${base}/api/codebase/file?path=${encodeURIComponent(samplePath)}`);
     assert.strictEqual(resFile.status, 200);
     const fileData = await resFile.json();
     assert.strictEqual(fileData.success, true);

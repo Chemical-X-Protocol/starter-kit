@@ -1,4 +1,6 @@
+import fs from 'node:fs';
 import path from 'node:path';
+import { generateEmbedding, serializeVector, VECTOR_DIMENSIONS } from './embeddings/vectorizer.js';
 
 export {
   isSqliteAvailable,
@@ -11,6 +13,9 @@ export {
   findSymbolReferences,
   findFileDependencies,
   findFileDependents,
+  calculateBlastRadius,
+  querySemanticIndex,
+  queryHybridIndex,
   syncViolationsIndex,
   queryViolations,
   recordAuditSnapshot,
@@ -51,6 +56,41 @@ export const removeDeletedFiles = (db, currentFilePaths) => {
   return removedCount;
 };
 
+export const resolveModulePath = (importerPath, sourceModule, cwd = process.cwd()) => {
+  if (!sourceModule || typeof sourceModule !== 'string') return '';
+  const isRelative = sourceModule.startsWith('.') || sourceModule.startsWith('/');
+  const isAliased = sourceModule.startsWith('@/');
+  if (!isRelative && !isAliased) return '';
+
+  let basePath;
+  if (isAliased) {
+    basePath = path.resolve(cwd, 'src', sourceModule.slice(2));
+  } else {
+    basePath = path.resolve(cwd, path.dirname(importerPath), sourceModule);
+  }
+
+  const extensions = ['', '.ts', '.js', '.vue', '.tsx', '.jsx', '.d.ts'];
+  for (const ext of extensions) {
+    const candidate = basePath + ext;
+    if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
+      return path.relative(cwd, candidate);
+    }
+  }
+
+  for (const ext of ['.ts', '.js', '.vue', '.tsx', '.jsx', '.d.ts']) {
+    const indexCandidate = path.join(basePath, `index${ext}`);
+    if (fs.existsSync(indexCandidate) && fs.statSync(indexCandidate).isFile()) {
+      return path.relative(cwd, indexCandidate);
+    }
+  }
+
+  // Fallback path normalization for virtual/mock files
+  if (isAliased) {
+    return path.normalize(path.join('src', sourceModule.slice(2)));
+  }
+  return path.normalize(path.join(path.dirname(importerPath), sourceModule));
+};
+
 export const upsertFileIndex = (db, record) => {
   if (!db) return;
   const {
@@ -70,6 +110,7 @@ export const upsertFileIndex = (db, record) => {
   db.prepare('DELETE FROM files WHERE path = ?').run(filePath);
   db.prepare('DELETE FROM fts_index WHERE file_path = ?').run(filePath);
   db.prepare('DELETE FROM imports WHERE importer_path = ?').run(filePath);
+  db.prepare('DELETE FROM embeddings WHERE file_path = ?').run(filePath);
 
   // Insert file record
   const insertFileStmt = db.prepare(`
@@ -119,14 +160,15 @@ export const upsertFileIndex = (db, record) => {
     }
   }
 
-  // Insert imports
+  // Insert imports with resolved relative paths
   if (imports.length > 0) {
     const insertImportStmt = db.prepare(`
-      INSERT INTO imports (importer_path, imported_symbol, source_module, line)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO imports (importer_path, imported_symbol, source_module, resolved_path, line)
+      VALUES (?, ?, ?, ?, ?)
     `);
     for (const imp of imports) {
-      insertImportStmt.run(filePath, imp.importedSymbol, imp.sourceModule, imp.line || 1);
+      const resolved = resolveModulePath(filePath, imp.sourceModule);
+      insertImportStmt.run(filePath, imp.importedSymbol, imp.sourceModule, resolved, imp.line || 1);
     }
   }
 
@@ -145,6 +187,26 @@ export const upsertFileIndex = (db, record) => {
     INSERT INTO fts_index (file_path, name, kind, tier, tokens)
     VALUES (?, ?, ?, ?, ?)
   `).run(filePath, mainName, tier, tier, tokensText);
+
+  // Insert vector embeddings
+  try {
+    const insertEmbeddingStmt = db.prepare(`
+      INSERT INTO embeddings (file_path, target_type, target_name, vector, dimensions, model, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `);
+    const fileVec = generateEmbedding(`${mainName} ${tier} ${tokensText}`);
+    insertEmbeddingStmt.run(filePath, 'capsule', mainName, serializeVector(fileVec), VECTOR_DIMENSIONS, 'fast-subword', Date.now());
+
+    for (const s of symbols) {
+      if (s.isExport) {
+        const symText = `${s.name} ${s.kind} ${s.signature || ''}`;
+        const symVec = generateEmbedding(symText);
+        insertEmbeddingStmt.run(filePath, 'symbol', s.name, serializeVector(symVec), VECTOR_DIMENSIONS, 'fast-subword', Date.now());
+      }
+    }
+  } catch {
+    // Graceful degradation if vector generation fails
+  }
 };
 
 export const queryIndex = (db, { query = '', tier = null, kind = null, limit = 50 } = {}) => {

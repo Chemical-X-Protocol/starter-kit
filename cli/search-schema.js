@@ -71,6 +71,7 @@ export const openIndexDb = (cwd = process.cwd()) => {
       importer_path TEXT NOT NULL,
       imported_symbol TEXT NOT NULL,
       source_module TEXT NOT NULL,
+      resolved_path TEXT NOT NULL DEFAULT '',
       line INTEGER NOT NULL DEFAULT 1,
       FOREIGN KEY(importer_path) REFERENCES files(path) ON DELETE CASCADE
     );
@@ -99,6 +100,18 @@ export const openIndexDb = (cwd = process.cwd()) => {
       low_count INTEGER NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS embeddings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      file_path TEXT NOT NULL,
+      target_type TEXT NOT NULL,
+      target_name TEXT NOT NULL,
+      vector BLOB NOT NULL,
+      dimensions INTEGER NOT NULL,
+      model TEXT NOT NULL DEFAULT 'fast-subword',
+      updated_at INTEGER NOT NULL,
+      FOREIGN KEY(file_path) REFERENCES files(path) ON DELETE CASCADE
+    );
+
     CREATE VIRTUAL TABLE IF NOT EXISTS fts_index USING fts5(
       file_path UNINDEXED,
       name,
@@ -107,6 +120,25 @@ export const openIndexDb = (cwd = process.cwd()) => {
       tokens
     );
   `);
+
+  // Register in-process hardware-accelerated cosine distance function
+  if (typeof db.function === 'function') {
+    try {
+      db.function('vec_cosine', (b1, b2) => {
+        if (!b1 || !b2) return 0;
+        const a = new Float32Array(b1.buffer, b1.byteOffset, b1.byteLength / 4);
+        const b = new Float32Array(b2.buffer, b2.byteOffset, b2.byteLength / 4);
+        let dot = 0;
+        const len = Math.min(a.length, b.length);
+        for (let i = 0; i < len; i++) {
+          dot += a[i] * b[i];
+        }
+        return Math.max(0, Math.min(1, dot));
+      });
+    } catch {
+      // Ignored if already registered
+    }
+  }
 
   // Column migrations for existing databases before creating indexes
   const symbolCols = db.prepare('PRAGMA table_info(symbols)').all() || [];
@@ -130,6 +162,12 @@ export const openIndexDb = (cwd = process.cwd()) => {
     db.exec('ALTER TABLE files ADD COLUMN hazard_count INTEGER NOT NULL DEFAULT 0;');
   }
 
+  const importCols = db.prepare('PRAGMA table_info(imports)').all() || [];
+  const importColNames = new Set(importCols.map((c) => c.name));
+  if (!importColNames.has('resolved_path')) {
+    db.exec("ALTER TABLE imports ADD COLUMN resolved_path TEXT NOT NULL DEFAULT '';");
+  }
+
   // Safely create all indexes
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_files_tier ON files(tier);
@@ -140,6 +178,9 @@ export const openIndexDb = (cwd = process.cwd()) => {
     CREATE INDEX IF NOT EXISTS idx_hooks_name ON hooks(name);
     CREATE INDEX IF NOT EXISTS idx_imports_symbol ON imports(imported_symbol);
     CREATE INDEX IF NOT EXISTS idx_imports_path ON imports(importer_path);
+    CREATE INDEX IF NOT EXISTS idx_imports_resolved ON imports(resolved_path);
+    CREATE INDEX IF NOT EXISTS idx_embeddings_file ON embeddings(file_path);
+    CREATE INDEX IF NOT EXISTS idx_embeddings_type ON embeddings(target_type);
     CREATE INDEX IF NOT EXISTS idx_violations_file ON violations(file_path);
     CREATE INDEX IF NOT EXISTS idx_violations_rule ON violations(rule);
     CREATE INDEX IF NOT EXISTS idx_violations_severity ON violations(severity);

@@ -6,7 +6,10 @@ import {
   findSymbolDefinition,
   findSymbolReferences,
   findFileDependencies,
-  findFileDependents
+  findFileDependents,
+  calculateBlastRadius,
+  querySemanticIndex,
+  queryHybridIndex
 } from '../search-queries.js';
 import { readTokenOptimized } from '../reader.js';
 import { patchFile, writeFile } from '../patcher.js';
@@ -27,7 +30,7 @@ export const resolveTargetCwd = (cwd) => {
 };
 
 export const handleChemxQ = (args = {}, cwd = process.cwd()) => {
-  const targetCwd = resolveTargetCwd(cwd);
+  const targetCwd = resolveTargetCwd(args.cwd || cwd);
   const query = args.query || args.symbol;
   if (!query) {
     throw new Error('chemx_q requires "query" or "symbol" argument.');
@@ -42,11 +45,55 @@ export const handleChemxQ = (args = {}, cwd = process.cwd()) => {
   }
 
   const isConnectionLookup = Boolean(args.connections || args.symbol);
+  if (args.blastRadius || args.impact) {
+    const blast = calculateBlastRadius(activeDb, query, { maxDepth: args.maxDepth || 5 });
+    const allConsumers = [...blast.directConsumers, ...blast.transitiveConsumers];
+    const colData = toColumnar(allConsumers, ['path', 'tier', 'depth']);
+    return {
+      target: blast.target,
+      seed: blast.seedPath,
+      count: blast.totalImpactCount,
+      depth: blast.depth,
+      tiers: blast.tiers,
+      format: 'columnar',
+      cols: colData.cols,
+      rows: colData.rows,
+      tests: blast.impactedTests.map((t) => t.path || t)
+    };
+  }
+
+  if (args.semantic) {
+    const results = querySemanticIndex(activeDb, query, { limit: args.limit || 20, tier: args.tier });
+    const colData = toColumnar(results, ['filePath', 'targetType', 'targetName', 'tier', 'similarity']);
+    return {
+      query,
+      mode: 'semantic',
+      count: results.length,
+      format: 'columnar',
+      cols: colData.cols,
+      rows: colData.rows
+    };
+  }
+
+  if (args.hybrid) {
+    const results = queryHybridIndex(activeDb, query, { limit: args.limit || 20 });
+    const colData = toColumnar(results, ['filePath', 'name', 'tier', 'score', 'ftsRank', 'vecRank']);
+    return {
+      query,
+      mode: 'hybrid (BM25 + Vector RRF)',
+      count: results.length,
+      format: 'columnar',
+      cols: colData.cols,
+      rows: colData.rows
+    };
+  }
+
   if (isConnectionLookup) {
     const symDef = findSymbolDefinition(activeDb, query);
     const symRefs = findSymbolReferences(activeDb, query);
     if (symDef) {
       const deps = findFileDependencies(activeDb, symDef.filePath);
+      const blast = calculateBlastRadius(activeDb, symDef.name);
       return {
         symbol: symDef.name,
         kind: symDef.kind,
@@ -54,17 +101,26 @@ export const handleChemxQ = (args = {}, cwd = process.cwd()) => {
         lines: `${symDef.startLine}-${symDef.endLine}`,
         signature: symDef.signature,
         dependencies: deps.map((d) => `${d.sourceModule}: ${d.importedSymbol}`),
-        consumers: symRefs.map((r) => `${r.importerPath}:${r.line}`)
+        consumers: symRefs.map((r) => `${r.importerPath}:${r.line}`),
+        blastRadius: {
+          totalImpactCount: blast.totalImpactCount,
+          impactedTests: blast.impactedTests.map((t) => t.path)
+        }
       };
     }
     const deps = findFileDependencies(activeDb, query);
     const dependents = findFileDependents(activeDb, query);
     const hasFileConnections = deps.length > 0 || dependents.length > 0;
     if (hasFileConnections) {
+      const blast = calculateBlastRadius(activeDb, query);
       return {
         file: query,
         dependencies: deps.map((d) => `${d.sourceModule}: ${d.importedSymbol}`),
-        dependents: dependents.map((d) => `${d.importerPath}:${d.line}`)
+        dependents: dependents.map((d) => `${d.importerPath}:${d.line}`),
+        blastRadius: {
+          totalImpactCount: blast.totalImpactCount,
+          impactedTests: blast.impactedTests.map((t) => t.path)
+        }
       };
     }
   }
@@ -111,7 +167,7 @@ export const handleChemxRead = (args = {}, cwd = process.cwd()) => {
   if (!args.path) {
     throw new Error('chemx_read requires "path" argument.');
   }
-  const targetCwd = resolveTargetCwd(cwd);
+  const targetCwd = resolveTargetCwd(args.cwd || cwd);
   const targetPath = path.isAbsolute(args.path) ? args.path : path.resolve(targetCwd, args.path);
   const res = readTokenOptimized(targetPath, {
     outline: args.outline,
@@ -126,13 +182,14 @@ export const handleChemxRead = (args = {}, cwd = process.cwd()) => {
   if (args.connections) {
     const db = openIndexDb(targetCwd);
     if (db) {
+      const blast = calculateBlastRadius(db, args.symbol || targetPath);
       if (args.symbol) {
         const refs = findSymbolReferences(db, args.symbol);
-        connectionCard = `\n// Connections for ${args.symbol}: referenced by ${refs.length} file(s) [${refs.slice(0, 3).map((r) => path.basename(r.importerPath)).join(', ')}]`;
+        connectionCard = `\n// Connections for ${args.symbol}: referenced by ${refs.length} file(s) [${refs.slice(0, 3).map((r) => path.basename(r.importerPath)).join(', ')}]. Blast Radius: ${blast.totalImpactCount} affected file(s) across ${blast.depth} hops (${blast.impactedTests.length} tests).`;
       } else {
         const deps = findFileDependencies(db, targetPath);
         const dependents = findFileDependents(db, targetPath);
-        connectionCard = `\n// File Connections: imports ${deps.length} symbol(s), imported by ${dependents.length} file(s)`;
+        connectionCard = `\n// File Connections: imports ${deps.length} symbol(s), imported by ${dependents.length} file(s). Blast Radius: ${blast.totalImpactCount} affected file(s) across ${blast.depth} hops (${blast.impactedTests.length} tests).`;
       }
     }
   }

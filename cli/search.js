@@ -25,7 +25,10 @@ import {
   handlePackCommand,
   handleProgressionCommand,
   handleHealthFilterCommand,
-  handleCheckCommand
+  handleCheckCommand,
+  handleBlastRadiusCommand,
+  handleSemanticCommand,
+  handleHybridCommand
 } from './search-commands.js';
 import { runGenerateWizard } from './generator.js';
 import { runMutatorCli } from './mutators.js';
@@ -42,13 +45,21 @@ export {
   findSymbolReferences,
   findFileDependencies,
   findFileDependents,
+  calculateBlastRadius,
+  querySemanticIndex,
+  queryHybridIndex,
   syncViolationsIndex,
   queryViolations,
   recordAuditSnapshot,
   getAuditProgression,
   queryFilesByHealth
 } from './search-db.js';
-export { handleCheckCommand } from './search-commands.js';
+export {
+  handleCheckCommand,
+  handleBlastRadiusCommand,
+  handleSemanticCommand,
+  handleHybridCommand
+} from './search-commands.js';
 
 const IGNORED_DIRS = new Set([
   'node_modules',
@@ -229,8 +240,10 @@ export const resolveTargetDir = (customOrFlag = null, dirFlag = null) => {
 };
 
 export const runSearch = async (rawArgs = [], isCli = true) => {
-  const isJson = rawArgs.includes('--json');
-  const isColumnar = rawArgs.includes('--columnar');
+  const isRawJson = rawArgs.includes('--raw-json') || rawArgs.includes('--no-columnar');
+  const isExplicitColumnar = rawArgs.includes('--columnar');
+  const isJson = rawArgs.includes('--json') || isExplicitColumnar;
+  const isColumnar = isJson && !isRawJson;
   const isInspect = rawArgs.includes('--inspect') || rawArgs.includes('-i');
   const isReindex = rawArgs.includes('--reindex');
   const tierFlag = rawArgs.find((a) => a.startsWith('--tier='));
@@ -288,6 +301,27 @@ export const runSearch = async (rawArgs = [], isCli = true) => {
   const isDepsCommand = firstArg === 'deps' || firstArg === 'dependencies';
   if (isDepsCommand) {
     return handleDepsCommand(db, secondArg, { isJson, isCli });
+  }
+
+  const isBlastRadiusCommand = firstArg === 'blast' || firstArg === 'impact' ||
+    rawArgs.includes('--blast-radius') || rawArgs.includes('--blast') || rawArgs.includes('--impact');
+  if (isBlastRadiusCommand) {
+    const target = (firstArg === 'blast' || firstArg === 'impact') ? secondArg : firstArg;
+    const maxDepthFlag = rawArgs.find((a) => a.startsWith('--max-depth='));
+    const maxDepth = maxDepthFlag ? parseInt(maxDepthFlag.split('=')[1], 10) : 5;
+    return handleBlastRadiusCommand(db, target, { isJson, isCli, isColumnar, maxDepth });
+  }
+
+  const isSemanticCommand = firstArg === 'semantic' || rawArgs.includes('--semantic');
+  if (isSemanticCommand) {
+    const query = firstArg === 'semantic' ? secondArg : firstArg;
+    return handleSemanticCommand(db, query, { isJson, isCli, isColumnar, tier, limit: 20 });
+  }
+
+  const isHybridCommand = firstArg === 'hybrid' || rawArgs.includes('--hybrid');
+  if (isHybridCommand) {
+    const query = firstArg === 'hybrid' ? secondArg : firstArg;
+    return handleHybridCommand(db, query, { isJson, isCli, isColumnar, tier, limit: 20 });
   }
 
   const isHazardsCommand = firstArg === 'hazards';
