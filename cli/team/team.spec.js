@@ -445,3 +445,39 @@ test('mcp-tools: chemx_team_task supports action triage and add with agent auto-
   }
 });
 
+test('team-commands: runTeamCli handles task update and re-verifies AST upon completion', () => {
+  const tmpCwd = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-update-test-'));
+  try {
+    const db = openIndexDb(tmpCwd);
+    assert.ok(db);
+
+    // Create a dummy source file that is compliant
+    const srcDir = path.join(tmpCwd, 'src');
+    fs.mkdirSync(srcDir, { recursive: true });
+    const cleanFile = path.join(srcDir, 'CleanCard.tsx');
+    fs.writeFileSync(cleanFile, "import React from 'react';\nexport const CleanCard = () => <div>Clean</div>;\n", 'utf-8');
+
+    // Create task
+    const task = runTeamCli(['task', 'add', 'Build Clean Card', '--target=src/CleanCard.tsx', '--as=@developer'], false, tmpCwd);
+    assert.ok(task);
+    assert.strictEqual(task.status, 'queued');
+
+    // Test update to in_progress
+    const inProg = runTeamCli(['task', 'update', String(task.id), 'in_progress', '--as=@developer'], false, tmpCwd);
+    assert.strictEqual(inProg.status, 'in_progress');
+
+    // Test update to review
+    const inReview = runTeamCli(['task', 'update', String(task.id), 'review', '--as=@developer'], false, tmpCwd);
+    assert.strictEqual(inReview.status, 'review');
+
+    // Test update to done: triggers completeTaskWithAudit and re-verifies target file
+    const completed = runTeamCli(['task', 'update', String(task.id), 'done', '--as=@developer'], false, tmpCwd);
+    assert.strictEqual(completed.status, 'done');
+    assert.strictEqual(completed.result_payload.completedBy, '@developer');
+    assert.strictEqual(completed.result_payload.verified, true);
+    assert.strictEqual(completed.result_payload.hazardCountAfter, 0);
+  } finally {
+    fs.rmSync(tmpCwd, { recursive: true, force: true });
+  }
+});
+

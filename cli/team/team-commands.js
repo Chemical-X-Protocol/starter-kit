@@ -157,7 +157,46 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
       const res = completeTaskWithAudit(db, taskId, agentHandle, { cwd });
       if (isCli) {
         if (flags.isJson) process.stdout.write(`${JSON.stringify(res, null, 2)}\n`);
-        else process.stdout.write(`\x1b[32m✔\x1b[0m Completed task #${taskId}\n`);
+        else if (res?.result_payload?.verified) {
+          process.stdout.write(`\x1b[32m✔\x1b[0m Completed task #${taskId} (Verified clean: 0 hazards in ${res.target_path || 'target'})\n`);
+        } else if (res?.result_payload?.hazardCountAfter > 0) {
+          process.stdout.write(`\x1b[32m✔\x1b[0m Completed task #${taskId} \x1b[33m(Note: ${res.result_payload.hazardCountAfter} hazard(s) still remain in ${res.target_path})\x1b[0m\n`);
+        } else {
+          process.stdout.write(`\x1b[32m✔\x1b[0m Completed task #${taskId}\n`);
+        }
+      }
+      return res;
+    }
+    if (taskAction === 'update') {
+      const taskId = nonFlagPositional[1];
+      const targetStatus = flags.status || nonFlagPositional[2] || 'in_progress';
+      const agentHandle = flags.as || '@agent';
+      registerAgent(db, { id: agentHandle, role: 'executor' });
+
+      let res;
+      if (targetStatus === 'done' || targetStatus === 'completed') {
+        res = completeTaskWithAudit(db, taskId, agentHandle, { cwd });
+      } else {
+        res = updateTaskStatus(db, taskId, targetStatus, { blockedReason: flags.reason || '' });
+        if (res) {
+          postFeedEvent(db, {
+            author_id: agentHandle,
+            task_id: Number(taskId),
+            event_type: 'task_status_updated',
+            message: `Updated task #${taskId} status to ${targetStatus}`
+          });
+        }
+      }
+
+      if (isCli) {
+        if (flags.isJson) process.stdout.write(`${JSON.stringify(res, null, 2)}\n`);
+        else if (res?.result_payload?.verified) {
+          process.stdout.write(`\x1b[32m✔\x1b[0m Updated task #${taskId} to status "done" (Verified clean: 0 hazards in ${res.target_path || 'target'})\n`);
+        } else if (res?.result_payload?.hazardCountAfter > 0) {
+          process.stdout.write(`\x1b[32m✔\x1b[0m Updated task #${taskId} to status "done" \x1b[33m(Note: ${res.result_payload.hazardCountAfter} hazard(s) still remain in ${res.target_path})\x1b[0m\n`);
+        } else {
+          process.stdout.write(`\x1b[32m✔\x1b[0m Updated task #${taskId} status to "${targetStatus}"\n`);
+        }
       }
       return res;
     }

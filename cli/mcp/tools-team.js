@@ -109,6 +109,15 @@ export const handleChemxTeamTask = async (args = {}, cwd = process.cwd()) => {
   if (action === 'block') {
     return updateTaskStatus(db, args.taskId, 'blocked', { blockedReason: args.blockedReason || 'Blocked' });
   }
+  if (action === 'update') {
+    const targetStatus = args.status || 'in_progress';
+    const agentHandle = args.agentId || '@agent';
+    registerAgent(db, { id: agentHandle, role: 'executor' });
+    if (targetStatus === 'done' || targetStatus === 'completed') {
+      return completeTaskWithAudit(db, args.taskId, agentHandle, { cwd });
+    }
+    return updateTaskStatus(db, args.taskId, targetStatus, { blockedReason: args.blockedReason || '' });
+  }
   if (action === 'triage') {
     return autoGenerateTasksFromAudit(db, { cwd, maxTasks: args.maxTasks || 10 });
   }

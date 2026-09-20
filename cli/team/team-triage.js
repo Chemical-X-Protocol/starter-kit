@@ -10,7 +10,7 @@ import { releaseFileLock } from './team-db-locks.js';
 import { postFeedEvent } from './team-db-feed.js';
 import { registerAgent } from './team-db-agents.js';
 import { ingestTaskTelemetry } from './team-telemetry.js';
-import { runAudit as executeAstAudit } from '../audit.js';
+import { runAudit as executeAstAudit, auditFile } from '../audit.js';
 import { syncSearchIndex, syncViolationsIndex, recordAuditSnapshot } from '../search.js';
 
 export { ingestTaskTelemetry };
@@ -130,11 +130,52 @@ export const completeTaskWithAudit = (db, taskId, agentId, options = {}) => {
   };
 
   if (task.target_path) {
-    const fileRow = db.prepare('SELECT health_score, hazard_count, lines FROM files WHERE path = ?').get(task.target_path);
-    if (fileRow) {
-      resultPayload.healthAfter = fileRow.health_score;
-      resultPayload.hazardCountAfter = fileRow.hazard_count;
-      resultPayload.linesAfter = fileRow.lines;
+    const cwd = options.cwd || process.cwd();
+    const fullPath = path.isAbsolute(task.target_path) ? task.target_path : path.resolve(cwd, task.target_path);
+    let verified = false;
+    let hazardCount = 0;
+    let healthScore = 100;
+
+    if (fs.existsSync(fullPath)) {
+      try {
+        const auditRes = auditFile(fullPath, task.target_path);
+        const remainingHazards = auditRes?.fileViolations || [];
+        hazardCount = remainingHazards.length;
+        healthScore = Math.max(0, 100 - hazardCount * 15);
+        verified = hazardCount === 0;
+        resultPayload.verified = verified;
+        resultPayload.hazardCountAfter = hazardCount;
+        resultPayload.healthAfter = healthScore;
+        resultPayload.remainingViolations = remainingHazards.map((v) => v.hazard || v.rule);
+
+        // Update database files and violations state
+        db.prepare('DELETE FROM violations WHERE file_path = ?').run(task.target_path);
+        if (hazardCount > 0) {
+          const insertStmt = db.prepare(`
+            INSERT INTO violations (file_path, rule, severity, pillar, line, hazard, directive)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+          `);
+          for (const v of remainingHazards) {
+            insertStmt.run(task.target_path, v.rule || '', v.severity || 'LOW', v.pillar || '', v.line || 1, v.hazard || '', v.directive || '');
+          }
+        }
+        db.prepare('UPDATE files SET health_score = ?, hazard_count = ? WHERE path = ?').run(healthScore, hazardCount, task.target_path);
+      } catch {
+        // Fallback to cached file row if audit fails
+        const fileRow = db.prepare('SELECT health_score, hazard_count, lines FROM files WHERE path = ?').get(task.target_path);
+        if (fileRow) {
+          resultPayload.healthAfter = fileRow.health_score;
+          resultPayload.hazardCountAfter = fileRow.hazard_count;
+          resultPayload.linesAfter = fileRow.lines;
+        }
+      }
+    } else {
+      const fileRow = db.prepare('SELECT health_score, hazard_count, lines FROM files WHERE path = ?').get(task.target_path);
+      if (fileRow) {
+        resultPayload.healthAfter = fileRow.health_score;
+        resultPayload.hazardCountAfter = fileRow.hazard_count;
+        resultPayload.linesAfter = fileRow.lines;
+      }
     }
     releaseFileLock(db, task.target_path, agentId);
   }
