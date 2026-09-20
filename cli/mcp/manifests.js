@@ -3,29 +3,52 @@
  * Declarative JSON Schema definitions for AI Agent Host integration.
  */
 
-export const MCP_TOOLS = [
-  {
-    name: 'chemx',
-    description: 'Chemical X Protocol Master Gateway: PRIMARY tool for AI agents. Dispatches all operations (read, write, patch, audit, verify, typecheck, test, check, q, team, autofix, generate, patterns, issue) in-process with a single user authorization point. Agents MUST prefer calling this master gateway tool instead of individual sub-tools to prevent repetitive user approval prompts.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        action: {
-          type: 'string',
-          enum: ['audit', 'verify', 'typecheck', 'test', 'check', 'patch', 'write', 'read', 'team', 'team_status', 'team_feed', 'team_post', 'team_task', 'team_lock', 'q', 'autofix', 'generate', 'patterns', 'issue'],
-          description: 'The Chemical X subsystem action to execute.'
-        },
-        params: {
-          type: 'object',
-          description: 'Parameter payload for the specific action.'
-        },
-        command: {
-          type: 'string',
-          description: 'Optional CLI command string format (e.g., "audit src", "team task list", "verify").'
-        }
+export const MASTER_MCP_TOOL = {
+  name: 'chemx',
+  description: 'Chemical X Protocol Master Gateway: PRIMARY and EXCLUSIVE tool for AI agents. Dispatches all operations (test, build, verify, typecheck, audit, read, patch, write, check, q, team, autofix, generate, patterns, issue) in-process with a single user authorization point. Agents MUST ALWAYS call this master gateway tool instead of separate sub-tools.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      action: {
+        type: 'string',
+        enum: [
+          'test',
+          'build',
+          'verify',
+          'typecheck',
+          'audit',
+          'read',
+          'patch',
+          'write',
+          'check',
+          'q',
+          'search',
+          'team',
+          'team_status',
+          'team_feed',
+          'team_post',
+          'team_task',
+          'team_lock',
+          'autofix',
+          'generate',
+          'patterns',
+          'issue'
+        ],
+        description: 'The Chemical X subsystem action to execute.'
+      },
+      params: {
+        type: 'object',
+        description: 'Parameter payload for the specific action (e.g., { path, symbol, outline, startLine, endLine } for read; { path, search, replace } for patch; { dir, command } for test/build).'
+      },
+      command: {
+        type: 'string',
+        description: 'Optional CLI command string format (e.g., "test", "build", "verify", "typecheck", "audit src", "read src/foo.vue --outline", "check src/bar.ts", "team task list").'
       }
     }
-  },
+  }
+};
+
+export const SUB_TOOLS = [
   {
     name: 'chemx_query_patterns',
     description: 'Execute single-pass AST fingerprinting across candidate files or directory to discover cross-file clones, duplicated predicates, shared state machines, and parallel controller returns before decomposing monoliths (Chemical X Directive 1.F Pre-Split Pattern Discovery). NOTE: Prefer using master tool chemx({ action: "patterns", params: ... }) for single-permission execution without recurring prompts.',
@@ -369,3 +392,8 @@ export const MCP_TOOLS = [
     }
   }
 ];
+
+// Master tool is primary: exposed as the sole gateway tool to AI host integrations to enforce single-permission dispatch
+export const MCP_TOOLS = [MASTER_MCP_TOOL];
+export const ALL_MCP_TOOLS = [MASTER_MCP_TOOL, ...SUB_TOOLS];
+

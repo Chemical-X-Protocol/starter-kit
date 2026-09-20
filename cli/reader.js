@@ -37,17 +37,26 @@ export const compactCode = (code) => {
 };
 
 const resolveDeclarationKind = (declaration) => {
-  const initType = declaration.init?.type || 'unknown';
-  if (initType !== 'CallExpression') {
+  const init = declaration.init;
+  if (!init) return 'const';
+
+  if (init.type === 'ArrowFunctionExpression' || init.type === 'FunctionExpression') {
+    return 'function';
+  }
+
+  if (init.type !== 'CallExpression') {
     return 'const';
   }
 
-  const calleeName = declaration.init?.callee?.name;
+  const calleeName = init.callee?.name;
   if (calleeName === 'computed') {
     return 'computed';
   }
   if (calleeName === 'ref') {
     return 'ref';
+  }
+  if (calleeName && calleeName.startsWith('use')) {
+    return 'hook';
   }
 
   return 'const';
@@ -118,6 +127,25 @@ export const generateAstOutline = (code, filePath) => {
       TSInterfaceDeclaration(nodePath) {
         if (nodePath.parent.type !== 'ExportNamedDeclaration') {
           lines.push(`interface ${nodePath.node.id.name}`);
+        }
+      },
+      VariableDeclaration(nodePath) {
+        if (nodePath.parent.type !== 'Program') return;
+        if (nodePath.parentPath?.parent?.type === 'ExportNamedDeclaration') return;
+        nodePath.node.declarations.forEach((d) => {
+          const name = d.id?.name;
+          if (name) {
+            const kind = resolveDeclarationKind(d);
+            lines.push(`${kind} ${name}`);
+          }
+        });
+      },
+      FunctionDeclaration(nodePath) {
+        if (nodePath.parent.type !== 'Program') return;
+        if (nodePath.parentPath?.parent?.type === 'ExportNamedDeclaration') return;
+        if (nodePath.node.id) {
+          const params = nodePath.node.params.map((p) => p.name || p.type).join(', ');
+          lines.push(`function ${nodePath.node.id.name}(${params})`);
         }
       },
     });
@@ -238,7 +266,28 @@ export const readTokenOptimized = (targetPath, options = {}) => {
     };
   }
 
-  let processedLines = rawLines;
+  const hasLineRange = typeof options.startLine === 'number' || typeof options.endLine === 'number';
+  const autoThreshold = typeof options.autoOutlineThreshold === 'number' ? options.autoOutlineThreshold : 100;
+
+  // Directive 1.A Guard: Monolithic files (> 100 lines) read without a target symbol or slice
+  // automatically return AST outline to prevent token exhaustion and host buffer spillover.
+  if (!hasLineRange && totalLines > autoThreshold) {
+    const outlineText = generateAstOutline(rawContent, targetPath);
+    const notice = [
+      `// [Directive 1.A Surgical Guard] File has ${totalLines} lines (> 100 outer bound).`,
+      `// Auto-rendered AST outline to conserve context tokens and prevent host buffer spillover.`,
+      `// To read a specific block, request symbol: chemx({ action: 'read', params: { path: '${targetPath}', symbol: '<name>' } })`,
+      `// Or specify a line range: chemx({ action: 'read', params: { path: '${targetPath}', startLine: 1, endLine: 50 } })\n`
+    ].join('\n');
+    return {
+      file: targetPath,
+      totalLines,
+      mode: 'auto-outline',
+      tokensEst: Math.round((outlineText.length + notice.length) / 3.8),
+      content: notice + outlineText
+    };
+  }
+
   let startIdx = 0;
   let endIdx = rawLines.length;
 
@@ -250,7 +299,14 @@ export const readTokenOptimized = (targetPath, options = {}) => {
     endIdx = Math.min(rawLines.length, parseInt(String(options.endLine), 10));
   }
 
-  processedLines = processedLines.slice(startIdx, endIdx);
+  // Cap maximum slice at 100 lines per read (Directive 1.A outer bound)
+  const maxLines = 100;
+  const isCapped = (endIdx - startIdx) > maxLines;
+  if (isCapped) {
+    endIdx = startIdx + maxLines;
+  }
+
+  let processedLines = rawLines.slice(startIdx, endIdx);
   let processedContent = processedLines.join('\n');
 
   if (options.stripComments) {
@@ -259,6 +315,10 @@ export const readTokenOptimized = (targetPath, options = {}) => {
 
   if (options.compact) {
     processedContent = compactCode(processedContent);
+  }
+
+  if (isCapped) {
+    processedContent += `\n// [Truncated at 100 lines per Directive 1.A. Use startLine=${endIdx + 1} to inspect subsequent lines]`;
   }
 
   const lineCount = processedContent.split('\n').length;

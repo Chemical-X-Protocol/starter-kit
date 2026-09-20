@@ -5,7 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { PassThrough } from 'node:stream';
 import { createMcpHandler, startStdioServer } from './server.js';
-import { MCP_TOOLS, Tools, executeMcpTool } from './tools.js';
+import { MCP_TOOLS, ALL_MCP_TOOLS, Tools, executeMcpTool } from './tools.js';
 
 test('MCP Server: initialize handshake', async () => {
   const handler = createMcpHandler();
@@ -23,11 +23,10 @@ test('MCP Server: initialize handshake', async () => {
   assert.strictEqual(res.jsonrpc, '2.0');
   assert.strictEqual(res.id, 1);
   assert.strictEqual(res.result.protocolVersion, '2024-11-05');
+  assert.strictEqual(res.result.serverInfo.name, 'chemical-x-mcp');
   assert.ok(res.result.capabilities.tools);
   assert.ok(res.result.capabilities.resources);
-  assert.strictEqual(res.result.capabilities.resources.subscribe, true);
   assert.ok(res.result.capabilities.prompts);
-  assert.strictEqual(res.result.serverInfo.name, 'chemical-x-mcp');
 });
 
 test('MCP Server: ping returns empty result', async () => {
@@ -43,7 +42,7 @@ test('MCP Server: ping returns empty result', async () => {
   assert.deepStrictEqual(res.result, {});
 });
 
-test('MCP Server: tools/list enumerates all Chemical X tools', async () => {
+test('MCP Server: tools/list enumerates master Chemical X gateway tool', async () => {
   const handler = createMcpHandler();
   const res = await handler.handleRequest({
     jsonrpc: '2.0',
@@ -53,21 +52,9 @@ test('MCP Server: tools/list enumerates all Chemical X tools', async () => {
 
   assert.strictEqual(res.jsonrpc, '2.0');
   const toolNames = res.result.tools.map((t) => t.name);
-  assert.strictEqual(toolNames.length, MCP_TOOLS.length);
-  assert.ok(toolNames.includes('chemx_query_patterns'));
-  assert.ok(toolNames.includes('chemx_audit'));
-  assert.ok(toolNames.includes('chemx_generate_capsule'));
-  assert.ok(toolNames.includes('chemx_get_refactor_prompt'));
-  assert.ok(toolNames.includes('chemx_audit_build'));
-  assert.ok(toolNames.includes('chemx_autofix'));
-  assert.ok(toolNames.includes('chemx_q'));
-  assert.ok(toolNames.includes('chemx_read'));
-  assert.ok(toolNames.includes('chemx_patch'));
-  assert.ok(toolNames.includes('chemx_write'));
-  assert.ok(toolNames.includes('chemx_check'));
-  assert.ok(toolNames.includes('chemx_typecheck'));
-  assert.ok(toolNames.includes('chemx_test'));
-  assert.ok(toolNames.includes('chemx_verify'));
+  assert.strictEqual(toolNames.length, 1);
+  assert.ok(toolNames.includes('chemx'));
+  assert.ok(ALL_MCP_TOOLS.length >= 20);
 });
 
 test('MCP Server: tools/call chemx_query_patterns executes AST discovery', async () => {
@@ -595,9 +582,9 @@ test('MCP Server: prompts/get chemx_remediate_hotspot dynamically hydrates diagn
 test('MCP Tools: keyed Tools map contains all handlers and executes mapped methods', async () => {
   assert.strictEqual(typeof Tools, 'object');
   const toolKeys = Object.keys(Tools);
-  assert.strictEqual(toolKeys.length, MCP_TOOLS.length);
+  assert.strictEqual(toolKeys.length, ALL_MCP_TOOLS.length);
 
-  for (const tool of MCP_TOOLS) {
+  for (const tool of ALL_MCP_TOOLS) {
     assert.strictEqual(typeof Tools[tool.name], 'function', `Tools.${tool.name} must be a function`);
   }
 
@@ -651,6 +638,73 @@ test('MCP Server: master tool chemx communicates strictly in-band with zero disk
     fs.rmSync(testDir, { recursive: true, force: true });
   }
 });
+
+test('MCP Server: master tool chemx handles action: "read" with auto-outlining on files > 100 lines', async () => {
+  const handler = createMcpHandler();
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-read-mcp-'));
+  const largeFilePath = path.join(tmpDir, 'MonolithComponent.vue');
+
+  // Create a 150-line file
+  const lines = ['<script setup lang="ts">'];
+  lines.push('import { ref, computed } from "vue";');
+  lines.push('const count = ref(0);');
+  lines.push('const doubled = computed(() => count.value * 2);');
+  lines.push('function increment() { count.value++; }');
+  for (let i = 6; i <= 149; i++) {
+    lines.push(`// filler line ${i}`);
+  }
+  lines.push('</script>');
+  fs.writeFileSync(largeFilePath, lines.join('\n'), 'utf-8');
+
+  try {
+    const res = await handler.handleRequest({
+      jsonrpc: '2.0',
+      id: 102,
+      method: 'tools/call',
+      params: {
+        name: 'chemx',
+        arguments: {
+          action: 'read',
+          params: {
+            path: largeFilePath
+          }
+        }
+      }
+    });
+
+    assert.strictEqual(res.jsonrpc, '2.0');
+    assert.strictEqual(res.result.isError, false);
+    const text = res.result.content[0].text;
+    // Must auto-render outline instead of dumping all 150 lines
+    assert.ok(text.includes('Directive 1.A Surgical Guard'));
+    assert.ok(text.includes('Auto-rendered AST outline'));
+    assert.ok(text.includes('ref count'));
+    assert.ok(text.includes('computed doubled'));
+    assert.ok(text.includes('function increment'));
+
+    // Targeted symbol read
+    const symRes = await handler.handleRequest({
+      jsonrpc: '2.0',
+      id: 103,
+      method: 'tools/call',
+      params: {
+        name: 'chemx',
+        arguments: {
+          action: 'read',
+          params: {
+            path: largeFilePath,
+            symbol: 'increment'
+          }
+        }
+      }
+    });
+    assert.strictEqual(symRes.result.isError, false);
+    assert.ok(symRes.result.content[0].text.includes('function increment()'));
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
 
 
 

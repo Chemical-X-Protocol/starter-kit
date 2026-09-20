@@ -14,7 +14,7 @@ import { createCapsuleFiles } from '../generator.js';
 import { runBuildAudit } from '../build.js';
 import { runAutofix } from '../audit/autofix.js';
 import { runTypecheckAudit, runTestAudit, runProjectVerify } from '../verify.js';
-import { MCP_TOOLS } from './manifests.js';
+import { MCP_TOOLS, ALL_MCP_TOOLS } from './manifests.js';
 import {
   resolveTargetCwd,
   handleChemxQ,
@@ -34,6 +34,7 @@ import {
 
 export {
   MCP_TOOLS,
+  ALL_MCP_TOOLS,
   handleChemxQ,
   handleChemxRead,
   handleChemxPatch,
@@ -278,6 +279,9 @@ const handleChemx = async (args = {}, cwd = process.cwd()) => {
     if (subCmd === 'audit') {
       action = 'audit';
       params = { path: parts[1] || 'src', ...params };
+    } else if (subCmd === 'build') {
+      action = 'build';
+      params = { dir: parts[1] || '.', ...params };
     } else if (subCmd === 'verify') {
       action = 'verify';
     } else if (subCmd === 'typecheck') {
@@ -287,6 +291,16 @@ const handleChemx = async (args = {}, cwd = process.cwd()) => {
     } else if (subCmd === 'check') {
       action = 'check';
       params = { path: parts[1] || 'src', ...params };
+    } else if (subCmd === 'read') {
+      action = 'read';
+      const hasOutline = args.command.includes('--outline');
+      const symbolMatch = args.command.match(/--symbol=([^\s]+)/);
+      params = {
+        path: parts[1],
+        outline: hasOutline,
+        symbol: symbolMatch ? symbolMatch[1] : undefined,
+        ...params
+      };
     } else if (subCmd === 'q' || subCmd === 'search') {
       action = 'q';
       params = { query: parts.slice(1).join(' '), ...params };
@@ -305,6 +319,7 @@ const handleChemx = async (args = {}, cwd = process.cwd()) => {
 
   const DISPATCHER = {
     audit: handleAudit,
+    build: handleAuditBuild,
     verify: handleChemxVerify,
     typecheck: handleChemxTypecheck,
     test: handleChemxTest,

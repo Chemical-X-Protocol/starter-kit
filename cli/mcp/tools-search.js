@@ -116,8 +116,8 @@ export const handleChemxRead = (args = {}, cwd = process.cwd()) => {
   const res = readTokenOptimized(targetPath, {
     outline: args.outline,
     symbol: args.symbol,
-    stripComments: args.stripComments,
-    compact: args.compact,
+    stripComments: args.stripComments !== false,
+    compact: args.compact !== false,
     startLine: args.startLine,
     endLine: args.endLine
   });

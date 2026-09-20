@@ -5,27 +5,36 @@ import { MCP_TOOLS } from './manifests.js';
 
 export const buildMcpInstructions = () => {
   return [
-    '# Chemical X Protocol: Mandatory AI Agent Directives',
+    '# Chemical X Protocol: Master MCP Gateway Guide (chemical-x / chemx)',
     '',
-    'MANDATORY VERIFICATION & MASTER MCP GATEWAY:',
-    '1. ALWAYS and EXCLUSIVELY invoke the master gateway tool "chemx" (or call_mcp_tool with ToolName: "chemx") for ALL operations.',
-    '   - Call format: chemx({ action: "read", params: { path, symbol } }) or chemx({ command: "audit src" }).',
-    '   - DO NOT invoke individual tools like chemx_read, chemx_audit, or chemx_write directly. The unified "chemx" tool gives the user a single authorization point so they never have to keep approving separate tool commands.',
-    '   - Supported actions: read, write, patch, check, audit, verify (chemx_verify), typecheck (chemx_typecheck), test (chemx_test), q, team, autofix, generate, patterns, issue.',
-    '2. NEVER execute raw, unthrottled "npm test", "pnpm test", "vitest", "tsc --noEmit", or "npm run build" directly in a bash shell. Always invoke chemx({ action: "verify" }) or chemx({ action: "typecheck" }) in-process.',
+    'MASTER TOOL: "chemx" (chemical-x / chemx)',
+    'ALWAYS and EXCLUSIVELY invoke the master gateway tool "chemx" for ALL operations.',
+    'All sub-operations route through this single tool with a single user authorization point.',
     '',
-    'IN-BAND PROTOCOL COMMUNICATION (ZERO DISK DUMPS):',
-    '3. All tool responses must be returned strictly in-band via MCP CallToolResult. Tools must never dump intermediate text files (.txt/.md) to disk for the AI to consume.',
+    '1. TESTING, BUILDS & VERIFICATION:',
+    '   - chemx({ action: "test" }) or chemx({ command: "test" })',
+    '   - chemx({ action: "build" }) or chemx({ command: "build" })',
+    '   - chemx({ action: "verify" }) or chemx({ command: "verify" })',
+    '   - chemx({ action: "typecheck" }) or chemx({ command: "typecheck" })',
+    '   - chemx({ action: "audit", params: { path: "src" } }) or chemx({ command: "audit src" })',
     '',
-    'DATABASE-FIRST & TARGETED SYMBOL EXTRACTION (BAN ON VIEW_FILE):',
-    '4. ALWAYS query database tasks and symbols via chemx({ action: "team" }) or chemx({ action: "q" }) first.',
-    '5. ALWAYS extract targeted symbols via chemx({ action: "read", params: { path, symbol } }) instead of dumping full files.',
-    '6. STRICT BAN ON NATIVE FILE ANALYZERS: NEVER invoke view_file, read_file, or raw cat on Chemical X projects.',
+    '2. SURGICAL INSPECTION & MODIFICATION (ZERO FILE DUMPS):',
+    '   - chemx({ action: "read", params: { path: "src/...", outline: true } }) -> AST outline (~100 tokens)',
+    '   - chemx({ action: "read", params: { path: "src/...", symbol: "<name>", connections: true } }) -> Symbol + caller graph (~150 tokens)',
+    '   - chemx({ action: "patch", params: { path: "src/...", search: "...", replace: "..." } }) -> Surgical AST patch',
+    '   - chemx({ action: "write", params: { path: "src/...", content: "..." } }) -> Create/write with line budget check',
+    '   - chemx({ action: "check", params: { path: "src/..." } }) -> Validate against molecular rules',
+    '   - NOTE: Monolith files (> 100 lines) auto-render AST outlines to prevent host buffer spillover (Directive 1.A). Request targeted symbols instead of full files.',
     '',
-    'MOLECULAR ARCHITECTURE GUARDRAILS:',
-    '7. 100-line outer bound per molecule capsule file. Never exceed.',
-    '8. Zero raw DOM elements in molecules or organisms: raw HTML tags are restricted exclusively to foundational atoms.',
-    '9. Two-stage atomic boolean composition: break multi-clause logic into named booleans before decision computeds.',
+    '3. AST SEARCH & MULTI-AGENT SWARM:',
+    '   - chemx({ action: "q", params: { query: "<symbol>" } }) -> Query AST index',
+    '   - chemx({ action: "team", params: { action: "status" } }) -> Swarm tasks and status',
+    '   - chemx({ action: "autofix", params: { path: "src" } }) -> Deterministic AST cleanup',
+    '',
+    'STRICT ZERO-RAW-DOM & 100-LINE BUDGET:',
+    '- 100-line outer bound per molecule capsule file. Never exceed.',
+    '- Zero raw DOM elements in molecules or organisms: raw HTML tags belong strictly in foundational atoms.',
+    '- Two-stage atomic boolean composition: decompose multi-clause logic before decision computeds.',
     ''
   ].join('\n');
 };
@@ -38,6 +47,14 @@ export const syncAntigravityMcpSchemas = (customTargetDir = null, options = {}) 
     fs.mkdirSync(targetDir, { recursive: true });
   }
 
+  // Clean up legacy/sub-tool schemas so only the master gateway tool is exposed
+  const existingFiles = fs.readdirSync(targetDir);
+  for (const file of existingFiles) {
+    if (file.startsWith('chemx_') && file.endsWith('.json')) {
+      fs.unlinkSync(path.join(targetDir, file));
+    }
+  }
+
   let toolCount = 0;
   for (const tool of MCP_TOOLS) {
     const filePath = path.join(targetDir, `${tool.name}.json`);
@@ -45,7 +62,7 @@ export const syncAntigravityMcpSchemas = (customTargetDir = null, options = {}) 
       name: tool.name,
       description: tool.description,
       parameters: tool.inputSchema
-    });
+    }, null, 2);
     fs.writeFileSync(filePath, schema, 'utf-8');
     toolCount += 1;
   }
@@ -54,7 +71,7 @@ export const syncAntigravityMcpSchemas = (customTargetDir = null, options = {}) 
   fs.writeFileSync(instructionsPath, buildMcpInstructions(), 'utf-8');
 
   if (!isSilent) {
-    process.stdout.write(`  \x1b[32m✔\x1b[0m Synchronized ${toolCount} MCP tool schemas and instructions.md in: ${targetDir}\n`);
+    process.stdout.write(`  \x1b[32m✔\x1b[0m Synchronized ${toolCount} MCP tool schema(s) and instructions.md in: ${targetDir}\n`);
   }
 
   return { targetDir, toolCount, instructions: true };
