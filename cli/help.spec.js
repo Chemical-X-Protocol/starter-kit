@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert';
+import { spawnSync } from 'node:child_process';
+import path from 'node:path';
 import { COMMANDS_SCHEMA } from './commands-schema.js';
 import { printHelp } from './help.js';
 
@@ -24,4 +26,14 @@ test('help: printHelp renders without throwing', () => {
   assert.doesNotThrow(() => {
     printHelp();
   });
+});
+
+test('cli: unknown command exits immediately with code 1 and error message', () => {
+  const cliPath = path.resolve('cli/index.js');
+  const res = spawnSync(process.execPath, [cliPath, 'config'], {
+    encoding: 'utf8',
+    timeout: 10000
+  });
+  assert.strictEqual(res.status, 1);
+  assert.ok(res.stderr.includes('Unknown command "config"'));
 });

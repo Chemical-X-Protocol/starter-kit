@@ -487,3 +487,31 @@ test('team-commands: runTeamCli handles task update and re-verifies AST upon com
   }
 });
 
+test('team-triage: completeTaskWithAudit correctly detects real on-disk violations and refuses completion', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-task-audit-'));
+  const testFile = path.join(tmpDir, 'm-test-hazard.tsx');
+  fs.writeFileSync(
+    testFile,
+    `import React from 'react';\nexport const MTest = () => {\n  return <div><button>Violating Raw Button</button></div>;\n};\nexport default MTest;\n`
+  );
+
+  const db = setupTestDb();
+  const task = createTask(db, {
+    title: 'Fix raw button in molecule',
+    target_path: testFile
+  });
+
+  const res = completeTaskWithAudit(db, task.id, '@auditor', { cwd: tmpDir });
+  assert.strictEqual(res.refused, true);
+  assert.ok(res.hazardCount > 0);
+  assert.strictEqual(res.verified, false);
+
+  // With force: true, completion succeeds with forced flag
+  const forced = completeTaskWithAudit(db, task.id, '@auditor', { cwd: tmpDir, force: true });
+  assert.ok(forced.id);
+  assert.strictEqual(forced.status, 'done');
+  assert.strictEqual(forced.result_payload.forced, true);
+
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+});
+

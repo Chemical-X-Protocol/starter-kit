@@ -27,7 +27,7 @@ import {
   buildViewIndex,
   buildViewSpec
 } from './generator-templates.js';
-import { detectFramework, detectTierBaseDir, detectInstalledFamily } from './project-detector.js';
+import { detectFramework, detectTierBaseDir, detectInstalledFamily, detectTestRunner } from './project-detector.js';
 
 const TIERS = [
   { prefix: 'm-', tier: 'molecule', label: '1. m- Molecule (Self-contained feature block < 100 lines - Recommended)' },
@@ -112,6 +112,7 @@ export const createCapsuleFiles = ({
   const parentDir = targetParent || detectedDir;
   const resolvedParent = path.resolve(cwd, parentDir || '.');
   const targetDir = path.resolve(resolvedParent, capsuleName);
+  const runner = detectTestRunner(targetDir || cwd);
 
   if (!dryRun && fs.existsSync(targetDir)) {
     throw new Error(`Directory ${capsuleName} already exists at ${targetDir}.`);
@@ -142,7 +143,7 @@ export const createCapsuleFiles = ({
 
     recordFile(hookFile, path.join(targetDir, hookFile), buildHook(capsuleName, camelName, pascalName));
     recordFile('index.ts', path.join(targetDir, 'index.ts'), buildHookIndex(capsuleName, camelName));
-    recordFile(specFile, path.join(targetDir, specFile), buildHookSpec(capsuleName, camelName));
+    recordFile(specFile, path.join(targetDir, specFile), buildHookSpec(capsuleName, camelName, runner));
 
     recordFile('types/options.d.ts', path.join(typesDir, 'options.d.ts'), buildHookOptionsType(pascalName));
     recordFile('types/return.d.ts', path.join(typesDir, 'return.d.ts'), buildHookReturnType(pascalName));
@@ -154,7 +155,7 @@ export const createCapsuleFiles = ({
 
     recordFile(viewFile, path.join(targetDir, viewFile), selectedFramework.viewBuilder(capsuleName, pascalName));
     recordFile('index.ts', path.join(targetDir, 'index.ts'), buildViewIndex(capsuleName, pascalName, selectedFramework.ext));
-    recordFile(specFile, path.join(targetDir, specFile), buildViewSpec(capsuleName, pascalName));
+    recordFile(specFile, path.join(targetDir, specFile), buildViewSpec(capsuleName, pascalName, runner));
 
     recordFile('types/params.d.ts', path.join(typesDir, 'params.d.ts'), buildViewParamsType(pascalName));
     recordFile('types/index.ts', path.join(typesDir, 'index.ts'), buildTypesIndex(['params']));
@@ -168,7 +169,7 @@ export const createCapsuleFiles = ({
 
     recordFile(compFile, path.join(targetDir, compFile), selectedFramework.compBuilder(capsuleName, pascalName, templateOpts));
     recordFile('index.ts', path.join(targetDir, 'index.ts'), buildIndex(capsuleName, pascalName, selectedFramework.ext, hasController));
-    recordFile(specFile, path.join(targetDir, specFile), buildComponentSpec(capsuleName, pascalName, hasController));
+    recordFile(specFile, path.join(targetDir, specFile), buildComponentSpec(capsuleName, pascalName, hasController, runner));
 
     recordFile('types/props.d.ts', path.join(typesDir, 'props.d.ts'), buildPropsType(capsuleName, pascalName, { description: capsuleDesc }));
     recordFile('types/state.d.ts', path.join(typesDir, 'state.d.ts'), buildStateType(capsuleName, pascalName, { description: capsuleDesc }));

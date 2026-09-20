@@ -65,12 +65,37 @@ export type * from './types';
 `;
 };
 
-export const buildViewSpec = (name, pascalName) => `import { describe, it } from 'node:test';
-import assert from 'node:assert/strict';
+export const buildViewSpec = (name, pascalName, runner = 'node:test') => {
+  if (runner === 'vitest') {
+    return `import { describe, it, expect } from 'vitest';
+import { ${pascalName}View } from './${name}';
 
 describe('${pascalName}View Table of Contents', () => {
-  it('defines pure declarative blueprint layout', () => {
-    assert.ok(true);
+  it('is defined as a view component', () => {
+    expect(typeof ${pascalName}View).toBe('function');
   });
 });
 `;
+  }
+  if (runner === 'jest') {
+    return `import { describe, it, expect } from '@jest/globals';
+import { ${pascalName}View } from './${name}';
+
+describe('${pascalName}View Table of Contents', () => {
+  it('is defined as a view component', () => {
+    expect(typeof ${pascalName}View).toBe('function');
+  });
+});
+`;
+  }
+  return `import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import { ${pascalName}View } from './${name}';
+
+describe('${pascalName}View Table of Contents', () => {
+  it('is defined as a view component', () => {
+    assert.equal(typeof ${pascalName}View, 'function');
+  });
+});
+`;
+};

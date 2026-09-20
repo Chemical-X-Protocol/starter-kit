@@ -139,7 +139,7 @@ export const completeTaskWithAudit = (db, taskId, agentId, options = {}) => {
     if (fs.existsSync(fullPath)) {
       try {
         const auditRes = auditFile(fullPath, task.target_path);
-        const remainingHazards = auditRes?.fileViolations || [];
+        const remainingHazards = Array.isArray(auditRes) ? auditRes : (auditRes?.fileViolations || auditRes?.violations || []);
         hazardCount = remainingHazards.length;
         healthScore = Math.max(0, 100 - hazardCount * 15);
         verified = hazardCount === 0;
@@ -151,6 +151,7 @@ export const completeTaskWithAudit = (db, taskId, agentId, options = {}) => {
         if (hazardCount > 0 && options.force !== true) {
           return {
             refused: true,
+            verified: false,
             taskId: Number(taskId),
             taskTitle: task.title,
             hazardCount,

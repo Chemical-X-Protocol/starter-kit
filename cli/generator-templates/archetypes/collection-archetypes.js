@@ -7,7 +7,7 @@ export const COLLECTION_ARCHETYPES = [
     id: 'task-list',
     name: 'Collection & Task List',
     keywords: ['task', 'todo', 'tasklist', 'checklist', 'item', 'queue', 'list', 'add', 'toggle', 'remove', 'delete'],
-    destructure: 'items, activeCount, setFilter, toggleItem, removeItem',
+    destructure: 'items, activeCount, setFilter, toggleItem, removeItem, addItem',
     buildState: (name, pascal) => `export interface ${pascal}Item {
   readonly id: string;
   readonly title: string;
@@ -25,22 +25,23 @@ export interface ${pascal}State {
     buildProps: (name, pascal) => `export interface ${pascal}Props {
   readonly initialItems?: readonly ${pascal}Item[];
   readonly onItemsChange?: (items: readonly ${pascal}Item[]) => void;
+  readonly className?: string;
 }
 `,
     buildController: (name, pascal) => `import { useState, useMemo } from 'react';
-import type { ${pascal}Item, ${pascal}Filter, ${pascal}State } from './types';
+import type { ${pascal}Item, ${pascal}Filter } from './types';
 
 export const use${pascal}Controller = (options: { initialItems?: readonly ${pascal}Item[]; onItemsChange?: (items: readonly ${pascal}Item[]) => void } = {}) => {
   const [items, setItems] = useState<readonly ${pascal}Item[]>(options.initialItems || [
-    { id: '1', title: 'Initialize Chemical X molecular structure', completed: true },
-    { id: '2', title: 'Implement domain controller state', completed: false }
+    { id: '1', title: 'Review Chemical X molecular standards', completed: true },
+    { id: '2', title: 'Audit atomic and molecular tier boundaries', completed: false }
   ]);
   const [filter, setFilter] = useState<${pascal}Filter>('all');
 
-  const activeCount = useMemo(() => items.filter((i) => !i.completed).length, [items]);
+  const activeCount = useMemo(() => items.filter((i: ${pascal}Item) => !i.completed).length, [items]);
   const visibleItems = useMemo(() => {
-    if (filter === 'active') return items.filter((i) => !i.completed);
-    if (filter === 'completed') return items.filter((i) => i.completed);
+    if (filter === 'active') return items.filter((i: ${pascal}Item) => !i.completed);
+    if (filter === 'completed') return items.filter((i: ${pascal}Item) => i.completed);
     return items;
   }, [items, filter]);
 
@@ -52,13 +53,13 @@ export const use${pascal}Controller = (options: { initialItems?: readonly ${pasc
   };
 
   const toggleItem = (id: string) => {
-    const next = items.map((i) => (i.id === id ? { ...i, completed: !i.completed } : i));
+    const next = items.map((i: ${pascal}Item) => (i.id === id ? { ...i, completed: !i.completed } : i));
     setItems(next);
     options.onItemsChange?.(next);
   };
 
   const removeItem = (id: string) => {
-    const next = items.filter((i) => i.id !== id);
+    const next = items.filter((i: ${pascal}Item) => i.id !== id);
     setItems(next);
     options.onItemsChange?.(next);
   };
@@ -66,17 +67,44 @@ export const use${pascal}Controller = (options: { initialItems?: readonly ${pasc
   return { items: visibleItems, allItems: items, filter, activeCount, setFilter, addItem, toggleItem, removeItem };
 };
 `,
-    buildReactBody: (name, pascal) => `      <div className="${name}__controls">
-        <span className="${name}__count">{activeCount} pending</span>
+    buildReactBody: (name, pascal) => `      <form
+        className="${name}__form"
+        onSubmit={(e) => {
+          e.preventDefault();
+          const target = e.currentTarget;
+          const input = target.elements.namedItem('taskTitle') as HTMLInputElement;
+          if (input && input.value.trim()) {
+            addItem(input.value.trim());
+            input.value = '';
+          }
+        }}
+      >
+        <input
+          name="taskTitle"
+          type="text"
+          placeholder="Add a new task..."
+          className="${name}__input"
+        />
+        <button type="submit" className="${name}__add-btn">Add</button>
+      </form>
+      <div className="${name}__controls">
+        <span className="${name}__counter">{activeCount} active</span>
         <div className="${name}__filters">
-          <button type="button" onClick={() => setFilter('all')}>All</button>
-          <button type="button" onClick={() => setFilter('active')}>Active</button>
-          <button type="button" onClick={() => setFilter('completed')}>Done</button>
+          {(['all', 'active', 'completed'] as const).map((f) => (
+            <button
+              key={f}
+              type="button"
+              className={filter === f ? 'active' : ''}
+              onClick={() => setFilter(f)}
+            >
+              {f}
+            </button>
+          ))}
         </div>
       </div>
       <ul className="${name}__list">
         {items.map((item) => (
-          <li key={item.id} className={item.completed ? '${name}__item ${name}__item--done' : '${name}__item'}>
+          <li key={item.id} className={item.completed ? 'completed' : ''}>
             <input type="checkbox" checked={item.completed} onChange={() => toggleItem(item.id)} />
             <span>{item.title}</span>
             <button type="button" onClick={() => removeItem(item.id)}>×</button>
@@ -253,7 +281,7 @@ export const use${pascal}Controller = (options: { cards?: readonly ${pascal}Card
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
 
   const moveCard = (cardId: string, toColumnId: string) => {
-    const next = cards.map((c) => (c.id === cardId ? { ...c, columnId: toColumnId } : c));
+    const next = cards.map((c: ${pascal}Card) => (c.id === cardId ? { ...c, columnId: toColumnId } : c));
     setCards(next);
     options.onCardMove?.(cardId, toColumnId);
   };

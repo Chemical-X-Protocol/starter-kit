@@ -48,13 +48,37 @@ export const buildHookIndex = (name, camelName) => `export { ${camelName} } from
 export type * from './types';
 `;
 
-export const buildHookSpec = (name, camelName) => `import { describe, it } from 'node:test';
-import assert from 'node:assert/strict';
-import { ${camelName} } from './${name}.ts';
+export const buildHookSpec = (name, camelName, runner = 'node:test') => {
+  if (runner === 'vitest') {
+    return `import { describe, it, expect } from 'vitest';
+import { ${camelName} } from './${name}';
 
 describe('${camelName} Hook Composable', () => {
-  it('exports pure hook function', () => {
+  it('is defined as a hook function', () => {
+    expect(typeof ${camelName}).toBe('function');
+  });
+});
+`;
+  }
+  if (runner === 'jest') {
+    return `import { describe, it, expect } from '@jest/globals';
+import { ${camelName} } from './${name}';
+
+describe('${camelName} Hook Composable', () => {
+  it('is defined as a hook function', () => {
+    expect(typeof ${camelName}).toBe('function');
+  });
+});
+`;
+  }
+  return `import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import { ${camelName} } from './${name}';
+
+describe('${camelName} Hook Composable', () => {
+  it('is defined as a hook function', () => {
     assert.equal(typeof ${camelName}, 'function');
   });
 });
 `;
+};

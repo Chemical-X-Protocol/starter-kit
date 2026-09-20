@@ -198,5 +198,62 @@ test('runGenerateWizard: --json with --help returns help object without mutation
   assert.strictEqual(res.help, true);
 });
 
+test('runGenerateWizard: description-driven task list wires addItem, toggleItem, removeItem and avoids implicit any or as any', async () => {
+  const tmpDir = path.resolve(process.cwd(), 'scratch/test-gen-tasklist');
+  if (fs.existsSync(tmpDir)) fs.rmSync(tmpDir, { recursive: true, force: true });
+
+  const res = await runGenerateWizard([
+    'molecule',
+    'task-list',
+    '-y',
+    `--dir=${tmpDir}`,
+    '--framework=react',
+    '--desc=add, toggle, and remove tasks'
+  ]);
+
+  assert.strictEqual(res.success, true);
+  const capsuleDir = path.join(tmpDir, 'm-task-list');
+  const tsxContent = fs.readFileSync(path.join(capsuleDir, 'm-task-list.tsx'), 'utf8');
+  const controllerContent = fs.readFileSync(path.join(capsuleDir, 'm-task-list.controller.ts'), 'utf8');
+
+  // Verify all actions are destructured and wired in UI
+  assert.ok(tsxContent.includes('addItem'));
+  assert.ok(tsxContent.includes('toggleItem'));
+  assert.ok(tsxContent.includes('removeItem'));
+  assert.ok(tsxContent.includes('<form'));
+  assert.ok(!tsxContent.includes('as any'));
+
+  // Verify controller has explicit types and no implicit any
+  assert.ok(controllerContent.includes('(i: TaskListItem)'));
+  assert.ok(!controllerContent.includes('(i) =>'));
+
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+});
+
+test('runGenerateWizard: spec uses Vitest imports when vitest is declared in package.json', async () => {
+  const tmpDir = path.resolve(process.cwd(), 'scratch/test-gen-vitest');
+  if (fs.existsSync(tmpDir)) fs.rmSync(tmpDir, { recursive: true, force: true });
+  fs.mkdirSync(tmpDir, { recursive: true });
+  fs.writeFileSync(path.join(tmpDir, 'package.json'), JSON.stringify({
+    name: 'test-project',
+    devDependencies: { vitest: '^1.6.0' }
+  }));
+
+  const res = await runGenerateWizard([
+    'molecule',
+    'demo-card',
+    '-y',
+    `--dir=${tmpDir}`,
+    '--framework=react'
+  ]);
+
+  assert.strictEqual(res.success, true);
+  const specContent = fs.readFileSync(path.join(tmpDir, 'm-demo-card/m-demo-card.spec.ts'), 'utf8');
+  assert.ok(specContent.includes("from 'vitest'"));
+  assert.ok(!specContent.includes("from 'node:test'"));
+
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+});
+
 
 

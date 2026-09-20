@@ -420,12 +420,14 @@ const main = async () => {
       printHelp();
       break;
     default:
-      if (firstArg && isCapsulePrefix(firstArg)) {
-        await runGenerateWizard(rawArgs);
-      } else if (firstArg && !firstArg.startsWith('-')) {
-        await runScaffold(firstArg, rawArgs, runAudit);
-      } else {
+      if (!firstArg) {
         printHelp();
+      } else if (isCapsulePrefix(firstArg)) {
+        await runGenerateWizard(rawArgs);
+      } else {
+        process.stderr.write(`\x1b[31mError:\x1b[0m Unknown command "${firstArg}".\n`);
+        process.stderr.write(`Run "chemx --help" for a list of available commands.\n\n`);
+        process.exit(1);
       }
       break;
   }

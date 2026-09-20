@@ -35,6 +35,27 @@ export const detectFramework = (cwd = process.cwd()) => {
   return 'react';
 };
 
+export const detectTestRunner = (startDir = process.cwd()) => {
+  let curr = path.resolve(startDir);
+  while (curr && curr !== path.dirname(curr)) {
+    const pkgPath = path.join(curr, 'package.json');
+    if (fs.existsSync(pkgPath)) {
+      try {
+        const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+        const deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
+        if (deps.vitest || (pkg.scripts?.test && pkg.scripts.test.includes('vitest'))) return 'vitest';
+        if (deps.jest || (pkg.scripts?.test && pkg.scripts.test.includes('jest'))) return 'jest';
+      } catch {
+        // ignore
+      }
+      break;
+    }
+    curr = path.dirname(curr);
+  }
+
+  return 'node:test';
+};
+
 const ATOMS_PACKAGES = ['@chemx/x-atoms', '@chemx/atoms', 'x-atoms', '@chem-x/x-atoms'];
 const PALETTE_PACKAGES = ['@chemx/o-command-palette', '@chemx/command-palette', 'o-command-palette', '@chem-x/o-command-palette'];
 

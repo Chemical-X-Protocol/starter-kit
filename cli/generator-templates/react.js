@@ -19,8 +19,8 @@ export const buildReactComponent = (name, pascalName, options = {}) => {
     }
 
     const stateBindings = hasController
-      ? `  const { ${archetype.destructure} } = { ...props, ...use${pascalName}Controller(props as any) };`
-      : `  const { ${archetype.destructure} } = props as any;`;
+      ? `  const { ${archetype.destructure} } = { ...props, ...use${pascalName}Controller(props) };`
+      : `  const { ${archetype.destructure} } = props;`;
 
     return `import React from 'react';
 ${atomImport}import type { ${pascalName}Props } from './types';

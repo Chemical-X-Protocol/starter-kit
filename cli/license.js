@@ -117,9 +117,10 @@ export const obtainLicenseKey = async (rawArgs = [], onRunAudit = null) => {
     rawArgs.includes('--non-interactive') ||
     rawArgs.includes('--no-interactive') ||
     Boolean(process.env.CI) ||
-    process.stdout?.isTTY === false ||
-    process.stdin?.isTTY === false ||
-    Boolean(process.argv?.some((arg) => arg === '--headless' || arg === '--ci' || arg === '--yes' || arg === '-y'));
+    !process.stdout?.isTTY ||
+    !process.stdin?.isTTY ||
+    process.env.TERM === 'dumb' ||
+    Boolean(process.argv?.some((arg) => arg === '--headless' || arg === '--ci' || arg === '--yes' || arg === '-y' || arg === '--non-interactive'));
 
   if (isHeadless) {
     return null;

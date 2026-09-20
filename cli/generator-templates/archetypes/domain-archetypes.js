@@ -146,8 +146,8 @@ export const use${pascal}Controller = (options: { onCheckout?: (total: number) =
   const updateQuantity = (id: string, delta: number) => {
     setItems((prev) =>
       prev
-        .map((i) => (i.id === id ? { ...i, quantity: Math.max(0, i.quantity + delta) } : i))
-        .filter((i) => i.quantity > 0)
+        .map((i: ${pascal}CartItem) => (i.id === id ? { ...i, quantity: Math.max(0, i.quantity + delta) } : i))
+        .filter((i: ${pascal}CartItem) => i.quantity > 0)
     );
   };
 
