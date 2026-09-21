@@ -7,6 +7,7 @@ import { INPUT_ARCHETYPES } from './input-archetypes.js';
 import { LAYOUT_ARCHETYPES } from './layout-archetypes.js';
 import { DOMAIN_ARCHETYPES } from './domain-archetypes.js';
 import { STATUS_ARCHETYPES } from './status-archetypes.js';
+import { MINIMAL_ARCHETYPES } from './minimal-archetypes.js';
 
 export const ALL_ARCHETYPES = [
   ...COLLECTION_ARCHETYPES,
@@ -16,7 +17,18 @@ export const ALL_ARCHETYPES = [
   ...STATUS_ARCHETYPES
 ];
 
-export const resolveArchetype = (slug = '', description = '') => {
+export const EXTENDED_ARCHETYPES = [
+  ...MINIMAL_ARCHETYPES,
+  ...ALL_ARCHETYPES
+];
+
+export const resolveArchetype = (slug = '', description = '', explicitTemplate = '') => {
+  if (explicitTemplate) {
+    const templateNorm = String(explicitTemplate).toLowerCase().trim();
+    const exactMatch = EXTENDED_ARCHETYPES.find((a) => a.id === templateNorm || a.keywords.includes(templateNorm));
+    if (exactMatch) return exactMatch;
+  }
+
   const normalized = String(slug).toLowerCase().replace(/^(m-|a-|o-|t-|v-|use-)/, '');
   const slugTokens = normalized.split(/[-_]/).filter(Boolean);
   const descTokens = String(description)

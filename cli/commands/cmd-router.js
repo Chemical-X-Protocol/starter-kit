@@ -1,5 +1,5 @@
 /**
- * cmd-router.js — CLI command dispatch table.
+ * cmd-router.js: CLI command dispatch table.
  * Single responsibility: map first-arg tokens to their lazy-loaded command handlers.
  * Extracted from cli/index.js per Directive 1.A (Monolith Decomposition).
  */
@@ -105,6 +105,12 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
     case 'fix': {
       const { runMutatorCli } = await import('../mutators.js');
       await runMutatorCli(rawArgs, true);
+      break;
+    }
+    case 'explode':
+    case 'unpack': {
+      const { runExplodeCli } = await import('../exploder.js');
+      await runExplodeCli(rawArgs.slice(1), true);
       break;
     }
     case 'add': {

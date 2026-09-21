@@ -3,7 +3,7 @@ import { resolveArchetype } from './archetypes/index.js';
 export const buildVueComponent = (name, pascalName, options = {}) => {
   const atomsPackage = options.atomsPackage || null;
   const hasController = options.hasController !== false;
-  const archetype = resolveArchetype(name, options.description || options.desc);
+  const archetype = resolveArchetype(name, options.description || options.desc, options.template || options.archetype);
 
   const controllerImport = hasController
     ? `import { use${pascalName}Controller } from './${name}.controller';\n`

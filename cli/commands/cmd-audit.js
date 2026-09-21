@@ -1,5 +1,5 @@
 /**
- * cmd-audit.js — Audit command orchestrator.
+ * cmd-audit.js: Audit command orchestrator.
  * Single responsibility: run the full AST audit pipeline given CLI args.
  * Extracted from cli/index.js per Directive 1.A (Monolith Decomposition).
  */
@@ -47,6 +47,19 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
   const isPromptOnFail = rawArgs.includes('--prompt-on-fail');
   const isCopyPrompt = rawArgs.includes('--copy-prompt');
 
+  const stageFlag = rawArgs.find((arg) => arg.startsWith('--stage='));
+  let stage = 'strict';
+  if (stageFlag) {
+    stage = stageFlag.split('=')[1];
+  } else if (rawArgs.includes('--relax') || rawArgs.includes('--draft')) {
+    stage = 'draft';
+  } else if (isStrict) {
+    stage = 'strict';
+  } else if (projectConfig.stage) {
+    stage = projectConfig.stage;
+  }
+  const isDraft = stage === 'draft';
+
   const dirFlag = rawArgs.find((arg) => arg.startsWith('--dir='));
   const outputFlag = rawArgs.find((arg) => arg.startsWith('--output=') || arg.startsWith('-o='));
   const outputFile = outputFlag ? outputFlag.split('=')[1] : null;
@@ -88,7 +101,7 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
     fileList = preflight.fileList;
   }
 
-  const auditOptions = { outputFile, model, costPerMillion, fast: isFast, fileList };
+  const auditOptions = { outputFile, model, costPerMillion, fast: isFast, fileList, stage };
   const report = executeAstAudit(targetDir, auditOptions);
   saveAuditSnapshot(report);
   const syncRes = syncSearchIndex(targetDir, process.cwd());
@@ -105,6 +118,8 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
   }
 
   // Stage 1: Atomic failure predicates
+  const isCriticalViolation = (v) => v.severity === 'CRITICAL';
+  const hasCritical = report.violations.some(isCriticalViolation);
   const isSevereViolation = (v) => v.severity === 'CRITICAL' || v.severity === 'HIGH';
   const hasCriticalOrHigh = report.violations.some(isSevereViolation);
   const hasViolations = report.violations.length > 0;
@@ -116,7 +131,8 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
   const isDefaultFail = !hasThreshold && !isStrict && hasCriticalOrHigh;
 
   // Stage 2: Unified failure decision
-  const hasFailingViolations = evaluateAuditFailure([isStrictFail, isDefaultFail, isGradeFail, isScoreFail]);
+  const hasStandardFailure = evaluateAuditFailure([isStrictFail, isDefaultFail, isGradeFail, isScoreFail]);
+  const hasFailingViolations = isDraft ? hasCritical : hasStandardFailure;
 
   if (isJson) {
     process.stdout.write(JSON.stringify(report, null, 2) + '\n');

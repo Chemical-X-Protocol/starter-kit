@@ -226,8 +226,11 @@ export const runAudit = (targetDir = 'src', options = {}) => {
   const patterns = patternRegistry.resolveHarmonizationCandidates(hotspots);
   const roadmap = buildRemediationRoadmap({ hotspots, violations, patterns });
 
+  const stage = options.stage || (options.relax ? 'draft' : 'strict');
+
   const report = {
     targetDir,
+    stage,
     options,
     scannedFiles,
     totalViolations: violations.length,

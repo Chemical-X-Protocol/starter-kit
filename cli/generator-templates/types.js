@@ -1,7 +1,7 @@
 import { resolveArchetype } from './archetypes/index.js';
 
 export const buildPropsType = (name, pascalName, options = {}) => {
-  const archetype = resolveArchetype(name, options.description || options.desc);
+  const archetype = resolveArchetype(name, options.description || options.desc, options.template || options.archetype);
   if (archetype && typeof archetype.buildProps === 'function') {
     const rawProps = archetype.buildProps(name, pascalName);
     if (!rawProps.includes(`${pascalName}Emits`)) {
@@ -28,7 +28,7 @@ export interface ${pascalName}Emits {
 };
 
 export const buildStateType = (name, pascalName, options = {}) => {
-  const archetype = resolveArchetype(name, options.description || options.desc);
+  const archetype = resolveArchetype(name, options.description || options.desc, options.template || options.archetype);
   if (archetype && typeof archetype.buildState === 'function') {
     return archetype.buildState(name, pascalName);
   }

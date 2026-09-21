@@ -184,3 +184,50 @@ export const detectTierBaseDir = (tier, cwd = process.cwd()) => {
 
   return '.';
 };
+
+const TAILWIND_PACKAGES = [
+  'tailwindcss',
+  '@tailwindcss/vite',
+  '@tailwindcss/postcss',
+  '@tailwindcss/cli'
+];
+
+const SCSS_PACKAGES = ['sass', 'sass-embedded'];
+
+const TAILWIND_CONFIG_NAMES = [
+  'tailwind.config.js',
+  'tailwind.config.ts',
+  'tailwind.config.cjs',
+  'tailwind.config.mjs'
+];
+
+export const detectStylingStack = (cwd = process.cwd()) => {
+  const pkgPath = path.resolve(cwd, 'package.json');
+  let hasTailwind = false;
+  let hasScss = false;
+
+  if (fs.existsSync(pkgPath)) {
+    try {
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+      const deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
+
+      hasTailwind = TAILWIND_PACKAGES.some((pkgName) => Boolean(deps[pkgName]));
+      hasScss = SCSS_PACKAGES.some((pkgName) => Boolean(deps[pkgName]));
+    } catch {
+      // ignore parse errors
+    }
+  }
+
+  if (!hasTailwind) {
+    hasTailwind = TAILWIND_CONFIG_NAMES.some((cfg) => fs.existsSync(path.resolve(cwd, cfg)));
+  }
+
+  let styleFlavor = 'css';
+  if (hasTailwind) {
+    styleFlavor = 'tailwind';
+  } else if (hasScss) {
+    styleFlavor = 'scss';
+  }
+
+  return { hasTailwind, hasScss, styleFlavor };
+};

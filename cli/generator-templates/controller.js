@@ -3,7 +3,7 @@ import { convertReactControllerToVue, convertReactControllerToSvelte } from './c
 
 export const buildController = (name, pascalName, options = {}) => {
   const fw = options.framework ? options.framework.toLowerCase() : 'react';
-  const archetype = resolveArchetype(name, options.description || options.desc);
+  const archetype = resolveArchetype(name, options.description || options.desc, options.template || options.archetype);
 
   if (archetype && typeof archetype.buildController === 'function') {
     const rawReactController = archetype.buildController(name, pascalName);

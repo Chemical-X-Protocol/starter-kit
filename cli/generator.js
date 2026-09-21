@@ -5,6 +5,7 @@ import { checkOrPromptEvaluation } from './license.js';
 import {
   toPascalCase,
   toCamelCase,
+  resolveArchetype,
   buildReactComponent,
   buildVueComponent,
   buildSvelteComponent,
@@ -25,9 +26,10 @@ import {
   buildSvelteView,
   buildViewParamsType,
   buildViewIndex,
-  buildViewSpec
+  buildViewSpec,
+  buildCompactCapsule
 } from './generator-templates.js';
-import { detectFramework, resolveFramework, detectTierBaseDir, detectInstalledFamily, detectTestRunner } from './project-detector.js';
+import { detectFramework, resolveFramework, detectTierBaseDir, detectInstalledFamily, detectTestRunner, detectStylingStack } from './project-detector.js';
 
 const TIERS = [
   { prefix: 'm-', tier: 'molecule', label: '1. m- Molecule (Self-contained feature block < 100 lines - Recommended)' },
@@ -82,11 +84,20 @@ export const createCapsuleFiles = ({
   cwd = process.cwd(),
   desc = '',
   description = '',
+  template = null,
+  templateArg = null,
+  css = null,
+  compact = false,
+  flat = false,
   dryRun = false
 }) => {
   const capsuleDesc = desc || description || '';
   const cleanName = (name || 'user-avatar').trim().toLowerCase();
   const selectedTier = resolveSelectedTier(tier, cleanName);
+  const explicitTemplate = template || templateArg || null;
+  const isCompact = Boolean(compact || flat);
+  const styling = detectStylingStack(cwd);
+  const wantsNoScss = css === 'none' || css === 'tailwind' || (styling.hasTailwind && css !== 'scss');
 
   const resolvedFrameworkId = resolveFramework({ frameworkArg: framework, cwd });
   const selectedFramework = FRAMEWORKS.find(
@@ -112,6 +123,56 @@ export const createCapsuleFiles = ({
   const detectedDir = detectTierBaseDir(selectedTier.tier, cwd);
   const parentDir = targetParent || detectedDir;
   const resolvedParent = path.resolve(cwd, parentDir || '.');
+
+  const isHookOrView = selectedTier.tier === 'hook' || selectedTier.tier === 'view';
+  const canUseCompact = isCompact && !isHookOrView;
+  if (canUseCompact) {
+    const compFile = `${capsuleName}.${selectedFramework.ext}`;
+    const targetFilePath = path.resolve(resolvedParent, compFile);
+
+    if (!dryRun && fs.existsSync(targetFilePath)) {
+      throw new Error(`File ${compFile} already exists at ${targetFilePath}.`);
+    }
+
+    const archetype = resolveArchetype(capsuleName, capsuleDesc, explicitTemplate);
+    const installedFamily = detectInstalledFamily(cwd);
+    const compactContent = buildCompactCapsule({
+      capsuleName,
+      pascalName,
+      framework: selectedFramework.id,
+      archetype,
+      atomsPackage: installedFamily.atomsPackage
+    });
+
+    const filesCreated = [compFile];
+    const previews = [{ file: compFile, lines: compactContent.split('\n').length }];
+
+    if (!dryRun) {
+      if (!fs.existsSync(resolvedParent)) {
+        fs.mkdirSync(resolvedParent, { recursive: true });
+      }
+      fs.writeFileSync(targetFilePath, compactContent, 'utf-8');
+    }
+
+    const relTargetDir = path.relative(cwd, targetFilePath);
+
+    return {
+      success: true,
+      compact: true,
+      dryRun: Boolean(dryRun),
+      capsuleName,
+      pascalName,
+      framework: selectedFramework.id,
+      tier: selectedTier.tier,
+      targetDir: targetFilePath,
+      relativeDir: relTargetDir,
+      directory: relTargetDir,
+      files: filesCreated,
+      filesCreated,
+      previews
+    };
+  }
+
   const targetDir = path.resolve(resolvedParent, capsuleName);
   const runner = detectTestRunner(targetDir || cwd);
 
@@ -170,24 +231,26 @@ export const createCapsuleFiles = ({
       atomsPackage: installedFamily.atomsPackage,
       hasController,
       description: capsuleDesc,
-      framework: selectedFramework.id
+      framework: selectedFramework.id,
+      template: explicitTemplate
     };
 
     recordFile(compFile, path.join(targetDir, compFile), selectedFramework.compBuilder(capsuleName, pascalName, templateOpts));
     recordFile('index.ts', path.join(targetDir, 'index.ts'), buildIndex(capsuleName, pascalName, selectedFramework.ext, hasController));
     recordFile(specFile, path.join(targetDir, specFile), buildComponentSpec(capsuleName, pascalName, hasController, runner));
 
-    recordFile('types/props.d.ts', path.join(typesDir, 'props.d.ts'), buildPropsType(capsuleName, pascalName, { description: capsuleDesc, framework: selectedFramework.id }));
-    recordFile('types/state.d.ts', path.join(typesDir, 'state.d.ts'), buildStateType(capsuleName, pascalName, { description: capsuleDesc, framework: selectedFramework.id }));
+    const domainOpts = { description: capsuleDesc, framework: selectedFramework.id, template: explicitTemplate };
+    recordFile('types/props.d.ts', path.join(typesDir, 'props.d.ts'), buildPropsType(capsuleName, pascalName, domainOpts));
+    recordFile('types/state.d.ts', path.join(typesDir, 'state.d.ts'), buildStateType(capsuleName, pascalName, domainOpts));
     recordFile('types/index.ts', path.join(typesDir, 'index.ts'), buildTypesIndex(['props', 'state']));
     recordFile('types.d.ts', path.join(targetDir, 'types.d.ts'), "export * from './types/index';\n");
 
     if (hasController) {
       const controllerFile = `${capsuleName}.controller.ts`;
-      recordFile(controllerFile, path.join(targetDir, controllerFile), buildController(capsuleName, pascalName, { description: capsuleDesc, framework: selectedFramework.id }));
+      recordFile(controllerFile, path.join(targetDir, controllerFile), buildController(capsuleName, pascalName, domainOpts));
     }
 
-    if (!isLean) {
+    if (!isLean && !wantsNoScss) {
       const scssFile = `_${capsuleName}.scss`;
       recordFile(scssFile, path.join(targetDir, scssFile), buildScss(capsuleName));
     }
@@ -294,6 +357,27 @@ export const runGenerateWizard = async (rawArgs = []) => {
     .replace(/^--(desc|description|prompt)=/, '');
   const isDryRun = rawArgs.includes('--dry-run') || rawArgs.includes('-n');
 
+  const isBareOrMinimal = rawArgs.includes('--bare') || rawArgs.includes('--minimal');
+  const templateFlagMatch = (rawArgs.find((a) => a.startsWith('--template=')) || '').split('=')[1];
+  let templateArg = templateFlagMatch || null;
+  if (!templateArg && isBareOrMinimal) {
+    templateArg = 'minimal';
+  } else if (!templateArg && rawArgs.includes('--controls')) {
+    templateArg = 'controls';
+  } else if (!templateArg && rawArgs.includes('--canvas')) {
+    templateArg = 'canvas';
+  }
+
+  const cssFlagMatch = (rawArgs.find((a) => a.startsWith('--css=')) || '').split('=')[1];
+  let cssArg = cssFlagMatch || null;
+  if (!cssArg && rawArgs.includes('--no-scss')) {
+    cssArg = 'none';
+  }
+
+  const hasCompactFlag = rawArgs.includes('--compact');
+  const hasFlatFlag = rawArgs.includes('--flat');
+  const isCompact = hasCompactFlag || hasFlatFlag;
+
   if (!rawName && !isYes) {
     rawName = useGum
       ? gumInput('Capsule feature name (e.g. user-avatar, spark-kpi, auth-status):', 'user-avatar')
@@ -371,6 +455,9 @@ export const runGenerateWizard = async (rawArgs = []) => {
       isLean,
       cwd: process.cwd(),
       desc: descArg,
+      template: templateArg,
+      css: cssArg,
+      compact: isCompact,
       dryRun: isDryRun
     });
   } catch (err) {

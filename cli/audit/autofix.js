@@ -63,7 +63,9 @@ export const autofixContent = (content, options = {}) => {
     }
 
     // 3. AI lazy placeholder comment removal
-    if (!shouldDropLine && shouldFix('AI_SLOP_LAZY_PLACEHOLDER') && TRUNCATION_REGEX.test(line)) {
+    const hasLazyTruncation = TRUNCATION_REGEX.test(line);
+    const isLazyTruncationEligible = !shouldDropLine && shouldFix('AI_SLOP_LAZY_PLACEHOLDER');
+    if (isLazyTruncationEligible && hasLazyTruncation) {
       fixes.push({
         line: lineNumber,
         rule: 'AI_SLOP_LAZY_PLACEHOLDER',
@@ -72,12 +74,25 @@ export const autofixContent = (content, options = {}) => {
       shouldDropLine = true;
     }
 
-    if (!shouldDropLine && shouldFix('TYPOGRAPHY_EM_DASH') && line.includes('\u2014')) {
+    const hasEmDash = line.includes('\u2014');
+    const isEmDashEligible = !shouldDropLine && shouldFix('TYPOGRAPHY_EM_DASH');
+    if (isEmDashEligible && hasEmDash) {
       line = line.replace(/\u2014/g, '-');
       fixes.push({
         line: lineNumber,
         rule: 'TYPOGRAPHY_EM_DASH',
         action: 'Replaced em dash with standard hyphen'
+      });
+    }
+
+    const hasTimeoutMacro = /setTimeout\([^,]+,\s*0\)/.test(line);
+    const isTimeoutEligible = !shouldDropLine && shouldFix('MACRO_TASK_OVER_MICRO_TASK');
+    if (isTimeoutEligible && hasTimeoutMacro) {
+      line = line.replace(/setTimeout\(([^,]+),\s*0\)/g, 'queueMicrotask($1)');
+      fixes.push({
+        line: lineNumber,
+        rule: 'MACRO_TASK_OVER_MICRO_TASK',
+        action: 'Replaced setTimeout(fn, 0) with queueMicrotask(fn)'
       });
     }
 

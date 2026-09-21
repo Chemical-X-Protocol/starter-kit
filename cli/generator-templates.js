@@ -27,3 +27,4 @@ export {
   buildViewIndex,
   buildViewSpec
 } from './generator-templates/views.js';
+export { buildCompactCapsule } from './generator-templates/compact.js';

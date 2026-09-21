@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { toPascalCase } from './generator-templates.js';
 import { ANSI } from './theme.js';
+import { runAutofix } from './audit/autofix.js';
 
 export const resolveCapsuleFiles = (targetPath, cwd = process.cwd()) => {
   const abs = path.resolve(cwd, targetPath);
@@ -194,29 +195,17 @@ export const autoFixFile = (targetFile, options = {}) => {
     throw new Error(`File not found: ${targetFile}`);
   }
 
-  let content = fs.readFileSync(absPath, 'utf-8');
-  let replacementsCount = 0;
-
-  if (content.includes('\u2014')) {
-    const matches = content.match(/\u2014/g);
-    replacementsCount += matches ? matches.length : 1;
-    content = content.replace(/\u2014/g, ' - ');
+  const stat = fs.statSync(absPath);
+  if (stat.isDirectory()) {
+    return runAutofix(absPath, options);
   }
 
-  const timeoutMatch = content.match(/setTimeout\(([^,]+),\s*0\)/g);
-  if (timeoutMatch) {
-    replacementsCount += timeoutMatch.length;
-    content = content.replace(/setTimeout\(([^,]+),\s*0\)/g, 'queueMicrotask($1)');
-  }
-
-  if (replacementsCount > 0) {
-    fs.writeFileSync(absPath, content, 'utf-8');
-  }
-
+  const result = runAutofix(absPath, options);
   return {
     file: path.relative(process.cwd(), absPath),
-    fixed: replacementsCount > 0,
-    replacementsCount
+    fixed: result.filesChanged > 0,
+    replacementsCount: result.totalFixes,
+    fixes: result.fixes
   };
 };
 
@@ -258,10 +247,8 @@ export const runMutatorCli = async (rawArgs = [], isCli = true) => {
       }
       result = addActionToController(target, value, { dryRun: isDryRun });
     } else if (command === 'fix') {
-      if (!target) {
-        throw new Error('Usage: chemx fix <file-path>');
-      }
-      result = autoFixFile(target);
+      const fixTarget = target || 'src';
+      result = autoFixFile(fixTarget, { dryRun: isDryRun });
     } else {
       throw new Error(`Unknown mutator command "${command}". Available: add:prop, add:state, add:action, fix`);
     }

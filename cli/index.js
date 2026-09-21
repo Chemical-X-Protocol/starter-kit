@@ -71,7 +71,7 @@ export const runPillarsWizard = async (...a) => (await import('./pillars-wizard.
 export { handleError, withErrorCatcher, publishIssue };
 
 // ---------------------------------------------------------------------------
-// Allowed commands guard (exits early — before any heavy import)
+// Allowed commands guard (exits early before any heavy import)
 // ---------------------------------------------------------------------------
 
 export const ALLOWED_COMMANDS = new Set([
@@ -80,6 +80,7 @@ export const ALLOWED_COMMANDS = new Set([
   'patch', 'edit',
   'write',
   'generate', 'g', 'gen', 'capsule', 'add',
+  'explode', 'unpack',
   'audit',
   'verify', 'check:all',
   'team', 'swarm', 'feed',
@@ -100,7 +101,7 @@ export const ALLOWED_COMMANDS = new Set([
 ]);
 
 // ---------------------------------------------------------------------------
-// main — thin orchestrator; real dispatch lives in cmd-router.js
+// main: thin orchestrator; real dispatch lives in cmd-router.js
 // ---------------------------------------------------------------------------
 
 const main = async () => {
