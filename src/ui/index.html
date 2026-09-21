@@ -2,91 +2,544 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Chemical X: Live Swarm Social Network</title>
+  <title>Chemical X: Swarm Control</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@300;400;500;600&display=swap" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/vuetify@3.7.0/dist/vuetify.min.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css" />
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background: #050811; color: #f8fafc; font-family: system-ui, sans-serif; height: 100vh; overflow: hidden; }
-    .t-social-layout { display: flex; flex-direction: column; height: 100vh; }
-    .t-header { height: 56px; padding: 0 16px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(98,201,255,0.2); background: rgba(11,19,41,0.85); backdrop-filter: blur(12px); }
-    .t-body { flex: 1; display: grid; grid-template-columns: 280px 1fr 340px; gap: 16px; padding: 16px; overflow: hidden; }
-    .t-panel { background: rgba(11,19,41,0.75); border: 1px solid rgba(98,201,255,0.18); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; }
-    .a-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 9999px; font-size: 12px; border: 1px solid rgba(255,255,255,0.1); background: rgba(15,23,42,0.6); color: #e2e8f0; cursor: pointer; }
-    .a-badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 600; }
-    .badge-primary { background: rgba(98,201,255,0.15); color: #62c9ff; }
-    .badge-lime { background: rgba(16,185,129,0.15); color: #34d399; }
-    .m-card { background: rgba(15,23,42,0.65); border: 1px solid rgba(98,201,255,0.2); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 6px; }
-    .a-btn { background: rgba(98,201,255,0.2); border: 1px solid #62c9ff; color: #62c9ff; border-radius: 6px; padding: 4px 10px; font-size: 12px; cursor: pointer; }
-    .o-drawer { position: fixed; top: 56px; left: 0; bottom: 0; width: 240px; background: rgba(11,19,41,0.95); border-right: 1px solid rgba(98,201,255,0.2); z-index: 100; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
-    .modal-box { position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 200; display: flex; align-items: center; justify-content: center; }
+    :root {
+      --xo-bg: #020617;
+      --xo-surface: #0b1329;
+      --xo-glass-bg: rgba(255,255,255,0.04);
+      --xo-glass-border: rgba(255,255,255,0.08);
+      --xo-cyan:   #38bdf8;
+      --xo-pink:   #f472b6;
+      --xo-lime:   #a3e635;
+      --xo-purple: #8b5cf6;
+      --xo-amber:  #fbbf24;
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body, #app { height: 100%; background: var(--xo-bg) !important; font-family: 'Inter', system-ui, sans-serif !important; -webkit-font-smoothing: antialiased; }
+
+    .xo-orb { position: fixed; border-radius: 9999px; pointer-events: none; z-index: 0; }
+    .xo-orb--pink  { width: 560px; height: 560px; background: radial-gradient(circle, rgba(244,114,182,.14) 0%, rgba(244,114,182,.06) 40%, transparent 70%); top: -14%; left: -10%; animation: xo-drift 26s ease-in-out infinite; }
+    .xo-orb--blue  { width: 480px; height: 480px; background: radial-gradient(circle, rgba(56,189,248,.13) 0%, rgba(56,189,248,.05) 40%, transparent 70%); bottom: 2%; right: -8%; animation: xo-drift 32s ease-in-out infinite -10s; }
+    .xo-orb--lime  { width: 360px; height: 360px; background: radial-gradient(circle, rgba(163,230,53,.09) 0%, rgba(163,230,53,.04) 40%, transparent 70%); top: 50%; left: 50%; animation: xo-drift 38s ease-in-out infinite -18s; }
+    @keyframes xo-drift { 0%,100% { transform: translate(0,0) scale(1); } 25% { transform: translate(24px,-14px) scale(1.04); } 50% { transform: translate(-14px,20px) scale(.96); } 75% { transform: translate(12px,12px) scale(1.02); } }
+
+    .xo-glass { background: var(--xo-glass-bg) !important; backdrop-filter: blur(20px) !important; -webkit-backdrop-filter: blur(20px) !important; border: 1px solid var(--xo-glass-border) !important; }
+
+    .v-app-bar { background: rgba(2,6,23,.82) !important; backdrop-filter: blur(20px) !important; border-bottom: 1px solid rgba(255,255,255,.07) !important; }
+    .v-navigation-drawer { background: rgba(5,10,30,.94) !important; backdrop-filter: blur(20px) !important; border-right: 1px solid rgba(255,255,255,.06) !important; }
+    .v-main { background: transparent !important; }
+    .v-list-item--active, .v-list-item--active .v-list-item-title { color: var(--xo-cyan) !important; }
+    .v-list-item--active::before { background: rgba(56,189,248,.08) !important; }
+
+    .xo-display { font-family: 'Space Grotesk', sans-serif !important; font-weight: 600; }
+    .xo-mono    { font-family: ui-monospace, SFMono-Regular, Menlo, monospace !important; font-size: 12px; }
+
+    .xo-kpi { background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08); border-radius: 12px; padding: 14px 18px; display: flex; flex-direction: column; gap: 4px; }
+    .xo-kpi__value { font-family: 'Space Grotesk', sans-serif; font-size: 22px; font-weight: 700; line-height: 1.1; }
+    .xo-kpi__label { font-size: 11px; color: rgba(255,255,255,.45); text-transform: uppercase; letter-spacing: .05em; }
+
+    .xo-file-card { background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08); border-radius: 10px; padding: 12px 14px; cursor: pointer; transition: border-color .2s, transform .2s; }
+    .xo-file-card:hover { border-color: rgba(56,189,248,.35); transform: translateY(-1px); }
+    .xo-file-card__path { font-size: 12px; color: var(--xo-cyan); word-break: break-all; }
+    .xo-file-card__meta { font-size: 11px; color: rgba(255,255,255,.4); margin-top: 4px; }
+
+    .xo-agent-card { background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.07); border-radius: 10px; padding: 10px 12px; cursor: pointer; transition: border-color .2s; }
+    .xo-agent-card--active { border-color: rgba(56,189,248,.4) !important; }
+    .xo-agent-card__name  { font-size: 13px; font-weight: 500; }
+    .xo-agent-card__role  { font-size: 11px; color: rgba(255,255,255,.45); }
+
+    .xo-task-card { background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.07); border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; }
+
+    .xo-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+    .xo-dot--active  { background: var(--xo-lime); box-shadow: 0 0 6px var(--xo-lime); }
+    .xo-dot--idle    { background: var(--xo-cyan); }
+    .xo-dot--offline { background: rgba(255,255,255,.25); }
+
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(56,189,248,.2); border-radius: 999px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(56,189,248,.4); }
+
+    .xo-post { background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.07); border-radius: 10px; padding: 12px 14px; }
+    .xo-post__author { font-size: 12px; font-weight: 600; color: var(--xo-cyan); }
+    .xo-post__msg    { font-size: 13px; margin-top: 4px; line-height: 1.5; }
+    .xo-post__time   { font-size: 11px; color: rgba(255,255,255,.35); margin-top: 6px; }
+
+    .xo-savings-badge { display: inline-flex; align-items: center; gap: 8px; padding: 5px 14px; border-radius: 9999px; background: rgba(163,230,53,.10); border: 1px solid rgba(163,230,53,.22); cursor: pointer; transition: background .2s; font-size: 13px; color: var(--xo-lime); font-weight: 500; }
+    .xo-savings-badge:hover { background: rgba(163,230,53,.18); }
+
+    .tier-atom     { background: rgba(56,189,248,.15)!important;  color: #38bdf8!important; }
+    .tier-molecule { background: rgba(163,230,53,.15)!important;  color: #a3e635!important; }
+    .tier-organism { background: rgba(244,114,182,.15)!important; color: #f472b6!important; }
+    .tier-template { background: rgba(139,92,246,.15)!important;  color: #8b5cf6!important; }
+    .tier-view     { background: rgba(251,191,36,.15)!important;  color: #fbbf24!important; }
+    .tier-utility  { background: rgba(255,255,255,.12)!important; color: rgba(255,255,255,.7)!important; }
+    .tier-hook     { background: rgba(56,189,248,.12)!important;  color: #7dd3fc!important; }
+    .xo-hazard     { background: rgba(244,63,94,.15)!important;   color: #fb7185!important; }
   </style>
   <script src="https://unpkg.com/vue@3.5.42/dist/vue.global.prod.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/vuetify@3.7.0/dist/vuetify.min.js"></script>
 </head>
 <body>
-  <div id="app" class="t-social-layout">
-    <header class="t-header">
-      <div style="display:flex; gap:10px; align-items:center;">
-        <button class="a-btn" @click="drawer = !drawer">☰</button>
-        <span class="a-chip">⚡ Chemical X Swarm</span>
-        <span class="a-badge badge-primary">{{ tab.toUpperCase() }}</span>
-      </div>
-      <div style="display:flex; gap:10px; align-items:center;">
-        <span class="a-chip" style="color:#34d399;" @click="openModal">⚡ Saved {{ (savings.tokensSaved || 165000).toLocaleString() }} Tokens / ${{ Number(savings.dollarsSaved || 1.65).toFixed(2) }}</span>
-        <span class="a-badge badge-lime">Live Swarm</span>
-      </div>
-    </header>
-    <aside v-if="drawer" class="o-drawer">
-      <div v-for="t in ['social','tasks','locks','codebase','settings']" :key="t" class="a-chip" @click="tab = t; drawer = false">{{ t.toUpperCase() }}</div>
-    </aside>
-    <main v-if="tab === 'social'" class="t-body">
-      <aside class="t-panel"><div style="display:flex; justify-content:space-between;"><span class="a-chip">Agents</span><span class="a-badge badge-lime">{{ agents.length }}</span></div><div v-for="a in agents" :key="a.id" class="m-card"><strong>{{ a.name }}</strong><span style="font-size:11px; color:#94a3b8;">{{ a.role }}</span></div></aside>
-      <section class="t-panel"><div style="display:flex; justify-content:space-between;"><span class="a-chip">Live Timeline</span><span class="a-badge badge-primary">{{ posts.length }}</span></div><div v-for="p in posts" :key="p.id" class="m-card"><span>{{ p.author }}: {{ p.message }}</span></div></section>
-      <aside class="t-panel"><div class="m-card"><strong>Telemetry</strong><div>Total: {{ Number(telemetry.totalTokens || 0).toLocaleString() }}</div><div style="color:#34d399;">Cost: ${{ Number(telemetry.totalCost || 0).toFixed(4) }}</div></div><div v-for="l in leases" :key="l.filePath" class="m-card">🔒 {{ l.filePath }}</div></aside>
-    </main>
-    <main v-else-if="tab === 'tasks'" style="padding:16px; display:grid; grid-template-columns:repeat(3,1fr); gap:12px; flex:1;">
-      <div class="t-panel"><strong>Queued</strong><div v-for="t in tasks.filter(x => x.status==='queued')" :key="t.id" class="m-card"><strong>{{ t.title }}</strong></div></div>
-      <div class="t-panel"><strong>In Progress</strong><div v-for="t in tasks.filter(x => x.status==='in_progress')" :key="t.id" class="m-card"><strong>{{ t.title }}</strong></div></div>
-      <div class="t-panel"><strong>Completed</strong><div v-for="t in tasks.filter(x => x.status==='completed'||x.status==='done')" :key="t.id" class="m-card"><strong>{{ t.title }}</strong></div></div>
-    </main>
-    <main v-else-if="tab === 'locks'" style="padding:16px; flex:1;" class="t-panel"><strong>File Lock Leases</strong><div v-for="l in leases" :key="l.filePath" class="m-card">🔒 {{ l.filePath }} ({{ l.lockedBy }})</div></main>
-    <main v-else-if="tab === 'codebase'" style="padding:16px; flex:1;" class="t-panel"><strong>AST Codebase</strong><div v-for="f in codebase" :key="f.path" class="m-card"><strong>{{ f.path }}</strong> - {{ f.lines }} lines</div></main>
-    <main v-else-if="tab === 'settings'" style="padding:16px; flex:1;" class="t-panel"><strong>Swarm Settings</strong><button class="a-btn" @click="postAction('vacuum')">Vacuum DB</button><button class="a-btn" @click="postAction('heartbeat')">Heartbeat</button></main>
-    <div v-if="modal" class="modal-box" @click.self="modal = false"><div class="m-card" style="width:520px; background:#0b1329; padding:16px;"><div style="display:flex; justify-content:space-between;"><strong>⚡ Token Savings Certificate</strong><button class="a-btn" @click="modal = false">✕</button></div><canvas id="cert" width="480" height="220" style="margin:10px 0; border:1px solid #62c9ff; border-radius:6px;"></canvas><button class="a-btn" @click="download">Download PNG</button></div></div>
-  </div>
-  <script>
-    const { createApp, ref, onMounted, onUnmounted, nextTick } = Vue;
-    createApp({
-      setup() {
-        const tab = ref('social'), drawer = ref(false), modal = ref(false);
-        const agents = ref([]), posts = ref([]), leases = ref([]), tasks = ref([]), codebase = ref([]);
-        const telemetry = ref({ totalTokens: 0, totalCost: 0 }), savings = ref({ tokensSaved: 165000, dollarsSaved: 1.65 });
-        let timer = null;
-        const fetchStatus = async () => {
-          try {
-            const res = await fetch('/api/swarm/status');
-            if (res.ok) {
-              const d = await res.json();
-              if (d.agents) agents.value = d.agents; if (d.posts) posts.value = d.posts;
-              if (d.leases) leases.value = d.leases; if (d.tasks) tasks.value = d.tasks;
-              if (d.telemetry) telemetry.value = d.telemetry; if (d.savings) savings.value = d.savings;
-            }
-          } catch(e) {}
-          timer = setTimeout(fetchStatus, 2000);
-        };
-        const postAction = async (action) => { await fetch('/api/swarm/settings/action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action }) }); };
-        const openModal = async () => {
-          modal.value = true; await nextTick();
-          const c = document.getElementById('cert'); if (!c) return; const ctx = c.getContext('2d');
-          ctx.fillStyle = '#050811'; ctx.fillRect(0,0,c.width,c.height); ctx.fillStyle = '#62c9ff'; ctx.font = 'bold 18px sans-serif'; ctx.fillText('⚡ CHEMICAL X TOKEN CERTIFICATE', 20, 40);
-          ctx.fillStyle = '#34d399'; ctx.font = 'bold 24px sans-serif'; ctx.fillText((savings.value.tokensSaved || 165000).toLocaleString() + ' TOKENS SAVED', 20, 90);
-          ctx.fillStyle = '#fbbf24'; ctx.font = 'bold 18px sans-serif'; ctx.fillText('$' + Number(savings.value.dollarsSaved || 1.65).toFixed(2) + ' USD Avoided', 20, 130);
-        };
-        const download = () => { const c = document.getElementById('cert'); if (!c) return; const a = document.createElement('a'); a.download = 'token-savings.png'; a.href = c.toDataURL('image/png'); a.click(); };
-        onMounted(async () => { fetchStatus(); try { const r = await fetch('/api/swarm/codebase'); if (r.ok) { const d = await r.json(); codebase.value = d.files || []; } } catch(e){} });
-        onUnmounted(() => clearTimeout(timer));
-        return { tab, drawer, modal, agents, posts, leases, tasks, codebase, telemetry, savings, postAction, openModal, download };
+<div id="app"></div>
+<script>
+const { createApp, ref, computed, onMounted, onUnmounted, nextTick } = Vue;
+const { createVuetify } = Vuetify;
+
+const vuetify = createVuetify({
+  theme: {
+    defaultTheme: 'chemx',
+    themes: {
+      chemx: {
+        dark: true,
+        colors: {
+          background: '#020617', surface: '#0b1329',
+          primary: '#38bdf8', secondary: '#8b5cf6',
+          success: '#a3e635', warning: '#fbbf24',
+          error: '#f472b6', info: '#38bdf8',
+          'on-surface': '#f1f5f9'
+        }
       }
-    }).mount('#app');
-  </script>
+    }
+  }
+});
+
+const NAV_ITEMS = [
+  { id: 'social',   icon: 'mdi-antenna',        label: 'Live Feed'  },
+  { id: 'tasks',    icon: 'mdi-clipboard-list',  label: 'Tasks'      },
+  { id: 'locks',    icon: 'mdi-lock-outline',    label: 'File Locks' },
+  { id: 'codebase', icon: 'mdi-code-braces',     label: 'Codebase'   },
+  { id: 'database', icon: 'mdi-database-outline', label: 'Database'  },
+  { id: 'settings', icon: 'mdi-tune-variant',    label: 'Settings'   },
+];
+
+const TIER_FILTERS = ['all','atom','molecule','organism','template','view','utility','hook'];
+
+const TASK_COLUMNS = [
+  { status: 'queued',      label: 'Queued',      color: 'primary', icon: 'mdi-clock-outline'        },
+  { status: 'in_progress', label: 'In Progress', color: 'warning', icon: 'mdi-progress-clock'       },
+  { status: 'done',        label: 'Done',        color: 'success', icon: 'mdi-check-circle-outline'  },
+];
+
+const App = {
+  template: `
+<v-app theme="chemx">
+  <div class="xo-orb xo-orb--pink" />
+  <div class="xo-orb xo-orb--blue" />
+  <div class="xo-orb xo-orb--lime" />
+
+  <v-app-bar flat height="56" style="z-index:200;">
+    <v-app-bar-nav-icon @click="drawer = !drawer" color="rgba(255,255,255,.7)" />
+    <div class="d-flex align-center gap-2 ml-1">
+      <span class="xo-display" style="font-size:15px;color:#f1f5f9;">⚡ Chemical X</span>
+      <v-chip size="x-small" color="primary" variant="tonal" class="ml-1">SWARM</v-chip>
+    </div>
+    <v-spacer />
+    <div class="d-flex align-center gap-3 mr-3">
+      <div class="xo-savings-badge" @click="openModal">
+        ⚡ Saved {{ (savings.tokensSaved||165000).toLocaleString() }} tokens / \${{ Number(savings.dollarsSaved||1.65).toFixed(2) }}
+      </div>
+      <v-chip size="small" color="success" variant="tonal" prepend-icon="mdi-circle" style="font-size:11px;">M3 Live</v-chip>
+    </div>
+  </v-app-bar>
+
+  <v-navigation-drawer v-model="drawer" width="220">
+    <div class="pa-4 pb-2">
+      <div class="xo-display" style="font-size:12px;color:rgba(255,255,255,.35);text-transform:uppercase;letter-spacing:.1em;">Navigation</div>
+    </div>
+    <v-list density="compact" nav>
+      <v-list-item
+        v-for="item in navItems" :key="item.id"
+        :prepend-icon="item.icon" :title="item.label" :value="item.id"
+        :active="tab === item.id" rounded="lg" color="primary"
+        @click="tab = item.id; drawer = false"
+      >
+        <template v-if="navBadge(item.id)" #append>
+          <v-chip size="x-small" color="primary" variant="tonal">{{ navBadge(item.id) }}</v-chip>
+        </template>
+      </v-list-item>
+    </v-list>
+  </v-navigation-drawer>
+
+  <v-main style="height:100vh;overflow:hidden;">
+    <div style="height:100%;overflow:hidden;display:flex;flex-direction:column;padding:16px;gap:16px;box-sizing:border-box;">
+
+      <!-- SOCIAL -->
+      <template v-if="tab==='social'">
+        <div style="display:grid;grid-template-columns:260px 1fr 300px;gap:14px;flex:1;overflow:hidden;min-height:0;">
+
+          <div class="xo-glass d-flex flex-column gap-2 pa-3" style="border-radius:14px;overflow-y:auto;">
+            <div class="d-flex justify-space-between align-center mb-1">
+              <span class="xo-display" style="font-size:13px;">Swarm Agents</span>
+              <v-chip size="x-small" color="success" variant="tonal">{{ agents.length }}</v-chip>
+            </div>
+            <div class="d-flex gap-1 flex-wrap mb-1">
+              <v-chip v-for="f in agentFilters" :key="f" size="x-small" style="cursor:pointer;"
+                :color="agentFilter===f ? 'primary' : 'default'" :variant="agentFilter===f ? 'tonal' : 'outlined'"
+                class="text-capitalize" @click="agentFilter = f">{{ f }}</v-chip>
+            </div>
+            <div v-for="a in filteredAgents" :key="a.id" class="xo-agent-card" :class="{'xo-agent-card--active': selectedAgentId===a.id}" @click="selectedAgentId=a.id">
+              <div class="d-flex align-center gap-2">
+                <span class="xo-dot" :class="statusDotClass(a.status)" />
+                <span class="xo-agent-card__name">{{ a.name||a.id }}</span>
+              </div>
+              <div class="xo-agent-card__role mt-1">{{ a.role||a.status||'agent' }}</div>
+            </div>
+            <div v-if="!filteredAgents.length" class="text-center" style="color:rgba(255,255,255,.3);font-size:12px;padding:16px 0;">No agents</div>
+          </div>
+
+          <div class="xo-glass d-flex flex-column pa-3" style="border-radius:14px;overflow:hidden;">
+            <div class="d-flex justify-space-between align-center mb-3">
+              <span class="xo-display" style="font-size:13px;">Live Timeline</span>
+              <v-chip size="x-small" color="primary" variant="tonal">{{ posts.length }}</v-chip>
+            </div>
+            <div style="flex:1;overflow-y:auto;" class="d-flex flex-column gap-2">
+              <div v-for="p in postsDesc" :key="p.id" class="xo-post">
+                <div class="xo-post__author">{{ p.author }}</div>
+                <div class="xo-post__msg">{{ p.message }}</div>
+                <div class="xo-post__time">{{ formatTime(p.createdAt) }}</div>
+              </div>
+              <div v-if="!posts.length" class="text-center" style="color:rgba(255,255,255,.3);font-size:12px;padding:32px 0;">
+                <v-icon size="32" color="rgba(255,255,255,.15)">mdi-antenna</v-icon>
+                <div class="mt-2">Waiting for swarm activity...</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="xo-glass d-flex flex-column gap-3 pa-3" style="border-radius:14px;overflow-y:auto;">
+            <div class="xo-display" style="font-size:13px;">Telemetry</div>
+            <div class="xo-kpi">
+              <div class="xo-kpi__label">Total Tokens</div>
+              <div class="xo-kpi__value" style="color:var(--xo-cyan);">{{ (telemetry.totalTokens||0).toLocaleString() }}</div>
+            </div>
+            <div class="xo-kpi">
+              <div class="xo-kpi__label">Total Cost</div>
+              <div class="xo-kpi__value" style="color:var(--xo-lime);">\${{ Number(telemetry.totalCost||0).toFixed(4) }}</div>
+            </div>
+            <v-divider style="border-color:rgba(255,255,255,.07);" />
+            <div class="d-flex justify-space-between align-center">
+              <span class="xo-display" style="font-size:13px;">Active Locks</span>
+              <v-chip size="x-small" :color="leases.length?'warning':'default'" variant="tonal">{{ leases.length }}</v-chip>
+            </div>
+            <div v-for="l in leases.slice(0,5)" :key="l.filePath" class="d-flex align-center gap-2" style="font-size:11px;color:rgba(255,255,255,.5);">
+              <v-icon size="13" color="warning">mdi-lock</v-icon>
+              <span class="xo-mono" style="word-break:break-all;">{{ l.filePath }}</span>
+            </div>
+            <div v-if="leases.length>5" style="font-size:11px;color:rgba(255,255,255,.3);">+ {{ leases.length-5 }} more</div>
+          </div>
+        </div>
+      </template>
+
+      <!-- TASKS -->
+      <template v-else-if="tab==='tasks'">
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;flex:1;overflow:hidden;min-height:0;">
+          <div v-for="col in taskColumns" :key="col.status" class="xo-glass d-flex flex-column pa-3" style="border-radius:14px;overflow:hidden;">
+            <div class="d-flex align-center gap-2 mb-3">
+              <v-icon size="16" :color="col.color">{{ col.icon }}</v-icon>
+              <span class="xo-display" style="font-size:13px;">{{ col.label }}</span>
+              <v-chip size="x-small" :color="col.color" variant="tonal" class="ml-auto">{{ tasksByStatus(col.status).length }}</v-chip>
+            </div>
+            <div style="flex:1;overflow-y:auto;" class="d-flex flex-column">
+              <div v-for="t in tasksByStatus(col.status)" :key="t.id" class="xo-task-card">
+                <div style="font-size:13px;font-weight:500;">{{ t.title }}</div>
+                <div v-if="t.assignedTo" style="font-size:11px;color:rgba(255,255,255,.4);margin-top:4px;">
+                  <v-icon size="12">mdi-robot-outline</v-icon> {{ t.assignedTo }}
+                </div>
+              </div>
+              <div v-if="!tasksByStatus(col.status).length" class="text-center" style="color:rgba(255,255,255,.25);font-size:12px;padding:24px 0;">Empty</div>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <!-- LOCKS -->
+      <template v-else-if="tab==='locks'">
+        <div class="xo-glass pa-4" style="border-radius:14px;flex:1;overflow-y:auto;min-height:0;">
+          <div class="d-flex align-center gap-2 mb-4">
+            <v-icon color="warning">mdi-lock-outline</v-icon>
+            <span class="xo-display" style="font-size:15px;">File Lock Leases</span>
+            <v-chip size="small" color="warning" variant="tonal" class="ml-auto">{{ leases.length }} active</v-chip>
+          </div>
+          <div v-if="leases.length" class="d-flex flex-column gap-2">
+            <div v-for="l in leases" :key="l.filePath" class="d-flex align-center gap-3 pa-3" style="background:rgba(255,255,255,.04);border-radius:10px;border:1px solid rgba(255,255,255,.07);">
+              <v-icon color="warning" size="18">mdi-lock</v-icon>
+              <div style="flex:1;">
+                <div class="xo-mono" style="color:var(--xo-cyan);font-size:12px;">{{ l.filePath }}</div>
+                <div v-if="l.lockedBy" style="font-size:11px;color:rgba(255,255,255,.4);margin-top:2px;">held by {{ l.lockedBy }}</div>
+              </div>
+              <v-chip size="x-small" color="warning" variant="tonal">Locked</v-chip>
+            </div>
+          </div>
+          <div v-else class="text-center" style="padding:48px 0;">
+            <v-icon size="48" color="rgba(255,255,255,.15)">mdi-lock-open-outline</v-icon>
+            <div class="mt-3" style="color:rgba(255,255,255,.3);font-size:13px;">No active locks</div>
+          </div>
+        </div>
+      </template>
+
+      <!-- CODEBASE -->
+      <template v-else-if="tab==='codebase'">
+        <div class="xo-glass d-flex flex-column pa-3" style="border-radius:14px;flex:1;overflow:hidden;min-height:0;">
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px;flex-shrink:0;">
+            <div class="xo-kpi">
+              <div class="xo-kpi__label">AST Files</div>
+              <div class="xo-kpi__value" style="color:var(--xo-cyan);">{{ codebase.length }}</div>
+            </div>
+            <div class="xo-kpi">
+              <div class="xo-kpi__label">Under 100L</div>
+              <div class="xo-kpi__value" style="color:var(--xo-lime);">{{ compliantCount }}</div>
+            </div>
+            <div class="xo-kpi">
+              <div class="xo-kpi__label">Compliance</div>
+              <div class="xo-kpi__value" style="color:var(--xo-purple);">{{ compliancePct }}%</div>
+            </div>
+          </div>
+          <div class="d-flex align-center gap-2 flex-wrap mb-3" style="flex-shrink:0;">
+            <v-chip v-for="tier in tierFilters" :key="tier" size="small" style="cursor:pointer;"
+              :class="selectedTier===tier ? 'tier-'+tier : ''"
+              :variant="selectedTier===tier ? 'tonal' : 'outlined'"
+              class="text-capitalize" style="border-color:rgba(255,255,255,.12);color:rgba(255,255,255,.5);"
+              @click="selectedTier=tier">{{ tier==='all' ? 'All' : tier }}</v-chip>
+            <v-spacer />
+            <v-text-field v-model="codebaseSearch" placeholder="Filter files..." density="compact" variant="outlined"
+              hide-details prepend-inner-icon="mdi-magnify" style="max-width:220px;font-size:12px;" bg-color="rgba(255,255,255,.04)" />
+          </div>
+          <div style="flex:1;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px;align-content:start;">
+            <div v-for="f in filteredCodebase" :key="f.path" class="xo-file-card">
+              <div class="d-flex align-center gap-2 mb-1">
+                <v-chip v-if="f.tier" size="x-small" :class="'tier-'+f.tier">{{ f.tier }}</v-chip>
+                <v-chip v-if="f.lines>100" size="x-small" class="xo-hazard">{{ f.lines }}L ⚠</v-chip>
+                <v-chip v-else-if="f.lines" size="x-small" variant="outlined" style="border-color:rgba(255,255,255,.12);color:rgba(255,255,255,.4);">{{ f.lines }}L</v-chip>
+                <v-chip v-if="f.coverage!=null" size="x-small" color="success" variant="tonal">{{ f.coverage }}%</v-chip>
+              </div>
+              <div class="xo-file-card__path">{{ f.path }}</div>
+              <div v-if="f.exports&&f.exports.length" class="xo-file-card__meta xo-mono">{{ f.exports.slice(0,3).join(', ') }}</div>
+            </div>
+            <div v-if="!filteredCodebase.length" style="grid-column:1/-1;text-align:center;padding:48px;color:rgba(255,255,255,.25);">
+              <v-icon size="40" color="rgba(255,255,255,.15)">mdi-code-braces</v-icon>
+              <div class="mt-2" style="font-size:13px;">No files match filter</div>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <!-- DATABASE -->
+      <template v-else-if="tab==='database'">
+        <div class="xo-glass pa-4" style="border-radius:14px;flex:1;min-height:0;">
+          <div class="d-flex align-center gap-2 mb-3">
+            <v-icon color="primary">mdi-database-outline</v-icon>
+            <span class="xo-display" style="font-size:15px;">Database Studio</span>
+          </div>
+          <div style="color:rgba(255,255,255,.35);font-size:13px;">SQLite .chemx/index.db — agent tasks, feed, file locks.</div>
+        </div>
+      </template>
+
+      <!-- SETTINGS -->
+      <template v-else-if="tab==='settings'">
+        <div class="xo-glass pa-4" style="border-radius:14px;max-width:520px;min-height:0;">
+          <div class="d-flex align-center gap-2 mb-4">
+            <v-icon color="primary">mdi-tune-variant</v-icon>
+            <span class="xo-display" style="font-size:15px;">Swarm Settings</span>
+          </div>
+          <div class="d-flex flex-column gap-3">
+            <div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:16px;">
+              <div style="font-size:13px;font-weight:500;margin-bottom:10px;">Database Maintenance</div>
+              <div class="d-flex gap-2">
+                <v-btn size="small" variant="tonal" color="primary" prepend-icon="mdi-broom" @click="postAction('vacuum')">Vacuum DB</v-btn>
+                <v-btn size="small" variant="tonal" color="success" prepend-icon="mdi-heart-pulse" @click="postAction('heartbeat')">Heartbeat</v-btn>
+              </div>
+            </div>
+            <div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:16px;">
+              <div style="font-size:13px;font-weight:500;margin-bottom:4px;">Poll Interval</div>
+              <div style="font-size:12px;color:rgba(255,255,255,.4);">Live updates every 2s via /api/swarm/status</div>
+            </div>
+          </div>
+        </div>
+      </template>
+
+    </div>
+  </v-main>
+
+  <!-- Savings Dialog -->
+  <v-dialog v-model="modal" max-width="540">
+    <v-card style="background:#0b1329;border:1px solid rgba(56,189,248,.2);border-radius:16px;">
+      <v-card-title class="d-flex align-center justify-space-between pa-4 pb-2">
+        <span class="xo-display">⚡ Token Savings Certificate</span>
+        <v-btn icon size="small" variant="text" @click="modal=false"><v-icon>mdi-close</v-icon></v-btn>
+      </v-card-title>
+      <v-card-text class="pa-4 pt-2">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+          <div class="xo-kpi"><div class="xo-kpi__label">Tokens Saved</div><div class="xo-kpi__value" style="color:var(--xo-cyan);">{{ (savings.tokensSaved||165000).toLocaleString() }}</div></div>
+          <div class="xo-kpi"><div class="xo-kpi__label">Cost Avoided</div><div class="xo-kpi__value" style="color:var(--xo-lime);">\${{ Number(savings.dollarsSaved||1.65).toFixed(2) }}</div></div>
+          <div class="xo-kpi"><div class="xo-kpi__label">Reduction</div><div class="xo-kpi__value" style="color:var(--xo-purple);">{{ savings.reductionPct||88 }}%</div></div>
+          <div class="xo-kpi"><div class="xo-kpi__label">Actual Cost</div><div class="xo-kpi__value" style="color:var(--xo-amber);">\${{ Number(savings.actualCost||0).toFixed(4) }}</div></div>
+        </div>
+        <canvas id="cert" width="492" height="160" style="width:100%;border-radius:10px;border:1px solid rgba(56,189,248,.2);" />
+      </v-card-text>
+      <v-card-actions class="pa-4 pt-0">
+        <v-btn variant="tonal" color="primary" prepend-icon="mdi-download" @click="download">Download PNG</v-btn>
+        <v-spacer />
+        <v-btn variant="text" @click="modal=false">Close</v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+</v-app>
+  `,
+
+  setup() {
+    const tab    = ref('social');
+    const drawer = ref(false);
+    const modal  = ref(false);
+
+    const agents    = ref([]);
+    const posts     = ref([]);
+    const leases    = ref([]);
+    const tasks     = ref([]);
+    const codebase  = ref([]);
+    const telemetry = ref({ totalTokens: 0, totalCost: 0 });
+    const savings   = ref({ tokensSaved: 165000, dollarsSaved: 1.65, reductionPct: 88, actualCost: 0 });
+
+    const agentFilter     = ref('all');
+    const selectedAgentId = ref(null);
+    const agentFilters    = ['all', 'active', 'idle', 'offline'];
+
+    const selectedTier   = ref('all');
+    const codebaseSearch = ref('');
+
+    let timer = null;
+
+    const postsDesc = computed(() => [...posts.value].reverse());
+
+    const filteredAgents = computed(() => {
+      if (agentFilter.value === 'all') return agents.value;
+      return agents.value.filter(a => a.status === agentFilter.value);
+    });
+
+    const tasksByStatus = (status) => {
+      const statuses = status === 'done' ? ['done', 'completed'] : [status];
+      return tasks.value.filter(t => statuses.includes(t.status));
+    };
+
+    const compliantCount  = computed(() => codebase.value.filter(f => !f.lines || f.lines <= 100).length);
+    const compliancePct   = computed(() => !codebase.value.length ? 0 : Math.round(compliantCount.value / codebase.value.length * 100));
+
+    const filteredCodebase = computed(() => {
+      const tierMatch = f => selectedTier.value === 'all' || f.tier === selectedTier.value;
+      const textMatch = f => !codebaseSearch.value || f.path.toLowerCase().includes(codebaseSearch.value.toLowerCase());
+      return codebase.value.filter(f => tierMatch(f) && textMatch(f));
+    });
+
+    const navBadge = (id) => {
+      if (id === 'tasks')    return tasks.value.filter(t => t.status === 'in_progress').length || null;
+      if (id === 'locks')    return leases.value.length || null;
+      if (id === 'codebase') return codebase.value.length || null;
+      return null;
+    };
+
+    const statusDotClass = (status) => {
+      if (status === 'active' || status === 'running') return 'xo-dot--active';
+      if (status === 'idle') return 'xo-dot--idle';
+      return 'xo-dot--offline';
+    };
+
+    const formatTime = (ts) => {
+      if (!ts) return '';
+      try { return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
+      catch { return ''; }
+    };
+
+    const applyData = (d = {}) => {
+      if (d.agents)    agents.value    = d.agents;
+      if (d.posts)     posts.value     = d.posts;
+      if (d.leases)    leases.value    = d.leases;
+      if (d.tasks)     tasks.value     = d.tasks;
+      if (d.telemetry) telemetry.value = d.telemetry;
+      if (d.savings)   savings.value   = d.savings;
+    };
+
+    const fetchStatus = async () => {
+      try {
+        if (typeof window !== 'undefined' && window.__CHEMX_HYDRATED_STATE__) applyData(window.__CHEMX_HYDRATED_STATE__);
+        const res = await fetch('/api/swarm/status');
+        if (res.ok) applyData(await res.json());
+      } catch {}
+      timer = setTimeout(fetchStatus, 2000);
+    };
+
+    const postAction = async (action) => {
+      try {
+        await fetch('/api/swarm/settings/action', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action })
+        });
+      } catch {}
+    };
+
+    const drawCert = () => {
+      const c = document.getElementById('cert');
+      if (!c) return;
+      const ctx = c.getContext('2d');
+      const w = c.width, h = c.height;
+      ctx.fillStyle = '#020617';
+      ctx.fillRect(0, 0, w, h);
+      const grad = ctx.createLinearGradient(0, 0, w, 0);
+      grad.addColorStop(0, '#8b5cf6'); grad.addColorStop(.4, '#38bdf8'); grad.addColorStop(.8, '#f472b6');
+      ctx.fillStyle = grad; ctx.fillRect(0, 0, w, 4);
+      ctx.fillStyle = '#38bdf8'; ctx.font = 'bold 13px "Space Grotesk", sans-serif';
+      ctx.fillText('⚡ CHEMICAL X TOKEN SAVINGS CERTIFICATE', 20, 30);
+      ctx.fillStyle = '#a3e635'; ctx.font = 'bold 28px "Space Grotesk", sans-serif';
+      ctx.fillText((savings.value.tokensSaved || 165000).toLocaleString() + ' TOKENS SAVED', 20, 70);
+      ctx.fillStyle = '#fbbf24'; ctx.font = 'bold 18px "Space Grotesk", sans-serif';
+      ctx.fillText('\$' + Number(savings.value.dollarsSaved || 1.65).toFixed(2) + ' USD Avoided', 20, 104);
+      ctx.fillStyle = '#8b5cf6'; ctx.font = '12px Inter, sans-serif';
+      ctx.fillText('Reduction: ' + (savings.value.reductionPct || 88) + '%  |  Chemical X Protocol', 20, 138);
+    };
+
+    const openModal = async () => {
+      modal.value = true;
+      await nextTick();
+      drawCert();
+    };
+
+    const download = () => {
+      const c = document.getElementById('cert');
+      if (!c) return;
+      const a = document.createElement('a');
+      a.download = 'chemx-token-savings.png';
+      a.href = c.toDataURL('image/png');
+      a.click();
+    };
+
+    onMounted(async () => {
+      fetchStatus();
+      try {
+        const r = await fetch('/api/swarm/codebase');
+        if (r.ok) { const d = await r.json(); codebase.value = d.files || []; }
+      } catch {}
+    });
+
+    onUnmounted(() => clearTimeout(timer));
+
+    return {
+      tab, drawer, modal,
+      agents, posts, leases, tasks, codebase, telemetry, savings,
+      agentFilter, agentFilters, selectedAgentId, filteredAgents,
+      selectedTier, codebaseSearch, tierFilters: TIER_FILTERS,
+      navItems: NAV_ITEMS, navBadge,
+      taskColumns: TASK_COLUMNS, tasksByStatus,
+      postsDesc, compliantCount, compliancePct, filteredCodebase,
+      statusDotClass, formatTime,
+      postAction, openModal, download,
+    };
+  }
+};
+
+createApp(App).use(vuetify).mount('#app');
+</script>
 </body>
 </html>
