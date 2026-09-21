@@ -180,3 +180,8 @@ test('archetypes: resolveArchetype matches from description keywords', () => {
   const cart = resolveArchetype('m-box', 'shopping cart checkout billing payment');
   assert.equal(cart.id, 'cart-billing');
 });
+
+test('archetypes: resolveArchetype matches from semantic vector embeddings on unknown slugs', () => {
+  const chat = resolveArchetype('m-quantum-nexus', 'live chat messages conversation thread');
+  assert.equal(chat.id, 'chat-messaging');
+});

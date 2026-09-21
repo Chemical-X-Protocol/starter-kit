@@ -25,6 +25,12 @@ export const EXTENDED_ARCHETYPES = [
   ...ALL_ARCHETYPES
 ];
 
+const isPartialMatch = (token, kw) => {
+  const isMinLength = token.length >= 3;
+  const isAffixMatch = token.startsWith(kw) || kw.startsWith(token);
+  return isMinLength && isAffixMatch;
+};
+
 export const resolveArchetype = (slug = '', description = '', explicitTemplate = '') => {
   if (explicitTemplate) {
     const templateNorm = String(explicitTemplate).toLowerCase().trim();
@@ -55,7 +61,7 @@ export const resolveArchetype = (slug = '', description = '', explicitTemplate =
       for (const kw of archetype.keywords) {
         if (token === kw) {
           score += 12;
-        } else if (token.length >= 3 && (token.startsWith(kw) || kw.startsWith(token))) {
+        } else if (isPartialMatch(token, kw)) {
           score += 8;
         }
       }
@@ -68,7 +74,7 @@ export const resolveArchetype = (slug = '', description = '', explicitTemplate =
       for (const kw of archetype.keywords) {
         if (token === kw) {
           score += 7;
-        } else if (token.length >= 3 && (token.startsWith(kw) || kw.startsWith(token))) {
+        } else if (isPartialMatch(token, kw)) {
           score += 4;
         }
       }
