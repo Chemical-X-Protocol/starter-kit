@@ -7,7 +7,7 @@ export const COLLECTION_ARCHETYPES = [
     id: 'task-list',
     name: 'Collection & Task List',
     keywords: ['task', 'todo', 'tasklist', 'checklist', 'item', 'queue', 'list', 'add', 'toggle', 'remove', 'delete'],
-    destructure: 'items, activeCount, setFilter, toggleItem, removeItem, addItem',
+    destructure: 'items, filter, activeCount, setFilter, toggleItem, removeItem, addItem',
     buildState: (name, pascal) => `export interface ${pascal}Item {
   readonly id: string;
   readonly title: string;
@@ -151,7 +151,7 @@ export const use${pascal}Controller = (options: { rows?: readonly ${pascal}Row[]
     }
   };
 
-  return { sortColumn, sortDirection, page, sortBy, setPage };
+  return { rows: options.rows || [], sortColumn, sortDirection, page, sortBy, setPage };
 };
 `,
     buildReactBody: (name, pascal) => `      <div className="${name}__header">
@@ -189,7 +189,7 @@ export interface ${pascal}State {
     buildController: (name, pascal) => `import { useState } from 'react';
 import type { ${pascal}Node } from './types';
 
-export const use${pascal}Controller = (options: { onSelect?: (id: string) => void } = {}) => {
+export const use${pascal}Controller = (options: { nodes?: readonly ${pascal}Node[]; onSelect?: (id: string) => void } = {}) => {
   const [expandedIds, setExpandedIds] = useState<readonly string[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
@@ -202,7 +202,7 @@ export const use${pascal}Controller = (options: { onSelect?: (id: string) => voi
     options.onSelect?.(id);
   };
 
-  return { expandedIds, selectedId, toggleNode, selectNode };
+  return { nodes: options.nodes || [], expandedIds, selectedId, toggleNode, selectNode };
 };
 `,
     buildReactBody: (name, pascal) => `      <div className="${name}__tree">
@@ -235,11 +235,11 @@ export interface ${pascal}State {
 `,
     buildController: (name, pascal) => `import { useState } from 'react';
 
-export const use${pascal}Controller = () => {
+export const use${pascal}Controller = (options: { series?: readonly ${pascal}DataPoint[]; timeRange?: '1h' | '24h' | '7d' | '30d' } = {}) => {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [timeRange, setTimeRange] = useState<'1h' | '24h' | '7d' | '30d'>('24h');
 
-  return { activeIndex, timeRange, setActiveIndex, setTimeRange };
+  return { series: options.series || [], activeIndex, timeRange, setActiveIndex, setTimeRange };
 };
 `,
     buildReactBody: (name, pascal) => `      <div className="${name}__toolbar">
@@ -274,9 +274,9 @@ export interface ${pascal}Column {
 }
 `,
     buildController: (name, pascal) => `import { useState } from 'react';
-import type { ${pascal}Card } from './types';
+import type { ${pascal}Card, ${pascal}Column } from './types';
 
-export const use${pascal}Controller = (options: { cards?: readonly ${pascal}Card[]; onCardMove?: (id: string, colId: string) => void } = {}) => {
+export const use${pascal}Controller = (options: { columns?: readonly ${pascal}Column[]; cards?: readonly ${pascal}Card[]; onCardMove?: (id: string, colId: string) => void } = {}) => {
   const [cards, setCards] = useState<readonly ${pascal}Card[]>(options.cards || []);
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
 
@@ -286,7 +286,7 @@ export const use${pascal}Controller = (options: { cards?: readonly ${pascal}Card
     options.onCardMove?.(cardId, toColumnId);
   };
 
-  return { cards, activeCardId, setActiveCardId, moveCard };
+  return { columns: options.columns || [], cards, activeCardId, setActiveCardId, moveCard };
 };
 `,
     buildReactBody: (name, pascal) => `      <div className="${name}__columns">

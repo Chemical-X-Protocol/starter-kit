@@ -22,7 +22,7 @@ export const STATUS_ARCHETYPES = [
 `,
     buildController: (name, pascal) => `import { useState } from 'react';
 
-export const use${pascal}Controller = (options: { onSearch?: (q: string) => void; onFilterChange?: (f: readonly string[]) => void } = {}) => {
+export const use${pascal}Controller = (options: { placeholder?: string; onSearch?: (q: string) => void; onFilterChange?: (f: readonly string[]) => void } = {}) => {
   const [query, setQuery] = useState<string>('');
   const [isSearching, setIsSearching] = useState<boolean>(false);
   const [activeFilters, setActiveFilters] = useState<readonly string[]>([]);
@@ -46,7 +46,7 @@ export const use${pascal}Controller = (options: { onSearch?: (q: string) => void
     options.onSearch?.('');
   };
 
-  return { query, isSearching, activeFilters, handleQueryChange, toggleFilter, clear, setIsSearching };
+  return { query, isSearching, activeFilters, handleQueryChange, toggleFilter, clear, setIsSearching, placeholder: options.placeholder };
 };
 `,
     buildReactBody: (name, pascal) => `      <div className="${name}__search-bar">
@@ -74,7 +74,7 @@ export const use${pascal}Controller = (options: { onSearch?: (q: string) => void
 `,
     buildController: (name, pascal) => `import { useState } from 'react';
 
-export const use${pascal}Controller = (options: { value?: number | string; delta?: number; onRefresh?: () => void } = {}) => {
+export const use${pascal}Controller = (options: { label?: string; value?: number | string; delta?: number; onRefresh?: () => void } = {}) => {
   const [value, setValue] = useState<number | string>(options.value ?? 1284);
   const [delta, setDelta] = useState<number>(options.delta ?? 12.5);
 
@@ -84,7 +84,7 @@ export const use${pascal}Controller = (options: { value?: number | string; delta
     options.onRefresh?.();
   };
 
-  return { value, delta, trend, setValue, setDelta, refresh };
+  return { label: options.label ?? 'Total', value, delta, trend, setValue, setDelta, refresh };
 };
 `,
     buildReactBody: (name, pascal) => `      <div className="${name}__card">

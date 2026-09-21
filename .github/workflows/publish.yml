@@ -39,6 +39,9 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Pre-publish Framework Generation & Typecheck Gate
+        run: node scripts/check-framework-generation.mjs
+
       - name: Publish packages to NPM
         run: npm run publish:both
         env:

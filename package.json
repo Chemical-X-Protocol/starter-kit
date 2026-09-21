@@ -42,6 +42,8 @@
   "scripts": {
     "chemx": "node cli/index.js",
     "test": "node --test cli/audit/*.spec.js cli/mcp/*.spec.js cli/build/*.spec.js cli/team/*.spec.js cli/errors/*.spec.js cli/*.spec.js",
+    "check:frameworks": "node scripts/check-framework-generation.mjs",
+    "prepublishOnly": "node scripts/check-framework-generation.mjs",
     "typecheck": "tsc --noEmit",
     "publish:both": "node scripts/publish-both.mjs",
     "postinstall": "node cli/postinstall.js",

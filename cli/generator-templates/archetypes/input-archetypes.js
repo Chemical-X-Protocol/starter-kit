@@ -86,7 +86,7 @@ export interface ${pascal}State {
 `,
     buildController: (name, pascal) => `import { useState } from 'react';
 
-export const use${pascal}Controller = (options: { onSelect?: (id: string) => void } = {}) => {
+export const use${pascal}Controller = (options: { options?: readonly { id: string; label: string }[]; onSelect?: (id: string) => void } = {}) => {
   const [isOpen, setIsOpen] = useState<boolean>(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
@@ -97,7 +97,7 @@ export const use${pascal}Controller = (options: { onSelect?: (id: string) => voi
     options.onSelect?.(id);
   };
 
-  return { isOpen, selectedId, toggle, select };
+  return { options: options.options || [], isOpen, selectedId, toggle, select };
 };
 `,
     buildReactBody: (name, pascal) => `      <div className="${name}__select" onClick={toggle}>

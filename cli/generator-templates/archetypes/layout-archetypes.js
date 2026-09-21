@@ -81,7 +81,7 @@ export interface ${pascal}State {
 `,
     buildController: (name, pascal) => `import { useState } from 'react';
 
-export const use${pascal}Controller = (options: { defaultTabId?: string; onTabChange?: (id: string) => void } = {}) => {
+export const use${pascal}Controller = (options: { tabs?: readonly { id: string; label: string }[]; defaultTabId?: string; onTabChange?: (id: string) => void } = {}) => {
   const [activeTabId, setActiveTabId] = useState<string>(options.defaultTabId || 'overview');
 
   const selectTab = (id: string) => {
@@ -89,7 +89,7 @@ export const use${pascal}Controller = (options: { defaultTabId?: string; onTabCh
     options.onTabChange?.(id);
   };
 
-  return { activeTabId, selectTab };
+  return { tabs: options.tabs || [{ id: 'overview', label: 'Overview' }], activeTabId, selectTab };
 };
 `,
     buildReactBody: (name, pascal) => `      <div className="${name}__tabs" role="tablist">

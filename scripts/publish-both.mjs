@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { runFrameworkPrePublishGate } from './check-framework-generation.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -71,6 +72,9 @@ const isPrerelease = Boolean(pkg.version && pkg.version.includes('-'));
 const tag = explicitTag || (isPrerelease ? 'latest' : null);
 
 const results = [];
+
+// Pre-publish mechanical gate: verify all frameworks compile and typecheck cleanly
+await runFrameworkPrePublishGate();
 
 try {
   for (const target of TARGETS) {

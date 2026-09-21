@@ -144,28 +144,28 @@ export const openIndexDb = (cwd = process.cwd()) => {
   const symbolCols = db.prepare('PRAGMA table_info(symbols)').all() || [];
   const symbolColNames = new Set(symbolCols.map((c) => c.name));
   if (!symbolColNames.has('start_line')) {
-    db.exec('ALTER TABLE symbols ADD COLUMN start_line INTEGER NOT NULL DEFAULT 1;');
+    try { db.exec('ALTER TABLE symbols ADD COLUMN start_line INTEGER NOT NULL DEFAULT 1;'); } catch {}
   }
   if (!symbolColNames.has('end_line')) {
-    db.exec('ALTER TABLE symbols ADD COLUMN end_line INTEGER NOT NULL DEFAULT 1;');
+    try { db.exec('ALTER TABLE symbols ADD COLUMN end_line INTEGER NOT NULL DEFAULT 1;'); } catch {}
   }
   if (!symbolColNames.has('signature')) {
-    db.exec("ALTER TABLE symbols ADD COLUMN signature TEXT NOT NULL DEFAULT '';");
+    try { db.exec("ALTER TABLE symbols ADD COLUMN signature TEXT NOT NULL DEFAULT '';"); } catch {}
   }
 
   const fileCols = db.prepare('PRAGMA table_info(files)').all() || [];
   const fileColNames = new Set(fileCols.map((c) => c.name));
   if (!fileColNames.has('health_score')) {
-    db.exec('ALTER TABLE files ADD COLUMN health_score INTEGER NOT NULL DEFAULT 100;');
+    try { db.exec('ALTER TABLE files ADD COLUMN health_score INTEGER NOT NULL DEFAULT 100;'); } catch {}
   }
   if (!fileColNames.has('hazard_count')) {
-    db.exec('ALTER TABLE files ADD COLUMN hazard_count INTEGER NOT NULL DEFAULT 0;');
+    try { db.exec('ALTER TABLE files ADD COLUMN hazard_count INTEGER NOT NULL DEFAULT 0;'); } catch {}
   }
 
   const importCols = db.prepare('PRAGMA table_info(imports)').all() || [];
   const importColNames = new Set(importCols.map((c) => c.name));
   if (!importColNames.has('resolved_path')) {
-    db.exec("ALTER TABLE imports ADD COLUMN resolved_path TEXT NOT NULL DEFAULT '';");
+    try { db.exec("ALTER TABLE imports ADD COLUMN resolved_path TEXT NOT NULL DEFAULT '';"); } catch {}
   }
 
   // Safely create all indexes

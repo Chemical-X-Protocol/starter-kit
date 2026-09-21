@@ -161,7 +161,7 @@ test('archetypes: semantic code generation for task-list archetype', () => {
 
   const react = buildReactComponent('m-task-list', 'TaskList');
   assert.ok(react.includes('useTaskListController'));
-  assert.ok(react.includes('items, activeCount, setFilter, toggleItem, removeItem'));
+  assert.ok(react.includes('items, filter, activeCount, setFilter, toggleItem, removeItem'));
   assert.ok(react.includes('m-task-list__list'));
 
   const withAtoms = buildReactComponent('m-task-list', 'TaskList', { atomsPackage: '@chemx/x-atoms' });

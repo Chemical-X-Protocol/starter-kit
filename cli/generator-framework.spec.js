@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
+import ts from 'typescript';
 import { runGenerateWizard } from './generator.js';
 import { auditFile } from './audit.js';
 
@@ -115,6 +116,15 @@ test('generator integration: Vue capsule with --desc generates Vue reactivity an
   assert.ok(!controllerContent.includes("from 'react'"), 'Vue controller must NOT import from react');
   assert.ok(!controllerContent.includes('useState'), 'Vue controller must NOT use useState');
 
+  // Assert method collision is prevented
+  assert.ok(!controllerContent.includes('.filter.value'), 'Must not collide Array.filter method with filter.value');
+  assert.ok(controllerContent.includes('items.value.filter'), 'Must unwrap items.value before Array.filter');
+  assert.ok(controllerContent.includes("filter.value === 'active'"), 'Must unwrap filter state variable comparison');
+
+  // Assert controller parses with zero TypeScript syntax errors
+  const sf = ts.createSourceFile('test.ts', controllerContent, ts.ScriptTarget.Latest, true);
+  assert.strictEqual(sf.parseDiagnostics?.length || 0, 0, 'Generated Vue controller must have zero TypeScript syntax errors');
+
   // Assert no old generic placeholder properties
   assert.ok(!viewContent.includes('descriptor.className'));
   assert.ok(!viewContent.includes('descriptor.text'));
@@ -160,6 +170,10 @@ test('generator integration: Svelte capsule with --desc generates matching view 
 
   assert.ok(!controllerContent.includes("from 'react'"), 'Svelte controller must NOT import from react');
   assert.ok(!controllerContent.includes('useState'), 'Svelte controller must NOT use useState');
+
+  // Assert Svelte controller parses with zero TypeScript syntax errors
+  const sfSvelte = ts.createSourceFile('test.ts', controllerContent, ts.ScriptTarget.Latest, true);
+  assert.strictEqual(sfSvelte.parseDiagnostics?.length || 0, 0, 'Generated Svelte controller must have zero TypeScript syntax errors');
 
   const returnedKeys = parseControllerReturns(controllerContent);
   const destructuredKeys = parseViewDestructured(viewContent);
@@ -239,5 +253,63 @@ test('generator integration: auto-detects framework from .chemx/config.json when
   assert.strictEqual(mismatchViolations.length, 0);
 
   fs.rmSync(tmpDir, { recursive: true, force: true });
+});
+
+test('generator integration: mechanical contract diff and syntax check across all frameworks with --desc', async () => {
+  const frameworks = ['react', 'vue', 'svelte'];
+  const testDesc = 'add, toggle, and remove tasks with an input field';
+
+  for (const fw of frameworks) {
+    const tmpDir = path.resolve(process.cwd(), `scratch/test-contract-diff-${fw}`);
+    if (fs.existsSync(tmpDir)) fs.rmSync(tmpDir, { recursive: true, force: true });
+
+    const res = await runGenerateWizard([
+      'molecule',
+      'task-list',
+      '-y',
+      `--dir=${tmpDir}`,
+      `--framework=${fw}`,
+      `--desc=${testDesc}`
+    ]);
+
+    assert.strictEqual(res.success, true, `Scaffolding must succeed for ${fw}`);
+    const capsuleDir = path.join(tmpDir, 'm-task-list');
+    const ext = fw === 'react' ? 'tsx' : fw;
+    const viewPath = path.join(capsuleDir, `m-task-list.${ext}`);
+    const controllerPath = path.join(capsuleDir, 'm-task-list.controller.ts');
+
+    assert.ok(fs.existsSync(viewPath), `View file must exist for ${fw}`);
+    assert.ok(fs.existsSync(controllerPath), `Controller file must exist for ${fw}`);
+
+    const viewContent = fs.readFileSync(viewPath, 'utf8');
+    const controllerContent = fs.readFileSync(controllerPath, 'utf8');
+
+    // 1. Mechanical check: TS syntax validation
+    const sf = ts.createSourceFile('test.ts', controllerContent, ts.ScriptTarget.Latest, true);
+    assert.strictEqual(
+      sf.parseDiagnostics?.length || 0,
+      0,
+      `Controller for ${fw} must have zero TypeScript syntax errors`
+    );
+
+    // 2. Mechanical check: diff controller return shape against view destructure
+    const returnedKeys = parseControllerReturns(controllerContent);
+    const destructuredKeys = parseViewDestructured(viewContent);
+
+    assert.ok(destructuredKeys.size > 0, `View for ${fw} must destructure controller properties`);
+    for (const key of destructuredKeys) {
+      assert.ok(
+        returnedKeys.has(key),
+        `[${fw}] View property "${key}" must be present in controller return object: ${[...returnedKeys].join(', ')}`
+      );
+    }
+
+    // 3. Audit check: CONTROLLER_VIEW_MISMATCH must report 0 violations
+    const violations = auditFile(viewPath, `m-task-list.${ext}`);
+    const mismatchViolations = violations.filter((v) => v.rule === 'CONTROLLER_VIEW_MISMATCH');
+    assert.strictEqual(mismatchViolations.length, 0, `Audit must report 0 mismatch violations for ${fw}`);
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
 });
 
