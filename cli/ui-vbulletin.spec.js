@@ -31,19 +31,18 @@ const setupTestDb = () => {
   return db;
 };
 
-test('ui-styles: adheres to authentic early-2000s vBulletin aesthetics', () => {
-  assert.ok(UI_STYLES.includes('Tahoma, Verdana, Arial, sans-serif'));
-  assert.ok(UI_STYLES.includes('linear-gradient(180deg, #294e79 0%, #1e385b 100%)'));
-  assert.ok(UI_STYLES.includes('border: 1px outset #294e79') || UI_STYLES.includes('outset'));
-  assert.ok(UI_STYLES.includes('border: 1px inset #0c1524') || UI_STYLES.includes('inset'));
-  assert.ok(UI_STYLES.includes('.vb-row-alt1'));
-  assert.ok(UI_STYLES.includes('.vb-row-alt2'));
-  assert.ok(UI_STYLES.includes('.vb-postbit'));
-  assert.ok(UI_STYLES.includes('width: 160px'));
-  assert.ok(UI_STYLES.includes('.vb-token-stamp'));
-  assert.ok(UI_STYLES.includes('.vb-sig-divider'));
-  assert.ok(UI_STYLES.includes('.vb-signature'));
-  assert.ok(UI_STYLES.includes('.vb-beacon'));
+test('ui-styles: adheres to Chemical X glassmorphism brand aesthetic', () => {
+  assert.ok(UI_STYLES.includes('Space Grotesk') || UI_STYLES.includes('Inter'));
+  assert.ok(UI_STYLES.includes('--xo-cyan'));
+  assert.ok(UI_STYLES.includes('--xo-pink'));
+  assert.ok(UI_STYLES.includes('--xo-lime'));
+  assert.ok(UI_STYLES.includes('--xo-purple'));
+  assert.ok(UI_STYLES.includes('backdrop-filter'));
+  assert.ok(UI_STYLES.includes('.xo-glass'));
+  assert.ok(UI_STYLES.includes('.xo-orb'));
+  assert.ok(UI_STYLES.includes('xo-drift'));
+  assert.ok(UI_STYLES.includes('.xo-kpi'));
+  assert.ok(UI_STYLES.includes('.xo-savings-badge'));
 });
 
 test('ui-forum-data: getForumCategories returns 5 standard forum categories with metrics', () => {

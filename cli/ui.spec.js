@@ -56,11 +56,11 @@ test('ui-html: generates standalone HTML bundle with Starship dark theme and hyd
 
   const html = generateSwarmHtml(sampleState);
   assert.ok(html.includes('<!DOCTYPE html>'));
-  assert.ok(html.includes('Chemical X: Live Swarm Social Network'));
+  assert.ok(html.includes('Chemical X: Swarm Control'));
   assert.ok(html.includes('__CHEMX_HYDRATED_STATE__'));
   assert.ok(html.includes('UI Bot'));
   assert.ok(html.includes('Vue'));
-  assert.ok(html.includes('t-social-layout'));
+  assert.ok(html.includes('xo-glass') || html.includes('xo-orb'));
 });
 
 test('ui-server: creates HTTP server and handles GET / and API routes', async () => {
@@ -74,7 +74,7 @@ test('ui-server: creates HTTP server and handles GET / and API routes', async ()
     const resHtml = await fetch(`http://localhost:${running.port}/`);
     assert.strictEqual(resHtml.status, 200);
     const htmlText = await resHtml.text();
-    assert.ok(htmlText.includes('Chemical X: Live Swarm Social Network'));
+    assert.ok(htmlText.includes('Chemical X: Swarm Control'));
 
     const resApi = await fetch(`http://localhost:${running.port}/api/swarm/status`);
     const resFav = await fetch(`http://localhost:${running.port}/favicon.ico`);

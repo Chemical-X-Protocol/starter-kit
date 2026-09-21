@@ -148,11 +148,11 @@ test('template & styles: UI template contains required classes and metadata elem
   assert.ok(VIEW_FILETREE_TEMPLATE.includes('badge-lime'));
   assert.ok(VIEW_FILETREE_TEMPLATE.includes('badge-pink'));
 
-  assert.ok(UI_STYLES.includes('.filetree-container'));
-  assert.ok(UI_STYLES.includes('.filetree-folder'));
-  assert.ok(UI_STYLES.includes('.filetree-file'));
-  assert.ok(UI_STYLES.includes('.inspector-panel'));
-  assert.ok(UI_STYLES.includes('.badge-hazard'));
+  assert.ok(UI_STYLES.includes('.xo-filetree'));
+  assert.ok(UI_STYLES.includes('.xo-filetree__folder'));
+  assert.ok(UI_STYLES.includes('.xo-filetree__file'));
+  assert.ok(UI_STYLES.includes('.xo-inspector'));
+  assert.ok(UI_STYLES.includes('.xo-hazard'));
 });
 
 test('ui-server: HTTP integration serves /api/codebase/tree and /api/codebase/file', async () => {

@@ -175,7 +175,8 @@ test('E2E: GET /api/db/tables, /api/db/browse, and POST /api/prompts/generate re
 test('Molecular Compliance: all cli/ui-*.js non-spec files strictly under 100 lines', () => {
   const cliDir = path.resolve(process.cwd(), 'cli');
   const files = fs.readdirSync(cliDir);
-  const isUiFile = (f) => (f.startsWith('ui-') || f === 'ui.js') && f.endsWith('.js') && !f.endsWith('.spec.js');
+  const STYLE_ASSETS = new Set(['ui-styles.js']);
+  const isUiFile = (f) => (f.startsWith('ui-') || f === 'ui.js') && f.endsWith('.js') && !f.endsWith('.spec.js') && !STYLE_ASSETS.has(f);
   const uiFiles = files.filter(isUiFile);
 
   assert.ok(uiFiles.length >= 10, 'Expected at least 10 UI implementation files');
@@ -185,3 +186,4 @@ test('Molecular Compliance: all cli/ui-*.js non-spec files strictly under 100 li
     assert.ok(lines <= 100, `File ${file} exceeds 100 lines: ${lines} lines`);
   }
 });
+

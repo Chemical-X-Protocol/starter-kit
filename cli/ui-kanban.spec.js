@@ -57,18 +57,18 @@ test('ui-template-kanban: token stamp is formatted to 4 decimals', () => {
   assert.strictEqual(stamp, '[P: 300 | C: 50 | Cost: $0.0017]');
 });
 
-test('ui-styles: includes 5-column Kanban and retro status styling', () => {
-  assert.ok(UI_STYLES.includes('.kanban-5col'));
-  assert.ok(UI_STYLES.includes('.kanban-col'));
-  assert.ok(UI_STYLES.includes('.kanban-header'));
-  assert.ok(UI_STYLES.includes('.col-queued'));
-  assert.ok(UI_STYLES.includes('.col-progress'));
-  assert.ok(UI_STYLES.includes('.col-review'));
-  assert.ok(UI_STYLES.includes('.col-completed'));
-  assert.ok(UI_STYLES.includes('.col-blocked'));
-  assert.ok(UI_STYLES.includes('.badge-status-queued'));
-  assert.ok(UI_STYLES.includes('.badge-status-completed'));
-  assert.ok(UI_STYLES.includes('.kanban-card'));
+test('ui-styles: includes Kanban and task status styling', () => {
+  assert.ok(UI_STYLES.includes('.xo-kanban'));
+  assert.ok(UI_STYLES.includes('.xo-kanban-col'));
+  assert.ok(UI_STYLES.includes('.xo-kanban-col__header'));
+  assert.ok(UI_STYLES.includes('.xo-task-card'));
+  assert.ok(UI_STYLES.includes('.xo-task-card__title'));
+  assert.ok(UI_STYLES.includes('.xo-task-card__meta'));
+  assert.ok(UI_STYLES.includes('.tier-atom'));
+  assert.ok(UI_STYLES.includes('.tier-molecule'));
+  assert.ok(UI_STYLES.includes('.xo-dot--active'));
+  assert.ok(UI_STYLES.includes('.xo-dot--idle'));
+  assert.ok(UI_STYLES.includes('.xo-dot'));
 });
 
 test('ui-template: includes Kanban template and M3 header indicator', () => {
