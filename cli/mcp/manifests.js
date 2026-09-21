@@ -5,7 +5,7 @@
 
 export const MASTER_MCP_TOOL = {
   name: 'chemx',
-  description: 'Chemical X Protocol Master Gateway: provides all Chemical X operations (test, build, verify, typecheck, audit, read, patch, write, check, q, team, autofix, generate, patterns, issue) through a single unified tool. Recommended for token efficiency and single-point authorization.',
+  description: "Provides all Chemical X operations (search, generate, patch, audit, verify, team) through a single tool. This avoids requiring separate approval for each sub-operation in MCP clients that gate tool access per-tool. Pass the desired operation via the action parameter; see action: 'help' for the full list.",
   inputSchema: {
     type: 'object',
     properties: {

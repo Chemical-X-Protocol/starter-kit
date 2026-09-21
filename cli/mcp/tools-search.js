@@ -11,6 +11,7 @@ import {
   querySemanticIndex,
   queryHybridIndex
 } from '../search-queries.js';
+import { findSimilarSymbols } from '../search-queries-similar.js';
 import { readTokenOptimized } from '../reader.js';
 import { patchFile, writeFile } from '../patcher.js';
 import { toColumnar } from '../columnar.js';
@@ -185,7 +186,12 @@ export const handleChemxRead = (args = {}, cwd = process.cwd()) => {
       const blast = calculateBlastRadius(db, args.symbol || targetPath);
       if (args.symbol) {
         const refs = findSymbolReferences(db, args.symbol);
-        connectionCard = `\n// Connections for ${args.symbol}: referenced by ${refs.length} file(s) [${refs.slice(0, 3).map((r) => path.basename(r.importerPath)).join(', ')}]. Blast Radius: ${blast.totalImpactCount} affected file(s) across ${blast.depth} hops (${blast.impactedTests.length} tests).`;
+        const similar = findSimilarSymbols(db, args.symbol, 3);
+        const hasSimilar = similar.length > 0;
+        const simSuffix = hasSimilar
+          ? ` Similar symbols: ${similar.map((s) => `${s.name} (${Math.round(s.similarity * 100)}%)`).join(', ')}.`
+          : '';
+        connectionCard = `\n// Connections for ${args.symbol}: referenced by ${refs.length} file(s) [${refs.slice(0, 3).map((r) => path.basename(r.importerPath)).join(', ')}]. Blast Radius: ${blast.totalImpactCount} affected file(s) across ${blast.depth} hops (${blast.impactedTests.length} tests).${simSuffix}`;
       } else {
         const deps = findFileDependencies(db, targetPath);
         const dependents = findFileDependents(db, targetPath);

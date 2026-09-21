@@ -115,6 +115,30 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
         process.stdout.write(`\x1b[32m✔\x1b[0m Auto-triage generated ${createdTasks.length} team task(s) from audit violations.\n`);
       }
     }
+    if (rawArgs.includes('--clones')) {
+      const { detectSemanticClones } = await import('../audit/clone-detector.js');
+      const { formatCloneReport } = await import('../audit/reporter-clones.js');
+      const cloneThresholdArg = rawArgs.find((a) => a.startsWith('--clone-threshold='));
+      const threshold = cloneThresholdArg ? parseFloat(cloneThresholdArg.split('=')[1]) : 0.85;
+      const clones = detectSemanticClones(syncRes.db, { threshold });
+      if (isJson) {
+        report.clones = clones;
+      } else {
+        process.stdout.write(formatCloneReport(clones));
+      }
+    }
+    if (rawArgs.includes('--hotspot-graph')) {
+      const { calculateCascadingHotspotGraph } = await import('../search-queries-hotspot-graph.js');
+      const { formatHotspotGraphReport } = await import('../audit/reporter-hotspot-graph.js');
+      const limitArg = rawArgs.find((a) => a.startsWith('--limit='));
+      const limit = limitArg ? parseInt(limitArg.split('=')[1], 10) : 10;
+      const graph = calculateCascadingHotspotGraph(syncRes.db, { limit });
+      if (isJson) {
+        report.hotspotGraph = graph;
+      } else {
+        process.stdout.write(formatHotspotGraphReport(graph));
+      }
+    }
   }
 
   // Stage 1: Atomic failure predicates
