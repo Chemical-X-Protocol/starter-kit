@@ -10,6 +10,7 @@ import {
   queryFeed,
   postFeedEvent,
   listTasks,
+  getTask,
   createTask,
   claimTask,
   updateTaskStatus,
@@ -24,18 +25,25 @@ const parseFlags = (args = []) => {
   const flags = {
     isJson: args.includes('--json'),
     isCompact: args.includes('--compact'),
-    force: args.includes('--force') || args.includes('-f')
+    force: args.includes('--force') || args.includes('-f'),
+    noTargetConfirm: args.includes('--no-target-confirm')
   };
-  for (const arg of args) {
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '--no-target-confirm') flags.noTargetConfirm = true;
     if (arg.startsWith('--as=')) flags.as = arg.split('=')[1];
+    if (arg === '--as' && args[i + 1] && !args[i + 1].startsWith('-')) flags.as = args[i + 1];
     if (arg.startsWith('--to=')) flags.to = arg.split('=')[1];
+    if (arg === '--to' && args[i + 1] && !args[i + 1].startsWith('-')) flags.to = args[i + 1];
     if (arg.startsWith('--since=')) flags.since = parseInt(arg.split('=')[1], 10);
     if (arg.startsWith('--thread=')) flags.thread = parseInt(arg.split('=')[1], 10);
     if (arg.startsWith('--task=')) flags.task = parseInt(arg.split('=')[1], 10);
     if (arg.startsWith('--type=')) flags.type = arg.split('=')[1];
     if (arg.startsWith('--status=')) flags.status = arg.split('=')[1];
     if (arg.startsWith('--agent=')) flags.agent = arg.split('=')[1];
+    if (arg === '--agent' && args[i + 1] && !args[i + 1].startsWith('-')) flags.agent = args[i + 1];
     if (arg.startsWith('--target=')) flags.target = arg.split('=')[1];
+    if (arg === '--target' && args[i + 1] && !args[i + 1].startsWith('-')) flags.target = args[i + 1];
     if (arg.startsWith('--tier=')) flags.tier = arg.split('=')[1];
     if (arg.startsWith('--prio=')) flags.priority = parseInt(arg.split('=')[1], 10);
     if (arg.startsWith('--purpose=')) flags.purpose = arg.split('=')[1];
@@ -67,7 +75,13 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
   const subCommand = rawArgs[0] || 'status';
   const restArgs = rawArgs.slice(1);
   const flags = parseFlags(restArgs);
-  const nonFlagPositional = restArgs.filter((a) => !a.startsWith('-'));
+  const nonFlagPositional = [];
+  for (let i = 0; i < restArgs.length; i++) {
+    const a = restArgs[i];
+    if (a.startsWith('-')) continue;
+    if (i > 0 && ['--target', '--as', '--to', '--agent'].includes(restArgs[i - 1])) continue;
+    nonFlagPositional.push(a);
+  }
 
   if (subCommand === 'status') {
     const status = getSwarmStatus(db);
@@ -175,6 +189,7 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
       const res = completeTaskWithAudit(db, taskId, agentHandle, {
         cwd,
         force: flags.force,
+        noTargetConfirm: flags.noTargetConfirm,
         tokens: tokensOption
       });
 
@@ -182,7 +197,13 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
         if (flags.isJson) {
           process.stdout.write(`${JSON.stringify(res, null, 2)}\n`);
         } else if (res?.refused) {
-          process.stderr.write(`\x1b[31m✕ Cannot complete task #${taskId}: ${res.hazardCount} hazard(s) remain in ${res.targetPath}. Fix the hazards or pass --force to complete anyway.\x1b[0m\n`);
+          if (res.noTarget) {
+            process.stderr.write(`\x1b[31m✕ ${res.message}\x1b[0m\n`);
+          } else {
+            process.stderr.write(`\x1b[31m✕ Cannot complete task #${taskId}: ${res.hazardCount} hazard(s) remain in ${res.targetPath}. Fix the hazards or pass --force to complete anyway.\x1b[0m\n`);
+          }
+        } else if (res?.result_payload?.verificationApplicable === false) {
+          process.stdout.write(`\x1b[33m⚠\x1b[0m Completed task #${taskId} (Unverified: no target_path specified; completed with --no-target-confirm)\n`);
         } else if (res?.result_payload?.forced) {
           process.stdout.write(`\x1b[33m⚠\x1b[0m Completed task #${taskId} with --force \x1b[33m(Note: ${res.result_payload.hazardCountAfter} hazard(s) still remain in ${res.target_path})\x1b[0m\n`);
         } else if (res?.result_payload?.verified) {
@@ -214,6 +235,7 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
         res = completeTaskWithAudit(db, taskId, agentHandle, {
           cwd,
           force: flags.force,
+          noTargetConfirm: flags.noTargetConfirm,
           tokens: tokensOption
         });
       } else {
@@ -232,7 +254,13 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
         if (flags.isJson) {
           process.stdout.write(`${JSON.stringify(res, null, 2)}\n`);
         } else if (res?.refused) {
-          process.stderr.write(`\x1b[31m✕ Cannot complete task #${taskId}: ${res.hazardCount} hazard(s) remain in ${res.targetPath}. Fix the hazards or pass --force to complete anyway.\x1b[0m\n`);
+          if (res.noTarget) {
+            process.stderr.write(`\x1b[31m✕ ${res.message}\x1b[0m\n`);
+          } else {
+            process.stderr.write(`\x1b[31m✕ Cannot complete task #${taskId}: ${res.hazardCount} hazard(s) remain in ${res.targetPath}. Fix the hazards or pass --force to complete anyway.\x1b[0m\n`);
+          }
+        } else if (res?.result_payload?.verificationApplicable === false) {
+          process.stdout.write(`\x1b[33m⚠\x1b[0m Updated task #${taskId} to status "done" (Unverified: no target_path specified; completed with --no-target-confirm)\n`);
         } else if (res?.result_payload?.forced) {
           process.stdout.write(`\x1b[33m⚠\x1b[0m Updated task #${taskId} to status "done" with --force \x1b[33m(Note: ${res.result_payload.hazardCountAfter} hazard(s) still remain in ${res.target_path})\x1b[0m\n`);
         } else if (res?.result_payload?.verified) {
@@ -282,9 +310,24 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
       }
       return tasks;
     }
+    if (taskAction === 'set-target' || taskAction === 'target') {
+      const taskId = nonFlagPositional[1];
+      const targetPath = flags.target || nonFlagPositional[2];
+      if (!taskId || !targetPath) {
+        if (isCli) process.stderr.write('\x1b[31m✕ Usage: chemx team task set-target <taskId> <path>\x1b[0m\n');
+        return { error: 'Usage: chemx team task set-target <taskId> <path>' };
+      }
+      db.prepare('UPDATE agent_tasks SET target_path = ?, updated_at = ? WHERE id = ?').run(targetPath, Date.now(), Number(taskId));
+      const updated = getTask(db, taskId);
+      if (isCli) {
+        if (flags.isJson) process.stdout.write(`${JSON.stringify(updated, null, 2)}\n`);
+        else process.stdout.write(`\x1b[32m✔\x1b[0m Updated task #${taskId} target_path to ${targetPath}\n`);
+      }
+      return updated;
+    }
 
     if (isCli) {
-      process.stderr.write(`\x1b[31m✕ Unknown task action: "${taskAction}". Available actions: list, add, claim, done, triage\x1b[0m\n`);
+      process.stderr.write(`\x1b[31m✕ Unknown task action: "${taskAction}". Available actions: list, add, claim, done, triage, set-target\x1b[0m\n`);
     }
     return { error: `Unknown task action: ${taskAction}` };
   }

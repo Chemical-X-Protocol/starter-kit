@@ -149,6 +149,8 @@ export const COMMANDS_SCHEMA = [
     description: 'Manages autonomous agent task queues, status transitions, AST verification on completion, and file locks.',
     flags: [
       { flag: '--as=<@handle>', desc: 'Agent identity handle (e.g. @claude, @antigravity)' },
+      { flag: '--target=<path>', desc: 'Target file path for task AST verification' },
+      { flag: '--no-target-confirm', desc: 'Confirm completing a task that has no target file without verification' },
       { flag: '--force, -f', desc: 'Force complete task even if hazards remain' },
       { flag: '--tokens=<N>', desc: 'Prompt tokens consumed by task' },
       { flag: '--cost=<USD>', desc: 'Estimated dollar cost for task' },

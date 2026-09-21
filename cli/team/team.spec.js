@@ -321,6 +321,7 @@ test('team-telemetry: ingests token metrics into SQLite during completeTaskWithA
   const task = createTask(db, { title: 'Add Telemetry' });
 
   const completed = completeTaskWithAudit(db, task.id, '@telemetry-coder', {
+    noTargetConfirm: true,
     tokens: { prompt: 500, completion: 200, cached: 50, cost_usd: 0.00325 }
   });
 
@@ -513,5 +514,61 @@ test('team-triage: completeTaskWithAudit correctly detects real on-disk violatio
   assert.strictEqual(forced.result_payload.forced, true);
 
   fs.rmSync(tmpDir, { recursive: true, force: true });
+});
+
+test('team-triage: completeTaskWithAudit refuses untargeted task without noTargetConfirm flag', () => {
+  const db = setupTestDb();
+  registerAgent(db, { id: 'agent-1', role: 'coder' });
+  const task = createTask(db, { title: 'Untargeted Task Without Target' });
+  assert.strictEqual(task.target_path, null);
+
+  const refused = completeTaskWithAudit(db, task.id, '@agent-1');
+  assert.strictEqual(refused.refused, true);
+  assert.strictEqual(refused.noTarget, true);
+  assert.strictEqual(refused.verificationApplicable, false);
+  assert.ok(
+    refused.message.includes(`Refusing to complete task #${task.id}: No target_path specified for AST verification`),
+    `Message should explain refusal: ${refused.message}`
+  );
+  assert.ok(
+    refused.message.includes('--no-target-confirm'),
+    'Message should mention --no-target-confirm'
+  );
+  assert.ok(
+    refused.message.includes(`chemx team task set-target ${task.id}`),
+    'Message should mention chemx team task set-target'
+  );
+
+  // Task in database remains open
+  const taskInDb = getTask(db, task.id);
+  assert.notStrictEqual(taskInDb.status, 'done');
+
+  // Passing noTargetConfirm: true succeeds and marks verificationApplicable: false
+  const completed = completeTaskWithAudit(db, task.id, '@agent-1', { noTargetConfirm: true });
+  assert.strictEqual(completed.status, 'done');
+  assert.strictEqual(completed.result_payload.verificationApplicable, false);
+  assert.strictEqual(completed.result_payload.noTargetConfirmed, true);
+  assert.strictEqual(completed.result_payload.verified, false);
+});
+
+test('team-cli: set-target updates task target_path and allows normal verification', () => {
+  const db = setupTestDb();
+  const task = createTask(db, { title: 'Task needing target' });
+  assert.strictEqual(task.target_path, null);
+
+  // Set target using SQLite / action
+  db.prepare('UPDATE agent_tasks SET target_path = ?, updated_at = ? WHERE id = ?').run(
+    'src/ui/molecules/m-card/m-card.vue',
+    Date.now(),
+    task.id
+  );
+
+  const updated = getTask(db, task.id);
+  assert.strictEqual(updated.target_path, 'src/ui/molecules/m-card/m-card.vue');
+
+  // Completion now has verificationApplicable: true
+  const completed = completeTaskWithAudit(db, task.id, '@agent-1', { force: true });
+  assert.strictEqual(completed.status, 'done');
+  assert.strictEqual(completed.result_payload.verificationApplicable, true);
 });
 

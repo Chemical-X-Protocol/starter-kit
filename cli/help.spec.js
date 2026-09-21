@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert';
 import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
 import path from 'node:path';
 import { COMMANDS_SCHEMA } from './commands-schema.js';
 import { printHelp } from './help.js';
@@ -45,6 +46,11 @@ test('cli: unknown command exits immediately with code 1 and error message', () 
     assert.ok(
       res.stderr.includes(`Unknown command "${input}"`),
       `chemx ${input} stderr should include Unknown command "${input}"`
+    );
+    assert.strictEqual(
+      fs.existsSync(path.resolve(input)),
+      false,
+      `chemx ${input} must not create file or directory on disk`
     );
   }
 });

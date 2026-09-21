@@ -5,7 +5,7 @@
 
 export const MASTER_MCP_TOOL = {
   name: 'chemx',
-  description: 'Chemical X Protocol Master Gateway: PRIMARY and EXCLUSIVE tool for AI agents. Dispatches all operations (test, build, verify, typecheck, audit, read, patch, write, check, q, team, autofix, generate, patterns, issue) in-process with a single user authorization point. Agents MUST ALWAYS call this master gateway tool instead of separate sub-tools.',
+  description: 'Chemical X Protocol Master Gateway: provides all Chemical X operations (test, build, verify, typecheck, audit, read, patch, write, check, q, team, autofix, generate, patterns, issue) through a single unified tool. Recommended for token efficiency and single-point authorization.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -260,7 +260,7 @@ export const SUB_TOOLS = [
   },
   {
     name: 'chemx_read',
-    description: 'Token-minified file reader. Extracts AST outlines, stripped comments, line ranges, or specific symbol blocks to minimize token consumption. NOTE: AI agents MUST prefer calling master tool chemx({ action: "read", params: { path, symbol } }) to maintain single-permission authorization without repetitive user approval prompts.',
+    description: 'Token-minified file reader. Extracts AST outlines, stripped comments, line ranges, or specific symbol blocks to minimize token consumption. NOTE: Recommended to call master tool chemx({ action: "read", params: { path, symbol } }) for single-permission authorization without repetitive user approval prompts.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -314,7 +314,7 @@ export const SUB_TOOLS = [
   },
   {
     name: 'chemx_typecheck',
-    description: 'Execute silent, token-conserving TypeScript typecheck audit. AI agents MUST use this tool first instead of running raw tsc or terminal commands. Returns structured diagnostics only if errors exist. NOTE: Prefer master tool chemx({ action: "typecheck" }) for single-permission execution.',
+    description: 'Execute silent, token-conserving TypeScript typecheck audit. Recommended to run instead of raw tsc commands to avoid compiler noise. Returns structured diagnostics only if errors exist. NOTE: Prefer master tool chemx({ action: "typecheck" }) for single-permission execution.',
     inputSchema: {
       type: 'object',
       properties: {

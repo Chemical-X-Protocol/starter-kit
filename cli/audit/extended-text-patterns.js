@@ -97,26 +97,53 @@ export const checkControllerViewContract = (filePath, relativePath, content, vio
 
   if (readErr || !controllerContent) return;
 
-  const returnMatch = controllerContent.match(/return\s*\{([\s\S]*?)\};?/);
-  if (!returnMatch) return;
+  // Locate the last `return {` in the controller (handles early-return guards).
+  // Use a brace-depth-aware scan to find the matching closing brace so that
+  // nested object literals (e.g. `filter: { current, set }`) do not truncate
+  // the extraction prematurely — the non-greedy `[\s\S]*?` regex stops at the
+  // first `}` it sees, which is wrong for controllers with nested return props.
+  const returnStartIdx = controllerContent.lastIndexOf('return {');
+  if (returnStartIdx === -1) return;
 
-  const returnBody = returnMatch[1];
-  const returnedKeys = new Set();
+  const openIdx = controllerContent.indexOf('{', returnStartIdx);
+  if (openIdx === -1) return;
 
-  const returnEntries = returnBody.split(/,\s*(?![^{}]*\})/);
-  for (const entry of returnEntries) {
-    const trimmed = entry.trim();
-    if (!trimmed) continue;
-    const getterMatch = trimmed.match(/^get\s+([a-zA-Z0-9_]+)\s*\(/);
-    if (getterMatch) {
-      returnedKeys.add(getterMatch[1]);
-      continue;
-    }
-    const keyMatch = trimmed.match(/^([a-zA-Z0-9_]+)/);
-    if (keyMatch) {
-      returnedKeys.add(keyMatch[1]);
+  let depth = 0;
+  let closeIdx = -1;
+  for (let i = openIdx; i < controllerContent.length; i++) {
+    if (controllerContent[i] === '{') depth++;
+    else if (controllerContent[i] === '}') {
+      depth--;
+      if (depth === 0) { closeIdx = i; break; }
     }
   }
+  if (closeIdx === -1) return;
+
+  const returnBody = controllerContent.slice(openIdx + 1, closeIdx);
+  const returnedKeys = new Set();
+
+  // Walk the return body character-by-character to extract only TOP-LEVEL keys
+  // (depth-0 identifiers immediately followed by `:` or end-of-entry `,`/`}`).
+  // This correctly ignores property names nested inside sub-objects.
+  let scanDepth = 0;
+  let currentToken = '';
+  const flushToken = () => {
+    const trimmed = currentToken.trim();
+    currentToken = '';
+    if (!trimmed) return;
+    const getterMatch = trimmed.match(/^get\s+([a-zA-Z0-9_]+)\s*\(/);
+    if (getterMatch) { returnedKeys.add(getterMatch[1]); return; }
+    const keyMatch = trimmed.match(/^([a-zA-Z0-9_]+)/);
+    if (keyMatch) returnedKeys.add(keyMatch[1]);
+  };
+  for (let i = 0; i < returnBody.length; i++) {
+    const ch = returnBody[i];
+    if (ch === '{' || ch === '[' || ch === '(') { scanDepth++; currentToken += ch; }
+    else if (ch === '}' || ch === ']' || ch === ')') { scanDepth--; currentToken += ch; }
+    else if (ch === ',' && scanDepth === 0) { flushToken(); }
+    else { currentToken += ch; }
+  }
+  flushToken();
 
   const destructuredMatches = content.matchAll(/(?:const|let)\s*\{([\s\S]*?)\}\s*=\s*(?:\{[^}]*\}\s*,\s*|\{\s*\.\.\.props\s*,\s*\.\.\.)?(?:use|create)[A-Z0-9]\w*Controller/g);
   const destructuredKeys = new Set();

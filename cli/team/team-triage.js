@@ -129,7 +129,22 @@ export const completeTaskWithAudit = (db, taskId, agentId, options = {}) => {
     telemetry
   };
 
-  if (task.target_path) {
+  if (!task.target_path) {
+    if (options.noTargetConfirm !== true && options.force !== true) {
+      return {
+        refused: true,
+        noTarget: true,
+        taskId: Number(taskId),
+        taskTitle: task.title,
+        verificationApplicable: false,
+        message: `Refusing to complete task #${taskId}: No target_path specified for AST verification. Re-run with --no-target-confirm to mark done without verification, or set a target path with: chemx team task set-target ${taskId} <path>`
+      };
+    }
+    resultPayload.verificationApplicable = false;
+    resultPayload.verified = false;
+    resultPayload.noTargetConfirmed = true;
+  } else {
+    resultPayload.verificationApplicable = true;
     const cwd = options.cwd || process.cwd();
     const fullPath = path.isAbsolute(task.target_path) ? task.target_path : path.resolve(cwd, task.target_path);
     let verified = false;
