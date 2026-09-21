@@ -67,6 +67,7 @@ export const patchFile       = async (...a) => (await import('./patcher.js')).pa
 export const runWriterCli    = async (...a) => (await import('./patcher.js')).runWriterCli(...a);
 export const writeFile       = async (...a) => (await import('./patcher.js')).writeFile(...a);
 export const runTeamCli      = async (...a) => (await import('./team/index.js')).runTeamCli(...a);
+export const runTrend        = async (...a) => (await import('./trend.js')).runTrend(...a);
 export const runPillarsWizard = async (...a) => (await import('./pillars-wizard.js')).runPillarsWizard(...a);
 export { handleError, withErrorCatcher, publishIssue };
 
@@ -82,6 +83,7 @@ export const ALLOWED_COMMANDS = new Set([
   'generate', 'g', 'gen', 'capsule', 'add',
   'explode', 'unpack',
   'audit',
+  'trend', 'trends',
   'verify', 'check:all',
   'team', 'swarm', 'feed',
   'pillars', 'rules', 'config:pillars',

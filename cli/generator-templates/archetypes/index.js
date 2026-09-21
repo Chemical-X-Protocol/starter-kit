@@ -8,6 +8,9 @@ import { LAYOUT_ARCHETYPES } from './layout-archetypes.js';
 import { DOMAIN_ARCHETYPES } from './domain-archetypes.js';
 import { STATUS_ARCHETYPES } from './status-archetypes.js';
 import { MINIMAL_ARCHETYPES } from './minimal-archetypes.js';
+import { matchArchetypeByVector } from './vector-matcher.js';
+
+export { matchArchetypeByVector };
 
 export const ALL_ARCHETYPES = [
   ...COLLECTION_ARCHETYPES,
@@ -77,8 +80,17 @@ export const resolveArchetype = (slug = '', description = '', explicitTemplate =
     }
   }
 
-  if (bestArchetype && highestScore > 0) {
+  const hasKeywordWinner = Boolean(bestArchetype && highestScore > 0);
+  if (hasKeywordWinner) {
     return bestArchetype;
+  }
+
+  const hasDescription = Boolean(description && String(description).trim());
+  if (hasDescription) {
+    const vectorMatch = matchArchetypeByVector(description, 0.3);
+    if (vectorMatch) {
+      return vectorMatch.archetype;
+    }
   }
 
   // Fallback to State Boundary (Archetype #22 in LAYOUT_ARCHETYPES)

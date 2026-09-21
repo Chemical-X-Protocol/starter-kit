@@ -67,6 +67,12 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
       await runAudit(posDir, true);
       break;
     }
+    case 'trend':
+    case 'trends': {
+      const { runTrend } = await import('../trend.js');
+      runTrend(rawArgs.slice(1), process.cwd());
+      break;
+    }
     case 'init': {
       const { runInit } = await import('../scaffold.js');
       await runInit(rawArgs[1] || 'src/chemical-x', rawArgs, runAudit);

@@ -15,6 +15,8 @@ import { runBuildAudit } from '../build.js';
 import { runAutofix } from '../audit/autofix.js';
 import { runTypecheckAudit, runTestAudit, runProjectVerify } from '../verify.js';
 import { syncSearchIndex, syncViolationsIndex, recordAuditSnapshot } from '../search.js';
+import { openIndexDb } from '../search-schema.js';
+import { fetchScoreTrends, formatTrendReport, renderSparkline } from '../trend.js';
 import { MCP_TOOLS, ALL_MCP_TOOLS } from './manifests.js';
 import {
   resolveTargetCwd,
@@ -286,6 +288,24 @@ const handleChemxVerify = async (args = {}, cwd = process.cwd()) => {
   });
 };
 
+const handleChemxTrend = async (args = {}, cwd = process.cwd()) => {
+  const targetCwd = resolveTargetCwd(args.cwd || cwd);
+  const db = openIndexDb(targetCwd);
+  const limit = args.limit || 10;
+  const snapshots = fetchScoreTrends(db, limit);
+  if (args.json) {
+    const scores = snapshots.map((s) => s.score);
+    return {
+      count: snapshots.length,
+      sparkline: renderSparkline(scores),
+      latestScore: snapshots.length ? snapshots[snapshots.length - 1].score : null,
+      delta: snapshots.length >= 2 ? snapshots[snapshots.length - 1].score - snapshots[0].score : 0,
+      snapshots
+    };
+  }
+  return formatTrendReport(snapshots);
+};
+
 const handleChemx = async (args = {}, cwd = process.cwd()) => {
   let action = args.action;
   let params = args.params || {};
@@ -331,11 +351,14 @@ const handleChemx = async (args = {}, cwd = process.cwd()) => {
     } else if (subCmd === 'autofix') {
       action = 'autofix';
       params = { path: parts[1] || 'src', ...params };
+    } else if (subCmd === 'trend' || subCmd === 'trends') {
+      action = 'trend';
     }
   }
 
   const DISPATCHER = {
     audit: handleAudit,
+    trend: handleChemxTrend,
     build: handleAuditBuild,
     verify: handleChemxVerify,
     typecheck: handleChemxTypecheck,
