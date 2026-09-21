@@ -53,7 +53,125 @@
     .xo-agent-card__name  { font-size: 13px; font-weight: 500; }
     .xo-agent-card__role  { font-size: 11px; color: rgba(255,255,255,.45); }
 
-    .xo-task-card { background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.07); border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; }
+    .xo-task-card {
+      background: rgba(15, 23, 42, 0.72);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      padding: 12px 14px;
+      margin-bottom: 12px;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+      backdrop-filter: blur(12px);
+      position: relative;
+      overflow: hidden;
+    }
+    .xo-task-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0; height: 2px;
+      background: linear-gradient(90deg, transparent, rgba(56, 189, 248, 0.45), transparent);
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+    .xo-task-card:hover {
+      transform: translateY(-2px);
+      border-color: rgba(56, 189, 248, 0.35);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), 0 0 16px rgba(56, 189, 248, 0.12);
+    }
+    .xo-task-card:hover::before {
+      opacity: 1;
+    }
+    .xo-task-card__header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+    .xo-task-card__id {
+      font-family: ui-monospace, monospace;
+      font-size: 10px;
+      font-weight: 700;
+      color: rgba(255, 255, 255, 0.5);
+      background: rgba(255, 255, 255, 0.06);
+      padding: 1px 5px;
+      border-radius: 4px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .xo-task-card__title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #f8fafc;
+      line-height: 1.4;
+      margin-bottom: 8px;
+      word-break: break-word;
+    }
+    .xo-task-card__path {
+      font-family: ui-monospace, monospace;
+      font-size: 11px;
+      color: var(--xo-cyan);
+      background: rgba(56, 189, 248, 0.06);
+      border: 1px solid rgba(56, 189, 248, 0.15);
+      border-radius: 6px;
+      padding: 3px 7px;
+      margin-bottom: 10px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .xo-task-card__footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding-top: 8px;
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+      font-size: 11px;
+    }
+    .xo-task-card__assignee {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      color: rgba(255, 255, 255, 0.7);
+      font-weight: 500;
+      background: rgba(255, 255, 255, 0.04);
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .xo-task-card__meta {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-left: auto;
+    }
+    .xo-task-card__badge-atom {
+      background: rgba(56, 189, 248, 0.12) !important;
+      color: var(--xo-cyan) !important;
+      border: 1px solid rgba(56, 189, 248, 0.28) !important;
+    }
+    .xo-task-card__badge-molecule {
+      background: rgba(244, 114, 182, 0.12) !important;
+      color: var(--xo-pink) !important;
+      border: 1px solid rgba(244, 114, 182, 0.28) !important;
+    }
+    .xo-task-card__badge-organism {
+      background: rgba(192, 132, 252, 0.12) !important;
+      color: var(--xo-purple) !important;
+      border: 1px solid rgba(192, 132, 252, 0.28) !important;
+    }
+    .xo-task-card__badge-utility {
+      background: rgba(163, 230, 53, 0.12) !important;
+      color: var(--xo-lime) !important;
+      border: 1px solid rgba(163, 230, 53, 0.28) !important;
+    }
+    .xo-task-card__badge-view {
+      background: rgba(251, 191, 36, 0.12) !important;
+      color: var(--xo-amber) !important;
+      border: 1px solid rgba(251, 191, 36, 0.28) !important;
+    }
 
     .xo-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
     .xo-dot--active  { background: var(--xo-lime); box-shadow: 0 0 6px var(--xo-lime); }
@@ -265,6 +383,44 @@ const App = {
 
       <!-- TASKS & KANBAN -->
       <template v-else-if="tab==='tasks'">
+        <div class="d-flex align-center gap-3 mb-3 flex-wrap" style="flex-shrink:0;">
+          <div style="flex:1;min-width:200px;max-width:360px;">
+            <v-text-field
+              v-model="taskSearch"
+              density="compact"
+              variant="outlined"
+              placeholder="Search tasks or files..."
+              prepend-inner-icon="mdi-magnify"
+              hide-details
+              rounded="lg"
+            />
+          </div>
+          <div class="d-flex gap-1 align-center">
+            <v-chip
+              v-for="tier in ['all', 'atom', 'molecule', 'organism', 'utility']"
+              :key="tier"
+              size="small"
+              :color="taskTierFilter === tier ? 'primary' : 'default'"
+              :variant="taskTierFilter === tier ? 'tonal' : 'outlined'"
+              style="cursor:pointer;text-transform:capitalize;"
+              @click="taskTierFilter = tier"
+            >
+              {{ tier }}
+            </v-chip>
+          </div>
+          <v-spacer />
+          <v-btn
+            size="small"
+            :color="hideTestTasks ? 'primary' : 'default'"
+            :variant="hideTestTasks ? 'tonal' : 'outlined'"
+            prepend-icon="mdi-shield-check-outline"
+            rounded="lg"
+            @click="hideTestTasks = !hideTestTasks"
+          >
+            {{ hideTestTasks ? 'Shielded: Real Tasks Only' : 'Showing All Tasks' }}
+          </v-btn>
+        </div>
+
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;flex:1;overflow:hidden;min-height:0;">
           <div v-for="col in taskColumns" :key="col.status" class="xo-glass d-flex flex-column pa-3 kanban-col" style="border-radius:14px;overflow:hidden;">
             <div class="d-flex align-center gap-2 mb-3">
@@ -272,14 +428,49 @@ const App = {
               <span class="xo-display" style="font-size:13px;">{{ col.label }}</span>
               <v-chip size="x-small" :color="col.color" variant="tonal" class="ml-auto">{{ tasksByStatus(col.status).length }}</v-chip>
             </div>
-            <div style="flex:1;overflow-y:auto;" class="d-flex flex-column">
+            <div style="flex:1;overflow-y:auto;" class="d-flex flex-column pr-1">
               <div v-for="t in tasksByStatus(col.status)" :key="t.id" class="xo-task-card">
-                <div style="font-size:13px;font-weight:500;">{{ t.title }}</div>
-                <div v-if="t.assignedTo" style="font-size:11px;color:rgba(255,255,255,.4);margin-top:4px;">
-                  <v-icon size="12">mdi-robot-outline</v-icon> {{ t.assignedTo }}
+                <div class="xo-task-card__header">
+                  <span class="xo-task-card__id">#{{ t.id }}</span>
+                  <span class="v-chip v-chip--density-compact v-chip--size-x-small v-chip--variant-tonal"
+                        :class="'xo-task-card__badge-' + (t.tier || 'utility')"
+                        style="font-size:10px;text-transform:uppercase;font-weight:700;letter-spacing:.05em;padding:0 6px;border-radius:4px;">
+                    {{ t.tier || 'utility' }}
+                  </span>
+                  <v-chip v-if="t.priority" size="x-small" :color="t.priority === 1 ? 'error' : t.priority === 2 ? 'primary' : 'default'" variant="tonal" style="font-size:10px;height:18px;">
+                    <v-icon size="10" start>{{ t.priority === 1 ? 'mdi-fire' : 'mdi-flag-outline' }}</v-icon>
+                    P{{ t.priority }}
+                  </v-chip>
+                </div>
+
+                <div class="xo-task-card__title">{{ t.title }}</div>
+
+                <div v-if="t.target_path || t.targetPath" class="xo-task-card__path" :title="t.target_path || t.targetPath">
+                  <v-icon size="11">mdi-file-code-outline</v-icon>
+                  <span>{{ t.target_path || t.targetPath }}</span>
+                </div>
+
+                <div class="xo-task-card__footer">
+                  <div v-if="t.assigned_agent_id || t.assignedTo" class="xo-task-card__assignee">
+                    <v-icon size="12" color="primary">mdi-robot-outline</v-icon>
+                    <span>{{ t.assigned_agent_id || t.assignedTo }}</span>
+                  </div>
+                  <div v-else style="color:rgba(255,255,255,.3);font-size:10px;font-style:italic;">
+                    Unassigned
+                  </div>
+
+                  <div class="xo-task-card__meta">
+                    <v-chip v-if="t.result_payload && t.result_payload.healthAfter !== undefined" size="x-small" color="success" variant="tonal" style="font-size:10px;height:18px;">
+                      <v-icon size="10" start>mdi-shield-check</v-icon>
+                      {{ t.result_payload.healthAfter }}%
+                    </v-chip>
+                    <span v-else-if="t.total_tokens" style="color:rgba(255,255,255,.4);font-size:10px;font-family:ui-monospace,monospace;">
+                      ⚡ {{ Math.round(t.total_tokens / 1000) }}k
+                    </span>
+                  </div>
                 </div>
               </div>
-              <div v-if="!tasksByStatus(col.status).length" class="text-center" style="color:rgba(255,255,255,.25);font-size:12px;padding:24px 0;">Empty</div>
+              <div v-if="!tasksByStatus(col.status).length" class="text-center" style="color:rgba(255,255,255,.25);font-size:12px;padding:24px 0;">No tasks</div>
             </div>
           </div>
         </div>
@@ -479,9 +670,40 @@ const App = {
       return agents.value.filter(a => a.status === agentFilter.value);
     });
 
+    const taskSearch     = ref('');
+    const taskTierFilter = ref('all');
+    const hideTestTasks  = ref(true);
+
+    const isTestTask = (t) => {
+      const title = t.title || '';
+      return title.startsWith('E2E Verify Task') || title.startsWith('API Test Task');
+    };
+
     const tasksByStatus = (status) => {
       const statuses = status === 'done' ? ['done', 'completed'] : [status];
-      return tasks.value.filter(t => statuses.includes(t.status));
+      return tasks.value.filter((t) => {
+        const matchesStatus = statuses.includes(t.status);
+        if (!matchesStatus) return false;
+
+        if (hideTestTasks.value && isTestTask(t)) {
+          return false;
+        }
+
+        if (taskTierFilter.value !== 'all') {
+          const tier = t.tier || 'utility';
+          if (tier !== taskTierFilter.value) return false;
+        }
+
+        if (taskSearch.value) {
+          const query = taskSearch.value.toLowerCase();
+          const titleMatch = (t.title || '').toLowerCase().includes(query);
+          const pathMatch = (t.target_path || t.targetPath || '').toLowerCase().includes(query);
+          const agentMatch = (t.assigned_agent_id || t.assignedTo || '').toLowerCase().includes(query);
+          if (!titleMatch && !pathMatch && !agentMatch) return false;
+        }
+
+        return true;
+      });
     };
 
     const compliantCount  = computed(() => codebase.value.filter(f => !f.lines || f.lines <= 100).length);
@@ -643,6 +865,7 @@ const App = {
       selectedTier, codebaseSearch, tierFilters: TIER_FILTERS,
       navItems: NAV_ITEMS, navBadge,
       taskColumns: TASK_COLUMNS, tasksByStatus,
+      taskSearch, taskTierFilter, hideTestTasks,
       postsDesc, compliantCount, compliancePct, filteredCodebase,
       attentionItems, confirmAttention,
       workbenchScopes, activeWorkbenchScope, workbenchPrompt, selectWorkbenchScope,
