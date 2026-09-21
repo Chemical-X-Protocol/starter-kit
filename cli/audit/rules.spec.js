@@ -203,3 +203,132 @@ export const debugCount = (itemCount: number) => {
   assert.strictEqual(violation, undefined);
 });
 
+test("Audit Hook Shape Contract: passes flat hook with 4 actions, 2 state fields, 1 status field (7 total)", () => {
+  const code = `
+export const useTodoList = () => {
+  const items = ref([]);
+  const filter = ref("all");
+  const isLoading = ref(false);
+
+  const addItem = (item) => { items.value.push(item); };
+  const toggleItem = (id) => { /* toggle */ };
+  const removeItem = (id) => { /* remove */ };
+  const setFilter = (next) => { filter.value = next; };
+
+  return {
+    items,
+    filter,
+    isLoading,
+    addItem,
+    toggleItem,
+    removeItem,
+    setFilter
+  };
+};
+`;
+  const violations = auditCode(code, "src/useTodoList.ts", "src/useTodoList.ts");
+  const shapeViolation = violations.find((v) => v.rule === "HOOK_SHAPE_CONTRACT");
+  assert.strictEqual(shapeViolation, undefined, "Expected HOOK_SHAPE_CONTRACT to pass for flat 7-property hook");
+
+  const overloadViolation = violations.find((v) => v.rule === "HOOK_RETURN_OVERLOAD");
+  assert.ok(overloadViolation, "Expected deprecated HOOK_RETURN_OVERLOAD warning");
+  assert.strictEqual(overloadViolation.severity, "MEDIUM", "Expected downgraded warning severity for HOOK_RETURN_OVERLOAD");
+});
+
+test("Audit Hook Shape Contract: fails hook with actions nested under actions wrapper", () => {
+  const code = `
+export const useTodoList = () => {
+  const items = ref([]);
+  const filter = ref("all");
+  const isLoading = ref(false);
+
+  const addItem = (item) => { items.value.push(item); };
+  const toggleItem = (id) => { /* toggle */ };
+  const removeItem = (id) => { /* remove */ };
+  const setFilter = (next) => { filter.value = next; };
+
+  return {
+    items,
+    filter,
+    isLoading,
+    actions: {
+      addItem,
+      toggleItem,
+      removeItem,
+      setFilter
+    }
+  };
+};
+`;
+  const violations = auditCode(code, "src/useTodoList.ts", "src/useTodoList.ts");
+  const shapeViolation = violations.find((v) => v.rule === "HOOK_SHAPE_CONTRACT");
+  assert.ok(shapeViolation, "Expected HOOK_SHAPE_CONTRACT failure for nested action wrapper");
+  assert.strictEqual(shapeViolation.severity, "HIGH");
+  assert.ok(shapeViolation.hazard.includes("actions"));
+});
+
+test("Audit Hook Shape Contract: flags raw DOM ref in hook return", () => {
+  const code = `
+export const useDropdown = () => {
+  const isOpen = ref(false);
+  const containerRef = ref(null);
+  const toggleDropdown = () => { isOpen.value = !isOpen.value; };
+
+  return {
+    isOpen,
+    containerRef,
+    toggleDropdown
+  };
+};
+`;
+  const violations = auditCode(code, "src/useDropdown.ts", "src/useDropdown.ts");
+  const shapeViolation = violations.find((v) => v.rule === "HOOK_SHAPE_CONTRACT");
+  assert.ok(shapeViolation, "Expected HOOK_SHAPE_CONTRACT failure for raw DOM ref");
+  assert.strictEqual(shapeViolation.severity, "HIGH");
+  assert.ok(shapeViolation.hazard.includes("containerRef"));
+});
+
+test("Audit Hook Shape Contract: flags non-verb action handler in hook return", () => {
+  const code = `
+export const useCounter = () => {
+  const count = ref(0);
+  const onToggle = () => { count.value += 1; };
+
+  return {
+    count,
+    onToggle
+  };
+};
+`;
+  const violations = auditCode(code, "src/useCounter.ts", "src/useCounter.ts");
+  const shapeViolation = violations.find((v) => v.rule === "HOOK_SHAPE_CONTRACT");
+  assert.ok(shapeViolation, "Expected HOOK_SHAPE_CONTRACT failure for onToggle");
+  assert.strictEqual(shapeViolation.severity, "HIGH");
+  assert.ok(shapeViolation.hazard.includes("onToggle"));
+});
+
+test("Audit Hook Shape Contract: flags cross-hook naming inconsistency for loading state", () => {
+  const code = `
+export const useFirst = () => {
+  const items = ref([]);
+  const isLoading = ref(false);
+  const fetchItems = () => {};
+  return { items, isLoading, fetchItems };
+};
+
+export const useSecond = () => {
+  const user = ref(null);
+  const loading = ref(false);
+  const fetchUser = () => {};
+  return { user, loading, fetchUser };
+};
+`;
+  const violations = auditCode(code, "src/useMulti.ts", "src/useMulti.ts");
+  const inconsistentViolation = violations.find(
+    (v) => v.rule === "HOOK_SHAPE_CONTRACT" && v.hazard.includes("loading")
+  );
+  assert.ok(inconsistentViolation, "Expected cross-hook naming inconsistency failure for loading vs isLoading");
+  assert.strictEqual(inconsistentViolation.severity, "HIGH");
+  assert.ok(inconsistentViolation.hazard.includes("isLoading"));
+});
+

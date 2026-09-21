@@ -15,7 +15,9 @@ export const parseTaskRow = (row) => {
   return {
     ...row,
     dependencies: JSON.parse(row.dependencies || '[]'),
-    result_payload: JSON.parse(row.result_payload || '{}')
+    result_payload: JSON.parse(row.result_payload || '{}'),
+    violation_snapshot: typeof row.violation_snapshot === 'string' ? JSON.parse(row.violation_snapshot || '{}') : (row.violation_snapshot || {}),
+    diff_receipt: typeof row.diff_receipt === 'string' ? JSON.parse(row.diff_receipt || '{}') : (row.diff_receipt || {})
   };
 };
 
@@ -59,8 +61,10 @@ export const executeStatusUpdate = (db, taskId, status, options, task) => {
   const payloadStr = options.resultPayload
     ? JSON.stringify(options.resultPayload)
     : JSON.stringify(task.result_payload);
-  db.prepare('UPDATE agent_tasks SET status = ?, blocked_reason = ?, result_payload = ?, updated_at = ? WHERE id = ?')
-    .run(status, options.blockedReason || '', payloadStr, now, Number(taskId));
+  const receiptObj = options.diffReceipt || options.resultPayload?.receipt || task.diff_receipt || {};
+  const diffReceiptStr = JSON.stringify(receiptObj);
+  db.prepare('UPDATE agent_tasks SET status = ?, blocked_reason = ?, result_payload = ?, diff_receipt = ?, updated_at = ? WHERE id = ?')
+    .run(status, options.blockedReason || '', payloadStr, diffReceiptStr, now, Number(taskId));
 
   const isTerminal = ['done', 'failed', 'queued'].includes(status);
   const hasAgent = Boolean(task.assigned_agent_id);

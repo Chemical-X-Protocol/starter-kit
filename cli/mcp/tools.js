@@ -52,8 +52,10 @@ export {
 };
 
 const handleQueryPatterns = (args = {}, cwd = process.cwd()) => {
-  const targetDir = args.dir || (fs.existsSync(path.resolve(cwd, 'src')) ? 'src' : '.');
-  const report = executeAstAudit(targetDir, {});
+  const baseCwd = resolveTargetCwd(cwd);
+  const targetDir = args.dir || (fs.existsSync(path.resolve(baseCwd, 'src')) ? 'src' : '.');
+  const resolvedTarget = path.isAbsolute(targetDir) ? targetDir : path.resolve(baseCwd, targetDir);
+  const report = executeAstAudit(resolvedTarget, { cwd: baseCwd });
   const rawPatterns = report.patterns || [];
   const filterType = args.type || 'ALL';
   const minOccurrences = typeof args.minOccurrences === 'number' ? args.minOccurrences : 2;
@@ -113,12 +115,13 @@ const handleQueryPatterns = (args = {}, cwd = process.cwd()) => {
 };
 
 const handleAudit = (args = {}, cwd = process.cwd()) => {
-  const rawTarget = args.path || (fs.existsSync(path.resolve(cwd, 'src')) ? 'src' : '.');
-  const resolvedTarget = path.resolve(cwd, rawTarget);
+  const baseCwd = resolveTargetCwd(cwd);
+  const rawTarget = args.path || args.dir || (fs.existsSync(path.resolve(baseCwd, 'src')) ? 'src' : '.');
+  const resolvedTarget = path.isAbsolute(rawTarget) ? rawTarget : path.resolve(baseCwd, rawTarget);
   const isFile = fs.existsSync(resolvedTarget) && fs.statSync(resolvedTarget).isFile();
 
   if (isFile) {
-    const relPath = path.relative(cwd, resolvedTarget);
+    const relPath = path.relative(baseCwd, resolvedTarget);
     const violations = auditFile(resolvedTarget, relPath);
     return {
       type: 'file',
@@ -129,21 +132,22 @@ const handleAudit = (args = {}, cwd = process.cwd()) => {
   }
 
   const options = {
+    cwd: baseCwd,
     model: args.model || 'blended',
     outputFile: null
   };
 
-  const report = executeAstAudit(rawTarget, options);
+  const report = executeAstAudit(resolvedTarget, options);
 
   // Sync AST audit results to SQLite index database
   try {
-    const syncRes = syncSearchIndex(rawTarget, cwd);
+    const syncRes = syncSearchIndex(resolvedTarget, baseCwd);
     if (syncRes?.db) {
       syncViolationsIndex(syncRes.db, report.violations);
       recordAuditSnapshot(syncRes.db, report);
     }
-  } catch {
-    // Continue if SQLite synchronization fails
+  } catch (syncError) {
+    process.stderr.write(`[chemx] Search index sync bypassed: ${syncError?.message || String(syncError)}\n`);
   }
 
   const isSevereViolation = (v) => {
@@ -239,7 +243,8 @@ const handleGetRefactorPrompt = (args = {}, cwd = process.cwd()) => {
 };
 
 const handleAuditBuild = async (args = {}, cwd = process.cwd()) => {
-  const targetCwd = args.dir ? path.resolve(cwd, args.dir) : cwd;
+  const baseCwd = resolveTargetCwd(cwd);
+  const targetCwd = args.dir ? path.resolve(baseCwd, args.dir) : baseCwd;
   const rawArgs = ['--json'];
   if (args.command) {
     rawArgs.push('--', args.command);
@@ -248,10 +253,13 @@ const handleAuditBuild = async (args = {}, cwd = process.cwd()) => {
 };
 
 const handleAutofix = (args = {}, cwd = process.cwd()) => {
-  return runAutofix(args.path, {
+  const baseCwd = resolveTargetCwd(cwd);
+  const rawTarget = args.path || args.dir || (fs.existsSync(path.resolve(baseCwd, 'src')) ? 'src' : '.');
+  const targetDir = path.isAbsolute(rawTarget) ? rawTarget : path.resolve(baseCwd, rawTarget);
+  return runAutofix(targetDir, {
     dryRun: Boolean(args.dryRun),
     rules: args.rules,
-    cwd
+    cwd: baseCwd
   });
 };
 

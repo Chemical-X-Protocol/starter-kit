@@ -38,13 +38,10 @@ export function useAgentRailController(props: AgentRailProps, emit: AgentRailEmi
   const activeSummary = computed((): string => `${activeCount.value}/${totalCount.value} active`);
 
   return {
-    filter: {
-      current: currentFilter,
-      set: setFilter
-    },
+    currentFilter,
+    setFilter,
     filteredAgents,
     activeSummary,
-    shouldShowEmpty,
     handleSelectAgent
   };
 }

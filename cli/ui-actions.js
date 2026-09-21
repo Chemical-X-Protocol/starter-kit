@@ -3,7 +3,7 @@
  * Task creation/claiming, lock acquisition/release, codebase index query, and settings actions
  */
 
-import { createTask, claimTask, requestFileLock, releaseFileLock } from './team/team-db.js';
+import { createTask, getTask, claimTask, requestFileLock, releaseFileLock } from './team/team-db.js';
 import { completeTaskWithAudit } from './team/team-triage.js';
 import { executeSettingsAction } from './ui-actions-helpers.js';
 
@@ -31,7 +31,15 @@ export const handleCompleteTask = (db, body = {}, cwd = process.cwd()) => {
   if (!db) return { success: false, error: 'Database unavailable' };
   const taskId = Number(body.taskId || body.id);
   const agentId = body.agentId || body.agent || '@developer';
-  const result = completeTaskWithAudit(db, taskId, agentId, { cwd });
+  const task = getTask(db, taskId);
+  const force = Boolean(body.force);
+  const hasTarget = Boolean(task?.target_path);
+  const noTargetConfirm = body.noTargetConfirm !== undefined ? Boolean(body.noTargetConfirm) : !hasTarget;
+  const result = completeTaskWithAudit(db, taskId, agentId, { cwd, force, noTargetConfirm });
+  if (!result) return { success: false, error: 'Task not found' };
+  if (result.refused) {
+    return { success: false, refused: true, ...result };
+  }
   return { success: true, result };
 };
 

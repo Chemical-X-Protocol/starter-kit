@@ -7,8 +7,9 @@ import {
   isZeroDelayTimeout,
   isUnguardedConsoleCall
 } from './rules-predicates.js';
+import { validateHookReturnShape } from './hook-shape-validator.js';
 
-export const createAstVisitors = ({ relativePath, violations }) => {
+export const createAstVisitors = ({ relativePath, violations, hookRegistry }) => {
   return {
     Function(astPath) {
       const isCustomHook = isCustomHookFunction(astPath);
@@ -45,22 +46,14 @@ export const createAstVisitors = ({ relativePath, violations }) => {
       if (isCustomHook) {
         astPath.traverse({
           ReturnStatement(retPath) {
-            if (retPath.getFunctionParent() === astPath && t.isObjectExpression(retPath.node.argument)) {
-              const propCount = retPath.node.argument.properties.length;
-              if (propCount > 5) {
-                const line = retPath.node.loc?.start.line || 1;
-                const meta = RULE_REGISTRY.HOOK_RETURN_OVERLOAD;
-                violations.push({
-                  filePath: relativePath,
-                  line,
-                  column: retPath.node.loc?.start.column || 1,
-                  hazard: `Hook return saturation (${propCount} properties > 5 limit)`,
-                  rule: 'HOOK_RETURN_OVERLOAD',
-                  severity: meta.severity,
-                  pillar: meta.pillar,
-                  directive: meta.directive
-                });
-              }
+            if (retPath.getFunctionParent() === astPath) {
+              validateHookReturnShape({
+                retPath,
+                astPath,
+                relativePath,
+                violations,
+                hookRegistry
+              });
             }
           }
         });

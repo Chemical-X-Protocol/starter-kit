@@ -277,8 +277,12 @@ export const runTestAudit = async (rawArgs = [], isCli = false, options = {}) =>
   const execution = await executeBuild(command, cwd, { raw: isRaw });
   const parsed = parseTestOutput(execution.stdout, execution.stderr, execution.exitCode);
 
+  const hasFailedExitCode = execution.exitCode !== 0;
+  const hasNoTestFailures = parsed.failed === 0 && parsed.failures.length === 0;
+  const isExecutionFault = hasFailedExitCode && hasNoTestFailures;
+
   let executionError = null;
-  if (execution.exitCode !== 0 && parsed.failed === 0 && parsed.failures.length === 0) {
+  if (isExecutionFault) {
     const rawLines = `${execution.stderr}\n${execution.stdout}`.split('\n').map((l) => l.trim()).filter(Boolean);
     executionError = rawLines.find((l) => /error|not found|failed/i.test(l)) || rawLines[0] || `Command exited with code ${execution.exitCode}`;
   }
@@ -369,7 +373,7 @@ export const runProjectVerify = async (rawArgs = [], isCli = false, options = {}
   }
 
   // 1. AST Architectural Audit
-  const auditReport = executeAstAudit(targetDir, {});
+  const auditReport = executeAstAudit(targetDir, { cwd });
   const isAuditPassing = auditReport.violations.filter((v) => v.severity === 'CRITICAL').length === 0;
 
   // 2. TypeScript Typecheck
@@ -430,12 +434,19 @@ export const runProjectVerify = async (rawArgs = [], isCli = false, options = {}
     const typeIcon = typeReport.success ? `${ANSI.LIME}✔${ANSI.RESET}` : `${ANSI.RED}✖${ANSI.RESET}`;
     const testIcon = testReport.success ? `${ANSI.LIME}✔${ANSI.RESET}` : `${ANSI.RED}✖${ANSI.RESET}`;
 
-    const typeStatus = typeReport.success
-      ? 'Clean (0 errors)'
-      : (typeReport.executionError ? `Command Failed (${typeReport.executionError})` : `${typeReport.errorCount} error(s)`);
-    const testStatus = testReport.success
-      ? `Passed (${testReport.passed}/${testReport.totalTests})`
-      : (testReport.executionError ? `Command Failed (${testReport.executionError})` : `${testReport.failed} failed`);
+    const formatTypeStatus = () => {
+      if (typeReport.success) return 'Clean (0 errors)';
+      if (typeReport.executionError) return `Command Failed (${typeReport.executionError})`;
+      return `${typeReport.errorCount} error(s)`;
+    };
+    const formatTestStatus = () => {
+      if (testReport.success) return `Passed (${testReport.passed}/${testReport.totalTests})`;
+      if (testReport.executionError) return `Command Failed (${testReport.executionError})`;
+      return `${testReport.failed} failed`;
+    };
+
+    const typeStatus = formatTypeStatus();
+    const testStatus = formatTestStatus();
 
     process.stdout.write(`  ${auditIcon} AST Architecture:  ${auditReport.health.grade} (${auditReport.health.score}/100, ${auditReport.totalViolations} violations)\n`);
     process.stdout.write(`  ${typeIcon} TypeScript:        ${typeStatus}\n`);

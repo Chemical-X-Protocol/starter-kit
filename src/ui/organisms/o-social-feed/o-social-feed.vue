@@ -17,8 +17,7 @@ const {
   currentFilter,
   filteredPosts,
   totalPosts,
-  shouldShowEmpty,
-  actions
+  setFilter
 } = useSocialFeedController(props, emit);
 </script>
 
@@ -34,32 +33,32 @@ const {
         label="All"
         :active="currentFilter === 'all'"
         clickable
-        @click="actions.setFilter('all')"
+        @click="setFilter('all')"
       />
       <AChip
         label="General"
         :active="currentFilter === 'general'"
         clickable
         tone="sky"
-        @click="actions.setFilter('general')"
+        @click="setFilter('general')"
       />
       <AChip
         label="Locks"
         :active="currentFilter === 'locks'"
         clickable
         tone="warning"
-        @click="actions.setFilter('locks')"
+        @click="setFilter('locks')"
       />
       <AChip
         label="Alerts"
         :active="currentFilter === 'alerts'"
         clickable
         tone="pink"
-        @click="actions.setFilter('alerts')"
+        @click="setFilter('alerts')"
       />
 
       <AChip
-        v-if="shouldShowEmpty"
+        v-if="filteredPosts.length === 0"
         label="No events found"
         tone="default"
       />

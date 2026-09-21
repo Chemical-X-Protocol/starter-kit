@@ -9,9 +9,11 @@ export function useTaskBoardController(props: TaskBoardProps, emit: TaskBoardEmi
   const isInProgress = (t: TaskItem) => t.status === 'in_progress';
   const isDone = (t: TaskItem) => t.status === 'completed' || t.status === 'done';
 
-  const queuedTasks = computed(() => props.tasks.filter(isQueued));
-  const inProgressTasks = computed(() => props.tasks.filter(isInProgress));
-  const doneTasks = computed(() => props.tasks.filter(isDone));
+  const tasksByStatus = computed(() => ({
+    queued: props.tasks.filter(isQueued),
+    inProgress: props.tasks.filter(isInProgress),
+    done: props.tasks.filter(isDone)
+  }));
 
   const handleCreate = () => {
     const text = newTaskTitle.value.trim();
@@ -25,13 +27,9 @@ export function useTaskBoardController(props: TaskBoardProps, emit: TaskBoardEmi
 
   return {
     newTaskTitle,
-    queuedTasks,
-    inProgressTasks,
-    doneTasks,
-    actions: {
-      create: handleCreate,
-      claim: handleClaim,
-      complete: handleComplete
-    }
+    tasksByStatus,
+    handleCreate,
+    handleClaim,
+    handleComplete
   };
 }

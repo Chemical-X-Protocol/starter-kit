@@ -261,7 +261,7 @@
 
 ### A. The Molecular Composable Destructuring Contract
 1. **Safe Destructuring**: Composables must always return plain objects containing individual `ref()`, `computed()`, and pure functions. Never return a raw `reactive()` object.
-2. **The 3 to 5 Property Limit**: Strictly limit return values to State + Status + Actions (maximum 3 to 5 return properties). Multi-responsibility hooks must be split into single-purpose verbs. (Note: For stateful service classes holding shared instance state, refer to the Section 1.J carve-out).
+2. **The Shape-Classification Contract**: Return values must classify strictly into three canonical buckets: State (domain data), Status (lifecycle/health info), and Actions (verb-prefixed functions flat at top level). No arbitrary property count ceiling applies. Unclassifiable properties (raw DOM refs, intermediate values, non-verb callbacks), nested action wrappers (`actions: {}`), and cross-hook naming inconsistencies are strictly prohibited. (Note: For stateful service classes holding shared instance state, refer to the Section 1.J carve-out).
 3. **Standardized Aliasing**: Use standardized names (`data`, `isLoading`, `error`, `execute`) to enable clean concurrent destructuring.
 4. **Autonomous Lifecycle Teardown**: Side effects (listeners, timers, observers) must be cleaned up automatically using `onScopeDispose()` or effect cleanup functions.
 5. **Flexible Input Ergonomics**: Accept raw values, refs, or getters interchangeably via `toValue()` / `MaybeRefOrGetter<T>`.

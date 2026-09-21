@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { auditCode, PILLARS, RULE_REGISTRY } from './audit/rules.js';
+import { auditCode, PILLARS, RULE_REGISTRY, createHookShapeRegistry } from './audit/rules.js';
 import { createPatternRegistry } from './audit/pattern-detector.js';
 import {
   buildRemediationRoadmap,
@@ -116,6 +116,7 @@ const auditFileEntry = (fullPath, relPath, scanOptions) => {
   const hookCount = hookMatches ? hookMatches.length : 0;
   const fileViolations = auditCode(content, fullPath, relPath, {
     patternRegistry: scanOptions.patternRegistry,
+    hookRegistry: scanOptions.hookRegistry,
     fast: scanOptions.fast
   });
 
@@ -174,14 +175,19 @@ export const scanDirectory = (targetDir, baseDir) => {
 };
 
 export const runAudit = (targetDir = 'src', options = {}) => {
-  const cwd = process.cwd();
-  const absoluteTarget = path.resolve(cwd, targetDir);
+  const cwd = options.cwd || process.cwd();
+  const absoluteTarget = path.isAbsolute(targetDir) ? targetDir : path.resolve(cwd, targetDir);
   const patternRegistry = createPatternRegistry();
+  const hookRegistry = createHookShapeRegistry();
   const { violations, fileStats, totalHooks } = scanTree(absoluteTarget, cwd, {
     patternRegistry,
+    hookRegistry,
     fast: Boolean(options.fast),
     fileList: options.fileList || null
   });
+
+  const crossHookViolations = hookRegistry.validateCrossHookConsistency();
+  violations.push(...crossHookViolations);
 
   const scannedFiles = fileStats.length;
   const totalLoc = fileStats.reduce((acc, f) => acc + f.lineCount, 0);

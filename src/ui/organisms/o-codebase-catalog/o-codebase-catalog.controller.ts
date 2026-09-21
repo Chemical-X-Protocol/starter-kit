@@ -32,12 +32,9 @@ export function useCodebaseCatalogController(props: CodebaseCatalogProps, emit: 
 
   return {
     selectedTier,
-    tiers,
     filteredFiles,
     stats,
-    actions: {
-      selectTier: handleSelectTier,
-      selectFile: handleSelectFile
-    }
+    handleSelectTier,
+    handleSelectFile
   };
 }

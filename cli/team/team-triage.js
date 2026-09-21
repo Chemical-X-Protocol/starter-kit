@@ -95,7 +95,17 @@ export const autoGenerateTasksFromAudit = (db, options = {}) => {
       description: `Target file has health score ${item.health_score}/100 with ${item.hazard_count || item.violation_count || 1} detected hazard(s). Refactor into molecular compliance.`,
       tier: item.tier || 'molecule',
       target_path: item.path,
-      priority: item.health_score < 70 ? 1 : 2
+      priority: item.health_score < 70 ? 1 : 2,
+      origin_type: 'audit',
+      rule_id: item.rules_summary || 'ARCHITECTURAL_HAZARD',
+      violation_snapshot: {
+        path: item.path,
+        tier: item.tier,
+        lines: item.lines,
+        healthBefore: item.health_score,
+        hazardCountBefore: item.hazard_count || item.violation_count || 1,
+        rules: item.rules_summary
+      }
     });
     if (task) createdTasks.push(task);
   }
@@ -241,7 +251,24 @@ export const completeTaskWithAudit = (db, taskId, agentId, options = {}) => {
     releaseFileLock(db, task.target_path, agentId);
   }
 
-  const updatedTask = updateTaskStatus(db, taskId, 'done', { resultPayload });
+  const healthBefore = task.violation_snapshot?.healthBefore ?? (task.target_path ? (db.prepare('SELECT health_score FROM files WHERE path = ?').get(task.target_path)?.health_score ?? null) : null);
+  const hazardsBefore = task.violation_snapshot?.hazardCountBefore ?? (task.target_path ? (db.prepare('SELECT hazard_count FROM files WHERE path = ?').get(task.target_path)?.hazard_count ?? null) : null);
+  const hazardsAfter = resultPayload.hazardCountAfter ?? 0;
+  const healthAfter = resultPayload.healthAfter ?? 100;
+  const diffReceipt = {
+    verified: Boolean(resultPayload.verified),
+    forced: Boolean(resultPayload.forced),
+    healthBefore,
+    healthAfter,
+    hazardsBefore,
+    hazardsAfter,
+    hazardsResolved: Math.max(0, (hazardsBefore || 0) - hazardsAfter),
+    completedAt: Date.now(),
+    completedBy: agentId
+  };
+  resultPayload.receipt = diffReceipt;
+
+  const updatedTask = updateTaskStatus(db, taskId, 'done', { resultPayload, diffReceipt });
 
   postFeedEvent(db, {
     author_id: agentId,

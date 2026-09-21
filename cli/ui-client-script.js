@@ -5,13 +5,10 @@ createApp({
     const s = window.__CHEMX_HYDRATED_STATE__ || {}, api = window.chemxApi;
     const activeTab = ref('social'), drawerOpen = ref(false), showModal = ref(false);
     const agents = ref(s.agents || []), posts = ref(s.posts || []), leases = ref(s.leases || []);
-    const tasks = ref(s.tasks || []), telemetry = ref(s.telemetry || { totalTokens: 0, totalCost: 0 });
-    const savings = ref(s.savings || { tokensSaved: 165000, dollarsSaved: 1.65, reductionPct: 88 });
-    const forumCategories = ref(s.forumCategories || s.categories || []);
-    const selectedAgent = ref(null), editingSignature = ref(''), codebaseFiles = ref([]);
+    const tasks = ref(s.tasks || []), telemetry = ref(s.telemetry || { totalTokens: 0, totalCost: 0 }), savings = ref(s.savings || { tokensSaved: 165000, dollarsSaved: 1.65, reductionPct: 88 });
+    const forumCategories = ref(s.forumCategories || s.categories || []), selectedAgent = ref(null), editingSignature = ref(''), codebaseFiles = ref([]);
     const newPost = ref(''), newTask = ref(''), newTaskTitle = ref(''), newTaskTier = ref('organism'), newTaskPriority = ref(2), newTaskPath = ref('');
-    const lockPath = ref('src/auth/session.ts'), lockAgent = ref('@coordinator'), settingsMsg = ref('');
-    const attentionItems = ref([]), antigravityRunning = ref(false);
+    const lockPath = ref('src/auth/session.ts'), lockAgent = ref('@coordinator'), settingsMsg = ref(''), attentionItems = ref([]), antigravityRunning = ref(false);
     const dbMetrics = ref(null), dbQuery = ref("SELECT name, type FROM sqlite_master WHERE type = 'table'"), dbResults = ref(null), dbError = ref('');
     const ft = window.createFileTreeState ? window.createFileTreeState(Vue, api, codebaseFiles) : {};
     const studio = window.createStudioState ? window.createStudioState(Vue, api) : {};
@@ -52,9 +49,15 @@ createApp({
     };
     const claimTask = async (id) => { await api.postJson('/api/tasks/claim', { taskId: id, agentId: '@coordinator' }); };
     const completeTask = async (id) => { await api.postJson('/api/tasks/done', { taskId: id }); };
-    const updateTaskStatus = async (id, status, reason = '') => {
-      await api.updateTaskStatus(id, status, reason);
+    const taskRefusals = ref({});
+    const updateTaskStatus = async (id, status, reason = '', force = false) => {
+      const res = await api.updateTaskStatus(id, status, reason, force);
+      if (res && res.refused) { taskRefusals.value = { ...taskRefusals.value, [id]: res }; return; }
+      const nextRefusals = { ...taskRefusals.value };
+      delete nextRefusals[id];
+      taskRefusals.value = nextRefusals;
       const t = tasks.value.find((x) => x.id === id); if (t) { t.status = status; t.blocked_reason = reason; }
+      if (res?.task) { const idx = tasks.value.findIndex((x) => x.id === id); if (idx !== -1) tasks.value[idx] = res.task; }
     };
     const reassignTask = async (id, agentId) => {
       await api.assignTask(id, agentId);
@@ -85,13 +88,7 @@ createApp({
     });
     onUnmounted(() => clearTimeout(timer));
     return {
-      activeTab, drawerOpen, showModal, agents, posts, leases, tasks, telemetry, savings, forumCategories,
-      selectedAgent, editingSignature, codebaseFiles, newPost, newTask, newTaskTitle, newTaskTier, newTaskPriority, newTaskPath,
-      lockPath, lockAgent, settingsMsg, attentionItems, antigravityRunning, dbMetrics, dbQuery, dbResults, dbError,
-      kanbanColumns, getColumnTasks, updateTaskStatus, reassignTask, overrideLock,
-      sendPost, createTask, claimTask, completeTask, acquireLock, releaseLock, executeSetting,
-      openAgentProfile, saveSignature, fetchAttention, confirmAttention, runDbQuery, selectDbPreset, openSavingsModal, downloadPng,
-      ...ft, ...studio, ...forum
+      activeTab, drawerOpen, showModal, agents, posts, leases, tasks, telemetry, savings, forumCategories, selectedAgent, editingSignature, codebaseFiles, newPost, newTask, newTaskTitle, newTaskTier, newTaskPriority, newTaskPath, lockPath, lockAgent, settingsMsg, attentionItems, antigravityRunning, dbMetrics, dbQuery, dbResults, dbError, kanbanColumns, getColumnTasks, updateTaskStatus, reassignTask, overrideLock, taskRefusals, sendPost, createTask, claimTask, completeTask, acquireLock, releaseLock, executeSetting, openAgentProfile, saveSignature, fetchAttention, confirmAttention, runDbQuery, selectDbPreset, openSavingsModal, downloadPng, ...ft, ...studio, ...forum
     };
   }
 }).mount('#app');

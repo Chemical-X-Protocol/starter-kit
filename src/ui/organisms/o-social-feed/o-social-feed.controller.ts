@@ -36,10 +36,7 @@ export function useSocialFeedController(props: SocialFeedProps, emit: SocialFeed
     currentFilter,
     filteredPosts,
     totalPosts,
-    shouldShowEmpty,
-    actions: {
-      setFilter,
-      broadcast: handleBroadcast
-    }
+    setFilter,
+    handleBroadcast
   };
 }

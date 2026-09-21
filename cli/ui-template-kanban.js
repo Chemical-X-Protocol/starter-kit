@@ -60,11 +60,25 @@ export const VIEW_KANBAN_TEMPLATE = `
               <strong style="color:#f8fafc; font-size:11px; word-break:break-word;">#{{ t.id }} {{ t.title }}</strong>
               <span class="a-badge" :class="'badge-' + (t.tier || 'utility')">{{ t.tier || 'utility' }}</span>
             </div>
-            <div style="display:flex; gap:4px; align-items:center; flex-wrap:wrap;">
+            <div style="display:flex; gap:4px; align-items:center; flex-wrap:wrap; margin:2px 0;">
               <span class="a-badge badge-warning">P{{ t.priority || 2 }}</span>
               <span class="a-badge badge-primary" style="cursor:pointer;" title="Click to view agent profile" @click="openAgentProfile(t.assigned_agent_id || t.assignedAgentId)">{{ t.assigned_agent_id || t.assignedAgentId || '@unassigned' }}</span>
+              <span class="a-badge" :style="{ background: (t.origin_type === 'audit' || t.target_path) ? '#059669' : '#475569', color: '#fff', fontSize: '9px' }">{{ (t.origin_type === 'audit' || t.target_path) ? '🛡️ Codebase-Verified' : '📝 Self-Reported' }}</span>
             </div>
             <span class="vb-token-stamp">{{ t.tokenStamp || ('[P: ' + (t.prompt_tokens || 250) + ' | C: ' + (t.completion_tokens || 45) + ' | Cost: $' + (Number(t.cost_usd || 0.0014)).toFixed(4) + ']') }}</span>
+
+            <div v-if="taskRefusals && taskRefusals[t.id]" style="background:#450a0a; border:1px solid #dc2626; color:#fca5a5; padding:5px 6px; border-radius:3px; margin:4px 0; font-size:10px;">
+              <strong>⛔ Verification Refused:</strong> {{ taskRefusals[t.id].message }}
+              <div v-if="taskRefusals[t.id].violations && taskRefusals[t.id].violations.length" style="margin-top:2px;">
+                <div v-for="v in taskRefusals[t.id].violations" :key="v.line">Line {{ v.line }}: {{ v.hazard || v.rule }}</div>
+              </div>
+              <button class="a-btn a-btn--sec" style="margin-top:4px; font-size:9px; padding:1px 5px;" @click="updateTaskStatus(t.id, 'done', '', true)">Force Complete Anyway ⚠️</button>
+            </div>
+
+            <div v-if="(t.status === 'done' || t.status === 'completed') && (t.diff_receipt?.verified || t.result_payload?.receipt?.verified)" style="background:#064e3b; border:1px solid #059669; color:#6ee7b7; padding:3px 6px; border-radius:3px; margin:3px 0; font-size:10px;">
+              🛡️ Receipt: Health {{ t.diff_receipt?.healthBefore ?? t.result_payload?.receipt?.healthBefore ?? '?' }} → {{ t.diff_receipt?.healthAfter ?? t.result_payload?.receipt?.healthAfter ?? 100 }}/100 ({{ t.diff_receipt?.hazardsResolved ?? t.result_payload?.receipt?.hazardsResolved ?? 0 }} resolved)
+            </div>
+
             <div style="display:flex; gap:4px; margin-top:2px;">
               <select class="kanban-select" style="flex:1;" :value="t.status" @change="updateTaskStatus(t.id, $event.target.value)"><option value="queued">Queued</option><option value="in_progress">In Progress</option><option value="review">Review</option><option value="done">Completed</option><option value="blocked">Blocked</option></select>
               <select class="kanban-select" style="flex:1;" :value="t.assigned_agent_id || t.assignedAgentId || ''" @change="reassignTask(t.id, $event.target.value)"><option value="">Reassign...</option><option v-for="a in agents" :key="a.id" :value="a.id">{{ a.id }}</option></select>

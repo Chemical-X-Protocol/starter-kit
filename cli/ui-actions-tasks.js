@@ -1,10 +1,6 @@
-/**
- * Chemical X UI Task & Lock Actions
- * Status updates, agent reassignments, and lock overrides
- */
-
 import { getTask, updateTaskStatus, postFeedEvent } from './team/team-db.js';
 import { promoteNextWaiter } from './team/team-db-locks.js';
+import { completeTaskWithAudit } from './team/team-triage.js';
 
 const formatAgentHandle = (id) => {
   const hasId = Boolean(id);
@@ -24,6 +20,18 @@ export const handleUpdateTaskStatus = (db, body = {}) => {
 
   const blockedReason = body.blocked_reason || body.blockedReason || '';
   const agentId = formatAgentHandle(body.agentId || body.agent) || '@ui-operator';
+
+  const isTerminalStatus = status === 'done' || status === 'completed';
+  if (isTerminalStatus) {
+    const task = getTask(db, taskId);
+    const hasTarget = Boolean(task?.target_path);
+    const noTargetConfirm = body.noTargetConfirm !== undefined ? Boolean(body.noTargetConfirm) : !hasTarget;
+    const auditRes = completeTaskWithAudit(db, taskId, agentId, { cwd: body.cwd || process.cwd(), force: Boolean(body.force), noTargetConfirm });
+    if (!auditRes) return { success: false, error: 'Task not found' };
+    if (auditRes.refused) return { success: false, refused: true, ...auditRes };
+    return { success: true, task: auditRes };
+  }
+
   const updated = updateTaskStatus(db, taskId, status, { blockedReason });
   if (!updated) return { success: false, error: 'Task not found' };
 

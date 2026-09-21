@@ -15,4 +15,28 @@ describe('m-task-card molecular capsule', () => {
     assert.equal(task.status, 'done');
     assert.equal(task.chatLink.startsWith('conversation://'), true);
   });
+
+  it('validates provenance, receipt, and refusal data structures', () => {
+    const auditTask = {
+      id: 'task-99',
+      title: 'Resolve architectural hazards in src/foo.ts (HOOK_RETURN_OVERLOAD)',
+      status: 'done',
+      originType: 'audit' as const,
+      ruleId: 'HOOK_RETURN_OVERLOAD',
+      targetPath: 'src/foo.ts',
+      violationSnapshot: {
+        healthBefore: 40,
+        hazardCountBefore: 3
+      },
+      diffReceipt: {
+        verified: true,
+        healthBefore: 40,
+        healthAfter: 100,
+        hazardsResolved: 3
+      }
+    };
+    assert.equal(auditTask.originType, 'audit');
+    assert.equal(auditTask.diffReceipt.verified, true);
+    assert.equal(auditTask.diffReceipt.hazardsResolved, 3);
+  });
 });

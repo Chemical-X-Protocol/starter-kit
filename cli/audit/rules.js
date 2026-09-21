@@ -19,8 +19,9 @@ import {
   createExtendedVisitors
 } from './extended-visitors.js';
 import { createPatternVisitors, recordTemplatePatterns } from './pattern-detector.js';
+import { createHookShapeRegistry } from './hook-shape-validator.js';
 
-export { PILLARS, RULE_REGISTRY };
+export { PILLARS, RULE_REGISTRY, createHookShapeRegistry };
 
 export const auditCode = (content, filePath, relativePath, options = {}) => {
   const violations = [];
@@ -145,7 +146,8 @@ export const auditCode = (content, filePath, relativePath, options = {}) => {
   }
 
   const traverseFn = traverse.default || traverse;
-  const visitors = createAstVisitors({ relativePath, violations });
+  const hookRegistry = options.hookRegistry || createHookShapeRegistry();
+  const visitors = createAstVisitors({ relativePath, violations, hookRegistry });
   const slopVisitors = createAiSlopVisitors({ relativePath, violations });
   const extendedVisitors = createExtendedVisitors({ relativePath, violations });
   const patternVisitors = options.patternRegistry
@@ -168,6 +170,12 @@ export const auditCode = (content, filePath, relativePath, options = {}) => {
   }
 
   traverseFn(ast, mergedVisitors);
+
+  const shouldRunLocalConsistency = !options.hookRegistry;
+  if (shouldRunLocalConsistency) {
+    const consistencyViolations = hookRegistry.validateCrossHookConsistency();
+    violations.push(...consistencyViolations);
+  }
 
   return violations;
 };

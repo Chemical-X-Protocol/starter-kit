@@ -13,7 +13,7 @@ const emit = defineEmits<SettingsPanelEmits>();
 
 const {
   busyTimeoutMs,
-  actions
+  handleAction
 } = useSettingsPanelController(props, emit);
 </script>
 
@@ -35,7 +35,7 @@ const {
           <ABadge label="PRAGMA" tone="primary" />
         </ACard>
         <AText variant="caption" tone="muted" text="Reclaim unused disk pages and optimize SQLite B-tree indexes." />
-        <AButton variant="secondary" size="md" @click="actions.vacuum"><AText text="Execute VACUUM" /></AButton>
+        <AButton variant="secondary" size="md" @click="handleAction('vacuum')"><AText text="Execute VACUUM" /></AButton>
       </ACard>
 
       <ACard variant="glass" padding="none" class="o-settings-panel__card">
@@ -44,7 +44,7 @@ const {
           <ABadge label="RETENTION" tone="primary" />
         </ACard>
         <AText variant="caption" tone="muted" text="Retain latest 50 live feed events; prune older entries." />
-        <AButton variant="secondary" size="md" @click="actions.clearFeed"><AText text="Prune Old Feed" /></AButton>
+        <AButton variant="secondary" size="md" @click="handleAction('clear_feed')"><AText text="Prune Old Feed" /></AButton>
       </ACard>
 
       <ACard variant="glass" padding="none" class="o-settings-panel__card">
@@ -53,7 +53,7 @@ const {
           <ABadge label="LEASES" tone="warning" />
         </ACard>
         <AText variant="caption" tone="muted" text="Release all locks where TTL timestamp has lapsed." />
-        <AButton variant="secondary" size="md" @click="actions.resetLeases"><AText text="Reset Expired Leases" /></AButton>
+        <AButton variant="secondary" size="md" @click="handleAction('reset_leases')"><AText text="Reset Expired Leases" /></AButton>
       </ACard>
 
       <ACard variant="glass" padding="none" class="o-settings-panel__card">
@@ -62,7 +62,7 @@ const {
           <ABadge label="TELEMETRY" tone="lime" />
         </ACard>
         <AText variant="caption" tone="muted" text="Broadcast an autonomous heartbeat signal to all swarm agents." />
-        <AButton variant="primary" size="md" @click="actions.heartbeat"><AText text="Broadcast Heartbeat" /></AButton>
+        <AButton variant="primary" size="md" @click="handleAction('heartbeat')"><AText text="Broadcast Heartbeat" /></AButton>
       </ACard>
 
       <ACard variant="glass" padding="none" class="o-settings-panel__card">
@@ -71,7 +71,7 @@ const {
           <ABadge label="CONCURRENCY" tone="primary" />
         </ACard>
         <AInput v-model="busyTimeoutMs" type="number" placeholder="Busy timeout in ms" />
-        <AButton variant="secondary" size="md" @click="actions.busyTimeout"><AText text="Apply Timeout" /></AButton>
+        <AButton variant="secondary" size="md" @click="handleAction('busy_timeout')"><AText text="Apply Timeout" /></AButton>
       </ACard>
     </ACard>
   </ACard>

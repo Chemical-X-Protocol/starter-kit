@@ -14,10 +14,10 @@ const props = withDefaults(defineProps<AgentRailProps>(), {
 const emit = defineEmits<AgentRailEmits>();
 
 const {
-  filter,
+  currentFilter,
+  setFilter,
   filteredAgents,
   activeSummary,
-  shouldShowEmpty,
   handleSelectAgent
 } = useAgentRailController(props, emit);
 </script>
@@ -32,34 +32,34 @@ const {
     <template #default>
       <AChip
         label="All"
-        :active="filter.current.value === 'all'"
+        :active="currentFilter === 'all'"
         clickable
-        @click="filter.set('all')"
+        @click="setFilter('all')"
       />
       <AChip
         label="Active"
-        :active="filter.current.value === 'active'"
+        :active="currentFilter === 'active'"
         clickable
         tone="warning"
-        @click="filter.set('active')"
+        @click="setFilter('active')"
       />
       <AChip
         label="Idle"
-        :active="filter.current.value === 'idle'"
+        :active="currentFilter === 'idle'"
         clickable
         tone="sky"
-        @click="filter.set('idle')"
+        @click="setFilter('idle')"
       />
       <AChip
         label="Offline"
-        :active="filter.current.value === 'offline'"
+        :active="currentFilter === 'offline'"
         clickable
         tone="default"
-        @click="filter.set('offline')"
+        @click="setFilter('offline')"
       />
 
       <AChip
-        v-if="shouldShowEmpty"
+        v-if="filteredAgents.length === 0"
         label="No agents match filter"
         tone="default"
       />

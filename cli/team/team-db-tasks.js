@@ -34,15 +34,20 @@ export const createTask = (db, taskData) => {
   const sql = `INSERT INTO agent_tasks (
     title, description, tier, target_path, target_symbol,
     status, priority, assigned_agent_id, blocked_reason,
-    parent_id, dependencies, created_at, updated_at, result_payload
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+    parent_id, dependencies, created_at, updated_at, result_payload,
+    origin_type, rule_id, violation_snapshot, diff_receipt
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
   const info = db.prepare(sql).run(
     taskData.title, taskData.description || '', taskData.tier || '',
     taskData.target_path || null, taskData.target_symbol || '', taskData.status || 'queued',
     Number(taskData.priority || 2), taskData.assigned_agent_id || null,
     taskData.blocked_reason || '', taskData.parent_id || null,
     JSON.stringify(taskData.dependencies || []), now, now,
-    JSON.stringify(taskData.result_payload || {})
+    JSON.stringify(taskData.result_payload || {}),
+    taskData.origin_type || (taskData.target_path ? 'audit' : 'manual'),
+    taskData.rule_id || '',
+    JSON.stringify(taskData.violation_snapshot || {}),
+    JSON.stringify(taskData.diff_receipt || {})
   );
   return getTask(db, info.lastInsertRowid);
 };

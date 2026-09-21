@@ -15,7 +15,9 @@ export const migrateTelemetryColumns = (db) => {
   migrateCols(db, 'agent_tasks', [
     ['prompt_tokens', 'INTEGER NOT NULL DEFAULT 0'], ['completion_tokens', 'INTEGER NOT NULL DEFAULT 0'],
     ['cached_tokens', 'INTEGER NOT NULL DEFAULT 0'], ['total_tokens', 'INTEGER NOT NULL DEFAULT 0'],
-    ['cost_usd', 'REAL NOT NULL DEFAULT 0.0']
+    ['cost_usd', 'REAL NOT NULL DEFAULT 0.0'],
+    ['origin_type', "TEXT NOT NULL DEFAULT 'manual'"], ['rule_id', "TEXT NOT NULL DEFAULT ''"],
+    ['violation_snapshot', "TEXT NOT NULL DEFAULT '{}'"], ['diff_receipt', "TEXT NOT NULL DEFAULT '{}'"]
   ]);
   migrateCols(db, 'agents', [
     ['total_prompt_tokens', 'INTEGER NOT NULL DEFAULT 0'], ['total_completion_tokens', 'INTEGER NOT NULL DEFAULT 0'],
@@ -41,7 +43,9 @@ export const initTeamSchema = (db) => {
       created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
       prompt_tokens INTEGER NOT NULL DEFAULT 0, completion_tokens INTEGER NOT NULL DEFAULT 0,
       cached_tokens INTEGER NOT NULL DEFAULT 0, total_tokens INTEGER NOT NULL DEFAULT 0,
-      cost_usd REAL NOT NULL DEFAULT 0.0, result_payload TEXT NOT NULL DEFAULT '{}'
+      cost_usd REAL NOT NULL DEFAULT 0.0, result_payload TEXT NOT NULL DEFAULT '{}',
+      origin_type TEXT NOT NULL DEFAULT 'manual', rule_id TEXT NOT NULL DEFAULT '',
+      violation_snapshot TEXT NOT NULL DEFAULT '{}', diff_receipt TEXT NOT NULL DEFAULT '{}'
     );
     CREATE TABLE IF NOT EXISTS agent_feed (
       id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp INTEGER NOT NULL, author_id TEXT NOT NULL,

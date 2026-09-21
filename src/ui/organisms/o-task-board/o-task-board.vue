@@ -13,10 +13,10 @@ const emit = defineEmits<TaskBoardEmits>();
 
 const {
   newTaskTitle,
-  queuedTasks,
-  inProgressTasks,
-  doneTasks,
-  actions
+  tasksByStatus,
+  handleCreate,
+  handleClaim,
+  handleComplete
 } = useTaskBoardController(props, emit);
 </script>
 
@@ -26,9 +26,9 @@ const {
       <AInput
         v-model="newTaskTitle"
         placeholder="Enter new swarm task description..."
-        @submit="actions.create"
+        @submit="handleCreate"
       />
-      <AButton variant="primary" size="md" @click="actions.create">
+      <AButton variant="primary" size="md" @click="handleCreate">
         <AText text="+ New Task" />
       </AButton>
     </ACard>
@@ -37,36 +37,36 @@ const {
       <ACard variant="subtle" padding="none" class="o-task-board__column">
         <ACard variant="subtle" padding="none" class="o-task-board__col-header">
           <AText variant="title" tone="warning" text="Backlog / Queued" />
-          <ABadge :label="String(queuedTasks.length)" tone="warning" />
+          <ABadge :label="String(tasksByStatus.queued.length)" tone="warning" />
         </ACard>
         <MTaskCard
-          v-for="t in queuedTasks"
+          v-for="t in tasksByStatus.queued"
           :key="t.id"
           :task="t"
-          @claim="actions.claim"
+          @claim="handleClaim"
         />
       </ACard>
 
       <ACard variant="subtle" padding="none" class="o-task-board__column">
         <ACard variant="subtle" padding="none" class="o-task-board__col-header">
           <AText variant="title" tone="primary" text="In Progress" />
-          <ABadge :label="String(inProgressTasks.length)" tone="primary" />
+          <ABadge :label="String(tasksByStatus.inProgress.length)" tone="primary" />
         </ACard>
         <MTaskCard
-          v-for="t in inProgressTasks"
+          v-for="t in tasksByStatus.inProgress"
           :key="t.id"
           :task="t"
-          @complete="actions.complete"
+          @complete="handleComplete"
         />
       </ACard>
 
       <ACard variant="subtle" padding="none" class="o-task-board__column">
         <ACard variant="subtle" padding="none" class="o-task-board__col-header">
           <AText variant="title" tone="success" text="Completed" />
-          <ABadge :label="String(doneTasks.length)" tone="lime" />
+          <ABadge :label="String(tasksByStatus.done.length)" tone="lime" />
         </ACard>
         <MTaskCard
-          v-for="t in doneTasks"
+          v-for="t in tasksByStatus.done"
           :key="t.id"
           :task="t"
         />

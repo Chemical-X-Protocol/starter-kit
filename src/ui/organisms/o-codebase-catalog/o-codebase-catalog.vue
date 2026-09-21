@@ -10,12 +10,14 @@ import { useCodebaseCatalogController } from './o-codebase-catalog.controller';
 const props = defineProps<CodebaseCatalogProps>();
 const emit = defineEmits<CodebaseCatalogEmits>();
 
+const TIERS = ['all', 'atom', 'molecule', 'organism', 'view', 'cli', 'utility'] as const;
+
 const {
   selectedTier,
-  tiers,
   filteredFiles,
   stats,
-  actions
+  handleSelectTier,
+  handleSelectFile
 } = useCodebaseCatalogController(props, emit);
 </script>
 
@@ -38,13 +40,13 @@ const {
 
     <ACard variant="subtle" padding="none" class="o-codebase-catalog__filters">
       <AChip
-        v-for="tier in tiers"
+        v-for="tier in TIERS"
         :key="tier"
         :label="tier.toUpperCase()"
         :tone="selectedTier === tier ? 'primary' : 'default'"
         :active="selectedTier === tier"
         :clickable="true"
-        @click="actions.selectTier(tier)"
+        @click="handleSelectTier(tier)"
       />
     </ACard>
 
@@ -53,7 +55,7 @@ const {
         v-for="file in filteredFiles"
         :key="file.path"
         :file="file"
-        @select="actions.selectFile"
+        @select="handleSelectFile"
       />
     </ACard>
   </ACard>

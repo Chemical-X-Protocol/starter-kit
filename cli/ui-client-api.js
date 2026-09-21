@@ -55,8 +55,8 @@ window.chemxApi = {
   postJson: async (url, body) => {
     return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   },
-  updateTaskStatus: async (taskId, status, blockedReason = '') => {
-    const res = await fetch('/api/tasks/update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId, status, blockedReason }) });
+  updateTaskStatus: async (taskId, status, blockedReason = '', force = false) => {
+    const res = await fetch('/api/tasks/update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId, status, blockedReason, force }) });
     return await res.json();
   },
   assignTask: async (taskId, agentId) => {

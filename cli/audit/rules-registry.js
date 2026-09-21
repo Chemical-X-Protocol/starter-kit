@@ -118,8 +118,13 @@ export const RULE_REGISTRY = {
   },
   HOOK_RETURN_OVERLOAD: {
     pillar: PILLARS.PILLAR_3,
+    severity: 'MEDIUM',
+    directive: 'Limit hook return values to 3 to 5 properties (Deprecated: use HOOK_SHAPE_CONTRACT)'
+  },
+  HOOK_SHAPE_CONTRACT: {
+    pillar: PILLARS.PILLAR_3,
     severity: 'HIGH',
-    directive: 'Limit hook return values to 3 to 5 properties (State + Status + Actions)'
+    directive: 'Structure hook returns into flat State, Status, and verb-prefixed Actions buckets'
   },
   CONTROLLER_VIEW_MISMATCH: {
     pillar: PILLARS.PILLAR_3,
