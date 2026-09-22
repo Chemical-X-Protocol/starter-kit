@@ -72,7 +72,7 @@ export const getMcpPrompt = async (name, args = {}) => {
         '2. Molecular Capsule Limit: Maximum 100 lines per molecule capsule file.',
         '3. Table-of-Contents Views: Top-level page views must be 10-20 line declarative templates assembling components via named slots.',
         '4. Two-Stage Atomic Booleans: Break complex multi-clause conditionals into atomic single-concept booleans.',
-        '5. Composable Return Contracts: Limit hook/composable returns to 3 to 5 properties (State + Status + Actions).',
+        '5. Composable Return Contracts: Classify hook/composable returns into flat State, Status, and verb-prefixed Actions buckets (HOOK_SHAPE_CONTRACT).',
         '6. Co-located Types: Co-locate granular types/*.d.ts inside each capsule (< 100 lines). Avoid type monoliths.',
         '7. Zero synthetic or mock data: Return live data or explicit empty states.',
         `8. Framework: Calibrate bindings for ${framework}.`,

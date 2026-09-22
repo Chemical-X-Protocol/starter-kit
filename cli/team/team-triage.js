@@ -167,28 +167,42 @@ export const completeTaskWithAudit = (db, taskId, agentId, options = {}) => {
         const remainingHazards = Array.isArray(auditRes) ? auditRes : (auditRes?.fileViolations || auditRes?.violations || []);
         hazardCount = remainingHazards.length;
         healthScore = Math.max(0, 100 - hazardCount * 15);
-        verified = hazardCount === 0;
+        const isStrict = Boolean(options.strict);
+        const isBlocking = (v) => {
+          if (isStrict) return true;
+          if (v.deprecated === true) return false;
+          if (typeof v.directive === 'string' && v.directive.includes('Deprecated')) return false;
+          return v.severity === 'CRITICAL' || v.severity === 'HIGH';
+        };
+        const blockingHazards = remainingHazards.filter(isBlocking);
+        const blockingCount = blockingHazards.length;
+
+        verified = blockingCount === 0;
         resultPayload.verified = verified;
         resultPayload.hazardCountAfter = hazardCount;
+        resultPayload.blockingHazardCountAfter = blockingCount;
         resultPayload.healthAfter = healthScore;
         resultPayload.remainingViolations = remainingHazards.map((v) => v.hazard || v.rule);
 
-        if (hazardCount > 0 && options.force !== true) {
+        if (blockingCount > 0 && options.force !== true) {
           return {
             refused: true,
             verified: false,
             taskId: Number(taskId),
             taskTitle: task.title,
-            hazardCount,
+            hazardCount: blockingCount,
+            totalHazards: hazardCount,
             targetPath: task.target_path,
             healthScore,
-            violations: remainingHazards.map((v) => ({ line: v.line, hazard: v.hazard || v.rule, rule: v.rule })),
-            message: `Cannot complete task #${taskId}: ${hazardCount} hazard(s) remain in ${task.target_path}. Fix the hazards or pass --force to complete anyway.`
+            violations: blockingHazards.map((v) => ({ line: v.line, hazard: v.hazard || v.rule, rule: v.rule })),
+            message: `Cannot complete task #${taskId}: ${blockingCount} blocking hazard(s) remain in ${task.target_path}. Fix the hazards or pass --force to complete anyway.`
           };
         }
 
-        if (hazardCount > 0 && options.force === true) {
+        if (blockingCount > 0 && options.force === true) {
           resultPayload.forced = true;
+        } else {
+          resultPayload.forced = false;
         }
 
         // Update database files and violations state
@@ -207,7 +221,19 @@ export const completeTaskWithAudit = (db, taskId, agentId, options = {}) => {
         // Fallback to cached file row if audit fails
         const fileRow = db.prepare('SELECT health_score, hazard_count, lines FROM files WHERE path = ?').get(task.target_path);
         if (fileRow) {
-          if (fileRow.hazard_count > 0 && options.force !== true) {
+          let blockingCount = fileRow.hazard_count;
+          try {
+            const blockingRow = db.prepare(
+              "SELECT COUNT(*) as count FROM violations WHERE file_path = ? AND severity IN ('CRITICAL', 'HIGH')"
+            ).get(task.target_path);
+            if (blockingRow && typeof blockingRow.count === 'number') {
+              blockingCount = blockingRow.count > 0 ? blockingRow.count : fileRow.hazard_count;
+            }
+          } catch {
+            blockingCount = fileRow.hazard_count;
+          }
+
+          if (blockingCount > 0 && options.force !== true) {
             return {
               refused: true,
               taskId: Number(taskId),
@@ -218,18 +244,34 @@ export const completeTaskWithAudit = (db, taskId, agentId, options = {}) => {
               message: `Cannot complete task #${taskId}: ${fileRow.hazard_count} hazard(s) remain in ${task.target_path}. Fix the hazards or pass --force to complete anyway.`
             };
           }
+          resultPayload.verified = blockingCount === 0;
           resultPayload.healthAfter = fileRow.health_score;
           resultPayload.hazardCountAfter = fileRow.hazard_count;
+          resultPayload.blockingHazardCountAfter = blockingCount;
           resultPayload.linesAfter = fileRow.lines;
-          if (fileRow.hazard_count > 0 && options.force === true) {
+          if (blockingCount > 0 && options.force === true) {
             resultPayload.forced = true;
+          } else {
+            resultPayload.forced = false;
           }
         }
       }
     } else {
       const fileRow = db.prepare('SELECT health_score, hazard_count, lines FROM files WHERE path = ?').get(task.target_path);
       if (fileRow) {
-        if (fileRow.hazard_count > 0 && options.force !== true) {
+        let blockingCount = fileRow.hazard_count;
+        try {
+          const blockingRow = db.prepare(
+            "SELECT COUNT(*) as count FROM violations WHERE file_path = ? AND severity IN ('CRITICAL', 'HIGH')"
+          ).get(task.target_path);
+          if (blockingRow && typeof blockingRow.count === 'number') {
+            blockingCount = blockingRow.count > 0 ? blockingRow.count : fileRow.hazard_count;
+          }
+        } catch {
+          blockingCount = fileRow.hazard_count;
+        }
+
+        if (blockingCount > 0 && options.force !== true) {
           return {
             refused: true,
             taskId: Number(taskId),
@@ -240,11 +282,15 @@ export const completeTaskWithAudit = (db, taskId, agentId, options = {}) => {
             message: `Cannot complete task #${taskId}: ${fileRow.hazard_count} hazard(s) remain in ${task.target_path}. Fix the hazards or pass --force to complete anyway.`
           };
         }
+        resultPayload.verified = blockingCount === 0;
         resultPayload.healthAfter = fileRow.health_score;
         resultPayload.hazardCountAfter = fileRow.hazard_count;
+        resultPayload.blockingHazardCountAfter = blockingCount;
         resultPayload.linesAfter = fileRow.lines;
-        if (fileRow.hazard_count > 0 && options.force === true) {
+        if (blockingCount > 0 && options.force === true) {
           resultPayload.forced = true;
+        } else {
+          resultPayload.forced = false;
         }
       }
     }

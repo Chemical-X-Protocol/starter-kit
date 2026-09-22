@@ -43,7 +43,7 @@ export const printHelp = () => {
   lines.push(
     `${BOLD}REACTIVE COMPOSABLE RULES${RESET}`,
     `  ${YELLOW}1.${RESET} Return plain objects with individual ref/computed. Never raw reactive().`,
-    `  ${YELLOW}2.${RESET} Strictly limit returns to State + Status + Actions (max 3-5 properties).`,
+    `  ${YELLOW}2.${RESET} Structure returns into flat State, Status, and verb Actions (HOOK_SHAPE_CONTRACT).`,
     `  ${YELLOW}3.${RESET} Clean up side-effects automatically onScopeDispose().`,
     '',
     `${BOLD}COMMUNITY & SUPPORT${RESET}`,

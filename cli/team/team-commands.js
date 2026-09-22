@@ -206,8 +206,10 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
           process.stdout.write(`\x1b[33m⚠\x1b[0m Completed task #${taskId} (Unverified: no target_path specified; completed with --no-target-confirm)\n`);
         } else if (res?.result_payload?.forced) {
           process.stdout.write(`\x1b[33m⚠\x1b[0m Completed task #${taskId} with --force \x1b[33m(Note: ${res.result_payload.hazardCountAfter} hazard(s) still remain in ${res.target_path})\x1b[0m\n`);
-        } else if (res?.result_payload?.verified) {
+        } else if (res?.result_payload?.verified && (res?.result_payload?.hazardCountAfter || 0) === 0) {
           process.stdout.write(`\x1b[32m✔\x1b[0m Completed task #${taskId} (Verified clean: 0 hazards in ${res.target_path || 'target'})\n`);
+        } else if (res?.result_payload?.verified && (res?.result_payload?.hazardCountAfter || 0) > 0) {
+          process.stdout.write(`\x1b[32m✔\x1b[0m Completed task #${taskId} (Verified passing: ${res.result_payload.hazardCountAfter} non-blocking warning(s) remain in ${res.target_path})\n`);
         } else if (res?.result_payload?.hazardCountAfter > 0) {
           process.stdout.write(`\x1b[32m✔\x1b[0m Completed task #${taskId} \x1b[33m(Note: ${res.result_payload.hazardCountAfter} hazard(s) still remain in ${res.target_path})\x1b[0m\n`);
         } else {
@@ -263,8 +265,10 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
           process.stdout.write(`\x1b[33m⚠\x1b[0m Updated task #${taskId} to status "done" (Unverified: no target_path specified; completed with --no-target-confirm)\n`);
         } else if (res?.result_payload?.forced) {
           process.stdout.write(`\x1b[33m⚠\x1b[0m Updated task #${taskId} to status "done" with --force \x1b[33m(Note: ${res.result_payload.hazardCountAfter} hazard(s) still remain in ${res.target_path})\x1b[0m\n`);
-        } else if (res?.result_payload?.verified) {
+        } else if (res?.result_payload?.verified && (res?.result_payload?.hazardCountAfter || 0) === 0) {
           process.stdout.write(`\x1b[32m✔\x1b[0m Updated task #${taskId} to status "done" (Verified clean: 0 hazards in ${res.target_path || 'target'})\n`);
+        } else if (res?.result_payload?.verified && (res?.result_payload?.hazardCountAfter || 0) > 0) {
+          process.stdout.write(`\x1b[32m✔\x1b[0m Updated task #${taskId} to status "done" (Verified passing: ${res.result_payload.hazardCountAfter} non-blocking warning(s) remain in ${res.target_path})\n`);
         } else if (res?.result_payload?.hazardCountAfter > 0) {
           process.stdout.write(`\x1b[32m✔\x1b[0m Updated task #${taskId} to status "done" \x1b[33m(Note: ${res.result_payload.hazardCountAfter} hazard(s) still remain in ${res.target_path})\x1b[0m\n`);
         } else {

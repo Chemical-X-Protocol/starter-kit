@@ -6,7 +6,13 @@
 const migrateCols = (db, tbl, cols) => {
   const existing = new Set((db.prepare(`PRAGMA table_info(${tbl})`).all() || []).map((c) => c.name));
   for (const [col, def] of cols) {
-    if (!existing.has(col)) db.exec(`ALTER TABLE ${tbl} ADD COLUMN ${col} ${def};`);
+    if (!existing.has(col)) {
+      try {
+        db.exec(`ALTER TABLE ${tbl} ADD COLUMN ${col} ${def};`);
+      } catch (err) {
+        if (!err.message?.includes('duplicate column')) throw err;
+      }
+    }
   }
 };
 

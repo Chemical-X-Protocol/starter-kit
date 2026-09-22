@@ -40,11 +40,11 @@ export const PILLARS = [
     id: 'p4_composables',
     key: 'composableContracts',
     title: 'Pillar 4: Molecular Composable Contracts',
-    summary: '3 to 5 return properties max, safe destructuring, auto-cleanup.',
-    cursorRule: 'Composables: return plain objects with refs, strictly 3-5 properties max, auto-cleanup on unmount.',
+    summary: 'Classified return shape (State, Status, flat verb-prefixed Actions), safe destructuring, auto-cleanup.',
+    cursorRule: 'Composables: return plain objects with refs, classify strictly into State/Status/Actions, auto-cleanup on unmount.',
     agentsDirective: `### Pillar 4: Molecular Composable Contracts
 - Safe Destructuring: Return plain objects containing individual refs, computeds, and pure functions. Never return raw reactive objects.
-- Return Limit: Strictly limit returns to State + Status + Actions (3 to 5 return properties maximum).
+- Shape-Classification Contract: Structure return values strictly into three canonical buckets: State (domain data), Status (lifecycle/health info), and Actions (verb-prefixed functions flat at top level). No arbitrary property count ceiling applies. Nested action wrappers ('actions: {}') are strictly prohibited.
 - Lifecycle Teardown: Clean up listeners, timers, and observers automatically on scope disposal.`
   },
   {

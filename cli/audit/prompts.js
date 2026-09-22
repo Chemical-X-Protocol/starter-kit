@@ -296,7 +296,7 @@ export const buildHotspotsPrompt = (report, options = {}) => {
   lines.push('1. Pre-Split Pattern Discovery: Audit recurring UI layouts, state machines, and predicates across monoliths first; extract canonical shared capsules before slicing to prevent bespoke pattern duplication.');
   lines.push('2. Molecular Limits: Molecule capsules must strictly remain under 100 lines per file.');
   lines.push('3. Table-of-Contents Views: Top-level page views must be 10 to 20 line declarative Table of Contents assembling molecules via named slots.');
-  lines.push('4. Composable Return Contracts: Custom hooks/composables must strictly limit returns to 3 to 5 properties (State + Status + Actions).');
+  lines.push('4. Composable Return Contracts: Custom hooks/composables must classify returns into flat State, Status, and verb-prefixed Actions buckets (Directive 4.A).');
   lines.push('5. Type Co-location: Co-locate granular types/*.d.ts files inside each feature capsule (< 100 lines per type file) instead of creating type monoliths.');
   lines.push('6. Zero breaking changes to external component APIs, route exports, or existing props.');
   if (!isSubSection) {

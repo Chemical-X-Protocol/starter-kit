@@ -194,5 +194,19 @@ export const COMMANDS_SCHEMA = [
       'npx chemx pillars --preset=recommended',
       'npx chemx pillars --preset=minimal --dry-run'
     ]
+  },
+  {
+    name: 'ui',
+    aliases: ['dashboard', 'preview'],
+    usage: 'npx chemx ui [options]',
+    summary: 'Launch the Chemical X interactive web dashboard.',
+    description: 'Provides real-time Kanban task boards, agent rails, live SQLite Database Studio, and codebase AST tree exploration.',
+    flags: [
+      { flag: '--port=<N>', desc: 'Server port (default: 4173)' }
+    ],
+    examples: [
+      'npx chemx ui',
+      'npx chemx dashboard --port=3000'
+    ]
   }
 ];

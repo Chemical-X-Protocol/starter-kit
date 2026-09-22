@@ -493,7 +493,7 @@ test('team-triage: completeTaskWithAudit correctly detects real on-disk violatio
   const testFile = path.join(tmpDir, 'm-test-hazard.tsx');
   fs.writeFileSync(
     testFile,
-    `import React from 'react';\nexport const MTest = () => {\n  return <div><button>Violating Raw Button</button></div>;\n};\nexport default MTest;\n`
+    `import React from 'react';\nexport const MTest = (a: any, b: any) => {\n  const x = a ? (b ? 1 : 2) : 3;\n  return <div><button>Violating Raw Button</button></div>;\n};\nexport default MTest;\n`
   );
 
   const db = setupTestDb();

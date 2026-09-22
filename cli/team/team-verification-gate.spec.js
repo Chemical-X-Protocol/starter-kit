@@ -46,7 +46,8 @@ test('Verification Gate: refuses completion when architectural hazards remain on
   const targetFull = path.join(tmpDir, targetRel);
   fs.mkdirSync(path.dirname(targetFull), { recursive: true });
 
-  const lines = Array.from({ length: 110 }, (_, i) => `export const val_${i} = ${i};`).join('\n');
+  // 260 lines triggers HIGH severity (>= 250 lines in molecule capsule)
+  const lines = Array.from({ length: 260 }, (_, i) => `export const val_${i} = ${i};`).join('\n');
   fs.writeFileSync(targetFull, lines, 'utf8');
 
   const task = createTask(db, {
@@ -81,7 +82,7 @@ test('Verification Gate: allows completion with force override flag', () => {
   const targetFull = path.join(tmpDir, targetRel);
   fs.mkdirSync(path.dirname(targetFull), { recursive: true });
 
-  const lines = Array.from({ length: 105 }, (_, i) => `export const x_${i} = ${i};`).join('\n');
+  const lines = Array.from({ length: 260 }, (_, i) => `export const x_${i} = ${i};`).join('\n');
   fs.writeFileSync(targetFull, lines, 'utf8');
 
   const task = createTask(db, {
@@ -97,6 +98,39 @@ test('Verification Gate: allows completion with force override flag', () => {
   assert.equal(completed.status, 'done');
   assert.equal(completed.result_payload.forced, true);
   assert.equal(completed.diff_receipt.forced, true);
+
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+});
+
+test('Verification Gate: allows completion when only non-blocking/deprecated MEDIUM warnings remain', () => {
+  const db = setupTestDb();
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-gate-nonblocking-'));
+  const targetRel = 'src/composables/useSample.ts';
+  const targetFull = path.join(tmpDir, targetRel);
+  fs.mkdirSync(path.dirname(targetFull), { recursive: true });
+
+  // 6 return properties triggers deprecated HOOK_RETURN_OVERLOAD (MEDIUM severity)
+  const code = 'export const useSample = () => { return { a: 1, b: 2, c: 3, d: 4, e: 5, f: 6 }; };\n';
+  fs.writeFileSync(targetFull, code, 'utf8');
+
+  const task = createTask(db, {
+    title: 'Modernize useSample.ts',
+    target_path: targetRel,
+    tier: 'hook',
+    origin_type: 'audit',
+    rule_id: 'HOOK_RETURN_OVERLOAD',
+    violation_snapshot: { healthBefore: 85, hazardCountBefore: 1 }
+  });
+
+  // Non-blocking MEDIUM warning should not prevent completion without force
+  const completed = completeTaskWithAudit(db, task.id, '@test-bot', { cwd: tmpDir });
+  assert.ok(completed);
+  assert.equal(completed.status, 'done');
+  assert.equal(completed.result_payload.verified, true);
+  assert.equal(completed.result_payload.forced, false);
+  assert.equal(completed.result_payload.hazardCountAfter, 1);
+  assert.equal(completed.diff_receipt.verified, true);
+  assert.equal(completed.diff_receipt.forced, false);
 
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
@@ -161,7 +195,8 @@ test('Verification Gate: UI route intercepts status update to done and refuses u
   const targetFull = path.join(tmpDir, targetRel);
   fs.mkdirSync(path.dirname(targetFull), { recursive: true });
 
-  const lines = Array.from({ length: 115 }, (_, i) => `export const u_${i} = ${i};`).join('\n');
+  // 260 lines triggers HIGH severity in molecule capsule
+  const lines = Array.from({ length: 260 }, (_, i) => `export const u_${i} = ${i};`).join('\n');
   fs.writeFileSync(targetFull, lines, 'utf8');
 
   const task = createTask(db, {
