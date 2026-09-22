@@ -48,10 +48,10 @@ export const resolveMcpServerCommand = (targetDir = '.') => {
   const hasScopedChemx = fs.existsSync(localScopedChemx);
   const hasInRepoStarterKit = fs.existsSync(inRepoStarterKit);
 
-  if (hasCreateChemx) {
+  if (hasInRepoStarterKit) {
     return {
       command: 'node',
-      args: ['./node_modules/create-chemx/cli/index.js', 'mcp']
+      args: ['./apps/chemical-x/starter-kit/cli/index.js', 'mcp']
     };
   }
 
@@ -62,16 +62,16 @@ export const resolveMcpServerCommand = (targetDir = '.') => {
     };
   }
 
-  if (hasInRepoStarterKit) {
+  if (hasCreateChemx) {
     return {
       command: 'node',
-      args: ['./apps/chemical-x/starter-kit/cli/index.js', 'mcp']
+      args: ['./node_modules/create-chemx/cli/index.js', 'mcp']
     };
   }
 
   return {
-    command: 'npx',
-    args: ['-y', 'chemx', 'mcp']
+    command: 'npm',
+    args: ['exec', '-y', '--', 'chemx', 'mcp']
   };
 };
 
@@ -173,7 +173,7 @@ export const installAntigravityMcpConfig = (targetDir = '.', options = {}) => {
 
   const serverDef = localStarter
     ? { command: process.execPath, args: [localStarter, 'mcp'] }
-    : { command: 'npx', args: ['-y', 'chemx', 'mcp'] };
+    : { command: 'npm', args: ['exec', '-y', '--', 'chemx', 'mcp'] };
 
   try {
     const existing = fs.existsSync(configFile) ? fs.readFileSync(configFile, 'utf-8') : '';

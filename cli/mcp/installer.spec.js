@@ -35,12 +35,12 @@ test('mergeMcpServerConfig: preserves existing servers while updating chemical-x
   assert.strictEqual(parsed.mcpServers['chemical-x'].command, 'npx');
 });
 
-test('resolveMcpServerCommand: falls back to npx when no local node_modules found', () => {
+test('resolveMcpServerCommand: falls back to npm exec when no local node_modules found', () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-cmd-test-'));
   try {
     const cmd = resolveMcpServerCommand(tmpDir);
-    assert.strictEqual(cmd.command, 'npx');
-    assert.deepStrictEqual(cmd.args, ['-y', 'chemx', 'mcp']);
+    assert.strictEqual(cmd.command, 'npm');
+    assert.deepStrictEqual(cmd.args, ['exec', '-y', '--', 'chemx', 'mcp']);
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
