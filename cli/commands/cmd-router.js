@@ -23,6 +23,19 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
       runTeamCli(rawArgs.slice(1), true);
       break;
     }
+    case 'tokens':
+    case 'telemetry': {
+      const { runTeamCli } = await import('../team/index.js');
+      runTeamCli(['tokens', ...rawArgs.slice(1)], true);
+      break;
+    }
+    case 'benchmark':
+    case 'ablation':
+    case 'memory': {
+      const { runTeamCli } = await import('../team/index.js');
+      runTeamCli(['benchmark', ...rawArgs.slice(1)], true);
+      break;
+    }
     case 'mcp':
     case 'mcp-server':
     case 'server': {
@@ -31,7 +44,8 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
       break;
     }
     case 'read':
-    case 'view': {
+    case 'view':
+    case 'r': {
       const { runReaderCli } = await import('../reader.js');
       runReaderCli(rawArgs.slice(1), true);
       break;

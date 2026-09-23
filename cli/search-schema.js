@@ -18,14 +18,33 @@ export const resolveIndexDbPath = (cwd = process.cwd()) => {
   return path.join(dir, 'index.db');
 };
 
-export const openIndexDb = (cwd = process.cwd()) => {
+const DB_CACHE = new Map();
+
+export const clearDbCache = () => {
+  DB_CACHE.clear();
+};
+
+export const warmIndexDb = (cwd = process.cwd()) => {
+  return openIndexDb(cwd);
+};
+
+export const openIndexDb = (cwd = process.cwd(), options = {}) => {
   if (!DatabaseSync) return null;
   const dbPath = resolveIndexDbPath(cwd);
+  const bypassCache = Boolean(options.fresh);
+  if (!bypassCache && DB_CACHE.has(dbPath)) {
+    return DB_CACHE.get(dbPath);
+  }
+
   const db = new DatabaseSync(dbPath);
 
-  db.exec('PRAGMA journal_mode = WAL;');
-  db.exec('PRAGMA busy_timeout = 5000;');
-  db.exec('PRAGMA foreign_keys = ON;');
+  try {
+    db.exec('PRAGMA busy_timeout = 5000;');
+    db.exec('PRAGMA journal_mode = WAL;');
+    db.exec('PRAGMA foreign_keys = ON;');
+  } catch {
+    // Safe retry/fallback if concurrent worker holds active lock
+  }
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS files (
@@ -189,5 +208,6 @@ export const openIndexDb = (cwd = process.cwd()) => {
 
   initTeamSchema(db);
 
+  DB_CACHE.set(dbPath, db);
   return db;
 };

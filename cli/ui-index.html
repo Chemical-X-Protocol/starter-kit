@@ -320,7 +320,12 @@ const App = {
             </div>
             <div style="flex:1;overflow-y:auto;" class="d-flex flex-column gap-2">
               <div v-for="p in postsDesc" :key="p.id" class="xo-post vb-postbit">
-                <div class="xo-post__author">{{ p.author }}</div>
+                <div class="d-flex align-center justify-space-between mb-1">
+                  <div class="xo-post__author">{{ p.author }}</div>
+                  <v-chip v-if="p.isDirectMessage" size="x-small" color="secondary" variant="tonal" style="font-size:10px;height:18px;">
+                    <v-icon start size="10">mdi-email-outline</v-icon>@DM to {{ p.recipient }}
+                  </v-chip>
+                </div>
                 <div class="xo-post__msg">{{ p.message }}</div>
                 <div class="xo-post__time">{{ formatTime(p.createdAt) }}</div>
               </div>
@@ -440,6 +445,14 @@ const App = {
                   <v-chip v-if="t.priority" size="x-small" :color="t.priority === 1 ? 'error' : t.priority === 2 ? 'primary' : 'default'" variant="tonal" style="font-size:10px;height:18px;">
                     <v-icon size="10" start>{{ t.priority === 1 ? 'mdi-fire' : 'mdi-flag-outline' }}</v-icon>
                     P{{ t.priority }}
+                  </v-chip>
+                  <v-chip v-if="t.parentId" size="x-small" color="primary" variant="tonal" style="font-size:10px;height:18px;">
+                    <v-icon size="10" start>mdi-subdirectory-arrow-right</v-icon>
+                    Sub of #{{ t.parentId }}
+                  </v-chip>
+                  <v-chip v-if="t.subtaskCount > 0" size="x-small" color="info" variant="outlined" style="font-size:10px;height:18px;">
+                    <v-icon size="10" start>mdi-file-tree</v-icon>
+                    {{ t.subtaskCount }} sub-tasks
                   </v-chip>
                 </div>
 
@@ -605,8 +618,8 @@ const App = {
               </div>
             </div>
             <div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:16px;">
-              <div style="font-size:13px;font-weight:500;margin-bottom:4px;">Poll Interval</div>
-              <div style="font-size:12px;color:rgba(255,255,255,.4);">Live updates every 2s via /api/swarm/status</div>
+              <div style="font-size:13px;font-weight:500;margin-bottom:4px;">Stream Mode</div>
+              <div style="font-size:12px;color:rgba(255,255,255,.4);">Real-time live updates via Server-Sent Events (SSE)</div>
             </div>
           </div>
         </div>
@@ -786,13 +799,23 @@ const App = {
       } catch {}
     };
 
-    const fetchStatus = async () => {
+    const initSse = () => {
+      if (typeof window !== 'undefined' && window.__CHEMX_HYDRATED_STATE__) {
+        applyData(window.__CHEMX_HYDRATED_STATE__);
+      }
       try {
-        if (typeof window !== 'undefined' && window.__CHEMX_HYDRATED_STATE__) applyData(window.__CHEMX_HYDRATED_STATE__);
-        const res = await fetch('/api/swarm/status');
-        if (res.ok) applyData(await res.json());
-      } catch {}
-      timer = setTimeout(fetchStatus, 2000);
+        const es = new EventSource('/api/swarm/events');
+        es.onmessage = (event) => {
+          try {
+            applyData(JSON.parse(event.data));
+          } catch {}
+        };
+        es.onerror = () => {
+          fetch('/api/swarm/status').then(r => r.json()).then(applyData).catch(() => {});
+        };
+      } catch {
+        fetch('/api/swarm/status').then(r => r.json()).then(applyData).catch(() => {});
+      }
     };
 
     const postAction = async (action) => {
@@ -840,7 +863,7 @@ const App = {
     };
 
     onMounted(async () => {
-      fetchStatus();
+      initSse();
       try {
         const r = await fetch('/api/swarm/codebase');
         if (r.ok) { const d = await r.json(); codebase.value = d.files || []; }

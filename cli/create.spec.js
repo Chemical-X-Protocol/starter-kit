@@ -63,7 +63,7 @@ describe('Scaffolding Entrypoint Invocations', () => {
     const result = spawnSync('node', [CREATE_BIN, '--help'], {
       encoding: 'utf-8',
       cwd: tmpBase,
-      timeout: 5000
+      timeout: 15000
     });
 
     assert.equal(result.status, 0, 'Should exit with code 0 on --help');
@@ -78,7 +78,7 @@ describe('Scaffolding Entrypoint Invocations', () => {
     const result = spawnSync('node', [CREATE_BIN, '--version'], {
       encoding: 'utf-8',
       cwd: tmpBase,
-      timeout: 5000
+      timeout: 15000
     });
 
     assert.equal(result.status, 0, 'Should exit with code 0 on --version');

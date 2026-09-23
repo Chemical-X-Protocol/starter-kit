@@ -99,6 +99,7 @@ if [ "$LINE_BUDGET_FAILED" -eq 1 ]; then
   printf "%b\n\n" "$LINE_BUDGET_ERRORS"
   printf "%sMonolithic files degrade AI context windows and cause hallucination loops.%s\n" "$C_YELLOW" "$C_RESET"
   printf "Decompose large files into single-purpose crystalline capsules before committing.\n\n"
+  exit 1
 fi
 
 AUDIT_BIN=""
@@ -115,7 +116,7 @@ fi
 if [ -n "$AUDIT_BIN" ]; then
   printf "%s[Chemical X] Verifying architectural health (Min Grade: %s, Min Score: %s)...%s\n" "$C_BLUE" "$MIN_GRADE" "$MIN_SCORE" "$C_RESET"
   
-  AUDIT_CMD="$AUDIT_BIN audit --min-grade=$MIN_GRADE --min-score=$MIN_SCORE --non-interactive"
+  AUDIT_CMD="$AUDIT_BIN audit --git --min-grade=$MIN_GRADE --min-score=$MIN_SCORE --non-interactive"
   
   if ! eval "$AUDIT_CMD < /dev/null"; then
     printf "\n%s%s[Chemical X] Commit Blocked: Architectural health verification failed%s\n" "$C_BOLD" "$C_RED" "$C_RESET"
@@ -123,12 +124,6 @@ if [ -n "$AUDIT_BIN" ]; then
     printf "   Run 'npm create chemx' or sponsor at https://github.com/sponsors/Chemical-X-Protocol\n\n"
     exit 1
   fi
-fi
-
-if [ "$LINE_BUDGET_FAILED" -eq 1 ]; then
-  printf "%s💡 Tip: Want crystalline drop-in templates to refactor in minutes?%s\n" "$C_CYAN" "$C_RESET"
-  printf "   Run 'npm create chemx' or sponsor at https://github.com/sponsors/Chemical-X-Protocol\n\n"
-  exit 1
 fi
 
 printf "%s✔ [Chemical X] Pre-commit architectural guardrails passed.%s\n" "$C_GREEN" "$C_RESET"

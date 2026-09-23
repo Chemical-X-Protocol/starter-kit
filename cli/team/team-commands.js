@@ -18,52 +18,14 @@ import {
   releaseFileLock,
   registerAgent
 } from './team-db.js';
+import { getAgentMailbox, sendDirectMessage } from './team-db-mailbox.js';
 import { autoGenerateTasksFromAudit, completeTaskWithAudit, queryUnassignedHazards } from './team-triage.js';
-import { formatSwarmStatusCard, formatFeedTimeline } from './team-format.js';
+import { formatSwarmStatusCard, formatFeedTimeline, formatTaskListCard, formatMailboxCard } from './team-format.js';
+import { getSwarmTokenBreakdown, formatTokenBreakdownCard } from './team-tokens.js';
+import { runAblationComparison, formatAblationCard } from './team-memory.js';
+import { parseFlags } from './team-flags.js';
 
-const parseFlags = (args = []) => {
-  const flags = {
-    isJson: args.includes('--json'),
-    isCompact: args.includes('--compact'),
-    force: args.includes('--force') || args.includes('-f'),
-    noTargetConfirm: args.includes('--no-target-confirm')
-  };
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i];
-    if (arg === '--no-target-confirm') flags.noTargetConfirm = true;
-    if (arg.startsWith('--as=')) flags.as = arg.split('=')[1];
-    if (arg === '--as' && args[i + 1] && !args[i + 1].startsWith('-')) flags.as = args[i + 1];
-    if (arg.startsWith('--to=')) flags.to = arg.split('=')[1];
-    if (arg === '--to' && args[i + 1] && !args[i + 1].startsWith('-')) flags.to = args[i + 1];
-    if (arg.startsWith('--since=')) flags.since = parseInt(arg.split('=')[1], 10);
-    if (arg.startsWith('--thread=')) flags.thread = parseInt(arg.split('=')[1], 10);
-    if (arg.startsWith('--task=')) flags.task = parseInt(arg.split('=')[1], 10);
-    if (arg.startsWith('--type=')) flags.type = arg.split('=')[1];
-    if (arg.startsWith('--status=')) flags.status = arg.split('=')[1];
-    if (arg.startsWith('--agent=')) flags.agent = arg.split('=')[1];
-    if (arg === '--agent' && args[i + 1] && !args[i + 1].startsWith('-')) flags.agent = args[i + 1];
-    if (arg.startsWith('--target=')) flags.target = arg.split('=')[1];
-    if (arg === '--target' && args[i + 1] && !args[i + 1].startsWith('-')) flags.target = args[i + 1];
-    if (arg.startsWith('--tier=')) flags.tier = arg.split('=')[1];
-    if (arg.startsWith('--prio=')) flags.priority = parseInt(arg.split('=')[1], 10);
-    if (arg.startsWith('--purpose=')) flags.purpose = arg.split('=')[1];
-    if (arg.startsWith('--tokens=')) flags.tokens = parseInt(arg.split('=')[1], 10);
-    if (arg.startsWith('--prompt-tokens=')) flags.promptTokens = parseInt(arg.split('=')[1], 10);
-    if (arg.startsWith('--completion-tokens=')) flags.completionTokens = parseInt(arg.split('=')[1], 10);
-    if (arg.startsWith('--cached-tokens=')) flags.cachedTokens = parseInt(arg.split('=')[1], 10);
-    if (arg.startsWith('--cost=')) flags.cost = parseFloat(arg.split('=')[1]);
-    if (arg.startsWith('--model=')) flags.model = arg.split('=')[1];
-    if (arg.startsWith('--metadata=')) {
-      const raw = arg.slice('--metadata='.length);
-      try {
-        flags.metadata = JSON.parse(raw);
-      } catch {
-        flags.metadata = { raw };
-      }
-    }
-  }
-  return flags;
-};
+const ARG_VAL_FLAGS = ['--target', '--as', '--to', '--agent', '--since', '--limit', '--thread', '--task', '--parent'];
 
 export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => {
   const db = openIndexDb(cwd);
@@ -79,7 +41,8 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
   for (let i = 0; i < restArgs.length; i++) {
     const a = restArgs[i];
     if (a.startsWith('-')) continue;
-    if (i > 0 && ['--target', '--as', '--to', '--agent'].includes(restArgs[i - 1])) continue;
+    const isVal = i > 0 && ARG_VAL_FLAGS.includes(restArgs[i - 1]);
+    if (isVal) continue;
     nonFlagPositional.push(a);
   }
 
@@ -103,6 +66,16 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
     }
     if (isCli) process.stdout.write(formatSwarmStatusCard(status));
     return status;
+  }
+
+  if (subCommand === 'tokens' || subCommand === 'telemetry') {
+    const breakdown = getSwarmTokenBreakdown(db);
+    if (flags.isJson) {
+      if (isCli) process.stdout.write(`${JSON.stringify(breakdown, null, 2)}\n`);
+      return breakdown;
+    }
+    if (isCli) process.stdout.write(formatTokenBreakdownCard(breakdown));
+    return breakdown;
   }
 
   if (subCommand === 'feed') {
@@ -143,22 +116,18 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
   if (subCommand === 'task') {
     const taskAction = nonFlagPositional[0] || 'list';
     if (taskAction === 'list') {
-      const tasks = listTasks(db, { status: flags.status, assigned_agent_id: flags.agent });
+      const tasks = listTasks(db, {
+        status: flags.status,
+        assigned_agent_id: flags.agent,
+        parentId: flags.parent
+      });
       if (flags.isJson) {
-        const col = toColumnar(tasks, ['id', 'title', 'tier', 'status', 'priority', 'assigned_agent_id', 'target_path']);
+        const col = toColumnar(tasks, ['id', 'title', 'tier', 'status', 'priority', 'assigned_agent_id', 'target_path', 'parent_id']);
         if (isCli) process.stdout.write(`${JSON.stringify(col, null, 2)}\n`);
         return col;
       }
       if (isCli) {
-        if (tasks.length === 0) {
-          process.stdout.write('  (No tasks found in backlog. Run "chemx team task triage" or "chemx team task add" to create tasks.)\n');
-        } else {
-          for (const t of tasks) {
-            const assignee = t.assigned_agent_id ? `(${t.assigned_agent_id})` : '(unassigned)';
-            const target = t.target_path ? ` [${t.target_path}]` : '';
-            process.stdout.write(`  #${t.id} [${t.status}] ${assignee}${target}: ${t.title}\n`);
-          }
-        }
+        process.stdout.write(formatTaskListCard(tasks));
       }
       return tasks;
     }
@@ -277,7 +246,8 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
       }
       return res;
     }
-    if (taskAction === 'create' || taskAction === 'add' || taskAction === 'new') {
+    const isCreateAction = ['create', 'add', 'new'].includes(taskAction);
+    if (isCreateAction) {
       const title = nonFlagPositional.slice(1).join(' ') || 'Untitled Task';
       const authorHandle = flags.as || '@agent';
       registerAgent(db, { id: authorHandle, role: 'contributor' });
@@ -289,7 +259,8 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
         tier: flags.tier || 'molecule',
         target_path: flags.target,
         priority: flags.priority || 2,
-        assigned_agent_id: flags.agent || null
+        assigned_agent_id: flags.agent || null,
+        parent_id: flags.parent ?? null
       });
       if (task) {
         postFeedEvent(db, {
@@ -317,7 +288,10 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
     if (taskAction === 'set-target' || taskAction === 'target') {
       const taskId = nonFlagPositional[1];
       const targetPath = flags.target || nonFlagPositional[2];
-      if (!taskId || !targetPath) {
+      const hasTaskId = Boolean(taskId);
+      const hasTargetPath = Boolean(targetPath);
+      const canSet = hasTaskId && hasTargetPath;
+      if (!canSet) {
         if (isCli) process.stderr.write('\x1b[31m✕ Usage: chemx team task set-target <taskId> <path>\x1b[0m\n');
         return { error: 'Usage: chemx team task set-target <taskId> <path>' };
       }
@@ -371,8 +345,61 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
     return tasks;
   }
 
+  if (subCommand === 'inbox') {
+    const agentId = flags.agent || flags.as || nonFlagPositional[0] || '@agent';
+    const mailbox = getAgentMailbox(db, agentId, {
+      since: flags.since,
+      limit: flags.limit,
+      markRead: flags.markRead
+    });
+    if (flags.isJson) {
+      if (isCli) process.stdout.write(`${JSON.stringify(mailbox, null, 2)}\n`);
+      return mailbox;
+    }
+    const card = formatMailboxCard(mailbox);
+    if (isCli) process.stdout.write(card);
+    return mailbox;
+  }
+
+  if (subCommand === 'dm') {
+    const to = flags.to || nonFlagPositional[0];
+    const msg = flags.to ? nonFlagPositional.join(' ') : nonFlagPositional.slice(1).join(' ');
+    const hasRecipient = Boolean(to);
+    const hasMsg = Boolean(msg);
+    const canSend = hasRecipient && hasMsg;
+    if (!canSend) {
+      if (isCli) process.stderr.write('\x1b[31m✕ Usage: chemx team dm <@recipient> <message>\x1b[0m\n');
+      return { error: 'Recipient and message required' };
+    }
+    const res = sendDirectMessage(db, {
+      author_id: flags.as || '@agent',
+      recipient_id: to,
+      message: msg,
+      task_id: flags.task || null,
+      thread_id: flags.thread || null,
+      metadata: flags.metadata || {}
+    });
+    if (isCli) {
+      if (flags.isJson) process.stdout.write(`${JSON.stringify(res, null, 2)}\n`);
+      else process.stdout.write(`\x1b[32m✔\x1b[0m Sent DM #${res.id} to ${res.recipient_id}\n`);
+    }
+    return res;
+  }
+
+  const isBenchmark = ['benchmark', 'ablation', 'memory'].includes(subCommand);
+  if (isBenchmark) {
+    const ablation = runAblationComparison(db);
+    if (flags.isJson) {
+      if (isCli) process.stdout.write(`${JSON.stringify(ablation, null, 2)}\n`);
+      return ablation;
+    }
+    const card = formatAblationCard(ablation);
+    if (isCli) process.stdout.write(card);
+    return ablation;
+  }
+
   if (isCli) {
-    process.stderr.write(`\x1b[31m✕ Unknown team command: "${subCommand}". Available commands: status, task, feed, post, lock, unlock, triage\x1b[0m\n`);
+    process.stderr.write(`\x1b[31m✕ Unknown team command: "${subCommand}". Available commands: status, task, feed, post, lock, unlock, triage, inbox, dm, benchmark\x1b[0m\n`);
   }
   return { error: `Unknown team command: ${subCommand}` };
 };

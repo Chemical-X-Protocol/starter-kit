@@ -27,4 +27,12 @@ export {
   autoGenerateTasksFromAudit,
   completeTaskWithAudit
 } from './team-triage.js';
+export {
+  recordMemoryInjection,
+  recordMemoryUtilization,
+  evictExpiredMemories,
+  calculateMemoryMetrics,
+  runAblationComparison,
+  formatAblationCard
+} from './team-memory.js';
 export { runTeamCli } from './team-commands.js';

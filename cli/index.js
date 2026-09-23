@@ -77,7 +77,7 @@ export { handleError, withErrorCatcher, publishIssue };
 
 export const ALLOWED_COMMANDS = new Set([
   'search', 'q', 'query', 'find',
-  'read', 'view',
+  'read', 'view', 'r',
   'patch', 'edit',
   'write',
   'generate', 'g', 'gen', 'capsule', 'add',
@@ -85,7 +85,8 @@ export const ALLOWED_COMMANDS = new Set([
   'audit',
   'trend', 'trends',
   'verify', 'check:all',
-  'team', 'swarm', 'feed',
+  'team', 'swarm', 'feed', 'tokens', 'telemetry',
+  'benchmark', 'ablation', 'memory',
   'pillars', 'rules', 'config:pillars',
   'mcp', 'mcp-server', 'server', 'install-mcp', 'setup-mcp',
   'build', 'run', 'wrap',

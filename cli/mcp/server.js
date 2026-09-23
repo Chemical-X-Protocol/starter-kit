@@ -4,6 +4,7 @@ import path from 'node:path';
 import { MCP_TOOLS, executeMcpTool } from './tools.js';
 import { MCP_RESOURCES, readMcpResource } from './resources.js';
 import { MCP_PROMPTS, getMcpPrompt } from './prompts.js';
+import { warmIndexDb } from '../search-db.js';
 
 export const SERVER_INFO = {
   name: 'chemical-x-mcp',
@@ -34,6 +35,7 @@ export const createMcpHandler = (options = {}) => {
       } else if (Array.isArray(params?.workspaceFolders) && params.workspaceFolders[0]?.uri?.startsWith('file://')) {
         cwd = new URL(params.workspaceFolders[0].uri).pathname;
       }
+      try { warmIndexDb(cwd); } catch {}
       return {
         jsonrpc: '2.0',
         id,

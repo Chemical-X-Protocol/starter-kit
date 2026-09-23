@@ -3,6 +3,7 @@ import { openIndexDb } from './search-db.js';
 import { handleSwarmStatus } from './ui-handlers.js';
 import { generateSwarmHtml } from './ui-html.js';
 import { routeGet, routePost, parseJsonBody } from './ui-server-routes.js';
+import { handleSseConnection, broadcastSseUpdate, closeSseHub } from './ui-sse.js';
 
 export const createUiServer = (cwd = process.cwd()) => {
   const db = openIndexDb(cwd);
@@ -31,6 +32,10 @@ export const createUiServer = (cwd = process.cwd()) => {
     }
 
     if (isGet) {
+      if (pathname === '/api/swarm/events' || pathname === '/api/events') {
+        handleSseConnection(req, res, db);
+        return;
+      }
       const result = routeGet(req.url, db, cwd);
       if (result) {
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -46,6 +51,7 @@ export const createUiServer = (cwd = process.cwd()) => {
         if (result) {
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify(result));
+          broadcastSseUpdate(db);
           return;
         }
       } catch (err) {
@@ -59,6 +65,7 @@ export const createUiServer = (cwd = process.cwd()) => {
     res.end(JSON.stringify({ error: 'Not found' }));
   });
 
+  server.on('close', closeSseHub);
   return { server, db };
 };
 

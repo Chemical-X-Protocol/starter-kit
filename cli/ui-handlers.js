@@ -45,7 +45,8 @@ export const handleSwarmStatus = (db, cwd = process.cwd()) => {
     const authorMeta = agentsMap.get(f.author_id) || resolveAgentMeta({ id: f.author_id, role: 'general' });
     return {
       id: f.id, author: f.author_id, eventType: f.event_type, message: f.message, timestamp: Number(f.timestamp),
-      channel: f.channel, tokenStamp: formatTokenStamp(f.message?.length || 50), signature: authorMeta.signature, authorMeta
+      channel: f.channel, recipient: f.recipient_id, isDirectMessage: Boolean(f.recipient_id),
+      tokenStamp: formatTokenStamp(f.message?.length || 50), signature: authorMeta.signature, authorMeta
     };
   });
 
@@ -56,7 +57,14 @@ export const handleSwarmStatus = (db, cwd = process.cwd()) => {
   const tasks = rawTasks.map((t) => {
     const p = t.prompt_tokens || 250, c = t.completion_tokens || 45;
     const cost = t.cost_usd != null ? Number(t.cost_usd) : ((p * 0.000003) + (c * 0.000015));
-    return { ...t, assignedAgentId: t.assigned_agent_id, tokenStamp: `[P: ${p} | C: ${c} | Cost: $${cost.toFixed(4)}]` };
+    const subtaskCount = rawTasks.filter((st) => st.parent_id === t.id).length;
+    return {
+      ...t,
+      parentId: t.parent_id,
+      subtaskCount,
+      assignedAgentId: t.assigned_agent_id,
+      tokenStamp: `[P: ${p} | C: ${c} | Cost: $${cost.toFixed(4)}]`
+    };
   });
 
   const fileCount = db.prepare("SELECT COUNT(*) as count FROM files").get()?.count || 59;

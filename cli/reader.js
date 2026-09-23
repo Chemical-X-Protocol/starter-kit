@@ -223,10 +223,21 @@ export const extractSymbolBlock = (code, symbol) => {
  * @returns {object} Token-minified file payload.
  */
 export const readTokenOptimized = (targetPath, options = {}) => {
-  const resolvedPath = path.resolve(process.cwd(), targetPath);
+  let rawPath = targetPath;
+  let startLine = options.startLine;
+  let endLine = options.endLine;
+
+  const colonMatch = typeof targetPath === 'string' && targetPath.match(/^([^:]+):(\d+)(?:[-:](\d+))?$/);
+  if (colonMatch) {
+    rawPath = colonMatch[1];
+    if (startLine === undefined) startLine = parseInt(colonMatch[2], 10);
+    if (endLine === undefined && colonMatch[3]) endLine = parseInt(colonMatch[3], 10);
+  }
+
+  const resolvedPath = path.resolve(process.cwd(), rawPath);
 
   if (!fs.existsSync(resolvedPath)) {
-    throw new Error(`File not found: ${targetPath}`);
+    throw new Error(`File not found: ${rawPath}`);
   }
 
   const stat = fs.statSync(resolvedPath);
@@ -266,21 +277,21 @@ export const readTokenOptimized = (targetPath, options = {}) => {
     };
   }
 
-  const hasLineRange = typeof options.startLine === 'number' || typeof options.endLine === 'number';
+  const hasLineRange = typeof startLine === 'number' || typeof endLine === 'number';
   const autoThreshold = typeof options.autoOutlineThreshold === 'number' ? options.autoOutlineThreshold : 100;
 
   // Directive 1.A Guard: Monolithic files (> 100 lines) read without a target symbol or slice
   // automatically return AST outline to prevent token exhaustion and host buffer spillover.
   if (!hasLineRange && totalLines > autoThreshold) {
-    const outlineText = generateAstOutline(rawContent, targetPath);
+    const outlineText = generateAstOutline(rawContent, rawPath);
     const notice = [
       `// [Directive 1.A Surgical Guard] File has ${totalLines} lines (> 100 outer bound).`,
       `// Auto-rendered AST outline to conserve context tokens and prevent host buffer spillover.`,
-      `// To read a specific block, request symbol: chemx({ action: 'read', params: { path: '${targetPath}', symbol: '<name>' } })`,
-      `// Or specify a line range: chemx({ action: 'read', params: { path: '${targetPath}', startLine: 1, endLine: 50 } })\n`
+      `// To read a specific block, request symbol: chemx({ action: 'read', params: { path: '${rawPath}', symbol: '<name>' } })`,
+      `// Or specify a line range: chemx({ action: 'read', params: { path: '${rawPath}', startLine: 1, endLine: 50 } })\n`
     ].join('\n');
     return {
-      file: targetPath,
+      file: rawPath,
       totalLines,
       mode: 'auto-outline',
       tokensEst: Math.round((outlineText.length + notice.length) / 3.8),
@@ -291,12 +302,12 @@ export const readTokenOptimized = (targetPath, options = {}) => {
   let startIdx = 0;
   let endIdx = rawLines.length;
 
-  if (options.startLine) {
-    startIdx = Math.max(0, parseInt(String(options.startLine), 10) - 1);
+  if (startLine) {
+    startIdx = Math.max(0, parseInt(String(startLine), 10) - 1);
   }
 
-  if (options.endLine) {
-    endIdx = Math.min(rawLines.length, parseInt(String(options.endLine), 10));
+  if (endLine) {
+    endIdx = Math.min(rawLines.length, parseInt(String(endLine), 10));
   }
 
   // Cap maximum slice at 100 lines per read (Directive 1.A outer bound)
@@ -325,7 +336,7 @@ export const readTokenOptimized = (targetPath, options = {}) => {
   const tokensEst = Math.round(processedContent.length / 3.8);
 
   return {
-    file: targetPath,
+    file: rawPath,
     totalLines,
     startLine: startIdx + 1,
     endLine: endIdx,
@@ -368,27 +379,59 @@ export const runReaderCli = (args, isCli = false) => {
   }
 
   const nonFlagArgs = args.filter((a) => !a.startsWith('-'));
-  const filePath = nonFlagArgs[0];
+  let filePath = nonFlagArgs[0];
 
   if (!filePath) {
-    process.stderr.write(`${ANSI.RED}✕ Missing file path. Usage: chemx read <file> [--outline] [--symbol=name] [--start=1] [--end=50] [--strip-comments] [--compact] [--json]${ANSI.RESET}\n`);
+    process.stderr.write(`${ANSI.RED}✕ Missing file path. Usage: chemx r <file[:start-end]> [-o] [-s name]${ANSI.RESET}\n`);
     if (isCli) process.exit(1);
     return null;
   }
 
-  const isJson = args.includes('--json');
-  const isOutline = args.includes('--outline');
-  const isCompact = args.includes('--compact');
-  const isStripComments = args.includes('--strip-comments') || args.includes('--no-comments');
+  let startLine;
+  let endLine;
 
-  const symbolFlag = args.find((a) => a.startsWith('--symbol='));
-  const symbol = symbolFlag ? symbolFlag.split('=')[1] : null;
+  const colonMatch = filePath.match(/^([^:]+):(\d+)(?:[-:](\d+))?$/);
+  if (colonMatch) {
+    filePath = colonMatch[1];
+    startLine = parseInt(colonMatch[2], 10);
+    if (colonMatch[3]) endLine = parseInt(colonMatch[3], 10);
+  }
 
-  const startFlag = args.find((a) => a.startsWith('--start=') || a.startsWith('-s='));
-  const startLine = startFlag ? parseInt(startFlag.split('=')[1], 10) : undefined;
+  const isJson = args.includes('--json') || args.includes('-j');
+  const isOutline = args.includes('--outline') || args.includes('-o');
+  const isCompact = args.includes('--compact') || args.includes('-c');
+  const isStripComments = args.includes('--strip-comments') || args.includes('--no-comments') || args.includes('-sc');
 
-  const endFlag = args.find((a) => a.startsWith('--end=') || a.startsWith('-e='));
-  const endLine = endFlag ? parseInt(endFlag.split('=')[1], 10) : undefined;
+  let symbol = null;
+  const symEqFlag = args.find((a) => a.startsWith('--symbol=') || a.startsWith('-sym='));
+  if (symEqFlag) {
+    symbol = symEqFlag.split('=')[1];
+  } else {
+    const sIndex = args.findIndex((a) => a === '-s' || a === '--symbol');
+    if (sIndex !== -1 && args[sIndex + 1] && !args[sIndex + 1].startsWith('-')) {
+      symbol = args[sIndex + 1];
+    } else {
+      const sFlag = args.find((a) => a.startsWith('-s='));
+      if (sFlag) {
+        const val = sFlag.split('=')[1];
+        if (/^\d+$/.test(val)) {
+          if (startLine === undefined) startLine = parseInt(val, 10);
+        } else {
+          symbol = val;
+        }
+      }
+    }
+  }
+
+  if (startLine === undefined) {
+    const startFlag = args.find((a) => a.startsWith('--start='));
+    if (startFlag) startLine = parseInt(startFlag.split('=')[1], 10);
+  }
+
+  if (endLine === undefined) {
+    const endFlag = args.find((a) => a.startsWith('--end=') || a.startsWith('-e='));
+    if (endFlag) endLine = parseInt(endFlag.split('=')[1], 10);
+  }
 
   try {
     const res = readTokenOptimized(filePath, {

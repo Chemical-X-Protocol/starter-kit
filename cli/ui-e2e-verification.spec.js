@@ -3,6 +3,7 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
 import { startUiServer } from './ui-server.js';
+import { openIndexDb } from './search-db.js';
 
 const REQUIRED_HTML_MARKERS = [
   'vb-postbit',
@@ -68,6 +69,8 @@ test('E2E: GET /api/status, /api/feed, /api/tasks return valid data structures',
 
 test('E2E: POST /api/tasks and POST /api/feed persist records to index database', async () => {
   const running = await startUiServer({ port: 0 });
+  let taskData = null;
+  let feedData = null;
   try {
     const base = `http://localhost:${running.port}`;
     const taskTitle = `E2E Verify Task ${Date.now()}`;
@@ -77,7 +80,7 @@ test('E2E: POST /api/tasks and POST /api/feed persist records to index database'
       body: JSON.stringify({ title: taskTitle, tier: 'atom', priority: 1 })
     });
     assert.strictEqual(resTask.status, 200);
-    const taskData = await resTask.json();
+    taskData = await resTask.json();
     assert.strictEqual(taskData.success, true);
     assert.strictEqual(taskData.task.title, taskTitle);
 
@@ -93,7 +96,7 @@ test('E2E: POST /api/tasks and POST /api/feed persist records to index database'
       body: JSON.stringify({ author: '@worker_m6', message: feedMsg, channel: 'general' })
     });
     assert.strictEqual(resFeed.status, 200);
-    const feedData = await resFeed.json();
+    feedData = await resFeed.json();
     assert.strictEqual(feedData.success, true);
     assert.ok(feedData.post && feedData.post.id);
 
@@ -102,6 +105,11 @@ test('E2E: POST /api/tasks and POST /api/feed persist records to index database'
     const isFeedPersisted = allFeed.feed.some((f) => f.id === feedData.post.id && f.message === feedMsg);
     assert.ok(isFeedPersisted, 'Created feed event must persist in database');
   } finally {
+    if (taskData?.task?.id || feedData?.post?.id) {
+      const db = openIndexDb(process.cwd());
+      if (taskData?.task?.id) db.prepare('DELETE FROM agent_tasks WHERE id = ?').run(taskData.task.id);
+      if (feedData?.post?.id) db.prepare('DELETE FROM agent_feed WHERE id = ?').run(feedData.post.id);
+    }
     running.server.close();
   }
 });

@@ -105,8 +105,15 @@ export const syncSearchIndex = (targetDir = 'src', cwd = process.cwd(), options 
   const db = openIndexDb(cwd);
   if (!db) return null;
 
-  const absoluteTarget = path.resolve(cwd, targetDir);
-  const scanned = scanFilesRecursively(absoluteTarget, cwd);
+  const targetDirs = Array.isArray(targetDir) ? targetDir : [targetDir];
+  if (targetDir === 'src' && fs.existsSync(path.resolve(cwd, 'cli'))) {
+    targetDirs.push('cli');
+  }
+
+  const scanned = targetDirs.flatMap((d) => {
+    const abs = path.resolve(cwd, d);
+    return fs.existsSync(abs) ? scanFilesRecursively(abs, cwd) : [];
+  });
   const currentPaths = scanned.map((s) => s.relPath);
 
   const indexedMap = options.reindex ? new Map() : getAllIndexedFiles(db);

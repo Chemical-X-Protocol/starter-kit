@@ -1,435 +1,100 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import { runAudit as executeAstAudit, auditFile } from '../audit.js';
-import {
-  buildMasterPrompt,
-  buildGradeFPrompt,
-  buildGradeDPrompt,
-  buildGradeCPrompt,
-  buildGradeBPrompt,
-  buildAiSlopPrompt,
-  buildHotspotsPrompt
-} from '../audit/prompts.js';
-import { createCapsuleFiles } from '../generator.js';
-import { runBuildAudit } from '../build.js';
-import { runAutofix } from '../audit/autofix.js';
-import { runTypecheckAudit, runTestAudit, runProjectVerify } from '../verify.js';
-import { syncSearchIndex, syncViolationsIndex, recordAuditSnapshot } from '../search.js';
-import { openIndexDb } from '../search-schema.js';
-import { fetchScoreTrends, formatTrendReport, renderSparkline } from '../trend.js';
 import { MCP_TOOLS, ALL_MCP_TOOLS } from './manifests.js';
+import { handleAudit, handleGetRefactorPrompt } from './tools-audit.js';
+import { handleQueryPatterns, handleAutofix } from './tools-patterns.js';
+import { handleAuditBuild, handleChemxTypecheck, handleChemxTest, handleChemxVerify } from './tools-verify.js';
+import { handleGenerateCapsule, handleChemxTrend } from './tools-generate.js';
+import { handleChemxQ, handleChemxRead, handleChemxPatch, handleChemxCheck, handleChemxWrite } from './tools-search.js';
 import {
-  resolveTargetCwd,
-  handleChemxQ,
-  handleChemxRead,
-  handleChemxPatch,
-  handleChemxCheck,
-  handleChemxWrite
-} from './tools-search.js';
-import {
-  handleChemxTeamStatus,
-  handleChemxTeamFeed,
-  handleChemxTeamPost,
-  handleChemxTeamTask,
-  handleChemxTeamLock,
-  handleChemxReportIssue
+  handleChemxTeam, handleChemxTeamStatus, handleChemxTeamFeed, handleChemxTeamPost,
+  handleChemxTeamTask, handleChemxTeamLock, handleChemxTeamInbox, handleChemxTeamDm, handleChemxReportIssue
 } from './tools-team.js';
 
 export {
-  MCP_TOOLS,
-  ALL_MCP_TOOLS,
-  handleChemxQ,
-  handleChemxRead,
-  handleChemxPatch,
-  handleChemxCheck,
-  handleChemxWrite,
-  handleChemxTeamStatus,
-  handleChemxTeamFeed,
-  handleChemxTeamPost,
-  handleChemxTeamTask,
-  handleChemxTeamLock,
-  handleChemxReportIssue
+  MCP_TOOLS, ALL_MCP_TOOLS,
+  handleChemxQ, handleChemxRead, handleChemxPatch, handleChemxCheck, handleChemxWrite,
+  handleChemxTeamStatus, handleChemxTeamFeed, handleChemxTeamPost,
+  handleChemxTeamTask, handleChemxTeamLock, handleChemxReportIssue
 };
 
-const handleQueryPatterns = (args = {}, cwd = process.cwd()) => {
-  const baseCwd = resolveTargetCwd(cwd);
-  const targetDir = args.dir || (fs.existsSync(path.resolve(baseCwd, 'src')) ? 'src' : '.');
-  const resolvedTarget = path.isAbsolute(targetDir) ? targetDir : path.resolve(baseCwd, targetDir);
-  const report = executeAstAudit(resolvedTarget, { cwd: baseCwd });
-  const rawPatterns = report.patterns || [];
-  const filterType = args.type || 'ALL';
-  const minOccurrences = typeof args.minOccurrences === 'number' ? args.minOccurrences : 2;
-  const isCompact = args.compact !== false;
-
-  const matchesType = (p) => filterType === 'ALL' || p.type === filterType;
-  const matchesCount = (p) => p.fileCount >= minOccurrences;
-
-  const candidates = rawPatterns
-    .filter((p) => matchesType(p) && matchesCount(p))
-    .map((p) => {
-      const base = {
-        id: p.id,
-        type: p.type,
-        label: p.label,
-        detail: p.detail,
-        suggestedCapsule: p.suggestedCapsule,
-        recommendation: p.recommendation,
-        fileCount: p.fileCount,
-        totalHits: p.totalHits,
-        impactScore: p.impactScore
-      };
-
-      if (isCompact) {
-        const sampleOccurrences = [];
-        const seenSampleFiles = new Set();
-        for (const occ of (p.occurrences || [])) {
-          if (!seenSampleFiles.has(occ.filePath)) {
-            seenSampleFiles.add(occ.filePath);
-            sampleOccurrences.push({
-              file: occ.filePath,
-              line: occ.line
-            });
-            if (sampleOccurrences.length >= 3) break;
-          }
-        }
-
-        return {
-          ...base,
-          files: p.uniqueFiles || Array.from(new Set((p.occurrences || []).map((o) => o.filePath))),
-          sampleOccurrences
-        };
-      }
-
-      return {
-        ...base,
-        occurrences: p.occurrences
-      };
-    });
-
-  return {
-    scannedDir: targetDir,
-    totalCandidates: candidates.length,
-    compact: isCompact,
-    candidates
-  };
-};
-
-const handleAudit = (args = {}, cwd = process.cwd()) => {
-  const baseCwd = resolveTargetCwd(cwd);
-  const rawTarget = args.path || args.dir || (fs.existsSync(path.resolve(baseCwd, 'src')) ? 'src' : '.');
-  const resolvedTarget = path.isAbsolute(rawTarget) ? rawTarget : path.resolve(baseCwd, rawTarget);
-  const isFile = fs.existsSync(resolvedTarget) && fs.statSync(resolvedTarget).isFile();
-
-  if (isFile) {
-    const relPath = path.relative(baseCwd, resolvedTarget);
-    const violations = auditFile(resolvedTarget, relPath);
-    return {
-      type: 'file',
-      target: relPath,
-      violationCount: violations.length,
-      violations
-    };
+const parseCommand = (command, params) => {
+  const parts = command.trim().split(/\s+/);
+  const subCmd = parts[0];
+  if (subCmd === 'audit' || subCmd === 'check') return { action: subCmd, params: { path: parts[1] || 'src', ...params } };
+  if (subCmd === 'build') return { action: 'build', params: { dir: parts[1] || '.', ...params } };
+  if (['verify', 'typecheck', 'test'].includes(subCmd)) return { action: subCmd, params };
+  if (subCmd === 'read' || subCmd === 'r') {
+    const hasOutline = command.includes('--outline') || command.includes(' -o');
+    const symbolMatch = command.match(/(?:--symbol=|-s\s+|-s=)([^\s]+)/);
+    const lineMatch = parts[1]?.match(/^([^:]+):(\d+)(?:[-:](\d+))?$/);
+    const targetPath = lineMatch ? lineMatch[1] : parts[1];
+    const startLine = lineMatch ? parseInt(lineMatch[2], 10) : undefined;
+    const endLine = lineMatch && lineMatch[3] ? parseInt(lineMatch[3], 10) : undefined;
+    return { action: 'read', params: { path: targetPath, outline: hasOutline, symbol: symbolMatch ? symbolMatch[1] : undefined, startLine, endLine, ...params } };
   }
-
-  const options = {
-    cwd: baseCwd,
-    model: args.model || 'blended',
-    outputFile: null
-  };
-
-  const report = executeAstAudit(resolvedTarget, options);
-
-  // Sync AST audit results to SQLite index database
-  try {
-    const syncRes = syncSearchIndex(resolvedTarget, baseCwd);
-    if (syncRes?.db) {
-      syncViolationsIndex(syncRes.db, report.violations);
-      recordAuditSnapshot(syncRes.db, report);
-    }
-  } catch (syncError) {
-    process.stderr.write(`[chemx] Search index sync bypassed: ${syncError?.message || String(syncError)}\n`);
+  if (subCmd === 'q' || subCmd === 'search') return { action: 'q', params: { query: parts.slice(1).join(' '), ...params } };
+  if (subCmd === 'team') {
+    const teamAction = parts[1] || 'status';
+    const TEAM_ACTIONS = { status: 'team_status', feed: 'team_feed', task: 'team_task', lock: 'team_lock', inbox: 'team_inbox', dm: 'team_dm' };
+    return { action: TEAM_ACTIONS[teamAction] || 'team_task', params };
   }
-
-  const isSevereViolation = (v) => {
-    const isCritical = v.severity === 'CRITICAL';
-    const isHigh = v.severity === 'HIGH';
-    return isCritical || isHigh;
-  };
-
-  const hasCriticalOrHigh = report.violations.some(isSevereViolation);
-  const hasViolations = report.violations.length > 0;
-  const isStrictFail = Boolean(args.strict) && hasViolations;
-  const hasMinScore = typeof args.minScore === 'number';
-  const isScoreFail = hasMinScore && report.health.score < args.minScore;
-
-  const hasFailingCondition = isStrictFail || isScoreFail || hasCriticalOrHigh;
-  const isPassing = !hasFailingCondition;
-
-  return {
-    type: 'directory',
-    target: rawTarget,
-    health: report.health,
-    metrics: report.metrics,
-    aiSlop: report.aiSlop,
-    hotspots: report.hotspots,
-    totalViolations: report.totalViolations,
-    violations: report.violations,
-    contextAnalysis: report.contextAnalysis,
-    isPassing
-  };
+  if (subCmd === 'autofix') return { action: 'autofix', params: { path: parts[1] || 'src', ...params } };
+  if (subCmd === 'trend' || subCmd === 'trends') return { action: 'trend', params };
+  return { action: subCmd, params };
 };
 
-const handleGenerateCapsule = (args = {}, cwd = process.cwd()) => {
-  const { name, framework, tier = 'm', targetDir = null, lean = false, desc = '', description = '', dryRun = false } = args;
-
-  const hasName = Boolean(name && name.trim());
-  const hasValidFramework = Boolean(framework && ['react', 'vue', 'svelte'].includes(framework.toLowerCase()));
-  const canGenerate = hasName && hasValidFramework;
-
-  if (!canGenerate) {
-    throw new Error('chemx_generate_capsule requires "name" and "framework" (react, vue, svelte).');
-  }
-
-  const result = createCapsuleFiles({
-    name: name.trim(),
-    framework: framework.toLowerCase(),
-    tier: tier.toLowerCase(),
-    targetParent: targetDir,
-    isLean: Boolean(lean),
-    cwd,
-    desc: desc || description,
-    dryRun: Boolean(dryRun)
-  });
-
-  return {
-    success: true,
-    dryRun: result.dryRun,
-    capsuleName: result.capsuleName,
-    pascalName: result.pascalName,
-    framework: result.framework,
-    tier: result.tier,
-    targetDir: result.targetDir,
-    relativeDir: result.relativeDir,
-    filesCreated: result.filesCreated,
-    previews: result.previews
-  };
+const DISPATCHER = {
+  audit: handleAudit, trend: handleChemxTrend, build: handleAuditBuild,
+  verify: handleChemxVerify, typecheck: handleChemxTypecheck, test: handleChemxTest,
+  check: handleChemxCheck, patch: handleChemxPatch, write: handleChemxWrite,
+  read: handleChemxRead, r: handleChemxRead,
+  team: handleChemxTeam, team_inbox: handleChemxTeamInbox, team_dm: handleChemxTeamDm,
+  team_status: handleChemxTeamStatus, team_feed: handleChemxTeamFeed,
+  team_post: handleChemxTeamPost, team_task: handleChemxTeamTask, team_lock: handleChemxTeamLock,
+  q: handleChemxQ, search: handleChemxQ, autofix: handleAutofix,
+  generate: handleGenerateCapsule, patterns: handleQueryPatterns, issue: handleChemxReportIssue
 };
 
-const handleGetRefactorPrompt = (args = {}, cwd = process.cwd()) => {
-  const targetDir = args.dir || (fs.existsSync(path.resolve(cwd, 'src')) ? 'src' : '.');
-  const scope = args.scope || 'master';
-  const report = executeAstAudit(targetDir, {});
-
-  const PROMPT_BUILDERS = {
-    'grade-f': buildGradeFPrompt,
-    'grade-d': buildGradeDPrompt,
-    'grade-c': buildGradeCPrompt,
-    'grade-b': buildGradeBPrompt,
-    'ai-slop': buildAiSlopPrompt,
-    'hotspots': buildHotspotsPrompt,
-    'master': buildMasterPrompt
-  };
-
-  const builder = Object.prototype.hasOwnProperty.call(PROMPT_BUILDERS, scope)
-    ? PROMPT_BUILDERS[scope]
-    : buildMasterPrompt;
-  const prompt = builder(report);
-
-  return {
-    targetDir,
-    scope,
-    prompt: prompt || 'No violations found for the requested scope.'
-  };
-};
-
-const handleAuditBuild = async (args = {}, cwd = process.cwd()) => {
-  const baseCwd = resolveTargetCwd(cwd);
-  const targetCwd = args.dir ? path.resolve(baseCwd, args.dir) : baseCwd;
-  const rawArgs = ['--json'];
-  if (args.command) {
-    rawArgs.push('--', args.command);
-  }
-  return runBuildAudit(rawArgs, false, { print: false, cwd: targetCwd });
-};
-
-const handleAutofix = (args = {}, cwd = process.cwd()) => {
-  const baseCwd = resolveTargetCwd(cwd);
-  const rawTarget = args.path || args.dir || (fs.existsSync(path.resolve(baseCwd, 'src')) ? 'src' : '.');
-  const targetDir = path.isAbsolute(rawTarget) ? rawTarget : path.resolve(baseCwd, rawTarget);
-  return runAutofix(targetDir, {
-    dryRun: Boolean(args.dryRun),
-    rules: args.rules,
-    cwd: baseCwd
-  });
-};
-
-const handleChemxTypecheck = async (args = {}, cwd = process.cwd()) => {
-  const baseCwd = resolveTargetCwd(cwd);
-  const targetCwd = args.dir ? path.resolve(baseCwd, args.dir) : baseCwd;
-  return runTypecheckAudit([], false, {
-    json: true,
-    command: args.command,
-    print: false,
-    cwd: targetCwd
-  });
-};
-
-const handleChemxTest = async (args = {}, cwd = process.cwd()) => {
-  const baseCwd = resolveTargetCwd(cwd);
-  const targetCwd = args.dir ? path.resolve(baseCwd, args.dir) : baseCwd;
-  return runTestAudit([], false, {
-    json: true,
-    command: args.command,
-    print: false,
-    cwd: targetCwd
-  });
-};
-
-const handleChemxVerify = async (args = {}, cwd = process.cwd()) => {
-  const baseCwd = resolveTargetCwd(cwd);
-  return runProjectVerify([], false, {
-    json: true,
-    targetDir: args.dir,
-    includeBuild: Boolean(args.includeBuild),
-    print: false,
-    cwd: baseCwd
-  });
-};
-
-const handleChemxTrend = async (args = {}, cwd = process.cwd()) => {
-  const targetCwd = resolveTargetCwd(args.cwd || cwd);
-  const db = openIndexDb(targetCwd);
-  const limit = args.limit || 10;
-  const snapshots = fetchScoreTrends(db, limit);
-  if (args.json) {
-    const scores = snapshots.map((s) => s.score);
-    return {
-      count: snapshots.length,
-      sparkline: renderSparkline(scores),
-      latestScore: snapshots.length ? snapshots[snapshots.length - 1].score : null,
-      delta: snapshots.length >= 2 ? snapshots[snapshots.length - 1].score - snapshots[0].score : 0,
-      snapshots
-    };
-  }
-  return formatTrendReport(snapshots);
-};
-
-const handleChemx = async (args = {}, cwd = process.cwd()) => {
-  let action = args.action;
-  let params = args.params || {};
-
+export const handleChemx = async (args = {}, cwd = process.cwd()) => {
+  let { action, params = {} } = args;
   if (args.command && typeof args.command === 'string') {
-    const parts = args.command.trim().split(/\s+/);
-    const subCmd = parts[0];
-    if (subCmd === 'audit') {
-      action = 'audit';
-      params = { path: parts[1] || 'src', ...params };
-    } else if (subCmd === 'build') {
-      action = 'build';
-      params = { dir: parts[1] || '.', ...params };
-    } else if (subCmd === 'verify') {
-      action = 'verify';
-    } else if (subCmd === 'typecheck') {
-      action = 'typecheck';
-    } else if (subCmd === 'test') {
-      action = 'test';
-    } else if (subCmd === 'check') {
-      action = 'check';
-      params = { path: parts[1] || 'src', ...params };
-    } else if (subCmd === 'read') {
-      action = 'read';
-      const hasOutline = args.command.includes('--outline');
-      const symbolMatch = args.command.match(/--symbol=([^\s]+)/);
-      params = {
-        path: parts[1],
-        outline: hasOutline,
-        symbol: symbolMatch ? symbolMatch[1] : undefined,
-        ...params
-      };
-    } else if (subCmd === 'q' || subCmd === 'search') {
-      action = 'q';
-      params = { query: parts.slice(1).join(' '), ...params };
-    } else if (subCmd === 'team') {
-      const teamAction = parts[1] || 'status';
-      if (teamAction === 'status') action = 'team_status';
-      else if (teamAction === 'feed') action = 'team_feed';
-      else if (teamAction === 'task') action = 'team_task';
-      else if (teamAction === 'lock') action = 'team_lock';
-      else action = 'team_task';
-    } else if (subCmd === 'autofix') {
-      action = 'autofix';
-      params = { path: parts[1] || 'src', ...params };
-    } else if (subCmd === 'trend' || subCmd === 'trends') {
-      action = 'trend';
-    }
+    const parsed = parseCommand(args.command, params);
+    action = parsed.action;
+    params = parsed.params;
   }
-
-  const DISPATCHER = {
-    audit: handleAudit,
-    trend: handleChemxTrend,
-    build: handleAuditBuild,
-    verify: handleChemxVerify,
-    typecheck: handleChemxTypecheck,
-    test: handleChemxTest,
-    check: handleChemxCheck,
-    patch: handleChemxPatch,
-    write: handleChemxWrite,
-    read: handleChemxRead,
-    team: handleChemxTeamTask,
-    team_status: handleChemxTeamStatus,
-    team_feed: handleChemxTeamFeed,
-    team_post: handleChemxTeamPost,
-    team_task: handleChemxTeamTask,
-    team_lock: handleChemxTeamLock,
-    q: handleChemxQ,
-    search: handleChemxQ,
-    autofix: handleAutofix,
-    generate: handleGenerateCapsule,
-    patterns: handleQueryPatterns,
-    issue: handleChemxReportIssue
-  };
-
-  const handler = Object.prototype.hasOwnProperty.call(DISPATCHER, action)
-    ? DISPATCHER[action]
-    : Tools[`chemx_${action}`];
-
+  const handler = Object.hasOwn(DISPATCHER, action) ? DISPATCHER[action] : Tools[`chemx_${action}`];
   if (!handler) {
     throw new Error(`Unknown Chemical X action: "${action}". Valid actions: ${Object.keys(DISPATCHER).join(', ')}`);
   }
-
   return handler(params, cwd);
 };
 
 export const Tools = {
-  chemx: handleChemx,
-  chemx_query_patterns: handleQueryPatterns,
-  chemx_audit: handleAudit,
-  chemx_generate_capsule: handleGenerateCapsule,
-  chemx_get_refactor_prompt: handleGetRefactorPrompt,
-  chemx_audit_build: handleAuditBuild,
-  chemx_autofix: handleAutofix,
-  chemx_q: handleChemxQ,
-  chemx_read: handleChemxRead,
-  chemx_patch: handleChemxPatch,
-  chemx_write: handleChemxWrite,
-  chemx_check: handleChemxCheck,
-  chemx_typecheck: handleChemxTypecheck,
-  chemx_test: handleChemxTest,
-  chemx_verify: handleChemxVerify,
-  chemx_team_status: handleChemxTeamStatus,
-  chemx_team_feed: handleChemxTeamFeed,
-  chemx_team_post: handleChemxTeamPost,
-  chemx_team_task: handleChemxTeamTask,
-  chemx_team_lock: handleChemxTeamLock,
+  chemx: handleChemx, chemx_query_patterns: handleQueryPatterns, chemx_audit: handleAudit,
+  chemx_generate_capsule: handleGenerateCapsule, chemx_get_refactor_prompt: handleGetRefactorPrompt,
+  chemx_audit_build: handleAuditBuild, chemx_autofix: handleAutofix, chemx_q: handleChemxQ,
+  chemx_read: handleChemxRead, chemx_patch: handleChemxPatch, chemx_write: handleChemxWrite,
+  chemx_check: handleChemxCheck, chemx_typecheck: handleChemxTypecheck, chemx_test: handleChemxTest,
+  chemx_verify: handleChemxVerify, chemx_team_status: handleChemxTeamStatus,
+  chemx_team_feed: handleChemxTeamFeed, chemx_team_post: handleChemxTeamPost,
+  chemx_team_task: handleChemxTeamTask, chemx_team_lock: handleChemxTeamLock,
   chemx_report_issue: handleChemxReportIssue
+};
+
+const EXTENDED_TOOLS = {
+  chemx_team: handleChemxTeam,
+  chemx_team_inbox: handleChemxTeamInbox,
+  chemx_team_dm: handleChemxTeamDm
+};
+
+const resolveToolHandler = (name) => {
+  if (Object.hasOwn(Tools, name)) return Tools[name];
+  if (Object.hasOwn(EXTENDED_TOOLS, name)) return EXTENDED_TOOLS[name];
+  return null;
 };
 
 export const executeMcpTool = async (name, args = {}, cwd = process.cwd()) => {
   const toolName = name === 'chemx_master' ? 'chemx' : name;
-  const handle = Object.prototype.hasOwnProperty.call(Tools, toolName) ? Tools[toolName] : null;
-  if (!handle) {
-    throw new Error(`Unknown tool: ${name}`);
-  }
+  const handle = resolveToolHandler(toolName);
+  if (!handle) throw new Error(`Unknown tool: ${name}`);
   return handle(args, cwd);
 };
-

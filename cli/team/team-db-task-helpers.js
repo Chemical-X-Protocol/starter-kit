@@ -1,30 +1,26 @@
-/**
- * Chemical X Protocol: Task DAG Helpers & Validators
- */
-
 export const normalizeAgentId = (id) => {
-  const hasId = Boolean(id);
-  if (!hasId) return null;
-  const isPrefixed = id.startsWith('@');
-  return isPrefixed ? id : `@${id}`;
+  if (!id) return null;
+  return id.startsWith('@') ? id : `@${id}`;
 };
 
 export const parseTaskRow = (row) => {
-  const hasRow = Boolean(row);
-  if (!hasRow) return null;
+  if (!row) return null;
+  const parseJson = (val, fallback) => {
+    if (!val) return fallback;
+    return typeof val === 'string' ? JSON.parse(val) : val;
+  };
   return {
     ...row,
-    dependencies: JSON.parse(row.dependencies || '[]'),
-    result_payload: JSON.parse(row.result_payload || '{}'),
-    violation_snapshot: typeof row.violation_snapshot === 'string' ? JSON.parse(row.violation_snapshot || '{}') : (row.violation_snapshot || {}),
-    diff_receipt: typeof row.diff_receipt === 'string' ? JSON.parse(row.diff_receipt || '{}') : (row.diff_receipt || {})
+    dependencies: parseJson(row.dependencies, []),
+    result_payload: parseJson(row.result_payload, {}),
+    violation_snapshot: parseJson(row.violation_snapshot, {}),
+    diff_receipt: parseJson(row.diff_receipt, {})
   };
 };
 
 export const checkDependenciesMet = (db, taskId, getTask) => {
   const task = getTask(db, taskId);
-  const hasTask = Boolean(task);
-  if (!hasTask) return true;
+  if (!task) return true;
   const hasDeps = Array.isArray(task.dependencies) && task.dependencies.length > 0;
   if (!hasDeps) return true;
 
@@ -35,9 +31,7 @@ export const checkDependenciesMet = (db, taskId, getTask) => {
 };
 
 export const evaluateClaim = (task, cleanId, isDepsMet) => {
-  const hasTask = Boolean(task);
-  if (!hasTask) return { allowed: false, reason: 'task_not_found' };
-
+  if (!task) return { allowed: false, reason: 'task_not_found' };
   const isClaimedByOther = task.status === 'in_progress' && Boolean(task.assigned_agent_id) && task.assigned_agent_id !== cleanId;
   if (isClaimedByOther) {
     return { allowed: false, reason: 'already_claimed', claimedBy: task.assigned_agent_id };
@@ -58,18 +52,12 @@ export const executeTaskClaim = (db, taskId, cleanId) => {
 
 export const executeStatusUpdate = (db, taskId, status, options, task) => {
   const now = Date.now();
-  const payloadStr = options.resultPayload
-    ? JSON.stringify(options.resultPayload)
-    : JSON.stringify(task.result_payload);
+  const payloadStr = JSON.stringify(options.resultPayload || task.result_payload || {});
   const receiptObj = options.diffReceipt || options.resultPayload?.receipt || task.diff_receipt || {};
-  const diffReceiptStr = JSON.stringify(receiptObj);
   db.prepare('UPDATE agent_tasks SET status = ?, blocked_reason = ?, result_payload = ?, diff_receipt = ?, updated_at = ? WHERE id = ?')
-    .run(status, options.blockedReason || '', payloadStr, diffReceiptStr, now, Number(taskId));
+    .run(status, options.blockedReason || '', payloadStr, JSON.stringify(receiptObj), now, Number(taskId));
 
-  const isTerminal = ['done', 'failed', 'queued'].includes(status);
-  const hasAgent = Boolean(task.assigned_agent_id);
-  const shouldReset = isTerminal && hasAgent;
-  if (shouldReset) {
+  if (['done', 'failed', 'queued'].includes(status) && task.assigned_agent_id) {
     db.prepare('UPDATE agents SET current_task_id = NULL, status = ? WHERE id = ?')
       .run('idle', task.assigned_agent_id);
   }
@@ -91,8 +79,18 @@ export const buildTaskListQuery = (filter = {}) => {
     conditions.push('target_path = ?');
     params.push(filter.target_path);
   }
-  const hasConditions = conditions.length > 0;
-  if (hasConditions) query += ` WHERE ${conditions.join(' AND ')}`;
+  const parentId = filter.parentId !== undefined ? filter.parentId : filter.parent_id;
+  const isRoot = parentId === 'root' || parentId === null;
+  const isNumberType = typeof parentId === 'number';
+  const isNumericStr = typeof parentId === 'string' && Boolean(parentId) && !isNaN(Number(parentId));
+  const isNumeric = isNumberType || isNumericStr;
+  if (isRoot) {
+    conditions.push('parent_id IS NULL');
+  } else if (isNumeric) {
+    conditions.push('parent_id = ?');
+    params.push(Number(parentId));
+  }
+  if (conditions.length > 0) query += ` WHERE ${conditions.join(' AND ')}`;
   query += ' ORDER BY priority ASC, id ASC';
   return { query, params };
 };

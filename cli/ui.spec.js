@@ -69,6 +69,7 @@ test('ui-server: creates HTTP server and handles GET / and API routes', async ()
 
   const running = await startUiServer({ port: 0, cwd: process.cwd() });
   assert.ok(running.port > 0);
+  let taskJson = null;
 
   try {
     const resHtml = await fetch(`http://localhost:${running.port}/`);
@@ -102,7 +103,7 @@ test('ui-server: creates HTTP server and handles GET / and API routes', async ()
       body: JSON.stringify({ title: testTaskTitle, tier: 'atom', priority: 1 })
     });
     assert.strictEqual(resCreateTask.status, 200);
-    const taskJson = await resCreateTask.json();
+    taskJson = await resCreateTask.json();
     assert.strictEqual(taskJson.success, true);
     assert.ok(taskJson.task?.id);
 
@@ -213,6 +214,10 @@ test('ui-server: creates HTTP server and handles GET / and API routes', async ()
     assert.ok(htmlText.includes('cert'), 'HTML must include canvas certificate');
     assert.ok(htmlText.includes('Download PNG') || htmlText.includes('downloadPng'), 'HTML must include download PNG button');
   } finally {
+    if (taskJson?.task?.id) {
+      const db = openIndexDb(process.cwd());
+      db.prepare('DELETE FROM agent_tasks WHERE id = ?').run(taskJson.task.id);
+    }
     running.server.close();
   }
 });

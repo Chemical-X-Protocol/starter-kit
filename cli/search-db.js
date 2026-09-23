@@ -5,7 +5,9 @@ import { generateEmbedding, serializeVector, VECTOR_DIMENSIONS } from './embeddi
 export {
   isSqliteAvailable,
   resolveIndexDbPath,
-  openIndexDb
+  openIndexDb,
+  warmIndexDb,
+  clearDbCache
 } from './search-schema.js';
 
 export {
@@ -33,10 +35,9 @@ export const getAllIndexedFiles = (db) => {
   return fileMap;
 };
 
-export const removeDeletedFiles = (db, currentFilePaths) => {
+export const removeDeletedFiles = (db, currentFilePaths, cwd = process.cwd()) => {
   if (!db) return 0;
   const indexed = getAllIndexedFiles(db);
-  const currentSet = new Set(currentFilePaths);
   let removedCount = 0;
 
   const deleteStmt = db.prepare('DELETE FROM files WHERE path = ?');
@@ -44,7 +45,8 @@ export const removeDeletedFiles = (db, currentFilePaths) => {
   const deleteImportsStmt = db.prepare('DELETE FROM imports WHERE importer_path = ?');
 
   for (const [filePath] of indexed.entries()) {
-    const isFileMissing = !currentSet.has(filePath);
+    const fullPath = path.isAbsolute(filePath) ? filePath : path.resolve(cwd, filePath);
+    const isFileMissing = !fs.existsSync(fullPath);
     if (isFileMissing) {
       deleteStmt.run(filePath);
       deleteFtsStmt.run(filePath);
@@ -255,7 +257,33 @@ export const queryIndex = (db, { query = '', tier = null, kind = null, limit = 5
   params.push(wildcard, limit);
 
   const matchedFiles = db.prepare(sql).all(...params);
-  return matchedFiles.map((f) => populateFileDetails(db, f));
+  if (matchedFiles.length > 0) {
+    return matchedFiles.map((f) => populateFileDetails(db, f));
+  }
+
+  try {
+    const clean = cleanQuery.replace(/[^\w\s-]/g, ' ').trim();
+    if (clean) {
+      const ftsRows = db.prepare(`
+        SELECT DISTINCT file_path FROM fts_index
+        WHERE fts_index MATCH ?
+        LIMIT ?
+      `).all(`"${clean}"*`, limit);
+
+      if (ftsRows.length > 0) {
+        const placeholders = ftsRows.map(() => '?').join(',');
+        const ftsFiles = db.prepare(`
+          SELECT * FROM files WHERE path IN (${placeholders})
+          ORDER BY lines ASC
+        `).all(...ftsRows.map((r) => r.file_path));
+        return ftsFiles.map((f) => populateFileDetails(db, f));
+      }
+    }
+  } catch {
+    // Non-blocking FTS fallback
+  }
+
+  return [];
 };
 
 export const inspectIndexedFile = (db, filePath) => {

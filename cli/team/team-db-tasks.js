@@ -8,7 +8,6 @@ import {
   parseTaskRow,
   checkDependenciesMet,
   evaluateClaim,
-  executeTaskClaim,
   executeStatusUpdate,
   buildTaskListQuery
 } from './team-db-task-helpers.js';
@@ -68,7 +67,11 @@ export const claimTask = (db, taskId, agentId) => {
     return { success: false, ...failDetails };
   }
 
-  executeTaskClaim(db, taskId, cleanId);
+  const now = Date.now();
+  const sql = "UPDATE agent_tasks SET assigned_agent_id = ?, status = 'in_progress', updated_at = ? WHERE id = ? AND status = 'queued' AND (assigned_agent_id IS NULL OR assigned_agent_id = ?);";
+  const info = db.prepare(sql).run(cleanId, now, Number(taskId), cleanId);
+  if (info.changes !== 1) return { success: false, reason: 'already_claimed' };
+  db.prepare("UPDATE agents SET current_task_id = ?, status = 'busy' WHERE id = ?").run(Number(taskId), cleanId);
   return { success: true, task: getTask(db, taskId) };
 };
 
