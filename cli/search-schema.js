@@ -36,14 +36,24 @@ export const openIndexDb = (cwd = process.cwd(), options = {}) => {
     return DB_CACHE.get(dbPath);
   }
 
-  const db = new DatabaseSync(dbPath);
-
   try {
-    db.exec('PRAGMA busy_timeout = 5000;');
-    db.exec('PRAGMA journal_mode = WAL;');
-    db.exec('PRAGMA foreign_keys = ON;');
+    fs.accessSync(path.dirname(dbPath), fs.constants.W_OK);
   } catch {
-    // Safe retry/fallback if concurrent worker holds active lock
+    return null;
+  }
+
+  let db = null;
+  try {
+    db = new DatabaseSync(dbPath);
+    try {
+      db.exec('PRAGMA busy_timeout = 5000;');
+      db.exec('PRAGMA journal_mode = WAL;');
+      db.exec('PRAGMA foreign_keys = ON;');
+    } catch {
+      // Safe retry/fallback if concurrent worker holds active lock
+    }
+  } catch {
+    return null;
   }
 
   db.exec(`

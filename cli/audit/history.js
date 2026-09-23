@@ -13,8 +13,12 @@ const RED = '\x1b[31m';
 
 export const ensureChemxDir = (cwd = process.cwd()) => {
   const dir = path.resolve(cwd, '.chemx');
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
+  try {
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+  } catch {
+    return dir;
   }
 
   // Ensure .chemx is gitignored if git repo exists
@@ -165,7 +169,11 @@ export const getAuditBaseline = (cwd = process.cwd()) => {
 export const setAuditBaseline = (snapshot, cwd = process.cwd()) => {
   ensureChemxDir(cwd);
   const baselinePath = path.resolve(cwd, '.chemx', 'baseline.json');
-  fs.writeFileSync(baselinePath, JSON.stringify(snapshot, null, 2), 'utf-8');
+  try {
+    fs.writeFileSync(baselinePath, JSON.stringify(snapshot, null, 2), 'utf-8');
+  } catch {
+    // Read-only filesystem in sandbox
+  }
   return snapshot;
 };
 
@@ -196,7 +204,11 @@ export const saveAuditSnapshot = (report, cwd = process.cwd()) => {
   // Keep last 50 snapshots
   const trimmed = history.slice(-50);
   const historyPath = path.resolve(cwd, '.chemx', 'history.json');
-  fs.writeFileSync(historyPath, JSON.stringify(trimmed, null, 2), 'utf-8');
+  try {
+    fs.writeFileSync(historyPath, JSON.stringify(trimmed, null, 2), 'utf-8');
+  } catch {
+    // Read-only filesystem in sandbox
+  }
 
   // Auto-establish first run or lower score as baseline floor
   const baselinePath = path.resolve(cwd, '.chemx', 'baseline.json');
@@ -206,8 +218,12 @@ export const saveAuditSnapshot = (report, cwd = process.cwd()) => {
   const baselineScore = currentBaseline?.health?.score ?? 101;
 
   if (!currentBaseline || currentScore < baselineScore) {
-    fs.writeFileSync(baselinePath, JSON.stringify(snapshot, null, 2), 'utf-8');
-    isNewBaseline = true;
+    try {
+      fs.writeFileSync(baselinePath, JSON.stringify(snapshot, null, 2), 'utf-8');
+      isNewBaseline = true;
+    } catch {
+      // Read-only filesystem in sandbox
+    }
   }
 
   const baseline = getAuditBaseline(cwd);
