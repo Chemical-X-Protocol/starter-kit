@@ -45,7 +45,7 @@ const loadProjectConfig = () => {
 };
 
 // ---------------------------------------------------------------------------
-// Public API — lazy proxy exports (zero startup cost for consumers)
+// Public API: lazy proxy exports (zero startup cost for consumers)
 // ---------------------------------------------------------------------------
 
 export const runAudit = async (customDir = null, isCli = false) => {
@@ -108,20 +108,28 @@ export const ALLOWED_COMMANDS = new Set([
 // main: thin orchestrator; real dispatch lives in cmd-router.js
 // ---------------------------------------------------------------------------
 
+const HELP_FLAGS = new Set(['help', '--help', '-h']);
+const VERSION_FLAGS = new Set(['version', '--version', '-v']);
+
 const main = async () => {
   const firstArg = rawArgs[0];
 
-  if (!firstArg || firstArg === 'help' || firstArg === '--help' || firstArg === '-h') {
+  const isHelpRequested = !firstArg || HELP_FLAGS.has(firstArg);
+  if (isHelpRequested) {
     printHelp();
     return;
   }
 
-  if (firstArg === 'version' || firstArg === '--version' || firstArg === '-v') {
+  const isVersionRequested = VERSION_FLAGS.has(firstArg);
+  if (isVersionRequested) {
     process.stdout.write(`create-chemx v${getPackageVersion()}\n`);
     return;
   }
 
-  if (!ALLOWED_COMMANDS.has(firstArg) && !isCapsulePrefix(firstArg)) {
+  const isAllowedCommand = ALLOWED_COMMANDS.has(firstArg);
+  const isCapsuleCmd = isCapsulePrefix(firstArg);
+  const isCommandValid = isAllowedCommand || isCapsuleCmd;
+  if (!isCommandValid) {
     process.stderr.write(`Unknown command "${firstArg}". Run --help for usage.\n`);
     process.exit(1);
   }

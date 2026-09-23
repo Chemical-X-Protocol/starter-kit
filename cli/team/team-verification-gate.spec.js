@@ -6,7 +6,7 @@ import os from 'node:os';
 import { DatabaseSync } from 'node:sqlite';
 import { initTeamSchema } from './team-schema.js';
 import { createTask, getTask } from './team-db-tasks.js';
-import { autoGenerateTasksFromAudit, completeTaskWithAudit } from './team-triage.js';
+import { autoGenerateTasksFromAudit, completeTaskWithAudit, reconcileAuditTasks } from './team-triage.js';
 import { handleUpdateTaskStatus } from '../ui-actions-tasks.js';
 import { handleCompleteTask } from '../ui-actions.js';
 
@@ -222,6 +222,32 @@ test('Verification Gate: UI route intercepts status update to done and refuses u
   const forceRes = handleUpdateTaskStatus(db, { taskId: task.id, status: 'done', force: true, cwd: tmpDir });
   assert.equal(forceRes.success, true);
   assert.equal(forceRes.task.status, 'done');
+
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+});
+
+test('Verification Gate: reconcileAuditTasks auto-resolves tasks when target files are compliant', () => {
+  const db = setupTestDb();
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-reconcile-'));
+  const targetRel = 'src/molecules/m-clean.ts';
+  const targetFull = path.join(tmpDir, targetRel);
+  fs.mkdirSync(path.dirname(targetFull), { recursive: true });
+  fs.writeFileSync(targetFull, 'export const cleanValue = 42;\n');
+
+  const task = createTask(db, {
+    title: 'Resolve hazards in src/molecules/m-clean.ts',
+    target_path: targetRel,
+    origin_type: 'audit'
+  });
+  assert.equal(task.status, 'queued');
+
+  const resolved = reconcileAuditTasks(db, { cwd: tmpDir });
+  assert.equal(resolved.length, 1);
+  assert.equal(resolved[0].id, task.id);
+
+  const updatedTask = getTask(db, task.id);
+  assert.equal(updatedTask.status, 'done');
+  assert.equal(updatedTask.result_payload.reconciled, true);
 
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });

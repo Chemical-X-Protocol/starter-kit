@@ -32,7 +32,8 @@ export const MASTER_MCP_TOOL = {
           'autofix',
           'generate',
           'patterns',
-          'issue'
+          'issue',
+          'project'
         ],
         description: 'The Chemical X subsystem action to execute.'
       },

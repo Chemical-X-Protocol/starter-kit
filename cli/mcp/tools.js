@@ -4,17 +4,12 @@ import { handleQueryPatterns, handleAutofix } from './tools-patterns.js';
 import { handleAuditBuild, handleChemxTypecheck, handleChemxTest, handleChemxVerify } from './tools-verify.js';
 import { handleGenerateCapsule, handleChemxTrend } from './tools-generate.js';
 import { handleChemxQ, handleChemxRead, handleChemxPatch, handleChemxCheck, handleChemxWrite } from './tools-search.js';
-import {
-  handleChemxTeam, handleChemxTeamStatus, handleChemxTeamFeed, handleChemxTeamPost,
-  handleChemxTeamTask, handleChemxTeamLock, handleChemxTeamInbox, handleChemxTeamDm, handleChemxReportIssue
-} from './tools-team.js';
+import { handleChemxTeam, handleChemxTeamStatus, handleChemxTeamFeed, handleChemxTeamPost, handleChemxTeamTask, handleChemxTeamLock, handleChemxTeamInbox, handleChemxTeamDm, handleChemxReportIssue } from './tools-team.js';
 import { handleChemxProject } from './tools-project.js';
 
 export {
-  MCP_TOOLS, ALL_MCP_TOOLS,
-  handleChemxQ, handleChemxRead, handleChemxPatch, handleChemxCheck, handleChemxWrite,
-  handleChemxTeamStatus, handleChemxTeamFeed, handleChemxTeamPost,
-  handleChemxTeamTask, handleChemxTeamLock, handleChemxReportIssue, handleChemxProject
+  MCP_TOOLS, ALL_MCP_TOOLS, handleChemxQ, handleChemxRead, handleChemxPatch, handleChemxCheck, handleChemxWrite,
+  handleChemxTeamStatus, handleChemxTeamFeed, handleChemxTeamPost, handleChemxTeamTask, handleChemxTeamLock, handleChemxReportIssue, handleChemxProject
 };
 
 const parseCommand = (command, params) => {
@@ -34,9 +29,14 @@ const parseCommand = (command, params) => {
   }
   if (subCmd === 'q' || subCmd === 'search') return { action: 'q', params: { query: parts.slice(1).join(' '), ...params } };
   if (subCmd === 'team') {
-    const teamAction = parts[1] || 'status';
     const TEAM_ACTIONS = { status: 'team_status', feed: 'team_feed', task: 'team_task', lock: 'team_lock', inbox: 'team_inbox', dm: 'team_dm' };
-    return { action: TEAM_ACTIONS[teamAction] || 'team_task', params };
+    return { action: TEAM_ACTIONS[parts[1] || 'status'] || 'team_task', params };
+  }
+  if (subCmd === 'project' || subCmd === 'coordinator') {
+    const subAction = parts[1] || 'status';
+    const rest = parts.slice(2).join(' ').replace(/^"|"$/g, '');
+    const extra = subAction === 'init' ? { goal: rest || params.goal } : { message: rest || params.message };
+    return { action: 'project', params: { subAction, ...extra, ...params } };
   }
   if (subCmd === 'autofix') return { action: 'autofix', params: { path: parts[1] || 'src', ...params } };
   if (subCmd === 'trend' || subCmd === 'trends') return { action: 'trend', params };
@@ -44,15 +44,14 @@ const parseCommand = (command, params) => {
 };
 
 const DISPATCHER = {
-  audit: handleAudit, trend: handleChemxTrend, build: handleAuditBuild,
-  verify: handleChemxVerify, typecheck: handleChemxTypecheck, test: handleChemxTest,
-  check: handleChemxCheck, patch: handleChemxPatch, write: handleChemxWrite,
-  read: handleChemxRead, r: handleChemxRead,
+  audit: handleAudit, trend: handleChemxTrend, build: handleAuditBuild, verify: handleChemxVerify,
+  typecheck: handleChemxTypecheck, test: handleChemxTest, check: handleChemxCheck,
+  patch: handleChemxPatch, write: handleChemxWrite, read: handleChemxRead, r: handleChemxRead,
   team: handleChemxTeam, team_inbox: handleChemxTeamInbox, team_dm: handleChemxTeamDm,
-  team_status: handleChemxTeamStatus, team_feed: handleChemxTeamFeed,
-  team_post: handleChemxTeamPost, team_task: handleChemxTeamTask, team_lock: handleChemxTeamLock,
-  q: handleChemxQ, search: handleChemxQ, autofix: handleAutofix,
-  generate: handleGenerateCapsule, patterns: handleQueryPatterns, issue: handleChemxReportIssue
+  team_status: handleChemxTeamStatus, team_feed: handleChemxTeamFeed, team_post: handleChemxTeamPost,
+  team_task: handleChemxTeamTask, team_lock: handleChemxTeamLock, q: handleChemxQ, search: handleChemxQ,
+  autofix: handleAutofix, generate: handleGenerateCapsule, patterns: handleQueryPatterns,
+  issue: handleChemxReportIssue, project: handleChemxProject, coordinator: handleChemxProject
 };
 
 export const handleChemx = async (args = {}, cwd = process.cwd()) => {

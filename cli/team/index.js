@@ -25,6 +25,7 @@ export {
 export {
   queryUnassignedHazards,
   autoGenerateTasksFromAudit,
+  reconcileAuditTasks,
   completeTaskWithAudit
 } from './team-triage.js';
 export {

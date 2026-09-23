@@ -14,7 +14,10 @@ export const recordVerifiedLearning = (db, learning = {}) => {
     provenancePath = ''
   } = learning;
 
-  if (!pattern || !ruleText) return null;
+  const hasPattern = Boolean(pattern);
+  const hasRuleText = Boolean(ruleText);
+  const isValidLearning = hasPattern && hasRuleText;
+  if (!isValidLearning) return null;
 
   const now = Date.now();
   const existing = db.prepare('SELECT id, verified_count FROM project_learnings WHERE pattern = ?').get(pattern);

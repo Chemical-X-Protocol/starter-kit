@@ -19,7 +19,7 @@ import {
   registerAgent
 } from './team-db.js';
 import { getAgentMailbox, sendDirectMessage } from './team-db-mailbox.js';
-import { autoGenerateTasksFromAudit, completeTaskWithAudit, queryUnassignedHazards } from './team-triage.js';
+import { autoGenerateTasksFromAudit, completeTaskWithAudit, queryUnassignedHazards, reconcileAuditTasks } from './team-triage.js';
 import { formatSwarmStatusCard, formatFeedTimeline, formatTaskListCard, formatMailboxCard } from './team-format.js';
 import { getSwarmTokenBreakdown, formatTokenBreakdownCard } from './team-tokens.js';
 import { runAblationComparison, formatAblationCard } from './team-memory.js';
@@ -285,6 +285,15 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
       }
       return tasks;
     }
+    if (taskAction === 'reconcile' || taskAction === 'prune') {
+      const resolved = reconcileAuditTasks(db, { cwd });
+      if (isCli) {
+        if (flags.isJson) process.stdout.write(`${JSON.stringify(resolved, null, 2)}\n`);
+        else if (resolved.length > 0) process.stdout.write(`\x1b[32m✔\x1b[0m Reconciled and auto-resolved ${resolved.length} task(s) whose hazards were fixed.\n`);
+        else process.stdout.write('\x1b[34mℹ\x1b[0m 0 tasks needed reconciliation.\n');
+      }
+      return resolved;
+    }
     if (taskAction === 'set-target' || taskAction === 'target') {
       const taskId = nonFlagPositional[1];
       const targetPath = flags.target || nonFlagPositional[2];
@@ -305,7 +314,7 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
     }
 
     if (isCli) {
-      process.stderr.write(`\x1b[31m✕ Unknown task action: "${taskAction}". Available actions: list, add, claim, done, triage, set-target\x1b[0m\n`);
+      process.stderr.write(`\x1b[31m✕ Unknown task action: "${taskAction}". Available actions: list, add, claim, done, triage, reconcile, set-target\x1b[0m\n`);
     }
     return { error: `Unknown task action: ${taskAction}` };
   }

@@ -23,22 +23,24 @@ export const handleChemxProject = async (args = {}, cwd = process.cwd()) => {
 
   const subAction = args.subAction || args.action || 'status';
 
-  if (subAction === 'init' || subAction === 'start') {
+  const isInit = subAction === 'init' || subAction === 'start';
+  if (isInit) {
     const goal = args.goal || args.title || 'Autonomous codebase optimization';
-    const session = initProjectSession(db, {
+    return initProjectSession(db, {
       goal,
       title: (args.title || goal).slice(0, 40),
       budgetLimit: args.budgetLimit || 2.0,
       maxTurns: args.maxTurns || 10
     });
-    return session;
   }
 
-  if (subAction === 'step' || subAction === 'turn') {
+  const isStep = subAction === 'step' || subAction === 'turn';
+  if (isStep) {
     return executeCoordinatorStep(db, { cwd, costUsd: args.costUsd });
   }
 
-  if (subAction === 'chat' || subAction === 'msg') {
+  const isChat = subAction === 'chat' || subAction === 'msg';
+  if (isChat) {
     const active = getActiveProjectSession(db);
     if (!active) return { error: 'no_active_session' };
     return postProjectMessage(db, {
@@ -50,11 +52,13 @@ export const handleChemxProject = async (args = {}, cwd = process.cwd()) => {
     });
   }
 
-  if (subAction === 'learnings' || subAction === 'memory') {
+  const isLearnings = subAction === 'learnings' || subAction === 'memory';
+  if (isLearnings) {
     return queryRelevantLearnings(db, { tier: args.tier, limit: args.limit || 10 });
   }
 
-  if (subAction === 'pause' || subAction === 'resume') {
+  const isPauseToggle = subAction === 'pause' || subAction === 'resume';
+  if (isPauseToggle) {
     const active = getActiveProjectSession(db);
     if (!active) return { error: 'no_active_session' };
     const status = subAction === 'pause' ? 'paused' : 'active';

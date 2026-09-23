@@ -6,9 +6,12 @@
 export const formatProjectStatusCard = ({ session, messages = [], activeTasks = [], learnings = [] }) => {
   if (!session) return '\n  \x1b[90mNo active project session found. Run "chemx project init <goal>" to start.\x1b[0m\n\n';
 
-  const isComplete = session.status === 'completed';
-  const isPaused = session.status.startsWith('paused');
-  const statusColor = isComplete ? '\x1b[32m' : (isPaused ? '\x1b[33m' : '\x1b[36m');
+  const getStatusColor = (status) => {
+    if (status === 'completed') return '\x1b[32m';
+    if (status.startsWith('paused')) return '\x1b[33m';
+    return '\x1b[36m';
+  };
+  const statusColor = getStatusColor(session.status);
   const spent = session.budget_spent_usd || 0;
   const limit = session.budget_limit_usd || 2.0;
   const budgetColor = spent >= limit ? '\x1b[31m' : '\x1b[32m';

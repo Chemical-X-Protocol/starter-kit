@@ -8,6 +8,7 @@ export function useNavDrawerController(props: NavDrawerProps, emit: NavDrawerEmi
     { id: 'attention', label: 'Attention Inbox', icon: '🔔', badge: props.attentionCount },
     { id: 'social', label: 'Timeline & Feed', icon: '📡' },
     { id: 'tasks', label: 'Tasks & Workload', icon: '📋', badge: props.taskCount },
+    { id: 'projects', label: 'Projects & Coordinator', icon: '🎯' },
     { id: 'locks', label: 'File Locks Hub', icon: '🔒', badge: props.lockCount },
     { id: 'codebase', label: 'AST Codebase', icon: '🧬', badge: props.fileCount },
     { id: 'database', label: 'Database Studio', icon: '💾' },

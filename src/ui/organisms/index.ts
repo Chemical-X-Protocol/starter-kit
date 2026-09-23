@@ -7,3 +7,4 @@ export * from './o-task-board';
 export * from './o-lock-hub';
 export * from './o-codebase-catalog';
 export * from './o-settings-panel';
+export * from './o-project-console';

@@ -38,7 +38,10 @@ export const initProjectSession = (db, options = {}) => {
 };
 
 export const getProjectSession = (db, id) => {
-  if (!db || !id) return null;
+  const hasDb = Boolean(db);
+  const hasId = Boolean(id);
+  const isValidQuery = hasDb && hasId;
+  if (!isValidQuery) return null;
   return db.prepare('SELECT * FROM project_sessions WHERE id = ?').get(id);
 };
 
@@ -65,12 +68,18 @@ export const postProjectMessage = (db, params = {}) => {
 };
 
 export const getProjectMessages = (db, projectId, limit = 50) => {
-  if (!db || !projectId) return [];
+  const hasDb = Boolean(db);
+  const hasProjectId = Boolean(projectId);
+  const isValidQuery = hasDb && hasProjectId;
+  if (!isValidQuery) return [];
   return db.prepare('SELECT * FROM project_messages WHERE project_id = ? ORDER BY id ASC LIMIT ?').all(projectId, limit);
 };
 
 export const updateProjectSession = (db, id, updates = {}) => {
-  if (!db || !id) return null;
+  const hasDb = Boolean(db);
+  const hasId = Boolean(id);
+  const isValidTarget = hasDb && hasId;
+  if (!isValidTarget) return null;
   const fields = [];
   const vals = [];
   for (const [k, v] of Object.entries(updates)) {

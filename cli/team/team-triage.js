@@ -56,9 +56,83 @@ export const queryUnassignedHazards = (db) => {
   }
 };
 
+export const reconcileAuditTasks = (db, options = {}) => {
+  if (!db) return [];
+  const cwd = options.cwd || process.cwd();
+
+  const openAuditTasks = db.prepare(`
+    SELECT id, target_path, title, status
+    FROM agent_tasks
+    WHERE status IN ('queued', 'in_progress', 'review')
+      AND target_path IS NOT NULL
+      AND origin_type = 'audit'
+  `).all();
+
+  const resolvedTasks = [];
+
+  for (const task of openAuditTasks) {
+    const fullPath = path.isAbsolute(task.target_path) ? task.target_path : path.resolve(cwd, task.target_path);
+    const fileExists = fs.existsSync(fullPath);
+
+    if (!fileExists) {
+      updateTaskStatus(db, task.id, 'done', {
+        resultPayload: {
+          reconciled: true,
+          resolvedAt: Date.now(),
+          reason: 'Target file was removed or relocated'
+        }
+      });
+      resolvedTasks.push({ id: task.id, target_path: task.target_path, reason: 'file_removed' });
+      continue;
+    }
+
+    try {
+      const auditRes = auditFile(fullPath, task.target_path);
+      const violations = Array.isArray(auditRes) ? auditRes : (auditRes?.fileViolations || auditRes?.violations || []);
+      const isBlocking = (v) => {
+        if (v.deprecated === true) return false;
+        const isDirectiveString = typeof v.directive === 'string';
+        const isDeprecatedDirective = isDirectiveString && v.directive.includes('Deprecated');
+        if (isDeprecatedDirective) return false;
+        const isCriticalOrHigh = v.severity === 'CRITICAL' || v.severity === 'HIGH';
+        return isCriticalOrHigh;
+      };
+      const blockingHazards = violations.filter(isBlocking);
+      const isClean = blockingHazards.length === 0;
+
+      if (isClean) {
+        updateTaskStatus(db, task.id, 'done', {
+          resultPayload: {
+            reconciled: true,
+            resolvedAt: Date.now(),
+            hazardCount: violations.length,
+            reason: 'Auto-reconciled: 0 blocking hazards remain'
+          }
+        });
+        resolvedTasks.push({ id: task.id, target_path: task.target_path, reason: 'hazards_resolved' });
+      }
+    } catch {
+      // Continue if audit cannot be evaluated
+    }
+  }
+
+  if (resolvedTasks.length > 0) {
+    postFeedEvent(db, {
+      author_id: '@triage-bot',
+      event_type: 'triage_reconciled',
+      message: `Auto-reconciled ${resolvedTasks.length} task(s) whose hazards are resolved`,
+      metadata: { resolvedTaskIds: resolvedTasks.map((t) => t.id) }
+    });
+  }
+
+  return resolvedTasks;
+};
+
 export const autoGenerateTasksFromAudit = (db, options = {}) => {
   if (!db) return [];
   const cwd = options.cwd || process.cwd();
+
+  reconcileAuditTasks(db, options);
 
   // If violations and files are empty, auto-audit to seed index if possible
   try {
