@@ -86,6 +86,7 @@ export const ALLOWED_COMMANDS = new Set([
   'trend', 'trends',
   'verify', 'check:all',
   'team', 'swarm', 'feed', 'tokens', 'telemetry',
+  'project', 'coordinator',
   'benchmark', 'ablation', 'memory',
   'pillars', 'rules', 'config:pillars',
   'mcp', 'mcp-server', 'server', 'install-mcp', 'setup-mcp',

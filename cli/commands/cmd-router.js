@@ -23,6 +23,12 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
       runTeamCli(rawArgs.slice(1), true);
       break;
     }
+    case 'project':
+    case 'coordinator': {
+      const { runProjectCli } = await import('./cmd-project.js');
+      await runProjectCli(rawArgs.slice(1), true);
+      break;
+    }
     case 'tokens':
     case 'telemetry': {
       const { runTeamCli } = await import('../team/index.js');

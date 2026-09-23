@@ -8,12 +8,13 @@ import {
   handleChemxTeam, handleChemxTeamStatus, handleChemxTeamFeed, handleChemxTeamPost,
   handleChemxTeamTask, handleChemxTeamLock, handleChemxTeamInbox, handleChemxTeamDm, handleChemxReportIssue
 } from './tools-team.js';
+import { handleChemxProject } from './tools-project.js';
 
 export {
   MCP_TOOLS, ALL_MCP_TOOLS,
   handleChemxQ, handleChemxRead, handleChemxPatch, handleChemxCheck, handleChemxWrite,
   handleChemxTeamStatus, handleChemxTeamFeed, handleChemxTeamPost,
-  handleChemxTeamTask, handleChemxTeamLock, handleChemxReportIssue
+  handleChemxTeamTask, handleChemxTeamLock, handleChemxReportIssue, handleChemxProject
 };
 
 const parseCommand = (command, params) => {

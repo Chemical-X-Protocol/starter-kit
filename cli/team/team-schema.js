@@ -4,6 +4,7 @@
  */
 
 import { initMemorySchema } from './team-schema-memory.js';
+import { initProjectsSchema } from './team-schema-projects.js';
 
 const migrateCols = (db, tbl, cols) => {
   const existing = new Set((db.prepare(`PRAGMA table_info(${tbl})`).all() || []).map((c) => c.name));
@@ -94,7 +95,5 @@ export const initTeamSchema = (db) => {
     CREATE INDEX IF NOT EXISTS idx_file_lock_queue_file ON file_lock_queue(file_path, status);
   `);
   initMemorySchema(db);
+  initProjectsSchema(db);
 };
-
-
-
