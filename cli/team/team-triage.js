@@ -13,46 +13,23 @@ import { ingestTaskTelemetry } from './team-telemetry.js';
 import { runAudit as executeAstAudit, auditFile } from '../audit.js';
 import { syncSearchIndex, syncViolationsIndex, recordAuditSnapshot } from '../search.js';
 
-export { ingestTaskTelemetry };
+import { queryUnassignedHazards } from './team-db-task-helpers.js';
 
-export const queryUnassignedHazards = (db) => {
-  if (!db) return [];
-  const query = `
-    SELECT 
-      COALESCE(v.file_path, f.path) as path,
-      COALESCE(f.tier, 'molecule') as tier,
-      COALESCE(f.lines, 0) as lines,
-      COALESCE(f.health_score, CASE WHEN COUNT(v.id) > 0 THEN MAX(20, 100 - COUNT(v.id) * 15) ELSE 100 END) as health_score,
-      COALESCE(MAX(f.hazard_count, COUNT(v.id)), COUNT(v.id)) as hazard_count,
-      COUNT(v.id) as violation_count,
-      GROUP_CONCAT(DISTINCT v.rule) as rules_summary
-    FROM violations v
-    LEFT JOIN files f ON f.path = v.file_path
-    LEFT JOIN agent_tasks t ON t.target_path = v.file_path AND t.status IN ('queued', 'in_progress', 'review')
-    WHERE t.id IS NULL
-    GROUP BY v.file_path
-    UNION
-    SELECT
-      f.path,
-      f.tier,
-      f.lines,
-      f.health_score,
-      f.hazard_count,
-      f.hazard_count as violation_count,
-      'ARCHITECTURAL_HAZARD' as rules_summary
-    FROM files f
-    LEFT JOIN agent_tasks t ON t.target_path = f.path AND t.status IN ('queued', 'in_progress', 'review')
-    WHERE (f.health_score < 90 OR f.hazard_count > 0)
-      AND t.id IS NULL
-      AND f.path NOT IN (SELECT file_path FROM violations)
-    GROUP BY f.path
-    ORDER BY health_score ASC, hazard_count DESC
-  `;
-  try {
-    return db.prepare(query).all();
-  } catch {
-    // Fallback if schema doesn't yet have all tables
-    return [];
+export { ingestTaskTelemetry, queryUnassignedHazards };
+
+const checkAndCompleteParent = (db, parentId, resolvedTasks) => {
+  if (!parentId) return;
+  const remaining = db.prepare("SELECT COUNT(*) as count FROM agent_tasks WHERE parent_id = ? AND status != 'done'").get(parentId)?.count || 0;
+  if (remaining === 0) {
+    updateTaskStatus(db, parentId, 'done', {
+      resultPayload: {
+        reconciled: true,
+        autoCompleted: true,
+        resolvedAt: Date.now(),
+        reason: 'Auto-reconciled: all child subtasks completed'
+      }
+    });
+    resolvedTasks.push({ id: parentId, reason: 'parent_subtasks_completed' });
   }
 };
 
@@ -61,7 +38,7 @@ export const reconcileAuditTasks = (db, options = {}) => {
   const cwd = options.cwd || process.cwd();
 
   const openAuditTasks = db.prepare(`
-    SELECT id, target_path, title, status
+    SELECT id, target_path, title, status, parent_id
     FROM agent_tasks
     WHERE status IN ('queued', 'in_progress', 'review')
       AND target_path IS NOT NULL
@@ -83,6 +60,7 @@ export const reconcileAuditTasks = (db, options = {}) => {
         }
       });
       resolvedTasks.push({ id: task.id, target_path: task.target_path, reason: 'file_removed' });
+      checkAndCompleteParent(db, task.parent_id, resolvedTasks);
       continue;
     }
 
@@ -110,6 +88,7 @@ export const reconcileAuditTasks = (db, options = {}) => {
           }
         });
         resolvedTasks.push({ id: task.id, target_path: task.target_path, reason: 'hazards_resolved' });
+        checkAndCompleteParent(db, task.parent_id, resolvedTasks);
       }
     } catch {
       // Continue if audit cannot be evaluated
@@ -152,7 +131,6 @@ export const autoGenerateTasksFromAudit = (db, options = {}) => {
   }
 
   const limit = options.maxTasks || 10;
-  const candidates = queryUnassignedHazards(db).slice(0, limit);
   const createdTasks = [];
 
   registerAgent(db, {
@@ -162,7 +140,104 @@ export const autoGenerateTasksFromAudit = (db, options = {}) => {
     capabilities: ['audit', 'triage', 'task_creation']
   });
 
-  for (const item of candidates) {
+  let rulesWithViolations = [];
+  try {
+    rulesWithViolations = db.prepare(`
+      SELECT 
+        v.rule,
+        v.severity,
+        v.hazard,
+        v.directive,
+        COUNT(DISTINCT v.file_path) as file_count,
+        COUNT(v.id) as violation_count
+      FROM violations v
+      LEFT JOIN agent_tasks t ON t.target_path = v.file_path AND t.rule_id = v.rule AND t.status IN ('queued', 'in_progress', 'review')
+      WHERE t.id IS NULL
+      GROUP BY v.rule
+      ORDER BY 
+        CASE v.severity WHEN 'CRITICAL' THEN 1 WHEN 'HIGH' THEN 2 WHEN 'MEDIUM' THEN 3 ELSE 4 END ASC,
+        violation_count DESC
+    `).all();
+  } catch {
+    rulesWithViolations = [];
+  }
+
+  const hasGroupedRules = rulesWithViolations.length > 0;
+  const isHierarchical = options.hierarchy === true;
+
+  if (hasGroupedRules) {
+    for (const ruleInfo of rulesWithViolations) {
+      const shouldGroup = isHierarchical || ruleInfo.file_count > 1;
+      let parentTask = null;
+
+      if (shouldGroup) {
+        parentTask = db.prepare(`
+          SELECT * FROM agent_tasks 
+          WHERE origin_type = 'audit' AND rule_id = ? AND parent_id IS NULL AND status IN ('queued', 'in_progress', 'review')
+        `).get(ruleInfo.rule);
+
+        if (!parentTask) {
+          const dirSummary = ruleInfo.directive ? `: ${ruleInfo.directive.slice(0, 60)}` : '';
+          parentTask = createTask(db, {
+            title: `[${ruleInfo.rule}]${dirSummary} (${ruleInfo.file_count} files)`,
+            description: `Hazard: ${ruleInfo.hazard || 'Architectural hazard detected'}\nDirective: ${ruleInfo.directive || 'Refactor into molecular compliance'}\nTotal violations: ${ruleInfo.violation_count} across ${ruleInfo.file_count} file(s).`,
+            tier: 'organism',
+            priority: ruleInfo.severity === 'CRITICAL' ? 1 : (ruleInfo.severity === 'HIGH' ? 2 : 3),
+            origin_type: 'audit',
+            rule_id: ruleInfo.rule,
+            parent_id: null
+          });
+          if (parentTask) createdTasks.push(parentTask);
+        }
+      }
+
+      const fileRows = db.prepare(`
+        SELECT 
+          v.file_path,
+          GROUP_CONCAT(DISTINCT v.line) as lines,
+          v.hazard,
+          v.directive,
+          COALESCE(f.tier, 'molecule') as tier,
+          COALESCE(f.health_score, 80) as health_score,
+          COALESCE(f.lines, 0) as file_lines
+        FROM violations v
+        LEFT JOIN files f ON f.path = v.file_path
+        LEFT JOIN agent_tasks t ON t.target_path = v.file_path AND t.rule_id = v.rule AND t.status IN ('queued', 'in_progress', 'review')
+        WHERE v.rule = ? AND t.id IS NULL
+        GROUP BY v.file_path
+      `).all(ruleInfo.rule);
+
+      for (const fv of fileRows) {
+        const lineStr = fv.lines ? ` (Lines: ${fv.lines})` : '';
+        const taskTitle = shouldGroup
+          ? `${fv.file_path}: Fix ${ruleInfo.rule}`
+          : `Resolve architectural hazards in ${fv.file_path} (${ruleInfo.rule})`;
+        const childTask = createTask(db, {
+          title: taskTitle,
+          description: `File: ${fv.file_path}${lineStr}\nHazard: ${fv.hazard || ruleInfo.hazard}\nDirective: ${fv.directive || ruleInfo.directive}`,
+          tier: fv.tier || 'molecule',
+          target_path: fv.file_path,
+          priority: parentTask ? parentTask.priority : (ruleInfo.severity === 'CRITICAL' ? 1 : 2),
+          origin_type: 'audit',
+          rule_id: ruleInfo.rule,
+          parent_id: parentTask ? parentTask.id : null,
+          violation_snapshot: {
+            path: fv.file_path,
+            tier: fv.tier,
+            lines: fv.file_lines,
+            violationLines: fv.lines,
+            healthBefore: fv.health_score,
+            hazardCountBefore: 1,
+            rules: ruleInfo.rule
+          }
+        });
+        if (childTask) createdTasks.push(childTask);
+      }
+    }
+  }
+
+  const remainingCandidates = queryUnassignedHazards(db).slice(0, limit);
+  for (const item of remainingCandidates) {
     const rulesText = item.rules_summary ? ` (${item.rules_summary})` : '';
     const task = createTask(db, {
       title: `Resolve architectural hazards in ${item.path}${rulesText}`,

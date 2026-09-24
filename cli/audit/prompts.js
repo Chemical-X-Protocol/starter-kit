@@ -36,7 +36,7 @@ const renderTreeLines = (node, depth = 0) => {
   return lines;
 };
 
-export const formatGroupedPromptViolations = (violations = []) => {
+export const formatGroupedPromptViolations = (violations = [], options = {}) => {
   const hasNoViolations = violations.length === 0;
   if (hasNoViolations) return [];
 
@@ -49,11 +49,14 @@ export const formatGroupedPromptViolations = (violations = []) => {
     lines.push(`${idx + 1}. ${sevColor}[${rg.rule}]${RESET} ${BOLD}(${countLabel})${RESET}`);
     lines.push(`   Hazard:    ${rg.hazard}`);
     lines.push(`   Directive: ${CYAN}${rg.directive}${RESET}`);
-    lines.push('   Locations:');
+    lines.push(`   Action:    chemx team task list --rule=${rg.rule}`);
 
-    const tree = buildPathTree(rg.violations);
-    const treeLines = renderTreeLines(tree, 0);
-    lines.push(...treeLines);
+    if (options.detailedLocations) {
+      lines.push('   Locations:');
+      const tree = buildPathTree(rg.violations);
+      const treeLines = renderTreeLines(tree, 0);
+      lines.push(...treeLines);
+    }
     lines.push('');
   });
 
@@ -62,10 +65,10 @@ export const formatGroupedPromptViolations = (violations = []) => {
 
 export const buildAgentCommandsSection = () => [
   '### AI AGENT DISCOVERY & REFACTORING COMMANDS:',
-  '- Query & Inspect: Run `pnpm q "<target>" --inspect` (or `npx chemx search "<target>" --inspect`) to inspect component props, symbols, and hooks before editing.',
-  '- Tier Filter: Run `pnpm q "<query>" --tier=molecule` (or `atom`, `organism`, `hook`) to find related capsules.',
-  '- Zero-Overhead JSON: Run `pnpm q "<query>" --json` for minified AST metadata without burning context tokens on whole files.',
-  '- Re-Verify Score: Run `npx chemx audit` after refactoring to ensure Molecular Health Index (MHI) and letter grades improve.'
+  '- Claim Work: Run `chemx team task list --status=queued` and claim via `chemx team task claim <id> --as=@coder`.',
+  '- Inspect Target: Run `chemx read <target_path> --outline` to inspect AST signatures without token bloat.',
+  '- Verify & Auto-Resolve: Run `chemx verify`. Clean files auto-reconcile tasks to done in SQLite.',
+  '- MCP Invocations: If invoking via MCP, pass command string directly via `chemx({ command: "..." })`.'
 ].join('\n');
 
 export const buildGradeFPrompt = (report, options = {}) => {

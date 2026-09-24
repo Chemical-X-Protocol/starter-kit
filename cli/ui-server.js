@@ -71,14 +71,23 @@ export const createUiServer = (cwd = process.cwd()) => {
 
 export const startUiServer = async (options = {}) => {
   const port = options.port !== undefined ? options.port : 4173;
+  const host = options.host || '0.0.0.0';
   const cwd = options.cwd || process.cwd();
   const { server, db } = createUiServer(cwd);
 
-  return new Promise((resolve) => {
-    server.listen(port, () => {
+  return new Promise((resolve, reject) => {
+    server.on('error', (err) => {
+      if (options.isCli) {
+        process.stderr.write(`\x1b[31m✖ Chemical X UI Server error: ${err.message}\x1b[0m\n`);
+      }
+      reject(err);
+    });
+
+    server.listen(port, host, () => {
       const addr = server.address();
       const actualPort = typeof addr === 'object' && addr ? addr.port : port;
-      const url = `http://localhost:${actualPort}`;
+      const displayHost = host === '0.0.0.0' ? 'localhost' : host;
+      const url = `http://${displayHost}:${actualPort}`;
       if (options.isCli) {
         process.stdout.write(`\x1b[32m✔ Chemical X Live Swarm Web UI running at:\x1b[0m \x1b[36m${url}\x1b[0m\n`);
       }

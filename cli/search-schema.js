@@ -1,4 +1,5 @@
 import './silence-warnings.js';
+import fs from 'node:fs';
 import path from 'node:path';
 import { ensureChemxDir } from './audit/history.js';
 import { initTeamSchema } from './team/team-schema.js';
@@ -36,24 +37,61 @@ export const openIndexDb = (cwd = process.cwd(), options = {}) => {
     return DB_CACHE.get(dbPath);
   }
 
+  let isReadOnly = false;
   try {
     fs.accessSync(path.dirname(dbPath), fs.constants.W_OK);
+    if (fs.existsSync(dbPath)) {
+      fs.accessSync(dbPath, fs.constants.W_OK);
+    }
   } catch {
-    return null;
+    isReadOnly = true;
   }
 
   let db = null;
   try {
-    db = new DatabaseSync(dbPath);
-    try {
-      db.exec('PRAGMA busy_timeout = 5000;');
-      db.exec('PRAGMA journal_mode = WAL;');
-      db.exec('PRAGMA foreign_keys = ON;');
-    } catch {
-      // Safe retry/fallback if concurrent worker holds active lock
+    db = new DatabaseSync(dbPath, isReadOnly ? { readOnly: true } : {});
+    if (!isReadOnly) {
+      try {
+        db.exec('PRAGMA busy_timeout = 5000;');
+        db.exec('PRAGMA journal_mode = WAL;');
+        db.exec('PRAGMA foreign_keys = ON;');
+      } catch {
+        // Safe retry/fallback if concurrent worker holds active lock
+      }
     }
-  } catch {
-    return null;
+  } catch (err) {
+    if (!isReadOnly) {
+      try {
+        db = new DatabaseSync(dbPath, { readOnly: true });
+        isReadOnly = true;
+      } catch {
+        return null;
+      }
+    } else {
+      return null;
+    }
+  }
+
+  if (isReadOnly) {
+    if (typeof db.function === 'function') {
+      try {
+        db.function('vec_cosine', (b1, b2) => {
+          if (!b1 || !b2) return 0;
+          const a = new Float32Array(b1.buffer, b1.byteOffset, b1.byteLength / 4);
+          const b = new Float32Array(b2.buffer, b2.byteOffset, b2.byteLength / 4);
+          let dot = 0;
+          const len = Math.min(a.length, b.length);
+          for (let i = 0; i < len; i++) {
+            dot += a[i] * b[i];
+          }
+          return Math.max(0, Math.min(1, dot));
+        });
+      } catch {
+        // Ignored if already registered
+      }
+    }
+    DB_CACHE.set(dbPath, db);
+    return db;
   }
 
   db.exec(`

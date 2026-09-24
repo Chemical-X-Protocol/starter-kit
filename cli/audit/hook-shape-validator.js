@@ -1,7 +1,7 @@
 import * as t from '@babel/types';
 import { RULE_REGISTRY } from './rules-registry.js';
 
-const VERB_PREFIX_REGEX = /^(add|remove|toggle|set|get|fetch|load|save|delete|clear|reset|refresh|update|create|edit|send|sync|init|dispose|trigger|post|put|patch|apply|dismiss|select|deselect|filter|sort|search|open|close|show|hide|start|stop|cancel|execute|run|retry|submit|validate|mutate|next|prev|step|increment|decrement|insert|upsert|drop|enable|disable|register|unregister|login|logout|checkout|publish|archive|discard|confirm|undo|redo|claim|complete|acquire|release|download|upload|export|import|handle)([A-Z0-9_].*)?$/;
+const VERB_PREFIX_REGEX = /^(add|remove|toggle|set|get|fetch|load|save|delete|clear|reset|refresh|update|create|edit|send|sync|init|setup|dispose|trigger|post|put|patch|apply|dismiss|select|deselect|filter|sort|search|open|close|show|hide|start|stop|cancel|execute|run|retry|submit|validate|mutate|next|prev|step|increment|decrement|insert|upsert|drop|enable|disable|register|unregister|login|logout|checkout|publish|archive|discard|confirm|undo|redo|claim|complete|acquire|release|download|upload|export|import|handle|play|pause|resume|seek|unlock|restore|advance|focus|notify|broadcast|copy|format)([A-Z0-9_].*)?$/;
 
 const STATUS_HEURISTIC_REGEX = /^(is[A-Z]|has[A-Z]|can[A-Z]|should[A-Z])|.*(Error|Status)$/;
 const STATUS_EXACT_NAMES = new Set(['status', 'error', 'loading', 'pending', 'ready']);

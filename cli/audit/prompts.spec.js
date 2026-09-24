@@ -10,7 +10,8 @@ import {
   buildAiSlopPrompt,
   buildHotspotsPrompt,
   buildPillarPrompt,
-  buildMasterPrompt
+  buildMasterPrompt,
+  formatGroupedPromptViolations
 } from './prompts.js';
 
 test('deduplicateRolePreambles: handles invalid and empty inputs', () => {
@@ -313,4 +314,54 @@ test('deduplicateRefactoringCommands: collapses multiple occurrences to single b
   assert.ok(result.includes('Section 1 content'));
   assert.ok(result.includes('Section 2 content'));
   assert.ok(result.includes('- Command B'));
+});
+
+test('formatGroupedPromptViolations: outputs token-compact task action by default', () => {
+  const violations = [
+    {
+      rule: 'SECURITY_RAW_HTML_INJECTION',
+      severity: 'CRITICAL',
+      hazard: 'Unsanitized HTML injection',
+      directive: 'Sanitize dynamic HTML via DOMPurify',
+      filePath: 'src/view-a.vue',
+      line: 10
+    },
+    {
+      rule: 'SECURITY_RAW_HTML_INJECTION',
+      severity: 'CRITICAL',
+      hazard: 'Unsanitized HTML injection',
+      directive: 'Sanitize dynamic HTML via DOMPurify',
+      filePath: 'src/view-b.vue',
+      line: 25
+    }
+  ];
+
+  const lines = formatGroupedPromptViolations(violations);
+  const text = lines.join('\n');
+
+  assert.ok(text.includes('[SECURITY_RAW_HTML_INJECTION]'));
+  assert.ok(text.includes('(2 items)'));
+  assert.ok(text.includes('Action:    chemx team task list --rule=SECURITY_RAW_HTML_INJECTION'));
+  // Does not dump file locations tree by default
+  assert.ok(!text.includes('Locations:'));
+  assert.ok(!text.includes('view-a.vue:10'));
+});
+
+test('formatGroupedPromptViolations: renders file tree when detailedLocations is enabled', () => {
+  const violations = [
+    {
+      rule: 'SECURITY_RAW_HTML_INJECTION',
+      severity: 'CRITICAL',
+      hazard: 'Unsanitized HTML injection',
+      directive: 'Sanitize dynamic HTML via DOMPurify',
+      filePath: 'src/view-a.vue',
+      line: 10
+    }
+  ];
+
+  const lines = formatGroupedPromptViolations(violations, { detailedLocations: true });
+  const text = lines.join('\n');
+
+  assert.ok(text.includes('Locations:'));
+  assert.ok(text.includes('view-a.vue:10'));
 });

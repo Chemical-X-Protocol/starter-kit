@@ -76,16 +76,20 @@ export const cleanExpiredLeases = (db) => {
   if (!hasDb) return [];
 
   const now = Date.now();
-  const expired = db.prepare('SELECT * FROM file_leases WHERE expires_at <= ?').all(now);
-  for (const lease of expired) {
-    db.prepare('DELETE FROM file_leases WHERE file_path = ?').run(lease.file_path);
-    postFeedEvent(db, {
-      author_id: '@system',
-      event_type: 'lock_expired',
-      file_path: lease.file_path,
-      message: `Lease expired for ${lease.file_path} held by ${lease.locked_by}`
-    });
-    promoteNextWaiter(db, lease.file_path);
+  try {
+    const expired = db.prepare('SELECT * FROM file_leases WHERE expires_at <= ?').all(now);
+    for (const lease of expired) {
+      db.prepare('DELETE FROM file_leases WHERE file_path = ?').run(lease.file_path);
+      postFeedEvent(db, {
+        author_id: '@system',
+        event_type: 'lock_expired',
+        file_path: lease.file_path,
+        message: `Lease expired for ${lease.file_path} held by ${lease.locked_by}`
+      });
+      promoteNextWaiter(db, lease.file_path);
+    }
+    return expired;
+  } catch {
+    return [];
   }
-  return expired;
 };

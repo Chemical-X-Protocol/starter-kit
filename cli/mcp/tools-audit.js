@@ -11,6 +11,7 @@ import {
   buildHotspotsPrompt
 } from '../audit/prompts.js';
 import { syncSearchIndex, syncViolationsIndex, recordAuditSnapshot } from '../search.js';
+import { autoGenerateTasksFromAudit } from '../team/team-triage.js';
 import { resolveTargetCwd } from './tools-search.js';
 
 export const handleAudit = (args = {}, cwd = process.cwd()) => {
@@ -43,6 +44,7 @@ export const handleAudit = (args = {}, cwd = process.cwd()) => {
     if (syncRes?.db) {
       syncViolationsIndex(syncRes.db, report.violations);
       recordAuditSnapshot(syncRes.db, report);
+      autoGenerateTasksFromAudit(syncRes.db, { cwd: baseCwd, targetDir: resolvedTarget });
     }
   } catch (syncError) {
     process.stderr.write(`[chemx] Search index sync bypassed: ${syncError?.message || String(syncError)}\n`);

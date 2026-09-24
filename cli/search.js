@@ -105,6 +105,10 @@ export const syncSearchIndex = (targetDir = 'src', cwd = process.cwd(), options 
   const db = openIndexDb(cwd);
   if (!db) return null;
 
+  const isWritable = () => { try { fs.accessSync(path.join(cwd, '.chemx'), fs.constants.W_OK); return true; } catch { return false; } };
+  const shouldSkipSync = !isWritable() && !options.reindex;
+  if (shouldSkipSync) return { db, updatedCount: 0 };
+
   const targetDirs = Array.isArray(targetDir) ? targetDir : [targetDir];
   if (targetDir === 'src' && fs.existsSync(path.resolve(cwd, 'cli'))) {
     targetDirs.push('cli');

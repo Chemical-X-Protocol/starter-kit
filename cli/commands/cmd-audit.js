@@ -109,11 +109,11 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
 
     if (syncRes?.db) {
       syncViolationsIndex(syncRes.db, report.violations);
-      recordAuditSnapshot(syncRes.db, report);
-      if (rawArgs.includes('--triage')) {
+      const shouldTriage = !rawArgs.includes('--no-triage');
+      if (shouldTriage) {
         const createdTasks = autoGenerateTasksFromAudit(syncRes.db, { cwd: process.cwd(), targetDir });
-        if (isCli && !isJson) {
-          process.stdout.write(`\x1b[32m✔\x1b[0m Auto-triage generated ${createdTasks.length} team task(s) from audit violations.\n`);
+        if (isCli && !isJson && createdTasks.length > 0) {
+          process.stdout.write(`\x1b[32m✔\x1b[0m Auto-triage synchronized ${createdTasks.length} team task(s) in SQLite backlog.\n`);
         }
       }
       if (rawArgs.includes('--clones')) {

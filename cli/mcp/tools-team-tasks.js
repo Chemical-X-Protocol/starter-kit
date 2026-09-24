@@ -18,7 +18,8 @@ export const handleChemxTeamTask = async (args = {}, cwd = process.cwd()) => {
 
   if (action === 'list') {
     const parentId = args.parentId !== undefined ? args.parentId : args.parent;
-    const tasks = listTasks(db, { status: args.status, assigned_agent_id: args.agentId, parentId });
+    const rule = args.rule || args.ruleId;
+    const tasks = listTasks(db, { status: args.status, assigned_agent_id: args.agentId, parentId, rule, priority: args.priority });
     const col = toColumnar(tasks, ['id', 'title', 'tier', 'status', 'priority', 'assigned_agent_id', 'target_path', 'parent_id']);
     return { ...col, total: tasks.length, card: formatTaskListCard(tasks) };
   }

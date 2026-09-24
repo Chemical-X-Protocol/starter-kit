@@ -90,7 +90,57 @@ export const buildTaskListQuery = (filter = {}) => {
     conditions.push('parent_id = ?');
     params.push(Number(parentId));
   }
+  const ruleFilter = filter.rule || filter.rule_id;
+  if (ruleFilter) {
+    conditions.push('(rule_id = ? OR rule_id LIKE ?)');
+    params.push(ruleFilter, `%${ruleFilter}%`);
+  }
+  const hasPriority = filter.priority !== undefined && filter.priority !== null && filter.priority !== '';
+  if (hasPriority) {
+    conditions.push('priority = ?');
+    params.push(Number(filter.priority));
+  }
   if (conditions.length > 0) query += ` WHERE ${conditions.join(' AND ')}`;
   query += ' ORDER BY priority ASC, id ASC';
   return { query, params };
+};
+
+export const queryUnassignedHazards = (db) => {
+  if (!db) return [];
+  const query = `
+    SELECT 
+      COALESCE(v.file_path, f.path) as path,
+      COALESCE(f.tier, 'molecule') as tier,
+      COALESCE(f.lines, 0) as lines,
+      COALESCE(f.health_score, CASE WHEN COUNT(v.id) > 0 THEN MAX(20, 100 - COUNT(v.id) * 15) ELSE 100 END) as health_score,
+      COALESCE(MAX(f.hazard_count, COUNT(v.id)), COUNT(v.id)) as hazard_count,
+      COUNT(v.id) as violation_count,
+      GROUP_CONCAT(DISTINCT v.rule) as rules_summary
+    FROM violations v
+    LEFT JOIN files f ON f.path = v.file_path
+    LEFT JOIN agent_tasks t ON t.target_path = v.file_path AND t.status IN ('queued', 'in_progress', 'review')
+    WHERE t.id IS NULL
+    GROUP BY v.file_path
+    UNION
+    SELECT
+      f.path,
+      f.tier,
+      f.lines,
+      f.health_score,
+      f.hazard_count,
+      f.hazard_count as violation_count,
+      'ARCHITECTURAL_HAZARD' as rules_summary
+    FROM files f
+    LEFT JOIN agent_tasks t ON t.target_path = f.path AND t.status IN ('queued', 'in_progress', 'review')
+    WHERE (f.health_score < 90 OR f.hazard_count > 0)
+      AND t.id IS NULL
+      AND f.path NOT IN (SELECT file_path FROM violations)
+    GROUP BY f.path
+    ORDER BY health_score ASC, hazard_count DESC
+  `;
+  try {
+    return db.prepare(query).all();
+  } catch {
+    return [];
+  }
 };

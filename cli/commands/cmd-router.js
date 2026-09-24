@@ -200,7 +200,17 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
       const { startUiServer } = await import('../ui-server.js');
       const portArg = rawArgs.find((a) => a.startsWith('--port='));
       const port = portArg ? parseInt(portArg.split('=')[1], 10) : 4173;
-      await startUiServer({ port, isCli: true, cwd: process.cwd() });
+      const hostArg = rawArgs.find((a) => a.startsWith('--host='));
+      const host = hostArg ? hostArg.split('=')[1] : '0.0.0.0';
+      const { server } = await startUiServer({ port, host, isCli: true, cwd: process.cwd() });
+      await new Promise((resolve) => {
+        const shutdown = () => {
+          server.close(() => resolve());
+        };
+        process.on('SIGINT', shutdown);
+        process.on('SIGTERM', shutdown);
+        server.on('close', resolve);
+      });
       break;
     }
     case 'help':

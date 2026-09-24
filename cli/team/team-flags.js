@@ -48,7 +48,10 @@ export const parseFlags = (args = []) => {
     if (arg.startsWith('--target=')) flags.target = arg.split('=')[1];
     if (arg === '--target' && hasNext) flags.target = nextArg;
     if (arg.startsWith('--tier=')) flags.tier = arg.split('=')[1];
-    if (arg.startsWith('--prio=')) flags.priority = parseInt(arg.split('=')[1], 10);
+    if (arg.startsWith('--rule=')) flags.rule = arg.split('=')[1];
+    if (arg === '--rule' && hasNext) flags.rule = nextArg;
+    if (arg.startsWith('--prio=') || arg.startsWith('--priority=')) flags.priority = parseInt(arg.split('=')[1], 10);
+    if ((arg === '--prio' || arg === '--priority') && hasNext) flags.priority = parseInt(nextArg, 10);
     if (arg.startsWith('--purpose=')) flags.purpose = arg.split('=')[1];
     if (arg.startsWith('--tokens=')) flags.tokens = parseInt(arg.split('=')[1], 10);
     if (arg.startsWith('--prompt-tokens=')) flags.promptTokens = parseInt(arg.split('=')[1], 10);

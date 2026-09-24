@@ -25,7 +25,7 @@ import { getSwarmTokenBreakdown, formatTokenBreakdownCard } from './team-tokens.
 import { runAblationComparison, formatAblationCard } from './team-memory.js';
 import { parseFlags } from './team-flags.js';
 
-const ARG_VAL_FLAGS = ['--target', '--as', '--to', '--agent', '--since', '--limit', '--thread', '--task', '--parent'];
+const ARG_VAL_FLAGS = ['--target', '--as', '--to', '--agent', '--since', '--limit', '--thread', '--task', '--parent', '--rule', '--priority', '--prio'];
 
 export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => {
   const db = openIndexDb(cwd);
@@ -119,7 +119,9 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
       const tasks = listTasks(db, {
         status: flags.status,
         assigned_agent_id: flags.agent,
-        parentId: flags.parent
+        parentId: flags.parent,
+        rule: flags.rule,
+        priority: flags.priority
       });
       if (flags.isJson) {
         const col = toColumnar(tasks, ['id', 'title', 'tier', 'status', 'priority', 'assigned_agent_id', 'target_path', 'parent_id']);
