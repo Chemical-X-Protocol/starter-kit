@@ -11,6 +11,8 @@ export const buildMcpInstructions = () => {
     'Provides all Chemical X operations through a single tool. This avoids requiring',
     'separate approval for each sub-operation in MCP clients that gate tool access per-tool.',
     'Pass the desired operation via the action parameter; see action: \'help\' for the full list.',
+    '0. AUTONOMOUS COGNITIVE BRIDGE (TESSERACT):',
+    '   - chemx({ action: "tesseract" }) or chemx({ command: "tesseract" }) -> Boot Jarvis cognitive lattice and mission protocol',
     '',
     '1. TESTING, BUILDS & VERIFICATION:',
     '   - chemx({ action: "test" }) or chemx({ command: "test" })',

@@ -69,6 +69,7 @@ export const writeFile       = async (...a) => (await import('./patcher.js')).wr
 export const runTeamCli      = async (...a) => (await import('./team/index.js')).runTeamCli(...a);
 export const runTrend        = async (...a) => (await import('./trend.js')).runTrend(...a);
 export const runPillarsWizard = async (...a) => (await import('./pillars-wizard.js')).runPillarsWizard(...a);
+export const runTesseract    = async (...a) => (await import('./tesseract.js')).runTesseract(...a);
 export { handleError, withErrorCatcher, publishIssue };
 
 // ---------------------------------------------------------------------------
@@ -100,6 +101,7 @@ export const ALLOWED_COMMANDS = new Set([
   'init',
   'hook', 'hooks', 'install-hooks', 'setup-ci',
   'add:prop', 'add:state', 'add:action', 'fix',
+  'tesseract', 'cube', 'matrix',
   'help', '--help', '-h',
   'version', '--version', '-v'
 ]);

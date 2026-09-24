@@ -33,7 +33,8 @@ export const MASTER_MCP_TOOL = {
           'generate',
           'patterns',
           'issue',
-          'project'
+          'project',
+          'tesseract'
         ],
         description: 'The Chemical X subsystem action to execute.'
       },

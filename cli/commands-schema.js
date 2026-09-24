@@ -208,5 +208,19 @@ export const COMMANDS_SCHEMA = [
       'npx chemx ui',
       'npx chemx dashboard --port=3000'
     ]
+  },
+  {
+    name: 'tesseract',
+    aliases: ['cube', 'matrix'],
+    usage: 'npx chemx tesseract [options]',
+    summary: 'Autonomous AI Cognitive Bridge and Human-AI Symbiosis Interface.',
+    description: 'Deploys the full Chemical X cognitive lattice, AST topology, swarm telemetry, and Jarvis operational directives for instant AI onboarding.',
+    flags: [
+      { flag: '--json', desc: 'Output machine-readable JSON cognitive payload' }
+    ],
+    examples: [
+      'npx chemx tesseract',
+      'npx chemx tesseract --json'
+    ]
   }
 ];

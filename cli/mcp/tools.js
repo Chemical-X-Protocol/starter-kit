@@ -9,7 +9,7 @@ import { handleChemxProject } from './tools-project.js';
 
 export {
   MCP_TOOLS, ALL_MCP_TOOLS, handleChemxQ, handleChemxRead, handleChemxPatch, handleChemxCheck, handleChemxWrite,
-  handleChemxTeamStatus, handleChemxTeamFeed, handleChemxTeamPost, handleChemxTeamTask, handleChemxTeamLock, handleChemxReportIssue, handleChemxProject
+  handleChemxTeamStatus, handleChemxTeamFeed, handleChemxTeamPost, handleChemxTeamTask, handleChemxTeamLock, handleChemxReportIssue, handleChemxProject, handleChemxTesseract
 };
 
 const parseCommand = (command, params) => {
@@ -40,7 +40,17 @@ const parseCommand = (command, params) => {
   }
   if (subCmd === 'autofix') return { action: 'autofix', params: { path: parts[1] || 'src', ...params } };
   if (subCmd === 'trend' || subCmd === 'trends') return { action: 'trend', params };
+  if (['tesseract', 'cube', 'matrix'].includes(subCmd)) return { action: 'tesseract', params };
   return { action: subCmd, params };
+};
+
+const handleChemxTesseract = async (params = {}, cwd = process.cwd()) => {
+  const { runTesseract } = await import('../tesseract.js');
+  const result = await runTesseract(params.args || [], false, cwd);
+  const textOutput = result.text || JSON.stringify(result.payload, null, 2);
+  return {
+    content: [{ type: 'text', text: textOutput }]
+  };
 };
 
 const DISPATCHER = {
@@ -51,7 +61,8 @@ const DISPATCHER = {
   team_status: handleChemxTeamStatus, team_feed: handleChemxTeamFeed, team_post: handleChemxTeamPost,
   team_task: handleChemxTeamTask, team_lock: handleChemxTeamLock, q: handleChemxQ, search: handleChemxQ,
   autofix: handleAutofix, generate: handleGenerateCapsule, patterns: handleQueryPatterns,
-  issue: handleChemxReportIssue, project: handleChemxProject, coordinator: handleChemxProject
+  issue: handleChemxReportIssue, project: handleChemxProject, coordinator: handleChemxProject,
+  tesseract: handleChemxTesseract, cube: handleChemxTesseract, matrix: handleChemxTesseract
 };
 
 export const handleChemx = async (args = {}, cwd = process.cwd()) => {

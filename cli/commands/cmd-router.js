@@ -213,6 +213,13 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
       });
       break;
     }
+    case 'tesseract':
+    case 'cube':
+    case 'matrix': {
+      const { runTesseract } = await import('../tesseract.js');
+      await runTesseract(rawArgs.slice(1), true);
+      break;
+    }
     case 'help':
     case '--help':
     case '-h':
