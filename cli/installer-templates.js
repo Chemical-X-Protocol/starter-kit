@@ -98,15 +98,20 @@ elif command -v npx >/dev/null 2>&1; then
 fi
 
 if [ -n "\$AUDIT_BIN" ]; then
-  printf "%s[Chemical X] Verifying architectural health (Min Grade: %s, Min Score: %s)...%s\\n" "\$C_BLUE" "\$MIN_GRADE" "\$MIN_SCORE" "\$C_RESET"
-  if ! \$AUDIT_BIN audit --git --min-grade="\$MIN_GRADE" --min-score="\$MIN_SCORE" --non-interactive < /dev/null; then
+  if [ "\$CHEMX_VERBOSE" = "1" ]; then
+    printf "%s[Chemical X] Verifying architectural health (Min Grade: %s, Min Score: %s)...%s\\n" "\$C_BLUE" "\$MIN_GRADE" "\$MIN_SCORE" "\$C_RESET"
+  fi
+  if ! AUDIT_OUT=\$(eval "\$AUDIT_BIN audit --git --min-grade=\$MIN_GRADE --min-score=\$MIN_SCORE --non-interactive" < /dev/null 2>&1); then
     printf "\\n%s%s[Chemical X] Commit Blocked: Architectural health verification failed%s\\n" "\$C_BOLD" "\$C_RED" "\$C_RESET"
+    printf "%s\\n\\n" "\$AUDIT_OUT"
     printf "%s💡 Tip: Want crystalline drop-in templates? Run 'npm create chemx' or sponsor at https://github.com/sponsors/Chemical-X-Protocol%s\\n\\n" "\$C_CYAN" "\$C_RESET"
     exit 1
   fi
 fi
 
-printf "%s✔ [Chemical X] Pre-commit architectural guardrails passed.%s\\n" "\$C_GREEN" "\$C_RESET"
+if [ "\$CHEMX_VERBOSE" = "1" ]; then
+  printf "%s✔ [Chemical X] Pre-commit architectural guardrails passed.%s\\n" "\$C_GREEN" "\$C_RESET"
+fi
 exit 0
 `;
 
