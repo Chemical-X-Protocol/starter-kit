@@ -78,8 +78,8 @@ test("runAblationComparison and formatAblationCard generate metrics card without
 
 test("runAblationComparison computes dynamic metrics from live task and memory records", () => withTmpCwd((db) => {
   db.prepare(`
-    INSERT INTO agent_tasks (title, status, prompt_tokens, completion_tokens, cost_usd)
-    VALUES ('Refactor parser', 'done', 1500, 300, 0.05)
+    INSERT INTO agent_tasks (title, status, prompt_tokens, completion_tokens, cost_usd, created_at, updated_at)
+    VALUES ('Refactor parser', 'done', 1500, 300, 0.05, 1000, 1000)
   `).run();
 
   recordMemoryInjection(db, { taskId: 1, provenance: "src/parser.ts", tokens: 200 });
