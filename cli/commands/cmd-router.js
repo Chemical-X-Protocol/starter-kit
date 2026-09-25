@@ -94,12 +94,26 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
       break;
     }
     case 'init': {
+      const isHelpRequested = rawArgs.includes('--help') || rawArgs.includes('-h') || rawArgs[1] === 'help';
+      if (isHelpRequested) {
+        const { printInitHelp } = await import('../help.js');
+        printInitHelp();
+        break;
+      }
+      const nonFlagArgs = rawArgs.slice(1).filter((arg) => !arg.startsWith('-'));
+      const targetSubDir = nonFlagArgs[0] || 'src/chemical-x';
       const { runInit } = await import('../scaffold.js');
-      await runInit(rawArgs[1] || 'src/chemical-x', rawArgs, runAudit);
+      await runInit(targetSubDir, rawArgs, runAudit);
       break;
     }
     case 'create':
     case 'scaffold': {
+      const isHelpRequested = rawArgs.includes('--help') || rawArgs.includes('-h') || rawArgs[1] === 'help';
+      if (isHelpRequested) {
+        const { printScaffoldHelp } = await import('../help.js');
+        printScaffoldHelp();
+        break;
+      }
       const { runScaffold } = await import('../scaffold.js');
       const nonFlagArgs = rawArgs.slice(1).filter((arg) => !arg.startsWith('-'));
       await runScaffold(nonFlagArgs[0], rawArgs, runAudit);

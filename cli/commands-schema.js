@@ -222,5 +222,41 @@ export const COMMANDS_SCHEMA = [
       'npx chemx tesseract',
       'npx chemx tesseract --json'
     ]
+  },
+  {
+    name: 'init',
+    aliases: [],
+    usage: 'npx chemx init [directory] [options]',
+    summary: 'Unpack blueprints and molecular architecture drop-in files into an existing codebase.',
+    description: 'Installs blueprints, domain hooks, and foundation capsules into target directory (default: src/chemical-x).',
+    flags: [
+      { flag: '-h, --help', desc: 'Show this help message' },
+      { flag: '--license=<key>', desc: 'Provide commercial license key for enterprise starter kit assets' }
+    ],
+    examples: [
+      'npx chemx init',
+      'npx chemx init src/chemical-x',
+      'npx chemx init packages/ui/src/modules'
+    ]
+  },
+  {
+    name: 'create',
+    aliases: ['scaffold'],
+    usage: 'npm create chemx [directory] [options]',
+    summary: 'Scaffold a complete new Chemical X Molecular Architecture application.',
+    description: 'Generates a full starter project configured with Chemical X molecular architecture, framework presets, and agent steering directives.',
+    flags: [
+      { flag: '--framework=<id>', desc: 'Framework flavor: react (default), vue, svelte' },
+      { flag: '--yes, -y', desc: 'Skip interactive prompts and scaffold Community Edition immediately' },
+      { flag: '--install', desc: 'Auto-install dependencies after scaffolding' },
+      { flag: '--headless', desc: 'Run in headless mode for CI/CD and AI agent automation' },
+      { flag: '-h, --help', desc: 'Show this help message' },
+      { flag: '-v, --version', desc: 'Show version number' }
+    ],
+    examples: [
+      'npm create chemx my-molecular-app --framework=react',
+      'npx create-chemx my-vue-app --framework=vue --yes',
+      'npx chemx create my-app --framework=svelte --install'
+    ]
   }
 ];

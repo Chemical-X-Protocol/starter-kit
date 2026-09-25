@@ -54,3 +54,67 @@ export const printHelp = () => {
 
   process.stdout.write(lines.join('\n'));
 };
+
+export const printInitHelp = () => {
+  renderBanner('Chemical X: In-Repo Capsule Drop-in (chemx init)');
+
+  const BOLD = '\x1b[1m';
+  const CYAN = '\x1b[36m';
+  const RESET = '\x1b[0m';
+
+  const lines = [
+    `${BOLD}USAGE${RESET}`,
+    `  ${CYAN}npx chemx init${RESET} [directory] [options]`,
+    '',
+    `${BOLD}DESCRIPTION${RESET}`,
+    '  Unpack Chemical X blueprints and molecular architecture drop-in files',
+    '  into an existing codebase (defaults to src/chemical-x).',
+    '',
+    `${BOLD}OPTIONS${RESET}`,
+    `  ${CYAN}-h, --help${RESET}           Show this help message`,
+    `  ${CYAN}--license=<key>${RESET}     Provide commercial license key for enterprise starter kit assets`,
+    '',
+    `${BOLD}EXAMPLES${RESET}`,
+    `  ${CYAN}npx chemx init${RESET}`,
+    `  ${CYAN}npx chemx init src/chemical-x${RESET}`,
+    `  ${CYAN}npx chemx init packages/ui/src/modules${RESET}`,
+    ''
+  ];
+
+  process.stdout.write(lines.join('\n'));
+};
+
+export const printScaffoldHelp = () => {
+  renderBanner('Chemical X: Project Scaffolder (npm create chemx)');
+
+  const BOLD = '\x1b[1m';
+  const CYAN = '\x1b[36m';
+  const RESET = '\x1b[0m';
+
+  const lines = [
+    `${BOLD}USAGE${RESET}`,
+    `  ${CYAN}npm create chemx${RESET} [directory] [options]`,
+    `  ${CYAN}npx create-chemx${RESET} [directory] [options]`,
+    `  ${CYAN}npx chemx create${RESET} [directory] [options]`,
+    '',
+    `${BOLD}DESCRIPTION${RESET}`,
+    '  Scaffold a complete new Chemical X Molecular Architecture application.',
+    '',
+    `${BOLD}OPTIONS${RESET}`,
+    `  ${CYAN}--framework=<id>${RESET}   Framework flavor: react (default), vue, svelte`,
+    `  ${CYAN}--install${RESET}          Auto-install dependencies after scaffolding`,
+    `  ${CYAN}--skip-install${RESET}     Skip installing dependencies`,
+    `  ${CYAN}--yes, -y${RESET}          Skip interactive prompts and scaffold Community Edition immediately`,
+    `  ${CYAN}--headless${RESET}         Run in headless mode for CI/CD and AI agent automation`,
+    `  ${CYAN}-h, --help${RESET}         Show this help message`,
+    `  ${CYAN}-v, --version${RESET}      Show version number`,
+    '',
+    `${BOLD}EXAMPLES${RESET}`,
+    `  ${CYAN}npm create chemx my-molecular-app --framework=react${RESET}`,
+    `  ${CYAN}npx create-chemx my-vue-app --framework=vue --yes${RESET}`,
+    `  ${CYAN}npx chemx create my-app --framework=svelte --install${RESET}`,
+    ''
+  ];
+
+  process.stdout.write(lines.join('\n'));
+};

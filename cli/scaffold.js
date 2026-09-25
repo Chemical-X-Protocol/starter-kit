@@ -7,6 +7,7 @@ import { runPillarsWizard } from './pillars-wizard.js';
 import { resolvePackageManager } from './build/detector.js';
 import { resolveFramework } from './project-detector.js';
 import { getFrameworkConfig, buildScaffoldPackageJson } from './scaffold-frameworks.js';
+import { printInitHelp, printScaffoldHelp } from './help.js';
 
 const extractTargetName = (projectName, rawArgs) => {
   if (projectName && !projectName.startsWith('-')) return projectName;
@@ -25,6 +26,19 @@ const extractTargetName = (projectName, rawArgs) => {
 };
 
 export const runScaffold = async (projectName, rawArgs = [], onRunAudit = null) => {
+  const isHelpRequested =
+    rawArgs.includes('--help') ||
+    rawArgs.includes('-h') ||
+    rawArgs.includes('help') ||
+    projectName === '--help' ||
+    projectName === '-h' ||
+    projectName === 'help';
+
+  if (isHelpRequested) {
+    printScaffoldHelp();
+    return;
+  }
+
   renderBanner('Chemical X: Molecular Architecture Scaffolder (npm create chemx)');
 
   const fwArg = (rawArgs.find((a) => a.startsWith('--framework=')) || '').split('=')[1]
@@ -125,9 +139,26 @@ export const runScaffold = async (projectName, rawArgs = [], onRunAudit = null) 
 };
 
 export const runInit = async (targetSubDir = 'src/chemical-x', rawArgs = [], onRunAudit = null) => {
+  const isHelpRequested =
+    rawArgs.includes('--help') ||
+    rawArgs.includes('-h') ||
+    rawArgs.includes('help') ||
+    targetSubDir === '--help' ||
+    targetSubDir === '-h' ||
+    targetSubDir === 'help';
+
+  if (isHelpRequested) {
+    printInitHelp();
+    return;
+  }
+
+  const safeTargetSubDir = (targetSubDir && !targetSubDir.startsWith('-'))
+    ? targetSubDir
+    : (rawArgs.slice(1).find((arg) => !arg.startsWith('-')) || 'src/chemical-x');
+
   renderBanner('Chemical X: In-Repo Capsule Drop-in');
 
-  const targetDir = path.resolve(process.cwd(), targetSubDir);
+  const targetDir = path.resolve(process.cwd(), safeTargetSubDir);
   const licenseKey = await obtainLicenseKey(rawArgs, onRunAudit);
   let files = {};
 
@@ -141,7 +172,7 @@ export const runInit = async (targetSubDir = 'src/chemical-x', rawArgs = [], onR
     files = await fetchStarterKitFiles(licenseKey);
   }
 
-  process.stdout.write(`Unpacking blueprints and hooks into: \x1b[36m${targetSubDir}/\x1b[0m\n`);
+  process.stdout.write(`Unpacking blueprints and hooks into: \x1b[36m${safeTargetSubDir}/\x1b[0m\n`);
 
   let count = 0;
   for (const [relPath, content] of Object.entries(files)) {
@@ -160,9 +191,9 @@ export const runInit = async (targetSubDir = 'src/chemical-x', rawArgs = [], onR
   }
 
   process.stdout.write(
-    `\n\x1b[1m\x1b[32m✔ Successfully installed ${count} Chemical X assets into ${targetSubDir}!\x1b[0m\n\n`
+    `\n\x1b[1m\x1b[32m✔ Successfully installed ${count} Chemical X assets into ${safeTargetSubDir}!\x1b[0m\n\n`
   );
 };
 
 export { runGenerateCapsule, runGenerateWizard } from './generator.js';
-export { printHelp } from './help.js';
+export { printHelp, printInitHelp, printScaffoldHelp } from './help.js';
