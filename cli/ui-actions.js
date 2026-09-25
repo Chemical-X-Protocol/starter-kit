@@ -67,6 +67,7 @@ export const handleSettingsAction = (db, body = {}) => {
 };
 
 export { handleUpdateTaskStatus, handleAssignTask, handleOverrideLock } from './ui-actions-tasks.js';
+export { handleUpdateTaskVdsSlot, handleUpdateTaskTraceability } from './ui-actions-vds.js';
 export {
   handleGeneratePrompt,
   handleDbTables,

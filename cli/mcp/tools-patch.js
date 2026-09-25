@@ -28,9 +28,11 @@ export const formatPatchWarnings = (result) => {
 };
 
 export const handleChemxPatch = (args = {}, cwd = process.cwd()) => {
+  const targetContent = args.targetContent ?? args.target ?? args.search;
+  const replacementContent = args.replacementContent ?? args.replacement ?? args.replace;
   const hasPath = Boolean(args.path);
-  const hasTargetContent = args.targetContent !== undefined;
-  const hasReplacementContent = args.replacementContent !== undefined;
+  const hasTargetContent = targetContent !== undefined;
+  const hasReplacementContent = replacementContent !== undefined;
   const hasRequiredArgs = hasPath && hasTargetContent && hasReplacementContent;
 
   if (!hasRequiredArgs) {
@@ -39,9 +41,9 @@ export const handleChemxPatch = (args = {}, cwd = process.cwd()) => {
 
   const targetPath = path.isAbsolute(args.path) ? args.path : path.resolve(cwd, args.path);
   const result = patchFile(targetPath, {
-    targetContent: args.targetContent,
-    replacementContent: args.replacementContent,
-    allowMultiple: Boolean(args.allowMultiple),
+    targetContent,
+    replacementContent,
+    allowMultiple: Boolean(args.allowMultiple || args.multiple),
     cwd
   });
 

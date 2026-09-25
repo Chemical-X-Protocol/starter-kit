@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import {
   detectTypecheckCommand,
   detectTestCommand,
@@ -95,4 +98,62 @@ test('Verify: runTypecheckAudit runs in JSON mode without throwing', async () =>
   assert.ok(typeof report.success === 'boolean');
   assert.ok(typeof report.errorCount === 'number');
   assert.ok(Array.isArray(report.errors));
+});
+
+test('Verify: runTypecheckAudit returns friendly message when node_modules is missing', async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-no-nm-tc-'));
+  try {
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), JSON.stringify({ name: 'test-app' }));
+    const report = await runTypecheckAudit(['--json'], false, { print: false, cwd: tmpDir });
+    assert.strictEqual(report.success, false);
+    assert.strictEqual(report.exitCode, 1);
+    assert.match(report.executionError, /Missing node_modules\. Please run '.* install' before typechecking\./);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('Verify: runTestAudit returns friendly message when node_modules is missing', async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-no-nm-test-'));
+  try {
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), JSON.stringify({ name: 'test-app' }));
+    const report = await runTestAudit(['--json'], false, { print: false, cwd: tmpDir });
+    assert.strictEqual(report.success, false);
+    assert.strictEqual(report.exitCode, 1);
+    assert.match(report.executionError, /Missing node_modules\. Please run '.* install' before testing\./);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('Verify: runProjectVerify returns friendly message when node_modules is missing', async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-no-nm-verify-'));
+  try {
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), JSON.stringify({ name: 'test-app' }));
+    const summary = await runProjectVerify(['--json'], false, { print: false, cwd: tmpDir });
+    assert.strictEqual(summary.success, false);
+    assert.match(summary.error, /Missing node_modules\. Please run '.* install' before verifying\./);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('Verify: runProjectVerify produces architecturalWarning when AST is clean but test/typecheck fails', async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-arch-warn-'));
+  try {
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), JSON.stringify({
+      name: 'test-arch-app',
+      scripts: { test: 'node -e "process.exit(1)"' }
+    }));
+    fs.mkdirSync(path.join(tmpDir, 'node_modules'));
+    fs.mkdirSync(path.join(tmpDir, 'src'));
+    fs.writeFileSync(path.join(tmpDir, 'src/sample.ts'), 'export const x = 1;\n');
+
+    const summary = await runProjectVerify(['--json', `--dir=${path.join(tmpDir, 'src')}`], false, { print: false, cwd: tmpDir });
+    assert.strictEqual(summary.success, false);
+    assert.ok(summary.audit.grade === 'A+' || summary.audit.grade === 'A');
+    assert.match(summary.architecturalWarning, /AST compliance does not guarantee functional correctness/);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
 });

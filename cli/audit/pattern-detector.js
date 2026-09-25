@@ -29,15 +29,17 @@ export const createPatternRegistry = () => {
     });
   };
 
-  const resolveHarmonizationCandidates = (hotspots = []) => {
+  const resolveHarmonizationCandidates = (hotspots = [], options = {}) => {
     const hotspotFiles = new Set(hotspots.map((h) => h.filePath));
     const candidates = [];
+    const minFiles = options.ruleOfThree ? 3 : 2;
 
     for (const [key, bucket] of buckets.entries()) {
       const uniqueFiles = Array.from(new Set(bucket.occurrences.map((o) => o.filePath)));
-      if (uniqueFiles.length < 2) continue;
-
       const hasHotspot = uniqueFiles.some((f) => hotspotFiles.has(f));
+      const isCandidateEligible = hasHotspot ? uniqueFiles.length >= 2 : uniqueFiles.length >= minFiles;
+      if (!isCandidateEligible) continue;
+
       const impactScore = uniqueFiles.length * (hasHotspot ? 3 : 1.5) + bucket.occurrences.length;
 
       let label = 'Recurring Pattern';

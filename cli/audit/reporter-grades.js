@@ -267,6 +267,7 @@ export const formatGradeASection = (report) => {
     lines.push(`   ${GREEN}✔${RESET} Low Context Hazard & Token Burn Risk`);
   }
 
+  lines.push(`\n   ${DIM}ℹ Notice: Architectural grade measures AST rules only. Run chemx verify for full typecheck and test verification.${RESET}`);
   lines.push(`\n${GREEN}======================================================================${RESET}\n`);
   return lines.join('\n');
 };

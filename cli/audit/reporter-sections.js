@@ -72,6 +72,9 @@ export const formatScorecardSection = (report, themeColor = null) => {
   lines.push(`   Largest File:        ${BOLD}${metrics.largestFile.filePath || 'None'}${RESET} (${metrics.largestFile.lineCount} lines)`);
   lines.push(`   Molecule Capsules:   ${metrics.moleculeCount} found (${metrics.moleculeCompliantPct}% compliant < 100 lines of code)`);
   lines.push(`   Custom Hooks:        ${metrics.hookCount} detected`);
+  lines.push(`   ${sectionColor}----------------------------------------------------------------------${RESET}`);
+  lines.push(`   ${DIM}ℹ Notice: Architectural grade measures AST rules only.${RESET}`);
+  lines.push(`   ${DIM}  Run ${RESET}${BOLD}chemx verify${RESET}${DIM} for full typecheck and test verification.${RESET}`);
   lines.push(`${sectionColor}======================================================================${RESET}\n`);
 
   return lines.join('\n');

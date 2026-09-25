@@ -5,7 +5,7 @@ import {
   handleSwarmStatus, handlePostFeed, handleCreateFeedPost, handleUpdateSignature,
   handleGetTopics, handleGetTopicPosts, handleCreateTopic
 } from './ui-handlers.js';
-import { queryFeed, listTasks } from './team/team-db.js';
+import { queryFeed, listTasks, getTask } from './team/team-db.js';
 import { getForumCategories } from './ui-forum-data.js';
 import {
   handleCodebaseIndex, handleCodebaseTree, handleCodebaseFile,
@@ -13,7 +13,7 @@ import {
   handleUpdateTaskStatus, handleAssignTask, handleAcquireLock,
   handleReleaseLock, handleOverrideLock, handleSettingsAction,
   handleGeneratePrompt, handleDbTables, handleDbBrowse,
-  handleDbStructure, handleDbQuery
+  handleDbStructure, handleDbQuery, handleUpdateTaskVdsSlot, handleUpdateTaskTraceability
 } from './ui-actions.js';
 import { getDatabaseMetrics, executeSqlQuery } from './ui-db-studio.js';
 import { scanAttentionItems, confirmAttentionItem } from './ui-attention.js';
@@ -37,12 +37,19 @@ export const routeGet = (pathname, db, cwd = process.cwd(), queryParams = {}) =>
     '/api/topics/posts': () => handleGetTopicPosts(db, parsedParams.topicId || parsedParams.topic_id),
     '/api/attention': () => scanAttentionItems(db, cwd),
     '/api/db/tables': () => handleDbTables(db, cwd),
-    '/api/db/browse': () => handleDbBrowse(db, parsedParams),
-    '/api/db/structure': () => handleDbStructure(db, parsedParams)
+    '/api/db/browse': () => handleDbBrowse(db, parsedParams), '/api/db/structure': () => handleDbStructure(db, parsedParams)
   };
 
   const hasRoute = Object.prototype.hasOwnProperty.call(routes, normPath);
   if (hasRoute) return routes[normPath]();
+
+  const taskByIdMatch = normPath.match(/^\/api\/tasks\/(\d+)$/);
+  if (taskByIdMatch) {
+    const task = getTask(db, taskByIdMatch[1]);
+    if (!task) return { success: false, error: 'Task not found' };
+    return { success: true, task };
+  }
+
   return null;
 };
 
@@ -57,9 +64,10 @@ export const routePost = (pathname, db, body, cwd = process.cwd()) => {
     '/api/tasks/claim': () => handleClaimTask(db, body),
     '/api/tasks/done': () => handleCompleteTask(db, body, cwd),
     '/api/tasks/update': () => handleUpdateTaskStatus(db, body),
+    '/api/tasks/slot': () => handleUpdateTaskVdsSlot(db, body),
+    '/api/tasks/trace': () => handleUpdateTaskTraceability(db, body),
     '/api/tasks/assign': () => handleAssignTask(db, body),
-    '/api/locks/acquire': () => handleAcquireLock(db, body),
-    '/api/locks/release': () => handleReleaseLock(db, body),
+    '/api/locks/acquire': () => handleAcquireLock(db, body), '/api/locks/release': () => handleReleaseLock(db, body),
     '/api/locks/override': () => handleOverrideLock(db, body),
     '/api/agents/signature': () => handleUpdateSignature(db, body),
     '/api/topics': () => handleCreateTopic(db, body),

@@ -11,6 +11,12 @@ export const parseTaskRow = (row) => {
   };
   return {
     ...row,
+    moscow: row.moscow || 'must',
+    vds_priority: row.vds_priority || 'medium',
+    vds_phase: row.vds_phase || 'planning',
+    vds_status: row.vds_status || 'ready',
+    task_url: row.task_url || '',
+    sprint_tag: row.sprint_tag || '',
     dependencies: parseJson(row.dependencies, []),
     result_payload: parseJson(row.result_payload, {}),
     violation_snapshot: parseJson(row.violation_snapshot, {}),
@@ -99,6 +105,18 @@ export const buildTaskListQuery = (filter = {}) => {
   if (hasPriority) {
     conditions.push('priority = ?');
     params.push(Number(filter.priority));
+  }
+  if (filter.moscow) {
+    conditions.push('moscow = ?');
+    params.push(filter.moscow);
+  }
+  if (filter.vds_priority) {
+    conditions.push('vds_priority = ?');
+    params.push(filter.vds_priority);
+  }
+  if (filter.sprint_tag) {
+    conditions.push('sprint_tag = ?');
+    params.push(filter.sprint_tag);
   }
   if (conditions.length > 0) query += ` WHERE ${conditions.join(' AND ')}`;
   query += ' ORDER BY priority ASC, id ASC';

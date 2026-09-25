@@ -5,6 +5,7 @@
 
 import { postFeedEvent } from './team-db-feed.js';
 import { DEFAULT_TTL_MS, cleanExpiredLeases, promoteNextWaiter, enqueueWaiter } from './team-db-lock-promotion.js';
+import { withImmediateTransaction } from './team-db-transaction.js';
 
 export { cleanExpiredLeases, promoteNextWaiter } from './team-db-lock-promotion.js';
 
@@ -23,32 +24,39 @@ export const requestFileLock = (db, filePath, agentId, options = {}) => {
   if (!canRequest) return { granted: false, reason: 'missing_args' };
 
   const cleanId = normalizeAgentId(agentId);
-  cleanExpiredLeases(db);
+  const pid = options.pid || process.pid;
 
-  const existingLease = db.prepare('SELECT * FROM file_leases WHERE file_path = ?').get(filePath);
-  const now = Date.now();
-  const ttlMs = options.ttlMs || DEFAULT_TTL_MS;
-  const expiresAt = now + ttlMs;
-  const purpose = options.purpose || '';
+  return withImmediateTransaction(db, () => {
+    cleanExpiredLeases(db);
 
-  const isAvailable = !existingLease || existingLease.locked_by === cleanId;
-  if (isAvailable) {
-    const upsertSql = `INSERT INTO file_leases (file_path, locked_by, acquired_at, expires_at, purpose)
-      VALUES (?, ?, ?, ?, ?)
-      ON CONFLICT(file_path) DO UPDATE SET expires_at = excluded.expires_at, purpose = excluded.purpose`;
-    db.prepare(upsertSql).run(filePath, cleanId, now, expiresAt, purpose);
+    const existingLease = db.prepare('SELECT * FROM file_leases WHERE file_path = ?').get(filePath);
+    const now = Date.now();
+    const ttlMs = options.ttlMs || DEFAULT_TTL_MS;
+    const expiresAt = now + ttlMs;
+    const purpose = options.purpose || '';
 
-    postFeedEvent(db, {
-      author_id: cleanId,
-      event_type: 'lock_acquired',
-      file_path: filePath,
-      message: `${cleanId} acquired lock on ${filePath}`
-    });
+    const isAvailable = !existingLease || existingLease.locked_by === cleanId;
+    if (isAvailable) {
+      const upsertSql = `INSERT INTO file_leases (file_path, locked_by, acquired_at, expires_at, purpose, pid)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(file_path) DO UPDATE SET
+          expires_at = excluded.expires_at,
+          purpose = excluded.purpose,
+          pid = excluded.pid`;
+      db.prepare(upsertSql).run(filePath, cleanId, now, expiresAt, purpose, pid);
 
-    return { granted: true, lease: { file_path: filePath, locked_by: cleanId, expires_at: expiresAt } };
-  }
+      postFeedEvent(db, {
+        author_id: cleanId,
+        event_type: 'lock_acquired',
+        file_path: filePath,
+        message: `${cleanId} acquired lock on ${filePath}`
+      });
 
-  return enqueueWaiter(db, filePath, cleanId, existingLease, options, now);
+      return { granted: true, lease: { file_path: filePath, locked_by: cleanId, expires_at: expiresAt, pid } };
+    }
+
+    return enqueueWaiter(db, filePath, cleanId, existingLease, options, now);
+  });
 };
 
 export const releaseFileLock = (db, filePath, agentId) => {
@@ -59,25 +67,28 @@ export const releaseFileLock = (db, filePath, agentId) => {
   if (!canRelease) return { success: false, reason: 'missing_args' };
 
   const cleanId = normalizeAgentId(agentId);
-  cleanExpiredLeases(db);
 
-  const existingLease = db.prepare('SELECT * FROM file_leases WHERE file_path = ?').get(filePath);
-  const isHolder = Boolean(existingLease) && existingLease.locked_by === cleanId;
-  if (!isHolder) {
-    return { success: false, reason: 'not_holder' };
-  }
+  return withImmediateTransaction(db, () => {
+    cleanExpiredLeases(db);
 
-  db.prepare('DELETE FROM file_leases WHERE file_path = ?').run(filePath);
-  postFeedEvent(db, {
-    author_id: cleanId,
-    event_type: 'lock_released',
-    file_path: filePath,
-    message: `${cleanId} released lock on ${filePath}`
+    const existingLease = db.prepare('SELECT * FROM file_leases WHERE file_path = ?').get(filePath);
+    const isHolder = Boolean(existingLease) && existingLease.locked_by === cleanId;
+    if (!isHolder) {
+      return { success: false, reason: 'not_holder' };
+    }
+
+    db.prepare('DELETE FROM file_leases WHERE file_path = ?').run(filePath);
+    postFeedEvent(db, {
+      author_id: cleanId,
+      event_type: 'lock_released',
+      file_path: filePath,
+      message: `${cleanId} released lock on ${filePath}`
+    });
+
+    const next = promoteNextWaiter(db, filePath);
+    const promotedWaiter = next ? next.waiter.agent_id : null;
+    return { success: true, promotedWaiter };
   });
-
-  const next = promoteNextWaiter(db, filePath);
-  const promotedWaiter = next ? next.waiter.agent_id : null;
-  return { success: true, promotedWaiter };
 };
 
 export const getFileLockStatus = (db, filePath) => {

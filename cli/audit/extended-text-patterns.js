@@ -15,7 +15,13 @@ const SECRET_PATTERNS = [
 const FAKE_GREEN_PATTERNS = [
   /expect\s*\(\s*(true|false|1|0)\s*\)\s*\.\s*to(?:Be|Equal|StrictEqual)\s*\(\s*\1\s*\)/,
   /assert\s*\.\s*(?:strictEqual|equal|deepEqual)\s*\(\s*(true|false|1|0)\s*,\s*\1\s*\)/,
-  /assert\s*\.\s*ok\s*\(\s*(?:true|1)\s*\)/
+  /assert\s*\.\s*ok\s*\(\s*(?:true|1)\s*\)/,
+  /\bAssert\.(?:True|IsTrue)\s*\(\s*true\s*\)/i,
+  /\bAssert\.(?:False|IsFalse)\s*\(\s*false\s*\)/i,
+  /\bAssert\.(?:Equal|AreEqual)\s*\(\s*(true|false|1|0)\s*,\s*\1\s*\)/i,
+  /\bassert\s+(?:True|1\s*==\s*1)\b/,
+  /\bself\.assert(?:True|Equal)\s*\(\s*(?:True|1\s*,\s*1)\s*\)/,
+  /\bassert\.(?:True|Equal)\s*\(\s*t\s*,\s*(?:true|1\s*,\s*1)\s*\)/
 ];
 
 const IMG_WITHOUT_ALT_PATTERN = new RegExp(['<', 'img\\b', '(?![^>]*\\balt\\s*=)', '[^>]*>'].join(''), 'i');
@@ -192,7 +198,10 @@ export const checkExtendedTextPatterns = (content, lines, relativePath, filePath
   checkMoleculeCoLocatedTest(filePath, relativePath, violations);
   checkControllerViewContract(filePath, relativePath, content, violations);
 
-  const isTestFile = /\.(test|spec)\.[jt]sx?$/.test(filePath);
+  const isTestFile = /\.(test|spec)\.[jt]sx?$/.test(filePath)
+    || /(?:^|[\\/])(?:test_[^\\/]+\.py|[^\\/]+_test\.(?:py|go)|[^\\/]+Tests?\.cs)$/i.test(filePath)
+    || /(?:^|[\\/])tests?[\\/]/i.test(filePath)
+    || (filePath.endsWith('.cs') && (content.includes('[Fact]') || content.includes('[Test]')));
   const ext = path.extname(filePath);
   const isTemplateFile = isTemplateExtension(ext);
 

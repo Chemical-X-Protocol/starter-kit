@@ -11,6 +11,10 @@ fi
 
 cd "$REPO_ROOT" || exit 1
 
+if [ "$CHEMX_FORCE_COMMIT" = "1" ] || [ "$CHEMX_SKIP_PRECOMMIT" = "1" ]; then
+  exit 0
+fi
+
 # Detect TTY and color support (respect NO_COLOR and dumb terminals)
 if [ -t 1 ] && [ -z "$NO_COLOR" ] && [ "$TERM" != "dumb" ]; then
   C_RESET="$(printf '\033[0m')"

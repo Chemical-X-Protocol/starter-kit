@@ -13,6 +13,7 @@ import {
 } from './generator-templates.js';
 import { handleCheckCommand } from './search-commands.js';
 import { obtainLicenseKey } from './license.js';
+import { openIndexDb, getAllIndexedFiles } from './search-db.js';
 
 test('generator-templates: toPascalCase and toCamelCase convert slugs correctly', () => {
   assert.strictEqual(toPascalCase('m-user-avatar'), 'UserAvatar');
@@ -251,6 +252,34 @@ test('runGenerateWizard: spec uses Vitest imports when vitest is declared in pac
   const specContent = fs.readFileSync(path.join(tmpDir, 'm-demo-card/m-demo-card.spec.ts'), 'utf8');
   assert.ok(specContent.includes("from 'vitest'"));
   assert.ok(!specContent.includes("from 'node:test'"));
+
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+});
+
+test('runGenerateWizard: generated capsule files are automatically indexed in .chemx/index.db', async () => {
+  const tmpDir = path.resolve(process.cwd(), 'scratch/test-gen-indexing');
+  if (fs.existsSync(tmpDir)) fs.rmSync(tmpDir, { recursive: true, force: true });
+  fs.mkdirSync(tmpDir, { recursive: true });
+  fs.writeFileSync(path.join(tmpDir, 'package.json'), JSON.stringify({
+    name: 'test-indexing',
+    type: 'module'
+  }));
+
+  const res = await runGenerateWizard([
+    'molecule',
+    'status-pill',
+    '-y',
+    `--dir=${tmpDir}`,
+    '--framework=react'
+  ]);
+
+  assert.strictEqual(res.success, true);
+  const db = openIndexDb(tmpDir);
+  assert.ok(db, 'Index db must exist in target directory');
+  const files = getAllIndexedFiles(db);
+  assert.ok(files.size >= 1, 'Generated files must be automatically indexed');
+  const hasCapsule = Array.from(files.keys()).some((p) => p.includes('m-status-pill'));
+  assert.ok(hasCapsule, 'Capsule file must be present in index');
 
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });

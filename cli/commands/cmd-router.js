@@ -202,7 +202,8 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
       const port = portArg ? parseInt(portArg.split('=')[1], 10) : 4173;
       const hostArg = rawArgs.find((a) => a.startsWith('--host='));
       const host = hostArg ? hostArg.split('=')[1] : '0.0.0.0';
-      const { server } = await startUiServer({ port, host, isCli: true, cwd: process.cwd() });
+      const isDev = rawArgs.includes('--dev') || rawArgs.includes('-d') || process.env.CHEMX_UI_DEV === '1';
+      const { server } = await startUiServer({ port, host, dev: isDev, isCli: true, cwd: process.cwd() });
       await new Promise((resolve) => {
         const shutdown = () => {
           server.close(() => resolve());

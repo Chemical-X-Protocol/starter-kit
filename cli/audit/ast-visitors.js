@@ -8,10 +8,18 @@ import {
   isUnguardedConsoleCall
 } from './rules-predicates.js';
 import { validateHookReturnShape } from './hook-shape-validator.js';
+import { evaluateComponentStructuralWeight } from './structural-weight-evaluator.js';
 
-export const createAstVisitors = ({ relativePath, violations, hookRegistry }) => {
+export const createAstVisitors = ({ relativePath, violations, hookRegistry, config }) => {
   return {
     Function(astPath) {
+      evaluateComponentStructuralWeight({
+        funcPath: astPath,
+        relativePath,
+        violations,
+        config
+      });
+
       const isCustomHook = isCustomHookFunction(astPath);
 
       // Pillar 3: Hook Saturation
@@ -178,18 +186,22 @@ export const createAstVisitors = ({ relativePath, violations, hookRegistry }) =>
       if (attrName === 'style') {
         const value = astPath.node.value;
         if (t.isJSXExpressionContainer(value) && t.isObjectExpression(value.expression)) {
-          const line = astPath.node.loc?.start.line || 1;
-          const meta = RULE_REGISTRY.RAW_INLINE_STYLE;
-          violations.push({
-            filePath: relativePath,
-            line,
-            column: astPath.node.loc?.start.column || 1,
-            hazard: 'Raw inline style attribute detected in JSX',
-            rule: 'RAW_INLINE_STYLE',
-            severity: meta.severity,
-            pillar: meta.pillar,
-            directive: meta.directive
-          });
+          const preferTokens = config?.preferDesignTokens || 'warning';
+          if (preferTokens !== 'off') {
+            const line = astPath.node.loc?.start.line || 1;
+            const meta = RULE_REGISTRY.RAW_INLINE_STYLE;
+            const severity = preferTokens === 'error' ? 'HIGH' : meta.severity;
+            violations.push({
+              filePath: relativePath,
+              line,
+              column: astPath.node.loc?.start.column || 1,
+              hazard: 'Raw inline style attribute detected in JSX',
+              rule: 'RAW_INLINE_STYLE',
+              severity,
+              pillar: meta.pillar,
+              directive: meta.directive
+            });
+          }
         }
       } else if (attrName === 'className' || attrName === 'class') {
         const value = astPath.node.value;

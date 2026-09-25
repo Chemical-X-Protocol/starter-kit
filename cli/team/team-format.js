@@ -119,3 +119,63 @@ export const formatMailboxCard = (mailbox) => {
   lines.push(`\x1b[90m${'-'.repeat(54)}\x1b[0m\n`);
   return lines.join('\n');
 };
+
+export const formatTaskDetailCard = (task, events = []) => {
+  if (!task) return '  (Task not found)\n';
+  const lines = [''];
+  const statusColors = {
+    queued: '\x1b[33mqueued\x1b[0m',
+    in_progress: '\x1b[36min_progress\x1b[0m',
+    review: '\x1b[35mreview\x1b[0m',
+    done: '\x1b[32mdone\x1b[0m',
+    completed: '\x1b[32mcompleted\x1b[0m',
+    blocked: '\x1b[31mblocked\x1b[0m'
+  };
+  const statusStr = statusColors[task.status] || task.status;
+  const pStr = `P${task.priority || 2}`;
+  const tierStr = task.tier ? `[${task.tier}]` : '';
+
+  lines.push(`\x1b[1m\x1b[36m📋 [Chemical X Task #${task.id}]\x1b[0m \x1b[1m${task.title}\x1b[0m`);
+  lines.push(`\x1b[90m${'─'.repeat(58)}\x1b[0m`);
+  lines.push(`  \x1b[1mStatus:\x1b[0m   ${statusStr} │ \x1b[1mPriority:\x1b[0m ${pStr} │ \x1b[1mTier:\x1b[0m ${tierStr || 'utility'}`);
+  lines.push(`  \x1b[1mAssignee:\x1b[0m ${task.assigned_agent_id || '(unassigned)'} │ \x1b[1mOrigin:\x1b[0m ${task.origin_type || 'manual'}`);
+
+  if (task.target_path) {
+    lines.push(`  \x1b[1mTarget:\x1b[0m   ${task.target_path}`);
+  }
+  if (task.blocked_reason) {
+    lines.push(`  \x1b[1m\x1b[31mBlocker:\x1b[0m  \x1b[33m${task.blocked_reason}\x1b[0m`);
+  }
+
+  const tok = task.total_tokens || ((task.prompt_tokens || 0) + (task.completion_tokens || 0));
+  if (tok > 0 || task.cost_usd > 0) {
+    lines.push(`  \x1b[1mTelemetry:\x1b[0m ${tok.toLocaleString()} tokens │ \x1b[32m${Number(task.cost_usd || 0).toFixed(4)}\x1b[0m`);
+  }
+
+  if (task.diff_receipt?.verified || task.result_payload?.verified) {
+    const r = task.diff_receipt?.healthAfter ? task.diff_receipt : task.result_payload;
+    lines.push(`  \x1b[32m🛡️ AST Verification:\x1b[0m Clean (Health: ${r.healthAfter ?? 100}/100)`);
+  }
+
+  lines.push('', '  \x1b[1mActivity & Status Stream (Asana Timeline):\x1b[0m');
+  if (events.length === 0) {
+    lines.push('    \x1b[90m(No updates recorded yet)\x1b[0m');
+  } else {
+    for (const ev of events) {
+      const timeStr = new Date(ev.timestamp).toLocaleTimeString();
+      let icon = '•';
+      let tag = ev.event_type;
+      if (ev.event_type === 'task_created') { icon = '⏳'; tag = 'created'; }
+      else if (ev.event_type === 'task_status_updated') { icon = '🔄'; tag = 'status_update'; }
+      else if (ev.event_type === 'task_reassigned') { icon = '👤'; tag = 'reassigned'; }
+      else if (ev.event_type === 'task_completed') { icon = '✅'; tag = 'completed'; }
+      else if (ev.event_type === 'comment' || ev.event_type === 'status_update') { icon = '💬'; tag = 'update'; }
+
+      lines.push(`    \x1b[90m[${timeStr}]\x1b[0m ${icon} \x1b[36m${ev.author_id}\x1b[0m \x1b[90m(${tag})\x1b[0m`);
+      lines.push(`      ${ev.message}`);
+    }
+  }
+
+  lines.push(`\x1b[90m${'─'.repeat(58)}\x1b[0m\n`);
+  return lines.join('\n');
+};

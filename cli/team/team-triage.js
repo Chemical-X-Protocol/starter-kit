@@ -288,6 +288,18 @@ export const completeTaskWithAudit = (db, taskId, agentId, options = {}) => {
     telemetry
   };
 
+  const targetOverride = options.target || options.targetPath;
+  if (targetOverride) {
+    task.target_path = targetOverride;
+    try {
+      db.prepare('UPDATE agent_tasks SET target_path = ?, updated_at = ? WHERE id = ?').run(
+        targetOverride,
+        Date.now(),
+        Number(taskId)
+      );
+    } catch {}
+  }
+
   if (!task.target_path) {
     if (options.noTargetConfirm !== true && options.force !== true) {
       return {

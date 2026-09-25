@@ -71,4 +71,30 @@ describe('UI Server-Sent Events (SSE) Stream', () => {
       closeSseHub();
     }
   });
+
+  it('broadcasts reload event on broadcastSseReload', async () => {
+    const running = await startUiServer({ port: 0 });
+    try {
+      const res = await fetch(`http://localhost:${running.port}/api/swarm/events`);
+      const reader = res.body?.getReader();
+      assert.ok(reader);
+      await readNextSseEvent(reader);
+
+      const { broadcastSseReload } = await import('./ui-sse.js');
+      broadcastSseReload();
+
+      let buffer = '';
+      const decoder = new TextDecoder();
+      while (!buffer.includes('event: reload')) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+      }
+      assert.ok(buffer.includes('event: reload'));
+      await reader.cancel();
+    } finally {
+      running.server.close();
+      closeSseHub();
+    }
+  });
 });

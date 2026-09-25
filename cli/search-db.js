@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { generateEmbedding, serializeVector, VECTOR_DIMENSIONS } from './embeddings/vectorizer.js';
+import { buildFtsTokens } from './search-tokenizer.js';
 
 export {
   isSqliteAvailable,
@@ -175,14 +176,7 @@ export const upsertFileIndex = (db, record) => {
   }
 
   // Insert into FTS index
-  const tokenList = [
-    ...symbols.map((s) => s.name),
-    ...props.map((p) => p.name),
-    ...hooks,
-    ...imports.map((i) => i.importedSymbol),
-    filePath
-  ];
-  const tokensText = tokenList.join(' ');
+  const tokensText = buildFtsTokens({ symbols, props, hooks, imports, filePath });
   const mainName = symbols.find((s) => s.isExport)?.name || path.basename(filePath);
 
   db.prepare(`

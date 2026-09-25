@@ -1,0 +1,13 @@
+{
+  "profile": "pragmatic",
+  "rules": {
+    "component-max-complexity": 12,
+    "max-hook-density": 4,
+    "max-render-depth": 4,
+    "max-prop-count": 7,
+    "prefer-design-tokens": "warning",
+    "enforce-file-length": false,
+    "rule-of-three-abstractions": true,
+    "ai-slop-detection": "critical"
+  }
+}

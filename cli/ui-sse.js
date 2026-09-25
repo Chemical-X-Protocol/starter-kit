@@ -1,8 +1,3 @@
-/**
- * Chemical X Protocol: UI Server-Sent Events (SSE) Stream Manager
- * Streams real-time swarm status, feed, tasks, and telemetry to connected UI clients
- */
-
 import { handleSwarmStatus } from './ui-handlers.js';
 
 const clients = new Set();
@@ -18,8 +13,8 @@ export const handleSseConnection = (req, res, db) => {
   try {
     const initialState = handleSwarmStatus(db);
     res.write(`data: ${JSON.stringify(initialState)}\n\n`);
-  } catch {
-    res.write('data: {}\n\n');
+  } catch (err) {
+    res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
   }
 
   clients.add(res);
@@ -40,18 +35,36 @@ export const broadcastSseUpdate = (db) => {
     for (const client of clients) {
       try {
         client.write(payload);
-      } catch {
+      } catch (err) {
         clients.delete(client);
       }
     }
-  } catch {}
+  } catch (err) {
+    process.stderr.write(`[SSE Broadcast Error] ${err.message}\n`);
+  }
+};
+
+export const broadcastSseReload = () => {
+  if (clients.size === 0) return;
+  const payload = `event: reload\ndata: ${JSON.stringify({ timestamp: Date.now() })}\n\n`;
+  for (const client of clients) {
+    try {
+      client.write(payload);
+    } catch (err) {
+      clients.delete(client);
+    }
+  }
 };
 
 export const getConnectedSseClientsCount = () => clients.size;
 
 export const closeSseHub = () => {
   for (const client of clients) {
-    try { client.end(); } catch {}
+    try {
+      client.end();
+    } catch (err) {
+      clients.delete(client);
+    }
   }
   clients.clear();
 };

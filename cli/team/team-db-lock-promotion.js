@@ -3,10 +3,11 @@
  */
 
 import { postFeedEvent } from './team-db-feed.js';
+import { isPidAlive } from './team-db-transaction.js';
 
 export const DEFAULT_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
-export const promoteNextWaiter = (db, filePath) => {
+export const promoteNextWaiter = (db, filePath, pid = 0) => {
   const hasDb = Boolean(db);
   const hasPath = Boolean(filePath);
   const canPromote = hasDb && hasPath;
@@ -22,10 +23,10 @@ export const promoteNextWaiter = (db, filePath) => {
   const expiresAt = now + DEFAULT_TTL_MS;
   db.prepare("UPDATE file_lock_queue SET status = 'granted' WHERE id = ?").run(waiter.id);
 
-  const upsertSql = `INSERT INTO file_leases (file_path, locked_by, acquired_at, expires_at, purpose)
-    VALUES (?, ?, ?, ?, ?)
-    ON CONFLICT(file_path) DO UPDATE SET locked_by = excluded.locked_by, acquired_at = excluded.acquired_at, expires_at = excluded.expires_at, purpose = excluded.purpose`;
-  db.prepare(upsertSql).run(filePath, waiter.agent_id, now, expiresAt, waiter.purpose || 'Promoted from FIFO queue');
+  const upsertSql = `INSERT INTO file_leases (file_path, locked_by, acquired_at, expires_at, purpose, pid)
+    VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT(file_path) DO UPDATE SET locked_by = excluded.locked_by, acquired_at = excluded.acquired_at, expires_at = excluded.expires_at, purpose = excluded.purpose, pid = excluded.pid`;
+  db.prepare(upsertSql).run(filePath, waiter.agent_id, now, expiresAt, waiter.purpose || 'Promoted from FIFO queue', pid);
 
   postFeedEvent(db, {
     author_id: '@system',
@@ -77,19 +78,29 @@ export const cleanExpiredLeases = (db) => {
 
   const now = Date.now();
   try {
-    const expired = db.prepare('SELECT * FROM file_leases WHERE expires_at <= ?').all(now);
-    for (const lease of expired) {
-      db.prepare('DELETE FROM file_leases WHERE file_path = ?').run(lease.file_path);
-      postFeedEvent(db, {
-        author_id: '@system',
-        event_type: 'lock_expired',
-        file_path: lease.file_path,
-        message: `Lease expired for ${lease.file_path} held by ${lease.locked_by}`
-      });
-      promoteNextWaiter(db, lease.file_path);
+    const leases = db.prepare('SELECT * FROM file_leases').all();
+    const cleaned = [];
+    for (const lease of leases) {
+      const isExpired = lease.expires_at <= now;
+      const isDeadProcess = typeof lease.pid === 'number' && lease.pid > 0 && !isPidAlive(lease.pid);
+      const shouldClean = isExpired || isDeadProcess;
+      if (shouldClean) {
+        db.prepare('DELETE FROM file_leases WHERE file_path = ?').run(lease.file_path);
+        const reason = isDeadProcess ? `Process #${lease.pid} terminated` : 'TTL expired';
+        postFeedEvent(db, {
+          author_id: '@system',
+          event_type: 'lock_expired',
+          file_path: lease.file_path,
+          message: `Lease expired for ${lease.file_path} held by ${lease.locked_by} (${reason})`
+        });
+        promoteNextWaiter(db, lease.file_path);
+        cleaned.push(lease);
+      }
     }
-    return expired;
-  } catch {
-    return [];
+    return cleaned;
+  } catch (err) {
+    const isNoSuchTable = err && String(err.message).includes('no such table');
+    if (isNoSuchTable) return [];
+    throw err;
   }
 };

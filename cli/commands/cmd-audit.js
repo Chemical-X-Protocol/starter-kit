@@ -101,7 +101,7 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
     fileList = preflight.fileList;
   }
 
-  const auditOptions = { outputFile, model, costPerMillion, fast: isFast, fileList, stage };
+  const auditOptions = { outputFile, model, costPerMillion, fast: isFast, fileList, stage, config: projectConfig };
   const report = executeAstAudit(targetDir, auditOptions);
   saveAuditSnapshot(report);
   try {

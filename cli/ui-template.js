@@ -25,17 +25,20 @@ export const UI_TEMPLATE = `
     <aside v-if="drawerOpen" class="o-drawer">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
         <strong>Swarm Navigation</strong>
-        <button class="a-btn a-btn--sec" @click="drawerOpen = false">✕</button>
+        <div style="display:flex; align-items:center; gap:6px;">
+          <button class="a-btn a-btn--sec" :style="drawerPinned ? 'color:#38bdf8;border-color:rgba(56,189,248,.4);' : ''" @click="drawerPinned = !drawerPinned" :title="drawerPinned ? 'Unpin menu' : 'Pin menu'">{{ drawerPinned ? '📌' : '📍' }}</button>
+          <button class="a-btn a-btn--sec" @click="drawerOpen = false">✕</button>
+        </div>
       </div>
-      <div class="o-drawer__link" :class="{'o-drawer__link--active': activeTab === 'attention'}" @click="activeTab = 'attention'; drawerOpen = false"><span>🔔 Attention Inbox</span><span class="a-badge badge-warning">{{ attentionItems.length }}</span></div>
-      <div class="o-drawer__link" :class="{'o-drawer__link--active': activeTab === 'social' || activeTab === 'forum'}" @click="activeTab = 'social'; drawerOpen = false"><span>🏛️ Forum & Timeline</span><span class="a-badge badge-primary">{{ posts.length }}</span></div>
-      <div class="o-drawer__link" :class="{'o-drawer__link--active': activeTab === 'agents'}" @click="activeTab = 'agents'; drawerOpen = false"><span>👥 Agent Directory</span><span class="a-badge badge-primary">{{ agents.length }}</span></div>
-      <div class="o-drawer__link" :class="{'o-drawer__link--active': activeTab === 'tasks'}" @click="activeTab = 'tasks'; drawerOpen = false"><span>📋 Tasks & Kanban</span><span class="a-badge badge-lime">{{ tasks.length }}</span></div>
-      <div class="o-drawer__link" :class="{'o-drawer__link--active': activeTab === 'locks'}" @click="activeTab = 'locks'; drawerOpen = false"><span>🔒 File Locks Hub</span><span class="a-badge badge-warning">{{ leases.length }}</span></div>
-      <div class="o-drawer__link" :class="{'o-drawer__link--active': activeTab === 'codebase'}" @click="activeTab = 'codebase'; drawerOpen = false"><span>🧬 AST Codebase</span><span class="a-badge badge-primary">{{ codebaseFiles.length }}</span></div>
-      <div class="o-drawer__link" :class="{'o-drawer__link--active': activeTab === 'workbench'}" @click="activeTab = 'workbench'; drawerOpen = false"><span>🛠️ Prompt Workbench</span></div>
-      <div class="o-drawer__link" :class="{'o-drawer__link--active': activeTab === 'database'}" @click="activeTab = 'database'; drawerOpen = false"><span>💾 Database Studio</span></div>
-      <div class="o-drawer__link" :class="{'o-drawer__link--active': activeTab === 'settings'}" @click="activeTab = 'settings'; drawerOpen = false"><span>⚙️ Swarm & DB Settings</span></div>
+      <div class="o-drawer__link" :class="{'o-drawer__link--active': activeTab === 'attention'}" @click="activeTab = 'attention'; if (!drawerPinned) drawerOpen = false"><span>🔔 Attention Inbox</span><span class="a-badge badge-warning">{{ attentionItems.length }}</span></div>
+      <div class="o-drawer__link" :class="{'o-drawer__link--active': activeTab === 'social' || activeTab === 'forum'}" @click="activeTab = 'social'; if (!drawerPinned) drawerOpen = false"><span>🏛️ Forum & Timeline</span><span class="a-badge badge-primary">{{ posts.length }}</span></div>
+      <div class="o-drawer__link" :class="{'o-drawer__link--active': activeTab === 'agents'}" @click="activeTab = 'agents'; if (!drawerPinned) drawerOpen = false"><span>👥 Agent Directory</span><span class="a-badge badge-primary">{{ agents.length }}</span></div>
+      <div class="o-drawer__link" :class="{'o-drawer__link--active': activeTab === 'tasks'}" @click="activeTab = 'tasks'; if (!drawerPinned) drawerOpen = false"><span>📋 Tasks & Kanban</span><span class="a-badge badge-lime">{{ tasks.length }}</span></div>
+      <div class="o-drawer__link" :class="{'o-drawer__link--active': activeTab === 'locks'}" @click="activeTab = 'locks'; if (!drawerPinned) drawerOpen = false"><span>🔒 File Locks Hub</span><span class="a-badge badge-warning">{{ leases.length }}</span></div>
+      <div class="o-drawer__link" :class="{'o-drawer__link--active': activeTab === 'codebase'}" @click="activeTab = 'codebase'; if (!drawerPinned) drawerOpen = false"><span>🧬 AST Codebase</span><span class="a-badge badge-primary">{{ codebaseFiles.length }}</span></div>
+      <div class="o-drawer__link" :class="{'o-drawer__link--active': activeTab === 'workbench'}" @click="activeTab = 'workbench'; if (!drawerPinned) drawerOpen = false"><span>🛠️ Prompt Workbench</span></div>
+      <div class="o-drawer__link" :class="{'o-drawer__link--active': activeTab === 'database'}" @click="activeTab = 'database'; if (!drawerPinned) drawerOpen = false"><span>💾 Database Studio</span></div>
+      <div class="o-drawer__link" :class="{'o-drawer__link--active': activeTab === 'settings'}" @click="activeTab = 'settings'; if (!drawerPinned) drawerOpen = false"><span>⚙️ Swarm & DB Settings</span></div>
     </aside>
 ` + VIEW_FORUM_TEMPLATE + VIEW_AGENTS_TEMPLATE + VIEW_KANBAN_TEMPLATE + `
 

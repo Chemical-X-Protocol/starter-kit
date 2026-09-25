@@ -1,4 +1,5 @@
 import React from 'react';
+import AtomButton from '../atoms/a-button';
 import type { MSampleCardProps, SampleCardBadgeDescriptor } from './types';
 
 export const resolveBadgeDescriptor = (
@@ -56,13 +57,12 @@ export const MSampleCard: React.FC<MSampleCardProps> = ({
           ${value.toLocaleString()}
         </div>
         {onAction && (
-          <button
-            type="button"
+          <AtomButton
             className="m-sample-card__action"
             onClick={handleActionClick}
           >
             Action
-          </button>
+          </AtomButton>
         )}
       </div>
     </div>

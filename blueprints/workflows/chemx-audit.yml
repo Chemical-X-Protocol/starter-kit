@@ -76,3 +76,39 @@ jobs:
             gh pr comment "\${PR_NUMBER}" --body-file PR_COMMENT.md
           fi
 
+  scaffold-smoke-test:
+    name: Framework Scaffolding Smoke Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install Dependencies
+        run: npm install
+      - name: Run Test Suite
+        run: npm test
+      - name: Multi-Framework Scaffolding Smoke Test
+        run: |
+          for fw in react vue svelte; do
+            echo "Smoke testing scaffolding for framework: $fw"
+            node cli/create.js test-app-$fw --framework=$fw --yes --skip-install
+            if [ "$fw" = "react" ]; then
+              test -f test-app-react/src/components/m-sample-card/m-sample-card.tsx
+              ! ls test-app-react/src/components/m-sample-card/*.vue 2>/dev/null
+              ! ls test-app-react/src/components/m-sample-card/*.svelte 2>/dev/null
+            elif [ "$fw" = "vue" ]; then
+              test -f test-app-vue/src/components/m-sample-card/m-sample-card.vue
+              ! ls test-app-vue/src/components/m-sample-card/*.tsx 2>/dev/null
+              ! ls test-app-vue/src/components/m-sample-card/*.svelte 2>/dev/null
+            elif [ "$fw" = "svelte" ]; then
+              test -f test-app-svelte/src/components/m-sample-card/m-sample-card.svelte
+              ! ls test-app-svelte/src/components/m-sample-card/*.vue 2>/dev/null
+              ! ls test-app-svelte/src/components/m-sample-card/*.tsx 2>/dev/null
+            fi
+            echo "Framework $fw scaffolded cleanly."
+          done
+
+

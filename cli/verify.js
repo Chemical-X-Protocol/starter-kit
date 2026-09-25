@@ -1,173 +1,27 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { executeBuild } from './build/executor.js';
-import { matchTypeScriptError } from './build/parser-matchers.js';
+import { loadProjectConfig } from './config/index.js';
 import { runAudit as executeAstAudit } from './audit.js';
 import { runBuildAudit } from './build.js';
-import { resolvePackageManager, loadLocalPackageJson, findProjectRoot } from './build/detector.js';
+import { findProjectRoot } from './build/detector.js';
 import { ANSI } from './theme.js';
+import {
+  parseCommandFromArgs,
+  detectTypecheckCommand,
+  detectTestCommand,
+  parseTypecheckOutput,
+  parseTestOutput,
+  checkNodeModules
+} from './verify-helpers.js';
 
-const parseCommandFromArgs = (args = []) => {
-  const dashDashIndex = args.indexOf('--');
-  if (dashDashIndex !== -1) {
-    const afterDash = args.slice(dashDashIndex + 1).join(' ').trim();
-    if (afterDash.length > 0) return afterDash;
-  }
-  return null;
-};
-
-export const detectTypecheckCommand = (customCmd, cwd = process.cwd()) => {
-  if (customCmd && customCmd.trim().length > 0) return customCmd.trim();
-  const pkg = loadLocalPackageJson(cwd);
-  const scripts = (pkg && pkg.scripts) || {};
-  const pm = resolvePackageManager(cwd);
-
-  if (scripts.typecheck) return `${pm} run typecheck`;
-  if (scripts['type-check']) return `${pm} run type-check`;
-  if (scripts['check-types']) return `${pm} run check-types`;
-  if (scripts.tsc) return `${pm} run tsc`;
-
-  if (fs.existsSync(path.join(cwd, 'tsconfig.json'))) {
-    return 'npx tsc --noEmit';
-  }
-
-  return `${pm} run typecheck`;
-};
-
-export const detectTestCommand = (customCmd, cwd = process.cwd()) => {
-  if (customCmd && customCmd.trim().length > 0) return customCmd.trim();
-  const pkg = loadLocalPackageJson(cwd);
-  const scripts = (pkg && pkg.scripts) || {};
-  const pm = resolvePackageManager(cwd);
-
-  const isLegitTest = scripts.test && !scripts.test.includes('no test specified');
-  if (isLegitTest) return pm === 'yarn' ? 'yarn test' : `${pm} run test`;
-
-  if (fs.existsSync(path.join(cwd, 'vitest.config.ts')) || fs.existsSync(path.join(cwd, 'vitest.config.js'))) {
-    return 'npx vitest run';
-  }
-
-  return pm === 'yarn' ? 'yarn test' : `${pm} run test`;
-};
-
-export const parseTypecheckOutput = (stdout = '', stderr = '') => {
-  const combined = `${stdout}\n${stderr}`;
-  const lines = combined.split(/\r?\n/);
-  const errors = [];
-  const seen = new Set();
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-    const match = matchTypeScriptError(trimmed);
-    if (match) {
-      const key = `${match.file}:${match.line}:${match.column}:${match.code}`;
-      if (!seen.has(key)) {
-        seen.add(key);
-        errors.push(match);
-      }
-    }
-  }
-
-  return errors;
-};
-
-const stripAnsi = (str = '') => String(str).replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
-
-export const parseTestOutput = (stdout = '', stderr = '', exitCode = 0) => {
-  const combined = `${stdout}\n${stderr}`;
-  const lines = combined.split(/\r?\n/);
-
-  let totalTests = 0;
-  let passed = 0;
-  let failed = 0;
-  let skipped = 0;
-  let checkmarkPasses = 0;
-  let crossmarkFails = 0;
-
-  for (const line of lines) {
-    const clean = stripAnsi(line).trim();
-    if (!clean) continue;
-
-    if (clean.startsWith('✔')) checkmarkPasses++;
-    if (clean.startsWith('✖') || clean.startsWith('FAIL ')) crossmarkFails++;
-
-    const nodeTests = clean.match(/(?:ℹ\s*)?tests\s+(\d+)/);
-    if (nodeTests) totalTests = parseInt(nodeTests[1], 10);
-
-    const nodePass = clean.match(/(?:ℹ\s*)?pass\s+(\d+)/);
-    if (nodePass) passed = parseInt(nodePass[1], 10);
-
-    const nodeFail = clean.match(/(?:ℹ\s*)?fail\s+(\d+)/);
-    if (nodeFail) failed = parseInt(nodeFail[1], 10);
-
-    const nodeSkip = clean.match(/(?:ℹ\s*)?(?:skipped|todo)\s+(\d+)/);
-    if (nodeSkip) skipped += parseInt(nodeSkip[1], 10);
-
-    const vitestMatch = clean.match(/Tests\s+(?:(\d+)\s+failed)?(?:,\s*)?(?:(\d+)\s+passed)?\s*\((\d+)\)/);
-    if (vitestMatch) {
-      if (vitestMatch[1]) failed = parseInt(vitestMatch[1], 10);
-      if (vitestMatch[2]) passed = parseInt(vitestMatch[2], 10);
-      if (vitestMatch[3]) totalTests = parseInt(vitestMatch[3], 10);
-    }
-  }
-
-  if (passed === 0 && checkmarkPasses > 0) passed = checkmarkPasses;
-  if (failed === 0 && crossmarkFails > 0) failed = crossmarkFails;
-  if (totalTests === 0) totalTests = passed + failed;
-
-  const failures = [];
-  if (exitCode !== 0 || failed > 0) {
-    let currentFailure = null;
-
-    for (const line of lines) {
-      const isFailHeader = line.includes('✖') || line.startsWith('FAIL ') || /^\s*not ok\b/.test(line);
-      if (isFailHeader) {
-        if (currentFailure) failures.push(currentFailure);
-        currentFailure = {
-          name: line.replace(/[✖]/g, '').trim(),
-          details: []
-        };
-      } else if (currentFailure) {
-        const isCleanLine = !line.includes('✔') && !line.includes('ℹ') && !line.includes('ExperimentalWarning');
-        if (isCleanLine && line.trim().length > 0) {
-          currentFailure.details.push(line.trim());
-          if (currentFailure.details.length >= 6) {
-            failures.push(currentFailure);
-            currentFailure = null;
-          }
-        }
-      }
-    }
-
-    if (currentFailure) failures.push(currentFailure);
-
-    if (failures.length === 0 && exitCode !== 0) {
-      const errorLines = lines
-        .map((l) => l.trim())
-        .filter((l) => l.length > 0 && !l.includes('✔') && !l.includes('ExperimentalWarning'))
-        .slice(-10);
-      failures.push({
-        name: 'Test process exit error',
-        details: errorLines
-      });
-    }
-  }
-
-  if (failed === 0 && exitCode !== 0) {
-    failed = Math.max(1, failures.length);
-  }
-
-  return {
-    success: exitCode === 0 && failed === 0,
-    exitCode,
-    totalTests: totalTests || (passed + failed),
-    passed,
-    failed,
-    skipped,
-    failures
-  };
-};
+export {
+  parseCommandFromArgs,
+  detectTypecheckCommand,
+  detectTestCommand,
+  parseTypecheckOutput,
+  parseTestOutput
+} from './verify-helpers.js';
 
 export const runTypecheckAudit = async (rawArgs = [], isCli = false, options = {}) => {
   if (rawArgs.includes('--help') || rawArgs.includes('-h') || rawArgs.includes('help')) {
@@ -194,6 +48,40 @@ export const runTypecheckAudit = async (rawArgs = [], isCli = false, options = {
   const isRaw = rawArgs.includes('--raw') || options.raw === true;
   const customCmd = parseCommandFromArgs(rawArgs) || options.command;
   const cwd = findProjectRoot(options.cwd || process.cwd());
+
+  const nmStatus = checkNodeModules(cwd);
+  if (nmStatus) {
+    const friendlyMsg = nmStatus.msg('typechecking');
+    const report = {
+      success: false,
+      exitCode: 1,
+      command: customCmd || 'typecheck',
+      durationMs: 0,
+      errorCount: 1,
+      executionError: friendlyMsg,
+      errors: [
+        {
+          file: 'package.json',
+          line: 1,
+          column: 1,
+          code: 'MISSING_NODE_MODULES',
+          message: friendlyMsg
+        }
+      ]
+    };
+    if (isJson) {
+      if (options.print !== false) {
+        process.stdout.write(JSON.stringify(report, null, 2) + '\n');
+      }
+      if (isCli) process.exit(1);
+      return report;
+    }
+    if (options.print !== false) {
+      process.stdout.write(`\n  ${ANSI.RED}✖${ANSI.RESET} ${ANSI.BOLD}${friendlyMsg}${ANSI.RESET}\n\n`);
+    }
+    if (isCli) process.exit(1);
+    return report;
+  }
 
   const command = detectTypecheckCommand(customCmd, cwd);
   const execution = await executeBuild(command, cwd, { raw: isRaw });
@@ -273,6 +161,35 @@ export const runTestAudit = async (rawArgs = [], isCli = false, options = {}) =>
   const customCmd = parseCommandFromArgs(rawArgs) || options.command;
   const cwd = findProjectRoot(options.cwd || process.cwd());
 
+  const nmStatus = checkNodeModules(cwd);
+  if (nmStatus) {
+    const friendlyMsg = nmStatus.msg('testing');
+    const report = {
+      success: false,
+      exitCode: 1,
+      command: customCmd || 'test',
+      durationMs: 0,
+      totalTests: 0,
+      passed: 0,
+      failed: 1,
+      skipped: 0,
+      executionError: friendlyMsg,
+      failures: [{ name: 'dependencies', details: [friendlyMsg] }]
+    };
+    if (isJson) {
+      if (options.print !== false) {
+        process.stdout.write(JSON.stringify(report, null, 2) + '\n');
+      }
+      if (isCli) process.exit(1);
+      return report;
+    }
+    if (options.print !== false) {
+      process.stdout.write(`\n  ${ANSI.RED}✖${ANSI.RESET} ${ANSI.BOLD}${friendlyMsg}${ANSI.RESET}\n\n`);
+    }
+    if (isCli) process.exit(1);
+    return report;
+  }
+
   const command = detectTestCommand(customCmd, cwd);
   const execution = await executeBuild(command, cwd, { raw: isRaw });
   const parsed = parseTestOutput(execution.stdout, execution.stderr, execution.exitCode);
@@ -332,11 +249,9 @@ export const runTestAudit = async (rawArgs = [], isCli = false, options = {}) =>
 };
 
 const resolveDefaultTargetDir = (cwd) => {
-  const hasSrc = fs.existsSync(path.resolve(cwd, 'src'));
-  if (hasSrc) return 'src';
-  const hasBlueprints = fs.existsSync(path.resolve(cwd, 'blueprints'));
-  if (hasBlueprints) return 'blueprints';
-  return '.';
+  if (fs.existsSync(path.join(cwd, 'src'))) return path.join(cwd, 'src');
+  if (fs.existsSync(path.join(cwd, 'blueprints'))) return path.join(cwd, 'blueprints');
+  return cwd;
 };
 
 export const runProjectVerify = async (rawArgs = [], isCli = false, options = {}) => {
@@ -368,30 +283,67 @@ export const runProjectVerify = async (rawArgs = [], isCli = false, options = {}
   const cwd = findProjectRoot(explicitDir || options.cwd || process.cwd());
   const targetDir = explicitDir || resolveDefaultTargetDir(cwd);
 
+  const nmStatus = checkNodeModules(cwd);
+  if (nmStatus) {
+    const friendlyMsg = nmStatus.msg('verifying');
+    const summary = {
+      success: false,
+      error: friendlyMsg,
+      audit: { score: 0, grade: 'F', violationsCount: 0, criticalCount: 0 },
+      typecheck: {
+        success: false,
+        errorCount: 1,
+        executionError: friendlyMsg,
+        errors: [{ file: 'package.json', line: 1, column: 1, code: 'MISSING_NODE_MODULES', message: friendlyMsg }]
+      },
+      tests: {
+        success: false,
+        total: 0,
+        passed: 0,
+        failed: 1,
+        executionError: friendlyMsg,
+        failures: [{ name: 'dependencies', details: [friendlyMsg] }]
+      }
+    };
+    if (isJson) {
+      if (options.print !== false) {
+        process.stdout.write(JSON.stringify(summary, null, 2) + '\n');
+      }
+      if (isCli) process.exit(1);
+      return summary;
+    }
+    if (options.print !== false) {
+      process.stdout.write(`\n  ${ANSI.RED}✖${ANSI.RESET} ${ANSI.BOLD}${friendlyMsg}${ANSI.RESET}\n\n`);
+    }
+    if (isCli) process.exit(1);
+    return summary;
+  }
+
   if (!isJson && options.print !== false) {
     process.stdout.write(`\n  ${ANSI.BOLD}${ANSI.CYAN}⚡ Chemical X: Token-Conserving Project Verification${ANSI.RESET}\n\n`);
   }
 
-  // 1. AST Architectural Audit
-  const auditReport = executeAstAudit(targetDir, { cwd });
+  const projectConfig = options.config || loadProjectConfig(cwd, rawArgs);
+  const auditReport = executeAstAudit(targetDir, { cwd, config: projectConfig });
   const isAuditPassing = auditReport.violations.filter((v) => v.severity === 'CRITICAL').length === 0;
 
-  // 2. TypeScript Typecheck
   const typeReport = await runTypecheckAudit([], false, { print: false, cwd });
-
-  // 3. Test Suite
   const testReport = await runTestAudit([], false, { print: false, cwd });
 
-  // 4. Optional Build Audit
   let buildReport = null;
   if (includeBuild) {
     buildReport = await runBuildAudit(['--json'], false, { print: false, cwd });
   }
 
+  const hasBuildOrTestFailure = !typeReport.success || !testReport.success || (buildReport && !buildReport.isPassing);
+  const isArchitecturePassingOnly = isAuditPassing && hasBuildOrTestFailure;
   const isAllPassed = isAuditPassing && typeReport.success && testReport.success && (!buildReport || buildReport.isPassing);
 
   const summary = {
     success: isAllPassed,
+    architecturalWarning: isArchitecturePassingOnly
+      ? 'AST compliance does not guarantee functional correctness. Fix typecheck or test errors before deployment.'
+      : null,
     audit: {
       score: auditReport.health.score,
       grade: auditReport.health.grade,
@@ -460,7 +412,11 @@ export const runProjectVerify = async (rawArgs = [], isCli = false, options = {}
     if (isAllPassed) {
       process.stdout.write(`  ${ANSI.LIME}${ANSI.BOLD}All verification checks passed with zero context burn!${ANSI.RESET}\n\n`);
     } else {
-      process.stdout.write(`  ${ANSI.RED}${ANSI.BOLD}Verification failed. Actionable issues cataloged above.${ANSI.RESET}\n\n`);
+      process.stdout.write(`  ${ANSI.RED}${ANSI.BOLD}Verification failed. Actionable issues cataloged above.${ANSI.RESET}\n`);
+      if (isArchitecturePassingOnly) {
+        process.stdout.write(`  ${ANSI.YELLOW}⚠ Notice: Architectural compliance (${auditReport.health.grade}) does not guarantee functional correctness. Code cannot be considered production ready while typecheck or test errors persist.${ANSI.RESET}\n`);
+      }
+      process.stdout.write('\n');
     }
   }
 

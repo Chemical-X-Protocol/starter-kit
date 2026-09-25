@@ -1,8 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert';
 import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
+import { resolveTargetDir } from './search.js';
 import {
-  resolveTargetDir,
   openIndexDb,
   upsertFileIndex,
   findSymbolDefinition,
@@ -13,8 +15,9 @@ import {
   queryViolations,
   recordAuditSnapshot,
   getAuditProgression,
-  queryFilesByHealth
-} from './search.js';
+  queryFilesByHealth,
+  queryHybridIndex
+} from './search-db.js';
 import {
   handleDefCommand,
   handleRefsCommand,
@@ -215,5 +218,50 @@ test('search-db: records snapshots, progression, and stamps file health', () => 
 
   const cleanCli = handleHealthFilterCommand(db, 'crystalline', { isJson: true, isCli: false });
   assert.strictEqual(cleanCli?.filter, 'crystalline');
+});
+
+test('hybrid search: natural language "toggle a task item" ranks useTaskListController top-3 with valid ftsRank', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-search-rank-'));
+  const db = openIndexDb(tmpDir);
+  const mockComponents = [
+    { path: 'src/molecules/m-task-list/useTaskListController.ts', name: 'useTaskListController', tier: 'hook', symbols: [{ name: 'useTaskListController', kind: 'function', isExport: true }, { name: 'toggleTaskItem', kind: 'function', isExport: false }], hooks: ['useState', 'useCallback'] },
+    { path: 'src/molecules/m-user-avatar/useUserAvatar.ts', name: 'useUserAvatar', tier: 'hook', symbols: [{ name: 'useUserAvatar', kind: 'function', isExport: true }], hooks: ['useEffect'] },
+    { path: 'src/molecules/m-tab-bar/useTabBar.ts', name: 'useTabBar', tier: 'hook', symbols: [{ name: 'useTabBar', kind: 'function', isExport: true }, { name: 'selectTabItem', kind: 'function', isExport: false }], hooks: ['useRef'] },
+    { path: 'src/molecules/m-billing-card/useBillingCard.ts', name: 'useBillingCard', tier: 'hook', symbols: [{ name: 'useBillingCard', kind: 'function', isExport: true }], hooks: ['useState'] },
+    { path: 'src/molecules/m-header/m-header.tsx', name: 'MHeader', tier: 'molecule', symbols: [{ name: 'MHeader', kind: 'component', isExport: true }], hooks: [] },
+    { path: 'src/atoms/a-button/a-button.tsx', name: 'AtomButton', tier: 'atom', symbols: [{ name: 'AtomButton', kind: 'component', isExport: true }], hooks: [] },
+    { path: 'src/atoms/a-input/a-input.tsx', name: 'AtomInput', tier: 'atom', symbols: [{ name: 'AtomInput', kind: 'component', isExport: true }], hooks: [] },
+    { path: 'src/organisms/o-dashboard/o-dashboard.tsx', name: 'ODashboard', tier: 'organism', symbols: [{ name: 'ODashboard', kind: 'component', isExport: true }], hooks: [] }
+  ];
+
+  for (const comp of mockComponents) {
+    upsertFileIndex(db, {
+      path: comp.path,
+      mtime: Date.now(),
+      size: 500,
+      tier: comp.tier,
+      lines: 40,
+      chars: 800,
+      symbols: comp.symbols,
+      props: [],
+      hooks: comp.hooks,
+      imports: []
+    });
+  }
+
+  const results = queryHybridIndex(db, 'toggle a task item', { limit: 5 });
+  assert.ok(results.length > 0, 'Must return results');
+
+  const target = results.find((r) => r.name === 'useTaskListController');
+  assert.ok(target, 'Target useTaskListController must be returned in results');
+  assert.notStrictEqual(target.ftsRank, null, 'ftsRank must not be null');
+  assert.ok(target.ftsRank >= 1, 'ftsRank must be valid positive rank');
+
+  const targetIndex = results.findIndex((r) => r.name === 'useTaskListController');
+  assert.ok(targetIndex >= 0 && targetIndex < 3, `Expected target in top 3, found at index ${targetIndex}`);
+
+  try {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  } catch {}
 });
 

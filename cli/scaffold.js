@@ -1,59 +1,62 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { hasGum, gumInput, promptQuestion, renderBanner } from './terminal.js';
 import { obtainLicenseKey, fetchStarterKitFiles, loadLocalBlueprintFiles } from './license.js';
 import { runPillarsWizard } from './pillars-wizard.js';
+import { resolvePackageManager } from './build/detector.js';
+import { resolveFramework } from './project-detector.js';
+import { getFrameworkConfig, buildScaffoldPackageJson } from './scaffold-frameworks.js';
+
+const extractTargetName = (projectName, rawArgs) => {
+  if (projectName && !projectName.startsWith('-')) return projectName;
+  const isHeadless =
+    rawArgs.includes('--headless') ||
+    rawArgs.includes('--yes') ||
+    rawArgs.includes('-y') ||
+    rawArgs.includes('--ci') ||
+    rawArgs.includes('--non-interactive') ||
+    rawArgs.includes('--no-interactive') ||
+    Boolean(process.env.CI) ||
+    process.stdout?.isTTY === false ||
+    process.stdin?.isTTY === false;
+
+  return isHeadless ? 'my-molecular-app' : null;
+};
 
 export const runScaffold = async (projectName, rawArgs = [], onRunAudit = null) => {
   renderBanner('Chemical X: Molecular Architecture Scaffolder (npm create chemx)');
 
+  const fwArg = (rawArgs.find((a) => a.startsWith('--framework=')) || '').split('=')[1]
+    || (rawArgs.includes('--framework') ? rawArgs[rawArgs.indexOf('--framework') + 1] : null);
+  const frameworkId = resolveFramework({ frameworkArg: fwArg, cwd: process.cwd() });
+  const fwConfig = getFrameworkConfig(frameworkId);
+
   const licenseKey = await obtainLicenseKey(rawArgs, onRunAudit);
-  let isCommunity = false;
-  let files = {};
+  let rawFiles = {};
 
   if (!licenseKey) {
     process.stdout.write(
       '\n\x1b[38;2;98;201;255m⚡ Chemical X: Community Edition (Free)\x1b[0m\n' +
       'Open-source molecular architecture standard for high-velocity AI coding.\n' +
-      'Scorecards can be shared with the community via PR checks or the share menu.\n' +
-      'No background telemetry is exfiltrated without your explicit consent.\n' +
-      'Thank you for supporting Chemical X!\n\n'
+      `Framework Flavor: \x1b[1m\x1b[36m${fwConfig.name}\x1b[0m\n\n`
     );
-    files = loadLocalBlueprintFiles();
-    isCommunity = true;
+    rawFiles = loadLocalBlueprintFiles();
   } else {
-    files = await fetchStarterKitFiles(licenseKey);
+    rawFiles = await fetchStarterKitFiles(licenseKey);
   }
 
-  let targetName = (projectName && !projectName.startsWith('-')) ? projectName : null;
+  let targetName = extractTargetName(projectName, rawArgs);
   if (!targetName) {
-    const isHeadless =
-      rawArgs.includes('--headless') ||
-      rawArgs.includes('--yes') ||
-      rawArgs.includes('-y') ||
-      rawArgs.includes('--ci') ||
-      rawArgs.includes('--non-interactive') ||
-      rawArgs.includes('--no-interactive') ||
-      Boolean(process.env.CI) ||
-      process.stdout?.isTTY === false ||
-      process.stdin?.isTTY === false ||
-      Boolean(process.argv?.some((arg) => arg === '--headless' || arg === '--ci' || arg === '--yes' || arg === '-y'));
-
-    if (isHeadless) {
-      targetName = 'my-molecular-app';
-    } else {
-      targetName = hasGum()
-        ? gumInput('Project directory name:', 'my-molecular-app')
-        : await promptQuestion('Project directory name [my-molecular-app]: ');
-    }
+    targetName = hasGum()
+      ? gumInput('Project directory name:', 'my-molecular-app')
+      : await promptQuestion('Project directory name [my-molecular-app]: ');
   }
 
-  const finalDirName = targetName.trim() || 'my-molecular-app';
+  const finalDirName = (targetName || 'my-molecular-app').trim();
   const targetDir = path.resolve(process.cwd(), finalDirName);
 
-  const dirExists = fs.existsSync(targetDir);
-  const isDirNonEmpty = dirExists && fs.readdirSync(targetDir).length > 0;
-  if (isDirNonEmpty) {
+  if (fs.existsSync(targetDir) && fs.readdirSync(targetDir).length > 0) {
     process.stderr.write(`\x1b[31m✕ Error: Directory '${finalDirName}' already exists and is not empty.\x1b[0m\n`);
     process.exit(1);
   }
@@ -66,10 +69,23 @@ export const runScaffold = async (projectName, rawArgs = [], onRunAudit = null) 
     return rel;
   };
 
-  process.stdout.write(`Scaffolding Molecular Architecture into: \x1b[36m${finalDirName}/\x1b[0m\n`);
+  process.stdout.write(`Scaffolding ${fwConfig.name} Molecular Architecture into: \x1b[36m${finalDirName}/\x1b[0m\n`);
   fs.mkdirSync(targetDir, { recursive: true });
 
-  for (const [relPath, content] of Object.entries(files)) {
+  const scaffoldFiles = {};
+  for (const rel of fwConfig.files) {
+    if (rawFiles[rel] !== undefined) {
+      scaffoldFiles[rel] = rawFiles[rel];
+    }
+  }
+
+  scaffoldFiles['_package.json'] = JSON.stringify(buildScaffoldPackageJson(finalDirName, fwConfig), null, 2) + '\n';
+  scaffoldFiles['.chemx/config.json'] = JSON.stringify({ framework: fwConfig.id }, null, 2) + '\n';
+
+  for (const [relPath, content] of Object.entries(scaffoldFiles)) {
+    const isForbidden = fwConfig.forbiddenExtensions.some((ext) => relPath.endsWith(ext));
+    if (isForbidden) continue;
+
     const targetRel = resolveScaffoldTarget(relPath);
     const fullPath = path.join(targetDir, targetRel);
     const dirName = path.dirname(fullPath);
@@ -83,11 +99,25 @@ export const runScaffold = async (projectName, rawArgs = [], onRunAudit = null) 
   const isYes = rawArgs.includes('-y') || rawArgs.includes('--yes') || !process.stdin.isTTY;
   await runPillarsWizard(isYes ? ['--preset=recommended', '-y'] : [], targetDir);
 
+  const pm = resolvePackageManager(targetDir);
+  const autoInstall = rawArgs.includes('--install');
+  let installDone = false;
+
+  if (autoInstall) {
+    process.stdout.write(`\nInstalling dependencies via \x1b[36m${pm} install\x1b[0m...\n`);
+    const installRes = spawnSync(pm, ['install'], { cwd: targetDir, stdio: 'inherit' });
+    installDone = installRes.status === 0;
+  }
+
   process.stdout.write(
     `\n\x1b[1m\x1b[32m✔ Molecular Architecture project created successfully at ${finalDirName}!\x1b[0m\n\n`
   );
   process.stdout.write('Next Steps:\n');
-  process.stdout.write(`  1. cd ${finalDirName}\n`);
+  if (installDone) {
+    process.stdout.write(`  1. cd ${finalDirName}\n`);
+  } else {
+    process.stdout.write(`  1. cd ${finalDirName} && ${pm} install\n`);
+  }
   process.stdout.write('  2. Review AGENTS.md for line budgets and architecture standards\n');
   process.stdout.write('  3. Run npx chemx generate m-<feature> to create capsules\n');
   process.stdout.write('  4. Run npx chemx audit to scan for line budget compliance\n');
@@ -115,7 +145,8 @@ export const runInit = async (targetSubDir = 'src/chemical-x', rawArgs = [], onR
 
   let count = 0;
   for (const [relPath, content] of Object.entries(files)) {
-    if (relPath === '_package.json' || relPath === '_tsconfig.json' || relPath === '_vitest.config.ts') {
+    const isConfigBlueprint = ['_package.json', '_tsconfig.json', '_vitest.config.ts'].includes(relPath);
+    if (isConfigBlueprint) {
       continue;
     }
     const fullPath = path.join(targetDir, relPath);
@@ -135,4 +166,3 @@ export const runInit = async (targetSubDir = 'src/chemical-x', rawArgs = [], onR
 
 export { runGenerateCapsule, runGenerateWizard } from './generator.js';
 export { printHelp } from './help.js';
-

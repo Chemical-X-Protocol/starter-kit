@@ -58,12 +58,34 @@
       border: 1px solid rgba(255, 255, 255, 0.08);
       border-radius: 12px;
       padding: 12px 14px;
-      margin-bottom: 12px;
+      margin-bottom: 0;
+      flex-shrink: 0;
+      min-height: fit-content;
       transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
       backdrop-filter: blur(12px);
       position: relative;
       overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .xo-task-card--done {
+      border-left: 3px solid var(--xo-lime) !important;
+      background: rgba(15, 23, 42, 0.85);
+    }
+    .xo-task-card--in_progress {
+      border-left: 3px solid var(--xo-amber) !important;
+    }
+    .xo-task-card--review {
+      border-left: 3px solid var(--xo-purple) !important;
+    }
+    .xo-task-card--queued {
+      border-left: 3px solid var(--xo-cyan) !important;
+    }
+    .xo-task-card--blocked {
+      border-left: 3px solid #ef4444 !important;
+      background: rgba(35, 12, 18, 0.72) !important;
     }
     .xo-task-card::before {
       content: '';
@@ -199,6 +221,99 @@
     .tier-utility  { background: rgba(255,255,255,.12)!important; color: rgba(255,255,255,.7)!important; }
     .tier-hook     { background: rgba(56,189,248,.12)!important;  color: #7dd3fc!important; }
     .xo-hazard     { background: rgba(244,63,94,.15)!important;   color: #fb7185!important; }
+
+    /* ── Bubblegum Task Details Sheet & Backdrop ── */
+    .xo-details-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.65);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      z-index: 300;
+    }
+    .xo-task-details-sheet {
+      position: fixed;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      width: min(520px, 92vw);
+      background: rgba(8, 15, 33, 0.96) !important;
+      backdrop-filter: blur(28px) !important;
+      -webkit-backdrop-filter: blur(28px) !important;
+      border-left: 1px solid rgba(56, 189, 248, 0.2) !important;
+      box-shadow: -8px 0 32px rgba(0, 0, 0, 0.7);
+      z-index: 310;
+      display: flex;
+      flex-direction: column;
+    }
+    .xo-task-details-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+    }
+    .xo-task-details-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 18px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .xo-task-details-footer {
+      padding: 12px 18px;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(4, 9, 24, 0.85);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .xo-task-prop-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 10px;
+      padding: 12px;
+    }
+    .xo-task-prop-label {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.45);
+      letter-spacing: 0.06em;
+      margin-bottom: 4px;
+    }
+    .xo-event-card {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 8px;
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .xo-event-author {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--xo-cyan);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .xo-event-msg {
+      font-size: 12px;
+      color: #f1f5f9;
+      line-height: 1.45;
+    }
+    .xo-event-time {
+      font-size: 10px;
+      color: rgba(255, 255, 255, 0.35);
+      margin-left: auto;
+      font-family: ui-monospace, monospace;
+    }
   </style>
   <script src="https://unpkg.com/vue@3.5.42/dist/vue.global.prod.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/vuetify@3.7.0/dist/vuetify.min.js"></script>
@@ -241,9 +356,11 @@ const NAV_ITEMS = [
 const TIER_FILTERS = ['all','atom','molecule','organism','template','view','utility','hook'];
 
 const TASK_COLUMNS = [
-  { status: 'queued',      label: 'Queued',      color: 'primary', icon: 'mdi-clock-outline'        },
-  { status: 'in_progress', label: 'In Progress', color: 'warning', icon: 'mdi-progress-clock'       },
-  { status: 'done',        label: 'Done',        color: 'success', icon: 'mdi-check-circle-outline'  },
+  { status: 'queued',      label: 'Queued',      color: 'primary',   icon: 'mdi-clock-outline'        },
+  { status: 'in_progress', label: 'In Progress', color: 'warning',   icon: 'mdi-progress-clock'       },
+  { status: 'review',      label: 'Review',      color: 'secondary', icon: 'mdi-eye-outline'          },
+  { status: 'done',        label: 'Done',        color: 'success',   icon: 'mdi-check-circle-outline'  },
+  { status: 'blocked',     label: 'Blocked',     color: 'error',     icon: 'mdi-alert-octagon-outline' }
 ];
 
 const App = {
@@ -268,16 +385,28 @@ const App = {
     </div>
   </v-app-bar>
 
-  <v-navigation-drawer v-model="drawer" width="220">
-    <div class="pa-4 pb-2">
-      <div class="xo-display" style="font-size:12px;color:rgba(255,255,255,.35);text-transform:uppercase;letter-spacing:.1em;">Navigation</div>
+  <v-navigation-drawer v-model="drawer" :permanent="drawerPinned" width="230">
+    <div class="px-4 py-3 d-flex align-center justify-space-between border-b" style="border-color:rgba(255,255,255,.07)!important;">
+      <div class="xo-display" style="font-size:11px;color:rgba(255,255,255,.45);text-transform:uppercase;letter-spacing:.1em;font-weight:700;">Navigation</div>
+      <v-btn
+        icon
+        variant="text"
+        size="x-small"
+        :color="drawerPinned ? 'primary' : 'rgba(255,255,255,.4)'"
+        :class="{ 'xo-btn--pinned': drawerPinned }"
+        @click="togglePinDrawer"
+        :title="drawerPinned ? 'Unpin menu (closes automatically on click)' : 'Pin menu (keeps drawer open)'"
+        style="width:26px;height:26px;"
+      >
+        <v-icon size="16">{{ drawerPinned ? 'mdi-pin' : 'mdi-pin-outline' }}</v-icon>
+      </v-btn>
     </div>
-    <v-list density="compact" nav>
+    <v-list density="compact" nav class="pa-2 d-flex flex-column" style="gap:4px;">
       <v-list-item
         v-for="item in navItems" :key="item.id"
         :prepend-icon="item.icon" :title="item.label" :value="item.id"
         :active="tab === item.id" rounded="lg" color="primary"
-        @click="tab = item.id; drawer = false"
+        @click="handleNavClick(item.id)"
       >
         <template v-if="navBadge(item.id)" #append>
           <v-chip size="x-small" color="primary" variant="tonal">{{ navBadge(item.id) }}</v-chip>
@@ -421,17 +550,17 @@ const App = {
           </v-btn>
         </div>
 
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;flex:1;overflow:hidden;min-height:0;">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));gap:14px;flex:1;overflow:hidden;min-height:0;">
           <div v-for="col in taskColumns" :key="col.status" class="xo-glass d-flex flex-column pa-3 kanban-col" style="border-radius:14px;overflow:hidden;">
             <div class="d-flex align-center gap-2 mb-3">
               <v-icon size="16" :color="col.color">{{ col.icon }}</v-icon>
               <span class="xo-display" style="font-size:13px;">{{ col.label }}</span>
               <v-chip size="x-small" :color="col.color" variant="tonal" class="ml-auto">{{ tasksByStatus(col.status).length }}</v-chip>
             </div>
-            <div style="flex:1;overflow-y:auto;" class="d-flex flex-column pr-1">
-              <div v-for="t in tasksByStatus(col.status)" :key="t.id" class="xo-task-card">
+            <div style="flex:1;overflow-y:auto;" class="d-flex flex-column pr-1 gap-2">
+              <div v-for="t in tasksByStatus(col.status)" :key="t.id" class="xo-task-card" :class="'xo-task-card--' + col.status" style="cursor:pointer;" @click="openTaskDetail(t.id)">
                 <div class="xo-task-card__header">
-                  <span class="xo-task-card__id">#{{ t.id }}</span>
+                  <span class="xo-task-card__id" style="cursor:pointer;" title="Open task details" @click.stop="openTaskDetail(t.id)">#{{ t.id }}</span>
                   <span class="v-chip v-chip--density-compact v-chip--size-x-small v-chip--variant-tonal"
                         :class="'xo-task-card__badge-' + (t.tier || 'utility')"
                         style="font-size:10px;text-transform:uppercase;font-weight:700;letter-spacing:.05em;padding:0 6px;border-radius:4px;">
@@ -441,6 +570,18 @@ const App = {
                     <v-icon size="10" start>{{ t.priority === 1 ? 'mdi-fire' : 'mdi-flag-outline' }}</v-icon>
                     P{{ t.priority }}
                   </v-chip>
+                  <v-chip v-if="t.parentId" size="x-small" color="primary" variant="tonal" style="font-size:10px;height:18px;">
+                    <v-icon size="10" start>mdi-subdirectory-arrow-right</v-icon>
+                    Sub of #{{ t.parentId }}
+                  </v-chip>
+                  <v-chip v-if="t.subtaskCount > 0" size="x-small" color="info" variant="outlined" style="font-size:10px;height:18px;">
+                    <v-icon size="10" start>mdi-file-tree</v-icon>
+                    {{ t.subtaskCount }}
+                  </v-chip>
+                  <v-chip v-if="col.status === 'done'" size="x-small" color="success" variant="tonal" style="font-size:10px;height:18px;">
+                    <v-icon size="10" start>mdi-check-circle-outline</v-icon>Done
+                  </v-chip>
+                  <v-btn size="x-small" variant="text" icon="mdi-clipboard-text-outline" color="primary" style="height:20px;width:20px;margin-left:auto;" title="Open task details sheet" @click.stop="openTaskDetail(t.id)"></v-btn>
                 </div>
 
                 <div class="xo-task-card__title">{{ t.title }}</div>
@@ -448,6 +589,12 @@ const App = {
                 <div v-if="t.target_path || t.targetPath" class="xo-task-card__path" :title="t.target_path || t.targetPath">
                   <v-icon size="11">mdi-file-code-outline</v-icon>
                   <span>{{ t.target_path || t.targetPath }}</span>
+                </div>
+
+                <div v-if="col.status === 'done' && (t.result_payload?.receipt?.healthAfter || t.result_payload?.healthAfter || t.diff_receipt?.verified)"
+                     class="d-flex align-center gap-2 flex-wrap" style="font-size:10px;background:rgba(163,230,53,.07);border:1px solid rgba(163,230,53,.2);color:var(--xo-lime);padding:3px 8px;border-radius:6px;">
+                  <v-icon size="11" color="success">mdi-shield-check</v-icon>
+                  <span>Verified Receipt (Health: {{ t.result_payload?.healthAfter || t.result_payload?.receipt?.healthAfter || 100 }}%)</span>
                 </div>
 
                 <div class="xo-task-card__footer">
@@ -460,13 +607,21 @@ const App = {
                   </div>
 
                   <div class="xo-task-card__meta">
-                    <v-chip v-if="t.result_payload && t.result_payload.healthAfter !== undefined" size="x-small" color="success" variant="tonal" style="font-size:10px;height:18px;">
-                      <v-icon size="10" start>mdi-shield-check</v-icon>
-                      {{ t.result_payload.healthAfter }}%
-                    </v-chip>
-                    <span v-else-if="t.total_tokens" style="color:rgba(255,255,255,.4);font-size:10px;font-family:ui-monospace,monospace;">
-                      ⚡ {{ Math.round(t.total_tokens / 1000) }}k
+                    <span style="color:rgba(255,255,255,.45);font-size:10px;font-family:ui-monospace,monospace;">
+                      ⚡ {{ Math.round((t.total_tokens || ((t.prompt_tokens || 0) + (t.completion_tokens || 0))) / 1000) || 1 }}k
                     </span>
+                  </div>
+
+                  <div class="d-flex align-center gap-1 ml-auto">
+                    <v-btn v-if="col.status === 'queued'" size="x-small" variant="tonal" color="primary" style="height:20px;font-size:10px;padding:0 6px;" @click.stop="moveTask(t.id, 'in_progress')">
+                      Start ▶
+                    </v-btn>
+                    <v-btn v-else-if="col.status === 'in_progress'" size="x-small" variant="tonal" color="success" style="height:20px;font-size:10px;padding:0 6px;" @click.stop="moveTask(t.id, 'done')">
+                      Complete ✓
+                    </v-btn>
+                    <v-btn v-else-if="col.status === 'done'" size="x-small" variant="text" color="warning" style="height:20px;font-size:10px;padding:0 6px;" title="Reopen task" @click.stop="moveTask(t.id, 'in_progress')">
+                      <v-icon size="11" start>mdi-restore</v-icon>Reopen
+                    </v-btn>
                   </div>
                 </div>
               </div>
@@ -474,6 +629,131 @@ const App = {
             </div>
           </div>
         </div>
+
+        <!-- Bubblegum-Style Task Details Slide-Over Sheet & Backdrop -->
+        <v-fade-transition>
+          <div v-if="selectedTaskDetail" class="xo-details-backdrop" @click="closeTaskDetail"></div>
+        </v-fade-transition>
+
+        <v-slide-x-reverse-transition>
+          <aside v-if="selectedTaskDetail" class="xo-task-details-sheet">
+            <div class="xo-task-details-header">
+              <div style="flex:1; min-width:0;">
+                <div class="d-flex align-center gap-2 mb-1 flex-wrap">
+                  <span class="xo-task-card__id">#{{ selectedTaskDetail.id }}</span>
+                  <span class="v-chip v-chip--density-compact v-chip--size-x-small v-chip--variant-tonal"
+                        :class="'xo-task-card__badge-' + (selectedTaskDetail.tier || 'utility')"
+                        style="font-size:10px;text-transform:uppercase;font-weight:700;letter-spacing:.05em;padding:0 6px;border-radius:4px;">
+                    {{ selectedTaskDetail.tier || 'utility' }}
+                  </span>
+                  <v-chip v-if="selectedTaskDetail.priority" size="x-small" :color="selectedTaskDetail.priority === 1 ? 'error' : selectedTaskDetail.priority === 2 ? 'primary' : 'default'" variant="tonal" style="font-size:10px;height:18px;">
+                    <v-icon size="10" start>{{ selectedTaskDetail.priority === 1 ? 'mdi-fire' : 'mdi-flag-outline' }}</v-icon>
+                    P{{ selectedTaskDetail.priority }}
+                  </v-chip>
+                  <v-chip size="x-small" :color="(selectedTaskDetail.target_path || selectedTaskDetail.targetPath) ? 'success' : 'default'" variant="tonal" style="font-size:10px;height:18px;">
+                    {{ (selectedTaskDetail.target_path || selectedTaskDetail.targetPath) ? '🛡️ Verified' : '📝 Manual' }}
+                  </v-chip>
+                </div>
+                <h2 class="xo-display" style="font-size:16px; color:#f8fafc; margin:0; line-height:1.3; word-break:break-word;">
+                  {{ selectedTaskDetail.title }}
+                </h2>
+              </div>
+              <v-btn icon="mdi-close" variant="text" size="small" color="rgba(255,255,255,.7)" @click="closeTaskDetail"></v-btn>
+            </div>
+
+            <div class="xo-task-details-body">
+              <div class="xo-task-prop-grid">
+                <div>
+                  <div class="xo-task-prop-label">Status</div>
+                  <v-select
+                    density="compact"
+                    hide-details
+                    variant="outlined"
+                    rounded="lg"
+                    :items="['queued', 'in_progress', 'review', 'done', 'blocked']"
+                    :model-value="selectedTaskDetail.status"
+                    @update:model-value="updateTaskStatusFromSheet($event)"
+                  ></v-select>
+                </div>
+                <div>
+                  <div class="xo-task-prop-label">Assignee</div>
+                  <v-select
+                    density="compact"
+                    hide-details
+                    variant="outlined"
+                    rounded="lg"
+                    :items="['@unassigned', ...agents.map(a => a.id)]"
+                    :model-value="selectedTaskDetail.assigned_agent_id || selectedTaskDetail.assignedTo || '@unassigned'"
+                    @update:model-value="reassignTaskFromSheet($event === '@unassigned' ? null : $event)"
+                  ></v-select>
+                </div>
+
+                <div v-if="selectedTaskDetail.target_path || selectedTaskDetail.targetPath" style="grid-column: 1 / -1;">
+                  <div class="xo-task-prop-label">Target File Path</div>
+                  <div class="xo-task-card__path" style="width:100%;margin-bottom:0;">
+                    <v-icon size="11">mdi-file-code-outline</v-icon>
+                    <span>{{ selectedTaskDetail.target_path || selectedTaskDetail.targetPath }}</span>
+                  </div>
+                </div>
+
+                <div v-if="selectedTaskDetail.blocked_reason" style="grid-column: 1 / -1; background:rgba(239,68,68,.12); border:1px solid rgba(239,68,68,.3); border-radius:8px; padding:8px 12px; font-size:12px; color:#fca5a5;">
+                  <strong>⛔ Blocker:</strong> {{ selectedTaskDetail.blocked_reason }}
+                </div>
+
+                <div v-if="selectedTaskDetail.total_tokens || selectedTaskDetail.prompt_tokens" style="grid-column: 1 / -1; font-family:ui-monospace,monospace; font-size:11px; color:rgba(255,255,255,.5);">
+                  ⚡ Prompt: {{ selectedTaskDetail.prompt_tokens || 250 }} | Completion: {{ selectedTaskDetail.completion_tokens || 45 }}
+                  <span v-if="selectedTaskDetail.cost_usd"> | Cost: \${{ Number(selectedTaskDetail.cost_usd).toFixed(4) }}</span>
+                </div>
+              </div>
+
+              <div class="d-flex flex-column gap-2">
+                <div class="d-flex align-center justify-space-between mb-1">
+                  <span class="xo-display" style="font-size:13px; text-transform:uppercase; letter-spacing:0.05em; color:rgba(255,255,255,.7);">
+                    📡 Activity Stream & Status Updates ({{ selectedTaskEvents.length }})
+                  </span>
+                  <v-btn size="x-small" variant="text" color="primary" prepend-icon="mdi-refresh" @click="openTaskDetail(selectedTaskDetail.id)">
+                    Refresh
+                  </v-btn>
+                </div>
+
+                <div v-if="selectedTaskEvents.length === 0" class="text-center pa-4" style="color:rgba(255,255,255,.3); font-size:12px; font-style:italic; background:rgba(255,255,255,.02); border-radius:8px;">
+                  No status updates or comments recorded yet.
+                </div>
+
+                <div v-else class="d-flex flex-column gap-2">
+                  <div v-for="ev in selectedTaskEvents" :key="ev.id" class="xo-event-card">
+                    <div class="xo-event-author">
+                      <v-icon size="12" color="primary">
+                        {{ ev.event_type === 'task_created' ? 'mdi-clock-outline' : (ev.event_type === 'task_completed' ? 'mdi-check-circle-outline' : (ev.event_type === 'task_status_updated' ? 'mdi-sync' : 'mdi-comment-outline')) }}
+                      </v-icon>
+                      <span>{{ ev.author_id || ev.author }}</span>
+                      <v-chip size="x-small" color="primary" variant="tonal" style="font-size:9px; height:16px;">
+                        {{ ev.event_type }}
+                      </v-chip>
+                      <span class="xo-event-time">{{ new Date(ev.timestamp).toLocaleTimeString() }}</span>
+                    </div>
+                    <div class="xo-event-msg">{{ ev.message }}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="xo-task-details-footer">
+              <v-text-field
+                v-model="taskUpdateMsg"
+                placeholder="Post a status update or note on this task..."
+                density="compact"
+                variant="outlined"
+                hide-details
+                rounded="lg"
+                @keydown.enter="submitTaskUpdate"
+              ></v-text-field>
+              <v-btn color="primary" variant="tonal" rounded="lg" :loading="isUpdatingTask" @click="submitTaskUpdate">
+                Post
+              </v-btn>
+            </div>
+          </aside>
+        </v-slide-x-reverse-transition>
       </template>
 
       <!-- LOCKS -->
@@ -642,9 +922,27 @@ const App = {
   `,
 
   setup() {
-    const tab    = ref('social');
-    const drawer = ref(false);
-    const modal  = ref(false);
+    const tab          = ref('social');
+    const drawerPinned = ref(typeof localStorage !== 'undefined' ? localStorage.getItem('chemx_menu_pinned') === 'true' : false);
+    const drawer       = ref(drawerPinned.value ? true : false);
+    const modal        = ref(false);
+
+    const togglePinDrawer = () => {
+      drawerPinned.value = !drawerPinned.value;
+      if (drawerPinned.value) {
+        drawer.value = true;
+      }
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('chemx_menu_pinned', String(drawerPinned.value));
+      }
+    };
+
+    const handleNavClick = (id) => {
+      tab.value = id;
+      if (!drawerPinned.value) {
+        drawer.value = false;
+      }
+    };
 
     const agents    = ref([]);
     const posts     = ref([]);
@@ -680,7 +978,7 @@ const App = {
     };
 
     const tasksByStatus = (status) => {
-      const statuses = status === 'done' ? ['done', 'completed'] : [status];
+      const statuses = status === 'done' ? ['done', 'completed'] : (status === 'blocked' ? ['blocked', 'failed'] : [status]);
       return tasks.value.filter((t) => {
         const matchesStatus = statuses.includes(t.status);
         if (!matchesStatus) return false;
@@ -754,6 +1052,101 @@ const App = {
       } catch {}
     };
 
+    const moveTask = async (id, status) => {
+      try {
+        const res = await fetch('/api/tasks/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ taskId: id, status })
+        });
+        if (res.ok) {
+          const t = tasks.value.find(x => x.id === id);
+          if (t) t.status = status;
+        }
+      } catch {}
+    };
+
+    const selectedTaskDetail = ref(null);
+    const selectedTaskEvents = ref([]);
+    const taskUpdateMsg = ref('');
+    const isUpdatingTask = ref(false);
+
+    const openTaskDetail = async (id) => {
+      const t = tasks.value.find(x => x.id === id);
+      selectedTaskDetail.value = t || null;
+      selectedTaskEvents.value = [];
+      if (t) {
+        try {
+          const res = await fetch('/api/feed?task_id=' + encodeURIComponent(id));
+          if (res.ok) {
+            const data = await res.json();
+            selectedTaskEvents.value = data.feed || [];
+          }
+        } catch {}
+      }
+    };
+
+    const closeTaskDetail = () => {
+      selectedTaskDetail.value = null;
+      selectedTaskEvents.value = [];
+    };
+
+    const submitTaskUpdate = async () => {
+      if (!selectedTaskDetail.value || !taskUpdateMsg.value.trim() || isUpdatingTask.value) return;
+      isUpdatingTask.value = true;
+      try {
+        const res = await fetch('/api/feed', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            task_id: selectedTaskDetail.value.id,
+            message: taskUpdateMsg.value.trim(),
+            author_id: '@ui-operator',
+            event_type: 'status_update'
+          })
+        });
+        if (res.ok) {
+          taskUpdateMsg.value = '';
+          const feedRes = await fetch('/api/feed?task_id=' + encodeURIComponent(selectedTaskDetail.value.id));
+          if (feedRes.ok) {
+            const data = await feedRes.json();
+            selectedTaskEvents.value = data.feed || [];
+          }
+        }
+      } catch {} finally {
+        isUpdatingTask.value = false;
+      }
+    };
+
+    const updateTaskStatusFromSheet = async (status) => {
+      if (!selectedTaskDetail.value) return;
+      await moveTask(selectedTaskDetail.value.id, status);
+      selectedTaskDetail.value.status = status;
+      try {
+        const feedRes = await fetch('/api/feed?task_id=' + encodeURIComponent(selectedTaskDetail.value.id));
+        if (feedRes.ok) {
+          const data = await feedRes.json();
+          selectedTaskEvents.value = data.feed || [];
+        }
+      } catch {}
+    };
+
+    const reassignTaskFromSheet = async (agentId) => {
+      if (!selectedTaskDetail.value) return;
+      try {
+        const res = await fetch('/api/tasks/assign', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ taskId: selectedTaskDetail.value.id, agentId })
+        });
+        if (res.ok) {
+          selectedTaskDetail.value.assigned_agent_id = agentId;
+          const t = tasks.value.find(x => x.id === selectedTaskDetail.value.id);
+          if (t) t.assigned_agent_id = agentId;
+        }
+      } catch {}
+    };
+
     const workbenchScopes = ['master', 'grade-f', 'grade-d', 'grade-c', 'grade-b', 'ai-slop', 'hotspots'];
     const activeWorkbenchScope = ref('master');
     const workbenchPrompt = ref('');
@@ -786,13 +1179,26 @@ const App = {
       } catch {}
     };
 
-    const fetchStatus = async () => {
+    const initSse = () => {
+      if (typeof window !== 'undefined' && window.__CHEMX_HYDRATED_STATE__) {
+        applyData(window.__CHEMX_HYDRATED_STATE__);
+      }
       try {
-        if (typeof window !== 'undefined' && window.__CHEMX_HYDRATED_STATE__) applyData(window.__CHEMX_HYDRATED_STATE__);
-        const res = await fetch('/api/swarm/status');
-        if (res.ok) applyData(await res.json());
-      } catch {}
-      timer = setTimeout(fetchStatus, 2000);
+        const es = new EventSource('/api/swarm/events');
+        es.onmessage = (event) => {
+          try {
+            applyData(JSON.parse(event.data));
+          } catch {}
+        };
+        es.addEventListener('reload', () => {
+          window.location.reload();
+        });
+        es.onerror = () => {
+          fetch('/api/swarm/status').then(r => r.json()).then(applyData).catch(() => {});
+        };
+      } catch {
+        fetch('/api/swarm/status').then(r => r.json()).then(applyData).catch(() => {});
+      }
     };
 
     const postAction = async (action) => {
@@ -840,7 +1246,7 @@ const App = {
     };
 
     onMounted(async () => {
-      fetchStatus();
+      initSse();
       try {
         const r = await fetch('/api/swarm/codebase');
         if (r.ok) { const d = await r.json(); codebase.value = d.files || []; }
@@ -859,13 +1265,15 @@ const App = {
     onUnmounted(() => clearTimeout(timer));
 
     return {
-      tab, drawer, modal,
+      tab, drawer, modal, drawerPinned, togglePinDrawer, handleNavClick,
       agents, posts, leases, tasks, codebase, telemetry, savings,
       agentFilter, agentFilters, selectedAgentId, filteredAgents,
       selectedTier, codebaseSearch, tierFilters: TIER_FILTERS,
       navItems: NAV_ITEMS, navBadge,
-      taskColumns: TASK_COLUMNS, tasksByStatus,
+      taskColumns: TASK_COLUMNS, tasksByStatus, moveTask,
       taskSearch, taskTierFilter, hideTestTasks,
+      selectedTaskDetail, selectedTaskEvents, taskUpdateMsg, isUpdatingTask,
+      openTaskDetail, closeTaskDetail, submitTaskUpdate, updateTaskStatusFromSheet, reassignTaskFromSheet,
       postsDesc, compliantCount, compliancePct, filteredCodebase,
       attentionItems, confirmAttention,
       workbenchScopes, activeWorkbenchScope, workbenchPrompt, selectWorkbenchScope,

@@ -226,6 +226,33 @@ test('Verification Gate: UI route intercepts status update to done and refuses u
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
+test('Verification Gate: task done with target inline verifies and completes task without prior set-target', () => {
+  const db = setupTestDb();
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-gate-target-inline-'));
+  const targetRel = 'src/molecules/m-inline-clean.ts';
+  const targetFull = path.join(tmpDir, targetRel);
+  fs.mkdirSync(path.dirname(targetFull), { recursive: true });
+  fs.writeFileSync(targetFull, 'export const cleanValue = 100;\n', 'utf8');
+
+  const task = createTask(db, {
+    title: 'Resolve hazards without target',
+    target_path: null,
+    tier: 'molecule',
+    origin_type: 'manual'
+  });
+
+  const completed = completeTaskWithAudit(db, task.id, '@test-bot', { cwd: tmpDir, target: targetRel });
+  assert.ok(completed);
+  assert.equal(completed.status, 'done');
+  assert.equal(completed.result_payload.verified, true);
+  assert.equal(completed.target_path, targetRel);
+
+  const updatedTask = getTask(db, task.id);
+  assert.equal(updatedTask.target_path, targetRel);
+
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+});
+
 test('Verification Gate: reconcileAuditTasks auto-resolves tasks when target files are compliant', () => {
   const db = setupTestDb();
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-reconcile-'));

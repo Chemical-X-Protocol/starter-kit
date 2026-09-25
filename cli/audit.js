@@ -1,5 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { isSourceFile as isPolyglotSourceFile } from './languages.js';
+import { loadProjectConfig } from './config/index.js';
 import { auditCode, PILLARS, RULE_REGISTRY, createHookShapeRegistry } from './audit/rules.js';
 import { createPatternRegistry } from './audit/pattern-detector.js';
 import {
@@ -82,14 +84,8 @@ const IGNORED_DIRS = new Set([
   'out'
 ]);
 
-const EXCLUDED_NAME_PATTERNS = ['.test.', '.spec.', '.min.'];
-
 const isSourceFile = (name) => {
-  const isExtensionValid = /\.(tsx|ts|jsx|js|vue)$/.test(name);
-  if (!isExtensionValid) return false;
-  if (name.endsWith('.d.ts')) return false;
-  const isExcluded = EXCLUDED_NAME_PATTERNS.some((pat) => name.includes(pat));
-  return !isExcluded;
+  return isPolyglotSourceFile(name, { includeTests: false });
 };
 
 export const auditFile = (filePath, relativePath) => {
@@ -117,7 +113,8 @@ const auditFileEntry = (fullPath, relPath, scanOptions) => {
   const fileViolations = auditCode(content, fullPath, relPath, {
     patternRegistry: scanOptions.patternRegistry,
     hookRegistry: scanOptions.hookRegistry,
-    fast: scanOptions.fast
+    fast: scanOptions.fast,
+    config: scanOptions.config
   });
 
   return { fileStat, hookCount, fileViolations };
@@ -179,11 +176,13 @@ export const runAudit = (targetDir = 'src', options = {}) => {
   const absoluteTarget = path.isAbsolute(targetDir) ? targetDir : path.resolve(cwd, targetDir);
   const patternRegistry = createPatternRegistry();
   const hookRegistry = createHookShapeRegistry();
+  const config = options.config || loadProjectConfig(cwd);
   const { violations, fileStats, totalHooks } = scanTree(absoluteTarget, cwd, {
     patternRegistry,
     hookRegistry,
     fast: Boolean(options.fast),
-    fileList: options.fileList || null
+    fileList: options.fileList || null,
+    config
   });
 
   const crossHookViolations = hookRegistry.validateCrossHookConsistency();
@@ -229,7 +228,7 @@ export const runAudit = (targetDir = 'src', options = {}) => {
   const contextAnalysis = calculateTokenBurnAnalytics(fileStats, options);
   const hotspots = calculateHotspots(violations, fileStats, 5);
   const aiSlop = calculateAiSlopScore(violations, scannedFiles);
-  const patterns = patternRegistry.resolveHarmonizationCandidates(hotspots);
+  const patterns = patternRegistry.resolveHarmonizationCandidates(hotspots, { ruleOfThree: config?.rules?.ruleOfThreeAbstractions ?? config?.ruleOfThreeAbstractions ?? true });
   const roadmap = buildRemediationRoadmap({ hotspots, violations, patterns });
 
   const stage = options.stage || (options.relax ? 'draft' : 'strict');

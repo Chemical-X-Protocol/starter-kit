@@ -204,3 +204,14 @@ test('ui-handlers: handleSwarmStatus returns enriched tasks with token stamps', 
   assert.ok(task.tokenStamp.startsWith('[P:'));
   assert.ok(task.tokenStamp.includes('Cost: $'));
 });
+
+test('ui-template-kanban: includes Bubblegum-style task details hover sheet and backdrop', () => {
+  assert.ok(VIEW_KANBAN_TEMPLATE.includes('task-details-sheet'));
+  assert.ok(VIEW_KANBAN_TEMPLATE.includes('task-details-backdrop'));
+  assert.ok(VIEW_KANBAN_TEMPLATE.includes('openTaskDetail'));
+  assert.ok(VIEW_KANBAN_TEMPLATE.includes('closeTaskDetail'));
+  assert.ok(VIEW_KANBAN_TEMPLATE.includes('submitTaskUpdate'));
+  assert.ok(UI_STYLES.includes('.task-details-sheet'));
+  assert.ok(UI_STYLES.includes('.task-details-backdrop'));
+});
+

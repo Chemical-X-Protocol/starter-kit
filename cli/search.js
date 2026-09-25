@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { isSourceFile as isPolyglotSourceFile } from './languages.js';
 import {
   openIndexDb,
   getAllIndexedFiles,
@@ -77,11 +78,7 @@ const IGNORED_DIRS = new Set([
 
 const EXCLUDED_NAME_PATTERNS = ['.test.', '.spec.', '.min.'];
 
-const isSourceFile = (name) => {
-  const isExtensionValid = /\.(tsx|ts|jsx|js|vue|svelte)$/.test(name);
-  if (!isExtensionValid) return false;
-  return !EXCLUDED_NAME_PATTERNS.some((pat) => name.includes(pat));
-};
+const isSourceFile = (name) => isPolyglotSourceFile(name);
 
 const scanFilesRecursively = (dir, baseDir, fileList = []) => {
   if (!fs.existsSync(dir)) return fileList;

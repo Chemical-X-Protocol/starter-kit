@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert";
 import { auditCode } from "./rules.js";
+import { formatScorecardSection } from './reporter-sections.js';
+import { formatGradeASection } from './reporter-grades.js';
+import { generateMarkdownReport } from './reporter-markdown.js';
 
 test("Audit Rules: flags repetitive dispatch switch statement as CONTROL_FLOW_DISPATCH_SWITCH", () => {
   const code = `
@@ -330,5 +333,29 @@ export const useSecond = () => {
   assert.ok(inconsistentViolation, "Expected cross-hook naming inconsistency failure for loading vs isLoading");
   assert.strictEqual(inconsistentViolation.severity, "HIGH");
   assert.ok(inconsistentViolation.hazard.includes("isLoading"));
+});
+
+test("Audit Reporter: includes explicit architectural health notice distinguishing from production readiness", () => {
+  const mockReport = {
+    metrics: { scannedFiles: 5, totalLoc: 200, avgLoc: 40, largestFile: { filePath: 'src/a.ts', lineCount: 50 }, moleculeCount: 2, moleculeCompliantPct: 100, hookCount: 1 },
+    health: { score: 100, grade: 'A+', label: 'Pristine' },
+    pillars: { 'Pillar 1': { status: 'PASSED', violations: 0, critical: 0, high: 0, medium: 0, low: 0 } },
+    hotspots: [],
+    contextAnalysis: { riskLevel: 'LOW', estimatedTokens: 1000, estimatedExcessTokens: 0, potentialSavingsPct: 0 },
+    violations: [],
+    aiSlop: { score: 100, grade: 'A+', label: 'Pure Artisanal' }
+  };
+
+  const scorecard = formatScorecardSection(mockReport);
+  assert.ok(scorecard.includes('Architectural grade measures AST rules only'));
+  assert.ok(scorecard.includes('chemx verify'));
+
+  const gradeA = formatGradeASection(mockReport);
+  assert.ok(gradeA.includes('Architectural grade measures AST rules only'));
+  assert.ok(gradeA.includes('chemx verify'));
+
+  const markdown = generateMarkdownReport(mockReport);
+  assert.ok(markdown.includes('Architectural grades measure AST rule compliance only'));
+  assert.ok(markdown.includes('chemx verify'));
 });
 

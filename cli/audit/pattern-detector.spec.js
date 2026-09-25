@@ -94,3 +94,20 @@ test('categorizeUiStructure: maps semantic AST topologies to specialized capsule
   assert.equal(fallbackRes.suggestedCapsule, 'm-feature-card');
 });
 
+test('Rule of Three: requires pattern across 3+ files unless a hotspot is involved', () => {
+  const registry = createPatternRegistry();
+  const template = `<template><v-sheet><x-btn>1</x-btn><x-btn>2</x-btn></v-sheet></template>`;
+
+  recordTemplatePatterns(registry, template, 'src/components/A.vue');
+  recordTemplatePatterns(registry, template, 'src/components/B.vue');
+
+  // With Rule of Three enabled and no hotspots, 2 files do not trigger premature abstraction
+  const strictCandidates = registry.resolveHarmonizationCandidates([], { ruleOfThree: true });
+  assert.equal(strictCandidates.length, 0, '2 occurrences without hotspot should not trigger premature abstraction');
+
+  // When a 3rd file adopts the pattern, Rule of Three threshold is satisfied
+  recordTemplatePatterns(registry, template, 'src/components/C.vue');
+  const satisfiedCandidates = registry.resolveHarmonizationCandidates([], { ruleOfThree: true });
+  assert.equal(satisfiedCandidates.length, 1, '3 occurrences should satisfy Rule of Three threshold');
+});
+

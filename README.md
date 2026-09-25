@@ -26,23 +26,35 @@ Create a brand new molecular architecture project in seconds using your preferre
 # npm (interactive or pass project directory)
 npm create chemx my-molecular-app
 
+# Choose framework (react, vue, or svelte)
+npm create chemx my-molecular-app -- --framework=react
+
+# Auto-install dependencies upon scaffolding
+npm create chemx my-molecular-app -- --framework=react --install
+
 # Automated / Agent / Headless mode (skips prompts, scaffolds Community Edition immediately)
 npm create chemx my-molecular-app -- --yes
 
 # npx
-npx create-chemx my-molecular-app --yes
+npx create-chemx my-molecular-app --framework=react --install --yes
 
 # pnpm / yarn / bun
-pnpm create chemx my-molecular-app
-yarn create chemx my-molecular-app
+pnpm create chemx my-molecular-app --framework=vue
+yarn create chemx my-molecular-app --framework=svelte
 bun create chemx my-molecular-app
 ```
+
+### Framework & Installation Flags
+* `--framework=<react|vue|svelte>` (or `-f <name>`): Selects target framework. Scaffolds strictly matching components, file templates, and dependencies with zero cross-framework leakage.
+* `--install`: Runs package manager install immediately after project creation.
+* `--skip-install` (or `--no-install`): Explicitly skips automatic dependency installation (default).
+* `--yes` (or `-y`): Automatically confirms prompts with standard molecular presets.
 
 ### Headless & Autonomous Agent Mode
 When running in unattended environments (CI/CD pipelines, Cursor Agent, Windsurf, Claude Code, Antigravity), pass `--yes` (or `-y`, `--ci`, `--headless`) to bypass interactive terminal menus and immediately scaffold the free Community Edition with recommended architectural pillars:
 
 ```bash
-npx create-chemx my-molecular-app --yes
+npx create-chemx my-molecular-app --framework=react --install --yes
 ```
 
 ### Package Architecture: Scaffolder vs Command Engine
@@ -233,12 +245,13 @@ Scaffold production-ready component capsules matching strict zero-raw-DOM standa
 ```bash
 # Molecule capsule (component, controller, glass styling, types, spec)
 chemx m-task-card
+chemx m-task-card --framework=react       # Explicit framework (react, vue, or svelte)
 
 # Atom foundation (the only tier permitted raw HTML elements)
-chemx a-status-pill
+chemx a-status-pill --framework=vue
 
 # Organism module (complex grouping of molecules and atoms)
-chemx o-workspace-header
+chemx o-workspace-header --framework=svelte
 
 # Pure reactive hook / domain composable
 chemx use-task-filter
@@ -256,12 +269,59 @@ chemx team task list --agent=@agent-alpha
 # Claim an open task
 chemx team task claim 1 --as=@agent-alpha
 
-# Mark task complete (automatically re-audits target file on disk to guarantee zero hazards)
-chemx team task done 1 --as=@agent-alpha
+# Mark task complete with inline AST verification gate
+# Re-audits target file on disk to guarantee zero blocking hazards before completion:
+chemx team task done 1 --as=@agent-alpha --target=src/components/m-card.vue
+
+# Emergency override / escape hatch: complete task despite non-blocking warnings:
+chemx team task done 1 --as=@agent-alpha --target=src/components/m-card.vue --force
 
 # Inspect multi-agent swarm status and lock queues
 chemx team status
 ```
+
+### 5. Live Swarm Web UI & Direct Task Routing
+Launch the real-time Chemical X Swarm Control Panel backed by SQLite (`.chemx/index.db`) with full SPA routing and deep linking:
+```bash
+# Launch Live Swarm Web UI (default: http://localhost:4173)
+npx chemx ui
+
+# Launch on a custom port
+npx chemx ui --port=8080
+```
+
+* **Direct Task Routing:** Link straight to any task in the Kanban board: `http://localhost:4173/tasks/:id` (e.g. `http://localhost:4173/tasks/42`)
+* **Auto-Focus & Highlighting:** Opening a task route automatically switches to the **📋 Tasks & Kanban** view, smoothly centers the card, and illuminates it with a cyan highlight glow.
+* **One-Click Share:** Click the `🔗` icon on any Kanban card to copy its direct URL straight to your clipboard.
+* **Single-Task API:** Fetch individual task state and verification diff receipts directly via `GET /api/tasks/:id`.
+
+---
+
+## Language-Agnostic Polyglot Architecture
+
+Chemical X is **language-agnostic**. The core physics of AI agent code generation—**Zero Context Rot, Monolith Slicing, and Verified Anti-Hallucination Gating**—apply universally across backend, frontend, and systems stacks.
+
+### Supported Language Ecosystems
+
+| Language / Framework | Extensions | Parser Engine | Capabilities |
+| :--- | :--- | :--- | :--- |
+| **C# / .NET 10** | `.cs` | Structural Regex / AST | Line budgets, MediatR handlers, shallow catch detection, fake in-memory stubs (`UseInMemoryDatabase`), `using` namespace indexing |
+| **Python** | `.py` | Structural Regex / AST | Line budgets, AI slop text patterns, fake assertions (`assert True`), `def`/`class` and `import` indexing |
+| **Go** | `.go` | Structural Regex / AST | Line budgets, mock data scanning, tautological assertions, `func`/`type` package indexing |
+| **Rust** | `.rs` | Structural Regex / AST | Line budgets, AI slop text patterns, secret scanning, struct and fn indexing |
+| **TypeScript / JavaScript** | `.ts`, `.tsx`, `.js`, `.jsx` | `@babel/parser` AST | Full 11-Pillar AST visitors, Zero-Raw-DOM, hook contracts, 2-stage booleans |
+| **Vue & Svelte** | `.vue`, `.svelte` | Babel + Template Registry | SFC template clone detection, reactive state verification |
+
+### Two-Tier Decoupled Audit Pipeline
+1. **Tier 1: Universal Polyglot Rules (Runs on ALL languages)**
+   * **Sliding-Scale Line Budgets:** Flags files exceeding 100, 500, or 1,000 lines (`LINE_BUDGET_FILE`) to eliminate LLM context rot.
+   * **AI Slop Text Patterns:** Strips conversational residue (*"Here is the code"*), leaked markdown code fences, and lazy truncation placeholders (`// ... rest of implementation`).
+   * **Synthetic Mock Data Scanners:** Catches fake emails (`@example.com`), `555-` phone numbers, and hardcoded dummy collections in services.
+   * **Security & Secret Guards:** Scans for high-entropy API keys, JWTs, AWS credentials, and unmanaged sensitive logging.
+   * **Polyglot Fake Green Tests:** Catches tautological assertions in C# (`Assert.True(true)`), Python (`assert True`), and Go (`assert.True(t, true)`).
+2. **Tier 2: Deep Language-Specific Analyzers**
+   * **Babel Engine:** Deep AST inspection for JS/TS/Vue/Svelte (zero false-positive syntax errors on non-JS code).
+   * **C# / Clean Architecture Analyzer:** Flags empty `catch (Exception) {}` blocks, simulated delays (`Task.Delay`), and monolithic controllers.
 
 ---
 

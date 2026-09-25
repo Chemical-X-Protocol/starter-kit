@@ -1,11 +1,6 @@
 import { getSwarmStatus, postFeedEvent, listTasks } from './team/team-db.js';
 import { calculateSavings } from './ui-actions-helpers.js';
-import {
-  getForumCategories,
-  resolveAgentMeta,
-  formatTokenStamp,
-  updateAgentSignatureInDb
-} from './ui-forum-data.js';
+import { getForumCategories, resolveAgentMeta, formatTokenStamp, updateAgentSignatureInDb } from './ui-forum-data.js';
 import { getForumTopics, getTopicPosts, createForumTopic } from './ui-forum-topics.js';
 
 const fallbackTelemetry = { promptTokens: 0, completionTokens: 0, totalTokens: 0, totalCost: 0 };
@@ -60,10 +55,13 @@ export const handleSwarmStatus = (db, cwd = process.cwd()) => {
     const subtaskCount = rawTasks.filter((st) => st.parent_id === t.id).length;
     return {
       ...t,
+      moscow: t.moscow || 'must',
+      vds_priority: t.vds_priority || 'medium',
+      task_url: t.task_url || ('http://localhost:3000/tasks/' + t.id),
       parentId: t.parent_id,
       subtaskCount,
       assignedAgentId: t.assigned_agent_id,
-      tokenStamp: `[P: ${p} | C: ${c} | Cost: $${cost.toFixed(4)}]`
+      tokenStamp: `[P: ${p} | C: ${c} | Cost: ${cost.toFixed(4)}]`
     };
   });
 
@@ -83,7 +81,8 @@ export const handlePostFeed = (db, payload = {}) => {
   const message = payload.message || '', channel = payload.channel || 'general';
   const event_type = payload.eventType || payload.event_type || 'broadcast';
   const thread_id = payload.threadId || payload.thread_id || null;
-  const post = postFeedEvent(db, { author_id, event_type, message, channel, thread_id });
+  const task_id = payload.taskId || payload.task_id || null;
+  const post = postFeedEvent(db, { author_id, event_type, message, channel, thread_id, task_id });
   return { success: Boolean(post), post };
 };
 

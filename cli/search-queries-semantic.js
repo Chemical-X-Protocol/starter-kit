@@ -4,6 +4,7 @@ import {
   deserializeVector,
   cosineSimilarity
 } from './embeddings/vectorizer.js';
+import { formatFtsQuery } from './search-tokenizer.js';
 
 export const querySemanticIndex = (db, queryText, options = {}) => {
   if (!db || !queryText) return [];
@@ -81,15 +82,33 @@ export const queryHybridIndex = (db, queryText, options = {}) => {
   const cleanQuery = queryText.trim();
 
   let ftsRows = [];
-  try {
-    ftsRows = db.prepare(`
-      SELECT file_path, name, kind, tier, rank
-      FROM fts_index
-      WHERE fts_index MATCH ?
-      ORDER BY rank
-      LIMIT ?
-    `).all(cleanQuery, limit * 2);
-  } catch {}
+  const ftsQuery = formatFtsQuery(cleanQuery);
+  if (ftsQuery) {
+    try {
+      ftsRows = db.prepare(`
+        SELECT file_path, name, kind, tier, rank
+        FROM fts_index
+        WHERE fts_index MATCH ?
+        ORDER BY rank
+        LIMIT ?
+      `).all(ftsQuery, limit * 2);
+    } catch {}
+  }
+
+  if (ftsRows.length === 0) {
+    try {
+      const sanitized = cleanQuery.replace(/[^a-zA-Z0-9]/g, ' ').trim();
+      if (sanitized) {
+        ftsRows = db.prepare(`
+          SELECT file_path, name, kind, tier, rank
+          FROM fts_index
+          WHERE fts_index MATCH ?
+          ORDER BY rank
+          LIMIT ?
+        `).all(`"${sanitized}"*`, limit * 2);
+      }
+    } catch {}
+  }
 
   const semanticResults = querySemanticIndex(db, cleanQuery, { limit: limit * 2, minSimilarity: 0.15 });
 

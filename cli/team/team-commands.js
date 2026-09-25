@@ -20,12 +20,13 @@ import {
 } from './team-db.js';
 import { getAgentMailbox, sendDirectMessage } from './team-db-mailbox.js';
 import { autoGenerateTasksFromAudit, completeTaskWithAudit, queryUnassignedHazards, reconcileAuditTasks } from './team-triage.js';
-import { formatSwarmStatusCard, formatFeedTimeline, formatTaskListCard, formatMailboxCard } from './team-format.js';
+import { formatSwarmStatusCard, formatFeedTimeline, formatTaskListCard, formatMailboxCard, formatTaskDetailCard } from './team-format.js';
 import { getSwarmTokenBreakdown, formatTokenBreakdownCard } from './team-tokens.js';
 import { runAblationComparison, formatAblationCard } from './team-memory.js';
 import { parseFlags } from './team-flags.js';
+import { handleTaskSlotCommand, handleTaskTraceCommand, handleTrainCommand } from './team-commands-vds.js';
 
-const ARG_VAL_FLAGS = ['--target', '--as', '--to', '--agent', '--since', '--limit', '--thread', '--task', '--parent', '--rule', '--priority', '--prio'];
+const ARG_VAL_FLAGS = ['--target', '--as', '--to', '--agent', '--since', '--limit', '--thread', '--task', '--parent', '--rule', '--priority', '--prio', '--moscow', '--url'];
 
 export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => {
   const db = openIndexDb(cwd);
@@ -133,6 +134,67 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
       }
       return tasks;
     }
+    const isShowAction = ['show', 'view', 'info'].includes(taskAction);
+    if (isShowAction) {
+      const taskId = nonFlagPositional[1];
+      if (!taskId) {
+        if (isCli) process.stderr.write('\x1b[31m✕ Task ID required: chemx team task show <id>\x1b[0m\n');
+        return { error: 'taskId required' };
+      }
+      const task = getTask(db, taskId);
+      if (!task) {
+        if (isCli) process.stderr.write(`\x1b[31m✕ Task #${taskId} not found\x1b[0m\n`);
+        return { error: `Task #${taskId} not found` };
+      }
+      const events = queryFeed(db, { task_id: taskId });
+      if (flags.isJson) {
+        const output = { task, events, activityCount: events.length };
+        if (isCli) process.stdout.write(`${JSON.stringify(output, null, 2)}\n`);
+        return output;
+      }
+      if (isCli) {
+        process.stdout.write(formatTaskDetailCard(task, events));
+      }
+      return { task, events };
+    }
+    if (taskAction === 'comment' || taskAction === 'post') {
+      const taskId = nonFlagPositional[1];
+      if (!taskId) {
+        if (isCli) process.stderr.write('\x1b[31m✕ Task ID required: chemx team task comment <id> <message>\x1b[0m\n');
+        return { error: 'taskId required' };
+      }
+      const msg = nonFlagPositional.slice(2).join(' ') || flags.message;
+      if (!msg) {
+        if (isCli) process.stderr.write('\x1b[31m✕ Message required\x1b[0m\n');
+        return { error: 'message required' };
+      }
+      const authorHandle = flags.as || '@agent';
+      registerAgent(db, { id: authorHandle, role: 'contributor' });
+      const ev = postFeedEvent(db, {
+        author_id: authorHandle,
+        task_id: Number(taskId),
+        event_type: flags.type || 'status_update',
+        message: msg
+      });
+      if (isCli) {
+        if (flags.isJson) process.stdout.write(`${JSON.stringify(ev, null, 2)}\n`);
+        else process.stdout.write(`\x1b[32m✔\x1b[0m Posted update to task #${taskId}: ${msg}\n`);
+      }
+      return ev;
+    }
+    const isVdsSlot = taskAction === 'vds-slot' || taskAction === 'slot';
+    if (isVdsSlot) {
+      const taskId = nonFlagPositional[1];
+      const moscow = nonFlagPositional[2] || flags.moscow || 'must';
+      const prio = nonFlagPositional[3] || flags.priority || 'critical';
+      return handleTaskSlotCommand(db, taskId, moscow, prio, isCli, flags.isJson);
+    }
+    const isTrace = taskAction === 'trace';
+    if (isTrace) {
+      const taskId = nonFlagPositional[1];
+      const url = nonFlagPositional[2] || flags.url;
+      return handleTaskTraceCommand(db, taskId, url, isCli, flags.isJson);
+    }
     if (taskAction === 'claim') {
       const taskId = nonFlagPositional[1];
       const agentHandle = flags.as || '@agent';
@@ -159,6 +221,7 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
 
       const res = completeTaskWithAudit(db, taskId, agentHandle, {
         cwd,
+        target: flags.target,
         force: flags.force,
         noTargetConfirm: flags.noTargetConfirm,
         tokens: tokensOption
@@ -207,6 +270,7 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
 
         res = completeTaskWithAudit(db, taskId, agentHandle, {
           cwd,
+          target: flags.target,
           force: flags.force,
           noTargetConfirm: flags.noTargetConfirm,
           tokens: tokensOption
@@ -316,7 +380,7 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
     }
 
     if (isCli) {
-      process.stderr.write(`\x1b[31m✕ Unknown task action: "${taskAction}". Available actions: list, add, claim, done, triage, reconcile, set-target\x1b[0m\n`);
+      process.stderr.write(`\x1b[31m✕ Unknown task action: "${taskAction}". Available actions: list, show, view, add, claim, done, update, comment, triage, reconcile, set-target\x1b[0m\n`);
     }
     return { error: `Unknown task action: ${taskAction}` };
   }
@@ -395,6 +459,11 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
       else process.stdout.write(`\x1b[32m✔\x1b[0m Sent DM #${res.id} to ${res.recipient_id}\n`);
     }
     return res;
+  }
+
+  const isTrain = subCommand === 'train';
+  if (isTrain) {
+    return handleTrainCommand(db, nonFlagPositional[0] || 'status', flags, isCli, flags.isJson);
   }
 
   const isBenchmark = ['benchmark', 'ablation', 'memory'].includes(subCommand);

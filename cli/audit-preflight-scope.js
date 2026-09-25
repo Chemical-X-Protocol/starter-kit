@@ -3,7 +3,10 @@ import path from 'node:path';
 import { hasGum, gumChoose, gumInput, promptQuestion } from './terminal.js';
 import { resolveGitAuditScope } from './audit-preflight-git.js';
 
-const CANDIDATE_NAMES = ['src', 'app', 'cli', 'components', 'lib', 'packages', 'modules'];
+const CANDIDATE_NAMES = [
+  'src', 'app', 'cli', 'components', 'lib', 'packages', 'modules',
+  'server', 'backend', 'api', 'Services', 'Controllers', 'Handlers', 'Domain', 'pkg', 'cmd', 'internal'
+];
 
 export const detectCandidateDirectories = (cwd = process.cwd()) => {
   return CANDIDATE_NAMES.filter((name) => {

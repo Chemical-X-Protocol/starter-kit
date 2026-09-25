@@ -8,11 +8,16 @@
 
 ## 1. The Molecular Architecture Protocol
 
-### A. Strict Hard Line Limits & Monolith Decomposition
-- **File Line Limit**: 100 lines is an outer bound, not a target. A genuinely single-purpose file (atom, molecule, hook, or controller) should typically land well under this - often 50-150 lines. Approaching 100 is itself a signal that the file has stopped being single-purpose, not a trigger to wait for.
-- **Molecule Capsule Limit**: Maximum 100 lines per molecule capsule file.
-- **Decomposition Trigger**: Split when you can name the new file's single responsibility on its own - not when a line counter fires. If a file is nearing 100 and no natural seam is obvious yet, that's a sign the responsibilities were already tangled before it got this big; look backward for where that happened rather than cutting at whatever line you're currently on.
-- **Rationale**: Small, single-purpose files aren't just cleaner - they're cheaper to work with. Every file opened loads its full contents into context; a smaller file means less scanning, less irrelevant code loaded per task, and lower token cost per edit, compounding across a session.
+### A. Structural Weight, Cognitive Cohesion & Profile Architecture
+- **The Pragmatic Staff Engineer Paradigm (Default)**: Chemical X audits **Structural Weight and Responsibility Density**, not arbitrary mechanical line caps. A cohesive 140-line table, modal, or canvas wrapper where state and layout are naturally co-located is far cleaner and more reliable for LLMs to edit than six fractured micro-files connected by prop-drilling. Slicing cohesive logic into artificial files just to appease a counter is an anti-pattern: *indirection masquerading as modularity*.
+- **Structural Weight Limits (Pragmatic Default)**:
+  - **Cyclomatic Complexity**: Max 12 decision points per component/hook.
+  - **Hook & State Density**: Max 4 independent hooks/state setters before extracting into a domain hook or reducer.
+  - **Render Tree Depth**: Max 4 nesting levels in JSX/templates; nested ternaries are strictly banned in favor of computed descriptor objects.
+  - **Prop Surface Area**: Max 7 flat props before grouping into a typed domain entity model.
+  - **Line Budget**: Soft warning at 250 lines only if cyclomatic complexity is high.
+- **Atomic-Strict Profile (`--profile=atomic-strict`)**: Opt-in strict mode enforcing 100-line capsule caps and mandatory atomization for teams building foundational design system component primitives.
+- **The Rule of Three for Abstractions**: Premature abstraction is worse than duplication. Do NOT extract an atom or molecule until a pattern is reused across 3+ distinct features, or until it encapsulates isolated behavioral/accessibility requirements.
 
 ### B. Table-of-Contents Views
 - Top-level page views MUST NEVER contain hundreds of lines of nested DOM scaffolding.
@@ -48,18 +53,14 @@
 - **Canonical Extraction First**: Consolidate and extract shared atoms, molecules, or composables once into canonical capsules before splitting consumer monoliths.
 - **Zero Bespoke Pattern Proliferation**: Decompose consumer monoliths by binding directly to the extracted canonical capsules, preventing the proliferation of duplicate, slightly divergent patterns across spliced views.
 
-### G. Strict Architectural Tier Separation & The Zero-Raw-DOM Rule
-- **Atoms / Foundations**: Single, foundational UI elements. (The ONLY tier where raw DOM/HTML elements like `<button>`, `<input>`, `<textarea>`, or raw layout `<div>` are permitted).
-- **Molecules / Blocks**: Groups of foundational elements. (NO raw DOM elements).
-- **Organisms / Modules**: Complex groupings of components. (NO raw DOM elements).
-- **Templates / Layouts**: Structural blueprints for pages. (NO raw DOM elements).
-- **Views / Pages**: High-level components that implement layouts and inject state.
-- **Tab List Decomposition Pattern**:
-  - *Anti-Pattern*: Inlining repeated raw `<button>` elements with ternary class chains and icons directly inside molecules or views.
-  - *Quantum Solution*:
-    1. Foundation: Encapsulate the raw `<button>` element inside a foundational Atom (`AtomButton` or `a-button`).
-    2. Capsule: Encapsulate the tab button UI pattern into `m-tab-button` with scoped BEM modifier classes (e.g. `.m-tab-button--pink`, `.m-tab-button--flexible`) using `@apply`. Never place utility selector strings in JavaScript.
-    3. Composition: In the consumer showcase or organism, declaratively render `<m-tab-button>` instances inside an atom surface, with zero raw HTML tags in the template.
+### G. Component Encapsulation, Semantic Integrity & The Zero-Raw-DOM Scope
+- **Pragmatic Profile (Default)**: Wrapping every native `<button>`, `<input>`, or `<a>` in a trivial single-line atom creates pointless wrapper boilerplate. In Pragmatic mode, native semantic elements are permitted, provided they maintain:
+  1. *Design Token Integrity*: Styled using design tokens, theme utilities, or scoped classes (no hardcoded hex colors or raw style objects).
+  2. *Accessibility Standard*: Native semantic interactive elements (never clickable `<div>` without keyboard roles), valid `type` on buttons, and `aria-label`/alt tags.
+  3. *Security Sanitization*: DOMPurify sanitization on dynamic HTML; no `javascript:` pseudo-protocols.
+- **Atomic-Strict Profile (`--profile=atomic-strict`)**: When building standalone design system libraries, the strict Zero-Raw-DOM rule applies: raw DOM elements are restricted strictly to the Atom tier (`a-*`).
+- **Tab List & Complex Pattern Harmonization**:
+  - When repeated elements accumulate behavioral logic, accessibility handling, or styling variants across 3+ places (Rule of Three), extract into a canonical capsule (`m-tab-button`).
 
 ### H. AI Agent Codebase Query Machine Protocol
 - **Search First Rule**: AI agents MUST invoke `pnpm chemx q "<query>"` (or `npx chemx search "<query>"`) before running broad ripgrep, find, or file dumping.

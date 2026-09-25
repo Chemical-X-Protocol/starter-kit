@@ -215,5 +215,32 @@ export const RULE_REGISTRY = {
     pillar: 'AI Slop & Code Authenticity',
     severity: 'LOW',
     directive: 'Inline redundant single-use passthrough assignments directly into return expressions'
+  },
+
+  // Greybeard Pragmatic: Structural Weight & Bounded Context
+  STRUCTURAL_WEIGHT_EXCEEDED: {
+    pillar: PILLARS.PILLAR_1,
+    severity: 'HIGH',
+    directive: 'Reduce component responsibility density: extract domain hooks, decompose branching, or flatten render tree'
+  },
+  COMPLEXITY_CYCLOMATIC_HIGH: {
+    pillar: PILLARS.PILLAR_2,
+    severity: 'HIGH',
+    directive: 'Decompose high cyclomatic complexity into pure helper functions or table dispatch'
+  },
+  HOOK_STATE_SATURATION: {
+    pillar: PILLARS.PILLAR_3,
+    severity: 'HIGH',
+    directive: 'Extract co-located state and effects into a dedicated domain hook or reducer'
+  },
+  RENDER_TREE_DEPTH_EXCEEDED: {
+    pillar: PILLARS.PILLAR_2,
+    severity: 'HIGH',
+    directive: 'Extract nested JSX ternaries into computed descriptor objects or early returns'
+  },
+  PROP_SURFACE_BLOAT: {
+    pillar: PILLARS.PILLAR_4,
+    severity: 'MEDIUM',
+    directive: 'Encapsulate flat primitive props into a cohesive domain type or composable'
   }
 };

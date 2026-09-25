@@ -1,0 +1,69 @@
+# Chemical X Protocol (chemx)
+
+> Token-conserving molecular architecture toolkit, AST query machine, and multi-agent swarm coordinator for AI coding agents.
+
+Chemical X optimizes AI agent workflows by eliminating context bloat, preventing monolith degradation, and providing zero-token-burn verification and coordination.
+
+## Core Directives for AI Agents
+
+1. **Strict File Line Outer Bound (< 100 lines)**: Every atom, molecule, controller, and type file should land well under 100 lines. Approaching 100 lines is a decomposition trigger.
+2. **Zero-Raw-DOM Rule**: Raw HTML tags (`<button>`, `<input>`, `<div>`) are ONLY permitted in foundational Atoms (`a-*`). Molecules (`m-*`), Organisms (`o-*`), and Views assemble atoms and never render raw DOM tags.
+3. **Table-of-Contents Views**: Top-level views must read like 10–20 line declarative blueprints with named slots (`#header`, `#default`, `#modals`), free of inline DOM scaffolding.
+4. **Two-Stage Atomic Booleans**: Decompose compound conditionals into Stage 1 atomic concepts and Stage 2 unified decision variables before branching.
+5. **Discriminated State Unions**: Model domain and UI state as disjoint discriminated unions (`{ status: 'idle' } | { status: 'loading' }`), eliminating conflicting booleans.
+6. **No Raw Terminal Test/Build Dumping**: Agents must never run unthrottled `npm test` or `tsc` in bash subshells. Use `chemx verify --json` to protect context windows.
+
+## Master MCP Gateway: `chemx`
+
+AI agents connect via the unified master MCP tool `chemx`:
+
+```typescript
+// Discovery & Impact Analysis
+chemx({ action: 'q', params: { query: 'a-button', blastRadius: true } });
+chemx({ action: 'q', params: { query: 'toggle task item', hybrid: true } });
+
+// Surgical AST Reading (Avoids Full File Dumps)
+chemx({ action: 'read', params: { path: 'src/...', outline: true } });
+chemx({ action: 'read', params: { path: 'src/...', symbol: 'myFunction', connections: true } });
+
+// Surgical Modification & Verification
+chemx({ action: 'patch', params: { path: 'src/...', targetContent: 'old', replacementContent: 'new' } });
+chemx({ action: 'write', params: { path: 'src/...', content: '...' } });
+chemx({ action: 'check', params: { path: 'src/...' } });
+chemx({ action: 'verify' }); // AST + Typecheck + Tests (~45 tokens if green)
+
+// Multi-Agent Swarm Coordination
+chemx({ action: 'team', params: { action: 'task', subAction: 'claim', taskId: 1, as: '@agent' } });
+chemx({ action: 'team', params: { action: 'task', subAction: 'done', taskId: 1, target: 'src/...', as: '@agent' } });
+chemx({ action: 'team', params: { action: 'lock', subAction: 'acquire', filePath: 'src/...', agentId: '@agent' } });
+chemx({ action: 'team', params: { action: 'lock', subAction: 'release', filePath: 'src/...', agentId: '@agent' } });
+```
+
+## CLI Reference
+
+- `chemx create <dir> [--framework=react|vue|svelte] [--install|--skip-install] [--yes]`: Scaffold project with strict framework isolation.
+- `chemx generate <tier> <name> [--framework=react|vue|svelte]`: Generate crystalline component capsule with co-located spec and types.
+- `chemx audit [path] [--json|--markdown|--strict]`: Run 7-Pillar static AST architecture analysis.
+- `chemx verify [--json|--build]`: Execute full verification gate (AST + Types + Tests).
+- `chemx typecheck [--json]`: Silent TypeScript compilation check.
+- `chemx test [--json] [-- <cmd>]`: Silent test runner suppressing passing tests.
+- `chemx q "<query>" [--hybrid|--blast-radius|--inspect|--json]`: Fast AST search.
+- `chemx read <path> [--outline|--symbol=<name>|--start=N --end=M]`: Token-optimized reader.
+- `chemx patch <path> --target="<old>" --replacement="<new>"`: Surgical AST patcher.
+- `chemx team task triage`: Convert AST violations into assignable database tasks.
+- `chemx team task claim <id> --as=@agent`: Atomic CAS task claim in SQLite.
+- `chemx team task done <id> --target=<path> [--force]`: Task completion with inline verification.
+- `chemx team status`: Inspect active file locks, FIFO waiter queues, and swarm health.
+- `chemx ui [--port=N]`: Launch real-time Swarm Control Panel Web UI.
+- `chemx bench`: Run empirical token reduction benchmark suite.
+
+## Architectural Health vs Production Readiness
+
+- **`chemx audit`**: Evaluates AST architecture, line limits, and AI slop (0–100 score, A+ to F).
+- **`chemx verify`**: Evaluates production readiness (AST audit + TypeScript compilation + test suite). A clean A+ audit does not guarantee functionality if types or tests fail.
+
+## References
+
+- [AGENTS.md](./AGENTS.md): Mandatory molecular architecture protocol for AI agents.
+- [STANDARDS.md](./STANDARDS.md): Complete verification standards and two-gate model.
+- [benchmarks/README.md](./benchmarks/README.md): Reproducible token reduction benchmark methodology.

@@ -39,6 +39,8 @@ export const generateMarkdownReport = (report) => {
     lines.push('');
   }
   lines.push('> *Comprehensive static analysis report enforcing Chemical X Molecular Architecture standards.*');
+  lines.push('> ');
+  lines.push('> **Notice**: Architectural grades measure AST rule compliance only. Run `chemx verify` for full production readiness (typecheck + test suite).');
   lines.push('');
   lines.push('## 1. Executive Summary & Scorecard');
   lines.push('');

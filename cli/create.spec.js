@@ -197,4 +197,95 @@ describe('Scaffolding Entrypoint Invocations', () => {
     assert.match(result.stderr, /Unknown command "config"/, 'Should report unknown command');
     assert.ok(!fs.existsSync(path.join(tmpBase, 'config')), 'Must NOT create a config directory when installed under create-chemx path');
   });
+
+  const getAllFiles = (dir) => {
+    const results = [];
+    const walk = (d) => {
+      const list = fs.readdirSync(d, { withFileTypes: true });
+      for (const item of list) {
+        const full = path.join(d, item.name);
+        if (item.isDirectory()) {
+          walk(full);
+        } else {
+          results.push(full);
+        }
+      }
+    };
+    walk(dir);
+    return results;
+  };
+
+  test('framework isolation: --framework=react produces zero .vue and zero .svelte files, and derives react deps', () => {
+    const tmpBase = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-test-react-'));
+    cleanupDirs.push(tmpBase);
+    const targetDir = path.join(tmpBase, 'react-app');
+
+    const result = spawnSync('node', [CREATE_BIN, targetDir, '--framework=react', '--yes'], {
+      encoding: 'utf-8',
+      cwd: tmpBase,
+      timeout: 15000
+    });
+
+    assert.equal(result.status, 0, `Failed: ${result.stderr}`);
+    const files = getAllFiles(targetDir);
+    const vueFiles = files.filter((f) => f.endsWith('.vue'));
+    const svelteFiles = files.filter((f) => f.endsWith('.svelte'));
+    assert.strictEqual(vueFiles.length, 0, `React app contains .vue files: ${vueFiles.join(', ')}`);
+    assert.strictEqual(svelteFiles.length, 0, `React app contains .svelte files: ${svelteFiles.join(', ')}`);
+
+    const pkg = JSON.parse(fs.readFileSync(path.join(targetDir, 'package.json'), 'utf-8'));
+    assert.ok(pkg.dependencies.react, 'Must have react in dependencies');
+    assert.ok(pkg.dependencies['react-dom'], 'Must have react-dom in dependencies');
+    assert.strictEqual(pkg.dependencies.vue, undefined, 'Must not have vue in dependencies');
+    assert.strictEqual(pkg.devDependencies['@vue/test-utils'], undefined, 'Must not have @vue/test-utils in devDependencies');
+  });
+
+  test('framework isolation: --framework=vue produces zero .tsx, .jsx, and zero .svelte files, and derives vue deps', () => {
+    const tmpBase = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-test-vue-'));
+    cleanupDirs.push(tmpBase);
+    const targetDir = path.join(tmpBase, 'vue-app');
+
+    const result = spawnSync('node', [CREATE_BIN, targetDir, '--framework=vue', '--yes'], {
+      encoding: 'utf-8',
+      cwd: tmpBase,
+      timeout: 15000
+    });
+
+    assert.equal(result.status, 0, `Failed: ${result.stderr}`);
+    const files = getAllFiles(targetDir);
+    const tsxFiles = files.filter((f) => f.endsWith('.tsx') || f.endsWith('.jsx'));
+    const svelteFiles = files.filter((f) => f.endsWith('.svelte'));
+    assert.strictEqual(tsxFiles.length, 0, `Vue app contains .tsx/.jsx files: ${tsxFiles.join(', ')}`);
+    assert.strictEqual(svelteFiles.length, 0, `Vue app contains .svelte files: ${svelteFiles.join(', ')}`);
+
+    const pkg = JSON.parse(fs.readFileSync(path.join(targetDir, 'package.json'), 'utf-8'));
+    assert.ok(pkg.dependencies.vue, 'Must have vue in dependencies');
+    assert.ok(pkg.devDependencies['@vue/test-utils'], 'Must have @vue/test-utils in devDependencies');
+    assert.strictEqual(pkg.dependencies.react, undefined, 'Must not have react in dependencies');
+    assert.strictEqual(pkg.devDependencies['@types/react'], undefined, 'Must not have @types/react');
+  });
+
+  test('framework isolation: --framework=svelte produces zero .vue, .tsx, .jsx files, and derives svelte deps', () => {
+    const tmpBase = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-test-svelte-'));
+    cleanupDirs.push(tmpBase);
+    const targetDir = path.join(tmpBase, 'svelte-app');
+
+    const result = spawnSync('node', [CREATE_BIN, targetDir, '--framework=svelte', '--yes'], {
+      encoding: 'utf-8',
+      cwd: tmpBase,
+      timeout: 15000
+    });
+
+    assert.equal(result.status, 0, `Failed: ${result.stderr}`);
+    const files = getAllFiles(targetDir);
+    const vueFiles = files.filter((f) => f.endsWith('.vue'));
+    const tsxFiles = files.filter((f) => f.endsWith('.tsx') || f.endsWith('.jsx'));
+    assert.strictEqual(vueFiles.length, 0, `Svelte app contains .vue files: ${vueFiles.join(', ')}`);
+    assert.strictEqual(tsxFiles.length, 0, `Svelte app contains .tsx/.jsx files: ${tsxFiles.join(', ')}`);
+
+    const pkg = JSON.parse(fs.readFileSync(path.join(targetDir, 'package.json'), 'utf-8'));
+    assert.ok(pkg.dependencies.svelte, 'Must have svelte in dependencies');
+    assert.strictEqual(pkg.dependencies.vue, undefined, 'Must not have vue in dependencies');
+    assert.strictEqual(pkg.dependencies.react, undefined, 'Must not have react in dependencies');
+  });
 });

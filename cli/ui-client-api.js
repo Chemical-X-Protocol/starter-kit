@@ -82,6 +82,14 @@ window.chemxApi = {
   createTopic: async (payload) => {
     const res = await fetch('/api/topics', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
     return await res.json();
+  },
+  fetchTaskFeed: async (taskId) => {
+    try { const res = await fetch('/api/feed?task_id=' + encodeURIComponent(taskId)); if (res.ok) { const d = await res.json(); return d.feed || []; } } catch (_err) { return []; }
+    return [];
+  },
+  postTaskUpdate: async (taskId, message, author = '@ui-operator', eventType = 'status_update') => {
+    const res = await fetch('/api/feed', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ task_id: taskId, message, author_id: author, event_type: eventType }) });
+    return await res.json();
   }
 };
 `;

@@ -20,14 +20,17 @@ USAGE
   npx create-chemx [directory] [options]
 
 OPTIONS
-  --yes, -y       Skip interactive prompts and scaffold Community Edition immediately
-  --headless      Run in headless mode for CI/CD and AI agent automation
-  -h, --help      Show this help message
-  -v, --version   Show version number
+  --framework=<id>   Framework flavor: react (default), vue, svelte
+  --install          Auto-install dependencies after scaffolding
+  --skip-install     Skip installing dependencies (default: prompts in Next Steps)
+  --yes, -y          Skip interactive prompts and scaffold Community Edition immediately
+  --headless         Run in headless mode for CI/CD and AI agent automation
+  -h, --help         Show this help message
+  -v, --version      Show version number
 
 EXAMPLES
-  npm create chemx my-molecular-app
-  npx create-chemx my-molecular-app --yes
+  npm create chemx my-molecular-app --framework=react
+  npx create-chemx my-vue-app --framework=vue --yes
   pnpm create chemx my-app
 
 DOCUMENTATION
@@ -54,11 +57,21 @@ const KNOWN_FLAGS = new Set([
   '-v', '--version',
   '--ci',
   '--non-interactive',
-  '--no-interactive'
+  '--no-interactive',
+  '--install',
+  '--skip-install',
+  '--no-install',
+  '--framework'
 ]);
 
 for (const arg of rawArgs) {
-  if (arg.startsWith('-') && !KNOWN_FLAGS.has(arg)) {
+  const isFlag = arg.startsWith('-');
+  const isKnownFlag = KNOWN_FLAGS.has(arg);
+  const isFrameworkFlag = arg === '--framework' || arg.startsWith('--framework=');
+  const isPresetFlag = arg.startsWith('--preset=');
+  const isValidOption = isKnownFlag || isFrameworkFlag || isPresetFlag;
+
+  if (isFlag && !isValidOption) {
     process.stderr.write(`Unknown option "${arg}". Run --help for usage.\n`);
     process.exit(1);
   }

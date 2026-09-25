@@ -1,15 +1,16 @@
 import path from 'node:path';
 import { parse } from '@babel/parser';
 import { extractParseableCode } from './audit/rules-helpers.js';
+import { isBabelParsable } from './languages.js';
 
 const TIER_PATTERNS = [
-  { tier: 'atom', test: (p, b) => p.includes('atoms/') || p.includes('/a-') || b.startsWith('a-') },
-  { tier: 'molecule', test: (p, b) => p.includes('molecules/') || p.includes('/m-') || b.startsWith('m-') },
-  { tier: 'organism', test: (p, b) => p.includes('organisms/') || p.includes('/o-') || b.startsWith('o-') },
+  { tier: 'atom', test: (p, b) => p.includes('atoms/') || p.includes('/a-') || b.startsWith('a-') || /(?:^|[\\/])(?:Domain|Entities|Models)[\\/]/i.test(p) },
+  { tier: 'molecule', test: (p, b) => p.includes('molecules/') || p.includes('/m-') || b.startsWith('m-') || /(?:^|[\\/])Features[\\/]/i.test(p) },
+  { tier: 'organism', test: (p, b) => p.includes('organisms/') || p.includes('/o-') || b.startsWith('o-') || /(?:^|[\\/])(?:Services|Handlers|Commands|Queries)[\\/]/i.test(p) },
   { tier: 'template', test: (p, b) => p.includes('templates/') || p.includes('/t-') || b.startsWith('t-') },
-  { tier: 'view', test: (p, b) => p.includes('/views/') || p.includes('/pages/') || p.includes('/routes/') || /View\.[tj]sx?$/.test(b) },
+  { tier: 'view', test: (p, b) => p.includes('/views/') || p.includes('/pages/') || p.includes('/routes/') || /(?:^|[\\/])(?:Controllers|Endpoints)[\\/]/i.test(p) || /View\.[tj]sx?$/.test(b) || /Controller\.cs$/.test(b) },
   { tier: 'hook', test: (p, b) => p.includes('/hooks/') || p.includes('/composables/') || /^use[A-Z]/.test(b) },
-  { tier: 'type', test: (p, b) => b.endsWith('.d.ts') || p.includes('/types/') }
+  { tier: 'type', test: (p, b) => b.endsWith('.d.ts') || p.includes('/types/') || /(?:^|[\\/])(?:Dtos|Contracts)[\\/]/i.test(p) }
 ];
 
 export const resolveArchitectureTier = (relativePath) => {
@@ -20,20 +21,48 @@ export const resolveArchitectureTier = (relativePath) => {
   return 'utility';
 };
 
-const extractRegexFallback = (content) => {
+const extractRegexFallback = (content, filePath = '') => {
   const symbols = [];
+  const imports = [];
+  const hooks = new Set();
+  const props = [];
+
   const exportMatches = content.matchAll(/export\s+(?:const|function|class|type|interface|enum)\s+([A-Za-z0-9_$]+)/g);
   for (const m of exportMatches) {
     symbols.push({ name: m[1], kind: 'symbol', isExport: true, startLine: 1, endLine: 1, signature: '' });
   }
 
-  const hooks = new Set();
+  const csMatches = content.matchAll(/(?:public|internal|protected)\s+(?:static\s+|sealed\s+|abstract\s+|partial\s+)*(?:class|record|interface|struct|enum)\s+([A-Za-z0-9_]+)/g);
+  for (const m of csMatches) {
+    symbols.push({ name: m[1], kind: 'class', isExport: true, startLine: 1, endLine: 1, signature: '' });
+  }
+
+  const pyMatches = content.matchAll(/(?:def|class)\s+([A-Za-z0-9_]+)/g);
+  for (const m of pyMatches) {
+    symbols.push({ name: m[1], kind: 'function', isExport: true, startLine: 1, endLine: 1, signature: '' });
+  }
+
+  const goMatches = content.matchAll(/(?:func(?:\s*\([^)]*\))?\s+|type\s+)([A-Za-z0-9_]+)/g);
+  for (const m of goMatches) {
+    symbols.push({ name: m[1], kind: 'function', isExport: true, startLine: 1, endLine: 1, signature: '' });
+  }
+
+  const csImports = content.matchAll(/using\s+([A-Za-z0-9_.]+);/g);
+  for (const m of csImports) {
+    imports.push({ importedSymbol: '*', sourceModule: m[1], line: 1 });
+  }
+
+  const pyImports = content.matchAll(/(?:import\s+([A-Za-z0-9_.]+)|from\s+([A-Za-z0-9_.]+)\s+import)/g);
+  for (const m of pyImports) {
+    const mod = m[1] || m[2];
+    imports.push({ importedSymbol: '*', sourceModule: mod, line: 1 });
+  }
+
   const hookMatches = content.matchAll(/\b(use[A-Z0-9][A-Za-z0-9_$]*)\b/g);
   for (const h of hookMatches) {
     hooks.add(h[1]);
   }
 
-  const props = [];
   const propMatches = content.matchAll(/(?:readonly\s+)?([A-Za-z0-9_$]+)\s*\??\s*:\s*([^;,\n]+)[;,]/g);
   for (const p of propMatches) {
     if (props.length < 20 && !['string', 'number', 'boolean', 'void'].includes(p[1])) {
@@ -41,7 +70,6 @@ const extractRegexFallback = (content) => {
     }
   }
 
-  const imports = [];
   const importMatches = content.matchAll(/import\s+(?:\{([^}]+)\}|([A-Za-z0-9_$]+)|\*\s+as\s+([A-Za-z0-9_$]+))\s+from\s+['"]([^'"]+)['"]/g);
   for (const m of importMatches) {
     const sourceModule = m[4];
@@ -61,6 +89,10 @@ const extractRegexFallback = (content) => {
 };
 
 export const extractAstMetadata = (content, filePath) => {
+  if (!isBabelParsable(filePath)) {
+    return extractRegexFallback(content, filePath);
+  }
+
   const ext = path.extname(filePath);
   const code = extractParseableCode(content, ext);
   const contentLines = content.split('\n');
