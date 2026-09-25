@@ -3,6 +3,12 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MSampleCard, resolveBadgeDescriptor } from './m-sample-card';
 
+interface TestElementProps {
+  children?: React.ReactElement<TestElementProps>[];
+  className?: string;
+  onClick?: () => void;
+}
+
 describe('m-sample-card: resolveBadgeDescriptor', () => {
   it('returns archived badge descriptor when status is archived', () => {
     const descriptor = resolveBadgeDescriptor('archived', false);
@@ -60,15 +66,15 @@ describe('m-sample-card: MSampleCard Component', () => {
       title: 'Actionable Unit',
       value: 1200,
       onAction: handleAction
-    }) as React.ReactElement;
+    }) as React.ReactElement<TestElementProps>;
 
-    const bodyNode = (vnode.props.children as React.ReactElement[])[1];
-    const buttonNode = (bodyNode.props.children as React.ReactElement[])[1];
+    const bodyNode = (vnode.props.children as React.ReactElement<TestElementProps>[])[1];
+    const buttonNode = (bodyNode.props.children as React.ReactElement<TestElementProps>[])[1];
 
     expect(buttonNode).toBeDefined();
     expect(buttonNode.props.className).toBe('m-sample-card__action');
 
-    buttonNode.props.onClick();
+    buttonNode.props.onClick?.();
     expect(handleAction).toHaveBeenCalledTimes(1);
   });
 });

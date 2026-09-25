@@ -24,7 +24,7 @@ export const requestFileLock = (db, filePath, agentId, options = {}) => {
   if (!canRequest) return { granted: false, reason: 'missing_args' };
 
   const cleanId = normalizeAgentId(agentId);
-  const pid = options.pid || process.pid;
+  const pid = typeof options.pid === 'number' ? options.pid : 0;
 
   return withImmediateTransaction(db, () => {
     cleanExpiredLeases(db);

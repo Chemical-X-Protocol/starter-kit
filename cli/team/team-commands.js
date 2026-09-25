@@ -14,19 +14,18 @@ import {
   createTask,
   claimTask,
   updateTaskStatus,
-  requestFileLock,
-  releaseFileLock,
   registerAgent
 } from './team-db.js';
 import { getAgentMailbox, sendDirectMessage } from './team-db-mailbox.js';
 import { autoGenerateTasksFromAudit, completeTaskWithAudit, queryUnassignedHazards, reconcileAuditTasks } from './team-triage.js';
-import { formatSwarmStatusCard, formatFeedTimeline, formatTaskListCard, formatMailboxCard, formatTaskDetailCard } from './team-format.js';
+import { formatSwarmStatusCard, formatFeedTimeline, formatTaskListCard, formatMailboxCard, formatTaskDetailCard, formatTeamHelpCard, formatTaskHelpCard } from './team-format.js';
 import { getSwarmTokenBreakdown, formatTokenBreakdownCard } from './team-tokens.js';
 import { runAblationComparison, formatAblationCard } from './team-memory.js';
 import { parseFlags } from './team-flags.js';
 import { handleTaskSlotCommand, handleTaskTraceCommand, handleTrainCommand } from './team-commands-vds.js';
+import { handleLockCommand, handleUnlockCommand } from './team-commands-lock.js';
 
-const ARG_VAL_FLAGS = ['--target', '--as', '--to', '--agent', '--since', '--limit', '--thread', '--task', '--parent', '--rule', '--priority', '--prio', '--moscow', '--url'];
+const ARG_VAL_FLAGS = ['--target', '--as', '--to', '--agent', '--since', '--limit', '--thread', '--task', '--parent', '--rule', '--priority', '--prio', '--moscow', '--url', '--pid'];
 
 export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => {
   const db = openIndexDb(cwd);
@@ -45,6 +44,12 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
     const isVal = i > 0 && ARG_VAL_FLAGS.includes(restArgs[i - 1]);
     if (isVal) continue;
     nonFlagPositional.push(a);
+  }
+
+  const isTeamHelp = subCommand === '--help' || subCommand === '-h' || subCommand === 'help' || (subCommand === 'status' && flags.help);
+  if (isTeamHelp) {
+    if (isCli) process.stdout.write(formatTeamHelpCard());
+    return { help: true, commands: ['status', 'task', 'lock', 'unlock', 'feed', 'post', 'inbox', 'dm', 'tokens', 'triage', 'benchmark', 'train'] };
   }
 
   if (subCommand === 'status') {
@@ -115,6 +120,11 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
   }
 
   if (subCommand === 'task') {
+    const isTaskHelp = flags.help || nonFlagPositional.includes('--help') || nonFlagPositional.includes('-h') || nonFlagPositional.includes('help');
+    if (isTaskHelp) {
+      if (isCli) process.stdout.write(formatTaskHelpCard());
+      return { help: true, actions: ['list', 'show', 'add', 'claim', 'done', 'update', 'comment', 'triage', 'reconcile', 'set-target', 'vds-slot', 'trace'] };
+    }
     const taskAction = nonFlagPositional[0] || 'list';
     if (taskAction === 'list') {
       const tasks = listTasks(db, {
@@ -386,28 +396,11 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
   }
 
   if (subCommand === 'lock') {
-    const file = nonFlagPositional[0];
-    const res = requestFileLock(db, file, flags.as || '@agent', {
-      purpose: flags.purpose,
-      priority: flags.priority
-    });
-    if (isCli) {
-      if (flags.isJson) process.stdout.write(`${JSON.stringify(res, null, 2)}\n`);
-      else if (res.granted) process.stdout.write(`\x1b[32m✔\x1b[0m Acquired lock on ${file}\n`);
-      else process.stdout.write(`\x1b[33m⏳\x1b[0m Enqueued in FIFO lock queue at position ${res.position} (held by ${res.currentHolder})\n`);
-    }
-    return res;
+    return handleLockCommand(db, nonFlagPositional, flags, isCli);
   }
 
   if (subCommand === 'unlock') {
-    const file = nonFlagPositional[0];
-    const res = releaseFileLock(db, file, flags.as || '@agent');
-    if (isCli) {
-      if (flags.isJson) process.stdout.write(`${JSON.stringify(res, null, 2)}\n`);
-      else if (res.success) process.stdout.write(`\x1b[32m✔\x1b[0m Released lock on ${file}\n`);
-      else process.stderr.write(`\x1b[31m✕ Unlock failed: ${res.reason}\x1b[0m\n`);
-    }
-    return res;
+    return handleUnlockCommand(db, nonFlagPositional, flags, isCli);
   }
 
   if (subCommand === 'triage') {

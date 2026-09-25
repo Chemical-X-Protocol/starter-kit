@@ -68,7 +68,32 @@ test("runAblationComparison and formatAblationCard generate metrics card without
   assert.strictEqual(ablation.memoryEnabled.astQualityScore, 100);
   assert.strictEqual(ablation.memoryDisabled.astQualityScore, 84);
   assert.ok(ablation.delta.tokenReductionPct >= 90);
+  assert.strictEqual(ablation.hasRealData, false);
+  assert.strictEqual(ablation.isSimulated, true);
   const card = formatAblationCard(ablation);
   assert.ok(card.includes("Persistent Memory Ablation Benchmark"));
+  assert.ok(card.includes("Reference Projection"));
+  assert.strictEqual(card.includes("—"), false);
+}));
+
+test("runAblationComparison computes dynamic metrics from live task and memory records", () => withTmpCwd((db) => {
+  db.prepare(`
+    INSERT INTO agent_tasks (title, status, prompt_tokens, completion_tokens, cost_usd)
+    VALUES ('Refactor parser', 'done', 1500, 300, 0.05)
+  `).run();
+
+  recordMemoryInjection(db, { taskId: 1, provenance: "src/parser.ts", tokens: 200 });
+  recordMemoryUtilization(db, { taskId: 1, utilizedProvenance: ["src/parser.ts"], causedRetry: false });
+
+  const ablation = runAblationComparison(db);
+  assert.strictEqual(ablation.hasRealData, true);
+  assert.strictEqual(ablation.isSimulated, false);
+  assert.strictEqual(ablation.workloadTurns, 2);
+  assert.strictEqual(ablation.memoryEnabled.tokensUsed, 1800);
+  assert.ok(ablation.delta.tokenReductionPct > 0);
+  assert.ok(ablation.delta.retrievalPrecisionGainRatio.endsWith('x'));
+
+  const card = formatAblationCard(ablation);
+  assert.ok(card.includes("Live Project Telemetry"));
   assert.strictEqual(card.includes("—"), false);
 }));

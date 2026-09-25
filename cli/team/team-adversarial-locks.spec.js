@@ -5,7 +5,12 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { openIndexDb } from '../search-db.js';
+import { runTeamCli } from './team-commands.js';
 import { initTeamSchema } from './team-schema.js';
 import {
   requestFileLock,
@@ -102,4 +107,70 @@ test('adversarial-locks: renewal idempotency, rogue release rejection, and expir
   const expired = cleanExpiredLeases(db);
   assert.equal(expired.length, 1);
   assert.equal(getFileLockStatus(db, file).lease.locked_by, '@next-in-line');
+});
+
+test('adversarial-locks: CLI mutual exclusion between two separate agent invocations prevents overwrite and queues second agent', () => {
+  const tmpCwd = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-lock-exclusion-'));
+  try {
+    const db = openIndexDb(tmpCwd);
+    initTeamSchema(db);
+    const testFile = 'src/components/button.vue';
+
+    // Agent 1 acquires the lock via CLI
+    const res1 = runTeamCli(['lock', 'acquire', testFile, '--as', '@agent-1'], false, tmpCwd);
+    assert.equal(res1.granted, true);
+    assert.equal(res1.lease.locked_by, '@agent-1');
+
+    // Agent 2 attempts to acquire the lock on the same file via CLI
+    const res2 = runTeamCli(['lock', 'acquire', testFile, '--as', '@agent-2'], false, tmpCwd);
+    assert.equal(res2.granted, false);
+    assert.equal(res2.queued, true);
+    assert.equal(res2.position, 1);
+    assert.equal(res2.currentHolder, '@agent-1');
+
+    // Verify .chemx/index.db state: Agent 1's lease was NOT overwritten
+    const leaseRow = db.prepare('SELECT * FROM file_leases WHERE file_path = ?').get(testFile);
+    assert.ok(leaseRow, 'Lease row must exist');
+    assert.equal(leaseRow.locked_by, '@agent-1', 'Lease must still be held by agent-1, never overwritten');
+
+    // Verify Agent 2 is recorded in file_lock_queue
+    const queueRows = db.prepare('SELECT * FROM file_lock_queue WHERE file_path = ?').all(testFile);
+    assert.equal(queueRows.length, 1);
+    assert.equal(queueRows[0].agent_id, '@agent-2');
+    assert.equal(queueRows[0].status, 'waiting');
+
+    // Agent 1 releases the lock via CLI
+    const relRes = runTeamCli(['lock', 'release', testFile, '--as', '@agent-1'], false, tmpCwd);
+    assert.equal(relRes.success, true);
+    assert.equal(relRes.promotedWaiter, '@agent-2');
+
+    // Verify Agent 2 was promoted to active lease
+    const promotedLease = db.prepare('SELECT * FROM file_leases WHERE file_path = ?').get(testFile);
+    assert.equal(promotedLease.locked_by, '@agent-2');
+  } finally {
+    fs.rmSync(tmpCwd, { recursive: true, force: true });
+  }
+});
+
+test('team-cli: help commands display correctly and do not fall through to list', () => {
+  const tmpCwd = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-help-test-'));
+  try {
+    const db = openIndexDb(tmpCwd);
+    initTeamSchema(db);
+
+    const teamHelp = runTeamCli(['--help'], false, tmpCwd);
+    assert.equal(teamHelp.help, true);
+    assert.ok(teamHelp.commands.includes('task'));
+
+    const taskHelp = runTeamCli(['task', '--help'], false, tmpCwd);
+    assert.equal(taskHelp.help, true);
+    assert.ok(taskHelp.actions.includes('list'));
+    assert.ok(taskHelp.actions.includes('claim'));
+
+    const lockHelp = runTeamCli(['lock', '--help'], false, tmpCwd);
+    assert.equal(lockHelp.help, true);
+    assert.ok(lockHelp.actions.includes('acquire'));
+  } finally {
+    fs.rmSync(tmpCwd, { recursive: true, force: true });
+  }
 });

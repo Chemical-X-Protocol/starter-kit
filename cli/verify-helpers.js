@@ -91,37 +91,56 @@ export const parseTestOutput = (stdout = '', stderr = '', exitCode = 0) => {
   let skipped = 0;
   let checkmarkPasses = 0;
   let crossmarkFails = 0;
+  let hasRunnerSummary = false;
 
   for (const line of lines) {
     const clean = stripAnsi(line).trim();
     if (!clean) continue;
 
-    if (clean.startsWith('✔')) checkmarkPasses++;
+    if (clean.startsWith('✔') || clean.startsWith('✓')) checkmarkPasses++;
     if (clean.startsWith('✖') || clean.startsWith('FAIL ')) crossmarkFails++;
 
-    const nodeTests = clean.match(/(?:ℹ\s*)?tests\s+(\d+)/);
-    if (nodeTests) totalTests = parseInt(nodeTests[1], 10);
+    const isRunnerSummary = /^Tests:?\s+/i.test(clean);
+    if (isRunnerSummary) {
+      const passM = clean.match(/(\d+)\s+passed/i);
+      const failM = clean.match(/(\d+)\s+failed/i);
+      const skipM = clean.match(/(\d+)\s+(?:skipped|todo|pending)/i);
+      const totalParenM = clean.match(/\((\d+)\)/);
+      const totalWordM = clean.match(/(\d+)\s+total/i);
 
-    const nodePass = clean.match(/(?:ℹ\s*)?pass\s+(\d+)/);
-    if (nodePass) passed = parseInt(nodePass[1], 10);
+      if (passM) passed = parseInt(passM[1], 10);
+      if (failM) failed = parseInt(failM[1], 10);
+      if (skipM) skipped = parseInt(skipM[1], 10);
 
-    const nodeFail = clean.match(/(?:ℹ\s*)?fail\s+(\d+)/);
-    if (nodeFail) failed = parseInt(nodeFail[1], 10);
+      if (totalParenM) totalTests = parseInt(totalParenM[1], 10);
+      else if (totalWordM) totalTests = parseInt(totalWordM[1], 10);
+      else totalTests = passed + failed + skipped;
 
-    const nodeSkip = clean.match(/(?:ℹ\s*)?(?:skipped|todo)\s+(\d+)/);
-    if (nodeSkip) skipped += parseInt(nodeSkip[1], 10);
+      hasRunnerSummary = true;
+      continue;
+    }
 
-    const vitestMatch = clean.match(/Tests\s+(?:(\d+)\s+failed)?(?:,\s*)?(?:(\d+)\s+passed)?\s*\((\d+)\)/);
-    if (vitestMatch) {
-      if (vitestMatch[1]) failed = parseInt(vitestMatch[1], 10);
-      if (vitestMatch[2]) passed = parseInt(vitestMatch[2], 10);
-      if (vitestMatch[3]) totalTests = parseInt(vitestMatch[3], 10);
+    if (!hasRunnerSummary) {
+      const nodeTests = clean.match(/^(?:[ℹ#]\s+)?tests\s+(\d+)$/i);
+      if (nodeTests) totalTests = parseInt(nodeTests[1], 10);
+
+      const nodePass = clean.match(/^(?:[ℹ#]\s+)?pass\s+(\d+)$/i);
+      if (nodePass) passed = parseInt(nodePass[1], 10);
+
+      const nodeFail = clean.match(/^(?:[ℹ#]\s+)?fail\s+(\d+)$/i);
+      if (nodeFail) failed = parseInt(nodeFail[1], 10);
+
+      const nodeSkip = clean.match(/^(?:[ℹ#]\s+)?(?:skipped|todo)\s+(\d+)$/i);
+      if (nodeSkip) skipped += parseInt(nodeSkip[1], 10);
     }
   }
 
   if (passed === 0 && checkmarkPasses > 0) passed = checkmarkPasses;
   if (failed === 0 && crossmarkFails > 0) failed = crossmarkFails;
-  if (totalTests === 0) totalTests = passed + failed;
+  if (totalTests === 0) totalTests = passed + failed + skipped;
+  const isCleanExit = exitCode === 0 && failed === 0;
+  const isTestCountUnderflow = isCleanExit && totalTests < passed;
+  if (isTestCountUnderflow) totalTests = passed;
 
   const failures = [];
   if (exitCode !== 0 || failed > 0) {

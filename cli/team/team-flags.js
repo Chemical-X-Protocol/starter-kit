@@ -15,7 +15,8 @@ export const parseFlags = (args = []) => {
     isCompact: args.includes('--compact'),
     markRead: args.includes('--mark-read'),
     force: args.includes('--force') || args.includes('-f'),
-    noTargetConfirm: args.includes('--no-target-confirm')
+    noTargetConfirm: args.includes('--no-target-confirm'),
+    help: args.includes('--help') || args.includes('-h')
   };
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -53,6 +54,8 @@ export const parseFlags = (args = []) => {
     if (arg.startsWith('--prio=') || arg.startsWith('--priority=')) flags.priority = parseInt(arg.split('=')[1], 10);
     if ((arg === '--prio' || arg === '--priority') && hasNext) flags.priority = parseInt(nextArg, 10);
     if (arg.startsWith('--purpose=')) flags.purpose = arg.split('=')[1];
+    if (arg.startsWith('--pid=')) flags.pid = parseInt(arg.split('=')[1], 10);
+    if (arg === '--pid' && hasNext) flags.pid = parseInt(nextArg, 10);
     if (arg.startsWith('--tokens=')) flags.tokens = parseInt(arg.split('=')[1], 10);
     if (arg.startsWith('--prompt-tokens=')) flags.promptTokens = parseInt(arg.split('=')[1], 10);
     if (arg.startsWith('--completion-tokens=')) flags.completionTokens = parseInt(arg.split('=')[1], 10);

@@ -179,3 +179,91 @@ export const formatTaskDetailCard = (task, events = []) => {
   lines.push(`\x1b[90m${'─'.repeat(58)}\x1b[0m\n`);
   return lines.join('\n');
 };
+
+export const formatTeamHelpCard = () => {
+  const lines = [
+    '',
+    '\x1b[1m\x1b[36m⚡ [Chemical X] Multi-Agent Swarm Orchestration (team)\x1b[0m',
+    `\x1b[90m${'─'.repeat(58)}\x1b[0m`,
+    '  \x1b[1mUsage:\x1b[0m chemx team <command> [options]',
+    '',
+    '  \x1b[1mCommands:\x1b[0m',
+    '    \x1b[32mstatus\x1b[0m                   Display swarm agent, task, and lock status card',
+    '    \x1b[32mtask\x1b[0m [action]            Manage agent tasks (list, show, add, claim, done, update)',
+    '    \x1b[32mlock\x1b[0m [acquire|release]   Acquire or release a mutual exclusion file lock',
+    '    \x1b[32munlock\x1b[0m <file>            Release a file lock held by an agent',
+    '    \x1b[32mfeed\x1b[0m                     View swarm feed event timeline',
+    '    \x1b[32mpost\x1b[0m <message>           Post broadcast message to swarm feed',
+    '    \x1b[32minbox\x1b[0m [@agent]           View agent mailbox and notifications',
+    '    \x1b[32mdm\x1b[0m <@agent> <msg>        Send direct message to another agent',
+    '    \x1b[32mtokens\x1b[0m                   Inspect token consumption and telemetry breakdown',
+    '    \x1b[32mtriage\x1b[0m                   Generate tasks automatically from AST audit hazards',
+    '    \x1b[32mbenchmark\x1b[0m                Run memory and token reduction ablation benchmark',
+    '    \x1b[32mtrain\x1b[0m                    Train/evaluate vector and pattern indices',
+    '',
+    '  \x1b[1mGlobal Options:\x1b[0m',
+    '    \x1b[33m--as\x1b[0m <@agent>            Execute action as specified agent handle',
+    '    \x1b[33m--json\x1b[0m                   Output machine-readable JSON format',
+    '    \x1b[33m--help, -h\x1b[0m               Show help for team or specific subcommands',
+    `\x1b[90m${'─'.repeat(58)}\x1b[0m\n`
+  ];
+  return lines.join('\n');
+};
+
+export const formatTaskHelpCard = () => {
+  const lines = [
+    '',
+    '\x1b[1m\x1b[36m⚡ [Chemical X] Task Coordination Commands (team task)\x1b[0m',
+    `\x1b[90m${'─'.repeat(58)}\x1b[0m`,
+    '  \x1b[1mUsage:\x1b[0m chemx team task <action> [arguments] [options]',
+    '',
+    '  \x1b[1mActions:\x1b[0m',
+    '    \x1b[32mlist\x1b[0m                         List swarm tasks (default action)',
+    '    \x1b[32mshow\x1b[0m <taskId>                Display full details and activity stream for a task',
+    '    \x1b[32madd\x1b[0m "<title>"                Create a new task in the queue',
+    '    \x1b[32mclaim\x1b[0m <taskId>              Claim an unassigned task for an agent',
+    '    \x1b[32mdone\x1b[0m <taskId>               Complete a task with automatic verification audit',
+    '    \x1b[32mupdate\x1b[0m <taskId> [status]    Update task status (in_progress, blocked, done)',
+    '    \x1b[32mcomment\x1b[0m <taskId> <msg>       Post a comment or status update to a task',
+    '    \x1b[32mtriage\x1b[0m                    Generate tasks from AST architectural hazards',
+    '    \x1b[32mreconcile\x1b[0m                 Auto-resolve tasks whose hazards have been fixed',
+    '    \x1b[32mset-target\x1b[0m <id> <path>     Assign target file path to a task',
+    '    \x1b[32mvds-slot\x1b[0m <id> <moscow> <p> Set MoSCoW slot and priority on a task',
+    '    \x1b[32mtrace\x1b[0m <id> <url>            Attach provenance trace URL to a task',
+    '',
+    '  \x1b[1mOptions:\x1b[0m',
+    '    \x1b[33m--as\x1b[0m <@agent>            Agent handle (e.g. @agent-1)',
+    '    \x1b[33m--status\x1b[0m <status>        Filter by status (todo, in_progress, blocked, done)',
+    '    \x1b[33m--agent\x1b[0m <@agent>         Filter tasks assigned to agent',
+    '    \x1b[33m--prio\x1b[0m <1-5>             Task priority filter or setting',
+    '    \x1b[33m--force, -f\x1b[0m              Force complete task even with remaining hazards',
+    '    \x1b[33m--json\x1b[0m                   Output machine-readable JSON format',
+    '    \x1b[33m--help, -h\x1b[0m               Show this help message',
+    `\x1b[90m${'─'.repeat(58)}\x1b[0m\n`
+  ];
+  return lines.join('\n');
+};
+
+export const formatLockHelpCard = () => {
+  const lines = [
+    '',
+    '\x1b[1m\x1b[36m⚡ [Chemical X] Mutual Exclusion File Locking (team lock)\x1b[0m',
+    `\x1b[90m${'─'.repeat(58)}\x1b[0m`,
+    '  \x1b[1mUsage:\x1b[0m chemx team lock [acquire|release] <filePath> [options]',
+    '         chemx team unlock <filePath> [options]',
+    '',
+    '  \x1b[1mActions:\x1b[0m',
+    '    \x1b[32macquire\x1b[0m <path>              Acquire mutual exclusion lock (or enqueue in FIFO)',
+    '    \x1b[32mrelease\x1b[0m <path>              Release lock and promote next FIFO waiter',
+    '',
+    '  \x1b[1mOptions:\x1b[0m',
+    '    \x1b[33m--as\x1b[0m <@agent>            Agent handle acquiring/releasing lock (default: @agent)',
+    '    \x1b[33m--purpose\x1b[0m "<reason>"      Reason or intent for acquiring lock',
+    '    \x1b[33m--priority\x1b[0m <1-5>         Priority in FIFO wait queue (1 = highest, default: 2)',
+    '    \x1b[33m--pid\x1b[0m <pid>              Optional process PID for crash-recovery lease reclamation',
+    '    \x1b[33m--json\x1b[0m                   Output machine-readable JSON format',
+    '    \x1b[33m--help, -h\x1b[0m               Show this help message',
+    `\x1b[90m${'─'.repeat(58)}\x1b[0m\n`
+  ];
+  return lines.join('\n');
+};

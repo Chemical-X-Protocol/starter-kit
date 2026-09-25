@@ -129,7 +129,7 @@ test('swarm multi-process: lock automatically releases when holding worker proce
     import { openIndexDb } from '${path.resolve('cli/search-schema.js')}';
     import { requestFileLock } from '${path.resolve('cli/team/team-db-locks.js')}';
     const db = openIndexDb('${tmpDir}');
-    requestFileLock(db, '${testFile}', '@crashing-worker', { ttlMs: 3600000 });
+    requestFileLock(db, '${testFile}', '@crashing-worker', { ttlMs: 3600000, pid: process.pid });
     process.exit(1);
   `;
 

@@ -59,7 +59,7 @@ npx create-chemx my-molecular-app --framework=react --install --yes
 
 ### Package Architecture: Scaffolder vs Command Engine
 Chemical X provides two coordinated packages:
-- **`create-chemx`**: Dedicated zero-dependency project scaffolder (`npm create chemx`). Directly provisions project templates, test suites, and architectural configurations.
+- **`create-chemx`**: Dedicated zero-configuration project scaffolder (`npm create chemx`). Directly provisions project templates, test suites, and architectural configurations.
 - **`chemx`**: The full Molecular Architecture CLI & AST Query Engine. Manages audits, verifications, AST query lookups, code patching, and multi-agent swarm task coordination.
 
 ```bash
@@ -341,7 +341,7 @@ Chemical X enforces seven core architectural directives configured via `chemx pi
 
 ## Model Context Protocol (MCP) Server
 
-Chemical X includes a high-performance, zero-dependency JSON-RPC 2.0 Stdio MCP server that connects directly to AI agent hosts (Cursor, Claude Desktop, Windsurf, Antigravity, VS Code).
+Chemical X includes a high-performance, native Node.js JSON-RPC 2.0 Stdio MCP server that connects directly to AI agent hosts (Cursor, Claude Desktop, Windsurf, Antigravity, VS Code).
 
 ### Automatic 1-Step Installation
 

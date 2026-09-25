@@ -93,6 +93,41 @@ test('Verify: parseTestOutput handles all passing tests with zero failures', () 
   assert.strictEqual(parsed.failures.length, 0);
 });
 
+test('Verify: parseTestOutput accurately parses Vitest summary and isolates test count from audit rules', () => {
+  const vitestOutput = `
+ ✓ src/atoms/a-button/a-button.spec.ts (6)
+ ✓ src/molecules/m-sample-card/m-sample-card.spec.ts (8)
+
+ Test Files  2 passed (2)
+      Tests  14 passed (14)
+   Start at  08:00:00
+   Duration  450ms
+
+ AST Architecture: A+ (100/100, 44 rules evaluated)
+`;
+  const parsed = parseTestOutput(vitestOutput, '', 0);
+  assert.strictEqual(parsed.success, true);
+  assert.strictEqual(parsed.passed, 14);
+  assert.strictEqual(parsed.totalTests, 14);
+  assert.strictEqual(parsed.failed, 0);
+});
+
+test('Verify: parseTestOutput handles Vitest pipe separators with failures and skips', () => {
+  const vitestMixedOutput = `
+ ❯ src/trouble.spec.ts (3)
+   ✖ broken test assertion
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 skipped | 12 passed (14)
+`;
+  const parsed = parseTestOutput(vitestMixedOutput, '', 1);
+  assert.strictEqual(parsed.success, false);
+  assert.strictEqual(parsed.passed, 12);
+  assert.strictEqual(parsed.failed, 1);
+  assert.strictEqual(parsed.skipped, 1);
+  assert.strictEqual(parsed.totalTests, 14);
+});
+
 test('Verify: runTypecheckAudit runs in JSON mode without throwing', async () => {
   const report = await runTypecheckAudit(['--json'], false, { print: false });
   assert.ok(typeof report.success === 'boolean');
