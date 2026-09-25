@@ -61,7 +61,7 @@ export const handleSwarmStatus = (db, cwd = process.cwd()) => {
       parentId: t.parent_id,
       subtaskCount,
       assignedAgentId: t.assigned_agent_id,
-      tokenStamp: `[P: ${p} | C: ${c} | Cost: ${cost.toFixed(4)}]`
+      tokenStamp: `[P: ${p} | C: ${c} | Cost: $${cost.toFixed(4)}]`
     };
   });
 
