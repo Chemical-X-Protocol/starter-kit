@@ -95,5 +95,29 @@ test("runAblationComparison computes dynamic metrics from live task and memory r
 
   const card = formatAblationCard(ablation);
   assert.ok(card.includes("Live Project Telemetry"));
+  assert.ok(card.includes("measured vs modeled baseline"));
+  assert.strictEqual(ablation.hasMeasuredTokens, true);
+  assert.strictEqual(ablation.delta.isEstimated, false);
+  assert.strictEqual(ablation.delta.tokenReductionBasis, "measured");
   assert.strictEqual(card.includes("—"), false);
 }));
+
+test("runAblationComparison marks token reduction as estimated when live tasks lack token counts", () => withTmpCwd((db) => {
+  db.prepare(`
+    INSERT INTO agent_tasks (title, status, created_at, updated_at)
+    VALUES ('Task without token telemetry', 'done', 1000, 1000)
+  `).run();
+
+  const ablation = runAblationComparison(db);
+  assert.strictEqual(ablation.hasRealData, true);
+  assert.strictEqual(ablation.hasMeasuredTokens, false);
+  assert.strictEqual(ablation.delta.isEstimated, true);
+  assert.strictEqual(ablation.delta.tokenReductionBasis, "estimated_typical_usage");
+  assert.strictEqual(ablation.delta.tokenReductionPct, 97);
+
+  const card = formatAblationCard(ablation);
+  assert.ok(card.includes("estimated based on typical usage"));
+  assert.ok(card.includes("(projected)"));
+  assert.strictEqual(card.includes("—"), false);
+}));
+

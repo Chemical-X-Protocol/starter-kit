@@ -84,17 +84,26 @@ export const runAblationComparison = (db) => {
     const precisionGain = (100 / 12.0).toFixed(1) + 'x';
     return {
       hasRealData: false,
+      hasMeasuredTokens: false,
       isSimulated: true,
       workloadTurns: turns,
       memoryEnabled: { mode: 'SQLite AST & Event Memory', tokensUsed: memTokens, staleRetryRatePct: 0.0, retrievalPrecisionPct: 100, astQualityScore: 100 },
       memoryDisabled: { mode: 'Stateless Monolithic File Re-read', tokensUsed: baseTokens, staleRetryRatePct: 18.5, retrievalPrecisionPct: 12.0, astQualityScore: 84 },
-      delta: { tokenReductionPct: Math.round((tokensSaved / baseTokens) * 100), costAvoidedUsd: Number(((tokensSaved / 1000000) * 10.0).toFixed(4)), retrievalPrecisionGainRatio: precisionGain, staleRetriesEliminated: Math.round(turns * 0.185) }
+      delta: {
+        tokenReductionPct: Math.round((tokensSaved / baseTokens) * 100),
+        tokenReductionBasis: 'estimated_typical_usage',
+        isEstimated: true,
+        costAvoidedUsd: Number(((tokensSaved / 1000000) * 10.0).toFixed(4)),
+        retrievalPrecisionGainRatio: precisionGain,
+        staleRetriesEliminated: Math.round(turns * 0.185)
+      }
     };
   }
 
   const turns = taskStats.totalTasks + m.totalCount;
   const liveTokens = taskStats.totalPromptTokens + taskStats.totalCompletionTokens;
-  const memTokens = liveTokens > 0 ? liveTokens : Math.max(turns * 70, m.totalInjectedTokens || 70);
+  const hasMeasuredTokens = liveTokens > 0;
+  const memTokens = hasMeasuredTokens ? liveTokens : Math.max(turns * 70, m.totalInjectedTokens || 70);
   const baseTokens = turns * 2500 + Math.round(memTokens * 0.5);
   const tokensSaved = Math.max(0, baseTokens - memTokens);
   const tokenReductionPct = baseTokens > 0 ? Math.round((tokensSaved / baseTokens) * 100) : 0;
@@ -105,11 +114,19 @@ export const runAblationComparison = (db) => {
 
   return {
     hasRealData: true,
+    hasMeasuredTokens,
     isSimulated: false,
     workloadTurns: turns,
     memoryEnabled: { mode: 'SQLite AST & Event Memory', tokensUsed: memTokens, staleRetryRatePct: retryRatePct, retrievalPrecisionPct: m.precisionPct, astQualityScore: 100 },
     memoryDisabled: { mode: 'Stateless Monolithic File Re-read', tokensUsed: baseTokens, staleRetryRatePct: 18.5, retrievalPrecisionPct: 12.0, astQualityScore: 84 },
-    delta: { tokenReductionPct, costAvoidedUsd, retrievalPrecisionGainRatio: precisionGainRatio, staleRetriesEliminated }
+    delta: {
+      tokenReductionPct,
+      tokenReductionBasis: hasMeasuredTokens ? 'measured' : 'estimated_typical_usage',
+      isEstimated: !hasMeasuredTokens,
+      costAvoidedUsd,
+      retrievalPrecisionGainRatio: precisionGainRatio,
+      staleRetriesEliminated
+    }
   };
 };
 
@@ -132,13 +149,19 @@ export const formatAblationCard = (a) => {
     );
   }
 
+  const tokenReductionLabel = a.hasMeasuredTokens
+    ? `${delta.tokenReductionPct}% fewer tokens consumed (measured vs modeled baseline)`
+    : `${delta.tokenReductionPct}% fewer tokens consumed (estimated based on typical usage)`;
+  const costAvoidedSuffix = a.hasMeasuredTokens ? '' : ' (projected)';
+  const memoryTokensSuffix = a.hasMeasuredTokens ? '' : ' (est.)';
+
   lines.push(
     `  \x1b[1mWorkload:\x1b[0m              ${a.workloadTurns} agent turns / tasks`,
-    `  \x1b[1mMemory Mode (SQLite):\x1b[0m  ${m.tokensUsed.toLocaleString()} tokens │ Precision: ${m.retrievalPrecisionPct}% │ Retry: ${m.staleRetryRatePct}%`,
-    `  \x1b[1mBaseline (Stateless):\x1b[0m  ${d.tokensUsed.toLocaleString()} tokens │ Precision: ${d.retrievalPrecisionPct}% │ Retry: ${d.staleRetryRatePct}%`,
+    `  \x1b[1mMemory Mode (SQLite):\x1b[0m  ${m.tokensUsed.toLocaleString()} tokens${memoryTokensSuffix} │ Precision: ${m.retrievalPrecisionPct}% │ Retry: ${m.staleRetryRatePct}%`,
+    `  \x1b[1mBaseline (Stateless):\x1b[0m  ${d.tokensUsed.toLocaleString()} tokens (modeled) │ Precision: ${d.retrievalPrecisionPct}% │ Retry: ${d.staleRetryRatePct}%`,
     `\x1b[90m${'─'.repeat(58)}\x1b[0m`,
-    `  \x1b[32m✔ Token Reduction:\x1b[0m     ${delta.tokenReductionPct}% fewer tokens consumed`,
-    `  \x1b[32m✔ Cost Avoided:\x1b[0m        ${delta.costAvoidedUsd.toFixed(4)} USD`,
+    `  \x1b[32m✔ Token Reduction:\x1b[0m     ${tokenReductionLabel}`,
+    `  \x1b[32m✔ Cost Avoided:\x1b[0m        ${delta.costAvoidedUsd.toFixed(4)} USD${costAvoidedSuffix}`,
     `  \x1b[32m✔ Precision Gain:\x1b[0m      ${delta.retrievalPrecisionGainRatio} higher retrieval precision per dollar`,
     `  \x1b[32m✔ Stale Retries:\x1b[0m       ${delta.staleRetriesEliminated} retries eliminated`,
     `\x1b[90m${'─'.repeat(58)}\x1b[0m\n`
