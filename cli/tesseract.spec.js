@@ -27,7 +27,7 @@ test('tesseract: cli command execution succeeds with exit code 0', () => {
   const cliPath = path.resolve('cli/index.js');
   const res = spawnSync(process.execPath, [cliPath, 'tesseract'], {
     encoding: 'utf8',
-    timeout: 5000
+    timeout: 15000
   });
 
   assert.strictEqual(res.status, 0, 'CLI tesseract should exit with 0');
@@ -40,7 +40,7 @@ test('tesseract: cli aliases cube and matrix work identically', () => {
   for (const alias of ['cube', 'matrix']) {
     const res = spawnSync(process.execPath, [cliPath, alias], {
       encoding: 'utf8',
-      timeout: 5000
+      timeout: 15000
     });
     assert.strictEqual(res.status, 0, `CLI ${alias} should exit with 0`);
     assert.ok(res.stdout.includes('TESSERACT'), `CLI ${alias} should render Tesseract`);

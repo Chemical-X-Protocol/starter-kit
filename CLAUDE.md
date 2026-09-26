@@ -4,8 +4,8 @@ Strictly follow the architectural directives in AGENTS.md:
 
 ## Core Verification Commands (Token Conservation)
 AI agents must NEVER run raw `npm test` or `tsc --noEmit` in bash. Always use the Chemical X zero-token-burn commands:
-- Master MCP Gateway (Recommended): Invoke `chemx({ action: 'verify' })` or `chemx({ action: 'audit' })` via MCP.
-- Full Verification (AST Audit + Typecheck + Tests): `node cli/index.js verify` (or `npx chemx verify`)
+- Master MCP Gateway (Mandatory): When operating in Antigravity or MCP-enabled environments, invoke `chemx` under server `chemical-x` via `call_mcp_tool(ServerName: 'chemical-x', ToolName: 'chemx')`. Never drop down to bash subshells or primitive viewers (`sed`, `grep`, `head`, `tail`, `cat`, `view_file`) when `chemical-x` MCP server is registered.
+- Full Verification (AST Audit + Typecheck + Tests): `chemx verify` (or `chemx({ action: 'verify' })`)
 - Silent Typecheck Audit: `node cli/index.js typecheck` (or `npx chemx typecheck`)
 - Silent Test Runner: `node cli/index.js test` (or `npx chemx test`)
 - Silent Build Audit: `node cli/index.js build` (or `npx chemx build`)
