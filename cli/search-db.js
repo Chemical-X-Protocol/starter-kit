@@ -17,6 +17,8 @@ export {
   findFileDependencies,
   findFileDependents,
   calculateBlastRadius,
+  calculateCallTrace,
+  calculateBacktrace,
   querySemanticIndex,
   queryHybridIndex,
   syncViolationsIndex,

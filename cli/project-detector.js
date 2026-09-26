@@ -170,8 +170,73 @@ const TIER_DIRECTORY_MAPS = {
   ]
 };
 
-export const detectTierBaseDir = (tier, cwd = process.cwd()) => {
+export const PRESET_DIRECTORY_MAPS = {
+  src: {
+    molecule: 'src/components/molecules',
+    atom: 'src/components/atoms',
+    organism: 'src/components/organisms',
+    template: 'src/components/templates',
+    hook: 'src/hooks',
+    view: 'src/views',
+    service: 'src/services',
+    route: 'src/routes',
+    store: 'src/stores',
+    repo: 'src/repos',
+    util: 'src/utils',
+    spec: 'test/unit'
+  },
+  app: {
+    molecule: 'app/components/molecules',
+    atom: 'app/components/atoms',
+    organism: 'app/components/organisms',
+    template: 'app/components/templates',
+    hook: 'app/composables',
+    view: 'app/pages',
+    service: 'app/services',
+    route: 'server/api',
+    store: 'app/stores',
+    repo: 'server/repos',
+    util: 'app/utils',
+    spec: 'test/unit'
+  },
+  root: {
+    molecule: 'components/molecules',
+    atom: 'components/atoms',
+    organism: 'components/organisms',
+    template: 'components/templates',
+    hook: 'hooks',
+    view: 'pages',
+    service: 'services',
+    route: 'routes',
+    store: 'stores',
+    repo: 'repos',
+    util: 'utils',
+    spec: 'test'
+  },
+  lib: {
+    molecule: 'src/lib/components/molecules',
+    atom: 'src/lib/components/atoms',
+    organism: 'src/lib/components/organisms',
+    template: 'src/lib/components/templates',
+    hook: 'src/lib/hooks',
+    view: 'src/routes',
+    service: 'src/lib/services',
+    route: 'src/routes/api',
+    store: 'src/lib/stores',
+    repo: 'src/lib/repos',
+    util: 'src/lib/utils',
+    spec: 'test'
+  }
+};
+
+export const detectTierBaseDir = (tier, cwd = process.cwd(), presetOverride = null) => {
   const config = loadProjectConfig(cwd);
+  const activePreset = presetOverride || config.preset;
+
+  if (activePreset && PRESET_DIRECTORY_MAPS[activePreset]?.[tier]) {
+    return PRESET_DIRECTORY_MAPS[activePreset][tier];
+  }
+
   if (config.dirs && config.dirs[tier]) {
     const configuredPath = path.resolve(cwd, config.dirs[tier]);
     if (fs.existsSync(configuredPath)) return config.dirs[tier];
@@ -182,7 +247,45 @@ export const detectTierBaseDir = (tier, cwd = process.cwd()) => {
     if (fs.existsSync(path.resolve(cwd, c))) return c;
   }
 
-  return '.';
+  if (fs.existsSync(path.resolve(cwd, 'app/components'))) {
+    return PRESET_DIRECTORY_MAPS.app[tier] || 'app/components';
+  }
+
+  return PRESET_DIRECTORY_MAPS.src[tier] || '.';
+};
+
+export const detectJigBaseDir = (kind, { cwd = process.cwd(), preset = null } = {}) => {
+  const config = loadProjectConfig(cwd);
+  const activePreset = preset || config.preset;
+
+  if (activePreset && PRESET_DIRECTORY_MAPS[activePreset]?.[kind]) {
+    return PRESET_DIRECTORY_MAPS[activePreset][kind];
+  }
+
+  if (config.dirs && config.dirs[kind]) {
+    const configuredPath = path.resolve(cwd, config.dirs[kind]);
+    if (fs.existsSync(configuredPath)) return config.dirs[kind];
+  }
+
+  const defaultDirMap = {
+    service: ['src/services', 'app/services', 'services', 'src/lib/services'],
+    route: ['src/routes', 'server/api', 'routes', 'src/routes/api'],
+    store: ['src/stores', 'app/stores', 'stores', 'src/lib/stores'],
+    repo: ['src/repos', 'server/repos', 'repos', 'src/lib/repos'],
+    util: ['src/utils', 'app/utils', 'utils', 'src/lib/utils'],
+    spec: ['test/unit', 'tests/unit', 'test', 'tests']
+  };
+
+  const candidates = defaultDirMap[kind] || [`src/${kind}s`];
+  for (const c of candidates) {
+    if (fs.existsSync(path.resolve(cwd, c))) return c;
+  }
+
+  if (fs.existsSync(path.resolve(cwd, 'app'))) {
+    return PRESET_DIRECTORY_MAPS.app[kind] || `app/${kind}s`;
+  }
+
+  return PRESET_DIRECTORY_MAPS.src[kind] || `src/${kind}s`;
 };
 
 const TAILWIND_PACKAGES = [

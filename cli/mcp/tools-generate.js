@@ -1,4 +1,4 @@
-import { createCapsuleFiles } from '../generator.js';
+import { createCapsuleFiles, createJigFiles, JIG_KINDS } from '../generator.js';
 import { openIndexDb } from '../search-schema.js';
 import { fetchScoreTrends, formatTrendReport, renderSparkline } from '../trend.js';
 import { resolveTargetCwd } from './tools-search.js';
@@ -6,12 +6,32 @@ import { resolveTargetCwd } from './tools-search.js';
 export const handleGenerateCapsule = (args = {}, cwd = process.cwd()) => {
   const { name, framework, tier = 'm', targetDir = null, lean = false, desc = '', description = '', dryRun = false } = args;
 
+  const isJig = Boolean(args.jig || args.kind || (args.tier && JIG_KINDS.has(args.tier.toLowerCase())));
+  if (isJig) {
+    const kind = args.kind || (typeof args.jig === 'string' ? args.jig : null) || (args.tier && JIG_KINDS.has(args.tier.toLowerCase()) ? args.tier : 'service');
+    const jigResult = createJigFiles({
+      kind,
+      name: (name || `sample-${kind}`).trim(),
+      targetParent: targetDir,
+      dir: args.dir,
+      preset: args.preset,
+      methods: args.methods,
+      state: args.state,
+      routes: args.routes,
+      schema: args.schema,
+      desc: desc || description,
+      dryRun: Boolean(dryRun),
+      cwd
+    });
+    return jigResult;
+  }
+
   const hasName = Boolean(name && name.trim());
   const hasValidFramework = Boolean(framework && ['react', 'vue', 'svelte'].includes(framework.toLowerCase()));
   const canGenerate = hasName && hasValidFramework;
 
   if (!canGenerate) {
-    throw new Error('chemx_generate_capsule requires "name" and "framework" (react, vue, svelte).');
+    throw new Error('chemx_generate_capsule requires "name" and "framework" (react, vue, svelte), or pass "jig: true" / "kind".');
   }
 
   const result = createCapsuleFiles({

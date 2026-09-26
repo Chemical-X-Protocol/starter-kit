@@ -16,16 +16,65 @@ const parseCommand = (command, params) => {
   const parts = command.trim().split(/\s+/);
   const subCmd = parts[0];
   if (subCmd === 'audit' || subCmd === 'check') return { action: subCmd, params: { path: parts[1] || 'src', ...params } };
-  if (subCmd === 'build') return { action: 'build', params: { dir: parts[1] || '.', ...params } };
-  if (['verify', 'typecheck', 'test'].includes(subCmd)) return { action: subCmd, params };
+  if (subCmd === 'test') {
+    const targetMatch = command.match(/--target=([^\s]+)/);
+    const filterMatch = command.match(/(?:--filter=|-t=|-t\s+)([^\s]+)/);
+    const positional = parts.slice(1).find((p) => !p.startsWith('-'));
+    return {
+      action: 'test',
+      params: {
+        target: targetMatch ? targetMatch[1] : (positional || params?.target),
+        filter: filterMatch ? filterMatch[1] : params?.filter,
+        ...params
+      }
+    };
+  }
+  if (subCmd === 'jig') {
+    const kind = parts[1];
+    const name = parts[2];
+    const methodsMatch = command.match(/--methods=([^\s]+)/);
+    const routesMatch = command.match(/--routes=([^\s]+)/);
+    return {
+      action: 'generate',
+      params: {
+        jig: true,
+        kind,
+        name,
+        methods: methodsMatch ? methodsMatch[1] : undefined,
+        routes: routesMatch ? routesMatch[1] : undefined,
+        ...params
+      }
+    };
+  }
+  if (['verify', 'typecheck'].includes(subCmd)) return { action: subCmd, params };
   if (subCmd === 'read' || subCmd === 'r') {
     const hasOutline = command.includes('--outline') || command.includes(' -o');
+    const hasLogic = command.includes('--logic') || command.includes(' -l');
+    const hasTemplate = command.includes('--template') || command.includes(' -t');
+    const hasEnrich = command.includes('--enrich');
     const symbolMatch = command.match(/(?:--symbol=|-s\s+|-s=)([^\s]+)/);
+    const traceMatch = command.match(/--trace=([^\s]+)/);
+    const backtraceMatch = command.match(/--backtrace=([^\s]+)/);
     const lineMatch = parts[1]?.match(/^([^:]+):(\d+)(?:[-:](\d+))?$/);
     const targetPath = lineMatch ? lineMatch[1] : parts[1];
     const startLine = lineMatch ? parseInt(lineMatch[2], 10) : undefined;
     const endLine = lineMatch && lineMatch[3] ? parseInt(lineMatch[3], 10) : undefined;
-    return { action: 'read', params: { path: targetPath, outline: hasOutline, symbol: symbolMatch ? symbolMatch[1] : undefined, startLine, endLine, ...params } };
+    return {
+      action: 'read',
+      params: {
+        path: targetPath,
+        outline: hasOutline || undefined,
+        logic: hasLogic || undefined,
+        template: hasTemplate || undefined,
+        enrich: hasEnrich || undefined,
+        symbol: symbolMatch ? symbolMatch[1] : undefined,
+        traceSymbol: traceMatch ? traceMatch[1] : undefined,
+        backtraceSymbol: backtraceMatch ? backtraceMatch[1] : undefined,
+        startLine,
+        endLine,
+        ...params
+      }
+    };
   }
   if (subCmd === 'q' || subCmd === 'search') return { action: 'q', params: { query: parts.slice(1).join(' '), ...params } };
   if (subCmd === 'team') {

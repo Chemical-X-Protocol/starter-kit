@@ -75,6 +75,16 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
       await runSearch(rawArgs.slice(1), true);
       break;
     }
+    case 'trace': {
+      const { runTraceCli } = await import('../search-commands-graph.js');
+      await runTraceCli(rawArgs.slice(1), true);
+      break;
+    }
+    case 'backtrace': {
+      const { runBacktraceCli } = await import('../search-commands-graph.js');
+      await runBacktraceCli(rawArgs.slice(1), true);
+      break;
+    }
     case 'build':
     case 'run':
     case 'wrap': {
@@ -166,9 +176,10 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
     case 'g':
     case 'gen':
     case 'generate':
-    case 'capsule': {
+    case 'capsule':
+    case 'jig': {
       const { runGenerateWizard } = await import('../scaffold.js');
-      await runGenerateWizard(rawArgs.slice(1));
+      await runGenerateWizard(rawArgs);
       break;
     }
     case 'badge':
@@ -199,6 +210,13 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
     case 'tsc': {
       const { runTypecheckAudit } = await import('../verify.js');
       await runTypecheckAudit(rawArgs.slice(1), true);
+      break;
+    }
+    case 'lint':
+    case 'check:lint':
+    case 'eslint': {
+      const { runLintAudit } = await import('../verify-lint.js');
+      await runLintAudit(rawArgs.slice(1), true);
       break;
     }
     case 'test':

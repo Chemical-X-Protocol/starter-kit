@@ -22,6 +22,7 @@ export {
   parseTypecheckOutput,
   parseTestOutput
 } from './verify-helpers.js';
+export { runLintAudit } from './verify-lint.js';
 
 export const runTypecheckAudit = async (rawArgs = [], isCli = false, options = {}) => {
   if (rawArgs.includes('--help') || rawArgs.includes('-h') || rawArgs.includes('help')) {
@@ -161,6 +162,12 @@ export const runTestAudit = async (rawArgs = [], isCli = false, options = {}) =>
   const customCmd = parseCommandFromArgs(rawArgs) || options.command;
   const cwd = findProjectRoot(options.cwd || process.cwd());
 
+  const targetFlag = (rawArgs.find((a) => a.startsWith('--target=')) || '').replace(/^--target=/, '');
+  const filterFlag = (rawArgs.find((a) => a.startsWith('--filter=') || a.startsWith('-t=')) || '').replace(/^--(filter|t)=/, '');
+  const positionalTarget = rawArgs.find((a) => !a.startsWith('-') && !['test', 'tests', 'check:test'].includes(a) && (a.endsWith('.js') || a.endsWith('.ts') || a.includes('/')));
+  const target = options.target || targetFlag || positionalTarget || null;
+  const filter = options.filter || filterFlag || null;
+
   const nmStatus = checkNodeModules(cwd);
   if (nmStatus) {
     const friendlyMsg = nmStatus.msg('testing');
@@ -190,7 +197,7 @@ export const runTestAudit = async (rawArgs = [], isCli = false, options = {}) =>
     return report;
   }
 
-  const command = detectTestCommand(customCmd, cwd);
+  const command = detectTestCommand(customCmd, cwd, { target, filter });
   const execution = await executeBuild(command, cwd, { raw: isRaw });
   const parsed = parseTestOutput(execution.stdout, execution.stderr, execution.exitCode);
 

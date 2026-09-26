@@ -1,7 +1,8 @@
 import path from 'node:path';
 import { openIndexDb } from '../search-db.js';
 import {
-  findSymbolReferences, findFileDependencies, findFileDependents, calculateBlastRadius
+  findSymbolReferences, findFileDependencies, findFileDependents, calculateBlastRadius,
+  calculateCallTrace, calculateBacktrace,
 } from '../search-queries.js';
 import { findSimilarSymbols } from '../search-queries-similar.js';
 import { readTokenOptimized } from '../reader.js';
@@ -35,6 +36,28 @@ const buildContextEnvelope = (db, targetPath) => {
   return '';
 };
 
+const buildTraceCard = (db, symbol) => {
+  try {
+    const result = calculateCallTrace(db, symbol, { maxDepth: 3 });
+    if (!result || !result.callees || result.callees.length === 0) return '';
+    const lines = result.callees.slice(0, 6).map((c) => `//   -> ${c.symbol || c} (${c.file ? path.basename(c.file) : '?'})`);
+    return `\n// --- Forward Trace: ${symbol} ---\n${lines.join('\n')}`;
+  } catch {
+    return '';
+  }
+};
+
+const buildBacktraceCard = (db, symbol) => {
+  try {
+    const result = calculateBacktrace(db, symbol, { maxDepth: 5 });
+    if (!result || !result.rootCallers || result.rootCallers.length === 0) return '';
+    const lines = result.rootCallers.slice(0, 5).map((c) => `//   <- ${path.basename(c)}`);
+    return `\n// --- Backtrace: ${symbol} ---\n${lines.join('\n')}`;
+  } catch {
+    return '';
+  }
+};
+
 export const handleChemxRead = (args = {}, cwd = process.cwd()) => {
   if (!args.path) throw new Error('chemx_read requires "path" argument.');
   const targetCwd = resolveTargetCwd(args.cwd || cwd);
@@ -51,19 +74,38 @@ export const handleChemxRead = (args = {}, cwd = process.cwd()) => {
 
   const targetPath = path.isAbsolute(rawPath) ? rawPath : path.resolve(targetCwd, rawPath);
   const res = readTokenOptimized(targetPath, {
-    outline: args.outline, symbol: args.symbol,
-    stripComments: args.stripComments !== false, compact: args.compact !== false,
-    startLine, endLine
+    outline: args.outline,
+    logic: args.logic,
+    template: args.template,
+    enrich: args.enrich,
+    traceSymbol: args.traceSymbol,
+    backtraceSymbol: args.backtraceSymbol,
+    symbol: args.symbol,
+    stripComments: args.stripComments !== false,
+    compact: args.compact !== false,
+    startLine,
+    endLine
   });
 
-  const db = (args.connections || args.symbol) ? openIndexDb(targetCwd) : null;
+  const needsDb = args.connections || args.symbol || (args.enrich && (args.traceSymbol || args.backtraceSymbol));
+  const db = needsDb ? openIndexDb(targetCwd) : null;
   const connectionCard = (args.connections && db) ? buildConnectionCard(db, args.symbol, targetPath) : '';
   const contextEnvelope = (args.symbol && db) ? buildContextEnvelope(db, targetPath) : '';
 
+  const traceCard = (args.enrich && args.traceSymbol && db)
+    ? buildTraceCard(db, args.traceSymbol)
+    : '';
+  const backtraceCard = (args.enrich && args.backtraceSymbol && db)
+    ? buildBacktraceCard(db, args.backtraceSymbol)
+    : '';
+
   const ext = path.extname(targetPath).toLowerCase();
   const lang = EXT_LANG_MAP[ext] || '';
-  const fence = res.content.includes('```') ? '~~~' : '```';
-  const fenced = `${fence}${lang}\n${res.content}\n${fence}`;
-  const header = `// ${res.file} (${res.lineCount || res.totalLines} lines, ~${res.tokensEst} tokens)${connectionCard}\n`;
+  const bodyParts = [res.content, res.enriched, traceCard, backtraceCard].filter(Boolean);
+  const body = bodyParts.join('\n');
+  const fence = body.includes('```') ? '~~~' : '```';
+  const fenced = `${fence}${lang}\n${body}\n${fence}`;
+  const enrichNote = res.tokensEnriched > 0 ? ` +${res.tokensEnriched} enriched` : '';
+  const header = `// ${res.file} (${res.lineCount || res.totalLines} lines, ~${res.tokensEst} tokens${enrichNote})${connectionCard}\n`;
   return header + contextEnvelope + fenced;
 };

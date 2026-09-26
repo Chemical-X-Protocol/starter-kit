@@ -4,63 +4,27 @@ import { parse } from '@babel/parser';
 import traverseModule from '@babel/traverse';
 import { ANSI } from './theme.js';
 
+import {
+  stripCodeComments,
+  compactCode,
+  resolveDeclarationKind,
+  summarizeTemplate,
+  extractTemplateContent,
+  generateAstLogicSkeleton
+} from './reader-logic.js';
+import { runReaderCli } from './reader-cli.js';
+
+export {
+  stripCodeComments,
+  compactCode,
+  resolveDeclarationKind,
+  summarizeTemplate,
+  extractTemplateContent,
+  generateAstLogicSkeleton
+} from './reader-logic.js';
+export { runReaderCli } from './reader-cli.js';
+
 const traverse = traverseModule.default || traverseModule;
-
-/**
- * Strips JavaScript/TypeScript comments while preserving line boundaries where possible.
- *
- * @param {string} code Source code.
- * @returns {string} Code without comments.
- */
-export const stripCodeComments = (code) => {
-  return code
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/(^|[^\:])\/\/.*$/gm, '$1');
-};
-
-/**
- * Collapses consecutive blank lines and trims trailing spaces.
- *
- * @param {string} code Source code.
- * @returns {string} Compact code.
- */
-export const compactCode = (code) => {
-  return code
-    .split('\n')
-    .map((line) => line.trimEnd())
-    .filter((line, idx, arr) => {
-      const isCurrentEmpty = line.trim() === '';
-      const isPrevEmpty = idx > 0 && arr[idx - 1].trim() === '';
-      return !(isCurrentEmpty && isPrevEmpty);
-    })
-    .join('\n');
-};
-
-const resolveDeclarationKind = (declaration) => {
-  const init = declaration.init;
-  if (!init) return 'const';
-
-  if (init.type === 'ArrowFunctionExpression' || init.type === 'FunctionExpression') {
-    return 'function';
-  }
-
-  if (init.type !== 'CallExpression') {
-    return 'const';
-  }
-
-  const calleeName = init.callee?.name;
-  if (calleeName === 'computed') {
-    return 'computed';
-  }
-  if (calleeName === 'ref') {
-    return 'ref';
-  }
-  if (calleeName && calleeName.startsWith('use')) {
-    return 'hook';
-  }
-
-  return 'const';
-};
 
 /**
  * Extracts an AST structural outline of a file (types, exports, props, signatures).
@@ -216,6 +180,22 @@ export const extractSymbolBlock = (code, symbol) => {
 };
 
 /**
+ * Appends a compacted logic skeleton after an outline block.
+ * Composable overlay: enriches outline without replacing it.
+ *
+ * @param {string} rawContent Full file source.
+ * @param {string} filePath File path (for template detection).
+ * @param {object} options Reader options forwarded to skeleton generator.
+ * @returns {{ text: string, tokensEst: number }} Enriched section text and token estimate.
+ */
+const enrichOutline = (rawContent, filePath, options) => {
+  const skeleton = generateAstLogicSkeleton(rawContent, filePath, options);
+  const compacted = compactCode(skeleton);
+  const text = `\n// --- Logic Skeleton ---\n${compacted}`;
+  return { text, tokensEst: Math.round(text.length / 3.8) };
+};
+
+/**
  * Primary token-optimized file reader.
  *
  * @param {string} targetPath File path.
@@ -249,14 +229,52 @@ export const readTokenOptimized = (targetPath, options = {}) => {
   const rawLines = rawContent.split('\n');
   const totalLines = rawLines.length;
 
+  if (options.template) {
+    const templateText = extractTemplateContent(rawContent, targetPath);
+    return {
+      file: targetPath,
+      totalLines,
+      mode: 'template',
+      tokensEst: Math.round(templateText.length / 3.8),
+      content: templateText,
+    };
+  }
+
+  if (options.logic) {
+    let logicSource = rawContent;
+    if (options.symbol) {
+      const block = extractSymbolBlock(rawContent, options.symbol);
+      if (!block) {
+        throw new Error(`Symbol "${options.symbol}" not found in ${targetPath}`);
+      }
+      logicSource = block.code;
+    }
+    let logicText = generateAstLogicSkeleton(logicSource, targetPath, options);
+    if (options.compact !== false) {
+      logicText = compactCode(logicText);
+    }
+    return {
+      file: targetPath,
+      totalLines,
+      mode: 'logic',
+      symbol: options.symbol || null,
+      lineCount: logicText.split('\n').length,
+      tokensEst: Math.round(logicText.length / 3.8),
+      content: logicText,
+    };
+  }
+
   if (options.outline) {
     const outlineText = generateAstOutline(rawContent, targetPath);
+    const enriched = options.enrich ? enrichOutline(rawContent, targetPath, options) : null;
     return {
       file: targetPath,
       totalLines,
       mode: 'outline',
       tokensEst: Math.round(outlineText.length / 3.8),
+      tokensEnriched: enriched ? enriched.tokensEst : 0,
       content: outlineText,
+      enriched: enriched ? enriched.text : null,
     };
   }
 
@@ -290,12 +308,15 @@ export const readTokenOptimized = (targetPath, options = {}) => {
       `// To read a specific block, request symbol: chemx({ action: 'read', params: { path: '${rawPath}', symbol: '<name>' } })`,
       `// Or specify a line range: chemx({ action: 'read', params: { path: '${rawPath}', startLine: 1, endLine: 50 } })\n`
     ].join('\n');
+    const enriched = options.enrich ? enrichOutline(rawContent, rawPath, options) : null;
     return {
       file: rawPath,
       totalLines,
       mode: 'auto-outline',
       tokensEst: Math.round((outlineText.length + notice.length) / 3.8),
-      content: notice + outlineText
+      tokensEnriched: enriched ? enriched.tokensEst : 0,
+      content: notice + outlineText,
+      enriched: enriched ? enriched.text : null,
     };
   }
 
@@ -344,118 +365,4 @@ export const readTokenOptimized = (targetPath, options = {}) => {
     tokensEst,
     content: processedContent,
   };
-};
-
-/**
- * CLI command runner for chemx read / chemx view.
- *
- * @param {string[]} args CLI arguments.
- * @param {boolean} isCli Whether invoked directly from CLI.
- */
-export const runReaderCli = (args, isCli = false) => {
-  if (args.includes('--help') || args.includes('-h') || args.includes('help')) {
-    const isJson = args.includes('--json');
-    if (isJson) {
-      process.stdout.write(JSON.stringify({ help: true, success: true }) + '\n');
-    } else {
-      process.stdout.write([
-        `${ANSI.BOLD}USAGE${ANSI.RESET}`,
-        `  chemx read <file> [options]`,
-        '',
-        `${ANSI.BOLD}OPTIONS${ANSI.RESET}`,
-        `  --outline                AST structure outline only (80%+ token savings)`,
-        `  --symbol=<name>          Extract specific function/hook/interface declaration`,
-        `  --start=<N>              Start line number (1-indexed)`,
-        `  --end=<N>                End line number (1-indexed)`,
-        `  --strip-comments         Remove comments to minimize tokens`,
-        `  --compact                Collapse empty whitespace lines`,
-        `  --json                   Output result as minified JSON`,
-        `  -h, --help               Show this help message`,
-        ''
-      ].join('\n'));
-    }
-    if (isCli) process.exit(0);
-    return { help: true, success: true };
-  }
-
-  const nonFlagArgs = args.filter((a) => !a.startsWith('-'));
-  let filePath = nonFlagArgs[0];
-
-  if (!filePath) {
-    process.stderr.write(`${ANSI.RED}✕ Missing file path. Usage: chemx r <file[:start-end]> [-o] [-s name]${ANSI.RESET}\n`);
-    if (isCli) process.exit(1);
-    return null;
-  }
-
-  let startLine;
-  let endLine;
-
-  const colonMatch = filePath.match(/^([^:]+):(\d+)(?:[-:](\d+))?$/);
-  if (colonMatch) {
-    filePath = colonMatch[1];
-    startLine = parseInt(colonMatch[2], 10);
-    if (colonMatch[3]) endLine = parseInt(colonMatch[3], 10);
-  }
-
-  const isJson = args.includes('--json') || args.includes('-j');
-  const isOutline = args.includes('--outline') || args.includes('-o');
-  const isCompact = args.includes('--compact') || args.includes('-c');
-  const isStripComments = args.includes('--strip-comments') || args.includes('--no-comments') || args.includes('-sc');
-
-  let symbol = null;
-  const symEqFlag = args.find((a) => a.startsWith('--symbol=') || a.startsWith('-sym='));
-  if (symEqFlag) {
-    symbol = symEqFlag.split('=')[1];
-  } else {
-    const sIndex = args.findIndex((a) => a === '-s' || a === '--symbol');
-    if (sIndex !== -1 && args[sIndex + 1] && !args[sIndex + 1].startsWith('-')) {
-      symbol = args[sIndex + 1];
-    } else {
-      const sFlag = args.find((a) => a.startsWith('-s='));
-      if (sFlag) {
-        const val = sFlag.split('=')[1];
-        if (/^\d+$/.test(val)) {
-          if (startLine === undefined) startLine = parseInt(val, 10);
-        } else {
-          symbol = val;
-        }
-      }
-    }
-  }
-
-  if (startLine === undefined) {
-    const startFlag = args.find((a) => a.startsWith('--start='));
-    if (startFlag) startLine = parseInt(startFlag.split('=')[1], 10);
-  }
-
-  if (endLine === undefined) {
-    const endFlag = args.find((a) => a.startsWith('--end=') || a.startsWith('-e='));
-    if (endFlag) endLine = parseInt(endFlag.split('=')[1], 10);
-  }
-
-  try {
-    const res = readTokenOptimized(filePath, {
-      outline: isOutline,
-      compact: isCompact,
-      stripComments: isStripComments,
-      symbol,
-      startLine,
-      endLine,
-    });
-
-    if (isJson) {
-      process.stdout.write(JSON.stringify(res, null, 2) + '\n');
-    } else {
-      process.stdout.write(`${ANSI.BOLD}${ANSI.CYAN}--- ${res.file} (${res.lineCount || res.totalLines} lines, ~${res.tokensEst} tokens) ---${ANSI.RESET}\n`);
-      process.stdout.write(res.content + '\n');
-    }
-
-    if (isCli) process.exit(0);
-    return res;
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    process.stderr.write(`${ANSI.RED}✕ ${msg}${ANSI.RESET}\n`);
-    if (isCli) process.exit(1);
-    return null;
-  }
 };

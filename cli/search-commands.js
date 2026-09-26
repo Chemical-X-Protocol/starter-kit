@@ -384,7 +384,13 @@ export const handleCheckCommand = (targetFile, { isJson = false, isCli = true } 
   return payload;
 };
 
-export { handleBlastRadiusCommand } from './search-commands-graph.js';
+export {
+  handleBlastRadiusCommand,
+  handleCallTraceCommand,
+  handleBacktraceCommand,
+  runTraceCli,
+  runBacktraceCli
+} from './search-commands-graph.js';
 export { handleSemanticCommand, handleHybridCommand } from './search-commands-semantic.js';
 
 

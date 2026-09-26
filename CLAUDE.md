@@ -16,7 +16,7 @@ AI agents must NEVER run raw `npm test` or `tsc --noEmit` in bash. Always use th
 - Symbol Connections: Inspect callers and dependencies without reading files: `chemx({ action: 'read', params: { path, symbol: '<name>', connections: true } })`.
 - Prohibition on Native File Analyzers: NEVER use `view_file` or raw file dumping tools. Use Chemical X AST tools exclusively.
 - Inspect Capsule: `node cli/index.js search "<capsule>" --inspect`
-- Token-minified reading: `node cli/index.js read <path> --outline`
+- Token-minified reading: `node cli/index.js read <path> --outline` (signatures only) or `--outline --enrich` (signatures + logic skeleton, no boilerplate penalty)
 
 ## Architectural Rules
 - File Line Limits: 100 lines is an outer bound for single-purpose files; molecule capsules must stay under 100 lines.

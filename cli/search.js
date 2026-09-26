@@ -28,6 +28,8 @@ import {
   handleHealthFilterCommand,
   handleCheckCommand,
   handleBlastRadiusCommand,
+  handleCallTraceCommand,
+  handleBacktraceCommand,
   handleSemanticCommand,
   handleHybridCommand
 } from './search-commands.js';
@@ -39,41 +41,21 @@ import { ANSI } from './theme.js';
 export { toColumnar, fromColumnar } from './columnar.js';
 
 export {
-  openIndexDb,
-  upsertFileIndex,
-  getIndexStats,
-  findSymbolDefinition,
-  findSymbolReferences,
-  findFileDependencies,
-  findFileDependents,
-  calculateBlastRadius,
-  querySemanticIndex,
-  queryHybridIndex,
-  syncViolationsIndex,
-  queryViolations,
-  recordAuditSnapshot,
-  getAuditProgression,
-  queryFilesByHealth
+  openIndexDb, upsertFileIndex, getIndexStats,
+  findSymbolDefinition, findSymbolReferences,
+  findFileDependencies, findFileDependents,
+  calculateBlastRadius, querySemanticIndex, queryHybridIndex,
+  syncViolationsIndex, queryViolations,
+  recordAuditSnapshot, getAuditProgression, queryFilesByHealth
 } from './search-db.js';
 export {
-  handleCheckCommand,
-  handleBlastRadiusCommand,
-  handleSemanticCommand,
-  handleHybridCommand
+  handleCheckCommand, handleBlastRadiusCommand,
+  handleSemanticCommand, handleHybridCommand
 } from './search-commands.js';
 
 const IGNORED_DIRS = new Set([
-  'node_modules',
-  'dist',
-  'build',
-  'vendor',
-  '.git',
-  '.next',
-  '.turbo',
-  '.output',
-  '.nuxt',
-  '.cache',
-  'out'
+  'node_modules', 'dist', 'build', 'vendor', '.git',
+  '.next', '.turbo', '.output', '.nuxt', '.cache', 'out'
 ]);
 
 const EXCLUDED_NAME_PATTERNS = ['.test.', '.spec.', '.min.'];
@@ -368,6 +350,22 @@ export const runSearch = async (rawArgs = [], isCli = true) => {
     const maxDepthFlag = rawArgs.find((a) => a.startsWith('--max-depth='));
     const maxDepth = maxDepthFlag ? parseInt(maxDepthFlag.split('=')[1], 10) : 5;
     return handleBlastRadiusCommand(db, target, { isJson, isCli, isColumnar, maxDepth });
+  }
+
+  const isTraceCommand = firstArg === 'trace' || rawArgs.includes('--trace');
+  if (isTraceCommand) {
+    const target = firstArg === 'trace' ? secondArg : firstArg;
+    const maxDepthFlag = rawArgs.find((a) => a.startsWith('--max-depth='));
+    const maxDepth = maxDepthFlag ? parseInt(maxDepthFlag.split('=')[1], 10) : 3;
+    return handleCallTraceCommand(db, target, { isJson, isCli, maxDepth });
+  }
+
+  const isBacktraceCommand = firstArg === 'backtrace' || rawArgs.includes('--backtrace');
+  if (isBacktraceCommand) {
+    const target = firstArg === 'backtrace' ? secondArg : firstArg;
+    const maxDepthFlag = rawArgs.find((a) => a.startsWith('--max-depth='));
+    const maxDepth = maxDepthFlag ? parseInt(maxDepthFlag.split('=')[1], 10) : 5;
+    return handleBacktraceCommand(db, target, { isJson, isCli, maxDepth });
   }
 
   const isSemanticCommand = firstArg === 'semantic' || rawArgs.includes('--semantic');

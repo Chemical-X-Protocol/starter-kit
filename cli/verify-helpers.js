@@ -30,16 +30,59 @@ export const detectTypecheckCommand = (customCmd, cwd = process.cwd()) => {
   return `${pm} run typecheck`;
 };
 
-export const detectTestCommand = (customCmd, cwd = process.cwd()) => {
-  if (customCmd && customCmd.trim().length > 0) return customCmd.trim();
+export const detectTestCommand = (customCmd, cwd = process.cwd(), options = {}) => {
+  const target = options.target ? String(options.target).trim() : null;
+  const filter = options.filter ? String(options.filter).trim() : null;
+
+  if (customCmd && customCmd.trim().length > 0) {
+    let cmd = customCmd.trim();
+    if (target && !cmd.includes(target)) cmd += ` ${target}`;
+    if (filter && !cmd.includes(filter)) cmd += ` -t "${filter}"`;
+    return cmd;
+  }
+
   const pkg = loadLocalPackageJson(cwd);
   const scripts = (pkg && pkg.scripts) || {};
+  const deps = { ...(pkg?.dependencies || {}), ...(pkg?.devDependencies || {}) };
   const pm = resolvePackageManager(cwd);
+
+  const hasVitest = Boolean(
+    deps.vitest ||
+    (scripts.test && scripts.test.includes('vitest')) ||
+    fs.existsSync(path.join(cwd, 'vitest.config.ts')) ||
+    fs.existsSync(path.join(cwd, 'vitest.config.js'))
+  );
+
+  const hasNodeTest = Boolean(
+    scripts.test && (scripts.test.includes('node --test') || scripts.test.includes('node:test'))
+  );
+
+  if (target || filter) {
+    if (hasVitest) {
+      let vitestCmd = 'npx vitest run';
+      if (target) vitestCmd += ` ${target}`;
+      if (filter) vitestCmd += ` -t "${filter}"`;
+      return vitestCmd;
+    }
+
+    if (hasNodeTest || target?.endsWith('.spec.js') || target?.endsWith('.test.js')) {
+      let nodeCmd = 'node --test';
+      if (target) nodeCmd += ` ${target}`;
+      if (filter) nodeCmd += ` --test-name-pattern="${filter}"`;
+      return nodeCmd;
+    }
+
+    const baseTest = pm === 'yarn' ? 'yarn test' : `${pm} test`;
+    let args = '';
+    if (target) args += ` ${target}`;
+    if (filter) args += ` -t "${filter}"`;
+    return `${baseTest} --${args}`;
+  }
 
   const isLegitTest = scripts.test && !scripts.test.includes('no test specified');
   if (isLegitTest) return pm === 'yarn' ? 'yarn test' : `${pm} run test`;
 
-  if (fs.existsSync(path.join(cwd, 'vitest.config.ts')) || fs.existsSync(path.join(cwd, 'vitest.config.js'))) {
+  if (hasVitest) {
     return 'npx vitest run';
   }
 

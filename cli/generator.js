@@ -32,7 +32,11 @@ import {
 import { detectFramework, resolveFramework, detectTierBaseDir, detectInstalledFamily, detectTestRunner, detectStylingStack } from './project-detector.js';
 import { indexGeneratedFiles } from './generator-indexer.js';
 import { printGenerateHelp } from './generator-help.js';
+import { createJigFiles, JIG_KINDS } from './generator-jig.js';
+import { handleJigCli } from './generator-jig-cli.js';
 export { printGenerateHelp } from './generator-help.js';
+export { createJigFiles, JIG_KINDS } from './generator-jig.js';
+export { handleJigCli } from './generator-jig-cli.js';
 
 const TIERS = [
   { prefix: 'm-', tier: 'molecule', label: '1. m- Molecule (Self-contained feature block < 100 lines - Recommended)' },
@@ -50,7 +54,7 @@ const FRAMEWORKS = [
 ];
 
 const KNOWN_TIER_NAMES = new Set(['molecule', 'atom', 'organism', 'template', 'hook', 'composable', 'view', 'page']);
-const IGNORED_NAME_TOKENS = new Set(['generate', 'capsule', 'add', 'g', 'gen']);
+const IGNORED_NAME_TOKENS = new Set(['generate', 'capsule', 'add', 'g', 'gen', 'jig']);
 export const isCapsuleNameArg = (arg) => !arg.startsWith('-') && !IGNORED_NAME_TOKENS.has(arg);
 
 const resolveSelectedTier = (explicitTier, cleanName) => {
@@ -293,7 +297,7 @@ export const runGenerateWizard = async (rawArgs = []) => {
   }
 
   const isJson = rawArgs.includes('--json');
-  const isYes = rawArgs.includes('-y') || rawArgs.includes('--yes') || !process.stdin.isTTY;
+  const isYes = rawArgs.includes('-y') || rawArgs.includes('--yes') || isJson || !process.stdin.isTTY;
   if (!isJson) renderBanner('Chemical X: Molecular Capsule Wizard');
   await checkOrPromptEvaluation('generate capsule', { isYes });
 
@@ -342,6 +346,15 @@ export const runGenerateWizard = async (rawArgs = []) => {
   const hasCompactFlag = rawArgs.includes('--compact');
   const hasFlatFlag = rawArgs.includes('--flat');
   const isCompact = hasCompactFlag || hasFlatFlag;
+
+  const jigFlag = (rawArgs.find((a) => a.startsWith('--jig=')) || '').split('=')[1];
+  const kindFlag = (rawArgs.find((a) => a.startsWith('--kind=')) || '').split('=')[1];
+  const isJigWord = positional[0] && (JIG_KINDS.has(positional[0].toLowerCase()) || positional[0].toLowerCase() === 'jig');
+  const isJig = Boolean(jigFlag || kindFlag || rawArgs.includes('--jig') || isJigWord);
+
+  if (isJig) {
+    return handleJigCli({ rawArgs, positional, rawName, dirArg, descArg, isDryRun, isJson });
+  }
 
   if (!rawName && !isYes) {
     rawName = useGum

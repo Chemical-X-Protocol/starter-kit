@@ -34,16 +34,20 @@ export const MASTER_MCP_TOOL = {
           'patterns',
           'issue',
           'project',
-          'tesseract'
+          'tesseract',
+          'trace',
+          'backtrace'
         ],
         description: 'The Chemical X subsystem action to execute.'
       },
       params: {
         type: 'object',
-        description: 'Parameter payload for the specific action (e.g., { path, symbol, outline, connections } for read; { query, blastRadius, semantic, hybrid } for q; { path, search, replace } for patch; { dir, command } for test/build).',
+        description: 'Parameter payload for the specific action (e.g., { path, symbol, outline, logic, template, connections } for read; { query, blastRadius, trace, backtrace, semantic, hybrid } for q; { path, search, replace } for patch; { dir, command } for test/build).',
         properties: {
           query: { type: 'string', description: 'Search term, symbol name, or conceptual query (for q/search)' },
           blastRadius: { type: 'boolean', description: 'Map direct consumers, transitive dependents & impacted tiers (for q)' },
+          trace: { type: 'boolean', description: 'Compute forward call trace of downstream invocations (for q/search)' },
+          backtrace: { type: 'boolean', description: 'Compute reverse backtrace causal caller path (for q/search)' },
           semantic: { type: 'boolean', description: 'Search conceptually related components via vector cosine similarity (for q)' },
           hybrid: { type: 'boolean', description: 'Blend BM25 keyword matching + Vector RRF ranking (for q)' },
           connections: { type: 'boolean', description: 'Include caller graph and dependent references (for q, read)' },
@@ -54,7 +58,12 @@ export const MASTER_MCP_TOOL = {
           reindex: { type: 'boolean', description: 'Force re-index before running query (for q)' },
           path: { type: 'string', description: 'Target file path (for read, patch, write, check, lock)' },
           symbol: { type: 'string', description: 'Target symbol declaration to extract (for read)' },
-          outline: { type: 'boolean', description: 'Extract AST signatures only (80%+ token reduction) (for read)' },
+          outline: { type: 'boolean', description: 'Extract AST signatures only (80%+ token reduction). Compose with enrich:true for free-lunch outline + logic in one call. (for read)' },
+          logic: { type: 'boolean', description: 'Extract AST logic skeleton preserving control flow, guards, and mutations (for read)' },
+          template: { type: 'boolean', description: 'Extract declarative template markup only (Vue/Svelte/JSX) (for read)' },
+          enrich: { type: 'boolean', description: 'Append compacted logic skeleton after outline block. Composable overlay: use with outline:true or symbol. Returns outline + logic in one token-compact response without boilerplate penalty. (for read)' },
+          traceSymbol: { type: 'string', description: 'Symbol name: appends forward call trace card inline when enrich:true (for read)' },
+          backtraceSymbol: { type: 'string', description: 'Symbol name: appends reverse caller chain card inline when enrich:true (for read)' },
           startLine: { type: 'number', description: 'Starting line number (1-indexed) (for read)' },
           endLine: { type: 'number', description: 'Ending line number (1-indexed) (for read)' },
           stripComments: { type: 'boolean', description: 'Remove comments to minimize tokens (for read)' },
@@ -69,6 +78,8 @@ export const MASTER_MCP_TOOL = {
           overwrite: { type: 'boolean', description: 'Allow overwriting existing file (for write)' },
           dir: { type: 'string', description: 'Target directory (for audit, test, build, patterns)' },
           command: { type: 'string', description: 'Explicit execution command (for build, test)' },
+          target: { type: 'string', description: 'Target test file or spec path (for test)' },
+          filter: { type: 'string', description: 'Filter test names by regex or string pattern (for test)' },
           subAction: { type: 'string', description: 'Sub-action for team operations (e.g. list, claim, done, triage, acquire, release)' },
           taskId: { type: 'number', description: 'Target task ID (for team task claim/done)' },
           agentId: { type: 'string', description: 'Agent handle (e.g. @antigravity, @coder)' },
@@ -78,6 +89,13 @@ export const MASTER_MCP_TOOL = {
           force: { type: 'boolean', description: 'Force complete task even if hazards remain (for team task done)' },
           tokens: { type: 'number', description: 'Prompt tokens consumed by task' },
           cost: { type: 'number', description: 'Estimated dollar cost for task' },
+          jig: { type: 'boolean', description: 'Enable universal programmatic jig generation (for generate)' },
+          kind: { type: 'string', enum: ['service', 'route', 'store', 'repo', 'util', 'spec'], description: 'Programmatic file kind for jig (for generate)' },
+          methods: { description: 'Methods definitions array or comma-separated string (for generate)' },
+          state: { description: 'State properties array or string (for generate)' },
+          routes: { description: 'Routes array or string (for generate)' },
+          schema: { description: 'JSON schema definition (for generate)' },
+          preset: { type: 'string', enum: ['src', 'app', 'root', 'lib'], description: 'Architecture directory preset (for generate)' },
           name: { type: 'string', description: 'Capsule name (for generate)' },
           desc: { type: 'string', description: 'Functional description to tailor archetype (for generate)' },
           framework: { type: 'string', enum: ['vue', 'react', 'svelte'], description: 'Framework flavor (for generate)' },
@@ -90,7 +108,7 @@ export const MASTER_MCP_TOOL = {
       },
       command: {
         type: 'string',
-        description: 'Optional CLI command string format (e.g., "test", "build", "verify", "typecheck", "audit src", "q a-button --blast-radius --json", "q \\"button state\\" --semantic --json", "read src/foo.vue --outline", "check src/bar.ts", "team task list").'
+        description: 'Optional CLI command string format (e.g., "test", "build", "verify", "typecheck", "audit src", "q a-button --blast-radius --json", "q \\"button state\\" --semantic --json", "read src/foo.vue --outline", "read src/foo.vue --outline --enrich", "check src/bar.ts", "team task list").'
       }
     }
   }

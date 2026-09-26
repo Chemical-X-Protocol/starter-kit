@@ -113,13 +113,26 @@
   // Surgical AST Reading & Connections
   chemx({ action: 'read', params: { path: 'src/...', symbol: 'ButtonVariant', connections: true } });
   chemx({ action: 'read', params: { path: 'src/...', outline: true } });
+  // Free-lunch enriched read: outline + logic skeleton in one call (no boilerplate penalty)
+  chemx({ action: 'read', params: { path: 'src/...', outline: true, enrich: true } });
+  // Outline + logic + forward call trace card
+  chemx({ action: 'read', params: { path: 'src/...', outline: true, enrich: true, traceSymbol: 'handleCheckout' } });
+  // Outline + logic + reverse caller chain card
+  chemx({ action: 'read', params: { path: 'src/...', outline: true, enrich: true, backtraceSymbol: 'handleCheckout' } });
 
   // Surgical Modification & Rules Check
   chemx({ action: 'patch', params: { path: 'src/...', target: 'oldCode', replacement: 'newCode' } });
   chemx({ action: 'write', params: { path: 'src/...', content: '...' } });
   chemx({ action: 'check', params: { path: 'src/...' } });
 
-  // Verification & Multi-Agent Swarm
+  // Deterministic Parameterized Scaffolding (Universal Jig - 90%+ Token Reduction)
+  chemx({ action: 'generate', params: { jig: true, kind: 'service', name: 'payment-gateway', methods: [{ name: 'charge', params: 'amount: number' }] } });
+  chemx({ action: 'generate', params: { jig: true, kind: 'route', name: 'api-orders', routes: ['GET /orders', 'POST /orders'] } });
+  chemx({ action: 'generate', params: { jig: true, kind: 'store', name: 'session-store' } });
+
+  // Verification, Targeted Testing & Multi-Agent Swarm
+  chemx({ action: 'test', params: { target: 'src/services/payment-gateway.spec.ts' } });
+  chemx({ action: 'test', params: { target: 'cli/generator.spec.js', filter: 'jig' } });
   chemx({ action: 'verify' });
   chemx({ action: 'team', params: { action: 'task', subAction: 'claim', taskId: 1, as: '@agent' } });
   chemx({ action: 'team', params: { action: 'task', subAction: 'done', taskId: 1, as: '@agent', force: true } });
@@ -131,8 +144,19 @@
 - **Database Master Index First**: Before inspecting or modifying any file, AI agents MUST query the SQLite database (`.chemx/index.db`) or the AST Query Machine (`chemx({ action: 'team', params: { action: 'list' } })`, `chemx({ action: 'q', params: { query } })`) rather than exploring the filesystem with broad find or ripgrep commands.
 - **Targeted Symbol-Only Extraction**: AI agents MUST NEVER dump entire source files into context. When an agent needs to inspect a function, hook, interface, or class, it MUST request only that specific symbol: `chemx({ action: 'read', params: { path, symbol: '<name>' } })`.
 - **Surgical Auto-Outline Guard**: Files exceeding 100 lines (Directive 1.A outer bound) read without a target symbol or slice automatically render an AST outline to prevent token exhaustion and host buffer spillovers (such as IDE `output.txt` dumps).
+- **Free-Lunch Enrich Mode**: When an agent needs both exported signatures AND logic flow for a file, use `enrich: true` with `outline: true`. Returns the outline block + a compacted logic skeleton in a single response card with no boilerplate token penalty. Optionally append a forward trace or reverse caller chain by adding `traceSymbol` or `backtraceSymbol` to the same call: `chemx({ action: 'read', params: { path, outline: true, enrich: true } })`.
 - **Symbol Connection Graph Over Multi-File Dumps**: Rather than reading multiple files to understand imports and consumers, agents MUST request symbol connections: `chemx({ action: 'read', params: { path, symbol: '<name>', connections: true } })` or `chemx({ action: 'q', params: { query, connections: true } })`. This instantly returns the definition, imported dependencies, and caller references in ~45 tokens.
 - **Prohibition on Native File Analyzers (`view_file` Ban)**: AI agents are strictly prohibited from using native IDE file-viewing tools (`view_file`, `read_file`, `cat`, `head`, `tail`, or full-file context dumps). Dumping raw files burns thousands of tokens, causes premature context exhaustion, and defeats the token economics of the molecular architecture. All inspections MUST flow through Chemical X AST readers.
+
+### O. Universal Programmatic File Jig & Closed-Loop Execution Protocol
+- **Deterministic Parameterized Synthesis**: When creating non-UI files (services, API route handlers, state stores, database repositories, utilities, or test specs), AI agents MUST NOT emit hundreds of lines of mechanical boilerplate via raw file writing tools. Agents MUST invoke `chemx generate --jig=<kind>` or `chemx({ action: 'generate', params: { jig: true, kind, name, ... } })`.
+- **The 90%+ Output Token Reduction Thesis**: Passing a 30-50 token structured parameter set replaces 1,000-2,500 output tokens of repetitive TypeScript, imports, error tuples, and test boilerplate.
+- **The Closed-Loop ChemX Execution Cycle**:
+  1. *Generate (Jig)*: Stamp out compliant architecture via `chemx({ action: 'generate', params: { jig: true, ... } })`.
+  2. *Read (Outline)*: Inspect AST shape via `chemx({ action: 'read', params: { path, outline: true } })`.
+  3. *Patch (Surgical Edit)*: Ingest domain logic via `chemx({ action: 'patch', params: { path, target, replacement } })`.
+  4. *Test (Targeted Slice)*: Run isolated unit tests in milliseconds via `chemx({ action: 'test', params: { target: '<spec-path>' } })`.
+  5. *Verify (Full Guard)*: Validate AST score and types via `chemx({ action: 'verify' })`.
 
 ---
 

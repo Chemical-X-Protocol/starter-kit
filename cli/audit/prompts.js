@@ -66,7 +66,7 @@ export const formatGroupedPromptViolations = (violations = [], options = {}) => 
 export const buildAgentCommandsSection = () => [
   '### AI AGENT DISCOVERY & REFACTORING COMMANDS:',
   '- Claim Work: Run `chemx team task list --status=queued` and claim via `chemx team task claim <id> --as=@coder`.',
-  '- Inspect Target: Run `chemx read <target_path> --outline` to inspect AST signatures without token bloat.',
+  '- Inspect Target: Run `chemx read <target_path> --outline` for AST signatures or `--outline --enrich` for signatures + logic flow without token bloat.',
   '- Verify & Auto-Resolve: Run `chemx verify`. Clean files auto-reconcile tasks to done in SQLite.',
   '- MCP Invocations: If invoking via MCP, pass command string directly via `chemx({ command: "..." })`.'
 ].join('\n');

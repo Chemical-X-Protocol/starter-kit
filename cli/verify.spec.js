@@ -28,6 +28,23 @@ test('Verify: detectTestCommand resolves custom test command when provided', () 
   assert.strictEqual(cmd, 'vitest run test/unit');
 });
 
+test('Verify: detectTestCommand formats target file and filter options correctly', () => {
+  const cmd = detectTestCommand(null, process.cwd(), {
+    target: 'cli/generator-jig.spec.js',
+    filter: 'presets'
+  });
+  assert.ok(cmd.includes('cli/generator-jig.spec.js'));
+  assert.ok(cmd.includes('presets'));
+});
+
+test('Verify: detectTestCommand appends target to custom command', () => {
+  const cmd = detectTestCommand('npx vitest run', process.cwd(), {
+    target: 'src/services/billing.spec.ts',
+    filter: 'charge'
+  });
+  assert.strictEqual(cmd, 'npx vitest run src/services/billing.spec.ts -t "charge"');
+});
+
 test('Verify: parseTypecheckOutput extracts clean structured diagnostics', () => {
   const sampleOutput = `
 src/components/Card.tsx(14,5): error TS2322: Type 'string' is not assignable to type 'number'.

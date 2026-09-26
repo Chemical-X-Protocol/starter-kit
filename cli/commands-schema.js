@@ -16,7 +16,9 @@ export const COMMANDS_SCHEMA = [
       { flag: '-i, --inspect', desc: 'Inspect props and hooks without full source' },
       { flag: '--tier=<tier>', desc: 'Filter by tier: atom, molecule, organism, hook, view' },
       { flag: '--blast-radius', desc: 'Map direct consumers, transitive dependents & impacted tiers (aliases: --blast, --impact)' },
-      { flag: '--max-depth=<N>', desc: 'Max depth for blast radius traversal (default: 5)' },
+      { flag: '--trace', desc: 'Forward call trace: downstream functions invoked by target' },
+      { flag: '--backtrace', desc: 'Reverse backtrace: upstream callers and causal paths leading to target' },
+      { flag: '--max-depth=<N>', desc: 'Max depth for blast radius / trace traversal (default: 5)' },
       { flag: '--semantic', desc: 'Concept search via vector cosine similarity' },
       { flag: '--hybrid', desc: 'Blended BM25 keyword + Vector RRF ranking' },
       { flag: '--hazards', desc: 'Query architectural rule violations directly (flags: --rule=<id>, --critical)' },
@@ -26,6 +28,8 @@ export const COMMANDS_SCHEMA = [
     examples: [
       'npx chemx search "badge"',
       'pnpm q a-button --blast-radius --json',
+      'pnpm q useUserCardController --trace',
+      'pnpm q handleAction --backtrace',
       'pnpm q "button click handler" --semantic',
       'pnpm q "useAttentionCardController" --hybrid --json',
       'pnpm q "useTheme" --inspect',
@@ -34,13 +38,18 @@ export const COMMANDS_SCHEMA = [
   },
   {
     name: 'read',
-    aliases: ['view'],
+    aliases: ['view', 'r'],
     usage: 'npx chemx read <file> [options]',
-    summary: 'Token-minified file reader with AST outline extraction.',
-    description: 'Extracts structural AST outlines, stripped comments, line ranges, or targeted symbol declarations to minimize LLM context token consumption.',
+    summary: 'Token-minified file reader with AST outline and logic extraction.',
+    description: 'Extracts structural AST outlines, logic skeletons, stripped comments, line ranges, or targeted symbol declarations to minimize LLM context token consumption.',
     flags: [
-      { flag: '--outline', desc: 'Signatures only (80%+ token savings)' },
-      { flag: '--symbol=<name>', desc: 'Target a specific symbol definition' },
+      { flag: '--outline, -o', desc: 'Signatures only (80%+ token savings)' },
+      { flag: '--logic, -l', desc: 'AST logic skeleton: control flow, guards, and mutations without decorative syntax' },
+      { flag: '--template, -t', desc: 'Extract template markup only (Vue/Svelte/JSX)' },
+      { flag: '--enrich', desc: 'Append compacted logic skeleton after outline (free-lunch overlay). Compose with --outline for signatures + logic in one call.' },
+      { flag: '--trace=<name>', desc: 'Append forward call trace card inline (requires --enrich)' },
+      { flag: '--backtrace=<name>', desc: 'Append reverse caller chain card inline (requires --enrich)' },
+      { flag: '--symbol=<name>, -s', desc: 'Target a specific symbol definition' },
       { flag: '--connections', desc: 'Include caller graph and dependent references alongside symbol' },
       { flag: '--strip-comments', desc: 'Remove all code comments' },
       { flag: '--compact', desc: 'Remove blank lines and indentation' },
@@ -50,8 +59,40 @@ export const COMMANDS_SCHEMA = [
     ],
     examples: [
       'npx chemx read src/store.ts --outline',
+      'npx chemx read src/controller.ts --outline --enrich',
+      'npx chemx read src/card.vue --outline --enrich --trace=handleSubmit',
+      'npx chemx read src/controller.ts --logic',
+      'npx chemx read src/card.vue --template',
       'npx chemx read api.ts --symbol=login --connections',
       'npx chemx read src/ui/atoms/a-button/types.d.ts --symbol=ButtonVariant'
+    ]
+  },
+  {
+    name: 'trace',
+    usage: 'npx chemx trace <symbol> [options]',
+    summary: 'Forward call trace: inspects downstream function invocations.',
+    description: 'Maps the execution tree of functions, services, and external APIs called by the target symbol.',
+    flags: [
+      { flag: '--max-depth=<N>', desc: 'Max depth for call trace traversal (default: 3)' },
+      { flag: '--json', desc: 'Output call tree as minified JSON' }
+    ],
+    examples: [
+      'npx chemx trace useCartController',
+      'npx chemx trace handleCheckout --json'
+    ]
+  },
+  {
+    name: 'backtrace',
+    usage: 'npx chemx backtrace <symbol> [options]',
+    summary: 'Reverse call backtrace: maps upstream caller chains leading to target.',
+    description: 'Traces the causal path of how user interactions, components, and views trigger the target symbol.',
+    flags: [
+      { flag: '--max-depth=<N>', desc: 'Max depth for backtrace traversal (default: 5)' },
+      { flag: '--json', desc: 'Output causal path as minified JSON' }
+    ],
+    examples: [
+      'npx chemx backtrace handleCheckout',
+      'npx chemx backtrace postOrder --json'
     ]
   },
   {
@@ -176,6 +217,24 @@ export const COMMANDS_SCHEMA = [
     examples: [
       'npx chemx verify',
       'pnpm chemx verify --json'
+    ]
+  },
+  {
+    name: 'lint',
+    aliases: ['check:lint', 'eslint'],
+    usage: 'npx chemx lint [path] [options]',
+    summary: 'Token-conserving linter runner and tree-formatter with automatic fix.',
+    description: 'Executes ESLint with token-efficient diagnostics, target scoping, and automatic --fix support.',
+    flags: [
+      { flag: '--fix', desc: 'Automatically fix fixable lint and tree-formatting errors' },
+      { flag: '--json', desc: 'Output structured diagnostics as JSON for AI agents' },
+      { flag: '--raw', desc: 'Do not capture or format output' }
+    ],
+    examples: [
+      'npx chemx lint',
+      'npx chemx lint --fix',
+      'npx chemx lint apps/youmeos/components/blueprints/desktop/u-desktop.vue --fix',
+      'pnpm chemx lint --json'
     ]
   },
   {

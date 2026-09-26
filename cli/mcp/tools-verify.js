@@ -30,6 +30,8 @@ export const handleChemxTest = async (args = {}, cwd = process.cwd()) => {
   return runTestAudit([], false, {
     json: true,
     command: args.command,
+    target: args.target,
+    filter: args.filter,
     print: false,
     cwd: targetCwd
   });

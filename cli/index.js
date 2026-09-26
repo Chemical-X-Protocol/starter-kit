@@ -68,6 +68,7 @@ export const runWriterCli    = async (...a) => (await import('./patcher.js')).ru
 export const writeFile       = async (...a) => (await import('./patcher.js')).writeFile(...a);
 export const runTeamCli      = async (...a) => (await import('./team/index.js')).runTeamCli(...a);
 export const runTrend        = async (...a) => (await import('./trend.js')).runTrend(...a);
+export const runLintAudit    = async (...a) => (await import('./verify-lint.js')).runLintAudit(...a);
 export const runPillarsWizard = async (...a) => (await import('./pillars-wizard.js')).runPillarsWizard(...a);
 export const runTesseract    = async (...a) => (await import('./tesseract.js')).runTesseract(...a);
 export { handleError, withErrorCatcher, publishIssue };
@@ -78,10 +79,11 @@ export { handleError, withErrorCatcher, publishIssue };
 
 export const ALLOWED_COMMANDS = new Set([
   'search', 'q', 'query', 'find',
+  'trace', 'backtrace',
   'read', 'view', 'r',
   'patch', 'edit',
   'write',
-  'generate', 'g', 'gen', 'capsule', 'add',
+  'generate', 'g', 'gen', 'capsule', 'add', 'jig',
   'explode', 'unpack',
   'audit',
   'trend', 'trends',
@@ -93,6 +95,7 @@ export const ALLOWED_COMMANDS = new Set([
   'mcp', 'mcp-server', 'server', 'install-mcp', 'setup-mcp',
   'build', 'run', 'wrap',
   'typecheck', 'check:types', 'tsc',
+  'lint', 'check:lint', 'eslint',
   'test', 'tests', 'check:test',
   'check',
   'badge', 'badges',

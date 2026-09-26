@@ -239,7 +239,12 @@ export const queryFilesByHealth = (db, { status = 'all', limit = 50 } = {}) => {
   }));
 };
 
-export { calculateBlastRadius } from './search-queries-graph.js';
+export {
+  calculateBlastRadius,
+  calculateCallTrace,
+  calculateBacktrace,
+  extractCalleesFromCode
+} from './search-queries-graph.js';
 export { querySemanticIndex, queryHybridIndex } from './search-queries-semantic.js';
 
 
