@@ -396,11 +396,11 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
   }
 
   if (subCommand === 'lock') {
-    return handleLockCommand(db, nonFlagPositional, flags, isCli);
+    return handleLockCommand(db, nonFlagPositional, flags, isCli, cwd);
   }
 
   if (subCommand === 'unlock') {
-    return handleUnlockCommand(db, nonFlagPositional, flags, isCli);
+    return handleUnlockCommand(db, nonFlagPositional, flags, isCli, cwd);
   }
 
   if (subCommand === 'triage') {

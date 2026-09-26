@@ -3,6 +3,7 @@ import path from 'node:path';
 import { parse } from '@babel/parser';
 import traverseModule from '@babel/traverse';
 import { ANSI } from './theme.js';
+import { resolveSafePath } from './path-scope.js';
 
 import {
   stripCodeComments,
@@ -214,7 +215,8 @@ export const readTokenOptimized = (targetPath, options = {}) => {
     if (endLine === undefined && colonMatch[3]) endLine = parseInt(colonMatch[3], 10);
   }
 
-  const resolvedPath = path.resolve(process.cwd(), rawPath);
+  const cwd = options.cwd || process.cwd();
+  const resolvedPath = resolveSafePath(rawPath, cwd);
 
   if (!fs.existsSync(resolvedPath)) {
     throw new Error(`File not found: ${rawPath}`);

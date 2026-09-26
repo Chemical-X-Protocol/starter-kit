@@ -6,6 +6,7 @@ import {
 } from '../search-queries.js';
 import { findSimilarSymbols } from '../search-queries-similar.js';
 import { readTokenOptimized } from '../reader.js';
+import { resolveSafePath } from '../path-scope.js';
 import { EXT_LANG_MAP, resolveTargetCwd } from './tools-search-util.js';
 
 const buildConnectionCard = (db, symbol, targetPath) => {
@@ -72,8 +73,9 @@ export const handleChemxRead = (args = {}, cwd = process.cwd()) => {
     if (endLine === undefined && colonMatch[3]) endLine = parseInt(colonMatch[3], 10);
   }
 
-  const targetPath = path.isAbsolute(rawPath) ? rawPath : path.resolve(targetCwd, rawPath);
+  const targetPath = resolveSafePath(rawPath, targetCwd);
   const res = readTokenOptimized(targetPath, {
+    cwd: targetCwd,
     outline: args.outline,
     logic: args.logic,
     template: args.template,

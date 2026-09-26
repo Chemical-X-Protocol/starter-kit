@@ -3,6 +3,7 @@ import path from 'node:path';
 import { ANSI } from './theme.js';
 import { syncSingleFileIndex } from './search.js';
 import { auditFile } from './audit.js';
+import { resolveSafePath } from './path-scope.js';
 
 /**
  * Surgically applies a search-and-replace block to a file.
@@ -37,7 +38,7 @@ export const patchFile = (targetPath, params = {}) => {
     throw new Error('replacementContent is required for patching');
   }
 
-  const resolvedPath = path.resolve(cwd, targetPath);
+  const resolvedPath = resolveSafePath(targetPath, cwd);
   if (!fs.existsSync(resolvedPath)) {
     throw new Error(`File not found: ${targetPath}`);
   }
@@ -253,7 +254,7 @@ export const writeFile = (targetPath, params = {}) => {
     throw new Error('content is required for writeFile');
   }
 
-  const resolvedPath = path.resolve(cwd, targetPath);
+  const resolvedPath = resolveSafePath(targetPath, cwd);
   const dir = path.dirname(resolvedPath);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });

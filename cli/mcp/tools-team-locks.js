@@ -6,23 +6,30 @@ import {
   getFileLockStatus
 } from '../team/team-db.js';
 import { handleError } from '../errors/index.js';
+import { isPathTraversal } from '../path-scope.js';
 
 export const handleChemxTeamLock = async (args = {}, cwd = process.cwd()) => {
   const db = openIndexDb(cwd);
   if (!db) return { error: 'sqlite_unavailable' };
   const action = args.action || 'status';
 
+  if (args.filePath && isPathTraversal(args.filePath, cwd)) {
+    return { error: 'path_traversal' };
+  }
+
   if (action === 'acquire') {
     return requestFileLock(db, args.filePath, args.agentId, {
       purpose: args.purpose,
-      ttlMs: args.ttlMs
+      ttlMs: args.ttlMs,
+      cwd
     });
   }
   if (action === 'release') {
-    return releaseFileLock(db, args.filePath, args.agentId);
+    return releaseFileLock(db, args.filePath, args.agentId, { cwd });
   }
   if (action === 'status') {
-    const status = getFileLockStatus(db, args.filePath);
+    const status = getFileLockStatus(db, args.filePath, { cwd });
+    if (!status) return null;
     return {
       lease: status.lease,
       waiters: toColumnar(status.waiters, ['id', 'agent_id', 'priority', 'status', 'requested_at'])

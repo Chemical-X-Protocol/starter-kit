@@ -2,6 +2,7 @@ import path from 'node:path';
 import { syncSingleFileIndex } from '../search.js';
 import { patchFile } from '../patcher.js';
 import { handleCheckCommand } from '../search-commands.js';
+import { resolveSafePath } from '../path-scope.js';
 
 export const isSevereViolation = (v) => {
   const isCritical = v.severity === 'CRITICAL';
@@ -39,7 +40,7 @@ export const handleChemxPatch = (args = {}, cwd = process.cwd()) => {
     throw new Error('chemx_patch requires "path", "targetContent", and "replacementContent" arguments.');
   }
 
-  const targetPath = path.isAbsolute(args.path) ? args.path : path.resolve(cwd, args.path);
+  const targetPath = resolveSafePath(args.path, cwd);
   const result = patchFile(targetPath, {
     targetContent,
     replacementContent,
@@ -69,6 +70,6 @@ export const handleChemxCheck = (args = {}, cwd = process.cwd()) => {
   if (!args.path) {
     throw new Error('chemx_check requires "path" argument.');
   }
-  const targetPath = path.isAbsolute(args.path) ? args.path : path.resolve(cwd, args.path);
+  const targetPath = resolveSafePath(args.path, cwd);
   return handleCheckCommand(targetPath, { isJson: true, isCli: false });
 };

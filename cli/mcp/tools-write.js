@@ -2,6 +2,7 @@ import path from 'node:path';
 import { syncSingleFileIndex } from '../search.js';
 import { writeFile } from '../patcher.js';
 import { formatPatchWarnings } from './tools-patch.js';
+import { resolveSafePath } from '../path-scope.js';
 
 export const handleChemxWrite = (args = {}, cwd = process.cwd()) => {
   const hasPath = Boolean(args.path);
@@ -12,7 +13,7 @@ export const handleChemxWrite = (args = {}, cwd = process.cwd()) => {
     throw new Error('chemx_write requires "path" and "content" arguments.');
   }
 
-  const targetPath = path.isAbsolute(args.path) ? args.path : path.resolve(cwd, args.path);
+  const targetPath = resolveSafePath(args.path, cwd);
   const result = writeFile(targetPath, {
     content: args.content,
     cwd

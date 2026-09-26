@@ -1,7 +1,8 @@
 import { requestFileLock, releaseFileLock } from './team-db.js';
 import { formatLockHelpCard } from './team-format.js';
+import { isPathTraversal } from '../path-scope.js';
 
-export const handleLockCommand = (db, nonFlagPositional, flags, isCli) => {
+export const handleLockCommand = (db, nonFlagPositional, flags, isCli, cwd = process.cwd()) => {
   const isLockHelp = flags.help || nonFlagPositional.includes('--help') || nonFlagPositional.includes('-h') || nonFlagPositional.includes('help');
   if (isLockHelp) {
     if (isCli) process.stdout.write(formatLockHelpCard());
@@ -24,13 +25,19 @@ export const handleLockCommand = (db, nonFlagPositional, flags, isCli) => {
   }
 
   if (action === 'release') {
-    return handleUnlockCommand(db, [file], flags, isCli);
+    return handleUnlockCommand(db, [file], flags, isCli, cwd);
+  }
+
+  if (isPathTraversal(file, cwd)) {
+    if (isCli) process.stderr.write('\x1b[31m✕ Path traversal rejected: file path must be within workspace\x1b[0m\n');
+    return { error: 'path_traversal' };
   }
 
   const res = requestFileLock(db, file, flags.as || '@agent', {
     purpose: flags.purpose,
     priority: flags.priority,
-    pid: flags.pid ? Number(flags.pid) : 0
+    pid: flags.pid ? Number(flags.pid) : 0,
+    cwd
   });
 
   if (isCli) {
@@ -41,7 +48,7 @@ export const handleLockCommand = (db, nonFlagPositional, flags, isCli) => {
   return res;
 };
 
-export const handleUnlockCommand = (db, nonFlagPositional, flags, isCli) => {
+export const handleUnlockCommand = (db, nonFlagPositional, flags, isCli, cwd = process.cwd()) => {
   const isUnlockHelp = flags.help || nonFlagPositional.includes('--help') || nonFlagPositional.includes('-h') || nonFlagPositional.includes('help');
   if (isUnlockHelp) {
     if (isCli) process.stdout.write(formatLockHelpCard());
@@ -54,7 +61,12 @@ export const handleUnlockCommand = (db, nonFlagPositional, flags, isCli) => {
     return { error: 'filePath required' };
   }
 
-  const res = releaseFileLock(db, file, flags.as || '@agent');
+  if (isPathTraversal(file, cwd)) {
+    if (isCli) process.stderr.write('\x1b[31m✕ Path traversal rejected: file path must be within workspace\x1b[0m\n');
+    return { error: 'path_traversal' };
+  }
+
+  const res = releaseFileLock(db, file, flags.as || '@agent', { cwd });
   if (isCli) {
     if (flags.isJson) process.stdout.write(`${JSON.stringify(res, null, 2)}\n`);
     else if (res.success) process.stdout.write(`\x1b[32m✔\x1b[0m Released lock on ${file}\n`);
