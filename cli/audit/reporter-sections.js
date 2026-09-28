@@ -27,7 +27,7 @@ import {
 } from './prompts.js';
 import { resolveFirstDefined } from './rules-predicates.js';
 
-const isSlopViolation = (v) => Boolean(v.isAiSlop);
+const isSlopViolation = (v) => Boolean(v.isAiSlop || (v.rule && v.rule.startsWith('AI_SLOP_')));
 
 const formatHotspotItem = (h, idx) => {
   const monolithBadge = resolveHotspotBadge(h.lineCount);

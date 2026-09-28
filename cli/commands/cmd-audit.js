@@ -101,7 +101,8 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
     fileList = preflight.fileList;
   }
 
-  const auditOptions = { outputFile, model, costPerMillion, fast: isFast, fileList, stage, config: projectConfig };
+  const includeTests = rawArgs.includes('--include-tests') || rawArgs.includes('--tests');
+  const auditOptions = { outputFile, model, costPerMillion, fast: isFast, fileList, stage, config: projectConfig, includeTests };
   const report = executeAstAudit(targetDir, auditOptions);
   saveAuditSnapshot(report);
   try {
@@ -112,7 +113,8 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
       const shouldTriage = !rawArgs.includes('--no-triage');
       if (shouldTriage) {
         const createdTasks = autoGenerateTasksFromAudit(syncRes.db, { cwd: process.cwd(), targetDir });
-        if (isCli && !isJson && createdTasks.length > 0) {
+        const shouldLogTriage = isCli && !isJson && createdTasks.length > 0;
+        if (shouldLogTriage) {
           process.stdout.write(`\x1b[32m✔\x1b[0m Auto-triage synchronized ${createdTasks.length} team task(s) in SQLite backlog.\n`);
         }
       }
@@ -141,8 +143,8 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
         }
       }
     }
-  } catch {
-    // Gracefully bypass indexing when database is readonly in sandboxed environment
+  } catch (err) {
+    if (process.env.DEBUG) process.stderr.write(`[debug] Indexing bypassed: ${err?.message}\n`);
   }
 
   // Stage 1: Atomic failure predicates

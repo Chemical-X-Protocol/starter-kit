@@ -101,7 +101,8 @@ export declare function runSearch(
 
 export declare function resolveTargetDir(
   customOrFlag?: string | null,
-  dirFlag?: string | null
+  dirFlag?: string | null,
+  cwd?: string
 ): string;
 
 export declare function findSymbolDefinition(

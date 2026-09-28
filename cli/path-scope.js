@@ -61,3 +61,53 @@ export const isPathTraversal = (targetPath, baseDir = process.cwd()) => {
     return true;
   }
 };
+
+const hasDotNetProject = (cwd) => {
+  try {
+    const rootEntries = fs.readdirSync(cwd, { withFileTypes: true });
+    const hasSln = rootEntries.some((e) => e.isFile() && e.name.endsWith('.sln'));
+    const hasRootCsproj = rootEntries.some((e) => e.isFile() && e.name.endsWith('.csproj'));
+    if (hasSln || hasRootCsproj) return true;
+
+    return rootEntries.some((e) => {
+      const isCandidateDir = e.isDirectory() && e.name !== 'src' && e.name !== 'node_modules' && !e.name.startsWith('.');
+      if (!isCandidateDir) return false;
+      const subPath = path.join(cwd, e.name);
+      try {
+        return fs.readdirSync(subPath).some((f) => f.endsWith('.csproj'));
+      } catch (err) {
+        if (process.env.DEBUG) process.stderr.write(`[debug] Read failed: ${err?.message}\n`);
+        return false;
+      }
+    });
+  } catch (err) {
+    if (process.env.DEBUG) process.stderr.write(`[debug] Scan failed: ${err?.message}\n`);
+    return false;
+  }
+};
+
+export const resolveTargetDir = (customOrFlag = null, dirFlag = null, cwd = process.cwd()) => {
+  const isCustomPath = Boolean(customOrFlag && !customOrFlag.startsWith('--dir='));
+  if (isCustomPath) {
+    return customOrFlag;
+  }
+
+  const effectiveFlag = dirFlag || (customOrFlag?.startsWith('--dir=') ? customOrFlag : null);
+  if (effectiveFlag) {
+    const [, flagValue] = effectiveFlag.split('=');
+    if (flagValue !== undefined) {
+      return flagValue;
+    }
+  }
+
+  if (hasDotNetProject(cwd)) {
+    return '.';
+  }
+
+  const hasSrcDirectory = fs.existsSync(path.resolve(cwd, 'src'));
+  if (hasSrcDirectory) {
+    return 'src';
+  }
+
+  return '.';
+};

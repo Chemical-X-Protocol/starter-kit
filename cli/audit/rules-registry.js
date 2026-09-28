@@ -242,5 +242,15 @@ export const RULE_REGISTRY = {
     pillar: PILLARS.PILLAR_4,
     severity: 'MEDIUM',
     directive: 'Encapsulate flat primitive props into a cohesive domain type or composable'
+  },
+  LAYER_VIOLATION_CONTROLLER: {
+    pillar: PILLARS.PILLAR_4,
+    severity: 'CRITICAL',
+    directive: 'Do not inject DbContext or raw persistence into presentation controllers; route through MediatR/CQRS handlers'
+  },
+  COUPLING_EXCESSIVE_INJECTION: {
+    pillar: PILLARS.PILLAR_1,
+    severity: 'HIGH',
+    directive: 'Decompose high-coupling controllers; reduce injected services or route via MediatR'
   }
 };

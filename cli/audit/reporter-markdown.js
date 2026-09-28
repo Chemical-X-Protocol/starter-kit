@@ -128,7 +128,7 @@ export const generateMarkdownReport = (report) => {
     }
   }
 
-  const slopViolations = violations.filter((v) => v.isAiSlop);
+  const slopViolations = violations.filter((v) => v.isAiSlop || (v.rule && v.rule.startsWith('AI_SLOP_')));
   lines.push('---');
   lines.push('');
   lines.push('## 5. AI Slop & Code Authenticity Audit');

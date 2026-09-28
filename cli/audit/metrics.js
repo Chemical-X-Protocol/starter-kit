@@ -1,5 +1,7 @@
 import { PILLARS } from './rules.js';
 
+export const isSlopViolation = (v) => Boolean(v.isAiSlop || (v.rule && v.rule.startsWith('AI_SLOP_')));
+
 export const calculateMolecularHealthScore = (violations, totalFiles) => {
   if (totalFiles === 0) {
     return { score: 100, grade: 'A+', label: 'Crystalline Molecular' };
@@ -7,7 +9,7 @@ export const calculateMolecularHealthScore = (violations, totalFiles) => {
 
   let penalty = 0;
   for (const v of violations) {
-    if (v.isAiSlop) continue;
+    if (isSlopViolation(v)) continue;
     if (v.severity === 'CRITICAL') penalty += 8;
     else if (v.severity === 'HIGH') penalty += 4;
     else if (v.severity === 'MEDIUM') penalty += 2;
@@ -57,7 +59,7 @@ export const calculatePillarBreakdown = (violations) => {
   }
 
   for (const v of violations) {
-    if (v.isAiSlop) continue;
+    if (isSlopViolation(v)) continue;
     const pillarName = v.pillar || PILLARS.PILLAR_1;
     if (!breakdown[pillarName]) {
       breakdown[pillarName] = {
@@ -181,7 +183,7 @@ export const calculateHotspots = (violations, fileStats, limit = 5) => {
 export const calculateQuantumHealthScore = calculateMolecularHealthScore;
 
 export const calculateAiSlopScore = (violations, totalFiles) => {
-  const slopViolations = violations.filter((v) => v.isAiSlop);
+  const slopViolations = violations.filter(isSlopViolation);
   if (totalFiles === 0) {
     return {
       score: 100,

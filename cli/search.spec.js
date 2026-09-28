@@ -57,6 +57,18 @@ test('resolveTargetDir: defaults to src if present, otherwise . when no flags pr
   assert.strictEqual(resultNoArgs, expectedDefault);
 });
 
+test('resolveTargetDir: defaults to . when .sln or csproj exists at repo root', () => {
+  const tmpDir = path.resolve('scratch/test-dotnet-repo');
+  fs.mkdirSync(tmpDir, { recursive: true });
+  fs.mkdirSync(path.join(tmpDir, 'src'), { recursive: true });
+  fs.writeFileSync(path.join(tmpDir, 'Solution.sln'), '', 'utf8');
+
+  const resolved = resolveTargetDir(null, null, tmpDir);
+  assert.strictEqual(resolved, '.');
+
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+});
+
 test('search-db: indexes symbols with line ranges and finds definition', () => {
   const db = openIndexDb();
   if (!db) return;

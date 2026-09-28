@@ -84,12 +84,12 @@ const IGNORED_DIRS = new Set([
   'out'
 ]);
 
-const isSourceFile = (name) => {
-  return isPolyglotSourceFile(name, { includeTests: false });
+const isSourceFile = (name, options = {}) => {
+  return isPolyglotSourceFile(name, { includeTests: false, ...options });
 };
 
 export const auditFile = (filePath, relativePath) => {
-  if (!isSourceFile(path.basename(filePath))) return [];
+  if (!isSourceFile(path.basename(filePath), { includeTests: true })) return [];
   const content = fs.readFileSync(filePath, 'utf-8');
   return auditCode(content, filePath, relativePath);
 };
@@ -125,12 +125,18 @@ export const scanTree = (targetDir, baseDir, scanOptions = {}) => {
   let fileStats = [];
   let totalHooks = 0;
 
+  const targetRel = path.relative(baseDir, targetDir);
+  const isTargetingTests = /(?:^|[\\/])(?:tests?|specs?)(?:[\\/]|$)/i.test(targetRel) ||
+    /(?:^|[\\/])(?:tests?|specs?)(?:[\\/]|$)/i.test(targetDir);
+  const includeTests = Boolean(scanOptions.includeTests || isTargetingTests);
+  const effectiveScanOptions = { ...scanOptions, includeTests };
+
   if (scanOptions.fileList && scanOptions.fileList.length > 0) {
     for (const item of scanOptions.fileList) {
       const fullPath = path.isAbsolute(item) ? item : path.resolve(baseDir, item);
       const relPath = path.relative(baseDir, fullPath);
-      if (fs.existsSync(fullPath) && isSourceFile(path.basename(fullPath))) {
-        const result = auditFileEntry(fullPath, relPath, scanOptions);
+      if (fs.existsSync(fullPath) && isSourceFile(path.basename(fullPath), { includeTests: true })) {
+        const result = auditFileEntry(fullPath, relPath, effectiveScanOptions);
         violations = violations.concat(result.fileViolations);
         fileStats.push(result.fileStat);
         totalHooks += result.hookCount;
@@ -150,13 +156,13 @@ export const scanTree = (targetDir, baseDir, scanOptions = {}) => {
 
     if (entry.isDirectory()) {
       if (!IGNORED_DIRS.has(entry.name)) {
-        const sub = scanTree(fullPath, baseDir, scanOptions);
+        const sub = scanTree(fullPath, baseDir, effectiveScanOptions);
         violations = violations.concat(sub.violations);
         fileStats = fileStats.concat(sub.fileStats);
         totalHooks += sub.totalHooks;
       }
-    } else if (isSourceFile(entry.name)) {
-      const result = auditFileEntry(fullPath, relPath, scanOptions);
+    } else if (isSourceFile(entry.name, { includeTests })) {
+      const result = auditFileEntry(fullPath, relPath, effectiveScanOptions);
       violations = violations.concat(result.fileViolations);
       fileStats.push(result.fileStat);
       totalHooks += result.hookCount;
@@ -177,11 +183,13 @@ export const runAudit = (targetDir = 'src', options = {}) => {
   const patternRegistry = createPatternRegistry();
   const hookRegistry = createHookShapeRegistry();
   const config = options.config || loadProjectConfig(cwd);
+  const includeTests = Boolean(options.includeTests);
   const { violations, fileStats, totalHooks } = scanTree(absoluteTarget, cwd, {
     patternRegistry,
     hookRegistry,
     fast: Boolean(options.fast),
     fileList: options.fileList || null,
+    includeTests,
     config
   });
 

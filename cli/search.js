@@ -207,27 +207,7 @@ const formatTierBadge = (tier) => {
   return map[tier] || `${ANSI.DIM}[${tier}]${ANSI.RESET}`;
 };
 
-export const resolveTargetDir = (customOrFlag = null, dirFlag = null) => {
-  const isCustomPath = Boolean(customOrFlag && !customOrFlag.startsWith('--dir='));
-  if (isCustomPath) {
-    return customOrFlag;
-  }
-
-  const effectiveFlag = dirFlag || (customOrFlag?.startsWith('--dir=') ? customOrFlag : null);
-  if (effectiveFlag) {
-    const [, flagValue] = effectiveFlag.split('=');
-    if (flagValue !== undefined) {
-      return flagValue;
-    }
-  }
-
-  const hasSrcDirectory = fs.existsSync('src');
-  if (hasSrcDirectory) {
-    return 'src';
-  }
-
-  return '.';
-};
+export { resolveTargetDir } from './path-scope.js';
 
 export const printSearchHelp = () => {
   const BOLD = '\x1b[1m';

@@ -111,7 +111,7 @@ export const auditCode = (content, filePath, relativePath, options = {}) => {
 
   const lang = getLanguageForFile(filePath);
   if (lang?.id === 'csharp') {
-    analyzeCSharpCode(content, relativePath, violations);
+    analyzeCSharpCode(content, relativePath, violations, config);
   }
 
   if (options.fast || !isBabelParsable(filePath)) {
