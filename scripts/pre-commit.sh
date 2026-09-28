@@ -66,8 +66,8 @@ MIN_SCORE="${CHEMX_MIN_SCORE:-${CONF_MIN_SCORE:-80}}"
 MAX_LINES="${CHEMX_MAX_LINES:-${CONF_MAX_LINES:-500}}"
 MAX_MOLECULE_LINES="${CHEMX_MAX_MOLECULE_LINES:-${CONF_MAX_MOL:-100}}"
 
-# Detect staged source files
-STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(jsx?|tsx?|vue|svelte)$' | grep -vE '(\.d\.ts|\.min\.|\.test\.|\.spec\.)')
+# Detect staged source files (including polyglot C#, Python, Go)
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(jsx?|tsx?|vue|svelte|cs|py|go)$' | grep -vE '(\.(d\.ts|min\.|test\.|spec\.))')
 
 if [ -z "$STAGED_FILES" ]; then
   exit 0
@@ -75,6 +75,7 @@ fi
 
 LINE_BUDGET_FAILED=0
 LINE_BUDGET_ERRORS=""
+EXCEEDED_FILES=""
 
 for FILE in $STAGED_FILES; do
   if [ -f "$FILE" ]; then
@@ -86,12 +87,14 @@ for FILE in $STAGED_FILES; do
         if [ "$LINES" -gt "$MAX_MOLECULE_LINES" ]; then
           LINE_BUDGET_FAILED=1
           LINE_BUDGET_ERRORS="${LINE_BUDGET_ERRORS}\n  ${C_RED}✕${C_RESET} $FILE ($LINES LOC > $MAX_MOLECULE_LINES LOC molecule capsule limit)"
+          EXCEEDED_FILES="${EXCEEDED_FILES}\n- $FILE ($LINES LOC > $MAX_MOLECULE_LINES LOC molecule limit)"
         fi
         ;;
       *)
         if [ "$LINES" -gt "$MAX_LINES" ]; then
           LINE_BUDGET_FAILED=1
           LINE_BUDGET_ERRORS="${LINE_BUDGET_ERRORS}\n  ${C_RED}✕${C_RESET} $FILE ($LINES LOC > $MAX_LINES LOC file budget)"
+          EXCEEDED_FILES="${EXCEEDED_FILES}\n- $FILE ($LINES LOC > $MAX_LINES LOC file budget)"
         fi
         ;;
     esac
@@ -101,8 +104,17 @@ done
 if [ "$LINE_BUDGET_FAILED" -eq 1 ]; then
   printf "\n%s%s[Chemical X] Commit Blocked: Staged files exceed architectural line budgets%s\n" "$C_BOLD" "$C_RED" "$C_RESET"
   printf "%b\n\n" "$LINE_BUDGET_ERRORS"
-  printf "%sMonolithic files degrade AI context windows and cause hallucination loops.%s\n" "$C_YELLOW" "$C_RESET"
-  printf "Decompose large files into single-purpose crystalline capsules before committing.\n\n"
+  printf "%s╭──────────────────────────────────────────────────────────────────────────╮%s\n" "$C_CYAN" "$C_RESET"
+  printf "%s│ 🤖 AI REFACTOR PROMPT (Copy & paste into your AI assistant):            │%s\n" "$C_CYAN" "$C_RESET"
+  printf "%s╰──────────────────────────────────────────────────────────────────────────╯%s\n" "$C_CYAN" "$C_RESET"
+  printf "Please refactor the following files that exceed Chemical X line budgets:%b\n\n" "$EXCEEDED_FILES"
+  printf "Refactor Directives:\n"
+  printf "1. Decompose monolithic logic into single-purpose crystalline capsules or helper modules (< %s lines for files, < %s lines for molecules).\n" "$MAX_LINES" "$MAX_MOLECULE_LINES"
+  printf "2. Extract presentation into Table-of-Contents views and business state into composables/services.\n"
+  printf "3. Preserve all existing symbols, exports, and public API contracts.\n"
+  printf "4. Decompose complex inline booleans and flatten nested control flow.\n"
+  printf "%s────────────────────────────────────────────────────────────────────────────%s\n\n" "$C_CYAN" "$C_RESET"
+  printf "%s💡 Tip: To bypass line budgets temporarily: CHEMX_SKIP_PRECOMMIT=1 git commit%s\n\n" "$C_YELLOW" "$C_RESET"
   exit 1
 fi
 
@@ -127,8 +139,18 @@ if [ -n "$AUDIT_BIN" ]; then
   if ! AUDIT_OUT=$(eval "$AUDIT_CMD < /dev/null" 2>&1); then
     printf "\n%s%s[Chemical X] Commit Blocked: Architectural health verification failed%s\n" "$C_BOLD" "$C_RED" "$C_RESET"
     printf "%s\n\n" "$AUDIT_OUT"
-    printf "%s💡 Tip: Want crystalline drop-in templates to refactor in minutes?%s\n" "$C_CYAN" "$C_RESET"
-    printf "   Run 'npm create chemx' or sponsor at https://github.com/sponsors/Chemical-X-Protocol\n\n"
+    printf "%s╭──────────────────────────────────────────────────────────────────────────╮%s\n" "$C_CYAN" "$C_RESET"
+    printf "%s│ 🤖 AI REFACTOR PROMPT (Copy & paste into your AI assistant):            │%s\n" "$C_CYAN" "$C_RESET"
+    printf "%s╰──────────────────────────────────────────────────────────────────────────╯%s\n" "$C_CYAN" "$C_RESET"
+    printf "Please fix the Chemical X architectural hazards reported above in staged files.\n\n"
+    printf "Refactor Directives:\n"
+    printf "1. Surgically resolve each flagged Critical and High severity hazard.\n"
+    printf "2. Decompose monoliths into single-purpose crystalline capsules.\n"
+    printf "3. Preserve all existing symbols, exports, and test contracts.\n"
+    printf "4. Verify with 'chemx audit' after making changes.\n"
+    printf "%s────────────────────────────────────────────────────────────────────────────%s\n\n" "$C_CYAN" "$C_RESET"
+    printf "%s💡 Tip: Run 'chemx audit' locally to inspect details or run autofixes.%s\n" "$C_CYAN" "$C_RESET"
+    printf "   To bypass this check temporarily: CHEMX_SKIP_PRECOMMIT=1 git commit\n\n"
     exit 1
   fi
 fi
