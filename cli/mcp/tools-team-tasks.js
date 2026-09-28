@@ -12,7 +12,10 @@ import { freezeReleaseTrain } from '../team/team-release-train.js';
 export const handleChemxTeamTask = async (args = {}, cwd = process.cwd()) => {
   const db = openIndexDb(cwd);
   if (!db) return { error: 'sqlite_unavailable' };
-  const action = args.action || args.subAction || 'list';
+  let action = args.action || args.subAction;
+  if (!action) {
+    action = Boolean(args.title) ? 'add' : 'list';
+  }
 
   if (action === 'list') {
     const parentId = args.parentId !== undefined ? args.parentId : args.parent;
@@ -53,7 +56,7 @@ export const handleChemxTeamTask = async (args = {}, cwd = process.cwd()) => {
     const parentId = args.parentId !== undefined ? args.parentId : args.parent;
     const task = createTask(db, {
       title: args.title,
-      target_path: args.targetPath,
+      target_path: args.targetPath || args.target,
       tier: args.tier || 'molecule',
       priority: args.priority || 2,
       assigned_agent_id: args.assignedAgentId || null,

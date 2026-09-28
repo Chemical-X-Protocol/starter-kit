@@ -32,7 +32,10 @@ const JAVASCRIPT_URL_TEMPLATE_PATTERN = /\b(?:href|src|action|formaction)\s*=\s*
 /**
  * Pillar 10: Check for co-located test files for molecule capsules.
  */
-export const checkMoleculeCoLocatedTest = (filePath, relativePath, violations) => {
+export const checkMoleculeCoLocatedTest = (filePath, relativePath, violations, config = {}) => {
+  const enforceColocated = config.enforceColocatedTests ?? (config.profile === 'atomic-strict');
+  if (!enforceColocated) return;
+
   const baseName = path.basename(filePath);
   const ext = path.extname(filePath);
 
@@ -194,8 +197,8 @@ export const checkControllerViewContract = (filePath, relativePath, content, vio
   }
 };
 
-export const checkExtendedTextPatterns = (content, lines, relativePath, filePath, violations) => {
-  checkMoleculeCoLocatedTest(filePath, relativePath, violations);
+export const checkExtendedTextPatterns = (content, lines, relativePath, filePath, violations, config = {}) => {
+  checkMoleculeCoLocatedTest(filePath, relativePath, violations, config);
   checkControllerViewContract(filePath, relativePath, content, violations);
 
   const isTestFile = /\.(test|spec)\.[jt]sx?$/.test(filePath)

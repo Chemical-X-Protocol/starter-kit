@@ -14,6 +14,7 @@ export const PROFILES = {
     maxPropCount: 7,
     preferDesignTokens: 'warning',
     enforceFileLength: false,
+    enforceColocatedTests: false,
     ruleOfThreeAbstractions: true,
     aiSlopDetection: 'critical',
     maxLineCountWarning: 250
@@ -28,6 +29,7 @@ export const PROFILES = {
     maxPropCount: 5,
     preferDesignTokens: 'error',
     enforceFileLength: true,
+    enforceColocatedTests: true,
     ruleOfThreeAbstractions: false,
     aiSlopDetection: 'critical',
     maxLineCountWarning: 100
@@ -42,6 +44,7 @@ export const PROFILES = {
     maxPropCount: 12,
     preferDesignTokens: 'off',
     enforceFileLength: false,
+    enforceColocatedTests: false,
     ruleOfThreeAbstractions: true,
     aiSlopDetection: 'medium',
     maxLineCountWarning: 500

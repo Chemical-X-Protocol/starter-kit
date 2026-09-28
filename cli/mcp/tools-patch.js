@@ -37,7 +37,7 @@ export const handleChemxPatch = (args = {}, cwd = process.cwd()) => {
   const hasRequiredArgs = hasPath && hasTargetContent && hasReplacementContent;
 
   if (!hasRequiredArgs) {
-    throw new Error('chemx_patch requires "path", "targetContent", and "replacementContent" arguments.');
+    throw new Error('chemx_patch requires "path", target content ("targetContent", "target", or "search"), and replacement content ("replacementContent", "replacement", or "replace").');
   }
 
   const targetPath = resolveSafePath(args.path, cwd);

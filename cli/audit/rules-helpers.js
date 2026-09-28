@@ -17,7 +17,13 @@ export const countLogicalOperators = (node) => {
 export const extractParseableCode = (content, ext) => {
   if (ext === '.vue') {
     const scriptMatch = content.match(/<script\b[^>]*>([\s\S]*?)<\/script>/i);
-    return scriptMatch ? scriptMatch[1] : '';
+    if (!scriptMatch) return '';
+    const scriptStartIndex = scriptMatch.index || 0;
+    const preScript = content.slice(0, scriptStartIndex);
+    const openTag = scriptMatch[0].match(/<script\b[^>]*>/i)?.[0] || '';
+    const preContent = preScript + openTag;
+    const leadingNewlines = preContent.split('\n').length - 1;
+    return '\n'.repeat(leadingNewlines) + scriptMatch[1];
   }
   return content;
 };

@@ -23,12 +23,18 @@ export const createAstVisitors = ({ relativePath, violations, hookRegistry, conf
       const isCustomHook = isCustomHookFunction(astPath);
 
       // Pillar 3: Hook Saturation
+      const CONTROLLER_WRAPPER_EXCLUSIONS = new Set([
+        'useSharedStatusController',
+        'useSharedController',
+        'useController'
+      ]);
       let hookCount = 0;
       astPath.traverse({
         CallExpression(callPath) {
           const callee = callPath.node.callee;
           if (t.isIdentifier(callee) && /^use[A-Z0-9]/.test(callee.name)) {
-            if (callPath.getFunctionParent() === astPath) {
+            const isExcluded = CONTROLLER_WRAPPER_EXCLUSIONS.has(callee.name);
+            if (!isExcluded && callPath.getFunctionParent() === astPath) {
               hookCount += 1;
             }
           }

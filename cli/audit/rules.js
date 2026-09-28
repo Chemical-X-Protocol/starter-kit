@@ -107,7 +107,7 @@ export const auditCode = (content, filePath, relativePath, options = {}) => {
   checkSlopTextPatterns(content, lines, relativePath, violations);
 
   // Pillars 8-11: Extended Fast Checks (A11y, Security secrets, Fake tests, Co-located specs)
-  checkExtendedTextPatterns(content, lines, relativePath, filePath, violations);
+  checkExtendedTextPatterns(content, lines, relativePath, filePath, violations, config);
 
   const lang = getLanguageForFile(filePath);
   if (lang?.id === 'csharp') {

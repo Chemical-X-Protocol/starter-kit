@@ -303,10 +303,15 @@ export const SUB_TOOLS = [
       properties: {
         path: { type: 'string', description: 'Target file path' },
         targetContent: { type: 'string', description: 'Exact string chunk to replace' },
+        target: { type: 'string', description: 'Alias for target text chunk to replace' },
+        search: { type: 'string', description: 'Alias for target text chunk to replace' },
         replacementContent: { type: 'string', description: 'New replacement content' },
-        allowMultiple: { type: 'boolean', description: 'Allow multiple replacements' }
+        replacement: { type: 'string', description: 'Alias for replacement content' },
+        replace: { type: 'string', description: 'Alias for replacement content' },
+        allowMultiple: { type: 'boolean', description: 'Allow multiple replacements' },
+        multiple: { type: 'boolean', description: 'Alias for allowMultiple' }
       },
-      required: ['path', 'targetContent', 'replacementContent']
+      required: ['path']
     }
   },
   {

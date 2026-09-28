@@ -25,6 +25,7 @@ const normalizeRuleKeys = (rules = {}) => {
     'max-prop-count': 'maxPropCount',
     'prefer-design-tokens': 'preferDesignTokens',
     'enforce-file-length': 'enforceFileLength',
+    'enforce-colocated-tests': 'enforceColocatedTests',
     'rule-of-three-abstractions': 'ruleOfThreeAbstractions',
     'ai-slop-detection': 'aiSlopDetection',
     'max-line-count-warning': 'maxLineCountWarning'

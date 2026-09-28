@@ -76,10 +76,53 @@ const parseCommand = (command, params) => {
       }
     };
   }
+  if (subCmd === 'patch') {
+    return {
+      action: 'patch',
+      params: {
+        path: parts[1] || params?.path,
+        target: params?.target || params?.targetContent || params?.search,
+        replacement: params?.replacement || params?.replacementContent || params?.replace,
+        ...params
+      }
+    };
+  }
   if (subCmd === 'q' || subCmd === 'search') return { action: 'q', params: { query: parts.slice(1).join(' '), ...params } };
   if (subCmd === 'team') {
     const TEAM_ACTIONS = { status: 'team_status', feed: 'team_feed', task: 'team_task', lock: 'team_lock', inbox: 'team_inbox', dm: 'team_dm' };
-    return { action: TEAM_ACTIONS[parts[1] || 'status'] || 'team_task', params };
+    const sub = parts[1] || 'status';
+    const action = TEAM_ACTIONS[sub] || 'team_task';
+    const parsedParams = { ...params };
+    const isTaskSub = sub === 'task' || !TEAM_ACTIONS[parts[1]];
+    if (isTaskSub) {
+      const taskSub = TEAM_ACTIONS[parts[1]] ? parts[2] : parts[1];
+      const isCreate = ['add', 'create', 'new'].includes(taskSub);
+      if (isCreate) {
+        parsedParams.subAction = 'add';
+        const titleTokens = parts.slice(TEAM_ACTIONS[parts[1]] ? 3 : 2);
+        if (titleTokens.length > 0 && !parsedParams.title) {
+          parsedParams.title = titleTokens.join(' ').replace(/^["']|["']$/g, '');
+        }
+      } else if (taskSub) {
+        parsedParams.subAction = taskSub;
+      }
+    }
+    return { action, params: parsedParams };
+  }
+  if (subCmd === 'team_task') {
+    const parsedParams = { ...params };
+    const taskSub = parts[1];
+    const isCreate = ['add', 'create', 'new'].includes(taskSub);
+    if (isCreate) {
+      parsedParams.subAction = 'add';
+      const titleTokens = parts.slice(2);
+      if (titleTokens.length > 0 && !parsedParams.title) {
+        parsedParams.title = titleTokens.join(' ').replace(/^["']|["']$/g, '');
+      }
+    } else if (taskSub) {
+      parsedParams.subAction = taskSub;
+    }
+    return { action: 'team_task', params: parsedParams };
   }
   if (subCmd === 'project' || subCmd === 'coordinator') {
     const subAction = parts[1] || 'status';
