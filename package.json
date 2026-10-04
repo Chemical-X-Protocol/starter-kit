@@ -1,6 +1,6 @@
 {
   "name": "@chemx/starter-kit",
-  "version": "26.10.4-235",
+  "version": "26.10.4-1258",
   "description": "Chemical X Protocol: Private drop-in architecture starter kit and capsule generator",
   "type": "module",
   "bin": {
