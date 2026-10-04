@@ -21,6 +21,17 @@ export const resolveArchitectureTier = (relativePath) => {
   return 'utility';
 };
 
+const CPP_NON_DECLARATION_KEYWORDS = new Set([
+  'if', 'for', 'while', 'switch', 'catch', 'return', 'sizeof', 'else', 'do', 'throw', 'new', 'delete'
+]);
+
+// Declaration keywords are never symbol names. Guards cross-language regex overlap,
+// e.g. the Rust `enum` pattern matching C++ `enum class Codec` and capturing `class`.
+const RESERVED_SYMBOL_NAMES = new Set([
+  'class', 'struct', 'enum', 'union', 'interface', 'object', 'fun', 'trait', 'impl', 'mod',
+  'namespace', 'typename', 'template', 'public', 'private', 'protected', 'static', 'const'
+]);
+
 const extractRegexFallback = (content, filePath = '') => {
   const symbols = [];
   const imports = [];
@@ -45,6 +56,49 @@ const extractRegexFallback = (content, filePath = '') => {
   const goMatches = content.matchAll(/(?:func(?:\s*\([^)]*\))?\s+|type\s+)([A-Za-z0-9_]+)/g);
   for (const m of goMatches) {
     symbols.push({ name: m[1], kind: 'function', isExport: true, startLine: 1, endLine: 1, signature: '' });
+  }
+
+  const cppTypeMatches = content.matchAll(/\b(?:class|struct|union|enum(?:\s+class)?)\s+([A-Za-z_][A-Za-z0-9_]*)/g);
+  for (const m of cppTypeMatches) {
+    if (!RESERVED_SYMBOL_NAMES.has(m[1])) {
+      symbols.push({ name: m[1], kind: 'class', isExport: true, startLine: 1, endLine: 1, signature: '' });
+    }
+  }
+
+  const cppQualifiedMatches = content.matchAll(/\b[A-Za-z_][A-Za-z0-9_]*\s*::\s*([A-Za-z_~][A-Za-z0-9_]*)\s*\(/g);
+  for (const m of cppQualifiedMatches) {
+    symbols.push({ name: m[1], kind: 'function', isExport: true, startLine: 1, endLine: 1, signature: '' });
+  }
+
+  const cppDeclMatches = content.matchAll(/^[ \t]*(?:[A-Za-z_][A-Za-z0-9_:<>,*& \t]*?)\s+\*?([A-Za-z_][A-Za-z0-9_]*)\s*\([^)]*\)\s*(?:const\s*)?[;{]/gm);
+  for (const m of cppDeclMatches) {
+    if (!CPP_NON_DECLARATION_KEYWORDS.has(m[1])) {
+      symbols.push({ name: m[1], kind: 'function', isExport: true, startLine: 1, endLine: 1, signature: '' });
+    }
+  }
+
+  const rustMatches = content.matchAll(/\b(?:pub\s+)?(?:struct|enum|trait|impl|mod|fn)\s+([A-Za-z_][A-Za-z0-9_]*)/g);
+  for (const m of rustMatches) {
+    if (!RESERVED_SYMBOL_NAMES.has(m[1])) {
+      symbols.push({ name: m[1], kind: 'symbol', isExport: true, startLine: 1, endLine: 1, signature: '' });
+    }
+  }
+
+  const kotlinMatches = content.matchAll(/\b(?:data\s+|sealed\s+|open\s+|abstract\s+|inner\s+)?(?:class|object|interface|fun)\s+([A-Za-z_][A-Za-z0-9_]*)/g);
+  for (const m of kotlinMatches) {
+    if (!RESERVED_SYMBOL_NAMES.has(m[1])) {
+      symbols.push({ name: m[1], kind: 'symbol', isExport: true, startLine: 1, endLine: 1, signature: '' });
+    }
+  }
+
+  const cppIncludes = content.matchAll(/#include\s*[<"]([^>"]+)[>"]/g);
+  for (const m of cppIncludes) {
+    imports.push({ importedSymbol: '*', sourceModule: m[1], line: 1 });
+  }
+
+  const rustUses = content.matchAll(/\buse\s+([A-Za-z_][A-Za-z0-9_]*(?:::[A-Za-z_][A-Za-z0-9_]*)+)/g);
+  for (const m of rustUses) {
+    imports.push({ importedSymbol: '*', sourceModule: m[1], line: 1 });
   }
 
   const csImports = content.matchAll(/using\s+([A-Za-z0-9_.]+);/g);

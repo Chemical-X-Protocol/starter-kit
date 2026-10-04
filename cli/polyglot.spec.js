@@ -109,3 +109,114 @@ func TestDummy(t *testing.T) {
   assert.equal(goViolations.some((v) => v.rule === 'SYNTAX_PARSE_ERROR'), false);
   assert.equal(goViolations.some((v) => v.rule === 'SYNTHETIC_MOCK_DATA'), true);
 });
+
+test('polyglot: extracts C++ classes, structs, functions and includes', () => {
+  const cppCode = `
+#include <memory>
+#include "vendor/codec.h"
+
+namespace audio {
+
+struct FrameHeader {
+    uint32_t size;
+};
+
+enum class Codec { Opus, Flac };
+
+class StreamDecoder : public IDecoder {
+public:
+    bool DecodeFrame(const FrameHeader& header);
+};
+
+bool StreamDecoder::DecodeFrame(const FrameHeader& header) {
+    return header.size > 0;
+}
+
+}  // namespace audio
+`;
+
+  const meta = extractAstMetadata(cppCode, 'src/audio/StreamDecoder.cpp');
+  const names = meta.symbols.map((s) => s.name);
+  assert.ok(names.includes('StreamDecoder'), 'must extract class StreamDecoder');
+  assert.ok(names.includes('FrameHeader'), 'must extract struct FrameHeader');
+  assert.ok(names.includes('Codec'), 'must extract enum class Codec');
+  assert.ok(names.includes('DecodeFrame'), 'must extract method DecodeFrame');
+  assert.ok(meta.imports.some((i) => i.sourceModule === 'vendor/codec.h'), 'must map #include to imports');
+  assert.ok(meta.imports.some((i) => i.sourceModule === 'memory'), 'must map angle-bracket includes');
+});
+
+test('polyglot: audits C++ without Babel syntax errors', () => {
+  const cppCode = `
+#include <string>
+void Connect() {
+    std::string email = "user@example.com";
+}
+`;
+  const violations = auditCode(cppCode, 'src/net/Client.cpp', 'src/net/Client.cpp');
+  assert.equal(violations.some((v) => v.rule === 'SYNTAX_PARSE_ERROR'), false, 'C++ must not trigger Babel SYNTAX_PARSE_ERROR');
+  assert.equal(violations.some((v) => v.rule === 'SYNTHETIC_MOCK_DATA'), true, 'must detect placeholder email in C++');
+});
+
+test('polyglot: extracts Rust items and use imports', () => {
+  const rustCode = `
+use std::sync::Arc;
+
+pub struct Decoder {
+    buffer: Vec<u8>,
+}
+
+pub enum State { Idle, Running }
+
+pub trait Sink {
+    fn write(&self, data: &[u8]);
+}
+
+impl Decoder {
+    pub fn new() -> Self { Decoder { buffer: Vec::new() } }
+}
+`;
+  const meta = extractAstMetadata(rustCode, 'src/decoder.rs');
+  const names = meta.symbols.map((s) => s.name);
+  assert.ok(names.includes('Decoder'), 'must extract pub struct');
+  assert.ok(names.includes('State'), 'must extract pub enum');
+  assert.ok(names.includes('Sink'), 'must extract pub trait');
+  assert.ok(names.includes('new'), 'must extract fn');
+  assert.ok(meta.imports.some((i) => i.sourceModule === 'std::sync::Arc'), 'must map use statements');
+});
+
+test('polyglot: extracts Kotlin declarations and imports', () => {
+  const kotlinCode = `
+import kotlinx.coroutines.flow.Flow
+
+class ConsentRepository(private val api: Api) {
+    fun observe(): Flow<List<Consent>> = api.stream()
+}
+
+data class Consent(val id: String)
+
+object Registry {
+    fun lookup(id: String) = id
+}
+`;
+  const meta = extractAstMetadata(kotlinCode, 'src/main/kotlin/ConsentRepository.kt');
+  const names = meta.symbols.map((s) => s.name);
+  assert.ok(names.includes('ConsentRepository'), 'must extract class');
+  assert.ok(names.includes('Consent'), 'must extract data class');
+  assert.ok(names.includes('Registry'), 'must extract object');
+  assert.ok(names.includes('observe'), 'must extract fun');
+  assert.ok(meta.imports.some((i) => i.sourceModule === 'kotlinx.coroutines.flow.Flow'), 'must map kotlin imports');
+});
+
+test('polyglot: declaration keywords never leak in as symbol names', () => {
+  const cppCode = `
+enum class Codec { Opus, Flac };
+struct Frame { int size; };
+namespace audio { }
+`;
+  const meta = extractAstMetadata(cppCode, 'src/audio/Codec.h');
+  const names = meta.symbols.map((s) => s.name);
+  assert.equal(names.includes('class'), false, 'bare "class" must not be extracted as a symbol');
+  assert.equal(names.includes('struct'), false, 'bare "struct" must not be extracted as a symbol');
+  assert.ok(names.includes('Codec'));
+  assert.ok(names.includes('Frame'));
+});

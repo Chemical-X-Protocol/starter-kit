@@ -76,6 +76,14 @@ export const LANGUAGE_DEFINITIONS = {
     parser: 'jvm',
     commentPrefix: '//',
     blockComment: { start: '/*', end: '*/' }
+  },
+  cpp: {
+    id: 'cpp',
+    name: 'C / C++',
+    extensions: new Set(['.c', '.h', '.cpp', '.cc', '.cxx', '.hpp', '.hxx', '.hh', '.inl']),
+    parser: 'cpp',
+    commentPrefix: '//',
+    blockComment: { start: '/*', end: '*/' }
   }
 };
 

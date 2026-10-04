@@ -42,3 +42,24 @@ test('languages: resolves language metadata', () => {
   assert.equal(py.id, 'python');
   assert.equal(py.commentPrefix, '#');
 });
+
+test('languages: recognizes C and C++ source extensions', () => {
+  assert.equal(isSourceFile('StreamDecoder.cpp'), true);
+  assert.equal(isSourceFile('StreamDecoder.cc'), true);
+  assert.equal(isSourceFile('StreamDecoder.cxx'), true);
+  assert.equal(isSourceFile('StreamDecoder.hpp'), true);
+  assert.equal(isSourceFile('StreamDecoder.h'), true);
+  assert.equal(isSourceFile('legacy_shim.c'), true);
+});
+
+test('languages: maps C and C++ extensions to the cpp language', () => {
+  assert.equal(getLanguageForFile('StreamDecoder.cpp').id, 'cpp');
+  assert.equal(getLanguageForFile('StreamDecoder.h').id, 'cpp');
+  assert.equal(getLanguageForFile('legacy_shim.c').id, 'cpp');
+  assert.equal(LANGUAGE_DEFINITIONS.cpp.name, 'C / C++');
+});
+
+test('languages: C and C++ are not babel parsable', () => {
+  assert.equal(isBabelParsable('StreamDecoder.cpp'), false);
+  assert.equal(isBabelParsable('StreamDecoder.h'), false);
+});
