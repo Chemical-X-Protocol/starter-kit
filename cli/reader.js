@@ -4,6 +4,8 @@ import { parse } from '@babel/parser';
 import traverseModule from '@babel/traverse';
 import { ANSI } from './theme.js';
 import { resolveSafePath } from './path-scope.js';
+import { isBabelParsable } from './languages.js';
+import { extractAstMetadata } from './search-ast.js';
 
 import {
   stripCodeComments,
@@ -34,6 +36,12 @@ const traverse = traverseModule.default || traverseModule;
  * @param {string} filePath File path for parser context.
  * @returns {string} Compressed structural outline.
  */
+const OUTLINE_KIND_LABELS = {
+  class: 'class',
+  function: 'function',
+  symbol: 'symbol'
+};
+
 export const generateAstOutline = (code, filePath) => {
   const isVue = filePath.endsWith('.vue');
   const isSvelte = filePath.endsWith('.svelte');
@@ -51,6 +59,21 @@ export const generateAstOutline = (code, filePath) => {
 
   const lines = [];
   lines.push(`// Outline: ${filePath}`);
+
+  // Babel cannot parse C/C++, Python, Go, Rust, Java, C# or Kotlin. It also does not
+  // throw on them, because errorRecovery swallows the failure and yields an empty AST,
+  // so the catch-block fallback below never fires for these files. Route them to the
+  // polyglot extractor instead.
+  if (!isBabelParsable(filePath)) {
+    const meta = extractAstMetadata(scriptContent, filePath);
+    const seen = new Set();
+    for (const sym of meta.symbols) {
+      if (!sym?.name || seen.has(sym.name)) continue;
+      seen.add(sym.name);
+      lines.push(`${OUTLINE_KIND_LABELS[sym.kind] || 'symbol'} ${sym.name}`);
+    }
+    return lines.join('\n');
+  }
 
   try {
     const ast = parse(scriptContent, {
