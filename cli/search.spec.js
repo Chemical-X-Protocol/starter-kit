@@ -277,3 +277,18 @@ test('hybrid search: natural language "toggle a task item" ranks useTaskListCont
   } catch {}
 });
 
+
+test('runSearch: resolveTargetDir is bound in module scope, not only re-exported', async () => {
+  const { runSearch } = await import('./search.js');
+  let caught = null;
+  try {
+    await runSearch(['__chemx_nonexistent_symbol__'], false);
+  } catch (err) {
+    caught = err;
+  }
+  assert.equal(
+    caught instanceof ReferenceError,
+    false,
+    `runSearch threw a ReferenceError: ${caught && caught.message}`
+  );
+});

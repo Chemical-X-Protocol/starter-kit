@@ -36,6 +36,7 @@ import {
 import { runGenerateWizard } from './generator.js';
 import { runMutatorCli } from './mutators.js';
 import { toColumnar } from './columnar.js';
+import { resolveTargetDir } from './path-scope.js';
 import { ANSI } from './theme.js';
 
 export { toColumnar, fromColumnar } from './columnar.js';
@@ -207,7 +208,7 @@ const formatTierBadge = (tier) => {
   return map[tier] || `${ANSI.DIM}[${tier}]${ANSI.RESET}`;
 };
 
-export { resolveTargetDir } from './path-scope.js';
+export { resolveTargetDir };
 
 export const printSearchHelp = () => {
   const BOLD = '\x1b[1m';
