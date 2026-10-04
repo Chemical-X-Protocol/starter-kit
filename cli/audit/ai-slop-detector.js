@@ -73,10 +73,38 @@ const normalizeWords = (text) => {
     .filter((w) => w.length > 1 && !STOP_WORDS.has(w));
 };
 
+// A line-based scan cannot tell a comment from a string that quotes one. Walk the line
+// up to the match and track quote state: if a quote is still open at that offset, the
+// match sits inside a string literal and is describing the pattern, not committing it.
+// Lines that are wholly a comment short-circuit, so apostrophes in prose cannot open a
+// phantom string and suppress a real finding.
+const COMMENT_LINE_START = /^\s*(?:\/\/|#|\*|--)/;
+
+const isInsideStringLiteral = (lineText, matchIndex) => {
+  if (matchIndex <= 0) return false;
+  if (COMMENT_LINE_START.test(lineText)) return false;
+
+  let quote = null;
+  for (let i = 0; i < matchIndex; i += 1) {
+    const ch = lineText[i];
+    if (ch === '\\') {
+      i += 1;
+      continue;
+    }
+    if (quote) {
+      if (ch === quote) quote = null;
+    } else if (ch === '"' || ch === "'" || ch === '`') {
+      quote = ch;
+    }
+  }
+  return quote !== null;
+};
+
 export const checkSlopTextPatterns = (content, lines, relativePath, violations) => {
   lines.forEach((lineText, idx) => {
     for (const pat of CONVERSATIONAL_PATTERNS) {
-      if (pat.regex.test(lineText)) {
+      const hit = pat.regex.exec(lineText);
+      if (hit && !isInsideStringLiteral(lineText, hit.index)) {
         const meta = RULE_REGISTRY[pat.rule];
         violations.push({
           filePath: relativePath,
