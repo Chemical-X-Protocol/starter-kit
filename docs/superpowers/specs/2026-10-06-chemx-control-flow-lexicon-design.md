@@ -3,7 +3,7 @@
 **Date:** 2026-10-06
 **Status:** Awaiting review
 **Scope:** Audit rule engine, autofix, predicate library, AGENTS.md directives
-**Companion spec:** `2026-10-06-chemx-truth-and-cost-design.md` (supersedes its sections 4.1 and 4.2)
+**Companion spec:** `2026-10-06-chemx-truth-and-cost-design.md` (supersedes its section 4.1; its section 4.2 on shallow catches stands)
 
 ---
 
@@ -370,8 +370,11 @@ Enabling these rules reports 1,867 violations immediately. Without a ratchet
 the grade pins at F permanently and the score stops carrying information, which
 is the same failure as the current state in the opposite direction.
 
-**Required behavior.** Record per-rule counts in `.chemx/baseline.json` (the
-file already exists). A rule fails only when its count exceeds the recorded
+**Required behavior.** Record per-rule counts in `chemx-ratchet.json` at the
+project root, committed to version control. Not `.chemx/baseline.json`: `.chemx/`
+is gitignored, so a ratchet there would not reach CI or other clones, and that
+file already holds the health-score snapshot floor that `cli/audit/history.js`
+rewrites automatically. A rule fails only when its count exceeds the recorded
 baseline. New and modified code is held to the standard immediately; existing
 debt is visible, non-blocking, and burns down as autofix passes run.
 `chemx audit --rebaseline` re-records after a burn-down pass.
