@@ -214,3 +214,67 @@ public class OrderTests
   const sqliteViolation = violations.find((v) => v.rule === "SYNTHETIC_MOCK_DATA" && v.hazard.includes("SQLite"));
   assert.ok(sqliteViolation, "Must flag UseSqlite/DataSource=:memory: provider");
 });
+
+const csharpShallowCatches = (code) => {
+  const violations = [];
+  analyzeCSharpCode(code, "Services/CacheWarmer.cs", violations);
+  return violations.filter((v) => v.rule === "AI_SLOP_SHALLOW_CATCH");
+};
+
+const wrapCSharpCatch = (catchBlock, above = "") => `
+public class CacheWarmer
+{
+    public void Run()
+    {
+        try
+        {
+            Warm();
+        }
+${above}${catchBlock}
+    }
+}
+`;
+
+test("csharp-analyzer: an empty catch is MEDIUM", () => {
+  const hits = csharpShallowCatches(wrapCSharpCatch("        catch (Exception) { }"));
+  assert.equal(hits.length, 1);
+  assert.equal(hits[0].severity, "MEDIUM");
+  assert.equal(hits[0].line, 10);
+});
+
+test("csharp-analyzer: shallow catch never escalates, because CS0165 rejects unset reads", () => {
+  const code = "string v;\ntry { v = Load(); } catch (Exception) { }\nUse(v);\n";
+  const hits = csharpShallowCatches(code);
+  assert.equal(hits.length, 1);
+  assert.equal(hits[0].severity, "MEDIUM");
+});
+
+test("csharp-analyzer: a best-effort annotation with a reason exempts the catch", () => {
+  const placements = [
+    wrapCSharpCatch("        catch (Exception)\n        {\n            // chemx-allow: best-effort warmup is optional\n        }"),
+    wrapCSharpCatch("        catch (Exception)\n        {\n        }", "        // chemx-allow: best-effort warmup is optional\n"),
+    wrapCSharpCatch("        catch (Exception) { } // chemx-allow: best-effort warmup is optional"),
+    wrapCSharpCatch("        catch (Exception)\n        {\n        } // chemx-allow: best-effort warmup is optional")
+  ];
+  for (const code of placements) {
+    assert.deepEqual(csharpShallowCatches(code), [], code);
+  }
+});
+
+test("csharp-analyzer: a best-effort annotation without a reason is flagged and says so", () => {
+  const hits = csharpShallowCatches(wrapCSharpCatch("        catch (Exception) { } // chemx-allow: best-effort"));
+  assert.equal(hits.length, 1);
+  assert.equal(hits[0].severity, "MEDIUM");
+  assert.ok(hits[0].hazard.includes("needs a reason"), hits[0].hazard);
+});
+
+test("csharp-analyzer: an annotation two lines above the catch does not exempt it", () => {
+  const above = "        // chemx-allow: best-effort warmup is optional\n        Log();\n";
+  assert.equal(csharpShallowCatches(wrapCSharpCatch("        catch (Exception) { }", above)).length, 1);
+});
+
+test("csharp-analyzer: known gap, annotation text in a string on a checked line still exempts", () => {
+  // The C# analyzer scans raw lines, so it cannot tell a quoted annotation from a comment.
+  const above = "        Log(\"chemx-allow: best-effort quoted, not a comment\");\n";
+  assert.deepEqual(csharpShallowCatches(wrapCSharpCatch("        catch (Exception) { }", above)), []);
+});

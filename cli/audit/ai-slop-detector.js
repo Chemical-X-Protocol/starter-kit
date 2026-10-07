@@ -4,6 +4,7 @@ import {
   isComponentPath,
   isCodeLine,
   isShallowCatchBody,
+  parseBestEffortAllowance,
   hasAnyTypeAnnotation,
   isRedundantPassthroughReturn
 } from './rules-predicates.js';
@@ -160,28 +161,159 @@ export const checkSlopTextPatterns = (content, lines, relativePath, violations) 
   });
 };
 
-export const createAiSlopVisitors = ({ relativePath, violations }) => {
+const SWALLOWABLE_KINDS = new Set(['let', 'var']);
+const DEFAULTING_OPERATORS = new Set(['??', '||']);
+const MISSING_REASON_NOTE = 'the chemx-allow: best-effort annotation needs a reason (reason is mandatory)';
+
+const isOnLines = (comment, span) => {
+  const startsBeforeSpanEnd = comment.loc.start.line <= span.end;
+  return startsBeforeSpanEnd && comment.loc.end.line >= span.start;
+};
+
+// Lines held by a try nested inside this try block belong to the inner catch, so an
+// annotation written there must never exempt the outer catch as well.
+const listNestedTrySpans = (tryPath) => {
+  const spans = [];
+  tryPath.get('block').traverse({
+    TryStatement(p) {
+      spans.push({ start: p.node.loc.start.line, end: p.node.loc.end.line });
+    }
+  });
+  return spans;
+};
+
+// Parser comments only, so annotation text quoted inside a string literal never counts. The
+// window runs from the line above the catch keyword to the closing brace of its body.
+const findCatchAllowance = (comments, catchPath) => {
+  const catchStart = catchPath.node.loc?.start.line || 1;
+  const window = { start: catchStart - 1, end: catchPath.node.loc?.end.line || catchStart };
+  const annotated = comments
+    .filter((comment) => isOnLines(comment, window))
+    .map((comment) => ({ comment, allowance: parseBestEffortAllowance(comment.value) }))
+    .filter((entry) => entry.allowance.isAnnotated);
+  if (annotated.length === 0) return null;
+
+  const nestedSpans = listNestedTrySpans(catchPath.parentPath);
+  const owned = annotated
+    .filter((entry) => !nestedSpans.some((span) => isOnLines(entry.comment, span)))
+    .map((entry) => entry.allowance);
+  return owned.find((allowance) => allowance.hasReason) || owned[0] || null;
+};
+
+const resolveFunctionScope = (scope) => scope.getFunctionParent() || scope.getProgramParent();
+
+const isUndefinedValue = (node) => {
+  const isUndefinedId = t.isIdentifier(node, { name: 'undefined' });
+  return isUndefinedId || t.isUnaryExpression(node, { operator: 'void' });
+};
+
+// Names written directly in the try block. Writes inside callbacks are skipped, and `var`
+// initialisers count because a var binding outlives the block it is declared in.
+const collectTryWrites = (blockPath) => {
+  const writes = [];
+  const record = (p) => {
+    for (const name of Object.keys(p.getBindingIdentifiers())) writes.push({ name, scope: p.scope });
+  };
+  blockPath.traverse({
+    Function(p) {
+      p.skip();
+    },
+    AssignmentExpression(p) {
+      if (p.node.operator === '=') record(p);
+    },
+    VariableDeclarator(p) {
+      const isVarInit = p.parent.kind === 'var' && Boolean(p.node.init);
+      if (isVarInit) record(p);
+    }
+  });
+  return writes;
+};
+
+// Start offsets of every write that gives the binding a value: each reassignment, plus a
+// declared initialiser that is not undefined, or a for-in/for-of head that assigns it.
+const listValueWrites = (binding) => {
+  const starts = binding.constantViolations.map((p) => p.node.start);
+  const init = binding.path.node.init;
+  const hasRealInit = Boolean(init) && !isUndefinedValue(init);
+  const isLoopHead = Boolean(binding.path.parentPath?.parentPath?.isForXStatement());
+  if (hasRealInit || isLoopHead) starts.push(binding.path.node.start);
+  return starts;
+};
+
+const isDefaultedRead = (refPath) => {
+  const parent = refPath.parent;
+  const isDefaultingLogical = t.isLogicalExpression(parent) && DEFAULTING_OPERATORS.has(parent.operator);
+  return isDefaultingLogical && parent.left === refPath.node;
+};
+
+const isReadUnsetAfterTry = (binding, tryNode, fnScope) => {
+  if (!binding) return false;
+  if (!SWALLOWABLE_KINDS.has(binding.kind)) return false;
+  if (!binding.path.isVariableDeclarator()) return false;
+  if (resolveFunctionScope(binding.scope) !== fnScope) return false;
+
+  const writeStarts = listValueWrites(binding);
+  if (writeStarts.some((start) => start < tryNode.start)) return false;
+  const firstLaterWrite = Math.min(Infinity, ...writeStarts.filter((start) => start > tryNode.end));
+
+  return binding.referencePaths.some((ref) => {
+    const isAfterTry = ref.node.start > tryNode.end;
+    const isBeforeLaterWrite = ref.node.start < firstLaterWrite;
+    const isUnguardedWindow = isAfterTry && isBeforeLaterWrite;
+    return isUnguardedWindow && !isDefaultedRead(ref);
+  });
+};
+
+// Truth spec 4.2: escalate only when a let/var assigned in the try is read after it while it
+// may still be undefined, because that is where a swallowed error silently propagates.
+const findSwallowedBinding = (catchPath) => {
+  const tryPath = catchPath.parentPath;
+  const fnScope = resolveFunctionScope(tryPath.scope);
+  const writes = collectTryWrites(tryPath.get('block'));
+  const swallowed = writes.find(({ name, scope }) => {
+    return isReadUnsetAfterTry(scope.getBinding(name), tryPath.node, fnScope);
+  });
+  return swallowed?.name || null;
+};
+
+const describeShallowCatch = (swallowed, isMissingReason) => {
+  const parts = [];
+  if (swallowed) {
+    parts.push(`Shallow catch leaves "${swallowed}" unset; it is read after the try (silent undefined propagation)`);
+  } else {
+    parts.push('Shallow catch paranoia wrapper (silent suppression without handling)');
+  }
+  if (isMissingReason) parts.push(MISSING_REASON_NOTE);
+  return parts.join('; ');
+};
+
+const reportShallowCatch = (astPath, { relativePath, violations, comments }) => {
+  const allowance = findCatchAllowance(comments, astPath);
+  if (allowance?.hasReason) return;
+
+  const swallowed = findSwallowedBinding(astPath);
+  const meta = RULE_REGISTRY.AI_SLOP_SHALLOW_CATCH;
+  violations.push({
+    filePath: relativePath,
+    line: astPath.node.loc?.start.line || 1,
+    column: astPath.node.loc?.start.column || 1,
+    hazard: describeShallowCatch(swallowed, Boolean(allowance)),
+    rule: 'AI_SLOP_SHALLOW_CATCH',
+    severity: swallowed ? 'HIGH' : meta.severity,
+    pillar: meta.pillar,
+    directive: meta.directive,
+    isAiSlop: true
+  });
+};
+
+export const createAiSlopVisitors = ({ relativePath, violations, comments = [] }) => {
   const isComponentFile = isComponentPath(relativePath);
 
   return {
     CatchClause(astPath) {
       const body = astPath.node.body?.body || [];
-      const isShallowCatch = isShallowCatchBody(body, t);
-
-      if (isShallowCatch) {
-        const line = astPath.node.loc?.start.line || 1;
-        const meta = RULE_REGISTRY.AI_SLOP_SHALLOW_CATCH;
-        violations.push({
-          filePath: relativePath,
-          line,
-          column: astPath.node.loc?.start.column || 1,
-          hazard: 'Shallow catch paranoia wrapper (silent suppression without handling)',
-          rule: 'AI_SLOP_SHALLOW_CATCH',
-          severity: meta.severity,
-          pillar: meta.pillar,
-          directive: meta.directive,
-          isAiSlop: true
-        });
+      if (isShallowCatchBody(body, t)) {
+        reportShallowCatch(astPath, { relativePath, violations, comments });
       }
 
       if (hasAnyTypeAnnotation(astPath.node.param, t)) {

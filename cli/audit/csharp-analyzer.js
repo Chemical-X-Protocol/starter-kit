@@ -4,11 +4,13 @@
  * cyclomatic complexity, control flow nesting depth, and AI slop.
  */
 import { RULE_REGISTRY } from './rules-registry.js';
+import { parseBestEffortAllowance } from './rules-predicates.js';
 
 const IN_MEMORY_DB_PATTERN = /\bUseInMemoryDatabase\s*\(/;
 const SQLITE_PROVIDER_PATTERN = /\b(?:UseSqlite|SqliteConnection|DataSource\s*=\s*:memory:)\b/;
 const SIMULATED_DELAY_PATTERN = /\bTask\.Delay\s*\(\s*\d+\s*\)/;
 const HARDCODED_LIST_MOCK_PATTERN = /new\s+List<[A-Za-z0-9_]+>\s*\{\s*new\s+[A-Za-z0-9_]+\s*\{/;
+const MISSING_REASON_NOTE = 'the chemx-allow: best-effort annotation needs a reason (reason is mandatory)';
 const SIMULATION_SWITCH_PATTERN = /(?:public|private|protected|internal)?\s*(?:static\s+)?(?:readonly\s+)?(?:const\s+)?bool\s+(?:Simulate|UseSimulation|Mock|Fake|Stub)[A-Za-z0-9_]*\s*(?:\{\s*get;\s*(?:set|init)?;\s*\}\s*)?=\s*true\b/i;
 
 const isVerbatimStringPrefix = (code, i) => {
@@ -325,6 +327,21 @@ const checkCleanArchitectureAndCoupling = (content, relativePath, violations) =>
   }
 };
 
+// A best-effort annotation counts on the line above the catch, on the catch line, inside the
+// body, or on the closing-brace line. Raw lines are read (masked content erases comments), so
+// annotation text quoted in a string on those lines also counts: a known gap the JS detector
+// avoids by reading parser comments. Severity stays at the registry MEDIUM with no escalation,
+// because C# definite assignment (CS0165) already rejects reading an unset local.
+const resolveCatchAllowance = (match, lines, lineNum) => {
+  const endLineNum = lineNum + (match[0].match(/\n/g) || []).length;
+  const texts = [lines[lineNum - 2], lines[lineNum - 1], match[0], lines[endLineNum - 1]];
+  const allowances = texts.map((text) => parseBestEffortAllowance(text));
+  return {
+    isExempt: allowances.some((allowance) => allowance.hasReason),
+    isAnnotated: allowances.some((allowance) => allowance.isAnnotated)
+  };
+};
+
 export const analyzeCSharpCode = (content, relativePath, violations, config = {}) => {
   const lines = content.split('\n');
   const maskedContent = maskCommentsAndStrings(content);
@@ -332,12 +349,16 @@ export const analyzeCSharpCode = (content, relativePath, violations, config = {}
   const catchMatches = content.matchAll(/catch\s*(?:\([^)]*\))?\s*\{(?:\s*|\s*\/\/[^\n]*\s*)\}/g);
   for (const m of catchMatches) {
     const lineNum = content.slice(0, m.index).split('\n').length;
+    const allowance = resolveCatchAllowance(m, lines, lineNum);
+    if (allowance.isExempt) continue;
+    const hazardParts = ['Empty or shallow catch block detected in C# handler/service'];
+    if (allowance.isAnnotated) hazardParts.push(MISSING_REASON_NOTE);
     const meta = RULE_REGISTRY.AI_SLOP_SHALLOW_CATCH;
     violations.push({
       filePath: relativePath,
       line: lineNum,
       column: 1,
-      hazard: 'Empty or shallow catch block detected in C# handler/service',
+      hazard: hazardParts.join('; '),
       rule: 'AI_SLOP_SHALLOW_CATCH',
       severity: meta.severity,
       pillar: meta.pillar,

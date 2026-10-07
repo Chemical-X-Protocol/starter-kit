@@ -7,6 +7,7 @@ export declare function isCommentLine(line: string): boolean;
 export declare function isCodeLine(line: string): boolean;
 export declare function isConsoleCallStatement(stmt: unknown, t: typeof babelTypes): boolean;
 export declare function isShallowCatchBody(body: readonly unknown[], t: typeof babelTypes): boolean;
+export declare function parseBestEffortAllowance(text?: string): { isAnnotated: boolean; hasReason: boolean; reason: string };
 export declare function hasAnyTypeAnnotation(param: unknown, t: typeof babelTypes): boolean;
 export declare function isRedundantPassthroughReturn(curr: unknown, next: unknown, t: typeof babelTypes): boolean;
 export declare function isHookIdentifier(idNode: unknown): boolean;

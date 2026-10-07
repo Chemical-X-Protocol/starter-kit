@@ -47,6 +47,15 @@ export const isShallowCatchBody = (body, t) => {
   return false;
 };
 
+const BEST_EFFORT_PATTERN = /chemx-allow:\s*best-effort\b([^\n]*)/;
+
+export const parseBestEffortAllowance = (text = '') => {
+  const match = String(text).match(BEST_EFFORT_PATTERN);
+  const isAnnotated = Boolean(match);
+  const reason = isAnnotated ? match[1].replace(/\*\/.*$/, '').replace(/^[\s*:-]+/, '').trim() : '';
+  return { isAnnotated, hasReason: reason.length > 0, reason };
+};
+
 export const hasAnyTypeAnnotation = (param, t) => {
   if (!param || !t.isIdentifier(param)) return false;
   const typeAnn = param.typeAnnotation;

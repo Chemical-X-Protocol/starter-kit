@@ -322,6 +322,7 @@ Chemical X is **language-agnostic**. The core physics of AI agent code generatio
 2. **Tier 2: Deep Language-Specific Analyzers**
    * **Babel Engine:** Deep AST inspection for JS/TS/Vue/Svelte (zero false-positive syntax errors on non-JS code).
    * **C# / Clean Architecture Analyzer:** Flags empty `catch (Exception) {}` blocks, simulated delays (`Task.Delay`), and monolithic controllers.
+   * **Shallow Catch (`AI_SLOP_SHALLOW_CATCH`):** Empty or console-only catch blocks are MEDIUM. A JS/TS catch escalates to HIGH when a `let` or `var` assigned in the try is read after it with no default first (silent `undefined` propagation); C# findings stay MEDIUM. Mark an intentional swallow with a `chemx-allow: best-effort <reason>` comment on the line above the catch, on the catch line, or inside its body (C# also checks the closing-brace line). The reason is mandatory: an annotation without one is still flagged.
 
 ---
 

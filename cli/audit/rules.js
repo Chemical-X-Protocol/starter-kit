@@ -159,7 +159,7 @@ export const auditCode = (content, filePath, relativePath, options = {}) => {
   const traverseFn = traverse.default || traverse;
   const hookRegistry = options.hookRegistry || createHookShapeRegistry();
   const visitors = createAstVisitors({ relativePath, violations, hookRegistry, config });
-  const slopVisitors = createAiSlopVisitors({ relativePath, violations });
+  const slopVisitors = createAiSlopVisitors({ relativePath, violations, comments: ast.comments || [] });
   const extendedVisitors = createExtendedVisitors({ relativePath, violations });
   const patternVisitors = options.patternRegistry
     ? createPatternVisitors(options.patternRegistry, relativePath)

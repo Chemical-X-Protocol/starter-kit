@@ -193,8 +193,8 @@ export const RULE_REGISTRY = {
   },
   AI_SLOP_SHALLOW_CATCH: {
     pillar: 'AI Slop & Code Authenticity',
-    severity: 'HIGH',
-    directive: 'Replace shallow catch paranoia wrappers with intentional error propagation or ResultTuple'
+    severity: 'MEDIUM',
+    directive: 'Replace shallow catch wrappers with intentional error propagation or ResultTuple, or mark an intentional swallow with chemx-allow: best-effort <reason>'
   },
   AI_SLOP_UTILITY_REINVENTION: {
     pillar: 'AI Slop & Code Authenticity',
