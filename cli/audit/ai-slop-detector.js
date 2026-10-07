@@ -8,6 +8,7 @@ import {
   hasAnyTypeAnnotation,
   isRedundantPassthroughReturn
 } from './rules-predicates.js';
+import { isCoveredRead, isUndefinedValue, isWithinNode } from './shallow-catch-reads.js';
 
 const RESIDUE_PATTERNS = [
   ['hope this', 'helps'].join(' '),
@@ -162,7 +163,6 @@ export const checkSlopTextPatterns = (content, lines, relativePath, violations) 
 };
 
 const SWALLOWABLE_KINDS = new Set(['let', 'var']);
-const DEFAULTING_OPERATORS = new Set(['??', '||']);
 const DEFAULTING_ASSIGNMENTS = new Set(['=', '??=', '||=']);
 const MISSING_REASON_NOTE = 'the chemx-allow: best-effort annotation needs a reason (reason is mandatory)';
 
@@ -227,11 +227,6 @@ const findCatchAllowance = (comments, catchPath, source) => {
 
 const resolveFunctionScope = (scope) => scope.getFunctionParent() || scope.getProgramParent();
 
-const isUndefinedValue = (node) => {
-  const isUndefinedId = t.isIdentifier(node, { name: 'undefined' });
-  return isUndefinedId || t.isUnaryExpression(node, { operator: 'void' });
-};
-
 // Names written directly in the try block. Writes inside callbacks are skipped, and `var`
 // initialisers count because a var binding outlives the block it is declared in.
 const collectTryWrites = (blockPath) => {
@@ -263,11 +258,6 @@ const resolveGuardedFrom = (writePath) => {
   if (writePath.isForXStatement()) return node.body.start;
   if (!writePath.isAssignmentExpression()) return node.end;
   return DEFAULTING_ASSIGNMENTS.has(node.operator) ? node.end : Infinity;
-};
-
-const isWithinNode = (inner, outer) => {
-  const startsInside = inner.start >= outer.start;
-  return startsInside && inner.end <= outer.end;
 };
 
 // A write inside the block of another try whose catch is shallow may never have run, so it
@@ -302,31 +292,8 @@ const listValueWrites = (binding, tryNode) => {
     .map((writePath) => ({ start: writePath.node.start, guardedFrom: resolveGuardedFrom(writePath) }));
 };
 
-const isOptionalChainLink = (path) => {
-  const parent = path.parent;
-  const isChainObject = t.isOptionalMemberExpression(parent) && parent.object === path.node;
-  const isChainCallee = t.isOptionalCallExpression(parent) && parent.callee === path.node;
-  return isChainObject || isChainCallee;
-};
-
-// Climb an optional chain that starts at the read: in data?.name ?? 'anon' the default also
-// covers data, because the chain short-circuits to undefined when data is unset. A plain
-// member access (data.name) throws first, so it is never climbed.
-const climbOptionalChain = (refPath) => {
-  let chain = refPath;
-  while (isOptionalChainLink(chain)) chain = chain.parentPath;
-  return chain;
-};
-
 // Babel lists the bare head of for (v of xs) among the references, but it is the write.
 const isLoopHeadTarget = (refPath) => refPath.parentPath.isForXStatement() && refPath.key === 'left';
-
-const isDefaultedRead = (refPath) => {
-  const chain = climbOptionalChain(refPath);
-  const parent = chain.parent;
-  const isDefaultingLogical = t.isLogicalExpression(parent) && DEFAULTING_OPERATORS.has(parent.operator);
-  return isDefaultingLogical && parent.left === chain.node;
-};
 
 const isReadUnsetAfterTry = (binding, tryNode, fnScope) => {
   if (!binding) return false;
@@ -344,7 +311,7 @@ const isReadUnsetAfterTry = (binding, tryNode, fnScope) => {
     const isAfterTry = ref.node.start > tryNode.end;
     const isBeforeGuard = ref.node.start < guardedFrom;
     const isUnguardedWindow = isAfterTry && isBeforeGuard;
-    return isUnguardedWindow && !isDefaultedRead(ref);
+    return isUnguardedWindow && !isCoveredRead(ref, binding);
   });
 };
 

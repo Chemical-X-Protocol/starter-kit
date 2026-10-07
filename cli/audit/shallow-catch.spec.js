@@ -132,8 +132,45 @@ test('shallow catch: a var initialised inside the try escalates', () => {
   assert.ok(hit.hazard.includes('"v"'));
 });
 
-test('shallow catch: a && read after the try is still a read', () => {
-  assertOne('let v;\ntry { v = f(); } catch {}\nuse(v && v.a);\n', 'HIGH');
+test('shallow catch: a && read after the try is still a read unless its left side checks the binding', () => {
+  assertOne('let v;\ntry { v = f(); } catch {}\nuse(ok && v);\n', 'HIGH');
+  assertOne('let v;\ntry { v = f(); } catch {}\nuse(v.a && v);\n', 'HIGH');
+  assertOne('let v;\ntry { v = f(); } catch {}\nuse(v && v.a);\n', 'MEDIUM');
+});
+
+test('shallow catch: an explicit default that checks the binding first keeps it MEDIUM', () => {
+  assertOne('let v;\ntry { v = f(); } catch {}\nv = v == null ? d : v;\nuse(v);', 'MEDIUM');
+  assertOne('let v;\ntry { v = f(); } catch {}\nv = typeof v === "string" ? v : "";\nuse(v);', 'MEDIUM');
+  assertOne('let v;\ntry { v = f(); } catch {}\nv = v !== undefined ? v : d;\nuse(v);', 'MEDIUM');
+  assertOne('let v;\ntry { v = f(); } catch {}\nv = null != v ? v : d;\nuse(v);', 'MEDIUM');
+  assertOne('let v;\ntry { v = f(); } catch {}\nv = v === void 0 ? d : v;\nuse(v);', 'MEDIUM');
+  assertOne('let v;\ntry { v = f(); } catch {}\nv = v ? v : d;\nuse(v);', 'MEDIUM');
+});
+
+test('shallow catch: a conditional default before the read keeps it MEDIUM (was HIGH)', () => {
+  assertOne('let v;\ntry { v = f(); } catch {}\nif (v === undefined) v = d;\nuse(v);', 'MEDIUM');
+  assertOne('let v;\ntry { v = f(); } catch {}\nif (!v) v = d;\nuse(v);', 'MEDIUM');
+  assertOne('let v;\ntry { v = f(); } catch {}\nif (typeof v !== "object") { v = {}; }\nuse(v);', 'MEDIUM');
+});
+
+test('shallow catch: a read inside a branch that checks the binding keeps it MEDIUM', () => {
+  assertOne('let v;\ntry { v = f(); } catch {}\nif (v) use(v.x);\n', 'MEDIUM');
+  assertOne('let v;\ntry { v = f(); } catch {}\nif (v == null) { skip(); } else { use(v.x); }\n', 'MEDIUM');
+  assertOne('let v;\ntry { v = f(); } catch {}\nconst x = v ? v.x : d;\n', 'MEDIUM');
+});
+
+test('shallow catch: a check on another binding, or a read after the branch, still escalates', () => {
+  assertOne('let v;\ntry { v = f(); } catch {}\nif (other) use(v);\n', 'HIGH');
+  assertOne('let v;\ntry { v = f(); } catch {}\nconst x = w == null ? d : v;\n', 'HIGH');
+  assertOne('let v;\ntry { v = f(); } catch {}\nconst x = v === 5 ? v.x : d;\n', 'HIGH');
+  assertOne('let v;\ntry { v = f(); } catch {}\nif (v) log();\nuse(v);\n', 'HIGH');
+  assertOne('let v;\ntry { v = f(); } catch {}\nconst x = v.x;\n', 'HIGH');
+});
+
+test('shallow catch: known false negative, a write inside a closure counts as a guard', () => {
+  // The closure may never run, so v can still be unset at use(v), but any write is trusted.
+  assertOne('let v;\ntry { v = f(); } catch {}\nrun(() => { v = d; });\nuse(v);\n', 'MEDIUM');
+  assertOne('let v;\nconst reset = () => { v = d; };\ntry { v = f(); } catch {}\nuse(v);\n', 'MEDIUM');
 });
 
 test('shallow catch: a real initializer keeps it MEDIUM', () => {
