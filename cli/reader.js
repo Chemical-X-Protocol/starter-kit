@@ -6,6 +6,7 @@ import { ANSI } from './theme.js';
 import { resolveSafePath } from './path-scope.js';
 import { isBabelParsable } from './languages.js';
 import { extractAstMetadata } from './search-ast.js';
+import { isMarkdownFile, generateMarkdownOutline } from './reader-markdown.js';
 
 import {
   stripCodeComments,
@@ -43,6 +44,7 @@ const OUTLINE_KIND_LABELS = {
 };
 
 export const generateAstOutline = (code, filePath) => {
+  if (isMarkdownFile(filePath)) return generateMarkdownOutline(code, filePath);
   const isVue = filePath.endsWith('.vue');
   const isSvelte = filePath.endsWith('.svelte');
   let scriptContent = code;
