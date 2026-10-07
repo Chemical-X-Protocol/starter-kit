@@ -61,6 +61,7 @@ export const MASTER_MCP_TOOL = {
           limit: { type: 'number', description: 'Maximum results to return (for q; for team task list, default 20)' },
           all: { type: 'boolean', description: 'team task list: include every status and remove the 20-row cap' },
           card: { type: 'boolean', description: 'team task list: include the formatted hierarchy card' },
+          triage: { type: 'boolean', description: 'audit: convert violations into team tasks (opt-in; audit is otherwise read-only)' },
           reindex: { type: 'boolean', description: 'Force re-index before running query (for q)' },
           path: { type: 'string', description: 'Target file path (for read, patch, write, check, lock)' },
           symbol: { type: 'string', description: 'Target symbol declaration to extract (for read)' },
@@ -194,6 +195,10 @@ export const SUB_TOOLS = [
         model: {
           type: 'string',
           description: 'Pricing baseline for token context burn analysis (claude, gpt4o, blended).'
+        },
+        triage: {
+          type: 'boolean',
+          description: 'Convert violations into team tasks (opt-in; audit is otherwise read-only).'
         }
       }
     }

@@ -110,7 +110,7 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
 
     if (syncRes?.db) {
       syncViolationsIndex(syncRes.db, report.violations);
-      const shouldTriage = !rawArgs.includes('--no-triage');
+      const shouldTriage = rawArgs.includes('--triage');
       if (shouldTriage) {
         const createdTasks = autoGenerateTasksFromAudit(syncRes.db, { cwd: process.cwd(), targetDir });
         const shouldLogTriage = isCli && !isJson && createdTasks.length > 0;
