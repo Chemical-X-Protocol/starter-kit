@@ -374,12 +374,14 @@ export const runProjectVerify = async (rawArgs = [], isCli = false, options = {}
     },
     typecheck: {
       success: typeReport.success,
+      command: typeReport.command,
       errorCount: typeReport.errorCount,
       executionError: typeReport.executionError || null,
       errors: typeReport.errors.slice(0, 5)
     },
     tests: {
       success: testReport.success,
+      command: testReport.command,
       total: testReport.totalTests,
       passed: testReport.passed,
       failed: testReport.failed,
@@ -422,9 +424,10 @@ export const runProjectVerify = async (rawArgs = [], isCli = false, options = {}
     const typeStatus = formatTypeStatus();
     const testStatus = formatTestStatus();
 
-    process.stdout.write(`  ${auditIcon} AST Architecture:  ${auditReport.health.grade} (${auditReport.health.score}/100, ${auditReport.totalViolations} violations)\n`);
-    process.stdout.write(`  ${typeIcon} TypeScript:        ${typeStatus}\n`);
-    process.stdout.write(`  ${testIcon} Test Suite:        ${testStatus}\n`);
+    // Only the audit is scoped; typecheck and tests run project-wide, so each line names what it covered.
+    process.stdout.write(`  ${auditIcon} AST Architecture:  ${auditReport.health.grade} (${auditReport.health.score}/100, ${auditReport.totalViolations} violations) ${ANSI.DIM}[${scope.relDir}/, ${gate.basis} gate]${ANSI.RESET}\n`);
+    process.stdout.write(`  ${typeIcon} TypeScript:        ${typeStatus} ${ANSI.DIM}[${typeReport.command}]${ANSI.RESET}\n`);
+    process.stdout.write(`  ${testIcon} Test Suite:        ${testStatus} ${ANSI.DIM}[${testReport.command}]${ANSI.RESET}\n`);
     if (buildReport) {
       const buildIcon = buildReport.isPassing ? `${ANSI.LIME}✔${ANSI.RESET}` : `${ANSI.RED}✖${ANSI.RESET}`;
       process.stdout.write(`  ${buildIcon} Production Build:  ${buildReport.isPassing ? 'Success' : 'Failed'}\n`);

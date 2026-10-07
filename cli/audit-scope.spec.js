@@ -115,3 +115,13 @@ test('audit scope: verify resolves a monorepo --dir once, from the caller direct
     assert.deepStrictEqual(summary.scope, { dir: 'src', source: 'explicit' });
   });
 });
+
+test('audit scope: verify names what typecheck and tests ran, since only the audit is scoped', async () => {
+  await withProject({ dirs: ['src', 'node_modules'] }, async (root) => {
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ name: 'p', scripts: { test: 'node -e ""', typecheck: 'node -e ""' } }));
+    fs.writeFileSync(path.join(root, 'src/x.js'), 'export const x = 1;\n');
+    const summary = await runProjectVerify(['--json'], false, { cwd: root, print: false });
+    assert.match(summary.typecheck.command, /typecheck/);
+    assert.match(summary.tests.command, /test/);
+  });
+});
