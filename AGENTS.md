@@ -1,8 +1,7 @@
 # Chemical X Molecular Architecture Directives
-# Target Project: Project Quantum App
 
 > *"Clean, literate code that reads like poetry to both humans and AI."*
-> Mandatory architectural directives for AI Agents operating on Project Quantum App. Strictly enforce these standards on every code generation, refactor, and review pass.
+> Mandatory architectural directives for AI agents operating on this repository. Strictly enforce these standards on every code generation, refactor, and review pass.
 
 ---
 
@@ -114,11 +113,11 @@
   // Surgical AST Reading & Connections
   chemx({ action: 'read', params: { path: 'src/...', symbol: 'ButtonVariant', connections: true } });
   chemx({ action: 'read', params: { path: 'src/...', outline: true } });
-  // Free-lunch enriched read: outline + logic skeleton in one call (no boilerplate penalty)
+  // Component capsules only: outline + logic skeleton in one call (procedural modules: outline or symbol)
   chemx({ action: 'read', params: { path: 'src/...', outline: true, enrich: true } });
-  // Outline + logic + forward call trace card
+  // Component capsules: outline + logic + forward call trace card
   chemx({ action: 'read', params: { path: 'src/...', outline: true, enrich: true, traceSymbol: 'handleCheckout' } });
-  // Outline + logic + reverse caller chain card
+  // Component capsules: outline + logic + reverse caller chain card
   chemx({ action: 'read', params: { path: 'src/...', outline: true, enrich: true, backtraceSymbol: 'handleCheckout' } });
 
   // Surgical Modification & Rules Check
@@ -144,8 +143,8 @@
 ### N. Database-First Navigation, Symbol Connections & The Zero-Native-File-Dump Directive
 - **Database Master Index First**: Before inspecting or modifying any file, AI agents MUST query the SQLite database (`.chemx/index.db`) or the AST Query Machine (`chemx({ action: 'team', params: { action: 'list' } })`, `chemx({ action: 'q', params: { query } })`) rather than exploring the filesystem with broad find or ripgrep commands.
 - **Targeted Symbol-Only Extraction**: AI agents MUST NEVER dump entire source files into context. When an agent needs to inspect a function, hook, interface, or class, it MUST request only that specific symbol: `chemx({ action: 'read', params: { path, symbol: '<name>' } })`.
-- **Surgical Auto-Outline Guard**: Files exceeding 100 lines (Directive 1.A outer bound) read without a target symbol or slice automatically render an AST outline to prevent token exhaustion and host buffer spillovers (such as IDE `output.txt` dumps).
-- **Free-Lunch Enrich Mode**: When an agent needs both exported signatures AND logic flow for a file, use `enrich: true` with `outline: true`. Returns the outline block + a compacted logic skeleton in a single response card with no boilerplate token penalty. Optionally append a forward trace or reverse caller chain by adding `traceSymbol` or `backtraceSymbol` to the same call: `chemx({ action: 'read', params: { path, outline: true, enrich: true } })`.
+- **Read Window Auto-Outline**: Files longer than the chemx read window (100 lines by default), read without a target symbol or slice, automatically render an AST outline to prevent token exhaustion and host buffer spillovers (such as IDE `output.txt` dumps). The read window is a tool budget, not an architecture rule; file size is governed by 1.A.
+- **Enrich Mode (Component Capsules Only)**: When an agent needs both exported signatures AND logic flow for a component capsule, use `enrich: true` with `outline: true`: one response card holds the outline and a compacted logic skeleton, optionally with a forward trace or reverse caller chain (`traceSymbol`, `backtraceSymbol`). The skeleton generator is tuned for components; on procedural modules (services, CLI code, utilities) enrich saves only a few percent over reading the whole file, so use plain `outline: true` or `symbol: '<name>'` there.
 - **Symbol Connection Graph Over Multi-File Dumps**: Rather than reading multiple files to understand imports and consumers, agents MUST request symbol connections: `chemx({ action: 'read', params: { path, symbol: '<name>', connections: true } })` or `chemx({ action: 'q', params: { query, connections: true } })`. This instantly returns the definition, imported dependencies, and caller references in ~45 tokens.
 - **Prohibition on Native File Analyzers (`view_file` Ban)**: AI agents are strictly prohibited from using native IDE file-viewing tools (`view_file`, `read_file`, `cat`, `head`, `tail`, or full-file context dumps). Dumping raw files burns thousands of tokens, causes premature context exhaustion, and defeats the token economics of the molecular architecture. All inspections MUST flow through Chemical X AST readers.
 
@@ -166,7 +165,7 @@
 ### A. The Anti-Type-Monolith Rule & Domain-Scoped Capsules
 - Strictly prohibit dumping thousands of unrelated entity types into a single monolithic `types.ts` or `global.d.ts`.
 - Co-locate granular `types/*.d.ts` declaration files directly inside each molecule, organism, or feature directory capsule.
-- Max 100 lines per domain type file. If a type file approaches 100 lines, decompose into granular domain files (`session.d.ts`, `auth.d.ts`, `billing.d.ts`).
+- Split type files by domain, not by line count: once a file declares entities from more than one domain, decompose it into granular domain files (`session.d.ts`, `auth.d.ts`, `billing.d.ts`). File length follows 1.A; there is no separate type-file line cap.
 - Root `types/*.d.ts` is reserved strictly for universal system primitives (`ResultTuple<T>`, `AsyncDataState<T>`, base envelopes). It never contains domain entity models.
 - Zero runtime logic in type files. Zero implicit `any`.
 
@@ -210,48 +209,48 @@
 
 ## 3. Control Flow & Self-Documenting Logic
 
-### A. Two-Stage Atomic Boolean Composition
-- Never inline complex multi-clause comparisons (`if (a === b && c > 0 && !d)`).
-- Break complex checks into atomic single-concept booleans, compose them into a unified decision variable, and use clean conditionals with early-return guard clauses:
+### A. Named Conditions & Two-Stage Composition
+> The `if` never asks a question. The question is asked and named before the branch, and the `if` reads the answer.
+
+- Every conditional test is a named boolean: an identifier, its negation, or a call or member access whose name is an assertion (3.F). A raw comparison (`x === y`, `n >= 5`), a truthiness check on a non-boolean (`if (user)`, `if (obj.prop)`), inline compound logic (`a && b`), or a verb-named call (`RE.test(s)`, `fs.existsSync(p)`) inside the test is a violation.
+- Naming is the point, not the ceremony: it forces the question inline code hides (why `<= 0` and not `=== -1`?), and an edit to a named condition changes its definition without touching the branch.
+- **Stage 1** names each atomic concept. **Stage 2** names the decision, only when 2 or more concepts compose; a single comparison gets one name and no wrapper. Guard with early returns.
   ```typescript
-  // Stage 1: Atomic Concept Declarations (Types assumed from domain types.d.ts)
-  const hasItems = items.length > 0;
-  const isFormComplete = isAddressValid && hasAcceptedTerms;
-  const hasSufficientFunds = userBalance >= totalCost;
+  if (hookCount > 5) return;                  // ❌ the if asks
+  const exceedsHookBudget = hookCount > 5;    // ✅ the question, named
+  if (exceedsHookBudget) return;              //    the if reads the answer
 
-  // Stage 2: Unified Final Decision Variable
-  const canCheckout = computed(() => (
-    hasItems && isFormComplete && hasSufficientFunds && !isProcessing
-  ));
-
-  // Stage 3: Clean Conditionals & Early-Return Guard Clauses
   const handleCheckout = () => {
-    if (!canCheckout.value) return;
+    // Stage 1: atomic concepts (Layer 1/2 predicates from 3.B where they exist)
+    const hasSufficientFunds = userBalance >= totalCost;
+    const isFormComplete = isAddressValid && hasAcceptedTerms;
+    // Stage 2: the decision
+    const canCheckout = hasItems(cart) && isFormComplete && hasSufficientFunds && !isProcessing;
+    if (!canCheckout) return;
     processPayment();
   };
   ```
 - In React, booleans are pure in-render derivations: never use `useEffect` for computed/derived state.
 
-### B. Named Predicates & Higher-Order Filter Extraction
-- Never repeat raw `.filter()` loops with inline multi-clause comparisons across multiple derived collections.
-- Extract the atomic predicate callback (`isTierFile(file, tier)`), compose a reusable named filter function (`const filterFiles = (tier) => filteredFiles.value.filter(f => isTierFile(f, tier))`), and declare clean derived computeds:
+### B. The Predicate Lexicon & Higher-Order Filter Extraction
+- Named conditions come from three layers. A raw comparison belongs in a named declaration (3.A) or inside a Layer 1 or Layer 2 predicate body, never in a conditional test.
+  1. **Structural primitives** (`lib/is/`: `value`, `collection`, `text`, `fs`, `type`): subject-agnostic and finite (`isAbsent`, `hasItems`, `isNonEmptyString`, `pathExists`). They import nothing, and the set does not grow. Every primitive is a TypeScript type predicate (`(x: unknown): x is string`), never a plain `boolean`, or callers lose narrowing.
+  2. **Domain vocabulary** (`<subsystem>/<domain>-predicates.<ext>`, colocated with the subsystem it describes): built from Layer 1. A condition earns a domain predicate at its 2nd use; a threshold duplicated across files (`score >= 90`) silently disagrees the day one copy changes, so name it once (`isGradeA`). Promote threshold literals in predicate bodies to named constants (`score >= GRADE_A_THRESHOLD`).
+  3. **Decisions**: single-use composites declared at the call site per 3.A. Never extract them: extracting every condition is *indirection masquerading as modularity* (1.A).
+- Before naming a new predicate, search for an existing one (`chemx({ action: 'q', params: { query: '<concept>', semantic: true } })`). A synonym beside an existing predicate (`hasNoItems` beside `isEmpty`) is lexicon rot.
+- Repeated filter conditions are Layer 2 candidates: extract the predicate, compose a named higher-order filter, and keep derivations declarative:
   ```typescript
-  // ❌ Bad: Inlined multi-clause predicates repeated across derivations
-  const viewsFiles = computed(() => filteredFiles.value.filter(f => f.path.startsWith("src/") && (f.path.startsWith("src/views") || f.tier === "views")));
-  const templatesFiles = computed(() => filteredFiles.value.filter(f => f.path.startsWith("src/") && (f.path.includes("templates/") || f.tier === "templates")));
-  const organismsFiles = computed(() => filteredFiles.value.filter(f => f.path.startsWith("src/") && (f.path.includes("organisms/") || f.tier === "organisms")));
+  // ❌ Bad: inlined multi-clause predicate, repeated per derivation
+  const viewsFiles = computed(() => filteredFiles.value.filter(f => f.path.startsWith("src/") && (f.path.includes("views/") || f.tier === "views")));
 
-  // ✅ Good: Atomic predicate + named higher-order filter + declarative derivations
+  // ✅ Good: domain predicate + named higher-order filter + declarative derivations
   const isTierFile = (file: Capsule, tier: string): boolean => {
     const isSrc = file.path.startsWith("src/");
     if (!isSrc) return false;
     return file.path.includes(`${tier}/`) || file.tier === tier;
   };
-
   const filterFiles = (tier: string) => filteredFiles.value.filter(f => isTierFile(f, tier));
-
   const viewsFiles = computed(() => filterFiles("views"));
-  const templatesFiles = computed(() => filterFiles("templates"));
   const organismsFiles = computed(() => filterFiles("organisms"));
   ```
 
@@ -274,12 +273,19 @@
 ### E. Keyed Map Dispatch Over Monolithic Switch Statements
 - Prohibit monolithic `switch` statements used as procedural dispatch tables or value lookups.
 - When branching performs uniform operations (e.g. mapping string keys to action handlers, CSS classes, prompt builders, or payload converters), extract into an O(1) keyed dictionary or method map (`const Registry = { ... }; Registry[key](...)`).
+- **Branch Chains**: An `if` / `else if` chain of 3 or more branches testing the same subject is a lookup, not a series of decisions. Use a keyed map; do not hoist a named boolean per branch (3.A does not apply to such chains).
 - **Prototype Pollution Guardrail**: Always guard dynamic object key access using `Object.hasOwn(Registry, key)` or `Object.prototype.hasOwnProperty.call(Registry, key)` before invoking mapped methods.
 - **Architectural Benefits**:
   - O(1) constant time lookup instead of O(N) linear string comparison branching.
   - Eliminates boilerplate syntax duplication, drastically slashing token burn and AI context footprint.
   - Complies with the Open-Closed Principle (OCP): new handlers can be registered dynamically without modifying the dispatcher AST.
   - Enables granular unit testing and mocking of individual handlers in isolation.
+
+### F. Name Quality, Assertion Prefixes & Adjacency
+- **Assertion Prefixes**: A condition name starts with `is`, `are`, `has`, `have`, `can`, `could`, `should`, `would`, `does`, `did`, `needs`, `must`, `allows`, `enables`, `contains`, `includes`, `supports`, `requires`, `exceeds`, `matches`, or `wants`, followed by its subject (`isEscapeChar`, `exceedsHookBudget`). A bare verb callee (`test`, `existsSync`, `includes`, `startsWith`) is not a name: bind its result to one first.
+- **Reject Restatements**: A name built only from the words of its own expression teaches nothing. `isChEqualsBackslash = ch === '\\'` and `isCountGreaterThanFive = count > 5` are rejected; `isEscapeChar = ch === '\\'` adds a domain term and passes. If a condition cannot be named in words absent from the condition itself, it is not yet understood: find out before branching on it.
+- **Adjacency**: Declare a single-use named boolean on the statement immediately before its `if`. Hoist it only when it is referenced 2 or more times in the enclosing function, and then only to a point before its first use. A wall of `const is*` declarations at function top is a readability regression.
+- **No Double Negation**: `if (!isNotFound)` names the wrong side. Name the positive and negate at the point of use.
 
 ---
 
@@ -442,7 +448,7 @@ Raw inline `style="..."` attributes are strictly prohibited. Visual styling flow
 - Constants meant to be immutable module-level config: SCREAMING_SNAKE_CASE (`MAX_RETRY_COUNT`).
 
 ### B. Boolean & Predicate Prefixes
-- Booleans use `is`, `has`, `can`, or `should` prefixes (`isLoading`, `hasItems`, `canCheckout`, `shouldShowEmptyState`), matching the pattern already used in Section 3.A and 4.B examples. Never name a boolean as a bare noun or adjective (`loading`, `valid`) that hides its type at the call site.
+- Booleans and predicates start with an assertion prefix from 3.F (`isLoading`, `hasItems`, `canCheckout`, `exceedsHookBudget`). Never name a boolean as a bare noun or adjective (`loading`, `valid`) that hides its type at the call site.
 
 ### C. Event & Handler Naming
 - Emitted events describe what happened, not what to do (`item-selected`, not `select-item`).
