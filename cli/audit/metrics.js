@@ -1,5 +1,5 @@
 import { PILLARS } from './rules.js';
-import { resolveMoleculeLineLimit } from '../config/profiles.js';
+import { resolveEffectiveMoleculeLineLimit } from '../config/profiles.js';
 
 export const isSlopViolation = (v) => Boolean(v.isAiSlop || (v.rule && v.rule.startsWith('AI_SLOP_')));
 
@@ -106,11 +106,11 @@ const FILE_LINE_BUDGET = 500;
 export const calculateTokenBurnAnalytics = (fileStats, options = {}) => {
   let totalRawChars = 0;
   let excessChars = 0;
-  const moleculeLineLimit = options?.moleculeLineLimit ?? resolveMoleculeLineLimit(options?.config);
+  const moleculeLineLimit = options?.moleculeLineLimit ?? resolveEffectiveMoleculeLineLimit(options?.config);
 
   for (const f of fileStats) {
     totalRawChars += f.charCount;
-    // Budget: 500 lines per file; molecules use the active profile limit (100 atomic-strict, 250 pragmatic); ~36 chars per line.
+    // Budget: 500 lines per file; molecules use the active profile limit (100 atomic-strict, 250 pragmatic), never above 500; ~36 chars per line.
     const maxChars = f.isMolecule ? moleculeLineLimit * CHARS_PER_LINE : FILE_LINE_BUDGET * CHARS_PER_LINE;
     if (f.charCount > maxChars) {
       excessChars += f.charCount - maxChars;

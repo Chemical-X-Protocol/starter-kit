@@ -4,13 +4,13 @@ import { ANSI } from './theme.js';
 import { syncSingleFileIndex } from './search.js';
 import { auditFile } from './audit.js';
 import { resolveSafePath } from './path-scope.js';
-import { loadProjectConfig, resolveMoleculeLineLimit } from './config/index.js';
+import { loadProjectConfig, resolveEffectiveMoleculeLineLimit } from './config/index.js';
 
-// Molecules take the project profile budget exactly as cli/audit/rules.js does; other files keep the 500-line bound.
+// Molecules take the project profile budget, capped at the 500-line bound that cli/audit/rules.js checks first.
 const resolveLineBudget = (relPath, cwd) => {
   const baseName = path.basename(relPath);
   const isMolecule = relPath.includes('molecules') || relPath.includes('/m-') || baseName.startsWith('m-');
-  const limit = isMolecule ? resolveMoleculeLineLimit(loadProjectConfig(cwd)) : 500;
+  const limit = isMolecule ? resolveEffectiveMoleculeLineLimit(loadProjectConfig(cwd)) : 500;
   return { isMolecule, limit };
 };
 

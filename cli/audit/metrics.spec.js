@@ -45,6 +45,12 @@ describe('calculateTokenBurnAnalytics: molecule budget follows the profile', () 
     assert.strictEqual(excessTokensFor([{ isMolecule: true, charCount: budget + 38 }], { moleculeLineLimit: 180 }), 10);
   });
 
+  it('caps a config-derived molecule budget at the 500-line file bound', () => {
+    const options = { config: { rules: { maxLineCountWarning: 800 } } };
+    assert.strictEqual(excessTokensFor([{ isMolecule: true, charCount: FILE_CHAR_BUDGET }], options), 0);
+    assert.strictEqual(excessTokensFor([{ isMolecule: true, charCount: FILE_CHAR_BUDGET + 38 }], options), 10);
+  });
+
   it('keeps the 500-line budget for non-molecule files under every option', () => {
     const optionSets = [undefined, { moleculeLineLimit: 100 }, { moleculeLineLimit: 180 }, { config: { profile: 'atomic-strict' } }];
     for (const options of optionSets) {

@@ -1,8 +1,8 @@
 import { ANSI } from './theme.js';
-import { loadProjectConfig, resolveMoleculeLineLimit } from './config/index.js';
+import { loadProjectConfig, resolveEffectiveMoleculeLineLimit } from './config/index.js';
 
 export const formatSystemGuide = (config = loadProjectConfig(process.cwd())) => {
-  const moleculeLineLimit = resolveMoleculeLineLimit(config);
+  const moleculeLineLimit = resolveEffectiveMoleculeLineLimit(config);
   const CYAN = '\x1b[36m';
   const BOLD = '\x1b[1m';
   const GREEN = '\x1b[32m';

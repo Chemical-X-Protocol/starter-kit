@@ -105,6 +105,27 @@ const PROFILE_CASES = [
     status: 0
   },
   {
+    name: 'max-line-count-warning 800 is capped at the 500-line file budget, so 600 lines are blocked',
+    files: { '.chemxrc': '{"rules":{"max-line-count-warning":800}}\n' },
+    lines: 600,
+    status: 1,
+    budget: 500
+  },
+  {
+    name: 'CHEMX_MAX_MOLECULE_LINES=800 is capped at the 500-line file budget, so 600 lines are blocked',
+    env: { CHEMX_MAX_MOLECULE_LINES: '800' },
+    lines: 600,
+    status: 1,
+    budget: 500
+  },
+  {
+    name: 'CHEMX_MAX_LINES=200 also caps the 250 molecule default, so 220 lines are blocked',
+    env: { CHEMX_MAX_LINES: '200' },
+    lines: 220,
+    status: 1,
+    budget: 200
+  },
+  {
     name: 'CHEMX_MAX_MOLECULE_LINES=400 wins over the default and passes 300 lines',
     env: { CHEMX_MAX_MOLECULE_LINES: '400' },
     lines: 300,

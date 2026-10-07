@@ -11,10 +11,10 @@ import {
   URL_STANDARD,
   URL_MASTER
 } from './license.js';
-import { loadProjectConfig, resolveMoleculeLineLimit } from './config/index.js';
+import { loadProjectConfig, resolveEffectiveMoleculeLineLimit } from './config/index.js';
 
 export const formatTargetFileBudget = (config = loadProjectConfig(process.cwd())) =>
-  `Target File Budget: Max 500 lines/file (<= ${resolveMoleculeLineLimit(config)} lines/molecule)`;
+  `Target File Budget: Max 500 lines/file (<= ${resolveEffectiveMoleculeLineLimit(config)} lines/molecule)`;
 
 export const showConversionMenu = async (onScaffold = null) => {
   const targetFileBudget = formatTargetFileBudget();

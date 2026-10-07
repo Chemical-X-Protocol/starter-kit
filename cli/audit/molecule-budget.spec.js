@@ -9,9 +9,11 @@ import { resolveMoleculeTier } from './rules-helpers.js';
 import {
   loadProjectConfig,
   resolveMoleculeLineLimit,
+  resolveEffectiveMoleculeLineLimit,
   isFileLengthEnforced,
   STRICT_MOLECULE_LINE_LIMIT,
-  DEFAULT_MOLECULE_LINE_LIMIT
+  DEFAULT_MOLECULE_LINE_LIMIT,
+  FILE_LINE_LIMIT
 } from '../config/index.js';
 
 const loadConfigFrom = (rcContent, rawArgs = []) => {
@@ -77,6 +79,42 @@ describe('molecule line budget: shared resolver', () => {
     assert.strictEqual(isFileLengthEnforced({ profile: 'atomic-strict' }), true);
     assert.strictEqual(isFileLengthEnforced({ rules: { enforceFileLength: true } }), true);
     assert.strictEqual(isFileLengthEnforced(loadConfigFrom('{"profile":"loose"}')), false);
+  });
+});
+
+// rules.js checks the 500-line file bound before the molecule budget, so a larger warning never applies.
+const EFFECTIVE_CASES = [
+  { label: 'no config', config: undefined, limit: 250 },
+  { label: 'flat atomic-strict', config: { profile: 'atomic-strict' }, limit: 100 },
+  { label: 'flat maxLineCountWarning 180', config: { maxLineCountWarning: 180 }, limit: 180 },
+  { label: 'loaded loose profile', config: loadConfigFrom('{"profile":"loose"}'), limit: 500 },
+  { label: 'flat maxLineCountWarning 800', config: { maxLineCountWarning: 800 }, limit: 500 },
+  { label: 'loaded max-line-count-warning 800', config: loadConfigFrom('{"rules":{"max-line-count-warning":800}}'), limit: 500 }
+];
+
+const listLineBudgetRules = (violations) => violations.map((v) => v.rule).filter((rule) => rule.startsWith('LINE_BUDGET_'));
+
+describe('molecule line budget: effective limit within the file bound', () => {
+  it('exposes the 500-line file bound', () => {
+    assert.strictEqual(FILE_LINE_LIMIT, 500);
+  });
+
+  for (const { label, config, limit } of EFFECTIVE_CASES) {
+    it(`resolves an effective ${limit}-line budget (${label})`, () => {
+      assert.strictEqual(resolveEffectiveMoleculeLineLimit(config), limit);
+    });
+  }
+
+  it('leaves the raw resolver at the configured 800 so rule counts stay put', () => {
+    assert.strictEqual(resolveMoleculeLineLimit({ maxLineCountWarning: 800 }), 800);
+  });
+
+  it('flags a 600-line molecule under warning 800 through the file bound, not the molecule budget', () => {
+    const violations = auditCode(buildMoleculeSource(600), 'src/molecules/m-x.js', 'src/molecules/m-x.js', {
+      config: { maxLineCountWarning: 800 },
+      fast: true
+    });
+    assert.deepStrictEqual(listLineBudgetRules(violations), ['LINE_BUDGET_FILE']);
   });
 });
 
@@ -155,6 +193,17 @@ describe('molecule line budget: runAudit compliance metrics', () => {
       assert.strictEqual(report.metrics.moleculeLineLimit, 100);
       assert.strictEqual(report.metrics.moleculeCompliantPct, 50);
       assertComplianceMatchesRule(report);
+    });
+  });
+
+  it('caps compliance at the 500-line file bound when max-line-count-warning is 800', () => {
+    withMoleculeProject({ 'm-a.ts': 600, 'm-b.ts': 400 }, '{"rules":{"max-line-count-warning":800}}', (root) => {
+      const report = runAudit('src', { cwd: root, fast: true });
+      assert.strictEqual(report.metrics.moleculeLineLimit, 500);
+      assert.strictEqual(report.metrics.moleculeCompliantCount, 1);
+      assert.strictEqual(report.metrics.moleculeCompliantPct, 50);
+      const flaggedFiles = report.violations.filter((v) => v.rule.startsWith('LINE_BUDGET_')).map((v) => v.filePath);
+      assert.deepStrictEqual(flaggedFiles, ['src/molecules/m-a.ts']);
     });
   });
 

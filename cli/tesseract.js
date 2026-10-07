@@ -7,7 +7,7 @@ import { ANSI } from './theme.js';
 import { renderHudHeader, renderMetricPill } from './tesseract-hud.js';
 import { getTesseractState } from './tesseract-state.js';
 import { buildDirectives, JARVIS_OPERATIONS, renderManifesto } from './tesseract-manifesto.js';
-import { loadProjectConfig, resolveMoleculeLineLimit } from './config/index.js';
+import { loadProjectConfig, resolveEffectiveMoleculeLineLimit } from './config/index.js';
 
 const formatTierSummary = (tiers) => {
   const tierEntries = Object.entries(tiers);
@@ -53,7 +53,7 @@ export const runTesseract = async (args = [], isCli = false, cwd = process.cwd()
   const isJson = args.includes('--json');
   const state = getTesseractState(cwd);
   const projectConfig = loadProjectConfig(cwd, args);
-  const directives = buildDirectives({ moleculeLineLimit: resolveMoleculeLineLimit(projectConfig), profile: projectConfig.profile });
+  const directives = buildDirectives({ moleculeLineLimit: resolveEffectiveMoleculeLineLimit(projectConfig), profile: projectConfig.profile });
 
   const payload = {
     protocol: 'Chemical X Tesseract',

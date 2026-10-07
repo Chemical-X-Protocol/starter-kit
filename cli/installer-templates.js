@@ -69,6 +69,8 @@ STAGED_FILES=\$(git diff --cached --name-only --diff-filter=ACM | grep -E '\\.(j
 [ -z "\$STAGED_FILES" ] && exit 0
 
 # Molecule budget: CHEMX_MAX_MOLECULE_LINES wins, then the project profile, then 250.
+# Whichever applies is capped at the MAX_LINES file budget, as the audit checks the
+# 500-line file bound before the molecule budget.
 # The profile comes from the first of .chemxrc, .chemxrc.json, .chemx/config.json or
 # package.json "chemx" that parses, as in cli/config/loader.js. atomic-strict or
 # enforce-file-length gives 100, otherwise max-line-count-warning or the profile
@@ -109,7 +111,16 @@ fi
 case "\$PROFILE_MAX_MOL" in
   ''|*[!0-9]*) PROFILE_MAX_MOL="" ;;
 esac
-MAX_MOLECULE_LINES="\${CHEMX_MAX_MOLECULE_LINES:-\${PROFILE_MAX_MOL:-250}}"
+MOL_LIMIT="\${CHEMX_MAX_MOLECULE_LINES:-\${PROFILE_MAX_MOL:-250}}"
+case "\$MOL_LIMIT\$MAX_LINES" in
+  *[!0-9]*) ;;
+  *)
+    if [ "\$MOL_LIMIT" -gt "\$MAX_LINES" ]; then
+      MOL_LIMIT="\$MAX_LINES"
+    fi
+    ;;
+esac
+MAX_MOLECULE_LINES="\$MOL_LIMIT"
 
 FAILED=0
 ERRORS=""

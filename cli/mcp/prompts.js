@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { auditFile } from '../audit.js';
-import { loadProjectConfig, resolveMoleculeLineLimit } from '../config/index.js';
+import { loadProjectConfig, resolveEffectiveMoleculeLineLimit } from '../config/index.js';
 
 export const MCP_PROMPTS = [
   {
@@ -43,7 +43,7 @@ export const getMcpPrompt = async (name, args = {}, options = {}) => {
       const framework = args.targetFramework || 'React/Vue';
       const projectRoot = options.cwd || process.cwd();
       const projectConfig = loadProjectConfig(projectRoot);
-      const moleculeLineLimit = resolveMoleculeLineLimit(projectConfig);
+      const moleculeLineLimit = resolveEffectiveMoleculeLineLimit(projectConfig);
 
       const resolvedPath = path.isAbsolute(filePath) ? filePath : path.resolve(projectRoot, filePath);
       const relPath = path.relative(projectRoot, resolvedPath);

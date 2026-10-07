@@ -60,6 +60,7 @@ export const getProfileDefaults = (profileName = DEFAULT_PROFILE) => {
 
 export const STRICT_MOLECULE_LINE_LIMIT = 100;
 export const DEFAULT_MOLECULE_LINE_LIMIT = 250;
+export const FILE_LINE_LIMIT = 500;
 
 // Accepts a flat rule set or a loaded config whose rules live under `rules`.
 const toRuleSet = (config) => config?.rules || config || {};
@@ -76,3 +77,6 @@ export const resolveMoleculeLineLimit = (config) => {
   const warningLimit = toRuleSet(config).maxLineCountWarning || DEFAULT_MOLECULE_LINE_LIMIT;
   return isStrict ? STRICT_MOLECULE_LINE_LIMIT : warningLimit;
 };
+
+// cli/audit/rules.js checks the 500-line file bound first, so a larger molecule warning never applies.
+export const resolveEffectiveMoleculeLineLimit = (config) => Math.min(resolveMoleculeLineLimit(config), FILE_LINE_LIMIT);

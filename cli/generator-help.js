@@ -1,15 +1,15 @@
 import { renderBanner } from './terminal.js';
-import { loadProjectConfig, resolveMoleculeLineLimit } from './config/index.js';
+import { loadProjectConfig, resolveEffectiveMoleculeLineLimit } from './config/index.js';
 
 export const formatStandardsSummary = ({ previews = [], config = loadProjectConfig(process.cwd()), traits }) => {
   const largestLines = Math.max(0, ...previews.map((p) => p.lines));
-  const moleculeLineLimit = resolveMoleculeLineLimit(config);
+  const moleculeLineLimit = resolveEffectiveMoleculeLineLimit(config);
   return `Chemical X Standards: largest generated file ${largestLines} lines (molecule budget ${moleculeLineLimit}, ${config.profile} profile), ${traits}.`;
 };
 
 export const printGenerateHelp = (config = loadProjectConfig(process.cwd())) => {
   renderBanner('Chemical X: Capsule Generator Usage');
-  const moleculeLineLimit = resolveMoleculeLineLimit(config);
+  const moleculeLineLimit = resolveEffectiveMoleculeLineLimit(config);
   const BOLD = '\x1b[1m';
   const CYAN = '\x1b[36m';
   const DIM = '\x1b[2m';

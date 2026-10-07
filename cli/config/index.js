@@ -4,8 +4,10 @@ import {
   getProfileDefaults,
   STRICT_MOLECULE_LINE_LIMIT,
   DEFAULT_MOLECULE_LINE_LIMIT,
+  FILE_LINE_LIMIT,
   isFileLengthEnforced,
-  resolveMoleculeLineLimit
+  resolveMoleculeLineLimit,
+  resolveEffectiveMoleculeLineLimit
 } from './profiles.js';
 import { findAndLoadConfigFile } from './loader.js';
 
@@ -48,7 +50,9 @@ export {
   findAndLoadConfigFile,
   STRICT_MOLECULE_LINE_LIMIT,
   DEFAULT_MOLECULE_LINE_LIMIT,
+  FILE_LINE_LIMIT,
   isFileLengthEnforced,
-  resolveMoleculeLineLimit
+  resolveMoleculeLineLimit,
+  resolveEffectiveMoleculeLineLimit
 };
 export default loadProjectConfig;

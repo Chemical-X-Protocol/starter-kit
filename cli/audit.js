@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { isSourceFile as isPolyglotSourceFile } from './languages.js';
-import { loadProjectConfig, resolveMoleculeLineLimit } from './config/index.js';
+import { loadProjectConfig, resolveEffectiveMoleculeLineLimit } from './config/index.js';
 import { auditCode, PILLARS, RULE_REGISTRY, createHookShapeRegistry } from './audit/rules.js';
 import { createPatternRegistry } from './audit/pattern-detector.js';
 import {
@@ -183,7 +183,7 @@ export const runAudit = (targetDir = 'src', options = {}) => {
   const patternRegistry = createPatternRegistry();
   const hookRegistry = createHookShapeRegistry();
   const config = options.config || loadProjectConfig(cwd);
-  const moleculeLineLimit = resolveMoleculeLineLimit(config);
+  const moleculeLineLimit = resolveEffectiveMoleculeLineLimit(config);
   const includeTests = Boolean(options.includeTests);
   const { violations, fileStats, totalHooks } = scanTree(absoluteTarget, cwd, {
     patternRegistry,

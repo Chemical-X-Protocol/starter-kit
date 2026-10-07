@@ -176,6 +176,31 @@ describe('navigator text reads the project profile', () => {
   });
 });
 
+// A warning above the 500-line file bound never applies, so the text must name 500 instead of 800.
+describe('budget text caps a large max-line-count-warning at the file bound', () => {
+  const wideRoot = createProject('{"rules":{"max-line-count-warning":800}}');
+  const wideConfig = loadProjectConfig(wideRoot);
+
+  it('generator help and standards summary', async () => {
+    const help = await captureStdout(() => printGenerateHelp(wideConfig));
+    assert.ok(help.includes('Molecule capsule template:  <= 500 lines (outer bound, pragmatic profile)'), help);
+    const summary = formatStandardsSummary({ previews: [], config: wideConfig, traits: 'Result tuples' });
+    assert.ok(summary.includes('(molecule budget 500, pragmatic profile)'), summary);
+  });
+
+  it('navigator guide and target file budget', () => {
+    assert.ok(stripAnsi(formatSystemGuide(wideConfig)).includes('Crystalline Molecular Capsules (<= 500 lines, pragmatic profile)'));
+    assert.strictEqual(formatTargetFileBudget(wideConfig), 'Target File Budget: Max 500 lines/file (<= 500 lines/molecule)');
+  });
+
+  it('tesseract directives and the MCP remediation prompt', async () => {
+    const payload = await runTesseract(['--json'], false, wideRoot);
+    assert.ok(payload.directives[0].desc.includes('500-line molecule budget (pragmatic profile)'), payload.directives[0].desc);
+    const result = await getMcpPrompt('chemx_remediate_hotspot', { filePath: 'src/molecules/m-card.ts' }, { cwd: wideRoot });
+    assert.ok(promptText(result).includes('Molecular limit: 500L, pragmatic profile'), promptText(result));
+  });
+});
+
 describe('source comments do not restate a fixed 100-line budget', () => {
   const files = [
     'cli/generator-jig.js',

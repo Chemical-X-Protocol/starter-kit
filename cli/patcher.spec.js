@@ -200,6 +200,32 @@ test('writeFile: atomic-strict keeps the Directive 1.A molecule limit at 100 lin
   });
 });
 
+const WARNING_800_RC = '{"rules":{"max-line-count-warning":800}}';
+
+test('patchFile: a max-line-count-warning of 800 still caps a 600-line molecule at the 500-line file bound', () => {
+  withBudgetProject(WARNING_800_RC, (tmpDir) => {
+    const result = patchSeededFile(tmpDir, 'm-trade-slip.ts', 600);
+
+    assert.strictEqual(result.lineBudget.passed, false);
+    assert.strictEqual(result.lineBudget.limit, 500);
+    assert.ok(result.lineBudget.warning.includes('500-line limit'));
+  });
+});
+
+test('writeFile: a max-line-count-warning of 800 still caps a 600-line molecule at the 500-line file bound', () => {
+  withBudgetProject(WARNING_800_RC, (tmpDir) => {
+    const result = writeFile(path.join(tmpDir, 'src/molecules/trade-slip.ts'), {
+      content: buildExportLines(600),
+      cwd: tmpDir,
+      skipIndex: true
+    });
+
+    assert.strictEqual(result.lineBudget.passed, false);
+    assert.strictEqual(result.lineBudget.limit, 500);
+    assert.ok(result.lineBudget.warning.includes('500-line limit'));
+  });
+});
+
 test('writeFile: still flags Directive 1.G raw DOM in molecule files', () => {
   withBudgetProject(null, (tmpDir) => {
     const result = writeFile(path.join(tmpDir, 'm-bad-input.vue'), {
