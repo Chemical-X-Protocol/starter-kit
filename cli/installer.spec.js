@@ -2,8 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
-import { ensurePackageScripts, buildInstallerProjectConfig, saveProjectConfig } from './installer.js';
-import { loadProjectConfig as loadSavedProjectConfig } from './project-detector.js';
+import { ensurePackageScripts, buildInstallerProjectConfig, saveInstallerProjectConfig } from './installer.js';
 
 test('installer: ensurePackageScripts adds minimal "chemx": "chemx" when missing', () => {
   const tmpDir = path.resolve(process.cwd(), 'scratch/test-installer-scripts-add');
@@ -85,7 +84,7 @@ test('installer: re-installing merges .chemx/config.json and drops the legacy mo
   fs.writeFileSync(path.join(tmpDir, '.chemx', 'config.json'), JSON.stringify(legacy), 'utf-8');
 
   const opts = { minGrade: 'B', minScore: 80 };
-  saveProjectConfig(tmpDir, buildInstallerProjectConfig(opts, loadSavedProjectConfig(tmpDir)));
+  assert.strictEqual(saveInstallerProjectConfig(tmpDir, opts), true);
 
   const saved = JSON.parse(fs.readFileSync(path.join(tmpDir, '.chemx', 'config.json'), 'utf-8'));
   assert.deepStrictEqual(saved, {
@@ -97,4 +96,58 @@ test('installer: re-installing merges .chemx/config.json and drops the legacy mo
   });
 
   fs.rmSync(tmpDir, { recursive: true, force: true });
+});
+
+const captureStdout = (fn) => {
+  const originalWrite = process.stdout.write;
+  let captured = '';
+  process.stdout.write = (chunk) => {
+    captured += String(chunk);
+    return true;
+  };
+  try {
+    return { result: fn(), output: captured };
+  } finally {
+    process.stdout.write = originalWrite;
+  }
+};
+
+const withSavedConfig = (name, content, run) => {
+  const tmpDir = path.resolve(process.cwd(), `scratch/${name}`);
+  if (fs.existsSync(tmpDir)) fs.rmSync(tmpDir, { recursive: true, force: true });
+  fs.mkdirSync(path.join(tmpDir, '.chemx'), { recursive: true });
+  const configPath = path.join(tmpDir, '.chemx', 'config.json');
+  fs.writeFileSync(configPath, content, 'utf-8');
+  try {
+    run(tmpDir, configPath);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+};
+
+test('installer: re-installing keeps profile and pillars from a commented .chemx/config.json', () => {
+  const commented = '// team\n{"profile":"atomic-strict","pillars":{"a":true}}';
+  withSavedConfig('test-installer-config-commented', commented, (tmpDir, configPath) => {
+    const { result } = captureStdout(() => saveInstallerProjectConfig(tmpDir, { minGrade: 'B', minScore: 80 }));
+    assert.strictEqual(result, true);
+    const saved = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    assert.deepStrictEqual(saved, {
+      profile: 'atomic-strict',
+      pillars: { a: true },
+      minGrade: 'B',
+      minScore: 80,
+      maxLineCount: 500
+    });
+  });
+});
+
+test('installer: an unparsable .chemx/config.json is kept as it is and the installer warns', () => {
+  const broken = '{"profile":"atomic-strict",,"pillars":{"a":true}}';
+  withSavedConfig('test-installer-config-broken', broken, (tmpDir, configPath) => {
+    const { result, output } = captureStdout(() => saveInstallerProjectConfig(tmpDir, { minGrade: 'B', minScore: 80 }));
+    assert.strictEqual(result, false);
+    assert.strictEqual(fs.readFileSync(configPath, 'utf-8'), broken);
+    assert.match(output, /\.chemx\/config\.json/);
+    assert.match(output, /does not parse as a JSON object/);
+  });
 });

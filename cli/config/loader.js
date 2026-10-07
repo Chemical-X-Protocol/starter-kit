@@ -7,7 +7,7 @@ const stripJsonComments = (content) => {
     .replace(/^\s*\/\/.*$/gm, '');
 };
 
-const parseJsonSafe = (raw) => {
+export const parseJsonSafe = (raw) => {
   try {
     return JSON.parse(stripJsonComments(raw));
   } catch (parseError) {

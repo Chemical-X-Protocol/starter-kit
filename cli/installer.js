@@ -4,7 +4,7 @@ import { hasGum, gumChoose, gumInput, promptQuestion } from './terminal.js';
 import { buildPreCommitHookScript, buildGitHubWorkflowScript } from './installer-templates.js';
 import { installAllMcpConfigs } from './mcp/installer.js';
 import { runPillarsWizard } from './pillars-wizard.js';
-import { loadProjectConfig as loadSavedProjectConfig } from './project-detector.js';
+import { parseJsonSafe } from './config/loader.js';
 
 export { buildPreCommitHookScript, buildGitHubWorkflowScript } from './installer-templates.js';
 export { installAllMcpConfigs } from './mcp/installer.js';
@@ -78,6 +78,26 @@ export const saveProjectConfig = (targetDir = '.', config = {}) => {
   if (!fs.existsSync(chemxDir)) fs.mkdirSync(chemxDir, { recursive: true });
   fs.writeFileSync(path.join(chemxDir, 'config.json'), JSON.stringify(config, null, 2), 'utf-8');
   process.stdout.write(`  \x1b[32m✔\x1b[0m Saved project settings to: .chemx/config.json\n`);
+};
+
+// Parses with the loader's comment stripping; null means the file exists but still is not a JSON object.
+export const readExistingProjectConfig = (targetDir = '.') => {
+  const configPath = path.resolve(targetDir, '.chemx', 'config.json');
+  if (!fs.existsSync(configPath)) return {};
+  const parsed = parseJsonSafe(fs.readFileSync(configPath, 'utf-8'));
+  const isConfigObject = parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed);
+  return isConfigObject ? parsed : null;
+};
+
+// A config the installer cannot read is left untouched, so profile, pillars and comments survive.
+export const saveInstallerProjectConfig = (targetDir = '.', opts = {}) => {
+  const existing = readExistingProjectConfig(targetDir);
+  if (existing === null) {
+    process.stdout.write('  \x1b[33m⚠\x1b[0m Kept .chemx/config.json unchanged: it does not parse as a JSON object, so minGrade and minScore were not saved. Fix it and re-run the installer.\n');
+    return false;
+  }
+  saveProjectConfig(targetDir, buildInstallerProjectConfig(opts, existing));
+  return true;
 };
 
 export const areGuardrailsInstalled = (targetDir = '.') => {
@@ -204,6 +224,6 @@ export const runInstallWizard = async (targetDir = '.') => {
   if (shouldMcp) installAllMcpConfigs(targetDir, { silent: false });
   if (shouldQuery) await installAgentSearchConfig(targetDir);
 
-  saveProjectConfig(targetDir, buildInstallerProjectConfig(opts, loadSavedProjectConfig(targetDir)));
+  saveInstallerProjectConfig(targetDir, opts);
   process.stdout.write('\n\x1b[1m\x1b[32m✔ Chemical X configuration installed successfully!\x1b[0m\n\n');
 };

@@ -26,6 +26,10 @@ export declare function buildInstallerProjectConfig(
   existing?: Record<string, unknown>
 ): Record<string, unknown> & Omit<ProjectConfig, 'maxMoleculeLineCount'>;
 export declare function saveProjectConfig(targetDir?: string, config?: Partial<ProjectConfig>): void;
+/** Returns {} when .chemx/config.json is absent and null when it exists but is not a JSON object after comment stripping. */
+export declare function readExistingProjectConfig(targetDir?: string): Record<string, unknown> | null;
+/** Merges and saves the installer settings; returns false, leaving the file untouched, when the existing config does not parse. */
+export declare function saveInstallerProjectConfig(targetDir?: string, opts?: InstallOptions): boolean;
 export declare function areGuardrailsInstalled(targetDir?: string): boolean;
 export declare function ensurePackageScripts(targetDir?: string): boolean;
 export declare function installAgentSearchConfig(targetDir?: string): Promise<boolean>;
