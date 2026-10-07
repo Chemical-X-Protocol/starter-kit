@@ -314,7 +314,7 @@ Chemical X is **language-agnostic**. The core physics of AI agent code generatio
 
 ### Two-Tier Decoupled Audit Pipeline
 1. **Tier 1: Universal Polyglot Rules (Runs on ALL languages)**
-   * **Sliding-Scale Line Budgets:** Flags files exceeding 100, 500, or 1,000 lines (`LINE_BUDGET_FILE`) to eliminate LLM context rot.
+   * **Sliding-Scale Line Budgets:** Flags files over 500 lines, escalating at 1,000 and 2,000 (`LINE_BUDGET_FILE`); molecules use `LINE_BUDGET_MOLECULE` at the active profile budget (250 pragmatic, 100 atomic-strict, 500 loose) to eliminate LLM context rot.
    * **AI Slop Text Patterns:** Strips conversational residue (*"Here is the code"*), leaked markdown code fences, and lazy truncation placeholders (`// ... rest of implementation`).
    * **Synthetic Mock Data Scanners:** Catches fake emails (`@example.com`), `555-` phone numbers, and hardcoded dummy collections in services.
    * **Security & Secret Guards:** Scans for high-entropy API keys, JWTs, AWS credentials, and unmanaged sensitive logging.
@@ -329,7 +329,7 @@ Chemical X is **language-agnostic**. The core physics of AI agent code generatio
 
 Chemical X enforces seven core architectural directives configured via `chemx pillars`:
 
-1. **Strict Molecular Line Budgets (< 100 Lines)**: Single-purpose files. Approaching 100 lines is a decomposition trigger. Eliminates context rot and cuts token ingestion costs.
+1. **Molecular Line Budgets (Structural Weight)**: The default pragmatic profile audits structural weight (complexity, hook density, render depth, prop count) with a 250-line molecule budget; `--profile=atomic-strict` (or the `enforce-file-length` rule) enforces a 100-line capsule cap. Eliminates context rot and cuts token ingestion costs.
 2. **Strict Component Tiers & Zero-Raw-DOM**: Raw HTML elements (`<button>`, `<input>`, `<div>`) are strictly isolated inside foundational **Atoms** (`a-*`). Molecules, Organisms, Templates, and Views assemble atoms and never contain raw tags.
 3. **Table-of-Contents Views**: Top-level page views are clean, 10–20 line declarative blueprints assembling self-contained molecules and organisms via named slots (`#header`, `#default`, `#modals`).
 4. **Molecular Composable Contracts**: Composables return plain destructurable objects with a strict 3-to-5 property limit (State + Status + Actions). Domain types use discriminated unions (zero impossible states).
@@ -381,7 +381,7 @@ To configure manually in your MCP client settings (e.g. `claude_desktop_config.j
 | `chemx_test` | Verification | Silent project test runner. Suppresses passing checkmarks; returns ONLY failing test assertions. |
 | `chemx_audit_build` | Verification | Wrap build commands with silent execution and catalog compiler diagnostics into structured categories. |
 | `chemx_audit` | Quality | Run the full 7-Pillar Chemical X static AST audit. Returns health score, grade (A+ to F), and hazard list. |
-| `chemx_check` | Quality | Verify a single file or capsule against molecular boundary rules (< 100L, 2-stage booleans, zero raw DOM). |
+| `chemx_check` | Quality | Verify a single file or capsule against molecular boundary rules (profile line budget, 2-stage booleans, zero raw DOM). |
 | `chemx_q` | Discovery | AST search index query machine. Query symbols, capsules, props, and hooks with minimal token burn. |
 | `chemx_query_patterns` | Discovery | Detect duplicated state machines, cloned UI layouts, and parallel hooks before decomposing monoliths. |
 | `chemx_read` | Reading | Token-minified file reader. Extracts AST outlines, stripped comments, or symbol blocks (80%+ token savings). |
