@@ -22,6 +22,7 @@ import { formatSwarmStatusCard, formatFeedTimeline, formatTaskListCard, formatMa
 import { getSwarmTokenBreakdown, formatTokenBreakdownCard } from './team-tokens.js';
 import { runAblationComparison, formatAblationCard } from './team-memory.js';
 import { parseFlags } from './team-flags.js';
+import { resolveListOptions, selectTaskPage, buildTaskListView } from './task-list-view.js';
 import { handleTaskSlotCommand, handleTaskTraceCommand, handleTrainCommand } from './team-commands-vds.js';
 import { handleLockCommand, handleUnlockCommand } from './team-commands-lock.js';
 
@@ -127,22 +128,26 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
     }
     const taskAction = nonFlagPositional[0] || 'list';
     if (taskAction === 'list') {
+      const listOptions = resolveListOptions({ status: flags.status, all: flags.all, limit: flags.limit });
       const tasks = listTasks(db, {
-        status: flags.status,
+        status: listOptions.status,
         assigned_agent_id: flags.agent,
         parentId: flags.parent,
         rule: flags.rule,
         priority: flags.priority
       });
+      const { page, total } = selectTaskPage(tasks, listOptions);
       if (flags.isJson) {
-        const col = toColumnar(tasks, ['id', 'title', 'tier', 'status', 'priority', 'assigned_agent_id', 'target_path', 'parent_id']);
-        if (isCli) process.stdout.write(`${JSON.stringify(col, null, 2)}\n`);
-        return col;
+        const view = buildTaskListView(page, total);
+        if (isCli) process.stdout.write(`${JSON.stringify(view)}\n`);
+        return view;
       }
       if (isCli) {
-        process.stdout.write(formatTaskListCard(tasks));
+        process.stdout.write(formatTaskListCard(page));
+        const hasMore = total > page.length;
+        if (hasMore) process.stdout.write(`\x1b[2mShowing ${page.length} of ${total}. Use --all, --status=, or --limit= for more.\x1b[0m\n`);
       }
-      return tasks;
+      return page;
     }
     const isShowAction = ['show', 'view', 'info'].includes(taskAction);
     if (isShowAction) {

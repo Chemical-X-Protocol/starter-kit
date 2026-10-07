@@ -93,7 +93,7 @@ test('handleChemxTeamTask creates subtask and formats card with hierarchy in iso
     assert.ok(sub.id);
     assert.strictEqual(sub.parent_id, root.id);
 
-    const listRes = await handleChemxTeamTask({ action: 'list' }, tmpCwd);
+    const listRes = await handleChemxTeamTask({ action: 'list', card: true }, tmpCwd);
     assert.strictEqual(listRes.total, 2);
     assert.ok(listRes.card);
     assert.ok(listRes.card.includes('└──'));

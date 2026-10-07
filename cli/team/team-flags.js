@@ -44,6 +44,7 @@ export const parseFlags = (args = []) => {
     }
     if (arg.startsWith('--type=')) flags.type = arg.split('=')[1];
     if (arg.startsWith('--status=')) flags.status = arg.split('=')[1];
+    if (arg === '--all') flags.all = true;
     if (arg.startsWith('--agent=')) flags.agent = arg.split('=')[1];
     if (arg === '--agent' && hasNext) flags.agent = nextArg;
     if (arg.startsWith('--target=')) flags.target = arg.split('=')[1];

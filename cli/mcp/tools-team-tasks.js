@@ -1,5 +1,4 @@
 import { openIndexDb } from '../search-db.js';
-import { toColumnar } from '../columnar.js';
 import {
   listTasks, getTask, queryFeed, createTask,
   claimTask, updateTaskStatus, registerAgent, postFeedEvent
@@ -8,6 +7,7 @@ import { completeTaskWithAudit, autoGenerateTasksFromAudit } from '../team/team-
 import { formatTaskListCard, formatTaskDetailCard } from '../team/team-format.js';
 import { enforceSingleSlot, verifyTraceability, generateTaskPermalink } from '../team/team-vds.js';
 import { freezeReleaseTrain } from '../team/team-release-train.js';
+import { resolveListOptions, selectTaskPage, buildTaskListView } from '../team/task-list-view.js';
 
 export const handleChemxTeamTask = async (args = {}, cwd = process.cwd()) => {
   const db = openIndexDb(cwd);
@@ -20,9 +20,11 @@ export const handleChemxTeamTask = async (args = {}, cwd = process.cwd()) => {
   if (action === 'list') {
     const parentId = args.parentId !== undefined ? args.parentId : args.parent;
     const rule = args.rule || args.ruleId;
-    const tasks = listTasks(db, { status: args.status, assigned_agent_id: args.agentId, parentId, rule, priority: args.priority });
-    const col = toColumnar(tasks, ['id', 'title', 'tier', 'status', 'priority', 'assigned_agent_id', 'target_path', 'parent_id']);
-    return { ...col, total: tasks.length, card: formatTaskListCard(tasks) };
+    const listOptions = resolveListOptions({ status: args.status, all: args.all, limit: args.limit });
+    const tasks = listTasks(db, { status: listOptions.status, assigned_agent_id: args.agentId, parentId, rule, priority: args.priority });
+    const { page, total } = selectTaskPage(tasks, listOptions);
+    const view = buildTaskListView(page, total);
+    return args.card ? { ...view, card: formatTaskListCard(page) } : view;
   }
   const isShowAction = action === 'show' || action === 'view' || action === 'get';
   if (isShowAction) {
