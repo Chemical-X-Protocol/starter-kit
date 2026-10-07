@@ -202,7 +202,7 @@ export const runInstallWizard = async (targetDir = '.') => {
 
   const isPillarsOnly = targetChoice.includes('Pillars & Agent Steering') || targetChoice === '3';
   if (isPillarsOnly) {
-    await runPillarsWizard([], targetDir);
+    await runPillarsWizard(['--write'], targetDir);
     return;
   }
 

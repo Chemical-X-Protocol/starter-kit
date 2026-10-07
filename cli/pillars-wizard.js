@@ -7,11 +7,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { renderBanner, hasGum, gumChoose, promptQuestion } from './terminal.js';
 import { PILLARS, PILLAR_PRESETS, buildCustomAgentsMd, buildCustomCursorRules } from './pillars-schema.js';
+import { planFileWrite, applyFileWrites } from './pillars-write-guard.js';
 
 export const runPillarsWizard = async (rawArgs = [], cwd = process.cwd()) => {
   const isJson = rawArgs.includes('--json');
   const isYes = rawArgs.includes('-y') || rawArgs.includes('--yes') || !process.stdin.isTTY;
-  const isDryRun = rawArgs.includes('--dry-run') || rawArgs.includes('-n');
+  const isWrite = rawArgs.includes('--write');
+  const isForce = rawArgs.includes('--force');
+  const isDryRun = !isWrite || rawArgs.includes('--dry-run') || rawArgs.includes('-n');
 
   if (!isJson) {
     renderBanner('Chemical X: Architectural Pillars Wizard');
@@ -73,8 +76,7 @@ export const runPillarsWizard = async (rawArgs = [], cwd = process.cwd()) => {
     pillarsConfig[pillar.key] = selectedPillarIds.includes(pillar.id);
   }
 
-  const chemxDir = path.resolve(cwd, '.chemx');
-  const configFile = path.join(chemxDir, 'config.json');
+  const configFile = path.resolve(cwd, '.chemx', 'config.json');
   let existingConfig = {};
 
   if (fs.existsSync(configFile)) {
@@ -90,39 +92,39 @@ export const runPillarsWizard = async (rawArgs = [], cwd = process.cwd()) => {
     pillars: pillarsConfig
   };
 
-  const filesWritten = [];
+  const targets = [
+    { file: configFile, content: JSON.stringify(updatedConfig, null, 2) + '\n', isGuarded: false }
+  ];
 
-  if (!isDryRun) {
-    if (!fs.existsSync(chemxDir)) {
-      fs.mkdirSync(chemxDir, { recursive: true });
-    }
-    fs.writeFileSync(configFile, JSON.stringify(updatedConfig, null, 2) + '\n', 'utf-8');
-    filesWritten.push('.chemx/config.json');
+  const hasSelectedPillars = selectedPillarIds.length > 0;
+  if (hasSelectedPillars) {
+    const projectName = path.basename(path.resolve(cwd));
+    targets.push(
+      { file: path.resolve(cwd, 'AGENTS.md'), content: buildCustomAgentsMd(selectedPillarIds, { projectName }), isGuarded: true },
+      { file: path.resolve(cwd, '.cursorrules'), content: buildCustomCursorRules(selectedPillarIds), isGuarded: true }
+    );
   }
 
-  // Generate AGENTS.md and .cursorrules if pillars selected
-  if (selectedPillarIds.length > 0) {
-    const agentsPath = path.resolve(cwd, 'AGENTS.md');
-    const cursorRulesPath = path.resolve(cwd, '.cursorrules');
+  const toRelative = (file) => path.relative(cwd, file);
+  const plans = targets.map((t) => ({ ...planFileWrite(t.file, t.content, { isForce, isGuarded: t.isGuarded }), content: t.content }));
+  const refused = plans.filter((p) => p.action === 'refused').map((p) => toRelative(p.file));
+  const hasRefusals = refused.length > 0;
+  const shouldApply = !isDryRun && !hasRefusals;
 
-    const agentsMdContent = buildCustomAgentsMd(selectedPillarIds, {
-      projectName: path.basename(path.resolve(cwd))
-    });
-    const cursorRulesContent = buildCustomCursorRules(selectedPillarIds);
-
-    if (!isDryRun) {
-      fs.writeFileSync(agentsPath, agentsMdContent, 'utf-8');
-      fs.writeFileSync(cursorRulesPath, cursorRulesContent, 'utf-8');
-      filesWritten.push('AGENTS.md', '.cursorrules');
-    }
+  if (shouldApply) {
+    fs.mkdirSync(path.dirname(configFile), { recursive: true });
   }
+  const filesWritten = shouldApply ? applyFileWrites(plans).map(toRelative) : [];
+  const planned = plans.map(({ file, action, backupPath }) => ({ file: toRelative(file), action, backupPath: backupPath && toRelative(backupPath) }));
 
   const result = {
-    success: true,
+    success: !hasRefusals,
     dryRun: isDryRun,
     preset: selectedPresetKey,
     selectedPillarIds,
     filesWritten,
+    planned,
+    refused,
     pillarsConfig
   };
 
@@ -131,28 +133,26 @@ export const runPillarsWizard = async (rawArgs = [], cwd = process.cwd()) => {
     return result;
   }
 
-  if (isDryRun) {
-    process.stdout.write(`\n\x1b[1m\x1b[33m[DRY RUN]\x1b[0m Planned architectural pillars configuration (${selectedPresetKey}):\n`);
-    for (const p of PILLARS) {
-      const isEnabled = selectedPillarIds.includes(p.id);
-      const icon = isEnabled ? '\x1b[32m✔\x1b[0m' : '\x1b[2m○\x1b[0m';
-      process.stdout.write(`  ${icon} ${p.title}\n`);
-    }
-    process.stdout.write('\nNo changes were written to disk.\n\n');
-    return result;
-  }
-
-  process.stdout.write(`\n\x1b[1m\x1b[32m✔ Chemical X Architectural Pillars Configured (${selectedPresetKey}):\x1b[0m\n`);
+  const heading = isDryRun ? '\x1b[1m\x1b[33m[PREVIEW]\x1b[0m Planned' : '\x1b[1m\x1b[32m✔\x1b[0m Applied';
+  process.stdout.write(`\n${heading} architectural pillars configuration (${selectedPresetKey}):\n`);
   for (const p of PILLARS) {
     const isEnabled = selectedPillarIds.includes(p.id);
     const icon = isEnabled ? '\x1b[32m✔\x1b[0m' : '\x1b[2m○\x1b[0m';
     process.stdout.write(`  ${icon} ${p.title}\n`);
   }
-  process.stdout.write('\nFiles updated:\n');
-  for (const f of filesWritten) {
-    process.stdout.write(`  \x1b[32m•\x1b[0m ${f}\n`);
+  process.stdout.write('\nFiles:\n');
+  for (const plan of planned) {
+    const backupNote = plan.backupPath ? ` (backup: ${plan.backupPath})` : '';
+    process.stdout.write(`  ${plan.action.padEnd(9)} ${plan.file}${backupNote}\n`);
   }
-  process.stdout.write('\n\x1b[2mReview AGENTS.md and customize any directives to fit your team.\x1b[0m\n\n');
+  for (const file of refused) {
+    process.stdout.write(`\n\x1b[31mRefusing to overwrite ${file}: not generated by chemx. Pass --force to overwrite (a backup is written first).\x1b[0m\n`);
+  }
+  if (isDryRun) {
+    process.stdout.write('\nNo changes were written to disk. Run with --write to apply.\n\n');
+  } else {
+    process.stdout.write('\n');
+  }
 
   return result;
 };

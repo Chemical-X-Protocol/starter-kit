@@ -111,7 +111,7 @@ export const runScaffold = async (projectName, rawArgs = [], onRunAudit = null) 
   }
 
   const isYes = rawArgs.includes('-y') || rawArgs.includes('--yes') || !process.stdin.isTTY;
-  await runPillarsWizard(isYes ? ['--preset=recommended', '-y'] : [], targetDir);
+  await runPillarsWizard(isYes ? ['--preset=recommended', '-y', '--write'] : ['--write'], targetDir);
 
   const pm = resolvePackageManager(targetDir);
   const autoInstall = rawArgs.includes('--install');

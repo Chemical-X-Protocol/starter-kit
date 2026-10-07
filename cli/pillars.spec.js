@@ -10,6 +10,7 @@ import {
   buildCustomCursorRules
 } from './pillars-schema.js';
 import { runPillarsWizard } from './pillars-wizard.js';
+import { GENERATED_MARKERS, isGeneratedContent } from './pillars-write-guard.js';
 
 test('pillars-schema: contains all 7 canonical architectural pillars', () => {
   assert.strictEqual(PILLARS.length, 7);
@@ -90,7 +91,7 @@ test('pillars-wizard: dry run produces planned output without writing files', as
 test('pillars-wizard: writes config and agent files when invoked non-interactively', async () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-pillars-run-'));
   try {
-    const result = await runPillarsWizard(['--preset=recommended', '-y'], tmpDir);
+    const result = await runPillarsWizard(['--preset=recommended', '-y', '--write'], tmpDir);
     assert.strictEqual(result.success, true);
     assert.strictEqual(result.dryRun, false);
     assert.strictEqual(result.preset, 'recommended');
@@ -106,12 +107,14 @@ test('pillars-wizard: writes config and agent files when invoked non-interactive
     assert.ok(fs.existsSync(agentsMdPath));
     const agentsContent = fs.readFileSync(agentsMdPath, 'utf8');
     assert.ok(agentsContent.includes('NOTE: This file is a project configuration'));
+    assert.ok(agentsContent.startsWith(GENERATED_MARKERS.md));
     assert.strictEqual(agentsContent.includes('\u2014'), false);
 
     const cursorPath = path.join(tmpDir, '.cursorrules');
     assert.ok(fs.existsSync(cursorPath));
     const cursorContent = fs.readFileSync(cursorPath, 'utf8');
     assert.ok(cursorContent.includes('Generated from selected project pillars'));
+    assert.ok(cursorContent.startsWith(GENERATED_MARKERS.rules));
     assert.strictEqual(cursorContent.includes('\u2014'), false);
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -121,7 +124,7 @@ test('pillars-wizard: writes config and agent files when invoked non-interactive
 test('pillars-wizard: none preset writes minimal config and skips agent files', async () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-pillars-none-'));
   try {
-    const result = await runPillarsWizard(['--preset=none', '-y'], tmpDir);
+    const result = await runPillarsWizard(['--preset=none', '-y', '--write'], tmpDir);
     assert.strictEqual(result.success, true);
     assert.strictEqual(result.selectedPillarIds.length, 0);
 
@@ -135,4 +138,79 @@ test('pillars-wizard: none preset writes minimal config and skips agent files', 
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
+});
+
+const withTmp = async (prefix, fn) => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  try {
+    await fn(tmpDir);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+};
+
+const HAND_AUTHORED = '# Hand authored\n';
+const exists = (dir, rel) => fs.existsSync(path.join(dir, rel));
+const readRel = (dir, rel) => fs.readFileSync(path.join(dir, rel), 'utf8');
+const planFor = (result, name) => result.planned.find((p) => p.file.endsWith(name));
+
+test('pillars-wizard: writes nothing without --write', async () => {
+  await withTmp('chemx-pillars-nowrite-', async (tmpDir) => {
+    const result = await runPillarsWizard(['--preset=recommended'], tmpDir);
+    assert.deepStrictEqual(result.filesWritten, []);
+    assert.strictEqual(result.dryRun, true);
+    assert.strictEqual(exists(tmpDir, 'AGENTS.md'), false);
+    assert.strictEqual(exists(tmpDir, '.cursorrules'), false);
+    assert.strictEqual(exists(tmpDir, '.chemx/config.json'), false);
+    assert.strictEqual(planFor(result, 'AGENTS.md').action, 'create');
+  });
+});
+
+test('pillars-wizard: --json never implies write', async () => {
+  await withTmp('chemx-pillars-json-', async (tmpDir) => {
+    await runPillarsWizard(['--preset=recommended', '-y', '--json'], tmpDir);
+    assert.strictEqual(exists(tmpDir, 'AGENTS.md'), false);
+    assert.strictEqual(exists(tmpDir, '.cursorrules'), false);
+    assert.strictEqual(exists(tmpDir, '.chemx/config.json'), false);
+  });
+});
+
+test('pillars-wizard: refuses to overwrite hand-authored AGENTS.md', async () => {
+  await withTmp('chemx-pillars-refuse-', async (tmpDir) => {
+    fs.writeFileSync(path.join(tmpDir, 'AGENTS.md'), HAND_AUTHORED);
+    const result = await runPillarsWizard(['--preset=recommended', '-y', '--write'], tmpDir);
+    assert.strictEqual(result.success, false);
+    assert.deepStrictEqual(result.refused, ['AGENTS.md']);
+    assert.strictEqual(readRel(tmpDir, 'AGENTS.md'), HAND_AUTHORED);
+    assert.strictEqual(exists(tmpDir, '.cursorrules'), false);
+    assert.strictEqual(exists(tmpDir, '.chemx/config.json'), false);
+    assert.strictEqual(exists(tmpDir, 'AGENTS.md.chemx-backup'), false);
+  });
+});
+
+test('pillars-wizard: --force overwrites hand-authored file and keeps a backup', async () => {
+  await withTmp('chemx-pillars-force-', async (tmpDir) => {
+    fs.writeFileSync(path.join(tmpDir, 'AGENTS.md'), HAND_AUTHORED);
+    const result = await runPillarsWizard(['--preset=recommended', '-y', '--write', '--force'], tmpDir);
+    assert.ok(readRel(tmpDir, 'AGENTS.md').startsWith(GENERATED_MARKERS.md));
+    assert.strictEqual(readRel(tmpDir, 'AGENTS.md.chemx-backup'), HAND_AUTHORED);
+    assert.ok(planFor(result, 'AGENTS.md').backupPath.endsWith('AGENTS.md.chemx-backup'));
+  });
+});
+
+test('pillars-wizard: regenerating backs up changed generated files and skips identical ones', async () => {
+  await withTmp('chemx-pillars-regen-', async (tmpDir) => {
+    await runPillarsWizard(['--preset=minimal', '-y', '--write'], tmpDir);
+    const minimalContent = readRel(tmpDir, 'AGENTS.md');
+    await runPillarsWizard(['--preset=strict', '-y', '--write'], tmpDir);
+    assert.strictEqual(readRel(tmpDir, 'AGENTS.md.chemx-backup'), minimalContent);
+    const again = await runPillarsWizard(['--preset=strict', '-y', '--write'], tmpDir);
+    assert.strictEqual(planFor(again, 'AGENTS.md').action, 'unchanged');
+  });
+});
+
+test('pillars-write-guard: isGeneratedContent recognizes legacy generated headers', () => {
+  const legacy = '> NOTE: This file is a project configuration generated from your selected Chemical X pillars.';
+  assert.strictEqual(isGeneratedContent(legacy), true);
+  assert.strictEqual(isGeneratedContent(HAND_AUTHORED), false);
 });

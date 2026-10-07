@@ -141,7 +141,9 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
     case 'rules':
     case 'config:pillars': {
       const { runPillarsWizard } = await import('../pillars-wizard.js');
-      await runPillarsWizard(rawArgs.slice(1), process.cwd());
+      const pillarsResult = await runPillarsWizard(rawArgs.slice(1), process.cwd());
+      const isPillarsRefused = pillarsResult?.success === false;
+      if (isPillarsRefused) process.exitCode = 1;
       break;
     }
     case 'check': {

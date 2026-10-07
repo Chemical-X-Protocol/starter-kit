@@ -3,6 +3,8 @@
  * Modular directives for conscious agent steering and project configuration.
  */
 
+import { GENERATED_MARKERS } from './pillars-write-guard.js';
+
 export const PILLARS = [
   {
     id: 'p1_line_budgets',
@@ -111,6 +113,7 @@ export const buildCustomAgentsMd = (selectedPillarIds = [], options = {}) => {
   const projectName = options.projectName || 'Project App';
 
   const sections = [
+    GENERATED_MARKERS.md,
     `# Chemical X Molecular Architecture Directives`,
     `# Target Project: ${projectName}`,
     '',
@@ -137,6 +140,7 @@ export const buildCustomCursorRules = (selectedPillarIds = []) => {
   const activePillars = PILLARS.filter((p) => selectedPillarIds.includes(p.id) || selectedPillarIds.includes(p.key));
 
   const lines = [
+    GENERATED_MARKERS.rules,
     '# Chemical X Architecture Directives',
     '# Generated from selected project pillars. Review and modify as needed.',
     ''
