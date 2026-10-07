@@ -62,6 +62,7 @@ export const MASTER_MCP_TOOL = {
           all: { type: 'boolean', description: 'team task list: include every status and remove the 20-row cap' },
           card: { type: 'boolean', description: 'team task list: include the formatted hierarchy card' },
           triage: { type: 'boolean', description: 'audit: convert violations into team tasks (opt-in; audit is otherwise read-only)' },
+          full: { type: 'boolean', description: 'audit: return the complete report with every violation instead of the banner summary' },
           reindex: { type: 'boolean', description: 'Force re-index before running query (for q)' },
           path: { type: 'string', description: 'Target file path (for read, patch, write, check, lock)' },
           symbol: { type: 'string', description: 'Target symbol declaration to extract (for read)' },

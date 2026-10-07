@@ -153,6 +153,7 @@ export const COMMANDS_SCHEMA = [
     flags: [
       { flag: '--triage', desc: 'Auto-convert unassigned hazards into team tasks' },
       { flag: '--rebaseline', desc: 'Record per-rule counts to chemx-ratchet.json (full scans only)' },
+      { flag: '--full', desc: 'With --json: print the complete report instead of the banner summary' },
       { flag: '--strict', desc: 'Fail on any architectural hazard' },
       { flag: '--json', desc: 'Output structured audit report as JSON' },
       { flag: '--markdown', desc: 'Generate Markdown audit report' },

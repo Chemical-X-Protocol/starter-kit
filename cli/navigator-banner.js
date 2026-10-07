@@ -1,6 +1,6 @@
 import { getChemicalXAsciiBanner } from "./audit.js";
 import { resolveGradeColor, resolveHealthHearts } from "./navigator-grades.js";
-import { resolveProjectName, truncatePath, visualWidth } from "./navigator-banner-helpers.js";
+import { resolveProjectName, resolveCostFigures, truncatePath, visualWidth } from "./navigator-banner-helpers.js";
 
 export const renderDashboardBanner = (
   health,
@@ -39,14 +39,7 @@ export const renderDashboardBanner = (
 
   const tokens = contextAnalysis?.estimatedTokens || 0;
   const pct = contextAnalysis?.potentialSavingsPct || 0;
-  const hasCostPass = contextAnalysis?.excessCostPerPass !== undefined;
-  const costPass = hasCostPass
-    ? contextAnalysis.excessCostPerPass
-    : Number((((contextAnalysis?.estimatedExcessTokens || 0) / 1000000) * 3.0).toFixed(3));
-  const hasCostMonth = contextAnalysis?.monthlyWastePerDev !== undefined;
-  const costMonth = hasCostMonth
-    ? contextAnalysis.monthlyWastePerDev
-    : Number((costPass * 20 * 5 * 4).toFixed(2));
+  const { perTurn: costPass, perMonth: costMonth } = resolveCostFigures(contextAnalysis);
 
   const hasPct = pct > 0;
   const pctStr = hasPct ? ` (${pct}% cut)` : "";

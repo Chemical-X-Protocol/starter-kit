@@ -31,8 +31,9 @@ const taskCount = (cwd) => listTasks(openIndexDb(cwd)).length;
 test('mcp audit: creates no tasks unless triage is requested', () => {
   const cwd = makeProject();
   try {
-    const report = handleAudit({ path: 'src' }, cwd);
-    assert.ok(report.totalViolations > 0, 'fixture must produce violations');
+    const summary = handleAudit({ path: 'src' }, cwd);
+    const hazardTotal = summary.hazards.critical + summary.hazards.highMedium + summary.hazards.low;
+    assert.ok(hazardTotal > 0, 'fixture must produce violations');
     assert.strictEqual(taskCount(cwd), 0);
     handleAudit({ path: 'src', triage: true }, cwd);
     assert.ok(taskCount(cwd) > 0);

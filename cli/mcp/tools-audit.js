@@ -15,6 +15,7 @@ import { autoGenerateTasksFromAudit } from '../team/team-triage.js';
 import { resolveTargetCwd } from './tools-search.js';
 import { resolveAuditScope } from '../audit-scope.js';
 import { computeGateVerdict } from '../audit/gate-verdict.js';
+import { buildAuditSummary } from '../audit/audit-summary.js';
 import { loadProjectConfig } from '../config/index.js';
 
 export const handleAudit = (args = {}, cwd = process.cwd()) => {
@@ -64,6 +65,9 @@ export const handleAudit = (args = {}, cwd = process.cwd()) => {
   const isStrictFail = Boolean(args.strict) && report.violations.length > 0;
   const isScoreFail = typeof args.minScore === 'number' && report.health.score < args.minScore;
   const isPassing = !isStrictFail && !isScoreFail && gate.isPassing;
+
+  const shouldReturnSummary = args.full !== true;
+  if (shouldReturnSummary) return buildAuditSummary({ ...report, gate: { ...gate, isPassing } }, { projectRoot: baseCwd, scope: rawTarget });
 
   return {
     type: 'directory',

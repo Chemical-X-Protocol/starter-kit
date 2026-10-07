@@ -38,6 +38,7 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
   const { syncSearchIndex, syncViolationsIndex, recordAuditSnapshot } = await import('../search.js');
   const { resolveAuditScope, toRelDir } = await import('../audit-scope.js');
   const { computeGateVerdict } = await import('../audit/gate-verdict.js');
+  const { buildAuditSummary } = await import('../audit/audit-summary.js');
   const { writeRatchet, RATCHET_FILE } = await import('../audit/ratchet.js');
   const { loadProjectConfig: loadSharedConfig } = await import('../config/index.js');
   const { autoGenerateTasksFromAudit } = await import('../team/index.js');
@@ -198,17 +199,28 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
   // Stage 2: Unified failure decision
   const hasStandardFailure = evaluateAuditFailure([isStrictFail, isDefaultFail, isGradeFail, isScoreFail]);
   const hasFailingViolations = isDraft ? hasCritical : hasStandardFailure;
+  const thresholdNotes = [
+    isGradeFail && `grade ${report.health.grade} is below minimum ${minGrade}`,
+    isScoreFail && `score ${report.health.score} is below minimum ${minScore}`,
+    isStrictFail && `strict mode: ${report.violations.length} violation(s)`
+  ].filter(Boolean);
+  const hasThresholdFailure = !isDraft && thresholdNotes.length > 0;
+  report.gate = hasThresholdFailure
+    ? { ...report.gate, isPassing: false, basis: 'threshold', note: thresholdNotes.join('; ') }
+    : { ...report.gate, isPassing: !hasFailingViolations };
 
   if (isJson) {
-    process.stdout.write(JSON.stringify(report, null, 2) + '\n');
-    if (isCli) process.exit(hasFailingViolations ? 1 : 0);
+    const isFullJson = rawArgs.includes('--full');
+    const payload = isFullJson ? report : buildAuditSummary(report, { projectRoot: process.cwd(), scope: auditRelDir });
+    process.stdout.write(JSON.stringify(payload, null, isFullJson ? 2 : 0) + '\n');
+    if (isCli) process.exitCode = hasFailingViolations ? 1 : 0;
     return report;
   }
 
   if (isMarkdown && !outputFile) {
     const md = generateMarkdownReport(report);
     process.stdout.write(md + '\n');
-    if (isCli) process.exit(hasFailingViolations ? 1 : 0);
+    if (isCli) process.exitCode = hasFailingViolations ? 1 : 0;
     return report;
   }
 
