@@ -1,10 +1,10 @@
 import readline from 'node:readline';
 import fs from 'node:fs';
-import path from 'node:path';
 import { MCP_TOOLS, executeMcpTool } from './tools.js';
 import { MCP_RESOURCES, readMcpResource } from './resources.js';
 import { MCP_PROMPTS, getMcpPrompt } from './prompts.js';
 import { warmIndexDb } from '../search-db.js';
+import { resolveCallScope, extractCallTarget, hasProjectMarker } from './call-scope.js';
 
 export const SERVER_INFO = {
   name: 'chemical-x-mcp',
@@ -14,12 +14,9 @@ export const SERVER_INFO = {
 export const PROTOCOL_VERSION = '2024-11-05';
 
 export const createMcpHandler = (options = {}) => {
-  const projectRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../..');
-  let cwd = options.cwd || process.cwd();
-  const isInvalidCwd = !cwd || cwd === '/home/xopher' || !fs.existsSync(path.resolve(cwd, 'package.json'));
-  if (isInvalidCwd) {
-    cwd = projectRoot;
-  }
+  let declaredRoot = options.cwd || null;
+  const startDir = process.cwd();
+  const bootRoot = hasProjectMarker(startDir) ? startDir : null;
   const subscriptions = new Set();
   let isInitialized = false;
 
@@ -29,13 +26,15 @@ export const createMcpHandler = (options = {}) => {
     if (method === 'initialize') {
       isInitialized = true;
       if (params?.rootPath) {
-        cwd = params.rootPath;
+        declaredRoot = params.rootPath;
       } else if (params?.rootUri && typeof params.rootUri === 'string' && params.rootUri.startsWith('file://')) {
-        cwd = new URL(params.rootUri).pathname;
+        declaredRoot = new URL(params.rootUri).pathname;
       } else if (Array.isArray(params?.workspaceFolders) && params.workspaceFolders[0]?.uri?.startsWith('file://')) {
-        cwd = new URL(params.workspaceFolders[0].uri).pathname;
+        declaredRoot = new URL(params.workspaceFolders[0].uri).pathname;
       }
-      try { warmIndexDb(cwd); } catch {}
+      if (declaredRoot) {
+        try { warmIndexDb(declaredRoot); } catch { /* chemx-allow: best-effort index warmup */ }
+      }
       return {
         jsonrpc: '2.0',
         id,
@@ -79,22 +78,21 @@ export const createMcpHandler = (options = {}) => {
     if (method === 'tools/call') {
       const toolName = params?.name;
       const toolArgs = params?.arguments || {};
-      let effectiveCwd = cwd;
-      const targetHint = toolArgs.dir || toolArgs.path;
-      if (targetHint) {
-        const resolved = path.resolve(cwd, targetHint);
-        let cur = fs.existsSync(resolved) && fs.statSync(resolved).isDirectory() ? resolved : path.dirname(resolved);
-        while (cur && cur !== path.dirname(cur)) {
-          if (fs.existsSync(path.join(cur, 'package.json')) || fs.existsSync(path.join(cur, '.chemx'))) {
-            effectiveCwd = cur;
-            break;
-          }
-          cur = path.dirname(cur);
-        }
+      const scope = resolveCallScope({ target: extractCallTarget(toolName, toolArgs), declaredRoot, bootRoot });
+      if (!scope.ok) {
+        return {
+          jsonrpc: '2.0',
+          id,
+          result: { content: [{ type: 'text', text: `Error executing tool "${toolName}": ${scope.error}` }], isError: true }
+        };
       }
+      const isBootFallback = scope.source === 'boot';
+      const scopeNotice = isBootFallback
+        ? [{ type: 'text', text: `chemx: resolved against server start directory ${scope.root}. Pass projectRoot to target another project.` }]
+        : [];
 
       try {
-        const toolOutput = await executeMcpTool(toolName, toolArgs, effectiveCwd);
+        const toolOutput = await executeMcpTool(toolName, toolArgs, scope.root);
         const serialized = typeof toolOutput === 'string' ? toolOutput : JSON.stringify(toolOutput, null, 2);
         return {
           jsonrpc: '2.0',
@@ -104,7 +102,8 @@ export const createMcpHandler = (options = {}) => {
               {
                 type: 'text',
                 text: serialized
-              }
+              },
+              ...scopeNotice
             ],
             isError: false
           }
@@ -140,7 +139,7 @@ export const createMcpHandler = (options = {}) => {
     if (method === 'resources/read') {
       const uri = params?.uri;
       try {
-        const resourceContent = await readMcpResource(uri, cwd);
+        const resourceContent = await readMcpResource(uri, declaredRoot ?? bootRoot ?? startDir);
         return {
           jsonrpc: '2.0',
           id,

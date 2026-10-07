@@ -23,13 +23,4 @@ export const EXT_LANG_MAP = {
   '.sql': 'sql'
 };
 
-export const resolveTargetCwd = (cwd) => {
-  const hasCwd = Boolean(cwd);
-  const isUserHome = cwd === '/home/xopher';
-  const hasPackageJson = hasCwd && fs.existsSync(path.resolve(cwd, 'package.json'));
-  const isValidProjectCwd = hasCwd && !isUserHome && hasPackageJson;
-  if (!isValidProjectCwd) {
-    return PROJECT_ROOT;
-  }
-  return cwd;
-};
+export const resolveTargetCwd = (cwd) => cwd || process.cwd();

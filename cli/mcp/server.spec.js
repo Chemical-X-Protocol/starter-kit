@@ -708,3 +708,35 @@ test('MCP Server: master tool chemx handles action: "read" with auto-outlining o
 
 
 
+
+test('MCP Server: master chemx read honors projectRoot over boot directory', async () => {
+  const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-root-read-')));
+  fs.mkdirSync(path.join(tmp, '.chemx'));
+  fs.writeFileSync(path.join(tmp, 'a.js'), 'export const scopeMarker = 1;\n');
+  try {
+    const handler = createMcpHandler();
+    const res = await handler.handleRequest({
+      jsonrpc: '2.0',
+      id: 2001,
+      method: 'tools/call',
+      params: { name: 'chemx', arguments: { action: 'read', projectRoot: tmp, params: { path: 'a.js' } } }
+    });
+    assert.strictEqual(res.result.isError, false);
+    assert.ok(res.result.content[0].text.includes('scopeMarker'));
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('MCP Server: relative master write without declared root is refused', async () => {
+  const probe = path.join(process.cwd(), 'zz-scope-probe.js');
+  const handler = createMcpHandler();
+  const res = await handler.handleRequest({
+    jsonrpc: '2.0',
+    id: 2002,
+    method: 'tools/call',
+    params: { name: 'chemx', arguments: { action: 'write', params: { path: 'zz-scope-probe.js', content: 'x' } } }
+  });
+  assert.strictEqual(res.result.isError, true);
+  assert.strictEqual(fs.existsSync(probe), false);
+});

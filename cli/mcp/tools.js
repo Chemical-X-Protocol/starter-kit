@@ -12,7 +12,7 @@ export {
   handleChemxTeamStatus, handleChemxTeamFeed, handleChemxTeamPost, handleChemxTeamTask, handleChemxTeamLock, handleChemxReportIssue, handleChemxProject, handleChemxTesseract
 };
 
-const parseCommand = (command, params) => {
+export const parseCommand = (command, params) => {
   const parts = command.trim().split(/\s+/);
   const subCmd = parts[0];
   if (subCmd === 'audit' || subCmd === 'check') return { action: subCmd, params: { path: parts[1] || 'src', ...params } };

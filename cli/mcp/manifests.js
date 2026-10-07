@@ -9,6 +9,10 @@ export const MASTER_MCP_TOOL = {
   inputSchema: {
     type: 'object',
     properties: {
+      projectRoot: {
+        type: 'string',
+        description: 'Absolute path of the project this call targets. Relative paths resolve against it.'
+      },
       action: {
         type: 'string',
         enum: [

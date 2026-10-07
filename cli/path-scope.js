@@ -27,7 +27,7 @@ export const resolveSafePath = (targetPath, baseDir = process.cwd()) => {
   const isLexicalEscape = relLexical.startsWith('..') || path.isAbsolute(relLexical);
 
   if (isLexicalEscape) {
-    throw new Error(`Path traversal rejected: "${targetPath}" is outside allowed workspace root "${realBase}".`);
+    throw new Error(`Path traversal rejected: "${targetPath}" resolves to "${resolvedTarget}", outside allowed workspace root "${realBase}".`);
   }
 
   if (fs.existsSync(resolvedTarget)) {
