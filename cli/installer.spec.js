@@ -168,3 +168,14 @@ test('installer: re-installing keeps /* and */ inside glob strings of .chemx/con
     });
   });
 });
+
+for (const [label, blank] of [['empty', ''], ['whitespace-only', '  \n\t\n']]) {
+  test(`installer: a ${label} .chemx/config.json counts as {} and gets grade and score saved`, () => {
+    withSavedConfig(`test-installer-config-${label}`, blank, (tmpDir, configPath) => {
+      const { result } = captureStdout(() => saveInstallerProjectConfig(tmpDir, { minGrade: 'B', minScore: 80 }));
+      assert.strictEqual(result, true);
+      const saved = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      assert.deepStrictEqual(saved, { minGrade: 'B', minScore: 80, maxLineCount: 500 });
+    });
+  });
+}

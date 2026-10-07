@@ -238,3 +238,12 @@ test('pillars-wizard: a dry run plans the unparsable .chemx/config.json as refus
     assert.strictEqual(result.unparsableConfig, path.join('.chemx', 'config.json'));
   });
 });
+
+test('pillars-wizard: a whitespace-only .chemx/config.json counts as {} and gets the pillars written', async () => {
+  await withTmp('chemx-pillars-blank-', async (tmpDir) => {
+    writeRel(tmpDir, '.chemx/config.json', ' \n');
+    const result = await runPillarsWizard(['--preset=minimal', '-y', '--write'], tmpDir);
+    assert.strictEqual(result.success, true);
+    assert.deepStrictEqual(JSON.parse(readRel(tmpDir, '.chemx/config.json')), { pillars: result.pillarsConfig });
+  });
+});

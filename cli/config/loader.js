@@ -56,7 +56,11 @@ export const parseJsonSafe = (raw) => {
 export const readExistingProjectConfig = (targetDir = '.') => {
   const configPath = path.resolve(targetDir, '.chemx', 'config.json');
   if (!fs.existsSync(configPath)) return {};
-  const parsed = parseJsonSafe(fs.readFileSync(configPath, 'utf-8'));
+  const content = fs.readFileSync(configPath, 'utf-8');
+  // A blank file holds no settings yet, so it merges like a missing one instead of being kept.
+  const isBlank = content.trim() === '';
+  if (isBlank) return {};
+  const parsed = parseJsonSafe(content);
   const isConfigObject = parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed);
   return isConfigObject ? parsed : null;
 };
