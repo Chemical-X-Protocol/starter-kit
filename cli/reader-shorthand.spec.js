@@ -9,6 +9,12 @@ describe('Reader Shorthand Syntax', () => {
     assert.ok(ALLOWED_COMMANDS.has('r'), 'ALLOWED_COMMANDS should include "r"');
   });
 
+  it('caps a slice at the configured read window, the same one the auto-outline uses', () => {
+    const res = readTokenOptimized('AGENTS.md', { startLine: 1, endLine: 60, autoOutlineThreshold: 20 });
+    assert.equal(res.endLine, 20);
+    assert.match(res.content, /Truncated at the 20-line chemx read window/);
+  });
+
   it('supports path:start-end line range in readTokenOptimized', () => {
     const res = readTokenOptimized('package.json:1-5');
     assert.equal(res.file, 'package.json');

@@ -357,7 +357,7 @@ export const readTokenOptimized = (targetPath, options = {}) => {
   }
 
   // Cap each slice to the read window (a tool budget, not an architecture rule)
-  const maxLines = 100;
+  const maxLines = autoThreshold;
   const isCapped = (endIdx - startIdx) > maxLines;
   if (isCapped) {
     endIdx = startIdx + maxLines;
