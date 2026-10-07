@@ -37,7 +37,6 @@ fi
 
 # Load thresholds from .chemx/config.json if available
 CONF_MAX_LINES=""
-CONF_MAX_MOL=""
 CONF_MIN_GRADE=""
 CONF_MIN_SCORE=""
 CONFIG_FILE="$REPO_ROOT/.chemx/config.json"
@@ -48,14 +47,12 @@ if [ -f "$CONFIG_FILE" ]; then
       try {
         const c = JSON.parse(require('fs').readFileSync('$CONFIG_FILE', 'utf8'));
         if (c.maxLineCount || c.maxLines) console.log('CONF_MAX_LINES=' + (c.maxLineCount || c.maxLines));
-        if (c.maxMoleculeLineCount || c.maxMoleculeLines) console.log('CONF_MAX_MOL=' + (c.maxMoleculeLineCount || c.maxMoleculeLines));
         if (c.minGrade) console.log('CONF_MIN_GRADE=' + c.minGrade);
         if (c.minScore) console.log('CONF_MIN_SCORE=' + c.minScore);
       } catch (e) {}
     ")
   else
     CONF_MAX_LINES=$(grep -o '"maxLineCount"[[:space:]]*:[[:space:]]*[0-9]*' "$CONFIG_FILE" 2>/dev/null | grep -o '[0-9]*$')
-    CONF_MAX_MOL=$(grep -o '"maxMoleculeLineCount"[[:space:]]*:[[:space:]]*[0-9]*' "$CONFIG_FILE" 2>/dev/null | grep -o '[0-9]*$')
     CONF_MIN_GRADE=$(grep -o '"minGrade"[[:space:]]*:[[:space:]]*"[^"]*"' "$CONFIG_FILE" 2>/dev/null | sed 's/.*"minGrade"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
     CONF_MIN_SCORE=$(grep -o '"minScore"[[:space:]]*:[[:space:]]*[0-9]*' "$CONFIG_FILE" 2>/dev/null | grep -o '[0-9]*$')
   fi
@@ -64,7 +61,6 @@ fi
 MIN_GRADE="${CHEMX_MIN_GRADE:-${CONF_MIN_GRADE:-B}}"
 MIN_SCORE="${CHEMX_MIN_SCORE:-${CONF_MIN_SCORE:-80}}"
 MAX_LINES="${CHEMX_MAX_LINES:-${CONF_MAX_LINES:-500}}"
-MAX_MOLECULE_LINES="${CHEMX_MAX_MOLECULE_LINES:-${CONF_MAX_MOL:-100}}"
 
 # Detect staged source files (including polyglot C#, Python, Go)
 STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(jsx?|tsx?|vue|svelte|cs|py|go)$' | grep -vE '(\.(d\.ts|min\.|test\.|spec\.))')
@@ -72,6 +68,49 @@ STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(jsx
 if [ -z "$STAGED_FILES" ]; then
   exit 0
 fi
+
+# Molecule budget: CHEMX_MAX_MOLECULE_LINES wins, then the project profile, then 250.
+# The profile comes from the first of .chemxrc, .chemxrc.json, .chemx/config.json or
+# package.json "chemx" that parses, as in cli/config/loader.js. atomic-strict or
+# enforce-file-length gives 100, otherwise max-line-count-warning or the profile
+# default, as in cli/audit/rules.js. Without node only strict settings are detected.
+PROFILE_MAX_MOL=""
+if command -v node >/dev/null 2>&1; then
+  PROFILE_MAX_MOL=$(node -e "
+    const fs = require('fs');
+    const read = (rel) => {
+      try {
+        const text = fs.readFileSync(rel, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*/gm, '');
+        const value = JSON.parse(text);
+        return value !== null && typeof value === 'object' ? value : null;
+      } catch {
+        return null;
+      }
+    };
+    const pkgRc = (read('package.json') || {}).chemx;
+    const rc = read('.chemxrc') || read('.chemxrc.json') || read('.chemx/config.json') || (typeof pkgRc === 'object' && pkgRc) || {};
+    const WARN = {'pragmatic': 250, 'atomic-strict': 100, 'loose': 500};
+    const name = String(rc.profile || 'pragmatic').toLowerCase();
+    const profile = Object.keys(WARN).includes(name) ? name : 'pragmatic';
+    const rules = {profile: profile, enforceFileLength: profile === 'atomic-strict', maxLineCountWarning: WARN[profile]};
+    const KEYS = {'enforce-file-length': 'enforceFileLength', 'max-line-count-warning': 'maxLineCountWarning'};
+    Object.entries(rc.rules || {}).forEach(([key, value]) => { rules[KEYS[key] || key] = value; });
+    const isStrict = rules.enforceFileLength === true || rules.profile === 'atomic-strict';
+    process.stdout.write(String(isStrict ? 100 : parseInt(rules.maxLineCountWarning, 10) || 250));
+  " 2>/dev/null)
+else
+  for RC in .chemxrc .chemxrc.json .chemx/config.json; do
+    [ -f "$RC" ] || continue
+    if grep -v '^[[:space:]]*//' "$RC" | grep -Eq '"profile"[[:space:]]*:[[:space:]]*"atomic-strict"|"(enforce-file-length|enforceFileLength)"[[:space:]]*:[[:space:]]*true'; then
+      PROFILE_MAX_MOL=100
+    fi
+    break
+  done
+fi
+case "$PROFILE_MAX_MOL" in
+  ''|*[!0-9]*) PROFILE_MAX_MOL="" ;;
+esac
+MAX_MOLECULE_LINES="${CHEMX_MAX_MOLECULE_LINES:-${PROFILE_MAX_MOL:-250}}"
 
 LINE_BUDGET_FAILED=0
 LINE_BUDGET_ERRORS=""

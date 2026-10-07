@@ -4,6 +4,7 @@ import { hasGum, gumChoose, gumInput, promptQuestion } from './terminal.js';
 import { buildPreCommitHookScript, buildGitHubWorkflowScript } from './installer-templates.js';
 import { installAllMcpConfigs } from './mcp/installer.js';
 import { runPillarsWizard } from './pillars-wizard.js';
+import { loadProjectConfig as loadSavedProjectConfig } from './project-detector.js';
 
 export { buildPreCommitHookScript, buildGitHubWorkflowScript } from './installer-templates.js';
 export { installAllMcpConfigs } from './mcp/installer.js';
@@ -63,6 +64,13 @@ export const installGitHubWorkflow = (targetDir = '.', options = {}) => {
   fs.writeFileSync(wfPath, buildGitHubWorkflowScript(options.minGrade, options.minScore), 'utf-8');
   process.stdout.write(`  \x1b[32m✔\x1b[0m Installed GitHub Actions CI workflow: .github/workflows/chemx-audit.yml\n`);
   return true;
+};
+
+// Keeps keys other tools wrote (pillars, framework) and drops the legacy fixed molecule pin.
+export const buildInstallerProjectConfig = (opts = {}, existing = {}) => {
+  const merged = { ...existing, minGrade: opts.minGrade, minScore: opts.minScore, maxLineCount: 500 };
+  delete merged.maxMoleculeLineCount;
+  return merged;
 };
 
 export const saveProjectConfig = (targetDir = '.', config = {}) => {
@@ -196,6 +204,6 @@ export const runInstallWizard = async (targetDir = '.') => {
   if (shouldMcp) installAllMcpConfigs(targetDir, { silent: false });
   if (shouldQuery) await installAgentSearchConfig(targetDir);
 
-  saveProjectConfig(targetDir, { minGrade: opts.minGrade, minScore: opts.minScore, maxLineCount: 500, maxMoleculeLineCount: 100 });
+  saveProjectConfig(targetDir, buildInstallerProjectConfig(opts, loadSavedProjectConfig(targetDir)));
   process.stdout.write('\n\x1b[1m\x1b[32m✔ Chemical X configuration installed successfully!\x1b[0m\n\n');
 };
