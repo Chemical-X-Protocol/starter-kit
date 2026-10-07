@@ -3,7 +3,7 @@ import { RULE_REGISTRY } from './rules-registry.js';
 import {
   isComponentPath,
   isCodeLine,
-  isShallowCatchBody,
+  isShallowCatchClause,
   parseBestEffortAllowance,
   hasAnyTypeAnnotation,
   isRedundantPassthroughReturn
@@ -163,6 +163,7 @@ export const checkSlopTextPatterns = (content, lines, relativePath, violations) 
 
 const SWALLOWABLE_KINDS = new Set(['let', 'var']);
 const DEFAULTING_OPERATORS = new Set(['??', '||']);
+const DEFAULTING_ASSIGNMENTS = new Set(['=', '??=', '||=']);
 const MISSING_REASON_NOTE = 'the chemx-allow: best-effort annotation needs a reason (reason is mandatory)';
 
 const isOnLines = (comment, span) => {
@@ -243,21 +244,78 @@ const collectTryWrites = (blockPath) => {
   return writes;
 };
 
-// Start offsets of every write that gives the binding a value: each reassignment, plus a
-// declared initialiser that is not undefined, or a for-in/for-of head that assigns it.
-const listValueWrites = (binding) => {
-  const starts = binding.constantViolations.map((p) => p.node.start);
-  const init = binding.path.node.init;
-  const hasRealInit = Boolean(init) && !isUndefinedValue(init);
-  const isLoopHead = Boolean(binding.path.parentPath?.parentPath?.isForXStatement());
-  if (hasRealInit || isLoopHead) starts.push(binding.path.node.start);
-  return starts;
+// Offset from which a write guarantees the binding a value, so reads nested inside the write
+// (v = normalize(v)) are still unguarded. Compound and update writes (v += x, v++) read the
+// old value first and never stand in for a default, so they guard nothing.
+const resolveGuardedFrom = (writePath) => {
+  const node = writePath.node;
+  if (writePath.isUpdateExpression()) return Infinity;
+  if (writePath.isForXStatement()) return node.body.start;
+  if (!writePath.isAssignmentExpression()) return node.end;
+  return DEFAULTING_ASSIGNMENTS.has(node.operator) ? node.end : Infinity;
 };
 
+const isWithinNode = (inner, outer) => {
+  const startsInside = inner.start >= outer.start;
+  return startsInside && inner.end <= outer.end;
+};
+
+// A write inside the block of another try whose catch is shallow may never have run, so it
+// cannot count as a default. A try that also encloses this one does not qualify: reaching
+// this try means the statements before it in that shared block already ran.
+const isInOtherShallowTry = (writePath, tryNode) => {
+  const swallowingTry = writePath.findParent((p) => {
+    if (!p.isTryStatement()) return false;
+    if (!isShallowCatchClause(p.node.handler, t)) return false;
+    if (isWithinNode(tryNode, p.node)) return false;
+    return isWithinNode(writePath.node, p.node.block);
+  });
+  return Boolean(swallowingTry);
+};
+
+const hasRealInit = (declaratorPath) => {
+  const init = declaratorPath.node.init;
+  return Boolean(init) && !isUndefinedValue(init);
+};
+
+// A bare `var v;` redeclaration is recorded as a constant violation but assigns nothing.
+const isValueWrite = (writePath) => !writePath.isVariableDeclarator() || hasRealInit(writePath);
+
+// Every write that gives the binding a value: each reassignment, plus a declared initialiser
+// that is not undefined, or a for-in/for-of head that assigns it.
+const listValueWrites = (binding, tryNode) => {
+  const writePaths = binding.constantViolations.filter(isValueWrite);
+  const isLoopHead = Boolean(binding.path.parentPath?.parentPath?.isForXStatement());
+  if (hasRealInit(binding.path) || isLoopHead) writePaths.push(binding.path);
+  return writePaths
+    .filter((writePath) => !isInOtherShallowTry(writePath, tryNode))
+    .map((writePath) => ({ start: writePath.node.start, guardedFrom: resolveGuardedFrom(writePath) }));
+};
+
+const isOptionalChainLink = (path) => {
+  const parent = path.parent;
+  const isChainObject = t.isOptionalMemberExpression(parent) && parent.object === path.node;
+  const isChainCallee = t.isOptionalCallExpression(parent) && parent.callee === path.node;
+  return isChainObject || isChainCallee;
+};
+
+// Climb an optional chain that starts at the read: in data?.name ?? 'anon' the default also
+// covers data, because the chain short-circuits to undefined when data is unset. A plain
+// member access (data.name) throws first, so it is never climbed.
+const climbOptionalChain = (refPath) => {
+  let chain = refPath;
+  while (isOptionalChainLink(chain)) chain = chain.parentPath;
+  return chain;
+};
+
+// Babel lists the bare head of for (v of xs) among the references, but it is the write.
+const isLoopHeadTarget = (refPath) => refPath.parentPath.isForXStatement() && refPath.key === 'left';
+
 const isDefaultedRead = (refPath) => {
-  const parent = refPath.parent;
+  const chain = climbOptionalChain(refPath);
+  const parent = chain.parent;
   const isDefaultingLogical = t.isLogicalExpression(parent) && DEFAULTING_OPERATORS.has(parent.operator);
-  return isDefaultingLogical && parent.left === refPath.node;
+  return isDefaultingLogical && parent.left === chain.node;
 };
 
 const isReadUnsetAfterTry = (binding, tryNode, fnScope) => {
@@ -266,14 +324,16 @@ const isReadUnsetAfterTry = (binding, tryNode, fnScope) => {
   if (!binding.path.isVariableDeclarator()) return false;
   if (resolveFunctionScope(binding.scope) !== fnScope) return false;
 
-  const writeStarts = listValueWrites(binding);
-  if (writeStarts.some((start) => start < tryNode.start)) return false;
-  const firstLaterWrite = Math.min(Infinity, ...writeStarts.filter((start) => start > tryNode.end));
+  const writes = listValueWrites(binding, tryNode);
+  if (writes.some((write) => write.start < tryNode.start)) return false;
+  const laterWrites = writes.filter((write) => write.start > tryNode.end);
+  const guardedFrom = Math.min(Infinity, ...laterWrites.map((write) => write.guardedFrom));
 
   return binding.referencePaths.some((ref) => {
+    if (isLoopHeadTarget(ref)) return false;
     const isAfterTry = ref.node.start > tryNode.end;
-    const isBeforeLaterWrite = ref.node.start < firstLaterWrite;
-    const isUnguardedWindow = isAfterTry && isBeforeLaterWrite;
+    const isBeforeGuard = ref.node.start < guardedFrom;
+    const isUnguardedWindow = isAfterTry && isBeforeGuard;
     return isUnguardedWindow && !isDefaultedRead(ref);
   });
 };
@@ -325,8 +385,7 @@ export const createAiSlopVisitors = ({ relativePath, violations, comments = [], 
 
   return {
     CatchClause(astPath) {
-      const body = astPath.node.body?.body || [];
-      if (isShallowCatchBody(body, t)) {
+      if (isShallowCatchClause(astPath.node, t)) {
         reportShallowCatch(astPath, { relativePath, violations, comments, source });
       }
 

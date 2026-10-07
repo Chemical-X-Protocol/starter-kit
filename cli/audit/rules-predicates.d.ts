@@ -7,6 +7,8 @@ export declare function isCommentLine(line: string): boolean;
 export declare function isCodeLine(line: string): boolean;
 export declare function isConsoleCallStatement(stmt: unknown, t: typeof babelTypes): boolean;
 export declare function isShallowCatchBody(body: readonly unknown[], t: typeof babelTypes): boolean;
+/** True for a catch clause whose body is empty or a single console call; false for a missing handler. */
+export declare function isShallowCatchClause(handler: unknown, t: typeof babelTypes): boolean;
 /**
  * Reads a `chemx-allow: best-effort <reason>` annotation from one comment body or one source
  * line. In a block comment the reason runs across its lines up to the comment close.

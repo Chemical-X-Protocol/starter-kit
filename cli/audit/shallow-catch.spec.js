@@ -121,9 +121,66 @@ test('shallow catch: a later assignment before the read keeps it MEDIUM', () => 
   assertOne('let v;\ntry { v = f(); } catch {}\nv = fallback();\nuse(v);\n', 'MEDIUM');
 });
 
+test('shallow catch: a later write that reads the binding first is not a default', () => {
+  assertOne('let v;\ntry { v = f(); } catch {}\nv = normalize(v);\nuse(v);\n', 'HIGH');
+  assertOne('let s;\ntry { s = f(); } catch {}\ns = String(s).trim();\nuse(s);\n', 'HIGH');
+});
+
+test('shallow catch: a later compound or update write is not a default', () => {
+  assertOne('let v;\ntry { v = f(); } catch {}\nv += x;\nuse(v);\n', 'HIGH');
+  assertOne('let v;\ntry { v = f(); } catch {}\nv++;\nuse(v);\n', 'HIGH');
+});
+
+test('shallow catch: a later for-of head guards its body but not its own iterable', () => {
+  assertOne('let v;\ntry { v = f(); } catch {}\nfor (v of xs) use(v);\n', 'MEDIUM');
+  assertOne('let v;\ntry { v = f(); } catch {}\nfor (v of v.items) use(v);\n', 'HIGH');
+});
+
+test('shallow catch: a var redeclaration without a value is not a default', () => {
+  assertOne('function g() {\n  var v;\n  try { v = f(); } catch {}\n  var v;\n  return v;\n}\n', 'HIGH');
+  assertOne('function g() {\n  var v;\n  var v;\n  try { v = f(); } catch {}\n  return v;\n}\n', 'HIGH');
+});
+
+test('shallow catch: later =, ??= and ||= writes that default the read keep it MEDIUM', () => {
+  assertOne('let v;\ntry { v = f(); } catch {}\nv ||= {};\nuse(v);\n', 'MEDIUM');
+  assertOne('let v;\ntry { v = f(); } catch {}\nv = v ?? {};\nuse(v);\n', 'MEDIUM');
+  assertOne('let v;\ntry { v = f(); } catch {}\nv = normalize(v ?? {});\nuse(v);\n', 'MEDIUM');
+});
+
 test('shallow catch: a read that supplies its own default keeps it MEDIUM', () => {
   assertOne('let v;\ntry { v = f(); } catch {}\nuse(v ?? {});\n', 'MEDIUM');
   assertOne('let v;\ntry { v = f(); } catch {}\nuse(v || {});\n', 'MEDIUM');
+});
+
+test('shallow catch: an optional chain read that ends in a default keeps it MEDIUM', () => {
+  assertOne('let data;\ntry { data = f(); } catch {}\nconst name = data?.name ?? "anon";\n', 'MEDIUM');
+  assertOne('let data;\ntry { data = f(); } catch {}\nconst name = data?.user.name ?? "anon";\n', 'MEDIUM');
+  assertOne('let data;\ntry { data = f(); } catch {}\nconst id = data?.get().id || 0;\n', 'MEDIUM');
+  assertOne('let data;\ntry { data = f(); } catch {}\nconst items = data?.[key] ?? [];\n', 'MEDIUM');
+});
+
+test('shallow catch: a plain member read before the default still escalates', () => {
+  // data.name throws when data is unset, so the ?? never gets to supply its default.
+  assertOne('let data;\ntry { data = f(); } catch {}\nconst name = data.name ?? "anon";\n', 'HIGH');
+  assertOne('let data;\ntry { data = f(); } catch {}\nconst name = (data?.user).name ?? "anon";\n', 'HIGH');
+  assertOne('let data;\ntry { data = f(); } catch {}\nconst name = data?.name;\n', 'HIGH');
+});
+
+test('shallow catch: a fallback chain of shallow trys escalates every catch', () => {
+  const code = 'let config;\ntry { config = readA(); } catch {}\ntry { config = readB(); } catch {}\nuse(config.x);';
+  const hits = shallow(code);
+  assert.deepEqual(hits.map((hit) => [hit.line, hit.severity]), [[2, 'HIGH'], [3, 'HIGH']]);
+});
+
+test('shallow catch: a write in a handled try still counts as a default', () => {
+  assertOne('let v;\ntry { v = a(); } catch (e) { report(e); }\ntry { v = f(); } catch {}\nuse(v);\n', 'MEDIUM');
+  assertOne('let v;\ntry { v = f(); } catch {}\ntry { v = b(); } finally { done(); }\nuse(v);\n', 'MEDIUM');
+});
+
+test('shallow catch: a write earlier in an enclosing shallow try still guards the inner catch', () => {
+  const code = 'let v;\ntry {\n  v = a();\n  try { v = f(); } catch {}\n  use(v);\n} catch {}\n';
+  const hits = shallow(code);
+  assert.deepEqual(hits.map((hit) => [hit.line, hit.severity]), [[4, 'MEDIUM'], [6, 'MEDIUM']]);
 });
 
 test('shallow catch: no read after the try keeps it MEDIUM', () => {

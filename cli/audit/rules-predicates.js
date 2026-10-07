@@ -47,6 +47,11 @@ export const isShallowCatchBody = (body, t) => {
   return false;
 };
 
+export const isShallowCatchClause = (handler, t) => {
+  if (!handler) return false;
+  return isShallowCatchBody(handler.body?.body || [], t);
+};
+
 const BEST_EFFORT_PATTERN = /chemx-allow:\s*best-effort\b([\s\S]*)/;
 
 // The reason runs to the end of the comment, so a block comment may carry it on its next
