@@ -38,6 +38,26 @@ ${staticRows}
 
     const moleculeLineViolation = violations.find((v) => v.rule === 'LINE_BUDGET_MOLECULE');
     assert.ok(moleculeLineViolation, 'Atomic-strict mode should enforce 100-line molecule cap');
+    assert.ok(moleculeLineViolation.hazard.includes('> 100 lines'), moleculeLineViolation.hazard);
+  });
+
+  it('names the configured warning limit when a pragmatic molecule exceeds it', () => {
+    const staticRows = Array.from({ length: 160 }, (_, i) => `    { id: ${i} },`).join('\n');
+    const code = `
+export const WideCard = () => {
+  const rows = [
+${staticRows}
+  ];
+  return rows.length;
+};
+`;
+    const violations = auditCode(code, 'src/components/molecules/m-wide.js', 'src/components/molecules/m-wide.js', {
+      config: { profile: 'pragmatic', enforceFileLength: false, maxLineCountWarning: 150 }
+    });
+
+    const moleculeLineViolation = violations.find((v) => v.rule === 'LINE_BUDGET_MOLECULE');
+    assert.ok(moleculeLineViolation, 'A 167-line molecule should exceed a 150-line warning limit');
+    assert.ok(moleculeLineViolation.hazard.includes('> 150 lines'), moleculeLineViolation.hazard);
   });
 
   it('detects high cyclomatic complexity (CC > 12) via COMPLEXITY_CYCLOMATIC_HIGH', () => {

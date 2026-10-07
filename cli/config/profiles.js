@@ -57,3 +57,22 @@ export const getProfileDefaults = (profileName = DEFAULT_PROFILE) => {
   const normalized = String(profileName || DEFAULT_PROFILE).toLowerCase();
   return PROFILES[normalized] || PROFILES[DEFAULT_PROFILE];
 };
+
+export const STRICT_MOLECULE_LINE_LIMIT = 100;
+export const DEFAULT_MOLECULE_LINE_LIMIT = 250;
+
+// Accepts a flat rule set or a loaded config whose rules live under `rules`.
+const toRuleSet = (config) => config?.rules || config || {};
+
+export const isFileLengthEnforced = (config) => {
+  const rules = toRuleSet(config);
+  const isLengthFlagged = rules.enforceFileLength === true;
+  const isStrictProfile = rules.profile === 'atomic-strict';
+  return isLengthFlagged || isStrictProfile;
+};
+
+export const resolveMoleculeLineLimit = (config) => {
+  const isStrict = isFileLengthEnforced(config);
+  const warningLimit = toRuleSet(config).maxLineCountWarning || DEFAULT_MOLECULE_LINE_LIMIT;
+  return isStrict ? STRICT_MOLECULE_LINE_LIMIT : warningLimit;
+};

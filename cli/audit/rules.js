@@ -22,6 +22,7 @@ import { createPatternVisitors, recordTemplatePatterns } from './pattern-detecto
 import { createHookShapeRegistry } from './hook-shape-validator.js';
 import { isBabelParsable, getLanguageForFile } from '../languages.js';
 import { analyzeCSharpCode } from './csharp-analyzer.js';
+import { resolveMoleculeLineLimit } from '../config/profiles.js';
 
 export { PILLARS, RULE_REGISTRY, createHookShapeRegistry };
 
@@ -37,10 +38,9 @@ export const auditCode = (content, filePath, relativePath, options = {}) => {
   const isRootTypeFile = baseName === 'types.ts' || baseName === 'global.d.ts';
 
   const config = options.config?.rules || options.config || {};
-  const enforceFileLength = config.enforceFileLength === true || config.profile === 'atomic-strict';
 
   // Pillar 1: Sliding Scale Monolith Detection
-  const moleculeLimit = enforceFileLength ? 100 : (config.maxLineCountWarning || 250);
+  const moleculeLimit = resolveMoleculeLineLimit(options.config);
   if (lineCount > 500) {
     const tier = resolveMonolithTier(lineCount);
     violations.push({
@@ -54,7 +54,7 @@ export const auditCode = (content, filePath, relativePath, options = {}) => {
       directive: tier.directive
     });
   } else if (isMolecule && lineCount > moleculeLimit) {
-    const tier = resolveMoleculeTier(lineCount);
+    const tier = resolveMoleculeTier(lineCount, moleculeLimit);
     violations.push({
       filePath: relativePath,
       line: 1,

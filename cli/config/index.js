@@ -1,4 +1,12 @@
-import { PROFILES, DEFAULT_PROFILE, getProfileDefaults } from './profiles.js';
+import {
+  PROFILES,
+  DEFAULT_PROFILE,
+  getProfileDefaults,
+  STRICT_MOLECULE_LINE_LIMIT,
+  DEFAULT_MOLECULE_LINE_LIMIT,
+  isFileLengthEnforced,
+  resolveMoleculeLineLimit
+} from './profiles.js';
 import { findAndLoadConfigFile } from './loader.js';
 
 const parseCliProfile = (rawArgs = []) => {
@@ -33,5 +41,14 @@ export const loadProjectConfig = (cwd = process.cwd(), rawArgs = []) => {
   };
 };
 
-export { PROFILES, DEFAULT_PROFILE, getProfileDefaults, findAndLoadConfigFile };
+export {
+  PROFILES,
+  DEFAULT_PROFILE,
+  getProfileDefaults,
+  findAndLoadConfigFile,
+  STRICT_MOLECULE_LINE_LIMIT,
+  DEFAULT_MOLECULE_LINE_LIMIT,
+  isFileLengthEnforced,
+  resolveMoleculeLineLimit
+};
 export default loadProjectConfig;

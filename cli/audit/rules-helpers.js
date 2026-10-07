@@ -92,7 +92,7 @@ export const resolveMonolithTier = (lineCount) => {
   };
 };
 
-export const resolveMoleculeTier = (lineCount) => {
+export const resolveMoleculeTier = (lineCount, limit) => {
   if (lineCount >= 500) {
     return {
       severity: 'CRITICAL',
@@ -109,7 +109,7 @@ export const resolveMoleculeTier = (lineCount) => {
   }
   return {
     severity: 'MEDIUM',
-    hazard: `Molecule capsule budget warning (${lineCount} > 100 lines)`,
+    hazard: `Molecule capsule budget warning (${lineCount} > ${limit} lines)`,
     directive: 'Split molecule into focused sub-molecules or extract state to hook'
   };
 };
