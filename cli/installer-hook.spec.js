@@ -72,6 +72,7 @@ const assertHookOutcome = (outcome, row) => {
 
 const GLOB_CONFIG = '{"profile":"atomic-strict","overrides":[{"files":["src/**/*.spec.ts"]}],"include":"app/**/x"}';
 const GLOB_PAIR_CONFIG = '{"include":["src/*"],"profile":"atomic-strict","exclude":["*/dist"]}';
+const NESTED_STRICT_CONFIG = '{"profile":"pragmatic","overrides":[{"files":["src/legacy/**"],"profile":"atomic-strict"}]}';
 
 const PROFILE_CASES = [
   { name: 'no config passes a 150-line molecule at the 250 default', lines: 150, status: 0 },
@@ -198,6 +199,12 @@ const PROFILE_CASES = [
     budget: 250
   },
   {
+    name: 'only the top-level profile counts, so a nested atomic-strict in overrides leaves 150 lines passing',
+    files: { '.chemxrc': `${NESTED_STRICT_CONFIG}\n` },
+    lines: 150,
+    status: 0
+  },
+  {
     name: 'atomic-strict .chemxrc with /* and */ inside glob strings blocks 150 lines at 100',
     files: { '.chemxrc': `${GLOB_CONFIG}\n` },
     lines: 150,
@@ -321,6 +328,13 @@ const NO_NODE_CASES = [
     files: { '.chemxrc': '{\n  /* "profile": "atomic-strict" */\n  "profile": "pragmatic"\n}\n' },
     lines: 150,
     status: 0
+  },
+  {
+    name: 'known gap: a nested "profile": "atomic-strict" in an overrides entry also matches, so 150 lines are blocked at 100',
+    files: { '.chemxrc': `${NESTED_STRICT_CONFIG}\n` },
+    lines: 150,
+    status: 1,
+    budget: 100
   },
   {
     name: 'known gap: a block comment that opens mid-line is kept, so the atomic-strict inside it blocks 150 lines at 100',

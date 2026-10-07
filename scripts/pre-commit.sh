@@ -154,6 +154,9 @@ else
   # true are detected, giving 100, and only in the first of .chemxrc, .chemxrc.json or
   # .chemx/config.json that exists, even when it does not parse. package.json "chemx", the
   # loose profile and max-line-count-warning are not read, so anything else falls back to 250.
+  # The keys are matched anywhere in the file, nested ones included: an overrides entry with
+  # "profile": "atomic-strict" gives 100 here, while node and the audit read only the
+  # top-level profile and stay at 250.
   # Only block comments that open at the start of a line (after optional blanks) are stripped,
   # across lines, and then lines starting with //. A /* that opens later in a line is left
   # alone, so globs inside strings such as "src/**/*.ts" never pair up into a comment; that
