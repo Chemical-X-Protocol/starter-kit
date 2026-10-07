@@ -39,17 +39,20 @@ const buildMolecule = (lineCount) => {
 };
 
 // The audit stub keeps stage 2 local (no npx, no network) and always passing.
-const createRepo = ({ lines, files = {}, withAuditStub = true }) => {
+// staged maps extra source paths to line counts; they are staged next to the molecule.
+const createRepo = ({ lines, files = {}, staged = {}, withAuditStub = true }) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-hook-repo-'));
   const env = buildCleanEnv();
   runIn(dir, 'git', ['init', '-q'], env);
-  const allFiles = { ...files, 'src/molecules/m-x.ts': buildMolecule(lines) };
+  const stagedLines = { 'src/molecules/m-x.ts': lines, ...staged };
+  const allFiles = { ...files };
+  for (const [rel, count] of Object.entries(stagedLines)) allFiles[rel] = buildMolecule(count);
   if (withAuditStub) allFiles['cli/index.js'] = 'process.exit(0);\n';
   for (const [rel, content] of Object.entries(allFiles)) {
     fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
     fs.writeFileSync(path.join(dir, rel), content);
   }
-  runIn(dir, 'git', ['add', 'src/molecules/m-x.ts'], env);
+  runIn(dir, 'git', ['add', ...Object.keys(stagedLines)], env);
   return dir;
 };
 
@@ -61,9 +64,10 @@ const runHook = (scriptPath, dir, env) => {
 // Matches both wordings: "260 LOC > 250 molecule limit" and "260 LOC > 250 LOC molecule capsule limit".
 const budgetPattern = (lines, limit) => new RegExp(`${lines} LOC > ${limit}\\b`);
 
+// flaggedLines names the over-budget file's size when it is not the molecule's own.
 const assertHookOutcome = (outcome, row) => {
   assert.strictEqual(outcome.status, row.status, outcome.output);
-  if (row.budget) assert.match(outcome.output, budgetPattern(row.lines, row.budget));
+  if (row.budget) assert.match(outcome.output, budgetPattern(row.flaggedLines ?? row.lines, row.budget));
 };
 
 const GLOB_CONFIG = '{"profile":"atomic-strict","overrides":[{"files":["src/**/*.spec.ts"]}],"include":"app/**/x"}';
@@ -146,6 +150,39 @@ const PROFILE_CASES = [
     env: { CHEMX_MAX_MOLECULE_LINES: '400' },
     lines: 300,
     status: 0
+  },
+  ...['abc', '0'].map((value) => ({
+    name: `CHEMX_MAX_MOLECULE_LINES=${value} is ignored, so the 250 default blocks 260 lines`,
+    env: { CHEMX_MAX_MOLECULE_LINES: value },
+    lines: 260,
+    status: 1,
+    budget: 250
+  })),
+  {
+    name: 'CHEMX_MAX_MOLECULE_LINES=abc falls back to the atomic-strict profile, so 150 lines are blocked at 100',
+    env: { CHEMX_MAX_MOLECULE_LINES: 'abc' },
+    files: { '.chemxrc': '{"profile":"atomic-strict"}\n' },
+    lines: 150,
+    status: 1,
+    budget: 100
+  },
+  {
+    name: 'CHEMX_MAX_LINES=abc is ignored, so the 500-line file budget blocks a 600-line file',
+    env: { CHEMX_MAX_LINES: 'abc' },
+    lines: 10,
+    staged: { 'src/big.ts': 600 },
+    flaggedLines: 600,
+    status: 1,
+    budget: 500
+  },
+  {
+    name: 'a .chemx/config.json maxLineCount of "abc" is ignored, so a 600-line file is blocked at 500',
+    files: { '.chemx/config.json': '{"maxLineCount":"abc"}\n' },
+    lines: 10,
+    staged: { 'src/big.ts': 600 },
+    flaggedLines: 600,
+    status: 1,
+    budget: 500
   },
   ...['"abc"', '0', '-5'].map((warning) => ({
     name: `loose with max-line-count-warning ${warning} falls back to the loose 500, so 300 lines pass`,

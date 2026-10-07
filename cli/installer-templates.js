@@ -38,6 +38,17 @@ else
   export NO_COLOR=1
 fi
 
+# Prints its argument only when it is a positive whole number; anything else prints nothing,
+# so a bad CHEMX_* override or config value falls back instead of breaking the [ -gt ] checks.
+positive_int() {
+  case "\$1" in
+    ''|*[!0-9]*) return 0 ;;
+  esac
+  if [ "\$1" -gt 0 ] 2>/dev/null; then
+    printf '%s' "\$1"
+  fi
+}
+
 # Load thresholds from .chemx/config.json if available
 CONF_MAX_LINES=""
 CONF_MIN_GRADE=""
@@ -63,12 +74,16 @@ fi
 
 MIN_GRADE="\${CHEMX_MIN_GRADE:-\${CONF_MIN_GRADE:-${minGrade}}}"
 MIN_SCORE="\${CHEMX_MIN_SCORE:-\${CONF_MIN_SCORE:-${minScore}}}"
-MAX_LINES="\${CHEMX_MAX_LINES:-\${CONF_MAX_LINES:-500}}"
+ENV_MAX_LINES="\$(positive_int "\$CHEMX_MAX_LINES")"
+CONF_MAX_LINES="\$(positive_int "\$CONF_MAX_LINES")"
+MAX_LINES="\${ENV_MAX_LINES:-\${CONF_MAX_LINES:-500}}"
 
 STAGED_FILES=\$(git diff --cached --name-only --diff-filter=ACM | grep -E '\\.(jsx?|tsx?|vue|svelte|cs|py|go)\$' | grep -vE '(\\.(d\\.ts|min\\.|test\\.|spec\\.))')
 [ -z "\$STAGED_FILES" ] && exit 0
 
 # Molecule budget: CHEMX_MAX_MOLECULE_LINES wins, then the project profile, then 250.
+# Each is used only when it is a positive whole number, so CHEMX_MAX_MOLECULE_LINES=abc
+# falls back to the profile instead of making the comparison error out and pass.
 # Whichever applies is capped at the MAX_LINES file budget, as the audit checks the
 # 500-line file bound before the molecule budget.
 # With node the profile comes from the first of .chemxrc, .chemxrc.json, .chemx/config.json
@@ -154,18 +169,12 @@ else
     break
   done
 fi
-case "\$PROFILE_MAX_MOL" in
-  ''|*[!0-9]*) PROFILE_MAX_MOL="" ;;
-esac
-MOL_LIMIT="\${CHEMX_MAX_MOLECULE_LINES:-\${PROFILE_MAX_MOL:-250}}"
-case "\$MOL_LIMIT\$MAX_LINES" in
-  *[!0-9]*) ;;
-  *)
-    if [ "\$MOL_LIMIT" -gt "\$MAX_LINES" ]; then
-      MOL_LIMIT="\$MAX_LINES"
-    fi
-    ;;
-esac
+PROFILE_MAX_MOL="\$(positive_int "\$PROFILE_MAX_MOL")"
+ENV_MAX_MOL="\$(positive_int "\$CHEMX_MAX_MOLECULE_LINES")"
+MOL_LIMIT="\${ENV_MAX_MOL:-\${PROFILE_MAX_MOL:-250}}"
+if [ "\$MOL_LIMIT" -gt "\$MAX_LINES" ]; then
+  MOL_LIMIT="\$MAX_LINES"
+fi
 MAX_MOLECULE_LINES="\$MOL_LIMIT"
 
 FAILED=0
