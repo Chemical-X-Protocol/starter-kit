@@ -15,6 +15,7 @@ import {
   resolveHotspotBadge,
   resolveTopSectionColor,
   resolveIndividualPillarGrade,
+  resolveReportMoleculeLineLimit,
   PILLAR_EMOJIS,
   formatPillarReactionBadgesTerminal
 } from './reporter-utils.js';
@@ -70,7 +71,8 @@ export const formatScorecardSection = (report, themeColor = null) => {
   lines.push(`   Files Scanned:       ${BOLD}${metrics.scannedFiles}${RESET} source files`);
   lines.push(`   Total Lines of Code: ${BOLD}${metrics.totalLoc}${RESET} lines of code (avg: ${metrics.avgLoc} lines/file)`);
   lines.push(`   Largest File:        ${BOLD}${metrics.largestFile.filePath || 'None'}${RESET} (${metrics.largestFile.lineCount} lines)`);
-  lines.push(`   Molecule Capsules:   ${metrics.moleculeCount} found (${metrics.moleculeCompliantPct}% compliant < 100 lines of code)`);
+  const moleculeLineLimit = resolveReportMoleculeLineLimit(report);
+  lines.push(`   Molecule Capsules:   ${metrics.moleculeCount} found (${metrics.moleculeCompliantPct}% compliant <= ${moleculeLineLimit} lines of code)`);
   lines.push(`   Custom Hooks:        ${metrics.hookCount} detected`);
   lines.push(`   ${sectionColor}----------------------------------------------------------------------${RESET}`);
   lines.push(`   ${DIM}ℹ Notice: Architectural grade measures AST rules only.${RESET}`);

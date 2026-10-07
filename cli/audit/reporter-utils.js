@@ -1,3 +1,5 @@
+import { DEFAULT_MOLECULE_LINE_LIMIT } from '../config/profiles.js';
+
 export {
   CHEMX_COLORS,
   CHEMX_RGB,
@@ -18,6 +20,9 @@ export const ORANGE = '\x1b[38;5;208m';
 export const DIM = '\x1b[2m';
 export const BOLD = '\x1b[1m';
 export const RESET = '\x1b[0m';
+
+// Reports from older runs or hand-built fixtures may lack metrics.moleculeLineLimit.
+export const resolveReportMoleculeLineLimit = (report) => report?.metrics?.moleculeLineLimit ?? DEFAULT_MOLECULE_LINE_LIMIT;
 
 export const groupViolationsBySeverity = (violations) => {
   const critical = [];
