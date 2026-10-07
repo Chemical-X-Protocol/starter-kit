@@ -3,11 +3,13 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { runPublishBoth, resolvePublishExitCode } from '../scripts/publish-both.mjs';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { runPublishBoth, resolvePublishExitCode, isDirectRun } from '../scripts/publish-both.mjs';
 
 const REAL_PKG_JSON = fileURLToPath(new URL('../package.json', import.meta.url));
 const REAL_PKG_TEXT = fs.readFileSync(REAL_PKG_JSON, 'utf8');
+const SCRIPT_PATH = fileURLToPath(new URL('../scripts/publish-both.mjs', import.meta.url));
 const TMP_PKG_TEXT = '{"name":"x","version":"1.0.0"}\n';
 
 const makePkgDir = (t, text = TMP_PKG_TEXT) => {
@@ -137,6 +139,56 @@ test('resolvePublishExitCode: 1 on any failure or an incomplete run, else 0', ()
   assert.strictEqual(resolvePublishExitCode([ok, failed], 2), 1);
   assert.strictEqual(resolvePublishExitCode([ok], 2), 1, 'a run that stopped early is a failure');
   assert.strictEqual(resolvePublishExitCode([], 0), 0);
+});
+
+// A copy of the script with a no-op gate, reached through a directory symlink, plus an npm that always fails.
+const makeSymlinkedKit = (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-publish-link-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const kitDir = path.join(root, 'kit');
+  const binDir = path.join(root, 'bin');
+  fs.mkdirSync(path.join(kitDir, 'scripts'), { recursive: true });
+  fs.mkdirSync(binDir);
+  fs.copyFileSync(SCRIPT_PATH, path.join(kitDir, 'scripts', 'publish-both.mjs'));
+  const gateStub = 'export const runFrameworkPrePublishGate = async () => {};\n';
+  fs.writeFileSync(path.join(kitDir, 'scripts', 'check-framework-generation.mjs'), gateStub, 'utf8');
+  fs.writeFileSync(path.join(kitDir, 'package.json'), TMP_PKG_TEXT, 'utf8');
+  fs.writeFileSync(path.join(binDir, 'npm'), '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+  fs.symlinkSync(kitDir, path.join(root, 'kitlink'), 'dir');
+  return { kitDir, binDir, linkedScript: path.join(root, 'kitlink', 'scripts', 'publish-both.mjs') };
+};
+
+test('publish-both: running through a symlinked path still publishes and exits 1 on failures', (t) => {
+  const { kitDir, binDir, linkedScript } = makeSymlinkedKit(t);
+
+  const proc = spawnSync(process.execPath, [linkedScript, '--dry-run'], {
+    encoding: 'utf8',
+    timeout: 15000,
+    env: { ...process.env, PATH: `${binDir}${path.delimiter}${process.env.PATH}` }
+  });
+
+  assert.strictEqual(proc.status, 1, `stdout: ${proc.stdout}\nstderr: ${proc.stderr}`);
+  assert.match(proc.stderr, /6 of 6 target\(s\) failed/);
+  assert.strictEqual(fs.readFileSync(path.join(kitDir, 'package.json'), 'utf8'), TMP_PKG_TEXT);
+});
+
+test('isDirectRun: argv[1] through a symlink matches the resolved module URL', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-direct-run-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const realDir = path.join(root, 'real');
+  fs.mkdirSync(realDir);
+  fs.writeFileSync(path.join(realDir, 'entry.mjs'), '', 'utf8');
+  fs.writeFileSync(path.join(realDir, 'other.mjs'), '', 'utf8');
+  fs.symlinkSync(realDir, path.join(root, 'link'), 'dir');
+  // Node hands a module its resolved URL, so the fixture resolves the entry path the same way.
+  const moduleUrl = pathToFileURL(fs.realpathSync(path.join(realDir, 'entry.mjs'))).href;
+
+  assert.strictEqual(isDirectRun(path.join(root, 'link', 'entry.mjs'), moduleUrl), true);
+  assert.strictEqual(isDirectRun(path.join(realDir, 'entry.mjs'), moduleUrl), true);
+  assert.strictEqual(isDirectRun(path.join(realDir, 'other.mjs'), moduleUrl), false);
+  assert.strictEqual(isDirectRun(path.join(root, 'missing.mjs'), moduleUrl), false);
+  assert.strictEqual(isDirectRun(undefined, moduleUrl), false);
+  assert.strictEqual(isDirectRun('', moduleUrl), false);
 });
 
 test('publish-both spec never rewrites the real package.json', () => {

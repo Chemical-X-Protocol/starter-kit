@@ -151,8 +151,14 @@ export const runPublishBoth = async ({
   return resolvePublishExitCode(results, targets.length);
 };
 
+// Node resolves symlinks in import.meta.url but leaves argv[1] as typed, so both sides are realpath'd.
+export const isDirectRun = (argv1, moduleUrl) => {
+  const hasInvokedFile = Boolean(argv1) && fs.existsSync(argv1);
+  if (!hasInvokedFile) return false;
+  return fs.realpathSync(argv1) === fs.realpathSync(fileURLToPath(moduleUrl));
+};
+
 // Set exitCode rather than calling exit() so npm output on inherited stdio is flushed first.
-const isDirectRun = process.argv[1] && __filename === path.resolve(process.argv[1]);
-if (isDirectRun) {
+if (isDirectRun(process.argv[1], import.meta.url)) {
   process.exitCode = await runPublishBoth();
 }
