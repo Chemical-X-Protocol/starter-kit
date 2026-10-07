@@ -24,12 +24,12 @@
   },
   "files": [
     "cli",
+    "!cli/**/*.spec.js",
     "blueprints",
     "scripts",
     "README.md",
     "AGENTS.md",
     "LICENSE",
-    "docs",
     "assets"
   ],
   "exports": {
