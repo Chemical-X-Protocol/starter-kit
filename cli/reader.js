@@ -323,12 +323,12 @@ export const readTokenOptimized = (targetPath, options = {}) => {
   const hasLineRange = typeof startLine === 'number' || typeof endLine === 'number';
   const autoThreshold = typeof options.autoOutlineThreshold === 'number' ? options.autoOutlineThreshold : 100;
 
-  // Directive 1.A Guard: Monolithic files (> 100 lines) read without a target symbol or slice
-  // automatically return AST outline to prevent token exhaustion and host buffer spillover.
+  // Read window: files longer than autoThreshold read without a symbol or slice return an AST
+  // outline to protect context. A tool budget, not an architecture rule (AGENTS.md owns those).
   if (!hasLineRange && totalLines > autoThreshold) {
     const outlineText = generateAstOutline(rawContent, rawPath);
     const notice = [
-      `// [Directive 1.A Surgical Guard] File has ${totalLines} lines (> 100 outer bound).`,
+      `// [chemx read window] File has ${totalLines} lines (over the ${autoThreshold}-line read window).`,
       `// Auto-rendered AST outline to conserve context tokens and prevent host buffer spillover.`,
       `// To read a specific block, request symbol: chemx({ action: 'read', params: { path: '${rawPath}', symbol: '<name>' } })`,
       `// Or specify a line range: chemx({ action: 'read', params: { path: '${rawPath}', startLine: 1, endLine: 50 } })\n`
@@ -356,7 +356,7 @@ export const readTokenOptimized = (targetPath, options = {}) => {
     endIdx = Math.min(rawLines.length, parseInt(String(endLine), 10));
   }
 
-  // Cap maximum slice at 100 lines per read (Directive 1.A outer bound)
+  // Cap each slice to the read window (a tool budget, not an architecture rule)
   const maxLines = 100;
   const isCapped = (endIdx - startIdx) > maxLines;
   if (isCapped) {
@@ -375,7 +375,7 @@ export const readTokenOptimized = (targetPath, options = {}) => {
   }
 
   if (isCapped) {
-    processedContent += `\n// [Truncated at 100 lines per Directive 1.A. Use startLine=${endIdx + 1} to inspect subsequent lines]`;
+    processedContent += `\n// [Truncated at the ${maxLines}-line chemx read window. Use startLine=${endIdx + 1} to inspect subsequent lines]`;
   }
 
   const lineCount = processedContent.split('\n').length;

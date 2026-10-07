@@ -27,7 +27,8 @@ export const buildMcpInstructions = () => {
     '   - chemx({ action: "patch", params: { path: "src/...", search: "...", replace: "..." } }) -> Surgical AST patch',
     '   - chemx({ action: "write", params: { path: "src/...", content: "..." } }) -> Create/write with line budget check',
     '   - chemx({ action: "check", params: { path: "src/..." } }) -> Validate against molecular rules',
-    '   - NOTE: Monolith files (> 100 lines) auto-render AST outlines to prevent host buffer spillover (Directive 1.A). Request targeted symbols instead of full files.',
+    '   - NOTE: Large files read without a symbol or line range return an AST outline. Request targeted symbols instead of full files.',
+    '   - Mutating actions (write, patch, autofix, generate, team claims and posts) need params.projectRoot set to the absolute repo path.',
     '',
     '3. AST SEARCH, BLAST RADIUS & DISCOVERY (ZERO BLIND REFACTORS):',
     '   - Blast Radius: chemx({ action: "q", params: { query: "<atom>", blastRadius: true } }) or chemx({ command: "q <atom> --blast-radius --json" })',
@@ -49,10 +50,8 @@ export const buildMcpInstructions = () => {
     '   - Scaffold Capsule: chemx({ action: "generate", params: { tier: "molecule", name: "m-<feature>-card", desc: "card with metrics and action" } })',
     '   - Pattern Discovery: chemx({ action: "patterns", params: { dir: "src" } }) or chemx({ action: "autofix", params: { path: "src" } })',
     '',
-    'STRICT ZERO-RAW-DOM & 100-LINE BUDGET:',
-    '- 100-line outer bound per molecule capsule file. Never exceed.',
-    '- Zero raw DOM elements in molecules or organisms: raw HTML tags belong strictly in foundational atoms.',
-    '- Two-stage atomic boolean composition: decompose multi-clause logic before decision computeds.',
+    'ARCHITECTURE RULES:',
+    '- AGENTS.md is the canonical rulebook. Every architectural rule and threshold lives there; this guide restates none.',
     ''
   ].join('\n');
 };

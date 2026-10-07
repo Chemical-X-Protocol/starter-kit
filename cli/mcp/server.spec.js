@@ -679,7 +679,7 @@ test('MCP Server: master tool chemx handles action: "read" with auto-outlining o
     assert.strictEqual(res.result.isError, false);
     const text = res.result.content[0].text;
     // Must auto-render outline instead of dumping all 150 lines
-    assert.ok(text.includes('Directive 1.A Surgical Guard'));
+    assert.ok(text.includes('chemx read window'));
     assert.ok(text.includes('Auto-rendered AST outline'));
     assert.ok(text.includes('ref count'));
     assert.ok(text.includes('computed doubled'));

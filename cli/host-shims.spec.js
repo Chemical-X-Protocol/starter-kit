@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { PILLAR_PRESETS } from './pillars-schema.js';
 import { buildHostShims, HOST_SHIM_FILES, SHIM_TOKEN_BUDGET } from './host-shims.js';
 import { isGeneratedContent } from './pillars-write-guard.js';
+import { buildMcpInstructions } from './mcp/antigravity.js';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const estimateTokens = (text) => Math.ceil(text.length / 4);
@@ -48,6 +49,13 @@ test('host-shims: CLAUDE.md names projectRoot for mutating MCP calls and scopes 
   const text = strictShims['CLAUDE.md'];
   assert.ok(text.includes('projectRoot'));
   assert.match(text, /enrich[^\n]*component/i);
+});
+
+test('host-shims: Antigravity MCP instructions point at AGENTS.md and state no threshold', () => {
+  const text = buildMcpInstructions();
+  assert.ok(text.includes('AGENTS.md'));
+  assert.ok(text.includes('projectRoot'));
+  assert.deepStrictEqual(findThresholds(text), []);
 });
 
 test('host-shims: lists only the selected pillars', () => {
