@@ -5,7 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { runPublishBoth, resolvePublishExitCode, isDirectRun } from '../scripts/publish-both.mjs';
+import { runPublishBoth, resolvePublishExitCode } from '../scripts/publish-both.mjs';
+import { isDirectRun } from '../scripts/direct-run.mjs';
 
 const REAL_PKG_JSON = fileURLToPath(new URL('../package.json', import.meta.url));
 const REAL_PKG_TEXT = fs.readFileSync(REAL_PKG_JSON, 'utf8');
@@ -141,21 +142,30 @@ test('resolvePublishExitCode: 1 on any failure or an incomplete run, else 0', ()
   assert.strictEqual(resolvePublishExitCode([], 0), 0);
 });
 
-// A copy of the script with a no-op gate, reached through a directory symlink, plus an npm that always fails.
-const makeSymlinkedKit = (t) => {
+// Copies the whole real scripts/ folder, so shared helper modules come along, and links the kit.
+const makeLinkedKit = (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-publish-link-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const kitDir = path.join(root, 'kit');
-  const binDir = path.join(root, 'bin');
-  fs.mkdirSync(path.join(kitDir, 'scripts'), { recursive: true });
-  fs.mkdirSync(binDir);
-  fs.copyFileSync(SCRIPT_PATH, path.join(kitDir, 'scripts', 'publish-both.mjs'));
-  const gateStub = 'export const runFrameworkPrePublishGate = async () => {};\n';
-  fs.writeFileSync(path.join(kitDir, 'scripts', 'check-framework-generation.mjs'), gateStub, 'utf8');
-  fs.writeFileSync(path.join(kitDir, 'package.json'), TMP_PKG_TEXT, 'utf8');
-  fs.writeFileSync(path.join(binDir, 'npm'), '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+  fs.cpSync(path.dirname(SCRIPT_PATH), path.join(kitDir, 'scripts'), { recursive: true });
   fs.symlinkSync(kitDir, path.join(root, 'kitlink'), 'dir');
-  return { kitDir, binDir, linkedScript: path.join(root, 'kitlink', 'scripts', 'publish-both.mjs') };
+  return { root, kitDir, linkDir: path.join(root, 'kitlink') };
+};
+
+const writeKitFile = (kitDir, rel, content) => {
+  fs.mkdirSync(path.dirname(path.join(kitDir, rel)), { recursive: true });
+  fs.writeFileSync(path.join(kitDir, rel), content, 'utf8');
+};
+
+// A copy of the script with a no-op gate, reached through a directory symlink, plus an npm that always fails.
+const makeSymlinkedKit = (t) => {
+  const { root, kitDir, linkDir } = makeLinkedKit(t);
+  const binDir = path.join(root, 'bin');
+  fs.mkdirSync(binDir);
+  writeKitFile(kitDir, 'scripts/check-framework-generation.mjs', 'export const runFrameworkPrePublishGate = async () => {};\n');
+  writeKitFile(kitDir, 'package.json', TMP_PKG_TEXT);
+  fs.writeFileSync(path.join(binDir, 'npm'), '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+  return { kitDir, binDir, linkedScript: path.join(linkDir, 'scripts', 'publish-both.mjs') };
 };
 
 test('publish-both: running through a symlinked path still publishes and exits 1 on failures', (t) => {
@@ -189,6 +199,23 @@ test('isDirectRun: argv[1] through a symlink matches the resolved module URL', (
   assert.strictEqual(isDirectRun(path.join(root, 'missing.mjs'), moduleUrl), false);
   assert.strictEqual(isDirectRun(undefined, moduleUrl), false);
   assert.strictEqual(isDirectRun('', moduleUrl), false);
+});
+
+// The gate's own imports are stubbed: a generator that always fails and an empty typescript package.
+test('check-framework-generation: running through a symlinked path still runs the gate and exits 1 on failures', (t) => {
+  const { kitDir, linkDir } = makeLinkedKit(t);
+  writeKitFile(kitDir, 'package.json', '{"name":"x","type":"module"}\n');
+  writeKitFile(kitDir, 'cli/generator.js', 'export const runGenerateWizard = async () => ({ success: false });\n');
+  writeKitFile(kitDir, 'cli/audit.js', 'export const auditFile = () => [];\n');
+  writeKitFile(kitDir, 'node_modules/typescript/package.json', '{"name":"typescript","main":"index.js"}\n');
+  writeKitFile(kitDir, 'node_modules/typescript/index.js', 'module.exports = {};\n');
+
+  const linkedGate = path.join(linkDir, 'scripts', 'check-framework-generation.mjs');
+  const proc = spawnSync(process.execPath, [linkedGate], { encoding: 'utf8', timeout: 15000 });
+
+  assert.strictEqual(proc.status, 1, `stdout: ${proc.stdout}\nstderr: ${proc.stderr}`);
+  assert.match(proc.stderr, /\[react\] Failed to scaffold capsule/);
+  assert.match(proc.stderr, /Pre-publish framework gate FAILED/);
 });
 
 test('publish-both spec never rewrites the real package.json', () => {

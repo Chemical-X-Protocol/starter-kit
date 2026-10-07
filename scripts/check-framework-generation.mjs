@@ -11,6 +11,7 @@ import ts from 'typescript';
 import { fileURLToPath } from 'node:url';
 import { runGenerateWizard } from '../cli/generator.js';
 import { auditFile } from '../cli/audit.js';
+import { isDirectRun } from './direct-run.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -186,8 +187,7 @@ export const runFrameworkPrePublishGate = async () => {
   process.stdout.write('\x1b[32m✔ Pre-publish framework gate passed for all frameworks.\x1b[0m\n');
 };
 
-const isDirectRun = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
-if (isDirectRun) {
+if (isDirectRun(process.argv[1], import.meta.url)) {
   runFrameworkPrePublishGate().catch((err) => {
     process.stderr.write(`Fatal error in pre-publish gate: ${err.message}\n`);
     process.exit(1);
