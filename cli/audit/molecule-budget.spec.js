@@ -40,7 +40,23 @@ const BUDGET_CASES = [
   { label: 'loaded atomic-strict profile', config: loadConfigFrom('{"profile":"atomic-strict"}'), limit: 100 },
   { label: 'loaded enforce-file-length', config: loadConfigFrom('{"rules":{"enforce-file-length":true}}'), limit: 100 },
   { label: 'loaded max-line-count-warning 180', config: loadConfigFrom('{"rules":{"max-line-count-warning":180}}'), limit: 180 },
-  { label: 'loaded with --profile=atomic-strict flag', config: loadConfigFrom(null, ['--profile=atomic-strict']), limit: 100 }
+  { label: 'loaded with --profile=atomic-strict flag', config: loadConfigFrom(null, ['--profile=atomic-strict']), limit: 100 },
+  { label: 'flat non-numeric maxLineCountWarning abc', config: { maxLineCountWarning: 'abc' }, limit: 250 },
+  { label: 'flat negative maxLineCountWarning -5', config: { maxLineCountWarning: -5 }, limit: 250 },
+  { label: 'flat zero maxLineCountWarning', config: { maxLineCountWarning: 0 }, limit: 250 },
+  { label: 'flat loose with maxLineCountWarning abc', config: { profile: 'loose', maxLineCountWarning: 'abc' }, limit: 500 },
+  { label: 'flat numeric string maxLineCountWarning 180', config: { maxLineCountWarning: '180' }, limit: 180 },
+  {
+    label: 'loaded loose with max-line-count-warning abc',
+    config: loadConfigFrom('{"profile":"loose","rules":{"max-line-count-warning":"abc"}}'),
+    limit: 500
+  },
+  { label: 'loaded max-line-count-warning -5', config: loadConfigFrom('{"rules":{"max-line-count-warning":-5}}'), limit: 250 },
+  {
+    label: 'loaded loose with max-line-count-warning 0',
+    config: loadConfigFrom('{"profile":"loose","rules":{"max-line-count-warning":0}}'),
+    limit: 500
+  }
 ];
 
 const SWEEP_LINE_COUNTS = [99, 100, 101, 180, 249, 250, 251, 499];
@@ -204,6 +220,15 @@ describe('molecule line budget: runAudit compliance metrics', () => {
       assert.strictEqual(report.metrics.moleculeCompliantPct, 50);
       const flaggedFiles = report.violations.filter((v) => v.rule.startsWith('LINE_BUDGET_')).map((v) => v.filePath);
       assert.deepStrictEqual(flaggedFiles, ['src/molecules/m-a.ts']);
+    });
+  });
+
+  it('ignores a non-numeric max-line-count-warning, so metrics and rule both use the 250 default', () => {
+    withMoleculeProject({ 'm-a.ts': 150, 'm-b.ts': 300 }, '{"rules":{"max-line-count-warning":"abc"}}', (root) => {
+      const report = runAudit('src', { cwd: root, fast: true });
+      assert.strictEqual(report.metrics.moleculeLineLimit, 250);
+      assert.strictEqual(report.metrics.moleculeCompliantPct, 50);
+      assertComplianceMatchesRule(report);
     });
   });
 

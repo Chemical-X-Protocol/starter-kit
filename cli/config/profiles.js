@@ -72,9 +72,18 @@ export const isFileLengthEnforced = (config) => {
   return isLengthFlagged || isStrictProfile;
 };
 
+// parseInt as the pre-commit hook does, so '180' and 180.5 resolve the same in both places.
+const parsePositiveLineLimit = (value) => {
+  const parsed = Number.parseInt(value, 10);
+  return parsed > 0 ? parsed : null;
+};
+
+// A missing, non-numeric or non-positive warning falls back to the selected profile's own default.
 export const resolveMoleculeLineLimit = (config) => {
+  const rules = toRuleSet(config);
   const isStrict = isFileLengthEnforced(config);
-  const warningLimit = toRuleSet(config).maxLineCountWarning || DEFAULT_MOLECULE_LINE_LIMIT;
+  const profileLimit = getProfileDefaults(rules.profile).maxLineCountWarning;
+  const warningLimit = parsePositiveLineLimit(rules.maxLineCountWarning) ?? profileLimit;
   return isStrict ? STRICT_MOLECULE_LINE_LIMIT : warningLimit;
 };
 

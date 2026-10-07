@@ -147,6 +147,19 @@ const PROFILE_CASES = [
     lines: 300,
     status: 0
   },
+  ...['"abc"', '0', '-5'].map((warning) => ({
+    name: `loose with max-line-count-warning ${warning} falls back to the loose 500, so 300 lines pass`,
+    files: { '.chemxrc': `{"profile":"loose","rules":{"max-line-count-warning":${warning}}}\n` },
+    lines: 300,
+    status: 0
+  })),
+  {
+    name: 'pragmatic with max-line-count-warning "abc" falls back to 250, so 260 lines are blocked',
+    files: { '.chemxrc': '{"rules":{"max-line-count-warning":"abc"}}\n' },
+    lines: 260,
+    status: 1,
+    budget: 250
+  },
   {
     name: 'atomic-strict .chemxrc with /* and */ inside glob strings blocks 150 lines at 100',
     files: { '.chemxrc': `${GLOB_CONFIG}\n` },

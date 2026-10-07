@@ -75,7 +75,8 @@ fi
 # With node the profile comes from the first of .chemxrc, .chemxrc.json, .chemx/config.json
 # or package.json "chemx" that parses, as in cli/config/loader.js. atomic-strict or
 # enforce-file-length gives 100, otherwise max-line-count-warning or the profile
-# default, as in cli/audit/rules.js.
+# default, as in cli/audit/rules.js. A warning that is not a positive number, such as
+# "abc", 0 or -5, is ignored in favour of the profile default, as resolveMoleculeLineLimit does.
 # strip() drops // and /* */ comments only outside strings, like stripJsonComments in
 # cli/config/loader.js. It names a double quote and a backslash by their char codes,
 # 34 and 92, because the JS sits inside a double-quoted sh string.
@@ -129,7 +130,9 @@ if command -v node >/dev/null 2>&1; then
     const KEYS = {'enforce-file-length': 'enforceFileLength', 'max-line-count-warning': 'maxLineCountWarning'};
     Object.entries(rc.rules || {}).forEach(([key, value]) => { rules[KEYS[key] || key] = value; });
     const isStrict = rules.enforceFileLength === true || rules.profile === 'atomic-strict';
-    process.stdout.write(String(isStrict ? 100 : parseInt(rules.maxLineCountWarning, 10) || 250));
+    const parsed = parseInt(rules.maxLineCountWarning, 10);
+    const warning = parsed > 0 ? parsed : WARN[profile];
+    process.stdout.write(String(isStrict ? 100 : warning));
   " 2>/dev/null)
 else
   # Without node only "profile": "atomic-strict" and enforce-file-length (or enforceFileLength)
