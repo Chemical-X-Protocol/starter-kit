@@ -30,8 +30,17 @@ jobs:
             npm install
           fi
 
+      # Gate on the ratchet (chemx-ratchet.json): fail only when a rule rises above its recorded
+      # baseline. Set the CHEMX_MIN_GRADE / CHEMX_MIN_SCORE repo variables to add absolute floors.
       - name: Run Chemical X Architectural Audit
-        run: npx --yes chemx audit --min-grade=${{ vars.CHEMX_MIN_GRADE || 'B' }} --min-score=${{ vars.CHEMX_MIN_SCORE || 80 }} --markdown --output=AUDIT_REPORT.md
+        env:
+          CHEMX_MIN_GRADE: ${{ vars.CHEMX_MIN_GRADE }}
+          CHEMX_MIN_SCORE: ${{ vars.CHEMX_MIN_SCORE }}
+        run: |
+          set -- --markdown --output=AUDIT_REPORT.md
+          if [ -n "$CHEMX_MIN_GRADE" ]; then set -- "$@" "--min-grade=$CHEMX_MIN_GRADE"; fi
+          if [ -n "$CHEMX_MIN_SCORE" ]; then set -- "$@" "--min-score=$CHEMX_MIN_SCORE"; fi
+          node cli/index.js audit "$@"
       - name: Upload Audit Scorecard Artifact
         if: always()
         uses: actions/upload-artifact@v4
