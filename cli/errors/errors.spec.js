@@ -17,10 +17,18 @@ import {
 } from './formatter.js';
 import {
   handleError,
+  resolveChemxVersion,
   resolveTargetIssuesRepo,
   saveIssueArtifact
 } from './catcher.js';
 import { withErrorCatcher } from './index.js';
+
+describe('Universal Error Catcher: version', () => {
+  it('reports the installed package version, not a hardcoded one', () => {
+    const pkg = JSON.parse(fs.readFileSync(new URL('../../package.json', import.meta.url), 'utf-8'));
+    assert.equal(resolveChemxVersion(), pkg.version);
+  });
+});
 
 describe('Universal Error Catcher: Sanitizer', () => {
   it('masks GitHub personal access tokens and npm tokens', () => {

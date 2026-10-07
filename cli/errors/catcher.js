@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import { copyToClipboard } from '../audit/social-git.js';
 import { formatIssueContent } from './formatter.js';
 import { publishIssue } from './publisher.js';
@@ -5,6 +6,15 @@ import { openBrowser, confirmAction } from '../terminal.js';
 import { resolveTargetIssuesRepo, saveIssueArtifact } from './storage.js';
 
 export { resolveTargetIssuesRepo, saveIssueArtifact };
+
+export const resolveChemxVersion = () => {
+  try {
+    const pkgContent = fs.readFileSync(new URL('../../package.json', import.meta.url), 'utf-8');
+    return JSON.parse(pkgContent).version || 'unknown';
+  } catch {
+    return 'unknown';
+  }
+};
 
 const promptUserToPublish = async (targetRepo, issue) => {
   const confirmed = await confirmAction('Post this error report directly to GitHub Issues?', 'Post Issue', 'Skip', false);
@@ -42,7 +52,7 @@ export const handleError = async (err, options = {}) => {
     timestamp: new Date().toISOString(),
     nodeVersion: process.version,
     platform: `${process.platform}-${process.arch}`,
-    chemxVersion: options.chemxVersion || '26.9.17',
+    chemxVersion: options.chemxVersion || resolveChemxVersion(),
     context: options.context || {}
   };
 
