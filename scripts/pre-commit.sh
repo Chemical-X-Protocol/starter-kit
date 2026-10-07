@@ -72,10 +72,10 @@ fi
 # Molecule budget: CHEMX_MAX_MOLECULE_LINES wins, then the project profile, then 250.
 # Whichever applies is capped at the MAX_LINES file budget, as the audit checks the
 # 500-line file bound before the molecule budget.
-# The profile comes from the first of .chemxrc, .chemxrc.json, .chemx/config.json or
-# package.json "chemx" that parses, as in cli/config/loader.js. atomic-strict or
+# With node the profile comes from the first of .chemxrc, .chemxrc.json, .chemx/config.json
+# or package.json "chemx" that parses, as in cli/config/loader.js. atomic-strict or
 # enforce-file-length gives 100, otherwise max-line-count-warning or the profile
-# default, as in cli/audit/rules.js. Without node only strict settings are detected.
+# default, as in cli/audit/rules.js.
 PROFILE_MAX_MOL=""
 if command -v node >/dev/null 2>&1; then
   PROFILE_MAX_MOL=$(node -e "
@@ -101,9 +101,16 @@ if command -v node >/dev/null 2>&1; then
     process.stdout.write(String(isStrict ? 100 : parseInt(rules.maxLineCountWarning, 10) || 250));
   " 2>/dev/null)
 else
+  # Without node only "profile": "atomic-strict" and enforce-file-length (or enforceFileLength)
+  # true are detected, giving 100, and only in the first of .chemxrc, .chemxrc.json or
+  # .chemx/config.json that exists, even when it does not parse. package.json "chemx", the
+  # loose profile and max-line-count-warning are not read, so anything else falls back to 250.
+  # Block comments are stripped across lines first, then lines starting with //.
   for RC in .chemxrc .chemxrc.json .chemx/config.json; do
     [ -f "$RC" ] || continue
-    if grep -v '^[[:space:]]*//' "$RC" | grep -Eq '"profile"[[:space:]]*:[[:space:]]*"atomic-strict"|"(enforce-file-length|enforceFileLength)"[[:space:]]*:[[:space:]]*true'; then
+    if tr '\n' '\001' < "$RC" | sed 's|/\*[^*]*\*\**\([^/*][^*]*\*\**\)*/||g' | tr '\001' '\n' \
+      | grep -v '^[[:space:]]*//' \
+      | grep -Eq '"profile"[[:space:]]*:[[:space:]]*"atomic-strict"|"(enforce-file-length|enforceFileLength)"[[:space:]]*:[[:space:]]*true'; then
       PROFILE_MAX_MOL=100
     fi
     break

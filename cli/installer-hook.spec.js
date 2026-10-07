@@ -99,6 +99,19 @@ const PROFILE_CASES = [
     budget: 100
   },
   {
+    name: 'a block-commented atomic-strict setting is ignored, so 150 lines pass',
+    files: { '.chemxrc': '/*\n  "profile": "atomic-strict"\n*/\n{"profile":"pragmatic"}\n' },
+    lines: 150,
+    status: 0
+  },
+  {
+    name: 'an invalid .chemxrc is skipped, so .chemxrc.json atomic-strict blocks 150 lines at 100',
+    files: { '.chemxrc': '{"profile":"pragmatic",,}\n', '.chemxrc.json': '{"profile":"atomic-strict"}\n' },
+    lines: 150,
+    status: 1,
+    budget: 100
+  },
+  {
     name: 'legacy .chemx/config.json maxMoleculeLineCount 100 no longer pins the budget',
     files: { '.chemx/config.json': '{"minGrade":"B","minScore":80,"maxLineCount":500,"maxMoleculeLineCount":100}\n' },
     lines: 150,
@@ -172,6 +185,44 @@ const NO_NODE_CASES = [
   {
     name: 'a commented-out atomic-strict line is ignored, so 150 lines pass',
     files: { '.chemxrc': '// {"profile":"atomic-strict"}\n{"profile":"pragmatic"}\n' },
+    lines: 150,
+    status: 0
+  },
+  {
+    name: 'a one-line block comment holding atomic-strict is ignored, so 150 lines pass',
+    files: { '.chemxrc': '/* {"profile":"atomic-strict"} */\n{"profile":"pragmatic"}\n' },
+    lines: 150,
+    status: 0
+  },
+  {
+    name: 'a multi-line block comment holding atomic-strict is ignored, so 150 lines pass',
+    files: { '.chemxrc': '/*\n  "profile": "atomic-strict"\n*/\n{"profile":"pragmatic"}\n' },
+    lines: 150,
+    status: 0
+  },
+  {
+    name: 'atomic-strict after a block comment on the same line still blocks 150 lines at 100',
+    files: { '.chemxrc': '/* team */ {"profile":"atomic-strict"} /* end */\n' },
+    lines: 150,
+    status: 1,
+    budget: 100
+  },
+  {
+    name: 'enforce-file-length between two block comments still blocks 150 lines at 100',
+    files: { '.chemxrc': '{\n/* a */ "rules": {"enforce-file-length": true} /* b\n*/\n}\n' },
+    lines: 150,
+    status: 1,
+    budget: 100
+  },
+  {
+    name: 'known gap: an invalid .chemxrc still ends the search, so .chemxrc.json atomic-strict is missed and 150 lines pass',
+    files: { '.chemxrc': '{"profile":"pragmatic",,}\n', '.chemxrc.json': '{"profile":"atomic-strict"}\n' },
+    lines: 150,
+    status: 0
+  },
+  {
+    name: 'known gap: package.json "chemx" is not read, so its atomic-strict is missed and 150 lines pass',
+    files: { 'package.json': '{"name":"consumer","chemx":{"profile":"atomic-strict"}}\n' },
     lines: 150,
     status: 0
   },
