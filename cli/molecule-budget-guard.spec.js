@@ -10,6 +10,7 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
 const GUARDED_FILES = [
   'README.md',
   'STANDARDS.md',
+  'app/components/molecules/funnel/funnel-system-layers-core.data.ts',
   'scripts/pre-commit.sh',
   'cli/audit/metrics.js',
   'cli/audit/prompts.js',
