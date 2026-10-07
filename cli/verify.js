@@ -284,8 +284,9 @@ export const runProjectVerify = async (rawArgs = [], isCli = false, options = {}
   const dirFlag = rawArgs.find((a) => a.startsWith('--dir='));
   const explicitDir = dirFlag ? dirFlag.split('=')[1] : options.targetDir;
   const baseDir = options.cwd || process.cwd();
-  const cwd = findProjectRoot(explicitDir ? path.resolve(baseDir, explicitDir) : baseDir);
-  const scope = resolveAuditScope({ projectRoot: cwd, explicitDir });
+  const explicitAbsDir = explicitDir ? path.resolve(baseDir, explicitDir) : null;
+  const cwd = findProjectRoot(explicitAbsDir ?? baseDir);
+  const scope = resolveAuditScope({ projectRoot: cwd, explicitDir: explicitAbsDir });
 
   const nmStatus = checkNodeModules(cwd);
   if (nmStatus) {

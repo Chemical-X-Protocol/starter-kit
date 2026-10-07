@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { resolveCallScope, extractCallTarget } from './call-scope.js';
+import { parseCommand } from './tools.js';
 
 const makeProject = (marker = '.chemx') => {
   const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-scope-')));
@@ -39,15 +40,68 @@ test('resolveCallScope: absolute path prefers nearest chemx marker over nearer p
   }
 });
 
-test('resolveCallScope: absolute path with no marker uses its own directory', () => {
+test('resolveCallScope: absolute read with no marker uses its own directory', () => {
   const bare = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-bare-')));
   try {
-    const scope = resolveCallScope({ target: { action: 'write', projectRoot: null, targetPath: path.join(bare, 'x.ts') }, declaredRoot: null, bootRoot: null });
+    const scope = resolveCallScope({ target: { action: 'read', projectRoot: null, targetPath: path.join(bare, 'x.ts') }, declaredRoot: null, bootRoot: null });
     assert.strictEqual(scope.root, bare);
-    assert.strictEqual(scope.source, 'path');
   } finally {
     cleanup(bare);
   }
+});
+
+test('resolveCallScope: absolute write with no marker is refused', () => {
+  const bare = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-bare-')));
+  try {
+    const scope = resolveCallScope({ target: { action: 'write', projectRoot: null, targetPath: path.join(bare, 'authorized_keys') }, declaredRoot: null, bootRoot: null });
+    assert.strictEqual(scope.ok, false);
+    assert.ok(scope.error.includes('authorized_keys'));
+  } finally {
+    cleanup(bare);
+  }
+});
+
+test('resolveCallScope: pathless mutations are refused under boot fallback', () => {
+  const boot = makeProject();
+  try {
+    const calls = [
+      extractCallTarget('chemx', { action: 'autofix', params: {} }),
+      extractCallTarget('chemx', { action: 'generate_capsule', params: { name: 'm-x' } }),
+      extractCallTarget('chemx', { action: 'team_task', params: { subAction: 'claim', taskId: 1 } }),
+      extractCallTarget('chemx', { action: 'team_post', params: { message: 'hi' } })
+    ];
+    for (const target of calls) {
+      const scope = resolveCallScope({ target, declaredRoot: null, bootRoot: boot });
+      assert.strictEqual(scope.ok, false, `${target.action} should be refused`);
+    }
+    const listing = extractCallTarget('chemx', { action: 'team_task', params: { subAction: 'list' } });
+    assert.strictEqual(resolveCallScope({ target: listing, declaredRoot: null, bootRoot: boot }).ok, true);
+  } finally {
+    cleanup(boot);
+  }
+});
+
+test('resolveCallScope: every path param is checked for escape', () => {
+  const projectA = makeProject();
+  try {
+    const target = extractCallTarget('chemx', { action: 'generate', projectRoot: projectA, params: { dir: 'src', targetDir: '../../other/src' } });
+    const scope = resolveCallScope({ target, declaredRoot: null, bootRoot: null });
+    assert.strictEqual(scope.ok, false);
+    assert.ok(scope.error.includes('../../other/src'));
+  } finally {
+    cleanup(projectA);
+  }
+});
+
+test('parseCommand: audit without a path leaves scope to the resolver', () => {
+  assert.strictEqual(parseCommand('audit', {}).params.path, undefined);
+});
+
+test('parseCommand: team task list forwards --all, --status, and --limit', () => {
+  const parsed = parseCommand('team task list --status=done --limit=5 --all', {});
+  assert.strictEqual(parsed.params.status, 'done');
+  assert.strictEqual(parsed.params.limit, 5);
+  assert.strictEqual(parsed.params.all, true);
 });
 
 test('resolveCallScope: refuses relative write when only boot root is known', () => {

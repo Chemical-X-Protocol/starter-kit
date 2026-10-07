@@ -18,7 +18,13 @@ export const evaluateGateVerdict = ({ violations, ratchetEval }) => {
   return { isPassing: !hasSevereViolation, basis: 'severity', regressions: [], note: ratchetEval.message ?? null };
 };
 
-export const computeGateVerdict = ({ projectRoot, scope, violations }) => {
-  const ratchetEval = evaluateRatchet(readRatchet(projectRoot), { scope, violations });
+const PARTIAL_SCAN_EVAL = {
+  status: 'partial',
+  regressions: [],
+  message: 'Partial scan (--git, --changed, or --fast): the ratchet applies to full scans only; using severity gate.'
+};
+
+export const computeGateVerdict = ({ projectRoot, scope, violations, isPartialScan = false }) => {
+  const ratchetEval = isPartialScan ? PARTIAL_SCAN_EVAL : evaluateRatchet(readRatchet(projectRoot), { scope, violations });
   return evaluateGateVerdict({ violations, ratchetEval });
 };

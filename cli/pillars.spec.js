@@ -214,3 +214,13 @@ test('pillars-write-guard: isGeneratedContent recognizes legacy generated header
   assert.strictEqual(isGeneratedContent(legacy), true);
   assert.strictEqual(isGeneratedContent(HAND_AUTHORED), false);
 });
+
+test('pillars-wizard: an existing backup is never overwritten', async () => {
+  await withTmp('chemx-pillars-backup-', async (tmpDir) => {
+    fs.writeFileSync(path.join(tmpDir, 'AGENTS.md'), HAND_AUTHORED);
+    await runPillarsWizard(['--preset=recommended', '-y', '--write', '--force'], tmpDir);
+    await runPillarsWizard(['--preset=strict', '-y', '--write'], tmpDir);
+    assert.strictEqual(readRel(tmpDir, 'AGENTS.md.chemx-backup'), HAND_AUTHORED);
+    assert.ok(exists(tmpDir, 'AGENTS.md.chemx-backup.2'));
+  });
+});

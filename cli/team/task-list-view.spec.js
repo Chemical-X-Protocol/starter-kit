@@ -74,3 +74,13 @@ test('task list view: status filter and limit recover the rest', async () => {
     assert.strictEqual(limited.total, 35);
   });
 });
+
+test('task list view: default includes blocked and pending approval tasks', async () => {
+  await withProject(async (cwd) => {
+    const db = openIndexDb(cwd);
+    createTask(db, { title: 'Blocked work', status: 'blocked' });
+    createTask(db, { title: 'Awaiting approval', status: 'pending_approval' });
+    const view = await handleChemxTeamTask({ action: 'list' }, cwd);
+    assert.strictEqual(view.total, 37);
+  });
+});

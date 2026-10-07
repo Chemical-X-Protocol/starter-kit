@@ -243,6 +243,7 @@ test('MCP Server: prompts/list and prompts/get', async () => {
 test('MCP Server: tools/call chemx_autofix performs deterministic cleanup', async () => {
   const handler = createMcpHandler();
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-mcp-autofix-'));
+  fs.mkdirSync(path.join(tempDir, '.chemx'));
   const testFile = path.join(tempDir, 'sample.ts');
   fs.writeFileSync(testFile, 'const title = "Dashboard — Analytics";\n// hope this helps', 'utf-8');
 
@@ -447,6 +448,7 @@ test('MCP Server: tools/call chemx_read extracts outline without full file dump'
 
 test('MCP Server: tools/call chemx_patch surgically modifies target content', async () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-patch-mcp-'));
+  fs.mkdirSync(path.join(tmpDir, '.chemx'));
   const testFile = path.join(tmpDir, 'sample.ts');
   fs.writeFileSync(testFile, 'const greeting = "hello world";\n', 'utf-8');
 
@@ -474,6 +476,7 @@ test('MCP Server: tools/call chemx_patch surgically modifies target content', as
 
 test('MCP Server: tools/call chemx_write creates and indexes file', async () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-mcp-write-'));
+  fs.mkdirSync(path.join(tmpDir, '.chemx'));
   const testFile = path.join(tmpDir, 'sample-written.ts');
   const handler = createMcpHandler();
 
@@ -739,4 +742,33 @@ test('MCP Server: relative master write without declared root is refused', async
   });
   assert.strictEqual(res.result.isError, true);
   assert.strictEqual(fs.existsSync(probe), false);
+});
+
+test('MCP Server: compact wire format keeps default task list under 2000 bytes', async () => {
+  const { openIndexDb } = await import('../search-db.js');
+  const { createTask } = await import('../team/team-db-tasks.js');
+  const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-wire-')));
+  try {
+    const db = openIndexDb(tmp);
+    for (let i = 0; i < 30; i++) {
+      createTask(db, { title: `Decompose inline multi-clause boolean comparison in module number ${i} per Directive 3.A`, status: 'in_progress', assigned_agent_id: '@agent-coder-7' });
+    }
+    const handler = createMcpHandler({ cwd: tmp });
+    const res = await handler.handleRequest({
+      jsonrpc: '2.0',
+      id: 2003,
+      method: 'tools/call',
+      params: { name: 'chemx', arguments: { action: 'team_task', params: { subAction: 'list' } } }
+    });
+    const wire = res.result.content.map((c) => c.text).join('');
+    assert.ok(wire.length < 2000, `wire payload ${wire.length} bytes`);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('MCP Server: chemx mcp without a positional dir does not declare its start directory', async () => {
+  const { resolveServerOptions } = await import('./index.js');
+  assert.deepStrictEqual(resolveServerOptions([]), {});
+  assert.deepStrictEqual(resolveServerOptions(['/some/project']), { cwd: '/some/project' });
 });

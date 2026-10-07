@@ -139,7 +139,8 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
     report.rebaseline = { file: RATCHET_FILE, scope: auditRelDir, rules: ruleCount, violations: report.totalViolations };
     if (!isJson) process.stdout.write(`\x1b[32m✔\x1b[0m Recorded ${RATCHET_FILE} for scope "${auditRelDir}": ${ruleCount} rules, ${report.totalViolations} violations\n`);
   }
-  report.gate = computeGateVerdict({ projectRoot: process.cwd(), scope: auditRelDir, violations: report.violations });
+  const isPartialAudit = Boolean(fileList) || isFast;
+  report.gate = computeGateVerdict({ projectRoot: process.cwd(), scope: auditRelDir, violations: report.violations, isPartialScan: isPartialAudit });
   saveAuditSnapshot(report);
   try {
     const syncRes = syncSearchIndex(targetDir, process.cwd());

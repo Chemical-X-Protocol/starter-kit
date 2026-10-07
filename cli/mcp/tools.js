@@ -12,10 +12,21 @@ export {
   handleChemxTeamStatus, handleChemxTeamFeed, handleChemxTeamPost, handleChemxTeamTask, handleChemxTeamLock, handleChemxReportIssue, handleChemxProject, handleChemxTesseract
 };
 
+const parseListFlags = (parts) => {
+  const flags = {};
+  for (const part of parts) {
+    if (part === '--all') flags.all = true;
+    if (part.startsWith('--status=')) flags.status = part.split('=')[1];
+    if (part.startsWith('--limit=')) flags.limit = parseInt(part.split('=')[1], 10);
+  }
+  return flags;
+};
+
 export const parseCommand = (command, params) => {
   const parts = command.trim().split(/\s+/);
   const subCmd = parts[0];
-  if (subCmd === 'audit' || subCmd === 'check') return { action: subCmd, params: { path: parts[1] || 'src', ...params } };
+  if (subCmd === 'audit') return { action: subCmd, params: { path: parts[1], ...params } };
+  if (subCmd === 'check') return { action: subCmd, params: { path: parts[1] || 'src', ...params } };
   if (subCmd === 'test') {
     const targetMatch = command.match(/--target=([^\s]+)/);
     const filterMatch = command.match(/(?:--filter=|-t=|-t\s+)([^\s]+)/);
@@ -92,7 +103,7 @@ export const parseCommand = (command, params) => {
     const TEAM_ACTIONS = { status: 'team_status', feed: 'team_feed', task: 'team_task', lock: 'team_lock', inbox: 'team_inbox', dm: 'team_dm' };
     const sub = parts[1] || 'status';
     const action = TEAM_ACTIONS[sub] || 'team_task';
-    const parsedParams = { ...params };
+    const parsedParams = { ...parseListFlags(parts), ...params };
     const isTaskSub = sub === 'task' || !TEAM_ACTIONS[parts[1]];
     if (isTaskSub) {
       const taskSub = TEAM_ACTIONS[parts[1]] ? parts[2] : parts[1];
@@ -110,7 +121,7 @@ export const parseCommand = (command, params) => {
     return { action, params: parsedParams };
   }
   if (subCmd === 'team_task') {
-    const parsedParams = { ...params };
+    const parsedParams = { ...parseListFlags(parts), ...params };
     const taskSub = parts[1];
     const isCreate = ['add', 'create', 'new'].includes(taskSub);
     if (isCreate) {

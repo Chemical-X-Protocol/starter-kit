@@ -105,3 +105,13 @@ test('audit scope: cli audit --git audits the change set even when scope is ambi
     }
   });
 });
+
+test('audit scope: verify resolves a monorepo --dir once, from the caller directory', async () => {
+  await withProject({ dirs: ['packages/a/src', 'node_modules'] }, async (root) => {
+    fs.writeFileSync(path.join(root, 'packages/a/package.json'), JSON.stringify({ name: 'a', scripts: { test: 'node -e ""', typecheck: 'node -e ""' } }));
+    fs.mkdirSync(path.join(root, 'packages/a/node_modules'));
+    fs.writeFileSync(path.join(root, 'packages/a/src/x.js'), 'export const x = 1;\n');
+    const summary = await runProjectVerify(['--json', '--dir=packages/a/src'], false, { cwd: root, print: false });
+    assert.deepStrictEqual(summary.scope, { dir: 'src', source: 'explicit' });
+  });
+});

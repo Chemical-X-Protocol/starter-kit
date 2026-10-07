@@ -18,8 +18,6 @@ export const findProjectRoot = (startDir = process.cwd()) => {
   if (pkgFile) return path.dirname(pkgFile);
   const chemxDir = findFileUpward('.chemx', startDir);
   if (chemxDir) return path.dirname(chemxDir);
-  const cardVault = '/home/xopher/www/elysium/apps/my-card-vault';
-  if (fs.existsSync(cardVault)) return cardVault;
   return startDir;
 };
 

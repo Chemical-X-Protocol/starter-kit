@@ -1,8 +1,8 @@
 import { toColumnar } from '../columnar.js';
 
-export const DEFAULT_LIST_STATUSES = ['queued', 'in_progress', 'review'];
+export const DEFAULT_LIST_STATUSES = ['queued', 'in_progress', 'review', 'blocked', 'pending_approval'];
 export const DEFAULT_LIST_LIMIT = 20;
-const TITLE_MAX = 60;
+const TITLE_MAX = 48;
 const LIST_COLUMNS = ['id', 'status', 'priority', 'assigned_agent_id', 'title'];
 
 const truncateTitle = (task) => {

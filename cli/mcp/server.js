@@ -93,7 +93,7 @@ export const createMcpHandler = (options = {}) => {
 
       try {
         const toolOutput = await executeMcpTool(toolName, toolArgs, scope.root);
-        const serialized = typeof toolOutput === 'string' ? toolOutput : JSON.stringify(toolOutput, null, 2);
+        const serialized = typeof toolOutput === 'string' ? toolOutput : JSON.stringify(toolOutput);
         return {
           jsonrpc: '2.0',
           id,

@@ -22,8 +22,12 @@ export const runMcpServer = async (rawArgs = []) => {
   // Stdio server must keep stdout strictly reserved for JSON-RPC messages.
   // Informative logs go to stderr.
   process.stderr.write('⚡ Chemical X Protocol MCP Server active (stdio transport)\n');
-  const targetDir = rawArgs.find((a) => !a.startsWith('-')) || process.cwd();
-  startStdioServer({ cwd: targetDir });
+  startStdioServer(resolveServerOptions(rawArgs));
+};
+
+export const resolveServerOptions = (rawArgs = []) => {
+  const explicitDir = rawArgs.find((a) => !a.startsWith('-'));
+  return explicitDir ? { cwd: explicitDir } : {};
 };
 
 export const runMcpInstaller = async (rawArgs = []) => {

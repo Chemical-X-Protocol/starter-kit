@@ -22,6 +22,13 @@ const resolveExistingAction = (current, nextContent, isGuarded, isForce) => {
   return isRefused ? 'refused' : 'overwrite';
 };
 
+const nextFreeBackupPath = (filePath) => {
+  const base = `${filePath}.chemx-backup`;
+  let candidate = base;
+  for (let n = 2; fs.existsSync(candidate); n++) candidate = `${base}.${n}`;
+  return candidate;
+};
+
 export const planFileWrite = (filePath, nextContent, { isForce = false, isGuarded = true } = {}) => {
   const isNewFile = !fs.existsSync(filePath);
   if (isNewFile) return { file: filePath, action: 'create', backupPath: null };
@@ -29,7 +36,7 @@ export const planFileWrite = (filePath, nextContent, { isForce = false, isGuarde
   const current = fs.readFileSync(filePath, 'utf-8');
   const action = resolveExistingAction(current, nextContent, isGuarded, isForce);
   const needsBackup = isGuarded && action === 'overwrite';
-  return { file: filePath, action, backupPath: needsBackup ? `${filePath}.chemx-backup` : null };
+  return { file: filePath, action, backupPath: needsBackup ? nextFreeBackupPath(filePath) : null };
 };
 
 export const applyFileWrites = (plans) => {

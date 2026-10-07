@@ -79,3 +79,8 @@ test('detector: detectProjectBuildCommand falls back to vite when vite.config ex
 
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
+
+test('findProjectRoot: never falls back to another project', async () => {
+  const { findProjectRoot } = await import('./detector.js');
+  assert.strictEqual(findProjectRoot('/'), '/');
+});
