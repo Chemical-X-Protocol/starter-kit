@@ -6,7 +6,7 @@ import { obtainLicenseKey, fetchStarterKitFiles, loadLocalBlueprintFiles } from 
 import { runPillarsWizard } from './pillars-wizard.js';
 import { resolvePackageManager } from './build/detector.js';
 import { resolveFramework } from './project-detector.js';
-import { getFrameworkConfig, buildScaffoldPackageJson } from './scaffold-frameworks.js';
+import { getFrameworkConfig, buildScaffoldPackageJson, resolveScaffoldTarget } from './scaffold-frameworks.js';
 import { printInitHelp, printScaffoldHelp } from './help.js';
 
 const extractTargetName = (projectName, rawArgs) => {
@@ -74,14 +74,6 @@ export const runScaffold = async (projectName, rawArgs = [], onRunAudit = null) 
     process.stderr.write(`\x1b[31m✕ Error: Directory '${finalDirName}' already exists and is not empty.\x1b[0m\n`);
     process.exit(1);
   }
-
-  const resolveScaffoldTarget = (rel) => {
-    if (rel === '_package.json') return 'package.json';
-    if (rel === '_tsconfig.json') return 'tsconfig.json';
-    if (rel === '_vitest.config.ts') return 'vitest.config.ts';
-    if (rel === '_gitignore') return '.gitignore';
-    return rel;
-  };
 
   process.stdout.write(`Scaffolding ${fwConfig.name} Molecular Architecture into: \x1b[36m${finalDirName}/\x1b[0m\n`);
   fs.mkdirSync(targetDir, { recursive: true });

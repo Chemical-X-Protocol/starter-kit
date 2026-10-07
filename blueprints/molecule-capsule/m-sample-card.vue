@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import AButton from '../../atoms/a-button.vue';
+import AButton from '../atoms/a-button.vue';
 import type { MSampleCardProps, SampleCardBadgeDescriptor } from './types';
 
 const props = withDefaults(defineProps<MSampleCardProps>(), {

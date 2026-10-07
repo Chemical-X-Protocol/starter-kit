@@ -3,6 +3,35 @@ import { normalizeFramework } from './project-detector.js';
 
 export const SUPPORTED_FRAMEWORKS = ['react', 'vue', 'svelte'];
 
+// Blueprints mirror the kit's source tree; a scaffolded project gets a src/ layout. Directory
+// prefixes keep their relative structure, so imports between blueprint files still resolve.
+const SCAFFOLD_FILE_TARGETS = {
+  '_package.json': 'package.json',
+  '_tsconfig.json': 'tsconfig.json',
+  '_vitest.config.ts': 'vitest.config.ts',
+  '_gitignore': '.gitignore',
+  'shims-vue.d.ts': 'src/shims-vue.d.ts'
+};
+
+const SCAFFOLD_DIR_TARGETS = [
+  ['molecule-capsule/', 'src/components/m-sample-card/'],
+  ['atoms/', 'src/components/atoms/'],
+  ['workflows/', '.github/workflows/']
+];
+
+const isViewTemplateFile = (rel) => /^_?view-template\./.test(rel);
+
+export const resolveScaffoldTarget = (rel) => {
+  const hasFileTarget = Object.hasOwn(SCAFFOLD_FILE_TARGETS, rel);
+  if (hasFileTarget) return SCAFFOLD_FILE_TARGETS[rel];
+  if (isViewTemplateFile(rel)) return `src/views/${rel}`;
+  const dirTarget = SCAFFOLD_DIR_TARGETS.find(([prefix]) => rel.startsWith(prefix));
+  const hasDirTarget = dirTarget !== undefined;
+  if (!hasDirTarget) return rel;
+  const [prefix, target] = dirTarget;
+  return target + rel.slice(prefix.length);
+};
+
 export const FRAMEWORK_CONFIGS = {
   react: {
     id: 'react',

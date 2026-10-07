@@ -1,5 +1,5 @@
 <script lang="ts">
-  import AButton from '../../atoms/a-button.svelte';
+  import AButton from '../atoms/a-button.svelte';
   import type { MSampleCardProps, SampleCardBadgeDescriptor } from './types';
 
   let {

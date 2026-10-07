@@ -38,7 +38,7 @@ describe('Scaffolding Entrypoint Invocations', () => {
 
     assert.equal(result.status, 0, `Expected exit 0, got: ${result.status}\nStdout: ${result.stdout}\nStderr: ${result.stderr}`);
     assert.ok(fs.existsSync(path.join(targetDir, 'package.json')), 'package.json should be created in targetDir');
-    assert.ok(fs.existsSync(path.join(targetDir, 'molecule-capsule')), 'molecule-capsule/ should be created in targetDir');
+    assert.ok(fs.existsSync(path.join(targetDir, 'src/components/m-sample-card')), 'src/components/m-sample-card/ should be created in targetDir');
   });
 
   test('node cli/create.js --yes (no dir argument) scaffolds into default my-molecular-app', () => {
@@ -288,4 +288,41 @@ describe('Scaffolding Entrypoint Invocations', () => {
     assert.strictEqual(pkg.dependencies.vue, undefined, 'Must not have vue in dependencies');
     assert.strictEqual(pkg.dependencies.react, undefined, 'Must not have react in dependencies');
   });
+
+  const RELATIVE_IMPORT = /(?:from\s+|import\s*\(\s*|@use\s+)['"](\.{1,2}\/[^'"]+)['"]/g;
+  const IMPORT_SUFFIXES = ['', '.ts', '.tsx', '.d.ts', '.vue', '.svelte', '.scss', '/index.ts'];
+
+  const findUnresolvedImports = (projectDir) => getAllFiles(projectDir)
+    .filter((file) => /\.(ts|tsx|vue|svelte)$/.test(file))
+    .flatMap((file) => [...fs.readFileSync(file, 'utf-8').matchAll(RELATIVE_IMPORT)]
+      .map((match) => ({ file, specifier: match[1] })))
+    .filter(({ file, specifier }) => {
+      const base = path.resolve(path.dirname(file), specifier);
+      const sassPartial = path.join(path.dirname(base), `_${path.basename(base)}`);
+      const candidates = [...IMPORT_SUFFIXES.map((s) => base + s), sassPartial + '.scss'];
+      return !candidates.some((candidate) => fs.existsSync(candidate) && fs.statSync(candidate).isFile());
+    })
+    .map(({ file, specifier }) => `${path.relative(projectDir, file)} -> ${specifier}`);
+
+  for (const [framework, ext] of [['react', 'tsx'], ['vue', 'vue'], ['svelte', 'svelte']]) {
+    test(`project layout: --framework=${framework} places capsules under src/ and CI under .github/, with every relative import resolving`, () => {
+      const tmpBase = fs.mkdtempSync(path.join(os.tmpdir(), `chemx-test-layout-${framework}-`));
+      cleanupDirs.push(tmpBase);
+      const targetDir = path.join(tmpBase, `${framework}-app`);
+
+      const result = spawnSync('node', [CREATE_BIN, targetDir, `--framework=${framework}`, '--yes', '--skip-install'], {
+        encoding: 'utf-8',
+        cwd: tmpBase,
+        timeout: 15000
+      });
+
+      assert.equal(result.status, 0, `Failed: ${result.stderr}`);
+      assert.ok(fs.existsSync(path.join(targetDir, `src/components/m-sample-card/m-sample-card.${ext}`)), 'sample card capsule under src/components/');
+      assert.ok(fs.existsSync(path.join(targetDir, '.github/workflows/chemx-audit.yml')), 'CI workflow under .github/workflows/');
+      for (const blueprintDir of ['molecule-capsule', 'atoms', 'workflows']) {
+        assert.ok(!fs.existsSync(path.join(targetDir, blueprintDir)), `blueprint directory ${blueprintDir}/ must not land at the project root`);
+      }
+      assert.deepStrictEqual(findUnresolvedImports(targetDir), []);
+    });
+  }
 });
