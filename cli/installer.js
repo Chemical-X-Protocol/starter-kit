@@ -4,10 +4,11 @@ import { hasGum, gumChoose, gumInput, promptQuestion } from './terminal.js';
 import { buildPreCommitHookScript, buildGitHubWorkflowScript } from './installer-templates.js';
 import { installAllMcpConfigs } from './mcp/installer.js';
 import { runPillarsWizard } from './pillars-wizard.js';
-import { parseJsonSafe } from './config/loader.js';
+import { readExistingProjectConfig } from './config/loader.js';
 
 export { buildPreCommitHookScript, buildGitHubWorkflowScript } from './installer-templates.js';
 export { installAllMcpConfigs } from './mcp/installer.js';
+export { readExistingProjectConfig } from './config/loader.js';
 
 export const resolveGitHooksDir = (targetDir = '.') => {
   const resolvedTarget = path.resolve(targetDir);
@@ -78,15 +79,6 @@ export const saveProjectConfig = (targetDir = '.', config = {}) => {
   if (!fs.existsSync(chemxDir)) fs.mkdirSync(chemxDir, { recursive: true });
   fs.writeFileSync(path.join(chemxDir, 'config.json'), JSON.stringify(config, null, 2), 'utf-8');
   process.stdout.write(`  \x1b[32m✔\x1b[0m Saved project settings to: .chemx/config.json\n`);
-};
-
-// Parses with the loader's comment stripping; null means the file exists but still is not a JSON object.
-export const readExistingProjectConfig = (targetDir = '.') => {
-  const configPath = path.resolve(targetDir, '.chemx', 'config.json');
-  if (!fs.existsSync(configPath)) return {};
-  const parsed = parseJsonSafe(fs.readFileSync(configPath, 'utf-8'));
-  const isConfigObject = parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed);
-  return isConfigObject ? parsed : null;
 };
 
 // A config the installer cannot read is left untouched, so profile, pillars and comments survive.

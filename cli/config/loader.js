@@ -52,6 +52,15 @@ export const parseJsonSafe = (raw) => {
   }
 };
 
+// Shared by the installer and the pillars wizard; null means the file exists but is not a JSON object.
+export const readExistingProjectConfig = (targetDir = '.') => {
+  const configPath = path.resolve(targetDir, '.chemx', 'config.json');
+  if (!fs.existsSync(configPath)) return {};
+  const parsed = parseJsonSafe(fs.readFileSync(configPath, 'utf-8'));
+  const isConfigObject = parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed);
+  return isConfigObject ? parsed : null;
+};
+
 const normalizeRuleKeys = (rules = {}) => {
   const normalized = {};
   const KEY_MAP = {
