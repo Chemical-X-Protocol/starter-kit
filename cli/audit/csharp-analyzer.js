@@ -327,14 +327,20 @@ const checkCleanArchitectureAndCoupling = (content, relativePath, violations) =>
   }
 };
 
-// A best-effort annotation counts on the line above the catch, on the catch line, inside the
-// body, or on the closing-brace line. Raw lines are read (masked content erases comments), so
-// annotation text quoted in a string on those lines also counts: a known gap the JS detector
-// avoids by reading parser comments. Severity stays at the registry MEDIUM with no escalation,
-// because C# definite assignment (CS0165) already rejects reading an unset local.
+// A best-effort annotation counts on the catch line, inside the body, on the closing-brace
+// line, or on the line above when that line starts with a comment. Code on the line above,
+// such as an annotated inner catch, belongs to another statement and never exempts this one.
+// Raw lines are read (masked content erases comments), so annotation text quoted in a string
+// on the catch's own lines also counts: a known gap the JS detector avoids by reading parser
+// comments. Severity stays at the registry MEDIUM with no escalation, because C# definite
+// assignment (CS0165) already rejects reading an unset local.
+const COMMENT_LED_LINE = /^\s*\/[/*]/;
+
 const resolveCatchAllowance = (match, lines, lineNum) => {
   const endLineNum = lineNum + (match[0].match(/\n/g) || []).length;
-  const texts = [lines[lineNum - 2], lines[lineNum - 1], match[0], lines[endLineNum - 1]];
+  const lineAbove = lines[lineNum - 2] || '';
+  const ownLines = lines.slice(lineNum - 1, endLineNum);
+  const texts = COMMENT_LED_LINE.test(lineAbove) ? [lineAbove, ...ownLines] : ownLines;
   const allowances = texts.map((text) => parseBestEffortAllowance(text));
   return {
     isExempt: allowances.some((allowance) => allowance.hasReason),

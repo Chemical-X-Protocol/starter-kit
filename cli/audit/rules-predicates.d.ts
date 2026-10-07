@@ -7,6 +7,10 @@ export declare function isCommentLine(line: string): boolean;
 export declare function isCodeLine(line: string): boolean;
 export declare function isConsoleCallStatement(stmt: unknown, t: typeof babelTypes): boolean;
 export declare function isShallowCatchBody(body: readonly unknown[], t: typeof babelTypes): boolean;
+/**
+ * Reads a `chemx-allow: best-effort <reason>` annotation from one comment body or one source
+ * line. In a block comment the reason runs across its lines up to the comment close.
+ */
 export declare function parseBestEffortAllowance(text?: string): { isAnnotated: boolean; hasReason: boolean; reason: string };
 export declare function hasAnyTypeAnnotation(param: unknown, t: typeof babelTypes): boolean;
 export declare function isRedundantPassthroughReturn(curr: unknown, next: unknown, t: typeof babelTypes): boolean;

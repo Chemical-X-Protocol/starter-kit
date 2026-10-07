@@ -275,6 +275,41 @@ test("csharp-analyzer: an annotation two lines above the catch does not exempt i
 
 test("csharp-analyzer: known gap, annotation text in a string on a checked line still exempts", () => {
   // The C# analyzer scans raw lines, so it cannot tell a quoted annotation from a comment.
+  const quoted = "        catch (Exception) { } Log(\"chemx-allow: best-effort quoted, not a comment\");";
+  assert.deepEqual(csharpShallowCatches(wrapCSharpCatch(quoted)), []);
+});
+
+test("csharp-analyzer: a line above counts only when it starts with a comment", () => {
   const above = "        Log(\"chemx-allow: best-effort quoted, not a comment\");\n";
-  assert.deepEqual(csharpShallowCatches(wrapCSharpCatch("        catch (Exception) { }", above)), []);
+  assert.equal(csharpShallowCatches(wrapCSharpCatch("        catch (Exception) { }", above)).length, 1);
+  const block = wrapCSharpCatch("        catch (Exception) { }", "        /* chemx-allow: best-effort warmup is optional */\n");
+  assert.deepEqual(csharpShallowCatches(block), []);
+});
+
+test("csharp-analyzer: an annotated inner catch does not exempt its outer catch", () => {
+  const code = "try {\n    try { X(); } catch { } // chemx-allow: best-effort inner reason\n} catch { }\n";
+  const hits = csharpShallowCatches(code);
+  assert.equal(hits.length, 1);
+  assert.equal(hits[0].line, 3);
+});
+
+test("csharp-analyzer: a reasonless block annotation in a CRLF file is flagged", () => {
+  const placements = [
+    wrapCSharpCatch("        catch (Exception) { }", "        /* chemx-allow: best-effort */\n"),
+    wrapCSharpCatch("        catch (Exception) { } /* chemx-allow: best-effort */")
+  ];
+  for (const code of placements) {
+    const hits = csharpShallowCatches(code.replace(/\n/g, "\r\n"));
+    assert.equal(hits.length, 1, code);
+    assert.ok(hits[0].hazard.includes("needs a reason"), hits[0].hazard);
+  }
+});
+
+test("csharp-analyzer: a reasonless line annotation inside a multi-line body is flagged", () => {
+  const body = "        catch (Exception)\n        {\n            // chemx-allow: best-effort\n        }";
+  for (const code of [wrapCSharpCatch(body), wrapCSharpCatch(body).replace(/\n/g, "\r\n")]) {
+    const hits = csharpShallowCatches(code);
+    assert.equal(hits.length, 1, code);
+    assert.ok(hits[0].hazard.includes("needs a reason"), hits[0].hazard);
+  }
 });

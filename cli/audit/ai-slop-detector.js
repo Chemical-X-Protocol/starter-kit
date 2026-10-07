@@ -182,13 +182,27 @@ const listNestedTrySpans = (tryPath) => {
   return spans;
 };
 
+const isAloneOnItsLine = (comment, source) => {
+  const lineStart = comment.start - comment.loc.start.column;
+  return source.slice(lineStart, comment.start).trim() === '';
+};
+
+// A comment that starts on the catch's own lines always counts. One that starts above them
+// counts only when nothing precedes it on its line, because a trailing comment there belongs
+// to the previous statement (or a previous one-line try) and must not exempt this catch.
+const isInCatchWindow = (comment, window, source) => {
+  if (!isOnLines(comment, window)) return false;
+  const startsAboveCatch = comment.loc.start.line < window.catchLine;
+  return !startsAboveCatch || isAloneOnItsLine(comment, source);
+};
+
 // Parser comments only, so annotation text quoted inside a string literal never counts. The
 // window runs from the line above the catch keyword to the closing brace of its body.
-const findCatchAllowance = (comments, catchPath) => {
+const findCatchAllowance = (comments, catchPath, source) => {
   const catchStart = catchPath.node.loc?.start.line || 1;
-  const window = { start: catchStart - 1, end: catchPath.node.loc?.end.line || catchStart };
+  const window = { start: catchStart - 1, catchLine: catchStart, end: catchPath.node.loc?.end.line || catchStart };
   const annotated = comments
-    .filter((comment) => isOnLines(comment, window))
+    .filter((comment) => isInCatchWindow(comment, window, source))
     .map((comment) => ({ comment, allowance: parseBestEffortAllowance(comment.value) }))
     .filter((entry) => entry.allowance.isAnnotated);
   if (annotated.length === 0) return null;
@@ -287,8 +301,8 @@ const describeShallowCatch = (swallowed, isMissingReason) => {
   return parts.join('; ');
 };
 
-const reportShallowCatch = (astPath, { relativePath, violations, comments }) => {
-  const allowance = findCatchAllowance(comments, astPath);
+const reportShallowCatch = (astPath, { relativePath, violations, comments, source }) => {
+  const allowance = findCatchAllowance(comments, astPath, source);
   if (allowance?.hasReason) return;
 
   const swallowed = findSwallowedBinding(astPath);
@@ -306,14 +320,14 @@ const reportShallowCatch = (astPath, { relativePath, violations, comments }) => 
   });
 };
 
-export const createAiSlopVisitors = ({ relativePath, violations, comments = [] }) => {
+export const createAiSlopVisitors = ({ relativePath, violations, comments = [], source = '' }) => {
   const isComponentFile = isComponentPath(relativePath);
 
   return {
     CatchClause(astPath) {
       const body = astPath.node.body?.body || [];
       if (isShallowCatchBody(body, t)) {
-        reportShallowCatch(astPath, { relativePath, violations, comments });
+        reportShallowCatch(astPath, { relativePath, violations, comments, source });
       }
 
       if (hasAnyTypeAnnotation(astPath.node.param, t)) {

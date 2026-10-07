@@ -40,6 +40,22 @@ test('parseBestEffortAllowance: an annotation without a reason is not a valid al
   }
 });
 
+test('parseBestEffortAllowance: a reasonless block annotation before a CRLF has no reason', () => {
+  for (const text of ['/* chemx-allow: best-effort */\r', '        /* chemx-allow: best-effort */\r\n']) {
+    const allowance = parseBestEffortAllowance(text);
+    assert.equal(allowance.isAnnotated, true, JSON.stringify(text));
+    assert.equal(allowance.hasReason, false, JSON.stringify(text));
+  }
+  assert.equal(parseBestEffortAllowance('/* chemx-allow: best-effort */\nnext();').hasReason, false);
+});
+
+test('parseBestEffortAllowance: a block annotation reads its reason from the following comment lines', () => {
+  assert.equal(parseBestEffortAllowance(' chemx-allow: best-effort\n * cache miss is fine\n ').reason, 'cache miss is fine');
+  assert.equal(parseBestEffortAllowance(' chemx-allow: best-effort\r\n * cache miss\r\n * is fine\r\n ').reason, 'cache miss is fine');
+  assert.equal(parseBestEffortAllowance('/* chemx-allow: best-effort\n   - optional warmup */ next();').reason, 'optional warmup');
+  assert.equal(parseBestEffortAllowance(' chemx-allow: best-effort\n *\n ').hasReason, false);
+});
+
 test('parseBestEffortAllowance: unrelated text is not annotated', () => {
   for (const text of [undefined, '', 'best-effort only', 'chemx-allow: best-effortless thing']) {
     assert.deepEqual(parseBestEffortAllowance(text), { isAnnotated: false, hasReason: false, reason: '' });
@@ -180,6 +196,23 @@ test('shallow catch: a reasonless annotation on an escalated catch keeps HIGH an
   const hit = assertOne('let v;\ntry { v = f(); } catch {} // chemx-allow: best-effort\nuse(v);\n', 'HIGH');
   assert.ok(hit.hazard.includes('"v"'), hit.hazard);
   assert.ok(hit.hazard.includes('needs a reason'), hit.hazard);
+});
+
+test('shallow catch: a multi-line block annotation with the reason on the next line exempts it', () => {
+  assertExempt('try { a(); } catch {\n  /* chemx-allow: best-effort\n   * cache miss is fine\n   */\n}\n');
+  assertExempt('/* chemx-allow: best-effort\n * cache miss is fine\n */\ntry { a(); } catch {}\n');
+});
+
+test('shallow catch: a trailing annotation on the previous one-line try does not exempt the next catch', () => {
+  const hits = shallow('try { a(); } catch {} // chemx-allow: best-effort reason A\ntry { b(); } catch {}');
+  assert.equal(hits.length, 1);
+  assert.equal(hits[0].line, 2);
+});
+
+test('shallow catch: a trailing annotation on the previous statement does not exempt the catch', () => {
+  assertOne('doThing(); // chemx-allow: best-effort reason\ntry { b(); } catch {}', 'MEDIUM');
+  assertOne('try {\n  a(); // chemx-allow: best-effort reason\n} catch {}\n', 'MEDIUM');
+  assertOne('doThing(); /* chemx-allow: best-effort\n * reason */\ntry { b(); } catch {}\n', 'MEDIUM');
 });
 
 test('shallow catch: an annotation two lines above does not exempt it', () => {

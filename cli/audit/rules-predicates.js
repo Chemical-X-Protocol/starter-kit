@@ -47,12 +47,20 @@ export const isShallowCatchBody = (body, t) => {
   return false;
 };
 
-const BEST_EFFORT_PATTERN = /chemx-allow:\s*best-effort\b([^\n]*)/;
+const BEST_EFFORT_PATTERN = /chemx-allow:\s*best-effort\b([\s\S]*)/;
+
+// The reason runs to the end of the comment, so a block comment may carry it on its next
+// lines. Each line loses its leading `*` gutter, and CRLF endings never leak into the text.
+const readAllowanceReason = (rest) => {
+  const commentText = rest.split('*/')[0];
+  const reasonLines = commentText.split(/\r?\n/).map((line) => line.replace(/^[\s*]+/, '').trim());
+  return reasonLines.filter(Boolean).join(' ').replace(/^[\s:-]+/, '').trim();
+};
 
 export const parseBestEffortAllowance = (text = '') => {
   const match = String(text).match(BEST_EFFORT_PATTERN);
   const isAnnotated = Boolean(match);
-  const reason = isAnnotated ? match[1].replace(/\*\/.*$/, '').replace(/^[\s*:-]+/, '').trim() : '';
+  const reason = isAnnotated ? readAllowanceReason(match[1]) : '';
   return { isAnnotated, hasReason: reason.length > 0, reason };
 };
 
