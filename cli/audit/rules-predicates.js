@@ -52,7 +52,10 @@ export const isShallowCatchClause = (handler, t) => {
   return isShallowCatchBody(handler.body?.body || [], t);
 };
 
-const BEST_EFFORT_PATTERN = /chemx-allow:\s*best-effort\b([\s\S]*)/;
+// The keyword ends at whitespace, ':', '*', a '-' that starts no further word, or the end of
+// the text, so best-effort-ish or best-effortless never reads as the annotation.
+const BEST_EFFORT_PATTERN = /chemx-allow:\s*best-effort(?=$|[\s:*]|-(?![\p{L}\p{N}_]))([\s\S]*)/u;
+const MEANINGFUL_REASON = /[\p{L}\p{N}]/u;
 
 // The reason runs to the end of the comment, so a block comment may carry it on its next
 // lines. Each line loses its leading `*` gutter, and CRLF endings never leak into the text.
@@ -62,11 +65,12 @@ const readAllowanceReason = (rest) => {
   return reasonLines.filter(Boolean).join(' ').replace(/^[\s:-]+/, '').trim();
 };
 
+// Punctuation alone ('...', a lone dash) is not a reason: it needs a letter or a digit.
 export const parseBestEffortAllowance = (text = '') => {
   const match = String(text).match(BEST_EFFORT_PATTERN);
   const isAnnotated = Boolean(match);
   const reason = isAnnotated ? readAllowanceReason(match[1]) : '';
-  return { isAnnotated, hasReason: reason.length > 0, reason };
+  return { isAnnotated, hasReason: MEANINGFUL_REASON.test(reason), reason };
 };
 
 export const hasAnyTypeAnnotation = (param, t) => {

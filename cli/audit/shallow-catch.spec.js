@@ -62,6 +62,35 @@ test('parseBestEffortAllowance: unrelated text is not annotated', () => {
   }
 });
 
+test('parseBestEffortAllowance: best-effort must end at a separator, not run into another word', () => {
+  for (const text of ['chemx-allow: best-effort-ish reason', 'chemx-allow: best-effort_ish reason', 'chemx-allow: best-effort2 reason']) {
+    assert.deepEqual(parseBestEffortAllowance(text), { isAnnotated: false, hasReason: false, reason: '' }, text);
+  }
+  const separated = {
+    'chemx-allow: best-effort reason': 'reason',
+    'chemx-allow: best-effort: reason': 'reason',
+    'chemx-allow: best-effort - reason': 'reason',
+    'chemx-allow: best-effort-- reason': 'reason',
+    'chemx-allow: best-effort\treason': 'reason',
+    'chemx-allow: best-effort*/': ''
+  };
+  for (const [text, reason] of Object.entries(separated)) {
+    const allowance = parseBestEffortAllowance(text);
+    assert.equal(allowance.isAnnotated, true, text);
+    assert.equal(allowance.reason, reason, text);
+  }
+});
+
+test('parseBestEffortAllowance: a reason needs at least one letter or digit', () => {
+  for (const text of ['chemx-allow: best-effort ...', 'chemx-allow: best-effort: -', 'chemx-allow: best-effort - ?!', 'chemx-allow: best-effort -- */']) {
+    const allowance = parseBestEffortAllowance(text);
+    assert.equal(allowance.isAnnotated, true, text);
+    assert.equal(allowance.hasReason, false, text);
+  }
+  assert.equal(parseBestEffortAllowance('chemx-allow: best-effort ... 3rd party').hasReason, true);
+  assert.equal(parseBestEffortAllowance('chemx-allow: best-effort caché').hasReason, true);
+});
+
 test('shallow catch: the registry default is MEDIUM and the directive names the annotation', () => {
   const meta = RULE_REGISTRY.AI_SLOP_SHALLOW_CATCH;
   assert.equal(meta.severity, 'MEDIUM');
@@ -247,6 +276,13 @@ test('shallow catch: an annotation without a reason is flagged and says so', () 
   assert.ok(hit.hazard.includes('reason is mandatory'), hit.hazard);
   const block = assertOne('try { a(); } catch { /* chemx-allow: best-effort */ }\n', 'MEDIUM');
   assert.ok(block.hazard.includes('needs a reason'), block.hazard);
+  const dots = assertOne('try { a(); } catch {} // chemx-allow: best-effort ...\n', 'MEDIUM');
+  assert.ok(dots.hazard.includes('needs a reason'), dots.hazard);
+});
+
+test('shallow catch: a best-effort-ish comment is not the annotation', () => {
+  const hit = assertOne('try { a(); } catch {} // chemx-allow: best-effort-ish reason\n', 'MEDIUM');
+  assert.equal(hit.hazard, 'Shallow catch paranoia wrapper (silent suppression without handling)');
 });
 
 test('shallow catch: a reasonless annotation on an escalated catch keeps HIGH and both notes', () => {

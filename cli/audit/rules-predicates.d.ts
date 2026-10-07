@@ -11,7 +11,9 @@ export declare function isShallowCatchBody(body: readonly unknown[], t: typeof b
 export declare function isShallowCatchClause(handler: unknown, t: typeof babelTypes): boolean;
 /**
  * Reads a `chemx-allow: best-effort <reason>` annotation from one comment body or one source
- * line. In a block comment the reason runs across its lines up to the comment close.
+ * line. In a block comment the reason runs across its lines up to the comment close. The
+ * keyword must end at a separator (best-effort-ish is not annotated), and `hasReason` needs
+ * a letter or digit in the reason, so punctuation alone such as `...` is not a reason.
  */
 export declare function parseBestEffortAllowance(text?: string): { isAnnotated: boolean; hasReason: boolean; reason: string };
 export declare function hasAnyTypeAnnotation(param: unknown, t: typeof babelTypes): boolean;

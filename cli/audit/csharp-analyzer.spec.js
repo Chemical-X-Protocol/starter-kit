@@ -313,3 +313,12 @@ test("csharp-analyzer: a reasonless line annotation inside a multi-line body is 
     assert.ok(hits[0].hazard.includes("needs a reason"), hits[0].hazard);
   }
 });
+
+test("csharp-analyzer: a best-effort-ish comment or a reason without letters is not an allowance", () => {
+  const ish = csharpShallowCatches(wrapCSharpCatch("        catch (Exception) { } // chemx-allow: best-effort-ish reason"));
+  assert.equal(ish.length, 1);
+  assert.equal(ish[0].hazard.includes("needs a reason"), false, ish[0].hazard);
+  const dots = csharpShallowCatches(wrapCSharpCatch("        catch (Exception) { } // chemx-allow: best-effort ..."));
+  assert.equal(dots.length, 1);
+  assert.ok(dots[0].hazard.includes("needs a reason"), dots[0].hazard);
+});
