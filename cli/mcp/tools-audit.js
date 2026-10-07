@@ -13,16 +13,17 @@ import {
 import { syncSearchIndex, syncViolationsIndex, recordAuditSnapshot } from '../search.js';
 import { autoGenerateTasksFromAudit } from '../team/team-triage.js';
 import { resolveTargetCwd } from './tools-search.js';
+import { resolveAuditScope } from '../audit-scope.js';
 
 export const handleAudit = (args = {}, cwd = process.cwd()) => {
   const baseCwd = resolveTargetCwd(cwd);
-  const rawTarget = args.path || args.dir || (fs.existsSync(path.resolve(baseCwd, 'src')) ? 'src' : '.');
-  const resolvedTarget = path.isAbsolute(rawTarget) ? rawTarget : path.resolve(baseCwd, rawTarget);
-  const isFile = fs.existsSync(resolvedTarget) && fs.statSync(resolvedTarget).isFile();
+  const explicitTarget = args.path || args.dir || null;
+  const explicitResolved = explicitTarget ? path.resolve(baseCwd, explicitTarget) : null;
+  const isFile = Boolean(explicitResolved) && fs.existsSync(explicitResolved) && fs.statSync(explicitResolved).isFile();
 
   if (isFile) {
-    const relPath = path.relative(baseCwd, resolvedTarget);
-    const violations = auditFile(resolvedTarget, relPath);
+    const relPath = path.relative(baseCwd, explicitResolved);
+    const violations = auditFile(explicitResolved, relPath);
     return {
       type: 'file',
       target: relPath,
@@ -30,6 +31,11 @@ export const handleAudit = (args = {}, cwd = process.cwd()) => {
       violations
     };
   }
+
+  const scope = resolveAuditScope({ projectRoot: baseCwd, explicitDir: explicitTarget });
+  if (!scope.ok) return { type: 'refusal', success: false, error: scope.message, candidates: scope.candidates };
+  const resolvedTarget = scope.dir;
+  const rawTarget = scope.relDir;
 
   const options = {
     cwd: baseCwd,
@@ -72,9 +78,11 @@ export const handleAudit = (args = {}, cwd = process.cwd()) => {
 };
 
 export const handleGetRefactorPrompt = (args = {}, cwd = process.cwd()) => {
-  const targetDir = args.dir || (fs.existsSync(path.resolve(cwd, 'src')) ? 'src' : '.');
+  const auditScope = resolveAuditScope({ projectRoot: resolveTargetCwd(cwd), explicitDir: args.dir || null });
+  if (!auditScope.ok) return { success: false, error: auditScope.message, candidates: auditScope.candidates };
+  const targetDir = auditScope.relDir;
   const scope = args.scope || 'master';
-  const report = executeAstAudit(targetDir, {});
+  const report = executeAstAudit(auditScope.dir, { cwd: resolveTargetCwd(cwd) });
 
   const PROMPT_BUILDERS = {
     'grade-f': buildGradeFPrompt,

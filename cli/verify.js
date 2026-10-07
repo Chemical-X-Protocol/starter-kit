@@ -5,6 +5,7 @@ import { loadProjectConfig } from './config/index.js';
 import { runAudit as executeAstAudit } from './audit.js';
 import { runBuildAudit } from './build.js';
 import { findProjectRoot } from './build/detector.js';
+import { resolveAuditScope } from './audit-scope.js';
 import { ANSI } from './theme.js';
 import {
   parseCommandFromArgs,
@@ -255,12 +256,6 @@ export const runTestAudit = async (rawArgs = [], isCli = false, options = {}) =>
   return report;
 };
 
-const resolveDefaultTargetDir = (cwd) => {
-  if (fs.existsSync(path.join(cwd, 'src'))) return path.join(cwd, 'src');
-  if (fs.existsSync(path.join(cwd, 'blueprints'))) return path.join(cwd, 'blueprints');
-  return cwd;
-};
-
 export const runProjectVerify = async (rawArgs = [], isCli = false, options = {}) => {
   if (rawArgs.includes('--help') || rawArgs.includes('-h') || rawArgs.includes('help')) {
     const isJson = rawArgs.includes('--json');
@@ -272,7 +267,7 @@ export const runProjectVerify = async (rawArgs = [], isCli = false, options = {}
         `  chemx verify [options]`,
         '',
         `${ANSI.BOLD}OPTIONS${ANSI.RESET}`,
-        `  --dir=<path>             Target directory to verify (default: src/ or blueprints/)`,
+        `  --dir=<path>             Target directory to verify (default: .chemxrc "scope", else project root)`,
         `  --build                  Include production build audit step`,
         `  --json                   Output summary status card as JSON`,
         `  -h, --help               Show this help message`,
@@ -288,7 +283,7 @@ export const runProjectVerify = async (rawArgs = [], isCli = false, options = {}
   const dirFlag = rawArgs.find((a) => a.startsWith('--dir='));
   const explicitDir = dirFlag ? dirFlag.split('=')[1] : options.targetDir;
   const cwd = findProjectRoot(explicitDir || options.cwd || process.cwd());
-  const targetDir = explicitDir || resolveDefaultTargetDir(cwd);
+  const scope = resolveAuditScope({ projectRoot: cwd, explicitDir });
 
   const nmStatus = checkNodeModules(cwd);
   if (nmStatus) {
@@ -326,12 +321,23 @@ export const runProjectVerify = async (rawArgs = [], isCli = false, options = {}
     return summary;
   }
 
+  if (!scope.ok) {
+    const summary = { success: false, error: scope.message, scope: { reason: scope.reason, candidates: scope.candidates } };
+    const shouldPrint = options.print !== false;
+    if (shouldPrint) {
+      const output = isJson ? JSON.stringify(summary, null, 2) : `\n  ${ANSI.RED}✖${ANSI.RESET} ${ANSI.BOLD}${scope.message}${ANSI.RESET}\n`;
+      process.stdout.write(output + '\n');
+    }
+    if (isCli) process.exit(1);
+    return summary;
+  }
+
   if (!isJson && options.print !== false) {
     process.stdout.write(`\n  ${ANSI.BOLD}${ANSI.CYAN}⚡ Chemical X: Token-Conserving Project Verification${ANSI.RESET}\n\n`);
   }
 
   const projectConfig = options.config || loadProjectConfig(cwd, rawArgs);
-  const auditReport = executeAstAudit(targetDir, { cwd, config: projectConfig });
+  const auditReport = executeAstAudit(scope.dir, { cwd, config: projectConfig });
   const isAuditPassing = auditReport.violations.filter((v) => v.severity === 'CRITICAL').length === 0;
 
   const typeReport = await runTypecheckAudit([], false, { print: false, cwd });
@@ -348,6 +354,7 @@ export const runProjectVerify = async (rawArgs = [], isCli = false, options = {}
 
   const summary = {
     success: isAllPassed,
+    scope: { dir: scope.relDir, source: scope.source },
     architecturalWarning: isArchitecturePassingOnly
       ? 'AST compliance does not guarantee functional correctness. Fix typecheck or test errors before deployment.'
       : null,

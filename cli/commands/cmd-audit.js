@@ -34,7 +34,8 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
     isNonInteractiveSession
   } = await import('../audit/rules-predicates.js');
   const { runAuditPreflight, resolveGitAuditScope } = await import('../audit-preflight.js');
-  const { syncSearchIndex, resolveTargetDir, syncViolationsIndex, recordAuditSnapshot } = await import('../search.js');
+  const { syncSearchIndex, syncViolationsIndex, recordAuditSnapshot } = await import('../search.js');
+  const { resolveAuditScope } = await import('../audit-scope.js');
   const { autoGenerateTasksFromAudit } = await import('../team/index.js');
   const { runScaffold } = await import('../scaffold.js');
 
@@ -79,11 +80,23 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
   const isNonInteractive = isNonInteractiveSession(rawArgs);
   const isInteractive = !isNonInteractive && Boolean(process.stdin.isTTY && process.stdout.isTTY);
 
-  let targetDir = resolveTargetDir(customDir, dirFlag);
+  const isCustomDirFlag = Boolean(customDir?.startsWith('--dir='));
+  const customDirValue = isCustomDirFlag ? customDir.split('=')[1] : customDir;
+  const explicitDir = customDirValue || (dirFlag ? dirFlag.split('=')[1] : null);
+  const resolvedScope = resolveAuditScope({ projectRoot: process.cwd(), explicitDir });
+  const hasGitFlag = rawArgs.includes('--git') || rawArgs.includes('--changed');
+  const isGitScopedAmbiguity = hasGitFlag && resolvedScope.reason === 'ambiguous';
+  const scope = isGitScopedAmbiguity ? { ok: true, dir: process.cwd(), relDir: '.', source: 'git' } : resolvedScope;
+  if (!scope.ok) {
+    const refusal = { success: false, error: scope.message, reason: scope.reason, candidates: scope.candidates };
+    process.stdout.write(isJson ? `${JSON.stringify(refusal)}\n` : `\x1b[31m✖ ${scope.message}\x1b[0m\n`);
+    if (isCli) process.exit(1);
+    return refusal;
+  }
+  let targetDir = scope.dir;
   let isFast = rawArgs.includes('--fast') || rawArgs.includes('--quick');
   let fileList = null;
 
-  const hasGitFlag = rawArgs.includes('--git') || rawArgs.includes('--changed');
   if (hasGitFlag) {
     const gitScope = resolveGitAuditScope(process.cwd());
     if (gitScope.ok) fileList = gitScope.files;
