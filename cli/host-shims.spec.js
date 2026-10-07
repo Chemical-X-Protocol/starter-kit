@@ -58,6 +58,13 @@ test('host-shims: Antigravity MCP instructions point at AGENTS.md and state no t
   assert.deepStrictEqual(findThresholds(text), []);
 });
 
+test('host-shims: committed Copilot instructions point at AGENTS.md and state no threshold', () => {
+  const text = fs.readFileSync(path.join(repoRoot, '.github/copilot-instructions.md'), 'utf8');
+  assert.ok(text.includes('AGENTS.md'));
+  assert.ok(estimateTokens(text) < SHIM_TOKEN_BUDGET, `copilot-instructions.md is ${estimateTokens(text)} tokens`);
+  assert.deepStrictEqual(findThresholds(text), []);
+});
+
 test('host-shims: lists only the selected pillars', () => {
   const shims = buildHostShims(['p1_line_budgets'], { projectName: 'demo-app' });
   for (const file of HOST_SHIM_FILES) {
