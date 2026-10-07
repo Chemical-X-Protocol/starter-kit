@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "scope": "cli",
+  "rules": {
+    "AI_SLOP_REDUNDANT_PASSTHROUGH": 2,
+    "AI_SLOP_SHALLOW_CATCH": 30,
+    "CONTROL_FLOW_INLINE_BOOLEAN": 87,
+    "CONTROL_FLOW_NESTED_TERNARY": 5,
+    "TYPOGRAPHY_EM_DASH": 1
+  }
+}
