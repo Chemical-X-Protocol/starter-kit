@@ -198,7 +198,7 @@ export const createMcpHandler = (options = {}) => {
       const promptName = params?.name;
       const promptArgs = params?.arguments || {};
       try {
-        const promptResult = await getMcpPrompt(promptName, promptArgs);
+        const promptResult = await getMcpPrompt(promptName, promptArgs, { cwd: declaredRoot ?? bootRoot ?? startDir });
         return {
           jsonrpc: '2.0',
           id,

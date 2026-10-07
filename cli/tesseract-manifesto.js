@@ -4,9 +4,10 @@
  */
 
 import { ANSI } from './theme.js';
+import { DEFAULT_MOLECULE_LINE_LIMIT, DEFAULT_PROFILE } from './config/profiles.js';
 
-export const DIRECTIVES = [
-  { id: '1. MOLECULAR BUDGET', desc: '100 lines is an outer bound per capsule file. Never write monoliths.' },
+export const buildDirectives = ({ moleculeLineLimit, profile }) => [
+  { id: '1. MOLECULAR BUDGET', desc: `Structural weight first; ${moleculeLineLimit}-line molecule budget (${profile} profile). Never write monoliths.` },
   { id: '2. ZERO-RAW-DOM RULE', desc: 'Raw HTML tags belong exclusively in Atoms (a-*). Molecules compose Atoms.' },
   { id: '3. TABLE-OF-CONTENTS', desc: 'Page views must be 10-20 line declarative templates assembling slots.' },
   { id: '4. TWO-STAGE BOOLEANS', desc: 'Deconstruct complex multi-clause checks into named atomic booleans.' },
@@ -14,6 +15,8 @@ export const DIRECTIVES = [
   { id: '6. SURGICAL AST READ', desc: 'Never dump full files. Request targeted symbols and outlines exclusively.' },
   { id: '7. SILENT VERIFY', desc: 'Verify via silent chemx verify/test/typecheck to preserve context tokens.' }
 ];
+
+export const DIRECTIVES = buildDirectives({ moleculeLineLimit: DEFAULT_MOLECULE_LINE_LIMIT, profile: DEFAULT_PROFILE });
 
 export const JARVIS_OPERATIONS = [
   { cmd: 'npx chemx q "<query>" --hybrid', desc: 'Discover components using hybrid BM25 + Vector RRF ranking' },
@@ -23,7 +26,7 @@ export const JARVIS_OPERATIONS = [
   { cmd: 'npx chemx verify --json', desc: 'Execute silent full AST audit + typecheck + test suite' }
 ];
 
-export const renderManifesto = () => {
+export const renderManifesto = (directives = DIRECTIVES) => {
   const B = ANSI.BOLD;
   const C = ANSI.CYAN;
   const G = ANSI.GOLD;
@@ -41,7 +44,7 @@ export const renderManifesto = () => {
     `${B}${C}THE 7 INVIOLABLE DIRECTIVES OF THE MEDIUM:${R}`
   ];
 
-  for (const dir of DIRECTIVES) {
+  for (const dir of directives) {
     lines.push(`  ${P}*${R} ${B}${dir.id}:${R} ${dir.desc}`);
   }
 

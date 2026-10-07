@@ -19,6 +19,11 @@ export interface CapsuleResult {
 
 export declare function detectBaseDir(cwd?: string): string;
 export declare function createCapsuleFiles(options: GeneratorOptions): CapsuleResult;
-export declare function printGenerateHelp(): void;
+export interface GeneratorHelpConfig {
+  readonly profile?: string;
+  readonly rules?: Record<string, unknown>;
+}
+
+export declare function printGenerateHelp(config?: GeneratorHelpConfig): void;
 export declare function runGenerateWizard(rawArgs?: string[]): Promise<any>;
 export declare function runGenerateCapsule(capsuleName: string): Promise<any>;

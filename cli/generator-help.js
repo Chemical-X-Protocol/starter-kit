@@ -1,7 +1,15 @@
 import { renderBanner } from './terminal.js';
+import { loadProjectConfig, resolveMoleculeLineLimit } from './config/index.js';
 
-export const printGenerateHelp = () => {
+export const formatStandardsSummary = ({ previews = [], config = loadProjectConfig(process.cwd()), traits }) => {
+  const largestLines = Math.max(0, ...previews.map((p) => p.lines));
+  const moleculeLineLimit = resolveMoleculeLineLimit(config);
+  return `Chemical X Standards: largest generated file ${largestLines} lines (molecule budget ${moleculeLineLimit}, ${config.profile} profile), ${traits}.`;
+};
+
+export const printGenerateHelp = (config = loadProjectConfig(process.cwd())) => {
   renderBanner('Chemical X: Capsule Generator Usage');
+  const moleculeLineLimit = resolveMoleculeLineLimit(config);
   const BOLD = '\x1b[1m';
   const CYAN = '\x1b[36m';
   const DIM = '\x1b[2m';
@@ -53,13 +61,13 @@ export const printGenerateHelp = () => {
     `  ${DIM}Thesis:        Passing a 30-50 token parameter payload to chemx generate / jig replaces${RESET}`,
     `  ${DIM}               1,000-2,500 output tokens of repetitive TypeScript, SCSS, and spec boilerplate.${RESET}`,
     `  ${DIM}Reduction:     90%+ fewer LLM output tokens consumed per component, service, or route.${RESET}`,
-    `  ${DIM}Invariants:    Guarantees <100 LOC limits, Result tuples, 2-stage booleans, zero synthetic data,${RESET}`,
-    `  ${DIM}               and co-located unit test specs without LLM syntax drift or hallucination.${RESET}`,
+    `  ${DIM}Invariants:    Each jig file stays <100 LOC (passes even atomic-strict), Result tuples, 2-stage booleans,${RESET}`,
+    `  ${DIM}               zero synthetic data, and co-located unit test specs without LLM syntax drift.${RESET}`,
     '',
     `${BOLD}LINE LIMITS${RESET}`,
-    `  ${DIM}Molecule capsule template:  < 100 lines (outer bound)${RESET}`,
-    `  ${DIM}Co-located controller hook: < 100 lines (pure reactive state)${RESET}`,
-    `  ${DIM}Domain service / repo:      < 100 lines (stateless or cohesive atomic class)${RESET}`,
+    `  ${DIM}Molecule capsule template:  <= ${moleculeLineLimit} lines (outer bound, ${config.profile} profile)${RESET}`,
+    `  ${DIM}Co-located controller hook: <= ${moleculeLineLimit} lines (pure reactive state)${RESET}`,
+    `  ${DIM}Domain service / repo:      <= ${moleculeLineLimit} lines (stateless or cohesive atomic class)${RESET}`,
     `  ${DIM}Table of Contents view:     10-20 lines (declarative slot assembly)${RESET}`,
     ''
   ];

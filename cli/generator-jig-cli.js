@@ -1,4 +1,6 @@
 import { createJigFiles, normalizeJigKind, JIG_KINDS } from './generator-jig.js';
+import { formatStandardsSummary } from './generator-help.js';
+import { loadProjectConfig } from './config/index.js';
 
 export const handleJigCli = ({ rawArgs, positional, rawName, dirArg, descArg, isDryRun, isJson }) => {
   const jigFlag = (rawArgs.find((a) => a.startsWith('--jig=')) || '').split('=')[1];
@@ -62,6 +64,7 @@ export const handleJigCli = ({ rawArgs, positional, rawName, dirArg, descArg, is
   for (const f of jigRes.filesCreated) {
     process.stdout.write(`  \x1b[32m✔\x1b[0m ${f}\n`);
   }
-  process.stdout.write('\n\x1b[2mChemical X Standards verified: < 100 lines per file, Result tuples, co-located spec tests.\x1b[0m\n\n');
+  const standardsSummary = formatStandardsSummary({ previews: jigRes.previews, config: loadProjectConfig(process.cwd(), rawArgs), traits: 'Result tuples, co-located spec tests' });
+  process.stdout.write(`\n\x1b[2m${standardsSummary}\x1b[0m\n\n`);
   return jigRes;
 };

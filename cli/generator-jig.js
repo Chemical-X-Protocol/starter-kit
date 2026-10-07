@@ -81,7 +81,7 @@ const normalizeRoutes = (rawRoutes) => {
 };
 
 // ---------------------------------------------------------------------------
-// Builders for Code, Types, and Specs (<100 LOC per file guarantee)
+// Builders for Code, Types, and Specs (each file <100 LOC, so output passes even atomic-strict)
 // ---------------------------------------------------------------------------
 
 const buildServiceFiles = ({ name, pascalName, camelName, methods, desc, runner }) => {

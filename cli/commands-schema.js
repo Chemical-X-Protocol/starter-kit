@@ -169,7 +169,7 @@ export const COMMANDS_SCHEMA = [
     name: 'generate',
     aliases: ['g', 'gen', 'capsule'],
     usage: 'npx chemx generate [tier] <name> [options]',
-    summary: 'Scaffold crystalline molecular capsules under 100 lines.',
+    summary: 'Scaffold crystalline molecular capsules sized to the active profile line budget.',
     description: 'Generates self-contained component capsules with co-located controllers, granular domain types, styles, and specs.',
     flags: [
       { flag: '--desc="<text>"', desc: 'Describe functionality to tailor archetype and state' },

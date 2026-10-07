@@ -31,7 +31,8 @@ import {
 } from './generator-templates.js';
 import { detectFramework, resolveFramework, detectTierBaseDir, detectInstalledFamily, detectTestRunner, detectStylingStack } from './project-detector.js';
 import { indexGeneratedFiles } from './generator-indexer.js';
-import { printGenerateHelp } from './generator-help.js';
+import { printGenerateHelp, formatStandardsSummary } from './generator-help.js';
+import { loadProjectConfig } from './config/index.js';
 import { createJigFiles, JIG_KINDS } from './generator-jig.js';
 import { handleJigCli } from './generator-jig-cli.js';
 export { printGenerateHelp } from './generator-help.js';
@@ -39,7 +40,7 @@ export { createJigFiles, JIG_KINDS } from './generator-jig.js';
 export { handleJigCli } from './generator-jig-cli.js';
 
 const TIERS = [
-  { prefix: 'm-', tier: 'molecule', label: '1. m- Molecule (Self-contained feature block < 100 lines - Recommended)' },
+  { prefix: 'm-', tier: 'molecule', label: '1. m- Molecule (Self-contained feature block - Recommended)' },
   { prefix: 'a-', tier: 'atom', label: '2. a- Atom (Single foundational UI element)' },
   { prefix: 'o-', tier: 'organism', label: '3. o- Organism (Complex module combining molecules)' },
   { prefix: 't-', tier: 'template', label: '4. t- Template (Structural layout blueprint)' },
@@ -291,7 +292,7 @@ export const runGenerateWizard = async (rawArgs = []) => {
     if (rawArgs.includes('--json')) {
       process.stdout.write(JSON.stringify({ help: true, success: true }) + '\n');
     } else {
-      printGenerateHelp();
+      printGenerateHelp(loadProjectConfig(process.cwd(), rawArgs));
     }
     return { success: true, help: true };
   }
@@ -466,7 +467,8 @@ export const runGenerateWizard = async (rawArgs = []) => {
   for (const f of result.filesCreated) {
     process.stdout.write(`  \x1b[32m✔\x1b[0m ${f}\n`);
   }
-  process.stdout.write('\n\x1b[2mChemical X Standards verified: < 100 lines per file, granular domain types, co-located spec tests.\x1b[0m\n\n');
+  const standardsSummary = formatStandardsSummary({ previews: result.previews, config: loadProjectConfig(process.cwd(), rawArgs), traits: 'granular domain types, co-located spec tests' });
+  process.stdout.write(`\n\x1b[2m${standardsSummary}\x1b[0m\n\n`);
   return result;
 };
 

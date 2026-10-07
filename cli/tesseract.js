@@ -6,7 +6,8 @@
 import { ANSI } from './theme.js';
 import { renderHudHeader, renderMetricPill } from './tesseract-hud.js';
 import { getTesseractState } from './tesseract-state.js';
-import { DIRECTIVES, JARVIS_OPERATIONS, renderManifesto } from './tesseract-manifesto.js';
+import { buildDirectives, JARVIS_OPERATIONS, renderManifesto } from './tesseract-manifesto.js';
+import { loadProjectConfig, resolveMoleculeLineLimit } from './config/index.js';
 
 const formatTierSummary = (tiers) => {
   const tierEntries = Object.entries(tiers);
@@ -51,6 +52,8 @@ const formatHudTelemetry = (state) => {
 export const runTesseract = async (args = [], isCli = false, cwd = process.cwd()) => {
   const isJson = args.includes('--json');
   const state = getTesseractState(cwd);
+  const projectConfig = loadProjectConfig(cwd, args);
+  const directives = buildDirectives({ moleculeLineLimit: resolveMoleculeLineLimit(projectConfig), profile: projectConfig.profile });
 
   const payload = {
     protocol: 'Chemical X Tesseract',
@@ -58,7 +61,7 @@ export const runTesseract = async (args = [], isCli = false, cwd = process.cwd()
     timestamp: new Date().toISOString(),
     philosophy: 'Human-AI Symbiosis Medium & Universal Molecular Program',
     state,
-    directives: DIRECTIVES,
+    directives,
     jarvisOperations: JARVIS_OPERATIONS
   };
 
@@ -70,7 +73,7 @@ export const runTesseract = async (args = [], isCli = false, cwd = process.cwd()
 
   const hud = renderHudHeader();
   const telemetry = formatHudTelemetry(state);
-  const manifesto = renderManifesto();
+  const manifesto = renderManifesto(directives);
   const fullOutput = [hud, telemetry, manifesto, ''].join('\n');
 
   if (isCli) {

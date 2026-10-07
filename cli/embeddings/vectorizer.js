@@ -1,4 +1,4 @@
-// Chemical X In-Process Semantic Vectorizer (< 100 lines per Directive 1.A)
+// Chemical X In-Process Semantic Vectorizer (single-purpose module per Directive 1.A)
 export const VECTOR_DIMENSIONS = 128;
 
 const hashString = (str, seed = 0) => {
