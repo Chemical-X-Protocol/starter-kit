@@ -3,7 +3,7 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { patchFile } from './patcher.js';
+import { patchFile, writeFile } from './patcher.js';
 import { syncSingleFileIndex, openIndexDb, findSymbolDefinition } from './search.js';
 
 test('patchFile: surgically replaces unique target chunk and updates line counts', () => {
@@ -103,27 +103,114 @@ test('patchFile: micro-indexes file into SQLite immediately upon write', () => {
   }
 });
 
-test('patchFile: evaluates Directive 1.A line limits and warns when molecule exceeds 100 lines', () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-patch-budget-'));
-  const moleculeFile = path.join(tmpDir, 'm-trade-slip.ts');
-  fs.writeFileSync(moleculeFile, 'export const isSample = true;\n', 'utf-8');
+const BUDGET_SEED = 'export const isSample = true;';
+const ATOMIC_STRICT_RC = '{"profile":"atomic-strict"}';
 
+const buildExportLines = (count) => Array.from({ length: count }, (_, i) => `export const line${i} = ${i};`).join('\n');
+
+const withBudgetProject = (rcContent, run) => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-patch-budget-'));
   try {
-    // Generate 105 lines
-    const bigContent = Array.from({ length: 105 }, (_, i) => `export const line${i} = ${i};`).join('\n');
-    const result = patchFile(moleculeFile, {
-      targetContent: 'export const isSample = true;',
-      replacementContent: bigContent,
-      cwd: tmpDir
-    });
+    if (rcContent !== null) {
+      fs.writeFileSync(path.join(tmpDir, '.chemxrc'), rcContent, 'utf-8');
+    }
+    run(tmpDir);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+};
+
+const patchSeededFile = (tmpDir, fileName, lineCount) => {
+  const filePath = path.join(tmpDir, fileName);
+  fs.writeFileSync(filePath, `${BUDGET_SEED}\n`, 'utf-8');
+  return patchFile(filePath, {
+    targetContent: BUDGET_SEED,
+    replacementContent: buildExportLines(lineCount),
+    cwd: tmpDir,
+    skipIndex: true
+  });
+};
+
+test('patchFile: atomic-strict keeps the Directive 1.A molecule limit at 100 lines', () => {
+  withBudgetProject(ATOMIC_STRICT_RC, (tmpDir) => {
+    const result = patchSeededFile(tmpDir, 'm-trade-slip.ts', 105);
 
     assert.strictEqual(result.lineBudget.passed, false);
     assert.strictEqual(result.lineBudget.limit, 100);
     assert.ok(result.lineBudget.lines >= 105);
     assert.ok(result.lineBudget.warning.includes('Directive 1.A'));
-  } finally {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  }
+    assert.ok(result.lineBudget.warning.includes('100-line limit'));
+  });
+});
+
+test('patchFile: the default pragmatic profile lets a 105-line molecule pass the 250-line limit', () => {
+  withBudgetProject(null, (tmpDir) => {
+    const result = patchSeededFile(tmpDir, 'm-trade-slip.ts', 105);
+
+    assert.strictEqual(result.lineBudget.passed, true);
+    assert.strictEqual(result.lineBudget.limit, 250);
+    assert.strictEqual(result.lineBudget.warning, null);
+  });
+});
+
+test('patchFile: the pragmatic profile flags a 260-line molecule against the 250-line limit', () => {
+  withBudgetProject('{"profile":"pragmatic"}', (tmpDir) => {
+    const result = patchSeededFile(tmpDir, 'm-trade-slip.ts', 260);
+
+    assert.strictEqual(result.lineBudget.passed, false);
+    assert.strictEqual(result.lineBudget.limit, 250);
+    assert.ok(result.lineBudget.warning.includes('250-line limit'));
+    assert.strictEqual(result.isClean, false);
+  });
+});
+
+test('patchFile: non-molecule files keep the 500-line outer bound even under atomic-strict', () => {
+  withBudgetProject(ATOMIC_STRICT_RC, (tmpDir) => {
+    const result = patchSeededFile(tmpDir, 'trade-service.ts', 260);
+
+    assert.strictEqual(result.lineBudget.limit, 500);
+    assert.strictEqual(result.lineBudget.passed, true);
+  });
+});
+
+test('writeFile: the default pragmatic profile lets a 105-line molecule pass the 250-line limit', () => {
+  withBudgetProject(null, (tmpDir) => {
+    const result = writeFile(path.join(tmpDir, 'src/molecules/trade-slip.ts'), {
+      content: buildExportLines(105),
+      cwd: tmpDir,
+      skipIndex: true
+    });
+
+    assert.strictEqual(result.lineBudget.passed, true);
+    assert.strictEqual(result.lineBudget.limit, 250);
+  });
+});
+
+test('writeFile: atomic-strict keeps the Directive 1.A molecule limit at 100 lines', () => {
+  withBudgetProject(ATOMIC_STRICT_RC, (tmpDir) => {
+    const result = writeFile(path.join(tmpDir, 'src/molecules/trade-slip.ts'), {
+      content: buildExportLines(105),
+      cwd: tmpDir,
+      skipIndex: true
+    });
+
+    assert.strictEqual(result.lineBudget.passed, false);
+    assert.strictEqual(result.lineBudget.limit, 100);
+    assert.ok(result.lineBudget.warning.includes('100-line limit'));
+  });
+});
+
+test('writeFile: still flags Directive 1.G raw DOM in molecule files', () => {
+  withBudgetProject(null, (tmpDir) => {
+    const result = writeFile(path.join(tmpDir, 'm-bad-input.vue'), {
+      content: '<template>\n  <input type="text" />\n</template>\n',
+      cwd: tmpDir,
+      skipIndex: true
+    });
+
+    const hasRawDomViolation = result.violations.some((v) => v.rule === 'ZERO_RAW_DOM_MOLECULE');
+    assert.ok(hasRawDomViolation, 'Discovered raw DOM violation in written molecule');
+  });
 });
 
 test('patchFile: detects Directive 1.G raw DOM violations in molecule files', () => {
