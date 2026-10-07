@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { auditCode } from './rules.js';
+import { runAudit } from '../audit.js';
 import { resolveMoleculeTier } from './rules-helpers.js';
 import {
   loadProjectConfig,
@@ -100,5 +101,69 @@ describe('molecule line budget: tier hazard text', () => {
     const critical = resolveMoleculeTier(510, 100);
     assert.strictEqual(critical.severity, 'CRITICAL');
     assert.ok(critical.hazard.includes('>= 500'), critical.hazard);
+  });
+});
+
+const withMoleculeProject = (molecules, rcContent, fn) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-molecule-metrics-'));
+  try {
+    const moleculeDir = path.join(root, 'src', 'molecules');
+    fs.mkdirSync(moleculeDir, { recursive: true });
+    for (const [name, lineCount] of Object.entries(molecules)) {
+      fs.writeFileSync(path.join(moleculeDir, name), buildMoleculeSource(lineCount));
+    }
+    if (rcContent !== null) {
+      fs.writeFileSync(path.join(root, '.chemxrc'), rcContent);
+    }
+    fn(root);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+};
+
+const countMoleculeBudgetViolations = (report) => report.violations.filter((v) => v.rule === 'LINE_BUDGET_MOLECULE').length;
+
+const assertComplianceMatchesRule = (report) => {
+  const { moleculeCount, moleculeCompliantCount } = report.metrics;
+  assert.strictEqual(moleculeCount - moleculeCompliantCount, countMoleculeBudgetViolations(report));
+};
+
+describe('molecule line budget: runAudit compliance metrics', () => {
+  it('counts a 150-line molecule as compliant under the default 250-line budget', () => {
+    withMoleculeProject({ 'm-a.ts': 150, 'm-b.ts': 80 }, null, (root) => {
+      const report = runAudit('src', { cwd: root, fast: true });
+      assert.strictEqual(report.metrics.moleculeLineLimit, 250);
+      assert.strictEqual(report.metrics.moleculeCount, 2);
+      assert.strictEqual(report.metrics.moleculeCompliantPct, 100);
+      assertComplianceMatchesRule(report);
+    });
+  });
+
+  it('applies the 100-line budget when .chemxrc selects atomic-strict', () => {
+    withMoleculeProject({ 'm-a.ts': 150, 'm-b.ts': 80 }, '{"profile":"atomic-strict"}', (root) => {
+      const report = runAudit('src', { cwd: root, fast: true });
+      assert.strictEqual(report.metrics.moleculeLineLimit, 100);
+      assert.strictEqual(report.metrics.moleculeCompliantPct, 50);
+      assertComplianceMatchesRule(report);
+    });
+  });
+
+  it('applies the 100-line budget when options.config carries the --profile flag', () => {
+    withMoleculeProject({ 'm-a.ts': 150, 'm-b.ts': 80 }, null, (root) => {
+      const config = loadProjectConfig(root, ['--profile=atomic-strict']);
+      const report = runAudit('src', { cwd: root, fast: true, config });
+      assert.strictEqual(report.metrics.moleculeLineLimit, 100);
+      assert.strictEqual(report.metrics.moleculeCompliantPct, 50);
+      assertComplianceMatchesRule(report);
+    });
+  });
+
+  it('counts exactly 250 lines as compliant and 251 lines as over budget', () => {
+    withMoleculeProject({ 'm-a.ts': 250, 'm-b.ts': 251 }, null, (root) => {
+      const report = runAudit('src', { cwd: root, fast: true });
+      assert.strictEqual(report.metrics.moleculeCompliantCount, 1);
+      assert.strictEqual(report.metrics.moleculeCompliantPct, 50);
+      assertComplianceMatchesRule(report);
+    });
   });
 });

@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { isSourceFile as isPolyglotSourceFile } from './languages.js';
-import { loadProjectConfig } from './config/index.js';
+import { loadProjectConfig, resolveMoleculeLineLimit } from './config/index.js';
 import { auditCode, PILLARS, RULE_REGISTRY, createHookShapeRegistry } from './audit/rules.js';
 import { createPatternRegistry } from './audit/pattern-detector.js';
 import {
@@ -183,6 +183,7 @@ export const runAudit = (targetDir = 'src', options = {}) => {
   const patternRegistry = createPatternRegistry();
   const hookRegistry = createHookShapeRegistry();
   const config = options.config || loadProjectConfig(cwd);
+  const moleculeLineLimit = resolveMoleculeLineLimit(config);
   const includeTests = Boolean(options.includeTests);
   const { violations, fileStats, totalHooks } = scanTree(absoluteTarget, cwd, {
     patternRegistry,
@@ -210,7 +211,7 @@ export const runAudit = (targetDir = 'src', options = {}) => {
     }
     if (f.isMolecule) {
       moleculeCount += 1;
-      if (f.lineCount <= 100) {
+      if (f.lineCount <= moleculeLineLimit) {
         moleculeCompliantCount += 1;
       }
     }
@@ -228,16 +229,17 @@ export const runAudit = (targetDir = 'src', options = {}) => {
     moleculeCount,
     moleculeCompliantCount,
     moleculeCompliantPct,
+    moleculeLineLimit,
     hookCount: totalHooks
   };
 
   const health = calculateMolecularHealthScore(violations, scannedFiles);
   const pillars = calculatePillarBreakdown(violations);
-  const contextAnalysis = calculateTokenBurnAnalytics(fileStats, options);
+  const contextAnalysis = calculateTokenBurnAnalytics(fileStats, { ...options, moleculeLineLimit });
   const hotspots = calculateHotspots(violations, fileStats, 5);
   const aiSlop = calculateAiSlopScore(violations, scannedFiles);
   const patterns = patternRegistry.resolveHarmonizationCandidates(hotspots, { ruleOfThree: config?.rules?.ruleOfThreeAbstractions ?? config?.ruleOfThreeAbstractions ?? true });
-  const roadmap = buildRemediationRoadmap({ hotspots, violations, patterns });
+  const roadmap = buildRemediationRoadmap({ hotspots, violations, patterns, metrics });
 
   const stage = options.stage || (options.relax ? 'draft' : 'strict');
 

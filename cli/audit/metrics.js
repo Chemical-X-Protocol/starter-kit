@@ -1,4 +1,5 @@
 import { PILLARS } from './rules.js';
+import { resolveMoleculeLineLimit } from '../config/profiles.js';
 
 export const isSlopViolation = (v) => Boolean(v.isAiSlop || (v.rule && v.rule.startsWith('AI_SLOP_')));
 
@@ -99,14 +100,18 @@ export const MODEL_PRICING_RATES = {
   gpt4o: { name: 'GPT-4o ($2.50/1M)', costPerMillion: 2.5 }
 };
 
+const CHARS_PER_LINE = 36;
+const FILE_LINE_BUDGET = 500;
+
 export const calculateTokenBurnAnalytics = (fileStats, options = {}) => {
   let totalRawChars = 0;
   let excessChars = 0;
+  const moleculeLineLimit = options?.moleculeLineLimit ?? resolveMoleculeLineLimit(options?.config);
 
   for (const f of fileStats) {
     totalRawChars += f.charCount;
-    // Budget: 500 lines max for files (~18,000 chars), 100 lines for molecules (~3,600 chars)
-    const maxChars = f.isMolecule ? 3600 : 18000;
+    // Budget: 500 lines per file; molecules use the active profile limit (100 atomic-strict, 250 pragmatic); ~36 chars per line.
+    const maxChars = f.isMolecule ? moleculeLineLimit * CHARS_PER_LINE : FILE_LINE_BUDGET * CHARS_PER_LINE;
     if (f.charCount > maxChars) {
       excessChars += f.charCount - maxChars;
     }

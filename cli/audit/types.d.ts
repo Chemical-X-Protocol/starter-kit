@@ -33,6 +33,7 @@ export interface CodebaseMetrics {
   readonly moleculeCount: number;
   readonly moleculeCompliantCount: number;
   readonly moleculeCompliantPct: number;
+  readonly moleculeLineLimit?: number;
   readonly hookCount: number;
 }
 
