@@ -151,3 +151,20 @@ test('installer: an unparsable .chemx/config.json is kept as it is and the insta
     assert.match(output, /does not parse as a JSON object/);
   });
 });
+
+test('installer: re-installing keeps /* and */ inside glob strings of .chemx/config.json', () => {
+  const globs = '{"profile":"atomic-strict","overrides":[{"files":["src/**/*.spec.ts"]}],"include":"app/**/x"}';
+  withSavedConfig('test-installer-config-globs', globs, (tmpDir, configPath) => {
+    const { result } = captureStdout(() => saveInstallerProjectConfig(tmpDir, { minGrade: 'B', minScore: 80 }));
+    assert.strictEqual(result, true);
+    const saved = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    assert.deepStrictEqual(saved, {
+      profile: 'atomic-strict',
+      overrides: [{ files: ['src/**/*.spec.ts'] }],
+      include: 'app/**/x',
+      minGrade: 'B',
+      minScore: 80,
+      maxLineCount: 500
+    });
+  });
+});

@@ -76,13 +76,44 @@ fi
 # or package.json "chemx" that parses, as in cli/config/loader.js. atomic-strict or
 # enforce-file-length gives 100, otherwise max-line-count-warning or the profile
 # default, as in cli/audit/rules.js.
+# strip() drops // and /* */ comments only outside strings, like stripJsonComments in
+# cli/config/loader.js. It names a double quote and a backslash by their char codes,
+# 34 and 92, because the JS sits inside a double-quoted sh string.
 PROFILE_MAX_MOL=""
 if command -v node >/dev/null 2>&1; then
   PROFILE_MAX_MOL=$(node -e "
     const fs = require('fs');
+    const strip = (text) => {
+      let out = '';
+      let i = 0;
+      let inString = false;
+      while (i < text.length) {
+        const code = text.charCodeAt(i);
+        const pair = text.slice(i, i + 2);
+        if (inString) {
+          const width = code === 92 ? 2 : 1;
+          out += text.slice(i, i + width);
+          inString = code !== 34;
+          i += width;
+        } else if (pair === '//') {
+          const end = text.indexOf(String.fromCharCode(10), i);
+          i = end < 0 ? text.length : end;
+          out += ' ';
+        } else if (pair === '/*') {
+          const end = text.indexOf('*/', i + 2);
+          i = end < 0 ? text.length : end + 2;
+          out += ' ';
+        } else {
+          inString = code === 34;
+          out += text[i];
+          i += 1;
+        }
+      }
+      return out;
+    };
     const read = (rel) => {
       try {
-        const text = fs.readFileSync(rel, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*/gm, '');
+        const text = strip(fs.readFileSync(rel, 'utf8'));
         const value = JSON.parse(text);
         return value !== null && typeof value === 'object' ? value : null;
       } catch {
@@ -105,10 +136,15 @@ else
   # true are detected, giving 100, and only in the first of .chemxrc, .chemxrc.json or
   # .chemx/config.json that exists, even when it does not parse. package.json "chemx", the
   # loose profile and max-line-count-warning are not read, so anything else falls back to 250.
-  # Block comments are stripped across lines first, then lines starting with //.
+  # Only block comments that open at the start of a line (after optional blanks) are stripped,
+  # across lines, and then lines starting with //. A /* that opens later in a line is left
+  # alone, so globs inside strings such as "src/**/*.ts" never pair up into a comment; that
+  # also keeps a block comment opening mid-line, and a strict setting inside it still counts.
+  SOH="$(printf '\001')"
   for RC in .chemxrc .chemxrc.json .chemx/config.json; do
     [ -f "$RC" ] || continue
-    if tr '\n' '\001' < "$RC" | sed 's|/\*[^*]*\*\**\([^/*][^*]*\*\**\)*/||g' | tr '\001' '\n' \
+    if { printf '\001'; tr '\n' '\001' < "$RC"; } \
+      | sed "s|${SOH}[[:blank:]]*/\*[^*]*\*\**\([^/*][^*]*\*\**\)*/|${SOH}|g" | tr '\001' '\n' \
       | grep -v '^[[:space:]]*//' \
       | grep -Eq '"profile"[[:space:]]*:[[:space:]]*"atomic-strict"|"(enforce-file-length|enforceFileLength)"[[:space:]]*:[[:space:]]*true'; then
       PROFILE_MAX_MOL=100

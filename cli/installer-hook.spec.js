@@ -66,6 +66,9 @@ const assertHookOutcome = (outcome, row) => {
   if (row.budget) assert.match(outcome.output, budgetPattern(row.lines, row.budget));
 };
 
+const GLOB_CONFIG = '{"profile":"atomic-strict","overrides":[{"files":["src/**/*.spec.ts"]}],"include":"app/**/x"}';
+const GLOB_PAIR_CONFIG = '{"include":["src/*"],"profile":"atomic-strict","exclude":["*/dist"]}';
+
 const PROFILE_CASES = [
   { name: 'no config passes a 150-line molecule at the 250 default', lines: 150, status: 0 },
   { name: 'no config blocks a 260-line molecule at 250', lines: 260, status: 1, budget: 250 },
@@ -143,6 +146,41 @@ const PROFILE_CASES = [
     env: { CHEMX_MAX_MOLECULE_LINES: '400' },
     lines: 300,
     status: 0
+  },
+  {
+    name: 'atomic-strict .chemxrc with /* and */ inside glob strings blocks 150 lines at 100',
+    files: { '.chemxrc': `${GLOB_CONFIG}\n` },
+    lines: 150,
+    status: 1,
+    budget: 100
+  },
+  {
+    name: 'atomic-strict .chemx/config.json with /* and */ inside glob strings blocks 150 lines at 100',
+    files: { '.chemx/config.json': `${GLOB_CONFIG}\n` },
+    lines: 150,
+    status: 1,
+    budget: 100
+  },
+  {
+    name: 'a glob pair around the profile key is not read as a comment, so 150 lines are blocked at 100',
+    files: { '.chemxrc': `${GLOB_PAIR_CONFIG}\n` },
+    lines: 150,
+    status: 1,
+    budget: 100
+  },
+  {
+    name: 'an escaped quote before /* keeps the string open, so 150 lines are blocked at 100',
+    files: { '.chemxrc': '{"note":"a \\"/*\\" b","profile":"atomic-strict","x":"*/"}\n' },
+    lines: 150,
+    status: 1,
+    budget: 100
+  },
+  {
+    name: 'a URL string and a trailing // comment keep atomic-strict, so 150 lines are blocked at 100',
+    files: { '.chemxrc': '{"url":"https://x.dev/a//b", // team\n"profile":"atomic-strict"}\n' },
+    lines: 150,
+    status: 1,
+    budget: 100
   }
 ];
 
@@ -210,6 +248,33 @@ const NO_NODE_CASES = [
   {
     name: 'enforce-file-length between two block comments still blocks 150 lines at 100',
     files: { '.chemxrc': '{\n/* a */ "rules": {"enforce-file-length": true} /* b\n*/\n}\n' },
+    lines: 150,
+    status: 1,
+    budget: 100
+  },
+  {
+    name: 'atomic-strict .chemxrc with /* and */ inside glob strings blocks 150 lines at 100',
+    files: { '.chemxrc': `${GLOB_CONFIG}\n` },
+    lines: 150,
+    status: 1,
+    budget: 100
+  },
+  {
+    name: 'a glob pair around the profile key is not read as a comment, so 150 lines are blocked at 100',
+    files: { '.chemxrc': `${GLOB_PAIR_CONFIG}\n` },
+    lines: 150,
+    status: 1,
+    budget: 100
+  },
+  {
+    name: 'an indented block comment line holding atomic-strict is still ignored, so 150 lines pass',
+    files: { '.chemxrc': '{\n  /* "profile": "atomic-strict" */\n  "profile": "pragmatic"\n}\n' },
+    lines: 150,
+    status: 0
+  },
+  {
+    name: 'known gap: a block comment that opens mid-line is kept, so the atomic-strict inside it blocks 150 lines at 100',
+    files: { '.chemxrc': '{"profile":"pragmatic" /* ,"profile":"atomic-strict" */}\n' },
     lines: 150,
     status: 1,
     budget: 100
