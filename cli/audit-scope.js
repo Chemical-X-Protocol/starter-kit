@@ -6,7 +6,7 @@ export const SOURCE_ROOT_CANDIDATES = ['src', 'lib', 'app', 'cli', 'packages', '
 
 const isDirectory = (dir) => fs.existsSync(dir) && fs.statSync(dir).isDirectory();
 
-const toRelDir = (projectRoot, dir) => path.relative(projectRoot, dir).split(path.sep).join('/') || '.';
+export const toRelDir = (projectRoot, dir) => path.relative(projectRoot, dir).split(path.sep).join('/') || '.';
 
 const scopeFromPath = (projectRoot, requested, source) => {
   const dir = path.resolve(projectRoot, requested);

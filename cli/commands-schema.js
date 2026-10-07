@@ -152,6 +152,7 @@ export const COMMANDS_SCHEMA = [
     description: 'Validates line budgets, molecular separation, zero-raw-DOM rules, and populates SQLite index tables.',
     flags: [
       { flag: '--triage', desc: 'Auto-convert unassigned hazards into team tasks' },
+      { flag: '--rebaseline', desc: 'Record per-rule counts to chemx-ratchet.json (full scans only)' },
       { flag: '--strict', desc: 'Fail on any architectural hazard' },
       { flag: '--json', desc: 'Output structured audit report as JSON' },
       { flag: '--markdown', desc: 'Generate Markdown audit report' },

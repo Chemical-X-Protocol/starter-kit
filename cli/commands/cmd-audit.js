@@ -4,6 +4,7 @@
  * Extracted from cli/index.js per Directive 1.A (Monolith Decomposition).
  */
 
+import path from 'node:path';
 import { printHelp } from '../help.js';
 
 /**
@@ -35,7 +36,10 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
   } = await import('../audit/rules-predicates.js');
   const { runAuditPreflight, resolveGitAuditScope } = await import('../audit-preflight.js');
   const { syncSearchIndex, syncViolationsIndex, recordAuditSnapshot } = await import('../search.js');
-  const { resolveAuditScope } = await import('../audit-scope.js');
+  const { resolveAuditScope, toRelDir } = await import('../audit-scope.js');
+  const { computeGateVerdict } = await import('../audit/gate-verdict.js');
+  const { writeRatchet, RATCHET_FILE } = await import('../audit/ratchet.js');
+  const { loadProjectConfig: loadSharedConfig } = await import('../config/index.js');
   const { autoGenerateTasksFromAudit } = await import('../team/index.js');
   const { runScaffold } = await import('../scaffold.js');
 
@@ -102,6 +106,16 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
     if (gitScope.ok) fileList = gitScope.files;
   }
 
+  const isRebaseline = rawArgs.includes('--rebaseline');
+  const isPartialScan = hasGitFlag || isFast;
+  const isPartialRebaseline = isRebaseline && isPartialScan;
+  if (isPartialRebaseline) {
+    const message = '--rebaseline needs a full scan; drop --git, --changed, --fast, and --quick.';
+    process.stdout.write(isJson ? `${JSON.stringify({ success: false, error: message })}\n` : `\x1b[31m✖ ${message}\x1b[0m\n`);
+    if (isCli) process.exit(1);
+    return { success: false, error: message };
+  }
+
   const shouldRunPreflight = isCli && isInteractive && !isJson && !isMarkdown && !isShare;
   if (shouldRunPreflight) {
     const preflight = await runAuditPreflight(rawArgs, {
@@ -115,8 +129,17 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
   }
 
   const includeTests = rawArgs.includes('--include-tests') || rawArgs.includes('--tests');
-  const auditOptions = { outputFile, model, costPerMillion, fast: isFast, fileList, stage, config: projectConfig, includeTests };
+  const auditConfig = loadSharedConfig(process.cwd(), rawArgs);
+  const auditOptions = { outputFile, model, costPerMillion, fast: isFast, fileList, stage, config: auditConfig, includeTests };
   const report = executeAstAudit(targetDir, auditOptions);
+  const auditRelDir = toRelDir(process.cwd(), path.resolve(process.cwd(), targetDir));
+  if (isRebaseline) {
+    const ratchet = writeRatchet(process.cwd(), { scope: auditRelDir, violations: report.violations });
+    const ruleCount = Object.keys(ratchet.rules).length;
+    report.rebaseline = { file: RATCHET_FILE, scope: auditRelDir, rules: ruleCount, violations: report.totalViolations };
+    if (!isJson) process.stdout.write(`\x1b[32m✔\x1b[0m Recorded ${RATCHET_FILE} for scope "${auditRelDir}": ${ruleCount} rules, ${report.totalViolations} violations\n`);
+  }
+  report.gate = computeGateVerdict({ projectRoot: process.cwd(), scope: auditRelDir, violations: report.violations });
   saveAuditSnapshot(report);
   try {
     const syncRes = syncSearchIndex(targetDir, process.cwd());
@@ -163,15 +186,13 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
   // Stage 1: Atomic failure predicates
   const isCriticalViolation = (v) => v.severity === 'CRITICAL';
   const hasCritical = report.violations.some(isCriticalViolation);
-  const isSevereViolation = (v) => v.severity === 'CRITICAL' || v.severity === 'HIGH';
-  const hasCriticalOrHigh = report.violations.some(isSevereViolation);
   const hasViolations = report.violations.length > 0;
   const isStrictFail = isStrict && hasViolations;
   const isGradeFail = isGradeBelowMinimum(report.health.grade, minGrade);
   const hasMinScore = minScore !== null && !isNaN(minScore);
   const isScoreFail = hasMinScore && report.health.score < minScore;
   const hasThreshold = Boolean(minGrade) || hasMinScore;
-  const isDefaultFail = !hasThreshold && !isStrict && hasCriticalOrHigh;
+  const isDefaultFail = !hasThreshold && !isStrict && !report.gate.isPassing;
 
   // Stage 2: Unified failure decision
   const hasStandardFailure = evaluateAuditFailure([isStrictFail, isDefaultFail, isGradeFail, isScoreFail]);

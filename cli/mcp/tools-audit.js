@@ -14,6 +14,8 @@ import { syncSearchIndex, syncViolationsIndex, recordAuditSnapshot } from '../se
 import { autoGenerateTasksFromAudit } from '../team/team-triage.js';
 import { resolveTargetCwd } from './tools-search.js';
 import { resolveAuditScope } from '../audit-scope.js';
+import { computeGateVerdict } from '../audit/gate-verdict.js';
+import { loadProjectConfig } from '../config/index.js';
 
 export const handleAudit = (args = {}, cwd = process.cwd()) => {
   const baseCwd = resolveTargetCwd(cwd);
@@ -39,6 +41,7 @@ export const handleAudit = (args = {}, cwd = process.cwd()) => {
 
   const options = {
     cwd: baseCwd,
+    config: loadProjectConfig(baseCwd, []),
     model: args.model || 'blended',
     outputFile: null
   };
@@ -57,11 +60,10 @@ export const handleAudit = (args = {}, cwd = process.cwd()) => {
     process.stderr.write(`[chemx] Search index sync bypassed: ${syncError?.message || String(syncError)}\n`);
   }
 
-  const isSevereViolation = (v) => v.severity === 'CRITICAL' || v.severity === 'HIGH';
-  const hasCriticalOrHigh = report.violations.some(isSevereViolation);
+  const gate = computeGateVerdict({ projectRoot: baseCwd, scope: scope.relDir, violations: report.violations });
   const isStrictFail = Boolean(args.strict) && report.violations.length > 0;
   const isScoreFail = typeof args.minScore === 'number' && report.health.score < args.minScore;
-  const isPassing = !isStrictFail && !isScoreFail && !hasCriticalOrHigh;
+  const isPassing = !isStrictFail && !isScoreFail && gate.isPassing;
 
   return {
     type: 'directory',
@@ -73,6 +75,7 @@ export const handleAudit = (args = {}, cwd = process.cwd()) => {
     totalViolations: report.totalViolations,
     violations: report.violations,
     contextAnalysis: report.contextAnalysis,
+    gate,
     isPassing
   };
 };

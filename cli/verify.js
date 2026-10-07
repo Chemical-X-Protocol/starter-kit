@@ -6,6 +6,7 @@ import { runAudit as executeAstAudit } from './audit.js';
 import { runBuildAudit } from './build.js';
 import { findProjectRoot } from './build/detector.js';
 import { resolveAuditScope } from './audit-scope.js';
+import { computeGateVerdict } from './audit/gate-verdict.js';
 import { ANSI } from './theme.js';
 import {
   parseCommandFromArgs,
@@ -282,7 +283,8 @@ export const runProjectVerify = async (rawArgs = [], isCli = false, options = {}
   const includeBuild = rawArgs.includes('--build') || options.includeBuild === true;
   const dirFlag = rawArgs.find((a) => a.startsWith('--dir='));
   const explicitDir = dirFlag ? dirFlag.split('=')[1] : options.targetDir;
-  const cwd = findProjectRoot(explicitDir || options.cwd || process.cwd());
+  const baseDir = options.cwd || process.cwd();
+  const cwd = findProjectRoot(explicitDir ? path.resolve(baseDir, explicitDir) : baseDir);
   const scope = resolveAuditScope({ projectRoot: cwd, explicitDir });
 
   const nmStatus = checkNodeModules(cwd);
@@ -338,7 +340,8 @@ export const runProjectVerify = async (rawArgs = [], isCli = false, options = {}
 
   const projectConfig = options.config || loadProjectConfig(cwd, rawArgs);
   const auditReport = executeAstAudit(scope.dir, { cwd, config: projectConfig });
-  const isAuditPassing = auditReport.violations.filter((v) => v.severity === 'CRITICAL').length === 0;
+  const gate = computeGateVerdict({ projectRoot: cwd, scope: scope.relDir, violations: auditReport.violations });
+  const isAuditPassing = gate.isPassing;
 
   const typeReport = await runTypecheckAudit([], false, { print: false, cwd });
   const testReport = await runTestAudit([], false, { print: false, cwd });
@@ -362,7 +365,11 @@ export const runProjectVerify = async (rawArgs = [], isCli = false, options = {}
       score: auditReport.health.score,
       grade: auditReport.health.grade,
       violationsCount: auditReport.totalViolations,
-      criticalCount: auditReport.violations.filter((v) => v.severity === 'CRITICAL').length
+      criticalCount: auditReport.violations.filter((v) => v.severity === 'CRITICAL').length,
+      passing: gate.isPassing,
+      basis: gate.basis,
+      regressions: gate.regressions.slice(0, 10),
+      note: gate.note
     },
     typecheck: {
       success: typeReport.success,
