@@ -5,9 +5,20 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { renderBanner, hasGum, gumChoose, promptQuestion } from './terminal.js';
-import { PILLARS, PILLAR_PRESETS, buildCustomAgentsMd, buildCustomCursorRules } from './pillars-schema.js';
+import { PILLARS, PILLAR_PRESETS } from './pillars-schema.js';
 import { planFileWrite, applyFileWrites } from './pillars-write-guard.js';
+import { buildHostShims } from './host-shims.js';
+
+const AGENTS_TEMPLATE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'AGENTS.md');
+
+// AGENTS.md is hand-authored and canonical: seeded from the template when absent, never modified.
+const agentsSeedTarget = (cwd) => {
+  const file = path.resolve(cwd, 'AGENTS.md');
+  const needsSeed = !fs.existsSync(file) && fs.existsSync(AGENTS_TEMPLATE);
+  return needsSeed ? [{ file, content: fs.readFileSync(AGENTS_TEMPLATE, 'utf-8'), isGuarded: true }] : [];
+};
 
 export const runPillarsWizard = async (rawArgs = [], cwd = process.cwd()) => {
   const isJson = rawArgs.includes('--json');
@@ -37,7 +48,7 @@ export const runPillarsWizard = async (rawArgs = [], cwd = process.cwd()) => {
       '2. Strict Chemical X (All 7 Pillars + Verification-First)',
       '3. Custom Pillar Selection (Review & toggle each pillar)',
       '4. Minimal (Line budgets only, no agent steering)',
-      '5. None (Skip - do not install AGENTS.md or .cursorrules)'
+      '5. None (Skip - do not install AGENTS.md or host shims)'
     ];
 
     const pick = useGum
@@ -99,9 +110,10 @@ export const runPillarsWizard = async (rawArgs = [], cwd = process.cwd()) => {
   const hasSelectedPillars = selectedPillarIds.length > 0;
   if (hasSelectedPillars) {
     const projectName = path.basename(path.resolve(cwd));
+    const shims = Object.entries(buildHostShims(selectedPillarIds, { projectName }));
     targets.push(
-      { file: path.resolve(cwd, 'AGENTS.md'), content: buildCustomAgentsMd(selectedPillarIds, { projectName }), isGuarded: true },
-      { file: path.resolve(cwd, '.cursorrules'), content: buildCustomCursorRules(selectedPillarIds), isGuarded: true }
+      ...agentsSeedTarget(cwd),
+      ...shims.map(([rel, content]) => ({ file: path.resolve(cwd, rel), content, isGuarded: true }))
     );
   }
 

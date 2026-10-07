@@ -244,7 +244,7 @@ export const COMMANDS_SCHEMA = [
     aliases: ['config:pillars', 'rules'],
     usage: 'npx chemx pillars [options]',
     summary: 'Interactive wizard to configure architectural pillars and agent steering directives.',
-    description: 'Customize which pillars and directives (AGENTS.md, .cursorrules) are installed in your codebase.',
+    description: 'Choose pillars and write host shims (CLAUDE.md, .cursorrules, llms.txt) that point at AGENTS.md. Seeds AGENTS.md if absent; never modifies it.',
     flags: [
       { flag: '--preset=<recommended|strict|minimal|none>', desc: 'Apply a predefined pillar configuration preset' },
       { flag: '--dry-run', desc: 'Preview pillar configuration without writing files' },

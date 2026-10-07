@@ -288,7 +288,7 @@ export const buildDashboardActionGroups = ({ report, onScaffold = null, onRerun 
   const installSearchAction = {
     key: "install_search",
     tag: formatButtonTag("Query Machine", "\x1b[38;2;56;189;248m"),
-    label: "⚡ Step 2: Install AI Agent Query Tool (\"pnpm q\" script + AGENTS.md rule)",
+    label: "⚡ Step 2: Install AI Agent Query Tool (\"pnpm q\" script + SQLite index)",
     action: handleInstallSearchAction
   };
 

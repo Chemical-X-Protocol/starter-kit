@@ -122,47 +122,7 @@ export const installAgentSearchConfig = async (targetDir = '.') => {
   // 1. Update package.json with minimal single entry
   ensurePackageScripts(resolvedTarget);
 
-  // 2. Inject rule into AGENTS.md
-  const agentsPath = path.join(resolvedTarget, 'AGENTS.md');
-  const agentDirectives = `
-## Chemical X Database-First Navigation & Targeted Symbol Extraction Protocol
-- Database Master Index First: Before inspecting or modifying files, AI agents MUST query the SQLite database ('.chemx/index.db') or the AST Query Machine ('chemx({ action: "team", params: { action: "list" } })', 'chemx({ action: "q", params: { query } })') before broad ripgrep or file scans.
-- Targeted Symbol Reading Only: AI agents MUST NEVER dump entire source files into context. Extract only specific symbols: 'chemx({ action: "read", params: { path, symbol: "<name>" } })'.
-- Symbol Connections: Inspect callers and dependencies via 'connections: true' ('chemx({ action: "read", params: { path, symbol: "<name>", connections: true } })') to understand integration without loading multiple files.
-- Prohibition on Native File Analyzers: NEVER invoke native IDE file-viewing tools ('view_file', 'read_file', 'cat', 'head') or full-file context dumps on Chemical X projects. All inspection must flow through Chemical X AST readers.
-
-## Chemical X Master MCP Gateway & Verification-First Protocol
-- Master MCP Gateway Rule: In AI IDE environments (Antigravity, Cursor, Claude Desktop), invoke the unified master "chemx" MCP tool (e.g. chemx({ action: 'verify' })) to avoid per-tool permission prompts and eliminate bash subshell overhead.
-- Verification First Rule: AI agents MUST NEVER run raw, unthrottled "npm test", "pnpm test", "vitest", "tsc --noEmit", or "npm run build" directly in a bash subshell.
-- MCP Verification Tools First: AI agents MUST invoke dedicated Chemical X MCP tools or CLI wrappers ('chemx verify', 'npx chemx verify', 'pnpm chemx build', 'npx chemx build') before running terminal commands.
-`;
-
-  if (fs.existsSync(agentsPath)) {
-    try {
-      const content = fs.readFileSync(agentsPath, 'utf-8');
-      const hasQueryProtocol = content.includes('Chemical X Codebase Query Machine Protocol');
-      const hasVerifyProtocol = content.includes('Chemical X Verification-First Protocol');
-
-      const isMissingBoth = !hasQueryProtocol && !hasVerifyProtocol;
-      if (isMissingBoth) {
-        fs.appendFileSync(agentsPath, `\n${agentDirectives}\n`, 'utf-8');
-        process.stdout.write('  \x1b[32m✔\x1b[0m Injected query and verification directives into AGENTS.md\n');
-      } else if (!hasVerifyProtocol) {
-        const verifyOnly = `
-## Chemical X Verification-First Protocol & Zero-Token-Burn Pipeline
-- Verification First Rule: AI agents MUST NEVER run raw, unthrottled "npm test", "pnpm test", "vitest", "tsc --noEmit", or "npm run build" directly in a bash subshell.
-- MCP Verification Tools First: AI agents MUST invoke dedicated Chemical X MCP tools or CLI wrappers ('pnpm chemx verify', 'npx chemx verify', 'pnpm chemx build', 'npx chemx build') before running terminal commands.
-`;
-        fs.appendFileSync(agentsPath, `\n${verifyOnly}\n`, 'utf-8');
-        process.stdout.write('  \x1b[32m✔\x1b[0m Injected verification-first directive into AGENTS.md\n');
-      }
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error(String(err));
-      process.stderr.write(`[installer] Skipped AGENTS.md injection: ${error.message}\n`);
-    }
-  }
-
-  // 3. Prime SQLite query index
+  // 2. Prime SQLite query index
   try {
     const { syncSearchIndex } = await import('./search.js');
     const targetSource = fs.existsSync(path.join(resolvedTarget, 'src')) ? 'src' : '.';
@@ -185,8 +145,8 @@ export const runInstallWizard = async (targetDir = '.') => {
     ? gumChoose([
         '1. Install All Guardrails (Pre-Commit Hook + GitHub CI + MCP Server + Query Machine)',
         '2. Model Context Protocol (MCP) Server only (.cursor, .vscode, Antigravity)',
-        '3. Architectural Pillars & Agent Steering Wizard (AGENTS.md, .cursorrules)',
-        '4. Agent Query Machine only ("pnpm q" script + AGENTS.md rule + SQLite index)',
+        '3. Architectural Pillars & Agent Steering Wizard (AGENTS.md seed + CLAUDE.md, .cursorrules, llms.txt shims)',
+        '4. Agent Query Machine only ("pnpm q" script + SQLite index)',
         '5. Git Pre-Commit Hook only (.git/hooks/pre-commit)',
         '6. GitHub Actions CI Workflow only (.github/workflows/chemx-audit.yml)',
         '7. Cancel'

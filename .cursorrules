@@ -1,21 +1,7 @@
-# Chemical X Protocol: Mandatory Agent Directives
-
-Strictly adhere to the directives codified in AGENTS.md:
-
-1. ZERO-TOKEN-BURN VERIFICATION FIRST:
-- In MCP mode, invoke the unified master `chemx` tool (e.g. `chemx({ action: 'verify' })`) to bypass terminal approval modals.
-- NEVER run raw unthrottled `npm test`, `pnpm test`, `vitest`, `tsc --noEmit`, or `npm run build` in terminal shells.
-- ALWAYS run `npx chemx verify` (or `npx chemx test`, `npx chemx typecheck`, `npx chemx build`) to consume pinpoint failure diffs while suppressing passing noise.
-
-2. SEARCH-FIRST & DATABASE-FIRST PROTOCOL:
-- Query database tasks and symbols via `chemx({ action: 'team', params: { action: 'list' } })` or `pnpm q "<query>"` before touching files.
-- ALWAYS extract specific symbols: `chemx({ action: 'read', params: { path, symbol: '<name>' } })` instead of dumping files.
-- Inspect callers and connections via `connections: true` without reading other files.
-- STRICT BAN ON NATIVE FILE ANALYZERS: NEVER use `view_file` or raw file dumping tools. Use Chemical X AST tools exclusively.
-- Use `pnpm q "<capsule>" --inspect` to examine props and hooks without reading entire files.
-
-3. MOLECULAR ARCHITECTURE GUARDRAILS:
-- 100-line outer bound per molecule capsule file.
-- Zero raw DOM elements in molecules or organisms: raw HTML elements (`<button>`, `<input>`, `<div>`) are restricted exclusively to foundational atoms.
-- Two-stage atomic boolean composition: break multi-clause logic into named booleans before decision computeds.
-- Zero typography em dashes in code or documentation. Use hyphens or colons.
+# chemx:generated pillars
+# Cursor: Chemical X
+AGENTS.md is the canonical rulebook. Every architectural rule and threshold lives there; this generated file only points at it. Regenerate with `npx chemx pillars --write` instead of editing it.
+Active pillars: Molecular Line Budgets, Strict Component Tiers & Zero-Raw-DOM, Table-of-Contents Views, Molecular Composable Contracts, Silent Verification Pipeline, AST Codebase Query Engine, Swarm Task Backlog & Cost Tracking.
+Run checks through the chemx MCP tool (chemx({ action: 'verify' })) or `npx chemx verify`; never raw `npm test` or `tsc --noEmit`.
+Pass params.projectRoot (absolute repo path) on mutating chemx MCP calls.
+Read with `npx chemx read <path> --outline` or `--symbol=<name>`; reserve `--enrich` for component capsules.

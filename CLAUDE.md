@@ -1,25 +1,13 @@
-# Chemical X Protocol: Claude Code Agent Guidelines
+<!-- chemx:generated pillars -->
+# Claude Code: Chemical X
 
-Strictly follow the architectural directives in AGENTS.md:
+AGENTS.md is the canonical rulebook. Every architectural rule and threshold lives there; this generated file only points at it. Regenerate with `npx chemx pillars --write` instead of editing it.
 
-## Core Verification Commands (Token Conservation)
-AI agents must NEVER run raw `npm test` or `tsc --noEmit` in bash. Always use the Chemical X zero-token-burn commands:
-- Master MCP Gateway (Mandatory): When operating in Antigravity or MCP-enabled environments, invoke `chemx` under server `chemical-x` via `call_mcp_tool(ServerName: 'chemical-x', ToolName: 'chemx')`. Never drop down to bash subshells or primitive viewers (`sed`, `grep`, `head`, `tail`, `cat`, `view_file`) when `chemical-x` MCP server is registered.
-- Full Verification (AST Audit + Typecheck + Tests): `chemx verify` (or `chemx({ action: 'verify' })`)
-- Silent Typecheck Audit: `node cli/index.js typecheck` (or `npx chemx typecheck`)
-- Silent Test Runner: `node cli/index.js test` (or `npx chemx test`)
-- Silent Build Audit: `node cli/index.js build` (or `npx chemx build`)
+Active pillars: Molecular Line Budgets, Strict Component Tiers & Zero-Raw-DOM, Table-of-Contents Views, Molecular Composable Contracts, Silent Verification Pipeline, AST Codebase Query Engine, Swarm Task Backlog & Cost Tracking.
 
-## AST Query & Codebase Navigation (Database-First)
-- Database First: Query tasks and symbols via `chemx({ action: 'team', params: { action: 'list' } })` or `pnpm q "<query>"` before touching files.
-- Targeted Symbol Reading: NEVER dump entire files into context. Extract only the specific symbol: `chemx({ action: 'read', params: { path, symbol: '<name>' } })`.
-- Symbol Connections: Inspect callers and dependencies without reading files: `chemx({ action: 'read', params: { path, symbol: '<name>', connections: true } })`.
-- Prohibition on Native File Analyzers: NEVER use `view_file` or raw file dumping tools. Use Chemical X AST tools exclusively.
-- Inspect Capsule: `node cli/index.js search "<capsule>" --inspect`
-- Token-minified reading: `node cli/index.js read <path> --outline` (signatures only) or `--outline --enrich` (signatures + logic skeleton, no boilerplate penalty)
-
-## Architectural Rules
-- File Line Limits: 100 lines is an outer bound for single-purpose files; molecule capsules must stay under 100 lines.
-- Zero Raw DOM: Raw HTML tags (`<button>`, `<input>`, `<div>`) belong strictly in foundational atoms.
-- Two-Stage Booleans: Always decompose complex multi-clause logic into named atomic booleans before decision computeds.
-- Typography: Zero em dashes in code, markdown, or comments. Use hyphens or colons.
+## Invocation
+- Checks go through the `chemx` MCP tool (server `chemical-x`): `chemx({ action: 'verify' })`, `'test'`, `'typecheck'`. Never run raw `npm test` or `tsc --noEmit`.
+- Mutating calls (`write`, `patch`, `autofix`, `generate`, team claims and posts) need `params.projectRoot` set to the absolute repo path.
+- Search before reading: `chemx({ action: 'q', params: { query } })`.
+- Read narrowly: `chemx({ action: 'read', params: { path, symbol } })` or `outline: true`. Use `enrich: true` on component capsules only; procedural modules gain little from it.
+- Without MCP: `npx chemx verify`, `npx chemx read <path> --outline`.
