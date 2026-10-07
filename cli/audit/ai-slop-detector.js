@@ -188,20 +188,30 @@ const isAloneOnItsLine = (comment, source) => {
   return source.slice(lineStart, comment.start).trim() === '';
 };
 
+// Stroustrup style puts the catch keyword below the try block's closing brace, so a comment
+// after that brace sits between this try and its own catch.
+const trailsTryBlock = (comment, tryBlock) => {
+  const isOnClosingLine = comment.loc.start.line === tryBlock.loc.end.line;
+  return isOnClosingLine && comment.loc.start.column >= tryBlock.loc.end.column;
+};
+
 // A comment that starts on the catch's own lines always counts. One that starts above them
-// counts only when nothing precedes it on its line, because a trailing comment there belongs
-// to the previous statement (or a previous one-line try) and must not exempt this catch.
+// counts only when nothing precedes it on its line or it trails this try block's closing
+// brace. Any other trailing comment there belongs to the previous statement (or a previous
+// one-line try) and must not exempt this catch.
 const isInCatchWindow = (comment, window, source) => {
   if (!isOnLines(comment, window)) return false;
   const startsAboveCatch = comment.loc.start.line < window.catchLine;
-  return !startsAboveCatch || isAloneOnItsLine(comment, source);
+  if (!startsAboveCatch) return true;
+  return trailsTryBlock(comment, window.tryBlock) || isAloneOnItsLine(comment, source);
 };
 
 // Parser comments only, so annotation text quoted inside a string literal never counts. The
 // window runs from the line above the catch keyword to the closing brace of its body.
 const findCatchAllowance = (comments, catchPath, source) => {
   const catchStart = catchPath.node.loc?.start.line || 1;
-  const window = { start: catchStart - 1, catchLine: catchStart, end: catchPath.node.loc?.end.line || catchStart };
+  const catchEnd = catchPath.node.loc?.end.line || catchStart;
+  const window = { start: catchStart - 1, catchLine: catchStart, end: catchEnd, tryBlock: catchPath.parent.block };
   const annotated = comments
     .filter((comment) => isInCatchWindow(comment, window, source))
     .map((comment) => ({ comment, allowance: parseBestEffortAllowance(comment.value) }))

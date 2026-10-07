@@ -293,6 +293,26 @@ test("csharp-analyzer: an annotated inner catch does not exempt its outer catch"
   assert.equal(hits[0].line, 3);
 });
 
+test("csharp-analyzer: a Stroustrup annotation trailing the try block brace exempts the catch", () => {
+  const placements = [
+    "try {\n    X();\n} // chemx-allow: best-effort reason\ncatch { }\n",
+    "try {\n    X();\n} /* chemx-allow: best-effort reason */\ncatch { }\n",
+    "try\n{\n    X();\n} // chemx-allow: best-effort reason\ncatch (Exception)\n{\n}\n",
+    "try {\n    Log(\"}{\");\n} // chemx-allow: best-effort braces in strings are masked\ncatch { }\n"
+  ];
+  for (const code of placements) {
+    assert.deepEqual(csharpShallowCatches(code), [], code);
+    assert.deepEqual(csharpShallowCatches(code.replace(/\n/g, "\r\n")), [], code);
+  }
+});
+
+test("csharp-analyzer: a commented brace that closes an inner catch or another block does not exempt", () => {
+  const innerCatch = "try {\n    try { X(); } catch {\n    } // chemx-allow: best-effort inner\n} catch { }\n";
+  assert.deepEqual(csharpShallowCatches(innerCatch).map((hit) => hit.line), [4]);
+  const ifBlock = "try {\n    if (a) {\n        X();\n    } // chemx-allow: best-effort reason\n} catch { }\n";
+  assert.deepEqual(csharpShallowCatches(ifBlock).map((hit) => hit.line), [5]);
+});
+
 test("csharp-analyzer: a reasonless block annotation in a CRLF file is flagged", () => {
   const placements = [
     wrapCSharpCatch("        catch (Exception) { }", "        /* chemx-allow: best-effort */\n"),

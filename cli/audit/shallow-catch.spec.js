@@ -258,6 +258,27 @@ test('shallow catch: an Allman-style annotation between the brace and catch exem
   assertExempt('try {\n  a();\n}\n// chemx-allow: best-effort cache miss is fine\ncatch {\n}\n');
 });
 
+test('shallow catch: a Stroustrup annotation trailing the try block brace exempts it', () => {
+  assertExempt('try {\n  a();\n} // chemx-allow: best-effort reason\ncatch {\n}\n');
+  assertExempt('try {\n  a();\n} /* chemx-allow: best-effort reason */\ncatch {\n}\n');
+  assertExempt('try { a(); } // chemx-allow: best-effort reason\ncatch {}\n');
+});
+
+test('shallow catch: an annotation before the try block brace on its line does not exempt it', () => {
+  assertOne('try {\n  a(); /* chemx-allow: best-effort reason */ }\ncatch {\n}\n', 'MEDIUM');
+});
+
+test('shallow catch: a standalone annotation above a multi-line try is outside the window', () => {
+  assertOne('// chemx-allow: best-effort reason\ntry {\n  a();\n} catch {}\n', 'MEDIUM');
+});
+
+test('shallow catch: a commented brace closing an inner catch or try does not exempt the outer catch', () => {
+  const innerCatch = shallow('try {\n  try { x(); } catch {\n  } // chemx-allow: best-effort inner\n} catch {}\n');
+  assert.deepEqual(innerCatch.map((hit) => hit.line), [4]);
+  const innerTry = shallow('try {\n  try {\n    x();\n  } // chemx-allow: best-effort inner\n  catch {}\n} catch {}\n');
+  assert.deepEqual(innerTry.map((hit) => hit.line), [6]);
+});
+
 test('shallow catch: the annotation also exempts an escalated catch', () => {
   assertExempt('let v;\ntry { v = f(); } catch { /* chemx-allow: best-effort v is optional */ }\nuse(v);\n');
 });

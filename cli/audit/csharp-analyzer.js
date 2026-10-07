@@ -4,7 +4,7 @@
  * cyclomatic complexity, control flow nesting depth, and AI slop.
  */
 import { RULE_REGISTRY } from './rules-registry.js';
-import { parseBestEffortAllowance } from './rules-predicates.js';
+import { resolveCSharpCatchAllowance } from './shallow-catch-csharp.js';
 
 const IN_MEMORY_DB_PATTERN = /\bUseInMemoryDatabase\s*\(/;
 const SQLITE_PROVIDER_PATTERN = /\b(?:UseSqlite|SqliteConnection|DataSource\s*=\s*:memory:)\b/;
@@ -327,27 +327,6 @@ const checkCleanArchitectureAndCoupling = (content, relativePath, violations) =>
   }
 };
 
-// A best-effort annotation counts on the catch line, inside the body, on the closing-brace
-// line, or on the line above when that line starts with a comment. Code on the line above,
-// such as an annotated inner catch, belongs to another statement and never exempts this one.
-// Raw lines are read (masked content erases comments), so annotation text quoted in a string
-// on the catch's own lines also counts: a known gap the JS detector avoids by reading parser
-// comments. Severity stays at the registry MEDIUM with no escalation, because C# definite
-// assignment (CS0165) already rejects reading an unset local.
-const COMMENT_LED_LINE = /^\s*\/[/*]/;
-
-const resolveCatchAllowance = (match, lines, lineNum) => {
-  const endLineNum = lineNum + (match[0].match(/\n/g) || []).length;
-  const lineAbove = lines[lineNum - 2] || '';
-  const ownLines = lines.slice(lineNum - 1, endLineNum);
-  const texts = COMMENT_LED_LINE.test(lineAbove) ? [lineAbove, ...ownLines] : ownLines;
-  const allowances = texts.map((text) => parseBestEffortAllowance(text));
-  return {
-    isExempt: allowances.some((allowance) => allowance.hasReason),
-    isAnnotated: allowances.some((allowance) => allowance.isAnnotated)
-  };
-};
-
 export const analyzeCSharpCode = (content, relativePath, violations, config = {}) => {
   const lines = content.split('\n');
   const maskedContent = maskCommentsAndStrings(content);
@@ -355,7 +334,7 @@ export const analyzeCSharpCode = (content, relativePath, violations, config = {}
   const catchMatches = content.matchAll(/catch\s*(?:\([^)]*\))?\s*\{(?:\s*|\s*\/\/[^\n]*\s*)\}/g);
   for (const m of catchMatches) {
     const lineNum = content.slice(0, m.index).split('\n').length;
-    const allowance = resolveCatchAllowance(m, lines, lineNum);
+    const allowance = resolveCSharpCatchAllowance(m, { content, lines, maskedContent }, lineNum);
     if (allowance.isExempt) continue;
     const hazardParts = ['Empty or shallow catch block detected in C# handler/service'];
     if (allowance.isAnnotated) hazardParts.push(MISSING_REASON_NOTE);
