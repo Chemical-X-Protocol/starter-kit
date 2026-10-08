@@ -6,7 +6,11 @@ import {
   resolveStartLine,
   isZeroDelayTimeout,
   isUnguardedConsoleCall,
-  isSilentGuardClause
+  isSilentGuardClause,
+  isSwallowedCatch,
+  countOptionalChainingDepth,
+  isCombinatorCall,
+  isRawBooleanArg
 } from './rules-predicates.js';
 import { validateHookReturnShape } from './hook-shape-validator.js';
 import { evaluateComponentStructuralWeight } from './structural-weight-evaluator.js';
@@ -315,6 +319,100 @@ export const createAstVisitors = ({ relativePath, violations, hookRegistry, conf
           pillar: meta.pillar,
           directive: meta.directive
         });
+      }
+
+      // Pillar 6: Orphaned Event Listener
+      if (t.isMemberExpression(callee) && t.isIdentifier(callee.property, { name: 'addEventListener' })) {
+        const fnParent = astPath.getFunctionParent();
+        let hasCleanup = false;
+        if (fnParent) {
+          const fnName = fnParent.node.id?.name || '';
+          if (fnName === 'listen') {
+            hasCleanup = true;
+          } else {
+            fnParent.traverse({
+              CallExpression(innerCall) {
+                const innerCallee = innerCall.node.callee;
+                if (t.isMemberExpression(innerCallee) && t.isIdentifier(innerCallee.property, { name: 'removeEventListener' })) {
+                  hasCleanup = true;
+                }
+              }
+            });
+          }
+        }
+        if (!hasCleanup) {
+          const line = astPath.node.loc?.start.line || 1;
+          const meta = RULE_REGISTRY.LIFECYCLE_ORPHANED_LISTENER;
+          violations.push({
+            filePath: relativePath,
+            line,
+            column: astPath.node.loc?.start.column || 1,
+            hazard: 'Raw addEventListener call lacking lifecycle disposer or removeEventListener teardown',
+            rule: 'LIFECYCLE_ORPHANED_LISTENER',
+            severity: meta.severity,
+            pillar: meta.pillar,
+            directive: meta.directive
+          });
+        }
+      }
+
+      // Pillar 2: Combinator Raw Boolean Arguments
+      if (isCombinatorCall(callee, t)) {
+        const hasRawArg = astPath.node.arguments.some((arg) => isRawBooleanArg(arg, t));
+        if (hasRawArg) {
+          const line = astPath.node.loc?.start.line || 1;
+          const meta = RULE_REGISTRY.COMBINATOR_RAW_BOOLEAN;
+          violations.push({
+            filePath: relativePath,
+            line,
+            column: astPath.node.loc?.start.column || 1,
+            hazard: `Raw boolean expression passed to ${callee.name}(). Decompose into named predicate or thunk.`,
+            rule: 'COMBINATOR_RAW_BOOLEAN',
+            severity: meta.severity,
+            pillar: meta.pillar,
+            directive: meta.directive
+          });
+        }
+      }
+    },
+
+    // Pillar 2: Swallowed Exceptions
+    CatchClause(astPath) {
+      if (isSwallowedCatch(astPath, t)) {
+        const line = astPath.node.loc?.start.line || 1;
+        const meta = RULE_REGISTRY.ERROR_SWALLOWED_EXCEPTION;
+        violations.push({
+          filePath: relativePath,
+          line,
+          column: astPath.node.loc?.start.column || 1,
+          hazard: 'Swallowed exception in catch block without active handling, logging, or ResultTuple',
+          rule: 'ERROR_SWALLOWED_EXCEPTION',
+          severity: meta.severity,
+          pillar: meta.pillar,
+          directive: meta.directive
+        });
+      }
+    },
+
+    // Pillar 4: Deep Optional Chaining Churn
+    OptionalMemberExpression(astPath) {
+      const isParentOptional = t.isOptionalMemberExpression(astPath.parent) || t.isOptionalCallExpression(astPath.parent);
+      if (!isParentOptional) {
+        const depth = countOptionalChainingDepth(astPath.node, t);
+        if (depth >= 3) {
+          const line = astPath.node.loc?.start.line || 1;
+          const meta = RULE_REGISTRY.DATA_FLOW_OPTIONAL_CHAINING_CHURN;
+          violations.push({
+            filePath: relativePath,
+            line,
+            column: astPath.node.loc?.start.column || 1,
+            hazard: `Deep optional chaining churn (${depth} chained operators >= 3 limit). Level data shapes line 1.`,
+            rule: 'DATA_FLOW_OPTIONAL_CHAINING_CHURN',
+            severity: meta.severity,
+            pillar: meta.pillar,
+            directive: meta.directive
+          });
+        }
       }
     },
 

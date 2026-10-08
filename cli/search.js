@@ -273,7 +273,9 @@ export const runSearch = async (rawArgs = [], isCli = true) => {
     const gIndex = rawArgs.indexOf('-g');
     const literalIndex = rawArgs.indexOf('--literal');
     const flagIndex = gIndex !== -1 ? gIndex : literalIndex;
-    if (flagIndex !== -1 && rawArgs[flagIndex + 1] && !rawArgs[flagIndex + 1].startsWith('-')) {
+    const hasNextArg = flagIndex !== -1 && Boolean(rawArgs[flagIndex + 1]);
+    const isNextArgQuery = hasNextArg && !rawArgs[flagIndex + 1].startsWith('-');
+    if (isNextArgQuery) {
       query = rawArgs[flagIndex + 1];
     } else {
       query = nonFlagArgs[0] || '';

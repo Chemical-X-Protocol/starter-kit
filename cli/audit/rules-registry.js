@@ -116,6 +116,16 @@ export const RULE_REGISTRY = {
     severity: 'MEDIUM',
     directive: 'Replace silent bare return in side-effecting logic with explicit ResultTuple, logger diagnostic, or error state (Directive 3.G)'
   },
+  ERROR_SWALLOWED_EXCEPTION: {
+    pillar: PILLARS.PILLAR_2,
+    severity: 'CRITICAL',
+    directive: 'Do not swallow caught exceptions silently; log with error context or return explicit ResultTuple error (Directive 3.B)'
+  },
+  COMBINATOR_RAW_BOOLEAN: {
+    pillar: PILLARS.PILLAR_2,
+    severity: 'MEDIUM',
+    directive: 'Do not pass inline boolean expressions or raw booleans into logical combinators; use named predicates or thunks (Directive 3.A)'
+  },
   HOOK_SATURATION: {
     pillar: PILLARS.PILLAR_3,
     severity: 'HIGH',
@@ -146,6 +156,11 @@ export const RULE_REGISTRY = {
     severity: 'CRITICAL',
     directive: 'Replace render-hack setTimeout(0) with await nextTick() or RAF'
   },
+  LIFECYCLE_ORPHANED_LISTENER: {
+    pillar: PILLARS.PILLAR_6,
+    severity: 'HIGH',
+    directive: 'Wrap event listeners in self-cleaning disposers or register pairing removeEventListener (Directive 3.F)'
+  },
   TYPE_COLOCATION: {
     pillar: PILLARS.PILLAR_4,
     severity: 'MEDIUM',
@@ -160,6 +175,11 @@ export const RULE_REGISTRY = {
     pillar: PILLARS.PILLAR_4,
     severity: 'MEDIUM',
     directive: 'Use live API data or explicit empty states instead of mock placeholders'
+  },
+  DATA_FLOW_OPTIONAL_CHAINING_CHURN: {
+    pillar: PILLARS.PILLAR_4,
+    severity: 'LOW',
+    directive: 'Level incoming data shapes line 1 using sentinels or normalizeArray instead of deep optional chaining churn (Directive 4.D)'
   },
   RAW_INLINE_STYLE: {
     pillar: PILLARS.PILLAR_5,

@@ -266,3 +266,75 @@ export const isSilentGuardClause = (ifPath, t) => {
 
   return { funcName: funcName || (isAsync ? 'async operation' : 'command handler') };
 };
+
+export const isSwallowedCatch = (astPath, t) => {
+  const body = astPath.node.body?.body || [];
+  if (body.length === 0) return true;
+
+  const nonNoopStatements = body.filter((stmt) => !t.isEmptyStatement(stmt));
+  if (nonNoopStatements.length === 0) return true;
+
+  let hasActiveHandling = false;
+  astPath.traverse({
+    ThrowStatement() {
+      hasActiveHandling = true;
+    },
+    ReturnStatement(retPath) {
+      if (retPath.node.argument !== null) {
+        hasActiveHandling = true;
+      }
+    },
+    CallExpression(callPath) {
+      const callee = callPath.node.callee;
+      if (t.isMemberExpression(callee)) {
+        const objName = t.isIdentifier(callee.object) ? callee.object.name : '';
+        const propName = t.isIdentifier(callee.property) ? callee.property.name : '';
+        const isLogger = ['console', 'logger', 'log', 'telemetry', 'reportError'].includes(objName);
+        const isHandlingMethod = ['error', 'warn', 'info', 'captureException', 'track'].includes(propName);
+        const isProcessStderr = t.isMemberExpression(callee.object) &&
+          t.isIdentifier(callee.object.object, { name: 'process' }) &&
+          t.isIdentifier(callee.object.property, { name: 'stderr' });
+        if (isLogger || isHandlingMethod || isProcessStderr) {
+          hasActiveHandling = true;
+        }
+      } else if (t.isIdentifier(callee)) {
+        const isHandler = ['handleError', 'reportError', 'captureException', 'toResult'].includes(callee.name);
+        if (isHandler) {
+          hasActiveHandling = true;
+        }
+      }
+    }
+  });
+
+  return !hasActiveHandling;
+};
+
+export const countOptionalChainingDepth = (node, t) => {
+  let count = 0;
+  let curr = node;
+  while (curr && (t.isOptionalMemberExpression(curr) || t.isOptionalCallExpression(curr) || t.isMemberExpression(curr))) {
+    if (curr.optional) {
+      count++;
+    }
+    curr = curr.object || curr.callee;
+  }
+  return count;
+};
+
+const COMBINATOR_NAMES = new Set(['all', 'any', 'none', 'allPass', 'anyPass', 'nonePass']);
+
+export const isCombinatorCall = (callee, t) => {
+  if (t.isIdentifier(callee)) {
+    return COMBINATOR_NAMES.has(callee.name);
+  }
+  return false;
+};
+
+export const isRawBooleanArg = (arg, t) => {
+  if (t.isBinaryExpression(arg)) return true;
+  if (t.isLogicalExpression(arg)) return true;
+  if (t.isBooleanLiteral(arg)) return true;
+  if (t.isUnaryExpression(arg, { operator: '!' })) return true;
+  return false;
+};
+
