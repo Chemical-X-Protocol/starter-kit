@@ -45,7 +45,7 @@ export const extractCallTarget = (toolName, toolArgs = {}) => {
   const action = TOOL_ACTION_ALIASES[rawAction] ?? rawAction ?? null;
   const subAction = params.subAction ?? params.action ?? (params.title ? 'add' : 'list');
   const targetPaths = collectPaths(params);
-  const projectRoot = toolArgs.projectRoot ?? params.projectRoot ?? null;
+  const projectRoot = toolArgs.projectRoot ?? params.projectRoot ?? process.env.CHEMX_PROJECT_ROOT ?? null;
   return { action, subAction, projectRoot, targetPath: targetPaths[0] ?? null, targetPaths };
 };
 

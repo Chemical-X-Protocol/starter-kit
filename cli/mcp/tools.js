@@ -144,6 +144,11 @@ export const parseCommand = (command, params) => {
   if (subCmd === 'autofix') return { action: 'autofix', params: { path: parts[1] || 'src', ...params } };
   if (subCmd === 'trend' || subCmd === 'trends') return { action: 'trend', params };
   if (['tesseract', 'cube', 'matrix'].includes(subCmd)) return { action: 'tesseract', params };
+  if (subCmd === 'd' || subCmd === 'diff') return { action: 'd', params: { args: parts.slice(1), ...params } };
+  if (subCmd === 'log') return { action: 'log', params: { args: parts.slice(1), ...params } };
+  if (subCmd === 'p' || subCmd === 'pkg') return { action: 'p', params: { query: parts[1], ...params } };
+  if (subCmd === 'f' || subCmd === 'ls') return { action: 'f', params: { filter: parts[1], ...params } };
+  if (subCmd === 'j' || subCmd === 'json') return { action: 'j', params: { path: parts[1], ...params } };
   return { action: subCmd, params };
 };
 
@@ -165,21 +170,49 @@ const DISPATCHER = {
   team_task: handleChemxTeamTask, team_lock: handleChemxTeamLock, q: handleChemxQ, search: handleChemxQ,
   autofix: handleAutofix, generate: handleGenerateCapsule, patterns: handleQueryPatterns,
   issue: handleChemxReportIssue, project: handleChemxProject, coordinator: handleChemxProject,
-  tesseract: handleChemxTesseract, cube: handleChemxTesseract, matrix: handleChemxTesseract
+  tesseract: handleChemxTesseract, cube: handleChemxTesseract, matrix: handleChemxTesseract,
+  d: async (p, cwd) => (await import('../commands/cmd-wrappers.js')).runDiff(p.args || [], false),
+  diff: async (p, cwd) => (await import('../commands/cmd-wrappers.js')).runDiff(p.args || [], false),
+  log: async (p, cwd) => (await import('../commands/cmd-wrappers.js')).runLog(p.args || [], false),
+  p: async (p, cwd) => (await import('../commands/cmd-wrappers.js')).runPkg([p.query].filter(Boolean), false),
+  pkg: async (p, cwd) => (await import('../commands/cmd-wrappers.js')).runPkg([p.query].filter(Boolean), false),
+  f: async (p, cwd) => (await import('../commands/cmd-wrappers.js')).runFiles([p.filter].filter(Boolean), false),
+  ls: async (p, cwd) => (await import('../commands/cmd-wrappers.js')).runFiles([p.filter].filter(Boolean), false),
+  j: async (p, cwd) => (await import('../commands/cmd-wrappers.js')).runJsonShape([p.path].filter(Boolean), false),
+  json: async (p, cwd) => (await import('../commands/cmd-wrappers.js')).runJsonShape([p.path].filter(Boolean), false)
 };
 
 export const handleChemx = async (args = {}, cwd = process.cwd()) => {
+  if (Array.isArray(args.commands) || Array.isArray(args.batch)) {
+    const list = args.commands || args.batch;
+    const results = [];
+    for (const item of list) {
+      if (typeof item === 'string') {
+        const itemResult = await handleChemx({ command: item, projectRoot: args.projectRoot }, cwd);
+        results.push(itemResult);
+      } else if (item && typeof item === 'object') {
+        const itemResult = await handleChemx({ ...item, projectRoot: args.projectRoot || item.projectRoot }, cwd);
+        results.push(itemResult);
+      }
+    }
+    return results;
+  }
+
   let { action, params = {} } = args;
-  if (args.command && typeof args.command === 'string') {
+  const hasCommand = Boolean(args.command && typeof args.command === 'string');
+  if (hasCommand) {
     const parsed = parseCommand(args.command, params);
     action = parsed.action;
     params = parsed.params;
   }
+  const effectiveCwd = args.projectRoot || params?.projectRoot || args.cwd || params?.cwd || process.env.CHEMX_PROJECT_ROOT || cwd;
+  const mergedParams = { projectRoot: effectiveCwd, cwd: effectiveCwd, ...params };
+
   const handler = Object.hasOwn(DISPATCHER, action) ? DISPATCHER[action] : Tools[`chemx_${action}`];
   if (!handler) {
     throw new Error(`Unknown Chemical X action: "${action}". Valid actions: ${Object.keys(DISPATCHER).join(', ')}`);
   }
-  return handler(params, cwd);
+  return handler(mergedParams, effectiveCwd);
 };
 
 export const Tools = {
@@ -210,5 +243,6 @@ export const executeMcpTool = async (name, args = {}, cwd = process.cwd()) => {
   const toolName = name === 'chemx_master' ? 'chemx' : name;
   const handle = resolveToolHandler(toolName);
   if (!handle) throw new Error(`Unknown tool: ${name}`);
-  return handle(args, cwd);
+  const effectiveCwd = args.projectRoot || args?.params?.projectRoot || args.cwd || args?.params?.cwd || process.env.CHEMX_PROJECT_ROOT || cwd;
+  return handle(args, effectiveCwd);
 };

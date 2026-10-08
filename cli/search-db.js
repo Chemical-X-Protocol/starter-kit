@@ -38,7 +38,7 @@ export const getAllIndexedFiles = (db) => {
   return fileMap;
 };
 
-export const removeDeletedFiles = (db, currentFilePaths, cwd = process.cwd()) => {
+export const removeDeletedFiles = (db, currentFilePaths, cwd = process.cwd(), { includeInternal = false } = {}) => {
   if (!db) return 0;
   const indexed = getAllIndexedFiles(db);
   let removedCount = 0;
@@ -47,10 +47,19 @@ export const removeDeletedFiles = (db, currentFilePaths, cwd = process.cwd()) =>
   const deleteFtsStmt = db.prepare('DELETE FROM fts_index WHERE file_path = ?');
   const deleteImportsStmt = db.prepare('DELETE FROM imports WHERE importer_path = ?');
 
+  const currentSet = new Set(currentFilePaths);
+
   for (const [filePath] of indexed.entries()) {
     const fullPath = path.isAbsolute(filePath) ? filePath : path.resolve(cwd, filePath);
     const isFileMissing = !fs.existsSync(fullPath);
-    if (isFileMissing) {
+    const isIgnored = (!includeInternal && filePath.startsWith('cli/')) ||
+      filePath.startsWith('.chemx/') ||
+      filePath.startsWith('blueprints/') ||
+      filePath.startsWith('scratch/') ||
+      filePath.startsWith('benchmarks/');
+    const isNotCurrent = currentFilePaths.length > 0 && !currentSet.has(filePath) && (!includeInternal && filePath.startsWith('cli/'));
+
+    if (isFileMissing || isIgnored || isNotCurrent) {
       deleteStmt.run(filePath);
       deleteFtsStmt.run(filePath);
       deleteImportsStmt.run(filePath);

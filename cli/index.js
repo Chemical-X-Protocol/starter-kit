@@ -79,6 +79,12 @@ export { handleError, withErrorCatcher, publishIssue };
 
 export const ALLOWED_COMMANDS = new Set([
   'search', 'q', 'query', 'find',
+  'd', 'diff',
+  'log',
+  'p', 'pkg',
+  'f', 'ls',
+  'j', 'json',
+  'do', 'batch',
   'trace', 'backtrace',
   'read', 'view', 'r',
   'patch', 'edit',

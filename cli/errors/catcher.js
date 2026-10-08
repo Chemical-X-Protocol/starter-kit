@@ -74,15 +74,48 @@ export const handleError = async (err, options = {}) => {
     }
   } else if (!options.silent) {
     const isTty = Boolean(process.stdin.isTTY && process.stdout.isTTY);
-    const isInteractive = isTty && !isCiEnv;
+    const isAgentEnv = Boolean(process.env.AGENT || process.env.ANTIGRAVITY || process.env.CURSOR || process.env.NON_INTERACTIVE);
+    const isExplicitPrompt = Boolean(options.promptIssue || process.env.CHEMX_PROMPT_ISSUES === 'true');
+    const canPromptUser = isTty && !isCiEnv && !isAgentEnv && isExplicitPrompt;
+
     process.stderr.write(`\n\x1b[31m✕ Command Failed: ${report.message}\x1b[0m\n`);
     process.stderr.write(`  \x1b[33m• Prepped Issue:\x1b[0m ${issue.webUrl}\n`);
     if (savedPath) {
       process.stderr.write(`  \x1b[33m• Local Report:\x1b[0m ${savedPath}\n`);
     }
 
-    if (isInteractive) {
+    if (canPromptUser) {
       publishResult = await promptUserToPublish(targetRepo, issue);
+    }
+  }
+
+  // Swarm task DAG integration: track published issues as actionable tasks
+  const isAutoTaskEnabled = options.createTask !== false && process.env.CHEMX_AUTO_TASK !== 'false';
+  const hasPublishedUrl = Boolean(publishResult.url);
+  const canRegisterTask = publishResult.success && hasPublishedUrl && isAutoTaskEnabled;
+
+  if (canRegisterTask) {
+    try {
+      const { openIndexDb } = await import('../search-db.js');
+      const { createTask } = await import('../team/team-db-tasks.js');
+      const db = openIndexDb(cwd);
+      if (db) {
+        const taskTitle = `Resolve issue: ${report.message.slice(0, 70)}`;
+        const taskDesc = `Automated GitHub Issue: ${publishResult.url}\n\nCommand: ${report.command}\n\n${report.stack || report.message}`;
+        const created = createTask(db, {
+          title: taskTitle,
+          description: taskDesc,
+          origin_type: 'github_issue',
+          task_url: publishResult.url,
+          status: 'queued',
+          priority: 1
+        });
+        if (created && !options.silent) {
+          process.stdout.write(`  \x1b[36m• Swarm Task:\x1b[0m #${created.id} queued to track issue resolution\n`);
+        }
+      }
+    } catch {
+      // Non-blocking fallback if database is unavailable
     }
   }
 

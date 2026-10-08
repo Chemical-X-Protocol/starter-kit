@@ -5,6 +5,19 @@
 
 ---
 
+## ⚡ Quick Agent Reflex Table (Token-Bounded Commands)
+| Standard Reflex | Chemical X (`cx`) Equivalent | Token & Architecture Advantage |
+| :--- | :--- | :--- |
+| `grep -rn "pattern" .` | `cx q -g "pattern"` or `cx q -g "pattern" -l` | Auto-ignores build/vendor; clamps lines to 60 chars or line-only (-l). |
+| `git diff` | `cx d` | Zero-context (`-U0`), auto-collapses to `--stat` if > 80 lines, micro-syncs index. |
+| `git log` | `cx log -n 5` | Single-line compact commit history (~8 tokens/commit). |
+| `find . -name "*.vue"` | `cx f "*.vue"` | Strictly filters by `.gitignore` and ignored dirs. |
+| `cat package.json` | `cx p -s` / `cx p <script>` | Instant single script or dep extraction (~3 tokens vs 300 lines). |
+| `cat <file>` / `head <file>` | `cx read <file> --outline` | AST signatures only (~50 tokens vs thousands). |
+| `npm test` / `tsc` | `cx test` / `cx verify` | Silent on success; returns only failing diffs. |
+
+---
+
 ## 1. The Molecular Architecture Protocol
 
 ### A. Structural Weight, Cognitive Cohesion & Profile Architecture
@@ -38,12 +51,11 @@
 - Encapsulate shared feature state in dedicated domain composables/hooks, scoped stores, or typed provide/inject.
 - Child components consume state directly from the domain composable and emit minimal, intention-revealing semantic events.
 
-### E. Same-Name Prop Shorthand (Vue 3.4+ & Svelte 5)
-- **Vue 3.4+**: Always use same-name `:prop` shorthand instead of redundant `:prop="prop"`:
-  `<m-spark-kpi-strip :metrics :records :can-refresh />`
-- **Svelte 5**: Always use same-name `{prop}` shorthand instead of `prop={prop}`:
-  `<SparkKpiStrip {metrics} {records} {canRefresh} />`
-- **React 19 (JSX)**: Explicitly bind `prop={prop}`. Never write `<Comp prop />` for variables (JSX evaluates bare attributes to boolean `true`).
+### E. Idiomatic Shorthand Binding
+Use same-name shorthand across all languages; eliminate redundant `key: key` duplication:
+- **JS / TS / Rust Data Structures**: `{ foo, bar }` over `{ foo: foo, bar: bar }`.
+- **Vue 3.4+ & Svelte 5 Templates**: `<Comp :prop />` or `<Comp {prop} />` over `:prop="prop"`.
+- **React / JSX Exception**: Explicit `prop={prop}` (bare `<Comp prop />` coerces to boolean `true`).
 
 ### F. Pre-Split Pattern Discovery & Harmonization Protocol
 - **Survey Before Slicing**: Before decomposing any monolithic file or collection of files, the AI must first conduct a cross-file pattern discovery audit across all candidate monoliths.
@@ -62,7 +74,7 @@
   - When repeated elements accumulate behavioral logic, accessibility handling, or styling variants across 3+ places (Rule of Three), extract into a canonical capsule (`m-tab-button`).
 
 ### H. AI Agent Codebase Query Machine Protocol
-- **Search First Rule**: AI agents MUST invoke `pnpm chemx q "<query>"` (or `npx chemx search "<query>"`) before running broad ripgrep, find, or file dumping.
+- **AST & Literal Search First Rule**: AI agents should invoke `cx q "<query>"` for AST symbols or `cx q -g "<pattern>"` for literal text before running broad unthrottled grep. If AST search returns 0 results, check the suggested `cx q -g` fallback before escalating to raw ripgrep.
 - **AST Architecture Intelligence**: Always leverage `pnpm chemx q` to inspect component tiers, exported symbols, props, and hooks with minimal token burn.
 - **Mandatory Blast Radius Pre-Refactor Check**: Prior to modifying any foundational atom (`a-*`), shared molecule, or central composable (`use*`), agents MUST calculate the transitive blast radius (`pnpm chemx q <target> --blast-radius --json` or `chemx({ action: 'q', params: { query: '<target>', blastRadius: true } })`). Never perform blind refactors without mapping direct consumers, transitive dependents, and impacted tiers.
 - **Hybrid RRF Discovery Protocol**: When discovering components, controllers, or state machines without an exact symbol name, agents MUST use hybrid search (`pnpm chemx q "<concept>" --hybrid --json` or `chemx({ action: 'q', params: { query: '<concept>', hybrid: true } })`). This blends BM25 keyword matching and vector cosine similarity via Reciprocal Rank Fusion (RRF), eliminating keyword misses and semantic hallucinations.
@@ -146,7 +158,7 @@
 - **Read Window Auto-Outline**: Files longer than the chemx read window (100 lines by default), read without a target symbol or slice, automatically render an AST outline to prevent token exhaustion and host buffer spillovers (such as IDE `output.txt` dumps). The read window is a tool budget, not an architecture rule; file size is governed by 1.A.
 - **Enrich Mode (Component Capsules Only)**: When an agent needs both exported signatures AND logic flow for a component capsule, use `enrich: true` with `outline: true`: one response card holds the outline and a compacted logic skeleton, optionally with a forward trace or reverse caller chain (`traceSymbol`, `backtraceSymbol`). The skeleton generator is tuned for components; on procedural modules (services, CLI code, utilities) enrich saves only a few percent over reading the whole file, so use plain `outline: true` or `symbol: '<name>'` there.
 - **Symbol Connection Graph Over Multi-File Dumps**: Rather than reading multiple files to understand imports and consumers, agents MUST request symbol connections: `chemx({ action: 'read', params: { path, symbol: '<name>', connections: true } })` or `chemx({ action: 'q', params: { query, connections: true } })`. This instantly returns the definition, imported dependencies, and caller references in ~45 tokens.
-- **Prohibition on Native File Analyzers (`view_file` Ban)**: AI agents are strictly prohibited from using native IDE file-viewing tools (`view_file`, `read_file`, `cat`, `head`, `tail`, or full-file context dumps). Dumping raw files burns thousands of tokens, causes premature context exhaustion, and defeats the token economics of the molecular architecture. All inspections MUST flow through Chemical X AST readers.
+- **Token-First File Inspection & Native Fallback**: AI agents should prioritize Chemical X AST readers (`cx read --outline` or `cx read --symbol`) to conserve tokens. Dumping raw files burns thousands of tokens and causes premature context exhaustion. If an agent requires exact raw verification or unformatted bytes, native tools (`view_file`, `grep`, `cat`) are permitted as an intentional fallback.
 
 ### O. Universal Programmatic File Jig & Closed-Loop Execution Protocol
 - **Deterministic Parameterized Synthesis**: When creating non-UI files (services, API route handlers, state stores, database repositories, utilities, or test specs), AI agents MUST NOT emit hundreds of lines of mechanical boilerplate via raw file writing tools. Agents MUST invoke `chemx generate --jig=<kind>` or `chemx({ action: 'generate', params: { jig: true, kind, name, ... } })`.

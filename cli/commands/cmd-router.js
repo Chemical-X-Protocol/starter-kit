@@ -75,6 +75,41 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
       await runSearch(rawArgs.slice(1), true);
       break;
     }
+    case 'd':
+    case 'diff': {
+      const { runDiff } = await import('./cmd-wrappers.js');
+      await runDiff(rawArgs, true);
+      break;
+    }
+    case 'log': {
+      const { runLog } = await import('./cmd-wrappers.js');
+      await runLog(rawArgs, true);
+      break;
+    }
+    case 'p':
+    case 'pkg': {
+      const { runPkg } = await import('./cmd-wrappers.js');
+      await runPkg(rawArgs, true);
+      break;
+    }
+    case 'f':
+    case 'ls': {
+      const { runFiles } = await import('./cmd-wrappers.js');
+      await runFiles(rawArgs, true);
+      break;
+    }
+    case 'j':
+    case 'json': {
+      const { runJsonShape } = await import('./cmd-wrappers.js');
+      await runJsonShape(rawArgs, true);
+      break;
+    }
+    case 'do':
+    case 'batch': {
+      const { runBatch } = await import('./cmd-wrappers.js');
+      await runBatch(rawArgs, true, (cmd, args) => dispatchCommand(cmd, args, runAudit, getPackageVersion, isCapsulePrefix));
+      break;
+    }
     case 'trace': {
       const { runTraceCli } = await import('../search-commands-graph.js');
       await runTraceCli(rawArgs.slice(1), true);

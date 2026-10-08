@@ -7,7 +7,9 @@
     "create-chemx": "cli/create.js",
     "chemx": "cli/index.js",
     "chem-x": "cli/index.js",
-    "chemical-x": "cli/index.js"
+    "chemical-x": "cli/index.js",
+    "cx": "cli/index.js",
+    "cmx": "cli/index.js"
   },
   "license": "MIT",
   "repository": {

@@ -31,7 +31,8 @@ import {
   handleCallTraceCommand,
   handleBacktraceCommand,
   handleSemanticCommand,
-  handleHybridCommand
+  handleHybridCommand,
+  handleLiteralSearchCommand
 } from './search-commands.js';
 import { runGenerateWizard } from './generator.js';
 import { runMutatorCli } from './mutators.js';
@@ -51,12 +52,14 @@ export {
 } from './search-db.js';
 export {
   handleCheckCommand, handleBlastRadiusCommand,
-  handleSemanticCommand, handleHybridCommand
+  handleSemanticCommand, handleHybridCommand,
+  handleLiteralSearchCommand
 } from './search-commands.js';
 
 const IGNORED_DIRS = new Set([
   'node_modules', 'dist', 'build', 'vendor', '.git',
-  '.next', '.turbo', '.output', '.nuxt', '.cache', 'out'
+  '.next', '.turbo', '.output', '.nuxt', '.cache', 'out',
+  '.chemx', 'blueprints', 'scratch', 'benchmarks', '.gemini', '.claude', '.cursor', 'temp', 'coverage'
 ]);
 
 const EXCLUDED_NAME_PATTERNS = ['.test.', '.spec.', '.min.'];
@@ -90,7 +93,7 @@ export const syncSearchIndex = (targetDir = 'src', cwd = process.cwd(), options 
   if (shouldSkipSync) return { db, updatedCount: 0 };
 
   const targetDirs = Array.isArray(targetDir) ? targetDir : [targetDir];
-  if (targetDir === 'src' && fs.existsSync(path.resolve(cwd, 'cli'))) {
+  if (options.includeInternal && fs.existsSync(path.resolve(cwd, 'cli'))) {
     targetDirs.push('cli');
   }
 
@@ -143,7 +146,7 @@ export const syncSearchIndex = (targetDir = 'src', cwd = process.cwd(), options 
     }
   }
 
-  removeDeletedFiles(db, currentPaths);
+  removeDeletedFiles(db, currentPaths, cwd, { includeInternal: options.includeInternal });
   return { db, updatedCount, totalFiles: scanned.length };
 };
 
@@ -209,47 +212,7 @@ const formatTierBadge = (tier) => {
 };
 
 export { resolveTargetDir };
-
-export const printSearchHelp = () => {
-  const BOLD = '\x1b[1m';
-  const CYAN = '\x1b[36m';
-  const DIM = '\x1b[2m';
-  const RESET = '\x1b[0m';
-
-  const help = [
-    `\n${BOLD}${CYAN}Chemical X Query Machine: Codebase & AST Search${RESET}`,
-    `Architecture-aware AST indexer powered by SQLite (.chemx/index.db).\n`,
-    `${BOLD}USAGE${RESET}`,
-    `  ${CYAN}npx chemx q${RESET} <query|symbol|file> [options]`,
-    `  ${CYAN}pnpm chemx search${RESET} <query> [options]\n`,
-    `${BOLD}DISCOVERY & IMPACT MODES${RESET}`,
-    `  ${CYAN}--blast-radius, --blast, --impact${RESET}`,
-    `      Calculate direct and transitive dependent blast radius across architectural tiers.`,
-    `      Optional: ${CYAN}--max-depth=<N>${RESET} (traversal depth, default: 5)`,
-    `      Example: ${DIM}pnpm chemx q a-button --blast-radius --json${RESET}\n`,
-    `  ${CYAN}--semantic${RESET}`,
-    `      Concept search via vector cosine similarity.`,
-    `      Example: ${DIM}pnpm chemx q "button click handler state" --semantic --json${RESET}\n`,
-    `  ${CYAN}--hybrid${RESET}`,
-    `      Blended keyword (BM25) and vector cosine ranking via Reciprocal Rank Fusion (RRF).`,
-    `      Example: ${DIM}pnpm chemx q "useAttentionCardController" --hybrid --json${RESET}\n`,
-    `  ${CYAN}refs <symbol>${RESET} / ${CYAN}deps <symbol|file>${RESET}`,
-    `      Inspect caller references or imported dependencies for a given symbol or file.\n`,
-    `  ${CYAN}--hazards${RESET}`,
-    `      Query unresolved architectural rule violations.`,
-    `      Optional: ${CYAN}--rule=<id>${RESET}, ${CYAN}--critical${RESET}\n`,
-    `  ${CYAN}--pack, context <target>${RESET}`,
-    `      Bundle token-optimized context payload for target capsule and consumers.\n`,
-    `${BOLD}OUTPUT & FILTER FLAGS${RESET}`,
-    `  ${CYAN}--json${RESET}                 Structured JSON output for AI agent workflows`,
-    `  ${CYAN}--columnar${RESET}             Token-compact columnar format (cols/rows)`,
-    `  ${CYAN}-i, --inspect${RESET}          Inspect props, exported symbols, and hooks breakdown`,
-    `  ${CYAN}--tier=<tier>${RESET}          Filter by tier (atom, molecule, organism, view, hook)`,
-    `  ${CYAN}--reindex${RESET}              Force re-index before executing query`,
-    `  ${CYAN}--failing, --clean${RESET}     Filter capsules by architectural health status\n`
-  ];
-  process.stdout.write(help.join('\n'));
-};
+export { printSearchHelp } from './help.js';
 
 export const runSearch = async (rawArgs = [], isCli = true) => {
   const hasHelpFlag = rawArgs.includes('--help') || rawArgs.includes('-h');
@@ -264,16 +227,30 @@ export const runSearch = async (rawArgs = [], isCli = true) => {
   const isRawJson = rawArgs.includes('--raw-json') || rawArgs.includes('--no-columnar');
   const isExplicitColumnar = rawArgs.includes('--columnar');
   const isJson = rawArgs.includes('--json') || isExplicitColumnar;
-  const isColumnar = isJson && !isRawJson;
-  const isInspect = rawArgs.includes('--inspect') || rawArgs.includes('-i');
+  const isLiteral = rawArgs.includes('-g') || rawArgs.includes('--literal');
+  const isCaseInsensitive = isLiteral && rawArgs.includes('-i');
+  const isInspect = !isLiteral && (rawArgs.includes('--inspect') || rawArgs.includes('-i'));
+  const isLineOnly = rawArgs.includes('-l') || rawArgs.includes('--lines');
+  const isIncludeInternal = rawArgs.includes('--include-internal');
   const isReindex = rawArgs.includes('--reindex');
   const tierFlag = rawArgs.find((a) => a.startsWith('--tier='));
   const tier = tierFlag ? tierFlag.split('=')[1] : null;
   const dirFlag = rawArgs.find((a) => a.startsWith('--dir='));
   const targetDir = resolveTargetDir(dirFlag);
 
+  let matchLimit = 20;
+  const limitFlag = rawArgs.find((a) => a.startsWith('-n=') || a.startsWith('--limit='));
+  if (limitFlag) {
+    matchLimit = parseInt(limitFlag.split('=')[1], 10) || 20;
+  } else {
+    const nIndex = rawArgs.indexOf('-n');
+    if (nIndex !== -1 && rawArgs[nIndex + 1]) {
+      matchLimit = parseInt(rawArgs[nIndex + 1], 10) || 20;
+    }
+  }
+
   const startTime = Date.now();
-  const syncRes = syncSearchIndex(targetDir, process.cwd(), { reindex: isReindex });
+  const syncRes = syncSearchIndex(targetDir, process.cwd(), { reindex: isReindex, includeInternal: isIncludeInternal });
   const db = syncRes?.db;
 
   if (!db) {
@@ -290,6 +267,26 @@ export const runSearch = async (rawArgs = [], isCli = true) => {
   const nonFlagArgs = rawArgs.filter((a) => !a.startsWith('-'));
   const firstArg = nonFlagArgs[0] || '';
   const secondArg = nonFlagArgs[1] || '';
+
+  if (isLiteral) {
+    let query = '';
+    const gIndex = rawArgs.indexOf('-g');
+    const literalIndex = rawArgs.indexOf('--literal');
+    const flagIndex = gIndex !== -1 ? gIndex : literalIndex;
+    if (flagIndex !== -1 && rawArgs[flagIndex + 1] && !rawArgs[flagIndex + 1].startsWith('-')) {
+      query = rawArgs[flagIndex + 1];
+    } else {
+      query = nonFlagArgs[0] || '';
+    }
+    return handleLiteralSearchCommand(db, query, {
+      isCaseInsensitive,
+      isLineOnly,
+      limit: matchLimit,
+      isJson,
+      isCli,
+      cwd: process.cwd()
+    });
+  }
 
   const isCheckCommand = firstArg === 'check' || firstArg === 'verify';
   if (isCheckCommand) {
@@ -426,6 +423,7 @@ export const runSearch = async (rawArgs = [], isCli = true) => {
       tier,
       count: results.length,
       durationMs,
+      suggestion: results.length === 0 ? `cx q -g "${cleanQuery}"` : undefined,
       results
     };
     process.stdout.write(JSON.stringify(payload) + '\n');
@@ -437,7 +435,8 @@ export const runSearch = async (rawArgs = [], isCli = true) => {
   process.stdout.write(`\n${ANSI.BOLD}${ANSI.CYAN}Chemical X Query Machine${ANSI.RESET} ${ANSI.DIM}(${results.length} results in ${durationMs}ms)${ANSI.RESET}\n`);
 
   if (results.length === 0) {
-    process.stdout.write(`  ${ANSI.DIM}No matching capsules, symbols, or files found for "${cleanQuery}".${ANSI.RESET}\n\n`);
+    process.stdout.write(`  ${ANSI.DIM}No matching capsules, symbols, or files found for "${cleanQuery}".${ANSI.RESET}\n`);
+    process.stdout.write(`  ${ANSI.CYAN}💡 Try literal search: cx q -g "${cleanQuery}"${ANSI.RESET}\n\n`);
     if (isCli) process.exit(0);
     return results;
   }

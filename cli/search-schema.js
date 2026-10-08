@@ -48,9 +48,11 @@ export const openIndexDb = (cwd = process.cwd(), options = {}) => {
   }
 
   let db = null;
-  try {
-    db = new DatabaseSync(dbPath, isReadOnly ? { readOnly: true } : {});
-    if (!isReadOnly) {
+  const isExistingDb = fs.existsSync(dbPath);
+
+  if (!isReadOnly) {
+    try {
+      db = new DatabaseSync(dbPath);
       try {
         db.exec('PRAGMA busy_timeout = 5000;');
         db.exec('PRAGMA journal_mode = WAL;');
@@ -58,17 +60,28 @@ export const openIndexDb = (cwd = process.cwd(), options = {}) => {
       } catch {
         // Safe retry/fallback if concurrent worker holds active lock
       }
+    } catch {
+      isReadOnly = true;
     }
-  } catch (err) {
-    if (!isReadOnly) {
+  }
+
+  if (isReadOnly) {
+    try {
+      if (isExistingDb) {
+        db = new DatabaseSync(`file:${dbPath}?immutable=1`, { readOnly: true });
+      } else {
+        db = new DatabaseSync(':memory:');
+      }
+    } catch {
       try {
         db = new DatabaseSync(dbPath, { readOnly: true });
-        isReadOnly = true;
       } catch {
-        return null;
+        try {
+          db = new DatabaseSync(':memory:');
+        } catch {
+          return null;
+        }
       }
-    } else {
-      return null;
     }
   }
 

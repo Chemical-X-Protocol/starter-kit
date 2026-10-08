@@ -11,10 +11,43 @@ const GREEN = '\x1b[32m';
 const YELLOW = '\x1b[33m';
 const RED = '\x1b[31m';
 
+export const findChemxDir = (startDir = process.cwd()) => {
+  const hasCustomRoot = Boolean(process.env.CHEMX_PROJECT_ROOT);
+  if (hasCustomRoot) {
+    return path.resolve(process.env.CHEMX_PROJECT_ROOT, '.chemx');
+  }
+
+  let current = path.resolve(startDir);
+  let gitRoot = null;
+  while (true) {
+    const candidate = path.join(current, '.chemx');
+    const hasExistingChemx = fs.existsSync(candidate);
+    if (hasExistingChemx) {
+      return candidate;
+    }
+    const hasGit = !gitRoot && fs.existsSync(path.join(current, '.git'));
+    if (hasGit) {
+      gitRoot = current;
+    }
+    const parent = path.dirname(current);
+    const isRootReached = parent === current;
+    if (isRootReached) break;
+    current = parent;
+  }
+
+  const hasDiscoveredGitRoot = Boolean(gitRoot);
+  if (hasDiscoveredGitRoot) {
+    return path.join(gitRoot, '.chemx');
+  }
+
+  return path.resolve(startDir, '.chemx');
+};
+
 export const ensureChemxDir = (cwd = process.cwd()) => {
-  const dir = path.resolve(cwd, '.chemx');
+  const dir = findChemxDir(cwd);
   try {
-    if (!fs.existsSync(dir)) {
+    const isDirMissing = !fs.existsSync(dir);
+    if (isDirMissing) {
       fs.mkdirSync(dir, { recursive: true });
     }
   } catch {
@@ -22,17 +55,21 @@ export const ensureChemxDir = (cwd = process.cwd()) => {
   }
 
   // Ensure .chemx is gitignored if git repo exists
-  const gitDir = path.resolve(cwd, '.git');
-  if (fs.existsSync(gitDir)) {
-    const gitignorePath = path.resolve(cwd, '.gitignore');
+  const targetParent = path.dirname(dir);
+  const gitDir = path.resolve(targetParent, '.git');
+  const hasGit = fs.existsSync(gitDir);
+  if (hasGit) {
+    const gitignorePath = path.resolve(targetParent, '.gitignore');
     try {
-      let content = fs.existsSync(gitignorePath) ? fs.readFileSync(gitignorePath, 'utf-8') : '';
-      if (!content.includes('.chemx')) {
-        const trailingNewline = content.endsWith('\n') || content.length === 0 ? '' : '\n';
+      const hasGitignore = fs.existsSync(gitignorePath);
+      let content = hasGitignore ? fs.readFileSync(gitignorePath, 'utf-8') : '';
+      const hasChemxEntry = content.includes('.chemx');
+      if (!hasChemxEntry) {
+        const hasTrailingNewline = content.endsWith('\n') || content.length === 0;
+        const trailingNewline = hasTrailingNewline ? '' : '\n';
         fs.appendFileSync(gitignorePath, `${trailingNewline}# Chemical X local telemetry & audit history\n.chemx/\n`, 'utf-8');
       }
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error(String(err));
+    } catch {
       return dir;
     }
   }
