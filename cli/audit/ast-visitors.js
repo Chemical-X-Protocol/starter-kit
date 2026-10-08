@@ -5,7 +5,8 @@ import {
   isCustomHookFunction,
   resolveStartLine,
   isZeroDelayTimeout,
-  isUnguardedConsoleCall
+  isUnguardedConsoleCall,
+  isSilentGuardClause
 } from './rules-predicates.js';
 import { validateHookReturnShape } from './hook-shape-validator.js';
 import { evaluateComponentStructuralWeight } from './structural-weight-evaluator.js';
@@ -116,6 +117,22 @@ export const createAstVisitors = ({ relativePath, violations, hookRegistry, conf
             directive: meta.directive
           });
         }
+      }
+
+      const silentGuard = isSilentGuardClause(astPath, t);
+      if (silentGuard) {
+        const line = astPath.node.loc?.start.line || 1;
+        const meta = RULE_REGISTRY.CONTROL_FLOW_SILENT_GUARD;
+        violations.push({
+          filePath: relativePath,
+          line,
+          column: astPath.node.loc?.start.column || 1,
+          hazard: `Silent guard abort detected in ${silentGuard.funcName}: bare return; swallows error condition without logging or error state. Return [null, error] or emit diagnostic per Directive 3.G.`,
+          rule: 'CONTROL_FLOW_SILENT_GUARD',
+          severity: meta.severity,
+          pillar: meta.pillar,
+          directive: meta.directive
+        });
       }
     },
 

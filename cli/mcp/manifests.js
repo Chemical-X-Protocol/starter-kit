@@ -16,31 +16,13 @@ export const MASTER_MCP_TOOL = {
       action: {
         type: 'string',
         enum: [
-          'test',
-          'build',
-          'verify',
-          'typecheck',
-          'audit',
-          'read',
-          'patch',
-          'write',
-          'check',
-          'q',
-          'search',
-          'team',
-          'team_status',
-          'team_feed',
-          'team_post',
-          'team_task',
-          'team_lock',
-          'autofix',
-          'generate',
-          'patterns',
-          'issue',
-          'project',
-          'tesseract',
-          'trace',
-          'backtrace'
+          'test', 'build', 'verify', 'typecheck', 'audit',
+          'read', 'patch', 'write', 'check',
+          'q', 'search',
+          'd', 'diff', 'log', 'p', 'pkg', 'f', 'ls', 'j', 'json', 'do', 'batch',
+          'team', 'team_status', 'team_feed', 'team_post', 'team_task', 'team_lock',
+          'autofix', 'generate', 'patterns', 'issue', 'project', 'tesseract',
+          'trace', 'backtrace'
         ],
         description: 'The Chemical X subsystem action to execute.'
       },
@@ -49,6 +31,8 @@ export const MASTER_MCP_TOOL = {
         description: 'Parameter payload for the specific action (e.g., { path, symbol, outline, logic, template, connections } for read; { query, blastRadius, trace, backtrace, semantic, hybrid } for q; { path, search, replace } for patch; { dir, command } for test/build).',
         properties: {
           query: { type: 'string', description: 'Search term, symbol name, or conceptual query (for q/search)' },
+          literal: { type: 'boolean', description: 'Literal substring search mode for q (-g)' },
+          lines: { type: 'boolean', description: 'Line-only output path:line for q (-l)' },
           blastRadius: { type: 'boolean', description: 'Map direct consumers, transitive dependents & impacted tiers (for q)' },
           trace: { type: 'boolean', description: 'Compute forward call trace of downstream invocations (for q/search)' },
           backtrace: { type: 'boolean', description: 'Compute reverse backtrace causal caller path (for q/search)' },
@@ -117,6 +101,16 @@ export const MASTER_MCP_TOOL = {
       command: {
         type: 'string',
         description: 'Optional CLI command string format (e.g., "test", "build", "verify", "typecheck", "audit src", "q a-button --blast-radius --json", "q \\"button state\\" --semantic --json", "read src/foo.vue --outline", "read src/foo.vue --outline --enrich", "check src/bar.ts", "team task list").'
+      },
+      commands: {
+        type: 'array',
+        items: { type: 'string' },
+        description: 'Batch execution array of CLI commands run sequentially in a single turn (e.g. ["d", "p -s", "verify"]).'
+      },
+      batch: {
+        type: 'array',
+        items: { type: 'object' },
+        description: 'Batch execution array of action objects run sequentially in a single turn.'
       }
     }
   }

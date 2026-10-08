@@ -23,17 +23,21 @@ export const COMMANDS_SCHEMA = [
       { flag: '--hybrid', desc: 'Blended BM25 keyword + Vector RRF ranking' },
       { flag: '--hazards', desc: 'Query architectural rule violations directly (flags: --rule=<id>, --critical)' },
       { flag: '--pack', desc: 'Assemble token-packed context bundle for target symbol or file' },
+      { flag: '-g, --literal', desc: 'Literal substring ripgrep search with 60-character line clamping' },
+      { flag: '-l, --lines', desc: 'Line-only output (path:line) consuming ~1 token per match' },
       { flag: '--reindex', desc: 'Force re-index before running query' }
     ],
     examples: [
-      'npx chemx search "badge"',
-      'pnpm q a-button --blast-radius --json',
-      'pnpm q useUserCardController --trace',
-      'pnpm q handleAction --backtrace',
-      'pnpm q "button click handler" --semantic',
-      'pnpm q "useAttentionCardController" --hybrid --json',
-      'pnpm q "useTheme" --inspect',
-      'npx chemx search "card" --tier=molecule'
+      'cx q "badge"',
+      'cx q -g "useTheme"',
+      'cx q -g "handleAction" -l',
+      'cx q a-button --blast-radius --json',
+      'cx q useUserCardController --trace',
+      'cx q handleAction --backtrace',
+      'cx q "button click handler" --semantic',
+      'cx q "useAttentionCardController" --hybrid --json',
+      'cx q "useTheme" --inspect',
+      'cx q "card" --tier=molecule'
     ]
   },
   {
@@ -318,6 +322,92 @@ export const COMMANDS_SCHEMA = [
       'npm create chemx my-molecular-app --framework=react',
       'npx create-chemx my-vue-app --framework=vue --yes',
       'npx chemx create my-app --framework=svelte --install'
+    ]
+  },
+  {
+    name: 'diff',
+    aliases: ['d'],
+    usage: 'cx d [options]',
+    summary: 'Token-enforced zero-context diff (-U0) with automatic stat collapse.',
+    description: 'Runs git diff -U0 --no-color, auto-collapsing to --stat if diff exceeds 80 lines to prevent context flooding. Micro-syncs dirty files to .chemx/index.db.',
+    flags: [
+      { flag: '--stat', desc: 'Show commit stat only' }
+    ],
+    examples: [
+      'cx d',
+      'cx diff --stat'
+    ]
+  },
+  {
+    name: 'log',
+    aliases: [],
+    usage: 'cx log [options]',
+    summary: 'Compact single-line git commit history.',
+    description: 'Runs git log --oneline -n <limit> to inspect recent changes in minimal tokens.',
+    flags: [
+      { flag: '-n, --limit=<N>', desc: 'Number of commits to show (default: 10)' }
+    ],
+    examples: [
+      'cx log',
+      'cx log -n 5'
+    ]
+  },
+  {
+    name: 'pkg',
+    aliases: ['p'],
+    usage: 'cx p [script|dep] [options]',
+    summary: 'Token-minified package.json reader.',
+    description: 'Extracts single scripts, dependencies, or keys from package.json without dumping the entire file into context.',
+    flags: [
+      { flag: '-s, --scripts', desc: 'List all script names only' },
+      { flag: '-d, --deps', desc: 'List dependency names only' }
+    ],
+    examples: [
+      'cx p -s',
+      'cx p build',
+      'cx p -d'
+    ]
+  },
+  {
+    name: 'ls',
+    aliases: ['f'],
+    usage: 'cx f [pattern]',
+    summary: 'Gitignore-aware fast path finder.',
+    description: 'Finds files matching pattern respecting .gitignore and ignored directories.',
+    flags: [
+      { flag: '--json', desc: 'Output matched paths as JSON array' }
+    ],
+    examples: [
+      'cx f "*.vue"',
+      'cx f "controller"'
+    ]
+  },
+  {
+    name: 'json',
+    aliases: ['j'],
+    usage: 'cx j <file.json> [options]',
+    summary: 'Structural JSON schema shape peeker.',
+    description: 'Infers type structure, array element types, and keys from JSON files without dumping raw payload bytes into context.',
+    flags: [
+      { flag: '--depth=<N>', desc: 'Max object traversal depth (default: 3)' }
+    ],
+    examples: [
+      'cx j package.json',
+      'cx j tsconfig.json'
+    ]
+  },
+  {
+    name: 'batch',
+    aliases: ['do'],
+    usage: 'cx do "<cmd1>" "<cmd2>" ...',
+    summary: 'Sequential multi-command runner inside a single warm Node process.',
+    description: 'Runs multiple Chemical X CLI commands sequentially in one process invocation, avoiding repeated process startup overhead.',
+    flags: [
+      { flag: '--stop-on-error', desc: 'Halt execution if any command fails (default: true)' }
+    ],
+    examples: [
+      'cx do "d" "p -s" "verify"',
+      'cx do "q -g theme" "d"'
     ]
   }
 ];

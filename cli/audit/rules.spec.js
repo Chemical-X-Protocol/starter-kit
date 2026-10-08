@@ -359,3 +359,72 @@ test("Audit Reporter: includes explicit architectural health notice distinguishi
   assert.ok(markdown.includes('chemx verify'));
 });
 
+test("Audit Rules: flags silent guard aborts in mutating handlers and async functions", () => {
+  const handlerCode = `
+export const handleCheckout = () => {
+  const hasFunds = balance > 0;
+  if (!hasFunds) return;
+  chargeCustomer();
+};
+`;
+  const handlerViolations = auditCode(handlerCode, "src/checkout.ts", "src/checkout.ts");
+  const handlerViolation = handlerViolations.find((v) => v.rule === "CONTROL_FLOW_SILENT_GUARD");
+  assert.ok(handlerViolation, "Expected CONTROL_FLOW_SILENT_GUARD for silent return in handleCheckout");
+  assert.strictEqual(handlerViolation.severity, "MEDIUM");
+  assert.ok(handlerViolation.hazard.includes("handleCheckout"));
+
+  const asyncCode = `
+export async function saveProfile(payload) {
+  const isValid = Boolean(payload);
+  if (!isValid) return;
+  await api.save(payload);
+}
+`;
+  const asyncViolations = auditCode(asyncCode, "src/profile.ts", "src/profile.ts");
+  const asyncViolation = asyncViolations.find((v) => v.rule === "CONTROL_FLOW_SILENT_GUARD");
+  assert.ok(asyncViolation, "Expected CONTROL_FLOW_SILENT_GUARD for silent return in async saveProfile");
+  assert.ok(asyncViolation.hazard.includes("saveProfile"));
+});
+
+test("Audit Rules: does NOT flag guard clauses with diagnostics, error states, or in exempt contexts", () => {
+  const withLogCode = `
+export const handleCheckout = () => {
+  const hasFunds = balance > 0;
+  if (!hasFunds) {
+    logger.warn('Checkout halted: insufficient funds');
+    return;
+  }
+  chargeCustomer();
+};
+`;
+  const logViolations = auditCode(withLogCode, "src/checkout.ts", "src/checkout.ts");
+  assert.strictEqual(logViolations.find((v) => v.rule === "CONTROL_FLOW_SILENT_GUARD"), undefined);
+
+  const optionalPropCode = `
+export const handleClick = () => {
+  if (!props.onClick) return;
+  props.onClick();
+};
+`;
+  const propViolations = auditCode(optionalPropCode, "src/button.ts", "src/button.ts");
+  assert.strictEqual(propViolations.find((v) => v.rule === "CONTROL_FLOW_SILENT_GUARD"), undefined);
+
+  const abortCode = `
+export async function loadData(signal) {
+  if (signal.aborted) return;
+  await fetchResource();
+}
+`;
+  const abortViolations = auditCode(abortCode, "src/loader.ts", "src/loader.ts");
+  assert.strictEqual(abortViolations.find((v) => v.rule === "CONTROL_FLOW_SILENT_GUARD"), undefined);
+
+  const predicateCode = `
+export function isAdult(user) {
+  if (!user) return false;
+  return user.age >= 18;
+}
+`;
+  const predViolations = auditCode(predicateCode, "src/validator.ts", "src/validator.ts");
+  assert.strictEqual(predViolations.find((v) => v.rule === "CONTROL_FLOW_SILENT_GUARD"), undefined);
+});
+

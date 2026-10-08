@@ -13,8 +13,11 @@
 | `git log` | `cx log -n 5` | Single-line compact commit history (~8 tokens/commit). |
 | `find . -name "*.vue"` | `cx f "*.vue"` | Strictly filters by `.gitignore` and ignored dirs. |
 | `cat package.json` | `cx p -s` / `cx p <script>` | Instant single script or dep extraction (~3 tokens vs 300 lines). |
+| `cat <data.json>` | `cx j <file.json>` | Structural schema shape only; collapses repeating arrays. |
 | `cat <file>` / `head <file>` | `cx read <file> --outline` | AST signatures only (~50 tokens vs thousands). |
 | `npm test` / `tsc` | `cx test` / `cx verify` | Silent on success; returns only failing diffs. |
+| Multiple CLI actions | `cx do "<cmd1>" "<cmd2>"` | Executes sequentially in a single warm Node process. |
+| Multiple MCP tool calls | `chemx({ commands: [...] })` | Executes multiple sub-operations in a single agent turn. |
 
 ---
 
@@ -117,6 +120,14 @@ Use same-name shorthand across all languages; eliminate redundant `key: key` dup
 - **Command Forwarding Syntax**: Agents may invoke either structured action objects (`chemx({ action: 'test' })`, `chemx({ action: 'build' })`, `chemx({ action: 'audit', params: { path: 'src' } })`) or CLI command strings (`chemx({ command: 'test' })`, `chemx({ command: 'build' })`, `chemx({ command: 'audit src' })`).
 - **Master Action & Parameter Dispatch Matrix**:
   ```typescript
+  // Fast Token-Bounded Wrappers & Multi-Action Batching
+  chemx({ commands: ['d', 'p -s', 'test'] }); // Multi-command batch in single turn
+  chemx({ action: 'd' });                      // Zero-context diff (-U0), auto-stat if > 80 lines
+  chemx({ action: 'log', params: { limit: 5 } }); // Compact single-line commit history
+  chemx({ action: 'p', params: { command: '-s' } }); // Read scripts from package.json
+  chemx({ action: 'j', params: { path: 'data.json' } }); // Structural JSON schema shape
+  chemx({ action: 'q', params: { query: 'theme', literal: true } }); // Literal ripgrep (-g)
+
   // Discovery & Impact Analysis
   chemx({ action: 'q', params: { query: 'a-button', blastRadius: true } });
   chemx({ action: 'q', params: { query: 'button state', semantic: true } });
@@ -287,17 +298,18 @@ Use same-name shorthand across all languages; eliminate redundant `key: key` dup
 - When branching performs uniform operations (e.g. mapping string keys to action handlers, CSS classes, prompt builders, or payload converters), extract into an O(1) keyed dictionary or method map (`const Registry = { ... }; Registry[key](...)`).
 - **Branch Chains**: An `if` / `else if` chain of 3 or more branches testing the same subject is a lookup, not a series of decisions. Use a keyed map; do not hoist a named boolean per branch (3.A does not apply to such chains).
 - **Prototype Pollution Guardrail**: Always guard dynamic object key access using `Object.hasOwn(Registry, key)` or `Object.prototype.hasOwnProperty.call(Registry, key)` before invoking mapped methods.
-- **Architectural Benefits**:
-  - O(1) constant time lookup instead of O(N) linear string comparison branching.
-  - Eliminates boilerplate syntax duplication, drastically slashing token burn and AI context footprint.
-  - Complies with the Open-Closed Principle (OCP): new handlers can be registered dynamically without modifying the dispatcher AST.
-  - Enables granular unit testing and mocking of individual handlers in isolation.
+- **Architectural Benefits**: O(1) lookup over O(N) string branching, eliminates boilerplate syntax duplication, complies with OCP, and isolates unit testing.
 
 ### F. Name Quality, Assertion Prefixes & Adjacency
 - **Assertion Prefixes**: A condition name starts with `is`, `are`, `has`, `have`, `can`, `could`, `should`, `would`, `does`, `did`, `needs`, `must`, `allows`, `enables`, `contains`, `includes`, `supports`, `requires`, `exceeds`, `matches`, or `wants`, followed by its subject (`isEscapeChar`, `exceedsHookBudget`). A bare verb callee (`test`, `existsSync`, `includes`, `startsWith`) is not a name: bind its result to one first.
 - **Reject Restatements**: A name built only from the words of its own expression teaches nothing. `isChEqualsBackslash = ch === '\\'` and `isCountGreaterThanFive = count > 5` are rejected; `isEscapeChar = ch === '\\'` adds a domain term and passes. If a condition cannot be named in words absent from the condition itself, it is not yet understood: find out before branching on it.
 - **Adjacency**: Declare a single-use named boolean on the statement immediately before its `if`. Hoist it only when it is referenced 2 or more times in the enclosing function, and then only to a point before its first use. A wall of `const is*` declarations at function top is a readability regression.
 - **No Double Negation**: `if (!isNotFound)` names the wrong side. Name the positive and negate at the point of use.
+
+### G. Explicit Guardrail Aborts (No Silent Failures)
+- Guard clauses in event handlers, mutations, and async flows must never fail silently via bare `return;`.
+- Halting execution requires an explicit contract: return a `ResultTuple` (`return [null, error]`), emit diagnostic logging (`logger.warn(...)`), update a user-facing error state (`state.error = '...'`), or throw a domain invariant.
+- **Exemptions**: Benign lifecycle no-ops (`abortSignal.aborted`, `!isMounted`), optional prop callbacks (`!props.onClick`), debounce/throttle timers, and pure query predicates.
 
 ---
 
@@ -481,15 +493,3 @@ Raw inline `style="..."` attributes are strictly prohibited. Visual styling flow
 ### C. "No Fake Doc-Sync" Anti-Pattern
 - Mirroring the "No Fake Green" testing rule in Section 10.D, superficial doc edits (whitespace tweaks, comment formatting, minor typo fixes) made merely to pass CI touch-checks without addressing substantive semantic changes are strictly prohibited.
 - Documentation reviews must verify substantive alignment between code behavior and documented contracts.
-
-
-## Chemical X Codebase Query Machine Protocol
-- Search First Rule: AI agents MUST invoke 'pnpm chemx q "<query>"' (or 'npx chemx search "<query>"') before running broad ripgrep, find, or file dumping.
-- AST Architecture Intelligence: Always leverage 'pnpm chemx q' to inspect component tiers, exported symbols, props, and hooks with minimal token burn.
-- Inspect Mode: Use 'pnpm chemx q "<capsule-name>" --inspect' to examine props and hooks without reading entire source files.
-- JSON Mode: Use 'pnpm chemx q "<query>" --json' for zero-overhead, machine-readable agent lookups.
-
-## Chemical X Verification-First Protocol & Zero-Token-Burn Pipeline
-- Verification First Rule: AI agents MUST NEVER run raw, unthrottled "npm test", "pnpm test", "vitest", "tsc --noEmit", or "npm run build" directly in a bash subshell.
-- MCP Verification Tools First: AI agents MUST invoke dedicated Chemical X MCP tools or CLI wrappers ('pnpm chemx verify', 'npx chemx verify', 'pnpm chemx build', 'npx chemx build') before running terminal commands.
-

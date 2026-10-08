@@ -8,6 +8,7 @@ Active pillars: Molecular Line Budgets, Strict Component Tiers & Zero-Raw-DOM, T
 ## Invocation
 - Checks go through the `chemx` MCP tool (server `chemical-x`): `chemx({ action: 'verify' })`, `'test'`, `'typecheck'`. Never run raw `npm test` or `tsc --noEmit`.
 - Mutating calls (`write`, `patch`, `autofix`, `generate`, team claims and posts) need `params.projectRoot` set to the absolute repo path.
-- Search before reading: `chemx({ action: 'q', params: { query } })`.
+- Fast token-bounded wrappers: `cx d` (diff), `cx log` (oneline), `cx p` (package.json), `cx j` (json schema), `cx do` (batch).
+- Search before reading: `chemx({ action: 'q', params: { query } })` (AST) or `cx q -g <pattern>` (literal search).
 - Read narrowly: `chemx({ action: 'read', params: { path, symbol } })` or `outline: true`. Use `enrich: true` on component capsules only; procedural modules gain little from it.
-- Without MCP: `npx chemx verify`, `npx chemx read <path> --outline`.
+- Without MCP: `cx verify`, `cx read <path> --outline`, `cx d`.

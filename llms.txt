@@ -1,4 +1,4 @@
-# starter-kit
+# Chemical X
 
 > Agent directives for this project, built on the Chemical X architecture toolkit.
 
@@ -11,6 +11,6 @@ Active pillars: Molecular Line Budgets, Strict Component Tiers & Zero-Raw-DOM, T
 
 ## Invocation
 - MCP: one tool, `chemx({ action, params })`. Mutating actions need `params.projectRoot`.
-- CLI: `npx chemx verify`, `npx chemx audit --json`, `npx chemx q "<query>"`, `npx chemx read <path> --outline`.
+- CLI: `cx verify`, `cx audit --json`, `cx q "<query>"` (AST), `cx q -g "<pattern>"` (literal), `cx d` (diff), `cx read <path> --outline`.
 
 <!-- chemx:generated pillars -->

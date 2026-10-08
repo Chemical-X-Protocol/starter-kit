@@ -138,3 +138,131 @@ export const isNonInteractiveSession = (rawArgs, env = process.env) => {
   const isNotTTY = Boolean(process.stdout && process.stdout.isTTY === false);
   return [hasCliFlag, hasOutputFlag, hasFormatFlag, hasCiEnv, isNotTTY].some(Boolean);
 };
+
+const EXEMPT_TEST_PATTERNS = [
+  /abort/i,
+  /signal/i,
+  /mounted/i,
+  /unmount/i,
+  /destroy/i,
+  /cleanup/i,
+  /timer/i,
+  /timeout/i,
+  /interval/i,
+  /debounce/i,
+  /throttle/i,
+  /\bon[A-Z]/,
+  /\bcall(?:back|backFn)?\b/i,
+  /\bcb\b/i,
+  /\bhandler\b/i
+];
+
+const MUTATING_FUNCTION_PATTERNS = [
+  /^handle[A-Z]/,
+  /^on[A-Z]/,
+  /^(?:save|update|delete|remove|create|add|insert|post|send|process|submit|dispatch|execute|mutate|checkout|charge|sync|write)/i
+];
+
+const PURE_PREDICATE_PATTERNS = [
+  /^(?:is|has|can|should|check)[A-Z]/
+];
+
+const isDiagnosticOrErrorStatement = (stmt, t) => {
+  if (t.isThrowStatement(stmt)) return true;
+  if (t.isExpressionStatement(stmt)) {
+    const expr = stmt.expression;
+    if (t.isCallExpression(expr)) {
+      const callee = expr.callee;
+      if (t.isMemberExpression(callee)) {
+        const objName = t.isIdentifier(callee.object) ? callee.object.name : '';
+        const propName = t.isIdentifier(callee.property) ? callee.property.name : '';
+        if (['console', 'logger', 'log'].includes(objName)) return true;
+        if (/^(?:error|warn|info|trace|notify|alert)/i.test(propName)) return true;
+      }
+      if (t.isIdentifier(callee) && /^(?:report|notify|alert|set.*Error|handleError)/i.test(callee.name)) return true;
+    }
+    if (t.isAssignmentExpression(expr)) {
+      const left = expr.left;
+      if (t.isMemberExpression(left) && t.isIdentifier(left.property) && /error/i.test(left.property.name)) return true;
+      if (t.isIdentifier(left) && /error/i.test(left.name)) return true;
+    }
+  }
+  return false;
+};
+
+export const isSilentGuardClause = (ifPath, t) => {
+  const node = ifPath.node;
+  if (!node || node.alternate) return false;
+
+  let hasBareReturn = false;
+  let hasDiagnosticOrHandling = false;
+
+  const checkStatement = (stmt) => {
+    if (t.isReturnStatement(stmt)) {
+      const isBare = !stmt.argument || (t.isIdentifier(stmt.argument) && stmt.argument.name === 'undefined');
+      if (isBare) hasBareReturn = true;
+    } else if (isDiagnosticOrErrorStatement(stmt, t)) {
+      hasDiagnosticOrHandling = true;
+    }
+  };
+
+  if (t.isReturnStatement(node.consequent)) {
+    checkStatement(node.consequent);
+  } else if (t.isBlockStatement(node.consequent)) {
+    for (const stmt of node.consequent.body) {
+      checkStatement(stmt);
+    }
+  }
+
+  if (!hasBareReturn || hasDiagnosticOrHandling) return false;
+
+  const collectTestIdentifiers = (n) => {
+    const names = [];
+    const walk = (item) => {
+      if (!item) return;
+      if (t.isIdentifier(item)) {
+        names.push(item.name);
+      } else if (t.isMemberExpression(item)) {
+        walk(item.object);
+        walk(item.property);
+      } else if (t.isUnaryExpression(item)) {
+        walk(item.argument);
+      } else if (t.isLogicalExpression(item) || t.isBinaryExpression(item)) {
+        walk(item.left);
+        walk(item.right);
+      } else if (t.isCallExpression(item)) {
+        walk(item.callee);
+        for (const arg of item.arguments) walk(arg);
+      }
+    };
+    walk(n);
+    return names;
+  };
+
+  const testIdentifiers = collectTestIdentifiers(node.test);
+  const isExemptTest = testIdentifiers.some((name) => EXEMPT_TEST_PATTERNS.some((pat) => pat.test(name)));
+  if (isExemptTest) return false;
+
+  const funcParent = ifPath.getFunctionParent();
+  if (!funcParent) return false;
+
+  let funcName = '';
+  if (funcParent.node.id?.name) {
+    funcName = funcParent.node.id.name;
+  } else if (funcParent.parentPath?.isVariableDeclarator() && t.isIdentifier(funcParent.parentPath.node.id)) {
+    funcName = funcParent.parentPath.node.id.name;
+  } else if (t.isIdentifier(funcParent.node.key)) {
+    funcName = funcParent.node.key.name;
+  }
+
+  const isAsync = Boolean(funcParent.node.async);
+  const isMutatingName = MUTATING_FUNCTION_PATTERNS.some((pat) => pat.test(funcName));
+  const isPurePredicate = PURE_PREDICATE_PATTERNS.some((pat) => pat.test(funcName));
+
+  if (isPurePredicate && !isAsync && !isMutatingName) return false;
+
+  const isTargetFunction = isAsync || isMutatingName;
+  if (!isTargetFunction) return false;
+
+  return { funcName: funcName || (isAsync ? 'async operation' : 'command handler') };
+};

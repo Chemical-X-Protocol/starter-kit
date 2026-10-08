@@ -111,6 +111,11 @@ export const RULE_REGISTRY = {
     severity: 'MEDIUM',
     directive: 'Replace repetitive dispatch switch with an O(1) keyed dictionary or method map (Directive 3.E)'
   },
+  CONTROL_FLOW_SILENT_GUARD: {
+    pillar: PILLARS.PILLAR_2,
+    severity: 'MEDIUM',
+    directive: 'Replace silent bare return in side-effecting logic with explicit ResultTuple, logger diagnostic, or error state (Directive 3.G)'
+  },
   HOOK_SATURATION: {
     pillar: PILLARS.PILLAR_3,
     severity: 'HIGH',
