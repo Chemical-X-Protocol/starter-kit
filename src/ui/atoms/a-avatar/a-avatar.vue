@@ -15,10 +15,12 @@ const canShowInitials = computed(() => !hasSrc.value && hasName.value);
 const hasStatus = computed(() => Boolean(props.status));
 
 const initials = computed(() => {
-  if (!props.name) return '?';
+  const isNameMissing = !props.name;
+  if (isNameMissing) return '?';
   const clean = props.name.replace(/^@/, '');
   const parts = clean.split(/[-_\s]+/);
-  if (parts.length >= 2) {
+  const hasMultipleParts = parts.length >= 2;
+  if (hasMultipleParts) {
     return (parts[0][0] + parts[1][0]).toUpperCase();
   }
   return clean.slice(0, 2).toUpperCase();
