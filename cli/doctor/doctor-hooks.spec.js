@@ -16,7 +16,7 @@ after(() => { for (const dir of created) fs.rmSync(dir, { recursive: true, force
 const tempDir = (prefix) => { const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix)); created.push(dir); return dir; };
 const writeJson = (file, value) => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, JSON.stringify(value)); };
 const readJson = (file) => JSON.parse(fs.readFileSync(file, 'utf-8'));
-const install = (root, extra = []) => runInstallHooks(parseInstallArgs(['--host=claude', `--root=${root}`, '--no-mcp', '--no-statusline', ...extra], root));
+const install = (root, extra = []) => runInstallHooks(parseInstallArgs(['--host=claude', `--root=${root}`, '--no-statusline', ...extra], root));
 const makeKit = () => {
   const kit = tempDir('chemx-doctor-other-kit-');
   fs.mkdirSync(path.join(kit, 'cli', 'hooks'), { recursive: true });

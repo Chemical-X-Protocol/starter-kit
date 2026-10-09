@@ -107,7 +107,7 @@ test('--dry-run reports the plan and writes nothing; malformed settings fail wit
 
 test('project scope references an in-project kit through $CLAUDE_PROJECT_DIR', () => {
   const project = makeProject({ kitInside: true });
-  install(project, ['--scope=project', '--no-mcp']);
+  install(project, ['--scope=project']);
   const command = settingsOf(project.root, 'settings.json').hooks.PreToolUse[0].hooks[0].command;
   assert.equal(command, 'node "$CLAUDE_PROJECT_DIR/tools/kit/cli/hooks/entry.js" claude-pre-tool');
 });
