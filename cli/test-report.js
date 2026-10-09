@@ -62,8 +62,10 @@ export const describeSelection = (selection) => {
   if (!selection) return null;
   if (selection.mode === 'full') return `Full suite: ${selection.reason}`;
   const changedCount = (selection.changed || []).length;
-  const graph = selection.graph ? `, ${selection.graph} graph` : '';
-  return `Affected specs: ${selection.specs.length} of ${selection.suiteSize ?? '?'} for ${changedCount} changed file(s)${graph}`;
+  const graph = selection.graph ? `, ${selection.graph} graph${selection.graphNote ? ` (${selection.graphNote})` : ''}` : '';
+  const unpinned = selection.specs.filter((s) => s.reasons.every((r) => r.startsWith('may load any changed file'))).length;
+  const unpinnedNote = unpinned > 0 ? `, ${unpinned} only because they load modules the graph cannot pin` : '';
+  return `Affected specs: ${selection.specs.length} of ${selection.suiteSize ?? '?'} for ${changedCount} changed file(s)${graph}${unpinnedNote}`;
 };
 
 export const formatTestReport = (report) => {

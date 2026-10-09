@@ -1,6 +1,8 @@
 // Affected-spec selection for `chemx test --changed` / `--related`. A spec is selected when it
 // changed, sits next to a changed source (x.js -> x.spec.js), or depends on a changed file
-// through the dependency graph (test-graph.js). When the graph cannot prove the selection
+// through the dependency graph (test-graph.js). A file the graph cannot pin down (computed
+// import(name), an unresolvable specifier) may load any changed file, so it and its dependents
+// are selected for every change, with that reason. When the graph cannot prove the selection
 // (manifests, lockfiles, runner/compiler configs, shared spec support or fixtures, deleted
 // modules, directories) the whole suite runs and `reason` says why: never a silent subset.
 import path from 'node:path';
@@ -34,6 +36,16 @@ const colocatedSpecs = (file, suite) => {
 const readersOf = (file, graph) => {
   const name = path.posix.basename(file);
   return [...graph.texts.entries()].filter(([reader, text]) => reader !== file && text.includes(name)).map(([reader]) => reader);
+};
+
+const selectOpenDependents = (graph, select) => {
+  for (const [file, why] of graph.open || []) {
+    const reason = `may load any changed file: ${file} ${why}`;
+    if (SPEC_FILE.test(file)) select(file, reason);
+    for (const [dependent, chain] of walkDependents(graph, file)) {
+      if (SPEC_FILE.test(dependent)) select(dependent, `${reason}; depends on ${chain}`);
+    }
+  }
 };
 
 // changes: [{ path, status }] root-relative. suite: Set of spec paths the full run would execute.
@@ -70,8 +82,10 @@ export const selectAffectedSpecs = ({ changes, graph, suite }) => {
         if (SPEC_FILE.test(dependent) && select(dependent, `depends on ${chain}${via}`)) hits++;
       }
     }
-    if (hits === 0) unaffected.push({ path: file, reason: isModule ? 'no spec in the suite depends on it' : 'no module imports or names it' });
+    if (hits === 0) unaffected.push({ path: file, reason: isModule ? 'no spec in the suite depends on it through a resolved import' : 'no module imports or names it' });
   }
+  const hasLiveChange = changes.some((change) => change.status !== 'D');
+  if (hasLiveChange) selectOpenDependents(graph, select);
   const specs = [...reasons.entries()].map(([spec, list]) => ({ path: spec, reasons: list })).sort((a, b) => a.path.localeCompare(b.path));
   return { mode: 'affected', reason: null, specs, unaffected };
 };
