@@ -17,7 +17,8 @@ import {
   queryFilesByHealth
 } from './search-db.js';
 
-const DEF_MAX_LINES = 40;
+// `chemx def` snippet window (a read cap, not a line budget).
+const DEF_SNIPPET_CAP = 40;
 
 export const handleDefCommand = (db, targetSymbol, { index = null, isJson = false, isCli = true, isFull = false, root = process.cwd() } = {}) => {
   const def = findSymbolDefinition(db, targetSymbol);
@@ -37,8 +38,8 @@ export const handleDefCommand = (db, targetSymbol, { index = null, isJson = fals
 
   let snippet = '';
   const bodyLines = Math.max(1, def.endLine - def.startLine + 1);
-  const isTruncated = !isFull && bodyLines > DEF_MAX_LINES;
-  const shownLines = isTruncated ? DEF_MAX_LINES : bodyLines;
+  const isTruncated = !isFull && bodyLines > DEF_SNIPPET_CAP;
+  const shownLines = isTruncated ? DEF_SNIPPET_CAP : bodyLines;
   try {
     const absPath = path.resolve(root, def.filePath);
     if (fs.existsSync(absPath)) {

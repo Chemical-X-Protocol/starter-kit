@@ -9,7 +9,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { DatabaseSync } from 'node:sqlite';
 import { initTeamSchema } from './team-schema.js';
-import { createTask } from './team-db-tasks.js';
+import { createTask, claimTask } from './team-db-tasks.js';
 import { completeTaskWithAudit } from './team-triage.js';
 import { auditFile } from '../audit.js';
 import { calculateMolecularHealthScore, SCORE_MODEL } from '../audit/metrics.js';
@@ -32,6 +32,7 @@ test('receipt healthAfter uses the severity-weighted score model', () => {
     assert.ok(hazards.every((v) => v.severity === 'LOW' || v.severity === 'MEDIUM'));
 
     const task = createTask(db, { title: 'flags', target_path: rel, origin_type: 'audit', violation_snapshot: { healthBefore: 50, hazardCountBefore: 1 } });
+    claimTask(db, task.id, '@test-bot'); // only the claimant may complete (T: task done checks ownership)
     const completed = completeTaskWithAudit(db, task.id, '@test-bot', { cwd: root });
     const expected = calculateMolecularHealthScore(hazards, 1).score;
     assert.equal(completed.result_payload.healthAfter, expected);

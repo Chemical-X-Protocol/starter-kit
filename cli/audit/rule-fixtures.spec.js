@@ -103,7 +103,9 @@ test('registry completeness: every rule has a fixture pair or a recorded reason'
 
 test('registry completeness: the engine only emits registered rule ids', () => {
   const auditDir = new URL('./', import.meta.url).pathname;
-  const sources = fs.readdirSync(auditDir).filter((f) => f.endsWith('.js') && !f.endsWith('.spec.js') && f !== 'autofix.js');
+  // autofix*.js (Phase 1 split autofix.js into autofix-content.js etc.) names fix ids, not audit rules.
+  const isAutofixModule = (f) => f.startsWith('autofix');
+  const sources = fs.readdirSync(auditDir).filter((f) => f.endsWith('.js') && !f.endsWith('.spec.js') && !isAutofixModule(f));
   const emitted = new Set();
   for (const file of sources) {
     const text = fs.readFileSync(path.join(auditDir, file), 'utf-8');
