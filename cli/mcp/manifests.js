@@ -70,6 +70,7 @@ export const MASTER_MCP_TOOL = {
           agentId: { type: 'string', description: 'Caller agent id for team lock checks on patch/write (default @agent)' },
           content: { type: 'string', description: 'File content to write (for write)' },
           overwrite: { type: 'boolean', description: 'Required to replace an existing file (for write); without it write refuses' },
+          append: { type: 'boolean', description: 'write: add content to the end of the file (created if missing) with the same parse check, audit, index sync and lock checks; refused together with overwrite; no newline is inserted for you' },
           dir: { type: 'string', description: 'Target directory (for audit, test, build, patterns)' },
           command: { type: 'string', description: 'Command for build/test/typecheck. Runs only when it equals a package.json script (or `npm run <script>`), unless the server has CHEMX_MCP_ALLOW_SHELL=1.' },
           testTarget: { type: 'string', description: 'Target test file or spec path (for test)' },
@@ -203,6 +204,7 @@ const FILE_SUB_TOOLS = [
         path: { type: 'string', description: 'Target file path to write' },
         content: { type: 'string', description: 'Code content to write' },
         overwrite: { type: 'boolean', description: 'Required to replace an existing file; without it write refuses' },
+        append: { type: 'boolean', description: 'Add content to the end of the file (created if missing); refused together with overwrite' },
         dryRun: { type: 'boolean', description: 'Preview only: return the unified diff and write nothing' },
         allowRemoved: { type: 'array', items: { type: 'string' }, description: 'Top-level declarations an overwrite may remove; any other removal is refused' },
         agentId: { type: 'string', description: 'Caller agent id for team lock checks (default @agent)' }

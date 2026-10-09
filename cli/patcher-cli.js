@@ -7,7 +7,8 @@ import fs from 'node:fs';
 import { ANSI } from './theme.js';
 import { isStdinTty } from './terminal.js';
 import { parseValueFlags, hasFlag, splitList, hasPreviewFlag, findUnknownFlags, unknownFlagsMessage } from './cli-args.js';
-import { patchFile, writeFile } from './patcher.js';
+import { patchFile } from './patcher.js';
+import { writeOrAppend } from './write-append.js';
 import { parseSearchReplaceBlocks } from './search-replace-blocks.js';
 
 const PATCH_HELP = [
@@ -50,6 +51,7 @@ const WRITE_HELP = [
   '  --content=<text>         File content (also: --content <text>)',
   '  --content-file=<path>    Read content from a file',
   '  --overwrite              Allow replacing an existing file',
+  '  --append                 Add the content to the end of the file (created if missing); same checks as a write; not with --overwrite',
   '  --allow-remove=<a,b>     Top-level declarations an overwrite may remove',
   '  --as=<agent>             Agent id for team lock checks',
   '  -n, --dry-run            Print the unified diff without writing (--dryRun, --dry-run=<any> too)',
@@ -191,7 +193,7 @@ export const runPatcherCli = (args, isCli = false) => {
 };
 
 const WRITE_FLAGS = { content: ['--content'], contentFile: ['--content-file'], allowRemove: ['--allow-remove'], as: ['--as'] };
-const WRITE_SWITCHES = ['--stdin', '--overwrite'];
+const WRITE_SWITCHES = ['--stdin', '--overwrite', '--append'];
 const MISSING_CONTENT = 'chemx write needs --content=<text>, --content-file=<path> or --stdin (a value starting with "-" needs the --content=<text> form). Refusing to write.';
 
 const readWriteContent = (args, values) => {
@@ -212,9 +214,10 @@ export const runWriterCli = (args, isCli = false) => {
   const hasFilePath = Boolean(filePath);
   if (!hasFilePath) return fail('Missing file path. Usage: chemx write <file> --content="text" [--json]', isCli);
 
-  return runGuarded(() => writeFile(filePath, {
+  return runGuarded(() => writeOrAppend(filePath, {
     content: readWriteContent(args, values),
     overwrite: args.includes('--overwrite'),
+    append: args.includes('--append'),
     dryRun: hasPreviewFlag(args),
     allowRemoved: splitList(values.allowRemove),
     agentId: values.as

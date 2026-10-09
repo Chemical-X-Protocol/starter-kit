@@ -1,4 +1,4 @@
-import { writeFile } from '../patcher.js';
+import { writeOrAppend } from '../write-append.js';
 import { formatPatchWarnings, isDryRunRequested } from './tools-patch.js';
 import { resolveSafePath } from '../path-scope.js';
 
@@ -12,9 +12,10 @@ export const handleChemxWrite = (args = {}, cwd = process.cwd()) => {
   }
 
   const targetPath = resolveSafePath(args.path, cwd);
-  const result = writeFile(targetPath, {
+  const result = writeOrAppend(targetPath, {
     content: args.content,
     overwrite: Boolean(args.overwrite),
+    append: Boolean(args.append),
     dryRun: isDryRunRequested(args),
     allowRemoved: args.allowRemoved ?? args.allowRemove,
     agentId: args.agentId ?? args.as,

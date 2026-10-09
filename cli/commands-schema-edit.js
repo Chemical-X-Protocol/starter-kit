@@ -36,6 +36,7 @@ export const EDIT_COMMANDS = [
       { flag: '-, --stdin', desc: 'Read the whole content from stdin (heredoc)' },
       { flag: '--content="<text>"', desc: 'File content to write' },
       { flag: '--overwrite', desc: 'Allow replacing an existing file' },
+      { flag: '--append', desc: 'Add the content to the end of the file (created if missing), with the same parse check, audit, index sync and lock checks; refused with --overwrite; no newline is inserted for you' },
       { flag: '--json', desc: 'Output result as minified JSON' }
     ],
     examples: ["chemx write src/keep.ts - <<'EOF'\nexport const keep = true;\nEOF", 'chemx write src/keep.ts --content="export const keep = true;\\n"']
