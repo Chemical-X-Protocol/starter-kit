@@ -40,11 +40,12 @@ test('resolveCallScope: absolute path prefers nearest chemx marker over nearer p
   }
 });
 
-test('resolveCallScope: absolute read with no marker uses its own directory', () => {
+test('resolveCallScope: absolute read outside any project and any known root is refused', () => {
   const bare = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-bare-')));
   try {
     const scope = resolveCallScope({ target: { action: 'read', projectRoot: null, targetPath: path.join(bare, 'x.ts') }, declaredRoot: null, bootRoot: null });
-    assert.strictEqual(scope.root, bare);
+    assert.strictEqual(scope.ok, false);
+    assert.match(scope.error, /no project marker/);
   } finally {
     cleanup(bare);
   }

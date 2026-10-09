@@ -5,7 +5,7 @@
 
 export const MASTER_MCP_TOOL = {
   name: 'chemx',
-  description: "Provides all Chemical X operations (search, generate, patch, audit, verify, team) through a single tool. This avoids requiring separate approval for each sub-operation in MCP clients that gate tool access per-tool. Pass the desired operation via the action parameter; see action: 'help' for the full list.",
+  description: "All Chemical X operations (search, read, patch, audit, verify, team) behind one tool. Pass the operation via action; action: 'help' lists every action and its params. Writes need a declared project root, and caller-supplied shell commands are refused unless they match a package.json script.",
   inputSchema: {
     type: 'object',
     properties: {
@@ -15,16 +15,8 @@ export const MASTER_MCP_TOOL = {
       },
       action: {
         type: 'string',
-        enum: [
-          'test', 'build', 'verify', 'typecheck', 'audit',
-          'read', 'patch', 'write', 'check',
-          'q', 'search',
-          'd', 'diff', 'log', 'p', 'pkg', 'f', 'ls', 'j', 'json', 'do', 'batch',
-          'team', 'team_status', 'team_feed', 'team_post', 'team_task', 'team_lock',
-          'autofix', 'generate', 'patterns', 'issue', 'project', 'tesseract',
-          'trace', 'backtrace'
-        ],
-        description: 'The Chemical X subsystem action to execute.'
+        enum: [],
+        description: "The Chemical X action to execute. action: 'help' returns the per-action parameter table."
       },
       params: {
         type: 'object',
@@ -60,17 +52,16 @@ export const MASTER_MCP_TOOL = {
           endLine: { type: 'number', description: 'Ending line number (1-indexed) (for read)' },
           stripComments: { type: 'boolean', description: 'Remove comments to minimize tokens (for read)' },
           compact: { type: 'boolean', description: 'Collapse empty lines and whitespace (for read)' },
-          target: { type: 'string', description: 'Exact text block to replace (for patch)' },
+          target: { type: 'string', description: 'patch: exact text block to replace. test: alias of testTarget.' },
           search: { type: 'string', description: 'Alias for target text block to replace (for patch)' },
           replacement: { type: 'string', description: 'New replacement content (for patch)' },
           replace: { type: 'string', description: 'Alias for replacement content (for patch)' },
           multiple: { type: 'boolean', description: 'Allow replacing multiple occurrences (for patch)' },
           dryRun: { type: 'boolean', description: 'Preview change without writing to disk (for patch, generate)' },
           content: { type: 'string', description: 'File content to write (for write)' },
-          overwrite: { type: 'boolean', description: 'Allow overwriting existing file (for write)' },
           dir: { type: 'string', description: 'Target directory (for audit, test, build, patterns)' },
-          command: { type: 'string', description: 'Explicit execution command (for build, test)' },
-          target: { type: 'string', description: 'Target test file or spec path (for test)' },
+          command: { type: 'string', description: 'Command for build/test/typecheck. Runs only when it equals a package.json script (or `npm run <script>`), unless the server has CHEMX_MCP_ALLOW_SHELL=1.' },
+          testTarget: { type: 'string', description: 'Target test file or spec path (for test)' },
           filter: { type: 'string', description: 'Filter test names by regex or string pattern (for test)' },
           subAction: { type: 'string', description: 'Sub-action for team operations (e.g. list, claim, done, triage, acquire, release)' },
           taskId: { type: 'number', description: 'Target task ID (for team task claim/done)' },
@@ -105,12 +96,12 @@ export const MASTER_MCP_TOOL = {
       commands: {
         type: 'array',
         items: { type: 'string' },
-        description: 'Batch execution array of CLI commands run sequentially in a single turn (e.g. ["d", "p -s", "verify"]).'
+        description: 'Batch of CLI command strings run in order (e.g. ["d", "p -s", "verify"]). Every item is scope-checked before any runs; the batch status is the worst item status.'
       },
       batch: {
         type: 'array',
         items: { type: 'object' },
-        description: 'Batch execution array of action objects run sequentially in a single turn.'
+        description: 'Batch of { action, params } objects run in order, with the same scope check and combined status as commands. Item-level cwd is ignored.'
       }
     }
   }
@@ -473,4 +464,12 @@ export const SUB_TOOLS = [
 // Master tool is primary: exposed as the sole gateway tool to AI host integrations to enforce single-permission dispatch
 export const MCP_TOOLS = [MASTER_MCP_TOOL];
 export const ALL_MCP_TOOLS = [MASTER_MCP_TOOL, ...SUB_TOOLS];
+
+// The action enum is generated from the live DISPATCHER so the schema never advertises dead actions.
+export const withActionEnum = (tools, actionNames) => tools.map((tool) => {
+  const hasActionEnum = Boolean(tool.inputSchema?.properties?.action?.enum);
+  if (!hasActionEnum) return tool;
+  const properties = { ...tool.inputSchema.properties, action: { ...tool.inputSchema.properties.action, enum: [...actionNames] } };
+  return { ...tool, inputSchema: { ...tool.inputSchema, properties } };
+});
 

@@ -6,6 +6,7 @@ import os from 'node:os';
 import { PassThrough } from 'node:stream';
 import { createMcpHandler, startStdioServer } from './server.js';
 import { MCP_TOOLS, ALL_MCP_TOOLS, Tools, executeMcpTool } from './tools.js';
+import { KIT_ROOT } from './spec-harness.js';
 
 test('MCP Server: initialize handshake', async () => {
   const handler = createMcpHandler();
@@ -311,32 +312,12 @@ test('MCP Server: tools/call chemx_query_patterns supports compact mode', async 
   }
 });
 
-test('MCP Server: resources/subscribe and resources/unsubscribe', async () => {
-  const handler = createMcpHandler();
-
-  const subRes = await handler.handleRequest({
-    jsonrpc: '2.0',
-    id: 18,
-    method: 'resources/subscribe',
-    params: { uri: 'chemx://scorecard' }
-  });
-  assert.strictEqual(subRes.jsonrpc, '2.0');
-  assert.deepStrictEqual(subRes.result, {});
-  assert.ok(handler.getSubscriptions().includes('chemx://scorecard'));
-
-  const notification = handler.notifyResourceUpdated('chemx://scorecard');
-  assert.strictEqual(notification.method, 'notifications/resources/updated');
-  assert.strictEqual(notification.params.uri, 'chemx://scorecard');
-
-  const unsubRes = await handler.handleRequest({
-    jsonrpc: '2.0',
-    id: 19,
-    method: 'resources/unsubscribe',
-    params: { uri: 'chemx://scorecard' }
-  });
-  assert.strictEqual(unsubRes.jsonrpc, '2.0');
-  assert.deepStrictEqual(unsubRes.result, {});
-  assert.ok(!handler.getSubscriptions().includes('chemx://scorecard'));
+test('MCP Server: resources/subscribe is not advertised because nothing would ever fire', async () => {
+  const handler = createMcpHandler({ bootDir: KIT_ROOT });
+  const init = await handler.handleRequest({ jsonrpc: '2.0', id: 17, method: 'initialize', params: {} });
+  assert.strictEqual(init.result.capabilities.resources.subscribe, false);
+  const subRes = await handler.handleRequest({ jsonrpc: '2.0', id: 18, method: 'resources/subscribe', params: { uri: 'chemx://scorecard' } });
+  assert.strictEqual(subRes.error.code, -32601);
 });
 
 test('MCP Server: resources/read chemx://scorecard returns streamlined summary', async () => {
@@ -645,6 +626,7 @@ test('MCP Server: master tool chemx communicates strictly in-band with zero disk
 test('MCP Server: master tool chemx handles action: "read" with auto-outlining on files > 100 lines', async () => {
   const handler = createMcpHandler();
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-read-mcp-'));
+  fs.writeFileSync(path.join(tmpDir, 'package.json'), '{}');
   const largeFilePath = path.join(tmpDir, 'MonolithComponent.vue');
 
   // Create a 150-line file

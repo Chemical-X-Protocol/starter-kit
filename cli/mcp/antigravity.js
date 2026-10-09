@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { MCP_TOOLS } from './manifests.js';
+import { MCP_TOOLS } from './tools.js';
 
 export const buildMcpInstructions = () => {
   return [
