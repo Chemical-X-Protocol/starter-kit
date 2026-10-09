@@ -26,6 +26,9 @@ const ARG_VAL_FLAGS = ['--target', '--as', '--to', '--agent', '--since', '--limi
 
 const TEAM_COMMANDS = ['status', 'task', 'lock', 'unlock', 'feed', 'post', 'inbox', 'dm', 'tokens', 'audit-run', 'triage', 'benchmark', 'train', 'migrate', 'route'];
 
+// Subcommands whose handlers do not parse --help themselves; the others print their own help.
+const HELPLESS_SUBCOMMANDS = ['post', 'dm', 'inbox', 'feed', 'tokens', 'telemetry', 'profile', 'handoff', 'train', 'triage'];
+
 const splitPositionals = (restArgs) => {
   const positionals = [];
   for (let i = 0; i < restArgs.length; i++) {
@@ -84,6 +87,12 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
   const args = parseArgs(rawArgs);
   const isTeamHelp = ['--help', '-h', 'help'].includes(args.subCommand) || (args.subCommand === 'status' && args.flags.help);
   if (isTeamHelp) {
+    if (isCli) process.stdout.write(formatTeamHelpCard());
+    return { help: true, commands: TEAM_COMMANDS };
+  }
+  // These subcommands have no help of their own: --help/-h must never run them (post would write a feed event).
+  const isSubHelp = HELPLESS_SUBCOMMANDS.includes(args.subCommand) && (args.flags.help || args.restArgs.some((a) => a === '-h' || a === '--help'));
+  if (isSubHelp) {
     if (isCli) process.stdout.write(formatTeamHelpCard());
     return { help: true, commands: TEAM_COMMANDS };
   }
