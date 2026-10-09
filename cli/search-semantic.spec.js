@@ -36,3 +36,20 @@ test('--semantic and --hybrid label themselves as feature-hash similarity, not e
   assert.match(hybrid.mode, /feature-hash/);
   assert.doesNotMatch(hybrid.mode, /Vector/);
 });
+
+test('hybrid RRF counts each file once per ranker (multi-symbol files are not inflated)', async () => {
+  const { queryHybridIndex } = await import('./search-db.js');
+  const db = openIndexDb(':memory:');
+  upsertFileIndex(db, {
+    path: 'src/auth/m-auth-form.vue', mtime: 1, size: 1, tier: 'molecule', lines: 5, chars: 50,
+    symbols: [{ name: 'AuthForm', kind: 'const', isExport: true }], props: [{ name: 'sessionToken', type: 'string' }]
+  });
+  upsertFileIndex(db, {
+    path: 'src/stats/m-token-stat.controller.ts', mtime: 1, size: 1, tier: 'molecule', lines: 5, chars: 50,
+    symbols: ['formatTokenCount', 'formatTokenRate', 'formatTokenTotal', 'tokenStatLabel'].map((name) => ({ name, kind: 'const', isExport: true }))
+  });
+  const ranked = queryHybridIndex(db, 'AuthForm sessionToken', { limit: 5 });
+  assert.equal(ranked[0].filePath, 'src/auth/m-auth-form.vue');
+  const maxPerFile = 2 / 61;
+  assert.ok(ranked.every((r) => r.score <= maxPerFile + 1e-9), 'no file scores above first place in both rankers');
+});

@@ -151,7 +151,9 @@ export const queryHybridIndex = (db, queryText, options = {}) => {
     });
   });
 
-  semanticResults.forEach((r, idx) => {
+  // RRF counts each file once per ranker: a file's capsule and symbol vectors share its best rank.
+  const semanticByFile = semanticResults.filter((r, idx) => semanticResults.findIndex((other) => other.filePath === r.filePath) === idx);
+  semanticByFile.forEach((r, idx) => {
     const key = r.filePath;
     const rrfScore = 1.0 / (RRF_CONSTANT + (idx + 1));
     if (combined.has(key)) {

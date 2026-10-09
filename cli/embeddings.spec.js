@@ -51,7 +51,7 @@ test("vectorizer: cosine similarity scoring", () => {
 });
 
 test("search: semantic and hybrid index queries", () => {
-  const db = openIndexDb();
+  const db = openIndexDb(':memory:');
   if (!db) return;
 
   upsertFileIndex(db, {

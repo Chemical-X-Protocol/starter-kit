@@ -27,7 +27,7 @@ describe('Call Trace & Backtrace Engine', () => {
   });
 
   it('calculates forward call trace gracefully on unknown or empty target', () => {
-    const db = openIndexDb();
+    const db = openIndexDb(':memory:');
     const trace = calculateCallTrace(db, 'nonExistentSymbol', { maxDepth: 2 });
     assert.equal(trace.target, 'nonExistentSymbol');
     assert.equal(trace.totalCallees, 0);
@@ -35,7 +35,7 @@ describe('Call Trace & Backtrace Engine', () => {
   });
 
   it('calculates reverse backtrace using recursive imports CTE', () => {
-    const db = openIndexDb();
+    const db = openIndexDb(':memory:');
 
     upsertFileIndex(db, {
       path: 'src/controllers/trace-cart.ts',
@@ -82,7 +82,7 @@ describe('Call Trace & Backtrace Engine', () => {
   });
 
   it('formats call trace and backtrace as JSON payloads', () => {
-    const db = openIndexDb();
+    const db = openIndexDb(':memory:');
     const traceRes = handleCallTraceCommand(db, 'foo', { isJson: true, isCli: false });
     assert.equal(traceRes.target, 'foo');
 
