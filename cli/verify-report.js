@@ -96,7 +96,7 @@ export const createProgress = (shouldPrint) => {
 export const formatVerdict = (status, warning, options = {}) => {
   const isEmptyPass = isPass(status) && Boolean(options.testsRanNothing);
   if (isEmptyPass) return `\n  ${ANSI.YELLOW}${ANSI.BOLD}Verification passed, but no tests ran (accepted by --allow-empty).${ANSI.RESET}\n\n`;
-  if (isPass(status)) return `\n  ${ANSI.LIME}${ANSI.BOLD}All verification checks passed with zero context burn!${ANSI.RESET}\n\n`;
+  if (isPass(status)) return `\n  ${ANSI.LIME}${ANSI.BOLD}All verification checks passed.${ANSI.RESET}\n\n`;
   const headline = isInconclusive(status)
     ? `${ANSI.YELLOW}${ANSI.BOLD}Verification inconclusive: a step could not prove its result.${ANSI.RESET}`
     : `${ANSI.RED}${ANSI.BOLD}Verification failed. Actionable issues cataloged above.${ANSI.RESET}`;

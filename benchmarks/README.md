@@ -2,7 +2,7 @@
 
 > *"Small, single-purpose files aren't just cleaner - they're cheaper to work with. Every file opened loads its full contents into context; a smaller file means less scanning, less irrelevant code loaded per task, and lower token cost per edit, compounding across a session."* - Directive 1.A
 
-This script measures how many tokens a chemx outline or symbol read saves against reading the whole file, for ten fixed targets in this kit. Last run: 2026-10-09. Token counts are an estimate (characters / 3.8), not a tokenizer count. Savings differ a lot by task, so read the table rather than one headline number: the total below is the aggregate over the measured rows. The verification row compares against a hard-coded sample log, so it is an illustration and is left out of the total.
+This script measures how many tokens a chemx outline or symbol read saves against reading the whole file, for 10 fixed targets in this kit. Last run: 2026-10-09. Token counts are an estimate (characters / 3.8), not a tokenizer count. Savings differ a lot by task, so read the table rather than one headline number: the total below is the aggregate over the measured rows. The verification row compares against a hard-coded sample log, so it is an illustration and is left out of the total.
 
 ---
 

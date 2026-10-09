@@ -86,7 +86,7 @@ starter-kit/
 │   └── rules.ts                # Lazy Rule Tree & diagnostic validation
 └── cli/
     ├── index.js                # CLI router & capsule generator
-    ├── verify.js               # Zero-token-burn verification engine
+    ├── verify.js               # Verification engine (audit, typecheck, tests)
     ├── audit.js                # 7-Pillar static AST audit
     └── mcp/                    # Model Context Protocol stdio server
 ```

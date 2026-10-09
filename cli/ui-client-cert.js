@@ -13,7 +13,8 @@ window.renderSavingsCanvas = function(canvas, savings) {
   ctx.fillStyle = '#38bdf8'; ctx.font = 'bold 18px sans-serif'; ctx.fillText('⚡ CHEMICAL X SAVINGS CERTIFICATE', 24, 40);
   ctx.fillStyle = '#34d399'; ctx.font = 'bold 24px sans-serif'; ctx.fillText(Number(savings.tokensSaved || 0).toLocaleString() + ' TOKENS SAVED', 24, 90);
   ctx.fillStyle = '#fbbf24'; ctx.font = 'bold 18px sans-serif'; ctx.fillText('$' + Number(savings.dollarsSaved || 0).toFixed(2) + ' USD Burn Avoided', 24, 130);
-  ctx.fillStyle = '#94a3b8'; ctx.font = '13px sans-serif'; ctx.fillText('Efficiency Ratio: ' + (savings.reductionPct || 88) + '% token reduction avoided', 24, 170);
+  ctx.fillStyle = '#94a3b8'; ctx.font = '13px sans-serif'; const hasReduction = Number.isFinite(Number(savings.reductionPct)) && savings.reductionPct !== null && savings.reductionPct !== '';
+  ctx.fillText('Token reduction: ' + (hasReduction ? savings.reductionPct + '%' : 'not measured'), 24, 170);
   ctx.fillText('Verified by SQLite AST Indexer • ' + new Date().toISOString().slice(0, 10), 24, 200);
 };
 
