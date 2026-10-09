@@ -5,13 +5,14 @@ import { ANSI } from './theme.js';
 import { STATUS, toExitCode, isPass, isInconclusive } from './result-status.js';
 import { parseCliArgs, describeArgErrors, parseTimeoutSeconds } from './cli-args.js';
 import { planTypecheck } from './typecheck-command.js';
+import { runSandboxTypecheck } from './typecheck-sandbox.js';
 import { parseTypecheckOutput, checkNodeModules } from './verify-helpers.js';
 import { formatAgentJson } from './agent-json.js';
 import { workspaceAt, emitWorkspace, allPackagesOrRefuse } from './workspace-run.js';
 
 const TYPECHECK_ARGS = {
-  booleans: { '--json': 'json', '--raw': 'raw', '--all-packages': 'allPackages', '--help': 'help', '-h': 'help' },
-  values: { '--timeout': 'timeout' }
+  booleans: { '--json': 'json', '--raw': 'raw', '--checkjs': 'checkjs', '--all-packages': 'allPackages', '--help': 'help', '-h': 'help' },
+  values: { '--timeout': 'timeout', '--sandbox': 'sandbox' }
 };
 
 const TYPECHECK_HELP = [
@@ -24,6 +25,8 @@ const TYPECHECK_HELP = [
   `${ANSI.BOLD}OPTIONS${ANSI.RESET}`,
   '  --timeout=<seconds>      Stop the check after this long (result: inconclusive)',
   '  --all-packages           At a monorepo root: check every workspace package (else refused)',
+  '  --sandbox=<dir>          Check a directory of loose JS/TS pieces under a temp strict tsconfig (checkJs, noImplicitAny)',
+  '  --checkjs                With --sandbox: check JS files (the default for a sandbox)',
   '  --json                   Output structured diagnostics as JSON',
   '  --raw                    Stream the checker output as it runs',
   '  -h, --help               Show this help message',
@@ -92,6 +95,12 @@ export const runTypecheckAudit = async (rawArgs = [], isCli = false, options = {
   if (argError) return emit(earlyReport(STATUS.FAIL, customCmd || 'typecheck', { reason: 'USAGE', executionError: argError }), output);
 
   const cwd = findProjectRoot(options.cwd || process.cwd());
+  const isSandboxRun = Boolean(parsed.values.sandbox);
+  if (isSandboxRun) {
+    const timeoutMs = parseTimeoutSeconds(parsed.values.timeout) ?? options.timeoutMs ?? null;
+    const sandboxReport = await runSandboxTypecheck(parsed.values.sandbox, { cwd, timeoutMs, raw: Boolean(parsed.flags.raw) });
+    return emit(sandboxReport, output);
+  }
   const workspace = options.inWorkspace || customCmd ? null : workspaceAt(cwd);
   if (workspace) {
     const allPackages = Boolean(parsed.flags.allPackages || options.allPackages);
