@@ -7,6 +7,7 @@ Reference pages for behavior that specs pin. Design notes and plans live under `
 | [audit-gates.md](audit-gates.md) | The one rule every audit gate applies |
 | [commit.md](commit.md) | `chemx commit`: path-limited commits, lease and task checks |
 | [coordination-db.md](coordination-db.md) | The one team db per monorepo: how it is chosen (never the temp dir or `/`), what reads which db, repo attribution, `task list --all-repos/--repo`, `chemx team migrate` and the live runbook |
+| [forge-patterns.md](forge-patterns.md) | `chemx patterns --forge`: grouping, LGG holes, reject codes R1-R8, refinement, drift, ranking, the stored run and `patterns reject` |
 | [hooks.md](hooks.md) | Claude Code hooks |
 | [team-audit-run.md](team-audit-run.md) | `chemx team audit-run` |
 | [team-dispatch.md](team-dispatch.md) | `chemx team dispatch --workflow`: task selection, routing per stage, the rendered build/review/repair/gate script (chemx renders it; the host runs it), run records |
