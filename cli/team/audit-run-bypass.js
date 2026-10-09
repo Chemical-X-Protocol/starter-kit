@@ -100,7 +100,9 @@ const isRepoPath = (abs, roots, home) => {
  * @returns {Array<{ how: string, target: string }>} target is the absolute path
  */
 export const shellWritesOf = (inv, roots, home = os.homedir()) => {
-  const isCounted = inv.kind === 'shell' && !inv.isScratch;
+  // Scratch is judged on this command's own words, not on the whole line it shares with other commands.
+  const isScratch = inv.isSegmentScratch ?? inv.isScratch;
+  const isCounted = inv.kind === 'shell' && !isScratch;
   if (!isCounted) return [];
   const editor = editorWrites(inv.argv);
   const words = [...redirectTargets(inv), ...(editor ? editor.files.map((word) => ({ how: editor.how, word })) : [])];

@@ -24,9 +24,9 @@ opens, its lease records. It only reads; it writes nothing.
    `possible`.
 6. **Cost and steps** per agent, from the #2497 reader.
 
-`--strict` exits 1 when any of these is non-empty: lapsed lease, starved waiter, shell or native bypass,
+The command exits 1 when any of these is non-empty (`--no-fail` prints the report and exits 0; `--strict` is accepted and is the default): lapsed lease, starved waiter, shell or native bypass,
 guard-bypass event, unleased edit, commit without a task id, unclosed claim, likely hijack. Adoption and
-`possible` hijacks never fail the run. A run that cannot be found exits 1 with or without `--strict`.
+`possible` hijacks never fail the run. A run that cannot be found exits 1 even with `--no-fail`. A commit counts as task-linked when its own arguments carry `#<id>`, `--task`, or `--no-task`; `commit --help` is ignored, and several commits on one shell line are reported once.
 
 ## What it cannot see
 

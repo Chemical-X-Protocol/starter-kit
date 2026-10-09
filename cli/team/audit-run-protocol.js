@@ -41,9 +41,27 @@ const isCommit = (inv) => {
 };
 
 // A commit inside a scratch repo (a command that touches /tmp, mktemp or ~/.claude) is test scaffolding, not a task commit.
-export const commitsWithoutTask = (invs) => invs
-  .filter((inv) => isCommit(inv) && !inv.isScratch && !/#\d+/.test(inv.raw))
-  .map((inv) => ({ at: inv.at, via: inv.via, command: clip(inv.raw) }));
+// Decided per invocation from its own argv: --help/-h is exempt, and --task=N, --task N, --no-task=... or #N in its own words carry a task.
+const hasTaskMark = (argv) => argv.some((w, i) => {
+  const isTaskFlag = /^--task=\S+/.test(w) || /^--no-task(=|$)/.test(w);
+  const isSpaced = w === '--task' && /^\d+$/.test(argv[i + 1] ?? '');
+  return isTaskFlag || isSpaced || /#\d+/.test(w);
+});
+const isHelp = (argv) => argv.some((w) => w === '--help' || w === '-h');
+
+// One shell line holding several commits is reported once (by time and line).
+export const commitsWithoutTask = (invs) => {
+  const seen = new Set();
+  const result = [];
+  for (const inv of invs) {
+    const isMissing = isCommit(inv) && !inv.isScratch && !isHelp(inv.argv) && !hasTaskMark(inv.argv);
+    const key = `${inv.at}\u0000${inv.raw}`;
+    const isNew = isMissing && !seen.has(key);
+    if (isMissing) seen.add(key);
+    if (isNew) result.push({ at: inv.at, via: inv.via, command: clip(inv.raw) });
+  }
+  return result;
+};
 
 const teamTask = (inv, verb) => inv.kind === 'chemx' && inv.argv[0] === 'team' && inv.argv[1] === 'task' && inv.argv[2] === verb;
 

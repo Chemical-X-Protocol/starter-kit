@@ -201,7 +201,7 @@ test('db: a lapse under an active holder, an abandoned lease, a starved waiter a
   assert.match(text, /binary patch/);
 });
 
-test('cli: --strict exits 1 on a violated run and 0 otherwise; --json parses', (t) => {
+test('cli: a violated run exits 1 unless --no-fail; --strict is accepted; --json parses', (t) => {
   const env = makeEnv(t);
   const dirty = writeRun(env, 'wf_dirty', [dirtyAgent(env.repo)]);
   const clean = writeRun(env, 'wf_clean', [cleanAgent(env.repo)]);
@@ -209,7 +209,8 @@ test('cli: --strict exits 1 on a violated run and 0 otherwise; --json parses', (
   const dirtyStrict = run(dirty, '--strict');
   assert.equal(dirtyStrict.status, 1, dirtyStrict.stderr);
   assert.match(dirtyStrict.stdout, /VIOLATED/);
-  assert.equal(run(dirty).status, 0, 'without --strict a finding is reported, not a failure');
+  assert.equal(run(dirty).status, 1, 'a finding fails by default');
+  assert.equal(run(dirty, '--no-fail').status, 0, '--no-fail reports only');
   assert.equal(run(clean, '--strict').status, 0);
   const json = JSON.parse(run(dirty, '--json').stdout);
   assert.equal(json.ok, false);

@@ -48,9 +48,11 @@ const bashInvocations = (call) => {
     const args = chemxArgs(cmd.argv);
     const isChemx = args !== null;
     const dir = cmd.dir ?? { steps: [], unknown: false };
+    const ownText = [...cmd.argv, ...cmd.redirects.map((r) => r.target)].join(' ');
+    const isSegmentScratch = isScratchText(ownText);
     result.push({
       via: 'bash', kind: isChemx ? 'chemx' : 'shell', at: call.at, cwd: call.cwd, raw: command,
-      argv: isChemx ? args : cmd.argv, redirects: cmd.redirects, dir, isPiped, isScratch
+      argv: isChemx ? args : cmd.argv, redirects: cmd.redirects, dir, isPiped, isScratch, isSegmentScratch
     });
   });
   return result;

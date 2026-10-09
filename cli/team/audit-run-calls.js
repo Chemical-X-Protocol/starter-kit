@@ -10,7 +10,8 @@
 export const CHEMX_MCP_TOOL = 'mcp__chemical-x__chemx';
 const FILE_TOOLS = new Set(['Read', 'Edit', 'MultiEdit', 'Write', 'NotebookEdit', 'Glob', 'Grep']);
 const OVERHEAD_TOOLS = new Set(['ToolSearch', 'StructuredOutput', 'TodoWrite', 'TaskCreate', 'TaskUpdate', 'TaskList', 'TaskGet', 'Monitor']);
-const TASK_MARKER = 'computed task';
+// The harness header of the computed task turn; a relayed user-request turn only mentions the words in its body.
+const TASK_MARKER = /^\s*\[Workflow harness\s*\W{1,3}\s*computed task\]/i;
 
 const parseLines = (text) => {
   const entries = [];
@@ -45,7 +46,7 @@ export const isFileTool = (name) => FILE_TOOLS.has(name);
 // The task text: the user turn the harness computed (falls back to the first user turns).
 const taskTextOf = (entries) => {
   const users = entries.filter((e) => e.type === 'user').slice(0, 4).map((e) => textOf(e.message?.content));
-  const computed = users.find((t) => t.includes(TASK_MARKER));
+  const computed = users.find((t) => TASK_MARKER.test(t));
   return computed ?? users.join('\n');
 };
 

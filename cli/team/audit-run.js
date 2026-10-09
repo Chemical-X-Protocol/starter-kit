@@ -1,12 +1,12 @@
 /**
- * Chemical X Protocol: `chemx team audit-run --run=<wf_id|dir> [--json] [--strict] [--projects=<dir>]` (#2561).
+ * Chemical X Protocol: `chemx team audit-run --run=<wf_id|dir> [--json] [--no-fail] [--projects=<dir>]` (#2561).
  * Audits a finished swarm from its transcripts (the #2497 run reader) and, when the coordination db is
  * available, its lease records. Sections: lease lapses and starved waiters, real chemx bypasses, adoption,
  * protocol gaps, hijack suspects, cost and steps per agent. Pure read: it writes nothing.
  *
- * --strict exits 1 when a guarantee was violated: a lease lapsed under an active holder, a starved waiter, a
+ * The exit code is 1 when a guarantee was violated: a lease lapsed under an active holder, a starved waiter, a
  * shell or native bypass or a guard-bypass event, an edit without a lease, a commit without a task id, a
- * claim never closed, or a likely hijack. Adoption and `possible` hijacks are reported, never a failure.
+ * claim never closed, or a likely hijack; --no-fail reports only (--strict is accepted, the default). Adoption and `possible` hijacks are reported, never a failure.
  * Every section states what it could not see: without a db the lease sections say so instead of reporting 0.
  */
 import fs from 'node:fs';
@@ -127,7 +127,7 @@ export const auditRun = (run, ctx = {}) => {
   return report;
 };
 
-const AUDIT_USAGE = 'Usage: chemx team audit-run --run=<wf_id|run dir> [--json] [--strict] [--projects=<dir>]';
+const AUDIT_USAGE = 'Usage: chemx team audit-run --run=<wf_id|run dir> [--json] [--no-fail] [--projects=<dir>]';
 
 export const handleAuditRun = (db, opts, isCli, cwd = process.cwd()) => {
   const run = readRun(opts.run, opts.projects);
@@ -139,7 +139,7 @@ export const handleAuditRun = (db, opts, isCli, cwd = process.cwd()) => {
   const report = auditRun(run, { db, pricing: loadPricing(cwd) });
   const body = opts.json ? JSON.stringify(report, null, 2) : renderAuditRun(report);
   if (isCli) process.stdout.write(`${body}\n`);
-  const isFailure = Boolean(opts.strict) && !report.ok;
+  const isFailure = !opts.noFail && !report.ok;
   const shouldFail = isCli && isFailure;
   if (shouldFail) process.exitCode = 1;
   return report;
@@ -155,7 +155,7 @@ export const runAuditRunCli = (restArgs, flags, isCli, cwd = process.cwd()) => {
     return { error: '--run is required' };
   }
   const ctx = openTeamContext(cwd);
-  const opts = { run, projects: optionOf(restArgs, 'projects'), json: Boolean(flags.isJson), strict: restArgs.includes('--strict') };
+  const opts = { run, projects: optionOf(restArgs, 'projects'), json: Boolean(flags.isJson), noFail: restArgs.includes('--no-fail') };
   const result = handleAuditRun(ctx.db ?? null, opts, isCli, cwd);
   const shouldFail = isCli && Boolean(result.error);
   if (shouldFail) process.exitCode = 1;
