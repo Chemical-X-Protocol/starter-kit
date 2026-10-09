@@ -29,6 +29,12 @@ export const isForbiddenRoot = (dir) => {
   return isFsRoot || holdsTempDir;
 };
 
+/** True when dir is the OS temp dir or inside it. */
+export const isInsideTempDir = (dir) => {
+  const rel = path.relative(realDir(os.tmpdir()), realDir(dir));
+  return !rel.startsWith('..') && !path.isAbsolute(rel);
+};
+
 /** Text for a refused root, or null when dir may hold a .chemx. */
 export const forbiddenRootRefusal = (dir) => {
   const isForbidden = isForbiddenRoot(dir);

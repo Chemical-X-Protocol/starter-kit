@@ -12,6 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { initCallSchema, COUNTERFACTUAL_KINDS } from './call-schema.js';
+import { isForbiddenRoot, isInsideTempDir } from '../project-markers.js';
 
 export const CHARS_PER_TOKEN = 4;
 /** Token estimate used everywhere in the report: characters / 4, rounded up. An estimate, not a tokenizer count. */
@@ -88,12 +89,15 @@ const LEDGER_BUSY_MS = 250;
  * The index db the call is running against: CHEMX_PROJECT_ROOT, else the nearest ancestor of cwd that
  * already has .chemx/index.db. It never creates a db. Light on purpose: loading the full index stack
  * costs about 330ms of CPU per CLI call, a direct sqlite open costs about 1ms.
+ * The walk never reaches the OS temp dir, its ancestors or / (#2570: a stray /tmp/.chemx), and a spec
+ * process (env.NODE_TEST_CONTEXT) gets no db outside the temp dir (#2581).
  */
 export const findLedgerDbPath = (cwd, env = process.env) => {
   const dirs = [];
-  for (let dir = path.resolve(env.CHEMX_PROJECT_ROOT || cwd); !dirs.includes(dir); dir = path.dirname(dir)) dirs.push(dir);
+  for (let dir = path.resolve(env.CHEMX_PROJECT_ROOT || cwd); !dirs.includes(dir) && !isForbiddenRoot(dir); dir = path.dirname(dir)) dirs.push(dir);
   const hit = dirs.map((dir) => path.join(dir, '.chemx', 'index.db')).find((file) => fs.existsSync(file));
-  return hit || null;
+  const isSpecRefused = Boolean(hit) && Boolean(env.NODE_TEST_CONTEXT) && !isInsideTempDir(hit);
+  return isSpecRefused ? null : hit || null;
 };
 
 const closeQuietly = (handle) => {

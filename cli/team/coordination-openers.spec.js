@@ -24,6 +24,7 @@ import { openTeamDbReadOnly, openExistingTeamDb } from './team-db-readonly.js';
 import { findChemxDir } from '../audit/chemx-dir.js';
 import { liveLeases, taskStatus } from '../lease-view.js';
 import { findForeignLease } from '../edit-locks.js';
+import { findLedgerDbPath } from '../telemetry/call-ledger.js';
 
 delete process.env.CHEMX_PROJECT_ROOT;
 
@@ -94,6 +95,7 @@ test('#2570: the coordination root never lands on the temp dir, and nothing read
   assert.equal(findForeignLease(bare, path.join(outer, 'bare', 'src', 'a.js'), '@spec-me'), null, 'the edit guard does not read the stray db');
   assert.equal(openTeamDbReadOnly(outer), null);
   assert.equal(openExistingTeamDb(outer), null);
+  assert.equal(findLedgerDbPath(bare, {}), null, 'the call ledger does not write to the stray db');
   assert.equal(runTeamCli(['lock', 'acquire', 'a.js', '--as=@spec-me'], false, outer), null, 'a team command run from the temp dir itself is refused');
   assert.equal(fs.existsSync(path.join(bare, '.chemx')), false, 'nothing was created by the reads');
 }));
@@ -152,5 +154,6 @@ test('a spec process never opens a real db through the read-only openers', () =>
   assert.deepEqual(teamDbRootsFor(KIT_DIR), []);
   assert.deepEqual(liveLeases(KIT_DIR), []);
   assert.equal(taskStatus(KIT_DIR, 1), null);
+  assert.equal(findLedgerDbPath(KIT_DIR, process.env), null, 'the call ledger is refused too');
   assert.match(resolveTeamDbTarget(KIT_DIR).refused, /spec process refused/);
 });
