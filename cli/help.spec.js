@@ -51,10 +51,27 @@ test('help: every routable token resolves to a schema entry and to its own --hel
   assert.strictEqual(resolveCommandHelpTopic('team', ['team', 'task', '--help']), null, 'team owns subcommand help');
 });
 
+test('help: a lone "help" is data for lookup commands, a help request for writers and flag-only commands', () => {
+  for (const token of ['f', 'ls', 'p', 'j', 'read', 'q', 'trace', 'backtrace', 'check', 'lint', 'test', 'audit', 'd', 'log']) {
+    assert.strictEqual(resolveCommandHelpTopic(token, [token, 'help']), null, `chemx ${token} help looks up "help"`);
+  }
+  for (const token of ['init', 'create', 'generate', 'write', 'patch', 'explode', 'hook', 'verify', 'typecheck', 'build', 'team']) {
+    assert.strictEqual(resolveCommandHelpTopic(token, [token, 'help']), token, `chemx ${token} help prints usage`);
+  }
+});
+
+test('help: -h that is the value of a pattern or count flag is data, not a help request', () => {
+  assert.strictEqual(resolveCommandHelpTopic('q', ['q', '-g', '-h']), null);
+  assert.strictEqual(resolveCommandHelpTopic('q', ['q', '--literal', '-h']), null);
+  assert.strictEqual(resolveCommandHelpTopic('read', ['read', 'a.js', '-s', '-h']), null);
+  assert.strictEqual(resolveCommandHelpTopic('q', ['q', 'needle', '-h']), 'q');
+  assert.strictEqual(resolveCommandHelpTopic('write', ['write', 'a.js', '--content=x', '--help']), 'write');
+});
+
 test('help: command matrix: every `<command> --help` prints usage, exits 0, runs nothing', async () => {
   const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-help-matrix-'));
   fs.writeFileSync(path.join(sandbox, 'package.json'), JSON.stringify({ name: 'fx', scripts: { build: 'node -e "require(\'fs\').writeFileSync(\'BUILD_RAN\',\'1\')"' } }));
-  const argLists = [...ROUTABLE_COMMAND_TOKENS.map((token) => [token, '--help']), ['m-card', '-h'], ['help', 'read']];
+  const argLists = [...ROUTABLE_COMMAND_TOKENS.map((token) => [token, '--help']), ['m-card', '-h'], ['help', 'read'], ['init', 'help'], ['generate', 'help']];
   const results = await runAllPiped(argLists, sandbox);
   const entries = fs.readdirSync(sandbox);
   fs.rmSync(sandbox, { recursive: true, force: true });

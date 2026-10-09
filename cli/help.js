@@ -14,6 +14,11 @@ const GROUP_TITLES = {
 };
 const HELP_TOKENS = new Set(['help', '--help', '-h']);
 const SUBCOMMAND_HELP_OWNERS = new Set(['team', 'swarm', 'feed', 'tokens', 'telemetry', 'benchmark', 'ablation', 'memory']);
+// Read-only commands whose positional is a lookup key: `chemx f help` lists paths containing "help".
+// Writers and scaffolders keep `<command> help` as a help request so it never creates "help".
+const LOOKUP_POSITIONAL_COMMANDS = new Set(['search', 'read', 'trace', 'backtrace', 'check', 'test', 'lint', 'audit', 'diff', 'log', 'pkg', 'ls', 'json', 'batch']);
+// Flags that take the next token as their value, so a following -h is data (`chemx q -g -h`).
+const VALUE_TAKING_FLAGS = new Set(['-g', '--literal', '-s', '--symbol', '-n']);
 const NAME_COLUMN = 13;
 
 const displayName = (entry) => {
@@ -80,19 +85,21 @@ export const printHelp = async (topicArgs = []) => {
 
 /**
  * Decide whether `chemx <command> ...args` asks for that command's help.
- * Only options before `--` count. Commands that own subcommand help (team family)
- * keep it unless the help flag directly follows the command.
+ * Only options before `--` count, and -h right after a value-taking flag is that flag's value.
+ * A lone `help` asks for help unless the command looks it up as data.
+ * Commands that own subcommand help (team family) keep it unless the help flag directly follows the command.
  */
 export const resolveCommandHelpTopic = (command, rawArgs) => {
   const rest = rawArgs.slice(1);
   const separatorIndex = rest.indexOf('--');
   const options = separatorIndex === -1 ? rest : rest.slice(0, separatorIndex);
-  const isHelpFlag = (arg) => arg === '--help' || arg === '-h';
-  const isBareHelpWord = options.length === 1 && options[0] === 'help';
-  const hasLeadingHelp = isHelpFlag(options[0] ?? '') || isBareHelpWord;
+  const isHelpFlagAt = (index) => ['--help', '-h'].includes(options[index]) && !VALUE_TAKING_FLAGS.has(options[index - 1]);
+  const isLookupCommand = LOOKUP_POSITIONAL_COMMANDS.has(findCommandSchema(command)?.name);
+  const isBareHelpWord = options.length === 1 && options[0] === 'help' && !isLookupCommand;
+  const hasLeadingHelp = isHelpFlagAt(0) || isBareHelpWord;
   const ownsSubcommandHelp = SUBCOMMAND_HELP_OWNERS.has(command);
   if (ownsSubcommandHelp) return hasLeadingHelp ? command : null;
-  const hasHelpAnywhere = options.some(isHelpFlag) || isBareHelpWord;
+  const hasHelpAnywhere = options.some((_, index) => isHelpFlagAt(index)) || isBareHelpWord;
   return hasHelpAnywhere ? command : null;
 };
 
