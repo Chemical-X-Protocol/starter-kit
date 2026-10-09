@@ -16,6 +16,7 @@ import { placeGroup, kindOf, hookNameOf, langOfKey, runtimeOfKey } from './place
 import { matchLibrary, pieceExistsIn } from './library-match.js';
 import { findRejectedMembers } from './rejected-members.js';
 import { deriveMembers } from './blueprint-members.js';
+import { bodyHashOf } from './heal-text.js';
 
 export const BLUEPRINT_SCHEMA = 'chemx.blueprint/1';
 
@@ -107,6 +108,14 @@ const memberSiteOf = (members, index) => {
   return { ...args, ...polarity };
 };
 
+// The member's own text hash (heal-text.js bodyHashOf): heal re-locates a member by it, so line drift is
+// not staleness and a changed body is.
+const bodyHashOfInstance = (instance, context) => {
+  const text = context.readFile(instance.file);
+  const hasSpan = typeof text === 'string' && Number.isInteger(instance.start) && Number.isInteger(instance.end);
+  return hasSpan ? bodyHashOf(text.slice(instance.start, instance.end)) : null;
+};
+
 const callSitesOf = ({ instances, name, kind, module, context, members = null }) => instances.map((instance, index) => {
   const row = context.rowsById.get(instance.unitIds[0]);
   const needsImport = FUNCTION_KINDS.has(kind) && instance.file !== module;
@@ -114,6 +123,7 @@ const callSitesOf = ({ instances, name, kind, module, context, members = null })
     ...memberSiteOf(members, index),
     file: instance.file,
     range: [instance.startLine, instance.endLine],
+    bodyHash: bodyHashOfInstance(instance, context),
     contentHash: context.contentHashes.get(instance.file) ?? null,
     memberFp: row?.fp2 ?? null,
     addImport: needsImport ? { from: specifierOf(instance.file, module), names: [name] } : null
