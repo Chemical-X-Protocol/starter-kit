@@ -1,0 +1,28 @@
+{
+  "id": "node-js/read-json-or",
+  "version": "1.0.0",
+  "role": "piece",
+  "facet": { "lang": "js", "runtime": "node", "framework": "none" },
+  "exportName": "readJsonOr",
+  "defaultModule": "cli/fs-json.js",
+  "signature": "readJsonOr(file: string, fallback: T): unknown | T",
+  "params": [
+    { "name": "file", "kind": "value", "type": "string" },
+    { "name": "fallback", "kind": "value", "type": "T" }
+  ],
+  "holes": [
+    { "id": "name", "kind": "name", "default": "readJsonOr", "locate": { "identifier": "readJsonOr" } },
+    { "id": "catch-reason", "kind": "wording", "default": "A missing or malformed file is an expected state for this reader: the caller supplies the fallback.", "locate": { "commentText": "A missing or malformed file is an expected state for this reader: the caller supplies the fallback." } }
+  ],
+  "fp": { "l1": "458dd55a44a634f3", "l2": "26c578898c4ffc34", "l3": "6e14bf0ce5aae12e" },
+  "aliases": [],
+  "canonicalFor": [],
+  "conflictsResolved": [],
+  "negatives": [
+    { "file": "negative/ratchet.js.txt", "expect": "noMatch", "provenance": "cli/audit/ratchet.js:37-49" },
+    { "file": "negative/workspace.js.txt", "expect": "noMatch", "provenance": "cli/workspace.js:10-16" }
+  ],
+  "verifiedRuleset": { "version": 5, "revisionsHash": "deb22e623872" },
+  "status": "verified",
+  "provenance": "Generic try/JSON.parse/fallback reader; the catch carries a reason comment so it satisfies ERROR_SWALLOWED_EXCEPTION and AI_SLOP_SHALLOW_CATCH. Shape of the A7 group in the ground truth; the negatives are its near misses."
+}

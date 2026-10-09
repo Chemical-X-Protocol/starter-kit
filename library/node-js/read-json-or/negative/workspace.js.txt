@@ -1,0 +1,8 @@
+// provenance: cli/workspace.js:10-16 (verbatim excerpt, kit checkout 2026-10-09)
+const readJson = (file) => {
+  try {
+    return [JSON.parse(fs.readFileSync(file, 'utf8')), null];
+  } catch (error) {
+    return [null, error];
+  }
+};

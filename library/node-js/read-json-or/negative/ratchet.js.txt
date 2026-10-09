@@ -1,0 +1,14 @@
+// provenance: cli/audit/ratchet.js:37-49 (verbatim excerpt, kit checkout 2026-10-09)
+export const readRatchet = (projectRoot) => {
+  const file = path.join(projectRoot, RATCHET_FILE);
+  const isMissing = !fs.existsSync(file);
+  if (isMissing) return { status: 'absent' };
+  try {
+    const raw = JSON.parse(fs.readFileSync(file, 'utf-8'));
+    const isValid = isV1Shape(raw) || isV2Shape(raw);
+    if (isValid) return { status: 'ok', ratchet: normalizeRatchet(raw) };
+    return { status: 'invalid', message: `${RATCHET_FILE} is missing "scopes" (or v1 "scope" and "rules").` };
+  } catch (err) {
+    return { status: 'invalid', message: `${RATCHET_FILE} is not valid JSON: ${err.message}` };
+  }
+};

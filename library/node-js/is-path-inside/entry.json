@@ -1,0 +1,26 @@
+{
+  "id": "node-js/is-path-inside",
+  "version": "1.0.0",
+  "role": "piece",
+  "facet": { "lang": "js", "runtime": "node", "framework": "none" },
+  "exportName": "isPathInside",
+  "defaultModule": "cli/path-inside.js",
+  "signature": "isPathInside(child: string, parent: string): boolean",
+  "params": [
+    { "name": "child", "kind": "value", "type": "string" },
+    { "name": "parent", "kind": "value", "type": "string" }
+  ],
+  "holes": [
+    { "id": "name", "kind": "name", "default": "isPathInside", "locate": { "identifier": "isPathInside" } }
+  ],
+  "fp": { "l1": "1da36297e10f0c9d", "l2": "d8bc077057293f12", "l3": "523f13bfc5321135" },
+  "aliases": [],
+  "canonicalFor": [],
+  "conflictsResolved": [],
+  "negatives": [
+    { "file": "negative/path-scope.js.txt", "expect": "noMatch", "provenance": "cli/path-scope.js:103-114" }
+  ],
+  "verifiedRuleset": { "version": 5, "revisionsHash": "deb22e623872" },
+  "status": "verified",
+  "provenance": "Generic lexical containment check (the A4 idiom: relative path starts with '..' or is absolute). Unlike the inline form it treats a '..name' directory as inside, which is a behaviour difference to record when a site is migrated."
+}

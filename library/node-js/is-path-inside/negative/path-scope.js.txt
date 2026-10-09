@@ -1,0 +1,13 @@
+// provenance: cli/path-scope.js:103-114 (verbatim excerpt, kit checkout 2026-10-09)
+export const isPathTraversal = (targetPath, baseDir = process.cwd()) => {
+  try {
+    const resolved = resolveSafePath(targetPath, baseDir);
+    const realBase = fs.existsSync(baseDir) ? fs.realpathSync(baseDir) : path.resolve(baseDir);
+    const rel = path.relative(realBase, resolved);
+    const isExactBaseMatch = rel === '';
+    if (isExactBaseMatch) return true;
+    return false;
+  } catch {
+    return true;
+  }
+};

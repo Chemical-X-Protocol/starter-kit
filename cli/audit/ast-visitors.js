@@ -14,6 +14,7 @@ import {
 import { isSwallowedCatch } from './catch-predicates.js';
 import { resolveCatchEscalation, resolveCatchSpan } from './shallow-catch-escalation.js';
 import { isNamedCondition, countJunctionOperators, resolveIfChainLength } from './lexicon-predicates.js';
+import { narrowsMutableRef, MUTABLE_REF_REMEDY } from './mutable-ref-predicate.js';
 import { collectTeardowns, classifyTimerDisposal, isListenerDisposed } from './lifecycle-predicates.js';
 import { validateHookReturnShape } from './hook-shape-validator.js';
 import { evaluateComponentStructuralWeight } from './structural-weight-evaluator.js';
@@ -127,11 +128,13 @@ export const createAstVisitors = ({ relativePath, violations, hookRegistry, conf
       if (shouldFlagTest) {
         const line = resolveStartLine(expr, astPath.node, 1);
         const meta = RULE_REGISTRY.CONTROL_FLOW_INLINE_BOOLEAN;
+        const isMutableNarrowing = narrowsMutableRef(astPath.get('test'), astPath.get('consequent'));
+        const remedy = isMutableNarrowing ? ` ${MUTABLE_REF_REMEDY}` : '';
         violations.push({
           filePath: relativePath,
           line,
           column: expr.loc?.start.column || 1,
-          hazard: 'The if asks instead of reading a named condition. Name the question first (Directive 3.A).',
+          hazard: `The if asks instead of reading a named condition. Name the question first (Directive 3.A).${remedy}`,
           rule: 'CONTROL_FLOW_INLINE_BOOLEAN',
           severity: countJunctionOperators(expr) > 0 ? meta.severity : 'LOW',
           pillar: meta.pillar,

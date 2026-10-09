@@ -1,0 +1,15 @@
+// provenance: constructed from the inline guard named in the engine doc (Library, THE CONFLICT RESOLUTION).
+export function useGuardedTimeout(fn: () => void, delayMs: number) {
+  let timerId: ReturnType<typeof setTimeout> | undefined;
+
+  const stop = () => {
+    if (timerId !== null) clearTimeout(timerId);
+  };
+
+  const start = () => {
+    stop();
+    timerId = setTimeout(fn, delayMs);
+  };
+
+  return { start, stop };
+}
