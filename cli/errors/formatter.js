@@ -33,10 +33,10 @@ export const buildIssueBody = (report) => {
   ];
 
   if (report.gitBranch) {
-    lines.push(`| **Git Branch** | \`${report.gitBranch}\` |`);
+    lines.push(`| **Git Branch** | \`${sanitizeText(String(report.gitBranch))}\` |`);
   }
   if (report.gitCommit) {
-    lines.push(`| **Git Commit** | \`${report.gitCommit}\` |`);
+    lines.push(`| **Git Commit** | \`${sanitizeText(String(report.gitCommit))}\` |`);
   }
 
   lines.push('');

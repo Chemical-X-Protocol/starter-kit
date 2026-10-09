@@ -63,19 +63,24 @@ export const sanitizeText = (text) => {
   return normalizeHomePath(masked);
 };
 
-// Structured caller data (report.context): mask every string, and the whole value of a secret-named key.
+// Structured caller data (report.context): mask every string, and every non-boolean primitive
+// at any depth beneath a secret-named key (so { license: { key } } is masked too).
 const SECRET_KEY_NAME = /api[_-]?key|license|secret|token|password|passwd|credential|authorization/i;
 
-export const sanitizeValue = (value, seen = new WeakSet()) => {
+const isMaskablePrimitive = (value) => value !== null && value !== undefined && typeof value !== 'object' && typeof value !== 'boolean';
+
+export const sanitizeValue = (value, seen = new WeakSet(), isUnderSecret = false) => {
+  const isSecretValue = isUnderSecret && isMaskablePrimitive(value);
+  if (isSecretValue) return '[REDACTED_SECRET]';
   if (typeof value === 'string') return sanitizeText(value);
   if (!value || typeof value !== 'object') return value;
   if (seen.has(value)) return '[Circular]';
   seen.add(value); // ancestors only, so a shared (non-circular) reference is still rendered
   try {
-    if (Array.isArray(value)) return value.map((item) => sanitizeValue(item, seen));
+    if (Array.isArray(value)) return value.map((item) => sanitizeValue(item, seen, isUnderSecret));
     const entries = Object.entries(value).map(([key, item]) => {
-      const isSecretKey = SECRET_KEY_NAME.test(key) && item !== null && typeof item !== 'object' && typeof item !== 'boolean';
-      return [sanitizeText(key), isSecretKey ? '[REDACTED_SECRET]' : sanitizeValue(item, seen)];
+      const isSecret = isUnderSecret || SECRET_KEY_NAME.test(key);
+      return [sanitizeText(key), sanitizeValue(item, seen, isSecret)];
     });
     return Object.fromEntries(entries);
   } finally {
