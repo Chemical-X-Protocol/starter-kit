@@ -46,7 +46,8 @@ export const createTask = (db, taskData) => {
     taskData.task_url || '', taskData.sprint_tag || '', needs
   );
   const createdId = info.lastInsertRowid;
-  if (!taskData.task_url) {
+  const isTaskUrlMissing = !taskData.task_url;
+  if (isTaskUrlMissing) {
     db.prepare('UPDATE agent_tasks SET task_url = ? WHERE id = ?').run(generateTaskPermalink(createdId), createdId);
   }
   return getTask(db, createdId);
@@ -61,7 +62,8 @@ export const claimTask = (db, taskId, agentId) => {
     const task = getTask(db, taskId);
     const depsMet = areTaskDependenciesMet(db, taskId);
     const claimCheck = evaluateClaim(task, cleanId, depsMet);
-    if (!claimCheck.allowed) {
+    const isClaimDenied = !claimCheck.allowed;
+    if (isClaimDenied) {
       const { allowed, ...failDetails } = claimCheck;
       return { success: false, ...failDetails };
     }
@@ -69,7 +71,8 @@ export const claimTask = (db, taskId, agentId) => {
     const now = Date.now();
     const sql = "UPDATE agent_tasks SET assigned_agent_id = ?, status = 'in_progress', updated_at = ? WHERE id = ? AND status = 'queued' AND (assigned_agent_id IS NULL OR assigned_agent_id = ?);";
     const info = db.prepare(sql).run(cleanId, now, Number(taskId), cleanId);
-    if (info.changes !== 1) return { success: false, reason: 'already_claimed' };
+    const isAlreadyClaimed = info.changes !== 1;
+    if (isAlreadyClaimed) return { success: false, reason: 'already_claimed' };
     db.prepare("UPDATE agents SET current_task_id = ?, status = 'busy' WHERE id = ?").run(Number(taskId), cleanId);
     return { success: true, task: getTask(db, taskId) };
   });
