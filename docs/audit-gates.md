@@ -11,7 +11,7 @@ This is the rule the audit ratchet (`chemx-ratchet.json`) applies repo-wide, whe
 | Pre-commit hook (`chemx audit --staged-delta`) | staged content vs the same file at HEAD (renames compare with the old path) | any rule's count rising in a staged source file | `cli/audit/gate-parity.spec.js` |
 | `chemx verify` ratchet step | a full scan vs `chemx-ratchet.json` | any rule above its recorded baseline | `cli/audit/gate-parity.spec.js` |
 | `chemx team task done` | the task's target file now vs HEAD | the absolute CRITICAL/HIGH hazards (all hazards with `--strict`), plus any rule's count rising over HEAD | `cli/team/team-done-delta.spec.js` |
-| `introducedViolations` in a `patch` or `write` result | the file before vs after that one edit | see the gap below | `cli/audit/gate-parity.spec.js` |
+| `introducedViolations` in a `patch` or `write` result | the file before vs after that one edit | any rule's count rising in that file, so a second identical hazard is reported | `cli/audit/gate-parity.spec.js` |
 
 ## What is guaranteed
 
@@ -24,7 +24,7 @@ This is the rule the audit ratchet (`chemx-ratchet.json`) applies repo-wide, whe
 - `CHEMX_SKIP_PRECOMMIT=1 git commit` skips only the hook. `chemx verify` still applies the same rule and fails on the hazards afterward.
 - The comparison is per rule, so fixing one hazard does not offset a new hazard of a different rule: the rising rule fails.
 - Rules adopted at a newer revision are recorded as baseline by the ratchet instead of failing. The hook compares HEAD and staged content under the current rules, so it is neutral on them as well.
-- Known gap: `introducedViolations` in `cli/patcher.js` matches violations by rule and hazard text, so a second identical hazard in the same file is not reported. The todo test in `gate-parity.spec.js` marks this until the patcher uses `introducedViolationsOf` from `gate-delta.js` (task #2546).
+- `introducedViolations` covers the one file an edit touched, not the repo; it does not include the line-budget warning, which is reported separately as `lineBudget`.
 - Files that `isSourceFilePath` rejects are not audited by the hook.
 
 ## Related env switches

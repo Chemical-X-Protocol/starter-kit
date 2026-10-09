@@ -46,7 +46,7 @@ const newSitesForRule = (rule, before, after, rise) => {
 /**
  * Per-rule increases between two violation lists of the same file.
  *
- * @returns {{ rule: string, severity: string, before: number, after: number, sites: { line: number, severity: string, hazard: string }[] }[]}
+ * @returns {{ rule: string, severity: string, before: number, after: number, sites: object[] }[]} sites are the new violation objects themselves
  */
 export const diffViolations = (beforeViolations = [], afterViolations = []) => {
   const before = countByRule(beforeViolations);
@@ -59,7 +59,7 @@ export const diffViolations = (beforeViolations = [], afterViolations = []) => {
     if (!isIncrease) continue;
     const sites = newSitesForRule(rule, beforeViolations, afterViolations, rise);
     const severity = highestSeverity(afterViolations.filter((v) => v.rule === rule));
-    increases.push({ rule, severity, before: was, after: count, sites: sites.map((v) => ({ line: v.line, severity: v.severity, hazard: v.hazard })) });
+    increases.push({ rule, severity, before: was, after: count, sites });
   }
   return increases;
 };

@@ -125,9 +125,7 @@ test('a second identical hazard is an increase for the staged gate and the ratch
   assert.equal(ratchetVerdict(dirty, doubled), false, 'ratchet');
 });
 
-const PATCH_TODO = 'cli/patcher.js still keys introducedViolations by rule:hazard text, so it misses a second identical hazard (#2546)';
-
-test('a second identical hazard is an increase for the patch report', { todo: PATCH_TODO }, () => {
+test('a second identical hazard is an increase for the patch report', () => {
   const { dirty, doubled } = doubledCase();
   assert.equal(patchVerdict(dirty, doubled), false, 'patch introducedViolations');
 });
