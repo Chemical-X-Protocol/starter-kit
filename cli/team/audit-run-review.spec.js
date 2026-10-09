@@ -21,6 +21,11 @@ test('bypass: a for-loop word list of literal repo files is reported per file, a
   assert.deepEqual(looped.map((w) => w.target), [`${REPO}/a.js`, `${REPO}/b.js`]);
   const unresolved = writesOf('for f in $LIST; do sed -i s/x/y/ $f; done');
   assert.deepEqual(unresolved.map((w) => [w.how, w.target]), [['sed -i (unresolved target)', REPO]]);
+  const piped = writesOf('printf a.js | xargs sed -i s/x/y/');
+  assert.deepEqual(piped.map((w) => [w.how, w.target]), [['sed -i (unresolved target)', REPO]]);
+  const found = writesOf('find . -name "*.js" -exec sed -i s/x/y/ {} +');
+  assert.deepEqual(found.map((w) => w.target), [REPO]);
+  assert.equal(writesOf('printf a | xargs echo').length, 0);
   assert.equal(writesOf('cd /tmp/scratch && sed -i s/x/y/ $f').length, 0);
   assert.equal(writesOf('cd $DIR && sed -i s/x/y/ $f').length, 0);
 });

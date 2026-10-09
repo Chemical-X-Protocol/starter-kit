@@ -66,13 +66,47 @@ const awkInPlaceFiles = ({ args }, context) => (isAwkInPlace(args) ? awkOperands
 // In-place edits (sed -i, perl -i, awk -i inplace) whose file operand is still a variable or substitution
 // while the command runs inside the project: the guard cannot tell whether the target is a repo file.
 const IN_PLACE_PARTS = { sed: sedParts, perl: perlParts };
-const unresolvedInPlaceTargets = ({ tool, args }, context) => {
+const EDITORS = new Set(['sed', 'perl', 'awk', 'gawk']);
+const XARGS_VALUE_FLAGS = new Set(['-I', '-i', '-n', '-L', '-P', '-s', '-d', '-E', '-a']);
+
+// The editor command an xargs or find -exec runs, when it is a sed/perl/awk word list.
+const xargsCommand = (args) => {
+  let at = 0;
+  while (at < args.length && args[at].startsWith('-')) at += XARGS_VALUE_FLAGS.has(args[at]) ? 2 : 1;
+  return args.slice(at);
+};
+
+const findExecCommand = (args) => {
+  const from = args.findIndex((arg) => /^-(?:exec|execdir|ok|okdir)$/.test(arg));
+  const tail = from === -1 ? [] : args.slice(from + 1);
+  const end = tail.findIndex((arg) => arg === ';' || arg === '+');
+  return end === -1 ? tail : tail.slice(0, end);
+};
+
+const EMBEDDERS = { xargs: xargsCommand, find: findExecCommand };
+
+const embeddedEditor = ({ tool, args }) => {
+  const [head, ...editorArgs] = EMBEDDERS[tool]?.(args) ?? [];
+  return EDITORS.has(head) ? { tool: head === 'gawk' ? 'awk' : head, args: editorArgs, isEmbedded: true } : null;
+};
+
+const unresolvedOf = ({ tool, args, isEmbedded }, context) => {
   const isAwk = tool === 'awk';
   const isSedOrPerl = Object.hasOwn(IN_PLACE_PARTS, tool);
   const hasFlag = args.some((arg) => IN_PLACE_FLAG.test(arg) || arg === '--in-place' || arg.startsWith('--in-place='));
   const isInPlace = isAwk ? isAwkInPlace(args) : isSedOrPerl && hasFlag;
   const files = isAwk ? awkOperands(args) : (IN_PLACE_PARTS[tool]?.({ args }).files ?? []);
-  return isInPlace ? files.filter((file) => isUnresolvedInRepo(file, context)) : [];
+  const isInRepo = isUnresolvedInRepo('$_', context);
+  // No file operand (xargs, which the parser strips, or a pipe supplies them) or a find `{}` placeholder: the target cannot be seen.
+  const isBlind = isInPlace && isInRepo && (files.length === 0 || (isEmbedded && files.includes('{}')));
+  const unresolved = isInPlace ? files.filter((file) => isUnresolvedInRepo(file, context)) : [];
+  return isBlind ? ['(files from a pipe or find)'] : unresolved;
+};
+
+const unresolvedInPlaceTargets = (invocation, context) => {
+  const embedded = embeddedEditor(invocation);
+  const blind = embedded ? unresolvedOf(embedded, context) : [];
+  return [...unresolvedOf(invocation, context), ...blind];
 };
 
 const nodeTestParts = ({ args }) => {

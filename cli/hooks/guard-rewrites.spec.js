@@ -59,6 +59,8 @@ const DENY_CASES = [
   ['for f in $LIST; do sed -i s/a/b/ $f; done', /cannot verify the target \$f/],
   ['for f in a.js b.js; do sed -i s/a/b/ $f; done', /chemx patch a\.js/],
   [LOOP_FIXTURE, /chemx patch cli\/doctor\/doctor-hooks\.spec\.js/],
+  ['printf a.js | xargs sed -i s/x/y/', /cannot verify the target \(files from a pipe or find\)/],
+  ['find . -name "*.js" -exec sed -i s/x/y/ {} +', /cannot verify the target \(files from a pipe or find\)/],
   ['git ls-files | xargs -n1 cat < list.txt', /chemx do/],
 ];
 

@@ -7,7 +7,7 @@
  * every repo root (so a native call on a /tmp file), /dev/*, and a native call on ~/.claude or node_modules.
  * Limits: a target built from a glob cannot be resolved and is skipped, never guessed; an in-place sed, perl or
  * awk edit whose target is a variable or substitution, run in a directory inside a repo, is reported as an
- * unresolved-target bypass at that directory (other writers with such a target are skipped); a write made by an interpreter (node -e, python -c) is not seen; repo roots are the nearest .git
+ * unresolved-target bypass at that directory (so is one with no file operand under xargs or find -exec; other writers with such a target are skipped); a write made by an interpreter (node -e, python -c) is not seen; repo roots are the nearest .git
  * above each call's recorded cwd (the cwd itself when none exists on this machine).
  */
 import os from 'node:os';
@@ -72,7 +72,34 @@ const scriptFiles = (args) => {
 
 const isShortInPlace = (word) => /^-[a-zA-Z]*i/.test(word) && !word.startsWith('--');
 
-const editorWrites = (argv) => {
+const EDITOR_HEADS = new Set(['sed', 'perl', 'awk', 'gawk']);
+const XARGS_VALUE_FLAGS = new Set(['-I', '-i', '-n', '-L', '-P', '-s', '-d', '-E', '-a']);
+
+// The sed/perl/awk command that an xargs or find -exec runs, as its own argv.
+const xargsArgv = (args) => {
+  const at = args.findIndex((w, i) => !isFlag(w) && !XARGS_VALUE_FLAGS.has(args[i - 1]));
+  return at === -1 ? [] : args.slice(at);
+};
+const findExecArgv = (args) => {
+  const from = args.findIndex((w) => /^-(?:exec|execdir|ok|okdir)$/.test(w));
+  const tail = from === -1 ? [] : args.slice(from + 1);
+  const end = tail.findIndex((w) => w === ';' || w === '+');
+  return end === -1 ? tail : tail.slice(0, end);
+};
+const EMBEDDERS = { xargs: xargsArgv, find: findExecArgv };
+
+// Files come from a pipe or find: nothing to resolve, so report the edit as an unresolved target.
+const embeddedWrites = (argv) => {
+  const inner = (EMBEDDERS[argv[0]]?.(argv.slice(1)) ?? []);
+  const found = EDITOR_HEADS.has(inner[0]) ? editorWritesOf(inner) : null;
+  const isInPlace = found !== null && found.how !== 'tee';
+  const isBlind = isInPlace && (found.files.length === 0 || found.files.includes('{}'));
+  return isBlind ? { how: found.how, files: ['$(piped)'] } : null;
+};
+
+const editorWrites = (argv) => editorWritesOf(argv) ?? embeddedWrites(argv);
+
+function editorWritesOf(argv) {
   const [head, ...args] = argv;
   const isInPlaceFlag = args.some((w) => isShortInPlace(w) || w === '--in-place' || w.startsWith('--in-place='));
   const isSed = head === 'sed' && isInPlaceFlag;
@@ -84,7 +111,7 @@ const editorWrites = (argv) => {
   if (isAwk) return { how: 'awk -i inplace', files: scriptFiles(args.filter((w, i) => i !== awkAt && i !== awkAt + 1)) };
   const isTee = head === 'tee';
   return isTee ? { how: 'tee', files: args.filter((w) => !isFlag(w)) } : null;
-};
+}
 
 const redirectTargets = (inv) => inv.redirects.filter((r) => WRITE_OPS.has(r.op)).map((r) => ({ how: `redirect ${r.op}`, word: r.target }));
 
