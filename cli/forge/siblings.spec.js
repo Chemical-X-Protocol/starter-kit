@@ -55,7 +55,7 @@ const unifyParseIntTransform = (a, b) => {
 
 test('W finds the two-form string flags as non-contiguous siblings of one block', (t) => {
   const { ledger, readFile } = flagsLedger(t);
-  const { groups } = buildForgeGroups(ledger, { readFile });
+  const { groups } = buildForgeGroups(ledger, { readFile, unify: null });
   const best = bestW(groups);
   assert.ok(best.memberCount >= W_FLOOR.minInstances);
   assert.ok(coveredPairs(best) >= 5, `covers ${coveredPairs(best)} of 13 A1 pairs`);
@@ -68,8 +68,19 @@ test('W finds the two-form string flags as non-contiguous siblings of one block'
 
 test('without a unify step the int and string forms stay apart, so A1 is only partial', (t) => {
   const { ledger, readFile } = flagsLedger(t);
-  const report = scoreGroups([A1], toScorerGroups(buildForgeGroups(ledger, { readFile }).groups));
+  const report = scoreGroups([A1], toScorerGroups(buildForgeGroups(ledger, { readFile, unify: null }).groups));
   assert.equal(report.perItem[0].credit, 0.5);
+});
+
+test('the LGG unify step (the default) merges the int forms through a transform hole: >= 10 of 13 pairs', (t) => {
+  const { ledger, readFile } = flagsLedger(t);
+  const { groups } = buildForgeGroups(ledger, { readFile });
+  const best = bestW(groups);
+  assert.ok(coveredPairs(best) >= 10, `covers ${coveredPairs(best)} of 13 A1 pairs`);
+  assert.equal(best.needsLgg, true);
+  assert.ok(best.lgg.holes.some((hole) => hole.kind === 'transform'), 'parseInt(x, 10) is a transform hole');
+  assert.deepEqual(best.rejectCodes, []);
+  assert.equal(scoreGroups([A1], toScorerGroups([best])).perItem[0].credit, 1);
 });
 
 test('a unify step that accepts the parseInt transform merges W buckets to cover >= 10 of the 13 pairs', (t) => {
@@ -91,12 +102,20 @@ const unifySingleRef = (a, b) => {
 
 test('W over sibling blocks reaches the A19 retries once the ref hole unifies them', (t) => {
   const { ledger, readFile } = fixtureLedger(t, 'social-gh.js.txt', SOCIAL_FILE);
-  const plain = buildForgeGroups(ledger, { readFile }).groups;
+  const plain = buildForgeGroups(ledger, { readFile, unify: null }).groups;
   assert.equal(scoreGroups([A19], toScorerGroups(plain)).perItem[0].credit, 0);
   const { groups } = buildForgeGroups(ledger, { readFile, unify: unifySingleRef });
   const retries = groups.filter((group) => group.path === 'W' && coveredAnchors(A19, group) >= 3);
   assert.ok(retries.length > 0);
   assert.ok(retries.every((group) => new Set(group.instances.map((instance) => instance.blockId)).size >= 2 || group.kind === 'stmt'));
+  assert.equal(scoreGroups([A19], toScorerGroups(groups)).perItem[0].credit, 1);
+});
+
+test('the LGG unify step (the default) reaches the A19 retries across sibling blocks', (t) => {
+  const { ledger, readFile } = fixtureLedger(t, 'social-gh.js.txt', SOCIAL_FILE);
+  const { groups } = buildForgeGroups(ledger, { readFile });
+  const retries = groups.filter((group) => group.path === 'W' && coveredAnchors(A19, group) >= 3);
+  assert.ok(retries.length > 0);
   assert.equal(scoreGroups([A19], toScorerGroups(groups)).perItem[0].credit, 1);
 });
 

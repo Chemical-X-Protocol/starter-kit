@@ -3,8 +3,9 @@
 // PATH_ORDER keeps a member set that several paths found). Reads only index.db and, for the return rule
 // and template refinement, the member files; it never runs rules or the audit. Rows are read ORDER BY
 // file_path, start, so the result never depends on insertion order.
-// LGG, R1-R8, drift, ranking and persistence (pattern_groups) are later stages: groups that need LGG
-// carry needsLgg, and options.unify plugs the LGG into W's fp3 merge.
+// Then the LGG stage (lgg-stage.js): every group's n-ary LGG, R1-R8 with member refinement, drift, and
+// ranking (rank.js); the same LGG is W's unify step unless options.unify replaces it (null: no merging).
+// Persistence (pattern_groups) is group-store.js; options.cache feeds stored verdicts back in.
 import fs from 'node:fs';
 import path from 'node:path';
 import { openIndexDb } from '../search-schema.js';
@@ -17,6 +18,9 @@ import { groupTemplates } from './templates.js';
 import { createRoleReader } from './template-roles.js';
 import { createReturnReader } from './exits.js';
 import { blocksOf } from './windows.js';
+import { createLggStage } from './lgg-stage.js';
+import { rankGroups } from './rank.js';
+import { readGroupCache, readSuppressions, writeGroupRun } from './group-store.js';
 
 export const PATH_ORDER = Object.freeze(['N1-fp1', 'N1-fp2', 'N1-fp3', 'N2', 'N3', 'W', 'T']);
 
@@ -77,13 +81,25 @@ const countBy = (items, keyOf) => {
   return Object.fromEntries(Object.entries(counts).sort(([a], [b]) => byCodePoint(a, b)));
 };
 
+const reasonCodeOf = (reason) => (reason.startsWith(REFINE_PREFIX) ? 'refine' : reason.split('.')[0]);
+
+// Accepted groups a `chemx patterns reject` suppressed: status suppressed, never surfaced.
+const applySuppressions = (groups, suppressions) => groups.map((group) => {
+  const suppression = suppressions.get(`${group.path}|${group.suppressionKey}`) ?? null;
+  return suppression ? { ...group, status: 'suppressed', rejectReason: 'suppressed', suppression } : group;
+});
+
 /**
- * Groups a ledger. options: { readFile(relativePath) => text | null, unify, includeIdioms }.
- * Returns { groups, refined, stats }: groups are admitted (status candidate, or idiom with includeIdioms),
- * refined are T partitions rejected by refinement (status rejected, rejectReason refine.*), stats counts
- * groups per path and rejections per reason.
+ * Groups a ledger. options: { readFile(relativePath) => text | null, unify (undefined: the LGG; null: no
+ * W merging), includeIdioms, judge (false skips the LGG stage), cache ({ verdicts, unify } from
+ * group-store.js), suppressions (Map from readSuppressions) }.
+ * Returns { groups, refined, rejected, suppressed, unifyDecisions, stats }: groups are accepted and ranked
+ * (status candidate, or idiom with includeIdioms), refined are T partitions rejected by refinement
+ * (rejectReason refine.*), rejected are groups the LGG stage turned away (rejectReason R1-R8 or refine.*),
+ * suppressed the accepted groups a rejection decision covers; stats counts groups per path, gate
+ * rejections per reason and LGG rejections per code.
  */
-export const buildForgeGroups = (ledger, { readFile = () => null, unify = null, includeIdioms = false } = {}) => {
+export const buildForgeGroups = (ledger, { readFile = () => null, unify, includeIdioms = false, judge = true, cache, suppressions = new Map() } = {}) => {
   const rejected = [];
   const textOf = createTextReader(readFile);
   const context = {
@@ -95,16 +111,28 @@ export const buildForgeGroups = (ledger, { readFile = () => null, unify = null, 
     reject: (draft, reason, finish) => rejected.push(reason.startsWith(REFINE_PREFIX) ? { ...finish(), status: 'rejected', rejectReason: reason } : { path: draft.path, rejectReason: reason })
   };
   const { rows } = ledger;
+  const stage = createLggStage({ rows, readFile, ubiquitousOf: context.ubiquitousOf, contentHashes: ledger.contentHashes, cache });
+  const unifyStep = unify === undefined ? stage.unify : unify;
   const found = [
     ...groupExact(rows, context), ...groupWindows(rows, context), ...groupNamed(rows, context),
-    ...groupSiblings(rows, context, { unify }), ...groupTemplateSiblings(rows, context), ...groupTemplates(rows, context)
+    ...groupSiblings(rows, context, { unify: unifyStep }), ...groupTemplateSiblings(rows, context), ...groupTemplates(rows, context)
   ];
   const unique = dedupeById(found.sort(byPathThenLocation));
-  const idioms = unique.filter((group) => group.status === 'idiom');
-  const groups = includeIdioms ? unique : unique.filter((group) => group.status !== 'idiom');
+  const judged = judge ? stage.judgeGroups(unique) : { accepted: unique, rejected: [] };
+  const kept = applySuppressions(dedupeById(judged.accepted.sort(byPathThenLocation)), suppressions);
+  const suppressed = kept.filter((group) => group.status === 'suppressed');
+  const accepted = kept.filter((group) => group.status !== 'suppressed');
+  rankGroups(accepted.filter((group) => group.status === 'candidate'));
+  const idioms = accepted.filter((group) => group.status === 'idiom');
+  const groups = includeIdioms ? accepted : accepted.filter((group) => group.status !== 'idiom');
   const refined = rejected.filter((group) => group.rejectReason.startsWith(REFINE_PREFIX)).sort(byPathThenLocation);
-  const stats = { rows: rows.length, groups: groups.length, idioms: idioms.length, byPath: countBy(groups, (group) => group.path), rejected: countBy(rejected, (group) => `${group.path} ${group.rejectReason}`) };
-  return { groups, refined, stats };
+  const lggRejected = judged.rejected.sort(byPathThenLocation);
+  const stats = {
+    rows: rows.length, groups: groups.length, idioms: idioms.length, byPath: countBy(groups, (group) => group.path),
+    rejected: countBy(rejected, (group) => `${group.path} ${group.rejectReason}`),
+    rejectedByCode: countBy([...lggRejected, ...refined, ...suppressed], (group) => reasonCodeOf(group.rejectReason))
+  };
+  return { groups, refined, rejected: lggRejected, suppressed, unifyDecisions: stage.unifyDecisions, shapeDecisions: stage.shapeDecisions, idioms, stats };
 };
 
 const fileReaderAt = (root) => (relativePath) => {
@@ -115,10 +143,19 @@ const fileReaderAt = (root) => (relativePath) => {
   }
 };
 
-/** Groups the project's ledger as it stands (run `chemx patterns --sync` first to refresh it). null without a db. */
+/**
+ * Groups the project's ledger as it stands (run `chemx patterns --sync` first to refresh it), reusing
+ * and then replacing the stored run (group-store.js). options.store false leaves index.db unwritten.
+ * null without a db.
+ */
 export const runForgeGroups = (cwd = process.cwd(), options = {}) => {
   const db = openIndexDb(cwd);
   if (!db) return null;
   const root = resolveIndexRoot(cwd);
-  return buildForgeGroups(readLedger(db, options), { readFile: fileReaderAt(root), ...options });
+  const stored = { cache: readGroupCache(db), suppressions: readSuppressions(db) };
+  const result = buildForgeGroups(readLedger(db, options), { readFile: fileReaderAt(root), ...stored, ...options });
+  const isStored = options.store !== false;
+  const everyGroup = [...result.groups, ...(options.includeIdioms ? [] : result.idioms), ...result.suppressed, ...result.rejected, ...result.refined];
+  if (isStored) writeGroupRun(db, { groups: everyGroup, unifyDecisions: result.unifyDecisions, shapeDecisions: result.shapeDecisions });
+  return result;
 };

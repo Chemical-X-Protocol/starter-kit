@@ -3,7 +3,14 @@
 //   pattern_files  one row per fingerprinted file: content stamp, facet and extractor version
 //   pattern_units  one row per stored unit (fn, stmt, expr, tmpl), cascading from pattern_files;
 //                  inner_fp1..3 hold the fps of an expression statement's expression (unit-floor.js)
-// Later phases add their tables (groups, blueprints, heal runs, library) here.
+// P3 owns the grouping tables (group-store.js):
+//   pattern_groups         one row per group of the last run, accepted or rejected, with its reason code,
+//                          score and LGG (lgg_json, the verdict cache keyed by source_id)
+//   pattern_group_members  the units of each group by role (member, drift, evicted) with a reason
+//   pattern_suppressions   `chemx patterns reject`: a group key (stable under line drift) and its reason
+//   pattern_unify_cache    W merge decisions by instance pair (content-derived keys)
+//   pattern_shape_cache    drift root shapes by unit (kind and content-derived key)
+// Later phases add their tables (blueprints, heal runs, library) here.
 import { debugNote } from '../search-debug.js';
 
 const TABLES_SQL = `
@@ -46,6 +53,54 @@ const TABLES_SQL = `
     meta TEXT,
     FOREIGN KEY(file_path) REFERENCES pattern_files(path) ON DELETE CASCADE
   );
+
+  CREATE TABLE IF NOT EXISTS pattern_groups (
+    id TEXT PRIMARY KEY,
+    path TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    facet_key TEXT NOT NULL,
+    member_count INTEGER NOT NULL,
+    file_count INTEGER NOT NULL,
+    mass INTEGER NOT NULL,
+    hole_count INTEGER NOT NULL DEFAULT 0,
+    hole_ratio REAL NOT NULL DEFAULT 0,
+    score REAL NOT NULL DEFAULT 0,
+    status TEXT NOT NULL,
+    reject_reason TEXT,
+    lgg_json TEXT,
+    depends_on TEXT,
+    extractor_version INTEGER NOT NULL,
+    source_id TEXT,
+    suppression_key TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS pattern_group_members (
+    group_id TEXT NOT NULL,
+    unit_id INTEGER NOT NULL,
+    role TEXT NOT NULL CHECK (role IN ('home', 'member', 'drift', 'evicted')),
+    reason TEXT,
+    PRIMARY KEY (group_id, unit_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS pattern_suppressions (
+    key_hash TEXT NOT NULL,
+    path TEXT NOT NULL,
+    reason TEXT,
+    by_agent TEXT,
+    decision_post_id INTEGER,
+    created_at INTEGER,
+    PRIMARY KEY (key_hash, path)
+  );
+
+  CREATE TABLE IF NOT EXISTS pattern_unify_cache (
+    pair_key TEXT PRIMARY KEY,
+    ok INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS pattern_shape_cache (
+    row_key TEXT PRIMARY KEY,
+    shape TEXT NOT NULL
+  );
 `;
 
 const INDEXES_SQL = `
@@ -58,6 +113,8 @@ const INDEXES_SQL = `
   CREATE INDEX IF NOT EXISTS idx_pattern_units_file ON pattern_units(file_path);
   CREATE INDEX IF NOT EXISTS idx_pattern_units_block ON pattern_units(file_path, block_id, ordinal);
   CREATE INDEX IF NOT EXISTS idx_pattern_units_decl ON pattern_units(decl_name, facet_key);
+  CREATE INDEX IF NOT EXISTS idx_pattern_groups_source ON pattern_groups(source_id);
+  CREATE INDEX IF NOT EXISTS idx_pattern_group_members_unit ON pattern_group_members(unit_id);
 `;
 
 // [table, column, definition]: columns added after a ledger table first shipped.

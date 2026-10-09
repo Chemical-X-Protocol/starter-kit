@@ -56,9 +56,12 @@ const skipsKey = (skip, key) => skip === SKIP_ALL_KIDS || Boolean(skip?.has(key)
  * Fingerprints one canonical unit. root: a canonical node, or an array of statements (a window).
  * declScope: node(s) whose declarations count as unit-local (default: the root itself); a fn unit
  * passes the whole function so its params are local while only its body is hashed.
+ * onNode(node, note): optional, called once per canonical node after its subtree with
+ * note = { l1, v1, anchor } (l1 the node's L1 digest as a `lane.lane` key, v1 its L1 label); the LGG
+ * reads it.
  * Returns { fp1, fp2, fp3, mass, anchors } with anchors sorted and distinct.
  */
-export const hashUnit = (root, { declScope } = {}) => {
+export const hashUnit = (root, { declScope, onNode = null } = {}) => {
   const isWindow = Array.isArray(root);
   const top = isWindow ? { type: WINDOW_TYPE, label: '', kids: { body: root }, isExpr: false, lit: null } : root;
   const scopeRoots = childList(declScope ?? top);
@@ -100,6 +103,7 @@ export const hashUnit = (root, { declScope } = {}) => {
     }
     const isErased = node.isExpr && !isAnchored;
     const l1 = mix(info.t1, info.v1, ints1);
+    onNode?.(node, { l1: `${l1[0]}.${l1[1]}`, v1: info.v1, anchor: info.anchor });
     const l2 = isSame12 ? l1 : mix(info.t2, info.v2, ints2);
     const l3Unerased = isSame23 ? l2 : mix(info.t2, info.v2, ints3);
     return { l1, l2, l3: isErased ? ERASED : l3Unerased, isAnchored };

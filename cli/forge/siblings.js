@@ -71,13 +71,15 @@ const isMassSimilar = (a, b) => {
 const byRepetition = (a, b) => b.instances.length - a.instances.length || a.instances[0].start - b.instances[0].start || a.k - b.k;
 
 // Merges each bucket into the first earlier bucket that unify accepts (most repeated first, then source
-// order), spending at most UNIFY_BUDGET unify calls on candidates of equal k and similar mass.
+// order), spending at most UNIFY_BUDGET unify calls on candidates of equal k and similar mass. A target
+// already repeats (2 or more instances): two one-off windows are never offered to each other.
 const mergeByUnify = (buckets, unify) => {
   const merged = [];
   let calls = 0;
   const accepts = (target, bucket) => {
     const hasBudget = calls < UNIFY_BUDGET;
-    const isCandidate = Boolean(unify) && hasBudget && target.k === bucket.k && isMassSimilar(target, bucket);
+    const isRepeatedTarget = target.instances.length >= 2;
+    const isCandidate = Boolean(unify) && hasBudget && isRepeatedTarget && target.k === bucket.k && isMassSimilar(target, bucket);
     if (!isCandidate) return false;
     calls += 1;
     return unify(target.instances[0], bucket.instances[0]);
