@@ -29,8 +29,8 @@ test('ratchet: writeRatchet then readRatchet round-trips with sorted keys', () =
     assert.ok(fs.existsSync(path.join(root, RATCHET_FILE)));
     const read = readRatchet(root);
     assert.strictEqual(read.status, 'ok');
-    assert.deepStrictEqual(Object.keys(read.ratchet.rules), ['A', 'Z']);
-    assert.strictEqual(read.ratchet.scope, 'cli');
+    assert.deepStrictEqual(Object.keys(read.ratchet.scopes.cli.rules), ['A', 'Z']);
+    assert.deepStrictEqual(Object.keys(read.ratchet.scopes), ['cli']);
   });
 });
 

@@ -2,24 +2,30 @@ import { PILLARS } from './rules.js';
 
 export const isSlopViolation = (v) => Boolean(v.isAiSlop || (v.rule && v.rule.startsWith('AI_SLOP_')));
 
+/**
+ * Score model 2 (intensive): the score depends on weighted violations per file, so
+ * a 10-file and a 1,000-file codebase with the same density earn the same grade.
+ * Model 1 divided by log10(files), which grew penalties with codebase size.
+ */
+export const SCORE_MODEL = 2;
+const SEVERITY_WEIGHTS = { CRITICAL: 8, HIGH: 4, MEDIUM: 2, LOW: 1 };
+const DENSITY_SCALE = 1.5;
+const CHARS_PER_LINE = 36;
+
+export const calculateWeightedDensity = (violations, totalFiles) => {
+  const penalty = violations.reduce((sum, v) => sum + (SEVERITY_WEIGHTS[v.severity] ?? 1), 0);
+  return penalty / Math.max(1, totalFiles);
+};
+
+export const scoreFromDensity = (density) => Math.max(0, Math.min(100, Math.round(100 - DENSITY_SCALE * density)));
+
 export const calculateMolecularHealthScore = (violations, totalFiles) => {
   if (totalFiles === 0) {
-    return { score: 100, grade: 'A+', label: 'Crystalline Molecular' };
+    return { score: 100, grade: 'A+', label: 'Crystalline Molecular', scoreModel: SCORE_MODEL, density: 0 };
   }
 
-  let penalty = 0;
-  for (const v of violations) {
-    if (isSlopViolation(v)) continue;
-    if (v.severity === 'CRITICAL') penalty += 8;
-    else if (v.severity === 'HIGH') penalty += 4;
-    else if (v.severity === 'MEDIUM') penalty += 2;
-    else if (v.severity === 'LOW') penalty += 1;
-  }
-
-  // Normalize penalty against codebase size
-  const scale = Math.max(1, Math.log10(totalFiles + 1));
-  const adjustedPenalty = penalty / scale;
-  const score = Math.max(0, Math.min(100, Math.round(100 - adjustedPenalty)));
+  const density = calculateWeightedDensity(violations.filter((v) => !isSlopViolation(v)), totalFiles);
+  const score = scoreFromDensity(density);
 
   let grade = 'F';
   let label = 'Severe Context Rot';
@@ -41,7 +47,7 @@ export const calculateMolecularHealthScore = (violations, totalFiles) => {
     label = 'High Context Hazard';
   }
 
-  return { score, grade, label };
+  return { score, grade, label, scoreModel: SCORE_MODEL, density: Number(density.toFixed(2)) };
 };
 
 export const calculatePillarBreakdown = (violations) => {
@@ -105,8 +111,9 @@ export const calculateTokenBurnAnalytics = (fileStats, options = {}) => {
 
   for (const f of fileStats) {
     totalRawChars += f.charCount;
-    // Budget: 500 lines max for files (~18,000 chars), 100 lines for molecules (~3,600 chars)
-    const maxChars = f.isMolecule ? 3600 : 18000;
+    // Budget from the line-budget policy (about 36 chars per line).
+    const lineBudget = f.lineBudget ?? (f.isMolecule ? 100 : 500);
+    const maxChars = lineBudget * CHARS_PER_LINE;
     if (f.charCount > maxChars) {
       excessChars += f.charCount - maxChars;
     }
@@ -216,9 +223,7 @@ export const calculateAiSlopScore = (violations, totalFiles) => {
     }
   }
 
-  const scale = Math.max(1, Math.log10(totalFiles + 1));
-  const adjustedPenalty = penalty / scale;
-  const score = Math.max(0, Math.min(100, Math.round(100 - adjustedPenalty)));
+  const score = scoreFromDensity(penalty / Math.max(1, totalFiles));
 
   let grade = 'F';
   let label = 'Severe AI Slop Infection';
