@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { runAudit } from './audit.js';
+import { classifyConsoleSql, CONSOLE_UNAVAILABLE_ERROR } from './ui-sql-guard.js';
 import {
   buildMasterPrompt,
   buildGradeFPrompt,
@@ -77,14 +78,14 @@ export const handleDbStructure = (db, queryParams = {}) => {
 };
 
 export const handleDbQuery = (db, body = {}) => {
-  if (!db) return { success: false, error: 'Database unavailable' };
+  if (!db) return { success: false, error: CONSOLE_UNAVAILABLE_ERROR };
   const sql = (body.sql || body.query || '').trim();
   if (!sql) return { success: false, error: 'Empty SQL query' };
-  if (!/^(SELECT|PRAGMA|EXPLAIN)\b/i.test(sql)) {
-    return { success: false, error: 'Only SELECT, PRAGMA, and EXPLAIN queries are permitted.' };
-  }
+  const verdict = classifyConsoleSql(sql);
+  if (!verdict.allowed) return { success: false, error: verdict.reason, query: sql };
   const start = performance.now();
-  const rows = db.prepare(sql).all().slice(0, 100);
+  let rows;
+  try { rows = db.prepare(sql).all().slice(0, 100); } catch (err) { return { success: false, error: err.message, query: sql }; }
   const durationMs = Number((performance.now() - start).toFixed(2));
   const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
   return { success: true, query: sql, columns, rows, rowCount: rows.length, durationMs };

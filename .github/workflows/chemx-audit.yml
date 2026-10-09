@@ -23,12 +23,7 @@ jobs:
           node-version: 22
 
       - name: Install dependencies
-        run: |
-          if [ -f package-lock.json ]; then
-            npm ci
-          elif [ -f package.json ]; then
-            npm install
-          fi
+        run: npm ci
 
       # Gate on the ratchet (chemx-ratchet.json): fail only when a rule rises above its recorded
       # baseline. Set the CHEMX_MIN_GRADE / CHEMX_MIN_SCORE repo variables to add absolute floors.
@@ -90,7 +85,7 @@ jobs:
         with:
           node-version: 22
       - name: Install Dependencies
-        run: npm install
+        run: npm ci
       - name: Run Test Suite
         run: npm test
       - name: Multi-Framework Scaffolding Smoke Test

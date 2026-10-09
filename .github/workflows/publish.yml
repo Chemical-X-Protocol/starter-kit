@@ -29,15 +29,13 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
 
       - name: Install dependencies
-        run: |
-          if [ -f package-lock.json ]; then
-            npm ci
-          else
-            npm install
-          fi
+        run: npm ci
 
       - name: Typecheck
         run: npm run typecheck
+
+      - name: Test
+        run: npm test
 
       - name: Pre-publish Framework Generation & Typecheck Gate
         run: node scripts/check-framework-generation.mjs

@@ -6,7 +6,6 @@ import { formatTerminalBuildReport, formatJsonBuildReport } from './build/report
 import { ANSI } from './theme.js';
 import { handleError } from './errors/index.js';
 import { STATUS, toExitCode } from './result-status.js';
-import { isInteractive } from './terminal.js';
 import { parseCliArgs, describeArgErrors, parseTimeoutSeconds, joinCommandWords } from './cli-args.js';
 import { formatAgentJson } from './agent-json.js';
 
@@ -100,12 +99,11 @@ export const runBuildAudit = async (rawArgs = [], isCli = false, options = {}) =
     process.stdout.write(terminalOutput);
   }
 
-  // A failing user build is the user's problem, not a chemx bug: the issue report (URL, issue
-  // files) only appears on an interactive terminal or when explicitly requested.
+  // A failing user build is the user's problem, not a chemx crash: only prepare an issue
+  // report when asked (--prep-issue / --post-issue).
   const isFailedBuild = status === STATUS.FAIL;
   const hasIssueFlag = Boolean(parsed.flags.prepIssue || parsed.flags.postIssue);
-  const isInteractiveCli = isCli && isInteractive();
-  const shouldHandleError = isFailedBuild && (hasIssueFlag || options.postIssue || isInteractiveCli);
+  const shouldHandleError = isFailedBuild && (hasIssueFlag || options.postIssue);
 
   if (shouldHandleError) {
     const errorDetails = `Build command failed with exit code ${report.exitCode}: ${command}`;
@@ -114,6 +112,7 @@ export const runBuildAudit = async (rawArgs = [], isCli = false, options = {}) =
       command,
       exitCode: report.exitCode,
       autoPost: Boolean(parsed.flags.postIssue || options.postIssue),
+      prepIssue: true,
       silent: isSilent || isJson,
       context: {
         totalErrors: report.totalErrors,

@@ -123,7 +123,7 @@ export const OPS_COMMANDS = [
     description: 'Kanban task boards, agent rails, SQLite studio and AST tree exploration.',
     flags: [
       { flag: '--port=<N>', desc: 'Server port (default: 4173)' },
-      { flag: '--host=<addr>', desc: 'Bind address' }
+      { flag: '--host=<addr>', desc: 'Bind address (default: 127.0.0.1). A non-loopback host exposes the UI beyond this machine and prints a warning.' }
     ],
     examples: ['chemx ui', 'chemx ui --port=3000']
   },

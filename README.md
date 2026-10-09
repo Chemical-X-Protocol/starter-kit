@@ -285,12 +285,16 @@ chemx team status
 ### 5. Live Swarm Web UI & Direct Task Routing
 Launch the real-time Chemical X Swarm Control Panel backed by SQLite (`.chemx/index.db`) with full SPA routing and deep linking:
 ```bash
-# Launch Live Swarm Web UI (default: http://localhost:4173)
+# Launch Live Swarm Web UI (binds 127.0.0.1:4173 and prints a tokened URL)
 npx chemx ui
 
 # Launch on a custom port
 npx chemx ui --port=8080
 ```
+
+* **Access token:** every launch generates a random token. Open the printed `http://127.0.0.1:4173/?token=...` URL; the page then keeps the token in a same-site cookie. API clients send it as the `X-Chemx-Token` header. Requests from other origins, non-JSON POSTs and unknown `Host` headers are refused.
+* **Bind address:** the UI listens on `127.0.0.1` by default. `--host=0.0.0.0` must be passed explicitly and prints a warning.
+* **Read-only SQL console:** the Database Studio console runs on a read-only connection and accepts one `SELECT`/`WITH`/`VALUES`/`EXPLAIN` or read-only `PRAGMA` statement per request.
 
 * **Direct Task Routing:** Link straight to any task in the Kanban board: `http://localhost:4173/tasks/:id` (e.g. `http://localhost:4173/tasks/42`)
 * **Auto-Focus & Highlighting:** Opening a task route automatically switches to the **📋 Tasks & Kanban** view, smoothly centers the card, and illuminates it with a cyan highlight glow.
@@ -353,10 +357,13 @@ Run the interactive installer in your workspace root:
 npx chemx install-mcp
 ```
 
-This automatically registers the Chemical X server in:
-- `.cursor/mcp.json` (Cursor IDE)
-- `.vscode/mcp.json` (VS Code)
-- `~/.gemini/config/mcp_config.json` (Antigravity)
+This registers the Chemical X server in:
+- `.cursor/mcp.json` (Cursor IDE, `mcpServers` key)
+- `.vscode/mcp.json` (VS Code, `servers` key with `type: "stdio"`)
+- `~/.gemini/config/mcp_config.json` (Antigravity) only with `npx chemx install-mcp --global`
+
+Installing the npm package never edits any config: `postinstall` only prints a one-line hint (silent in CI or with `CHEMX_SKIP_POSTINSTALL=1`).
+Existing configs are merged, not replaced: other servers and keys are kept, the previous file is saved as `<file>.bak`, and a file that is not valid JSON, or that has comments a rewrite would drop, is left untouched with the entry to add by hand.
 
 ### Manual MCP Server Configuration
 

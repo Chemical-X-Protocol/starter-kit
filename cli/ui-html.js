@@ -16,18 +16,12 @@ export const generateSwarmHtml = (initialState = {}) => {
     path.resolve(process.cwd(), 'src/ui/index.html')
   ];
 
-  let raw = '';
-  for (const p of candidates) {
-    if (fs.existsSync(p)) {
-      raw = fs.readFileSync(p, 'utf8');
-      break;
-    }
-  }
+  const source = candidates.find((candidate) => fs.existsSync(candidate));
+  const raw = source ? fs.readFileSync(source, 'utf8') : '';
 
   const injection = `<script>window.__CHEMX_HYDRATED_STATE__ = ${jsonState};</script>`;
-  if (raw.includes('</head>')) {
-    return raw.replace('</head>', `  ${injection}\n</head>`);
-  }
-  return raw + injection;
+  const hasHead = raw.includes('</head>');
+  if (!hasHead) return raw + injection;
+  // A replacer function: a string replacement would expand $', $& and $` found in task text.
+  return raw.replace('</head>', () => `  ${injection}\n</head>`);
 };
-

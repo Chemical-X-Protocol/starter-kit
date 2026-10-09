@@ -32,21 +32,21 @@ test('ui-server: HTTP integration serves SPA HTML on direct frontend routes /tas
   const running = await startUiServer({ port: 0, cwd: process.cwd() });
   try {
     // Direct link to /tasks
-    const resTasks = await fetch(`http://localhost:${running.port}/tasks`);
+    const resTasks = await running.fetch(`http://localhost:${running.port}/tasks`);
     assert.strictEqual(resTasks.status, 200);
     assert.strictEqual(resTasks.headers.get('content-type'), 'text/html; charset=utf-8');
     const htmlTasks = await resTasks.text();
     assert.ok(htmlTasks.includes('Chemical X'));
 
     // Direct link to /tasks/42
-    const resSingleTask = await fetch(`http://localhost:${running.port}/tasks/42`);
+    const resSingleTask = await running.fetch(`http://localhost:${running.port}/tasks/42`);
     assert.strictEqual(resSingleTask.status, 200);
     assert.strictEqual(resSingleTask.headers.get('content-type'), 'text/html; charset=utf-8');
     const htmlSingleTask = await resSingleTask.text();
     assert.ok(htmlSingleTask.includes('Chemical X'));
 
     // Direct link to /database
-    const resDb = await fetch(`http://localhost:${running.port}/database`);
+    const resDb = await running.fetch(`http://localhost:${running.port}/database`);
     assert.strictEqual(resDb.status, 200);
     assert.strictEqual(resDb.headers.get('content-type'), 'text/html; charset=utf-8');
   } finally {

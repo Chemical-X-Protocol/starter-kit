@@ -41,7 +41,7 @@ export {
 export { syncSearchIndex, syncSingleFileIndex, resolveTargetDir };
 export { printSearchHelp } from './help.js';
 
-const SQLITE_MISSING = 'SQLite engine not available. Please ensure Node.js >= 22.5 is installed.';
+const SQLITE_MISSING = 'SQLite engine not available. Please ensure Node.js >= 22.13 is installed.';
 
 const failNoSqlite = (isJson, isCli) => {
   const message = `✕ ${SQLITE_MISSING}`;

@@ -6,8 +6,7 @@ export const handleSseConnection = (req, res, db) => {
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache, no-transform',
-    'Connection': 'keep-alive',
-    'Access-Control-Allow-Origin': '*'
+    'Connection': 'keep-alive'
   });
 
   try {

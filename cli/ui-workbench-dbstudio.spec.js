@@ -120,7 +120,7 @@ test('Routes: routeGet and routePost resolve Studio endpoints', () => {
   assert.strictEqual(genPrompt.success, true);
   assert.ok(genPrompt.prompt.includes('Grade F'));
 
-  const sqlRes = routePost('/api/db/query', db, { query: 'SELECT 1 as num' });
+  const sqlRes = routePost('/api/db/query', db, { query: 'SELECT 1 as num' }, undefined, { consoleDb: db });
   assert.strictEqual(sqlRes.success, true);
   assert.strictEqual(sqlRes.rows[0].num, 1);
 });
@@ -129,12 +129,12 @@ test('HTTP Server: studio endpoints respond over HTTP', async () => {
   const running = await startUiServer({ port: 0, cwd: process.cwd() });
   try {
     const base = `http://localhost:${running.port}`;
-    const resTables = await fetch(`${base}/api/db/tables`);
+    const resTables = await running.fetch(`${base}/api/db/tables`);
     assert.strictEqual(resTables.status, 200);
     const jsonTables = await resTables.json();
     assert.strictEqual(jsonTables.success, true);
 
-    const resPrompt = await fetch(`${base}/api/prompts/generate`, {
+    const resPrompt = await running.fetch(`${base}/api/prompts/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ scope: 'master' })
@@ -144,12 +144,12 @@ test('HTTP Server: studio endpoints respond over HTTP', async () => {
     assert.strictEqual(jsonPrompt.success, true);
     assert.ok(jsonPrompt.prompt.length > 0);
 
-    const resBrowse = await fetch(`${base}/api/db/browse?table=agent_tasks`);
+    const resBrowse = await running.fetch(`${base}/api/db/browse?table=agent_tasks`);
     assert.strictEqual(resBrowse.status, 200);
     const jsonBrowse = await resBrowse.json();
     assert.strictEqual(jsonBrowse.success, true);
 
-    const resSql = await fetch(`${base}/api/db/query`, {
+    const resSql = await running.fetch(`${base}/api/db/query`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query: 'SELECT 42 as answer' })

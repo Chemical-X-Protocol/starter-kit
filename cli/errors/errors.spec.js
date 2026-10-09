@@ -153,6 +153,7 @@ describe('Universal Error Catcher: Catcher & Orchestration', () => {
         {
           cwd: tempCwd,
           silent: true,
+          saveReport: true,
           exitOnError: false,
           repo: 'test-org/test-repo'
         }
