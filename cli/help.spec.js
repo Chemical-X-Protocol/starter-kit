@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { COMMANDS_SCHEMA, ROUTABLE_COMMAND_TOKENS, findCommandSchema } from './commands-schema.js';
 import { printHelp, printInitHelp, printScaffoldHelp, formatTopLevelHelp, resolveCommandHelpTopic } from './help.js';
+import { runCli } from './spec-support/run-cli.js';
 
 const CLI = path.resolve(path.dirname(new URL(import.meta.url).pathname), 'index.js');
 
@@ -141,18 +142,15 @@ test('help: printHelp renders without throwing', () => {
 });
 
 test('cli: unknown command exits immediately with code 1 and error message', () => {
-  const cliPath = path.resolve('cli/index.js');
   const bogusInputs = ['config', 'foo', '--bogus'];
 
+  // "Immediately" is measured in user CPU, not wall clock: wall time on a loaded machine
+  // flakes, while a hang or an eager import of the heavy stack shows up as CPU or a kill.
   for (const input of bogusInputs) {
-    const startTime = Date.now();
-    const res = spawnSync(process.execPath, [cliPath, input], {
-      encoding: 'utf8',
-      timeout: 2000
-    });
-    const elapsed = Date.now() - startTime;
+    const res = runCli([input], { timeout: 15000 });
 
-    assert.ok(elapsed < 2000, `Command chemx ${input} took ${elapsed}ms, expected < 2000ms`);
+    assert.strictEqual(res.signal, null, `chemx ${input} hung and was killed`);
+    assert.ok(res.userCpuMs < 1000, `chemx ${input} spent ${res.userCpuMs}ms user CPU, expected < 1000ms`);
     assert.strictEqual(res.status, 1, `chemx ${input} should exit with code 1`);
     assert.ok(
       res.stderr.includes(`Unknown command "${input}"`),
