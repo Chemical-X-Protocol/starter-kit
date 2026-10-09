@@ -47,11 +47,15 @@ const formatFlagRows = (flags) => {
 export const formatCommandHelp = (entry) => {
   const otherNames = [entry.name, ...entry.aliases].filter((token) => token !== displayName(entry));
   const lines = ['USAGE', `  ${entry.usage}`];
-  if (otherNames.length > 0) lines.push(`  aliases: ${otherNames.join(', ')}`);
+  const hasOtherNames = otherNames.length > 0;
+  if (hasOtherNames) lines.push(`  aliases: ${otherNames.join(', ')}`);
   lines.push('', entry.summary);
-  if (entry.description) lines.push(entry.description);
-  if (entry.flags.length > 0) lines.push('', 'FLAGS', ...formatFlagRows(entry.flags));
-  if (entry.examples.length > 0) lines.push('', 'EXAMPLES', ...entry.examples.map((eg) => `  ${eg}`));
+  const hasDescription = Boolean(entry.description);
+  if (hasDescription) lines.push(entry.description);
+  const hasFlags = entry.flags.length > 0;
+  if (hasFlags) lines.push('', 'FLAGS', ...formatFlagRows(entry.flags));
+  const hasExamples = entry.examples.length > 0;
+  if (hasExamples) lines.push('', 'EXAMPLES', ...entry.examples.map((eg) => `  ${eg}`));
   return `${lines.join('\n')}\n`;
 };
 
