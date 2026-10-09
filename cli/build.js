@@ -44,7 +44,8 @@ export const resolveBuildCommand = (parsed) => {
 };
 
 const buildStatusOf = (execution) => {
-  if (execution.timedOut) return STATUS.INCONCLUSIVE;
+  const isTimedOut = Boolean(execution.timedOut);
+  if (isTimedOut) return STATUS.INCONCLUSIVE;
   return execution.exitCode === 0 ? STATUS.PASS : STATUS.FAIL;
 };
 
@@ -55,7 +56,8 @@ export const runBuildAudit = async (rawArgs = [], isCli = false, options = {}) =
   const isRaw = Boolean(parsed.flags.raw) || options.raw === true;
   const isSummary = Boolean(parsed.flags.summary) || options.summary === true;
   const shouldPrint = options.print !== false;
-  if (parsed.flags.help) {
+  const isHelpRequested = Boolean(parsed.flags.help);
+  if (isHelpRequested) {
     if (shouldPrint) process.stdout.write(isJson ? `${JSON.stringify({ help: true, success: true })}\n` : BUILD_HELP);
     if (isCli) process.exit(0);
     return { help: true, success: true };
