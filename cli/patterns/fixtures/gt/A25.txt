@@ -1,0 +1,41 @@
+// gt fixture A25 (class A): Settings action card repeated with literal content
+// @@ anchor A25.1 src/ui/organisms/o-settings-panel/o-settings-panel.vue:32-39 sha=e1ca2609cab15047
+      <ACard variant="glass" padding="none" class="o-settings-panel__card">
+        <ACard variant="subtle" padding="none" class="o-settings-panel__card-header">
+          <AText variant="title" text="🧹 Vacuum SQLite DB" />
+          <ABadge label="PRAGMA" tone="primary" />
+        </ACard>
+        <AText variant="caption" tone="muted" text="Reclaim unused disk pages and optimize SQLite B-tree indexes." />
+        <AButton variant="secondary" size="md" @click="handleAction('vacuum')"><AText text="Execute VACUUM" /></AButton>
+      </ACard>
+// @@ end
+// @@ anchor A25.2 src/ui/organisms/o-settings-panel/o-settings-panel.vue:41-48 sha=08fc5d67a3f1d074
+      <ACard variant="glass" padding="none" class="o-settings-panel__card">
+        <ACard variant="subtle" padding="none" class="o-settings-panel__card-header">
+          <AText variant="title" text="📜 Prune Feed Stream" />
+          <ABadge label="RETENTION" tone="primary" />
+        </ACard>
+        <AText variant="caption" tone="muted" text="Retain latest 50 live feed events; prune older entries." />
+        <AButton variant="secondary" size="md" @click="handleAction('clear_feed')"><AText text="Prune Old Feed" /></AButton>
+      </ACard>
+// @@ end
+// @@ anchor A25.3 src/ui/organisms/o-settings-panel/o-settings-panel.vue:50-57 sha=717324297940022c
+      <ACard variant="glass" padding="none" class="o-settings-panel__card">
+        <ACard variant="subtle" padding="none" class="o-settings-panel__card-header">
+          <AText variant="title" text="🔓 Clear Expired Locks" />
+          <ABadge label="LEASES" tone="warning" />
+        </ACard>
+        <AText variant="caption" tone="muted" text="Release all locks where TTL timestamp has lapsed." />
+        <AButton variant="secondary" size="md" @click="handleAction('reset_leases')"><AText text="Reset Expired Leases" /></AButton>
+      </ACard>
+// @@ end
+// @@ anchor A25.4 src/ui/organisms/o-settings-panel/o-settings-panel.vue:59-66 sha=71d013ad6f9f74e1
+      <ACard variant="glass" padding="none" class="o-settings-panel__card">
+        <ACard variant="subtle" padding="none" class="o-settings-panel__card-header">
+          <AText variant="title" text="💓 Swarm Heartbeat" />
+          <ABadge label="TELEMETRY" tone="lime" />
+        </ACard>
+        <AText variant="caption" tone="muted" text="Broadcast an autonomous heartbeat signal to all swarm agents." />
+        <AButton variant="primary" size="md" @click="handleAction('heartbeat')"><AText text="Broadcast Heartbeat" /></AButton>
+      </ACard>
+// @@ end

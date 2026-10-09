@@ -1,0 +1,70 @@
+// gt fixture B3 (class B): Blueprint templates mirrored per framework
+// @@ anchor B3.1 blueprints/molecule-capsule/m-sample-card.vue:40-60 sha=32a8d46fa52fe175
+<template>
+  <div class="m-sample-card">
+    <div class="m-sample-card__header">
+      <div class="m-sample-card__title-group">
+        <h3 class="m-sample-card__title">{{ title }}</h3>
+        <p v-if="subtitle" class="m-sample-card__subtitle">{{ subtitle }}</p>
+      </div>
+      <span :class="badge.className">{{ badge.text }}</span>
+    </div>
+    <div class="m-sample-card__body">
+      <div class="m-sample-card__value">
+        ${{ value.toLocaleString() }}
+      </div>
+      <AButton
+        v-if="onAction"
+        class="m-sample-card__action"
+        @click="handleActionClick"
+      >
+        Action
+      </AButton>
+    </div>
+// @@ end
+// @@ anchor B3.2 blueprints/molecule-capsule/m-sample-card.tsx:45-65 sha=691d7ff3be7852e8
+  return (
+    <div className="m-sample-card">
+      <div className="m-sample-card__header">
+        <div className="m-sample-card__title-group">
+          <h3 className="m-sample-card__title">{title}</h3>
+          {subtitle && <p className="m-sample-card__subtitle">{subtitle}</p>}
+        </div>
+        <span className={badge.className}>
+          {badge.text}
+        </span>
+      </div>
+      <div className="m-sample-card__body">
+        <div className="m-sample-card__value">
+          ${value.toLocaleString()}
+        </div>
+        {onAction && (
+          <AtomButton
+            className="m-sample-card__action"
+            onClick={handleActionClick}
+          >
+            Action
+// @@ end
+// @@ anchor B3.3 blueprints/molecule-capsule/m-sample-card.svelte:40-60 sha=23b5486aa68e0499
+      {#if subtitle}
+        <p class="m-sample-card__subtitle">{subtitle}</p>
+      {/if}
+    </div>
+    <span class={badge.className}>{badge.text}</span>
+  </div>
+  <div class="m-sample-card__body">
+    <div class="m-sample-card__value">
+      ${value.toLocaleString()}
+    </div>
+    {#if onAction}
+      <AButton
+        class="m-sample-card__action"
+        onclick={onAction}
+      >
+        Action
+      </AButton>
+    {/if}
+  </div>
+</div>
+
+// @@ end

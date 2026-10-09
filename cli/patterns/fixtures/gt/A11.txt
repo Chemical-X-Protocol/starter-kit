@@ -1,0 +1,10 @@
+// gt fixture A11 (class A): isPlainObject re-declared
+// @@ anchor A11.1 cli/hooks/mcp-json-merge.js:13-13 sha=230907e654e9390e
+const isPlainObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
+// @@ end
+// @@ anchor A11.2 cli/mcp/installer-package.js:11-11 sha=c101493086a14a4b
+const isPlainObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+// @@ end
+// @@ anchor A11.3 cli/mcp/installer-write.js:17-17 sha=c101493086a14a4b
+const isPlainObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+// @@ end

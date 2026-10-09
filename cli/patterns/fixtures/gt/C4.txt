@@ -1,0 +1,7 @@
+// gt fixture C4 (class C): normalizeHandle with trim vs without
+// @@ anchor C4.1 cli/team/agent-identity.js:17-17 sha=57a7e2c0e0b7cc4a
+  const trimmed = String(rawId).trim();
+// @@ end
+// @@ anchor C4.2 cli/team/team-db-mailbox.js:9-9 sha=c31586d39c45a5e3
+  return handle.startsWith('@') ? handle : `@${handle}`;
+// @@ end

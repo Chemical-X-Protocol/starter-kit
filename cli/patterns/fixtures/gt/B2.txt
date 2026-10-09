@@ -1,0 +1,19 @@
+// gt fixture B2 (class B): UI trio: three different roles
+// @@ anchor B2.1 src/ui/molecules/m-attention-card/m-attention-card.vue:26-29 sha=c47acb4bf3ba0658
+    <ACard variant="subtle" padding="none" class="m-attention-card__body">
+      <AText variant="title" tone="default" :text="props.item.title" />
+      <AText variant="body" tone="muted" :text="props.item.detail" />
+    </ACard>
+// @@ end
+// @@ anchor B2.2 src/ui/molecules/m-lock-row/m-lock-row.vue:18-21 sha=d842b10b3ef585f7
+    <ACard variant="subtle" padding="none" class="m-lock-row__info">
+      <AText variant="title" tone="warning" :text="`🔒 ${props.lease.filePath}`" />
+      <AText variant="caption" tone="muted" :text="`Locked by ${props.lease.lockedBy} • ${expiresAtText}`" />
+    </ACard>
+// @@ end
+// @@ anchor B2.3 src/ui/molecules/m-savings-modal/m-savings-modal.vue:26-29 sha=e20cbf0e0315d92b
+        <ACard variant="subtle" padding="none" class="m-savings-modal__stat">
+          <AText variant="caption" tone="muted" text="Baseline Monolithic Burn" />
+          <AText variant="title" tone="warning" :text="`${(props.savings?.baselineTokens || 0).toLocaleString()} tokens`" />
+        </ACard>
+// @@ end

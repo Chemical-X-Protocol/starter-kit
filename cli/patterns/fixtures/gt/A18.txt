@@ -1,0 +1,9 @@
+// gt fixture A18 (class A): Inline MCP text item bypassing textItem
+// @@ anchor A18.1 cli/mcp/tools.js:230-230 sha=a501b08434321622
+    return { content: [{ type: 'text', text: formatAgentJson(runLatticeJson(false, cwd)) }] };
+// @@ end
+// @@ anchor A18.2 cli/mcp/tools.js:235-237 sha=d680f46cc069fb81
+  return {
+    content: [{ type: 'text', text: textOutput }]
+  };
+// @@ end

@@ -1,0 +1,33 @@
+// gt fixture C2 (class C): useSelfCleaningInterval vs useSelfCleaningTimeout
+// @@ anchor C2.1 hooks/useSelfCleaningTimer.ts:3-16 sha=44ccf1f5ade745e4
+export const useSelfCleaningInterval = (callback: () => void, delayMs: number | null): void => {
+  const savedCallback = useRef(callback);
+
+  useEffect(() => {
+    savedCallback.current = callback;
+  }, [callback]);
+
+  useEffect(() => {
+    const isDisabled = delayMs === null;
+    if (isDisabled) return;
+    const intervalId = setInterval(() => savedCallback.current(), delayMs);
+    return () => clearInterval(intervalId);
+  }, [delayMs]);
+};
+// @@ end
+// @@ anchor C2.2 hooks/useSelfCleaningTimer.ts:18-31 sha=f1b89b338c998e23
+export const useSelfCleaningTimeout = (callback: () => void, delayMs: number | null): void => {
+  const savedCallback = useRef(callback);
+
+  useEffect(() => {
+    savedCallback.current = callback;
+  }, [callback]);
+
+  useEffect(() => {
+    const isDisabled = delayMs === null;
+    if (isDisabled) return;
+    const timerId = setTimeout(() => savedCallback.current(), delayMs);
+    return () => clearTimeout(timerId);
+  }, [delayMs]);
+};
+// @@ end

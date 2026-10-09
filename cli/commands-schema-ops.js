@@ -132,13 +132,14 @@ export const OPS_COMMANDS = [
     aliases: [],
     group: 'verify',
     brief: 'Repeats',
-    usage: 'chemx patterns [dir] [--type=<T>] [--min=<N>] [--full]',
+    usage: 'chemx patterns [dir] [--type=<T>] [--min=<N>] [--full] [--score=<labels.json>]',
     summary: 'List repeated code patterns found by the audit (same handler as the MCP patterns action).',
     description: 'Prints compact JSON candidates with sample occurrences. Interim alias until the Forge surface lands.',
     flags: [
       { flag: '--type=<T>', desc: 'Only this pattern type (default: ALL)' },
       { flag: '--min=<N>', desc: 'Minimum file count (default: 2)' },
-      { flag: '--full', desc: 'Include every occurrence instead of samples' }
+      { flag: '--full', desc: 'Include every occurrence instead of samples' },
+      { flag: '--score=<labels.json>', desc: 'Score the detector against the content-anchored ground truth (cli/patterns/fixtures/gt/labels.json); add --json, --dir=<d>, --input=<groups.json>' }
     ],
     examples: ['chemx patterns', 'chemx patterns src --min=3']
   }

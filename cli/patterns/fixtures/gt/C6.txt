@@ -1,0 +1,7 @@
+// gt fixture C6 (class C): isPlainObject variants that do not exclude arrays
+// @@ anchor C6.1 cli/mcp/envelope.js:12-12 sha=3063b6b77299d099
+  const isPlainObject = value !== null && typeof value === 'object';
+// @@ end
+// @@ anchor C6.2 cli/agent-json.js:28-28 sha=9860eb88817c9531
+  const isPlainObject = Boolean(value) && typeof value === 'object';
+// @@ end

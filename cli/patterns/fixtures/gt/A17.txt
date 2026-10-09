@@ -1,0 +1,29 @@
+// gt fixture A17 (class A): Spec temp project
+// @@ anchor A17.1 cli/friction-fixes.spec.js:13-17 sha=5ba7df680b1c75e4
+const makeTempProject = (prefix) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  fs.writeFileSync(path.join(root, 'package.json'), '{"name":"friction-fixture"}\n');
+  return root;
+};
+// @@ end
+// @@ anchor A17.2 cli/mcp/tools-project.spec.js:14-18 sha=60339bf43fcc98e7
+const makeTempProject = (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-project-tool-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  return root;
+};
+// @@ end
+// @@ anchor A17.3 cli/team/team-db-feed-latest.spec.js:21-26 sha=b0eafa831ddabe9e
+const makeTempProject = (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-feed-latest-'));
+  fs.mkdirSync(path.join(root, '.chemx'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  return root;
+};
+// @@ end
+// @@ anchor A17.4 cli/team/team-task-add-flags.spec.js:8-8 sha=e3231b40838c6d32
+const makeTempProject = () => fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-task-flags-'));
+// @@ end
+// @@ anchor A17.5 cli/team/team-unknown-task.spec.js:8-8 sha=9680b9924617d4d6
+const makeTempProject = () => fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-unknown-task-'));
+// @@ end

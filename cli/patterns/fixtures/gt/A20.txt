@@ -1,0 +1,83 @@
+// gt fixture A20 (class A): Swarm composables: GET /api/swarm/... and assign fields
+// @@ anchor A20.1 src/ui/composables/useSwarmTasks.ts:9-26 sha=adf19aab1315bb8c
+  const fetchTasks = async () => {
+    const hasFetch = typeof fetch === 'function';
+    if (!hasFetch) return;
+    try {
+      isLoading.value = true;
+      const res = await fetch('/api/swarm/status');
+      const isResponseOk = Boolean(res.ok);
+      if (isResponseOk) {
+        const data = await res.json();
+        const hasTasks = Boolean(data.tasks);
+        if (hasTasks) tasks.value = data.tasks;
+      }
+    } catch (err) {
+      error.value = err instanceof Error ? err : new Error(String(err));
+    } finally {
+      isLoading.value = false;
+    }
+  };
+// @@ end
+// @@ anchor A20.2 src/ui/composables/useSwarmFeed.ts:10-28 sha=297effb67a6031c1
+  const fetchFeed = async () => {
+    const isFetchUnavailable = typeof fetch !== 'function';
+    if (isFetchUnavailable) return;
+    try {
+      isLoading.value = true;
+      const res = await fetch('/api/swarm/status');
+      const isResponseOk = Boolean(res.ok);
+      if (isResponseOk) {
+        const data = await res.json();
+        const hasPosts = Boolean(data.posts);
+        if (hasPosts) posts.value = data.posts;
+      }
+    } catch (err) {
+      error.value = err instanceof Error ? err : new Error(String(err));
+    } finally {
+      isLoading.value = false;
+      poller.start();
+    }
+  };
+// @@ end
+// @@ anchor A20.3 src/ui/composables/useSwarmLocks.ts:9-25 sha=440682cfd056a0e8
+  const fetchLocks = async () => {
+    const hasFetch = typeof fetch === 'function';
+    if (!hasFetch) return;
+    try {
+      const res = await fetch('/api/swarm/status');
+      const isOk = Boolean(res.ok);
+      if (isOk) {
+        const data = await res.json();
+        const hasLeases = Boolean(data.leases);
+        if (hasLeases) leases.value = data.leases;
+        const hasWaitingCount = data.waitingLocksCount !== undefined;
+        if (hasWaitingCount) waitingLocksCount.value = data.waitingLocksCount;
+      }
+    } catch (err) {
+      error.value = err instanceof Error ? err : new Error(String(err));
+    }
+  };
+// @@ end
+// @@ anchor A20.4 src/ui/composables/useSwarmCodebase.ts:10-29 sha=a856222ed95d6110
+  const fetchCodebase = async () => {
+    const isFetchMissing = typeof fetch !== 'function';
+    if (isFetchMissing) return;
+    try {
+      isLoading.value = true;
+      const res = await fetch('/api/swarm/codebase');
+      const isResponseOk = Boolean(res.ok);
+      if (isResponseOk) {
+        const data = await res.json();
+        const hasFiles = Boolean(data.files);
+        if (hasFiles) files.value = data.files;
+        const hasViolations = Boolean(data.violations);
+        if (hasViolations) violations.value = data.violations;
+      }
+    } catch (err) {
+      error.value = err instanceof Error ? err : new Error(String(err));
+    } finally {
+      isLoading.value = false;
+    }
+  };
+// @@ end

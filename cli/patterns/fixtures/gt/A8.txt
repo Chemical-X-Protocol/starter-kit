@@ -1,0 +1,41 @@
+// gt fixture A8 (class A): Read one field from package.json with a default
+// @@ anchor A8.1 cli/hooks/launcher.js:12-18 sha=db8af5bff2350f74
+export const readKitVersion = (kitRoot = KIT_ROOT) => {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(kitRoot, 'package.json'), 'utf-8')).version ?? 'unknown';
+  } catch {
+    return 'unknown'; // an unreadable package.json is reported by doctor; callers treat 'unknown' as unpinned
+  }
+};
+// @@ end
+// @@ anchor A8.2 cli/mcp/server-info.js:10-16 sha=88c164ab587fff1c
+export const readPackageVersion = (packageJsonPath = PACKAGE_JSON_PATH) => {
+  try {
+    return JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8')).version || 'unknown';
+  } catch (err) {
+    process.stderr.write(`[mcp] cannot read version from ${packageJsonPath}: ${err.message}\n`);
+    return 'unknown';
+  }
+// @@ end
+// @@ anchor A8.3 cli/db-project-stamp.js:17-23 sha=273d818d8f3b73ee
+const readPackageName = (root) => {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf-8')).name || '';
+  } catch { // chemx-allow: best-effort a missing or malformed package.json falls back to the directory name
+    return '';
+  }
+};
+// @@ end
+// @@ anchor A8.4 cli/audit/project-figures.js:6-16 sha=08df796e903da4bd
+export const resolveProjectName = (cwd = process.cwd()) => {
+  const pkgPath = path.resolve(cwd, "package.json");
+  const hasPkg = fs.existsSync(pkgPath);
+  if (hasPkg) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
+      return parsed.name || path.basename(cwd);
+    } catch {
+      return path.basename(cwd) || "Project";
+    }
+  }
+// @@ end

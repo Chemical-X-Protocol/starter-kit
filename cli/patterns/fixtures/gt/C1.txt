@@ -1,0 +1,26 @@
+// gt fixture C1 (class C): Deep ANSI stripping walk
+// @@ anchor C1.1 cli/mcp/envelope.js:8-15 sha=33fe50fc853f47d6
+const stripDeep = (value) => {
+  const isString = typeof value === 'string';
+  if (isString) return stripAnsi(value);
+  if (Array.isArray(value)) return value.map(stripDeep);
+  const isPlainObject = value !== null && typeof value === 'object';
+  if (!isPlainObject) return value;
+  return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, stripDeep(v)]));
+};
+// @@ end
+// @@ anchor C1.2 cli/agent-json.js:23-35 sha=6bbe2ca53f7c4e3d
+const compactValue = (value) => {
+  const isString = typeof value === 'string';
+  if (isString) return stripAnsi(value);
+  if (isDiagnosticList(value)) return value.map(formatDiagnosticRow);
+  if (Array.isArray(value)) return value.map(compactValue);
+  const isPlainObject = Boolean(value) && typeof value === 'object';
+  if (!isPlainObject) return value;
+  const compacted = {};
+  for (const [key, entry] of Object.entries(value)) {
+    const isAbsent = entry === null || entry === undefined;
+    if (!isAbsent) compacted[key] = compactValue(entry);
+  }
+  return compacted;
+// @@ end

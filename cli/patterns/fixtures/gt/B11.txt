@@ -1,0 +1,7 @@
+// gt fixture B11 (class B): Same 3-clause && count as A4, different meaning
+// @@ anchor B11.1 cli/terminal.js:29-29 sha=42af5d722bbf664b
+export const isInteractive = () => isStdinTty() && isStdoutTty() && !process.env.CI;
+// @@ end
+// @@ anchor B11.2 cli/edit-locks.js:72-72 sha=b970514f96ee2a2c
+  const isInside = (key) => key !== '' && !key.startsWith('..') && !path.isAbsolute(key);
+// @@ end

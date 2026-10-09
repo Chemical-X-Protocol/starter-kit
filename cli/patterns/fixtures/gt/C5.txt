@@ -1,0 +1,29 @@
+// gt fixture C5 (class C): useSwarmAttention fetch as a weak A20 member
+// @@ anchor C5.1 src/ui/composables/useSwarmAttention.ts:12-37 sha=623abb02744f430e
+  const fetchAttention = async (): Promise<[AttentionItem[] | null, Error | null]> => {
+    const isFetchAvailable = typeof fetch === 'function';
+    if (!isFetchAvailable) return [null, new Error('fetch is not available')];
+    try {
+      const res = await fetch('/api/swarm/attention');
+      const isResponseOk = res.ok;
+      if (!isResponseOk) {
+        const error = new Error(`Server responded with ${res.status}`);
+        errorMessage.value = error.message;
+        return [null, error];
+      }
+      const data = await res.json();
+      items.value = data.items || [];
+      antigravityRunning.value = Boolean(data.antigravityRunning);
+      conversationId.value = data.conversationId || null;
+      pendingCount.value = data.pendingCount || 0;
+      errorMessage.value = null;
+      return [items.value, null];
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('Failed to fetch attention items');
+      errorMessage.value = error.message;
+      return [null, error];
+    } finally {
+      poller.start();
+    }
+  };
+// @@ end

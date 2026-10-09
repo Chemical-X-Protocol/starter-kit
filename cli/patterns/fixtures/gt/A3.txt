@@ -1,0 +1,17 @@
+// gt fixture A3 (class A): Resolve project root via git rev-parse with cwd fallback
+// @@ anchor A3.1 cli/friction/friction-cli.js:18-23 sha=bf36d94642703617
+const resolveRoot = (args, cwd) => {
+  const explicit = flagValue(args, 'root');
+  if (explicit) return path.resolve(cwd, explicit);
+  const result = spawnSync('git', ['rev-parse', '--show-toplevel'], { cwd, encoding: 'utf-8' });
+  return result.status === 0 ? result.stdout.trim() : cwd;
+};
+// @@ end
+// @@ anchor A3.2 cli/hooks/install-hooks-cli.js:18-23 sha=16cce40869ac4929
+const resolveProjectRoot = (explicit, cwd) => {
+  if (explicit) return path.resolve(cwd, explicit);
+  const result = spawnSync('git', ['rev-parse', '--show-toplevel'], { cwd, encoding: 'utf-8' });
+  const isRepo = result.status === 0 && result.stdout.trim() !== '';
+  return isRepo ? result.stdout.trim() : cwd;
+};
+// @@ end

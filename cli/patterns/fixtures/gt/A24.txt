@@ -1,0 +1,67 @@
+// gt fixture A24 (class A): Vue stat tile: caption label over title value
+// @@ anchor A24.1 src/ui/molecules/m-savings-modal/m-savings-modal.vue:26-29 sha=e20cbf0e0315d92b
+        <ACard variant="subtle" padding="none" class="m-savings-modal__stat">
+          <AText variant="caption" tone="muted" text="Baseline Monolithic Burn" />
+          <AText variant="title" tone="warning" :text="`${(props.savings?.baselineTokens || 0).toLocaleString()} tokens`" />
+        </ACard>
+// @@ end
+// @@ anchor A24.2 src/ui/molecules/m-savings-modal/m-savings-modal.vue:30-33 sha=8eca5d97d8b7cc1c
+        <ACard variant="subtle" padding="none" class="m-savings-modal__stat">
+          <AText variant="caption" tone="muted" text="Actual Chemical X Usage" />
+          <AText variant="title" tone="primary" :text="`${(props.savings?.actualTokens || 0).toLocaleString()} tokens`" />
+        </ACard>
+// @@ end
+// @@ anchor A24.3 src/ui/molecules/m-savings-modal/m-savings-modal.vue:34-37 sha=9b8b6a0b6747b7f6
+        <ACard variant="subtle" padding="none" class="m-savings-modal__stat">
+          <AText variant="caption" tone="muted" text="Tokens Saved" />
+          <AText variant="title" tone="success" :text="`${(props.savings?.tokensSaved || 0).toLocaleString()} tokens`" />
+        </ACard>
+// @@ end
+// @@ anchor A24.4 src/ui/molecules/m-savings-modal/m-savings-modal.vue:38-41 sha=d8234438ed3df0b8
+        <ACard variant="subtle" padding="none" class="m-savings-modal__stat">
+          <AText variant="caption" tone="muted" text="Estimated Dollar Avoidance" />
+          <AText variant="title" tone="success" :text="`$${Number(props.savings?.dollarsSaved || 0).toFixed(2)} USD`" />
+        </ACard>
+// @@ end
+// @@ anchor A24.5 src/ui/organisms/o-codebase-catalog/o-codebase-catalog.vue:27-30 sha=bdea0b4eb338120f
+      <ACard variant="subtle" padding="none" class="o-codebase-catalog__stat-box">
+        <AText variant="caption" tone="muted" text="AST Indexed Files" />
+        <AText variant="title" tone="primary" :text="String(stats.totalFiles)" />
+      </ACard>
+// @@ end
+// @@ anchor A24.6 src/ui/organisms/o-codebase-catalog/o-codebase-catalog.vue:31-34 sha=b0c7a676b7dc0bf9
+      <ACard variant="subtle" padding="none" class="o-codebase-catalog__stat-box">
+        <AText variant="caption" tone="muted" text="Under 100L Limit" />
+        <AText variant="title" tone="success" :text="`${stats.compliantCount} / ${stats.totalFiles}`" />
+      </ACard>
+// @@ end
+// @@ anchor A24.7 src/ui/organisms/o-codebase-catalog/o-codebase-catalog.vue:35-38 sha=0437f5f3dfd231fb
+      <ACard variant="subtle" padding="none" class="o-codebase-catalog__stat-box">
+        <AText variant="caption" tone="muted" text="Protocol Compliance" />
+        <AText variant="title" tone="lime" :text="`${stats.compliancePct}%`" />
+      </ACard>
+// @@ end
+// @@ anchor A24.8 src/ui/organisms/o-db-studio/o-db-studio.vue:20-23 sha=f9222c5b2d966337
+      <ACard variant="glass" padding="none" class="o-db-studio__metric-item">
+        <AText variant="caption" tone="muted" text="DATABASE SIZE" />
+        <AText variant="title" tone="default" :text="props.metrics.fileSizeFormatted" />
+      </ACard>
+// @@ end
+// @@ anchor A24.9 src/ui/organisms/o-db-studio/o-db-studio.vue:24-27 sha=adfbecbb7cef18de
+      <ACard variant="glass" padding="none" class="o-db-studio__metric-item">
+        <AText variant="caption" tone="muted" text="JOURNAL MODE" />
+        <AText variant="title" tone="success" :text="props.metrics.journalMode.toUpperCase()" />
+      </ACard>
+// @@ end
+// @@ anchor A24.10 src/ui/organisms/o-db-studio/o-db-studio.vue:28-31 sha=913945422e78d67c
+      <ACard variant="glass" padding="none" class="o-db-studio__metric-item">
+        <AText variant="caption" tone="muted" text="TOTAL ROWS" />
+        <AText variant="title" tone="default" :text="props.metrics.totalRows" />
+      </ACard>
+// @@ end
+// @@ anchor A24.11 src/ui/organisms/o-db-studio/o-db-studio.vue:32-35 sha=6721eea412631603
+      <ACard variant="glass" padding="none" class="o-db-studio__metric-item">
+        <AText variant="caption" tone="muted" text="TABLES" />
+        <AText variant="title" tone="default" :text="props.metrics.tableCount" />
+      </ACard>
+// @@ end

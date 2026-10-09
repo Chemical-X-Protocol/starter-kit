@@ -1,0 +1,15 @@
+// gt fixture B6 (class B): Thin views composed by design
+// @@ anchor B6.1 src/ui/views/v-swarm-locks.vue:14-18 sha=f4d81585f5228352
+<template>
+  <TSocialLayout>
+    <template #default><OLockHub :leases :waiting-count="waitingLocksCount" @acquire="acquireLock" @release="releaseLock" /></template>
+    <template #right><OWorkloadRail :leases :tasks :telemetry :waiting-locks-count="waitingLocksCount" /></template>
+  </TSocialLayout>
+// @@ end
+// @@ anchor B6.2 src/ui/views/v-swarm-tasks.vue:14-18 sha=d2e21bb789a99da7
+<template>
+  <TSocialLayout>
+    <template #default><OTaskBoard :tasks @create="createTask" @claim="claimTask" @complete="completeTask" /></template>
+    <template #right><OWorkloadRail :leases :tasks :telemetry :waiting-locks-count="waitingLocksCount" /></template>
+  </TSocialLayout>
+// @@ end

@@ -1,0 +1,15 @@
+// gt fixture A6 (class A): leaseKeys copied verbatim
+// @@ anchor A6.1 cli/edit-locks.js:70-74 sha=80ea312eadfd503e
+const leaseKeys = (lockRoot, absPath, root) => {
+  const keys = [path.relative(lockRoot, absPath), path.relative(root, absPath)];
+  const isInside = (key) => key !== '' && !key.startsWith('..') && !path.isAbsolute(key);
+  return [...new Set(keys.filter(isInside))];
+};
+// @@ end
+// @@ anchor A6.2 cli/team/lease-renew.js:32-36 sha=cbbf5b8bc77d5ff4
+const leaseKeys = (lockRoot, absPath, root) => {
+  const keys = [path.relative(lockRoot, absPath), path.relative(root, absPath)];
+  const isInside = (key) => key !== '' && !key.startsWith('..') && !path.isAbsolute(key);
+  return keys.filter(isInside);
+};
+// @@ end

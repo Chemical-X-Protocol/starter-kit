@@ -1,0 +1,39 @@
+// gt fixture A13 (class A): DB row JSON-column hydration
+// @@ anchor A13.1 cli/team/team-db-feed.js:44-44 sha=bc34fc945094d25f
+  return { ...row, metadata: JSON.parse(row.metadata || '{}') };
+// @@ end
+// @@ anchor A13.2 cli/team/team-db-feed.js:51-51 sha=dc000248110b8572
+const parseRow = (r) => ({ ...r, metadata: JSON.parse(r.metadata || '{}') });
+// @@ end
+// @@ anchor A13.3 cli/team/team-db-mailbox.js:36-36 sha=bc34fc945094d25f
+  return { ...row, metadata: JSON.parse(row.metadata || '{}') };
+// @@ end
+// @@ anchor A13.4 cli/team/team-db-agents.js:12-16 sha=0a88902ed555ae4e
+  return {
+    ...row,
+    capabilities: JSON.parse(row.capabilities || '[]'),
+    metadata: JSON.parse(row.metadata || '{}')
+  };
+// @@ end
+// @@ anchor A13.5 cli/team/team-db-agents.js:80-84 sha=d8198722457da7dd
+  return rows.map((r) => ({
+    ...r,
+    capabilities: JSON.parse(r.capabilities || '[]'),
+    metadata: JSON.parse(r.metadata || '{}')
+  }));
+// @@ end
+// @@ anchor A13.6 cli/ui-forum-data.js:22-25 sha=768c3aa7eec219af
+const parseMeta = (metadata) => {
+  const isText = typeof metadata === 'string';
+  return isText ? JSON.parse(metadata || '{}') : (metadata || {});
+};
+// @@ end
+// @@ anchor A13.7 cli/ui-forum-data.js:92-92 sha=60d1a5839d110595
+  const meta = JSON.parse(row.metadata || '{}');
+// @@ end
+// @@ anchor A13.8 cli/team/team-db-task-helpers.js:10-13 sha=11ee7a2c8fc1da95
+  const parseJson = (val, fallback) => {
+    if (!val) return fallback;
+    return typeof val === 'string' ? JSON.parse(val) : val;
+  };
+// @@ end

@@ -1,0 +1,41 @@
+// gt fixture B10 (class B): m-token-stat vs the A24 stat tile
+// @@ anchor B10.1 src/ui/molecules/m-token-stat/m-token-stat.vue:22-53 sha=92cf17bf0324cb13
+  <ACard
+    variant="glass"
+    padding="sm"
+    class="m-token-stat"
+  >
+    <template #header>
+      <AChip
+        :label="props.title"
+        tone="sky"
+      />
+      <ABadge
+        v-if="hasCost"
+        :label="formattedCost"
+        tone="lime"
+      />
+    </template>
+
+    <template #default>
+      <ABadge
+        :label="formattedCount"
+        :tone="props.tone"
+      />
+    </template>
+
+    <template #footer>
+      <AChip
+        v-if="props.subtitle"
+        :label="props.subtitle"
+        tone="default"
+      />
+    </template>
+  </ACard>
+// @@ end
+// @@ anchor B10.2 src/ui/molecules/m-savings-modal/m-savings-modal.vue:26-29 sha=e20cbf0e0315d92b
+        <ACard variant="subtle" padding="none" class="m-savings-modal__stat">
+          <AText variant="caption" tone="muted" text="Baseline Monolithic Burn" />
+          <AText variant="title" tone="warning" :text="`${(props.savings?.baselineTokens || 0).toLocaleString()} tokens`" />
+        </ACard>
+// @@ end

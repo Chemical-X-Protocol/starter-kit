@@ -1,0 +1,109 @@
+// gt fixture A1 (class A): Team flag parsing: inline --x= and --x <next> blocks
+// @@ anchor A1.1 cli/team/team-flags.js:41-46 sha=a2706eb76c246296
+    const isAsEquals = arg.startsWith('--as=');
+    if (isAsEquals) flags.as = arg.split('=')[1];
+
+    const isAsFlag = arg === '--as';
+    const shouldReadAsNext = isAsFlag && hasNextArg;
+    if (shouldReadAsNext) flags.as = nextArg;
+// @@ end
+// @@ anchor A1.2 cli/team/team-flags.js:48-53 sha=64387ec1dce64452
+    const isToEquals = arg.startsWith('--to=');
+    if (isToEquals) flags.to = arg.split('=')[1];
+
+    const isToFlag = arg === '--to';
+    const shouldReadToNext = isToFlag && hasNextArg;
+    if (shouldReadToNext) flags.to = nextArg;
+// @@ end
+// @@ anchor A1.3 cli/team/team-flags.js:55-60 sha=0b1835a2b5223e9e
+    const isSinceEquals = arg.startsWith('--since=');
+    if (isSinceEquals) flags.since = parseInt(arg.split('=')[1], 10);
+
+    const isSinceFlag = arg === '--since';
+    const shouldReadSinceNext = isSinceFlag && hasNextArg;
+    if (shouldReadSinceNext) flags.since = parseInt(nextArg, 10);
+// @@ end
+// @@ anchor A1.4 cli/team/team-flags.js:62-67 sha=8712a6baa38dad55
+    const isLimitEquals = arg.startsWith('--limit=');
+    if (isLimitEquals) flags.limit = parseInt(arg.split('=')[1], 10);
+
+    const isLimitFlag = arg === '--limit';
+    const shouldReadLimitNext = isLimitFlag && hasNextArg;
+    if (shouldReadLimitNext) flags.limit = parseInt(nextArg, 10);
+// @@ end
+// @@ anchor A1.5 cli/team/team-flags.js:75-80 sha=e834d2e68a849e6c
+    const isThreadEquals = arg.startsWith('--thread=');
+    if (isThreadEquals) flags.thread = parseInt(arg.split('=')[1], 10);
+
+    const isThreadFlag = arg === '--thread';
+    const shouldReadThreadNext = isThreadFlag && hasNextArg;
+    if (shouldReadThreadNext) flags.thread = parseInt(nextArg, 10);
+// @@ end
+// @@ anchor A1.6 cli/team/team-flags.js:82-87 sha=e7c4457b92837255
+    const isTaskEquals = arg.startsWith('--task=');
+    if (isTaskEquals) flags.task = parseInt(arg.split('=')[1], 10);
+
+    const isTaskFlag = arg === '--task';
+    const shouldReadTaskNext = isTaskFlag && hasNextArg;
+    if (shouldReadTaskNext) flags.task = parseInt(nextArg, 10);
+// @@ end
+// @@ anchor A1.7 cli/team/team-flags.js:89-98 sha=be186cff9ae6f107
+    const isParentEquals = arg.startsWith('--parent=');
+    if (isParentEquals) {
+      flags.parent = parseParentFlagValue(arg.split('=')[1]);
+    }
+
+    const isParentFlag = arg === '--parent';
+    const shouldReadParentNext = isParentFlag && hasNextArg;
+    if (shouldReadParentNext) {
+      flags.parent = parseParentFlagValue(nextArg);
+    }
+// @@ end
+// @@ anchor A1.8 cli/team/team-flags.js:109-114 sha=b47d85daf546ffa4
+    const isAgentEquals = arg.startsWith('--agent=');
+    if (isAgentEquals) flags.agent = arg.split('=')[1];
+
+    const isAgentFlag = arg === '--agent';
+    const shouldReadAgentNext = isAgentFlag && hasNextArg;
+    if (shouldReadAgentNext) flags.agent = nextArg;
+// @@ end
+// @@ anchor A1.9 cli/team/team-flags.js:116-121 sha=3cc2b24ad5571bb4
+    const isTargetEquals = arg.startsWith('--target=');
+    if (isTargetEquals) flags.target = arg.split('=')[1];
+
+    const isTargetFlag = arg === '--target';
+    const shouldReadTargetNext = isTargetFlag && hasNextArg;
+    if (shouldReadTargetNext) flags.target = nextArg;
+// @@ end
+// @@ anchor A1.10 cli/team/team-flags.js:126-131 sha=d8da9e7e5b5864d7
+    const isRuleEquals = arg.startsWith('--rule=');
+    if (isRuleEquals) flags.rule = arg.split('=')[1];
+
+    const isRuleFlag = arg === '--rule';
+    const shouldReadRuleNext = isRuleFlag && hasNextArg;
+    if (shouldReadRuleNext) flags.rule = nextArg;
+// @@ end
+// @@ anchor A1.11 cli/team/team-flags.js:133-138 sha=36d41234c41c5719
+    const isPrioEquals = arg.startsWith('--prio=') || arg.startsWith('--priority=');
+    if (isPrioEquals) flags.priority = parseInt(arg.split('=')[1], 10);
+
+    const isPrioFlag = arg === '--prio' || arg === '--priority';
+    const shouldReadPrioNext = isPrioFlag && hasNextArg;
+    if (shouldReadPrioNext) flags.priority = parseInt(nextArg, 10);
+// @@ end
+// @@ anchor A1.12 cli/team/team-flags.js:143-148 sha=e3789fa7b3c679a9
+    const isPidEquals = arg.startsWith('--pid=');
+    if (isPidEquals) flags.pid = parseInt(arg.split('=')[1], 10);
+
+    const isPidFlag = arg === '--pid';
+    const shouldReadPidNext = isPidFlag && hasNextArg;
+    if (shouldReadPidNext) flags.pid = parseInt(nextArg, 10);
+// @@ end
+// @@ anchor A1.13 cli/team/team-flags.js:181-186 sha=50fbe024924037ad
+    const isNeedsEquals = arg.startsWith('--needs=');
+    if (isNeedsEquals) flags.needs = valueAfterEquals;
+
+    const isNeedsFlag = arg === '--needs';
+    const shouldReadNeedsNext = isNeedsFlag && hasNextArg;
+    if (shouldReadNeedsNext) flags.needs = nextArg;
+// @@ end

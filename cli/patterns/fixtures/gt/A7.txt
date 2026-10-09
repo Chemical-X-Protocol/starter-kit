@@ -1,0 +1,79 @@
+// gt fixture A7 (class A): Read a JSON file, return a fallback on any error
+// @@ anchor A7.1 cli/doctor/check-host.js:15-21 sha=637b47ad2daeea18
+const readJsonOrEmpty = (file) => {
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf-8'));
+  } catch {
+    return {}; // missing or unparseable settings count as "no hooks"; install-hooks reports parse errors
+  }
+};
+// @@ end
+// @@ anchor A7.2 cli/hooks/project-status.js:11-17 sha=fc22bdb3a23703e9
+const readJson = (file) => {
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf-8'));
+  } catch {
+    return null; // absent or unreadable status sources are reported as unknown
+  }
+};
+// @@ end
+// @@ anchor A7.3 cli/doctor/kit-locate.js:9-16 sha=41f429408b1d5283
+const readPackage = (dir) => {
+  const file = path.join(dir, 'package.json');
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf-8'));
+  } catch {
+    return null; // no or unreadable package.json at this level: keep walking up
+  }
+};
+// @@ end
+// @@ anchor A7.4 cli/build/detector.js:24-32 sha=4e160c7a3d2b409d
+export const loadLocalPackageJson = (cwd) => {
+  const pkgPath = path.join(cwd, 'package.json');
+  if (!fs.existsSync(pkgPath)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+  } catch {
+    return null;
+  }
+};
+// @@ end
+// @@ anchor A7.5 cli/project-detector.js:4-13 sha=1b28be7f485e470c
+export const loadProjectConfig = (cwd = process.cwd()) => {
+  const cfgPath = path.resolve(cwd, '.chemx', 'config.json');
+  const hasConfig = fs.existsSync(cfgPath);
+  if (!hasConfig) return {};
+  try {
+    return JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
+  } catch {
+    return {};
+  }
+};
+// @@ end
+// @@ anchor A7.6 cli/audit/status-file.js:27-33 sha=880cc2d1e05a7936
+  try {
+    const parsed = JSON.parse(fs.readFileSync(path.join(findChemxDir(projectRoot), STATUS_BASENAME), 'utf-8'));
+    const hasScopes = parsed !== null && typeof parsed === 'object' && typeof parsed.scopes === 'object';
+    return hasScopes ? parsed : null;
+  } catch {
+    return null;
+  }
+// @@ end
+// @@ anchor A7.7 cli/config/index.js:11-17 sha=07afa0ecd104ecd7
+  try {
+    const stored = JSON.parse(fs.readFileSync(path.join(cwd, '.chemx', 'config.json'), 'utf-8'));
+    const hasStoredPillars = Boolean(stored?.pillars && typeof stored.pillars === 'object');
+    return hasStoredPillars ? stored.pillars : null;
+  } catch {
+    return null;
+  }
+// @@ end
+// @@ anchor A7.8 cli/sfc/module-aliases.js:41-47 sha=2d3f3e0a105cc5d5
+const readJsonc = (file) => {
+  try {
+    return JSON.parse(stripJsonc(fs.readFileSync(file, 'utf-8')));
+  } catch {
+    return null;
+  }
+};
+// @@ end

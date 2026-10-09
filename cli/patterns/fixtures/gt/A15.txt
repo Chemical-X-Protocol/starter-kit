@@ -1,0 +1,70 @@
+// gt fixture A15 (class A): Emit JSON or human text from a CLI handler
+// @@ anchor A15.1 cli/team/team-commands-vds.js:14-14 sha=795ba881e9250b75
+      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+// @@ end
+// @@ anchor A15.2 cli/team/team-commands-vds.js:46-46 sha=8d51a6ccd2600feb
+    if (isJson) process.stdout.write(`${JSON.stringify(res, null, 2)}\n`);
+// @@ end
+// @@ anchor A15.3 cli/team/team-commands-vds.js:57-57 sha=8d51a6ccd2600feb
+      if (isJson) process.stdout.write(`${JSON.stringify(res, null, 2)}\n`);
+// @@ end
+// @@ anchor A15.4 cli/team/team-commands-vds.js:67-67 sha=8b5a32c6f63b9925
+    if (isJson) process.stdout.write(`${JSON.stringify(status, null, 2)}\n`);
+// @@ end
+// @@ anchor A15.5 cli/team/team-commands-lock.js:87-87 sha=d6955c5e8264dd1b
+    if (flags.isJson) process.stdout.write(`${JSON.stringify(res, null, 2)}\n`);
+// @@ end
+// @@ anchor A15.6 cli/team/team-commands-lock.js:117-117 sha=d6955c5e8264dd1b
+    if (flags.isJson) process.stdout.write(`${JSON.stringify(res, null, 2)}\n`);
+// @@ end
+// @@ anchor A15.7 cli/team/team-commands.js:85-85 sha=efdf1b183958e7fa
+      if (isCli) process.stdout.write(`${JSON.stringify(output, null, 2)}\n`);
+// @@ end
+// @@ anchor A15.8 cli/team/team-commands.js:96-96 sha=b6ca860b38d4bdb1
+      if (isCli) process.stdout.write(`${JSON.stringify(breakdown, null, 2)}\n`);
+// @@ end
+// @@ anchor A15.9 cli/team/team-commands.js:114-114 sha=21e0c4c2e5960977
+      if (isCli) process.stdout.write(`${JSON.stringify(col, null, 2)}\n`);
+// @@ end
+// @@ anchor A15.10 cli/team/team-commands.js:134-134 sha=28a0003dc4518f0e
+      if (flags.isJson) process.stdout.write(`${JSON.stringify(ev, null, 2)}\n`);
+// @@ end
+// @@ anchor A15.11 cli/team/team-commands.js:173-173 sha=3043b9c15871f6b9
+        if (isCli) process.stdout.write(`${JSON.stringify(view)}\n`);
+// @@ end
+// @@ anchor A15.12 cli/team/team-commands.js:199-199 sha=efdf1b183958e7fa
+        if (isCli) process.stdout.write(`${JSON.stringify(output, null, 2)}\n`);
+// @@ end
+// @@ anchor A15.13 cli/team/team-commands.js:228-228 sha=28a0003dc4518f0e
+        if (flags.isJson) process.stdout.write(`${JSON.stringify(ev, null, 2)}\n`);
+// @@ end
+// @@ anchor A15.14 cli/team/team-commands.js:253-253 sha=d6955c5e8264dd1b
+        if (flags.isJson) process.stdout.write(`${JSON.stringify(res, null, 2)}\n`);
+// @@ end
+// @@ anchor A15.15 cli/team/team-commands.js:333-333 sha=5df8b2ff5ad1774c
+        if (flags.isJson) process.stdout.write(`${JSON.stringify(task, null, 2)}\n`);
+// @@ end
+// @@ anchor A15.16 cli/team/team-commands.js:343-343 sha=f8489567b5c78515
+        if (flags.isJson) process.stdout.write(`${JSON.stringify(tasks, null, 2)}\n`);
+// @@ end
+// @@ anchor A15.17 cli/commands/cmd-project.js:33-33 sha=63b464c873fb3376
+      if (isJson) process.stdout.write(`${JSON.stringify(session, null, 2)}\n`);
+// @@ end
+// @@ anchor A15.18 cli/commands/cmd-project.js:43-43 sha=8d51a6ccd2600feb
+      if (isJson) process.stdout.write(`${JSON.stringify(res, null, 2)}\n`);
+// @@ end
+// @@ anchor A15.19 cli/commands/cmd-project.js:64-64 sha=c1747d822e743a02
+      if (isJson) process.stdout.write(`${JSON.stringify(msg, null, 2)}\n`);
+// @@ end
+// @@ anchor A15.20 cli/commands/cmd-project.js:74-74 sha=9fbbe8fff78f5dcf
+      if (isJson) process.stdout.write(`${JSON.stringify(learnings, null, 2)}\n`);
+// @@ end
+// @@ anchor A15.21 cli/commands/cmd-project.js:98-98 sha=22c0261ec25c3220
+    if (isCli) process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
+// @@ end
+// @@ anchor A15.22 cli/conflicts-cli.js:45-45 sha=57372e608f5106d4
+    process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+// @@ end
+// @@ anchor A15.23 cli/patcher-cli.js:95-95 sha=915d264d7608b5c9
+    process.stdout.write(`${JSON.stringify(res, null, 2)}\n`);
+// @@ end

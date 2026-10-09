@@ -1,0 +1,42 @@
+// gt fixture A9 (class A): ANSI color constants re-declared although theme.ANSI exists
+// @@ anchor A9.1 cli/audit/history.js:11-17 sha=d2b45b9544bf9a69
+const RESET = '\x1b[0m';
+const BOLD = '\x1b[1m';
+const DIM = '\x1b[2m';
+const CYAN = '\x1b[36m';
+const GREEN = '\x1b[32m';
+const YELLOW = '\x1b[33m';
+const RED = '\x1b[31m';
+// @@ end
+// @@ anchor A9.2 cli/team/task-completion-output.js:7-10 sha=d7f58889e5bd28fe
+const RED = '\x1b[31m';
+const GREEN = '\x1b[32m';
+const YELLOW = '\x1b[33m';
+const RESET = '\x1b[0m';
+// @@ end
+// @@ anchor A9.3 cli/navigator-guide.js:5-13 sha=ca6c76f4ed579c6b
+  const CYAN = '\x1b[36m';
+  const BOLD = '\x1b[1m';
+  const GREEN = '\x1b[32m';
+  const GOLD = '\x1b[38;5;220m';
+  const PINK = '\x1b[38;2;244;114;182m';
+  const LIME = '\x1b[38;2;74;222;128m';
+  const SKY = '\x1b[38;2;56;189;248m';
+  const DIM = '\x1b[2m';
+  const RESET = '\x1b[0m';
+// @@ end
+// @@ anchor A9.4 cli/audit/reporter-utils.js:9-21 sha=b01f0f8dc6e7e6bf
+export const CYAN = '\x1b[38;2;56;189;248m';
+export const PINK = '\x1b[38;2;244;63;133m';
+export const PURPLE = '\x1b[38;2;168;85;247m';
+export const MINT = '\x1b[38;2;45;212;191m';
+export const LIME = '\x1b[38;2;163;230;53m';
+export const GOLD = '\x1b[38;2;251;191;36m';
+export const GREEN = '\x1b[32m';
+export const YELLOW = '\x1b[33m';
+export const RED = '\x1b[31m';
+export const ORANGE = '\x1b[38;5;208m';
+export const DIM = '\x1b[2m';
+export const BOLD = '\x1b[1m';
+export const RESET = '\x1b[0m';
+// @@ end

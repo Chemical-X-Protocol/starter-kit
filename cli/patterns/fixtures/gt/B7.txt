@@ -1,0 +1,24 @@
+// gt fixture B7 (class B): Controllers that return computeds and handlers
+// @@ anchor B7.1 src/ui/molecules/m-lock-row/m-lock-row.controller.ts:19-23 sha=79856a213de02521
+  return {
+    hasAgent,
+    expiresAtText,
+    handleRelease
+  };
+// @@ end
+// @@ anchor B7.2 src/ui/molecules/m-attention-card/m-attention-card.controller.ts:31-36 sha=05b67bc2d44be71a
+  return {
+    typeTone,
+    formattedTime,
+    handleApprove,
+    handleReject
+  };
+// @@ end
+// @@ anchor B7.3 src/ui/molecules/m-token-stat/m-token-stat.controller.ts:27-32 sha=f5e193d5df739748
+  return {
+    hasCost,
+    isHighVolume,
+    formattedCount,
+    formattedCost
+  };
+// @@ end

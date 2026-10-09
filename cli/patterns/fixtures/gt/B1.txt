@@ -1,0 +1,11 @@
+// gt fixture B1 (class B): Three-clause && predicates are unrelated
+// @@ anchor B1.1 cli/agent-json.js:10-11 sha=2a6ff152e599badc
+const isDiagnosticRow = (item) =>
+  Boolean(item) && typeof item === 'object' && typeof item.file === 'string' && 'line' in item && 'message' in item;
+// @@ end
+// @@ anchor B1.2 cli/build.js:79-79 sha=167e22c26f5701ae
+  const shouldPrintStart = shouldPrint && !isJson && !isSilent && !isRaw;
+// @@ end
+// @@ anchor B1.3 cli/cli-args.js:103-103 sha=366db140c53730a5
+  const isNumber = value !== undefined && value !== null && String(value).trim() !== '' && Number.isFinite(seconds);
+// @@ end

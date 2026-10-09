@@ -1,0 +1,37 @@
+// gt fixture A23 (class A): Swarm composables: error normalization
+// @@ anchor A23.1 src/ui/composables/useSwarmTasks.ts:22-22 sha=653d63948c5ed337
+      error.value = err instanceof Error ? err : new Error(String(err));
+// @@ end
+// @@ anchor A23.2 src/ui/composables/useSwarmTasks.ts:39-39 sha=653d63948c5ed337
+      error.value = err instanceof Error ? err : new Error(String(err));
+// @@ end
+// @@ anchor A23.3 src/ui/composables/useSwarmTasks.ts:54-54 sha=653d63948c5ed337
+      error.value = err instanceof Error ? err : new Error(String(err));
+// @@ end
+// @@ anchor A23.4 src/ui/composables/useSwarmTasks.ts:69-69 sha=653d63948c5ed337
+      error.value = err instanceof Error ? err : new Error(String(err));
+// @@ end
+// @@ anchor A23.5 src/ui/composables/useSwarmLocks.ts:23-23 sha=653d63948c5ed337
+      error.value = err instanceof Error ? err : new Error(String(err));
+// @@ end
+// @@ anchor A23.6 src/ui/composables/useSwarmLocks.ts:38-38 sha=653d63948c5ed337
+      error.value = err instanceof Error ? err : new Error(String(err));
+// @@ end
+// @@ anchor A23.7 src/ui/composables/useSwarmLocks.ts:53-53 sha=653d63948c5ed337
+      error.value = err instanceof Error ? err : new Error(String(err));
+// @@ end
+// @@ anchor A23.8 src/ui/composables/useSwarmFeed.ts:23-23 sha=653d63948c5ed337
+      error.value = err instanceof Error ? err : new Error(String(err));
+// @@ end
+// @@ anchor A23.9 src/ui/composables/useSwarmFeed.ts:50-50 sha=653d63948c5ed337
+      error.value = err instanceof Error ? err : new Error(String(err));
+// @@ end
+// @@ anchor A23.10 src/ui/composables/useSwarmCodebase.ts:25-25 sha=653d63948c5ed337
+      error.value = err instanceof Error ? err : new Error(String(err));
+// @@ end
+// @@ anchor A23.11 src/ui/composables/useSwarmState.ts:45-45 sha=653d63948c5ed337
+      error.value = err instanceof Error ? err : new Error(String(err));
+// @@ end
+// @@ anchor A23.12 src/ui/composables/useSwarmState.ts:72-72 sha=653d63948c5ed337
+      error.value = err instanceof Error ? err : new Error(String(err));
+// @@ end

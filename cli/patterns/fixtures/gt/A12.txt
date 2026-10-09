@@ -1,0 +1,29 @@
+// gt fixture A12 (class A): Agent handle normalization (prefix @)
+// @@ anchor A12.1 cli/team/team-db-mailbox.js:7-10 sha=bde024cb515ad506
+export const normalizeHandle = (handle) => {
+  if (!handle) return null;
+  return handle.startsWith('@') ? handle : `@${handle}`;
+};
+// @@ end
+// @@ anchor A12.2 cli/team/team-db-task-helpers.js:3-6 sha=9d130438a97e316d
+export const normalizeAgentId = (id) => {
+  if (!id) return null;
+  return id.startsWith('@') ? id : `@${id}`;
+};
+// @@ end
+// @@ anchor A12.3 cli/team/team-db-feed.js:6-12 sha=dda16d22b08083ac
+const formatHandle = (handle, fallback = null) => {
+  const hasHandle = Boolean(handle);
+  if (!hasHandle) return fallback;
+  const isPrefixed = handle.startsWith('@');
+  if (isPrefixed) return handle;
+  return `@${handle}`;
+};
+// @@ end
+// @@ anchor A12.4 cli/team/agent-identity.js:16-20 sha=88586698c348ab30
+const toHandle = (rawId) => {
+  const trimmed = String(rawId).trim();
+  const isPrefixed = trimmed.startsWith('@');
+  return isPrefixed ? trimmed : `@${trimmed}`;
+};
+// @@ end

@@ -1,0 +1,1819 @@
+{
+  "schema": "chemx.gt-labels/1",
+  "source": "docs/superpowers/reviews/2026-10-09-forge-groundtruth.md",
+  "items": [
+    {
+      "id": "A1",
+      "title": "Team flag parsing: inline --x= and --x <next> blocks",
+      "confidence": "high",
+      "class": "A",
+      "anchors": [
+        {
+          "id": "A1.1",
+          "file": "cli/team/team-flags.js",
+          "startLine": 41,
+          "endLine": 46,
+          "hash": "a2706eb76c246296"
+        },
+        {
+          "id": "A1.2",
+          "file": "cli/team/team-flags.js",
+          "startLine": 48,
+          "endLine": 53,
+          "hash": "64387ec1dce64452"
+        },
+        {
+          "id": "A1.3",
+          "file": "cli/team/team-flags.js",
+          "startLine": 55,
+          "endLine": 60,
+          "hash": "0b1835a2b5223e9e"
+        },
+        {
+          "id": "A1.4",
+          "file": "cli/team/team-flags.js",
+          "startLine": 62,
+          "endLine": 67,
+          "hash": "8712a6baa38dad55"
+        },
+        {
+          "id": "A1.5",
+          "file": "cli/team/team-flags.js",
+          "startLine": 75,
+          "endLine": 80,
+          "hash": "e834d2e68a849e6c"
+        },
+        {
+          "id": "A1.6",
+          "file": "cli/team/team-flags.js",
+          "startLine": 82,
+          "endLine": 87,
+          "hash": "e7c4457b92837255"
+        },
+        {
+          "id": "A1.7",
+          "file": "cli/team/team-flags.js",
+          "startLine": 89,
+          "endLine": 98,
+          "hash": "be186cff9ae6f107"
+        },
+        {
+          "id": "A1.8",
+          "file": "cli/team/team-flags.js",
+          "startLine": 109,
+          "endLine": 114,
+          "hash": "b47d85daf546ffa4"
+        },
+        {
+          "id": "A1.9",
+          "file": "cli/team/team-flags.js",
+          "startLine": 116,
+          "endLine": 121,
+          "hash": "3cc2b24ad5571bb4"
+        },
+        {
+          "id": "A1.10",
+          "file": "cli/team/team-flags.js",
+          "startLine": 126,
+          "endLine": 131,
+          "hash": "d8da9e7e5b5864d7"
+        },
+        {
+          "id": "A1.11",
+          "file": "cli/team/team-flags.js",
+          "startLine": 133,
+          "endLine": 138,
+          "hash": "36d41234c41c5719"
+        },
+        {
+          "id": "A1.12",
+          "file": "cli/team/team-flags.js",
+          "startLine": 143,
+          "endLine": 148,
+          "hash": "e3789fa7b3c679a9"
+        },
+        {
+          "id": "A1.13",
+          "file": "cli/team/team-flags.js",
+          "startLine": 181,
+          "endLine": 186,
+          "hash": "50fbe024924037ad"
+        }
+      ]
+    },
+    {
+      "id": "A2",
+      "title": "Ad-hoc flag value readers re-implementing readFlagValue",
+      "confidence": "high",
+      "class": "A",
+      "anchors": [
+        {
+          "id": "A2.1",
+          "file": "cli/friction/friction-cli.js",
+          "startLine": 15,
+          "endLine": 15,
+          "hash": "81490d1701a591d4"
+        },
+        {
+          "id": "A2.2",
+          "file": "cli/hooks/install-hooks-cli.js",
+          "startLine": 16,
+          "endLine": 16,
+          "hash": "81490d1701a591d4"
+        },
+        {
+          "id": "A2.3",
+          "file": "cli/hooks/install-hooks-cli.js",
+          "startLine": 26,
+          "endLine": 26,
+          "hash": "80f43cc55fcc3776"
+        },
+        {
+          "id": "A2.4",
+          "file": "cli/license.js",
+          "startLine": 91,
+          "endLine": 96,
+          "hash": "fc1f032b7e018e83"
+        },
+        {
+          "id": "A2.5",
+          "file": "cli/config/index.js",
+          "startLine": 23,
+          "endLine": 30,
+          "hash": "9c39ed42760c761c"
+        }
+      ]
+    },
+    {
+      "id": "A3",
+      "title": "Resolve project root via git rev-parse with cwd fallback",
+      "confidence": "high",
+      "class": "A",
+      "anchors": [
+        {
+          "id": "A3.1",
+          "file": "cli/friction/friction-cli.js",
+          "startLine": 18,
+          "endLine": 23,
+          "hash": "bf36d94642703617"
+        },
+        {
+          "id": "A3.2",
+          "file": "cli/hooks/install-hooks-cli.js",
+          "startLine": 18,
+          "endLine": 23,
+          "hash": "16cce40869ac4929"
+        }
+      ]
+    },
+    {
+      "id": "A4",
+      "title": "Is the path inside the root check",
+      "confidence": "high",
+      "related": [
+        "A5",
+        "A6",
+        "B11"
+      ],
+      "class": "A",
+      "anchors": [
+        {
+          "id": "A4.1",
+          "file": "cli/hooks/guard-paths.js",
+          "startLine": 16,
+          "endLine": 20,
+          "hash": "599ea6b8f5f106fe"
+        },
+        {
+          "id": "A4.2",
+          "file": "cli/mcp/context.js",
+          "startLine": 21,
+          "endLine": 24,
+          "hash": "caeb199ed0912858"
+        },
+        {
+          "id": "A4.3",
+          "file": "cli/path-scope.js",
+          "startLine": 39,
+          "endLine": 40,
+          "hash": "c51b3307a336293f"
+        },
+        {
+          "id": "A4.4",
+          "file": "cli/path-scope.js",
+          "startLine": 47,
+          "endLine": 48,
+          "hash": "f2b94270f9a96624"
+        },
+        {
+          "id": "A4.5",
+          "file": "cli/path-scope.js",
+          "startLine": 59,
+          "endLine": 60,
+          "hash": "b9807599fa64e9ad"
+        },
+        {
+          "id": "A4.6",
+          "file": "cli/edit-locks.js",
+          "startLine": 72,
+          "endLine": 72,
+          "hash": "b970514f96ee2a2c"
+        },
+        {
+          "id": "A4.7",
+          "file": "cli/team/lease-renew.js",
+          "startLine": 34,
+          "endLine": 34,
+          "hash": "b970514f96ee2a2c"
+        },
+        {
+          "id": "A4.8",
+          "file": "cli/hooks/native-tool-policy.js",
+          "startLine": 99,
+          "endLine": 99,
+          "hash": "b0ac578f5ea9c92d"
+        },
+        {
+          "id": "A4.9",
+          "file": "cli/mcp/installer-report.js",
+          "startLine": 31,
+          "endLine": 31,
+          "hash": "6278f85b34ab6e5b"
+        },
+        {
+          "id": "A4.10",
+          "file": "cli/team/team-dispatch-batches.js",
+          "startLine": 38,
+          "endLine": 38,
+          "hash": "ebb47bc4f17ada1d"
+        },
+        {
+          "id": "A4.11",
+          "file": "cli/typecheck-command.js",
+          "startLine": 42,
+          "endLine": 42,
+          "hash": "42ea6a936385e314"
+        }
+      ]
+    },
+    {
+      "id": "A5",
+      "title": "Show a path relative to a base when inside, absolute otherwise",
+      "confidence": "high",
+      "related": [
+        "A4"
+      ],
+      "class": "A",
+      "anchors": [
+        {
+          "id": "A5.1",
+          "file": "cli/hooks/native-tool-policy.js",
+          "startLine": 97,
+          "endLine": 101,
+          "hash": "9235555288365085"
+        },
+        {
+          "id": "A5.2",
+          "file": "cli/mcp/installer-report.js",
+          "startLine": 29,
+          "endLine": 33,
+          "hash": "a77b14f3bd76b880"
+        },
+        {
+          "id": "A5.3",
+          "file": "cli/typecheck-command.js",
+          "startLine": 40,
+          "endLine": 44,
+          "hash": "67941d7aef552c27"
+        },
+        {
+          "id": "A5.4",
+          "file": "cli/team/team-dispatch-batches.js",
+          "startLine": 33,
+          "endLine": 40,
+          "hash": "af69298f7a287fd6"
+        }
+      ]
+    },
+    {
+      "id": "A6",
+      "title": "leaseKeys copied verbatim",
+      "confidence": "high",
+      "class": "A",
+      "anchors": [
+        {
+          "id": "A6.1",
+          "file": "cli/edit-locks.js",
+          "startLine": 70,
+          "endLine": 74,
+          "hash": "80ea312eadfd503e"
+        },
+        {
+          "id": "A6.2",
+          "file": "cli/team/lease-renew.js",
+          "startLine": 32,
+          "endLine": 36,
+          "hash": "cbbf5b8bc77d5ff4"
+        }
+      ]
+    },
+    {
+      "id": "A7",
+      "title": "Read a JSON file, return a fallback on any error",
+      "confidence": "high",
+      "related": [
+        "A8"
+      ],
+      "class": "A",
+      "anchors": [
+        {
+          "id": "A7.1",
+          "file": "cli/doctor/check-host.js",
+          "startLine": 15,
+          "endLine": 21,
+          "hash": "637b47ad2daeea18"
+        },
+        {
+          "id": "A7.2",
+          "file": "cli/hooks/project-status.js",
+          "startLine": 11,
+          "endLine": 17,
+          "hash": "fc22bdb3a23703e9"
+        },
+        {
+          "id": "A7.3",
+          "file": "cli/doctor/kit-locate.js",
+          "startLine": 9,
+          "endLine": 16,
+          "hash": "41f429408b1d5283"
+        },
+        {
+          "id": "A7.4",
+          "file": "cli/build/detector.js",
+          "startLine": 24,
+          "endLine": 32,
+          "hash": "4e160c7a3d2b409d"
+        },
+        {
+          "id": "A7.5",
+          "file": "cli/project-detector.js",
+          "startLine": 4,
+          "endLine": 13,
+          "hash": "1b28be7f485e470c"
+        },
+        {
+          "id": "A7.6",
+          "file": "cli/audit/status-file.js",
+          "startLine": 27,
+          "endLine": 33,
+          "hash": "880cc2d1e05a7936"
+        },
+        {
+          "id": "A7.7",
+          "file": "cli/config/index.js",
+          "startLine": 11,
+          "endLine": 17,
+          "hash": "07afa0ecd104ecd7"
+        },
+        {
+          "id": "A7.8",
+          "file": "cli/sfc/module-aliases.js",
+          "startLine": 41,
+          "endLine": 47,
+          "hash": "2d3f3e0a105cc5d5"
+        }
+      ]
+    },
+    {
+      "id": "A8",
+      "title": "Read one field from package.json with a default",
+      "confidence": "high",
+      "related": [
+        "A7"
+      ],
+      "class": "A",
+      "anchors": [
+        {
+          "id": "A8.1",
+          "file": "cli/hooks/launcher.js",
+          "startLine": 12,
+          "endLine": 18,
+          "hash": "db8af5bff2350f74"
+        },
+        {
+          "id": "A8.2",
+          "file": "cli/mcp/server-info.js",
+          "startLine": 10,
+          "endLine": 16,
+          "hash": "88c164ab587fff1c"
+        },
+        {
+          "id": "A8.3",
+          "file": "cli/db-project-stamp.js",
+          "startLine": 17,
+          "endLine": 23,
+          "hash": "273d818d8f3b73ee"
+        },
+        {
+          "id": "A8.4",
+          "file": "cli/audit/project-figures.js",
+          "startLine": 6,
+          "endLine": 16,
+          "hash": "08df796e903da4bd"
+        }
+      ]
+    },
+    {
+      "id": "A9",
+      "title": "ANSI color constants re-declared although theme.ANSI exists",
+      "confidence": "high",
+      "class": "A",
+      "anchors": [
+        {
+          "id": "A9.1",
+          "file": "cli/audit/history.js",
+          "startLine": 11,
+          "endLine": 17,
+          "hash": "d2b45b9544bf9a69"
+        },
+        {
+          "id": "A9.2",
+          "file": "cli/team/task-completion-output.js",
+          "startLine": 7,
+          "endLine": 10,
+          "hash": "d7f58889e5bd28fe"
+        },
+        {
+          "id": "A9.3",
+          "file": "cli/navigator-guide.js",
+          "startLine": 5,
+          "endLine": 13,
+          "hash": "ca6c76f4ed579c6b"
+        },
+        {
+          "id": "A9.4",
+          "file": "cli/audit/reporter-utils.js",
+          "startLine": 9,
+          "endLine": 21,
+          "hash": "b01f0f8dc6e7e6bf"
+        }
+      ]
+    },
+    {
+      "id": "A10",
+      "title": "stripAnsi duplicated",
+      "confidence": "high",
+      "class": "A",
+      "anchors": [
+        {
+          "id": "A10.1",
+          "file": "cli/terminal.js",
+          "startLine": 73,
+          "endLine": 79,
+          "hash": "f87e8a0bf92730f4"
+        },
+        {
+          "id": "A10.2",
+          "file": "cli/verify-helpers.js",
+          "startLine": 36,
+          "endLine": 36,
+          "hash": "e4c96bb04e5c3f8e"
+        }
+      ]
+    },
+    {
+      "id": "A11",
+      "title": "isPlainObject re-declared",
+      "confidence": "high",
+      "related": [
+        "C6"
+      ],
+      "class": "A",
+      "anchors": [
+        {
+          "id": "A11.1",
+          "file": "cli/hooks/mcp-json-merge.js",
+          "startLine": 13,
+          "endLine": 13,
+          "hash": "230907e654e9390e"
+        },
+        {
+          "id": "A11.2",
+          "file": "cli/mcp/installer-package.js",
+          "startLine": 11,
+          "endLine": 11,
+          "hash": "c101493086a14a4b"
+        },
+        {
+          "id": "A11.3",
+          "file": "cli/mcp/installer-write.js",
+          "startLine": 17,
+          "endLine": 17,
+          "hash": "c101493086a14a4b"
+        }
+      ]
+    },
+    {
+      "id": "A12",
+      "title": "Agent handle normalization (prefix @)",
+      "confidence": "high",
+      "related": [
+        "C4"
+      ],
+      "class": "A",
+      "anchors": [
+        {
+          "id": "A12.1",
+          "file": "cli/team/team-db-mailbox.js",
+          "startLine": 7,
+          "endLine": 10,
+          "hash": "bde024cb515ad506"
+        },
+        {
+          "id": "A12.2",
+          "file": "cli/team/team-db-task-helpers.js",
+          "startLine": 3,
+          "endLine": 6,
+          "hash": "9d130438a97e316d"
+        },
+        {
+          "id": "A12.3",
+          "file": "cli/team/team-db-feed.js",
+          "startLine": 6,
+          "endLine": 12,
+          "hash": "dda16d22b08083ac"
+        },
+        {
+          "id": "A12.4",
+          "file": "cli/team/agent-identity.js",
+          "startLine": 16,
+          "endLine": 20,
+          "hash": "88586698c348ab30"
+        }
+      ]
+    },
+    {
+      "id": "A13",
+      "title": "DB row JSON-column hydration",
+      "confidence": "high",
+      "related": [
+        "A14"
+      ],
+      "class": "A",
+      "anchors": [
+        {
+          "id": "A13.1",
+          "file": "cli/team/team-db-feed.js",
+          "startLine": 44,
+          "endLine": 44,
+          "hash": "bc34fc945094d25f"
+        },
+        {
+          "id": "A13.2",
+          "file": "cli/team/team-db-feed.js",
+          "startLine": 51,
+          "endLine": 51,
+          "hash": "dc000248110b8572"
+        },
+        {
+          "id": "A13.3",
+          "file": "cli/team/team-db-mailbox.js",
+          "startLine": 36,
+          "endLine": 36,
+          "hash": "bc34fc945094d25f"
+        },
+        {
+          "id": "A13.4",
+          "file": "cli/team/team-db-agents.js",
+          "startLine": 12,
+          "endLine": 16,
+          "hash": "0a88902ed555ae4e"
+        },
+        {
+          "id": "A13.5",
+          "file": "cli/team/team-db-agents.js",
+          "startLine": 80,
+          "endLine": 84,
+          "hash": "d8198722457da7dd"
+        },
+        {
+          "id": "A13.6",
+          "file": "cli/ui-forum-data.js",
+          "startLine": 22,
+          "endLine": 25,
+          "hash": "768c3aa7eec219af"
+        },
+        {
+          "id": "A13.7",
+          "file": "cli/ui-forum-data.js",
+          "startLine": 92,
+          "endLine": 92,
+          "hash": "60d1a5839d110595"
+        },
+        {
+          "id": "A13.8",
+          "file": "cli/team/team-db-task-helpers.js",
+          "startLine": 10,
+          "endLine": 13,
+          "hash": "11ee7a2c8fc1da95"
+        }
+      ]
+    },
+    {
+      "id": "A14",
+      "title": "Insert into agent_feed then re-select by lastInsertRowid",
+      "confidence": "high",
+      "related": [
+        "A13"
+      ],
+      "class": "A",
+      "anchors": [
+        {
+          "id": "A14.1",
+          "file": "cli/team/team-db-feed.js",
+          "startLine": 23,
+          "endLine": 44,
+          "hash": "b15c7ca491a6b9b3"
+        },
+        {
+          "id": "A14.2",
+          "file": "cli/team/team-db-mailbox.js",
+          "startLine": 19,
+          "endLine": 36,
+          "hash": "2e45dd8480b17137"
+        }
+      ]
+    },
+    {
+      "id": "A15",
+      "title": "Emit JSON or human text from a CLI handler",
+      "confidence": "medium-high",
+      "related": [
+        "C7"
+      ],
+      "class": "A",
+      "anchors": [
+        {
+          "id": "A15.1",
+          "file": "cli/team/team-commands-vds.js",
+          "startLine": 14,
+          "endLine": 14,
+          "hash": "795ba881e9250b75"
+        },
+        {
+          "id": "A15.2",
+          "file": "cli/team/team-commands-vds.js",
+          "startLine": 46,
+          "endLine": 46,
+          "hash": "8d51a6ccd2600feb"
+        },
+        {
+          "id": "A15.3",
+          "file": "cli/team/team-commands-vds.js",
+          "startLine": 57,
+          "endLine": 57,
+          "hash": "8d51a6ccd2600feb"
+        },
+        {
+          "id": "A15.4",
+          "file": "cli/team/team-commands-vds.js",
+          "startLine": 67,
+          "endLine": 67,
+          "hash": "8b5a32c6f63b9925"
+        },
+        {
+          "id": "A15.5",
+          "file": "cli/team/team-commands-lock.js",
+          "startLine": 87,
+          "endLine": 87,
+          "hash": "d6955c5e8264dd1b"
+        },
+        {
+          "id": "A15.6",
+          "file": "cli/team/team-commands-lock.js",
+          "startLine": 117,
+          "endLine": 117,
+          "hash": "d6955c5e8264dd1b"
+        },
+        {
+          "id": "A15.7",
+          "file": "cli/team/team-commands.js",
+          "startLine": 85,
+          "endLine": 85,
+          "hash": "efdf1b183958e7fa"
+        },
+        {
+          "id": "A15.8",
+          "file": "cli/team/team-commands.js",
+          "startLine": 96,
+          "endLine": 96,
+          "hash": "b6ca860b38d4bdb1"
+        },
+        {
+          "id": "A15.9",
+          "file": "cli/team/team-commands.js",
+          "startLine": 114,
+          "endLine": 114,
+          "hash": "21e0c4c2e5960977"
+        },
+        {
+          "id": "A15.10",
+          "file": "cli/team/team-commands.js",
+          "startLine": 134,
+          "endLine": 134,
+          "hash": "28a0003dc4518f0e"
+        },
+        {
+          "id": "A15.11",
+          "file": "cli/team/team-commands.js",
+          "startLine": 173,
+          "endLine": 173,
+          "hash": "3043b9c15871f6b9"
+        },
+        {
+          "id": "A15.12",
+          "file": "cli/team/team-commands.js",
+          "startLine": 199,
+          "endLine": 199,
+          "hash": "efdf1b183958e7fa"
+        },
+        {
+          "id": "A15.13",
+          "file": "cli/team/team-commands.js",
+          "startLine": 228,
+          "endLine": 228,
+          "hash": "28a0003dc4518f0e"
+        },
+        {
+          "id": "A15.14",
+          "file": "cli/team/team-commands.js",
+          "startLine": 253,
+          "endLine": 253,
+          "hash": "d6955c5e8264dd1b"
+        },
+        {
+          "id": "A15.15",
+          "file": "cli/team/team-commands.js",
+          "startLine": 333,
+          "endLine": 333,
+          "hash": "5df8b2ff5ad1774c"
+        },
+        {
+          "id": "A15.16",
+          "file": "cli/team/team-commands.js",
+          "startLine": 343,
+          "endLine": 343,
+          "hash": "f8489567b5c78515"
+        },
+        {
+          "id": "A15.17",
+          "file": "cli/commands/cmd-project.js",
+          "startLine": 33,
+          "endLine": 33,
+          "hash": "63b464c873fb3376"
+        },
+        {
+          "id": "A15.18",
+          "file": "cli/commands/cmd-project.js",
+          "startLine": 43,
+          "endLine": 43,
+          "hash": "8d51a6ccd2600feb"
+        },
+        {
+          "id": "A15.19",
+          "file": "cli/commands/cmd-project.js",
+          "startLine": 64,
+          "endLine": 64,
+          "hash": "c1747d822e743a02"
+        },
+        {
+          "id": "A15.20",
+          "file": "cli/commands/cmd-project.js",
+          "startLine": 74,
+          "endLine": 74,
+          "hash": "9fbbe8fff78f5dcf"
+        },
+        {
+          "id": "A15.21",
+          "file": "cli/commands/cmd-project.js",
+          "startLine": 98,
+          "endLine": 98,
+          "hash": "22c0261ec25c3220"
+        },
+        {
+          "id": "A15.22",
+          "file": "cli/conflicts-cli.js",
+          "startLine": 45,
+          "endLine": 45,
+          "hash": "57372e608f5106d4"
+        },
+        {
+          "id": "A15.23",
+          "file": "cli/patcher-cli.js",
+          "startLine": 95,
+          "endLine": 95,
+          "hash": "915d264d7608b5c9"
+        }
+      ]
+    },
+    {
+      "id": "A16",
+      "title": "Spec setup with an in-memory team DB",
+      "confidence": "high",
+      "class": "A",
+      "anchors": [
+        {
+          "id": "A16.1",
+          "file": "cli/team/team-db-feed-latest.spec.js",
+          "startLine": 28,
+          "endLine": 32,
+          "hash": "297eb2dae90cd769"
+        },
+        {
+          "id": "A16.2",
+          "file": "cli/team/team-projects-coordinator.spec.js",
+          "startLine": 14,
+          "endLine": 19,
+          "hash": "6d8e5fce824b0d93"
+        },
+        {
+          "id": "A16.3",
+          "file": "cli/team/team-adversarial-locks.spec.js",
+          "startLine": 23,
+          "endLine": 25,
+          "hash": "760324dd38de9ae5"
+        },
+        {
+          "id": "A16.4",
+          "file": "cli/team/team-vds.spec.js",
+          "startLine": 20,
+          "endLine": 21,
+          "hash": "394785b2d567878c"
+        },
+        {
+          "id": "A16.5",
+          "file": "cli/team/team-release-train.spec.js",
+          "startLine": 15,
+          "endLine": 16,
+          "hash": "394785b2d567878c"
+        },
+        {
+          "id": "A16.6",
+          "file": "cli/team/team-needs.spec.js",
+          "startLine": 25,
+          "endLine": 30,
+          "hash": "72d70f5bcfec37ec"
+        },
+        {
+          "id": "A16.7",
+          "file": "cli/ui-kanban.spec.js",
+          "startLine": 23,
+          "endLine": 31,
+          "hash": "6cc9e68a6b755405"
+        },
+        {
+          "id": "A16.8",
+          "file": "cli/ui-vbulletin.spec.js",
+          "startLine": 22,
+          "endLine": 30,
+          "hash": "6cc9e68a6b755405"
+        }
+      ]
+    },
+    {
+      "id": "A17",
+      "title": "Spec temp project",
+      "confidence": "medium-high",
+      "class": "A",
+      "anchors": [
+        {
+          "id": "A17.1",
+          "file": "cli/friction-fixes.spec.js",
+          "startLine": 13,
+          "endLine": 17,
+          "hash": "5ba7df680b1c75e4"
+        },
+        {
+          "id": "A17.2",
+          "file": "cli/mcp/tools-project.spec.js",
+          "startLine": 14,
+          "endLine": 18,
+          "hash": "60339bf43fcc98e7"
+        },
+        {
+          "id": "A17.3",
+          "file": "cli/team/team-db-feed-latest.spec.js",
+          "startLine": 21,
+          "endLine": 26,
+          "hash": "b0eafa831ddabe9e"
+        },
+        {
+          "id": "A17.4",
+          "file": "cli/team/team-task-add-flags.spec.js",
+          "startLine": 8,
+          "endLine": 8,
+          "hash": "e3231b40838c6d32"
+        },
+        {
+          "id": "A17.5",
+          "file": "cli/team/team-unknown-task.spec.js",
+          "startLine": 8,
+          "endLine": 8,
+          "hash": "9680b9924617d4d6"
+        }
+      ]
+    },
+    {
+      "id": "A18",
+      "title": "Inline MCP text item bypassing textItem",
+      "confidence": "medium",
+      "class": "A",
+      "anchors": [
+        {
+          "id": "A18.1",
+          "file": "cli/mcp/tools.js",
+          "startLine": 230,
+          "endLine": 230,
+          "hash": "a501b08434321622"
+        },
+        {
+          "id": "A18.2",
+          "file": "cli/mcp/tools.js",
+          "startLine": 235,
+          "endLine": 237,
+          "hash": "d680f46cc069fb81"
+        }
+      ]
+    },
+    {
+      "id": "A19",
+      "title": "gh discussion create retried per fallback category",
+      "confidence": "high",
+      "class": "A",
+      "anchors": [
+        {
+          "id": "A19.1",
+          "file": "cli/audit/social-gh.js",
+          "startLine": 10,
+          "endLine": 14,
+          "hash": "9b4869810d6d36c7"
+        },
+        {
+          "id": "A19.2",
+          "file": "cli/audit/social-gh.js",
+          "startLine": 24,
+          "endLine": 28,
+          "hash": "50e6987676d2edb6"
+        },
+        {
+          "id": "A19.3",
+          "file": "cli/audit/social-gh.js",
+          "startLine": 37,
+          "endLine": 41,
+          "hash": "7a3346d8d9137c5d"
+        },
+        {
+          "id": "A19.4",
+          "file": "cli/audit/social-gh.js",
+          "startLine": 50,
+          "endLine": 54,
+          "hash": "5b396f8c050a872e"
+        }
+      ]
+    },
+    {
+      "id": "A20",
+      "title": "Swarm composables: GET /api/swarm/... and assign fields",
+      "confidence": "high",
+      "related": [
+        "C5"
+      ],
+      "class": "A",
+      "anchors": [
+        {
+          "id": "A20.1",
+          "file": "src/ui/composables/useSwarmTasks.ts",
+          "startLine": 9,
+          "endLine": 26,
+          "hash": "adf19aab1315bb8c"
+        },
+        {
+          "id": "A20.2",
+          "file": "src/ui/composables/useSwarmFeed.ts",
+          "startLine": 10,
+          "endLine": 28,
+          "hash": "297effb67a6031c1"
+        },
+        {
+          "id": "A20.3",
+          "file": "src/ui/composables/useSwarmLocks.ts",
+          "startLine": 9,
+          "endLine": 25,
+          "hash": "440682cfd056a0e8"
+        },
+        {
+          "id": "A20.4",
+          "file": "src/ui/composables/useSwarmCodebase.ts",
+          "startLine": 10,
+          "endLine": 29,
+          "hash": "a856222ed95d6110"
+        }
+      ]
+    },
+    {
+      "id": "A21",
+      "title": "Swarm composables: POST JSON then refetch",
+      "confidence": "high",
+      "related": [
+        "A23"
+      ],
+      "class": "A",
+      "anchors": [
+        {
+          "id": "A21.1",
+          "file": "src/ui/composables/useSwarmLocks.ts",
+          "startLine": 27,
+          "endLine": 40,
+          "hash": "23cbc61096eafd94"
+        },
+        {
+          "id": "A21.2",
+          "file": "src/ui/composables/useSwarmLocks.ts",
+          "startLine": 42,
+          "endLine": 55,
+          "hash": "a76e906c8f42ceb5"
+        },
+        {
+          "id": "A21.3",
+          "file": "src/ui/composables/useSwarmTasks.ts",
+          "startLine": 28,
+          "endLine": 41,
+          "hash": "1928d177c0b90695"
+        },
+        {
+          "id": "A21.4",
+          "file": "src/ui/composables/useSwarmTasks.ts",
+          "startLine": 43,
+          "endLine": 56,
+          "hash": "d421c7dbdf1a4e83"
+        },
+        {
+          "id": "A21.5",
+          "file": "src/ui/composables/useSwarmTasks.ts",
+          "startLine": 58,
+          "endLine": 71,
+          "hash": "ad8e8a1592cde667"
+        },
+        {
+          "id": "A21.6",
+          "file": "src/ui/composables/useSwarmFeed.ts",
+          "startLine": 39,
+          "endLine": 52,
+          "hash": "3ba63711c77d4a72"
+        },
+        {
+          "id": "A21.7",
+          "file": "src/ui/composables/useSwarmState.ts",
+          "startLine": 61,
+          "endLine": 74,
+          "hash": "2ee146e2d029eb3a"
+        },
+        {
+          "id": "A21.8",
+          "file": "src/ui/composables/useSwarmAttention.ts",
+          "startLine": 49,
+          "endLine": 71,
+          "hash": "13e717223a3e034b"
+        }
+      ]
+    },
+    {
+      "id": "A22",
+      "title": "Visibility-aware poller",
+      "confidence": "high",
+      "class": "A",
+      "anchors": [
+        {
+          "id": "A22.1",
+          "file": "src/ui/composables/useSwarmAttention.ts",
+          "startLine": 39,
+          "endLine": 47,
+          "hash": "3ec1e59ead951ed3"
+        },
+        {
+          "id": "A22.2",
+          "file": "src/ui/composables/useSwarmFeed.ts",
+          "startLine": 30,
+          "endLine": 37,
+          "hash": "ed22f9f5559b0255"
+        },
+        {
+          "id": "A22.3",
+          "file": "src/ui/composables/useSwarmState.ts",
+          "startLine": 52,
+          "endLine": 59,
+          "hash": "cc6377d6b09f9241"
+        }
+      ]
+    },
+    {
+      "id": "A23",
+      "title": "Swarm composables: error normalization",
+      "confidence": "medium",
+      "subsumedBy": "A21",
+      "related": [
+        "A20",
+        "A21"
+      ],
+      "class": "A",
+      "anchors": [
+        {
+          "id": "A23.1",
+          "file": "src/ui/composables/useSwarmTasks.ts",
+          "startLine": 22,
+          "endLine": 22,
+          "hash": "653d63948c5ed337"
+        },
+        {
+          "id": "A23.2",
+          "file": "src/ui/composables/useSwarmTasks.ts",
+          "startLine": 39,
+          "endLine": 39,
+          "hash": "653d63948c5ed337"
+        },
+        {
+          "id": "A23.3",
+          "file": "src/ui/composables/useSwarmTasks.ts",
+          "startLine": 54,
+          "endLine": 54,
+          "hash": "653d63948c5ed337"
+        },
+        {
+          "id": "A23.4",
+          "file": "src/ui/composables/useSwarmTasks.ts",
+          "startLine": 69,
+          "endLine": 69,
+          "hash": "653d63948c5ed337"
+        },
+        {
+          "id": "A23.5",
+          "file": "src/ui/composables/useSwarmLocks.ts",
+          "startLine": 23,
+          "endLine": 23,
+          "hash": "653d63948c5ed337"
+        },
+        {
+          "id": "A23.6",
+          "file": "src/ui/composables/useSwarmLocks.ts",
+          "startLine": 38,
+          "endLine": 38,
+          "hash": "653d63948c5ed337"
+        },
+        {
+          "id": "A23.7",
+          "file": "src/ui/composables/useSwarmLocks.ts",
+          "startLine": 53,
+          "endLine": 53,
+          "hash": "653d63948c5ed337"
+        },
+        {
+          "id": "A23.8",
+          "file": "src/ui/composables/useSwarmFeed.ts",
+          "startLine": 23,
+          "endLine": 23,
+          "hash": "653d63948c5ed337"
+        },
+        {
+          "id": "A23.9",
+          "file": "src/ui/composables/useSwarmFeed.ts",
+          "startLine": 50,
+          "endLine": 50,
+          "hash": "653d63948c5ed337"
+        },
+        {
+          "id": "A23.10",
+          "file": "src/ui/composables/useSwarmCodebase.ts",
+          "startLine": 25,
+          "endLine": 25,
+          "hash": "653d63948c5ed337"
+        },
+        {
+          "id": "A23.11",
+          "file": "src/ui/composables/useSwarmState.ts",
+          "startLine": 45,
+          "endLine": 45,
+          "hash": "653d63948c5ed337"
+        },
+        {
+          "id": "A23.12",
+          "file": "src/ui/composables/useSwarmState.ts",
+          "startLine": 72,
+          "endLine": 72,
+          "hash": "653d63948c5ed337"
+        }
+      ]
+    },
+    {
+      "id": "A24",
+      "title": "Vue stat tile: caption label over title value",
+      "confidence": "high",
+      "related": [
+        "B2",
+        "B10"
+      ],
+      "class": "A",
+      "anchors": [
+        {
+          "id": "A24.1",
+          "file": "src/ui/molecules/m-savings-modal/m-savings-modal.vue",
+          "startLine": 26,
+          "endLine": 29,
+          "hash": "e20cbf0e0315d92b"
+        },
+        {
+          "id": "A24.2",
+          "file": "src/ui/molecules/m-savings-modal/m-savings-modal.vue",
+          "startLine": 30,
+          "endLine": 33,
+          "hash": "8eca5d97d8b7cc1c"
+        },
+        {
+          "id": "A24.3",
+          "file": "src/ui/molecules/m-savings-modal/m-savings-modal.vue",
+          "startLine": 34,
+          "endLine": 37,
+          "hash": "9b8b6a0b6747b7f6"
+        },
+        {
+          "id": "A24.4",
+          "file": "src/ui/molecules/m-savings-modal/m-savings-modal.vue",
+          "startLine": 38,
+          "endLine": 41,
+          "hash": "d8234438ed3df0b8"
+        },
+        {
+          "id": "A24.5",
+          "file": "src/ui/organisms/o-codebase-catalog/o-codebase-catalog.vue",
+          "startLine": 27,
+          "endLine": 30,
+          "hash": "bdea0b4eb338120f"
+        },
+        {
+          "id": "A24.6",
+          "file": "src/ui/organisms/o-codebase-catalog/o-codebase-catalog.vue",
+          "startLine": 31,
+          "endLine": 34,
+          "hash": "b0c7a676b7dc0bf9"
+        },
+        {
+          "id": "A24.7",
+          "file": "src/ui/organisms/o-codebase-catalog/o-codebase-catalog.vue",
+          "startLine": 35,
+          "endLine": 38,
+          "hash": "0437f5f3dfd231fb"
+        },
+        {
+          "id": "A24.8",
+          "file": "src/ui/organisms/o-db-studio/o-db-studio.vue",
+          "startLine": 20,
+          "endLine": 23,
+          "hash": "f9222c5b2d966337"
+        },
+        {
+          "id": "A24.9",
+          "file": "src/ui/organisms/o-db-studio/o-db-studio.vue",
+          "startLine": 24,
+          "endLine": 27,
+          "hash": "adfbecbb7cef18de"
+        },
+        {
+          "id": "A24.10",
+          "file": "src/ui/organisms/o-db-studio/o-db-studio.vue",
+          "startLine": 28,
+          "endLine": 31,
+          "hash": "913945422e78d67c"
+        },
+        {
+          "id": "A24.11",
+          "file": "src/ui/organisms/o-db-studio/o-db-studio.vue",
+          "startLine": 32,
+          "endLine": 35,
+          "hash": "6721eea412631603"
+        }
+      ]
+    },
+    {
+      "id": "A25",
+      "title": "Settings action card repeated with literal content",
+      "confidence": "medium-high",
+      "class": "A",
+      "anchors": [
+        {
+          "id": "A25.1",
+          "file": "src/ui/organisms/o-settings-panel/o-settings-panel.vue",
+          "startLine": 32,
+          "endLine": 39,
+          "hash": "e1ca2609cab15047"
+        },
+        {
+          "id": "A25.2",
+          "file": "src/ui/organisms/o-settings-panel/o-settings-panel.vue",
+          "startLine": 41,
+          "endLine": 48,
+          "hash": "08fc5d67a3f1d074"
+        },
+        {
+          "id": "A25.3",
+          "file": "src/ui/organisms/o-settings-panel/o-settings-panel.vue",
+          "startLine": 50,
+          "endLine": 57,
+          "hash": "717324297940022c"
+        },
+        {
+          "id": "A25.4",
+          "file": "src/ui/organisms/o-settings-panel/o-settings-panel.vue",
+          "startLine": 59,
+          "endLine": 66,
+          "hash": "71d013ad6f9f74e1"
+        }
+      ]
+    },
+    {
+      "id": "A26",
+      "title": "Lease time remaining",
+      "confidence": "medium",
+      "class": "A",
+      "anchors": [
+        {
+          "id": "A26.1",
+          "file": "src/ui/molecules/m-lock-row/m-lock-row.controller.ts",
+          "startLine": 6,
+          "endLine": 13,
+          "hash": "0a6455ddc11a062a"
+        },
+        {
+          "id": "A26.2",
+          "file": "src/ui/molecules/m-lock-chip/m-lock-chip.controller.ts",
+          "startLine": 15,
+          "endLine": 30,
+          "hash": "bba978084a1be8d8"
+        }
+      ]
+    },
+    {
+      "id": "B1",
+      "title": "Three-clause && predicates are unrelated",
+      "class": "B",
+      "anchors": [
+        {
+          "id": "B1.1",
+          "file": "cli/agent-json.js",
+          "startLine": 10,
+          "endLine": 11,
+          "hash": "2a6ff152e599badc"
+        },
+        {
+          "id": "B1.2",
+          "file": "cli/build.js",
+          "startLine": 79,
+          "endLine": 79,
+          "hash": "167e22c26f5701ae"
+        },
+        {
+          "id": "B1.3",
+          "file": "cli/cli-args.js",
+          "startLine": 103,
+          "endLine": 103,
+          "hash": "366db140c53730a5"
+        }
+      ]
+    },
+    {
+      "id": "B2",
+      "title": "UI trio: three different roles",
+      "related": [
+        "A24"
+      ],
+      "class": "B",
+      "anchors": [
+        {
+          "id": "B2.1",
+          "file": "src/ui/molecules/m-attention-card/m-attention-card.vue",
+          "startLine": 26,
+          "endLine": 29,
+          "hash": "c47acb4bf3ba0658"
+        },
+        {
+          "id": "B2.2",
+          "file": "src/ui/molecules/m-lock-row/m-lock-row.vue",
+          "startLine": 18,
+          "endLine": 21,
+          "hash": "d842b10b3ef585f7"
+        },
+        {
+          "id": "B2.3",
+          "file": "src/ui/molecules/m-savings-modal/m-savings-modal.vue",
+          "startLine": 26,
+          "endLine": 29,
+          "hash": "e20cbf0e0315d92b"
+        }
+      ]
+    },
+    {
+      "id": "B3",
+      "title": "Blueprint templates mirrored per framework",
+      "class": "B",
+      "anchors": [
+        {
+          "id": "B3.1",
+          "file": "blueprints/molecule-capsule/m-sample-card.vue",
+          "startLine": 40,
+          "endLine": 60,
+          "hash": "32a8d46fa52fe175"
+        },
+        {
+          "id": "B3.2",
+          "file": "blueprints/molecule-capsule/m-sample-card.tsx",
+          "startLine": 45,
+          "endLine": 65,
+          "hash": "691d7ff3be7852e8"
+        },
+        {
+          "id": "B3.3",
+          "file": "blueprints/molecule-capsule/m-sample-card.svelte",
+          "startLine": 40,
+          "endLine": 60,
+          "hash": "23b5486aa68e0499"
+        }
+      ]
+    },
+    {
+      "id": "B4",
+      "title": "Same name, different framework",
+      "related": [
+        "C2"
+      ],
+      "class": "B",
+      "anchors": [
+        {
+          "id": "B4.1",
+          "file": "hooks/useSelfCleaningTimer.ts",
+          "startLine": 18,
+          "endLine": 31,
+          "hash": "f1b89b338c998e23"
+        },
+        {
+          "id": "B4.2",
+          "file": "src/ui/composables/useSelfCleaningTimeout.ts",
+          "startLine": 3,
+          "endLine": 38,
+          "hash": "bb9486ebc5824557"
+        }
+      ]
+    },
+    {
+      "id": "B5",
+      "title": "Timestamp formatting with different outputs",
+      "class": "B",
+      "anchors": [
+        {
+          "id": "B5.1",
+          "file": "src/ui/molecules/m-attention-card/m-attention-card.controller.ts",
+          "startLine": 16,
+          "endLine": 21,
+          "hash": "1b6dab9d753da742"
+        },
+        {
+          "id": "B5.2",
+          "file": "src/ui/molecules/m-feed-post/m-feed-post.controller.ts",
+          "startLine": 20,
+          "endLine": 29,
+          "hash": "b704152e50f53d4b"
+        }
+      ]
+    },
+    {
+      "id": "B6",
+      "title": "Thin views composed by design",
+      "class": "B",
+      "anchors": [
+        {
+          "id": "B6.1",
+          "file": "src/ui/views/v-swarm-locks.vue",
+          "startLine": 14,
+          "endLine": 18,
+          "hash": "f4d81585f5228352"
+        },
+        {
+          "id": "B6.2",
+          "file": "src/ui/views/v-swarm-tasks.vue",
+          "startLine": 14,
+          "endLine": 18,
+          "hash": "d2e21bb789a99da7"
+        }
+      ]
+    },
+    {
+      "id": "B7",
+      "title": "Controllers that return computeds and handlers",
+      "class": "B",
+      "anchors": [
+        {
+          "id": "B7.1",
+          "file": "src/ui/molecules/m-lock-row/m-lock-row.controller.ts",
+          "startLine": 19,
+          "endLine": 23,
+          "hash": "79856a213de02521"
+        },
+        {
+          "id": "B7.2",
+          "file": "src/ui/molecules/m-attention-card/m-attention-card.controller.ts",
+          "startLine": 31,
+          "endLine": 36,
+          "hash": "05b67bc2d44be71a"
+        },
+        {
+          "id": "B7.3",
+          "file": "src/ui/molecules/m-token-stat/m-token-stat.controller.ts",
+          "startLine": 27,
+          "endLine": 32,
+          "hash": "f5e193d5df739748"
+        }
+      ]
+    },
+    {
+      "id": "B8",
+      "title": "JSON readers whose error contracts differ from A7",
+      "class": "B",
+      "anchors": [
+        {
+          "id": "B8.1",
+          "file": "cli/audit/ratchet.js",
+          "startLine": 37,
+          "endLine": 48,
+          "hash": "81d8f52c6610bf5e"
+        },
+        {
+          "id": "B8.2",
+          "file": "cli/doctor/check-mcp.js",
+          "startLine": 14,
+          "endLine": 21,
+          "hash": "184f924d6b2a5a29"
+        },
+        {
+          "id": "B8.3",
+          "file": "cli/workspace.js",
+          "startLine": 10,
+          "endLine": 16,
+          "hash": "404151e89c9c3da3"
+        },
+        {
+          "id": "B8.4",
+          "file": "cli/commands/cmd-wrappers-json.js",
+          "startLine": 13,
+          "endLine": 16,
+          "hash": "cfbaddc34a6088a0"
+        }
+      ]
+    },
+    {
+      "id": "B9",
+      "title": "Truncation from different ends",
+      "class": "B",
+      "anchors": [
+        {
+          "id": "B9.1",
+          "file": "cli/navigator-banner-helpers.js",
+          "startLine": 14,
+          "endLine": 18,
+          "hash": "adaf95db67a43ca8"
+        },
+        {
+          "id": "B9.2",
+          "file": "cli/team/task-list-view.js",
+          "startLine": 10,
+          "endLine": 14,
+          "hash": "0750bc2f9a021bde"
+        },
+        {
+          "id": "B9.3",
+          "file": "cli/errors/formatter.js",
+          "startLine": 7,
+          "endLine": 7,
+          "hash": "cab62eef78a1425b"
+        }
+      ]
+    },
+    {
+      "id": "B10",
+      "title": "m-token-stat vs the A24 stat tile",
+      "related": [
+        "A24"
+      ],
+      "class": "B",
+      "anchors": [
+        {
+          "id": "B10.1",
+          "file": "src/ui/molecules/m-token-stat/m-token-stat.vue",
+          "startLine": 22,
+          "endLine": 53,
+          "hash": "92cf17bf0324cb13"
+        },
+        {
+          "id": "B10.2",
+          "file": "src/ui/molecules/m-savings-modal/m-savings-modal.vue",
+          "startLine": 26,
+          "endLine": 29,
+          "hash": "e20cbf0e0315d92b"
+        }
+      ]
+    },
+    {
+      "id": "B11",
+      "title": "Same 3-clause && count as A4, different meaning",
+      "related": [
+        "A4"
+      ],
+      "class": "B",
+      "anchors": [
+        {
+          "id": "B11.1",
+          "file": "cli/terminal.js",
+          "startLine": 29,
+          "endLine": 29,
+          "hash": "42af5d722bbf664b"
+        },
+        {
+          "id": "B11.2",
+          "file": "cli/edit-locks.js",
+          "startLine": 72,
+          "endLine": 72,
+          "hash": "b970514f96ee2a2c"
+        }
+      ]
+    },
+    {
+      "id": "C1",
+      "title": "Deep ANSI stripping walk",
+      "lean": "against",
+      "class": "C",
+      "anchors": [
+        {
+          "id": "C1.1",
+          "file": "cli/mcp/envelope.js",
+          "startLine": 8,
+          "endLine": 15,
+          "hash": "33fe50fc853f47d6"
+        },
+        {
+          "id": "C1.2",
+          "file": "cli/agent-json.js",
+          "startLine": 23,
+          "endLine": 35,
+          "hash": "6bbe2ca53f7c4e3d"
+        }
+      ]
+    },
+    {
+      "id": "C2",
+      "title": "useSelfCleaningInterval vs useSelfCleaningTimeout",
+      "lean": "against",
+      "related": [
+        "B4"
+      ],
+      "class": "C",
+      "anchors": [
+        {
+          "id": "C2.1",
+          "file": "hooks/useSelfCleaningTimer.ts",
+          "startLine": 3,
+          "endLine": 16,
+          "hash": "44ccf1f5ade745e4"
+        },
+        {
+          "id": "C2.2",
+          "file": "hooks/useSelfCleaningTimer.ts",
+          "startLine": 18,
+          "endLine": 31,
+          "hash": "f1b89b338c998e23"
+        }
+      ]
+    },
+    {
+      "id": "C3",
+      "title": "Splitting off the command after --",
+      "lean": "against",
+      "class": "C",
+      "anchors": [
+        {
+          "id": "C3.1",
+          "file": "cli/verify-helpers.js",
+          "startLine": 12,
+          "endLine": 17,
+          "hash": "08999f1dcad8ff75"
+        },
+        {
+          "id": "C3.2",
+          "file": "cli/mcp/call-args.js",
+          "startLine": 40,
+          "endLine": 46,
+          "hash": "b2d1041f9aa2d822"
+        },
+        {
+          "id": "C3.3",
+          "file": "cli/cli-args.js",
+          "startLine": 37,
+          "endLine": 42,
+          "hash": "647c43415c30d984"
+        }
+      ]
+    },
+    {
+      "id": "C4",
+      "title": "normalizeHandle with trim vs without",
+      "lean": "for",
+      "related": [
+        "A12"
+      ],
+      "class": "C",
+      "anchors": [
+        {
+          "id": "C4.1",
+          "file": "cli/team/agent-identity.js",
+          "startLine": 17,
+          "endLine": 17,
+          "hash": "57a7e2c0e0b7cc4a"
+        },
+        {
+          "id": "C4.2",
+          "file": "cli/team/team-db-mailbox.js",
+          "startLine": 9,
+          "endLine": 9,
+          "hash": "c31586d39c45a5e3"
+        }
+      ]
+    },
+    {
+      "id": "C5",
+      "title": "useSwarmAttention fetch as a weak A20 member",
+      "lean": "for",
+      "related": [
+        "A20",
+        "A21"
+      ],
+      "class": "C",
+      "anchors": [
+        {
+          "id": "C5.1",
+          "file": "src/ui/composables/useSwarmAttention.ts",
+          "startLine": 12,
+          "endLine": 37,
+          "hash": "623abb02744f430e"
+        }
+      ]
+    },
+    {
+      "id": "C6",
+      "title": "isPlainObject variants that do not exclude arrays",
+      "lean": "for",
+      "related": [
+        "A11"
+      ],
+      "class": "C",
+      "anchors": [
+        {
+          "id": "C6.1",
+          "file": "cli/mcp/envelope.js",
+          "startLine": 12,
+          "endLine": 12,
+          "hash": "3063b6b77299d099"
+        },
+        {
+          "id": "C6.2",
+          "file": "cli/agent-json.js",
+          "startLine": 28,
+          "endLine": 28,
+          "hash": "9860eb88817c9531"
+        }
+      ]
+    },
+    {
+      "id": "C7",
+      "title": "The isCli && isJson branches in team-commands.js",
+      "lean": "for",
+      "related": [
+        "A15"
+      ],
+      "class": "C",
+      "anchors": [
+        {
+          "id": "C7.1",
+          "file": "cli/team/team-commands.js",
+          "startLine": 85,
+          "endLine": 99,
+          "hash": "7fd5145cbf4739c2"
+        }
+      ]
+    }
+  ]
+}

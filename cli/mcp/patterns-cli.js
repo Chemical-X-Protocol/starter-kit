@@ -3,6 +3,7 @@
  * Interim alias (Forge P0); P5 replaces it with the Forge surface.
  */
 import { handleQueryPatterns } from './tools-patterns.js';
+import { runPatternsScore } from '../patterns/gt-score-cli.js';
 
 const flagValue = (args, name) => args.find((a) => a.startsWith(`--${name}=`))?.slice(name.length + 3);
 
@@ -20,6 +21,8 @@ export const parsePatternsArgs = (args) => {
 };
 
 export const runPatternsCli = (args, cwd = process.cwd()) => {
+  const isScoreRun = args.some((arg) => arg.startsWith('--score='));
+  if (isScoreRun) return runPatternsScore(args, cwd);
   const result = handleQueryPatterns(parsePatternsArgs(args), cwd);
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 };

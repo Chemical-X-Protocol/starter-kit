@@ -1,0 +1,26 @@
+// gt fixture C3 (class C): Splitting off the command after --
+// @@ anchor C3.1 cli/verify-helpers.js:12-17 sha=08999f1dcad8ff75
+export const parseCommandFromArgs = (args = []) => {
+  const dashDashIndex = args.indexOf('--');
+  const hasSeparator = dashDashIndex !== -1;
+  const command = hasSeparator ? joinCommandWords(args.slice(dashDashIndex + 1)) : '';
+  return command.length > 0 ? command : null;
+};
+// @@ end
+// @@ anchor C3.2 cli/mcp/call-args.js:40-46 sha=b2d1041f9aa2d822
+const gitWords = (args) => {
+  const separator = args.indexOf('--');
+  const hasSeparator = separator !== -1;
+  const before = hasSeparator ? args.slice(0, separator) : args;
+  const pathspecs = hasSeparator ? args.slice(separator + 1) : [];
+  return [...before.filter((a) => !a.startsWith('-')), ...pathspecs];
+};
+// @@ end
+// @@ anchor C3.3 cli/cli-args.js:37-42 sha=647c43415c30d984
+    const isCommandSeparator = arg === '--';
+    if (isCommandSeparator) {
+      const command = joinCommandWords(rawArgs.slice(index + 1));
+      result.command = command.length > 0 ? command : null;
+      break;
+    }
+// @@ end

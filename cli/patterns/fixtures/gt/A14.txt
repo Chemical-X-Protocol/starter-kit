@@ -1,0 +1,45 @@
+// gt fixture A14 (class A): Insert into agent_feed then re-select by lastInsertRowid
+// @@ anchor A14.1 cli/team/team-db-feed.js:23-44 sha=b15c7ca491a6b9b3
+  const now = Date.now();
+  const stmt = db.prepare(`
+    INSERT INTO agent_feed (
+      timestamp, author_id, recipient_id, thread_id,
+      task_id, file_path, event_type, message, metadata
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const info = stmt.run(
+    now,
+    authorId,
+    recipientId,
+    eventData.thread_id || null,
+    eventData.task_id || null,
+    eventData.file_path || null,
+    eventData.event_type || 'broadcast',
+    eventData.message,
+    JSON.stringify(eventData.metadata || {})
+  );
+
+  const row = db.prepare('SELECT * FROM agent_feed WHERE id = ?').get(info.lastInsertRowid);
+  return { ...row, metadata: JSON.parse(row.metadata || '{}') };
+// @@ end
+// @@ anchor A14.2 cli/team/team-db-mailbox.js:19-36 sha=2e45dd8480b17137
+  const now = Date.now();
+  const sql = `
+    INSERT INTO agent_feed (
+      timestamp, author_id, recipient_id, thread_id,
+      task_id, file_path, event_type, message, metadata
+    ) VALUES (?, ?, ?, ?, ?, NULL, 'dm', ?, ?)
+  `;
+  const info = db.prepare(sql).run(
+    now,
+    author,
+    recipient,
+    params.thread_id || null,
+    params.task_id || null,
+    params.message || '',
+    JSON.stringify(params.metadata || {})
+  );
+  const row = db.prepare('SELECT * FROM agent_feed WHERE id = ?').get(info.lastInsertRowid);
+  return { ...row, metadata: JSON.parse(row.metadata || '{}') };
+// @@ end

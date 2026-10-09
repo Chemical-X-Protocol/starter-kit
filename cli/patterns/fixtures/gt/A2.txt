@@ -1,0 +1,28 @@
+// gt fixture A2 (class A): Ad-hoc flag value readers re-implementing readFlagValue
+// @@ anchor A2.1 cli/friction/friction-cli.js:15-15 sha=81490d1701a591d4
+const flagValue = (args, name) => args.find((arg) => arg.startsWith(`--${name}=`))?.slice(name.length + 3) ?? null;
+// @@ end
+// @@ anchor A2.2 cli/hooks/install-hooks-cli.js:16-16 sha=81490d1701a591d4
+const flagValue = (args, name) => args.find((arg) => arg.startsWith(`--${name}=`))?.slice(name.length + 3) ?? null;
+// @@ end
+// @@ anchor A2.3 cli/hooks/install-hooks-cli.js:26-26 sha=80f43cc55fcc3776
+  const host = flagValue(args, 'host') ?? (args.includes('--host') ? args[args.indexOf('--host') + 1] : null);
+// @@ end
+// @@ anchor A2.4 cli/license.js:91-96 sha=fc1f032b7e018e83
+const resolveFlagLicense = (args) => {
+  const cliFlagIdx = args.indexOf('--license');
+  const hasFlag = cliFlagIdx !== -1 && Boolean(args[cliFlagIdx + 1]);
+  if (!hasFlag) return null;
+  return args[cliFlagIdx + 1].trim();
+};
+// @@ end
+// @@ anchor A2.5 cli/config/index.js:23-30 sha=9c39ed42760c761c
+const parseCliProfile = (rawArgs = []) => {
+  const args = rawArgs.map(String);
+  const inlineArg = args.find((arg) => arg.startsWith('--profile='));
+  const spacedIndex = args.indexOf('--profile');
+  const value = inlineArg ? inlineArg.slice('--profile='.length) : args[spacedIndex + 1];
+  const hasValue = (Boolean(inlineArg) || spacedIndex !== -1) && typeof value === 'string';
+  return hasValue ? value.trim().toLowerCase() || null : null;
+};
+// @@ end

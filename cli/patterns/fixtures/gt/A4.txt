@@ -1,0 +1,44 @@
+// gt fixture A4 (class A): Is the path inside the root check
+// @@ anchor A4.1 cli/hooks/guard-paths.js:16-20 sha=599ea6b8f5f106fe
+export const isInsideDirectory = (target, directory) => {
+  const relative = path.relative(directory, target);
+  const isOutside = relative.startsWith('..') || path.isAbsolute(relative);
+  return !isOutside;
+};
+// @@ end
+// @@ anchor A4.2 cli/mcp/context.js:21-24 sha=caeb199ed0912858
+export const isInsideDir = (root, target) => {
+  const rel = path.relative(root, target);
+  return !rel.startsWith('..') && !path.isAbsolute(rel);
+};
+// @@ end
+// @@ anchor A4.3 cli/path-scope.js:39-40 sha=c51b3307a336293f
+  const relLexical = path.relative(realBase, resolvedTarget);
+  const isLexicalEscape = relLexical.startsWith('..') || path.isAbsolute(relLexical);
+// @@ end
+// @@ anchor A4.4 cli/path-scope.js:47-48 sha=f2b94270f9a96624
+  const relExistingLexical = path.relative(realBase, existing);
+  const isAncestorAboveBase = relExistingLexical.startsWith('..') || path.isAbsolute(relExistingLexical);
+// @@ end
+// @@ anchor A4.5 cli/path-scope.js:59-60 sha=b9807599fa64e9ad
+  const relReal = path.relative(realBase, realExisting);
+  const isSymlinkEscape = relReal.startsWith('..') || path.isAbsolute(relReal);
+// @@ end
+// @@ anchor A4.6 cli/edit-locks.js:72-72 sha=b970514f96ee2a2c
+  const isInside = (key) => key !== '' && !key.startsWith('..') && !path.isAbsolute(key);
+// @@ end
+// @@ anchor A4.7 cli/team/lease-renew.js:34-34 sha=b970514f96ee2a2c
+  const isInside = (key) => key !== '' && !key.startsWith('..') && !path.isAbsolute(key);
+// @@ end
+// @@ anchor A4.8 cli/hooks/native-tool-policy.js:99-99 sha=b0ac578f5ea9c92d
+  const isBelowCwd = relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative);
+// @@ end
+// @@ anchor A4.9 cli/mcp/installer-report.js:31-31 sha=6278f85b34ab6e5b
+  const isOutsideProject = rel.startsWith('..') || path.isAbsolute(rel);
+// @@ end
+// @@ anchor A4.10 cli/team/team-dispatch-batches.js:38-38 sha=ebb47bc4f17ada1d
+  const isOutsideRoot = relative.startsWith('..');
+// @@ end
+// @@ anchor A4.11 cli/typecheck-command.js:42-42 sha=42ea6a936385e314
+  const isInsideCwd = !relative.startsWith('..');
+// @@ end

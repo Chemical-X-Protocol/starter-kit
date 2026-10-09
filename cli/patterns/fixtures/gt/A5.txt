@@ -1,0 +1,32 @@
+// gt fixture A5 (class A): Show a path relative to a base when inside, absolute otherwise
+// @@ anchor A5.1 cli/hooks/native-tool-policy.js:97-101 sha=9235555288365085
+const displayPath = (absolute, cwd) => {
+  const relative = path.relative(cwd, absolute);
+  const isBelowCwd = relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative);
+  return isBelowCwd ? relative : absolute;
+};
+// @@ end
+// @@ anchor A5.2 cli/mcp/installer-report.js:29-33 sha=a77b14f3bd76b880
+const projectPath = (base, file) => {
+  const rel = path.relative(base, file);
+  const isOutsideProject = rel.startsWith('..') || path.isAbsolute(rel);
+  return isOutsideProject ? file : rel;
+};
+// @@ end
+// @@ anchor A5.3 cli/typecheck-command.js:40-44 sha=67941d7aef552c27
+const toRunnable = (cwd, binPath) => {
+  const relative = path.relative(cwd, binPath);
+  const isInsideCwd = !relative.startsWith('..');
+  return isInsideCwd ? relative : binPath;
+};
+// @@ end
+// @@ anchor A5.4 cli/team/team-dispatch-batches.js:33-40 sha=af69298f7a287fd6
+  if (!raw) return '';
+  const isAbsolute = path.isAbsolute(raw);
+  const hasRoot = Boolean(root);
+  const canRelativise = isAbsolute && hasRoot;
+  const relative = canRelativise ? path.relative(root, raw) : raw;
+  const isOutsideRoot = relative.startsWith('..');
+  const chosen = isOutsideRoot ? raw : relative;
+  return chosen.replace(/\\/g, '/').replace(/^\.\//, '');
+// @@ end

@@ -1,0 +1,59 @@
+// gt fixture A16 (class A): Spec setup with an in-memory team DB
+// @@ anchor A16.1 cli/team/team-db-feed-latest.spec.js:28-32 sha=297eb2dae90cd769
+const createDb = () => {
+  const db = new DatabaseSync(':memory:');
+  initTeamSchema(db);
+  return db;
+};
+// @@ end
+// @@ anchor A16.2 cli/team/team-projects-coordinator.spec.js:14-19 sha=6d8e5fce824b0d93
+const createDb = () => {
+  const db = new DatabaseSync(':memory:');
+  initTeamSchema(db);
+  initProjectSession(db, { title: 'Coordinator spec', goal: 'Exercise the step', budgetLimit: 1, maxTurns: 10 });
+  return db;
+};
+// @@ end
+// @@ anchor A16.3 cli/team/team-adversarial-locks.spec.js:23-25 sha=760324dd38de9ae5
+  const db = new DatabaseSync(':memory:');
+  db.exec('PRAGMA foreign_keys = ON;');
+  initTeamSchema(db);
+// @@ end
+// @@ anchor A16.4 cli/team/team-vds.spec.js:20-21 sha=394785b2d567878c
+  const db = new DatabaseSync(':memory:');
+  initTeamSchema(db);
+// @@ end
+// @@ anchor A16.5 cli/team/team-release-train.spec.js:15-16 sha=394785b2d567878c
+  const db = new DatabaseSync(':memory:');
+  initTeamSchema(db);
+// @@ end
+// @@ anchor A16.6 cli/team/team-needs.spec.js:25-30 sha=72d70f5bcfec37ec
+  const db = new DatabaseSync(':memory:');
+  db.exec(`
+    CREATE TABLE files (path TEXT PRIMARY KEY, mtime INTEGER NOT NULL, size INTEGER NOT NULL, tier TEXT NOT NULL, lines INTEGER NOT NULL, chars INTEGER NOT NULL, health_score INTEGER NOT NULL DEFAULT 100, hazard_count INTEGER NOT NULL DEFAULT 0);
+    CREATE TABLE violations (id INTEGER PRIMARY KEY AUTOINCREMENT, file_path TEXT NOT NULL, rule TEXT NOT NULL, severity TEXT NOT NULL, pillar TEXT NOT NULL, line INTEGER NOT NULL DEFAULT 1, hazard TEXT NOT NULL DEFAULT '', directive TEXT NOT NULL DEFAULT '');
+  `);
+  initTeamSchema(db);
+// @@ end
+// @@ anchor A16.7 cli/ui-kanban.spec.js:23-31 sha=6cc9e68a6b755405
+  const db = new DatabaseSync(':memory:');
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS files (
+      path TEXT PRIMARY KEY, mtime INTEGER NOT NULL, size INTEGER NOT NULL,
+      tier TEXT NOT NULL, lines INTEGER NOT NULL, chars INTEGER NOT NULL,
+      health_score INTEGER NOT NULL DEFAULT 100, hazard_count INTEGER NOT NULL DEFAULT 0
+    );
+  `);
+  initTeamSchema(db);
+// @@ end
+// @@ anchor A16.8 cli/ui-vbulletin.spec.js:22-30 sha=6cc9e68a6b755405
+  const db = new DatabaseSync(':memory:');
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS files (
+      path TEXT PRIMARY KEY, mtime INTEGER NOT NULL, size INTEGER NOT NULL,
+      tier TEXT NOT NULL, lines INTEGER NOT NULL, chars INTEGER NOT NULL,
+      health_score INTEGER NOT NULL DEFAULT 100, hazard_count INTEGER NOT NULL DEFAULT 0
+    );
+  `);
+  initTeamSchema(db);
+// @@ end

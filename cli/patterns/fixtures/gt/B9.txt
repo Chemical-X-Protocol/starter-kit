@@ -1,0 +1,18 @@
+// gt fixture B9 (class B): Truncation from different ends
+// @@ anchor B9.1 cli/navigator-banner-helpers.js:14-18 sha=adaf95db67a43ca8
+export const truncatePath = (p, maxLen) => {
+  const isWithinLimit = p.length <= maxLen;
+  if (isWithinLimit) return p;
+  return `…${p.slice(p.length - maxLen + 1)}`;
+};
+// @@ end
+// @@ anchor B9.2 cli/team/task-list-view.js:10-14 sha=0750bc2f9a021bde
+const truncateTitle = (task) => {
+  const title = task.title ?? '';
+  const isLong = title.length > TITLE_MAX;
+  return isLong ? `${title.slice(0, TITLE_MAX - 3)}...` : title;
+};
+// @@ end
+// @@ anchor B9.3 cli/errors/formatter.js:7-7 sha=cab62eef78a1425b
+  const truncatedMsg = cleanMsg.length > 70 ? `${cleanMsg.slice(0, 67)}...` : cleanMsg;
+// @@ end

@@ -1,0 +1,138 @@
+// gt fixture A21 (class A): Swarm composables: POST JSON then refetch
+// @@ anchor A21.1 src/ui/composables/useSwarmLocks.ts:27-40 sha=23cbc61096eafd94
+  const acquireLock = async (filePath: string, agentId = '@coordinator') => {
+    const hasFetch = typeof fetch === 'function';
+    if (!hasFetch) return;
+    try {
+      await fetch('/api/swarm/locks/acquire', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filePath, agentId, purpose: 'molecular edit' })
+      });
+      await fetchLocks();
+    } catch (err) {
+      error.value = err instanceof Error ? err : new Error(String(err));
+    }
+  };
+// @@ end
+// @@ anchor A21.2 src/ui/composables/useSwarmLocks.ts:42-55 sha=a76e906c8f42ceb5
+  const releaseLock = async (filePath: string, agentId = '@coordinator') => {
+    const hasFetch = typeof fetch === 'function';
+    if (!hasFetch) return;
+    try {
+      await fetch('/api/swarm/locks/release', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filePath, agentId })
+      });
+      await fetchLocks();
+    } catch (err) {
+      error.value = err instanceof Error ? err : new Error(String(err));
+    }
+  };
+// @@ end
+// @@ anchor A21.3 src/ui/composables/useSwarmTasks.ts:28-41 sha=1928d177c0b90695
+  const createTask = async (title: string) => {
+    const hasFetch = typeof fetch === 'function';
+    if (!hasFetch) return;
+    try {
+      await fetch('/api/swarm/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, createdBy: '@ui-specialist' })
+      });
+      await fetchTasks();
+    } catch (err) {
+      error.value = err instanceof Error ? err : new Error(String(err));
+    }
+  };
+// @@ end
+// @@ anchor A21.4 src/ui/composables/useSwarmTasks.ts:43-56 sha=d421c7dbdf1a4e83
+  const claimTask = async (taskId: string, agentId = '@coordinator') => {
+    const hasFetch = typeof fetch === 'function';
+    if (!hasFetch) return;
+    try {
+      await fetch('/api/swarm/tasks/claim', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskId, agentId })
+      });
+      await fetchTasks();
+    } catch (err) {
+      error.value = err instanceof Error ? err : new Error(String(err));
+    }
+  };
+// @@ end
+// @@ anchor A21.5 src/ui/composables/useSwarmTasks.ts:58-71 sha=ad8e8a1592cde667
+  const completeTask = async (taskId: string) => {
+    const hasFetch = typeof fetch === 'function';
+    if (!hasFetch) return;
+    try {
+      await fetch('/api/swarm/tasks/done', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskId })
+      });
+      await fetchTasks();
+    } catch (err) {
+      error.value = err instanceof Error ? err : new Error(String(err));
+    }
+  };
+// @@ end
+// @@ anchor A21.6 src/ui/composables/useSwarmFeed.ts:39-52 sha=3ba63711c77d4a72
+  const sendPost = async (message: string) => {
+    const isFetchUnavailable = typeof fetch !== 'function';
+    if (isFetchUnavailable) return;
+    try {
+      await fetch('/api/swarm/feed', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message, author })
+      });
+      await fetchFeed();
+    } catch (err) {
+      error.value = err instanceof Error ? err : new Error(String(err));
+    }
+  };
+// @@ end
+// @@ anchor A21.7 src/ui/composables/useSwarmState.ts:61-74 sha=2ee146e2d029eb3a
+  const sendPost = async (message: string) => {
+    const isFetchMissing = typeof fetch !== 'function';
+    if (isFetchMissing) return;
+    try {
+      await fetch('/api/swarm/feed', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message, author: selectedAgentId.value || '@ui-specialist' })
+      });
+      await fetchSwarmData();
+    } catch (err) {
+      error.value = err instanceof Error ? err : new Error(String(err));
+    }
+  };
+// @@ end
+// @@ anchor A21.8 src/ui/composables/useSwarmAttention.ts:49-71 sha=13e717223a3e034b
+  const confirmItem = async (itemId: string, action: 'approve' | 'reject'): Promise<[boolean, Error | null]> => {
+    const isFetchAvailable = typeof fetch === 'function';
+    if (!isFetchAvailable) return [false, new Error('fetch is not available')];
+    try {
+      const res = await fetch('/api/swarm/attention/action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ itemId, action })
+      });
+      const isResponseOk = res.ok;
+      if (!isResponseOk) {
+        const error = new Error(`Action failed with ${res.status}`);
+        errorMessage.value = error.message;
+        return [false, error];
+      }
+      await fetchAttention();
+      return [true, null];
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('Action request failed');
+      errorMessage.value = error.message;
+      return [false, error];
+    }
+  };
+// @@ end

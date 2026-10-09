@@ -1,0 +1,13 @@
+// gt fixture A10 (class A): stripAnsi duplicated
+// @@ anchor A10.1 cli/terminal.js:73-79 sha=f87e8a0bf92730f4
+export const stripAnsi = (text) => {
+  const isInvalidText = !text || typeof text !== "string";
+  if (isInvalidText) return "";
+  return text
+    .replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, "")
+    .replace(/\x1b\][^\x07\x1b]*(\x07|\x1b\\)/g, "");
+};
+// @@ end
+// @@ anchor A10.2 cli/verify-helpers.js:36-36 sha=e4c96bb04e5c3f8e
+export const stripAnsi = (str = '') => String(str).replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
+// @@ end

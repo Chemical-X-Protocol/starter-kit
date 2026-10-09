@@ -1,0 +1,32 @@
+// gt fixture A22 (class A): Visibility-aware poller
+// @@ anchor A22.1 src/ui/composables/useSwarmAttention.ts:39-47 sha=3ec1e59ead951ed3
+  const poller = useSelfCleaningTimeout(() => {
+    const isDocumentAvailable = typeof document !== 'undefined';
+    const isTabHidden = isDocumentAvailable && document.visibilityState === 'hidden';
+    if (isTabHidden) {
+      poller.start();
+      return;
+    }
+    fetchAttention();
+  }, 3000);
+// @@ end
+// @@ anchor A22.2 src/ui/composables/useSwarmFeed.ts:30-37 sha=ed22f9f5559b0255
+  const poller = useSelfCleaningTimeout(() => {
+    const isPageHidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
+    if (isPageHidden) {
+      poller.start();
+      return;
+    }
+    fetchFeed();
+  }, 3000);
+// @@ end
+// @@ anchor A22.3 src/ui/composables/useSwarmState.ts:52-59 sha=cc6377d6b09f9241
+  const poller = useSelfCleaningTimeout(() => {
+    const isHidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
+    if (isHidden) {
+      poller.start();
+      return;
+    }
+    fetchSwarmData();
+  }, 2000);
+// @@ end

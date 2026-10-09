@@ -1,0 +1,29 @@
+// gt fixture A19 (class A): gh discussion create retried per fallback category
+// @@ anchor A19.1 cli/audit/social-gh.js:10-14 sha=9b4869810d6d36c7
+    let res = spawnSync(
+      'gh',
+      ['discussion', 'create', '-R', repo, '--title', title, '--body', body, '--category', category],
+      { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] }
+    );
+// @@ end
+// @@ anchor A19.2 cli/audit/social-gh.js:24-28 sha=50e6987676d2edb6
+      res = spawnSync(
+        'gh',
+        ['discussion', 'create', '-R', repo, '--title', title, '--body', body, '--category', DISCUSSION_CATEGORY_SLUG],
+        { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] }
+      );
+// @@ end
+// @@ anchor A19.3 cli/audit/social-gh.js:37-41 sha=7a3346d8d9137c5d
+      res = spawnSync(
+        'gh',
+        ['discussion', 'create', '-R', repo, '--title', title, '--body', body, '--category', 'Audits'],
+        { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] }
+      );
+// @@ end
+// @@ anchor A19.4 cli/audit/social-gh.js:50-54 sha=5b396f8c050a872e
+      res = spawnSync(
+        'gh',
+        ['discussion', 'create', '-R', repo, '--title', title, '--body', body, '--category', 'General'],
+        { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] }
+      );
+// @@ end

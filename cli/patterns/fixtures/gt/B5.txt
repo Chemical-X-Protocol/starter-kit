@@ -1,0 +1,21 @@
+// gt fixture B5 (class B): Timestamp formatting with different outputs
+// @@ anchor B5.1 src/ui/molecules/m-attention-card/m-attention-card.controller.ts:16-21 sha=1b6dab9d753da742
+  const formattedTime = computed(() => {
+    const isMissingTimestamp = !props.item.timestamp;
+    if (isMissingTimestamp) return '';
+    const date = new Date(props.item.timestamp);
+    return Number.isNaN(date.getTime()) ? '' : date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  });
+// @@ end
+// @@ anchor B5.2 src/ui/molecules/m-feed-post/m-feed-post.controller.ts:20-29 sha=b704152e50f53d4b
+export const formatRelativeTime = (timestamp: number): string => {
+  if (!timestamp) return '';
+  const seconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
+  const isUnderMinute = seconds < 60;
+  if (isUnderMinute) return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  const isUnderHour = minutes < 60;
+  if (isUnderHour) return `${minutes}m ago`;
+  return `${Math.floor(minutes / 60)}h ago`;
+};
+// @@ end
