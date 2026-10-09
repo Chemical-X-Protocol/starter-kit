@@ -21,7 +21,10 @@ export const BLOCK_MARKERS = { OPEN, MID, CLOSE };
 const FORMAT_HINT = `expected one or more blocks: ${OPEN} / old text / ${MID} / new text / ${CLOSE}, each marker on its own line at column 0 (use 8+ characters on all three markers to edit text that contains markers)`;
 
 const nextMarker = (lines, from, marker) => {
-  for (let i = from; i < lines.length; i++) if (lines[i].trimEnd() === marker) return i;
+  for (let i = from; i < lines.length; i++) {
+    const isMarkerLine = lines[i].trimEnd() === marker;
+    if (isMarkerLine) return i;
+  }
   return -1;
 };
 
@@ -49,13 +52,16 @@ export const parseSearchReplaceBlocks = (text) => {
     const midMarker = '='.repeat(open.width);
     const closeMarker = `${'>'.repeat(open.width)} REPLACE`;
     const mid = nextMarker(lines, open.index + 1, midMarker);
-    if (mid === -1) throw new Error(`Block ${n}: no "${midMarker}" divider after the SEARCH marker (input line ${open.index + 1}); ${FORMAT_HINT}.`);
+    const isMissingDivider = mid === -1;
+    if (isMissingDivider) throw new Error(`Block ${n}: no "${midMarker}" divider after the SEARCH marker (input line ${open.index + 1}); ${FORMAT_HINT}.`);
     const close = nextMarker(lines, mid + 1, closeMarker);
-    if (close === -1) throw new Error(`Block ${n}: no "${closeMarker}" after the divider (input line ${mid + 1}); ${FORMAT_HINT}.`);
+    const isMissingClose = close === -1;
+    if (isMissingClose) throw new Error(`Block ${n}: no "${closeMarker}" after the divider (input line ${mid + 1}); ${FORMAT_HINT}.`);
     blocks.push({ search: lines.slice(open.index + 1, mid).join('\n'), replace: lines.slice(mid + 1, close).join('\n') });
     open = nextOpen(lines, close + 1);
   }
-  if (blocks.length === 0) throw new Error(`No SEARCH/REPLACE blocks found on stdin; ${FORMAT_HINT}.`);
+  const hasNoBlocks = blocks.length === 0;
+  if (hasNoBlocks) throw new Error(`No SEARCH/REPLACE blocks found on stdin; ${FORMAT_HINT}.`);
   return blocks;
 };
 
