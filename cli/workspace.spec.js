@@ -8,7 +8,7 @@ import { listWorkspacePackages } from './workspace.js';
 import { findChemxDir } from './audit/chemx-dir.js';
 import { runTestAudit } from './test-audit.js';
 import { runTypecheckAudit } from './typecheck-audit.js';
-import { runProjectVerify } from './verify.js';
+import { runProjectVerify, runLintAudit } from './verify.js';
 import { STATUS } from './result-status.js';
 
 const KIT_NODE_MODULES = path.resolve(import.meta.dirname, '..', 'node_modules');
@@ -80,6 +80,17 @@ test('workspace: test, typecheck and verify at the monorepo root refuse and list
       assert.deepEqual(report.packages.map((p) => p.dir), ['packages/alpha', 'packages/beta', 'packages/gamma']);
       assert.match(report.executionError || report.error, /--all-packages/);
     }
+  });
+});
+
+test('workspace: lint and audit at the monorepo root refuse too', { timeout: 60000 }, async () => {
+  await withMonorepo(async (root) => {
+    const lint = await runLintAudit(['--json'], false, quiet(root));
+    assert.equal(lint.reason, 'MONOREPO_ROOT', JSON.stringify(lint));
+    const cli = path.resolve(import.meta.dirname, 'index.js');
+    const audit = spawnSync(process.execPath, [cli, 'audit', '--json'], { cwd: root, encoding: 'utf8', env: { ...process.env, CHEMX_NONINTERACTIVE: '1' }, timeout: 60000 });
+    assert.equal(audit.status, 3, audit.stdout + audit.stderr);
+    assert.equal(JSON.parse(audit.stdout).reason, 'MONOREPO_ROOT');
   });
 });
 
