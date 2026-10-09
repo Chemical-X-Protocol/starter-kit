@@ -31,11 +31,13 @@ const fullRun = (reason, extra = {}) => ({ targets: [], selection: { mode: 'full
 // when nothing changed or no spec is affected (the caller reports that as inconclusive).
 export const resolveChangeScope = (root, { changed = false, base = null, related = [], cwd = root, useIndex = true } = {}) => {
   const listing = changed ? listChangedFiles(root, { base }) : { ok: true, base: null, files: [] };
-  if (!listing.ok) return fullRun(`cannot list changed files: ${listing.error}`);
+  const isListingFailed = !listing.ok;
+  if (isListingFailed) return fullRun(`cannot list changed files: ${listing.error}`);
   const known = new Set(listing.files.map((c) => c.path));
   const changes = [...listing.files, ...relatedChanges(root, related, cwd).filter((c) => !known.has(c.path))];
   const label = changed ? `vs ${listing.base}` : 'in --related';
-  if (changes.length === 0) {
+  const isUnchanged = changes.length === 0;
+  if (isUnchanged) {
     const hint = changed && !base ? '; pass --base=<rev> to include committed work' : '';
     return { targets: [], selection: { mode: 'affected', reason: null, base: listing.base, changed: [], specs: [], unaffected: [] }, emptyDetail: `no changed files ${label}${hint}` };
   }
