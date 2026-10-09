@@ -52,12 +52,14 @@ export const runAudit = (targetDir = 'src', options = {}) => {
   let moleculeCompliantCount = 0;
 
   for (const f of fileStats) {
-    if (f.lineCount > largestFile.lineCount) {
+    const isLargerFile = f.lineCount > largestFile.lineCount;
+    if (isLargerFile) {
       largestFile = { filePath: f.relativePath, lineCount: f.lineCount };
     }
     if (f.isMolecule) {
       moleculeCount += 1;
-      if (f.lineCount <= f.lineBudget) {
+      const isWithinBudget = f.lineCount <= f.lineBudget;
+      if (isWithinBudget) {
         moleculeCompliantCount += 1;
       }
     }
@@ -110,7 +112,8 @@ export const runAudit = (targetDir = 'src', options = {}) => {
     skippedConflicts
   };
 
-  if (options.outputFile) {
+  const hasOutputFile = Boolean(options.outputFile);
+  if (hasOutputFile) {
     const outPath = path.resolve(cwd, options.outputFile);
     const mdContent = generateMarkdownReport(report);
     fs.writeFileSync(outPath, mdContent, 'utf-8');
