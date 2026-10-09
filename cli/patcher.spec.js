@@ -20,8 +20,8 @@ test('patchFile: surgically replaces unique target chunk and updates line counts
     });
 
     assert.strictEqual(result.status, 'ok');
-    assert.strictEqual(result.originalLines, 3);
-    assert.strictEqual(result.newLines, 4);
+    assert.strictEqual(result.originalLines, 2);
+    assert.strictEqual(result.newLines, 3);
     assert.strictEqual(result.lineDelta, 1);
     assert.strictEqual(result.replaced, 1);
 

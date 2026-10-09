@@ -34,7 +34,7 @@ test('MCP read is verbatim by default: no comment stripping, no compaction, numb
     assert.ok(out.includes("4|  cdn: '//cdn.example.com/a.js',"), out);
     assert.ok(out.includes('2|  // tests live next to sources'), out);
     assert.ok(out.includes('6|  url: `${base}//path`'), out);
-    assert.match(out.split('\n')[0], /vite\.config\.js:L1-7 of 8/);
+    assert.match(out.split('\n')[0], /vite\.config\.js:L1-7 of 7/);
   });
 });
 
@@ -63,7 +63,7 @@ test('CLI symbol and range reads print N| numbers and a file:Lstart-end header',
       process.stdout.write = write;
       process.chdir(cwd);
     }
-    assert.match(printed, /a\.ts:L3-5 of 6/);
+    assert.match(printed, /a\.ts:L3-5 of 5/);
     assert.match(printed, /3\|export function go\(n: number\) \{\n4\|  return n\n5\|\}/);
   });
 });
@@ -174,5 +174,20 @@ test('without an index, cards say so instead of reporting zero references, and n
     assert.match(printed, /Backtrace unavailable: no search index/);
     assert.match(printed, /Forward Trace unavailable: no search index/);
     assert.equal(fs.existsSync(path.join(dir, '.chemx')), false);
+  });
+});
+
+test('line counts: a final newline ends the last line instead of adding an empty one', async () => {
+  const { patchFile } = await import('./patcher.js');
+  const nine = Array.from({ length: 9 }, (_, i) => `export const v${i} = ${i};`).join('\n') + '\n';
+  withProject({ 'nine.js': nine, 'one.ts': 'export const x = 1\n' }, (dir) => {
+    const out = handleChemxRead({ path: 'nine.js' }, dir);
+    assert.match(out.split("\n")[0], /nine\.js:L1-9 of 9/);
+    assert.doesNotMatch(out, /^\s*10\|/m);
+    const range = handleChemxRead({ path: 'nine.js', startLine: 1 }, dir);
+    assert.match(range.split('\n')[0], /L1-9 of 9/);
+    const res = patchFile('one.ts', { targetContent: 'x = 1', replacementContent: 'x = 2', dryRun: true, cwd: dir, skipIndex: true });
+    assert.equal(res.originalLines, 1);
+    assert.equal(res.newLines, 1);
   });
 });

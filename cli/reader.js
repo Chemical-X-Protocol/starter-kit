@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { splitFileLines } from './line-count.js';
 import path from 'node:path';
 import { parse } from '@babel/parser';
 import traverseModule from '@babel/traverse';
@@ -304,7 +305,7 @@ export const readTokenOptimized = (targetPath, options = {}) => {
   }
 
   const rawContent = fs.readFileSync(resolvedPath, 'utf-8');
-  const rawLines = rawContent.split('\n');
+  const rawLines = splitFileLines(rawContent);
   const totalLines = rawLines.length;
 
   if (options.template) {

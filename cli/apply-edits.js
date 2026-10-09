@@ -16,6 +16,7 @@ import { parseSource } from './source-parse.js';
 import { buildUnifiedDiff } from './edit-diff.js';
 import { writeAtomic, removeWithBackup, restoreFromBackup } from './edit-atomic.js';
 import { findForeignLease } from './edit-locks.js';
+import { countLines } from './line-count.js';
 
 export class EditRefusedError extends Error {
   constructor(issues) {
@@ -120,8 +121,8 @@ export const applyEdits = (edits, options = {}) => {
     created: p.created,
     deleted: p.deleted,
     changed: p.isDelete || p.before !== p.after,
-    originalLines: p.before === null ? 0 : p.before.split('\n').length,
-    newLines: p.isDelete ? 0 : p.after.split('\n').length,
+    originalLines: p.before === null ? 0 : countLines(p.before),
+    newLines: p.isDelete ? 0 : countLines(p.after),
     parse: p.parse,
     declarations: p.declarations,
     backup: p.backup ? path.relative(root, p.backup) : null,
