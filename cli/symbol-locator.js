@@ -23,7 +23,11 @@ const keyName = (key) => key?.name ?? key?.value ?? key?.id?.name ?? null;
 const ownName = (node) => {
   const isKeyed = ['ClassMethod', 'ClassPrivateMethod', 'ClassProperty', 'ObjectMethod', 'ObjectProperty'].includes(node.type);
   if (isKeyed) return keyName(node.key);
-  if (node.type === 'VariableDeclarator') return node.id?.type === 'Identifier' ? node.id.name : null;
+  const isVariableDeclarator = node.type === 'VariableDeclarator';
+  if (isVariableDeclarator) {
+    const hasIdentifierId = node.id?.type === 'Identifier';
+    return hasIdentifierId ? node.id.name : null;
+  }
   return node.id?.name ?? null;
 };
 
@@ -55,7 +59,8 @@ const rangeNode = (nodePath) => {
 
 const matchesQuery = (segments, containers, name) => {
   const last = segments[segments.length - 1];
-  if (last !== name) return false;
+  const isDifferentName = last !== name;
+  if (isDifferentName) return false;
   let cursor = 0;
   for (const segment of segments.slice(0, -1)) {
     const found = containers.indexOf(segment, cursor);
@@ -78,7 +83,8 @@ const tryParse = (source) => {
   try {
     return parseBabel(source.code, source.lang, { errorRecovery: true });
   } catch (err) {
-    if (process.env.CHEMX_DEBUG) process.stderr.write(`[symbol-locator] parse failed: ${err.message}\n`);
+    const isDebugEnabled = Boolean(process.env.CHEMX_DEBUG);
+    if (isDebugEnabled) process.stderr.write(`[symbol-locator] parse failed: ${err.message}\n`);
     return null;
   }
 };
