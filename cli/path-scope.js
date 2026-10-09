@@ -1,5 +1,24 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { ruleTree } from './rules.js';
+
+const validatePathTarget = (targetPath) => {
+  const isMissing = !targetPath;
+  const isNonString = typeof targetPath !== 'string';
+  const gate = ruleTree({
+    input: {
+      invalidType: isMissing || isNonString,
+      hasNullByte: () => targetPath.includes('\0')
+    }
+  }, { failFast: true });
+
+  const hasValidationError = !gate.ok;
+  if (hasValidationError) {
+    const isNullByteFailure = gate.first === 'input.hasNullByte';
+    if (isNullByteFailure) throw new Error('Null byte detected in path.');
+    throw new Error('A valid file path string is required.');
+  }
+};
 
 /**
  * Resolves a target path against a base directory and ensures it does not escape the boundary.
@@ -10,13 +29,7 @@ import path from 'node:path';
  * @throws {Error} If path contains null bytes, attempts traversal, or escapes baseDir.
  */
 export const resolveSafePath = (targetPath, baseDir = process.cwd()) => {
-  if (!targetPath || typeof targetPath !== 'string') {
-    throw new Error('A valid file path string is required.');
-  }
-
-  if (targetPath.includes('\0')) {
-    throw new Error('Null byte detected in path.');
-  }
+  validatePathTarget(targetPath);
 
   const realBase = fs.existsSync(baseDir) ? fs.realpathSync(baseDir) : path.resolve(baseDir);
   const resolvedTarget = path.isAbsolute(targetPath)
@@ -92,7 +105,8 @@ export const isPathTraversal = (targetPath, baseDir = process.cwd()) => {
     const resolved = resolveSafePath(targetPath, baseDir);
     const realBase = fs.existsSync(baseDir) ? fs.realpathSync(baseDir) : path.resolve(baseDir);
     const rel = path.relative(realBase, resolved);
-    if (rel === '') return true;
+    const isExactBaseMatch = rel === '';
+    if (isExactBaseMatch) return true;
     return false;
   } catch {
     return true;
@@ -104,7 +118,8 @@ const hasDotNetProject = (cwd) => {
     const rootEntries = fs.readdirSync(cwd, { withFileTypes: true });
     const hasSln = rootEntries.some((e) => e.isFile() && e.name.endsWith('.sln'));
     const hasRootCsproj = rootEntries.some((e) => e.isFile() && e.name.endsWith('.csproj'));
-    if (hasSln || hasRootCsproj) return true;
+    const hasDotNetRootProject = hasSln || hasRootCsproj;
+    if (hasDotNetRootProject) return true;
 
     return rootEntries.some((e) => {
       const isCandidateDir = e.isDirectory() && e.name !== 'src' && e.name !== 'node_modules' && !e.name.startsWith('.');
@@ -113,12 +128,14 @@ const hasDotNetProject = (cwd) => {
       try {
         return fs.readdirSync(subPath).some((f) => f.endsWith('.csproj'));
       } catch (err) {
-        if (process.env.DEBUG) process.stderr.write(`[debug] Read failed: ${err?.message}\n`);
+        const isDebugActive = Boolean(process.env.DEBUG);
+        if (isDebugActive) process.stderr.write(`[debug] Read failed: ${err?.message}\n`);
         return false;
       }
     });
   } catch (err) {
-    if (process.env.DEBUG) process.stderr.write(`[debug] Scan failed: ${err?.message}\n`);
+    const isDebugActive = Boolean(process.env.DEBUG);
+    if (isDebugActive) process.stderr.write(`[debug] Scan failed: ${err?.message}\n`);
     return false;
   }
 };
@@ -130,9 +147,11 @@ export const resolveTargetDir = (customOrFlag = null, dirFlag = null, cwd = proc
   }
 
   const effectiveFlag = dirFlag || (customOrFlag?.startsWith('--dir=') ? customOrFlag : null);
-  if (effectiveFlag) {
+  const hasEffectiveFlag = Boolean(effectiveFlag);
+  if (hasEffectiveFlag) {
     const [, flagValue] = effectiveFlag.split('=');
-    if (flagValue !== undefined) {
+    const hasFlagValue = flagValue !== undefined;
+    if (hasFlagValue) {
       return flagValue;
     }
   }

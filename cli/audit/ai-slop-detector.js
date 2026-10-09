@@ -1,4 +1,5 @@
 import * as t from '@babel/types';
+import { ruleTree } from '../rules.js';
 import { RULE_REGISTRY } from './rules-registry.js';
 import {
   isComponentPath,
@@ -266,28 +267,35 @@ export const createAiSlopVisitors = ({ relativePath, violations }) => {
     },
 
     VariableDeclarator(astPath) {
-      if (!isComponentFile) return;
       const idName = astPath.node.id?.name?.toLowerCase();
       const isReinventedName = Boolean(idName && REINVENTED_UTILS.has(idName));
-      if (!isReinventedName) return;
-
       const initNode = astPath.node.init;
-      const isFunction = t.isArrowFunctionExpression(initNode) || t.isFunctionExpression(initNode);
-      if (!isFunction) return;
+      const isFunction = Boolean(initNode && (t.isArrowFunctionExpression(initNode) || t.isFunctionExpression(initNode)));
+
+      const gate = ruleTree({
+        declarator: {
+          notComponent: !isComponentFile,
+          notReinvented: !isReinventedName,
+          notFunction: !isFunction
+        }
+      }, { failFast: true });
+
+      const isReinvented = gate.ok;
+      if (!isReinvented) return;
 
       const line = astPath.node.loc?.start.line || 1;
-        const meta = RULE_REGISTRY.AI_SLOP_UTILITY_REINVENTION;
-        violations.push({
-          filePath: relativePath,
-          line,
-          column: astPath.node.loc?.start.column || 1,
-          hazard: `Inline utility reinvention "${astPath.node.id.name}" in component capsule`,
-          rule: 'AI_SLOP_UTILITY_REINVENTION',
-          severity: meta.severity,
-          pillar: meta.pillar,
-          directive: meta.directive,
-          isAiSlop: true
-        });
+      const meta = RULE_REGISTRY.AI_SLOP_UTILITY_REINVENTION;
+      violations.push({
+        filePath: relativePath,
+        line,
+        column: astPath.node.loc?.start.column || 1,
+        hazard: `Inline utility reinvention "${astPath.node.id.name}" in component capsule`,
+        rule: 'AI_SLOP_UTILITY_REINVENTION',
+        severity: meta.severity,
+        pillar: meta.pillar,
+        directive: meta.directive,
+        isAiSlop: true
+      });
     }
   };
 };

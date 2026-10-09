@@ -8,6 +8,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { ruleTree } from './rules.js';
 import { toPascalCase } from './generator-templates/naming.js';
 import { buildComponentSpec } from './generator-templates/specs.js';
 import { buildTypesIndex } from './generator-templates/types.js';
@@ -143,17 +144,34 @@ const verifyLossless = (plan, files, names) => {
   if (isLossy) throw new Error(`Explode refused (would lose or break code): ${problems.join('; ')}. Nothing was changed.`);
 };
 
+const validateExplodeTarget = (absPath, targetFilePath, ext) => {
+  const isMissing = !fs.existsSync(absPath);
+  const isDirectory = () => fs.statSync(absPath).isDirectory();
+  const isSfc = () => ext === 'vue' || ext === 'svelte';
+
+  const gate = ruleTree({
+    target: {
+      missing: isMissing,
+      directory: isDirectory,
+      sfc: isSfc
+    }
+  }, { failFast: true });
+
+  const hasTargetError = !gate.ok;
+  if (hasTargetError) {
+    const isDirectoryFailure = gate.first === 'target.directory';
+    if (isDirectoryFailure) throw new Error(`Target ${targetFilePath} is already a directory capsule.`);
+    const isSfcFailure = gate.first === 'target.sfc';
+    if (isSfcFailure) throw new Error(`Explode refused: .${ext} files are not supported until SFC parsing lands (plan B). Nothing was changed.`);
+    throw new Error(`Target file not found at ${absPath}`);
+  }
+};
+
 export const explodeCapsule = (targetFilePath, options = {}) => {
   const cwd = options.cwd || process.cwd();
   const absPath = resolveSafePath(targetFilePath, cwd);
-  const isMissing = !fs.existsSync(absPath);
-  if (isMissing) throw new Error(`Target file not found at ${absPath}`);
-  const isDirectory = fs.statSync(absPath).isDirectory();
-  if (isDirectory) throw new Error(`Target ${targetFilePath} is already a directory capsule.`);
-
   const ext = path.extname(absPath).replace('.', '');
-  const isSfc = ext === 'vue' || ext === 'svelte';
-  if (isSfc) throw new Error(`Explode refused: .${ext} files are not supported until SFC parsing lands (plan B). Nothing was changed.`);
+  validateExplodeTarget(absPath, targetFilePath, ext);
   assertImportersSurvive(fs.realpathSync(absPath), fs.realpathSync(cwd));
 
   const capsuleName = path.basename(absPath).replace(/\.[^.]+$/, '');

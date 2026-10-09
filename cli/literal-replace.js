@@ -1,3 +1,5 @@
+import { ruleTree } from './rules.js';
+
 /**
  * Literal search-and-replace for `chemx patch`.
  *
@@ -32,6 +34,42 @@ const notFoundError = (filePath, isCrlfFile) => {
   return new Error(`Target content not found in ${filePath}.${eolHint} Verify indentation and exact characters (read the lines first; chemx read prints N| line numbers).`);
 };
 
+const validateTarget = (target, filePath) => {
+  const isNonString = typeof target !== 'string';
+  const gate = ruleTree({
+    target: {
+      invalidType: isNonString,
+      empty: () => target.trim() === ''
+    }
+  }, { failFast: true });
+
+  const isInvalid = !gate.ok;
+  if (isInvalid) {
+    throw new Error(`Refusing to patch ${filePath}: the target is empty or whitespace-only. Pass the exact text to replace.`);
+  }
+};
+
+const validateMatches = (indexes, content, filePath, isCrlfFile, allowMultiple) => {
+  const hasNoMatches = indexes.length === 0;
+  const isMultiple = indexes.length > 1;
+  const gate = ruleTree({
+    search: {
+      notFound: hasNoMatches,
+      ambiguous: () => isMultiple && !allowMultiple
+    }
+  }, { failFast: true });
+
+  const hasSearchError = !gate.ok;
+  if (hasSearchError) {
+    const isAmbiguous = gate.first === 'search.ambiguous';
+    if (isAmbiguous) {
+      const lines = indexes.map((idx) => lineOfIndex(content, idx));
+      throw new Error(`Target content found multiple times in ${filePath}: ${indexes.length} matches at lines ${lines.join(', ')}. Extend the target to make it unique, or pass --multiple / allowMultiple to replace all.`);
+    }
+    throw notFoundError(filePath, isCrlfFile);
+  }
+};
+
 /**
  * @param {string} content File content.
  * @param {string} target Exact text to find.
@@ -41,10 +79,7 @@ const notFoundError = (filePath, isCrlfFile) => {
  */
 export const replaceLiteral = (content, target, replacement, options = {}) => {
   const filePath = options.filePath || 'file';
-  const isBlankTarget = typeof target !== 'string' || target.trim() === '';
-  if (isBlankTarget) {
-    throw new Error(`Refusing to patch ${filePath}: the target is empty or whitespace-only. Pass the exact text to replace.`);
-  }
+  validateTarget(target, filePath);
 
   const isCrlfFile = usesCrlf(content);
   const shouldNormalizeEol = isCrlfFile && hasBareLf(target) && !content.includes(target);
@@ -52,14 +87,9 @@ export const replaceLiteral = (content, target, replacement, options = {}) => {
   const effectiveReplacement = shouldNormalizeEol ? toCrlf(replacement) : replacement;
 
   const indexes = findAll(content, effectiveTarget);
-  const isNotFound = indexes.length === 0;
-  if (isNotFound) throw notFoundError(filePath, isCrlfFile);
+  validateMatches(indexes, content, filePath, isCrlfFile, options.allowMultiple);
 
   const lines = indexes.map((idx) => lineOfIndex(content, idx));
-  const isAmbiguous = indexes.length > 1 && !options.allowMultiple;
-  if (isAmbiguous) {
-    throw new Error(`Target content found multiple times in ${filePath}: ${indexes.length} matches at lines ${lines.join(', ')}. Extend the target to make it unique, or pass --multiple / allowMultiple to replace all.`);
-  }
 
   let result = '';
   let cursor = 0;

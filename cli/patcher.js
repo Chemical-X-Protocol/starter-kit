@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { ruleTree } from './rules.js';
 import { syncSingleFileIndex } from './search.js';
 import { resolveSafePath } from './path-scope.js';
 import { replaceLiteral } from './literal-replace.js';
@@ -14,6 +15,26 @@ const syncIndex = (absPath, cwd) => {
     return Boolean(syncSingleFileIndex(absPath, cwd));
   } catch {
     return false;
+  }
+};
+
+const validatePatchParams = (params, targetContent, replacementContent) => {
+  const hasBlocks = Array.isArray(params.blocks) && params.blocks.length > 0;
+  const isMissingTarget = targetContent === undefined || targetContent === null;
+  const isMissingReplacement = replacementContent === undefined || replacementContent === null;
+
+  const gate = ruleTree({
+    params: {
+      missingTarget: !hasBlocks && isMissingTarget,
+      missingReplacement: () => !hasBlocks && isMissingReplacement
+    }
+  }, { failFast: true });
+
+  const hasParamError = !gate.ok;
+  if (hasParamError) {
+    const isTargetFailure = gate.first === 'params.missingTarget';
+    if (isTargetFailure) throw new Error('targetContent (or blocks) is required for patching');
+    throw new Error('replacementContent is required for patching');
   }
 };
 
@@ -42,10 +63,7 @@ export const patchFile = (targetPath, params = {}) => {
   } = params;
 
   const hasBlocks = Array.isArray(params.blocks) && params.blocks.length > 0;
-  const isMissingTarget = !hasBlocks && (targetContent === undefined || targetContent === null);
-  if (isMissingTarget) throw new Error('targetContent (or blocks) is required for patching');
-  const isMissingReplacement = !hasBlocks && (replacementContent === undefined || replacementContent === null);
-  if (isMissingReplacement) throw new Error('replacementContent is required for patching');
+  validatePatchParams(params, targetContent, replacementContent);
 
   const resolvedPath = resolveSafePath(targetPath, cwd);
   const isMissingFile = !fs.existsSync(resolvedPath);

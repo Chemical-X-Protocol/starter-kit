@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { ruleTree } from './rules.js';
 import { hasGum, gumChoose, gumInput, promptQuestion } from './terminal.js';
 import { buildPreCommitHookScript, buildGitHubWorkflowScript } from './installer-templates.js';
 import { installAllMcpConfigs } from './mcp/installer.js';
@@ -219,6 +220,45 @@ export const planWizardTargets = (targetChoice = '1') => {
   };
 };
 
+const dispatchWizardChoice = async (targetChoice, targets, targetDir) => {
+  const isCancelled = Boolean(targetChoice?.includes('Cancel')) || targetChoice === '7';
+  const isPillarsOnly = Boolean(targetChoice?.includes('Pillars & Agent Steering')) || targetChoice === '3';
+  const isQueryOnly = Boolean(targetChoice?.includes('Query Index only')) || targetChoice === '4';
+
+  const gate = ruleTree({
+    wizard: {
+      cancelled: isCancelled,
+      mcpOnly: Boolean(targets.isMcpOnly),
+      pillarsOnly: isPillarsOnly,
+      queryOnly: isQueryOnly
+    }
+  }, { failFast: true });
+
+  const hasSpecialAction = !gate.ok;
+  if (!hasSpecialAction) return false;
+
+  const handlers = {
+    'wizard.cancelled': () => true,
+    'wizard.mcpOnly': () => {
+      installAllMcpConfigs(targetDir, { silent: false, includeHome: targets.includeHome });
+      return true;
+    },
+    'wizard.pillarsOnly': async () => {
+      await runPillarsWizard(['--write'], targetDir);
+      return true;
+    },
+    'wizard.queryOnly': async () => {
+      process.stdout.write('\n\x1b[1mSetting up the query index for "chemx q"...\x1b[0m\n');
+      await installAgentSearchConfig(targetDir);
+      process.stdout.write('\n\x1b[1m\x1b[32m✔ Query index ready: agents can run "chemx q".\x1b[0m\n\n');
+      return true;
+    }
+  };
+
+  const handler = handlers[gate.first];
+  return handler ? await handler() : false;
+};
+
 export const runInstallWizard = async (targetDir = '.') => {
   const isGit = Boolean(resolveGitHooksDir(targetDir));
   process.stdout.write('\n\x1b[1m\x1b[38;2;98;201;255mChemical X: Architecture Guardrail & Query Installer\x1b[0m\n\n');
@@ -233,28 +273,10 @@ export const runInstallWizard = async (targetDir = '.') => {
         '7. Cancel'
       ])
     : await promptQuestion('Select target: [1] All, [2] MCP, [3] Pillars Wizard, [4] Query Index, [5] Hook, [6] CI, [7] Cancel (default: 1): ');
-  const isCancelled = Boolean(targetChoice?.includes('Cancel')) || targetChoice === '7';
-  if (isCancelled) return;
 
   const targets = planWizardTargets(targetChoice);
-  if (targets.isMcpOnly) {
-    installAllMcpConfigs(targetDir, { silent: false, includeHome: targets.includeHome });
-    return;
-  }
-
-  const isPillarsOnly = targetChoice.includes('Pillars & Agent Steering') || targetChoice === '3';
-  if (isPillarsOnly) {
-    await runPillarsWizard(['--write'], targetDir);
-    return;
-  }
-
-  const isQueryOnly = targetChoice.includes('Query Index only') || targetChoice === '4';
-  if (isQueryOnly) {
-    process.stdout.write('\n\x1b[1mSetting up the query index for "chemx q"...\x1b[0m\n');
-    await installAgentSearchConfig(targetDir);
-    process.stdout.write('\n\x1b[1m\x1b[32m✔ Query index ready: agents can run "chemx q".\x1b[0m\n\n');
-    return;
-  }
+  const isHandled = await dispatchWizardChoice(targetChoice, targets, targetDir);
+  if (isHandled) return;
 
   const minGrade = (hasGum() ? gumInput('Minimum required Grade [A+, A, B, C, D] (default: B):', 'B') : await promptQuestion('Minimum required Grade [default: B]: ')) || 'B';
   const minScore = parseInt((hasGum() ? gumInput('Minimum required Score [0-100] (default: 80):', '80') : await promptQuestion('Minimum required Score [default: 80]: ')) || '80', 10);
