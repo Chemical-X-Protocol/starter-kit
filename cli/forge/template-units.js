@@ -104,13 +104,16 @@ export const collectTemplateUnits = (roots, { minMass = TMPL_MIN_MASS } = {}) =>
 /** tmpl units of a Vue SFC template AST (sfc.template.ast). */
 export const collectVueTemplateUnits = (templateAst, options) => collectTemplateUnits(vueRootElements(templateAst), options);
 
-/** tmpl units of the outermost JSX elements in a Babel AST; source is the parsed code. */
-export const collectJsxTemplateUnits = (ast, source, options) => {
+/** The outermost JSX elements of a Babel AST, normalized, in traversal order; source is the parsed code. */
+export const jsxRootElements = (ast, source) => {
   const roots = [];
   const collectRoot = (path) => {
     const isNested = JSX_ROOT_PARENTS.has(path.parent.type);
     if (!isNested) roots.push(normalizeJsxElement(path.node, source));
   };
   traverse(ast, { JSXElement: collectRoot, JSXFragment: collectRoot });
-  return collectTemplateUnits(roots, options);
+  return roots;
 };
+
+/** tmpl units of the outermost JSX elements in a Babel AST; source is the parsed code. */
+export const collectJsxTemplateUnits = (ast, source, options) => collectTemplateUnits(jsxRootElements(ast, source), options);

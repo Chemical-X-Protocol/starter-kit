@@ -1,11 +1,14 @@
 // `chemx patterns --score=<labels.json>`: score a detector against the content-anchored ground truth.
 // Default detector is the legacy audit pattern detector (the recorded baseline); `--input=<groups.json>` scores
-// any other detector's groups ([{ id, path, occurrences: [{ file, startLine, endLine }] }]).
+// any other detector's groups ([{ id, path, occurrences: [{ file, startLine, endLine }] }]); `--forge` scores the
+// Forge grouping (cli/forge/forge-groups.js) over the ledger as it stands (refresh it with --sync first).
 import fs from 'node:fs';
 import path from 'node:path';
 import { handleQueryPatterns } from '../mcp/tools-patterns.js';
 import { loadLabels, resolveLabels, staleAnchorIds, mismatchedAnchorIds } from './gt-resolve.js';
 import { scoreGroups } from './gt-score.js';
+import { runForgeGroups } from '../forge/forge-groups.js';
+import { toScorerGroups } from '../forge/group-shape.js';
 
 const flagValue = (args, name) => args.find((arg) => arg.startsWith(`--${name}=`))?.slice(name.length + 3);
 
@@ -19,7 +22,11 @@ export const legacyGroups = (candidates) => candidates.map((candidate) => ({
 // dir is omitted when not given, so the scored scan scope is the same default as plain `chemx patterns`.
 const readLegacy = (dir, cwd) => legacyGroups(handleQueryPatterns({ ...(dir ? { dir } : {}), compact: false }, cwd).candidates);
 
+const readForge = (cwd) => toScorerGroups(runForgeGroups(cwd)?.groups ?? []);
+
 const readGroups = (args, cwd) => {
+  const isForge = args.includes('--forge');
+  if (isForge) return readForge(cwd);
   const input = flagValue(args, 'input');
   const dir = flagValue(args, 'dir') ?? args.find((arg) => !arg.startsWith('-'));
   return input ? JSON.parse(fs.readFileSync(path.resolve(cwd, input), 'utf-8')) : readLegacy(dir, cwd);
