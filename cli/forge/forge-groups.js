@@ -21,6 +21,7 @@ import { createBodyEndReader } from './body-ends.js';
 import { createLggStage } from './lgg-stage.js';
 import { rankGroups } from './rank.js';
 import { readGroupCache, readSuppressions, writeGroupRun, suppressionKeyOf } from './group-store.js';
+import { runKeyOf, scopeKeyOf, readCachedRun, writeCachedRun, isStoredRun, markStoredRun } from './run-cache.js';
 
 export const PATH_ORDER = Object.freeze(['N1-fp1', 'N1-fp2', 'N1-fp3', 'N2', 'N3', 'W', 'T']);
 
@@ -156,19 +157,40 @@ const fileReaderAt = (root) => (relativePath) => {
   }
 };
 
+const storeRun = (db, result, options, runKey) => {
+  const everyGroup = [...result.groups, ...(options.includeIdioms ? [] : result.idioms), ...result.suppressed, ...result.rejected, ...result.refined];
+  writeGroupRun(db, { groups: everyGroup, unifyDecisions: result.unifyDecisions, shapeDecisions: result.shapeDecisions });
+  markStoredRun(db, runKey);
+};
+
+// Callers that swap the unify step, skip judging or bring their own caches compute a run of their own.
+const isCacheableRun = (options) => options.unify === undefined && options.judge !== false && options.cache === undefined && options.runCache !== false;
+
 /**
  * Groups the project's ledger as it stands (run `chemx patterns --sync` first to refresh it), reusing
- * and then replacing the stored run (group-store.js). options.store false leaves index.db unwritten.
+ * and then replacing the stored run (group-store.js). A run whose ledger, member files, code and options
+ * are unchanged is read back whole from run-cache.js (result.runCache 'hit'; 'miss' when it was computed
+ * and cached, 'off' when it could not be keyed). options.store false leaves index.db unwritten.
  * null without a db.
  */
 export const runForgeGroups = (cwd = process.cwd(), options = {}) => {
   const db = openIndexDb(cwd);
   if (!db) return null;
   const root = resolveIndexRoot(cwd);
-  const stored = { cache: readGroupCache(db), suppressions: readSuppressions(db) };
-  const result = buildForgeGroups(readLedger(db, options), { readFile: fileReaderAt(root), ...stored, ...options });
+  const suppressions = readSuppressions(db);
   const isStored = options.store !== false;
-  const everyGroup = [...result.groups, ...(options.includeIdioms ? [] : result.idioms), ...result.suppressed, ...result.rejected, ...result.refined];
-  if (isStored) writeGroupRun(db, { groups: everyGroup, unifyDecisions: result.unifyDecisions, shapeDecisions: result.shapeDecisions });
-  return result;
+  const scopeKey = scopeKeyOf(options);
+  const runKey = isCacheableRun(options) ? runKeyOf(db, root, options, suppressions) : null;
+  const cached = runKey ? readCachedRun(db, scopeKey, runKey) : null;
+  if (cached) {
+    const needsStore = isStored && !isStoredRun(db, runKey);
+    if (needsStore) storeRun(db, cached, options, runKey);
+    return { ...cached, runCache: 'hit' };
+  }
+  const stored = { cache: readGroupCache(db), suppressions };
+  const result = buildForgeGroups(readLedger(db, options), { readFile: fileReaderAt(root), ...stored, ...options });
+  if (isStored) storeRun(db, result, options, runKey);
+  const isKeyed = runKey !== null && isStored;
+  if (isKeyed) writeCachedRun(db, scopeKey, runKey, result);
+  return { ...result, runCache: isKeyed ? 'miss' : 'off' };
 };

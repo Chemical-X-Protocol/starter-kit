@@ -10,6 +10,7 @@
 //   pattern_suppressions   `chemx patterns reject`: a group key (stable under line drift) and its reason
 //   pattern_unify_cache    W merge decisions by instance pair (content-derived keys)
 //   pattern_shape_cache    drift root shapes by unit (kind and content-derived key)
+//   pattern_run_cache      the last whole-run result per scope under its run key (run-cache.js)
 // Later phases add their tables (blueprints, heal runs, library) here.
 import { debugNote } from '../search-debug.js';
 
@@ -100,6 +101,13 @@ const TABLES_SQL = `
   CREATE TABLE IF NOT EXISTS pattern_shape_cache (
     row_key TEXT PRIMARY KEY,
     shape TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS pattern_run_cache (
+    scope_key TEXT PRIMARY KEY,
+    run_key TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    created_at INTEGER NOT NULL
   );
 `;
 
