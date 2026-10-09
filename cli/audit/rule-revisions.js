@@ -7,6 +7,10 @@
  * A ratchet baseline recorded under an older revision of a rule does not gate that
  * rule: its current count is adopted as the new baseline instead of reported as a
  * regression (findings: ratchet-not-rule-versioned, self-audit-ratchet-red).
+ *
+ * rule-revisions.spec.js snapshots the RULE_REGISTRY ids per RULESET_VERSION, so adding
+ * a rule without a bump fails the suite. At runtime a baseline also records every
+ * registered rule's revision, so a rule it never saw is adopted, not a regression.
  */
 export const RULESET_VERSION = 3;
 

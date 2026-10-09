@@ -1,13 +1,17 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { RULESET_VERSION, resolveRuleRevision } from './rule-revisions.js';
+import { RULE_REGISTRY } from './rules-registry.js';
 
 /**
  * chemx-ratchet.json, format version 2:
- *   { version: 2, ruleset, scopes: { <scope>: { ruleset, rules: { RULE: count }, revisions: { RULE: rev } } } }
+ *   { version: 2, ruleset, scopes: { <scope>: { ruleset, allRules, rules: { RULE: count }, revisions: { RULE: rev } } } }
  * Format version 1 ({ version: 1, scope, rules }) is read as one scope recorded under ruleset 1.
  * A rule whose current revision is newer than the revision its baseline was recorded
  * under is adopted (its count becomes the baseline) instead of failing the gate.
+ * `allRules: true` means `revisions` lists every rule that existed at recording time,
+ * so a registered rule missing from it is new and is adopted even if nobody bumped its revision.
+ * Every full scan upgrades the scope to the current rule set (see upgradeScope).
  */
 export const RATCHET_FILE = 'chemx-ratchet.json';
 const RATCHET_VERSION = 2;
@@ -44,7 +48,10 @@ export const readRatchet = (projectRoot) => {
   }
 };
 
-const currentRevisions = (rules) => Object.fromEntries(Object.keys(rules).map((rule) => [rule, resolveRuleRevision(rule)]));
+const currentRevisions = (rules) => {
+  const names = new Set([...Object.keys(RULE_REGISTRY), ...Object.keys(rules)]);
+  return sortKeys(Object.fromEntries([...names].map((rule) => [rule, resolveRuleRevision(rule)])));
+};
 
 const persistRatchet = (projectRoot, ratchet) => {
   const scopes = Object.fromEntries(Object.entries(ratchet.scopes).sort(([a], [b]) => a.localeCompare(b)));
@@ -62,24 +69,51 @@ const readExistingOrEmpty = (projectRoot) => {
 export const writeRatchet = (projectRoot, { scope, violations }) => {
   const ratchet = readExistingOrEmpty(projectRoot);
   const rules = sortKeys(countViolationsByRule(violations));
-  ratchet.scopes[scope] = { ruleset: RULESET_VERSION, rules, revisions: sortKeys(currentRevisions(rules)) };
+  ratchet.scopes[scope] = { ruleset: RULESET_VERSION, allRules: true, rules, revisions: currentRevisions(rules) };
   persistRatchet(projectRoot, ratchet);
   return ratchet.scopes[scope];
 };
 
-/** Merges adopted rule counts into the recorded scope (the "new rule baseline"). */
+/**
+ * After a full scan every rule has been evaluated under its current revision: adopted
+ * counts become the baseline and every other rule (including those with 0 hits) is
+ * now recorded at its current revision, so its next increase is gated.
+ */
+const upgradeScope = (entry, adopted) => {
+  const rules = { ...entry.rules };
+  for (const { rule, current } of adopted) rules[rule] = current;
+  return {
+    ruleset: Math.max(entry.ruleset ?? 1, RULESET_VERSION),
+    allRules: true,
+    rules: sortKeys(rules),
+    revisions: currentRevisions(rules)
+  };
+};
+
+/** True when the scope must be rewritten after this scan (adoptions or an older rule set). */
+export const needsScopeUpgrade = (entry, adopted = []) => {
+  if (!entry) return false;
+  const upgraded = upgradeScope(entry, adopted);
+  const isSame = JSON.stringify(upgraded) === JSON.stringify({ ruleset: entry.ruleset, allRules: entry.allRules, rules: entry.rules, revisions: entry.revisions });
+  return !isSame;
+};
+
+/** Records adopted rule counts and the current rule set for one scope (the "new rule baseline"). */
 export const recordAdoptedRules = (projectRoot, { scope, adopted }) => {
   const ratchet = readExistingOrEmpty(projectRoot);
   const entry = ratchet.scopes[scope];
   if (!entry) return null;
-  for (const { rule, current, revision } of adopted) {
-    entry.rules = sortKeys({ ...entry.rules, [rule]: current });
-    entry.revisions = sortKeys({ ...(entry.revisions || {}), [rule]: revision });
-  }
+  ratchet.scopes[scope] = upgradeScope(entry, adopted);
   return persistRatchet(projectRoot, ratchet);
 };
 
-const recordedRevision = (entry, rule) => entry.revisions?.[rule] ?? entry.ruleset ?? 1;
+const recordedRevision = (entry, rule) => {
+  const recorded = entry.revisions?.[rule];
+  const isRecorded = recorded !== undefined;
+  if (isRecorded) return recorded;
+  const isNewRegisteredRule = entry.allRules === true && Boolean(RULE_REGISTRY[rule]);
+  return isNewRegisteredRule ? 0 : (entry.ruleset ?? 1);
+};
 
 const compareToBaseline = (entry, violations) => {
   const current = countViolationsByRule(violations);
@@ -114,5 +148,6 @@ export const evaluateRatchet = (readResult, { scope, violations }) => {
   }
   const { regressions, adopted } = compareToBaseline(entry, violations);
   const hasRegressions = regressions.length > 0;
-  return { status: hasRegressions ? 'fail' : 'pass', regressions, adopted, message: null };
+  const isStale = needsScopeUpgrade(entry, adopted);
+  return { status: hasRegressions ? 'fail' : 'pass', regressions, adopted, isStale, message: null };
 };

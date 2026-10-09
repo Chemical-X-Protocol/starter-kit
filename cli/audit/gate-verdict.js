@@ -36,7 +36,8 @@ const PARTIAL_SCAN_EVAL = {
 
 const persistAdoption = (projectRoot, scope, ratchetEval) => {
   const hasAdopted = ratchetEval.adopted?.length > 0;
-  if (!hasAdopted) return;
+  const shouldPersist = hasAdopted || ratchetEval.isStale === true;
+  if (!shouldPersist) return;
   try {
     recordAdoptedRules(projectRoot, { scope, adopted: ratchetEval.adopted });
   } catch (err) {
