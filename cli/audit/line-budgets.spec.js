@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { auditCode } from './rules.js';
-import { countLines, getLineBudgets, resolveFileTier, FILE_BUDGET } from './line-budgets.js';
+import { countLines, getLineBudgets, lineLimitFor, resolveFileTier, FILE_BUDGET } from './line-budgets.js';
 import { getProfileDefaults } from '../config/profiles.js';
 
 const rulesAt = (violations, rule) => violations.filter((v) => v.rule === rule);
@@ -54,4 +54,25 @@ test('one source of truth: profile budgets match the AGENTS.md and README policy
   assert.match(agents, new RegExp(`above ${FILE_BUDGET.warn} lines.*${FILE_BUDGET.high.toLocaleString('en-US')}.*${FILE_BUDGET.critical.toLocaleString('en-US')}`));
   const readme = fs.readFileSync(new URL('../../README.md', import.meta.url), 'utf-8');
   assert.doesNotMatch(readme, /exceeding 100, 500, or 1,000 lines/);
+});
+
+test('enforce-file-length under pragmatic defaults holds molecules to the atomic-strict 100 (ported from afdd8af)', () => {
+  const budgets = getLineBudgets({ ...getProfileDefaults('pragmatic'), enforceFileLength: true });
+  assert.equal(budgets.profile, 'atomic-strict');
+  assert.equal(budgets.molecule, 100);
+  assert.equal(budgets.isMoleculeHardCap, true);
+});
+
+test('the molecule budget never exceeds the 500-line file bound (ported from 98c65c0)', () => {
+  assert.equal(getLineBudgets({ ...getProfileDefaults('pragmatic'), maxLineCountWarning: 800 }).molecule, FILE_BUDGET.warn);
+  assert.equal(getLineBudgets(getProfileDefaults('loose')).molecule, 500);
+  assert.equal(lineLimitFor('src/molecules/m-x.ts', { ...getProfileDefaults('pragmatic'), maxLineCountWarning: 800 }), 500);
+});
+
+test('a non-positive or non-numeric molecule warning falls back to the profile default (ported from 94f8c6f)', () => {
+  for (const bad of ['abc', 0, -5, '', null]) {
+    assert.equal(getLineBudgets({ ...getProfileDefaults('pragmatic'), maxLineCountWarning: bad }).molecule, 250, `pragmatic ${bad}`);
+    assert.equal(getLineBudgets({ ...getProfileDefaults('loose'), maxLineCountWarning: bad }).molecule, 500, `loose ${bad}`);
+  }
+  assert.equal(getLineBudgets({ ...getProfileDefaults('pragmatic'), maxLineCountWarning: '180' }).molecule, 180);
 });
