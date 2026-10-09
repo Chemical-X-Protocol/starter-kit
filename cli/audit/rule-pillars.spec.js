@@ -38,3 +38,14 @@ test('the pillar selection in .chemx/config.json is loaded next to .chemxrc', ()
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('violations carry the audit category and the product pillar as separate keys', () => {
+  const big = Array.from({ length: 600 }, (_, i) => `export const v${i} = ${i};`).join('\n') + '\n';
+  const budget = auditCode(big, '/p/src/big.ts', 'src/big.ts').find((v) => v.rule === 'LINE_BUDGET_FILE');
+  assert.equal(budget.productPillar, 'lineBudgets');
+  assert.equal(typeof budget.category, 'string');
+  assert.equal(budget.pillar, budget.category, 'pillar stays as a deprecated alias of category');
+  const ternary = auditCode('export const p = (a, b) => (a ? 1 : b ? 2 : 3);\n', '/p/src/t.ts', 'src/t.ts').find((v) => v.rule === 'CONTROL_FLOW_NESTED_TERNARY');
+  assert.equal(ternary.productPillar, null);
+  assert.equal(ternary.category, 'Control Flow & Boolean Logic');
+});

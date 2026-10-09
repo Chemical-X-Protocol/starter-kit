@@ -30,3 +30,14 @@ export const resolvePillarDisabledRules = (pillarSelection) => {
   }
   return disabled;
 };
+
+/**
+ * Output taxonomy: `category` is the audit category (one of the 11 report groupings),
+ * `productPillar` the product pillar key this rule enforces (null when unmapped).
+ * `pillar` is kept as a deprecated alias of `category` for existing consumers.
+ */
+export const withTaxonomy = (violation) => ({
+  ...violation,
+  category: violation.category ?? violation.pillar,
+  productPillar: RULE_PRODUCT_PILLARS[violation.rule] ?? null
+});

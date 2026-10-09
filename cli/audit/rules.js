@@ -8,6 +8,7 @@ import { isBabelParsable, getLanguageForFile } from '../languages.js';
 import { analyzeCSharpCode } from './csharp-analyzer.js';
 import { applyAuditPostFilters } from './suppressions.js';
 import { applyRuleOverrides } from './rule-overrides.js';
+import { withTaxonomy } from './rule-pillars.js';
 import { checkLineBudgets } from './budget-rules.js';
 import { auditTemplate } from './template-rules.js';
 import { checkTemplateRenderDepth } from './render-depth.js';
@@ -101,5 +102,5 @@ export const auditCode = (content, filePath, relativePath, options = {}) => {
   const config = normalizeConfig(options.config);
   const raw = collectRawViolations(content, filePath, relativePath, options, config.rules);
   const filtered = applyAuditPostFilters(raw, content.split('\n'));
-  return applyRuleOverrides(filtered, relativePath, config);
+  return applyRuleOverrides(filtered, relativePath, config).map(withTaxonomy);
 };
