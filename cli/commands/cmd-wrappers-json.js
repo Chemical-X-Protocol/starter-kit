@@ -15,6 +15,9 @@ const readJson = (fullPath) => {
   return { raw, parsed: JSON.parse(raw) };
 };
 
+// An empty section is said out loud, never printed as nothing.
+const listOrNone = (lines, what) => (lines.length > 0 ? lines.join('') : `(no ${what} in package.json)\n`);
+
 const formatPkgQuery = (pkg, query) => {
   const scripts = pkg.scripts || {};
   const deps = pkg.dependencies || {};
@@ -24,9 +27,9 @@ const formatPkgQuery = (pkg, query) => {
     const scriptLine = scriptKeys.length ? `Scripts (${scriptKeys.length}): ${scriptKeys.join(', ')}\n` : '';
     return `Package: ${pkg.name || 'unnamed'}@${pkg.version || '0.0.0'}\n${scriptLine}`;
   }
-  if (query === '-s' || query === '--scripts') return Object.entries(scripts).map(([k, v]) => `${k}: ${v}\n`).join('');
+  if (query === '-s' || query === '--scripts') return listOrNone(Object.entries(scripts).map(([k, v]) => `${k}: ${v}\n`), 'scripts');
   if (query === '-d' || query === '--deps') {
-    return [...Object.entries(deps).map(([k, v]) => `${k}: ${v}\n`), ...Object.entries(devDeps).map(([k, v]) => `[dev] ${k}: ${v}\n`)].join('');
+    return listOrNone([...Object.entries(deps).map(([k, v]) => `${k}: ${v}\n`), ...Object.entries(devDeps).map(([k, v]) => `[dev] ${k}: ${v}\n`)], 'dependencies');
   }
   if (Object.hasOwn(scripts, query)) return `${query}: ${scripts[query]}\n`;
   const version = deps[query] || devDeps[query];

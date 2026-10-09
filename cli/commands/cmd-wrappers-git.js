@@ -45,11 +45,18 @@ export const emitWrapperResult = (result, isCli) => {
 };
 
 const DIFF_LINE_BUDGET = 80;
+const NOT_A_REPO_CODE = 128;
+
+// Outside a work tree git diff silently becomes --no-index and prints ~100 lines of usage.
+const isInsideWorkTree = (cwd) => runGit(['rev-parse', '--is-inside-work-tree'], cwd).stdout.trim() === 'true';
 
 export const runDiff = async (rawArgs = [], isCli = true, cwd = process.cwd()) => {
   const subArgs = rawArgs.filter((a) => a !== 'd' && a !== 'diff');
   const isFull = subArgs.includes('--full');
   const gitArgs = subArgs.filter((a) => a !== '--full');
+  const isExplicitNoIndex = gitArgs.includes('--no-index');
+  const isOutsideRepo = !isExplicitNoIndex && !isInsideWorkTree(cwd);
+  if (isOutsideRepo) return emitWrapperResult({ output: '', code: NOT_A_REPO_CODE, error: `not a git repository: ${cwd}` }, isCli);
   tryMicroSyncModifiedFiles(cwd);
   const diff = runGit(['diff', '-U0', '--no-color', ...gitArgs], cwd);
   const isFailure = diff.code !== 0;

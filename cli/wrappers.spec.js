@@ -118,3 +118,21 @@ test('help schema: wrapper entries advertise only flags their implementation rea
     }
   }
 });
+
+test('wrappers: d outside a repository says so in one line instead of dumping git usage', async () => {
+  const bare = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-nogit-'));
+  const diff = await runDiff([], false, bare);
+  assert.notStrictEqual(diff.code, 0);
+  assert.match(diff.error, /not a git repository/);
+  assert.strictEqual(diff.error.split('\n').length, 1);
+  assert.strictEqual(diff.output, '');
+});
+
+test('wrappers: p -s and p -d name an empty section instead of printing nothing', async () => {
+  const repo = makeRepo({ 'package.json': JSON.stringify({ name: 'empty-pkg' }) });
+  const scripts = await runPkg(['-s'], false, repo);
+  const deps = await runPkg(['-d'], false, repo);
+  assert.strictEqual(scripts.code, 0);
+  assert.match(scripts.output, /no scripts/);
+  assert.match(deps.output, /no dependencies/);
+});
