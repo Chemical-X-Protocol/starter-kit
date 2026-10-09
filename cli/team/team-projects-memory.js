@@ -38,7 +38,8 @@ export const recordVerifiedLearning = (db, learning = {}) => {
 export const queryRelevantLearnings = (db, options = {}) => {
   if (!db) return [];
   const { tier, limit = 3 } = options;
-  if (tier && tier !== 'all') {
+  const hasTierFilter = Boolean(tier && tier !== 'all');
+  if (hasTierFilter) {
     return db.prepare(`
       SELECT id, tier, pattern, rule_text, rationale, verified_count, provenance_path
       FROM project_learnings
@@ -56,14 +57,16 @@ export const queryRelevantLearnings = (db, options = {}) => {
 };
 
 export const formatLearningsCard = (learnings = []) => {
-  if (!learnings.length) return '  (No compounding learnings recorded yet.)\n';
+  const isEmpty = !learnings.length;
+  if (isEmpty) return '  (No compounding learnings recorded yet.)\n';
   const lines = [''];
   lines.push('\x1b[1m\x1b[36m🧠 [Chemical X] Compounded Codebase Memory\x1b[0m');
   lines.push(`\x1b[90m${'─'.repeat(54)}\x1b[0m`);
   for (const l of learnings) {
     lines.push(`  \x1b[32m✔\x1b[0m \x1b[1m[${l.tier.toUpperCase()}]\x1b[0m \x1b[33m${l.pattern}\x1b[0m (verified ${l.verified_count}x)`);
     lines.push(`    \x1b[90mRule:\x1b[0m ${l.rule_text}`);
-    if (l.provenance_path) lines.push(`    \x1b[90mSrc:\x1b[0m  ${l.provenance_path}`);
+    const hasProvenancePath = Boolean(l.provenance_path);
+    if (hasProvenancePath) lines.push(`    \x1b[90mSrc:\x1b[0m  ${l.provenance_path}`);
   }
   lines.push(`\x1b[90m${'─'.repeat(54)}\x1b[0m\n`);
   return lines.join('\n');
