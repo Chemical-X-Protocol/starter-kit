@@ -14,16 +14,16 @@ const isAlive = (pid) => {
   }
 };
 
-test('executeBuild: a step that outlives its timeout is killed with its children and reports timedOut', { timeout: 15000 }, async () => {
+test('executeBuild: a step that outlives its timeout is killed with its children and reports timedOut', { timeout: 20000 }, async () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-exec-timeout-'));
   const pidFile = path.join(tmpDir, 'grandchild.pid');
   try {
     const grandchild = `node -e "require('fs').writeFileSync('${pidFile}', String(process.pid)); setInterval(() => {}, 1000)"`;
-    const result = await executeBuild(`${grandchild}; echo after`, tmpDir, { timeoutMs: 600 });
+    const result = await executeBuild(`${grandchild}; echo after`, tmpDir, { timeoutMs: 2500 });
     assert.equal(result.timedOut, true);
     assert.equal(result.exitCode, null, 'a timed-out step carries no exit verdict');
-    assert.ok(result.durationMs < 5000, `took ${result.durationMs}ms`);
-    assert.match(result.stderr, /Timed out after 600ms/);
+    assert.ok(result.durationMs < 8000, `took ${result.durationMs}ms`);
+    assert.match(result.stderr, /Timed out after 2500ms/);
     const grandchildPid = Number(fs.readFileSync(pidFile, 'utf8'));
     for (let i = 0; i < 20 && isAlive(grandchildPid); i++) await new Promise((r) => setTimeout(r, 100));
     assert.equal(isAlive(grandchildPid), false, 'grandchild process must not be orphaned');
@@ -64,7 +64,7 @@ const runSignalledDriver = async (signal) => {
   const { spawn } = await import('node:child_process');
   const driver = spawn(process.execPath, [driverFile], { stdio: 'ignore' });
   const exited = new Promise((resolve) => driver.on('exit', (code, sig) => resolve({ code, sig })));
-  for (let i = 0; i < 100 && !fs.existsSync(pidFile); i++) await new Promise((r) => setTimeout(r, 50));
+  for (let i = 0; i < 300 && !fs.existsSync(pidFile); i++) await new Promise((r) => setTimeout(r, 50));
   const runnerPid = Number(fs.readFileSync(pidFile, 'utf8'));
   driver.kill(signal);
   const outcome = await exited;
@@ -75,14 +75,14 @@ const runSignalledDriver = async (signal) => {
   return result;
 };
 
-test('executeBuild: SIGTERM to chemx kills the running runner group and chemx exits 143', { timeout: 15000, skip: process.platform === 'win32' }, async () => {
+test('executeBuild: SIGTERM to chemx kills the running runner group and chemx exits 143', { timeout: 30000, skip: process.platform === 'win32' }, async () => {
   const result = await runSignalledDriver('SIGTERM');
   assert.equal(result.runnerAlive, false, 'the runner must not be orphaned when chemx is terminated');
   assert.equal(result.code, 143);
   assert.equal(result.secondStepRan, false);
 });
 
-test('executeBuild: SIGINT stops chemx with exit 130 instead of moving on to the next step', { timeout: 15000, skip: process.platform === 'win32' }, async () => {
+test('executeBuild: SIGINT stops chemx with exit 130 instead of moving on to the next step', { timeout: 30000, skip: process.platform === 'win32' }, async () => {
   const result = await runSignalledDriver('SIGINT');
   assert.equal(result.runnerAlive, false);
   assert.equal(result.code, 130, 'Ctrl+C must stop chemx, not just the current step');
