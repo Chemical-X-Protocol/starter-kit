@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { toPascalCase } from './generator-templates.js';
 import { ANSI } from './theme.js';
+import { STATUS, toExitCode } from './result-status.js';
 import { runAutofix } from './audit/autofix.js';
 import { applyEdits } from './apply-edits.js';
 import { hasPreviewFlag, findUnknownFlags, unknownFlagsMessage } from './cli-args.js';
@@ -228,8 +229,11 @@ export const autoFixFile = (targetFile, options = {}) => {
 
   const result = runAutofix(absPath, options);
   return {
+    status: result.status,
+    ...(result.reason ? { reason: result.reason } : {}),
     file: path.relative(process.cwd(), absPath),
     dryRun: result.dryRun,
+    filesScanned: result.filesScanned,
     fixed: result.filesChanged > 0,
     replacementsCount: result.totalFixes,
     fixes: result.fixes,
@@ -237,6 +241,27 @@ export const autoFixFile = (targetFile, options = {}) => {
     skipped: result.skipped,
     ...(result.diff ? { diff: result.diff } : {})
   };
+};
+
+const changedFileCount = (result) => {
+  const hasUpdatedFiles = Array.isArray(result.updatedFiles);
+  if (hasUpdatedFiles) return result.updatedFiles.length;
+  const isDirectoryResult = result.filesChanged !== undefined;
+  if (isDirectoryResult) return result.filesChanged;
+  return result.fixed ? 1 : 0;
+};
+
+const printNothingChecked = (result) => {
+  process.stdout.write(`\n${ANSI.BOLD}${ANSI.GOLD}Inconclusive: no fixable file was checked (${result.reason}).${ANSI.RESET}\n`);
+  for (const s of result.skipped || []) process.stdout.write(`  ${ANSI.GOLD}•${ANSI.RESET} Skipped ${s.file}: ${s.reason}\n`);
+  process.stdout.write('\n');
+};
+
+const printDirectorySummary = (result) => {
+  const files = [...new Set((result.fixes || []).map((f) => f.file))];
+  for (const f of files) process.stdout.write(`  ${ANSI.CYAN}•${ANSI.RESET} Updated ${f}\n`);
+  const summary = `Fixed ${result.totalFixes} mechanical hazard(s) in ${result.filesChanged} of ${result.filesScanned} file(s) checked`;
+  process.stdout.write(`  ${ANSI.MINT}•${ANSI.RESET} ${summary}\n`);
 };
 
 export const runMutatorCli = async (rawArgs = [], isCli = true) => {
@@ -289,9 +314,15 @@ export const runMutatorCli = async (rawArgs = [], isCli = true) => {
       throw new Error(`Unknown mutator command "${command}". Available: add:prop, add:state, add:action, fix`);
     }
 
+    const isInconclusive = result.status === STATUS.INCONCLUSIVE;
     if (isJson) {
-      process.stdout.write(JSON.stringify({ success: true, command, ...result }) + '\n');
-      if (isCli) process.exit(0);
+      process.stdout.write(JSON.stringify({ success: !isInconclusive, command, ...result }) + '\n');
+      if (isCli) process.exit(toExitCode(result.status || STATUS.PASS));
+      return result;
+    }
+    if (isInconclusive) {
+      printNothingChecked(result);
+      if (isCli) process.exit(toExitCode(result.status));
       return result;
     }
 
@@ -310,7 +341,7 @@ export const runMutatorCli = async (rawArgs = [], isCli = true) => {
       return result;
     }
 
-    const isNothingApplied = result.fixed === false;
+    const isNothingApplied = changedFileCount(result) === 0;
     const heading = isNothingApplied ? `${ANSI.BOLD}${ANSI.GOLD}No changes written:` : `${ANSI.BOLD}${ANSI.LIME}✔ Chemical X Surgical Mutation Applied:`;
     process.stdout.write(`\n${heading}${ANSI.RESET}\n`);
     if (result.updatedFiles) {
@@ -327,6 +358,8 @@ export const runMutatorCli = async (rawArgs = [], isCli = true) => {
       const msg = result.fixed ? `Fixed ${result.replacementsCount} mechanical hazard(s)` : 'File was already clean';
       process.stdout.write(`  ${ANSI.MINT}•${ANSI.RESET} ${msg} in ${result.file}\n`);
     }
+    const isDirectoryResult = result.filesChanged !== undefined;
+    if (isDirectoryResult) printDirectorySummary(result);
     process.stdout.write('\n');
 
     if (isCli) process.exit(0);

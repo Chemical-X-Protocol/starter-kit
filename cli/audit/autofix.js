@@ -3,6 +3,7 @@ import path from 'node:path';
 import { resolveSafePath } from '../path-scope.js';
 import { applyEdits } from '../apply-edits.js';
 import { autofixContent } from './autofix-content.js';
+import { STATUS, inconclusive } from '../result-status.js';
 
 export { autofixContent } from './autofix-content.js';
 
@@ -41,6 +42,9 @@ const collectFiles = (targetPath) => {
   return files;
 };
 
+// No fixable file was looked at: that proves nothing, so it is inconclusive (exit 3), never a green check.
+const NOTHING_CHECKED = inconclusive('NO_FILES_CHECKED');
+
 const excludedReason = (filePath) => {
   const ext = path.extname(filePath).toLowerCase() || 'extensionless';
   return `${ext} files are not autofix targets (fixable: ${[...FIXABLE_EXTENSIONS].join(' ')}); nothing was checked`;
@@ -52,7 +56,8 @@ const excludedReason = (filePath) => {
  *
  * @param {string} targetPath File or directory (default 'src').
  * @param {object} [options] { cwd, dryRun, rules, agentId }
- * @returns {object} Uncapped fix list, suggestions, skipped files, and the diff on a dry run.
+ * @returns {object} status (pass, or inconclusive when no fixable file was checked), the uncapped
+ *   fix list, suggestions, skipped files, and the diff on a dry run.
  */
 export const runAutofix = (targetPath, options = {}) => {
   const cwd = options.cwd || process.cwd();
@@ -60,7 +65,7 @@ export const runAutofix = (targetPath, options = {}) => {
   const dryRun = Boolean(options.dryRun);
   const resolvedTarget = resolveSafePath(target, cwd);
   const root = fs.realpathSync(cwd);
-  const empty = { target, dryRun, filesScanned: 0, filesChanged: 0, totalFixes: 0, fixes: [], suggestions: [], skipped: [] };
+  const empty = { ...NOTHING_CHECKED, target, dryRun, filesScanned: 0, filesChanged: 0, totalFixes: 0, fixes: [], suggestions: [], skipped: [] };
   const isMissing = !fs.existsSync(resolvedTarget);
   if (isMissing) return { ...empty, skipped: [{ file: target, reason: 'target does not exist; nothing was checked' }] };
   const isExcludedFile = fs.statSync(resolvedTarget).isFile() && !isFixable(resolvedTarget);
@@ -84,7 +89,9 @@ export const runAutofix = (targetPath, options = {}) => {
   }
 
   const applied = edits.length > 0 ? applyEdits(edits, { cwd, dryRun, agentId: options.agentId }) : null;
+  const isNothingChecked = files.length === 0;
   return {
+    ...(isNothingChecked ? NOTHING_CHECKED : { status: STATUS.PASS }),
     target,
     dryRun,
     filesScanned: files.length,
