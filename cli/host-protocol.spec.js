@@ -3,6 +3,7 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { fileURLToPath } from 'node:url';
 import { runPillarsWizard } from './pillars-wizard.js';
 import { isGeneratedContent } from './pillars-write-guard.js';
 import {
@@ -37,6 +38,8 @@ const PINNED_PHRASES = [
   'Friction: <what happened>',
   'nothing blocks you'
 ];
+
+const AGENTS_TEMPLATE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'AGENTS.md');
 
 const withTmp = async (prefix, fn) => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -156,6 +159,7 @@ test('pillars without --protocol: writes no protocol file', async () => {
     await runQuiet(['--preset=minimal', '-y', '--write'], tmpDir);
     assert.strictEqual(exists(tmpDir, 'GEMINI.md'), false);
     assert.strictEqual(exists(tmpDir, '.agent/rules/chemx-protocol.md'), false);
-    assert.strictEqual(readRel(tmpDir, 'AGENTS.md').includes(PROTOCOL_BEGIN), false);
+    // The seeded AGENTS.md is a copy of the kit's own, which carries the block; the run adds none of its own.
+    assert.strictEqual(readRel(tmpDir, 'AGENTS.md'), fs.readFileSync(AGENTS_TEMPLATE, 'utf8'));
   });
 });

@@ -1,15 +1,7 @@
-# chemx:generated pillars
-# Cursor: Chemical X
-AGENTS.md is the canonical rulebook. Every architectural rule and threshold lives there; this generated file only points at it. Regenerate with `npx chemx pillars --write` instead of editing it.
-Active pillars: Molecular Line Budgets, Strict Component Tiers & Zero-Raw-DOM, Table-of-Contents Views, Molecular Composable Contracts, Silent Verification Pipeline, AST Codebase Query Engine, Swarm Task Backlog & Cost Tracking.
-Run checks through the chemx MCP tool (chemx({ action: 'verify' })) or `chemx verify`; never raw `npm test` or `tsc --noEmit`.
-Fast token-bounded wrappers: `chemx d` (diff), `chemx log` (oneline), `chemx p` (package.json), `chemx j` (json schema), `chemx do` (batch).
-Search: `chemx q <query>` (AST) or `chemx q -g <pattern>` (literal search).
-Pass params.projectRoot (absolute repo path) on mutating chemx MCP calls.
-Read with `chemx read <path> --outline` or `--symbol=<name>`; reserve `--enrich` for component capsules.
+<!-- chemx:generated pillars -->
+# Antigravity: Chemical X protocol
 
-<!-- chemx:protocol begin -->
-## Chemical X coordination protocol (generated)
+AGENTS.md is the canonical rulebook for architecture. This generated file carries the coordination protocol only. Regenerate with `chemx pillars --protocol --write` instead of editing it.
 
 Shared-workspace protocol. Several agents edit this checkout at once, and chemx records claims, locks and messages in its team database. This host cannot run Claude Code hooks, so nothing blocks you: following these steps is up to you.
 
@@ -26,6 +18,3 @@ Shared-workspace protocol. Several agents edit this checkout at once, and chemx 
 11. Handoff: To pass a task to another agent, run `chemx team task handoff <id> @<to> --as=@<you>`. Only the assignee or creator can hand off.
 12. Finish: Run the package gate (`chemx verify`), commit, release every lock with `chemx team lock release <file> --as=@<you>`, then run `chemx team task done <id> --target=<file> --as=@<you>`. If the gate refuses, mark the task blocked with a reason. Do not use `--force`.
 13. Friction: When a chemx command misbehaves, you bypass it, or a flag is missing, file `chemx team task add "Friction: <what happened>" --needs=light --desc="<exact command and output>"` and keep going.
-
-Regenerate with `chemx pillars --protocol --write`; edits inside this block are overwritten.
-<!-- chemx:protocol end -->
