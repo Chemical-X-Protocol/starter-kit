@@ -9,6 +9,7 @@ import { completeTaskWithAudit, reconcileAuditTasks } from './team-triage.js';
 import { formatTaskListCard, formatTaskDetailCard, formatTaskHelpCard } from './team-format.js';
 import { resolveListOptions, selectTaskPage, buildTaskListView } from './task-list-view.js';
 import { handleTaskHandoffCommand } from './team-task-handoff.js';
+import { handleTaskCloseCommand, duplicateLinks, formatDuplicateLinks } from './team-task-close.js';
 import { handleTaskSlotCommand, handleTaskTraceCommand } from './team-commands-vds.js';
 import { resolveCliAgent } from './team-commands-lock.js';
 import { resolveTaskTier } from './task-tier.js';
@@ -20,7 +21,7 @@ import { resolveListRepo, prepareTaskTarget, describeBoardScope } from './team-c
 import { runTriage } from './team-commands-triage.js';
 import { repoDir } from './coordination-repos.js';
 
-export const TASK_ACTIONS = ['list', 'show', 'add', 'claim', 'handoff', 'done', 'update', 'comment', 'triage', 'reconcile', 'set-target', 'vds-slot', 'trace'];
+export const TASK_ACTIONS = ['list', 'show', 'add', 'claim', 'handoff', 'close', 'done', 'update', 'comment', 'triage', 'reconcile', 'set-target', 'vds-slot', 'trace'];
 
 const fail = (isCli, message, result = { error: message }) => {
   if (isCli) process.stderr.write(`\x1b[31m✕ ${message}\x1b[0m\n`);
@@ -65,9 +66,10 @@ const runShow = (ctx, taskId, flags, isCli) => {
   if (!task) return fail(isCli, `Task #${taskId} not found`);
   const events = queryFeed(ctx.db, { task_id: taskId });
   const dependencyStates = resolveDependencyStates(ctx.db, task);
-  const output = { task, dependencyStates, events, activityCount: events.length };
-  if (!isCli) return flags.isJson ? output : { task, dependencyStates, events };
-  process.stdout.write(flags.isJson ? `${JSON.stringify(output, null, 2)}\n` : formatTaskDetailCard(task, events, dependencyStates));
+  const links = duplicateLinks(ctx.db, taskId);
+  const output = { task, dependencyStates, events, activityCount: events.length, ...links };
+  if (!isCli) return flags.isJson ? output : { task, dependencyStates, events, ...links };
+  process.stdout.write(flags.isJson ? `${JSON.stringify(output, null, 2)}\n` : formatTaskDetailCard(task, events, dependencyStates) + formatDuplicateLinks(links));
   return flags.isJson ? output : { task, dependencyStates, events };
 };
 
@@ -184,6 +186,7 @@ const ACTIONS = {
   trace: (ctx, p, flags, words, isCli) => handleTaskTraceCommand(ctx.db, p[1], p[2] || flags.url, isCli, flags.isJson),
   claim: (ctx, p, flags, words, isCli) => runClaim(ctx, p[1], flags, isCli),
   handoff: (ctx, p, flags, words, isCli) => handleTaskHandoffCommand(ctx.db, p, flags, isCli),
+  close: (ctx, p, flags, words, isCli) => handleTaskCloseCommand(ctx.db, p, flags, isCli),
   done: (ctx, p, flags, words, isCli, cwd) => runComplete(ctx, p[1], flags, isCli, cwd, `Completed task #${p[1]}`),
   update: (ctx, p, flags, words, isCli, cwd) => runUpdate(ctx, p, flags, isCli, cwd),
   add: (ctx, p, flags, words, isCli, cwd) => runCreate(ctx, p, flags, words, isCli, cwd),

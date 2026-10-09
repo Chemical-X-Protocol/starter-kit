@@ -188,6 +188,12 @@ export const parseFlags = (args = []) => {
     const isReasonEquals = arg.startsWith('--reason=');
     if (isReasonEquals) flags.reason = valueAfterEquals;
 
+    const isDuplicateOfEquals = arg.startsWith('--duplicate-of=');
+    if (isDuplicateOfEquals) flags.duplicateOf = valueAfterEquals;
+
+    const isCancelEquals = arg.startsWith('--cancel=');
+    if (isCancelEquals) flags.cancel = valueAfterEquals;
+
     const isLogEquals = arg.startsWith('--log=');
     if (isLogEquals) flags.log = valueAfterEquals;
 
