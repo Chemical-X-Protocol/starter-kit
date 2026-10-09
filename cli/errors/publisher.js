@@ -72,7 +72,8 @@ export const publishIssue = async (repo, title, body, labels = []) => {
   const hasToken = Boolean(token && token.length > 0);
   if (hasToken) {
     const httpRes = await publishIssueViaHttp(token, repo, title, body, labels);
-    if (httpRes.success) return httpRes;
+    const didPublishViaHttp = Boolean(httpRes.success);
+    if (didPublishViaHttp) return httpRes;
   }
 
   return publishIssueViaGh(repo, title, body, labels);
