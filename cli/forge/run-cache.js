@@ -5,8 +5,10 @@
 //     files count only with includeSpecs
 //   - the disk: each of those files must still carry the mtime and size its row was stamped with, or no
 //     key is made (nothing is read from or written to the cache), since the stage reads member files
-//   - the engine: a sha1 of the source of every cli/forge module and cli/rules.js, so any code change
-//     misses (no version constant to forget to bump)
+//   - the engine: a sha1 of the source of every module the grouping imports, followed from
+//     forge-groups.js through relative imports inside cli/forge/ and cli/sfc/ plus cli/rules.js and
+//     cli/babel-lazy.js, so any change to grouping code misses (no version constant to forget to bump)
+//     while a new forge module nothing imports yet does not
 //   - includeSpecs, includeIdioms, CHEMX_FORGE_INLINE and the suppressions
 // One row per scope (includeSpecs, includeIdioms) holds the last result; a second row, STORED_SCOPE,
 // names the run key whose groups pattern_groups holds, so a hit rewrites pattern_groups only when another
@@ -19,7 +21,11 @@ import { statOf } from './fingerprint-session.js';
 import { isInlineRequested } from './inline-mode.js';
 
 const FORGE_DIR = path.dirname(fileURLToPath(import.meta.url));
-const RULES_FILE = path.join(FORGE_DIR, '..', 'rules.js');
+const CLI_DIR = path.dirname(FORGE_DIR);
+const ENGINE_ROOT = path.join(FORGE_DIR, 'forge-groups.js');
+const ENGINE_DIRS = [FORGE_DIR, path.join(CLI_DIR, 'sfc')].map((dir) => `${dir}${path.sep}`);
+const ENGINE_FILES = new Set([path.join(CLI_DIR, 'rules.js'), path.join(CLI_DIR, 'babel-lazy.js')]);
+const IMPORT_PATTERN = /^\s*(?:import|export)\s[^'"]*?from\s+['"](\.[^'"]+)['"]|^\s*import\s+['"](\.[^'"]+)['"]/gm;
 export const STORED_SCOPE = 'stored-groups';
 
 const SQL = {
@@ -31,16 +37,39 @@ const SQL = {
 
 const sha1 = (text) => crypto.createHash('sha1').update(text).digest('hex');
 
-const isEngineSource = (name) => name.endsWith('.js') && !name.endsWith('.spec.js');
+const isEngineFile = (file) => ENGINE_FILES.has(file) || ENGINE_DIRS.some((dir) => file.startsWith(dir));
+
+const readSource = (file) => {
+  try {
+    return fs.readFileSync(file, 'utf-8');
+  } catch {
+    return '';
+  }
+};
+
+// Sources of the grouping code: the relative-import closure of forge-groups.js within the engine files.
+const engineSources = () => {
+  const sources = new Map();
+  const queue = [ENGINE_ROOT];
+  while (queue.length > 0) {
+    const file = queue.shift();
+    const isNew = !sources.has(file);
+    if (!isNew) continue;
+    const text = readSource(file);
+    sources.set(file, text);
+    const imported = [...text.matchAll(IMPORT_PATTERN)].map((match) => path.resolve(path.dirname(file), match[1] ?? match[2]));
+    queue.push(...imported.filter(isEngineFile));
+  }
+  return [...sources].sort(([a], [b]) => Number(a > b) - Number(a < b));
+};
 
 let engineHash = null;
 
-/** sha1 over the source of the grouping code (cli/forge modules and cli/rules.js), read once per process. */
+/** sha1 over the source of the grouping code (engineSources), read once per process. */
 export const engineHashOf = () => {
   const isKnown = engineHash !== null;
   if (isKnown) return engineHash;
-  const files = fs.readdirSync(FORGE_DIR).filter(isEngineSource).sort().map((name) => path.join(FORGE_DIR, name));
-  engineHash = sha1([...files, RULES_FILE].map((file) => `${path.basename(file)}\n${fs.readFileSync(file, 'utf-8')}`).join('\0'));
+  engineHash = sha1(engineSources().map(([file, text]) => `${path.relative(CLI_DIR, file)}\n${text}`).join('\0'));
   return engineHash;
 };
 
