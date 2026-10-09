@@ -1,7 +1,5 @@
-import { parse } from '@babel/parser';
-import traverseModule from '@babel/traverse';
+import { parse, traverse } from './babel-lazy.js';
 
-const traverse = traverseModule.default || traverseModule;
 
 /**
  * Strips JavaScript/TypeScript comments while preserving line boundaries where possible.

@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import { copyToClipboard } from '../audit/social-git.js';
 import { formatIssueContent } from './formatter.js';
 import { publishIssue } from './publisher.js';
-import { openBrowser, confirmAction } from '../terminal.js';
+import { openBrowser, confirmAction, isStdinTty, isStdoutTty } from '../terminal.js';
 import { resolveTargetIssuesRepo, saveIssueArtifact } from './storage.js';
 
 export { resolveTargetIssuesRepo, saveIssueArtifact };
@@ -73,7 +73,7 @@ export const handleError = async (err, options = {}) => {
       process.stdout.write(`\n\x1b[32m✔ Issue automatically created: ${publishResult.url}\x1b[0m\n`);
     }
   } else if (!options.silent) {
-    const isTty = Boolean(process.stdin.isTTY && process.stdout.isTTY);
+    const isTty = isStdinTty() && isStdoutTty();
     const isAgentEnv = Boolean(process.env.AGENT || process.env.ANTIGRAVITY || process.env.CURSOR || process.env.NON_INTERACTIVE);
     const isExplicitPrompt = Boolean(options.promptIssue || process.env.CHEMX_PROMPT_ISSUES === 'true');
     const canPromptUser = isTty && !isCiEnv && !isAgentEnv && isExplicitPrompt;

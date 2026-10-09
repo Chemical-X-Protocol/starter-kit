@@ -7,10 +7,13 @@ export const handleJigCli = ({ rawArgs, positional, rawName, dirArg, descArg, is
   let resolvedKind = jigFlag || kindFlag;
   let resolvedName = rawName;
 
-  if (!resolvedKind && positional[0] && JIG_KINDS.has(positional[0].toLowerCase())) {
-    resolvedKind = positional[0].toLowerCase();
+  const firstPositional = (positional[0] ?? '').toLowerCase();
+  const isKindPositional = !resolvedKind && JIG_KINDS.has(firstPositional);
+  const isJigKeyword = firstPositional === 'jig';
+  if (isKindPositional) {
+    resolvedKind = firstPositional;
     resolvedName = positional[1] || rawName;
-  } else if (positional[0] && positional[0].toLowerCase() === 'jig') {
+  } else if (isJigKeyword) {
     resolvedKind = positional[1];
     resolvedName = positional[2] || rawName;
   }
@@ -26,8 +29,8 @@ export const handleJigCli = ({ rawArgs, positional, rawName, dirArg, descArg, is
   if (schemaArg) {
     try {
       schemaData = JSON.parse(schemaArg);
-    } catch {
-      // ignore JSON parse error
+    } catch (err) {
+      process.stderr.write(`Ignoring --schema: not valid JSON (${err.message}).\n`);
     }
   }
 
@@ -62,6 +65,6 @@ export const handleJigCli = ({ rawArgs, positional, rawName, dirArg, descArg, is
   for (const f of jigRes.filesCreated) {
     process.stdout.write(`  \x1b[32m✔\x1b[0m ${f}\n`);
   }
-  process.stdout.write('\n\x1b[2mChemical X Standards verified: < 100 lines per file, Result tuples, co-located spec tests.\x1b[0m\n\n');
+  process.stdout.write('\n\x1b[2mChemical X standards: single-purpose files, Result tuples, co-located spec tests. Line budget: see AGENTS.md.\x1b[0m\n\n');
   return jigRes;
 };

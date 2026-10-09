@@ -1,7 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { runAudit as executeAstAudit } from '../audit.js';
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 const starterKitRoot = path.resolve(currentDir, '..', '..');
@@ -181,8 +180,9 @@ export const Resources = {
     };
   },
 
-  'chemx://scorecard': (uri, cwd) => {
+  'chemx://scorecard': async (uri, cwd) => {
     const targetDir = fs.existsSync(path.resolve(cwd, 'src')) ? 'src' : '.';
+    const { runAudit: executeAstAudit } = await import('../audit.js');
     const report = executeAstAudit(targetDir, {});
     const severityRollup = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 };
     for (const v of report.violations || []) {

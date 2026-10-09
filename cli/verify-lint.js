@@ -2,6 +2,7 @@ import { executeBuild } from './build/executor.js';
 import { findProjectRoot } from './build/detector.js';
 import { resolvePackageManager, loadLocalPackageJson } from './build/detector.js';
 import { ANSI } from './theme.js';
+import { formatAgentJson } from './agent-json.js';
 import { parseCommandFromArgs, stripAnsi, checkNodeModules } from './verify-helpers.js';
 
 export const detectLintCommand = (customCmd, cwd = process.cwd(), isFix = false, targetPath = null) => {
@@ -149,7 +150,7 @@ export const runLintAudit = async (rawArgs = [], isCli = false, options = {}) =>
     };
     if (isJson) {
       if (options.print !== false) {
-        process.stdout.write(JSON.stringify(report, null, 2) + '\n');
+        process.stdout.write(formatAgentJson(report) + '\n');
       }
       if (isCli) process.exit(1);
       return report;
@@ -189,7 +190,7 @@ export const runLintAudit = async (rawArgs = [], isCli = false, options = {}) =>
 
   if (isJson) {
     if (options.print !== false) {
-      process.stdout.write(JSON.stringify(report, null, 2) + '\n');
+      process.stdout.write(formatAgentJson(report) + '\n');
     }
     if (isCli) process.exit(report.success ? 0 : 1);
     return report;

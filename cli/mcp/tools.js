@@ -1,11 +1,12 @@
 import { MCP_TOOLS, ALL_MCP_TOOLS } from './manifests.js';
-import { handleAudit, handleGetRefactorPrompt } from './tools-audit.js';
-import { handleQueryPatterns, handleAutofix } from './tools-patterns.js';
-import { handleAuditBuild, handleChemxTypecheck, handleChemxTest, handleChemxVerify } from './tools-verify.js';
-import { handleGenerateCapsule, handleChemxTrend } from './tools-generate.js';
-import { handleChemxQ, handleChemxRead, handleChemxPatch, handleChemxCheck, handleChemxWrite } from './tools-search.js';
-import { handleChemxTeam, handleChemxTeamStatus, handleChemxTeamFeed, handleChemxTeamPost, handleChemxTeamTask, handleChemxTeamLock, handleChemxTeamInbox, handleChemxTeamDm, handleChemxReportIssue } from './tools-team.js';
-import { handleChemxProject } from './tools-project.js';
+import {
+  handleAudit, handleGetRefactorPrompt, handleQueryPatterns, handleAutofix,
+  handleAuditBuild, handleChemxTypecheck, handleChemxTest, handleChemxVerify,
+  handleGenerateCapsule, handleChemxTrend,
+  handleChemxQ, handleChemxRead, handleChemxPatch, handleChemxCheck, handleChemxWrite,
+  handleChemxTeam, handleChemxTeamStatus, handleChemxTeamFeed, handleChemxTeamPost, handleChemxTeamTask,
+  handleChemxTeamLock, handleChemxTeamInbox, handleChemxTeamDm, handleChemxReportIssue, handleChemxProject
+} from './tools-lazy.js';
 
 export {
   MCP_TOOLS, ALL_MCP_TOOLS, handleChemxQ, handleChemxRead, handleChemxPatch, handleChemxCheck, handleChemxWrite,
@@ -153,9 +154,16 @@ export const parseCommand = (command, params) => {
 };
 
 const handleChemxTesseract = async (params = {}, cwd = process.cwd()) => {
+  const args = params.args || [];
+  const isJson = args.includes('--json');
+  if (isJson) {
+    const { runLatticeJson } = await import('../lattice-payload.js');
+    const { formatAgentJson } = await import('../agent-json.js');
+    return { content: [{ type: 'text', text: formatAgentJson(runLatticeJson(false, cwd)) }] };
+  }
   const { runTesseract } = await import('../tesseract.js');
-  const result = await runTesseract(params.args || [], false, cwd);
-  const textOutput = result.text || JSON.stringify(result.payload, null, 2);
+  const result = await runTesseract(args, false, cwd);
+  const textOutput = result.text;
   return {
     content: [{ type: 'text', text: textOutput }]
   };

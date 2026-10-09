@@ -53,6 +53,13 @@ export const PROFILES = {
 
 export const DEFAULT_PROFILE = 'pragmatic';
 
+// The one sentence every doc, help string and shim uses for line budgets (AGENTS.md section 1.A).
+export const describeLineBudgetPolicy = () => {
+  const pragmatic = PROFILES[DEFAULT_PROFILE].maxLineCountWarning;
+  const strict = PROFILES['atomic-strict'].maxLineCountWarning;
+  return `Line budget: soft warning at ${pragmatic} lines when complexity is high (default profile); --profile=atomic-strict caps capsules at ${strict} lines.`;
+};
+
 export const getProfileDefaults = (profileName = DEFAULT_PROFILE) => {
   const normalized = String(profileName || DEFAULT_PROFILE).toLowerCase();
   return PROFILES[normalized] || PROFILES[DEFAULT_PROFILE];

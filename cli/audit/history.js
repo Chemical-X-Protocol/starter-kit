@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { groupViolationsBySeverity } from './reporter.js';
+import { groupViolationsBySeverity } from './reporter-utils.js';
 import { hasMatchingAuditMetrics } from './rules-predicates.js';
 
 const RESET = '\x1b[0m';

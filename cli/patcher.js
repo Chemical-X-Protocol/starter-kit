@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { ANSI } from './theme.js';
 import { syncSingleFileIndex } from './search.js';
-import { auditFile } from './audit.js';
+import { auditFile } from './audit-engine.js';
 import { resolveSafePath } from './path-scope.js';
 
 /**

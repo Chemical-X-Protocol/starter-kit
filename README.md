@@ -140,15 +140,11 @@ $ npx chemx typecheck
   ✔ TypeScript typecheck clean (1820ms)
 
 # Machine-readable output for AI agents
+# (one minified line; `errors` is always an array of "file:line:col CODE message" rows)
 $ npx chemx typecheck --json
-{
-  "success": true,
-  "exitCode": 0,
-  "command": "npm run typecheck",
-  "durationMs": 1820,
-  "errorCount": 0,
-  "errors": []
-}
+{"success":true,"exitCode":0,"command":"npm run typecheck","durationMs":1820,"errorCount":0,"errors":[]}
+$ npx chemx typecheck --json   # with a type error
+{"success":false,"exitCode":2,"command":"npm run typecheck","durationMs":1009,"errorCount":1,"errors":["src/a.ts:1:7 TS2322 Type 'string' is not assignable to type 'number'."]}
 ```
 
 #### 3. Production Build: Raw Build vs `chemx build`
@@ -314,7 +310,7 @@ Chemical X is **language-agnostic**. The core physics of AI agent code generatio
 
 ### Two-Tier Decoupled Audit Pipeline
 1. **Tier 1: Universal Polyglot Rules (Runs on ALL languages)**
-   * **Sliding-Scale Line Budgets:** Flags files exceeding 100, 500, or 1,000 lines (`LINE_BUDGET_FILE`) to eliminate LLM context rot.
+   * **Line Budgets (`LINE_BUDGET_FILE`):** Line budget: soft warning at 250 lines when complexity is high (default profile); --profile=atomic-strict caps capsules at 100 lines.
    * **AI Slop Text Patterns:** Strips conversational residue (*"Here is the code"*), leaked markdown code fences, and lazy truncation placeholders (`// ... rest of implementation`).
    * **Synthetic Mock Data Scanners:** Catches fake emails (`@example.com`), `555-` phone numbers, and hardcoded dummy collections in services.
    * **Security & Secret Guards:** Scans for high-entropy API keys, JWTs, AWS credentials, and unmanaged sensitive logging.
@@ -329,7 +325,7 @@ Chemical X is **language-agnostic**. The core physics of AI agent code generatio
 
 Chemical X enforces seven core architectural directives configured via `chemx pillars`:
 
-1. **Strict Molecular Line Budgets (< 100 Lines)**: Single-purpose files. Approaching 100 lines is a decomposition trigger. Eliminates context rot and cuts token ingestion costs.
+1. **Molecular Line Budgets**: Single-purpose files, measured by structural weight first. Line budget: soft warning at 250 lines when complexity is high (default profile); --profile=atomic-strict caps capsules at 100 lines. Eliminates context rot and cuts token ingestion costs.
 2. **Strict Component Tiers & Zero-Raw-DOM**: Raw HTML elements (`<button>`, `<input>`, `<div>`) are strictly isolated inside foundational **Atoms** (`a-*`). Molecules, Organisms, Templates, and Views assemble atoms and never contain raw tags.
 3. **Table-of-Contents Views**: Top-level page views are clean, 10–20 line declarative blueprints assembling self-contained molecules and organisms via named slots (`#header`, `#default`, `#modals`).
 4. **Molecular Composable Contracts**: Composables return plain destructurable objects with a strict 3-to-5 property limit (State + Status + Actions). Domain types use discriminated unions (zero impossible states).
@@ -371,24 +367,19 @@ To configure manually in your MCP client settings (e.g. `claude_desktop_config.j
 }
 ```
 
-### Available MCP Tools (14 Tools)
+### The `chemx` MCP Tool
 
-| Tool Name | Scope | Purpose |
+The server exposes one tool, `chemx({ action, params })`. `commands: [...]` runs several actions in one call. Mutating actions (`write`, `patch`, `autofix`, `generate`, team claims and posts) need `params.projectRoot` set to the absolute repo path.
+
+| Actions | Scope | Purpose |
 | :--- | :--- | :--- |
-| `chemx_verify` | Verification | Full pipeline gatekeeper: AST Audit + Typecheck + Tests into a ~45-token card. |
-| `chemx_typecheck` | Verification | Silent TypeScript typecheck audit. Drops compiler noise; returns structured diagnostics on error. |
-| `chemx_test` | Verification | Silent project test runner. Suppresses passing checkmarks; returns ONLY failing test assertions. |
-| `chemx_audit_build` | Verification | Wrap build commands with silent execution and catalog compiler diagnostics into structured categories. |
-| `chemx_audit` | Quality | Run the full 7-Pillar Chemical X static AST audit. Returns health score, grade (A+ to F), and hazard list. |
-| `chemx_check` | Quality | Verify a single file or capsule against molecular boundary rules (< 100L, 2-stage booleans, zero raw DOM). |
-| `chemx_q` | Discovery | AST search index query machine. Query symbols, capsules, props, and hooks with minimal token burn. |
-| `chemx_query_patterns` | Discovery | Detect duplicated state machines, cloned UI layouts, and parallel hooks before decomposing monoliths. |
-| `chemx_read` | Reading | Token-minified file reader. Extracts AST outlines, stripped comments, or symbol blocks (80%+ token savings). |
-| `chemx_patch` | Editing | Surgically patch files with exact search and replace blocks without whole-file context dumps. |
-| `chemx_write` | Editing | Create or overwrite files with automatic SQLite AST indexing and boundary compliance checks. |
-| `chemx_autofix` | Remediation | Deterministically remediate safe violations (typography hyphens, markdown fences, AI slop comments). |
-| `chemx_generate_capsule` | Scaffolding | Deterministically generate a crystalline capsule directory (component, controller, SCSS, types, index). |
-| `chemx_get_refactor_prompt` | Prompting | Synthesize targeted refactoring prompts for Grade F critical hazards, hotspots, and slop artifacts. |
+| `verify`, `typecheck`, `test`, `build` | Verification | Audit + typecheck + tests as one compact card; silent typecheck and test runners; build diagnostics grouped by category. |
+| `audit`, `check`, `autofix`, `patterns` | Quality | Architectural AST audit, single-file check, deterministic safe fixes, duplicated-pattern detection. |
+| `q`, `search`, `trace`, `backtrace` | Discovery | AST index queries, forward call traces and upstream caller chains. |
+| `read`, `patch`, `write` | Reading and editing | Outline, symbol or line-range reads; exact search/replace patches; whole-file writes with re-indexing. |
+| `d`, `diff`, `log`, `p`, `pkg`, `f`, `ls`, `j`, `json`, `do`, `batch` | Wrappers | Token-bounded git diff/log, package.json, file finder, JSON shape and batched commands. |
+| `team`, `team_status`, `team_feed`, `team_post`, `team_task`, `team_lock`, `project` | Coordination | Swarm task queue, feed, posts, file locks and project sessions in `.chemx/index.db`. |
+| `generate`, `issue`, `tesseract` | Other | Capsule generation, sanitized issue reports, agent onboarding payload. |
 
 ### Living Resources & Prompts
 

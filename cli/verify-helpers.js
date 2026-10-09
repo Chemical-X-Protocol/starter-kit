@@ -96,7 +96,7 @@ export const parseTypecheckOutput = (stdout = '', stderr = '') => {
   const seen = new Set();
 
   for (const line of lines) {
-    const trimmed = line.trim();
+    const trimmed = stripAnsi(line).trim();
     if (!trimmed) continue;
     const match = matchTypeScriptError(trimmed);
     if (match) {

@@ -53,3 +53,24 @@ test('tesseract: MCP handler returns formatted text content', async () => {
   assert.strictEqual(res.content[0].type, 'text');
   assert.ok(res.content[0].text.includes('TESSERACT'));
 });
+
+test('tesseract --json: minified agent payload with the package version, no HUD modules', async () => {
+  const { runCliAsync, localModules } = await import('./spec-support/run-cli.js');
+  const fs = await import('node:fs');
+  const pkg = JSON.parse(fs.readFileSync(path.resolve('package.json'), 'utf8'));
+  const run = await runCliAsync(['tesseract', '--json']);
+  assert.strictEqual(run.status, 0, run.stderr);
+  const lines = run.stdout.trim().split('\n');
+  assert.strictEqual(lines.length, 1, 'payload is one minified line');
+  const payload = JSON.parse(lines[0]);
+  assert.strictEqual(payload.version, pkg.version, 'version comes from package.json');
+  assert.ok(payload.directives.length >= 7);
+  const hudModules = localModules(run.modules).filter((mod) => /^cli\/(tesseract[^/]*|banner|navigator[^/]*)\.js$/.test(mod));
+  assert.deepStrictEqual(hudModules, [], 'tesseract --json loads no presentation module');
+});
+
+test('tesseract: MCP handler with --json returns the payload, not "undefined"', async () => {
+  const res = await handleChemxTesseract({ args: ['--json'] });
+  const payload = JSON.parse(res.content[0].text);
+  assert.strictEqual(payload.protocol, 'Chemical X Tesseract');
+});

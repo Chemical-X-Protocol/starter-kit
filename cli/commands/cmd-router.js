@@ -4,7 +4,7 @@
  * Extracted from cli/index.js per Directive 1.A (Monolith Decomposition).
  */
 
-import { printHelp } from '../help.js';
+import { printHelp, printCommandHelp, resolveCommandHelpTopic } from '../help.js';
 
 /**
  * Dispatch the resolved CLI command to its handler module.
@@ -15,6 +15,12 @@ import { printHelp } from '../help.js';
  * @param {(arg: string) => boolean} isCapsulePrefix
  */
 export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVersion, isCapsulePrefix) => {
+  // `<command> --help` never reaches the handler: some handlers act on unknown flags.
+  const helpTopic = resolveCommandHelpTopic(firstArg, rawArgs);
+  if (helpTopic) {
+    const isCapsuleTopic = isCapsulePrefix(helpTopic);
+    return printCommandHelp(isCapsuleTopic ? 'generate' : helpTopic);
+  }
   switch (firstArg) {
     case 'team':
     case 'swarm':
@@ -139,12 +145,6 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
       break;
     }
     case 'init': {
-      const isHelpRequested = rawArgs.includes('--help') || rawArgs.includes('-h') || rawArgs[1] === 'help';
-      if (isHelpRequested) {
-        const { printInitHelp } = await import('../help.js');
-        printInitHelp();
-        break;
-      }
       const nonFlagArgs = rawArgs.slice(1).filter((arg) => !arg.startsWith('-'));
       const targetSubDir = nonFlagArgs[0] || 'src/chemical-x';
       const { runInit } = await import('../scaffold.js');
@@ -153,12 +153,6 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
     }
     case 'create':
     case 'scaffold': {
-      const isHelpRequested = rawArgs.includes('--help') || rawArgs.includes('-h') || rawArgs[1] === 'help';
-      if (isHelpRequested) {
-        const { printScaffoldHelp } = await import('../help.js');
-        printScaffoldHelp();
-        break;
-      }
       const { runScaffold } = await import('../scaffold.js');
       const nonFlagArgs = rawArgs.slice(1).filter((arg) => !arg.startsWith('-'));
       await runScaffold(nonFlagArgs[0], rawArgs, runAudit);
@@ -234,7 +228,7 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
     case '-v':
     case '--version':
     case 'version':
-      process.stdout.write(`create-chemx v${getPackageVersion()}\n`);
+      process.stdout.write(`chemx v${getPackageVersion()}\n`);
       break;
     case 'verify':
     case 'check:all': {
@@ -286,6 +280,12 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
     case 'tesseract':
     case 'cube':
     case 'matrix': {
+      const isJsonPayload = rawArgs.includes('--json');
+      if (isJsonPayload) {
+        const { runLatticeJson } = await import('../lattice-payload.js');
+        runLatticeJson(true);
+        break;
+      }
       const { runTesseract } = await import('../tesseract.js');
       await runTesseract(rawArgs.slice(1), true);
       break;
@@ -293,7 +293,7 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
     case 'help':
     case '--help':
     case '-h':
-      printHelp();
+      await printHelp(rawArgs.slice(1));
       break;
     default: {
       if (isCapsulePrefix(firstArg)) {

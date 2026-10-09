@@ -591,9 +591,10 @@ test('MCP Tools: keyed Tools map contains all handlers and executes mapped metho
     assert.strictEqual(typeof Tools[tool.name], 'function', `Tools.${tool.name} must be a function`);
   }
 
-  // Direct keyed execution: const handle = Tools[n]; handle(args, cwd)
+  // Direct keyed execution: const handle = Tools[n]; await handle(args, cwd).
+  // Handlers load lazily, so every Tools entry returns a promise.
   const handle = Tools['chemx_q'];
-  const res = handle({ query: 'badge', columnar: true });
+  const res = await handle({ query: 'badge', columnar: true });
   assert.ok(res);
   assert.ok(Array.isArray(res.cols));
   assert.ok(Array.isArray(res.rows));

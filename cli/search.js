@@ -34,8 +34,6 @@ import {
   handleHybridCommand,
   handleLiteralSearchCommand
 } from './search-commands.js';
-import { runGenerateWizard } from './generator.js';
-import { runMutatorCli } from './mutators.js';
 import { toColumnar } from './columnar.js';
 import { resolveTargetDir } from './path-scope.js';
 import { ANSI } from './theme.js';
@@ -214,16 +212,9 @@ const formatTierBadge = (tier) => {
 export { resolveTargetDir };
 export { printSearchHelp } from './help.js';
 
+// Help requests never reach runSearch: the CLI router (help.js) owns them, so `help`
+// and `-h` here are query data (`chemx q help`, `chemx q -g -h`).
 export const runSearch = async (rawArgs = [], isCli = true) => {
-  const hasHelpFlag = rawArgs.includes('--help') || rawArgs.includes('-h');
-  const isHelpAlias = rawArgs[0] === 'help';
-  const isHelpRequested = hasHelpFlag || isHelpAlias;
-  if (isHelpRequested) {
-    printSearchHelp();
-    if (isCli) process.exit(0);
-    return [];
-  }
-
   const isRawJson = rawArgs.includes('--raw-json') || rawArgs.includes('--no-columnar');
   const isExplicitColumnar = rawArgs.includes('--columnar');
   const isJson = rawArgs.includes('--json') || isExplicitColumnar;
@@ -301,11 +292,13 @@ export const runSearch = async (rawArgs = [], isCli = true) => {
   const isAddTarget = firstArg === 'add' && ['prop', 'state', 'action'].includes(secondArg);
   const isMutatorAction = isFixCommand || isAddPrefix || isAddTarget;
   if (isMutatorAction) {
+    const { runMutatorCli } = await import('./mutators.js');
     return runMutatorCli(rawArgs, isCli);
   }
 
   const isGenerateCommand = ['gen', 'g', 'generate'].includes(firstArg);
   if (isGenerateCommand) {
+    const { runGenerateWizard } = await import('./generator.js');
     return runGenerateWizard(rawArgs.slice(1));
   }
 
@@ -426,7 +419,7 @@ export const runSearch = async (rawArgs = [], isCli = true) => {
       tier,
       count: results.length,
       durationMs,
-      suggestion: results.length === 0 ? `cx q -g "${cleanQuery}"` : undefined,
+      suggestion: results.length === 0 ? `chemx q -g "${cleanQuery}"` : undefined,
       results
     };
     process.stdout.write(JSON.stringify(payload) + '\n');
@@ -439,7 +432,7 @@ export const runSearch = async (rawArgs = [], isCli = true) => {
 
   if (results.length === 0) {
     process.stdout.write(`  ${ANSI.DIM}No matching capsules, symbols, or files found for "${cleanQuery}".${ANSI.RESET}\n`);
-    process.stdout.write(`  ${ANSI.CYAN}💡 Try literal search: cx q -g "${cleanQuery}"${ANSI.RESET}\n\n`);
+    process.stdout.write(`  ${ANSI.CYAN}💡 Try literal search: chemx q -g "${cleanQuery}"${ANSI.RESET}\n\n`);
     if (isCli) process.exit(0);
     return results;
   }

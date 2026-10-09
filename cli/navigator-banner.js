@@ -1,4 +1,5 @@
 import { getChemicalXAsciiBanner } from "./audit.js";
+import { isStdoutTty } from "./terminal.js";
 import { resolveGradeColor, resolveHealthHearts } from "./navigator-grades.js";
 import { resolveProjectName, resolveCostFigures, truncatePath, visualWidth } from "./navigator-banner-helpers.js";
 
@@ -13,9 +14,9 @@ export const renderDashboardBanner = (
   aiSlop = null,
   options = {}
 ) => {
-  const isInteractiveTty = Boolean(options.interactive) && Boolean(process.stdout.isTTY);
+  const isInteractiveTty = Boolean(options.interactive) && isStdoutTty();
   const shouldClear = options.clear ?? isInteractiveTty;
-  const canClearConsole = shouldClear && Boolean(process.stdout.isTTY);
+  const canClearConsole = shouldClear && isStdoutTty();
   if (canClearConsole) console.clear();
   process.stdout.write(getChemicalXAsciiBanner(health.grade));
 

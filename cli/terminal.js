@@ -1,6 +1,5 @@
 import readline from "node:readline";
 import { spawnSync } from "node:child_process";
-import { formatChemicalXGradient, ANSI } from "./theme.js";
 
 export const openBrowser = (url) => {
   const platform = process.platform;
@@ -19,8 +18,11 @@ export const openBrowser = (url) => {
 };
 
 // Node leaves isTTY undefined (not false) on pipes and files, so test for truthiness.
+// Every other module asks these helpers; cli/tty-policy.spec.js enforces it.
 export const isStdoutTty = () => Boolean(process.stdout && process.stdout.isTTY);
-export const isInteractive = () => Boolean(process.stdin && process.stdin.isTTY) && isStdoutTty() && !process.env.CI;
+export const isStdinTty = () => Boolean(process.stdin && process.stdin.isTTY);
+export const isStderrTty = () => Boolean(process.stderr && process.stderr.isTTY);
+export const isInteractive = () => isStdinTty() && isStdoutTty() && !process.env.CI;
 
 export const hasGum = () => {
   if (!isInteractive()) return false;
@@ -97,34 +99,6 @@ export const sanitizeOutputStreams = () => {
   wrapStream(process.stderr);
 };
 
-export const renderBanner = (title = "Chemical X Protocol: Molecular Architecture") => {
-  if (hasGum()) {
-    spawnSync(
-      "gum",
-      [
-        "style",
-        "--border=normal",
-        "--margin=1",
-        "--padding=1 2",
-        "--border-foreground=45",
-        "--foreground=81",
-        "--bold",
-        `  ${title}\n  The Secret Sauce to Vibe Coding | Zero-Context-Rot Directives`
-      ],
-      { stdio: "inherit" }
-    );
-  } else {
-    process.stdout.write(
-      `\n${formatChemicalXGradient("=====================================================")}\n`
-    );
-    process.stdout.write(`  ${formatChemicalXGradient(title)}\n`);
-    process.stdout.write(`  ${ANSI.BOLD}${ANSI.GOLD}The Secret Sauce to Vibe Coding!${ANSI.RESET} ${ANSI.DIM}| Zero-Context-Rot Directives${ANSI.RESET}\n`);
-    process.stdout.write(
-      `${formatChemicalXGradient("=====================================================")}\n\n`
-    );
-  }
-};
-
 export const gumConfirm = (
   promptText = "Publish audit report and promote your project to our GitHub Discussions Audits Forum?",
   affirmative = "Publish Report",
@@ -165,4 +139,17 @@ export const confirmAction = async (
     return gumConfirm(promptText, affirmative, negative, defaultVal);
   }
   return promptConfirm(promptText, defaultVal);
+};
+
+// `chemx <cmd> | head` closes stdout early. A closed pipe is the reader's choice, not a
+// crash, so EPIPE ends the process quietly instead of reaching the error catcher.
+// Any other stream error is rethrown and still reported.
+export const exitQuietlyOnClosedPipe = () => {
+  const onStreamError = (streamError) => {
+    const isClosedPipe = streamError?.code === 'EPIPE';
+    if (!isClosedPipe) throw streamError;
+    process.exit(process.exitCode ?? 0);
+  };
+  process.stdout.on('error', onStreamError);
+  process.stderr.on('error', onStreamError);
 };

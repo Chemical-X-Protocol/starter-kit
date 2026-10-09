@@ -2,12 +2,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { executeBuild } from './build/executor.js';
 import { loadProjectConfig } from './config/index.js';
-import { runAudit as executeAstAudit } from './audit.js';
+import { runAudit as executeAstAudit } from './audit-engine.js';
 import { runBuildAudit } from './build.js';
 import { findProjectRoot } from './build/detector.js';
 import { resolveAuditScope } from './audit-scope.js';
 import { computeGateVerdict } from './audit/gate-verdict.js';
 import { ANSI } from './theme.js';
+import { formatAgentJson } from './agent-json.js';
 import {
   parseCommandFromArgs,
   detectTypecheckCommand,
@@ -74,7 +75,7 @@ export const runTypecheckAudit = async (rawArgs = [], isCli = false, options = {
     };
     if (isJson) {
       if (options.print !== false) {
-        process.stdout.write(JSON.stringify(report, null, 2) + '\n');
+        process.stdout.write(formatAgentJson(report) + '\n');
       }
       if (isCli) process.exit(1);
       return report;
@@ -109,7 +110,7 @@ export const runTypecheckAudit = async (rawArgs = [], isCli = false, options = {
 
   if (isJson) {
     if (options.print !== false) {
-      process.stdout.write(JSON.stringify(report, null, 2) + '\n');
+      process.stdout.write(formatAgentJson(report) + '\n');
     }
     if (isCli) process.exit(report.success ? 0 : 1);
     return report;
@@ -187,7 +188,7 @@ export const runTestAudit = async (rawArgs = [], isCli = false, options = {}) =>
     };
     if (isJson) {
       if (options.print !== false) {
-        process.stdout.write(JSON.stringify(report, null, 2) + '\n');
+        process.stdout.write(formatAgentJson(report) + '\n');
       }
       if (isCli) process.exit(1);
       return report;
@@ -228,7 +229,7 @@ export const runTestAudit = async (rawArgs = [], isCli = false, options = {}) =>
 
   if (isJson) {
     if (options.print !== false) {
-      process.stdout.write(JSON.stringify(report, null, 2) + '\n');
+      process.stdout.write(formatAgentJson(report) + '\n');
     }
     if (isCli) process.exit(report.success ? 0 : 1);
     return report;
@@ -312,7 +313,7 @@ export const runProjectVerify = async (rawArgs = [], isCli = false, options = {}
     };
     if (isJson) {
       if (options.print !== false) {
-        process.stdout.write(JSON.stringify(summary, null, 2) + '\n');
+        process.stdout.write(formatAgentJson(summary) + '\n');
       }
       if (isCli) process.exit(1);
       return summary;
@@ -328,7 +329,7 @@ export const runProjectVerify = async (rawArgs = [], isCli = false, options = {}
     const summary = { success: false, error: scope.message, scope: { reason: scope.reason, candidates: scope.candidates } };
     const shouldPrint = options.print !== false;
     if (shouldPrint) {
-      const output = isJson ? JSON.stringify(summary, null, 2) : `\n  ${ANSI.RED}✖${ANSI.RESET} ${ANSI.BOLD}${scope.message}${ANSI.RESET}\n`;
+      const output = isJson ? formatAgentJson(summary) : `\n  ${ANSI.RED}✖${ANSI.RESET} ${ANSI.BOLD}${scope.message}${ANSI.RESET}\n`;
       process.stdout.write(output + '\n');
     }
     if (isCli) process.exit(1);
@@ -399,7 +400,7 @@ export const runProjectVerify = async (rawArgs = [], isCli = false, options = {}
 
   if (isJson) {
     if (options.print !== false) {
-      process.stdout.write(JSON.stringify(summary, null, 2) + '\n');
+      process.stdout.write(formatAgentJson(summary) + '\n');
     }
     if (isCli) process.exit(isAllPassed ? 0 : 1);
     return summary;

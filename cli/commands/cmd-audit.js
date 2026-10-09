@@ -5,7 +5,7 @@
  */
 
 import path from 'node:path';
-import { printHelp } from '../help.js';
+import { isStdinTty, isStdoutTty } from '../terminal.js';
 
 /**
  * @param {string|null} customDir
@@ -14,35 +14,27 @@ import { printHelp } from '../help.js';
  * @param {() => object} loadProjectConfig
  */
 export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => {
-  const {
-    runAudit: executeAstAudit,
-    formatTerminalReport,
-    generateMarkdownReport,
-    saveAuditSnapshot,
-    copyToClipboard,
-    buildMasterPrompt,
-    groupViolationsBySeverity
-  } = await import('../audit.js');
-  const {
-    runInteractiveAuditNavigator,
-    showConversionMenu,
-    handleShareToDiscussions
-  } = await import('../navigator.js');
-  const { renderDashboardBanner } = await import('../navigator-banner.js');
+  // Core imports only. Presentation (navigator, dashboard banner, terminal report) is loaded
+  // inside the branches that render for a human terminal (cli/seam.spec.js).
+  const { runAudit: executeAstAudit } = await import('../audit-engine.js');
+  const { saveAuditSnapshot } = await import('../audit/history.js');
+  const { groupViolationsBySeverity } = await import('../audit/reporter-utils.js');
   const {
     isGradeBelowMinimum,
     evaluateAuditFailure,
     isNonInteractiveSession
   } = await import('../audit/rules-predicates.js');
-  const { runAuditPreflight, resolveGitAuditScope } = await import('../audit-preflight.js');
-  const { syncSearchIndex, syncViolationsIndex, recordAuditSnapshot } = await import('../search.js');
+  const { resolveGitAuditScope } = await import('../audit-preflight-git.js');
+  const { syncSearchIndex, syncViolationsIndex } = await import('../search.js');
   const { resolveAuditScope, toRelDir } = await import('../audit-scope.js');
   const { computeGateVerdict } = await import('../audit/gate-verdict.js');
   const { buildAuditSummary } = await import('../audit/audit-summary.js');
   const { writeRatchet, RATCHET_FILE } = await import('../audit/ratchet.js');
   const { loadProjectConfig: loadSharedConfig } = await import('../config/index.js');
   const { autoGenerateTasksFromAudit } = await import('../team/index.js');
-  const { runScaffold } = await import('../scaffold.js');
+  const loadNavigator = () => import('../navigator.js');
+  const formatTerminalReport = async (r) => (await import('../audit/reporter.js')).formatTerminalReport(r);
+  const runScaffold = async (...args) => (await import('../scaffold.js')).runScaffold(...args);
 
   const projectConfig = loadProjectConfig();
   const isJson = rawArgs.includes('--json');
@@ -83,7 +75,7 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
   const costPerMillion = costFlag ? parseFloat(costFlag.split('=')[1]) : null;
 
   const isNonInteractive = isNonInteractiveSession(rawArgs);
-  const isInteractive = !isNonInteractive && Boolean(process.stdin.isTTY && process.stdout.isTTY);
+  const isInteractive = !isNonInteractive && isStdinTty() && isStdoutTty();
 
   const isCustomDirFlag = Boolean(customDir?.startsWith('--dir='));
   const customDirValue = isCustomDirFlag ? customDir.split('=')[1] : customDir;
@@ -119,6 +111,7 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
 
   const shouldRunPreflight = isCli && isInteractive && !isJson && !isMarkdown && !isShare;
   if (shouldRunPreflight) {
+    const { runAuditPreflight } = await import('../audit-preflight.js');
     const preflight = await runAuditPreflight(rawArgs, {
       customDir,
       defaultDir: targetDir,
@@ -218,6 +211,7 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
   }
 
   if (isMarkdown && !outputFile) {
+    const { generateMarkdownReport } = await import('../audit/reporter-markdown.js');
     const md = generateMarkdownReport(report);
     process.stdout.write(md + '\n');
     if (isCli) process.exitCode = hasFailingViolations ? 1 : 0;
@@ -226,6 +220,7 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
 
   if (isCli) {
     if (isShare) {
+      const { handleShareToDiscussions } = await loadNavigator();
       await handleShareToDiscussions(report);
       process.exit(0);
     }
@@ -236,6 +231,7 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
         saveAuditSnapshot(refreshed);
         return refreshed;
       };
+      const { runInteractiveAuditNavigator } = await loadNavigator();
       await runInteractiveAuditNavigator(
         report,
         () => runScaffold(undefined, rawArgs, (d, cli) => runAudit(d, cli, rawArgs, loadProjectConfig)),
@@ -243,24 +239,33 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
       );
     } else {
       if (isUnroll) {
-        process.stdout.write(formatTerminalReport(report));
+        process.stdout.write(await formatTerminalReport(report));
         if (isInteractive) {
+          const { showConversionMenu } = await loadNavigator();
           await showConversionMenu(() => runScaffold(undefined, rawArgs, (d, cli) => runAudit(d, cli, rawArgs, loadProjectConfig)));
         }
       } else {
         const { critical, high, medium, low } = groupViolationsBySeverity(report.violations);
         const highMediumCount = high.length + medium.length;
-        renderDashboardBanner(
-          report.health,
-          report.metrics,
-          report.violations,
-          critical,
-          highMediumCount,
-          low,
-          report.contextAnalysis,
-          report.aiSlop,
-          { clear: false }
-        );
+        const isHumanTerminal = isStdoutTty();
+        if (isHumanTerminal) {
+          const { renderDashboardBanner } = await import('../navigator-banner.js');
+          renderDashboardBanner(
+            report.health,
+            report.metrics,
+            report.violations,
+            critical,
+            highMediumCount,
+            low,
+            report.contextAnalysis,
+            report.aiSlop,
+            { clear: false }
+          );
+        } else {
+          const { formatPlainAuditSummary } = await import('../audit/audit-plain.js');
+          const summary = buildAuditSummary(report, { projectRoot: process.cwd(), scope: auditRelDir });
+          process.stdout.write(formatPlainAuditSummary(summary));
+        }
 
         if (hasFailingViolations && !isInteractive) {
           process.stdout.write('\n\x1b[1m\x1b[31m✕ [Chemical X] Architectural health verification failed:\x1b[0m\n');
@@ -274,6 +279,8 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
     }
 
     if (hasFailingViolations && (isPromptOnFail || isCopyPrompt)) {
+      const { buildMasterPrompt } = await import('../audit/prompts.js');
+      const { copyToClipboard } = await import('../audit/social-git.js');
       const prompt = buildMasterPrompt(report);
       if (prompt) {
         const copied = copyToClipboard(prompt);
@@ -289,6 +296,6 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
     process.exit(hasFailingViolations ? 1 : 0);
   }
 
-  process.stdout.write(formatTerminalReport(report));
+  process.stdout.write(await formatTerminalReport(report));
   return report;
 };

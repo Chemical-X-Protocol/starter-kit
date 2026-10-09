@@ -86,7 +86,7 @@ const helperTwo = () => {
   const outline = generateAstOutline(codeWithHelpers, 'src/api/service.ts');
 
   assert.match(outline, /export function publicApi/);
-  assert.match(outline, /\/\/ \[Notice: \d+ internal\/unexported function\(s\) omitted\. Use cx read --symbol=<name> to inspect\]/);
+  assert.match(outline, /\/\/ \[Notice: \d+ internal\/unexported function\(s\) omitted\. Use chemx read --symbol=<name> to inspect\]/);
 });
 
 test('Fix 6: Vue SFC outline detects companion controller if present', () => {
