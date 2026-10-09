@@ -3,16 +3,11 @@ import {
   findFileDependents, calculateBlastRadius, querySemanticIndex, queryHybridIndex
 } from '../search-queries.js';
 import { toColumnar } from '../columnar.js';
+import { buildBlastPayload } from '../search-commands-blast.js';
 
 export const executeBlastRadiusQuery = (activeDb, query, args = {}) => {
   const blast = calculateBlastRadius(activeDb, query, { maxDepth: args.maxDepth || 5 });
-  const allConsumers = [...blast.directConsumers, ...blast.transitiveConsumers];
-  const col = toColumnar(allConsumers, ['path', 'tier', 'depth']);
-  return {
-    target: blast.target, seed: blast.seedPath, count: blast.totalImpactCount,
-    depth: blast.depth, tiers: blast.tiers, format: 'columnar',
-    cols: col.cols, rows: col.rows, tests: blast.impactedTests.map((t) => t.path || t)
-  };
+  return buildBlastPayload(blast, { isColumnar: true });
 };
 
 export const executeSemanticQuery = (activeDb, query, args = {}) => {

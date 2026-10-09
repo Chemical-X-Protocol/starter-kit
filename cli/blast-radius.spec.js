@@ -111,3 +111,53 @@ test("calculateBlastRadius: safely terminates on circular dependency cycles", ()
   assert.ok(blast.totalImpactCount > 0);
   assert.ok(blast.depth <= 4);
 });
+
+const seedGraph = (db, files) => {
+  for (const [filePath, imports] of Object.entries(files)) {
+    upsertFileIndex(db, {
+      path: filePath, mtime: 1, size: 1, tier: 'utility', lines: 1, chars: 1,
+      symbols: [{ name: filePath.split('/').pop().replace(/\..*$/, ''), kind: 'const', isExport: true }],
+      imports, root: '/nonexistent-chemx-root'
+    });
+  }
+};
+
+test("calculateBlastRadius: an index.ts target never pulls in every import containing 'index'", () => {
+  const db = openIndexDb(':memory:');
+  seedGraph(db, {
+    'src/routes/compass/store/index.ts': [],
+    'src/routes/bazaar/store/index.ts': [],
+    'src/routes/compass/views/dash.ts': [{ importedSymbol: 'useCompassStore', sourceModule: '../store/index', line: 1 }],
+    'src/routes/compass/views/alias.ts': [{ importedSymbol: 'useCompassStore', sourceModule: '@/routes/compass/store', line: 1 }],
+    'cli/audit.js': [{ importedSymbol: 'loadConfig', sourceModule: './config/index.js', line: 1 }],
+    'src/routes/bazaar/composables/useBazaarPosState.ts': [{ importedSymbol: 'useBazaarStore', sourceModule: '../store/index', line: 1 }]
+  });
+  const blast = calculateBlastRadius(db, 'src/routes/compass/store/index.ts', { maxDepth: 1 });
+  assert.deepEqual(blast.directConsumers.map((c) => c.path).sort(), ['src/routes/compass/views/alias.ts', 'src/routes/compass/views/dash.ts']);
+
+  const ambiguous = calculateBlastRadius(db, 'index.ts');
+  assert.equal(ambiguous.ambiguous, true, 'a basename shared by several files is ambiguous, not guessed');
+  assert.ok(ambiguous.candidates.length >= 1);
+  assert.equal(ambiguous.totalImpactCount, 0);
+});
+
+test('calculateBacktrace: every caller and root entry point appears once', async () => {
+  const { calculateBacktrace } = await import('./search-queries.js');
+  const db = openIndexDb(':memory:');
+  seedGraph(db, {
+    'src/stores/branding.ts': [],
+    'src/views/BrandingSettings.vue': [
+      { importedSymbol: 'branding', sourceModule: '../stores/branding', line: 1 },
+      { importedSymbol: 'brandingHelper', sourceModule: '../stores/branding', line: 2 },
+      { importedSymbol: '*', sourceModule: '../stores/branding', line: 3 }
+    ],
+    'src/views/Dashboard.vue': [{ importedSymbol: 'BrandingSettings', sourceModule: './BrandingSettings.vue', line: 1 }]
+  });
+  const trace = calculateBacktrace(db, 'branding');
+  const callerPaths = trace.callers.map((c) => c.path);
+  assert.deepEqual(callerPaths, Array.from(new Set(callerPaths)), 'no duplicate callers');
+  const rootPaths = trace.rootCallers.map((c) => c.path);
+  assert.deepEqual(rootPaths, Array.from(new Set(rootPaths)), 'no duplicate root entry points');
+  assert.deepEqual(trace.chains, Array.from(new Set(trace.chains)), 'no duplicate chains');
+  assert.ok(callerPaths.includes('src/views/Dashboard.vue'));
+});

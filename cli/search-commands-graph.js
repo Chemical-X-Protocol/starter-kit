@@ -1,92 +1,14 @@
 import { ANSI } from './theme.js';
 import { withIndex } from './search-output.js';
-import { toColumnar } from './columnar.js';
 import {
-  calculateBlastRadius,
   calculateCallTrace,
   calculateBacktrace
 } from './search-db.js';
 import { openSyncedIndex } from './search-session.js';
 import { applyExitStatus, indexStatusOf } from './search-output.js';
+import { STATUS, toExitCode } from './result-status.js';
 
-export const handleBlastRadiusCommand = (db, target, { index = null, isJson = false, isCli = true, isColumnar = false, maxDepth = 5 } = {}) => {
-  const result = calculateBlastRadius(db, target, { maxDepth });
-  const allConsumers = [...result.directConsumers, ...result.transitiveConsumers];
-
-  if (isJson) {
-    if (isColumnar) {
-      const colData = toColumnar(allConsumers, ['path', 'tier', 'depth']);
-      const payload = {
-        target: result.target,
-        seed: result.seedPath,
-        count: result.totalImpactCount,
-        depth: result.depth,
-        tiers: result.tiers,
-        format: 'columnar',
-        cols: colData.cols,
-        rows: colData.rows,
-        tests: result.impactedTests.map((t) => t.path || t)
-      };
-      process.stdout.write(JSON.stringify(withIndex(payload, index)) + '\n');
-      if (isCli) process.exit();
-      return payload;
-    }
-
-    const payload = {
-      target: result.target,
-      seed: result.seedPath,
-      count: result.totalImpactCount,
-      depth: result.depth,
-      tiers: result.tiers,
-      consumers: allConsumers.map((c) => ({
-        path: c.path,
-        tier: c.tier,
-        depth: c.depth
-      })),
-      tests: result.impactedTests.map((t) => t.path || t)
-    };
-    process.stdout.write(JSON.stringify(withIndex(payload, index)) + '\n');
-    if (isCli) process.exit();
-    return payload;
-  }
-
-  process.stdout.write(`\n${ANSI.BOLD}${ANSI.CYAN}Blast Radius Analysis:${ANSI.RESET} ${ANSI.BOLD}${target}${ANSI.RESET}\n`);
-  if (result.seedPath) {
-    process.stdout.write(`  ${ANSI.DIM}Resolved Seed:${ANSI.RESET} ${result.seedPath}\n`);
-  }
-  process.stdout.write(`  ${ANSI.MINT}Impact Summary:${ANSI.RESET} ${result.totalImpactCount} total affected files across ${result.depth} dependency hops\n`);
-
-  if (result.totalImpactCount === 0) {
-    process.stdout.write(`    ${ANSI.DIM}No downstream consumers found. Modification has 0 blast radius.${ANSI.RESET}\n\n`);
-    if (isCli) process.exit();
-    return result;
-  }
-
-  if (result.directConsumers.length > 0) {
-    process.stdout.write(`  ${ANSI.GOLD}Direct Consumers (Depth 1 - ${result.directConsumers.length}):${ANSI.RESET}\n`);
-    for (const c of result.directConsumers) {
-      process.stdout.write(`    ${ANSI.BOLD}${c.path}${ANSI.RESET} ${ANSI.DIM}[${c.tier}]${ANSI.RESET}\n`);
-    }
-  }
-
-  if (result.transitiveConsumers.length > 0) {
-    process.stdout.write(`  ${ANSI.PURPLE}Transitive Consumers (Depth 2+ - ${result.transitiveConsumers.length}):${ANSI.RESET}\n`);
-    for (const c of result.transitiveConsumers) {
-      process.stdout.write(`    ${ANSI.DIM}(depth ${c.depth})${ANSI.RESET} ${c.path} ${ANSI.DIM}[${c.tier}]${ANSI.RESET}\n`);
-    }
-  }
-
-  if (result.impactedTests.length > 0) {
-    process.stdout.write(`  ${ANSI.RED}Impacted Tests (${result.impactedTests.length}):${ANSI.RESET}\n`);
-    for (const t of result.impactedTests) {
-      process.stdout.write(`    ${ANSI.RED}▶${ANSI.RESET} ${t.path || t}\n`);
-    }
-  }
-
-  process.stdout.write('\n');
-  if (isCli) process.exit();
-  return result;
-};
+export { handleBlastRadiusCommand } from './search-commands-blast.js';
 
 const renderCalleeTreeLines = (callees, indent = '  ') => {
   const lines = [];
@@ -134,6 +56,12 @@ export const handleCallTraceCommand = (db, target, { index = null, isJson = fals
 
 export const handleBacktraceCommand = (db, target, { index = null, isJson = false, isCli = true, maxDepth = 5 } = {}) => {
   const result = calculateBacktrace(db, target, { maxDepth });
+  const isUnresolved = Boolean(result.ambiguous || result.notFound);
+  if (isUnresolved) {
+    result.status = STATUS.INCONCLUSIVE;
+    result.reason = result.ambiguous ? `ambiguous target: ${result.candidates.join(', ')}` : `target "${result.target}" not found in the index scope`;
+  }
+  if (isCli && isUnresolved) process.exitCode = toExitCode(STATUS.INCONCLUSIVE);
 
   if (isJson) {
     process.stdout.write(JSON.stringify(withIndex(result, index)) + '\n');
@@ -145,6 +73,7 @@ export const handleBacktraceCommand = (db, target, { index = null, isJson = fals
   if (result.seedPath) {
     process.stdout.write(`  ${ANSI.DIM}Resolved Target:${ANSI.RESET} ${result.seedPath}\n`);
   }
+  if (isUnresolved) process.stdout.write(`  ${ANSI.GOLD}? Inconclusive: ${result.reason}${ANSI.RESET}\n`);
   process.stdout.write(`  ${ANSI.MINT}Caller Summary:${ANSI.RESET} ${result.totalCallers} upstream callers across ${result.depth} causal hops\n`);
 
   if (result.totalCallers === 0) {
