@@ -17,7 +17,8 @@ test('hotspot-graph: calculates cascading risk scores joining violations and bla
       importer_path TEXT NOT NULL,
       imported_symbol TEXT NOT NULL,
       source_module TEXT NOT NULL,
-      resolved_path TEXT NOT NULL DEFAULT ''
+      resolved_path TEXT NOT NULL DEFAULT '',
+      line INTEGER NOT NULL DEFAULT 1
     );
     CREATE TABLE violations (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
