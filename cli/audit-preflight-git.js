@@ -52,3 +52,16 @@ export const resolveGitAuditScope = (cwd = process.cwd()) => {
     files: existingSourceFiles
   };
 };
+
+// Staged (index) files only: what a pre-commit hook is actually about to commit.
+export const getGitStagedFiles = (cwd = process.cwd()) => {
+  const result = spawnSync('git', ['diff', '--cached', '--name-only', '--diff-filter=ACM', '-z'], { cwd, encoding: 'utf-8' });
+  const isSuccess = result.status === 0;
+  if (!isSuccess) return [];
+  return result.stdout.split('\0').filter(Boolean);
+};
+
+export const resolveStagedAuditScope = (cwd = process.cwd()) => {
+  const files = getGitStagedFiles(cwd).filter((relPath) => isSourceFilePath(relPath) && fs.existsSync(relPath));
+  return { ok: files.length > 0, files };
+};

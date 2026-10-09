@@ -134,7 +134,9 @@ if [ -n "\$AUDIT_BIN" ]; then
   if [ "\$CHEMX_VERBOSE" = "1" ]; then
     printf "%s[Chemical X] Verifying architectural health (Min Grade: %s, Min Score: %s)...%s\\n" "\$C_BLUE" "\$MIN_GRADE" "\$MIN_SCORE" "\$C_RESET"
   fi
-  if ! AUDIT_OUT=\$(eval "\$AUDIT_BIN audit --git --min-grade=\$MIN_GRADE --min-score=\$MIN_SCORE --non-interactive" < /dev/null 2>&1); then
+  STAGED_COUNT=\$(printf '%s\\n' "\$STAGED_FILES" | wc -l | tr -d ' ')
+  printf "%s[Chemical X] Auditing %s staged file(s)...%s\\n" "\$C_BLUE" "\$STAGED_COUNT" "\$C_RESET" >&2
+  if ! AUDIT_OUT=\$(eval "\$AUDIT_BIN audit --staged --no-index --min-grade=\$MIN_GRADE --min-score=\$MIN_SCORE --non-interactive" < /dev/null 2>&1); then
     printf "\\n%s%s[Chemical X] Commit Blocked: Architectural health verification failed%s\\n" "\$C_BOLD" "\$C_RED" "\$C_RESET"
     printf "%s\\n\\n" "\$AUDIT_OUT"
     printf "%s╭──────────────────────────────────────────────────────────────────────────╮%s\\n" "\$C_CYAN" "\$C_RESET"

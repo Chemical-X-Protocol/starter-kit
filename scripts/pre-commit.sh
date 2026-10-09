@@ -118,8 +118,11 @@ if [ "$LINE_BUDGET_FAILED" -eq 1 ]; then
   exit 1
 fi
 
-AUDIT_BIN=""
-if [ -f "./cli/index.js" ]; then
+# CHEMX_BIN (exported by the installed hook) pins the same chemx as the MCP launcher.
+AUDIT_BIN="$CHEMX_BIN"
+if [ -n "$AUDIT_BIN" ]; then
+  :
+elif [ -f "./cli/index.js" ]; then
   AUDIT_BIN="node ./cli/index.js"
 elif [ -x "./node_modules/.bin/chemx" ]; then
   AUDIT_BIN="./node_modules/.bin/chemx"
@@ -134,7 +137,10 @@ if [ -n "$AUDIT_BIN" ]; then
     printf "%s[Chemical X] Verifying architectural health (Min Grade: %s, Min Score: %s)...%s\n" "$C_BLUE" "$MIN_GRADE" "$MIN_SCORE" "$C_RESET"
   fi
   
-  AUDIT_CMD="$AUDIT_BIN audit --git --min-grade=$MIN_GRADE --min-score=$MIN_SCORE --non-interactive"
+  # Staged files only, no index sync: the audit finishes in seconds instead of minutes (#1742).
+  STAGED_COUNT=$(printf '%s\n' "$STAGED_FILES" | wc -l | tr -d ' ')
+  printf "%s[Chemical X] Auditing %s staged file(s)...%s\n" "$C_BLUE" "$STAGED_COUNT" "$C_RESET" >&2
+  AUDIT_CMD="$AUDIT_BIN audit --staged --no-index --min-grade=$MIN_GRADE --min-score=$MIN_SCORE --non-interactive"
   
   if ! AUDIT_OUT=$(eval "$AUDIT_CMD < /dev/null" 2>&1); then
     printf "\n%s%s[Chemical X] Commit Blocked: Architectural health verification failed%s\n" "$C_BOLD" "$C_RED" "$C_RESET"
