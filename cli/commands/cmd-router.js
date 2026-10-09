@@ -154,6 +154,8 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
     }
     case 'audit': {
       const posDir = (rawArgs[1] && !rawArgs[1].startsWith('-')) ? rawArgs[1] : null;
+      const { refuseMonorepoRootAudit } = await import('../workspace-run.js');
+      if (refuseMonorepoRootAudit(posDir, rawArgs)) break;
       await runAudit(posDir, true);
       break;
     }

@@ -4,6 +4,8 @@ import { resolvePackageManager, loadLocalPackageJson } from './build/detector.js
 import { ANSI } from './theme.js';
 import { formatAgentJson } from './agent-json.js';
 import { parseCommandFromArgs, stripAnsi, checkNodeModules } from './verify-helpers.js';
+import { workspaceAt, emitWorkspace, allPackagesOrRefuse } from './workspace-run.js';
+import { STATUS } from './result-status.js';
 
 export const detectLintCommand = (customCmd, cwd = process.cwd(), isFix = false, targetPath = null) => {
   if (customCmd && customCmd.trim().length > 0) return customCmd.trim();
@@ -100,6 +102,7 @@ export const runLintAudit = async (rawArgs = [], isCli = false, options = {}) =>
         '',
         `${ANSI.BOLD}OPTIONS${ANSI.RESET}`,
         `  --fix                    Automatically fix fixable lint and tree-formatting errors`,
+        `  --all-packages           At a monorepo root: lint every workspace package (else refused)`,
         `  --json                   Output structured diagnostics as JSON for AI agents`,
         `  --raw                    Do not capture or format output`,
         `  -h, --help               Show this help message`,
@@ -123,6 +126,19 @@ export const runLintAudit = async (rawArgs = [], isCli = false, options = {}) =>
 
   // Extract optional target path argument (first non-flag argument)
   const targetPath = rawArgs.find((arg) => !arg.startsWith('-') && arg !== 'lint' && arg !== 'check:lint' && arg !== 'eslint') || null;
+
+  // At a monorepo root with no path: lint every package with --all-packages, else refuse.
+  const workspace = options.inWorkspace || customCmd || targetPath ? null : workspaceAt(cwd);
+  if (workspace) {
+    const allPackages = rawArgs.includes('--all-packages') || options.allPackages === true;
+    const runInPackage = async (pkg) => {
+      const report = await runLintAudit(isFix ? ['--fix'] : [], false, { cwd: pkg.dir, print: false, json: true, inWorkspace: true });
+      return { status: report.success ? STATUS.PASS : STATUS.FAIL, ...report };
+    };
+    const output = { isJson, isCli, shouldPrint: options.print !== false };
+    const formatOne = (entry) => `  ${entry.status} ${ANSI.DIM}(${entry.errorCount ?? 0} error(s), ${entry.command})${ANSI.RESET}\n`;
+    return emitWorkspace(await allPackagesOrRefuse(workspace, 'lint', allPackages, 'pass a path inside a package', runInPackage), output, formatOne);
+  }
 
   const nmStatus = checkNodeModules(cwd);
   if (nmStatus) {
