@@ -261,8 +261,9 @@ test('MCP Server: tools/call chemx_autofix performs deterministic cleanup', asyn
   assert.strictEqual(dryRes.result.isError, false);
   const dryData = JSON.parse(dryRes.result.content[0].text);
   assert.strictEqual(dryData.dryRun, true);
-  assert.strictEqual(dryData.totalFixes, 2);
+  assert.strictEqual(dryData.totalFixes, 1, 'the em dash is inside a string literal and stays');
   assert.strictEqual(dryData.filesChanged, 1);
+  assert.match(dryData.diff, /-\/\/ hope this helps/);
 
   // Live run
   const liveRes = await handler.handleRequest({
@@ -278,8 +279,8 @@ test('MCP Server: tools/call chemx_autofix performs deterministic cleanup', asyn
   assert.strictEqual(liveRes.result.isError, false);
   const liveData = JSON.parse(liveRes.result.content[0].text);
   assert.strictEqual(liveData.dryRun, false);
-  assert.strictEqual(liveData.totalFixes, 2);
-  assert.strictEqual(fs.readFileSync(testFile, 'utf-8'), 'const title = "Dashboard - Analytics";');
+  assert.strictEqual(liveData.totalFixes, 1);
+  assert.strictEqual(fs.readFileSync(testFile, 'utf-8'), 'const title = "Dashboard — Analytics";');
 
   fs.rmSync(tempDir, { recursive: true, force: true });
 });

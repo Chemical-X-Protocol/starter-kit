@@ -5,13 +5,14 @@ import path from 'node:path';
 import os from 'node:os';
 import { autofixContent, runAutofix } from './autofix.js';
 
-test('autofixContent: replaces em dash with standard hyphen', () => {
+test('autofixContent: replaces em dash in comments only, never in string literals', () => {
   const input = 'const title = "Welcome — User Dashboard";\n// Notes — see section 3';
   const { fixedContent, fixes } = autofixContent(input);
 
-  assert.equal(fixes.length, 2);
+  assert.equal(fixes.length, 1);
   assert.equal(fixes[0].rule, 'TYPOGRAPHY_EM_DASH');
-  assert.equal(fixedContent, 'const title = "Welcome - User Dashboard";\n// Notes - see section 3');
+  assert.equal(fixes[0].line, 2);
+  assert.equal(fixedContent, 'const title = "Welcome — User Dashboard";\n// Notes - see section 3');
 });
 
 test('autofixContent: removes leaked markdown code fences', () => {
@@ -53,12 +54,12 @@ test('autofixContent: removes lazy truncation comments', () => {
 });
 
 test('autofixContent: respects rule filtering', () => {
-  const input = '```\nconst x = "foo — bar";';
+  const input = '// foo — bar\n// hope this helps\nconst x = 1;';
   const { fixedContent, fixes } = autofixContent(input, { rules: ['TYPOGRAPHY_EM_DASH'] });
 
   assert.equal(fixes.length, 1);
   assert.equal(fixes[0].rule, 'TYPOGRAPHY_EM_DASH');
-  assert.ok(fixedContent.includes('```'));
+  assert.ok(fixedContent.includes('// hope this helps'));
   assert.ok(fixedContent.includes('foo - bar'));
 });
 
@@ -70,16 +71,16 @@ test('runAutofix: handles dryRun and file write correctly', () => {
   // Dry run: reports fixes without modifying file
   const dryResult = runAutofix(testFile, { dryRun: true, cwd: tempDir });
   assert.equal(dryResult.filesChanged, 1);
-  assert.equal(dryResult.totalFixes, 2);
+  assert.equal(dryResult.totalFixes, 1);
   assert.equal(dryResult.dryRun, true);
   assert.equal(fs.readFileSync(testFile, 'utf-8'), 'const msg = "test — em dash";\n// hope this helps');
 
   // Live run: writes changes
   const liveResult = runAutofix(testFile, { dryRun: false, cwd: tempDir });
   assert.equal(liveResult.filesChanged, 1);
-  assert.equal(liveResult.totalFixes, 2);
+  assert.equal(liveResult.totalFixes, 1);
   assert.equal(liveResult.dryRun, false);
-  assert.equal(fs.readFileSync(testFile, 'utf-8'), 'const msg = "test - em dash";');
+  assert.equal(fs.readFileSync(testFile, 'utf-8'), 'const msg = "test — em dash";', 'string literal untouched');
 
   fs.rmSync(tempDir, { recursive: true, force: true });
 });
