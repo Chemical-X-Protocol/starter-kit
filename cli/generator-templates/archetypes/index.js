@@ -51,36 +51,53 @@ export const resolveArchetype = (slug = '', description = '', explicitTemplate =
 
   for (const archetype of ALL_ARCHETYPES) {
     let score = 0;
-    if (archetype.id === normalized) score += 30;
-    if (archetype.keywords.includes(normalized)) score += 25;
+    const isIdMatch = archetype.id === normalized;
+    if (isIdMatch) score += 30;
+    const isKeywordMatch = archetype.keywords.includes(normalized);
+    if (isKeywordMatch) score += 25;
 
     for (const token of slugTokens) {
-      if (archetype.id === token) score += 15;
-      else if (archetype.id.includes(token)) score += 8;
+      const isSlugIdMatch = archetype.id === token;
+      if (isSlugIdMatch) {
+        score += 15;
+      } else {
+        const isSlugIdPartial = archetype.id.includes(token);
+        if (isSlugIdPartial) score += 8;
+      }
 
       for (const kw of archetype.keywords) {
-        if (token === kw) {
+        const isSlugKeywordExact = token === kw;
+        if (isSlugKeywordExact) {
           score += 12;
-        } else if (isPartialMatch(token, kw)) {
-          score += 8;
+        } else {
+          const isSlugKeywordPartial = isPartialMatch(token, kw);
+          if (isSlugKeywordPartial) score += 8;
         }
       }
     }
 
     for (const token of descTokens) {
-      if (archetype.id === token) score += 10;
-      else if (archetype.id.includes(token)) score += 5;
+      const isDescIdMatch = archetype.id === token;
+      if (isDescIdMatch) {
+        score += 10;
+      } else {
+        const isDescIdPartial = archetype.id.includes(token);
+        if (isDescIdPartial) score += 5;
+      }
 
       for (const kw of archetype.keywords) {
-        if (token === kw) {
+        const isDescKeywordExact = token === kw;
+        if (isDescKeywordExact) {
           score += 7;
-        } else if (isPartialMatch(token, kw)) {
-          score += 4;
+        } else {
+          const isDescKeywordPartial = isPartialMatch(token, kw);
+          if (isDescKeywordPartial) score += 4;
         }
       }
     }
 
-    if (score > highestScore) {
+    const isNewBest = score > highestScore;
+    if (isNewBest) {
       highestScore = score;
       bestArchetype = archetype;
     }
