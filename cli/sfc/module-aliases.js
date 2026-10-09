@@ -91,7 +91,8 @@ export const loadAliasMap = (cwd) => {
 /** Absolute base path for an aliased specifier, or null when no alias matches. */
 export const resolveAliasBase = (sourceModule, cwd) => {
   for (const alias of loadAliasMap(cwd)) {
-    if (alias.isExact && sourceModule === alias.prefix) return alias.targetDir;
+    const isExactMatch = alias.isExact && sourceModule === alias.prefix;
+    if (isExactMatch) return alias.targetDir;
     const isPrefixMatch = !alias.isExact && sourceModule.startsWith(alias.prefix);
     if (isPrefixMatch) return path.join(alias.targetDir, sourceModule.slice(alias.prefix.length));
   }
