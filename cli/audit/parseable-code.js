@@ -5,6 +5,7 @@
 import { parseSfc } from '../sfc/sfc-parse.js';
 
 export const extractParseableCode = (content, ext, filePath = 'component.vue') => {
-  if (ext === '.vue') return parseSfc(content, filePath).scriptOverlay;
+  const isVue = ext === '.vue';
+  if (isVue) return parseSfc(content, filePath).scriptOverlay;
   return content;
 };
