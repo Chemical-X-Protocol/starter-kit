@@ -36,7 +36,8 @@ export const formatFailuresSection = (report) => {
   lines.push(`${DIM}   Consolidated breakdown of all failed architectural checks${RESET}`);
   lines.push(`${RED}======================================================================${RESET}`);
 
-  if (violations.length === 0 && hotspots.length === 0) {
+  const hasNoFindings = violations.length === 0 && hotspots.length === 0;
+  if (hasNoFindings) {
     lines.push(`\n   ${GREEN}${BOLD}✔ ZERO FAILURES DETECTED!${RESET}`);
     lines.push(`   All ${Object.keys(pillars).length} Chemical X Molecular Architecture Pillars are 100% Compliant.\n`);
     lines.push(`${RED}======================================================================${RESET}\n`);
@@ -55,23 +56,27 @@ export const formatFailuresSection = (report) => {
   lines.push(`   Hotspot Files:           ${hotspotsDesc}`);
   lines.push(`${RED}----------------------------------------------------------------------${RESET}`);
 
-  if (critical.length > 0) {
+  const hasCritical = critical.length > 0;
+  if (hasCritical) {
     lines.push(`\n   ${BOLD}${RED}🚨 CRITICAL HAZARDS (${critical.length}) : IMMEDIATE ACTION REQUIRED${RESET}\n`);
     lines.push(renderGroupedViolationsTerminal(critical));
   }
 
-  if (debtsTotal > 0) {
+  const hasDebts = debtsTotal > 0;
+  if (hasDebts) {
     lines.push(`   ${BOLD}${ORANGE}⚠️  HIGH & MEDIUM HAZARDS (${debtsTotal}) : ARCHITECTURE DEBTS${RESET}\n`);
     lines.push(renderGroupedViolationsTerminal([...high, ...medium]));
   }
 
-  if (low.length > 0) {
+  const hasLow = low.length > 0;
+  if (hasLow) {
     lines.push(`   ${BOLD}${YELLOW}🧹 LOW & HYGIENE ISSUES (${low.length})${RESET}\n`);
     lines.push(renderGroupedViolationsTerminal(low));
   }
 
   const failedPillars = Object.entries(pillars).filter(isDegradedPillar);
-  if (failedPillars.length > 0) {
+  const hasFailedPillars = failedPillars.length > 0;
+  if (hasFailedPillars) {
     lines.push(`   ${BOLD}${RED}🏛️  FAILED / DEGRADED PILLARS (${failedPillars.length})${RESET}`);
     for (const [name, p] of failedPillars) {
       lines.push(`   ✕ ${YELLOW}${name}${RESET}: ${p.violations} violations (${p.critical} Critical, ${p.high} High, ${p.medium} Med)`);
@@ -79,7 +84,8 @@ export const formatFailuresSection = (report) => {
     lines.push('');
   }
 
-  if (hotspots.length > 0) {
+  const hasHotspots = hotspots.length > 0;
+  if (hasHotspots) {
     lines.push(`   ${BOLD}${YELLOW}🔥 REFACTORING HOTSPOTS (${hotspots.length})${RESET}`);
     for (let idx = 0; idx < hotspots.length; idx++) {
       lines.push(formatFailureHotspot(hotspots[idx], idx));
@@ -115,7 +121,8 @@ export const formatPassesSection = (report) => {
   lines.push(`${GREEN}----------------------------------------------------------------------${RESET}`);
 
   lines.push(`\n   ${BOLD}${GREEN}✔ COMPLIANT ARCHITECTURAL PILLARS:${RESET}`);
-  if (passedPillars.length === 0) {
+  const hasNoPassedPillars = passedPillars.length === 0;
+  if (hasNoPassedPillars) {
     lines.push(`   ${YELLOW}No pillars are completely hazard-free.${RESET}\n`);
   } else {
     for (const [name] of passedPillars) {
@@ -125,7 +132,8 @@ export const formatPassesSection = (report) => {
   }
 
   lines.push(`   ${BOLD}${CYAN}STANDARDS MET & CLEAN AREAS:${RESET}`);
-  if (metrics.moleculeCompliantPct === 100) {
+  const isFullyCompliant = metrics.moleculeCompliantPct === 100;
+  if (isFullyCompliant) {
     lines.push(`   ${GREEN}✔${RESET} 100% Molecule Capsule Limit (<= ${moleculeLimit} lines per molecule)`);
   }
   const hasExtremeMonolith = hotspots.some(isExtremeMonolith);
@@ -136,7 +144,8 @@ export const formatPassesSection = (report) => {
   if (!hasSevereMonolith) {
     lines.push(`   ${GREEN}✔${RESET} Zero Severe Monoliths (0 files ${SIZE_LABELS.severe} lines of code)`);
   }
-  if (contextAnalysis.riskLevel === 'LOW') {
+  const isLowContextRisk = contextAnalysis.riskLevel === 'LOW';
+  if (isLowContextRisk) {
     lines.push(`   ${GREEN}✔${RESET} Low Context Hazard & Token Burn Risk`);
   }
 
