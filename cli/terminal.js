@@ -18,9 +18,12 @@ export const openBrowser = (url) => {
   }
 };
 
+// Node leaves isTTY undefined (not false) on pipes and files, so test for truthiness.
+export const isStdoutTty = () => Boolean(process.stdout && process.stdout.isTTY);
+export const isInteractive = () => Boolean(process.stdin && process.stdin.isTTY) && isStdoutTty() && !process.env.CI;
+
 export const hasGum = () => {
-  if (process.stdout && process.stdout.isTTY === false) return false;
-  if (process.stdin && process.stdin.isTTY === false) return false;
+  if (!isInteractive()) return false;
   if (process.argv && process.argv.some((arg) => arg === '--headless' || arg === '--ci' || arg === '--non-interactive' || arg === '--no-interactive' || arg === '--yes' || arg === '-y')) return false;
   try {
     return spawnSync("which", ["gum"], { stdio: "ignore" }).status === 0;
@@ -71,7 +74,7 @@ export const isColorSupported = () => {
   const hasNoColorArg = Boolean(process.argv && process.argv.some((arg) => arg === "--no-color" || arg === "--color=false"));
   const hasNoColorEnv = Boolean(process.env.NO_COLOR);
   const isDumbTerminal = process.env.TERM === "dumb";
-  const isPipedStdout = Boolean(process.stdout && process.stdout.isTTY === false);
+  const isPipedStdout = !isStdoutTty();
   const shouldDisableColor = hasNoColorArg || hasNoColorEnv || isDumbTerminal || isPipedStdout;
   return !shouldDisableColor;
 };
