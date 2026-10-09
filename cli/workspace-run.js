@@ -1,6 +1,7 @@
 // Per-package fan-out for commands started at a workspace (monorepo) root. A root run with no
 // target is refused with the package list (unless --all-packages): running every package's
 // tests, types or audit at once is what made the whole monorepo too big to check.
+import fs from 'node:fs';
 import path from 'node:path';
 import { findProjectRoot } from './build/detector.js';
 import { ANSI } from './theme.js';
@@ -98,6 +99,33 @@ export const emitWorkspace = (report, { isJson, isCli, shouldPrint }, formatOne)
   if (shouldPrint) process.stdout.write(isJson ? `${formatAgentJson(report)}\n` : text);
   if (isCli) process.exit(toExitCode(report.status));
   return report;
+};
+
+// The workspace root as a package of its own: name from its package.json, rel '.'.
+export const rootPackage = (workspace) => {
+  let name = '<root>';
+  try {
+    const manifest = JSON.parse(fs.readFileSync(path.join(workspace.root, 'package.json'), 'utf8'));
+    const hasName = typeof manifest.name === 'string' && manifest.name;
+    if (hasName) name = manifest.name;
+  } catch { // chemx-allow: best-effort an unreadable root manifest keeps the placeholder name
+    name = '<root>';
+  }
+  return { name, rel: '.', dir: workspace.root };
+};
+
+// What a default root run left out, so the output names exactly what did and did not run.
+export const rootOnlyNote = (workspace, command) =>
+  `ran only the root package's own ${command}; the ${workspace.packages.length} packages under it were not run (use --all-packages for all of them, or run inside a package)`;
+
+// --all-packages runs `runInPackage(pkg)` in every package; without it only the root package's own
+// script runs (apps and submodules own their suites). Used by typecheck and verify.
+export const rootOrAllPackages = async (workspace, command, allPackages, runInPackage) => {
+  if (allPackages) {
+    const units = workspace.packages.map((pkg) => ({ pkg, args: [] }));
+    return runPerPackage(units, (unit) => runInPackage(unit.pkg), { notes: [`the root package's own ${command} was not run; run it without --all-packages`] });
+  }
+  return runPerPackage([{ pkg: rootPackage(workspace), args: [] }], (unit) => runInPackage(unit.pkg), { notes: [rootOnlyNote(workspace, command)] });
 };
 
 // --all-packages runs `runInPackage(pkg)` in every package; without it the root run is refused.

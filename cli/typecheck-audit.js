@@ -8,7 +8,7 @@ import { planTypecheck } from './typecheck-command.js';
 import { runSandboxTypecheck } from './typecheck-sandbox.js';
 import { parseTypecheckOutput, checkNodeModules } from './verify-helpers.js';
 import { formatAgentJson } from './agent-json.js';
-import { workspaceAt, emitWorkspace, allPackagesOrRefuse } from './workspace-run.js';
+import { workspaceAt, emitWorkspace, rootOrAllPackages } from './workspace-run.js';
 
 const TYPECHECK_ARGS = {
   booleans: { '--json': 'json', '--raw': 'raw', '--checkjs': 'checkjs', '--no-checkjs': 'noCheckjs', '--all-packages': 'allPackages', '--help': 'help', '-h': 'help' },
@@ -107,7 +107,7 @@ export const runTypecheckAudit = async (rawArgs = [], isCli = false, options = {
     const allPackages = Boolean(parsed.flags.allPackages || options.allPackages);
     const timeoutArgs = parsed.values.timeout ? [`--timeout=${parsed.values.timeout}`] : [];
     const runInPackage = (pkg) => runTypecheckAudit(timeoutArgs, false, { timeoutMs: options.timeoutMs, cwd: pkg.dir, print: false, json: true, inWorkspace: true });
-    return emitWorkspace(await allPackagesOrRefuse(workspace, 'typecheck', allPackages, 'pass -- <command>', runInPackage), output, formatTypecheckReport);
+    return emitWorkspace(await rootOrAllPackages(workspace, 'typecheck', allPackages, runInPackage), output, formatTypecheckReport);
   }
   const nmStatus = checkNodeModules(cwd);
   if (nmStatus) {

@@ -67,7 +67,7 @@ test('workspace: packages come from pnpm-workspace.yaml globs, negations honoure
   });
 });
 
-test('workspace: test, typecheck and verify at the monorepo root refuse and list the packages', { timeout: 60000 }, async () => {
+test('workspace: test, typecheck and verify at the monorepo root run the root package only and name it', { timeout: 120000 }, async () => {
   await withMonorepo(async (root) => {
     const reports = [
       await runTestAudit(['--json'], false, quiet(root)),
@@ -75,11 +75,30 @@ test('workspace: test, typecheck and verify at the monorepo root refuse and list
       await runProjectVerify(['--json'], false, quiet(root))
     ];
     for (const report of reports) {
-      assert.equal(report.status, STATUS.INCONCLUSIVE, JSON.stringify(report));
-      assert.equal(report.reason, 'MONOREPO_ROOT');
-      assert.deepEqual(report.packages.map((p) => p.dir), ['packages/alpha', 'packages/beta', 'packages/gamma']);
-      assert.match(report.executionError || report.error, /--all-packages/);
+      assert.notEqual(report.reason, 'MONOREPO_ROOT', JSON.stringify(report));
+      assert.deepEqual(report.packages.map((p) => [p.package, p.dir]), [['mono', '.']], 'only the root package ran');
+      assert.match(report.notes.join(' '), /ran only the root package's own .*--all-packages/);
     }
+    assert.equal(reports[0].status, STATUS.FAIL, 'the root test script (which fails here) was the one that ran');
+  });
+});
+
+test('workspace: test --changed routes a root file to the root suite and a script-less package to a note', { timeout: 120000 }, async () => {
+  await withMonorepo(async (root) => {
+    fs.mkdirSync(path.join(root, 'apps/x'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'apps/x/package.json'), JSON.stringify({ name: '@m/x', private: true }));
+    fs.writeFileSync(path.join(root, 'apps/x/x.js'), 'export const x = 1;\n');
+    fs.writeFileSync(path.join(root, 'pnpm-workspace.yaml'), "packages:\n  - 'packages/*'\n  - 'apps/*'\n  - '!packages/ignored'\n");
+    git(root, 'add', '-A');
+    git(root, 'commit', '-q', '-m', 'add app');
+    fs.appendFileSync(path.join(root, 'apps/x/x.js'), '// changed\n');
+    fs.mkdirSync(path.join(root, 'src'));
+    fs.writeFileSync(path.join(root, 'src/r.js'), 'export const r = 1;\n');
+    git(root, 'add', '-A');
+    const report = await runTestAudit(['--changed', '--json'], false, quiet(root));
+    assert.deepEqual(report.packages.map((p) => p.package), ['mono'], JSON.stringify(report));
+    assert.match(report.notes.join(' '), /@m\/x \(apps\/x\) changed but has no test script/);
+    assert.match(report.notes.join(' '), /1 changed root file\(s\) were routed to the root package's suite/);
   });
 });
 

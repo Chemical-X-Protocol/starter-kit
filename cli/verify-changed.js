@@ -5,7 +5,7 @@ import { listChangedFiles } from './test-changes.js';
 import { isSourceFilePath } from './audit-preflight-git.js';
 import { ANSI } from './theme.js';
 import { STATUS } from './result-status.js';
-import { changedPackages, runPerPackage, changeNotes, allPackagesOrRefuse } from './workspace-run.js';
+import { changedPackages, runPerPackage, changeNotes, rootOrAllPackages } from './workspace-run.js';
 
 // Returns { ok, base, files } (root-relative source files that still exist) or { ok: false, error }.
 export const resolveVerifyChanges = (root, base = null) => {
@@ -24,7 +24,7 @@ export const testArgsFor = (changes, base) => (changes ? ['--changed', ...(base 
 // --all-packages verifies every package, anything else is refused with the package list.
 // runInPackage(pkg, args) resolves to that package's own verify summary.
 export const verifyWorkspace = async (workspace, { changed, base, allPackages }, runInPackage) => {
-  if (!changed) return allPackagesOrRefuse(workspace, 'verify', allPackages, 'use --dir=<package>, use --changed', (pkg) => runInPackage(pkg, []));
+  if (!changed) return rootOrAllPackages(workspace, 'verify', allPackages, (pkg) => runInPackage(pkg, []));
   const changes = changedPackages(workspace, base);
   const isChangesFailed = !changes.ok;
   if (isChangesFailed) return { status: STATUS.INCONCLUSIVE, success: false, reason: 'NO_CHANGES', error: `cannot list changed files: ${changes.error}`, packages: [] };

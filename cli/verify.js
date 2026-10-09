@@ -143,11 +143,11 @@ export const runProjectVerify = async (rawArgs = [], isCli = false, options = {}
 
   // Only the audit is scoped; typecheck, tests and build run project-wide, so each line names its command.
   progress.start('TypeScript');
-  const typecheck = typecheckSection(await runTypecheckAudit([], false, { print: false, cwd, timeoutMs }));
+  const typecheck = typecheckSection(await runTypecheckAudit([], false, { print: false, cwd, timeoutMs, inWorkspace: true }));
   progress.finish(stepLine(typecheck.status, 'TypeScript', formatTypecheckStep(typecheck), typecheck.status === SKIPPED ? '' : typecheck.command));
 
   progress.start('Test Suite');
-  const tests = testsSection(await runTestAudit(testArgsFor(changes, base), false, { print: false, cwd, timeoutMs, allowEmpty }));
+  const tests = testsSection(await runTestAudit(testArgsFor(changes, base), false, { print: false, cwd, timeoutMs, allowEmpty, inWorkspace: true }));
   progress.finish(stepLine(testStepIcon(tests), 'Test Suite', formatTestStep(tests), tests.command));
 
   let build = null;
