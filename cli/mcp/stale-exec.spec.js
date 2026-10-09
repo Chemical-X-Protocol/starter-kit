@@ -7,7 +7,7 @@ import { PassThrough } from 'node:stream';
 import { createMcpHandler } from './server.js';
 import { scheduleTimeout } from '../timers.js';
 import { createFreshRunner, timeoutMsFor } from './fresh-runner.js';
-import { RESULT_MARK } from './fresh-protocol.js';
+import { RESULT_MARK, LOADED_MARK } from './fresh-protocol.js';
 import { FRESH_NOTICE } from './stale-exec.js';
 import { SERVER_INFO } from './server-info.js';
 import { makeFixtureProject, KIT_ROOT } from './spec-harness.js';
@@ -71,6 +71,24 @@ test('fresh runner: a child that prints no result is a load failure, a tool erro
   assert.strictEqual(loadResult.kind, 'load');
   assert.match(loadResult.message, /exited 1 without a result/);
   assert.deepStrictEqual(errorResult, { kind: 'error', error: 'bad path' });
+});
+
+test('fresh runner: a child that loaded then died without a result is a crash, not a load failure', async () => {
+  const died = createFreshRunner({ spawn: fakeSpawn(`\n${LOADED_MARK}\n`, 1) });
+  const result = await died({ toolName: 'chemx', toolArgs: {}, root: '/r', env: {} });
+  assert.strictEqual(result.kind, 'crash');
+  assert.match(result.message, /exited 1 without a result/);
+});
+
+test('crash: the error says the outcome is unknown and never claims nothing changed', async () => {
+  const project = makeFixtureProject({ 'package.json': PKG, 'a.txt': 'one\n' });
+  const runFresh = async () => ({ kind: 'crash', message: 'fresh process exited 1 without a result: no stderr' });
+  const handler = createMcpHandler({ bootDir: KIT_ROOT, staleness: STALE, runFresh });
+  const res = await call(handler, { action: 'patch', projectRoot: project, params: { path: 'a.txt', agentId: '@spec-a', blocks: [{ search: 'one', replace: 'two' }] } });
+  assert.strictEqual(res.result.isError, true);
+  assert.match(joined(res), /outcome is unknown/);
+  assert.doesNotMatch(joined(res), /Nothing was changed/);
+  assert.doesNotMatch(joined(res), /Refusing a mutating call/);
 });
 
 test('load failure: mutating calls are refused and change nothing', async () => {

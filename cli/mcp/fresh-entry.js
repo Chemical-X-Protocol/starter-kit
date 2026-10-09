@@ -1,7 +1,7 @@
 // One-shot executor for a stale MCP server: runs one tool call with the code on disk.
 // stdin: { toolName, toolArgs, root } as JSON. stdout: one line, RESULT_MARK + JSON of
 // { output } | { error } | { loadFailure }. loadFailure means the code on disk did not load.
-import { RESULT_MARK } from './fresh-protocol.js';
+import { RESULT_MARK, LOADED_MARK } from './fresh-protocol.js';
 
 const readStdin = async () => {
   const chunks = [];
@@ -21,6 +21,7 @@ const run = async () => {
     emit({ loadFailure: describe(err) });
     return;
   }
+  process.stdout.write(`\n${LOADED_MARK}\n`);
   try {
     const output = await executeMcpTool(request.toolName, request.toolArgs, request.root);
     emit({ output: output ?? null });

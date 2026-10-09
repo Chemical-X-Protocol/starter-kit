@@ -5,7 +5,9 @@ export const FRESH_NOTICE = 'chemx MCP server code is stale; this call ran in a 
 
 const loadWarning = (message, staleNotice) => `WARNING: ${staleNotice}. The code on disk does not load (${message}), so this read-only call ran on the old loaded code. Fix the load error, then reconnect via /mcp.`;
 
-const refusal = (message) => `Refusing a mutating call: the chemx MCP server code is stale and the code on disk does not load (${message}). Nothing was changed. Fix the load error, or reconnect via /mcp.`;
+const refusal = (message) => `Refusing a mutating call: the chemx MCP server code is stale and the code on disk does not load (${message}). The code did not finish loading, so the call did not start. Fix the load error, or reconnect via /mcp.`;
+
+const crashMessage = (message) => `The fresh process for this stale-server call died after the code loaded (${message}). The outcome is unknown and the call may have partly run: check the files it targeted before retrying.`;
 
 const TIMEOUT_MESSAGE = 'the fresh process for this stale-server call timed out and was killed';
 
@@ -29,6 +31,8 @@ export const prepareExecution = ({ staleness, runFresh, runLoaded, isMutating, e
   const onFresh = (fresh) => {
     const isTimeout = fresh.kind === 'timeout';
     const isToolError = fresh.kind === 'error';
+    const isCrash = fresh.kind === 'crash';
+    if (isCrash) throw new Error(crashMessage(fresh.message));
     if (isTimeout) throw new Error(TIMEOUT_MESSAGE);
     addBanner(FRESH_NOTICE);
     if (isToolError) throw new Error(fresh.error);
