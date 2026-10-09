@@ -67,6 +67,7 @@ export const patchFile = (targetPath, params = {}) => {
     lineDelta: fileResult.newLines - fileResult.originalLines,
     indexed,
     backup: fileResult.backup,
+    parse: fileResult.parse,
     declarations: fileResult.declarations,
     diff: fileResult.diff,
     ...evaluateGuardrails({ absPath: resolvedPath, relPath: fileResult.file, content: replaced.content, skipCheck })
@@ -117,6 +118,7 @@ export const writeFile = (targetPath, params = {}) => {
     lines: fileResult.newLines,
     indexed,
     backup: fileResult.backup,
+    parse: fileResult.parse,
     declarations: fileResult.declarations,
     diff: fileResult.diff,
     ...evaluateGuardrails({ absPath: resolvedPath, relPath: fileResult.file, content, skipCheck })

@@ -243,3 +243,35 @@ test('patch and write: Markdown is replaced literally and nothing else changes',
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+const GENERIC_SFC = `<script setup lang="ts" generic="T extends Record<string, number>">
+const props = defineProps<{ items: T[] }>()
+function keep() { return props }
+</script>
+
+<template><div>{{ keep() }}</div></template>
+`;
+
+test('patch: a Vue generic SFC is still parsed, so declaration removal and broken results refuse', () => {
+  const dir = makeProject({ 'src/g.vue': GENERIC_SFC });
+  try {
+    assert.throws(() => patchFile('src/g.vue', { targetContent: 'function keep() { return props }', replacementContent: '', cwd: dir, skipIndex: true }), /keep/);
+    assert.throws(() => patchFile('src/g.vue', { targetContent: 'defineProps<{ items: T[] }>()', replacementContent: 'defineProps<{ items: T[] }>(', cwd: dir, skipIndex: true }), /does not parse/);
+    assert.equal(read(dir, 'src/g.vue'), GENERIC_SFC);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('patch: an already-broken file reports that the parse checks could not run (lib, MCP)', () => {
+  const dir = makeProject({ 'src/b.ts': 'export const a = (\nexport const b = 1\n' });
+  try {
+    const res = patchFile('src/b.ts', { targetContent: 'b = 1', replacementContent: 'b = 2', cwd: dir, skipIndex: true, dryRun: true });
+    assert.equal(res.parse.ok, false);
+    assert.match(res.parse.note, /could not run/);
+    const mcp = handleChemxPatch({ path: 'src/b.ts', search: 'b = 1', replace: 'b = 2', dryRun: true }, dir);
+    assert.ok(mcp.warnings.some((w) => /\[Parse\]/.test(w)), JSON.stringify(mcp.warnings));
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

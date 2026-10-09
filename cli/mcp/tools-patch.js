@@ -16,6 +16,10 @@ export const formatPatchWarnings = (result) => {
     warnings.push(`[Directive 1.A] ${result.lineBudget.warning}`);
   }
 
+  const parseNote = result.parse?.note;
+  const hasParseNote = Boolean(parseNote);
+  if (hasParseNote) warnings.push(`[Parse] ${parseNote}`);
+
   const violations = result.violations || [];
   for (const v of violations) {
     if (isSevereViolation(v)) {

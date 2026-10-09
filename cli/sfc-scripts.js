@@ -6,7 +6,8 @@
  * equal the offsets in the original file. Interim helper until a real SFC parser lands (plan B).
  */
 
-const SCRIPT_BLOCK_REGEX = /<script\b([^>]*)>([\s\S]*?)<\/script>/gi;
+// Quoted attribute values may contain '>' (`generic="T extends Record<string, number>"`).
+const SCRIPT_BLOCK_REGEX = /<script\b((?:[^>"']|"[^"]*"|'[^']*')*)>([\s\S]*?)<\/script>/gi;
 const LANG_ATTR_REGEX = /\blang\s*=\s*["']([a-z]+)["']/i;
 
 export const isSfcFile = (filePath = '') => {

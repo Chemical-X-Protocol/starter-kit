@@ -78,7 +78,7 @@ const planEdit = (edit, root, options) => {
     return { ...plan, after, issue: `would remove top-level declaration(s) ${delta.blocked.join(', ')}${addedNote}; name them in allowRemoved (CLI: --allow-remove=${delta.blocked.join(',')}) if intended` };
   }
 
-  const parse = { kind: afterParse.kind, ok: afterParse.ok, ...(wasBroken ? { note: 'file did not parse before this edit either' } : {}) };
+  const parse = { kind: afterParse.kind, ok: afterParse.ok, ...(wasBroken ? { note: 'file did not parse before this edit either, so the parse and declaration-removal checks could not run' } : {}) };
   return { ...plan, after, parse, declarations: { removed: delta.removed, added: delta.added } };
 };
 
