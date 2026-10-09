@@ -1,5 +1,8 @@
-import { describe, it } from 'node:test';
+import { describe, it, after } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { startUiServer } from './ui-server.js';
 import { closeSseHub } from './ui-sse.js';
 
@@ -15,9 +18,13 @@ const readNextSseEvent = async (reader) => {
   return JSON.parse(eventText);
 };
 
+// The SSE server runs against a throwaway project so task mutations never reach a real .chemx/index.db.
+const PROJECT_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-ui-sse-'));
+after(() => fs.rmSync(PROJECT_ROOT, { recursive: true, force: true }));
+
 describe('UI Server-Sent Events (SSE) Stream', () => {
   it('serves text/event-stream headers and initial state snapshot', async () => {
-    const running = await startUiServer({ port: 0 });
+    const running = await startUiServer({ port: 0, cwd: PROJECT_ROOT });
     try {
       const res = await fetch(`http://localhost:${running.port}/api/swarm/events`);
       assert.strictEqual(res.status, 200);
@@ -37,7 +44,7 @@ describe('UI Server-Sent Events (SSE) Stream', () => {
   });
 
   it('broadcasts real-time updates when tasks or events mutate', async () => {
-    const running = await startUiServer({ port: 0 });
+    const running = await startUiServer({ port: 0, cwd: PROJECT_ROOT });
     let taskId = null;
     try {
       const res = await fetch(`http://localhost:${running.port}/api/swarm/events`);
@@ -73,7 +80,7 @@ describe('UI Server-Sent Events (SSE) Stream', () => {
   });
 
   it('broadcasts reload event on broadcastSseReload', async () => {
-    const running = await startUiServer({ port: 0 });
+    const running = await startUiServer({ port: 0, cwd: PROJECT_ROOT });
     try {
       const res = await fetch(`http://localhost:${running.port}/api/swarm/events`);
       const reader = res.body?.getReader();

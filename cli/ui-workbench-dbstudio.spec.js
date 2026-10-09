@@ -13,6 +13,16 @@ import { routeGet, routePost } from './ui-server-routes.js';
 import { startUiServer } from './ui-server.js';
 import { VIEW_WORKBENCH_TEMPLATE } from './ui-template-workbench.js';
 import { VIEW_DBSTUDIO_TEMPLATE } from './ui-template-dbstudio.js';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+// The studio server runs against a throwaway project so specs never open a real .chemx/index.db.
+const makeUiProject = (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-ui-project-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  return root;
+};
 
 const setupTestDb = () => {
   const db = new DatabaseSync(':memory:');
@@ -125,8 +135,8 @@ test('Routes: routeGet and routePost resolve Studio endpoints', () => {
   assert.strictEqual(sqlRes.rows[0].num, 1);
 });
 
-test('HTTP Server: studio endpoints respond over HTTP', async () => {
-  const running = await startUiServer({ port: 0, cwd: process.cwd() });
+test('HTTP Server: studio endpoints respond over HTTP', async (t) => {
+  const running = await startUiServer({ port: 0, cwd: makeUiProject(t) });
   try {
     const base = `http://localhost:${running.port}`;
     const resTables = await fetch(`${base}/api/db/tables`);

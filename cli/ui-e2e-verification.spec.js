@@ -1,9 +1,25 @@
-import test from 'node:test';
+import test, { after } from 'node:test';
 import assert from 'node:assert';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { startUiServer } from './ui-server.js';
 import { openIndexDb } from './search-db.js';
+
+// One seeded throwaway project: the studio is exercised end to end without reading or writing a real .chemx/index.db.
+const PROJECT_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-ui-e2e-'));
+after(() => fs.rmSync(PROJECT_ROOT, { recursive: true, force: true }));
+const seedProject = () => {
+  const source = 'export const seed = () => 1;\n';
+  fs.mkdirSync(path.join(PROJECT_ROOT, 'src'), { recursive: true });
+  fs.writeFileSync(path.join(PROJECT_ROOT, 'src/seed.js'), source);
+  const db = openIndexDb(PROJECT_ROOT);
+  db.prepare('INSERT INTO files (path, mtime, size, tier, lines, chars) VALUES (?, ?, ?, ?, ?, ?)')
+    .run('src/seed.js', Date.now(), source.length, 'utility', 1, source.length);
+  const now = Date.now();
+  db.prepare("INSERT INTO agent_tasks (title, status, created_at, updated_at) VALUES ('Seed task', 'queued', ?, ?)").run(now, now);
+};
+seedProject();
 
 const REQUIRED_HTML_MARKERS = [
   'vb-postbit',
@@ -20,7 +36,7 @@ const REQUIRED_HTML_MARKERS = [
 ];
 
 test('E2E: GET / delivers full HTML shell with all core modules', async () => {
-  const running = await startUiServer({ port: 0 });
+  const running = await startUiServer({ port: 0, cwd: PROJECT_ROOT });
   try {
     const res = await fetch(`http://localhost:${running.port}/`);
     assert.strictEqual(res.status, 200);
@@ -37,7 +53,7 @@ test('E2E: GET / delivers full HTML shell with all core modules', async () => {
 });
 
 test('E2E: GET /api/status, /api/feed, /api/tasks return valid data structures', async () => {
-  const running = await startUiServer({ port: 0 });
+  const running = await startUiServer({ port: 0, cwd: PROJECT_ROOT });
   try {
     const base = `http://localhost:${running.port}`;
     const resStatus = await fetch(`${base}/api/status`);
@@ -68,7 +84,7 @@ test('E2E: GET /api/status, /api/feed, /api/tasks return valid data structures',
 });
 
 test('E2E: POST /api/tasks and POST /api/feed persist records to index database', async () => {
-  const running = await startUiServer({ port: 0 });
+  const running = await startUiServer({ port: 0, cwd: PROJECT_ROOT });
   let taskData = null;
   let feedData = null;
   try {
@@ -106,7 +122,7 @@ test('E2E: POST /api/tasks and POST /api/feed persist records to index database'
     assert.ok(isFeedPersisted, 'Created feed event must persist in database');
   } finally {
     if (taskData?.task?.id || feedData?.post?.id) {
-      const db = openIndexDb(process.cwd());
+      const db = openIndexDb(PROJECT_ROOT);
       if (taskData?.task?.id) db.prepare('DELETE FROM agent_tasks WHERE id = ?').run(taskData.task.id);
       if (feedData?.post?.id) db.prepare('DELETE FROM agent_feed WHERE id = ?').run(feedData.post.id);
     }
@@ -115,7 +131,7 @@ test('E2E: POST /api/tasks and POST /api/feed persist records to index database'
 });
 
 test('E2E: GET /api/codebase/tree and /api/codebase/file inspect AST and connections', async () => {
-  const running = await startUiServer({ port: 0 });
+  const running = await startUiServer({ port: 0, cwd: PROJECT_ROOT });
   try {
     const base = `http://localhost:${running.port}`;
     const resTree = await fetch(`${base}/api/codebase/tree`);
@@ -139,7 +155,7 @@ test('E2E: GET /api/codebase/tree and /api/codebase/file inspect AST and connect
 });
 
 test('E2E: GET /api/db/tables, /api/db/browse, and POST /api/prompts/generate respond cleanly', async () => {
-  const running = await startUiServer({ port: 0 });
+  const running = await startUiServer({ port: 0, cwd: PROJECT_ROOT });
   try {
     const base = `http://localhost:${running.port}`;
     const resTables = await fetch(`${base}/api/db/tables`);

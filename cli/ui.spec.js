@@ -3,14 +3,25 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
 import http from 'node:http';
+import os from 'node:os';
 
 import { openIndexDb } from './search-db.js';
 import { handleSwarmStatus, handlePostFeed, getAggregatedTelemetry } from './ui-handlers.js';
 import { generateSwarmHtml } from './ui-html.js';
 import { createUiServer, startUiServer } from './ui-server.js';
 
-test('ui-handlers: queries genuine SQLite index.db data and aggregates telemetry', () => {
-  const db = openIndexDb(process.cwd());
+// Swarm UI specs run against a throwaway project so they never write into a real .chemx/index.db.
+const makeUiProject = (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-ui-spec-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const db = openIndexDb(root);
+  db.prepare('INSERT INTO files (path, mtime, size, tier, lines, chars) VALUES (?, ?, ?, ?, ?, ?)')
+    .run('src/Seed.ts', Date.now(), 10, 'utility', 1, 10);
+  return root;
+};
+
+test('ui-handlers: queries genuine SQLite index.db data and aggregates telemetry', (t) => {
+  const db = openIndexDb(makeUiProject(t));
   assert.ok(db, 'SQLite index.db must be available');
 
   const telemetry = getAggregatedTelemetry(db);
@@ -29,8 +40,8 @@ test('ui-handlers: queries genuine SQLite index.db data and aggregates telemetry
   assert.ok(status.summary);
 });
 
-test('ui-handlers: posts feed events and updates timeline in SQLite', () => {
-  const db = openIndexDb(process.cwd());
+test('ui-handlers: posts feed events and updates timeline in SQLite', (t) => {
+  const db = openIndexDb(makeUiProject(t));
   const testMessage = `Automated UI test event ${Date.now()}`;
   const result = handlePostFeed(db, {
     author: '@ui-specialist',
@@ -63,11 +74,12 @@ test('ui-html: generates standalone HTML bundle with Starship dark theme and hyd
   assert.ok(html.includes('xo-glass') || html.includes('xo-orb'));
 });
 
-test('ui-server: creates HTTP server and handles GET / and API routes', async () => {
-  const { server } = createUiServer(process.cwd());
+test('ui-server: creates HTTP server and handles GET / and API routes', async (t) => {
+  const projectRoot = makeUiProject(t);
+  const { server } = createUiServer(projectRoot);
   assert.ok(server instanceof http.Server);
 
-  const running = await startUiServer({ port: 0, cwd: process.cwd() });
+  const running = await startUiServer({ port: 0, cwd: projectRoot });
   assert.ok(running.port > 0);
   let taskJson = null;
 
@@ -214,10 +226,6 @@ test('ui-server: creates HTTP server and handles GET / and API routes', async ()
     assert.ok(htmlText.includes('cert'), 'HTML must include canvas certificate');
     assert.ok(htmlText.includes('Download PNG') || htmlText.includes('downloadPng'), 'HTML must include download PNG button');
   } finally {
-    if (taskJson?.task?.id) {
-      const db = openIndexDb(process.cwd());
-      db.prepare('DELETE FROM agent_tasks WHERE id = ?').run(taskJson.task.id);
-    }
     running.server.close();
   }
 });
