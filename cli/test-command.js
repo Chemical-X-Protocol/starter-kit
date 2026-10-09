@@ -45,15 +45,37 @@ const declaresTestRunner = (dir) => {
   return hasRealScript || detectTestRunner(dir, pkg) !== null;
 };
 
-// Splits the script's `node ... --test ...` segment into its flags and its file globs.
+// Node options that take their value as the next word (`--import tsx`), so that word is part of
+// the flag, never a file glob to be replaced by the targets.
+const NODE_VALUE_FLAGS = new Set([
+  '-r', '--require', '--import', '--loader', '--experimental-loader', '-C', '--conditions',
+  '--env-file', '--env-file-if-exists', '--input-type', '--disable-warning', '--watch-path',
+  '--test-reporter', '--test-reporter-destination', '--test-name-pattern', '--test-skip-pattern',
+  '--test-concurrency', '--test-timeout', '--test-shard', '--test-isolation', '--test-global-setup',
+  '--test-coverage-include', '--test-coverage-exclude', '--test-coverage-branches',
+  '--test-coverage-functions', '--test-coverage-lines', '--experimental-default-type'
+]);
+
+// Splits the script's `node ... --test ...` segment into flag groups (a flag plus its value)
+// and file globs. An existing name pattern is dropped, since the caller supplies its own.
 const readNodeSegment = (script = '') => {
   const segment = (String(script).match(NODE_TEST_SEGMENT) || ['node --test'])[0].trim();
   const tokens = segment.split(/\s+/).slice(1);
-  const isNamePattern = (token) => token.startsWith('--test-name-pattern');
-  return {
-    flags: tokens.filter((t) => t.startsWith('-') && !isNamePattern(t)),
-    files: tokens.filter((t) => !t.startsWith('-'))
-  };
+  const flags = [];
+  const files = [];
+  for (let index = 0; index < tokens.length; index++) {
+    const token = tokens[index];
+    const isFlag = token.startsWith('-');
+    if (!isFlag) {
+      files.push(token);
+      continue;
+    }
+    const takesNextWord = NODE_VALUE_FLAGS.has(token) && index + 1 < tokens.length;
+    const group = takesNextWord ? [token, tokens[++index]] : [token];
+    const isNamePattern = token.startsWith('--test-name-pattern');
+    if (!isNamePattern) flags.push(...group);
+  }
+  return { flags, files };
 };
 
 // node --test does not walk a directory argument (it tries to load it as a module), so a

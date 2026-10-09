@@ -161,3 +161,15 @@ test('test-command: a sub-package with a runner config or a real test script own
     assert.equal(planTestCommand(null, root, { targets: ['packages/mocha/b.spec.js'] }).cwd, path.join(root, 'packages/mocha'));
   });
 });
+
+test('test-command: node flags keep their space-separated values when targets or a filter are swapped in', () => {
+  const files = {
+    'package.json': { scripts: { test: 'node --import ./setup.mjs -r tsx/cjs --test-reporter spec --test --test-name-pattern old src/*.test.js' } },
+    'src/a.test.js': ''
+  };
+  withProject(files, (root) => {
+    const flags = 'node --import ./setup.mjs -r tsx/cjs --test-reporter spec --test';
+    assert.equal(planTestCommand(null, root, { targets: ['src/a.test.js'] }).command, `${flags} src/a.test.js`);
+    assert.equal(planTestCommand(null, root, { filter: 'setup' }).command, `${flags} --test-name-pattern="setup" src/*.test.js`);
+  });
+});
