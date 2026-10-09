@@ -25,7 +25,8 @@ export const runProjectCli = async (rawArgs = [], isCli = false, cwd = process.c
   const subCommand = nonFlag[0] || 'status';
   const restText = nonFlag.slice(1).join(' ');
 
-  if (subCommand === 'init' || subCommand === 'start') {
+  const isInitCommand = subCommand === 'init' || subCommand === 'start';
+  if (isInitCommand) {
     const goal = restText || 'Autonomous codebase optimization';
     const session = initProjectSession(db, { goal, title: goal.slice(0, 40) });
     if (isCli) {
@@ -35,7 +36,8 @@ export const runProjectCli = async (rawArgs = [], isCli = false, cwd = process.c
     return session;
   }
 
-  if (subCommand === 'step' || subCommand === 'turn') {
+  const isStepCommand = subCommand === 'step' || subCommand === 'turn';
+  if (isStepCommand) {
     const res = executeCoordinatorStep(db, { cwd });
     if (isCli) {
       if (isJson) process.stdout.write(`${JSON.stringify(res, null, 2)}\n`);
@@ -44,7 +46,8 @@ export const runProjectCli = async (rawArgs = [], isCli = false, cwd = process.c
     return res;
   }
 
-  if (subCommand === 'chat' || subCommand === 'msg') {
+  const isChatCommand = subCommand === 'chat' || subCommand === 'msg';
+  if (isChatCommand) {
     const active = getActiveProjectSession(db);
     if (!active) {
       if (isCli) process.stderr.write('\x1b[31m✕ No active project. Run "chemx project init <goal>" first.\x1b[0m\n');
@@ -64,7 +67,8 @@ export const runProjectCli = async (rawArgs = [], isCli = false, cwd = process.c
     return msg;
   }
 
-  if (subCommand === 'learnings' || subCommand === 'memory') {
+  const isLearningsCommand = subCommand === 'learnings' || subCommand === 'memory';
+  if (isLearningsCommand) {
     const learnings = queryRelevantLearnings(db, { limit: 10 });
     if (isCli) {
       if (isJson) process.stdout.write(`${JSON.stringify(learnings, null, 2)}\n`);
@@ -73,7 +77,8 @@ export const runProjectCli = async (rawArgs = [], isCli = false, cwd = process.c
     return learnings;
   }
 
-  if (subCommand === 'pause' || subCommand === 'resume') {
+  const isPauseResumeCommand = subCommand === 'pause' || subCommand === 'resume';
+  if (isPauseResumeCommand) {
     const active = getActiveProjectSession(db);
     if (!active) return null;
     const newStatus = subCommand === 'pause' ? 'paused' : 'active';
