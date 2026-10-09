@@ -1,12 +1,14 @@
-import { renderBanner } from './banner.js';
 import { describeLineBudgetPolicy } from './config/profiles.js';
+import { isStdoutTty } from './terminal.js';
+import { renderTtyBanner } from './tty-banner.js';
 
-export const printGenerateHelp = () => {
-  renderBanner('Chemical X: Capsule Generator Usage');
-  const BOLD = '\x1b[1m';
-  const CYAN = '\x1b[36m';
-  const DIM = '\x1b[2m';
-  const RESET = '\x1b[0m';
+const TTY_STYLES = { BOLD: '\x1b[1m', CYAN: '\x1b[36m', DIM: '\x1b[2m', RESET: '\x1b[0m' };
+const PLAIN_STYLES = { BOLD: '', CYAN: '', DIM: '', RESET: '' };
+
+// The banner and colors exist only for a human terminal (plan 5.4 seam).
+export const printGenerateHelp = async () => {
+  await renderTtyBanner('Chemical X: Capsule Generator Usage');
+  const { BOLD, CYAN, DIM, RESET } = isStdoutTty() ? TTY_STYLES : PLAIN_STYLES;
 
   const out = [
     `${BOLD}USAGE${RESET}`,

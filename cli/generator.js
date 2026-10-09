@@ -293,7 +293,7 @@ export const runGenerateWizard = async (rawArgs = []) => {
     if (rawArgs.includes('--json')) {
       process.stdout.write(JSON.stringify({ help: true, success: true }) + '\n');
     } else {
-      printGenerateHelp();
+      await printGenerateHelp();
     }
     return { success: true, help: true };
   }

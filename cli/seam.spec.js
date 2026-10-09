@@ -30,7 +30,11 @@ const SEAM_RUNS = [
   ['test', '--json'],
   ['typecheck', '--json'],
   ['pillars', '--json'],
-  ['badge', '--json']
+  ['badge', '--json'],
+  ['generate', 'atom', 'zed', '--dry-run'],
+  ['jig', 'util', 'fmt', '--dry-run'],
+  ['create', 'newproj'],
+  ['init']
 ];
 
 test('seam: piped and --json runs never import presentation modules', async () => {
