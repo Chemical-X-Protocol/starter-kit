@@ -41,6 +41,8 @@ const makeFixture = (t, base = Date.now() - 1000) => {
     fs.rmSync(projects, { recursive: true, force: true });
     fs.rmSync(root, { recursive: true, force: true });
   });
+  // Own .chemx dir stops openIndexDb's walk up to an ancestor db such as /tmp/.chemx/index.db.
+  fs.mkdirSync(path.join(root, '.chemx'), { recursive: true });
   const runDir = path.join(projects, 'proj-a', 'session-1', 'subagents', 'workflows', RUN_ID);
   fs.mkdirSync(runDir, { recursive: true });
   fs.writeFileSync(path.join(runDir, 'journal.jsonl'), `${JSON.stringify({ type: 'started', agentId: 'a1', label: 'fix:thing.js', phase: 'Fix' })}\n`);
@@ -103,7 +105,6 @@ test('pricing: 5m and 1h cache writes, cache reads, input and output at the actu
 
 test('pricing: .chemx/config.json overrides a rate and the source says so', (t) => {
   const { projects, root } = makeFixture(t);
-  fs.mkdirSync(path.join(root, '.chemx'));
   fs.writeFileSync(path.join(root, '.chemx', 'config.json'), JSON.stringify({ pricing: { haiku: { output: 1 } } }));
   const pricing = loadPricing(root);
   assert.match(pricing.source, /overrides from .*config\.json/);

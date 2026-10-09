@@ -39,6 +39,8 @@ const totalsLines = (priced) => {
   ];
 };
 
+const HANDLE_LIMIT = 15;
+
 const gapLines = (priced) => {
   const lines = [];
   const missing = priced.missingTranscripts.length;
@@ -52,13 +54,15 @@ export const renderRunCard = (priced, { top } = {}) => {
   const sorted = [...priced.rows].sort((a, b) => b.cost - a.cost);
   const shown = Number.isFinite(top) ? sorted.slice(0, top) : sorted;
   const hidden = sorted.length - shown.length;
+  const hiddenHandles = Math.max(0, priced.byHandle.length - HANDLE_LIMIT);
   return [
     `Token usage for run ${priced.runId}`,
     AGENT_HEADER,
     ...shown.map(agentLine),
     ...(hidden ? [`... ${hidden} more agents (use --json for all rows)`] : []),
     '',
-    ...section('By handle', priced.byHandle.slice(0, 15), priced.altFamily),
+    ...section('By handle', priced.byHandle.slice(0, HANDLE_LIMIT), priced.altFamily),
+    ...(hiddenHandles ? [`... ${hiddenHandles} more handles (use --json for all rows)`] : []),
     '',
     ...section('By model', priced.byModel, priced.altFamily),
     '',
