@@ -109,3 +109,26 @@ test('context with shared and circular references renders without throwing', () 
   const parsed = JSON.parse(issue.body.split('```json\n')[1].split('\n```')[0]);
   assert.deepStrictEqual(parsed, { a: { n: 1 }, b: { n: 1 }, self: '[Circular]' });
 });
+
+test('Additional Metadata (report.context) goes through the body sanitizer: keys, tokens, home paths and emails', () => {
+  const home = os.homedir();
+  const EMAIL = 'jane.doe+ci@example.co.uk';
+  const context = {
+    argv: `chemx create --license ${KEY}`,
+    configPath: path.join(home, 'work', 'app', '.chemxrc'),
+    author: EMAIL,
+    remote: `https://x-access-token:${GH}@github.com/o/r.git`,
+    nested: { owners: [`${EMAIL} (maintainer)`], cwd: home }
+  };
+  const issue = formatIssueContent({ message: `push rejected for ${EMAIL}`, stack: `Error: as ${EMAIL}\n    at ${home}/a.js:1:1`, command: 'x', context }, 'o/r');
+  const json = issue.body.split('```json\n')[1].split('\n```')[0];
+  const parsed = JSON.parse(json);
+  for (const text of [issue.title, issue.body, decodeURIComponent(issue.webUrl)]) {
+    assert.ok(!text.includes(KEY_BODY), 'license key leaked');
+    assert.ok(!text.includes('ghp_aaa'), 'GitHub token leaked');
+    assert.ok(!text.includes(home), 'home path leaked');
+    assert.ok(!text.includes('jane.doe'), `email leaked: ${text.slice(0, 400)}`);
+  }
+  assert.match(parsed.configPath, /^~/);
+  assert.strictEqual(typeof parsed.nested.owners[0], 'string');
+});
