@@ -23,7 +23,8 @@ export const classifyEffects = ({ action, params = {} }) => {
 
 const readScripts = (dir) => {
   const pkgPath = path.join(dir, 'package.json');
-  if (!fs.existsSync(pkgPath)) return {};
+  const hasPackageJson = Boolean(fs.existsSync(pkgPath));
+  if (!hasPackageJson) return {};
   try {
     return JSON.parse(fs.readFileSync(pkgPath, 'utf-8')).scripts || {};
   } catch (err) {
