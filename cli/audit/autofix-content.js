@@ -22,7 +22,7 @@ const PREAMBLE_REGEX = /\b(?:here(?:'s| is) the (?:complete|updated|refactored|f
 const TRUNCATION_REGEX = /^(?:\/\/|\/\*)\s*\.\.\.\s*(?:existing|rest of|remaining)\s+(?:code|implementation|logic|imports)/i;
 const FENCE_LINE_REGEX = /^\s*```(?:typescript|javascript|tsx|jsx|vue|js|ts|html|css|scss)?\s*$/;
 const TIMER_REGEX = /setTimeout\([^,]+,\s*0\)/g;
-const EM_DASH = '—';
+const EM_DASH = String.fromCharCode(0x2014);
 
 const insideAny = (ranges, index) => ranges.some((r) => index >= r.start && index < r.end);
 

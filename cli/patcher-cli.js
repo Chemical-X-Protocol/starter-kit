@@ -70,7 +70,9 @@ const printOutcome = (res, verb, isJson) => {
     return;
   }
   const where = res.changedLines ? `:L${res.changedLines.start}-${res.changedLines.end}` : '';
-  process.stdout.write(`${ANSI.GREEN}✔ ${verb === 'patch' ? 'Patched' : (res.created ? 'Created' : 'Updated')} ${res.file}${where}${res.backup ? ` (backup: ${res.backup})` : ''}${ANSI.RESET}\n`);
+  const writeVerb = res.created ? 'Created' : 'Updated';
+  const doneVerb = verb === 'patch' ? 'Patched' : writeVerb;
+  process.stdout.write(`${ANSI.GREEN}✔ ${doneVerb} ${res.file}${where}${res.backup ? ` (backup: ${res.backup})` : ''}${ANSI.RESET}\n`);
   if (res.lineBudget && !res.lineBudget.passed) {
     process.stdout.write(`  ${ANSI.RED}⚠ Line Budget: ${res.lineBudget.lines}L exceeds ${res.lineBudget.limit}L limit (Directive 1.A)${ANSI.RESET}\n`);
   }

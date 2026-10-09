@@ -10,12 +10,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { isPidAlive } from './team/team-db-transaction.js';
 
-let DatabaseSync = null;
-try {
-  DatabaseSync = (await import('node:sqlite')).DatabaseSync;
-} catch {
-  DatabaseSync = null;
-}
+const loadSqlite = async () => {
+  try {
+    return (await import('node:sqlite')).DatabaseSync;
+  } catch (err) {
+    if (process.env.CHEMX_DEBUG) process.stderr.write(`[edit-locks] node:sqlite unavailable: ${err.message}\n`);
+    return null;
+  }
+};
+const DatabaseSync = await loadSqlite();
 
 export const DEFAULT_AGENT_ID = '@agent';
 
@@ -34,11 +37,13 @@ const readLease = (root, relPath) => {
   let db = null;
   try {
     db = new DatabaseSync(dbPath, { readOnly: true });
-    return db.prepare('SELECT * FROM file_leases WHERE file_path = ?').get(relPath) || null;
-  } catch {
+    const lease = db.prepare('SELECT * FROM file_leases WHERE file_path = ?').get(relPath) || null;
+    db.close();
+    return lease;
+  } catch (err) {
+    if (process.env.CHEMX_DEBUG) process.stderr.write(`[edit-locks] lease lookup skipped: ${err.message}\n`);
+    if (db?.isOpen) db.close();
     return null;
-  } finally {
-    try { db?.close(); } catch { /* already closed */ }
   }
 };
 
