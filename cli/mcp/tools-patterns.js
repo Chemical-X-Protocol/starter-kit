@@ -37,10 +37,12 @@ export const handleQueryPatterns = (args = {}, cwd = process.cwd()) => {
         const sampleOccurrences = [];
         const seenSampleFiles = new Set();
         for (const occ of (p.occurrences || [])) {
-          if (!seenSampleFiles.has(occ.filePath)) {
+          const isNewSampleFile = !seenSampleFiles.has(occ.filePath);
+          if (isNewSampleFile) {
             seenSampleFiles.add(occ.filePath);
             sampleOccurrences.push({ file: occ.filePath, line: occ.line });
-            if (sampleOccurrences.length >= 3) break;
+            const hasEnoughSamples = sampleOccurrences.length >= 3;
+            if (hasEnoughSamples) break;
           }
         }
         return {
