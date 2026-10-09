@@ -9,6 +9,7 @@ export const ACTION_HELP = {
   write: '{ path, content } writes; needs a declared root',
   check: '{ path } single-file rule check',
   audit: '{ path|dir?, full?, triage? } (triage writes team tasks)',
+  audit_feed: '{ view?: history|pillars|scopes, scope?, since?, fullOnly?, limit? } read-only rows from .chemx history and status, newest 100 (max 500), with total and cut; string form `audit --feed=<view>`',
   verify: '{ dir?, includeBuild? }',
   test: '{ dir?, testTarget?, filter?, command? } command runs only if it equals a package.json script or CHEMX_MCP_ALLOW_SHELL=1; testTarget is one path or glob, filter has no $ ` " \\',
   typecheck: '{ dir?, command? } command rule as test',

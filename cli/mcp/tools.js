@@ -49,6 +49,8 @@ const parseCommandParts = (command, params) => {
   const parts = command.trim().split(/\s+/);
   const subCmd = parts[0];
   const isAudit = subCmd === 'audit';
+  const isAuditFeed = isAudit && parts.some((part) => part === '--feed' || part.startsWith('--feed='));
+  if (isAuditFeed) return { action: 'audit_feed', params: { args: parts.slice(1), ...params } };
   if (isAudit) return { action: subCmd, params: { path: parts[1], ...params } };
   const isCheck = subCmd === 'check';
   if (isCheck) return { action: subCmd, params: { path: parts[1] || 'src', ...params } };
@@ -234,6 +236,7 @@ const DISPATCHER = {
   diff: (p, cwd) => runWrapper('runDiff', p.args || [], cwd),
   log: (p, cwd) => runWrapper('runLog', p.args || [], cwd),
   conflicts: async (p, cwd) => (await import('../conflicts.js')).collectConflicts(cwd),
+  audit_feed: async (p, cwd) => (await import('./tools-audit-feed.js')).handleChemxAuditFeed(p, cwd),
   show: (p, cwd) => runWrapper('runShow', p.args || [], cwd),
   p: (p, cwd) => runWrapper('runPkg', [p.query].filter(Boolean), cwd),
   pkg: (p, cwd) => runWrapper('runPkg', [p.query].filter(Boolean), cwd),
