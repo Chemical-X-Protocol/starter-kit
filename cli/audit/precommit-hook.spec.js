@@ -51,7 +51,7 @@ const withHookRepo = (variant, files, fn) => {
     delete env.CHEMX_SKIP_PRECOMMIT;
     delete env.CHEMX_FORCE_COMMIT;
     delete env.CHEMX_PRECOMMIT_GATE;
-    const commit = () => spawnSync('git', ['commit', '-q', '-m', 'change'], { cwd: root, encoding: 'utf-8', env });
+    const commit = (extra = {}) => spawnSync('git', ['commit', '-q', '-m', 'change'], { cwd: root, encoding: 'utf-8', env: { ...env, ...extra } });
     fn(root, commit);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
@@ -87,6 +87,14 @@ for (const variant of Object.keys(VARIANTS)) {
       const result = commit();
       assert.equal(result.status, 1, result.stdout + result.stderr);
       assert.match(result.stdout + result.stderr, /CONTROL_FLOW_NESTED_TERNARY/);
+    });
+  });
+
+  test(`${variant}: CHEMX_SKIP_PRECOMMIT=1 bypasses the gate, as the hook output says`, () => {
+    withHookRepo(variant, { 'src/svc.js': lines(20) }, (root, commit) => {
+      append(root, 'src/svc.js', NESTED);
+      const result = commit({ CHEMX_SKIP_PRECOMMIT: '1' });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
     });
   });
 }
