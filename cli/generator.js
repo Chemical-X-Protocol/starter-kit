@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { hasGum, gumChoose, gumInput, promptQuestion, isStdinTty } from './terminal.js';
-import { renderBanner } from './banner.js';
+import { renderTtyBanner } from './tty-banner.js';
 import { describeLineBudgetPolicy } from './config/profiles.js';
 import { checkOrPromptEvaluation } from './license.js';
 import {
@@ -300,7 +300,7 @@ export const runGenerateWizard = async (rawArgs = []) => {
 
   const isJson = rawArgs.includes('--json');
   const isYes = rawArgs.includes('-y') || rawArgs.includes('--yes') || isJson || !isStdinTty();
-  if (!isJson) renderBanner('Chemical X: Molecular Capsule Wizard');
+  if (!isJson) await renderTtyBanner('Chemical X: Molecular Capsule Wizard');
   await checkOrPromptEvaluation('generate capsule', { isYes });
 
   const useGum = hasGum();

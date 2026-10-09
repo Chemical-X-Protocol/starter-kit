@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { hasGum, gumChoose, promptQuestion, isStdinTty } from './terminal.js';
-import { renderBanner } from './banner.js';
+import { renderTtyBanner } from './tty-banner.js';
 import { PILLARS, PILLAR_PRESETS } from './pillars-schema.js';
 import { planFileWrite, applyFileWrites } from './pillars-write-guard.js';
 import { buildHostShims } from './host-shims.js';
@@ -29,7 +29,7 @@ export const runPillarsWizard = async (rawArgs = [], cwd = process.cwd()) => {
   const isDryRun = !isWrite || rawArgs.includes('--dry-run') || rawArgs.includes('-n');
 
   if (!isJson) {
-    renderBanner('Chemical X: Architectural Pillars Wizard');
+    await renderTtyBanner('Chemical X: Architectural Pillars Wizard');
   }
 
   const presetFlag = (rawArgs.find((a) => a.startsWith('--preset=')) || '').split('=')[1];

@@ -1,5 +1,5 @@
 import { COMMANDS_SCHEMA, COMMAND_GROUPS, findCommandSchema } from './commands-schema.js';
-import { isStdoutTty } from './terminal.js';
+import { renderTtyBanner } from './tty-banner.js';
 
 // Help text is generated from commands-schema.js. Top-level help stays under 1,500 bytes
 // (help.spec.js); detail lives in `chemx help <command>` and `chemx <command> --help`.
@@ -53,14 +53,6 @@ export const formatCommandHelp = (entry) => {
   if (entry.flags.length > 0) lines.push('', 'FLAGS', ...formatFlagRows(entry.flags));
   if (entry.examples.length > 0) lines.push('', 'EXAMPLES', ...entry.examples.map((eg) => `  ${eg}`));
   return `${lines.join('\n')}\n`;
-};
-
-const renderTtyBanner = async (title) => {
-  const isHumanTerminal = isStdoutTty();
-  if (!isHumanTerminal) return false;
-  const { renderBanner } = await import('./banner.js');
-  renderBanner(title);
-  return true;
 };
 
 export const printCommandHelp = async (token) => {

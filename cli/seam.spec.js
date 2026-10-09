@@ -17,6 +17,7 @@ const makeProject = () => {
   return dir;
 };
 
+// `chemx tesseract` is not listed: its HUD and manifesto text is the command's product (MCP returns it too).
 const SEAM_RUNS = [
   ['help'],
   ['q', 'add'],
@@ -27,7 +28,9 @@ const SEAM_RUNS = [
   ['audit', '--json'],
   ['verify', '--json'],
   ['test', '--json'],
-  ['typecheck', '--json']
+  ['typecheck', '--json'],
+  ['pillars', '--json'],
+  ['badge', '--json']
 ];
 
 test('seam: piped and --json runs never import presentation modules', async () => {

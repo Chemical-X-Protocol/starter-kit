@@ -6,7 +6,7 @@ import {
   gumInput,
   promptQuestion
 } from './terminal.js';
-import { renderBanner } from './banner.js';
+import { renderTtyBanner } from './tty-banner.js';
 import { copyToClipboard } from './audit/social-git.js';
 import { getAuditHistory, getAuditBaseline } from './audit/history.js';
 import { getStoredDiscussion } from './audit/discussion-store.js';
@@ -171,7 +171,7 @@ export const generateSvgBadgeSnippet = (label, grade) => {
 };
 
 export const runBadgeCommand = async (rawArgs = []) => {
-  renderBanner('Chemical X: Verified Footer Badge Generator');
+  await renderTtyBanner('Chemical X: Verified Footer Badge Generator');
 
   const detected = resolveLatestAuditInfo();
   const gradeFlag = rawArgs.find((a) => a.startsWith('--grade='));

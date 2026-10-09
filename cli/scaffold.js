@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { hasGum, gumInput, promptQuestion, isStdinTty, isStdoutTty } from './terminal.js';
-import { renderBanner } from './banner.js';
+import { renderTtyBanner } from './tty-banner.js';
 import { obtainLicenseKey, fetchStarterKitFiles, loadLocalBlueprintFiles } from './license.js';
 import { runPillarsWizard } from './pillars-wizard.js';
 import { resolvePackageManager } from './build/detector.js';
@@ -40,7 +40,7 @@ export const runScaffold = async (projectName, rawArgs = [], onRunAudit = null) 
     return;
   }
 
-  renderBanner('Chemical X: Molecular Architecture Scaffolder (npm create chemx)');
+  await renderTtyBanner('Chemical X: Molecular Architecture Scaffolder (npm create chemx)');
 
   const fwArg = (rawArgs.find((a) => a.startsWith('--framework=')) || '').split('=')[1]
     || (rawArgs.includes('--framework') ? rawArgs[rawArgs.indexOf('--framework') + 1] : null);
@@ -149,7 +149,7 @@ export const runInit = async (targetSubDir = 'src/chemical-x', rawArgs = [], onR
     ? targetSubDir
     : (rawArgs.slice(1).find((arg) => !arg.startsWith('-')) || 'src/chemical-x');
 
-  renderBanner('Chemical X: In-Repo Capsule Drop-in');
+  await renderTtyBanner('Chemical X: In-Repo Capsule Drop-in');
 
   const targetDir = path.resolve(process.cwd(), safeTargetSubDir);
   const licenseKey = await obtainLicenseKey(rawArgs, onRunAudit);
