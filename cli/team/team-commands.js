@@ -13,6 +13,7 @@ import { handleLockCommand, handleUnlockCommand } from './team-commands-lock.js'
 import { runCheckStagedArgs } from './team-commands-lock-staged.js';
 import { handleProfileCommand, handleHandoffCommand } from './team-commands-profile.js';
 import { handleDispatchCommand } from './team-commands-dispatch.js';
+import { handleRouteCommand } from './team-route.js';
 import { handleRunTokens, parseRunArgs } from './team-commands-tokens.js';
 import { runAuditRunCli } from './audit-run.js';
 import { isBoardCommand, runBoardCommand } from './team-commands-board.js';
@@ -23,7 +24,7 @@ import { parseRepoFlags, resolveTaskIdArgs, REPO_VALUE_FLAGS } from './team-comm
 
 const ARG_VAL_FLAGS = ['--target', '--as', '--to', '--agent', '--since', '--limit', '--thread', '--task', '--parent', '--rule', '--priority', '--prio', '--moscow', '--needs', '--url', '--pid', '--run', '--projects', ...REPO_VALUE_FLAGS];
 
-const TEAM_COMMANDS = ['status', 'task', 'lock', 'unlock', 'feed', 'post', 'inbox', 'dm', 'tokens', 'audit-run', 'triage', 'benchmark', 'train', 'migrate'];
+const TEAM_COMMANDS = ['status', 'task', 'lock', 'unlock', 'feed', 'post', 'inbox', 'dm', 'tokens', 'audit-run', 'triage', 'benchmark', 'train', 'migrate', 'route'];
 
 const splitPositionals = (restArgs) => {
   const positionals = [];
@@ -57,7 +58,8 @@ const SUB_COMMANDS = {
   train: (ctx, args, isCli) => handleTrainCommand(ctx.db, args.positionals[0] || 'status', args.flags, isCli, args.flags.isJson),
   profile: (ctx, args, isCli) => handleProfileCommand(ctx.db, args.positionals, args.flags, isCli),
   handoff: (ctx, args, isCli) => handleHandoffCommand(ctx.db, args.positionals, args.flags, isCli, args.titleWords),
-  dispatch: (ctx, args, isCli, cwd) => handleDispatchCommand(ctx.db, { ...args.flags, root: ctx.root, rawArgs: args.restArgs }, isCli, cwd)
+  dispatch: (ctx, args, isCli, cwd) => handleDispatchCommand(ctx.db, { ...args.flags, root: ctx.root, rawArgs: args.restArgs }, isCli, cwd),
+  route: (ctx, args, isCli, cwd) => handleRouteCommand(ctx.db, args.positionals, args.flags, isCli, ctx.root || cwd)
 };
 
 const runSubCommand = (ctx, args, isCli, cwd) => {
@@ -70,7 +72,7 @@ const runSubCommand = (ctx, args, isCli, cwd) => {
   const isKnown = Object.hasOwn(SUB_COMMANDS, subCommand);
   if (isKnown) return SUB_COMMANDS[subCommand](ctx, args, isCli, cwd);
   if (isCli) {
-    process.stderr.write(`\x1b[31m✕ Unknown team command: "${subCommand}". Available commands: status, task, feed, post, lock, unlock, triage, inbox, dm, profile, handoff, dispatch, benchmark, migrate, tokens, audit-run\x1b[0m\n`);
+    process.stderr.write(`\x1b[31m✕ Unknown team command: "${subCommand}". Available commands: status, task, feed, post, lock, unlock, triage, inbox, dm, profile, handoff, dispatch, route, benchmark, migrate, tokens, audit-run\x1b[0m\n`);
   }
   return { error: `Unknown team command: ${subCommand}` };
 };

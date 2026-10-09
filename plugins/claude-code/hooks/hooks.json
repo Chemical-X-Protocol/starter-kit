@@ -3,7 +3,7 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash|Grep|Read|Edit|Write|MultiEdit|NotebookEdit|Glob",
+        "matcher": "Bash|Grep|Read|Edit|Write|MultiEdit|NotebookEdit|Glob|Agent|Workflow",
         "hooks": [
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/chemx-launch.mjs\" hook claude-pre-tool", "timeout": 10 }
         ]

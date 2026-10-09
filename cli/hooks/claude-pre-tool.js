@@ -10,7 +10,8 @@
 // `nativeFileTools` policy (native-tool-policy.js), and native edits are denied while another
 // handle holds a live chemx lock (native-edit-lock.js). Search rules are on unless
 // CHEMX_GUARD_SEARCH=0. Escape hatch for Bash: a `# chemx-bypass: <reason>` comment, which is
-// logged to .chemx/friction.jsonl and the coordination db feed.
+// logged to .chemx/friction.jsonl and the coordination db feed. Agent and Workflow launches that name chemx
+// tasks (#NNNN) are compared with the routed model (guard-route.js, routeGuard: warn | block).
 
 import { parseShell } from './shell-parse.js';
 import { resolveInvocation, isChemxInvocation } from './guard-invocation.js';
@@ -19,6 +20,7 @@ import { contextForCommand } from './guard-paths.js';
 import { isPromotedNudge, resolveNudgePromotion } from './guard-config.js';
 import { NATIVE_FILE_TOOLS, decideNativeTool, resolveNativeToolMode } from './native-tool-policy.js';
 import { decideEditLock, resolveHookAgentId } from './native-edit-lock.js';
+import { ROUTE_GUARD_TOOLS, decideRouteGuard, resolveRouteGuardMode } from './guard-route.js';
 
 const BYPASS_PATTERN = /chemx-bypass:\s*(\S.*)$/;
 const SEGMENT_LIMIT = 120;
@@ -108,7 +110,9 @@ export const decidePreTool = (payload, context) => {
   const isNativeFileTool = NATIVE_FILE_TOOLS.has(tool);
   if (isNativeFileTool) return decideNativeFileTool(tool, input, context);
   const isBash = tool === 'Bash';
-  return isBash ? decideBash(input, context) : allow();
+  if (isBash) return decideBash(input, context);
+  const isLaunch = ROUTE_GUARD_TOOLS.has(tool);
+  return (isLaunch ? decideRouteGuard(tool, input, context) : null) ?? allow();
 };
 
 export const buildPreToolContext = (payload, env = process.env) => {
@@ -118,7 +122,8 @@ export const buildPreToolContext = (payload, env = process.env) => {
   const agentId = resolveHookAgentId(payload, env);
   const nudgePromotion = resolveNudgePromotion(root, env);
   const scratchDir = payload?.scratchpad_dir ?? null;
-  return { cwd, root, enforceSearch: env.CHEMX_GUARD_SEARCH !== '0', mode, agentId, nudgePromotion, scratchDir };
+  const routeGuard = resolveRouteGuardMode(root, env);
+  return { cwd, root, enforceSearch: env.CHEMX_GUARD_SEARCH !== '0', mode, agentId, nudgePromotion, scratchDir, routeGuard };
 };
 
 // Deny carries permissionDecision; an advisory allow carries only additionalContext, so it never

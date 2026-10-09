@@ -84,6 +84,17 @@ blocks every nudge, or list rule ids to block only those:
 
 Rule ids: `nudge-git-status`, `nudge-git-add`, `nudge-git-commit`, `nudge-wait`, `nudge-ls`. `CHEMX_GUARD_NUDGES=block` or `nudge` overrides the config for one process. An unreadable config means no promotion.
 
+## Launch routing guard: Agent and Workflow
+
+Task #2027. When Claude Code is about to launch an `Agent` or run a `Workflow`, the guard looks for chemx task ids (`#NNNN`) and compares the launch's model with the model chemx routes for those tasks (`chemx team route`, the same routing as `team dispatch`). Existing installs need `chemx install-hooks --host=claude` again: the matcher gained `Agent|Workflow`, and `chemx doctor` reports the old matcher as outdated.
+
+- **Agent**: reads `prompt`, `description` and `model` from the tool input (documented Claude Code fields).
+- **Workflow**: reads the inline `script`, or the file named by `scriptPath` (the Workflow tool's own inputs; Claude Code's hook docs list the tool but not its fields). Each `agent(...)` call is judged on its own: the ids inside the call against its `model:` option.
+- **What it flags**: no model (the agent then runs on the session's top model), or a model heavier than routed (haiku < sonnet < opus, matched by name). A lighter or equal model, a model that is not one of those three names, and a model chosen at run time pass silently. A launch naming several tasks is compared with the heaviest routed model among them.
+- **Silent when it cannot tell**: no `#NNNN` in the launch, ids that are not tasks in the team db, tasks without a needs tier, a prompt or script built at run time, an unreadable script file, a missing db.
+
+The default is advice: the call runs and the model sees a note naming the task, its tier and the routed model. To make it a block, set `"routeGuard": "block"` in `.chemxrc` (or `CHEMX_ROUTE_GUARD=block|warn` for one process). An unreadable config means advice. It is a text match on ids and models, not proof of what the agent will do.
+
 ## What is never touched
 
 - Anything outside every git repo: `/tmp`, scratch directories, the scratchpad directory Claude Code names in the payload.
@@ -108,4 +119,4 @@ If chemx truly cannot do the job, file it: `chemx team task add "Friction: <what
 
 ## Where the code lives
 
-`cli/hooks/claude-pre-tool.js` (decision), `guard-rules.js`, `guard-rules-shell.js`, `guard-rules-reads.js`, `guard-rules-nudge.js` (rules), `guard-paths.js`, `repo-membership.js`, `native-tool-policy.js` (scope), `guard-config.js` (nudge promotion), `bypass-log.js`, `install-hooks-*.js` and `cli/doctor/check-host.js`. Specs sit beside them: `guard-rewrites.spec.js`, `guard-native-bypass.spec.js`, `install-hooks-project.spec.js`, `cli/doctor/doctor-hooks.spec.js`.
+`cli/hooks/claude-pre-tool.js` (decision), `guard-rules.js`, `guard-rules-shell.js`, `guard-rules-reads.js`, `guard-rules-nudge.js` (rules), `guard-paths.js`, `repo-membership.js`, `native-tool-policy.js` (scope), `guard-config.js` (nudge promotion), `guard-route.js` (launch routing), `bypass-log.js`, `install-hooks-*.js` and `cli/doctor/check-host.js`. Specs sit beside them: `guard-rewrites.spec.js`, `guard-native-bypass.spec.js`, `install-hooks-project.spec.js`, `cli/doctor/doctor-hooks.spec.js`.

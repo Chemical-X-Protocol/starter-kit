@@ -20,6 +20,8 @@ import { checkNeedsInput } from './team-needs.js';
 import { resolveListRepo, prepareTaskTarget, describeBoardScope } from './team-commands-repo.js';
 import { runTriage } from './team-commands-triage.js';
 import { repoDir } from './coordination-repos.js';
+import { loadModelRouting } from './team-dispatch.js';
+import { buildLabelFor } from './team-route.js';
 
 export const TASK_ACTIONS = ['list', 'show', 'add', 'claim', 'handoff', 'close', 'done', 'update', 'comment', 'triage', 'reconcile', 'set-target', 'vds-slot', 'trace'];
 
@@ -69,7 +71,7 @@ const runShow = (ctx, taskId, flags, isCli) => {
   const links = duplicateLinks(ctx.db, taskId);
   const output = { task, dependencyStates, events, activityCount: events.length, ...links };
   if (!isCli) return flags.isJson ? output : { task, dependencyStates, events, ...links };
-  process.stdout.write(flags.isJson ? `${JSON.stringify(output, null, 2)}\n` : formatTaskDetailCard(task, events, dependencyStates) + formatDuplicateLinks(links));
+  process.stdout.write(flags.isJson ? `${JSON.stringify(output, null, 2)}\n` : formatTaskDetailCard(task, events, dependencyStates, buildLabelFor(task, loadModelRouting(ctx.root))) + formatDuplicateLinks(links));
   return flags.isJson ? output : { task, dependencyStates, events };
 };
 

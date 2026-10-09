@@ -133,7 +133,7 @@ export const formatMailboxCard = (mailbox) => {
   return lines.join('\n');
 };
 
-export const formatTaskDetailCard = (task, events = [], dependencyStates = []) => {
+export const formatTaskDetailCard = (task, events = [], dependencyStates = [], routeLabel = null) => {
   const hasNoTask = !task;
   if (hasNoTask) return '  (Task not found)\n';
   const lines = [''];
@@ -162,7 +162,7 @@ export const formatTaskDetailCard = (task, events = [], dependencyStates = []) =
   if (hasBlockedReason) {
     lines.push(`  \x1b[1m\x1b[31mBlocker:\x1b[0m  \x1b[33m${task.blocked_reason}\x1b[0m`);
   }
-  lines.push(...formatTaskBriefLines(task, dependencyStates));
+  lines.push(...formatTaskBriefLines(task, dependencyStates, routeLabel));
 
   lines.push(...formatTelemetryLines(task));
 
@@ -215,6 +215,7 @@ export const formatTeamHelpCard = () => {
     '    \x1b[32minbox\x1b[0m [@agent]           View agent mailbox and notifications',
     '    \x1b[32mdm\x1b[0m <@agent> <msg>        Send direct message to another agent',
     '    \x1b[32mtokens\x1b[0m                   Inspect token consumption and telemetry breakdown',
+    '    \x1b[32mroute\x1b[0m <ids...>          Show the model and effort chemx routes for each stage of tasks',
     '    \x1b[32mtriage\x1b[0m                   Generate tasks automatically from AST audit hazards',
     '    \x1b[32mbenchmark\x1b[0m                Run memory and token reduction ablation benchmark',
     '    \x1b[32mtrain\x1b[0m                    Train/evaluate vector and pattern indices',

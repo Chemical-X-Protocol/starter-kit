@@ -8,16 +8,26 @@ import { closeQuietly, openTeamDbReadOnly } from './team-db-readonly.js';
 import { teamRootFor } from './coordination-target.js';
 import { getAgentProfile, latestHandoff, listLiveLocks, toAgentHandle } from './team-profile.js';
 import { capLines, handoffLine, listTop } from './team-profile-format.js';
+import { loadModelRouting } from './team-dispatch.js';
+import { readRouteTasks, buildLabelFor } from './team-route.js';
 
 export const TEAM_BRIEF_MAX_CHARS = 380;
 const TOP_FILES = 3;
 
-const readBrief = (db, handle, now) => {
+// Adds the routed build model ("sonnet/medium") to each listed claim; a claim with no needs tier gets none.
+const withRoutes = (db, claims, root) => {
+  const rows = readRouteTasks(db, claims.items.map((task) => task.id));
+  const routing = loadModelRouting(root);
+  const items = claims.items.map((task) => ({ ...task, route: buildLabelFor(rows.get(Number(task.id)), routing) }));
+  return { ...claims, items };
+};
+
+const readBrief = (db, handle, now, root) => {
   const profile = getAgentProfile(db, handle, { limit: TOP_FILES, now });
   const others = listLiveLocks(db, now).filter((lock) => lock.holder !== handle);
   return {
     agentId: handle,
-    claims: profile.claims,
+    claims: withRoutes(db, profile.claims, root),
     myLocks: profile.liveLocks,
     unreadDms: profile.unreadDms.count,
     othersLocks: { count: others.length, items: others.slice(0, TOP_FILES) },
@@ -38,7 +48,7 @@ export const collectTeamBrief = ({ root, agentId, now = Date.now() } = {}) => {
   const hasDb = Boolean(db);
   if (!hasDb) return null;
   try {
-    return readBrief(db, handle, now);
+    return readBrief(db, handle, now, root);
   } finally {
     closeQuietly(db);
   }
@@ -47,7 +57,7 @@ export const collectTeamBrief = ({ root, agentId, now = Date.now() } = {}) => {
 const mineLine = (brief) => {
   const claims = brief.claims.count;
   const hasClaims = claims > 0;
-  const claimList = hasClaims ? ` (${listTop(brief.claims, (task) => `#${task.id}`)})` : '';
+  const claimList = hasClaims ? ` (${listTop(brief.claims, (task) => (task.route ? `#${task.id} ${task.route}` : `#${task.id}`))})` : '';
   const hasUnread = brief.unreadDms > 0;
   const inboxHint = hasUnread ? ': chemx team inbox' : '';
   return `Team ${brief.agentId}: claims ${claims}${claimList} | my locks ${brief.myLocks.count} | unread DMs ${brief.unreadDms}${inboxHint}`;

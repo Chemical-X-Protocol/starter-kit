@@ -6,7 +6,7 @@
 
 export const TEAM_SUBCOMMANDS = [
   'status', 'task', 'tokens', 'telemetry', 'feed', 'post', 'lock', 'unlock', 'triage', 'inbox',
-  'dm', 'train', 'benchmark', 'ablation', 'memory', 'profile', 'handoff', 'dispatch', 'migrate', 'audit-run', 'help'
+  'dm', 'train', 'benchmark', 'ablation', 'memory', 'profile', 'handoff', 'dispatch', 'route', 'migrate', 'audit-run', 'help'
 ];
 
 export const TEAM_TASK_ACTIONS = [

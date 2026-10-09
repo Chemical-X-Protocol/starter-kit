@@ -61,7 +61,7 @@ test('project settings keep every existing key and foreign hook; a second run ch
 test('the report lists exactly what changed: additions, replacements, nothing on a repeat', async () => {
   const project = makeProject();
   const first = await installText(project, ['--no-statusline']);
-  assert.match(first, /\+ PreToolUse: Bash\|Grep\|Read\|Edit\|Write\|MultiEdit\|NotebookEdit\|Glob -> node "\$CLAUDE_PROJECT_DIR\/tools\/kit\/cli\/hooks\/entry\.js" claude-pre-tool/);
+  assert.match(first, /\+ PreToolUse: Bash\|Grep\|Read\|Edit\|Write\|MultiEdit\|NotebookEdit\|Glob\|Agent\|Workflow -> node "\$CLAUDE_PROJECT_DIR\/tools\/kit\/cli\/hooks\/entry\.js" claude-pre-tool/);
   assert.match(first, /\+ PostToolUse: /);
   assert.match(first, /\+ SessionStart: /);
   const stale = { hooks: { PreToolUse: [{ matcher: 'Bash|Grep', hooks: [{ type: 'command', command: 'node "$CLAUDE_PROJECT_DIR/.claude/hooks/chemx-guard.mjs"' }] }] } };

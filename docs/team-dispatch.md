@@ -63,6 +63,19 @@ Guards (#2508):
 - A stage whose result is missing, or a build or repair with zero commits and no evidence, is retried once with the same prompt plus "Your previous attempt did not do the task." placed before the final authority line. A second empty result marks the task `build_failed`, `review_failed` or `repair_failed`; a task whose lane never reported it is `missing`.
 - The script `log()`s each task's stages and a one-line status table before the gate.
 
+## Routing: `chemx team route`
+
+Task #2027. Before launching an agent by hand, ask chemx which model and effort to use:
+
+```sh
+chemx team route 2027 2031 [--json]
+```
+
+For each task it prints the build, review and repair route and why (the tier, and whether it came from `modelRouting` in `.chemx/config.json` or the built-in defaults). It uses `routeStages` from `team-dispatch-v2.js`, so it always agrees with `--workflow`. Unknown ids and tasks without a needs tier are reported as such (the latter are shown at the standard default, which is what dispatch would use).
+
+- `chemx team task show <id>` prints the routed build model next to Needs, and the session brief adds it to each claimed task that has a tier.
+- The Claude Code hook warns, or blocks with `routeGuard: "block"`, when an `Agent` or `Workflow` launch that names task ids has no model or a heavier one than routed. See [hooks](hooks.md#launch-routing-guard-agent-and-workflow). Existing installs need `chemx install-hooks --host=claude` again.
+
 ## Run it in Claude Code
 
 Start the rendered file with the Workflow tool's `scriptPath`. While it runs, follow the log lines. Every prompt names its run (the marker text is "dispatch run: " followed by the run name), which is what `--find-run` searches for.

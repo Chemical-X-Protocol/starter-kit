@@ -56,7 +56,7 @@ test('an old matcher is reported outdated with the exact difference, and doctor 
   assert.equal(check.scope, 'local');
   const report = await runDoctor({ projectRoot: root, isFix: true, procRoot: tempDir('chemx-doctor-noproc-'), envPath: '' });
   assert.equal(report.checks.find((entry) => entry.id === 'hooks').status, 'pass');
-  assert.equal(readJson(file).hooks.PreToolUse[0].matcher, 'Bash|Grep|Read|Edit|Write|MultiEdit|NotebookEdit|Glob');
+  assert.equal(readJson(file).hooks.PreToolUse[0].matcher, 'Bash|Grep|Read|Edit|Write|MultiEdit|NotebookEdit|Glob|Agent|Workflow');
   assert.equal(fs.existsSync(path.join(root, '.claude', 'settings.json')), false, 'project settings untouched');
 });
 

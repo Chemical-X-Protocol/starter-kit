@@ -42,11 +42,12 @@ export const resolveDependencyStates = (db, task) => {
   });
 };
 
-export const formatTaskBriefLines = (task, dependencyStates = []) => {
+export const formatTaskBriefLines = (task, dependencyStates = [], routeLabel = null) => {
   const lines = [];
   const sprint = task.sprint_tag || '(none)';
   const moscow = task.moscow || '(none)';
-  const needs = task.needs || '(none)';
+  const routed = routeLabel ? ` (build ${routeLabel})` : '';
+  const needs = `${task.needs || '(none)'}${routed}`;
   lines.push(`  \x1b[1mSprint:\x1b[0m   ${sprint} │ \x1b[1mMoSCoW:\x1b[0m ${moscow} │ \x1b[1mNeeds:\x1b[0m ${needs}`);
   // The owning package, relative to the coordination root; the target below is relative to it.
   const repo = task.repo || '.';
