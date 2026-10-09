@@ -112,10 +112,10 @@ test("calculateBlastRadius: safely terminates on circular dependency cycles", ()
   assert.ok(blast.depth <= 4);
 });
 
-const seedGraph = (db, files) => {
+const seedGraph = (db, files, tiers = {}) => {
   for (const [filePath, imports] of Object.entries(files)) {
     upsertFileIndex(db, {
-      path: filePath, mtime: 1, size: 1, tier: 'utility', lines: 1, chars: 1,
+      path: filePath, mtime: 1, size: 1, tier: tiers[filePath] || 'utility', lines: 1, chars: 1,
       symbols: [{ name: filePath.split('/').pop().replace(/\..*$/, ''), kind: 'const', isExport: true }],
       imports, root: '/nonexistent-chemx-root'
     });
@@ -152,7 +152,7 @@ test('calculateBacktrace: every caller and root entry point appears once', async
       { importedSymbol: '*', sourceModule: '../stores/branding', line: 3 }
     ],
     'src/views/Dashboard.vue': [{ importedSymbol: 'BrandingSettings', sourceModule: './BrandingSettings.vue', line: 1 }]
-  });
+  }, { 'src/views/BrandingSettings.vue': 'view', 'src/views/Dashboard.vue': 'view' });
   const trace = calculateBacktrace(db, 'branding');
   const callerPaths = trace.callers.map((c) => c.path);
   assert.deepEqual(callerPaths, Array.from(new Set(callerPaths)), 'no duplicate callers');
@@ -160,4 +160,29 @@ test('calculateBacktrace: every caller and root entry point appears once', async
   assert.deepEqual(rootPaths, Array.from(new Set(rootPaths)), 'no duplicate root entry points');
   assert.deepEqual(trace.chains, Array.from(new Set(trace.chains)), 'no duplicate chains');
   assert.ok(callerPaths.includes('src/views/Dashboard.vue'));
+  assert.deepEqual(rootPaths, ['src/views/Dashboard.vue'], 'a view that is itself imported is not a root entry point');
+});
+
+test('calculateCallTrace: external callees come from the traced file only, never a basename LIKE match', async () => {
+  const fs = await import('node:fs');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const { calculateCallTrace } = await import('./search-queries.js');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-trace-like-'));
+  try {
+    fs.mkdirSync(path.join(root, 'src/store'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'src/store/index.ts'), 'export const useStore = () => helperOnlyElsewhere();\n');
+    const db = openIndexDb(':memory:');
+    upsertFileIndex(db, { path: 'src/other/index.ts', mtime: 1, size: 1, tier: 'utility', lines: 1, chars: 1, root,
+      symbols: [{ name: 'useStore', kind: 'const', isExport: false, startLine: 1, endLine: 1 }],
+      imports: [{ importedSymbol: 'helperOnlyElsewhere', sourceModule: 'some-pkg', line: 1 }] });
+    upsertFileIndex(db, { path: 'src/store/index.ts', mtime: 1, size: 1, tier: 'utility', lines: 1, chars: 1, root,
+      symbols: [{ name: 'useStore', kind: 'const', isExport: true, startLine: 1, endLine: 1 }], imports: [] });
+    const trace = calculateCallTrace(db, 'useStore', { root });
+    assert.equal(trace.filePath, 'src/store/index.ts', 'the exported definition seeds the trace');
+    const external = trace.callees.filter((c) => c.isExternal).map((c) => c.symbol);
+    assert.deepEqual(external, [], 'an import in src/other/index.ts is not attributed to src/store/index.ts');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });

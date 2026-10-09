@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 import { extractSymbolBlock } from './reader.js';
 import { debugNote } from './search-debug.js';
 import { resolveGraphSeed, walkConsumers, findUnresolvedImporters } from './search-graph-edges.js';
+import { moduleKeysFor } from './search-resolve.js';
 
 const _require = createRequire(import.meta.url);
 let _parse = null;
@@ -124,6 +125,17 @@ export const extractCalleesFromCode = (code) => {
   return Array.from(callees);
 };
 
+// One definition per name, chosen deterministically: the current file's own definition first,
+// then an exported one, then by path. Never whichever row SQLite happens to return first.
+const SYMBOL_ROW_SQL = `
+  SELECT s.name, s.kind, s.start_line, s.end_line, s.file_path, f.tier
+  FROM symbols s
+  JOIN files f ON s.file_path = f.path
+  WHERE s.name = ?1
+  ORDER BY (s.file_path = ?2) DESC, s.is_export DESC, s.file_path, s.start_line
+  LIMIT 1
+`;
+
 /**
  * Calculates forward call trace: downstream functions invoked by target symbol.
  *
@@ -141,13 +153,7 @@ export const calculateCallTrace = (db, targetSymbolOrPath, options = {}) => {
   const cleanTarget = targetSymbolOrPath.trim();
   const maxDepth = typeof options.maxDepth === 'number' ? options.maxDepth : 3;
 
-  const symRow = db.prepare(`
-    SELECT s.name, s.kind, s.start_line, s.end_line, s.file_path, f.tier
-    FROM symbols s
-    JOIN files f ON s.file_path = f.path
-    WHERE s.name = ?
-    LIMIT 1
-  `).get(cleanTarget);
+  const symRow = db.prepare(SYMBOL_ROW_SQL).get(cleanTarget, '');
 
   let targetPath = symRow ? symRow.file_path : cleanTarget;
   let symbolName = symRow ? symRow.name : cleanTarget;
@@ -185,13 +191,7 @@ export const calculateCallTrace = (db, targetSymbolOrPath, options = {}) => {
       if (visited.has(c)) continue;
       visited.add(c);
 
-      const calleeSym = db.prepare(`
-        SELECT s.name, s.kind, s.start_line, s.end_line, s.file_path, f.tier
-        FROM symbols s
-        JOIN files f ON s.file_path = f.path
-        WHERE s.name = ?
-        LIMIT 1
-      `).get(c);
+      const calleeSym = db.prepare(SYMBOL_ROW_SQL).get(c, filePath);
 
       if (calleeSym) {
         const subCallees = traceCallees(calleeSym.name, calleeSym.file_path, currentDepth + 1);
@@ -209,10 +209,11 @@ export const calculateCallTrace = (db, targetSymbolOrPath, options = {}) => {
         const importRow = db.prepare(`
           SELECT source_module
           FROM imports
-          WHERE (importer_path = ? OR importer_path LIKE ?)
+          WHERE importer_path = ?
             AND (imported_symbol = ? OR imported_symbol = ? OR imported_symbol = '*')
+          ORDER BY line
           LIMIT 1
-        `).get(filePath, `%${path.basename(filePath)}%`, c, baseName);
+        `).get(filePath, c, baseName);
 
         if (importRow) {
           results.push({
@@ -294,7 +295,12 @@ export const calculateBacktrace = (db, targetSymbolOrPath, options = {}) => {
   }
   const maxReachedDepth = callers.reduce((acc, c) => Math.max(acc, c.depth), 0);
   const leafCallers = callers.filter((c) => !consumedPaths.has(c.path));
-  const rootCallers = callers.filter((c) => c.isEntry || leafCallers.includes(c));
+  // A root entry point is a caller nothing in the index imports, whatever its tier.
+  const hasImporter = (filePath) => {
+    const keys = moduleKeysFor(filePath);
+    return Boolean(db.prepare(`SELECT 1 FROM imports WHERE resolved_path IN (${keys.map(() => '?').join(', ')}) LIMIT 1`).get(...keys));
+  };
+  const rootCallers = callers.filter((c) => !hasImporter(c.path));
 
   return {
     target: cleanTarget,
