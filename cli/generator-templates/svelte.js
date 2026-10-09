@@ -10,10 +10,12 @@ export const buildSvelteComponent = (name, pascalName, options = {}) => {
     ? `import { create${pascalName}Controller } from './${name}.controller';\n`
     : '';
 
-  if (archetype && archetype.id !== 'state-boundary' && hasController && typeof archetype.buildReactBody === 'function') {
+  const hasReactBodyBuilder = Boolean(archetype && archetype.id !== 'state-boundary' && hasController && typeof archetype.buildReactBody === 'function');
+  if (hasReactBodyBuilder) {
     const destructureProps = archetype.destructure || 'state, canProceed, descriptor, handleAction';
     let bodyContent = '';
-    if (archetype.id === 'task-list') {
+    const isTaskList = archetype.id === 'task-list';
+    if (isTaskList) {
       const btnTag = atomsPackage ? 'AtomButton' : 'button';
       bodyContent = `  <form
     class="${name}__form"
