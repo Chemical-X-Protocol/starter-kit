@@ -10,7 +10,8 @@ import { STATUS } from './result-status.js';
 import { shareResult } from './share-consent.js';
 
 const reportPublished = (pubResult) => {
-  if (pubResult.updated) {
+  const isUpdated = Boolean(pubResult.updated);
+  if (isUpdated) {
     process.stdout.write(`\n\x1b[1m\x1b[32m✔ Successfully updated discussion topic #${pubResult.discussionNumber}!\x1b[0m\n`);
     process.stdout.write('  \x1b[33mPrevious audit checkpoint was archived as a comment in the thread.\x1b[0m\n');
     process.stdout.write(`Discussion URL: \x1b[36m${pubResult.url}\x1b[0m\n\n`);
