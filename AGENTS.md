@@ -16,6 +16,8 @@
 | `cat <data.json>` | `chemx j <file.json>` | Structural schema shape only; collapses repeating arrays. |
 | `cat <file>` / `head <file>` | `chemx read <file> --outline` | AST signatures only (~50 tokens vs thousands). |
 | `npm test` / `tsc` | `chemx test` / `chemx verify` | Silent on success; returns only failing diffs. |
+| `cat .chemx/history.json` | `chemx audit --feed=scopes` / MCP `audit_feed` | Recorded audit results as flat rows (per scope, per run or per pillar) without re-running the audit; `--json` for every row. |
+| Auditing each package by hand | `chemx audit --each=submodules` | One scoped audit per submodule or workspace package, then a one-line-per-package summary. |
 | Multiple CLI actions | `chemx do "<cmd1>" "<cmd2>"` | Executes sequentially in a single warm Node process. |
 | Multiple MCP tool calls | `chemx({ commands: [...] })` | Executes multiple sub-operations in a single agent turn. |
 

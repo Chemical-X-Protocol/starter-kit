@@ -88,9 +88,11 @@ export const VERIFY_COMMANDS = [
       { flag: '--markdown', desc: 'Generate a Markdown audit report' },
       { flag: '--unroll', desc: 'Print the full terminal report' },
       { flag: '--git, --changed', desc: 'Audit only files changed in git' },
-      { flag: '--min-grade=<A|B|C|D|F>', desc: 'Minimum acceptable architectural grade' }
+      { flag: '--min-grade=<A|B|C|D|F>', desc: 'Minimum acceptable architectural grade' },
+      { flag: '--each[=<kind>]', desc: 'Audit each submodule (or =workspaces) as its own scope; --concurrency=N' },
+      { flag: '--feed[=<view>]', desc: 'Recorded runs, no audit: history|pillars|scopes; --scope= --since= --limit=' }
     ],
-    examples: ['chemx audit', 'chemx audit --json', 'chemx audit --strict --min-grade=A']
+    examples: ['chemx audit', 'chemx audit --json', 'chemx audit --strict --min-grade=A', 'chemx audit --each=submodules', 'chemx audit --feed=scopes --json']
   },
   {
     name: 'trend',

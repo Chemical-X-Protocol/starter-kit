@@ -202,6 +202,9 @@ chemx audit
 chemx audit --unroll        # Inspect individual hazard lines and explanations
 chemx audit --strict        # Fail on any violation, including minor style warnings
 chemx audit --json          # Machine-readable format for agent pipelines
+chemx audit --each=submodules   # Audit every submodule (or =workspaces) as its own scope
+chemx audit --feed=scopes       # Recorded results per scope; also =history, =pillars (no audit runs)
+chemx audit --feed --json       # Every recorded run as rows, ready for a dashboard
 
 # Silent TypeScript compilation check (suppresses passing noise, returns error lines)
 chemx typecheck
