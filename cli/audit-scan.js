@@ -46,7 +46,8 @@ export const auditFile = (filePath, relativePath, options = {}) => {
   if (!isSourceFile(path.basename(filePath), { includeTests: true })) return [];
   const content = fs.readFileSync(filePath, 'utf-8');
   const fileHunks = conflictHunksOf(content);
-  if (fileHunks.length > 0) return [conflictViolation(relativePath || filePath, fileHunks)];
+  const hasConflictHunks = fileHunks.length > 0;
+  if (hasConflictHunks) return [conflictViolation(relativePath || filePath, fileHunks)];
   const config = options.config || resolveAuditConfig(options.cwd || process.cwd());
   return auditCode(content, filePath, relativePath, { config, coverage: options.coverage });
 };
@@ -128,7 +129,8 @@ export const scanTree = (targetDir, baseDir, scanOptions = {}) => {
   let totalHooks = 0;
   let skippedConflicts = [];
   const take = (result) => {
-    if (result.skipped) {
+    const hasSkipped = Boolean(result.skipped);
+    if (hasSkipped) {
       skippedConflicts.push(result.skipped);
       return;
     }
@@ -156,7 +158,8 @@ export const scanTree = (targetDir, baseDir, scanOptions = {}) => {
     return { violations, fileStats, totalHooks, skippedConflicts };
   }
 
-  if (!fs.existsSync(targetDir)) {
+  const isMissingTarget = !fs.existsSync(targetDir);
+  if (isMissingTarget) {
     return { violations, fileStats, totalHooks, skippedConflicts };
   }
 
