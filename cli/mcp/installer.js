@@ -22,7 +22,8 @@ const PUBLISHED_MCP_ARGS = ['exec', '-y', '--', 'chemx@latest', 'mcp'];
  */
 export const mergeMcpServerConfig = (existingJsonString = '', serverDef = {}, options = {}) => {
   const plan = planMcpConfigMerge(existingJsonString, serverDef, options);
-  if (plan.ok) return plan.content;
+  const isPlanOk = Boolean(plan.ok);
+  if (isPlanOk) return plan.content;
   const err = new Error(plan.reason);
   err.code = 'CHEMX_MCP_CONFIG_REFUSED';
   throw err;
