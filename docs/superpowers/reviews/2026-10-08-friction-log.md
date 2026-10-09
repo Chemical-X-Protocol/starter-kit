@@ -31,3 +31,4 @@
 - [G4] the PreToolUse guard blocks `git log` even inside an unrelated /tmp fixture repo, where chemx `log` reports the wrong repository anyway. (reported by the G4 reviewer)
 - [G4] the guard blocked `cat cli/mcp/index.js`, and reading a just-written spec header with `head` needed a chemx-bypass comment; separately, an unquoted `--include=*.js` fails under the zsh shell ("no matches found").
 - [G4] `chemx test` still picks vitest for this kit, so every spec run in the fix round used `node --test` with the runner-detection bypass.
+- [G4] the full `node --test` glob runs spec files in parallel, and wall-clock assertions flake under that load: help.spec "chemx <cmd> took 2208ms, expected < 2000ms" (the same command takes 0.17s standalone) and team-concurrency-stress p95 > 50ms. Both pass in isolation.
