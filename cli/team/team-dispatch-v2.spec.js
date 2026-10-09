@@ -52,6 +52,26 @@ test('selection: target_path only; skip reasons for scoping, root, claims, deps,
   assert.deepEqual(fixturePlan({ needs: 'deep' }).tasks.map((task) => task.id), [4]);
 });
 
+test('selection: requested ids selection did not return are named with a reason, not dropped', () => {
+  const db = makeFixtureDb();
+  db.prepare("UPDATE agent_tasks SET status = 'done' WHERE id = 2").run();
+  const plan = buildRunPlan(db, fixtureOptions({ tasks: '1,2,12345' }));
+  assert.deepEqual(plan.tasks.map((task) => task.id), [1]);
+  const reasons = Object.fromEntries(plan.skipped.map((entry) => [entry.id, entry.reason]));
+  assert.deepEqual(reasons, { 2: 'done', 12345: 'unknown' });
+  assert.equal(plan.totals.skipped, 2);
+});
+
+test('prompts: builder and repair close only when every deliverable is met, else follow-ups per unmet item', () => {
+  const plan = fixturePlan();
+  const first = renderTaskPrompts(plan.tasks.find((entry) => entry.id === 3), plan);
+  for (const prompt of [first.build, first.repair]) {
+    assert.match(prompt, /leave the task in_progress/);
+    assert.match(prompt, /task add "<unmet item>" --parent=\d+ --needs=light/);
+  }
+  assert.match(first.repair, /only if every deliverable of the task is met/);
+});
+
 test('selection: a task the dispatcher holds is skipped with a handoff hint', () => {
   const db = makeFixtureDb();
   db.prepare("UPDATE agent_tasks SET assigned_agent_id = '@disp', status = 'in_progress' WHERE id = 1").run();

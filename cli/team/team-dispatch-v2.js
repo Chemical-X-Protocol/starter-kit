@@ -10,7 +10,7 @@ import crypto from 'node:crypto';
 import { findForeignLease, resolveAgentId } from '../edit-locks.js';
 import { selectDispatchTasks, routeModel, loadModelRouting } from './team-dispatch.js';
 import { dispatchScope, DEFAULT_MAX_AGENTS } from './team-dispatch-batches.js';
-import { screenTasks, planLanes, readDirtyFiles, unmetDependencies, hazardWeight } from './team-dispatch-select.js';
+import { screenTasks, planLanes, readDirtyFiles, unmetDependencies, hazardWeight, SATISFIED_STATUSES } from './team-dispatch-select.js';
 import { TEMPLATE_VERSION } from './dispatch-templates/dispatch-v1.js';
 
 export const MECHANICAL_ROUTE = Object.freeze({ model: 'haiku', effort: 'low' });
@@ -113,6 +113,26 @@ const parseIds = (value) => {
   return [...new Set(tokens.map(Number).filter((id) => Number.isInteger(id) && id > 0))].sort((a, b) => a - b);
 };
 
+/**
+ * Requested ids that selection returned nothing for, each with the reason: unknown (no such task), the
+ * task's own closed status (done, duplicate, cancelled), or not_selected (open, but a filter or
+ * the limit dropped it). Read-only; an id the screens already skipped is not repeated here.
+ */
+const unselectedRequested = (db, ids, candidates) => {
+  const seen = new Set(candidates.map((task) => Number(task.id)));
+  const missing = ids.filter((id) => !seen.has(id));
+  const hasMissing = missing.length > 0;
+  if (!hasMissing) return [];
+  const rows = safeAll(db, `SELECT id, title, status FROM agent_tasks WHERE id IN (${missing.map(() => '?').join(', ')})`, missing);
+  const byId = new Map(rows.map((row) => [Number(row.id), row]));
+  return missing.map((id) => {
+    const row = byId.get(id);
+    if (!row) return { id, title: '', files: [], reason: 'unknown' };
+    const isClosed = SATISFIED_STATUSES.includes(row.status);
+    return { id, title: row.title, files: [], reason: isClosed ? String(row.status) : 'not_selected', status: row.status };
+  });
+};
+
 const toPlanTask = (entry, run, routing) => ({
   id: entry.id,
   title: entry.title,
@@ -162,6 +182,7 @@ export const buildRunPlan = (db, options = {}) => {
   const run = runNameFor(options.runName, scope, screened.ready.map((entry) => entry.id));
   const lanes = planLanes(screened.ready, options.maxAgents ?? DEFAULT_MAX_AGENTS);
   const tasks = lanes.flatMap((lane) => lane.tasks).map((entry) => toPlanTask(entry, run, routing));
+  const skipped = [...screened.skipped, ...unselectedRequested(db, ids, candidates)];
   const runHandles = tasks.flatMap((task) => [task.handle, task.reviewer, task.repairer]);
   return {
     version: 2,
@@ -178,7 +199,7 @@ export const buildRunPlan = (db, options = {}) => {
     laneWeights: lanes.map((lane) => lane.weight),
     gate: { handle: `@${run}-gate`, ...routeGate(routing) },
     peers: peerMap(db, { root, now, dispatcher, runIds: tasks.map((task) => task.id), runHandles }),
-    skipped: screened.skipped,
-    totals: { candidates: candidates.length, ready: tasks.length, skipped: screened.skipped.length, lanes: lanes.length }
+    skipped,
+    totals: { candidates: candidates.length, ready: tasks.length, skipped: skipped.length, lanes: lanes.length }
   };
 };

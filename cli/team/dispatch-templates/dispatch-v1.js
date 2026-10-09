@@ -19,6 +19,10 @@ export const CLAIM_STEP = 'Claim the task: chemx team task claim {{taskId}} --as
 
 export const HANDOFF_STEP = 'This task was built by {{builder}}. Take it over with chemx team task handoff {{taskId}} {{handle}} --as={{builder}}, never a second claim. If the handoff is refused, comment on the task with the refusal and continue only if the task is still yours to finish.';
 
+// Closing rule shared by the builder and the repair agent (#4430). task done checks hazards on the target only,
+// so it cannot tell whether every deliverable is met; the agent has to.
+export const UNMET_RULE = 'A deliverable is met only when you ran a command whose output shows it. If any deliverable is unmet, leave the task in_progress: run chemx team task comment {{taskId}} "<each unmet item and why>" --as={{handle}}, and file one follow-up per unmet item: chemx team task add "<unmet item>" --parent={{taskId}} --needs=light --desc="<what is missing and the command that shows it>" --as={{handle}} (another tier only if the task says so). This is an instruction to you; chemx does not enforce it.';
+
 export const PROTOCOL = [
   'Project: {{root}} (shared checkout on main: no worktrees, branches, stash, reset or push).',
   'Shell: cd {{root}} && CHEMX_AGENT_ID={{handle}} chemx ... ; team commands also take --as={{handle}}.',
@@ -52,6 +56,7 @@ export const BUILDER = [
   'Target files: {{files}}{{extraFilesNote}}',
   '',
   'Do the task. Do not run chemx team task done: a reviewer checks your commits first, and the task is closed after review.',
+  UNMET_RULE,
   'Return the structured result: commits (sha and subject of each), specs (what you ran and the result), deliverables (each item, met or not, with evidence: a command you ran and its output), openIssues.',
   '{{authority}}'
 ].join('\n');
@@ -83,7 +88,8 @@ export const REPAIR = [
   'TASK #{{taskId}}: {{title}}',
   '{{description}}',
   'A reviewer reported the issues below. Verify each (skip a wrong one with a reason), fix, re-run the affected specs, commit with chemx commit --release,',
-  'then close the task: chemx team task done {{taskId}} --target={{target}} --as={{handle}}. If the gate refuses, run chemx team task update {{taskId}} blocked with the reason; never --force.',
+  'then close the task only if every deliverable of the task is met: chemx team task done {{taskId}} --target={{target}} --as={{handle}} (it checks hazards on the target, not your deliverables). If the gate refuses, run chemx team task update {{taskId}} blocked with the reason; never --force.',
+  UNMET_RULE,
   '__ISSUES__',
   'Return the structured result: commits, specs, deliverables with evidence, openIssues.',
   '{{authority}}'
