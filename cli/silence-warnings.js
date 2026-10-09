@@ -2,7 +2,8 @@
  * Silences non-actionable Node.js runtime experimental warnings (e.g. node:sqlite).
  */
 export const silenceExperimentalWarnings = () => {
-  if (typeof process === 'undefined' || !process.emitWarning) return;
+  const isProcessUnavailable = typeof process === 'undefined' || !process.emitWarning;
+  if (isProcessUnavailable) return;
 
   const originalEmitWarning = process.emitWarning;
   process.emitWarning = (warning, ...args) => {
