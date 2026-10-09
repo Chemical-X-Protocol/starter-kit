@@ -1,3 +1,4 @@
+import { hasSizeClass, isAtLeastSize } from './audit/line-budgets.js';
 export const resolveGradeColor = (grade) => {
   if (grade === 'A+' || grade === 'A') return '\x1b[32;1m';
   if (grade === 'B') return '\x1b[33;1m';
@@ -92,9 +93,9 @@ export const resolvePillarGrade = (pillars) => {
   return 'F';
 };
 
-const isExtremeFile = (h) => h.lineCount >= 2000;
-const isSevereFile = (h) => h.lineCount >= 1000;
-const isWarningFile = (h) => h.lineCount > 500;
+const isExtremeFile = hasSizeClass('extreme');
+const isSevereFile = (h) => isAtLeastSize(h.lineCount, 'severe');
+const isWarningFile = (h) => isAtLeastSize(h.lineCount, 'warning');
 
 export const resolveHotspotGrade = (hotspots) => {
   if (!hotspots || hotspots.length === 0) return 'A+';

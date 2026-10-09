@@ -1,3 +1,4 @@
+import { isMonolithHotspot } from './line-budgets.js';
 import {
   CYAN,
   GREEN,
@@ -219,7 +220,7 @@ export const formatSinglePillarSection = (report, pillarName, themeColor = null)
 
   const isPillar1 = pillarName === 'Line Budgets & Monolith Decomposition';
   if (isPillar1) {
-    const monolithHotspots = (report?.hotspots || []).filter((h) => h.isMonolith || h.lineCount > 500);
+    const monolithHotspots = (report?.hotspots || []).filter(isMonolithHotspot);
     if (monolithHotspots.length > 0) {
       lines.push(`   ${BOLD}${sectionColor}🔥 MONOLITHIC HOTSPOTS (${monolithHotspots.length}):${RESET}`);
       monolithHotspots.forEach((h, idx) => {

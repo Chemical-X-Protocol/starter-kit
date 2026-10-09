@@ -7,7 +7,8 @@ import {
   countLines,
   getLineBudgets,
   resolveFileTier,
-  isViewMarkupFile
+  isViewMarkupFile,
+  classifyFileSize
 } from './line-budgets.js';
 
 const fileViolation = (relativePath, rule, severity, hazard, directive) => ({
@@ -21,10 +22,15 @@ const fileViolation = (relativePath, rule, severity, hazard, directive) => ({
   directive
 });
 
+const FILE_SEVERITY_BY_CLASS = Object.freeze({
+  extreme: { severity: 'CRITICAL', limitKey: 'critical', label: 'Extreme monolith hazard' },
+  severe: { severity: 'HIGH', limitKey: 'high', label: 'Severe monolith hazard' },
+  warning: { severity: 'MEDIUM', limitKey: 'warn', label: 'Monolith line budget warning' }
+});
+
 const resolveFileSeverity = (lineCount, budget) => {
-  if (lineCount >= budget.critical) return { severity: 'CRITICAL', limit: budget.critical, label: 'Extreme monolith hazard' };
-  if (lineCount >= budget.high) return { severity: 'HIGH', limit: budget.high, label: 'Severe monolith hazard' };
-  return { severity: 'MEDIUM', limit: budget.warn, label: 'Monolith line budget warning' };
+  const { severity, limitKey, label } = FILE_SEVERITY_BY_CLASS[classifyFileSize(lineCount, budget)];
+  return { severity, limit: budget[limitKey], label };
 };
 
 const resolveMoleculeSeverity = (lineCount, limit) => {
@@ -47,7 +53,7 @@ export const checkLineBudgets = ({ content, relativePath, config = {}, sfc = nul
   const lineCount = countLines(content);
   const tier = resolveFileTier(relativePath, config);
 
-  const isFileMonolith = lineCount > budgets.file.warn;
+  const isFileMonolith = classifyFileSize(lineCount, budgets.file) !== null;
   if (isFileMonolith) {
     const { severity, limit, label } = resolveFileSeverity(lineCount, budgets.file);
     return [fileViolation(relativePath, 'LINE_BUDGET_FILE', severity, `${label} (${lineCount} > ${limit} lines)`,

@@ -1,3 +1,4 @@
+import { classifyFileSize } from './line-budgets.js';
 import { PILLARS } from './rules.js';
 
 export const isSlopViolation = (v) => Boolean(v.isAiSlop || (v.rule && v.rule.startsWith('AI_SLOP_')));
@@ -152,12 +153,9 @@ export const calculateTokenBurnAnalytics = (fileStats, options = {}) => {
   };
 };
 
-const resolveMonolithTierName = (lineCount) => {
-  if (lineCount >= 2000) return 'CRITICAL';
-  if (lineCount >= 1000) return 'SEVERE';
-  if (lineCount > 500) return 'WARNING';
-  return null;
-};
+const MONOLITH_TIER_NAMES = Object.freeze({ extreme: 'CRITICAL', severe: 'SEVERE', warning: 'WARNING' });
+
+const resolveMonolithTierName = (lineCount) => MONOLITH_TIER_NAMES[classifyFileSize(lineCount)] ?? null;
 
 export const calculateHotspots = (violations, fileStats, limit = 5) => {
   const violationCountsByFile = {};
@@ -178,7 +176,7 @@ export const calculateHotspots = (violations, fileStats, limit = 5) => {
       filePath,
       violationCount: count,
       lineCount: stats.lineCount,
-      isMonolith: stats.lineCount > 500,
+      isMonolith: classifyFileSize(stats.lineCount) !== null,
       monolithTier
     };
   });

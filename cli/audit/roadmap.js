@@ -1,3 +1,4 @@
+import { hasSizeClass } from './line-budgets.js';
 /**
  * Chemical X Protocol: Self-Healing Remediation Roadmap
  * Calculates and formats the optimal sequence of architectural fixes.
@@ -20,9 +21,9 @@ export const buildRemediationRoadmap = (report) => {
   const { hotspots = [], violations = [], patterns = [] } = report;
   const { critical, high, medium, low } = groupViolationsBySeverity(violations);
 
-  const extremeMonoliths = hotspots.filter((h) => h.lineCount >= 2000);
-  const severeMonoliths = hotspots.filter((h) => h.lineCount >= 1000 && h.lineCount < 2000);
-  const warningMonoliths = hotspots.filter((h) => h.lineCount >= 500 && h.lineCount < 1000);
+  const extremeMonoliths = hotspots.filter(hasSizeClass('extreme'));
+  const severeMonoliths = hotspots.filter(hasSizeClass('severe'));
+  const warningMonoliths = hotspots.filter(hasSizeClass('warning'));
 
   const phases = [];
 

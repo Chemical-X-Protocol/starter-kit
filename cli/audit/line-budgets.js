@@ -14,6 +14,44 @@ import path from 'node:path';
 
 export const FILE_BUDGET = Object.freeze({ warn: 500, high: 1000, critical: 2000 });
 export const VIEW_TEMPLATE_BUDGET = Object.freeze({ warn: 200, critical: 500 });
+
+/**
+ * File size class with the LINE_BUDGET_FILE boundaries: 'warning' above warn (MEDIUM),
+ * 'severe' from high (HIGH), 'extreme' from critical (CRITICAL), else null. Reporters,
+ * history, roadmap and the navigator classify monoliths only through this.
+ */
+export const classifyFileSize = (lineCount, budget = FILE_BUDGET) => {
+  const isExtreme = lineCount >= budget.critical;
+  const isSevere = lineCount >= budget.high;
+  const isWarning = lineCount > budget.warn;
+  if (isExtreme) return 'extreme';
+  if (isSevere) return 'severe';
+  return isWarning ? 'warning' : null;
+};
+
+const SIZE_RANK = Object.freeze({ warning: 1, severe: 2, extreme: 3 });
+
+/** True when the file is at least the given size class ('warning' means any monolith). */
+export const isAtLeastSize = (lineCount, sizeClass) => (SIZE_RANK[classifyFileSize(lineCount)] ?? 0) >= SIZE_RANK[sizeClass];
+
+/** Hotspot predicate for one exact size class: hotspots.filter(hasSizeClass('severe')). */
+export const hasSizeClass = (sizeClass) => (hotspot) => classifyFileSize(hotspot.lineCount) === sizeClass;
+
+/** Hotspot predicate for any monolith (the file rule fires). */
+export const isMonolithHotspot = (hotspot) => Boolean(hotspot.isMonolith) || classifyFileSize(hotspot.lineCount) !== null;
+
+const formatCount = (n) => n.toLocaleString('en-US');
+
+/** Human labels derived from FILE_BUDGET, e.g. { warning: '> 500', severe: '>= 1,000', ... }. */
+export const SIZE_LABELS = Object.freeze({
+  warnLimit: formatCount(FILE_BUDGET.warn),
+  warning: `> ${formatCount(FILE_BUDGET.warn)}`,
+  warningRange: `${formatCount(FILE_BUDGET.warn + 1)} to ${formatCount(FILE_BUDGET.high - 1)}`,
+  severe: `>= ${formatCount(FILE_BUDGET.high)}`,
+  severeRange: `${formatCount(FILE_BUDGET.high)} to ${formatCount(FILE_BUDGET.critical - 1)}`,
+  extreme: `>= ${formatCount(FILE_BUDGET.critical)}`
+});
+
 const MOLECULE_BUDGET_BY_PROFILE = Object.freeze({ pragmatic: 250, 'atomic-strict': 100, loose: 500 });
 const DEFAULT_PROFILE = 'pragmatic';
 
