@@ -1,6 +1,6 @@
 {
   "profile": "pragmatic",
-  "scope": "cli",
+  "scope": ".",
   "rules": {
     "component-max-complexity": 12,
     "max-hook-density": 4,
