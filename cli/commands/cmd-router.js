@@ -172,7 +172,8 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
       }
       const posDir = (rawArgs[1] && !rawArgs[1].startsWith('-')) ? rawArgs[1] : null;
       const { refuseMonorepoRootAudit } = await import('../workspace-run.js');
-      if (refuseMonorepoRootAudit(posDir, rawArgs)) break;
+      const isMonorepoRootRefused = Boolean(refuseMonorepoRootAudit(posDir, rawArgs));
+      if (isMonorepoRootRefused) break;
       await runAudit(posDir, true);
       break;
     }
@@ -246,7 +247,8 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
       break;
     }
     case 'add': {
-      if (['prop', 'state', 'action'].includes(rawArgs[1])) {
+      const isMutatorSubcommand = ['prop', 'state', 'action'].includes(rawArgs[1]);
+      if (isMutatorSubcommand) {
         const { runMutatorCli } = await import('../mutators.js');
         await runMutatorCli(rawArgs, true);
       } else {
