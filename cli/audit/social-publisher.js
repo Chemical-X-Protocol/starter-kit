@@ -74,7 +74,8 @@ export const publishDiscussion = async (repo, title, body, category = DISCUSSION
   const envToken = process.env.GH_TOKEN || process.env.GITHUB_TOKEN;
   if (envToken) {
     const httpResult = await publishDiscussionViaHttp(envToken, repo, title, body, category);
-    if (httpResult.success) {
+    const isHttpPublished = Boolean(httpResult.success);
+    if (isHttpPublished) {
       return httpResult;
     }
   }
@@ -95,7 +96,8 @@ export const publishOrUpdateDiscussion = async (
 
   let existingDiscussion = null;
 
-  if (stored && stored.number && (!stored.repo || stored.repo === targetRepo)) {
+  const hasStoredDiscussion = Boolean(stored && stored.number && (!stored.repo || stored.repo === targetRepo));
+  if (hasStoredDiscussion) {
     if (envToken) {
       existingDiscussion = await viewDiscussionViaHttp(envToken, targetRepo, stored.number);
     }
@@ -104,11 +106,13 @@ export const publishOrUpdateDiscussion = async (
     }
   }
 
-  if (!existingDiscussion && options.projectName) {
+  const shouldFindByProjectName = Boolean(!existingDiscussion && options.projectName);
+  if (shouldFindByProjectName) {
     existingDiscussion = findExistingDiscussionViaGh(targetRepo, options.projectName);
   }
 
-  if (existingDiscussion && existingDiscussion.number) {
+  const hasExistingDiscussion = Boolean(existingDiscussion && existingDiscussion.number);
+  if (hasExistingDiscussion) {
     const discussionNumber = existingDiscussion.number;
     const discussionId = existingDiscussion.id || stored?.discussionId;
     const previousBody = existingDiscussion.body || '';
@@ -117,7 +121,8 @@ export const publishOrUpdateDiscussion = async (
     if (hasPreviousBody) {
       const archiveComment = formatArchiveComment(existingDiscussion.title, previousBody);
 
-      if (envToken && discussionId) {
+      const canCommentViaHttp = Boolean(envToken && discussionId);
+      if (canCommentViaHttp) {
         await postDiscussionCommentViaHttp(envToken, discussionId, archiveComment);
       } else {
         postDiscussionCommentViaGh(targetRepo, discussionNumber, archiveComment);
@@ -125,7 +130,8 @@ export const publishOrUpdateDiscussion = async (
     }
 
     let editSuccess = false;
-    if (envToken && discussionId) {
+    const canEditViaHttp = Boolean(envToken && discussionId);
+    if (canEditViaHttp) {
       editSuccess = await editDiscussionViaHttp(envToken, discussionId, title, body);
     }
     if (!editSuccess) {
@@ -158,7 +164,8 @@ export const publishOrUpdateDiscussion = async (
   }
 
   const pubResult = await publishDiscussion(targetRepo, title, body, category);
-  if (pubResult.success && pubResult.url) {
+  const isPublishedWithUrl = Boolean(pubResult.success && pubResult.url);
+  if (isPublishedWithUrl) {
     const match = pubResult.url.match(/\/discussions\/(\d+)/);
     const parsedNumber = match ? parseInt(match[1], 10) : null;
     const discussionNumber = pubResult.number || parsedNumber;
