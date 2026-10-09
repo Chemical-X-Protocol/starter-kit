@@ -11,7 +11,7 @@ import { renderRunCard } from './usage-render.js';
 
 const TOKENS_USAGE = 'Usage: chemx team tokens --run=<wf_id|run dir> [--json] [--import] [--alt=opus|sonnet|haiku|fable] [--top=<n>]';
 
-const optionOf = (args, name) => {
+export const optionOf = (args, name) => {
   const prefix = `--${name}=`;
   const equals = args.find((a) => a.startsWith(prefix));
   if (equals) return equals.slice(prefix.length);

@@ -49,6 +49,14 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
       await runProjectCli(rawArgs.slice(1), true);
       break;
     }
+    case 'report': {
+      const { openIndexDb } = await import('../search-schema.js');
+      const { runReportCli } = await import('../telemetry/savings-report.js');
+      const result = runReportCli(rawArgs.slice(1), true, { db: openIndexDb(process.cwd()) });
+      const isFailed = Boolean(result?.error);
+      if (isFailed) process.exitCode = 1;
+      break;
+    }
     case 'tokens':
     case 'telemetry': {
       const { runTeamCli } = await import('../team/index.js');

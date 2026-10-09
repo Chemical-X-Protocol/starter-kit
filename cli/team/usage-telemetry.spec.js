@@ -17,6 +17,9 @@ import { loadPricing, familyOf, DEFAULT_SOURCE } from './usage-pricing.js';
 import { importPricedRun } from './usage-store.js';
 import { runTeamCli } from './team-commands.js';
 
+// A bare `node --test` from a shell that exports CHEMX_PROJECT_ROOT must not aim temp projects at the real db.
+delete process.env.CHEMX_PROJECT_ROOT;
+
 const RUN_ID = 'wf_test-123';
 const entry = (type, extra) => JSON.stringify({ type, timestamp: new Date(extra.at).toISOString(), uuid: extra.uuid, message: extra.message });
 
