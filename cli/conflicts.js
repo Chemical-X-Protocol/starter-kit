@@ -22,8 +22,10 @@ const readHunk = (lines, open) => {
   let side = 'ours';
   for (let i = open + 1; i < lines.length; i++) {
     const line = lines[i];
-    if (BASE_RE.test(line) && side === 'ours') { side = 'base'; hunk.base = []; continue; }
-    if (MID_RE.test(line) && side !== 'theirs') { side = 'theirs'; continue; }
+    const isBaseMarker = BASE_RE.test(line) && side === 'ours';
+    if (isBaseMarker) { side = 'base'; hunk.base = []; continue; }
+    const isMidMarker = MID_RE.test(line) && side !== 'theirs';
+    if (isMidMarker) { side = 'theirs'; continue; }
     const close = side === 'theirs' ? THEIRS_RE.exec(line) : null;
     if (close) return { ...hunk, end: i + 1, theirsLabel: close[1] ?? '' };
     hunk[side].push(line);
@@ -39,7 +41,8 @@ export const findConflictHunks = (text) => {
   const lines = String(text ?? '').split(/\r?\n/);
   const hunks = [];
   for (let i = 0; i < lines.length; i++) {
-    if (!OURS_RE.test(lines[i])) continue;
+    const isOursMarker = OURS_RE.test(lines[i]);
+    if (!isOursMarker) continue;
     const hunk = readHunk(lines, i);
     if (!hunk) break;
     i = hunk.end - 1;
@@ -82,7 +85,8 @@ const STAGE_NAMES = { 1: 'base', 2: 'ours', 3: 'theirs' };
 /** Unmerged paths (relative to cwd) with the index stages git holds for each. */
 export const listUnmergedPaths = (cwd = process.cwd()) => {
   const res = git(cwd, ['ls-files', '-u', '-z']);
-  if (res.status !== 0) return { isRepo: false, paths: [] };
+  const isGitFailure = res.status !== 0;
+  if (isGitFailure) return { isRepo: false, paths: [] };
   const byPath = new Map();
   for (const entry of res.stdout.split('\0').filter(Boolean)) {
     const [meta, file] = entry.split('\t');
