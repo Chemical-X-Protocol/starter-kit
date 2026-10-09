@@ -114,7 +114,8 @@ export const runProjectVerify = async (rawArgs = [], isCli = false, options = {}
     return finish(summary, STATUS.FAIL, { isCli });
   }
 
-  if (!scope.ok) {
+  const isScopeRefused = !scope.ok;
+  if (isScopeRefused) {
     const summary = { status: STATUS.FAIL, success: false, error: scope.message, scope: { reason: scope.reason, candidates: scope.candidates } };
     printEarly(summary, isJson, shouldPrint);
     return finish(summary, STATUS.FAIL, { isCli });
