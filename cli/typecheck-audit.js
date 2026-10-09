@@ -82,7 +82,7 @@ export const runTypecheckAudit = async (rawArgs = [], isCli = false, options = {
   }
 
   const customCmd = parsed.command || options.command;
-  const argError = describeArgErrors(parsed, 'typecheck');
+  const argError = describeArgErrors(parsed, 'typecheck', { strayHint: 'typecheck always checks the whole project (use -- <command> for a custom checker)' });
   if (argError) return emit(earlyReport(STATUS.FAIL, customCmd || 'typecheck', { reason: 'USAGE', executionError: argError }), output);
 
   const cwd = findProjectRoot(options.cwd || process.cwd());

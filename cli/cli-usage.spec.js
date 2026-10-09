@@ -90,6 +90,7 @@ test('cli-usage: a multi-word positional command is re-quoted word by word, so s
   assert.equal(resolve(['echo', "it's"]), `echo "it's"`);
   assert.equal(parseCliArgs(['--', 'node', '-e', 'console.log(1+1)'], BUILD_ARGS).command, 'node -e "console.log(1+1)"');
   assert.equal(parseCliArgs(['--', 'npm run build && echo ok'], BUILD_ARGS).command, 'npm run build && echo ok', 'one word is a whole shell command');
+  assert.equal(parseCliArgs(['--', 'npm run build', '--mode=x'], BUILD_ARGS).command, 'npm run build --mode=x', 'a quoted command string followed by extra args');
 });
 
 test('cli-usage: chemx flags after the first command word belong to the command, not to chemx', () => {
@@ -104,5 +105,23 @@ test('cli-usage: `chemx wrap node -e <code>` runs the code instead of a shell sy
   await withProject(async (root) => {
     const report = await runBuildAudit(['--json', 'node', '-e', 'console.log(1+1)'], false, quiet(root));
     assert.equal(report.status, STATUS.PASS, report.executionError || JSON.stringify(report.rawTail));
+  });
+});
+
+test('cli-usage: `chemx typecheck <path>` is a usage error, not a silent whole-project check', async () => {
+  await withProject(async (root) => {
+    const report = await runTypecheckAudit(['src/a.js', '--json'], false, quiet(root));
+    assert.equal(report.status, STATUS.FAIL);
+    assert.equal(report.reason, 'USAGE');
+    assert.match(report.executionError, /unexpected argument\(s\) src\/a\.js/);
+  });
+});
+
+test('cli-usage: a --timeout setTimeout cannot honour (overflow or under 1ms) is a usage error', async () => {
+  await withProject(async (root) => {
+    const overflow = await runBuildAudit(['--timeout=3000000', '--json'], false, quiet(root));
+    assert.match(overflow.executionError || '', /--timeout/, 'above 2^31-1 ms fires after 1ms');
+    const tiny = await runTypecheckAudit(['--timeout=0.0001', '--json'], false, quiet(root));
+    assert.equal(tiny.reason, 'USAGE', 'rounds to 0ms, which would disable the timeout');
   });
 });
