@@ -1,18 +1,21 @@
 // `chemx test`: run the project's tests silently and report a tri-state verdict.
 import path from 'node:path';
-import { executeBuild } from './build/executor.js';
 import { findProjectRoot } from './build/detector.js';
 import { STATUS, toExitCode } from './result-status.js';
 import { parseCliArgs, describeArgErrors, parseTimeoutSeconds } from './cli-args.js';
 import { planTestCommand } from './test-command.js';
+import { runWithinBudget } from './test-run.js';
+import { resolveChangeScope } from './test-scope.js';
+import { planWorkspaceTest } from './test-workspace.js';
+import { workspaceAt, emitWorkspace } from './workspace-run.js';
 import { parseTestOutput, REASONS } from './test-output.js';
 import { formatTestReport, TEST_HELP } from './test-report.js';
 import { checkNodeModules } from './verify-helpers.js';
 import { formatAgentJson } from './agent-json.js';
 
 const TEST_ARGS = {
-  booleans: { '--json': 'json', '--raw': 'raw', '--allow-empty': 'allowEmpty', '--help': 'help', '-h': 'help' },
-  values: { '--target': 'target', '--filter': 'filter', '-t': 'filter', '--test-name-pattern': 'filter', '--timeout': 'timeout' }
+  booleans: { '--json': 'json', '--raw': 'raw', '--allow-empty': 'allowEmpty', '--changed': 'changed', '--related': 'related', '--all-packages': 'allPackages', '--help': 'help', '-h': 'help' },
+  values: { '--target': 'target', '--filter': 'filter', '-t': 'filter', '--test-name-pattern': 'filter', '--timeout': 'timeout', '--base': 'base' }
 };
 
 const emptyCounts = { totalTests: 0, passed: 0, failed: 0, skipped: 0, errors: 0 };
@@ -28,11 +31,42 @@ const emit = (report, { isJson, isCli, shouldPrint }) => {
   return report;
 };
 
-const resolveScope = (parsed, options) => {
+// At a monorepo root the same flags pick packages (test-workspace.js).
+const relatedFiles = (parsed, options) => (Array.isArray(options.related) ? options.related : parsed.positionals);
+const plainTargets = (parsed, options) => {
+  const explicit = options.target || parsed.values.target;
+  return explicit ? [String(explicit)] : parsed.positionals;
+};
+
+const workspaceScope = (parsed, options) => {
+  const hasRelated = Boolean(parsed.flags.related || options.related);
+  const related = hasRelated ? relatedFiles(parsed, options) : [];
+  return {
+    targets: hasRelated ? [] : plainTargets(parsed, options),
+    related, filter: options.filter || parsed.values.filter || null,
+    changed: Boolean(parsed.flags.changed || options.changed), base: parsed.values.base || options.base || null,
+    allPackages: Boolean(parsed.flags.allPackages || options.allPackages), allowEmpty: Boolean(parsed.flags.allowEmpty || options.allowEmpty)
+  };
+};
+
+// A package run inside a workspace fan-out: scope flags travel as args, never twice.
+const packageOptions = ({ changed, base, related, target, filter, allPackages, allowEmpty, ...rest }) => ({ ...rest, print: false, json: true, inWorkspace: true });
+
+// --changed / --related: positionals are related files (specs or sources) and the targets are
+// the affected specs (test-scope.js). Otherwise positionals are runner targets as given.
+const resolveScope = (parsed, options, root) => {
+  const filter = options.filter || parsed.values.filter || null;
+  const changed = Boolean(parsed.flags.changed || options.changed);
+  const hasRelated = Boolean(parsed.flags.related || options.related);
+  if (changed || hasRelated) {
+    const related = Array.isArray(options.related) ? options.related : parsed.positionals;
+    const base = parsed.values.base || options.base || null;
+    return { ...resolveChangeScope(root, { changed, base, related, cwd: options.cwd || process.cwd() }), filter };
+  }
   const explicit = options.target || parsed.values.target;
   // The router already removed the command name, so a positional `test` is a real target directory.
   const targets = explicit ? [String(explicit)] : parsed.positionals;
-  return { targets, filter: options.filter || parsed.values.filter || null };
+  return { targets, filter, selection: null };
 };
 
 export const runTestAudit = async (rawArgs = [], isCli = false, options = {}) => {
@@ -50,25 +84,36 @@ export const runTestAudit = async (rawArgs = [], isCli = false, options = {}) =>
   if (argError) return emit(earlyReport(STATUS.FAIL, customCmd || 'test', { reason: 'USAGE', executionError: argError }), output);
 
   const cwd = findProjectRoot(options.cwd || process.cwd());
+  const workspace = options.inWorkspace || customCmd ? null : workspaceAt(cwd);
+  if (workspace) {
+    const scope = workspaceScope(parsed, options);
+    const runInPackage = (args, dir) => runTestAudit([...args, '--json'], false, { ...packageOptions(options), cwd: dir });
+    return emitWorkspace(await planWorkspaceTest(workspace, scope, runInPackage, options.cwd || process.cwd()), output, formatTestReport);
+  }
   const nmStatus = checkNodeModules(cwd);
   if (nmStatus) {
     const friendlyMsg = nmStatus.msg('testing');
     return emit(earlyReport(STATUS.FAIL, customCmd || 'test', { failed: 1, executionError: friendlyMsg, failures: [{ name: 'dependencies', details: [friendlyMsg] }] }), output);
   }
 
-  const { targets, filter } = resolveScope(parsed, options);
+  const allowEmpty = Boolean(parsed.flags.allowEmpty || options.allowEmpty);
+  const { targets, filter, selection, emptyDetail } = resolveScope(parsed, options, cwd);
+  const selectionField = selection ? { selection } : {};
+  if (emptyDetail) {
+    const status = allowEmpty ? STATUS.PASS : STATUS.INCONCLUSIVE;
+    return emit(earlyReport(status, 'test --changed', { reason: allowEmpty ? null : REASONS.NO_TESTS_RAN, detail: emptyDetail, exitCode: 0, ...selectionField }), output);
+  }
   const plan = planTestCommand(customCmd, cwd, { targets, filter });
   const runDir = path.relative(cwd, plan.cwd) || '.';
   const hasMissingTargets = plan.missingTargets.length > 0;
   if (hasMissingTargets) {
     const detail = `target(s) matched nothing: ${plan.missingTargets.join(', ')}`;
-    return emit(earlyReport(STATUS.INCONCLUSIVE, plan.command, { reason: REASONS.NO_TESTS_RAN, detail, runner: plan.runner, runDir }), output);
+    return emit(earlyReport(STATUS.INCONCLUSIVE, plan.command, { reason: REASONS.NO_TESTS_RAN, detail, runner: plan.runner, runDir, ...selectionField }), output);
   }
 
-  const allowEmpty = Boolean(parsed.flags.allowEmpty || options.allowEmpty);
   const timeoutMs = parseTimeoutSeconds(parsed.values.timeout) ?? options.timeoutMs ?? null;
   const isRaw = Boolean(parsed.flags.raw) || options.raw === true;
-  const execution = await executeBuild(plan.command, plan.cwd, { raw: isRaw, timeoutMs });
+  const { execution, command, workers, budget, queuedMs } = await runWithinBudget(plan, { raw: isRaw, timeoutMs, env: options.env, onWait: options.onWait });
   const result = parseTestOutput(execution.stdout, execution.stderr, execution.exitCode, { allowEmpty, scoped: targets.length > 0 || Boolean(filter), timedOut: execution.timedOut, timeoutMs });
 
   const report = {
@@ -77,9 +122,12 @@ export const runTestAudit = async (rawArgs = [], isCli = false, options = {}) =>
     reason: result.reason,
     ...(result.detail ? { detail: result.detail } : {}),
     exitCode: execution.exitCode,
-    command: plan.command,
+    command,
     runner: plan.runner,
     runDir,
+    workers,
+    budget,
+    queuedMs,
     durationMs: execution.durationMs,
     totalTests: result.totalTests,
     passed: result.passed,
@@ -87,7 +135,8 @@ export const runTestAudit = async (rawArgs = [], isCli = false, options = {}) =>
     skipped: result.skipped,
     errors: result.errors,
     executionError: result.executionError,
-    failures: result.failures
+    failures: result.failures,
+    ...selectionField
   };
   return emit(report, output);
 };

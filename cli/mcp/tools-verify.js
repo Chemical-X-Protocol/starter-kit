@@ -11,6 +11,14 @@ const timeoutArgs = (args) => {
   return hasTimeout ? [`--timeout=${args.timeout}`] : [];
 };
 
+// changed/base/related select affected specs (test-scope.js); related paths are as given.
+const changeArgs = (args) => ({
+  changed: Boolean(args.changed),
+  base: args.base || null,
+  related: Array.isArray(args.related) && args.related.length > 0 ? args.related.map(String) : undefined,
+  allPackages: Boolean(args.allPackages)
+});
+
 const targetDirOf = (args, cwd) => {
   const baseCwd = resolveTargetCwd(cwd);
   return args.dir ? path.resolve(baseCwd, args.dir) : baseCwd;
@@ -28,6 +36,7 @@ export const handleChemxTypecheck = async (args = {}, cwd = process.cwd()) => {
   return runTypecheckAudit(timeoutArgs(args), false, {
     json: true,
     command: args.command,
+    allPackages: Boolean(args.allPackages),
     print: false,
     cwd: targetDirOf(args, cwd),
     timeoutMs: DEFAULT_STEP_TIMEOUT_MS
@@ -41,6 +50,7 @@ export const handleChemxTest = async (args = {}, cwd = process.cwd()) => {
     target: args.testTarget ?? args.target,
     filter: args.filter,
     allowEmpty: Boolean(args.allowEmpty),
+    ...changeArgs(args),
     print: false,
     cwd: targetDirOf(args, cwd),
     timeoutMs: DEFAULT_STEP_TIMEOUT_MS
@@ -54,6 +64,9 @@ export const handleChemxVerify = async (args = {}, cwd = process.cwd()) => {
     targetDir: args.dir,
     includeBuild: Boolean(args.includeBuild),
     allowEmpty: Boolean(args.allowEmpty),
+    changed: Boolean(args.changed),
+    base: args.base || null,
+    allPackages: Boolean(args.allPackages),
     print: false,
     cwd: baseCwd
   });

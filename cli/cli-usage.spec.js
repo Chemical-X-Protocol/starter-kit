@@ -31,7 +31,7 @@ const quiet = (root) => ({ cwd: root, print: false });
 test('cli-usage: `chemx test test` targets a directory named test instead of dropping it', { timeout: 60000 }, async () => {
   await withProject(async (root) => {
     const report = await runTestAudit(['test', '--json'], false, quiet(root));
-    assert.equal(report.command, 'node --test "test/**/*.{test,spec}.{js,mjs,cjs}"');
+    assert.match(report.command, /^node --test --test-concurrency=\d+ "test\/\*\*\/\*\.\{test,spec\}\.\{js,mjs,cjs\}"$/);
     assert.equal(report.passed, 1);
   });
 });

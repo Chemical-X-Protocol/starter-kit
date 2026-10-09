@@ -47,7 +47,8 @@ export const testsSection = (testReport) => ({
   skipped: testReport.skipped,
   errors: testReport.errors || 0,
   executionError: testReport.executionError || null,
-  failures: testReport.failures.slice(0, 3)
+  failures: testReport.failures.slice(0, 3),
+  ...(testReport.selection ? { selection: testReport.selection } : {})
 });
 
 // stepStatuses: { audit, typecheck, tests, build? } where each value is a STATUS or SKIPPED.

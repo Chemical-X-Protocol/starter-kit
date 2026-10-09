@@ -78,6 +78,17 @@ const readNodeSegment = (script = '') => {
   return { flags, files };
 };
 
+// The spec globs a pure `node --test ...` test script runs (quotes removed), or null when the
+// suite is not a node --test glob list (other runners, wrapped scripts, node's default globs).
+export const suiteGlobs = (cwd) => {
+  const script = String(loadLocalPackageJson(cwd)?.scripts?.test || '').trim();
+  const segment = (script.match(NODE_TEST_SEGMENT)?.[0] || '').trim();
+  const isPureNodeScript = segment.length > 0 && segment === script;
+  if (!isPureNodeScript) return null;
+  const globs = readNodeSegment(script).files.map((file) => file.replace(/^(['"])(.*)\1$/, '$2'));
+  return globs.length > 0 ? globs : null;
+};
+
 // node --test does not walk a directory argument (it tries to load it as a module), so a
 // directory target becomes a glob of the spec files inside it.
 const NODE_DIR_GLOB = '**/*.{test,spec}.{js,mjs,cjs}';
@@ -145,7 +156,7 @@ const appendScopeToCustom = (customCmd, targets, filter) => {
   return `${command} ${flag}${quoteFilter(filter)}`;
 };
 
-// Returns { command, cwd, runner, missingTargets }. missingTargets lists node --test targets
+// Returns { command, cwd, runner, missingTargets, targets, forwardsArgs }. missingTargets lists node --test targets
 // that do not exist on disk; the caller reports those as inconclusive instead of running.
 export const planTestCommand = (customCmd, cwd = process.cwd(), options = {}) => {
   const targets = (options.targets || []).map(String).filter(Boolean);
@@ -167,15 +178,21 @@ export const planTestCommand = (customCmd, cwd = process.cwd(), options = {}) =>
     const script = scripts.test || '';
     const missingTargets = runner === 'node' ? owner.targets.filter((t) => !/[*?[]/.test(t) && !fs.existsSync(path.resolve(runCwd, t))) : [];
     const command = buildScopedCommand({ runner, script, runCwd, targets: owner.targets, filter, pm });
-    return { command, cwd: runCwd, runner, missingTargets };
+    return { command, cwd: runCwd, runner, missingTargets, targets: owner.targets };
   }
 
   const isLegitTest = Boolean(scripts.test) && !isPlaceholderScript(scripts.test);
   const shouldRunVitestDirectly = !isLegitTest && runner === 'vitest';
-  if (shouldRunVitestDirectly) return { command: buildVitestCommand(runCwd, [], null), cwd: runCwd, runner, missingTargets: [] };
+  if (shouldRunVitestDirectly) return { command: buildVitestCommand(runCwd, [], null), cwd: runCwd, runner, missingTargets: [], targets: [] };
   const scriptName = pickUnscopedScript(scripts);
+  const script = String(scripts[scriptName] || '').trim();
+  // A script that is exactly one `node --test ...` runs directly, so the worker budget
+  // (--test-concurrency) reaches node; `npm run` would swallow the flag.
+  const isPureNodeScript = runner === 'node' && (script.match(NODE_TEST_SEGMENT)?.[0] || '').trim() === script && script.length > 0;
+  if (isPureNodeScript) return { command: buildNodeCommand(script, runCwd, [], null), cwd: runCwd, runner, missingTargets: [], targets: [] };
   const command = pm === 'yarn' ? `yarn ${scriptName}` : `${pm} run ${scriptName}`;
-  return { command, cwd: runCwd, runner, missingTargets: [] };
+  const forwardsArgs = script.length > 0 && !/[&|;<>`$()]/.test(script);
+  return { command, cwd: runCwd, runner, missingTargets: [], targets: [], forwardsArgs };
 };
 
 export const detectTestCommand = (customCmd, cwd = process.cwd(), options = {}) => {

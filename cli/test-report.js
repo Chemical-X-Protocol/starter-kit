@@ -13,11 +13,19 @@ export const TEST_HELP = [
   `${ANSI.BOLD}OPTIONS${ANSI.RESET}`,
   '  -t <name>, -t=<name>     Only run tests whose name matches (alias: --filter)',
   '  --target=<path>          Explicit target (same as a positional)',
+  '  --changed                Run only the specs affected by files changed vs HEAD (staged,',
+  '                           unstaged, untracked); --base=<rev> compares from merge-base',
+  '  --related <files...>     Run only the specs affected by these files (specs or sources)',
   '  --allow-empty            Treat a run that collects zero tests as a pass',
   '  --timeout=<seconds>      Stop the run after this long (result: inconclusive)',
   '  --json                   Output the test summary as JSON',
   '  --raw                    Stream the runner output as it runs',
   '  -h, --help               Show this help message',
+  '',
+  `${ANSI.BOLD}WORKER BUDGET${ANSI.RESET}`,
+  '  All chemx test runs on this machine share floor(cores/2) workers (CHEMX_TEST_CONCURRENCY',
+  '  overrides). A run takes free slots from os.tmpdir()/chemx-test-slots, passes the count to',
+  '  the runner (--test-concurrency / --maxWorkers) and waits, with one line, when none is free.',
   '',
   `${ANSI.BOLD}EXIT CODES${ANSI.RESET}`,
   '  0 pass, 1 fail, 3 inconclusive (no tests ran, timeout)',
@@ -49,8 +57,21 @@ export const formatTestHeadline = (report) => {
   return `${ANSI.RED}✖${ANSI.RESET} ${ANSI.BOLD}Test Failures (${report.failed} failed${errorNote} out of ${report.totalTests})${ANSI.RESET}`;
 };
 
+// One line naming what --changed / --related selected, or why the whole suite ran.
+export const describeSelection = (selection) => {
+  if (!selection) return null;
+  if (selection.mode === 'full') return `Full suite: ${selection.reason}`;
+  const changedCount = (selection.changed || []).length;
+  const graph = selection.graph ? `, ${selection.graph} graph${selection.graphNote ? ` (${selection.graphNote})` : ''}` : '';
+  const unpinned = selection.specs.filter((s) => s.reasons.every((r) => r.startsWith('may load any changed file'))).length;
+  const unpinnedNote = unpinned > 0 ? `, ${unpinned} only because they load modules the graph cannot pin` : '';
+  return `Affected specs: ${selection.specs.length} of ${selection.suiteSize ?? '?'} for ${changedCount} changed file(s)${graph}${unpinnedNote}`;
+};
+
 export const formatTestReport = (report) => {
-  const out = [`  ${formatTestHeadline(report)}`];
+  const selectionLine = describeSelection(report.selection);
+  const out = selectionLine ? [`  ${ANSI.DIM}${selectionLine}${ANSI.RESET}`] : [];
+  out.push(`  ${formatTestHeadline(report)}`);
   const isFailure = report.status === STATUS.FAIL;
   if (isFailure) {
     for (const failure of report.failures.slice(0, 5)) {
