@@ -372,24 +372,26 @@ To configure manually in your MCP client settings (e.g. `claude_desktop_config.j
 }
 ```
 
-### Available MCP Tools (14 Tools)
+### The `chemx` MCP tool
 
-| Tool Name | Scope | Purpose |
-| :--- | :--- | :--- |
-| `chemx_verify` | Verification | Full pipeline gatekeeper: AST Audit + Typecheck + Tests into a ~45-token card. |
-| `chemx_typecheck` | Verification | Silent TypeScript typecheck audit. Drops compiler noise; returns structured diagnostics on error. |
-| `chemx_test` | Verification | Silent project test runner. Suppresses passing checkmarks; returns ONLY failing test assertions. |
-| `chemx_audit_build` | Verification | Wrap build commands with silent execution and catalog compiler diagnostics into structured categories. |
-| `chemx_audit` | Quality | Run the full 7-Pillar Chemical X static AST audit. Returns health score, grade (A+ to F), and hazard list. |
-| `chemx_check` | Quality | Verify a single file or capsule against molecular boundary rules (< 100L, 2-stage booleans, zero raw DOM). |
-| `chemx_q` | Discovery | AST search index query machine. Query symbols, capsules, props, and hooks with minimal token burn. |
-| `chemx_query_patterns` | Discovery | Detect duplicated state machines, cloned UI layouts, and parallel hooks before decomposing monoliths. |
-| `chemx_read` | Reading | Token-minified file reader. Extracts AST outlines, stripped comments, or symbol blocks (80%+ token savings). |
-| `chemx_patch` | Editing | Surgically patch files with exact search and replace blocks without whole-file context dumps. |
-| `chemx_write` | Editing | Create or overwrite files with automatic SQLite AST indexing and boundary compliance checks. |
-| `chemx_autofix` | Remediation | Deterministically remediate safe violations (typography hyphens, markdown fences, AI slop comments). |
-| `chemx_generate_capsule` | Scaffolding | Deterministically generate a crystalline capsule directory (component, controller, SCSS, types, index). |
-| `chemx_get_refactor_prompt` | Prompting | Synthesize targeted refactoring prompts for Grade F critical hazards, hotspots, and slop artifacts. |
+`tools/list` returns one tool, `chemx`. Pick the operation with `action` (the enum is generated from the live dispatcher); `{ "action": "help" }` returns every action with its parameters. The legacy `chemx_*` sub-tools are hidden from `tools/list` but still callable by name.
+
+Call forms:
+
+| Form | Example |
+| :--- | :--- |
+| Action + params | `{ "action": "read", "projectRoot": "/abs/repo", "params": { "path": "src/a.ts", "outline": true } }` |
+| CLI string | `{ "command": "q useBrandingStore --blast-radius" }` |
+| Batch of strings | `{ "commands": ["d", "p -s", "verify"] }` |
+| Batch of objects | `{ "batch": [{ "action": "p" }, { "action": "log" }] }` |
+
+Contract:
+- **Root.** Each call resolves one project root: `projectRoot` > the project above an absolute path > MCP `roots/list` > the server's start argument (`chemx mcp <dir>`) > `CHEMX_PROJECT_ROOT` > the start directory only if it has `.chemxrc`/`.chemx`. Otherwise the call is refused. `params.cwd` never overrides it. Set `CHEMX_MCP_ALLOWED_ROOTS` (path-delimited) to pin the boundary.
+- **Writes** (`write`, `patch`, `autofix`, `generate`, team writes, `issue` with `autoPost`, `audit` with `triage`, `check RESTART_MCP`) are refused when the root was only guessed from the start directory.
+- **Shell.** `build`/`test`/`typecheck` with `params.command` run only when the command is a `package.json` script of the project (its body, or `npm run <name>`), unless the server runs with `CHEMX_MCP_ALLOW_SHELL=1`. Children get no stdin and a timeout (`CHEMX_CHILD_TIMEOUT_MS`, default 15 min).
+- **Batch.** Every item is scope-checked before any item runs; the batch status is the worst item status (`fail` > `inconclusive` > `pass`).
+- **Results.** Plain text without ANSI. Every result ends with `chemx root: <root> (<source>) v<version>`. When the code on disk differs from the running server you also get `stale chemx MCP server (loaded X, disk Y): reconnect via /mcp`.
+- **Protocol.** `serverInfo.version` is the package version. Long calls honour `_meta.progressToken` (progress notifications) and `notifications/cancelled`.
 
 ### Living Resources & Prompts
 

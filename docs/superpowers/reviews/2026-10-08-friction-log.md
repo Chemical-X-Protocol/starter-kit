@@ -13,3 +13,4 @@
 - guard matched inside quoted strings and heredoc bodies; fixed with literal stripping (keep as a spec case for chemx hook claude-pre-tool)
 - guard blocks multi-file `cat a b c` for reading several small modules; chemx read takes one file per call, so 4 files cost 4 calls (used Read tool instead)
 - pre-commit gate (grade B on staged files) blocks any commit touching cli/mcp/server.js because of a pre-existing swallowed-catch that already carries a chemx-allow comment; also flags a cleared setTimeout (TIMER_DISCIPLINE) and a handled writeSync fallback catch as CRITICAL. Used CHEMX_SKIP_PRECOMMIT=1 for G3 commits; verify ratchet is the real gate
+- `chemx d --stat` prints the full -U0 patch plus the stat, because the wrapper always passes -U0 and git treats -U as implying -p; a stat-only view needs raw git
