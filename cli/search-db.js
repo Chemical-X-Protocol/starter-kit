@@ -27,13 +27,15 @@ export {
 
 import { debugNote } from './search-debug.js';
 import { rankIndexHits } from './search-rank.js';
+import { isPathInScope, scopeSqlFilter } from './search-root.js';
 
 export const getAllIndexedFiles = (db) => {
   if (!db) return new Map();
-  const rows = db.prepare('SELECT path, mtime, size FROM files').all();
+  const rows = db.prepare('SELECT path, mtime, size, extractor_version FROM files').all();
   const fileMap = new Map();
   for (const row of rows) {
-    fileMap.set(row.path, { mtime: Number(row.mtime), size: Number(row.size) });
+    const version = row.extractor_version === null ? null : Number(row.extractor_version);
+    fileMap.set(row.path, { mtime: Number(row.mtime), size: Number(row.size), version });
   }
   return fileMap;
 };
@@ -60,23 +62,27 @@ const queryFtsFallback = (db, cleanQuery, limit) => {
 };
 
 // Ranked page of matches: { results, total, truncated, limit }. Each result carries `match`.
-export const queryIndexPage = (db, { query = '', tier = null, limit = 50 } = {}) => {
+// scopeDirs (root-relative) limits answers to the scope the caller synced; null means every row.
+export const queryIndexPage = (db, { query = '', tier = null, limit = 50, scopeDirs = null } = {}) => {
   const emptyPage = { results: [], total: 0, truncated: false, limit };
   if (!db) return emptyPage;
   const cleanQuery = query.trim();
   const hasQuery = cleanQuery.length > 0;
   const hasTierFilter = Boolean(tier) && tier !== 'all';
+  const scopeFilter = scopeSqlFilter('path', scopeDirs);
 
   if (!hasQuery) {
-    const where = hasTierFilter ? ' WHERE tier = ?' : '';
-    const params = hasTierFilter ? [tier] : [];
+    const where = ` WHERE ${scopeFilter.sql}${hasTierFilter ? ' AND tier = ?' : ''}`;
+    const params = hasTierFilter ? [...scopeFilter.params, tier] : scopeFilter.params;
     const total = Number(db.prepare(`SELECT COUNT(*) AS c FROM files${where}`).get(...params)?.c || 0);
     const rows = db.prepare(`SELECT * FROM files${where} ORDER BY path ASC LIMIT ?`).all(...params, limit);
     return { results: rows.map((r) => populateFileDetails(db, r)), total, truncated: total > rows.length, limit };
   }
 
-  const ranked = rankIndexHits(db, cleanQuery, tier);
-  const hits = ranked.length > 0 ? ranked : queryFtsFallback(db, cleanQuery, limit);
+  const isScoped = Array.isArray(scopeDirs) && scopeDirs.length > 0;
+  const isInScope = (hit) => !isScoped || isPathInScope(hit.path, scopeDirs);
+  const ranked = rankIndexHits(db, cleanQuery, tier).filter(isInScope);
+  const hits = ranked.length > 0 ? ranked : queryFtsFallback(db, cleanQuery, limit).filter(isInScope);
   const page = hits.slice(0, limit);
   const results = page.map((hit) => {
     const details = populateFileDetails(db, db.prepare(FILE_ROW_SQL).get(hit.path));

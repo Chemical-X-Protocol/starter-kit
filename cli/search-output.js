@@ -2,16 +2,21 @@
 // searched, how fresh that was, and whether the answer is pass or inconclusive.
 import { STATUS, toExitCode } from './result-status.js';
 import { INDEX_VERSION } from './search-index-meta.js';
+import { scopeSqlFilter } from './search-root.js';
 
 export const describeIndexFromSync = (syncRes) => {
   const hasSync = Boolean(syncRes);
   if (!hasSync) return null;
   const isStale = syncRes.status !== 'fresh';
-  const fileCount = Number(syncRes.db?.prepare('SELECT COUNT(*) AS c FROM files').get()?.c || 0);
+  const filter = scopeSqlFilter('path', syncRes.scopeDirs);
+  const fileCount = Number(syncRes.db?.prepare(`SELECT COUNT(*) AS c FROM files WHERE ${filter.sql}`).get(...filter.params)?.c || 0);
+  const hasWiderIndex = Boolean(syncRes.indexedScopes) && syncRes.indexedScopes !== syncRes.scope;
   return {
     root: syncRes.root,
     scope: syncRes.scope,
+    scopeDirs: syncRes.scopeDirs,
     files: fileCount,
+    indexedScopes: hasWiderIndex ? syncRes.indexedScopes : undefined,
     version: INDEX_VERSION,
     status: isStale ? STATUS.INCONCLUSIVE : STATUS.PASS,
     reason: isStale ? syncRes.staleReason : null,
@@ -38,7 +43,8 @@ export const applyExitStatus = (status, isCli) => {
 export const formatIndexLine = (index) => {
   const hasIndex = Boolean(index);
   if (!hasIndex) return '';
-  const base = `index: scope ${index.scope} (${index.files} files) under ${index.root}`;
+  const wider = index.indexedScopes ? `; index holds ${index.indexedScopes} (rows outside ${index.scope} are re-checked on disk; graph, def and semantic answers may include them)` : '';
+  const base = `index: scope ${index.scope} (${index.files} files) under ${index.root}${wider}`;
   const notice = index.notice ? `; ${index.notice}` : '';
   const isInconclusive = index.status === STATUS.INCONCLUSIVE;
   const verdict = isInconclusive ? `; INCONCLUSIVE: ${index.reason}` : '';

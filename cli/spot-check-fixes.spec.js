@@ -5,7 +5,7 @@ import path from 'node:path';
 import { generateAstOutline } from './reader.js';
 import { handleLiteralSearchCommand } from './search-commands.js';
 import { runPkg, runFiles } from './commands/cmd-wrappers.js';
-import { openIndexDb, upsertFileIndex } from './search-db.js';
+import { openIndexDb, upsertFileIndex, queryIndexPage } from './search-db.js';
 import { syncSearchIndex } from './search.js';
 
 test('Fix 1: Index isolation excludes cli/ from project search by default', () => {
@@ -16,9 +16,11 @@ test('Fix 1: Index isolation excludes cli/ from project search by default', () =
   const syncRes = syncSearchIndex('src', cwd, { reindex: false, includeInternal: false });
   assert.ok(syncRes, 'Sync should complete');
 
-  // Verify no cli/ files are indexed in project mode
-  const cliFiles = db.prepare("SELECT path FROM files WHERE path LIKE 'cli/%'").all();
-  assert.equal(cliFiles.length, 0, 'Project index must not contain internal cli/ files');
+  // The index may hold cli/ rows from an earlier --include-internal or --dir . sync; a default
+  // (src) answer must never serve them.
+  const listing = queryIndexPage(db, { query: '', scopeDirs: syncRes.scopeDirs, limit: 100000 });
+  const cliFiles = listing.results.filter((r) => r.path.startsWith('cli/'));
+  assert.equal(cliFiles.length, 0, 'Project answers must not contain internal cli/ files');
 });
 
 test('Fix 2: Literal search matches exact strings with line numbers and full lines', () => {

@@ -49,10 +49,12 @@ test('rows from an earlier --dir scope never leak into the default scope', () =>
   try {
     syncSearchIndex('other', root);
     assert.deepEqual(indexedPaths(root), ['other/otter.ts']);
-    syncSearchIndex('src', root);
-    assert.deepEqual(indexedPaths(root), ['src/a.ts']);
-    const leaked = queryIndex(openIndexDb(root), { query: 'useOtterLeak' });
+    const res = syncSearchIndex('src', root);
+    assert.deepEqual(res.scopeDirs, ['src']);
+    const leaked = queryIndex(openIndexDb(root), { query: 'useOtterLeak', scopeDirs: res.scopeDirs });
     assert.equal(leaked.length, 0, 'out-of-scope symbol is not served');
+    const own = queryIndex(openIndexDb(root), { query: 'useAlpha', scopeDirs: res.scopeDirs });
+    assert.equal(own.length, 1);
   } finally {
     cleanup(root);
   }

@@ -10,7 +10,8 @@ const TABLES_SQL = `
     lines INTEGER NOT NULL,
     chars INTEGER NOT NULL,
     health_score INTEGER NOT NULL DEFAULT 100,
-    hazard_count INTEGER NOT NULL DEFAULT 0
+    hazard_count INTEGER NOT NULL DEFAULT 0,
+    extractor_version INTEGER
   );
 
   CREATE TABLE IF NOT EXISTS symbols (
@@ -124,6 +125,8 @@ const COLUMN_MIGRATIONS = [
   ['symbols', 'signature', "TEXT NOT NULL DEFAULT ''"],
   ['files', 'health_score', 'INTEGER NOT NULL DEFAULT 100'],
   ['files', 'hazard_count', 'INTEGER NOT NULL DEFAULT 0'],
+  // NULL marks a row written by a chemx that predates per-row stamping: re-parsed, never trusted.
+  ['files', 'extractor_version', 'INTEGER'],
   ['imports', 'resolved_path', "TEXT NOT NULL DEFAULT ''"]
 ];
 

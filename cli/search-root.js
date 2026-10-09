@@ -49,6 +49,29 @@ export const isScopeCovered = (scopeDirs, coveringKey) => {
   return scopeDirs.every((dir) => isPathInScope(dir, coveringDirs));
 };
 
+export const parseScopeKey = (key) => {
+  const hasKey = typeof key === 'string' && key.length > 0;
+  return hasKey ? key.split(',') : [];
+};
+
+// The index keeps every scope it has synced. Merging drops dirs another dir already covers,
+// so 'src' + 'other' is 'other,src' and anything + '.' is '.'.
+export const mergeScopeKeys = (storedKey, scopeDirs) => {
+  const all = Array.from(new Set([...parseScopeKey(storedKey), ...scopeDirs])).sort();
+  const isCoveredByAnother = (dir) => all.some((other) => other !== dir && isPathInScope(dir, [other]));
+  return all.filter((dir) => !isCoveredByAnother(dir)).join(',');
+};
+
+// SQL predicate for "column is a path inside scopeDirs" (exact prefix, no LIKE wildcards).
+export const scopeSqlFilter = (column, scopeDirs) => {
+  const dirs = Array.isArray(scopeDirs) ? scopeDirs : [];
+  const isUnscoped = dirs.length === 0 || dirs.includes('.');
+  if (isUnscoped) return { sql: '1 = 1', params: [] };
+  const clauses = dirs.map(() => `(${column} = ? OR substr(${column}, 1, ?) = ?)`);
+  const params = dirs.flatMap((dir) => [dir, dir.length + 1, `${dir}/`]);
+  return { sql: `(${clauses.join(' OR ')})`, params };
+};
+
 export const toRootRelative = (filePath, root, cwd = root) => {
   const abs = path.isAbsolute(filePath) ? filePath : path.resolve(cwd, filePath);
   return toPosix(path.relative(root, abs));

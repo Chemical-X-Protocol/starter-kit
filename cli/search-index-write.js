@@ -5,6 +5,7 @@ import { generateEmbedding, serializeVector, VECTOR_DIMENSIONS } from './embeddi
 import { buildFtsTokens } from './search-tokenizer.js';
 import { resolveModulePath } from './search-resolve.js';
 import { withImmediateTransaction } from './team/team-db-transaction.js';
+import { INDEX_VERSION } from './search-index-meta.js';
 
 export const EMBEDDING_MODEL = 'feature-hash-128';
 
@@ -18,7 +19,7 @@ const SQL = {
   deleteImports: 'DELETE FROM imports WHERE importer_path = ?',
   deleteEmbeddings: 'DELETE FROM embeddings WHERE file_path = ?',
   deleteFts: 'DELETE FROM fts_index WHERE file_path = ?',
-  insertFile: 'INSERT INTO files (path, mtime, size, tier, lines, chars) VALUES (?, ?, ?, ?, ?, ?)',
+  insertFile: 'INSERT INTO files (path, mtime, size, tier, lines, chars, extractor_version) VALUES (?, ?, ?, ?, ?, ?, ?)',
   insertSymbol: 'INSERT INTO symbols (file_path, name, kind, is_export, start_line, end_line, signature) VALUES (?, ?, ?, ?, ?, ?, ?)',
   insertProp: 'INSERT INTO props (file_path, name, prop_type) VALUES (?, ?, ?)',
   insertHook: 'INSERT INTO hooks (file_path, name) VALUES (?, ?)',
@@ -36,10 +37,10 @@ const statementsFor = (db) => {
   return prepared;
 };
 
-export const withIndexTransaction = (db, callback) => {
+export const withIndexTransaction = (db, callback, maxRetries = 5) => {
   const isAlreadyInTransaction = db.isTransaction === true;
   if (isAlreadyInTransaction) return callback();
-  return withImmediateTransaction(db, callback);
+  return withImmediateTransaction(db, callback, maxRetries);
 };
 
 // Explicit deletes (not only ON DELETE CASCADE) so rows go even when foreign_keys is off.
@@ -68,7 +69,7 @@ const writeFileRows = (db, record) => {
   const root = record.root || process.cwd();
 
   deleteFileRows(db, filePath);
-  s.insertFile.run(filePath, mtime, size, tier, lines, chars);
+  s.insertFile.run(filePath, mtime, size, tier, lines, chars, INDEX_VERSION);
   for (const sym of symbols) {
     const startLine = sym.startLine || 1;
     s.insertSymbol.run(filePath, sym.name, sym.kind, sym.isExport ? 1 : 0, startLine, sym.endLine || startLine, sym.signature || '');

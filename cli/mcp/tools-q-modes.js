@@ -4,6 +4,7 @@ import {
 } from '../search-queries.js';
 import { toColumnar } from '../columnar.js';
 import { buildBlastPayload } from '../search-commands-blast.js';
+import { isPathInScope } from '../search-root.js';
 
 export const executeBlastRadiusQuery = (activeDb, query, args = {}) => {
   const blast = calculateBlastRadius(activeDb, query, { maxDepth: args.maxDepth || 5 });
@@ -50,11 +51,13 @@ export const executeConnectionsQuery = (activeDb, query) => {
   return null;
 };
 
-export const executeFtsFallback = (activeDb, query) => {
+export const executeFtsFallback = (activeDb, query, scopeDirs = null) => {
+  const isScoped = Array.isArray(scopeDirs) && scopeDirs.length > 0;
   try {
     const clean = query.replace(/[^\w\s-]/g, ' ').trim();
     if (clean) {
-      const rows = activeDb.prepare('SELECT file_path, name, tier FROM fts_index WHERE fts_index MATCH ? LIMIT 10').all(`"${clean}"*`);
+      const rows = activeDb.prepare('SELECT file_path, name, tier FROM fts_index WHERE fts_index MATCH ?').all(`"${clean}"*`)
+        .filter((r) => !isScoped || isPathInScope(r.file_path, scopeDirs)).slice(0, 10);
       if (rows.length > 0) return rows.map((r) => `[FTS MATCH] ${r.file_path} (${r.name || r.tier})`).join('\n');
     }
   } catch (err) {

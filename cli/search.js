@@ -193,7 +193,7 @@ export const runSearch = async (rawArgs = [], isCli = true) => {
   if (handler) return handler(ctx);
 
   const query = first.trim();
-  const page = queryIndexPage(db, { query, tier: parsed.values.tier || null, limit });
+  const page = queryIndexPage(db, { query, tier: parsed.values.tier || null, limit, scopeDirs: syncRes.scopeDirs });
   const durationMs = Date.now() - startTime;
   if (isJson) {
     const payload = buildQueryPayload(page, { query, tier: parsed.values.tier || null, durationMs, isColumnar, index });

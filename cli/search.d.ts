@@ -93,13 +93,16 @@ export interface SyncSearchIndexResult {
   readonly root: string;
   readonly scopeDirs: readonly string[];
   readonly scope: string;
-  readonly status: 'fresh' | 'stale';
+  /** fresh; stale (outside root, read-only, write lock busy); missing (scope dir absent); empty (no indexable files). */
+  readonly status: 'fresh' | 'stale' | 'missing' | 'empty';
   readonly staleReason: string | null;
   readonly updatedCount: number;
   readonly removedCount: number;
   readonly totalFiles: number;
   readonly skippedFiles: readonly { path: string; reason: string }[];
   readonly versionNotice: string | null;
+  /** Every scope the index holds (comma list); rows outside the requested scope are re-checked on disk. */
+  readonly indexedScopes: string | null;
 }
 
 export declare function syncSearchIndex(

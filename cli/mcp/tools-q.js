@@ -67,7 +67,7 @@ export const handleChemxQ = (args = {}, cwd = process.cwd()) => {
   }
 
   const limit = typeof args.limit === 'number' ? args.limit : 20;
-  const page = queryIndexPage(db, { query, tier: args.tier || null, limit });
+  const page = queryIndexPage(db, { query, tier: args.tier || null, limit, scopeDirs: index.scopeDirs });
   const { results } = page;
 
   if (args.columnar) {
@@ -92,7 +92,7 @@ export const handleChemxQ = (args = {}, cwd = process.cwd()) => {
   const lines = results.map(formatTextHit);
   const hasHits = lines.length > 0;
   if (hasHits) return formatTextAnswer(lines, page, index);
-  const fts = executeFtsFallback(db, query);
+  const fts = executeFtsFallback(db, query, index.scopeDirs);
   const fallbackLines = fts ? [fts] : [`No matching capsules or symbols for "${query}" in scope ${index.scope}`];
   return formatTextAnswer(fallbackLines, page, index);
 };

@@ -50,14 +50,18 @@ const walk = (dir, root, fileList) => {
 };
 
 // scopeDirs are root-relative posix dirs ('.' for the whole project). An explicitly requested
-// dir is always walked, even when its own name is on the ignore list.
+// dir is always walked, even when its own name is on the ignore list. Dirs that do not exist
+// are listed in `missing` so callers can refuse to answer for them.
 export const scanScope = (root, scopeDirs) => {
-  const fileList = { files: [], unreadable: [] };
+  const fileList = { files: [], unreadable: [], missing: [] };
   const seen = new Set();
   for (const scopeDir of scopeDirs) {
     const abs = path.resolve(root, scopeDir);
     const isMissing = !fs.existsSync(abs);
-    if (isMissing) continue;
+    if (isMissing) {
+      fileList.missing.push(scopeDir);
+      continue;
+    }
     const isFileTarget = fs.statSync(abs).isFile();
     if (isFileTarget) {
       fileList.files.push({ fullPath: abs, relPath: toPosix(path.relative(root, abs)) });
