@@ -14,6 +14,7 @@ import { runAudit as executeAstAudit, auditFile } from '../audit.js';
 import { syncSearchIndex, syncViolationsIndex, recordAuditSnapshot } from '../search.js';
 
 import { queryUnassignedHazards } from './team-db-task-helpers.js';
+import { checkCompletionOwnership, buildOwnershipRefusal } from './team-task-ownership.js';
 
 export { ingestTaskTelemetry, queryUnassignedHazards };
 
@@ -276,17 +277,19 @@ export const completeTaskWithAudit = (db, taskId, agentId, options = {}) => {
   const task = getTask(db, taskId);
   if (!task) return null;
 
-  const telemetry = ingestTaskTelemetry(db, taskId, agentId, options);
-  const conversationId = options.conversationId || (task.result_payload && task.result_payload.conversationId) || process.env.CONVERSATION_ID || '536da3e7-6be6-47b6-b308-58786d395e36';
-  const chatLink = `conversation://${conversationId}`;
+  const ownership = checkCompletionOwnership(task, agentId, options);
+  if (!ownership.allowed) return buildOwnershipRefusal(task, ownership);
+
+  // No guessed conversation: only an explicit id (option, payload or env) is recorded.
+  const conversationId = options.conversationId || task.result_payload?.conversationId || process.env.CONVERSATION_ID || null;
   let resultPayload = {
     ...task.result_payload,
     completedBy: agentId,
     completedAt: Date.now(),
     conversationId,
-    chatLink,
-    telemetry
+    chatLink: conversationId ? `conversation://${conversationId}` : null
   };
+  if (ownership.override) resultPayload.ownershipOverride = ownership.override;
 
   const targetOverride = options.target || options.targetPath;
   if (targetOverride) {
@@ -473,8 +476,11 @@ export const completeTaskWithAudit = (db, taskId, agentId, options = {}) => {
     completedAt: Date.now(),
     completedBy: agentId
   };
+  if (ownership.override) diffReceipt.ownershipOverride = ownership.override;
   resultPayload.receipt = diffReceipt;
 
+  // Telemetry is ingested only once every gate has passed, so refused attempts never add tokens.
+  resultPayload.telemetry = ingestTaskTelemetry(db, taskId, agentId, options);
   const updatedTask = updateTaskStatus(db, taskId, 'done', { resultPayload, diffReceipt });
 
   postFeedEvent(db, {

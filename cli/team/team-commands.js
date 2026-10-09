@@ -24,7 +24,7 @@ import { runAblationComparison, formatAblationCard } from './team-memory.js';
 import { parseFlags } from './team-flags.js';
 import { resolveListOptions, selectTaskPage, buildTaskListView } from './task-list-view.js';
 import { handleTaskSlotCommand, handleTaskTraceCommand, handleTrainCommand } from './team-commands-vds.js';
-import { handleLockCommand, handleUnlockCommand } from './team-commands-lock.js';
+import { handleLockCommand, handleUnlockCommand, resolveCliAgent } from './team-commands-lock.js';
 
 const ARG_VAL_FLAGS = ['--target', '--as', '--to', '--agent', '--since', '--limit', '--thread', '--task', '--parent', '--rule', '--priority', '--prio', '--moscow', '--url', '--pid'];
 
@@ -215,7 +215,7 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
     }
     if (taskAction === 'claim') {
       const taskId = nonFlagPositional[1];
-      const agentHandle = flags.as || '@agent';
+      const agentHandle = resolveCliAgent(flags, isCli);
       registerAgent(db, { id: agentHandle, role: 'executor' });
       const res = claimTask(db, taskId, agentHandle);
       if (isCli) {
@@ -227,7 +227,7 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
     }
     if (taskAction === 'done' || taskAction === 'complete') {
       const taskId = nonFlagPositional[1];
-      const agentHandle = flags.as || '@agent';
+      const agentHandle = resolveCliAgent(flags, isCli);
       registerAgent(db, { id: agentHandle, role: 'executor' });
       const tokensOption = (flags.tokens || flags.promptTokens || flags.completionTokens || flags.cost) ? {
         prompt: flags.promptTokens || flags.tokens || 0,
@@ -242,14 +242,15 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
         target: flags.target,
         force: flags.force,
         noTargetConfirm: flags.noTargetConfirm,
-        tokens: tokensOption
+        tokens: tokensOption,
+        logPath: flags.log
       });
 
       if (isCli) {
         if (flags.isJson) {
           process.stdout.write(`${JSON.stringify(res, null, 2)}\n`);
         } else if (res?.refused) {
-          if (res.noTarget) {
+          if (res.noTarget || res.ownership) {
             process.stderr.write(`\x1b[31m✕ ${res.message}\x1b[0m\n`);
           } else {
             process.stderr.write(`\x1b[31m✕ Cannot complete task #${taskId}: ${res.hazardCount} hazard(s) remain in ${res.targetPath}. Fix the hazards or pass --force to complete anyway.\x1b[0m\n`);
@@ -273,7 +274,7 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
     if (taskAction === 'update') {
       const taskId = nonFlagPositional[1];
       const targetStatus = flags.status || nonFlagPositional[2] || 'in_progress';
-      const agentHandle = flags.as || '@agent';
+      const agentHandle = resolveCliAgent(flags, isCli);
       registerAgent(db, { id: agentHandle, role: 'executor' });
 
       let res;
@@ -291,7 +292,8 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
           target: flags.target,
           force: flags.force,
           noTargetConfirm: flags.noTargetConfirm,
-          tokens: tokensOption
+          tokens: tokensOption,
+          logPath: flags.log
         });
       } else {
         res = updateTaskStatus(db, taskId, targetStatus, { blockedReason: flags.reason || '' });
@@ -309,7 +311,7 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
         if (flags.isJson) {
           process.stdout.write(`${JSON.stringify(res, null, 2)}\n`);
         } else if (res?.refused) {
-          if (res.noTarget) {
+          if (res.noTarget || res.ownership) {
             process.stderr.write(`\x1b[31m✕ ${res.message}\x1b[0m\n`);
           } else {
             process.stderr.write(`\x1b[31m✕ Cannot complete task #${taskId}: ${res.hazardCount} hazard(s) remain in ${res.targetPath}. Fix the hazards or pass --force to complete anyway.\x1b[0m\n`);

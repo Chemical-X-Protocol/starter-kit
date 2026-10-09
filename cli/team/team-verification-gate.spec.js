@@ -5,7 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { DatabaseSync } from 'node:sqlite';
 import { initTeamSchema } from './team-schema.js';
-import { createTask, getTask } from './team-db-tasks.js';
+import { createTask, getTask, claimTask } from './team-db-tasks.js';
 import { autoGenerateTasksFromAudit, completeTaskWithAudit, reconcileAuditTasks } from './team-triage.js';
 import { handleUpdateTaskStatus } from '../ui-actions-tasks.js';
 import { handleCompleteTask } from '../ui-actions.js';
@@ -61,6 +61,7 @@ test('Verification Gate: refuses completion when architectural hazards remain on
   assert.ok(task);
   assert.equal(task.origin_type, 'audit');
 
+  claimTask(db, task.id, '@test-bot');
   const refusal = completeTaskWithAudit(db, task.id, '@test-bot', { cwd: tmpDir });
   assert.ok(refusal);
   assert.equal(refusal.refused, true);
@@ -123,6 +124,7 @@ test('Verification Gate: allows completion when only non-blocking/deprecated MED
   });
 
   // Non-blocking MEDIUM warning should not prevent completion without force
+  claimTask(db, task.id, '@test-bot');
   const completed = completeTaskWithAudit(db, task.id, '@test-bot', { cwd: tmpDir });
   assert.ok(completed);
   assert.equal(completed.status, 'done');
@@ -153,6 +155,7 @@ test('Verification Gate: populates verified diff_receipt upon legitimate resolut
     violation_snapshot: { healthBefore: 50, hazardCountBefore: 2 }
   });
 
+  claimTask(db, task.id, '@test-bot');
   const completed = completeTaskWithAudit(db, task.id, '@test-bot', { cwd: tmpDir });
   assert.ok(completed);
   assert.equal(completed.status, 'done');
@@ -241,6 +244,7 @@ test('Verification Gate: task done with target inline verifies and completes tas
     origin_type: 'manual'
   });
 
+  claimTask(db, task.id, '@test-bot');
   const completed = completeTaskWithAudit(db, task.id, '@test-bot', { cwd: tmpDir, target: targetRel });
   assert.ok(completed);
   assert.equal(completed.status, 'done');

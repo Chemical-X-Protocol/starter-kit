@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { initTeamSchema } from './team-schema.js';
 import { registerAgent } from './team-db-agents.js';
-import { createTask, getTask } from './team-db-tasks.js';
+import { createTask, getTask, claimTask } from './team-db-tasks.js';
 import { requestFileLock, getFileLockStatus } from './team-db-locks.js';
 import { getSwarmStatus } from './team-db.js';
 import { ingestTaskTelemetry, completeTaskWithAudit } from './team-triage.js';
@@ -66,6 +66,7 @@ test('adversarial-telemetry: completeTaskWithAudit releases lock, sets done, and
   requestFileLock(db, file, agent, { purpose: 'Auditing' });
   assert.notEqual(getFileLockStatus(db, file).lease, null);
 
+  claimTask(db, task.id, agent);
   const doneTask = completeTaskWithAudit(db, task.id, agent, {
     tokens: { prompt: 2000, completion: 1000 }
   });
