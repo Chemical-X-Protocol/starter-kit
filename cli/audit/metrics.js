@@ -21,7 +21,8 @@ export const calculateWeightedDensity = (violations, totalFiles) => {
 export const scoreFromDensity = (density) => Math.max(0, Math.min(100, Math.round(100 - DENSITY_SCALE * density)));
 
 export const calculateMolecularHealthScore = (violations, totalFiles) => {
-  if (totalFiles === 0) {
+  const isEmpty = totalFiles === 0;
+  if (isEmpty) {
     return { score: 100, grade: 'A+', label: 'Crystalline Molecular', scoreModel: SCORE_MODEL, density: 0 };
   }
 
@@ -68,7 +69,8 @@ export const calculatePillarBreakdown = (violations) => {
   for (const v of violations) {
     if (isSlopViolation(v)) continue;
     const pillarName = v.pillar || PILLARS.PILLAR_1;
-    if (!breakdown[pillarName]) {
+    const hasPillar = Boolean(breakdown[pillarName]);
+    if (!hasPillar) {
       breakdown[pillarName] = {
         pillarKey: 'UNKNOWN',
         violations: 0,
@@ -88,12 +90,16 @@ export const calculatePillarBreakdown = (violations) => {
   }
 
   for (const item of Object.values(breakdown)) {
-    if (item.critical > 0) {
+    const hasCritical = item.critical > 0;
+    if (hasCritical) {
       item.status = 'FAILED';
-    } else if (item.high > 0 || item.medium > 1) {
-      item.status = 'WARN';
     } else {
-      item.status = 'PASSED';
+      const hasWarning = item.high > 0 || item.medium > 1;
+      if (hasWarning) {
+        item.status = 'WARN';
+      } else {
+        item.status = 'PASSED';
+      }
     }
   }
 
@@ -121,7 +127,8 @@ export const calculateTokenBurnAnalytics = (fileStats, options = {}) => {
     // Budget from the line-budget policy (about 36 chars per line).
     const lineBudget = f.lineBudget ?? fallbackLineBudget(f);
     const maxChars = lineBudget * CHARS_PER_LINE;
-    if (f.charCount > maxChars) {
+    const hasExcess = f.charCount > maxChars;
+    if (hasExcess) {
       excessChars += f.charCount - maxChars;
     }
   }
@@ -133,8 +140,10 @@ export const calculateTokenBurnAnalytics = (fileStats, options = {}) => {
     : 0;
 
   const resolveRiskLevel = (pct) => {
-    if (pct > 40) return 'HIGH';
-    if (pct > 15) return 'MODERATE';
+    const isHigh = pct > 40;
+    if (isHigh) return 'HIGH';
+    const isModerate = pct > 15;
+    if (isModerate) return 'MODERATE';
     return 'LOW';
   };
 
@@ -195,7 +204,8 @@ export const calculateQuantumHealthScore = calculateMolecularHealthScore;
 
 export const calculateAiSlopScore = (violations, totalFiles) => {
   const slopViolations = violations.filter(isSlopViolation);
-  if (totalFiles === 0) {
+  const isEmpty = totalFiles === 0;
+  if (isEmpty) {
     return {
       score: 100,
       grade: 'A+',
