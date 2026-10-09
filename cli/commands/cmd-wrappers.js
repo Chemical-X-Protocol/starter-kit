@@ -6,6 +6,8 @@ const SOURCE_EXTENSIONS = new Set(['.js', '.jsx', '.ts', '.tsx', '.vue', '.svelt
 const MAX_DIFF_LINES = 80;
 // Output formats that are already summaries: never "compact" them to --stat.
 const SUMMARY_FORMAT_FLAGS = new Set(['--stat', '--shortstat', '--numstat', '--dirstat', '--name-only', '--name-status', '--summary', '--compact-summary']);
+// `-U<n>` implies --patch in git, so -U0 is only added when the caller wants a patch.
+const PATCH_FLAGS = new Set(['-p', '-u', '--patch', '--patch-with-stat', '--patch-with-raw']);
 
 /**
  * Opportunistically syncs modified files to SQLite index.
@@ -51,7 +53,8 @@ const tryMicroSyncModifiedFiles = async (cwd = process.cwd()) => {
 
 /**
  * chemx d / chemx diff: Enforced token-lean git diff.
- * Defaults to -U0 and --no-color. Compresses to --stat if > 80 lines.
+ * Defaults to -U0 and --no-color (summary formats such as --stat skip -U0, which would add the patch).
+ * Compresses to --stat if > 80 lines.
  */
 export const runDiff = async (rawArgs = [], isCli = true) => {
   const cwd = process.cwd();
@@ -62,8 +65,13 @@ export const runDiff = async (rawArgs = [], isCli = true) => {
   // Trigger opportunistic background micro-sync
   await tryMicroSyncModifiedFiles(cwd);
 
+  const isSummaryFormat = gitArgs.some((a) => SUMMARY_FORMAT_FLAGS.has(a.split('=')[0]));
+  const wantsPatch = gitArgs.some((a) => PATCH_FLAGS.has(a) || /^(-U|--unified)/.test(a));
+  const isSummaryOnly = isSummaryFormat && !wantsPatch;
+  const contextArgs = isSummaryOnly ? [] : ['-U0'];
+
   try {
-    const res = spawnSync('git', ['diff', '-U0', '--no-color', ...gitArgs], {
+    const res = spawnSync('git', ['diff', ...contextArgs, '--no-color', ...gitArgs], {
       cwd,
       encoding: 'utf-8',
       maxBuffer: 10 * 1024 * 1024
@@ -76,8 +84,7 @@ export const runDiff = async (rawArgs = [], isCli = true) => {
 
     const output = res.stdout || '';
     const lineCount = output.split('\n').length;
-    const isSummaryFormat = gitArgs.some((a) => SUMMARY_FORMAT_FLAGS.has(a.split('=')[0]));
-    const isCompactionCandidate = !isFull && !isSummaryFormat && lineCount > MAX_DIFF_LINES;
+    const isCompactionCandidate = !isFull && !isSummaryOnly && lineCount > MAX_DIFF_LINES;
 
     if (isCompactionCandidate) {
       const statRes = spawnSync('git', ['diff', '--stat', '--no-color', ...gitArgs], {

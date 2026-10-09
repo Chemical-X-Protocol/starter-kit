@@ -79,6 +79,21 @@ test('d: the "compacted" footer appears only when the diff was replaced by a sho
   fs.rmSync(repo, { recursive: true, force: true });
 });
 
+test('d: summary formats print only the summary, never the -U0 patch', () => {
+  const repo = makeRepo(30);
+  for (let i = 0; i < 30; i += 1) fs.writeFileSync(path.join(repo, `f${i}.js`), 'export const a = 2;\n');
+  const summaryRuns = [['--stat'], ['--stat=40'], ['--shortstat'], ['--numstat'], ['--dirstat'], ['--summary'], ['--compact-summary'], ['--name-only'], ['--name-status']];
+  for (const flags of summaryRuns) {
+    const run = runCli(['d', ...flags], { cwd: repo });
+    assert.strictEqual(run.status, 0, `chemx d ${flags.join(' ')}: ${run.stderr}`);
+    assert.doesNotMatch(run.stdout, /^@@ /m, `chemx d ${flags.join(' ')} leaked patch hunks`);
+    assert.ok(run.stdout.split('\n').length <= 33, `chemx d ${flags.join(' ')} printed ${run.stdout.split('\n').length} lines`);
+  }
+  const explicitPatch = runCli(['d', '--stat', '-p'], { cwd: repo });
+  assert.match(explicitPatch.stdout, /^@@ /m, 'an explicit -p still asks git for the patch');
+  fs.rmSync(repo, { recursive: true, force: true });
+});
+
 test('wrappers: user-facing hints name the chemx binary, never cx', () => {
   const repo = makeRepo();
   const usage = runCli(['j'], { cwd: repo });
