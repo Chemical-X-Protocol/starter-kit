@@ -14,13 +14,15 @@ export const handleChemxTeamLock = async (args = {}, cwd = process.cwd()) => {
   if (!db) return { error: 'sqlite_unavailable' };
   const action = args.action || 'status';
 
-  if (args.filePath && isPathTraversal(args.filePath, cwd)) {
+  const hasTraversalPath = Boolean(args.filePath && isPathTraversal(args.filePath, cwd));
+  if (hasTraversalPath) {
     return { error: 'path_traversal' };
   }
 
   // The MCP server outlives a single call, so its pid makes dead-holder cleanup meaningful.
   const agentId = resolveAgentId(args.agentId || args.as);
-  if (action === 'acquire') {
+  const isAcquire = action === 'acquire';
+  if (isAcquire) {
     return requestFileLock(db, args.filePath, agentId, {
       purpose: args.purpose,
       ttlMs: args.ttlMs,
@@ -28,10 +30,12 @@ export const handleChemxTeamLock = async (args = {}, cwd = process.cwd()) => {
       cwd
     });
   }
-  if (action === 'release') {
+  const isRelease = action === 'release';
+  if (isRelease) {
     return releaseFileLock(db, args.filePath, agentId, { cwd });
   }
-  if (action === 'status') {
+  const isStatus = action === 'status';
+  if (isStatus) {
     const status = getFileLockStatus(db, args.filePath, { cwd });
     if (!status) return null;
     return {
@@ -45,7 +49,8 @@ export const handleChemxTeamLock = async (args = {}, cwd = process.cwd()) => {
 
 export const handleChemxReportIssue = async (args = {}, cwd = process.cwd()) => {
   const errorObj = new Error(args.error || 'Unknown error');
-  if (args.stack) errorObj.stack = args.stack;
+  const hasStack = Boolean(args.stack);
+  if (hasStack) errorObj.stack = args.stack;
 
   const result = await handleError(errorObj, {
     cwd,
