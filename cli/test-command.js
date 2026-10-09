@@ -78,6 +78,17 @@ const readNodeSegment = (script = '') => {
   return { flags, files };
 };
 
+// The spec globs a pure `node --test ...` test script runs (quotes removed), or null when the
+// suite is not a node --test glob list (other runners, wrapped scripts, node's default globs).
+export const suiteGlobs = (cwd) => {
+  const script = String(loadLocalPackageJson(cwd)?.scripts?.test || '').trim();
+  const segment = (script.match(NODE_TEST_SEGMENT)?.[0] || '').trim();
+  const isPureNodeScript = segment.length > 0 && segment === script;
+  if (!isPureNodeScript) return null;
+  const globs = readNodeSegment(script).files.map((file) => file.replace(/^(['"])(.*)\1$/, '$2'));
+  return globs.length > 0 ? globs : null;
+};
+
 // node --test does not walk a directory argument (it tries to load it as a module), so a
 // directory target becomes a glob of the spec files inside it.
 const NODE_DIR_GLOB = '**/*.{test,spec}.{js,mjs,cjs}';

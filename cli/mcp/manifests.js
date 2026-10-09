@@ -68,6 +68,7 @@ export const MASTER_MCP_TOOL = {
           testTarget: { type: 'string', description: 'Target test file or spec path (for test)' },
           filter: { type: 'string', description: 'Filter test names by regex or string pattern (for test)' },
           allowEmpty: { type: 'boolean', description: 'Accept a test run that collects zero tests (for test, verify)' },
+          changed: { type: 'boolean', description: 'Only the specs affected by files changed vs HEAD (or base, via merge-base); verify also audits only changed files. Unprovable selections run everything and say why (for test, verify)' }, base: { type: 'string', description: 'Base revision for changed (for test, verify)' }, related: { type: 'array', items: { type: 'string' }, description: 'Run only the specs affected by these files (for test)' },
           timeout: { type: 'number', description: 'Seconds before a test, typecheck, build or verify step stops as inconclusive (default 600)' },
           includeBuild: { type: 'boolean', description: 'Also run the production build step (for verify)' },
           subAction: { type: 'string', description: 'Sub-action for team operations (e.g. list, claim, done, triage, acquire, release)' },
@@ -371,6 +372,7 @@ export const SUB_TOOLS = [
         dir: { type: 'string', description: 'Target workspace directory (defaults to current working directory)' },
         target: { type: 'string', description: 'Test file or directory to run' },
         filter: { type: 'string', description: 'Test name filter' },
+        changed: { type: 'boolean', description: 'Run only specs affected by files changed vs HEAD (or base); unprovable selections run all with the reason' }, base: { type: 'string', description: 'Base revision for changed' }, related: { type: 'array', items: { type: 'string' }, description: 'Run only the specs affected by these files' },
         allowEmpty: { type: 'boolean', description: 'Accept a test run that collects zero tests (default false: zero tests is inconclusive)' },
         timeout: { type: 'number', description: 'Stop the run after this many seconds; a timed-out run is inconclusive (default 600)' }
       }

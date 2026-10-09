@@ -14,6 +14,8 @@ export const VERIFY_HELP = [
   '  --build                  Include production build audit step',
   '  --timeout=<seconds>      Per-step timeout for typecheck, tests and build (default 600)',
   '  --allow-empty            Accept a test run that collects zero tests',
+  '  --changed                Audit only changed source files and run only the affected specs',
+  '                           (typecheck stays whole-project); --base=<rev> compares from merge-base',
   '  --profile=<name>         Rule profile for the AST audit',
   '  --json                   Output summary status card as JSON',
   '  -h, --help               Show this help message',

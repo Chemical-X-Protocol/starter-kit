@@ -13,6 +13,9 @@ export const TEST_HELP = [
   `${ANSI.BOLD}OPTIONS${ANSI.RESET}`,
   '  -t <name>, -t=<name>     Only run tests whose name matches (alias: --filter)',
   '  --target=<path>          Explicit target (same as a positional)',
+  '  --changed                Run only the specs affected by files changed vs HEAD (staged,',
+  '                           unstaged, untracked); --base=<rev> compares from merge-base',
+  '  --related <files...>     Run only the specs affected by these files (specs or sources)',
   '  --allow-empty            Treat a run that collects zero tests as a pass',
   '  --timeout=<seconds>      Stop the run after this long (result: inconclusive)',
   '  --json                   Output the test summary as JSON',
@@ -54,8 +57,19 @@ export const formatTestHeadline = (report) => {
   return `${ANSI.RED}✖${ANSI.RESET} ${ANSI.BOLD}Test Failures (${report.failed} failed${errorNote} out of ${report.totalTests})${ANSI.RESET}`;
 };
 
+// One line naming what --changed / --related selected, or why the whole suite ran.
+export const describeSelection = (selection) => {
+  if (!selection) return null;
+  if (selection.mode === 'full') return `Full suite: ${selection.reason}`;
+  const changedCount = (selection.changed || []).length;
+  const graph = selection.graph ? `, ${selection.graph} graph` : '';
+  return `Affected specs: ${selection.specs.length} of ${selection.suiteSize ?? '?'} for ${changedCount} changed file(s)${graph}`;
+};
+
 export const formatTestReport = (report) => {
-  const out = [`  ${formatTestHeadline(report)}`];
+  const selectionLine = describeSelection(report.selection);
+  const out = selectionLine ? [`  ${ANSI.DIM}${selectionLine}${ANSI.RESET}`] : [];
+  out.push(`  ${formatTestHeadline(report)}`);
   const isFailure = report.status === STATUS.FAIL;
   if (isFailure) {
     for (const failure of report.failures.slice(0, 5)) {

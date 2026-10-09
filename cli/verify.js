@@ -19,6 +19,7 @@ import {
   VERIFY_HELP, stepLine, formatTypecheckStep, formatTestStep, testStepIcon, formatBuildStep, createProgress, formatVerdict, isEmptyAllowed
 } from './verify-report.js';
 import { formatAgentJson } from './agent-json.js';
+import { resolveVerifyChanges, changedAuditOptions, testArgsFor } from './verify-changed.js';
 
 export {
   parseCommandFromArgs,
@@ -32,12 +33,13 @@ export { runTypecheckAudit } from './typecheck-audit.js';
 export { runTestAudit } from './test-audit.js';
 
 const VERIFY_ARGS = {
-  booleans: { '--json': 'json', '--build': 'build', '--allow-empty': 'allowEmpty', '--help': 'help', '-h': 'help' },
-  values: { '--dir': 'dir', '--timeout': 'timeout', '--profile': 'profile' }
+  booleans: { '--json': 'json', '--build': 'build', '--allow-empty': 'allowEmpty', '--changed': 'changed', '--help': 'help', '-h': 'help' },
+  values: { '--dir': 'dir', '--timeout': 'timeout', '--profile': 'profile', '--base': 'base' }
 };
 
 // verify takes no positional arguments; `chemx verify src` must not silently verify everything.
 const VERIFY_STRAY_HINT = 'use --dir=<path> to pick a directory';
+const EMPTY_AUDIT = { violations: [], totalViolations: 0, health: { grade: 'A', score: 100 } };
 
 const finish = (summary, status, { isCli }) => {
   if (isCli) process.exit(toExitCode(status));
@@ -110,17 +112,25 @@ export const runProjectVerify = async (rawArgs = [], isCli = false, options = {}
     return finish(summary, STATUS.FAIL, { isCli });
   }
 
+  // --changed: null when not asked for, or when git cannot list changes (then everything runs).
+  const base = parsed.values.base || options.base || null;
+  const wantsChanged = Boolean(parsed.flags.changed || options.changed);
+  const listing = wantsChanged ? resolveVerifyChanges(cwd, base) : null;
+  const changes = listing?.ok ? listing : null;
   const isText = !isJson && shouldPrint;
   if (isText) process.stdout.write(`\n  ${ANSI.BOLD}${ANSI.CYAN}⚡ Chemical X: Token-Conserving Project Verification${ANSI.RESET}\n\n`);
   const progress = createProgress(isText);
 
   progress.start('AST Architecture', { announceOnPipe: true });
   const projectConfig = options.config || loadProjectConfig(cwd, rawArgs);
-  const auditReport = executeAstAudit(scope.dir, { cwd, config: projectConfig });
-  const gate = computeGateVerdict({ projectRoot: cwd, scope: scope.relDir, violations: auditReport.violations });
+  const hasNoChangedSource = Boolean(changes) && changes.files.length === 0;
+  const auditOptions = changes ? changedAuditOptions(cwd, changes) : {};
+  const auditReport = hasNoChangedSource ? EMPTY_AUDIT : executeAstAudit(scope.dir, { cwd, config: projectConfig, ...auditOptions });
+  const gate = computeGateVerdict({ projectRoot: cwd, scope: scope.relDir, violations: auditReport.violations, isPartialScan: Boolean(changes) });
   const auditStatus = gate.isPassing ? STATUS.PASS : STATUS.FAIL;
   const auditText = `${auditReport.health.grade} (${auditReport.health.score}/100, ${auditReport.totalViolations} violations)`;
-  progress.finish(stepLine(auditStatus, 'AST Architecture', auditText, `${scope.relDir}/, ${gate.basis} gate`));
+  const auditScope = changes ? `${changes.files.length} changed file(s) vs ${changes.base}` : `${scope.relDir}/`;
+  progress.finish(stepLine(auditStatus, 'AST Architecture', auditText, `${auditScope}, ${gate.basis} gate`));
 
   // Only the audit is scoped; typecheck, tests and build run project-wide, so each line names its command.
   progress.start('TypeScript');
@@ -128,7 +138,7 @@ export const runProjectVerify = async (rawArgs = [], isCli = false, options = {}
   progress.finish(stepLine(typecheck.status, 'TypeScript', formatTypecheckStep(typecheck), typecheck.status === SKIPPED ? '' : typecheck.command));
 
   progress.start('Test Suite');
-  const tests = testsSection(await runTestAudit([], false, { print: false, cwd, timeoutMs, allowEmpty }));
+  const tests = testsSection(await runTestAudit(testArgsFor(changes, base), false, { print: false, cwd, timeoutMs, allowEmpty }));
   progress.finish(stepLine(testStepIcon(tests), 'Test Suite', formatTestStep(tests), tests.command));
 
   let build = null;
@@ -144,7 +154,7 @@ export const runProjectVerify = async (rawArgs = [], isCli = false, options = {}
   const summary = {
     status,
     success: status === STATUS.PASS,
-    scope: { dir: scope.relDir, source: scope.source },
+    scope: changes ? { dir: scope.relDir, source: 'changed', base: changes.base, files: changes.files, typecheck: 'whole project' } : { dir: scope.relDir, source: scope.source, ...(listing && !listing.ok ? { changedError: listing.error } : {}) },
     architecturalWarning,
     audit: {
       status: auditStatus,
