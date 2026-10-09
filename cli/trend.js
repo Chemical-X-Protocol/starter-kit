@@ -4,12 +4,14 @@ import { ANSI } from './theme.js';
 const TICKS = [' ', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
 
 export const renderSparkline = (values) => {
-  if (!Array.isArray(values) || values.length === 0) return '';
+  const isEmpty = !Array.isArray(values) || values.length === 0;
+  if (isEmpty) return '';
   const min = Math.min(...values);
   const max = Math.max(...values);
   const span = max - min;
   return values.map((val) => {
-    if (span === 0) return TICKS[4];
+    const isFlat = span === 0;
+    if (isFlat) return TICKS[4];
     const normalized = (val - min) / span;
     const bucket = Math.min(TICKS.length - 1, Math.floor(normalized * TICKS.length));
     return TICKS[bucket];
@@ -29,7 +31,8 @@ export const fetchScoreTrends = (db, limit = 10) => {
 };
 
 export const formatTrendReport = (snapshots) => {
-  if (!snapshots || snapshots.length === 0) {
+  const isEmpty = !snapshots || snapshots.length === 0;
+  if (isEmpty) {
     return `${ANSI.DIM}No audit snapshots found in index.db. Run 'chemx audit' to record snapshots.${ANSI.RESET}\n`;
   }
   const scores = snapshots.map((s) => s.score);
@@ -39,8 +42,10 @@ export const formatTrendReport = (snapshots) => {
   const delta = latest.score - earliest.score;
   const deltaPrefix = delta > 0 ? '+' : '';
   const resolveDeltaColor = (d) => {
-    if (d > 0) return ANSI.LIME;
-    if (d < 0) return ANSI.RED;
+    const isPositive = d > 0;
+    if (isPositive) return ANSI.LIME;
+    const isNegative = d < 0;
+    if (isNegative) return ANSI.RED;
     return ANSI.DIM;
   };
   const deltaColor = resolveDeltaColor(delta);
