@@ -10,7 +10,8 @@ const hashString = (str, seed = 0) => {
 };
 
 const tokenize = (text) => {
-  if (!text || typeof text !== "string") return [];
+  const isInvalidText = !text || typeof text !== "string";
+  if (isInvalidText) return [];
   return text
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
     .toLowerCase()
@@ -21,7 +22,8 @@ const tokenize = (text) => {
 export const generateEmbedding = (text) => {
   const vec = new Float32Array(VECTOR_DIMENSIONS);
   const tokens = tokenize(text);
-  if (tokens.length === 0) return vec;
+  const isEmpty = tokens.length === 0;
+  if (isEmpty) return vec;
 
   for (const token of tokens) {
     const tokenBucket = hashString(token) % VECTOR_DIMENSIONS;
@@ -40,7 +42,8 @@ export const generateEmbedding = (text) => {
     normSq += vec[i] * vec[i];
   }
   const norm = Math.sqrt(normSq);
-  if (norm > 0) {
+  const hasNorm = norm > 0;
+  if (hasNorm) {
     for (let i = 0; i < VECTOR_DIMENSIONS; i++) {
       vec[i] /= norm;
     }
