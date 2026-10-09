@@ -5,6 +5,9 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import '../silence-warnings.js';
 import { loadPricing } from '../team/usage-pricing.js';
 import { priceRun } from '../team/usage-compute.js';
@@ -12,7 +15,7 @@ import { routingLine, MIN_ROUTING_AGENTS } from './savings-routing.js';
 import { accountCalls, handleWindows, mergeWindows, loadRunCalls } from './savings-tooling.js';
 import { buildSavingsReport, coverageNote } from './savings-report.js';
 import { renderSavingsCard } from './savings-render.js';
-import { noteCounterfactual, runLoggedMcp, recordCall, pickCounterfactual, measureChars, estimateTokens } from './call-ledger.js';
+import { noteCounterfactual, runLoggedMcp, recordCall, pickCounterfactual, measureChars, estimateTokens, findLedgerDbPath } from './call-ledger.js';
 
 // An in-memory db per test: nothing touches a project db or the shared /tmp one.
 const { DatabaseSync } = await import('node:sqlite');
@@ -36,6 +39,8 @@ const makeDb = (t) => {
   t.after(() => db.close());
   return db;
 };
+
+const handleOf = (db) => ({ db, release() {} });
 
 const row = (action, resultChars, cfKind = null, cfChars = 0, cfCalls = 0) => ({ action, result_chars: resultChars, cf_kind: cfKind, cf_chars: cfChars, cf_calls: cfCalls });
 
@@ -118,7 +123,7 @@ test('ledger: rows hold sizes and counts, never content, paths or arguments', as
   const secret = 'SECRET-CONTENT-xyz';
   const args = { action: 'read', params: { path: 'secret/path.js', agentId: '@a0' } };
   const output = await runLoggedMcp({
-    toolName: 'chemx', args, cwd: '/tmp', env: {}, now: () => T0, openDb: async () => db,
+    toolName: 'chemx', args, cwd: '/tmp', env: {}, now: () => T0, openDb: async () => handleOf(db),
     run: async () => {
       noteCounterfactual('file-whole', { chars: 5000 });
       noteCounterfactual('file-whole', { chars: 1 });
@@ -138,20 +143,39 @@ test('ledger: rows hold sizes and counts, never content, paths or arguments', as
 
 test('ledger: batch and mixed-kind calls carry no counterfactual, errors pass through, a broken db fails open', async (t) => {
   const db = makeDb(t);
-  const base = { toolName: 'chemx', cwd: '/tmp', env: {}, now: () => T0, openDb: async () => db };
+  const base = { toolName: 'chemx', cwd: '/tmp', env: {}, now: () => T0, openDb: async () => handleOf(db) };
   await runLoggedMcp({ ...base, args: { commands: ['q a', 'read b'] }, run: async () => { noteCounterfactual('file-whole', { chars: 900 }); return 'x'; } });
   await runLoggedMcp({ ...base, args: { action: 'verify' }, run: async () => { noteCounterfactual('raw-output', { chars: 900 }); noteCounterfactual('file-whole', { chars: 900 }); return 'x'; } });
   await assert.rejects(runLoggedMcp({ ...base, args: { action: 'patch' }, run: async () => { throw new Error('boom'); } }), /boom/);
   const rows = db.prepare('SELECT action, ok, cf_kind FROM tool_calls ORDER BY id').all().map((r) => ({ ...r }));
   assert.deepEqual(rows, [{ action: 'batch', ok: 1, cf_kind: null }, { action: 'verify', ok: 1, cf_kind: null }, { action: 'patch', ok: 0, cf_kind: null }]);
   const broken = { exec: () => { throw new Error('locked'); }, prepare: () => { throw new Error('locked'); } };
-  const out = await runLoggedMcp({ ...base, openDb: async () => broken, args: { action: 'q' }, run: async () => 'still returned' });
+  const out = await runLoggedMcp({ ...base, openDb: async () => handleOf(broken), args: { action: 'q' }, run: async () => 'still returned' });
   assert.equal(out, 'still returned');
   const off = await runLoggedMcp({ ...base, env: { CHEMX_CALL_LOG: '0' }, args: { action: 'q' }, run: async () => 'off' });
   assert.equal(off, 'off');
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM tool_calls').get().n, 3);
   assert.equal(pickCounterfactual(new Map(), false).kind, null);
   assert.equal(measureChars({ a: 'bcd' }), 11);
+});
+
+test('ledger: the default opener finds the project db without creating one, writes one row and closes it', async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-ledger-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const sub = path.join(root, 'a', 'b');
+  fs.mkdirSync(sub, { recursive: true });
+  fs.mkdirSync(path.join(root, '.chemx'));
+  const file = path.join(root, '.chemx', 'index.db');
+  const seed = new DatabaseSync(file);
+  seed.close();
+  assert.equal(findLedgerDbPath(sub, {}), file);
+  assert.equal(findLedgerDbPath('/', { CHEMX_PROJECT_ROOT: sub }), file);
+  const out = await runLoggedMcp({ toolName: 'chemx', args: { action: 'read', params: { agentId: '@x' } }, cwd: sub, env: {}, run: async () => 'abc' });
+  assert.equal(out, 'abc');
+  const check = new DatabaseSync(file);
+  const rows = check.prepare('SELECT agent, action, result_chars FROM tool_calls').all().map((r) => ({ ...r }));
+  check.close();
+  assert.deepEqual(rows, [{ agent: '@x', action: 'read', result_chars: 3 }]);
 });
 
 test('coverage: the note says exactly what the log can and cannot cover', () => {

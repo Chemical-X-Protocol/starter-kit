@@ -8,6 +8,8 @@
  * Fails open: any problem opening or writing the db is swallowed and the call proceeds untouched.
  * Off in spec processes and with CHEMX_CALL_LOG=0.
  */
+import fs from 'node:fs';
+import path from 'node:path';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { initCallSchema, COUNTERFACTUAL_KINDS } from './call-schema.js';
 
@@ -80,12 +82,47 @@ export const recordCall = (db, row) => {
   }
 };
 
-const openLedgerDb = async (cwd) => {
+const LEDGER_BUSY_MS = 250;
+
+/**
+ * The index db the call is running against: CHEMX_PROJECT_ROOT, else the nearest ancestor of cwd that
+ * already has .chemx/index.db. It never creates a db. Light on purpose: loading the full index stack
+ * costs about 330ms of CPU per CLI call, a direct sqlite open costs about 1ms.
+ */
+export const findLedgerDbPath = (cwd, env = process.env) => {
+  const dirs = [];
+  for (let dir = path.resolve(env.CHEMX_PROJECT_ROOT || cwd); !dirs.includes(dir); dir = path.dirname(dir)) dirs.push(dir);
+  const hit = dirs.map((dir) => path.join(dir, '.chemx', 'index.db')).find((file) => fs.existsSync(file));
+  return hit || null;
+};
+
+const closeQuietly = (handle) => {
   try {
-    const { openIndexDb } = await import('../search-schema.js');
-    return openIndexDb(cwd) || null;
+    handle?.release();
+  } catch { // chemx-allow: best-effort closing a ledger connection never fails a call
+  }
+};
+
+/** Default opener: { db, release } on the project's index db, or null. A short busy wait keeps a call from stalling. */
+const openLedgerDb = async (cwd, env = process.env) => {
+  try {
+    const file = findLedgerDbPath(cwd, env);
+    if (!file) return null;
+    await import('../silence-warnings.js');
+    const { DatabaseSync } = await import('node:sqlite');
+    const db = new DatabaseSync(file);
+    db.exec(`PRAGMA busy_timeout = ${LEDGER_BUSY_MS}`);
+    return { db, release: () => db.close() };
   } catch {
     return null;
+  }
+};
+
+const recordAndRelease = (handle, row) => {
+  try {
+    recordCall(handle?.db, row);
+  } finally {
+    closeQuietly(handle);
   }
 };
 
@@ -120,9 +157,9 @@ export const runLoggedMcp = async ({ toolName, args, cwd, run, openDb = openLedg
     isOk = false;
     throw err;
   } finally {
-    const db = await openDb(cwd);
+    const handle = await openDb(cwd, env);
     const cf = pickCounterfactual(store.notes, isBatchArgs(args));
-    recordCall(db, { ts: now(), agent: handleOfMcp(args), surface: 'mcp', action: actionOfMcp(toolName, args), ok: isOk, resultChars: measureChars(output), cf });
+    recordAndRelease(handle, { ts: now(), agent: handleOfMcp(args), surface: 'mcp', action: actionOfMcp(toolName, args), ok: isOk, resultChars: measureChars(output), cf });
   }
 };
 
@@ -145,14 +182,14 @@ const meterOutput = () => {
 export const runLoggedCli = async ({ command, rawArgs, cwd, run, openDb = openLedgerDb, now = Date.now, env = process.env }) => {
   const isSkipped = !isLoggingOn(env) || CLI_SKIPPED.has(command);
   if (isSkipped) return run();
-  const db = await openDb(cwd);
-  if (!db) return run();
+  const handle = await openDb(cwd, env);
+  if (!handle) return run();
   const store = { notes: new Map() };
   const written = meterOutput();
   const agent = asFromWords(rawArgs) ?? env.CHEMX_AGENT_ID;
   process.once('exit', (code) => {
     const cf = pickCounterfactual(store.notes);
-    recordCall(db, { ts: now(), agent, surface: 'cli', action: command, ok: code === 0, resultChars: written(), cf });
+    recordAndRelease(handle, { ts: now(), agent, surface: 'cli', action: command, ok: code === 0, resultChars: written(), cf });
   });
   return scope.run(store, run);
 };
