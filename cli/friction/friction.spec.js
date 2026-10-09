@@ -45,7 +45,7 @@ test('usage report on a fixture transcript counts chemx, bypasses, raw calls, se
   assert.deepEqual(report.bash, { 'chemx CLI': 2, 'chemx-bypass': 2, 'raw search': 1, 'raw runner/git': 1, 'shell: read-only': 1 });
   assert.deepEqual(report.chemx, { read: 1, q: 1 });
   assert.deepEqual(report.bypass, { 'runner-detection-wrong-runner': 1, kitchen: 1 });
-  assert.deepEqual(report.raw, { 'raw-git-log': 1, 'raw-test-runner': 1 });
+  assert.deepEqual(report.raw, { 'raw-git-log': 1, 'raw-test-runner': 1, 'raw-node-test': 1 });
   assert.deepEqual(report.search, { 'grep -r / rg': 1, 'chemx q': 1 });
   assert.deepEqual(report.pipeFilters, { head: 1 });
   assert.deepEqual(report.mcp, { verify: 1 });

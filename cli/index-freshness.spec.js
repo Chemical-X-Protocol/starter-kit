@@ -15,6 +15,8 @@ import { buildReadCards } from './reader-cards.js';
 
 const CLI = path.join(path.dirname(fileURLToPath(import.meta.url)), 'index.js');
 const STAMP = /synced \d+ files, \d+ re-indexed, \d+ removed(, \d+ racy rows hash-checked)?, \d+ms/;
+// An exported project root would pull every in-process reader off its temp project.
+delete process.env.CHEMX_PROJECT_ROOT;
 const CHILD_ENV = { ...process.env, NO_COLOR: '1', CHEMX_PROJECT_ROOT: '' };
 
 const makeProject = (files, { git = false } = {}) => {
