@@ -66,6 +66,12 @@ export const parseFlags = (args = []) => {
     const shouldReadLimitNext = isLimitFlag && hasNextArg;
     if (shouldReadLimitNext) flags.limit = parseInt(nextArg, 10);
 
+    const isMaxAgentsEquals = arg.startsWith('--max-agents=');
+    if (isMaxAgentsEquals) flags.maxAgents = parseInt(arg.split('=')[1], 10);
+
+    const isPerAgentEquals = arg.startsWith('--per-agent=') || arg.startsWith('--max-tasks-per-agent=');
+    if (isPerAgentEquals) flags.maxTasksPerAgent = parseInt(arg.split('=')[1], 10);
+
     const isThreadEquals = arg.startsWith('--thread=');
     if (isThreadEquals) flags.thread = parseInt(arg.split('=')[1], 10);
 
