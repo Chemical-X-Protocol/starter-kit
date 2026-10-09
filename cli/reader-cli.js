@@ -24,7 +24,7 @@ export const runReaderCli = (args, isCli = false) => {
         `  chemx read <file> [options]`,
         '',
         `${ANSI.BOLD}OPTIONS${ANSI.RESET}`,
-        `  --outline                AST structure outline only (80%+ token savings)`,
+        `  --outline                AST structure outline only (smaller than the file; see benchmarks/README.md)`,
         `  --logic, -l              AST logic skeleton (control flow, state, mutations)`,
         `  --template, -t           Extract template markup only (Vue/Svelte/JSX)`,
         `  --enrich                 Append a logic skeleton (not verbatim source) after the outline`,

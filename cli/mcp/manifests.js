@@ -49,7 +49,7 @@ export const MASTER_MCP_TOOL = {
           path: { type: 'string', description: 'Target file path (for read, patch, write, check, lock)' },
           symbol: { type: 'string', description: 'Target symbol declaration to extract (for read)' },
           rev: { type: 'string', description: 'read: git revision (sha, ref, HEAD~N) to read the file at, instead of the working tree; all read modes apply' },
-          outline: { type: 'boolean', description: 'Extract AST signatures only (80%+ token reduction). Compose with enrich:true for free-lunch outline + logic in one call. (for read)' },
+          outline: { type: 'boolean', description: 'Extract AST signatures only, much smaller than the file (benchmarks/README.md has measured savings). Compose with enrich:true to append a logic skeleton. (for read)' },
           logic: { type: 'boolean', description: 'Extract AST logic skeleton preserving control flow, guards, and mutations (for read)' },
           template: { type: 'boolean', description: 'Extract declarative template markup only (Vue/Svelte/JSX) (for read)' },
           enrich: { type: 'boolean', description: 'Append compacted logic skeleton after outline block. Composable overlay: use with outline:true or symbol. Returns outline + logic in one token-compact response without boilerplate penalty. (for read)' },
@@ -89,7 +89,7 @@ export const MASTER_MCP_TOOL = {
           force: { type: 'boolean', description: 'Force complete task even if hazards remain (for team task done)' },
           tokens: { type: 'number', description: 'Prompt tokens consumed by task' },
           cost: { type: 'number', description: 'Estimated dollar cost for task' },
-          jig: { type: 'boolean', description: 'Enable universal programmatic jig generation (for generate)' },
+          jig: { type: 'boolean', description: 'Generate a service, route, store, repo, util or spec from a fixed template with the parameters you give (for generate)' },
           kind: { type: 'string', enum: ['service', 'route', 'store', 'repo', 'util', 'spec'], description: 'Programmatic file kind for jig (for generate)' },
           methods: { description: 'Methods definitions array or comma-separated string (for generate)' },
           state: { description: 'State properties array or string (for generate)' },
@@ -139,7 +139,7 @@ const FILE_SUB_TOOLS = [
           description: 'Architectural tier filter'
         },
         inspect: { type: 'boolean', description: 'Include props and hooks breakdown' },
-        columnar: { type: 'boolean', description: 'Return results in compact Columnar JSON format (cols + rows) to eliminate repeated keys and reduce tokens by 60%' },
+        columnar: { type: 'boolean', description: 'Return results in compact Columnar JSON format (cols + rows) so keys are not repeated in every row' },
         limit: { type: 'integer', description: 'Maximum results to return (default: 20)' }
       },
       required: ['query']
@@ -152,7 +152,7 @@ const FILE_SUB_TOOLS = [
       type: 'object',
       properties: {
         path: { type: 'string', description: 'Relative or absolute file path' },
-        outline: { type: 'boolean', description: 'Extract structural AST outline only (types/interfaces/exports, saves 80%+ tokens)' },
+        outline: { type: 'boolean', description: 'Extract structural AST outline only (types/interfaces/exports; smaller than the whole file)' },
         symbol: { type: 'string', description: 'Extract only this symbol declaration and body' },
         stripComments: { type: 'boolean', description: 'Strip comments from output' },
         compact: { type: 'boolean', description: 'Collapse blank lines and trim spaces' },
@@ -164,7 +164,7 @@ const FILE_SUB_TOOLS = [
   },
   {
     name: 'chemx_patch',
-    description: 'Surgically patch a file using exact search and replace without dumping entire file contents into context. Automatically updates SQLite AST index in real-time and evaluates Chemical X architectural guardrails. NOTE: Prefer master tool chemx({ action: "patch", params: ... }) for single-permission execution.',
+    description: 'Surgically patch a file using exact search and replace without dumping entire file contents into context. Re-indexes the patched file in the SQLite AST index and evaluates Chemical X architectural guardrails. NOTE: Prefer master tool chemx({ action: "patch", params: ... }) for single-permission execution.',
     inputSchema: {
       type: 'object',
       properties: {

@@ -12,10 +12,10 @@ This document defines the distinction between **Architectural Health** (evaluate
 | :--- | :--- | :--- |
 | **Primary Scope** | Static AST analysis & molecular patterns | Full functional verification pipeline |
 | **Pillars Enforced** | 7 Architectural Pillars (Tokens, DOM, Logic, Types, Slop) | Architecture + Typecheck + Tests + Build |
-| **Execution Speed** | In-process AST scan (~10-50ms) | Comprehensive multi-tool gate (~200-1500ms) |
-| **Token Cost** | ~150-300 tokens (scorecard & hotspots) | ~45 tokens (green status card) |
+| **Execution Speed** | Whole-kit scan (981 files) took 12s on 2026-10-09 on a shared machine; one `chemx check <file>` took 1.1s including process start | Runs the full test suite, so it takes as long as your tests (minutes here); not benchmarked |
+| **Token Cost** | A clean-run summary measured about 55 tokens on 2026-10-09; failures print more | A short card when green; size not benchmarked |
 | **Output Metric** | Molecular Health Index (0-100, Grade A+ to F) | Binary Green/Red Pass/Fail + Diagnostics |
-| **Guarantees** | Code follows crystalline, token-efficient structure | Code builds, typechecks, and tests pass |
+| **Guarantees** | Reports violations of the audited rules; says nothing about whether the code works | Code builds, typechecks, and tests pass |
 
 ---
 
@@ -29,7 +29,7 @@ A project or component can receive a perfect **100/100 (Grade A+)** architectura
 ### The Two-Gate Model
 
 1. **Gate 1: Architectural Health (`chemx audit`)**
-   - Eliminates context bloat and token-burn hazards before code reaches AI context.
+   - Flags oversized files and other context-bloat hazards so they can be fixed before an agent reads them.
    - Enforces the profile line budget, Two-Stage Booleans (Directive 3.A), Domain Validator Functions & Lazy Rule Trees (Directive 3.H), and Zero-Raw-DOM (Directive 1.G). Line budget: soft warning at 250 lines when complexity is high (default profile); --profile=atomic-strict caps capsules at 100 lines.
    - Detects LLM conversational residue and AI slop (Directive 7.A).
 
@@ -54,7 +54,7 @@ chemx audit [path] --markdown     # Markdown report with shields for CI/CD
 ```bash
 chemx verify                      # Full verification gate (AST + Types + Tests)
 chemx verify --build              # Includes production build audit
-chemx verify --json               # Minified status card (~45 tokens if green)
+chemx verify --json               # Minified status card
 chemx typecheck --json            # Silent TypeScript compiler diagnostics
 chemx test --json                 # Silent test runner with diffs on failure
 ```

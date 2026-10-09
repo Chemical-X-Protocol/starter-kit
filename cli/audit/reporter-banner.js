@@ -49,7 +49,7 @@ export const getChemicalXAsciiBanner = (gradeOrReport = null) => {
     lines.push(out);
   }
 
-  const subtitle = 'Architectural guardrails to eliminate token burn and AI hallucinations.';
+  const subtitle = 'Architectural guardrails that flag oversized files and common AI-code slop.';
   const pad = ' '.repeat(Math.max(0, Math.floor((MAX_BANNER_LEN - subtitle.length) / 2)));
   lines.push(`${pad}\x1b[2m${subtitle}\x1b[0m\n`);
 

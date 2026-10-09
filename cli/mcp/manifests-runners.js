@@ -34,7 +34,7 @@ export const RUNNER_SUB_TOOLS = [
   },
   {
     name: 'chemx_verify',
-    description: 'Execute the complete zero-token-burn project verification pipeline (7-Pillar AST Audit + Typecheck + Tests). Returns a compact status card (~45 tokens if all pass) or pinpoint diagnostics. NOTE: Prefer master tool chemx({ action: "verify" }) for single-permission execution.',
+    description: 'Execute the project verification pipeline (7-Pillar AST Audit + Typecheck + Tests). Returns a short status card when all pass, or the failing diagnostics. NOTE: Prefer master tool chemx({ action: "verify" }) for single-permission execution.',
     inputSchema: {
       type: 'object',
       properties: {

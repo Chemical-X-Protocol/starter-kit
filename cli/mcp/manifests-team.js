@@ -67,7 +67,7 @@ export const TEAM_SUB_TOOLS = [
   },
   {
     name: 'chemx_team_lock',
-    description: 'Acquire or release a deterministic file lease in .chemx/index.db. If file is currently locked by another agent, enqueues into the zero-token FIFO lock queue.',
+    description: 'Acquire or release a file lease in .chemx/index.db. If another agent holds a live lease on the file, you are queued FIFO. A lease lasts 5 minutes and any chemx call by the holder extends it; see docs/team-locks.md.',
     inputSchema: {
       type: 'object',
       required: ['action', 'filePath', 'agentId'],
