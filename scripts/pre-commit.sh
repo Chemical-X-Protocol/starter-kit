@@ -134,7 +134,13 @@ if [ -n "$AUDIT_BIN" ]; then
     printf "%s[Chemical X] Verifying architectural health (Min Grade: %s, Min Score: %s)...%s\n" "$C_BLUE" "$MIN_GRADE" "$MIN_SCORE" "$C_RESET"
   fi
   
-  AUDIT_CMD="$AUDIT_BIN audit --git --min-grade=$MIN_GRADE --min-score=$MIN_SCORE --non-interactive"
+  # Default gate: new MEDIUM+ hazards in staged files vs HEAD (#1716).
+  # CHEMX_PRECOMMIT_GATE=grade restores the absolute grade gate on changed files.
+  if [ "$CHEMX_PRECOMMIT_GATE" = "grade" ]; then
+    AUDIT_CMD="$AUDIT_BIN audit --git --min-grade=$MIN_GRADE --min-score=$MIN_SCORE --non-interactive"
+  else
+    AUDIT_CMD="$AUDIT_BIN audit --staged-delta --non-interactive"
+  fi
   
   if ! AUDIT_OUT=$(eval "$AUDIT_CMD < /dev/null" 2>&1); then
     printf "\n%s%s[Chemical X] Commit Blocked: Architectural health verification failed%s\n" "$C_BOLD" "$C_RED" "$C_RESET"

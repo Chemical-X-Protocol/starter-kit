@@ -128,6 +128,12 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
       break;
     }
     case 'audit': {
+      const isStagedDelta = rawArgs.includes('--staged-delta');
+      if (isStagedDelta) {
+        const { runStagedDeltaCommand } = await import('./cmd-staged-delta.js');
+        runStagedDeltaCommand(rawArgs.slice(1));
+        break;
+      }
       const posDir = (rawArgs[1] && !rawArgs[1].startsWith('-')) ? rawArgs[1] : null;
       await runAudit(posDir, true);
       break;

@@ -121,7 +121,9 @@ if [ -n "\$AUDIT_BIN" ]; then
   if [ "\$CHEMX_VERBOSE" = "1" ]; then
     printf "%s[Chemical X] Verifying architectural health (Min Grade: %s, Min Score: %s)...%s\\n" "\$C_BLUE" "\$MIN_GRADE" "\$MIN_SCORE" "\$C_RESET"
   fi
-  if ! AUDIT_OUT=\$(eval "\$AUDIT_BIN audit --git --min-grade=\$MIN_GRADE --min-score=\$MIN_SCORE --non-interactive" < /dev/null 2>&1); then
+  AUDIT_GATE_ARGS="--staged-delta"
+  if [ "\$CHEMX_PRECOMMIT_GATE" = "grade" ]; then AUDIT_GATE_ARGS="--git --min-grade=\$MIN_GRADE --min-score=\$MIN_SCORE"; fi
+  if ! AUDIT_OUT=\$(eval "\$AUDIT_BIN audit \$AUDIT_GATE_ARGS --non-interactive" < /dev/null 2>&1); then
     printf "\\n%s%s[Chemical X] Commit Blocked: Architectural health verification failed%s\\n" "\$C_BOLD" "\$C_RED" "\$C_RESET"
     printf "%s\\n\\n" "\$AUDIT_OUT"
     printf "%s╭──────────────────────────────────────────────────────────────────────────╮%s\\n" "\$C_CYAN" "\$C_RESET"
