@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { parseCommand, canonicalAction } from './tools.js';
-import { resolveContext, isInsideDir, hasChemxMarker } from './context.js';
+import { resolveContext, resolveInsideRoot, hasChemxMarker } from './context.js';
 import { classifyEffects, checkShellCommand, EFFECTS } from './call-effects.js';
 import { checkCallArgs } from './call-args.js';
 
@@ -61,8 +61,8 @@ const refuseBootMutation = (target, root) => {
 };
 
 const findEscape = (root, requestedPaths) => requestedPaths
-  .map((requested) => ({ requested, resolved: path.resolve(root, requested) }))
-  .find(({ resolved }) => !isInsideDir(root, resolved));
+  .map((requested) => resolveInsideRoot(root, requested))
+  .find(({ isInside }) => !isInside);
 
 // A refusal after the root resolved still names it, so the envelope can print the root line.
 const refuseIn = (scope, refusal) => ({ ...scope, ...refusal, ok: false });
@@ -81,7 +81,7 @@ export const resolveCallScope = ({ target, declaredRoot = null, bootRoot = null,
   const escape = findEscape(scope.root, requestedPaths);
   const hasEscape = Boolean(escape);
   if (hasEscape) return refuseIn(scope, { error: `Path "${escape.requested}" resolves to "${escape.resolved}", outside project root "${scope.root}".` });
-  const args = checkCallArgs(target);
+  const args = checkCallArgs(target, scope.root);
   if (!args.ok) return refuseIn(scope, args);
   const isShellCall = classifyEffects(target).has(EFFECTS.SHELL);
   const shell = isShellCall ? checkShellCommand({ command: target.params.command, root: scope.root, dir: target.params.dir, env }) : { ok: true };

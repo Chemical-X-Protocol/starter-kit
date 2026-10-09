@@ -23,7 +23,27 @@ export const isInsideDir = (root, target) => {
   return !rel.startsWith('..') && !path.isAbsolute(rel);
 };
 
-const parseAllowedRoots = (env) => (env.CHEMX_MCP_ALLOWED_ROOTS || '').split(path.delimiter).filter((p) => path.isAbsolute(p));
+// realpath of the nearest existing ancestor plus the not-yet-existing tail, so a symlink is followed.
+const realResolve = (target) => {
+  const tail = [];
+  let current = target;
+  while (!fs.existsSync(current)) {
+    const parent = path.dirname(current);
+    if (parent === current) return target;
+    tail.unshift(path.basename(current));
+    current = parent;
+  }
+  return path.join(fs.realpathSync(current), ...tail);
+};
+
+// Inside both lexically and after following symlinks: a link in the root cannot carry a path out of it.
+export const resolveInsideRoot = (root, requested) => {
+  const resolved = path.resolve(root, requested);
+  const isInside = isInsideDir(root, resolved) && isInsideDir(realResolve(root), realResolve(resolved));
+  return { requested, resolved, isInside };
+};
+
+const parseAllowedRoots =(env) => (env.CHEMX_MCP_ALLOWED_ROOTS || '').split(path.delimiter).filter((p) => path.isAbsolute(p));
 
 const locateRoot = ({ projectRoot, mcpRoots, serverRoot, envRoot, bootDir }) => {
   const hasProjectRoot = !(projectRoot === undefined || projectRoot === null);
