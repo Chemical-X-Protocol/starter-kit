@@ -1,15 +1,20 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { syncSingleFileIndex } from '../search.js';
 
 const SOURCE_EXTENSIONS = new Set(['.js', '.jsx', '.ts', '.tsx', '.vue', '.svelte', '.mjs', '.cjs']);
+const MAX_DIFF_LINES = 80;
+// Output formats that are already summaries: never "compact" them to --stat.
+const SUMMARY_FORMAT_FLAGS = new Set(['--stat', '--shortstat', '--numstat', '--dirstat', '--name-only', '--name-status', '--summary', '--compact-summary']);
 
 /**
  * Opportunistically syncs modified files to SQLite index.
- * Strictly bounded: max 5 files, silent error catching, < 20ms budget.
+ * Strictly bounded: max 5 files, silent error catching. Only runs when the project
+ * already has an index, and loads the AST stack lazily, so `chemx d` stays cheap.
  */
-const tryMicroSyncModifiedFiles = (cwd = process.cwd()) => {
+const tryMicroSyncModifiedFiles = async (cwd = process.cwd()) => {
+  const hasIndexDb = fs.existsSync(path.join(cwd, '.chemx', 'index.db'));
+  if (!hasIndexDb) return { synced: 0 };
   try {
     const statusOut = execFileSync('git', ['status', '--porcelain'], {
       cwd,
@@ -30,6 +35,7 @@ const tryMicroSyncModifiedFiles = (cwd = process.cwd()) => {
     }
 
     if (modifiedFiles.length > 0 && modifiedFiles.length <= 5) {
+      const { syncSingleFileIndex } = await import('../search.js');
       for (const file of modifiedFiles) {
         try {
           syncSingleFileIndex(file, cwd);
@@ -44,7 +50,7 @@ const tryMicroSyncModifiedFiles = (cwd = process.cwd()) => {
 };
 
 /**
- * cx d / cx diff: Enforced token-lean git diff.
+ * chemx d / chemx diff: Enforced token-lean git diff.
  * Defaults to -U0 and --no-color. Compresses to --stat if > 80 lines.
  */
 export const runDiff = async (rawArgs = [], isCli = true) => {
@@ -54,7 +60,7 @@ export const runDiff = async (rawArgs = [], isCli = true) => {
   const gitArgs = subArgs.filter((a) => a !== '--full');
 
   // Trigger opportunistic background micro-sync
-  tryMicroSyncModifiedFiles(cwd);
+  await tryMicroSyncModifiedFiles(cwd);
 
   try {
     const res = spawnSync('git', ['diff', '-U0', '--no-color', ...gitArgs], {
@@ -69,17 +75,22 @@ export const runDiff = async (rawArgs = [], isCli = true) => {
     }
 
     const output = res.stdout || '';
-    const lines = output.split('\n');
+    const lineCount = output.split('\n').length;
+    const isSummaryFormat = gitArgs.some((a) => SUMMARY_FORMAT_FLAGS.has(a.split('=')[0]));
+    const isCompactionCandidate = !isFull && !isSummaryFormat && lineCount > MAX_DIFF_LINES;
 
-    if (!isFull && lines.length > 80) {
+    if (isCompactionCandidate) {
       const statRes = spawnSync('git', ['diff', '--stat', '--no-color', ...gitArgs], {
         cwd,
         encoding: 'utf-8'
       });
-      const statOut = statRes.stdout || '';
-      const compacted = `${statOut.trim()}\n// [Diff compacted to --stat (exceeded 80 lines). Use cx d --full for uncompressed output]\n`;
-      if (isCli) process.stdout.write(compacted);
-      return { output: compacted, code: res.status ?? 0 };
+      const statOut = (statRes.stdout || '').trim();
+      const isStatShorter = statOut.length > 0 && statOut.split('\n').length < lineCount;
+      if (isStatShorter) {
+        const compacted = `${statOut}\n// [Diff compacted to --stat (${lineCount} lines). Use chemx d --full for uncompressed output]\n`;
+        if (isCli) process.stdout.write(compacted);
+        return { output: compacted, code: res.status ?? 0, compacted: true };
+      }
     }
 
     if (isCli) process.stdout.write(output);
@@ -91,7 +102,7 @@ export const runDiff = async (rawArgs = [], isCli = true) => {
 };
 
 /**
- * cx log: Compact git commit history.
+ * chemx log: Compact git commit history.
  * Enforces --oneline and caps at limit (default 10).
  */
 export const runLog = async (rawArgs = [], isCli = true) => {
@@ -135,7 +146,7 @@ export const runLog = async (rawArgs = [], isCli = true) => {
 };
 
 /**
- * cx p / cx pkg: Targeted package.json inspector.
+ * chemx p / chemx pkg: Targeted package.json inspector.
  * Eliminates full file dumps when querying scripts or dependency versions.
  */
 export const runPkg = async (rawArgs = [], isCli = true) => {
@@ -192,7 +203,7 @@ export const runPkg = async (rawArgs = [], isCli = true) => {
 };
 
 /**
- * cx f / cx ls: Filtered path finder respecting .gitignore and ignored dirs.
+ * chemx f / chemx ls: Filtered path finder respecting .gitignore and ignored dirs.
  */
 export const runFiles = async (rawArgs = [], isCli = true) => {
   const cwd = process.cwd();
@@ -224,7 +235,7 @@ export const runFiles = async (rawArgs = [], isCli = true) => {
 
     const output = files.slice(0, 100).join('\n') + '\n';
     if (files.length > 100) {
-      const overflow = `// [${files.length - 100} additional files omitted. Refine filter with cx f <pattern>]\n`;
+      const overflow = `// [${files.length - 100} additional files omitted. Refine filter with chemx f <pattern>]\n`;
       if (isCli) process.stdout.write(output + overflow);
       return { output: output + overflow, code: 0 };
     }
@@ -259,7 +270,7 @@ const inferJsonType = (value, depth = 0) => {
 };
 
 /**
- * cx j / cx json: Structural schema peeker for JSON files.
+ * chemx j / chemx json: Structural schema peeker for JSON files.
  * Extracts shape without dumping full payload.
  */
 export const runJsonShape = async (rawArgs = [], isCli = true) => {
@@ -268,7 +279,7 @@ export const runJsonShape = async (rawArgs = [], isCli = true) => {
   const targetFile = subArgs[0];
 
   if (!targetFile) {
-    const msg = 'Usage: cx j <path-to-json-file>\n';
+    const msg = 'Usage: chemx j <path-to-json-file>\n';
     if (isCli) process.stderr.write(msg);
     return { output: '', code: 1 };
   }
@@ -295,12 +306,12 @@ export const runJsonShape = async (rawArgs = [], isCli = true) => {
 };
 
 /**
- * cx do / cx batch: Executes multiple commands sequentially in one warm Node process.
+ * chemx do / chemx batch: Executes multiple commands sequentially in one warm Node process.
  */
 export const runBatch = async (rawArgs = [], isCli = true, dispatchFn) => {
   const subArgs = rawArgs.filter((a) => a !== 'do' && a !== 'batch');
   if (subArgs.length === 0) {
-    if (isCli) process.stdout.write('Usage: cx do "<command 1>" "<command 2>" ...\n');
+    if (isCli) process.stdout.write('Usage: chemx do "<command 1>" "<command 2>" ...\n');
     return { output: '', code: 0 };
   }
 
@@ -308,7 +319,7 @@ export const runBatch = async (rawArgs = [], isCli = true, dispatchFn) => {
     const tokens = cmdStr.trim().split(/\s+/).filter(Boolean);
     if (tokens.length === 0) continue;
     const cleanTokens = tokens[0] === 'cx' || tokens[0] === 'chemx' ? tokens.slice(1) : tokens;
-    if (isCli) process.stdout.write(`\n--- cx ${cleanTokens.join(' ')} ---\n`);
+    if (isCli) process.stdout.write(`\n--- chemx ${cleanTokens.join(' ')} ---\n`);
     try {
       if (dispatchFn) {
         await dispatchFn(cleanTokens[0], cleanTokens);
