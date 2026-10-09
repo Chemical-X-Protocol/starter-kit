@@ -22,6 +22,7 @@ import { createLggStage } from './lgg-stage.js';
 import { rankGroups } from './rank.js';
 import { readGroupCache, readSuppressions, writeGroupRun, suppressionKeyOf } from './group-store.js';
 import { runKeyOf, scopeKeyOf, readCachedRun, writeCachedRun, isStoredRun, markStoredRun } from './run-cache.js';
+import { readBodyEnds, writeBodyEnds } from './body-end-cache.js';
 
 export const PATH_ORDER = Object.freeze(['N1-fp1', 'N1-fp2', 'N1-fp3', 'N2', 'N3', 'W', 'T']);
 
@@ -112,15 +113,16 @@ const applySuppressions = (groups, suppressions) => groups.map((group) => {
  * suppressed the accepted groups a rejection decision covers; stats counts groups per path, gate
  * rejections per reason and LGG rejections per code.
  */
-export const buildForgeGroups = (ledger, { readFile = () => null, unify, includeIdioms = false, judge = true, cache, suppressions = new Map() } = {}) => {
+export const buildForgeGroups = (ledger, { readFile = () => null, unify, includeIdioms = false, judge = true, cache, suppressions = new Map(), bodyEnds } = {}) => {
   const rejected = [];
   const textOf = createTextReader(readFile);
   const rowsById = new Map(ledger.rows.map((row) => [row.id, row]));
+  const bodyEndReader = createBodyEndReader(readFile, bodyEnds);
   const context = {
     contentHashes: ledger.contentHashes,
     ubiquitousOf: createUbiquityIndex(ledger.rows),
     ...createReturnReader(textOf),
-    ...createBodyEndReader(readFile),
+    endsFunctionBody: bodyEndReader.endsFunctionBody,
     roleKeyOf: createRoleReader(readFile).roleKeyOf,
     reject: (draft, reason, finish) => rejected.push(reason.startsWith(REFINE_PREFIX) ? refineRejection(finish(), reason, rowsById) : { path: draft.path, rejectReason: reason })
   };
@@ -146,7 +148,7 @@ export const buildForgeGroups = (ledger, { readFile = () => null, unify, include
     rejected: countBy(rejected, (group) => `${group.path} ${group.rejectReason}`),
     rejectedByCode: countBy([...lggRejected, ...refined, ...suppressed], (group) => reasonCodeOf(group.rejectReason))
   };
-  return { groups, refined, rejected: lggRejected, suppressed, unifyDecisions: stage.unifyDecisions, shapeDecisions: stage.shapeDecisions, idioms, stats };
+  return { groups, refined, rejected: lggRejected, suppressed, unifyDecisions: stage.unifyDecisions, shapeDecisions: stage.shapeDecisions, bodyEndDecisions: bodyEndReader.decisions, idioms, stats };
 };
 
 const fileReaderAt = (root) => (relativePath) => {
@@ -187,9 +189,10 @@ export const runForgeGroups = (cwd = process.cwd(), options = {}) => {
     if (needsStore) storeRun(db, cached, options, runKey);
     return { ...cached, runCache: 'hit' };
   }
-  const stored = { cache: readGroupCache(db), suppressions };
-  const result = buildForgeGroups(readLedger(db, options), { readFile: fileReaderAt(root), ...stored, ...options });
+  const stored = { cache: readGroupCache(db), suppressions, bodyEnds: readBodyEnds(db) };
+  const { bodyEndDecisions, ...result } = buildForgeGroups(readLedger(db, options), { readFile: fileReaderAt(root), ...stored, ...options });
   if (isStored) storeRun(db, result, options, runKey);
+  if (isStored) writeBodyEnds(db, bodyEndDecisions);
   const isKeyed = runKey !== null && isStored;
   if (isKeyed) writeCachedRun(db, scopeKey, runKey, result);
   return { ...result, runCache: isKeyed ? 'miss' : 'off' };

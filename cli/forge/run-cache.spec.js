@@ -11,6 +11,7 @@ import { syncFingerprints } from './fingerprint-sync.js';
 import { runForgeGroups } from './forge-groups.js';
 import { suppressGroup } from './group-store.js';
 import { isStoredRun, markStoredRun } from './run-cache.js';
+import { createBodyEndReader } from './body-ends.js';
 import { openIndexDb } from '../search-schema.js';
 
 delete process.env.CHEMX_PROJECT_ROOT;
@@ -62,6 +63,23 @@ test('a suppression makes a new key, and the hit after it is suppressed too', (t
   assert.equal(after.runCache, 'miss');
   assert.ok(after.suppressed.some((group) => group.id === target.id));
   assert.equal(runForgeGroups(dir).runCache, 'hit');
+});
+
+test('stored body ends are reused on a recomputed run and give the same groups', (t) => {
+  const dir = makeProject(t);
+  const first = runForgeGroups(dir);
+  const stored = openIndexDb(dir).prepare('SELECT count(*) AS n FROM pattern_body_end_cache').get().n;
+  assert.ok(stored > 0);
+  const again = runForgeGroups(dir, { runCache: false });
+  assert.equal(again.runCache, 'off');
+  assert.deepEqual(shapeOf(again), shapeOf(first));
+});
+
+test('a known content key is read from the store, never parsed', () => {
+  const known = new Map([['k', ['5:9']]]);
+  const reader = createBodyEndReader(() => 'not even javascript (', { keyOf: () => 'k', known });
+  assert.equal(reader.endsFunctionBody({ file_path: 'x.js', start: 5, end: 9 }), true);
+  assert.deepEqual([...reader.decisions], [['k', ['5:9']]]);
 });
 
 test('a hit restores pattern_groups after a run of another scope replaced them', (t) => {

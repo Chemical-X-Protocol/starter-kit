@@ -11,6 +11,7 @@
 //   pattern_unify_cache    W merge decisions by instance pair (content-derived keys)
 //   pattern_shape_cache    drift root shapes by unit (kind and content-derived key)
 //   pattern_run_cache      the last whole-run result per scope under its run key (run-cache.js)
+//   pattern_body_end_cache function-body last-statement spans per file content (body-end-cache.js)
 // Later phases add their tables (blueprints, heal runs, library) here.
 import { debugNote } from '../search-debug.js';
 
@@ -101,6 +102,11 @@ const TABLES_SQL = `
   CREATE TABLE IF NOT EXISTS pattern_shape_cache (
     row_key TEXT PRIMARY KEY,
     shape TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS pattern_body_end_cache (
+    content_key TEXT PRIMARY KEY,
+    ends TEXT NOT NULL
   );
 
   CREATE TABLE IF NOT EXISTS pattern_run_cache (

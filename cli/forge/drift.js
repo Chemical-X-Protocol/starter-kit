@@ -67,15 +67,24 @@ const heaviestDisjoint = (spans) => {
 // A drift span carries only shared anchors, so each of its rows does too.
 const isWithin = (row, shared, ubiquitous) => row.anchors.every((anchor) => shared.has(anchor) || ubiquitous.has(anchor));
 
+// A survivor carries at least `minimum` of the shared anchors, so it carries one of any
+// (shared.size - minimum + 1) of them: only the postings of that many rarest anchors are walked, which
+// finds the same spans as walking all of them (heaviestDisjoint orders them, so visit order is moot).
+const rarestAnchors = (shared, minimum, postingsOf) => {
+  const needed = shared.size - minimum + 1;
+  return [...shared].sort((a, b) => postingsOf(a).length - postingsOf(b).length || Number(a > b) - Number(a < b)).slice(0, Math.max(needed, 1));
+};
+
 // Candidate spans (row lists) built only from rows whose anchors all belong to the group.
-const candidateSpans = (group, shared, context) => {
+const candidateSpans = (group, shared, minimum, context) => {
   const k = group.instances[0]?.unitIds.length ?? 1;
   const isWindow = group.kind === 'window';
   const seen = new Set();
   const spans = [];
   const fits = (row) => isWithin(row, shared, context.ubiquitous);
   for (const kind of CANDIDATE_KINDS[group.kind] ?? []) {
-    for (const anchor of shared) {
+    const postingsOf = (anchor) => context.index.postings(group.facetKey, kind, anchor);
+    for (const anchor of rarestAnchors(shared, minimum, postingsOf)) {
       for (const row of context.index.postings(group.facetKey, kind, anchor).filter(fits)) {
         const around = isWindow ? context.index.windowsAround(row, k).filter((rows) => rows.every(fits)) : [[row]];
         around.filter((rows) => !seen.has(spanKeyOf(rows))).forEach((rows) => {
@@ -98,7 +107,7 @@ export const findDrift = (group, context) => {
   const hasEvidence = shared.size >= 2 && group.evidence >= GATES.G2.minEvidence;
   if (!hasEvidence) return [];
   const minimumMass = Math.max(DRIFT_MIN_MASS, group.mass * DRIFT_MIN_MASS_RATIO);
-  const survivors = candidateSpans(group, shared, context)
+  const survivors = candidateSpans(group, shared, minimum, context)
     .filter((rows) => {
       const anchors = anchorsOf(rows, context.ubiquitous);
       return isStrictSubsetOf(anchors, shared) && anchors.length >= minimum && massOf(rows) >= minimumMass;
