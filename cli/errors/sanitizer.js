@@ -44,11 +44,22 @@ export const normalizeHomePath = (text) => {
   return text.split(homeDir).join('~');
 };
 
+// user@host.tld. Scoped packages (@vue/x) and versions (pkg@1.2.3) have no local part or TLD, so they stay.
+const EMAIL_PATTERN = /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/g;
+
+export const maskEmails = (text) => {
+  const isInputString = typeof text === 'string';
+  if (!isInputString) return '';
+  return text.replace(EMAIL_PATTERN, '[REDACTED_EMAIL]');
+};
+
+// The one sanitizer for every report string (title, body, context, stack, CLI output):
+// license keys, tokens, emails, then the home directory.
 export const sanitizeText = (text) => {
   const isString = typeof text === 'string';
   if (!isString) return '';
 
-  const masked = maskSensitiveTokens(text);
+  const masked = maskEmails(maskSensitiveTokens(text));
   return normalizeHomePath(masked);
 };
 
