@@ -4,7 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { listLiteralSearchFiles } from './search-literal-files.js';
+import { listLiteralSearchFiles, classifySearchFile } from './search-literal-files.js';
 import { debugNote } from './search-debug.js';
 
 const MAX_LINE_CHARS = 1000;
@@ -72,29 +72,48 @@ const runRipgrep = (root, args) => {
   return res.stdout || '';
 };
 
-// rg's --json summary only counts files it reported on (0 when nothing matches), so the
-// searched-file count comes from `rg --files` under the same filters.
-const countRipgrepFiles = (root, scopeDirs, options) => {
+// rg's --json summary only counts files it reported on, and rg handles binary and large files
+// its own way. So rg lists the files (`rg --files`, same filters), each is classified exactly as
+// the JS engine would, and rg searches with --text, keeping only matches in text files.
+const classifyRipgrepFiles = (root, scopeDirs, options) => {
   const args = ['--files', ...RG_FILTER_ARGS];
   if (options.isHidden) args.push('--hidden');
   args.push('--', ...scopeDirs);
-  return runRipgrep(root, args).split('\n').filter(Boolean).length;
+  const textFiles = new Set();
+  const stats = { filesSearched: 0, skippedBinary: 0, skippedLarge: 0 };
+  for (const listed of runRipgrep(root, args).split('\n').filter(Boolean)) {
+    const rel = listed.replace(/^\.\//, '');
+    const kind = classifySearchFile(root, rel, MAX_FILE_BYTES);
+    if (kind === 'text') textFiles.add(rel);
+    if (kind === 'binary') stats.skippedBinary += 1;
+    if (kind === 'large') stats.skippedLarge += 1;
+  }
+  stats.filesSearched = textFiles.size;
+  return { textFiles, stats };
+};
+
+// rg sends a line that is not valid UTF-8 as base64 bytes; decode it as the JS engine does.
+const decodeRipgrepText = (data) => {
+  const hasText = typeof data?.text === 'string';
+  return hasText ? data.text : Buffer.from(data?.bytes || '', 'base64').toString('utf-8');
 };
 
 const searchWithRipgrep = (root, scopeDirs, options, collect) => {
-  const args = ['--json', ...RG_FILTER_ARGS, options.isCaseInsensitive ? '--ignore-case' : '--case-sensitive', '--sort', 'path'];
+  const { textFiles, stats } = classifyRipgrepFiles(root, scopeDirs, options);
+  const args = ['--json', ...RG_FILTER_ARGS, '--text', '--max-filesize', String(MAX_FILE_BYTES), options.isCaseInsensitive ? '--ignore-case' : '--case-sensitive', '--sort', 'path'];
   if (!options.isRegex) args.push('--fixed-strings');
   if (options.isHidden) args.push('--hidden');
   args.push('--', options.pattern, ...scopeDirs);
   const stdout = runRipgrep(root, args);
-  const stats = { filesSearched: countRipgrepFiles(root, scopeDirs, options), skippedBinary: 0, skippedLarge: 0 };
   for (const raw of stdout.split('\n')) {
     if (!raw) continue;
     const event = JSON.parse(raw);
     const isMatchEvent = event.type === 'match';
     if (!isMatchEvent) continue;
     const rel = (event.data.path.text || '').replace(/^\.\//, '');
-    collect({ path: rel, line: event.data.line_number, text: clampLine((event.data.lines.text || '').replace(/\n$/, '')) });
+    const isTextFile = textFiles.has(rel);
+    if (!isTextFile) continue;
+    collect({ path: rel, line: event.data.line_number, text: clampLine(decodeRipgrepText(event.data.lines).replace(/\n$/, '')) });
   }
   return stats;
 };

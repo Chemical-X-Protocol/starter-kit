@@ -75,3 +75,26 @@ export const listLiteralSearchFiles = (root, scopeDirs = ['.'], { isHidden = fal
   const selected = Array.from(new Set(files)).filter((rel) => inScope(rel) && visible(rel)).sort();
   return { files: selected, lister: usedGit ? 'git ls-files' : 'walk' };
 };
+
+const SNIFF_BYTES = 8000;
+
+// The same verdict the JS engine reaches by reading the file: 'large' over maxBytes, 'binary'
+// with a NUL in the first 8000 bytes, else 'text' ('unreadable' when it cannot be opened).
+export const classifySearchFile = (root, rel, maxBytes) => {
+  let fd = null;
+  try {
+    const abs = path.join(root, rel);
+    const isTooLarge = fs.statSync(abs).size > maxBytes;
+    if (isTooLarge) return 'large';
+    fd = fs.openSync(abs, 'r');
+    const buffer = Buffer.alloc(SNIFF_BYTES);
+    const read = fs.readSync(fd, buffer, 0, SNIFF_BYTES, 0);
+    return buffer.subarray(0, read).includes(0) ? 'binary' : 'text';
+  } catch (err) {
+    debugNote.warn(`literal sniff ${rel}`, err);
+    return 'unreadable';
+  } finally {
+    const isOpen = fd !== null;
+    if (isOpen) fs.closeSync(fd);
+  }
+};

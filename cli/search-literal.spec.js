@@ -111,3 +111,22 @@ test('chemx q -g treats a dash-prefixed pattern as the pattern, not a flag value
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('q -g: rg and js engines count searched, binary and large files the same way', { skip: !isRipgrepAvailable() }, () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-literal-parity-'));
+  try {
+    fs.mkdirSync(path.join(root, 'src'));
+    fs.writeFileSync(path.join(root, 'src/a.ts'), 'const needle = 1;\n');
+    fs.writeFileSync(path.join(root, 'src/b.md'), 'no match here\n');
+    fs.writeFileSync(path.join(root, 'bin.dat'), Buffer.concat([Buffer.from('needle\n'), Buffer.from([0, 1, 2]), Buffer.from('\nneedle\n')]));
+    fs.writeFileSync(path.join(root, 'late-nul.txt'), `${'x'.repeat(9000)}\nneedle\n\u0000\n`);
+    fs.writeFileSync(path.join(root, 'huge.log'), `needle\n${'y'.repeat(8 * 1024 * 1024)}\n`);
+    const answers = ['js', 'rg'].map((engine) => runLiteralSearch({ root, scopeDirs: ['.'], pattern: 'needle', engine, limit: 50 }));
+    const [js, rg] = answers.map((a) => ({ filesSearched: a.filesSearched, skipped: a.skipped, matches: a.matches.map((m) => `${m.path}:${m.line}`).sort() }));
+    assert.deepEqual(rg, js);
+    assert.equal(js.skipped.binary, 1);
+    assert.equal(js.skipped.large, 1);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
