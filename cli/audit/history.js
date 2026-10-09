@@ -123,6 +123,7 @@ export const createSnapshotFromReport = (report) => {
       moleculeCount: metrics.moleculeCount,
       moleculeCompliantCount: metrics.moleculeCompliantCount,
       moleculeCompliantPct: metrics.moleculeCompliantPct,
+      moleculeLineLimit: metrics.moleculeLineLimit,
       hookCount: metrics.hookCount
     },
     violations: {

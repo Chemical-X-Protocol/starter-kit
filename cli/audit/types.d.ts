@@ -33,6 +33,8 @@ export interface CodebaseMetrics {
   readonly moleculeCount: number;
   readonly moleculeCompliantCount: number;
   readonly moleculeCompliantPct: number;
+  /** The profile molecule budget compliance was measured against (absent in old snapshots). */
+  readonly moleculeLineLimit?: number;
   readonly hookCount: number;
 }
 

@@ -252,6 +252,7 @@ export const runAudit = (targetDir = 'src', options = {}) => {
     moleculeCount,
     moleculeCompliantCount,
     moleculeCompliantPct,
+    moleculeLineLimit: getLineBudgets(config?.rules || {}).molecule,
     hookCount: totalHooks
   };
 
