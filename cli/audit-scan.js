@@ -3,20 +3,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { isSourceFile as isPolyglotSourceFile } from './languages.js';
 import { auditCode } from './audit/rules.js';
+import { ANY_DEPTH_IGNORED_DIRS } from './search-scan.js';
 
-const IGNORED_DIRS = new Set([
-  'node_modules',
-  'dist',
-  'build',
-  'vendor',
-  '.git',
-  '.next',
-  '.turbo',
-  '.output',
-  '.nuxt',
-  '.cache',
-  'out'
-]);
+// Shares search's skip list (package stores, agent worktree copies, the chemx index) so the
+// audit never scores code that isn't the project's; build output is skipped at any depth here.
+const IGNORED_DIRS = new Set([...ANY_DEPTH_IGNORED_DIRS, 'build', 'out']);
 
 const isSourceFile = (name, options = {}) => {
   return isPolyglotSourceFile(name, { includeTests: false, ...options });

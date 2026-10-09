@@ -10,7 +10,8 @@ import { debugNote } from './search-debug.js';
 export const ANY_DEPTH_IGNORED_DIRS = new Set([
   'node_modules', '.git', 'vendor', 'dist', 'coverage',
   '.chemx', '.claude', '.cursor', '.gemini', '.agents',
-  '.next', '.turbo', '.output', '.nuxt', '.cache', '.svelte-kit'
+  '.next', '.turbo', '.output', '.nuxt', '.cache', '.svelte-kit',
+  '.pnpm-store', '.yarn'
 ]);
 
 export const ROOT_ONLY_IGNORED_DIRS = new Set([
