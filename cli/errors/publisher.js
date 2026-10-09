@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import { isOfflineMode, describeOffline } from '../network-policy.js';
 
 export const publishIssueViaHttp = async (token, repo, title, body, labels = []) => {
   const hasBasicInputs = Boolean(token && repo && title);
@@ -65,6 +66,8 @@ export const publishIssueViaGh = (repo, title, body, labels = []) => {
 };
 
 export const publishIssue = async (repo, title, body, labels = []) => {
+  const isOffline = isOfflineMode();
+  if (isOffline) return { success: false, url: null, issueNumber: null, error: describeOffline('Posting a GitHub issue') };
   const token = process.env.GH_TOKEN || process.env.GITHUB_TOKEN;
   const hasToken = Boolean(token && token.length > 0);
   if (hasToken) {

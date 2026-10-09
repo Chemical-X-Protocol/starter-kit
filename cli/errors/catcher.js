@@ -59,11 +59,9 @@ export const handleError = async (err, options = {}) => {
   const issue = formatIssueContent(report, targetRepo, options.labels);
   const savedPath = saveIssueArtifact(cwd, issue, options);
 
-  const hasToken = Boolean(process.env.GH_TOKEN || process.env.GITHUB_TOKEN);
+  // Posting is opt-in only (--post-issue, autoPost, CHEMX_AUTO_POST_ISSUES=true). A CI token alone never posts.
   const isCiEnv = Boolean(process.env.CI || process.env.GITHUB_ACTIONS);
-  const isExplicitAutoPost = Boolean(options.autoPost || process.env.CHEMX_AUTO_POST_ISSUES === 'true');
-  const isCiAutoPost = isCiEnv && hasToken && options.autoPost !== false;
-  const shouldAutoPost = isExplicitAutoPost || isCiAutoPost;
+  const shouldAutoPost = Boolean(options.autoPost || process.env.CHEMX_AUTO_POST_ISSUES === 'true');
 
   let publishResult = { success: false, url: null, issueNumber: null, error: null };
 
@@ -114,8 +112,10 @@ export const handleError = async (err, options = {}) => {
           process.stdout.write(`  \x1b[36m• Swarm Task:\x1b[0m #${created.id} queued to track issue resolution\n`);
         }
       }
-    } catch {
-      // Non-blocking fallback if database is unavailable
+    } catch (err) {
+      // Non-blocking: the issue is already published; only the task record failed.
+      const reason = err instanceof Error ? err.message : String(err);
+      if (!options.silent) process.stderr.write(`  • Swarm task not recorded: ${reason}\n`);
     }
   }
 
