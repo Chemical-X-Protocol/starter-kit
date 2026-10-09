@@ -1,20 +1,7 @@
 import { spawn } from 'node:child_process';
+import { canSignalGroups, killTree, trackChild, untrackChild } from './child-registry.js';
 
 const KILL_GRACE_MS = 2000;
-const canSignalGroups = process.platform !== 'win32';
-
-// Kill the whole process group so `npm run x` cannot orphan the runner it spawned.
-// Returns whether the group signal landed; on failure it falls back to the direct child.
-const killTree = (child, signal) => {
-  try {
-    if (canSignalGroups) process.kill(-child.pid, signal);
-    else child.kill(signal);
-    return true;
-  } catch (error) {
-    child.kill(signal);
-    return error.code !== 'ESRCH';
-  }
-};
 
 // Returns the timer handle so the caller owns its disposal (cleared in settle()).
 const armTimer = (delayMs, onFire) => {
@@ -52,8 +39,7 @@ export const executeBuild = (command, cwd = process.cwd(), options = {}) => {
       env: childEnv(options.env)
     });
 
-    const forwardInterrupt = () => killTree(child, 'SIGINT');
-    process.once('SIGINT', forwardInterrupt);
+    trackChild(child);
 
     let killTimer = null;
     const timeoutTimer = hasTimeout
@@ -69,7 +55,7 @@ export const executeBuild = (command, cwd = process.cwd(), options = {}) => {
       isSettled = true;
       clearTimeout(timeoutTimer);
       clearTimeout(killTimer);
-      process.removeListener('SIGINT', forwardInterrupt);
+      untrackChild(child);
       if (timedOut) stderrBuffer += `\nTimed out after ${timeoutMs}ms: ${command}\n`;
       resolve({
         exitCode: timedOut ? null : exitCode,
