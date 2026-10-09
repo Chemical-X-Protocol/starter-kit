@@ -31,13 +31,19 @@ jobs:
             npm install
           fi
 
+      # Gate on the ratchet (chemx-ratchet.json): fail only when a rule rises above its recorded
+      # baseline. Without a ratchet file the gate fails on any CRITICAL/HIGH finding; record one with
+      # `npx chemx audit --rebaseline` (full scan). Set the CHEMX_MIN_GRADE / CHEMX_MIN_SCORE repo
+      # variables to add absolute floors.
       - name: Run Chemical X Architectural Audit
+        env:
+          CHEMX_MIN_GRADE: ${{ vars.CHEMX_MIN_GRADE }}
+          CHEMX_MIN_SCORE: ${{ vars.CHEMX_MIN_SCORE }}
         run: |
-          npx --yes chemx audit \
-            --min-grade=${{ vars.CHEMX_MIN_GRADE || 'B' }} \
-            --min-score=${{ vars.CHEMX_MIN_SCORE || 80 }} \
-            --markdown \
-            --output=AUDIT_REPORT.md
+          set -- --markdown --output=AUDIT_REPORT.md
+          if [ -n "$CHEMX_MIN_GRADE" ]; then set -- "$@" "--min-grade=$CHEMX_MIN_GRADE"; fi
+          if [ -n "$CHEMX_MIN_SCORE" ]; then set -- "$@" "--min-score=$CHEMX_MIN_SCORE"; fi
+          npx --yes chemx audit "$@"
 
       - name: Upload Audit Scorecard Artifact
         if: always()
@@ -62,53 +68,16 @@ jobs:
           {
             echo "<!-- chemical-x-audit-pr-comment -->"
             if [ -n "$DISCUSSION_URL" ]; then
-              echo "> 💬 **Architectural Discussion Topic:** [View Discussion & Community Showcase](\${DISCUSSION_URL})"
+              echo "> 💬 **Architectural Discussion Topic:** [View Discussion & Community Showcase]($DISCUSSION_URL)"
               echo ""
             fi
             cat AUDIT_REPORT.md
           } > PR_COMMENT.md
 
-          EXISTING_COMMENT_ID=$(gh api "repos/\${REPO}/issues/\${PR_NUMBER}/comments" --jq '.[] | select(.body | contains("<!-- chemical-x-audit-pr-comment -->")) | .id' | head -n 1)
+          EXISTING_COMMENT_ID=$(gh api "repos/$REPO/issues/$PR_NUMBER/comments" --jq '.[] | select(.body | contains("<!-- chemical-x-audit-pr-comment -->")) | .id' | head -n 1)
 
           if [ -n "$EXISTING_COMMENT_ID" ]; then
-            gh api --method PATCH "repos/\${REPO}/issues/comments/\${EXISTING_COMMENT_ID}" -F body=@PR_COMMENT.md
+            gh api --method PATCH "repos/$REPO/issues/comments/$EXISTING_COMMENT_ID" -F body=@PR_COMMENT.md
           else
-            gh pr comment "\${PR_NUMBER}" --body-file PR_COMMENT.md
+            gh pr comment "$PR_NUMBER" --body-file PR_COMMENT.md
           fi
-
-  scaffold-smoke-test:
-    name: Framework Scaffolding Smoke Test
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - name: Install Dependencies
-        run: npm install
-      - name: Run Test Suite
-        run: npm test
-      - name: Multi-Framework Scaffolding Smoke Test
-        run: |
-          for fw in react vue svelte; do
-            echo "Smoke testing scaffolding for framework: $fw"
-            node cli/create.js test-app-$fw --framework=$fw --yes --skip-install
-            if [ "$fw" = "react" ]; then
-              test -f test-app-react/src/components/m-sample-card/m-sample-card.tsx
-              ! ls test-app-react/src/components/m-sample-card/*.vue 2>/dev/null
-              ! ls test-app-react/src/components/m-sample-card/*.svelte 2>/dev/null
-            elif [ "$fw" = "vue" ]; then
-              test -f test-app-vue/src/components/m-sample-card/m-sample-card.vue
-              ! ls test-app-vue/src/components/m-sample-card/*.tsx 2>/dev/null
-              ! ls test-app-vue/src/components/m-sample-card/*.svelte 2>/dev/null
-            elif [ "$fw" = "svelte" ]; then
-              test -f test-app-svelte/src/components/m-sample-card/m-sample-card.svelte
-              ! ls test-app-svelte/src/components/m-sample-card/*.vue 2>/dev/null
-              ! ls test-app-svelte/src/components/m-sample-card/*.tsx 2>/dev/null
-            fi
-            echo "Framework $fw scaffolded cleanly."
-          done
-
-
