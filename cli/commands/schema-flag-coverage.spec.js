@@ -42,6 +42,21 @@ test('test help lists the lane flags the docs name (#4509)', () => {
   }
 });
 
+test('team task help lists every task-level flag team-flags.js parses (#4509)', async () => {
+  const { formatTaskHelpCard } = await import('../team/team-format.js');
+  const card = formatTaskHelpCard().replace(/\x1b\[[0-9;]*m/g, '');
+  const src = fs.readFileSync(path.join(dir, '../team/team-flags.js'), 'utf8');
+  const parsed = new Set((src.match(/'(--[a-z][a-z0-9-]*)/g) ?? []).map((s) => s.slice(1)));
+  // Flags parsed for other team subcommands, documented on their own help cards.
+  const ELSEWHERE = new Set([
+    '--type', '--task', '--rule', '--tier', '--purpose', '--run', '--workflow', '--compact', '--mark-read',
+    '--to', '--since', '--max-agents', '--per-agent', '--max-tasks-per-agent', '--thread', '--pid', '--tokens',
+    '--prompt-tokens', '--completion-tokens', '--cached-tokens', '--cost', '--model', '--log', '--metadata',
+  ]);
+  const missing = [...parsed].filter((f) => !ELSEWHERE.has(f) && !card.includes(f));
+  assert.deepEqual(missing, []);
+});
+
 test('team task help lists close and the flags its handlers read (#4509)', async () => {
   const { formatTaskHelpCard } = await import('../team/team-format.js');
   const card = formatTaskHelpCard().replace(/\x1b\[[0-9;]*m/g, '');
