@@ -10,7 +10,8 @@ import { STATUS } from './result-status.js';
 
 const SPEC = (importLine, extra = '') => `import test from 'node:test';\n${importLine}\n${extra}\ntest('ok', () => {});\n`;
 
-// A kit-shaped project: cli/team specs, a dynamic import, a spec that spawns the CLI entry,
+// A kit-shaped project: cli/team specs, a dynamic import, a spec that spawns the CLI entry
+// ('index.js' next to it, not cli/team/index.js),
 // a module that reads a markdown file by name, and a spec-support helper.
 const FILES = {
   'package.json': JSON.stringify({ name: 'kit', type: 'module', scripts: { test: 'node --test cli/*.spec.js cli/team/*.spec.js' } }),
@@ -19,6 +20,7 @@ const FILES = {
   'cli/team/feed.js': "import { board } from './board.js';\nexport const feed = () => board();\n",
   'cli/team/feed.spec.js': SPEC("import { feed } from './feed.js';"),
   'cli/team/mailbox.js': 'export const mailbox = () => 2;\n',
+  'cli/team/index.js': "export * from './board.js';\n",
   'cli/team/mailbox.spec.js': SPEC("import { mailbox } from './mailbox.js';"),
   'cli/verify.js': 'export const verify = () => 3;\n',
   'cli/verify.spec.js': SPEC("import { verify } from './verify.js';"),
