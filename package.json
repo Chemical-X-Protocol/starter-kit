@@ -27,6 +27,7 @@
   "files": [
     "cli",
     "!cli/**/*.spec.js",
+    "!cli/fixtures/**",
     "blueprints",
     "scripts",
     "README.md",

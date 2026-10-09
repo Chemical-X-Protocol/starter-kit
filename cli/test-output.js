@@ -1,0 +1,121 @@
+// Parses test runner output into counts, failures and a tri-state verdict.
+// A run only PASSES when at least one test ran and nothing failed; zero collected tests,
+// a filter that matched nothing, or a timeout is INCONCLUSIVE (exit 3), never a green check.
+import { stripAnsi } from './terminal.js';
+import { STATUS } from './result-status.js';
+import {
+  extractAssertionFailures,
+  extractUnhandledErrors,
+  findFatalLine,
+  findNoTestsLine,
+  tailLines
+} from './test-failures.js';
+
+export const REASONS = Object.freeze({
+  NO_TESTS_RAN: 'NO_TESTS_RAN',
+  STEP_TIMEOUT: 'STEP_TIMEOUT',
+  EMPTY_ALLOWED: 'EMPTY_ALLOWED'
+});
+
+const TEST_FILE_NAME = /\.(?:test|spec)\.(?:c|m)?[jt]sx?$|\.(?:c|m)?[jt]sx?$/;
+
+// node --test reports a file that ran no tests (for example a name pattern matched nothing)
+// as one passing pseudo-test named after the file, preceded by a `1..0` plan.
+const countEmptyNodeFiles = (cleanLines) => cleanLines.filter((line, index) => {
+  const isEmptyPlan = line === '1..0';
+  const subtest = (cleanLines[index + 1] || '').match(/^# Subtest: (.+)$/);
+  const okLine = cleanLines[index + 2] || '';
+  return isEmptyPlan && subtest && TEST_FILE_NAME.test(subtest[1]) && okLine.endsWith(`- ${subtest[1]}`);
+}).length;
+
+const readNumber = (line, pattern) => {
+  const match = line.match(pattern);
+  return match ? parseInt(match[1], 10) : null;
+};
+
+const parseCounts = (cleanLines) => {
+  const counts = { totalTests: 0, passed: 0, failed: 0, skipped: 0, errors: 0 };
+  let hasRunnerSummary = false;
+  for (const line of cleanLines) {
+    const isRunnerSummary = /^Tests:?\s+/i.test(line);
+    if (isRunnerSummary) {
+      counts.passed = readNumber(line, /(\d+)\s+passed/i) ?? 0;
+      counts.failed = readNumber(line, /(\d+)\s+failed/i) ?? 0;
+      counts.skipped = readNumber(line, /(\d+)\s+(?:skipped|todo|pending)/i) ?? 0;
+      counts.totalTests = readNumber(line, /\((\d+)\)/) ?? readNumber(line, /(\d+)\s+total/i) ?? counts.passed + counts.failed + counts.skipped;
+      hasRunnerSummary = true;
+      continue;
+    }
+    const errorCount = readNumber(line, /^Errors\s+(\d+)\s+errors?/i);
+    if (errorCount !== null) counts.errors = errorCount;
+    if (hasRunnerSummary) continue;
+    const nodeCount = (name) => readNumber(line, new RegExp(`^(?:[ℹ#]\\s+)?${name}\\s+(\\d+)$`, 'i'));
+    counts.totalTests = nodeCount('tests') ?? counts.totalTests;
+    counts.passed = nodeCount('pass') ?? counts.passed;
+    counts.failed = (nodeCount('fail') ?? counts.failed);
+    counts.failed += nodeCount('cancelled') ?? 0;
+    counts.skipped += (nodeCount('skipped') ?? 0) + (nodeCount('todo') ?? 0);
+  }
+  const emptyNodeFiles = hasRunnerSummary ? 0 : countEmptyNodeFiles(cleanLines);
+  counts.passed = Math.max(0, counts.passed - emptyNodeFiles);
+  counts.totalTests = Math.max(0, counts.totalTests - emptyNodeFiles);
+  return counts;
+};
+
+const applyMarkerFallback = (counts, cleanLines) => {
+  const checkmarks = cleanLines.filter((l) => /^(?:✔|✓)/.test(l)).length;
+  const crosses = cleanLines.filter((l) => /^(?:✖|×|✗|✕)/.test(l) || l.startsWith('FAIL ')).length;
+  const hasUncountedPasses = counts.passed === 0 && checkmarks > 0;
+  if (hasUncountedPasses) counts.passed = checkmarks;
+  const hasUncountedFailures = counts.failed === 0 && crosses > 0 && counts.totalTests === 0;
+  if (hasUncountedFailures) counts.failed = crosses;
+  const countedTotal = counts.passed + counts.failed + counts.skipped;
+  const isTotalUnderReported = counts.totalTests < counts.passed + counts.failed;
+  if (counts.totalTests === 0 || isTotalUnderReported) counts.totalTests = countedTotal;
+};
+
+const classify = ({ counts, failures, fatalLine, noTestsLine, exitCode, options, lines }) => {
+  if (options.timedOut) return { status: STATUS.INCONCLUSIVE, reason: REASONS.STEP_TIMEOUT, executionError: `Timed out after ${options.timeoutMs || '?'}ms` };
+  if (fatalLine) return { status: STATUS.FAIL, reason: null, executionError: fatalLine };
+  const hasFailures = counts.failed > 0 || counts.errors > 0 || failures.length > 0;
+  if (hasFailures) return { status: STATUS.FAIL, reason: null, executionError: null };
+  const ranCount = counts.passed + counts.failed;
+  // The runner's own "no tests" line only explains an empty run; a test *named* after it must not cause one.
+  const isEmptyRun = ranCount === 0;
+  if (isEmptyRun) {
+    const status = options.allowEmpty ? STATUS.PASS : STATUS.INCONCLUSIVE;
+    const reason = options.allowEmpty ? REASONS.EMPTY_ALLOWED : REASONS.NO_TESTS_RAN;
+    const detail = noTestsLine || `0 tests ran (${counts.skipped} skipped)`;
+    return { status, reason, executionError: null, detail };
+  }
+  const exitedDirty = exitCode !== 0;
+  if (exitedDirty) {
+    const tail = tailLines(lines, 10);
+    const errorLine = tail.find((l) => /error|not found|failed/i.test(l)) || tail[tail.length - 1];
+    return { status: STATUS.FAIL, reason: null, executionError: errorLine || `Command exited with code ${exitCode}` };
+  }
+  return { status: STATUS.PASS, reason: null, executionError: null };
+};
+
+export const parseTestOutput = (stdout = '', stderr = '', exitCode = 0, options = {}) => {
+  const lines = `${stdout}\n${stderr}`.split(/\r?\n/).map((l) => stripAnsi(l));
+  const cleanLines = lines.map((l) => l.trim()).filter(Boolean);
+  const counts = parseCounts(cleanLines);
+  applyMarkerFallback(counts, cleanLines);
+
+  const assertionFailures = (exitCode !== 0 || counts.failed > 0) ? extractAssertionFailures(lines) : [];
+  const failures = [...assertionFailures, ...extractUnhandledErrors(lines)];
+  const hasUnnamedFailures = counts.failed > 0 && assertionFailures.length === 0;
+  if (hasUnnamedFailures) {
+    failures.unshift({ kind: 'assertion', name: `${counts.failed} failing test(s), names not parsed`, message: null, location: null, details: tailLines(lines, 10) });
+  }
+  if (counts.errors === 0) counts.errors = failures.filter((f) => f.kind === 'unhandled-error').length;
+
+  const verdict = classify({
+    counts, failures, lines, exitCode, options,
+    fatalLine: findFatalLine(String(stderr).split(/\r?\n/).map((l) => stripAnsi(l))),
+    noTestsLine: findNoTestsLine(lines)
+  });
+
+  return { success: verdict.status === STATUS.PASS, ...verdict, ...counts, failures };
+};
