@@ -82,11 +82,12 @@ test('d: the "compacted" footer appears only when the diff was replaced by a sho
 test('d: summary formats print only the summary, never the -U0 patch', () => {
   const repo = makeRepo(30);
   for (let i = 0; i < 30; i += 1) fs.writeFileSync(path.join(repo, `f${i}.js`), 'export const a = 2;\n');
-  const summaryRuns = [['--stat'], ['--stat=40'], ['--shortstat'], ['--numstat'], ['--dirstat'], ['--summary'], ['--compact-summary'], ['--name-only'], ['--name-status']];
+  const summaryRuns = [['--stat'], ['--stat=40'], ['--shortstat'], ['--numstat'], ['--dirstat'], ['--summary'], ['--compact-summary'], ['--name-only'], ['--name-status'], ['--raw'], ['--no-patch', '--stat']];
   for (const flags of summaryRuns) {
     const run = runCli(['d', ...flags], { cwd: repo });
     assert.strictEqual(run.status, 0, `chemx d ${flags.join(' ')}: ${run.stderr}`);
     assert.doesNotMatch(run.stdout, /^@@ /m, `chemx d ${flags.join(' ')} leaked patch hunks`);
+    assert.doesNotMatch(run.stdout, /Diff compacted/, `chemx d ${flags.join(' ')} is already a summary, not a compaction`);
     assert.ok(run.stdout.split('\n').length <= 33, `chemx d ${flags.join(' ')} printed ${run.stdout.split('\n').length} lines`);
   }
   const explicitPatch = runCli(['d', '--stat', '-p'], { cwd: repo });

@@ -5,7 +5,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 const SOURCE_EXTENSIONS = new Set(['.js', '.jsx', '.ts', '.tsx', '.vue', '.svelte', '.mjs', '.cjs']);
 const MAX_DIFF_LINES = 80;
 // Output formats that are already summaries: never "compact" them to --stat.
-const SUMMARY_FORMAT_FLAGS = new Set(['--stat', '--shortstat', '--numstat', '--dirstat', '--name-only', '--name-status', '--summary', '--compact-summary']);
+const SUMMARY_FORMAT_FLAGS = new Set(['--stat', '--shortstat', '--numstat', '--dirstat', '--name-only', '--name-status', '--summary', '--compact-summary', '--raw', '--no-patch']);
 // `-U<n>` implies --patch in git, so -U0 is only added when the caller wants a patch.
 const PATCH_FLAGS = new Set(['-p', '-u', '--patch', '--patch-with-stat', '--patch-with-raw']);
 
