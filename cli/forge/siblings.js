@@ -13,11 +13,15 @@
 //   - Sibling blocks (sibling-blocks.js: the bodies of statements that share a parent block) are bucketed
 //     the same way across the blocks of one family; a bucket counts there only when its instances span at
 //     least 2 blocks (one block alone is the per-block pass). This is how A19 (four retries) is reached.
-//   - Template siblings under one parent are handled the same way at tmpl fp2 (k = 1), and also need G4.
+//   - Template siblings under one parent are bucketed at tmpl fp3 and refined by structural role, as T is
+//     (templates.js), then held to the W floor and G4. The engine doc says fp2, but fp2 keeps ROLE tokens of
+//     every attribute, and A25's settings cards differ only in a badge tone (a variant hole), so the
+//     template pass needs fp3 with the structural-role refinement that keeps tag and role structure exact.
 import { instanceOfRow, instanceOfRows, makeGroup, pushTo } from './group-shape.js';
 import { checkGate, labelIdiom } from './gates.js';
 import { blocksOf, runsOf, windowsOfRuns, windowKeyOf, nonOverlapping, dropDominated } from './windows.js';
 import { siblingBlockFamilies } from './sibling-blocks.js';
+import { partitionByRoles } from './templates.js';
 
 export const W_FLOOR = Object.freeze({ minInstances: 3, minInstanceMass: 8, minTotalMass: 36, maxK: 6 });
 
@@ -116,15 +120,19 @@ export const groupSiblings = (rows, context, { unify = null } = {}) => [
   ...siblingBlockFamilies(rows).flatMap((family) => statementGroups(family, context, unify, spansBlocks))
 ];
 
+const passesTemplateFloor = (instances) => passesWFloor(instances) && checkGate('G4', { mass: Math.min(...instances.map((instance) => instance.mass)) }).ok;
+
 const templateGroups = (siblings, context) => {
   const facetKey = siblings[0].facet_key;
   const buckets = new Map();
-  for (const row of siblings) pushTo(buckets, row.fp2, instanceOfRow(row));
+  for (const row of siblings) pushTo(buckets, row.fp3, row);
   return [...buckets.values()]
-    .filter((instances) => passesWFloor(instances) && checkGate('G4', { mass: Math.min(...instances.map((instance) => instance.mass)) }).ok)
-    .map((instances) => toGroup({ k: 1, kind: 'tmpl', instances }, facetKey, context, { level: 2 }));
+    .filter((rows) => rows.length >= W_FLOOR.minInstances)
+    .flatMap((rows) => partitionByRoles(rows, context.roleKeyOf).map((partition) => partition.rows.map(instanceOfRow)))
+    .filter(passesTemplateFloor)
+    .map((instances) => toGroup({ k: 1, kind: 'tmpl', instances }, facetKey, context, { level: 3, needsLgg: true }));
 };
 
-/** W over template siblings: tmpl units under one parent element, bucketed by fp2. */
+/** W over template siblings: tmpl units under one parent element, bucketed by fp3 and refined by role. */
 export const groupTemplateSiblings = (rows, context) =>
   [...blocksOf(rows, 'tmpl').values()].flatMap((siblings) => templateGroups(siblings, context));

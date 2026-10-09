@@ -58,6 +58,15 @@ test('B2 (three child-role orders) is rejected by structural-role refinement', (
   assert.deepEqual(formed, []);
 });
 
+test('A25 settings cards (badge tones differ) group as template siblings under one parent', (t) => {
+  const { result, report } = grouped(t);
+  const cards = result.groups.filter((group) => group.path === 'W' && group.kind === 'tmpl' && itemById('A25').anchors.some((anchor) => touches(group, anchor)));
+  assert.equal(cards.length, 1);
+  assert.ok(cards[0].memberCount >= 3);
+  assert.equal(cards[0].fileCount, 1);
+  assert.equal(creditOf(report, 'A25'), 1);
+});
+
 test('exact buckets find A7 (N1 L2), A22 (N1 L1 expr) and the A4 path check', (t) => {
   const { report } = grouped(t);
   assert.equal(creditOf(report, 'A7'), 1);
