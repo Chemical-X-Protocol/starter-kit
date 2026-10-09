@@ -1,5 +1,5 @@
 import { writeOrAppend } from '../write-append.js';
-import { formatPatchWarnings, isDryRunRequested } from './tools-patch.js';
+import { compactViolationLists, formatPatchWarnings, isDryRunRequested } from './tools-patch.js';
 import { resolveSafePath } from '../path-scope.js';
 
 export const handleChemxWrite = (args = {}, cwd = process.cwd()) => {
@@ -23,7 +23,7 @@ export const handleChemxWrite = (args = {}, cwd = process.cwd()) => {
   });
 
   return {
-    ...result,
+    ...compactViolationLists(result, args),
     warnings: formatPatchWarnings(result)
   };
 };

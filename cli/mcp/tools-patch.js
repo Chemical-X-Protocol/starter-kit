@@ -51,6 +51,32 @@ const normalizeBlocks = (raw) => {
   });
 };
 
+const LIST_KEYS = ['violations', 'introducedViolations', 'preExistingViolations'];
+
+/**
+ * Patch/write results repeat each violation (with its full rule text) in up to three lists.
+ * Compact form: rule text once under `rules`, each list becomes "RULE@line" strings.
+ * Pass full:true (or compact:false) to keep the original shape. Not guaranteed: rule text is
+ * whatever the first hit carried.
+ */
+export const compactViolationLists = (result, args = {}) => {
+  const isFull = args.compact === false || args.full === true;
+  const hasResult = Boolean(result);
+  const keepsOriginal = isFull || !hasResult;
+  if (keepsOriginal) return result;
+  const rules = {};
+  const out = { ...result };
+  for (const key of LIST_KEYS) {
+    if (!Array.isArray(result[key])) continue;
+    out[key] = result[key].map((v) => {
+      rules[v.rule] ??= { hazard: v.hazard, directive: v.directive, pillar: v.pillar, severity: v.severity };
+      return `${v.rule}@${v.line}`;
+    });
+  }
+  const hasRules = Object.keys(rules).length > 0;
+  return hasRules ? { ...out, rules } : out;
+};
+
 export const handleChemxPatch = (args = {}, cwd = process.cwd()) => {
   const targetContent = args.targetContent ?? args.target ?? args.search;
   const replacementContent = args.replacementContent ?? args.replacement ?? args.replace;
@@ -77,12 +103,11 @@ export const handleChemxPatch = (args = {}, cwd = process.cwd()) => {
     agentId: args.agentId ?? args.as,
     cwd
   });
-  if (isDryRun) return { ...result, dryRun: true, warnings: formatPatchWarnings(result) };
+  const warnings = formatPatchWarnings(result);
+  const compact = compactViolationLists(result, args);
+  if (isDryRun) return { ...compact, dryRun: true, warnings };
 
-  return {
-    ...result,
-    warnings: formatPatchWarnings(result)
-  };
+  return { ...compact, warnings };
 };
 
 const DRY_RUN_KEYS = ['dryRun', 'dry-run', 'dry_run', 'n'];
