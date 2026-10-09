@@ -26,10 +26,12 @@ export function useSwarmDatabase() {
   const errorMessage = ref<string | null>(null);
 
   const fetchMetrics = async () => {
-    if (typeof fetch !== 'function') return;
+    const canFetch = typeof fetch === 'function';
+    if (!canFetch) return;
     try {
       const res = await fetch('/api/swarm/database/metrics');
-      if (res.ok) {
+      const isResponseOk = Boolean(res.ok);
+      if (isResponseOk) {
         metrics.value = await res.json();
       }
     } catch (err) {
@@ -39,7 +41,8 @@ export function useSwarmDatabase() {
 
   const runQuery = async (sql?: string) => {
     const targetSql = sql || activeQuery.value;
-    if (!targetSql.trim() || typeof fetch !== 'function') return;
+    const canRunQuery = Boolean(targetSql.trim()) && typeof fetch === 'function';
+    if (!canRunQuery) return;
     activeQuery.value = targetSql;
     try {
       const res = await fetch('/api/swarm/database/query', {
@@ -48,7 +51,8 @@ export function useSwarmDatabase() {
         body: JSON.stringify({ query: targetSql })
       });
       const data = await res.json();
-      if (data.success) {
+      const isSuccess = Boolean(data.success);
+      if (isSuccess) {
         queryResult.value = data;
         errorMessage.value = null;
       } else {
