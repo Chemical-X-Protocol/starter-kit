@@ -68,14 +68,16 @@ export const syncAntigravityMcpSchemas = (customTargetDir = null, options = {}) 
   const isSilent = Boolean(options.silent);
   const targetDir = customTargetDir || path.join(os.homedir(), '.gemini', 'antigravity', 'mcp', 'chemical-x');
 
-  if (!fs.existsSync(targetDir)) {
+  const shouldCreateTargetDir = !fs.existsSync(targetDir);
+  if (shouldCreateTargetDir) {
     fs.mkdirSync(targetDir, { recursive: true });
   }
 
   // Clean up legacy/sub-tool schemas so only the master gateway tool is exposed
   const existingFiles = fs.readdirSync(targetDir);
   for (const file of existingFiles) {
-    if (file.startsWith('chemx_') && file.endsWith('.json')) {
+    const isChemxSchemaFile = file.startsWith('chemx_') && file.endsWith('.json');
+    if (isChemxSchemaFile) {
       fs.unlinkSync(path.join(targetDir, file));
     }
   }
