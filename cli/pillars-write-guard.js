@@ -44,7 +44,8 @@ export const applyFileWrites = (plans) => {
   for (const plan of plans) {
     const isWritable = plan.action === 'create' || plan.action === 'overwrite';
     if (!isWritable) continue;
-    if (plan.backupPath) fs.copyFileSync(plan.file, plan.backupPath);
+    const hasBackupPath = Boolean(plan.backupPath);
+    if (hasBackupPath) fs.copyFileSync(plan.file, plan.backupPath);
     fs.writeFileSync(plan.file, plan.content, 'utf-8');
     written.push(plan.file);
   }
