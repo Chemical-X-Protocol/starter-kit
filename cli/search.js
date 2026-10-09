@@ -39,6 +39,7 @@ import { runMutatorCli } from './mutators.js';
 import { toColumnar } from './columnar.js';
 import { resolveTargetDir } from './path-scope.js';
 import { ANSI } from './theme.js';
+import { isIgnoredScanDir } from './scan-ignore.js';
 
 export { toColumnar, fromColumnar } from './columnar.js';
 
@@ -56,11 +57,6 @@ export {
   handleLiteralSearchCommand
 } from './search-commands.js';
 
-const IGNORED_DIRS = new Set([
-  'node_modules', 'dist', 'build', 'vendor', '.git',
-  '.next', '.turbo', '.output', '.nuxt', '.cache', 'out',
-  '.chemx', 'blueprints', 'scratch', 'benchmarks', '.gemini', '.claude', '.cursor', 'temp', 'coverage'
-]);
 
 const EXCLUDED_NAME_PATTERNS = ['.test.', '.spec.', '.min.'];
 
@@ -74,7 +70,7 @@ const scanFilesRecursively = (dir, baseDir, fileList = []) => {
     const relPath = path.relative(baseDir, fullPath);
 
     if (entry.isDirectory()) {
-      if (!IGNORED_DIRS.has(entry.name)) {
+      if (!isIgnoredScanDir(entry.name, relPath)) {
         scanFilesRecursively(fullPath, baseDir, fileList);
       }
     } else if (isSourceFile(entry.name)) {

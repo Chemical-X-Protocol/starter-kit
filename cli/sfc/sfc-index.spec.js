@@ -93,7 +93,9 @@ test('blast radius counts template, alias, dynamic and re-export consumers', () 
   withProject({
     'tsconfig.json': '{ "compilerOptions": { "paths": { "@primitives/*": ["./src/components/primitives/*"] } } }',
     [BTN]: '<template><button /></template>\n<script setup lang="ts">\nconst a = 1\n</script>\n',
-    'src/views/uses-tag.vue': '<template><x-btn /><y-unknown /></template>\n',
+    'src/views/uses-tag.vue': '<template><x-btn /><y-unknown /><z-card /></template>\n',
+    'lib/a/z-card.vue': '<template><div /></template>\n',
+    'lib/b/z-card.vue': '<template><div /></template>\n',
     'src/views/uses-alias.vue': '<script setup lang="ts">\nimport XBtn from "@primitives/x-btn/x-btn.vue"\n</script>\n<template><XBtn /></template>\n',
     'src/routes/lazy.ts': 'export const route = { component: () => import("../components/primitives/x-btn/x-btn.vue") }\n',
     'src/components/primitives/index.ts': 'export { default as XBtn } from "./x-btn/x-btn.vue"\n'
@@ -108,7 +110,7 @@ test('blast radius counts template, alias, dynamic and re-export consumers', () 
       'src/views/uses-tag.vue'
     ]);
     assert.equal(blast.coverage.unresolvedImports, 1);
-    assert.deepEqual(blast.coverage.unresolvedSamples, ['#component:y-unknown']);
+    assert.deepEqual(blast.coverage.unresolvedSamples, ['#component:z-card'], 'an ambiguous local tag is unresolved; an unknown tag is third-party');
     assert.ok(blast.coverage.resolvedPct < 100);
   });
 });

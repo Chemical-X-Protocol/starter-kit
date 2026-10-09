@@ -74,7 +74,7 @@ export const removeDeletedFiles = (db, currentFilePaths, cwd = process.cwd(), { 
 
 export const resolveModulePath = (importerPath, sourceModule, cwd = process.cwd()) => {
   if (!sourceModule || typeof sourceModule !== 'string') return '';
-  if (isComponentSpecifier(sourceModule)) return resolveComponentSpecifier(sourceModule, cwd);
+  if (isComponentSpecifier(sourceModule)) return resolveComponentSpecifier(sourceModule, cwd, importerPath);
   const isRelative = sourceModule.startsWith('.') || sourceModule.startsWith('/');
   const aliasBase = isRelative ? null : resolveAliasBase(sourceModule, cwd);
   if (!isRelative && !aliasBase) return '';

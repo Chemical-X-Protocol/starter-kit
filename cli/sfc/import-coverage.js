@@ -1,15 +1,16 @@
 /**
- * How many local import edges (relative, aliased, template component tags) the
+ * How many local import edges (relative, aliased, template tags naming a project
+ * component; third-party tags such as v-btn or router-view are not local) the
  * index could resolve to a file. Blast radius reports it so a low consumer count
  * on a poorly resolved index is never shown as a confident answer.
  */
 import { resolveAliasBase } from './module-aliases.js';
-import { isComponentSpecifier } from './component-resolver.js';
+import { isComponentSpecifier, hasLocalComponent } from './component-resolver.js';
 
 const isLocalSpecifier = (sourceModule, cwd) => {
   const isRelative = sourceModule.startsWith('.') || sourceModule.startsWith('/');
   if (isRelative) return true;
-  if (isComponentSpecifier(sourceModule)) return true;
+  if (isComponentSpecifier(sourceModule)) return hasLocalComponent(sourceModule, cwd);
   return resolveAliasBase(sourceModule, cwd) !== null;
 };
 
