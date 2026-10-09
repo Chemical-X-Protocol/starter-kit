@@ -1,60 +1,89 @@
 import { spawn } from 'node:child_process';
-import { isStdoutTty } from '../terminal.js';
+import { isInteractive, isStdoutTty } from '../terminal.js';
+import { currentRequestSignal } from '../request-context.js';
+import { scheduleTimeout } from '../timers.js';
 
-export const executeBuild = (command, cwd = process.cwd(), options = {}) => {
-  return new Promise((resolve) => {
-    const startTime = Date.now();
-    let stdoutBuffer = '';
-    let stderrBuffer = '';
+const DEFAULT_TIMEOUT_MS = 15 * 60 * 1000;
+const KILL_GRACE_MS = 2000;
+export const TIMEOUT_EXIT_CODE = 124;
+export const CANCEL_EXIT_CODE = 130;
 
-    const isRawStream = Boolean(options.raw);
-
-    const child = spawn(command, {
-      shell: true,
-      cwd,
-      stdio: ['inherit', 'pipe', 'pipe'],
-      // Color only when the child streams straight to a human terminal; captured output is parsed.
-      env: { ...process.env, FORCE_COLOR: isRawStream && isStdoutTty() ? '1' : '0' }
-    });
-
-    child.stdout.on('data', (chunk) => {
-      const text = chunk.toString();
-      stdoutBuffer += text;
-      if (isRawStream) {
-        process.stdout.write(text);
-      }
-    });
-
-    child.stderr.on('data', (chunk) => {
-      const text = chunk.toString();
-      stderrBuffer += text;
-      if (isRawStream) {
-        process.stderr.write(text);
-      }
-    });
-
-    child.on('error', (err) => {
-      const durationMs = Date.now() - startTime;
-      stderrBuffer += `\nProcess error: ${err.message}\n`;
-      resolve({
-        exitCode: 1,
-        stdout: stdoutBuffer,
-        stderr: stderrBuffer,
-        durationMs,
-        command
-      });
-    });
-
-    child.on('close', (code) => {
-      const durationMs = Date.now() - startTime;
-      const normalizedCode = code === null ? 1 : code;
-      resolve({
-        exitCode: normalizedCode,
-        stdout: stdoutBuffer,
-        stderr: stderrBuffer,
-        durationMs,
-        command
-      });
-    });
-  });
+export const resolveChildTimeoutMs = (options = {}, env = process.env) => {
+  const fromEnv = Number(env.CHEMX_CHILD_TIMEOUT_MS);
+  const hasEnvTimeout = Number.isFinite(fromEnv) && fromEnv > 0;
+  return options.timeoutMs ?? (hasEnvTimeout ? fromEnv : DEFAULT_TIMEOUT_MS);
 };
+
+// Color only when the child streams straight to a human terminal; captured output is parsed.
+const colorEnv = (isRawStream) => {
+  const isColorWanted = isRawStream && isStdoutTty() && !process.env.NO_COLOR;
+  return isColorWanted ? { FORCE_COLOR: '1' } : { NO_COLOR: '1', FORCE_COLOR: '0' };
+};
+
+// Kill the whole process group when we own one, so shells cannot orphan their children.
+const killTree = (child, ownsGroup, signal) => {
+  try {
+    if (ownsGroup) process.kill(-child.pid, signal);
+    else child.kill(signal);
+  } catch (err) {
+    if (err.code !== 'ESRCH') process.stderr.write(`[executor] kill ${signal} failed: ${err.message}\n`);
+  }
+};
+
+// Runs a shell command with stdin closed (it must never read the MCP JSON-RPC stream),
+// a timeout, and cancellation through options.signal or the current request context.
+export const executeBuild = (command, cwd = process.cwd(), options = {}) => new Promise((resolve) => {
+  const startTime = Date.now();
+  const isRawStream = Boolean(options.raw);
+  const timeoutMs = resolveChildTimeoutMs(options);
+  const signal = options.signal ?? currentRequestSignal();
+  const ownsGroup = process.platform !== 'win32' && !isInteractive();
+  let stdoutBuffer = '';
+  let stderrBuffer = '';
+  let stopReason = null;
+
+  const child = spawn(command, { shell: true, cwd, detached: ownsGroup, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, ...colorEnv(isRawStream) } });
+
+  const stop = (reason) => {
+    if (stopReason) return;
+    stopReason = reason;
+    stderrBuffer += `\nchemx: command ${reason === 'timeout' ? `timed out after ${timeoutMs} ms` : 'cancelled'}; process tree killed.\n`;
+    killTree(child, ownsGroup, 'SIGTERM');
+    scheduleTimeout(() => killTree(child, ownsGroup, 'SIGKILL'), KILL_GRACE_MS, { unref: true });
+  };
+  const cancelTimeout = scheduleTimeout(() => stop('timeout'), timeoutMs);
+  const onAbort = () => stop('cancelled');
+  signal?.addEventListener('abort', onAbort, { once: true });
+  if (signal?.aborted) onAbort();
+
+  child.stdout.on('data', (chunk) => {
+    const text = chunk.toString();
+    stdoutBuffer += text;
+    if (isRawStream) process.stdout.write(text);
+  });
+  child.stderr.on('data', (chunk) => {
+    const text = chunk.toString();
+    stderrBuffer += text;
+    if (isRawStream) process.stderr.write(text);
+  });
+
+  const finish = (code) => {
+    cancelTimeout();
+    signal?.removeEventListener('abort', onAbort);
+    const stoppedCode = stopReason === 'timeout' ? TIMEOUT_EXIT_CODE : CANCEL_EXIT_CODE;
+    resolve({
+      exitCode: stopReason ? stoppedCode : code,
+      stdout: stdoutBuffer,
+      stderr: stderrBuffer,
+      durationMs: Date.now() - startTime,
+      command,
+      timedOut: stopReason === 'timeout',
+      cancelled: stopReason === 'cancelled'
+    });
+  };
+  child.on('error', (err) => {
+    stderrBuffer += `\nProcess error: ${err.message}\n`;
+    finish(1);
+  });
+  child.on('close', (code) => finish(code === null ? 1 : code));
+});

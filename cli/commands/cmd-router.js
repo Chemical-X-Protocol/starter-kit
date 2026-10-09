@@ -6,6 +6,12 @@
 
 import { printHelp, printCommandHelp, resolveCommandHelpTopic } from '../help.js';
 
+// Wrappers return { code }; a non-zero code must reach the process exit status.
+const setExitCodeFrom = (result) => {
+  const isFailureCode = typeof result?.code === 'number' && result.code !== 0;
+  if (isFailureCode) process.exitCode = result.code;
+};
+
 /**
  * Dispatch the resolved CLI command to its handler module.
  * @param {string} firstArg
@@ -84,36 +90,36 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
     case 'd':
     case 'diff': {
       const { runDiff } = await import('./cmd-wrappers.js');
-      await runDiff(rawArgs, true);
+      setExitCodeFrom(await runDiff(rawArgs, true));
       break;
     }
     case 'log': {
       const { runLog } = await import('./cmd-wrappers.js');
-      await runLog(rawArgs, true);
+      setExitCodeFrom(await runLog(rawArgs, true));
       break;
     }
     case 'p':
     case 'pkg': {
       const { runPkg } = await import('./cmd-wrappers.js');
-      await runPkg(rawArgs, true);
+      setExitCodeFrom(await runPkg(rawArgs, true));
       break;
     }
     case 'f':
     case 'ls': {
       const { runFiles } = await import('./cmd-wrappers.js');
-      await runFiles(rawArgs, true);
+      setExitCodeFrom(await runFiles(rawArgs, true));
       break;
     }
     case 'j':
     case 'json': {
       const { runJsonShape } = await import('./cmd-wrappers.js');
-      await runJsonShape(rawArgs, true);
+      setExitCodeFrom(await runJsonShape(rawArgs, true));
       break;
     }
     case 'do':
     case 'batch': {
       const { runBatch } = await import('./cmd-wrappers.js');
-      await runBatch(rawArgs, true, (cmd, args) => dispatchCommand(cmd, args, runAudit, getPackageVersion, isCapsulePrefix));
+      setExitCodeFrom(await runBatch(rawArgs, true, (cmd, args) => dispatchCommand(cmd, args, runAudit, getPackageVersion, isCapsulePrefix)));
       break;
     }
     case 'trace': {

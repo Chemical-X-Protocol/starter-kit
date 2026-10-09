@@ -32,7 +32,7 @@ export const MCP_PROMPTS = [
   }
 ];
 
-export const getMcpPrompt = async (name, args = {}) => {
+export const getMcpPrompt = async (name, args = {}, cwd = process.cwd()) => {
   switch (name) {
     case 'chemx_remediate_hotspot': {
       const filePath = args.filePath;
@@ -41,8 +41,8 @@ export const getMcpPrompt = async (name, args = {}) => {
       }
       const framework = args.targetFramework || 'React/Vue';
 
-      const resolvedPath = path.isAbsolute(filePath) ? filePath : path.resolve(process.cwd(), filePath);
-      const relPath = path.relative(process.cwd(), resolvedPath);
+      const resolvedPath = path.isAbsolute(filePath) ? filePath : path.resolve(cwd, filePath);
+      const relPath = path.relative(cwd, resolvedPath);
       const diagnosticLines = [];
 
       if (fs.existsSync(resolvedPath) && fs.statSync(resolvedPath).isFile()) {

@@ -10,10 +10,11 @@ import { localModules } from '../spec-support/run-cli.js';
 // startup-latency-eager-imports: `initialize` must not wait on the tool stack.
 // Tool handlers, the audit engine and Babel load on the first call that needs them.
 // audit/social-git.js is exempt: the error catcher loads it for every CLI run.
+// audit/chemx-dir.js is exempt: a leaf (fs/path) the MCP root resolver uses to find .chemx.
 const here = path.dirname(fileURLToPath(import.meta.url));
 const CLI_PATH = path.resolve(here, '..', 'index.js');
 const TRACER_PATH = path.resolve(here, '..', 'spec-support', 'import-trace.mjs');
-const HEAVY_MODULE = /^cli\/(audit\.js|audit-engine\.js|audit\/(?!social-git).*|mcp\/tools-(?!lazy).*|generator.*|search\.js|reader\.js|patcher\.js|verify.*|build\.js|team\/.*)$/;
+const HEAVY_MODULE = /^cli\/(audit\.js|audit-engine\.js|audit\/(?!social-git|chemx-dir).*|mcp\/tools-(?!lazy).*|generator.*|search\.js|reader\.js|patcher\.js|verify.*|build\.js|team\/.*)$/;
 
 const readModules = (traceFile) => {
   const lines = fs.existsSync(traceFile) ? fs.readFileSync(traceFile, 'utf8').split('\n') : [];

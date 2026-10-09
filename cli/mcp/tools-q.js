@@ -16,7 +16,7 @@ const GRAPH_ARGS = ['blastRadius', 'impact', 'semantic', 'trace', 'backtrace', '
 
 export const syncIndexForQuery = (targetCwd, args = {}) => {
   const includeHeldScopes = GRAPH_ARGS.some((key) => Boolean(args[key]));
-  const session = openSyncedIndex(targetCwd, args.dir, { includeHeldScopes });
+  const session = openSyncedIndex(targetCwd, args.dir, { includeHeldScopes, reindex: Boolean(args.reindex) });
   const hasDb = Boolean(session.db);
   if (!hasDb) throw new Error('Unable to initialize Chemical X AST search index database.');
   return session;

@@ -44,11 +44,11 @@ export const WRAPPER_COMMANDS = [
     aliases: ['f'],
     group: 'wrappers',
     brief: 'Gitignore-aware file finder',
-    usage: 'chemx f [substring]',
-    summary: 'Gitignore-aware path finder.',
-    description: 'Lists tracked and untracked files whose path contains the substring.',
+    usage: 'chemx f [pattern]',
+    summary: 'Gitignore-aware path finder, submodules included.',
+    description: 'Lists tracked and untracked-but-not-ignored files (git ls-files --recurse-submodules). A pattern with * or ? is a glob (basename unless it contains /, ** spans directories); otherwise a case-insensitive substring. No match exits 1 with a message.',
     flags: [],
-    examples: ['chemx f controller', 'chemx f .vue']
+    examples: ['chemx f "*.vue"', 'chemx f controller']
   },
   {
     name: 'json',
@@ -56,8 +56,8 @@ export const WRAPPER_COMMANDS = [
     group: 'wrappers',
     brief: 'JSON shape peek',
     usage: 'chemx j <file.json>',
-    summary: 'Structural JSON shape peeker.',
-    description: 'Infers types, array element types and keys without dumping the payload.',
+    summary: 'JSON peeker: small files verbatim, large ones as shape with values.',
+    description: 'Files up to 2 KB are printed verbatim. Larger files print their key structure with scalar values kept (long strings truncated) and containers summarised past depth 3. Missing or invalid files exit 1.',
     flags: [],
     examples: ['chemx j package.json', 'chemx j tsconfig.json']
   },
@@ -68,7 +68,7 @@ export const WRAPPER_COMMANDS = [
     brief: 'Run commands in one process',
     usage: 'chemx do "<cmd1>" "<cmd2>" ...',
     summary: 'Sequential multi-command runner inside a single warm Node process.',
-    description: 'Avoids repeated process startup for bursts of small commands.',
+    description: 'Runs several chemx commands in one process. Every item runs even if an earlier one fails or calls exit; the batch exits with the worst item status (fail 1 > inconclusive 3 > pass 0) and prints a summary line.',
     flags: [],
     examples: ['chemx do "d" "p -s" "verify"']
   },

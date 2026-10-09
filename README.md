@@ -381,6 +381,25 @@ The server exposes one tool, `chemx({ action, params })`. `commands: [...]` runs
 | `team`, `team_status`, `team_feed`, `team_post`, `team_task`, `team_lock`, `project` | Coordination | Swarm task queue, feed, posts, file locks and project sessions in `.chemx/index.db`. |
 | `generate`, `issue`, `tesseract` | Other | Capsule generation, sanitized issue reports, agent onboarding payload. |
 
+`tools/list` returns one tool, `chemx`. Pick the operation with `action` (the enum is generated from the live dispatcher); `{ "action": "help" }` returns every action with its parameters. The legacy `chemx_*` sub-tools are hidden from `tools/list` but still callable by name.
+
+Call forms:
+
+| Form | Example |
+| :--- | :--- |
+| Action + params | `{ "action": "read", "projectRoot": "/abs/repo", "params": { "path": "src/a.ts", "outline": true } }` |
+| CLI string | `{ "command": "q useBrandingStore --blast-radius" }` |
+| Batch of strings | `{ "commands": ["d", "p -s", "verify"] }` |
+| Batch of objects | `{ "batch": [{ "action": "p" }, { "action": "log" }] }` |
+
+Contract:
+- **Root.** Each call resolves one project root: `projectRoot` > MCP `roots/list` > the server's start argument (`chemx mcp <dir>`) > `CHEMX_PROJECT_ROOT` > the start directory only if it has `.chemxrc`/`.chemx`. Otherwise the call is refused. An absolute path never picks its own root, and `params.cwd` never overrides it. When MCP roots or a start argument exist, `projectRoot` must sit inside one of them. Paths (including git path arguments to `d`/`log`) must resolve inside the root after following symlinks. Set `CHEMX_MCP_ALLOWED_ROOTS` (path-delimited) to pin the boundary further.
+- **Writes** (`write`, `patch`, `autofix`, `generate`, team writes, `issue` with `autoPost`, `audit` with `triage`, `check RESTART_MCP`) are refused when the root was only guessed from the start directory.
+- **Shell.** `build`/`test`/`typecheck` with `params.command` run only when the command is a `package.json` script of the project (its body, or `npm run <name>`), unless the server runs with `CHEMX_MCP_ALLOW_SHELL=1`. Children get no stdin and a timeout (`CHEMX_CHILD_TIMEOUT_MS`, default 15 min).
+- **Batch.** Every item is scope-checked before any item runs; the batch status is the worst item status (`fail` > `inconclusive` > `pass`).
+- **Results.** Plain text without ANSI. Every result ends with `chemx root: <root> (<source>) v<version>`. When the code on disk differs from the running server you also get `stale chemx MCP server (loaded X, disk Y): reconnect via /mcp`.
+- **Protocol.** `serverInfo.version` is the package version. Long calls honour `_meta.progressToken` (progress notifications) and `notifications/cancelled`.
+
 ### Living Resources & Prompts
 
 * **Resources**:

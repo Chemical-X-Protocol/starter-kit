@@ -127,12 +127,12 @@ test('Fix 8: File finder cx f respects ignore rules', async () => {
   assert.ok(!res.output.includes('.chemx/'), 'Files list must not include .chemx internal dir');
 });
 
-test('Fix 9: JSON shape peeker cx j infers structural types without dumping raw data', async () => {
+test('Fix 9: JSON peeker cx j summarises large files as shape with scalar values', async () => {
   const { runJsonShape } = await import('./commands/cmd-wrappers.js');
   const res = await runJsonShape(['j', 'package.json'], false);
   assert.equal(res.code, 0);
-  assert.match(res.output, /\/\/ JSON Shape: package\.json/);
-  assert.match(res.output, /name: string/);
+  assert.match(res.output, /\/\/ JSON: package\.json \(\d+ bytes.*shape with values/);
+  assert.match(res.output, /name: "/);
   assert.match(res.output, /scripts: {/);
 });
 

@@ -18,16 +18,16 @@ test('MCP chemx_q sees files created and deleted outside chemx (no ghost results
   fs.writeFileSync(path.join(root, 'src', 'mechanics', 'useSeed.ts'), 'export const useSeed = () => 0;\n');
   const handler = createMcpHandler();
   try {
-    const warm = await callQ(handler, { query: 'useSeed', cwd: root });
+    const warm = await callQ(handler, { query: 'useSeed', projectRoot: root });
     assert.match(warm, /useSeed/);
 
     const target = path.join(root, 'src', 'mechanics', 'useZebraFreshness.ts');
     fs.writeFileSync(target, 'export function useZebraFreshness() { return 1; }\n');
-    const created = await callQ(handler, { query: 'useZebraFreshness', cwd: root });
+    const created = await callQ(handler, { query: 'useZebraFreshness', projectRoot: root });
     assert.match(created, /src\/mechanics\/useZebraFreshness\.ts:1 definition useZebraFreshness/);
 
     fs.rmSync(target);
-    const deleted = await callQ(handler, { query: 'useZebraFreshness', cwd: root });
+    const deleted = await callQ(handler, { query: 'useZebraFreshness', projectRoot: root });
     assert.doesNotMatch(deleted, /useZebraFreshness\.ts/, 'deleted file is not served');
     assert.match(deleted, /# index: scope src/);
   } finally {
@@ -45,7 +45,7 @@ test('MCP chemx_q literal mode searches the repo without writing to stdout', asy
   let leaked = '';
   process.stdout.write = (chunk, ...rest) => { leaked += String(chunk); return true; };
   try {
-    const text = await callQ(handler, { query: '--x-glass', literal: true, cwd: root });
+    const text = await callQ(handler, { query: '--x-glass', literal: true, projectRoot: root });
     process.stdout.write = originalWrite;
     const payload = JSON.parse(text);
     assert.equal(payload.totalMatches, 1);
@@ -65,10 +65,10 @@ test('MCP chemx_q honours the advertised trace and backtrace params', async () =
   fs.writeFileSync(path.join(root, 'src', 'page.ts'), "import { useBase } from './base';\nexport const usePage = () => useBase();\n");
   const handler = createMcpHandler();
   try {
-    const back = JSON.parse(await callQ(handler, { query: 'useBase', backtrace: true, cwd: root }));
+    const back = JSON.parse(await callQ(handler, { query: 'useBase', backtrace: true, projectRoot: root }));
     assert.deepEqual(back.callers.map((c) => c.path), ['src/page.ts']);
     assert.ok(back.index, 'backtrace answer carries the index envelope');
-    const trace = JSON.parse(await callQ(handler, { query: 'usePage', trace: true, cwd: root }));
+    const trace = JSON.parse(await callQ(handler, { query: 'usePage', trace: true, projectRoot: root }));
     assert.equal(trace.target, 'usePage');
     assert.ok(Array.isArray(trace.callees));
   } finally {

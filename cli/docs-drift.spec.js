@@ -17,7 +17,8 @@ const GUIDANCE_FILES = [
   'cli/commands-schema-wrappers.js', 'cli/commands-schema-ops.js',
   'cli/help.js', 'cli/host-shims.js', 'cli/generator-help.js', 'cli/generator.js',
   'cli/navigator-guide.js', 'cli/navigator-conversion.js', 'cli/tesseract-manifesto.js', 'cli/lattice-directives.js',
-  'cli/commands/cmd-wrappers.js', 'cli/reader.js', 'cli/search.js',
+  'cli/commands/cmd-wrappers.js', 'cli/commands/cmd-wrappers-git.js', 'cli/commands/cmd-wrappers-files.js',
+  'cli/commands/cmd-wrappers-json.js', 'cli/commands/cmd-batch.js', 'cli/reader.js', 'cli/search.js',
   'cli/generator-jig-cli.js', 'cli/generator-jig.js', 'cli/audit/roadmap.js', 'cli/mcp/manifests.js', 'cli/embeddings/vectorizer.js',
   'cli/mcp/prompts.js', 'cli/audit/prompts.js'
 ];

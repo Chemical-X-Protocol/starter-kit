@@ -141,15 +141,17 @@ test('help: printHelp renders without throwing', () => {
   });
 });
 
+const HANG_LIMIT_MS = 15000;
+
 test('cli: unknown command exits immediately with code 1 and error message', () => {
   const bogusInputs = ['config', 'foo', '--bogus'];
 
   // "Immediately" is measured in user CPU, not wall clock: wall time on a loaded machine
   // flakes, while a hang or an eager import of the heavy stack shows up as CPU or a kill.
   for (const input of bogusInputs) {
-    const res = runCli([input], { timeout: 15000 });
+    const res = runCli([input], { timeout: HANG_LIMIT_MS });
 
-    assert.strictEqual(res.signal, null, `chemx ${input} hung and was killed`);
+    assert.strictEqual(res.signal, null, `chemx ${input} hung and was killed after ${HANG_LIMIT_MS}ms`);
     assert.ok(res.userCpuMs < 1000, `chemx ${input} spent ${res.userCpuMs}ms user CPU, expected < 1000ms`);
     assert.strictEqual(res.status, 1, `chemx ${input} should exit with code 1`);
     assert.ok(
