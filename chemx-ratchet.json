@@ -5,10 +5,7 @@
     ".": {
       "ruleset": 5,
       "allRules": true,
-      "rules": {
-        "CONTROL_FLOW_CASCADE_GUARDS": 11,
-        "CONTROL_FLOW_INLINE_BOOLEAN": 612
-      },
+      "rules": {},
       "revisions": {
         "A11Y_CLICKABLE_NON_SEMANTIC": 3,
         "A11Y_IMAGE_MISSING_ALT": 1,
