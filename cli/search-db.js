@@ -26,6 +26,7 @@ export {
 } from './search-queries.js';
 
 import { debugNote } from './search-debug.js';
+import { rankIndexHits } from './search-rank.js';
 
 export const getAllIndexedFiles = (db) => {
   if (!db) return new Map();
@@ -40,80 +41,51 @@ export const getAllIndexedFiles = (db) => {
 export { resolveModulePath, moduleKeysFor } from './search-resolve.js';
 export { upsertFileIndex, upsertFileIndexBatch, deleteFileIndexRows, withIndexTransaction } from './search-index-write.js';
 
-export const queryIndex = (db, { query = '', tier = null, kind = null, limit = 50 } = {}) => {
-  if (!db) return [];
+const FILE_ROW_SQL = 'SELECT * FROM files WHERE path = ?';
 
-  const cleanQuery = query.trim();
-  const hasQuery = cleanQuery.length > 0;
-
-  if (!hasQuery) {
-    let sql = 'SELECT * FROM files';
-    const params = [];
-    if (tier) {
-      sql = 'SELECT * FROM files WHERE tier = ?';
-      params.push(tier);
-    }
-    sql += ' ORDER BY path ASC LIMIT ?';
-    params.push(limit);
-
-    const rows = db.prepare(sql).all(...params);
-    return rows.map((r) => populateFileDetails(db, r));
-  }
-
-  // Search via symbols, path, or FTS
-  const wildcard = `%${cleanQuery}%`;
-  let sql = `
-    SELECT DISTINCT f.*
-    FROM files f
-    LEFT JOIN symbols s ON f.path = s.file_path
-    LEFT JOIN props p ON f.path = p.file_path
-    LEFT JOIN hooks h ON f.path = h.file_path
-    WHERE (
-      f.path LIKE ?
-      OR s.name LIKE ?
-      OR p.name LIKE ?
-      OR h.name LIKE ?
-    )
-  `;
-  const params = [wildcard, wildcard, wildcard, wildcard];
-
-  if (tier) {
-    sql += ' AND f.tier = ?';
-    params.push(tier);
-  }
-
-  sql += ' ORDER BY (f.path LIKE ?) DESC, f.lines ASC LIMIT ?';
-  params.push(wildcard, limit);
-
-  const matchedFiles = db.prepare(sql).all(...params);
-  if (matchedFiles.length > 0) {
-    return matchedFiles.map((f) => populateFileDetails(db, f));
-  }
-
+const queryFtsFallback = (db, cleanQuery, limit) => {
+  const clean = cleanQuery.replace(/[^\w\s-]/g, ' ').trim();
+  const hasTerms = clean.length > 0;
+  if (!hasTerms) return [];
   try {
-    const clean = cleanQuery.replace(/[^\w\s-]/g, ' ').trim();
-    if (clean) {
-      const ftsRows = db.prepare(`
-        SELECT DISTINCT file_path FROM fts_index
-        WHERE fts_index MATCH ?
-        LIMIT ?
-      `).all(`"${clean}"*`, limit);
-
-      if (ftsRows.length > 0) {
-        const placeholders = ftsRows.map(() => '?').join(',');
-        const ftsFiles = db.prepare(`
-          SELECT * FROM files WHERE path IN (${placeholders})
-          ORDER BY lines ASC
-        `).all(...ftsRows.map((r) => r.file_path));
-        return ftsFiles.map((f) => populateFileDetails(db, f));
-      }
-    }
+    const ftsRows = db.prepare('SELECT DISTINCT file_path FROM fts_index WHERE fts_index MATCH ?').all(`"${clean}"*`);
+    const paths = ftsRows.map((r) => r.file_path);
+    return paths.map((p) => db.prepare(FILE_ROW_SQL).get(p)).filter(Boolean)
+      .sort((a, b) => Number(a.lines) - Number(b.lines))
+      .map((row) => ({ path: row.path, rank: 0, type: 'fts', name: null, line: null }));
   } catch (err) {
     debugNote.warn('fts fallback', err);
+    return [];
+  }
+};
+
+// Ranked page of matches: { results, total, truncated, limit }. Each result carries `match`.
+export const queryIndexPage = (db, { query = '', tier = null, limit = 50 } = {}) => {
+  const emptyPage = { results: [], total: 0, truncated: false, limit };
+  if (!db) return emptyPage;
+  const cleanQuery = query.trim();
+  const hasQuery = cleanQuery.length > 0;
+  const hasTierFilter = Boolean(tier) && tier !== 'all';
+
+  if (!hasQuery) {
+    const where = hasTierFilter ? ' WHERE tier = ?' : '';
+    const params = hasTierFilter ? [tier] : [];
+    const total = Number(db.prepare(`SELECT COUNT(*) AS c FROM files${where}`).get(...params)?.c || 0);
+    const rows = db.prepare(`SELECT * FROM files${where} ORDER BY path ASC LIMIT ?`).all(...params, limit);
+    return { results: rows.map((r) => populateFileDetails(db, r)), total, truncated: total > rows.length, limit };
   }
 
-  return [];
+  const ranked = rankIndexHits(db, cleanQuery, tier);
+  const hits = ranked.length > 0 ? ranked : queryFtsFallback(db, cleanQuery, limit);
+  const page = hits.slice(0, limit);
+  const results = page.map((hit) => {
+    const details = populateFileDetails(db, db.prepare(FILE_ROW_SQL).get(hit.path));
+    return { ...details, match: { type: hit.type, name: hit.name, line: hit.line } };
+  });
+  return { results, total: hits.length, truncated: hits.length > page.length, limit };
 };
+
+export const queryIndex = (db, options = {}) => queryIndexPage(db, options).results;
 
 export const inspectIndexedFile = (db, filePath) => {
   if (!db) return null;

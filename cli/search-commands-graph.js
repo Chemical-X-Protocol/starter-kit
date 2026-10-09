@@ -1,13 +1,15 @@
 import { ANSI } from './theme.js';
+import { withIndex } from './search-output.js';
 import { toColumnar } from './columnar.js';
 import {
   calculateBlastRadius,
   calculateCallTrace,
-  calculateBacktrace,
-  openIndexDb
+  calculateBacktrace
 } from './search-db.js';
+import { openSyncedIndex } from './search-session.js';
+import { applyExitStatus, indexStatusOf } from './search-output.js';
 
-export const handleBlastRadiusCommand = (db, target, { isJson = false, isCli = true, isColumnar = false, maxDepth = 5 } = {}) => {
+export const handleBlastRadiusCommand = (db, target, { index = null, isJson = false, isCli = true, isColumnar = false, maxDepth = 5 } = {}) => {
   const result = calculateBlastRadius(db, target, { maxDepth });
   const allConsumers = [...result.directConsumers, ...result.transitiveConsumers];
 
@@ -25,8 +27,8 @@ export const handleBlastRadiusCommand = (db, target, { isJson = false, isCli = t
         rows: colData.rows,
         tests: result.impactedTests.map((t) => t.path || t)
       };
-      process.stdout.write(JSON.stringify(payload) + '\n');
-      if (isCli) process.exit(0);
+      process.stdout.write(JSON.stringify(withIndex(payload, index)) + '\n');
+      if (isCli) process.exit();
       return payload;
     }
 
@@ -43,8 +45,8 @@ export const handleBlastRadiusCommand = (db, target, { isJson = false, isCli = t
       })),
       tests: result.impactedTests.map((t) => t.path || t)
     };
-    process.stdout.write(JSON.stringify(payload) + '\n');
-    if (isCli) process.exit(0);
+    process.stdout.write(JSON.stringify(withIndex(payload, index)) + '\n');
+    if (isCli) process.exit();
     return payload;
   }
 
@@ -56,7 +58,7 @@ export const handleBlastRadiusCommand = (db, target, { isJson = false, isCli = t
 
   if (result.totalImpactCount === 0) {
     process.stdout.write(`    ${ANSI.DIM}No downstream consumers found. Modification has 0 blast radius.${ANSI.RESET}\n\n`);
-    if (isCli) process.exit(0);
+    if (isCli) process.exit();
     return result;
   }
 
@@ -82,7 +84,7 @@ export const handleBlastRadiusCommand = (db, target, { isJson = false, isCli = t
   }
 
   process.stdout.write('\n');
-  if (isCli) process.exit(0);
+  if (isCli) process.exit();
   return result;
 };
 
@@ -102,12 +104,12 @@ const renderCalleeTreeLines = (callees, indent = '  ') => {
   return lines;
 };
 
-export const handleCallTraceCommand = (db, target, { isJson = false, isCli = true, maxDepth = 3 } = {}) => {
-  const result = calculateCallTrace(db, target, { maxDepth });
+export const handleCallTraceCommand = (db, target, { index = null, isJson = false, isCli = true, maxDepth = 3, root = process.cwd() } = {}) => {
+  const result = calculateCallTrace(db, target, { maxDepth, root });
 
   if (isJson) {
-    process.stdout.write(JSON.stringify(result) + '\n');
-    if (isCli) process.exit(0);
+    process.stdout.write(JSON.stringify(withIndex(result, index)) + '\n');
+    if (isCli) process.exit();
     return result;
   }
 
@@ -119,23 +121,23 @@ export const handleCallTraceCommand = (db, target, { isJson = false, isCli = tru
 
   if (result.callees.length === 0) {
     process.stdout.write(`    ${ANSI.DIM}No downstream calls or external invocations detected.${ANSI.RESET}\n\n`);
-    if (isCli) process.exit(0);
+    if (isCli) process.exit();
     return result;
   }
 
   const treeLines = renderCalleeTreeLines(result.callees, '  ');
   process.stdout.write(treeLines.join('\n') + '\n\n');
 
-  if (isCli) process.exit(0);
+  if (isCli) process.exit();
   return result;
 };
 
-export const handleBacktraceCommand = (db, target, { isJson = false, isCli = true, maxDepth = 5 } = {}) => {
+export const handleBacktraceCommand = (db, target, { index = null, isJson = false, isCli = true, maxDepth = 5 } = {}) => {
   const result = calculateBacktrace(db, target, { maxDepth });
 
   if (isJson) {
-    process.stdout.write(JSON.stringify(result) + '\n');
-    if (isCli) process.exit(0);
+    process.stdout.write(JSON.stringify(withIndex(result, index)) + '\n');
+    if (isCli) process.exit();
     return result;
   }
 
@@ -147,7 +149,7 @@ export const handleBacktraceCommand = (db, target, { isJson = false, isCli = tru
 
   if (result.totalCallers === 0) {
     process.stdout.write(`    ${ANSI.DIM}No upstream callers found in project imports.${ANSI.RESET}\n\n`);
-    if (isCli) process.exit(0);
+    if (isCli) process.exit();
     return result;
   }
 
@@ -169,7 +171,7 @@ export const handleBacktraceCommand = (db, target, { isJson = false, isCli = tru
   }
 
   process.stdout.write('\n');
-  if (isCli) process.exit(0);
+  if (isCli) process.exit();
   return result;
 };
 
@@ -185,8 +187,9 @@ export const runTraceCli = async (args = [], isCli = true) => {
   const maxDepthFlag = args.find((a) => a.startsWith('--max-depth=') || a.startsWith('-d='));
   const maxDepth = maxDepthFlag ? parseInt(maxDepthFlag.split('=')[1], 10) : 3;
 
-  const db = openIndexDb(process.cwd());
-  return handleCallTraceCommand(db, target, { isJson, isCli, maxDepth });
+  const { db, index, root } = openSyncedIndex(process.cwd());
+  applyExitStatus(indexStatusOf(index), isCli);
+  return handleCallTraceCommand(db, target, { index, isJson, isCli, maxDepth, root });
 };
 
 export const runBacktraceCli = async (args = [], isCli = true) => {
@@ -201,6 +204,7 @@ export const runBacktraceCli = async (args = [], isCli = true) => {
   const maxDepthFlag = args.find((a) => a.startsWith('--max-depth=') || a.startsWith('-d='));
   const maxDepth = maxDepthFlag ? parseInt(maxDepthFlag.split('=')[1], 10) : 5;
 
-  const db = openIndexDb(process.cwd());
-  return handleBacktraceCommand(db, target, { isJson, isCli, maxDepth });
+  const { db, index } = openSyncedIndex(process.cwd());
+  applyExitStatus(indexStatusOf(index), isCli);
+  return handleBacktraceCommand(db, target, { index, isJson, isCli, maxDepth });
 };

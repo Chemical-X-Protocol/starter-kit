@@ -420,8 +420,9 @@ test('MCP Server: tools/call chemx_q searches symbols and capsules', async () =>
 
   assert.strictEqual(res.jsonrpc, '2.0');
   assert.strictEqual(res.result.isError, false);
-  const results = JSON.parse(res.result.content[0].text);
-  assert.ok(Array.isArray(results));
+  const payload = JSON.parse(res.result.content[0].text);
+  assert.ok(Array.isArray(payload.results));
+  assert.ok(payload.index && payload.index.scope, 'answer states the index scope it searched');
 });
 
 test('MCP Server: tools/call chemx_read extracts outline without full file dump', async () => {

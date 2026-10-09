@@ -1,8 +1,9 @@
 import { ANSI } from './theme.js';
+import { withIndex } from './search-output.js';
 import { toColumnar } from './columnar.js';
 import { querySemanticIndex, queryHybridIndex } from './search-db.js';
 
-export const handleSemanticCommand = (db, query, { isJson = false, isCli = true, isColumnar = false, limit = 20, tier = null } = {}) => {
+export const handleSemanticCommand = (db, query, { index = null, isJson = false, isCli = true, isColumnar = false, limit = 20, tier = null } = {}) => {
   const results = querySemanticIndex(db, query, { limit, tier });
 
   if (isJson) {
@@ -16,8 +17,8 @@ export const handleSemanticCommand = (db, query, { isJson = false, isCli = true,
         cols: colData.cols,
         rows: colData.rows
       };
-      process.stdout.write(JSON.stringify(payload) + '\n');
-      if (isCli) process.exit(0);
+      process.stdout.write(JSON.stringify(withIndex(payload, index)) + '\n');
+      if (isCli) process.exit();
       return payload;
     }
 
@@ -27,15 +28,15 @@ export const handleSemanticCommand = (db, query, { isJson = false, isCli = true,
       count: results.length,
       results
     };
-    process.stdout.write(JSON.stringify(payload) + '\n');
-    if (isCli) process.exit(0);
+    process.stdout.write(JSON.stringify(withIndex(payload, index)) + '\n');
+    if (isCli) process.exit();
     return payload;
   }
 
   process.stdout.write(`\n${ANSI.BOLD}${ANSI.CYAN}Semantic Search Results for "${query}":${ANSI.RESET} ${ANSI.DIM}(${results.length} matches)${ANSI.RESET}\n`);
   if (results.length === 0) {
     process.stdout.write(`  ${ANSI.DIM}No semantically matching components found.${ANSI.RESET}\n\n`);
-    if (isCli) process.exit(0);
+    if (isCli) process.exit();
     return results;
   }
 
@@ -45,11 +46,11 @@ export const handleSemanticCommand = (db, query, { isJson = false, isCli = true,
   }
   process.stdout.write('\n');
 
-  if (isCli) process.exit(0);
+  if (isCli) process.exit();
   return results;
 };
 
-export const handleHybridCommand = (db, query, { isJson = false, isCli = true, isColumnar = false, limit = 20 } = {}) => {
+export const handleHybridCommand = (db, query, { index = null, isJson = false, isCli = true, isColumnar = false, limit = 20 } = {}) => {
   const results = queryHybridIndex(db, query, { limit });
 
   if (isJson) {
@@ -63,8 +64,8 @@ export const handleHybridCommand = (db, query, { isJson = false, isCli = true, i
         cols: colData.cols,
         rows: colData.rows
       };
-      process.stdout.write(JSON.stringify(payload) + '\n');
-      if (isCli) process.exit(0);
+      process.stdout.write(JSON.stringify(withIndex(payload, index)) + '\n');
+      if (isCli) process.exit();
       return payload;
     }
 
@@ -74,15 +75,15 @@ export const handleHybridCommand = (db, query, { isJson = false, isCli = true, i
       count: results.length,
       results
     };
-    process.stdout.write(JSON.stringify(payload) + '\n');
-    if (isCli) process.exit(0);
+    process.stdout.write(JSON.stringify(withIndex(payload, index)) + '\n');
+    if (isCli) process.exit();
     return payload;
   }
 
   process.stdout.write(`\n${ANSI.BOLD}${ANSI.CYAN}Hybrid Search Results for "${query}":${ANSI.RESET} ${ANSI.DIM}(${results.length} ranked)${ANSI.RESET}\n`);
   if (results.length === 0) {
     process.stdout.write(`  ${ANSI.DIM}No hybrid matches found.${ANSI.RESET}\n\n`);
-    if (isCli) process.exit(0);
+    if (isCli) process.exit();
     return results;
   }
 
@@ -93,6 +94,6 @@ export const handleHybridCommand = (db, query, { isJson = false, isCli = true, i
   }
   process.stdout.write('\n');
 
-  if (isCli) process.exit(0);
+  if (isCli) process.exit();
   return results;
 };

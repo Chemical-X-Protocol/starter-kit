@@ -216,7 +216,7 @@ export const calculateCallTrace = (db, targetSymbolOrPath, options = {}) => {
 
     let codeSlice = '';
     let fullText = '';
-    const absPath = path.isAbsolute(filePath) ? filePath : path.resolve(process.cwd(), filePath);
+    const absPath = path.isAbsolute(filePath) ? filePath : path.resolve(options.root || process.cwd(), filePath);
     if (fs.existsSync(absPath)) {
       fullText = fs.readFileSync(absPath, 'utf-8');
       const block = extractSymbolBlock(fullText, symbol);
