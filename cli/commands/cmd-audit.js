@@ -86,7 +86,8 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
   const hasGitFlag = rawArgs.includes('--git') || rawArgs.includes('--changed') || isStagedScope;
   const isGitScopedAmbiguity = hasGitFlag && resolvedScope.reason === 'ambiguous';
   const scope = isGitScopedAmbiguity ? { ok: true, dir: process.cwd(), relDir: '.', source: 'git' } : resolvedScope;
-  if (!scope.ok) {
+  const hasScopeError = !scope.ok;
+  if (hasScopeError) {
     const refusal = { success: false, error: scope.message, reason: scope.reason, candidates: scope.candidates };
     process.stdout.write(isJson ? `${JSON.stringify(refusal)}\n` : `\x1b[31m✖ ${scope.message}\x1b[0m\n`);
     if (isCli) process.exit(1);
@@ -98,7 +99,8 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
 
   if (hasGitFlag) {
     const gitScope = isStagedScope ? resolveStagedAuditScope(process.cwd()) : resolveGitAuditScope(process.cwd());
-    if (gitScope.ok || isStagedScope) fileList = gitScope.files;
+    const hasUsableGitScope = Boolean(gitScope.ok || isStagedScope);
+    if (hasUsableGitScope) fileList = gitScope.files;
   }
   // An empty staged list is a vacuous pass for a commit gate, never a silent whole-project scan.
   const hasNothingStaged = isStagedScope && fileList.length === 0;
@@ -169,7 +171,8 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
     const shouldSyncIndex = hasIndexSync;
     const syncRes = shouldSyncIndex ? syncSearchIndex(targetDir, process.cwd()) : null;
 
-    if (syncRes?.db) {
+    const hasSyncDb = Boolean(syncRes?.db);
+    if (hasSyncDb) {
       // A --fast or --git audit checks only part of the scope, so it vouches for no file.
       syncViolationsIndex(syncRes.db, report.violations, { scope: isPartialAudit ? null : syncRes.scope });
       if (shouldTriage) {
@@ -183,7 +186,8 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
           process.stdout.write(`\x1b[32m✔\x1b[0m Auto-triage synchronized ${createdTasks.length} team task(s) in SQLite backlog.\n`);
         }
       }
-      if (rawArgs.includes('--clones')) {
+      const hasClonesFlag = rawArgs.includes('--clones');
+      if (hasClonesFlag) {
         const { detectSemanticClones } = await import('../audit/clone-detector.js');
         const { formatCloneReport } = await import('../audit/reporter-clones.js');
         const cloneThresholdArg = rawArgs.find((a) => a.startsWith('--clone-threshold='));
@@ -195,7 +199,8 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
           process.stdout.write(formatCloneReport(clones));
         }
       }
-      if (rawArgs.includes('--hotspot-graph')) {
+      const hasHotspotGraphFlag = rawArgs.includes('--hotspot-graph');
+      if (hasHotspotGraphFlag) {
         const { calculateCascadingHotspotGraph } = await import('../search-queries-hotspot-graph.js');
         const { formatHotspotGraphReport } = await import('../audit/reporter-hotspot-graph.js');
         const limitArg = rawArgs.find((a) => a.startsWith('--limit='));
@@ -209,7 +214,8 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
       }
     }
   } catch (err) {
-    if (process.env.DEBUG) process.stderr.write(`[debug] Indexing bypassed: ${err?.message}\n`);
+    const isDebugEnabled = Boolean(process.env.DEBUG);
+    if (isDebugEnabled) process.stderr.write(`[debug] Indexing bypassed: ${err?.message}\n`);
   }
 
   // Stage 1: Atomic failure predicates
@@ -245,7 +251,8 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
     return report;
   }
 
-  if (isMarkdown && !outputFile) {
+  const hasMarkdownStdout = Boolean(isMarkdown && !outputFile);
+  if (hasMarkdownStdout) {
     const { generateMarkdownReport } = await import('../audit/reporter-markdown.js');
     const md = generateMarkdownReport(report);
     process.stdout.write(md + '\n');
@@ -261,7 +268,8 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
       process.exit(shareExitCode(shared));
     }
 
-    if (isInteractive && !isUnroll) {
+    const shouldPromptInteractive = Boolean(isInteractive && !isUnroll);
+    if (shouldPromptInteractive) {
       const handleReAudit = () => {
         const refreshed = executeAstAudit(targetDir, auditOptions);
         refreshed.taskRules = report.taskRules;
@@ -304,7 +312,8 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
           process.stdout.write(formatPlainAuditSummary(summary));
         }
 
-        if (hasFailingViolations && !isInteractive) {
+        const shouldPrintFailureSummary = Boolean(hasFailingViolations && !isInteractive);
+        if (shouldPrintFailureSummary) {
           process.stdout.write('\n\x1b[1m\x1b[31m✕ [Chemical X] Architectural health verification failed:\x1b[0m\n');
           if (isGradeFail) process.stdout.write(`  \x1b[31m•\x1b[0m Grade ${report.health.grade} is below required minimum tier ${minGrade}\n`);
           if (isScoreFail) process.stdout.write(`  \x1b[31m•\x1b[0m Score ${report.health.score}/100 is below required minimum score ${minScore}/100\n`);
@@ -315,7 +324,8 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
       }
     }
 
-    if (hasFailingViolations && (isPromptOnFail || isCopyPrompt)) {
+    const shouldBuildPrompt = Boolean(hasFailingViolations && (isPromptOnFail || isCopyPrompt));
+    if (shouldBuildPrompt) {
       const { buildMasterPrompt } = await import('../audit/prompts.js');
       const { copyToClipboard } = await import('../audit/social-git.js');
       const prompt = buildMasterPrompt(report);
