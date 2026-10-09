@@ -41,18 +41,21 @@ const checkExpression = (entry, relativePath, violations) => {
   if (!ast) return;
   walkBabel(ast, (node, parent) => {
     const isOutermost = !t.isConditionalExpression(parent);
-    if (isNestedTernary(node) && isOutermost) {
+    const isOutermostNestedTernary = isNestedTernary(node) && isOutermost;
+    if (isOutermostNestedTernary) {
       const location = resolveExpressionLocation(exp, node);
       violations.push(buildViolation(relativePath, 'CONTROL_FLOW_NESTED_TERNARY', location, 'Nested ternary in template expression (Directive 3.D)'));
     }
   });
   const junctions = countJunctionOperators(ast);
-  if (junctions > MAX_TEMPLATE_JUNCTIONS) {
+  const hasTooManyJunctions = junctions > MAX_TEMPLATE_JUNCTIONS;
+  if (hasTooManyJunctions) {
     const location = resolveExpressionLocation(exp, ast);
     violations.push(buildViolation(relativePath, 'CONTROL_FLOW_INLINE_BOOLEAN', location, `Inline boolean in template (${junctions} logical operators > ${MAX_TEMPLATE_JUNCTIONS}); name it in a computed`));
   }
   const isStyleBinding = directive?.name === 'bind' && directive.arg === 'style';
-  if (isStyleBinding && isRawStyleObject(ast)) {
+  const isRawStyleBinding = isStyleBinding && isRawStyleObject(ast);
+  if (isRawStyleBinding) {
     const location = resolveExpressionLocation(exp, ast);
     violations.push(buildViolation(relativePath, 'RAW_INLINE_STYLE', location, 'Raw inline :style object in template; only CSS custom properties belong here (Directive 5.A)'));
   }
@@ -61,7 +64,8 @@ const checkExpression = (entry, relativePath, violations) => {
 /** Returns violations for one parsed SFC template block. */
 export const auditTemplate = (template, relativePath) => {
   const violations = [];
-  if (!template?.ast) return violations;
+  const hasTemplateAst = Boolean(template?.ast);
+  if (!hasTemplateAst) return violations;
   walkTemplate(template.ast, {
     onAttribute({ attribute }) {
       const isStaticStyle = attribute.name === 'style' && Boolean(attribute.value?.content?.trim());
