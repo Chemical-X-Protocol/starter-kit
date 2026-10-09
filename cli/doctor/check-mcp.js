@@ -20,12 +20,14 @@ const readMcpServer = (projectRoot) => {
   }
 };
 
-export const describeLaunchVersion = (server) => {
+const PROJECT_DIR_VAR = /\$\{CLAUDE_PROJECT_DIR(?::-\.)?\}/g;
+
+export const describeLaunchVersion = (server, projectRoot = process.cwd()) => {
   const args = Array.isArray(server.args) ? server.args : [];
   const launch = [server.command, ...args].join(' ');
   const pinned = launch.match(PINNED_NPX);
   if (pinned) return { version: pinned[1], target: launch };
-  const script = args.find((arg) => /cli\/index\.js$/.test(arg));
+  const script = args.map((arg) => String(arg).replace(PROJECT_DIR_VAR, projectRoot)).find((arg) => /cli\/index\.js$/.test(arg));
   if (!script) return { version: null, target: launch, problem: 'unpinned launch (no version or script path)' };
   const exists = fs.existsSync(script);
   if (!exists) return { version: null, target: script, problem: 'launch script does not exist' };
@@ -37,13 +39,14 @@ export const checkMcpLaunch = ({ projectRoot, cliVersion }) => {
   if (!server) return { id: 'mcp-launch', status: STATUS.FAIL, summary: `${MCP_SERVER_NAME} not configured (${error ?? 'no entry'})`, fixable: true };
   const isOwned = isChemxServer(server);
   if (!isOwned) return { id: 'mcp-launch', status: STATUS.FAIL, summary: `${MCP_SERVER_NAME} launches something other than chemx; not touched`, fixable: false };
-  const launch = describeLaunchVersion(server);
+  const launch = describeLaunchVersion(server, projectRoot);
   const problems = [];
   const hasLaunchProblem = Boolean(launch.problem);
   if (hasLaunchProblem) problems.push(launch.problem);
   const isSkewed = launch.version !== null && launch.version !== cliVersion;
   if (isSkewed) problems.push(`launches ${launch.version}, CLI is ${cliVersion}`);
-  const hasRootEnv = server.env?.CHEMX_PROJECT_ROOT === projectRoot;
+  const rootEnv = String(server.env?.CHEMX_PROJECT_ROOT ?? '').replace(PROJECT_DIR_VAR, projectRoot);
+  const hasRootEnv = path.resolve(projectRoot, rootEnv || '\0') === projectRoot;
   if (!hasRootEnv) problems.push(`env CHEMX_PROJECT_ROOT is ${server.env?.CHEMX_PROJECT_ROOT ?? 'unset'}`);
   const hasNoColor = Boolean(server.env?.NO_COLOR);
   if (!hasNoColor) problems.push('env NO_COLOR unset');

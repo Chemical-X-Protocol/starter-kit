@@ -27,6 +27,15 @@ const hookEntryPath = ({ kitRoot, projectRoot, scope }) => {
   return isShared ? `$CLAUDE_PROJECT_DIR/${path.relative(projectRoot, entry)}` : entry;
 };
 
+// A kit inside the project is named relative to it so .mcp.json can be committed (Claude Code expands
+// ${VAR:-default} in command/args/env; CLAUDE_PROJECT_DIR needs the default). A kit outside the project
+// can only be named by absolute path, which is machine-specific.
+const PROJECT_DIR = '${CLAUDE_PROJECT_DIR:-.}';
+const mcpServerFor = ({ isKitInProject, relativeCli, cliPath, projectRoot }) => {
+  if (!isKitInProject) return { command: 'node', args: [cliPath, 'mcp'], env: { CHEMX_PROJECT_ROOT: projectRoot, NO_COLOR: '1' } };
+  return { command: 'node', args: [`${PROJECT_DIR}/${relativeCli.split(path.sep).join('/')}`, 'mcp'], env: { CHEMX_PROJECT_ROOT: PROJECT_DIR, NO_COLOR: '1' } };
+};
+
 export const resolveLauncher = ({ kitRoot = KIT_ROOT, projectRoot, scope = 'local' }) => {
   const version = readKitVersion(kitRoot);
   const cliPath = path.join(kitRoot, 'cli', 'index.js');
@@ -38,7 +47,7 @@ export const resolveLauncher = ({ kitRoot = KIT_ROOT, projectRoot, scope = 'loca
     kitRoot,
     cliPath,
     hookCommand: (hook) => `node ${quote(entry)} ${hook}`,
-    mcpServer: { command: 'node', args: [cliPath, 'mcp'], env: { CHEMX_PROJECT_ROOT: projectRoot, NO_COLOR: '1' } },
+    mcpServer: mcpServerFor({ isKitInProject, relativeCli, cliPath, projectRoot }),
     shellBin: `node ${quote(cliPath)}`,
     ciBin: isKitInProject ? `node ${relativeCli}` : `npx --yes chemx@${version}`,
   };

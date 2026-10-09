@@ -12,6 +12,7 @@ chemx install-hooks --host=claude                              # write the track
 chemx install-hooks --host=claude --native-file-tools=block    # also record the policy in .chemxrc
 ```
 
+- Default run touches only the settings file (plus `.chemxrc` with `--native-file-tools`). Three more files are opt-in: `--write-mcp` (`.mcp.json`), `--git-hooks` (git pre-commit hook; alias `--git-hook`) and `--pin-ci` (`.github/workflows/chemx-audit.yml`; alias `--ci`). Each is created or re-pinned only with its flag, every file written appears in the printed list, and `--dry-run` lists the same set. A kit inside the project is written to `.mcp.json` as `${CLAUDE_PROJECT_DIR:-.}/<relative path>` (Claude Code expands it), so the file can be committed; a kit outside the project can only be named by absolute path, which is machine-specific.
 - The default scope is `project`: the tracked `.claude/settings.json`, so every session and every worktree of the repo gets the guard. `--scope=local` writes the untracked `.claude/settings.local.json` instead.
 - Existing keys and foreign hooks are kept as they are. Only chemx-owned entries (including the old bootstrap `chemx-guard.mjs` command) are replaced, in place. A second run changes nothing.
 - The report lists each entry it added (`+`) or replaced (`~`) and every file it backed up under `.chemx/backups/`.

@@ -1,6 +1,6 @@
 // GAP-4 pins: the git pre-commit hook and the CI workflow run the same chemx as the MCP launcher.
-// An existing chemx hook/workflow is re-pinned; a missing one is only created on request
-// (--git-hook / --ci); a foreign pre-commit hook is never replaced.
+// Both are opt-in (--git-hooks / --pin-ci): without the flag neither file is read or planned. On request an
+// existing chemx hook/workflow is re-pinned and a missing one created; a foreign pre-commit hook is never replaced.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -33,11 +33,12 @@ const readGradeDefaults = (projectRoot) => {
 
 export const planGitHookPin = ({ projectRoot, launcher, isRequested }) => {
   const hooksDir = resolveGitHooksPath(projectRoot);
-  if (!hooksDir) return isRequested ? { file: path.join(projectRoot, '.git'), label: 'git pre-commit', status: 'error', notes: ['not a git repository'] } : null;
+  if (!isRequested) return null;
+  if (!hooksDir) return { file: path.join(projectRoot, '.git'), label: 'git pre-commit', status: 'error', notes: ['not a git repository'] };
   const file = path.join(hooksDir, 'pre-commit');
   const before = readText(file);
   const isMissing = before === null;
-  const isSkipped = isMissing && !isRequested;
+  const isSkipped = !isRequested;
   if (isSkipped) return null;
   const isForeign = !isMissing && !CHEMX_MARKER.test(before);
   if (isForeign) return { file, label: 'git pre-commit', status: 'refused', before, after: before, notes: ['existing pre-commit hook is not chemx; left untouched'] };
@@ -51,8 +52,8 @@ export const planWorkflowPin = ({ projectRoot, launcher, isRequested }) => {
   const file = path.join(projectRoot, WORKFLOW_FILE);
   const before = readText(file);
   const isMissing = before === null;
+  if (!isRequested) return null;
   if (isMissing) {
-    if (!isRequested) return null;
     return { file, label: 'CI workflow', status: 'create', before, after: buildGitHubWorkflowScript('B', 80, launcher), notes: [`runs ${launcher.ciBin}`] };
   }
   const hasInvocation = AUDIT_INVOCATION.test(before);

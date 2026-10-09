@@ -28,7 +28,7 @@ const applySafeFixes = (checks, projectRoot) => {
   if (!hasFixes) return null;
   const isMcpFix = fixable.some((check) => check.id === 'mcp-launch');
   const hooksScope = checks.find((check) => check.id === 'hooks')?.scope ?? 'project';
-  const args = ['--host=claude', `--scope=${hooksScope}`, `--root=${projectRoot}`, `--kit=${KIT_ROOT}`, ...(isMcpFix ? [] : ['--no-mcp'])];
+  const args = ['--host=claude', `--scope=${hooksScope}`, `--root=${projectRoot}`, `--kit=${KIT_ROOT}`, ...(isMcpFix ? ['--write-mcp'] : [])];
   return runInstallHooks(parseInstallArgs(args, projectRoot));
 };
 

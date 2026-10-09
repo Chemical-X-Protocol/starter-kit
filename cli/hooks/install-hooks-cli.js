@@ -1,5 +1,8 @@
 // `chemx install-hooks --host=claude [--scope=project|local] [--dry-run] [--json] [--root=<dir>]
-//   [--no-mcp] [--no-statusline] [--git-hook] [--ci] [--native-file-tools=block|warn|allow]`
+//   [--no-statusline] [--write-mcp] [--git-hooks] [--pin-ci] [--native-file-tools=block|warn|allow]`
+// Default run touches only the Claude settings file (plus .chemxrc with --native-file-tools). .mcp.json,
+// the git pre-commit hook and the CI workflow are written only with --write-mcp, --git-hooks, --pin-ci
+// (--git-hook and --ci are accepted aliases). Every file written is in the printed list; --dry-run lists the same.
 // The default scope is `project`: the tracked .claude/settings.json, shared by every session and
 // worktree of the repo. `--scope=local` writes the untracked .claude/settings.local.json instead.
 // Idempotent: a second run reports every file unchanged. Exit codes follow cli/result-status.js:
@@ -44,7 +47,7 @@ export const parseInstallArgs = (args, cwd = process.cwd()) => {
     kitRoot: flagValue(args, 'kit') ? path.resolve(cwd, flagValue(args, 'kit')) : KIT_ROOT,
     dryRun: args.includes('--dry-run'),
     isJson: args.includes('--json'),
-    options: { mcp: !args.includes('--no-mcp'), statusline: !args.includes('--no-statusline'), gitHook: args.includes('--git-hook'), ci: args.includes('--ci'), nativeFileTools },
+    options: { mcp: args.includes('--write-mcp'), statusline: !args.includes('--no-statusline'), gitHook: args.includes('--git-hooks') || args.includes('--git-hook'), ci: args.includes('--pin-ci') || args.includes('--ci'), nativeFileTools },
   };
 };
 
@@ -88,7 +91,7 @@ export const runInstallHooksCli = async (args, { stdout = process.stdout, stderr
   const parsed = parseInstallArgs(args, cwd);
   const hasErrors = parsed.errors.length > 0;
   if (hasErrors) {
-    stderr.write(`${parsed.errors.join('\n')}\nUsage: chemx install-hooks --host=claude [--scope=project|local] [--dry-run] [--json] [--native-file-tools=block|warn|allow]\n`);
+    stderr.write(`${parsed.errors.join('\n')}\nUsage: chemx install-hooks --host=claude [--scope=project|local] [--dry-run] [--json] [--write-mcp] [--git-hooks] [--pin-ci] [--native-file-tools=block|warn|allow]\n`);
     return toExitCode(STATUS.FAIL);
   }
   const report = runInstallHooks(parsed);

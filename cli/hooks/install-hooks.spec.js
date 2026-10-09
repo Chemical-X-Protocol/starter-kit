@@ -30,7 +30,7 @@ const commandsOf = (groups) => groups.flatMap((group) => group.hooks.map((hook) 
 
 test('fresh install writes the three hook events, statusLine and the .mcp.json launch', () => {
   const project = makeProject();
-  const report = install(project);
+  const report = install(project, ['--write-mcp']);
   assert.equal(report.status, 'pass');
   const settings = settingsOf(project.root);
   assert.deepEqual(Object.keys(settings.hooks).sort(), ['PostToolUse', 'PreToolUse', 'SessionStart']);
@@ -44,9 +44,9 @@ test('fresh install writes the three hook events, statusLine and the .mcp.json l
 
 test('second run is a no-op: every file unchanged, no backups', () => {
   const project = makeProject();
-  install(project);
+  install(project, ['--write-mcp']);
   const before = fs.readFileSync(path.join(project.root, '.claude', 'settings.local.json'), 'utf-8');
-  const report = install(project);
+  const report = install(project, ['--write-mcp']);
   assert.deepEqual(report.actions.map((action) => action.status), ['unchanged', 'unchanged']);
   assert.equal(fs.readFileSync(path.join(project.root, '.claude', 'settings.local.json'), 'utf-8'), before);
   assert.equal(fs.existsSync(path.join(project.root, '.chemx', 'backups')), false);
@@ -76,7 +76,7 @@ test('a foreign statusLine and a foreign chemical-x server are refused (exit 3),
   fs.writeFileSync(path.join(project.root, '.claude', 'settings.local.json'), JSON.stringify({ statusLine: { type: 'command', command: 'starship prompt' } }));
   const foreignServer = { mcpServers: { 'chemical-x': { command: 'python', args: ['other.py'] } } };
   fs.writeFileSync(path.join(project.root, '.mcp.json'), JSON.stringify(foreignServer));
-  const report = install(project);
+  const report = install(project, ['--write-mcp']);
   assert.equal(report.status, 'inconclusive');
   assert.equal(settingsOf(project.root).statusLine.command, 'starship prompt');
   assert.deepEqual(readJson(path.join(project.root, '.mcp.json')), foreignServer);
@@ -86,7 +86,7 @@ test('a foreign statusLine and a foreign chemical-x server are refused (exit 3),
 test('a stale chemx server launch is repointed and keeps extra env keys', () => {
   const project = makeProject();
   fs.writeFileSync(path.join(project.root, '.mcp.json'), JSON.stringify({ mcpServers: { 'chemical-x': { command: 'npx', args: ['-y', 'chemx@26.9.20-1257', 'mcp'], env: { DEBUG: '1' } }, other: { command: 'x' } } }));
-  install(project);
+  install(project, ['--write-mcp']);
   const config = readJson(path.join(project.root, '.mcp.json'));
   assert.deepEqual(config.mcpServers.other, { command: 'x' });
   assert.deepEqual(config.mcpServers['chemical-x'].env, { DEBUG: '1', CHEMX_PROJECT_ROOT: project.root, NO_COLOR: '1' });
@@ -96,7 +96,7 @@ test('a stale chemx server launch is repointed and keeps extra env keys', () => 
 test('--dry-run reports the plan and writes nothing; malformed settings fail without writing', () => {
   const project = makeProject();
   const dry = install(project, ['--dry-run']);
-  assert.deepEqual(dry.actions.map((action) => [action.status, action.written]), [['create', false], ['create', false]]);
+  assert.deepEqual(dry.actions.map((action) => [action.status, action.written]), [['create', false]]);
   assert.equal(fs.existsSync(path.join(project.root, '.claude')), false);
   fs.mkdirSync(path.join(project.root, '.claude'));
   fs.writeFileSync(path.join(project.root, '.claude', 'settings.local.json'), '{ "hooks": ');
@@ -119,16 +119,73 @@ test('GAP-4: pre-commit hook and CI workflow are re-pinned to the launcher; a fo
   fs.writeFileSync(path.join(hooksDir, 'pre-commit'), '#!/bin/sh\n# Chemical X Protocol: old\nnpx chemx audit\n');
   fs.mkdirSync(path.join(project.root, '.github', 'workflows'), { recursive: true });
   fs.writeFileSync(path.join(project.root, '.github', 'workflows', 'chemx-audit.yml'), 'jobs:\n  a:\n    steps:\n      - name: Audit\n        run: npx --yes chemx audit --min-grade=B\n');
-  install(project, ['--no-mcp']);
+  install(project, ['--git-hooks', '--pin-ci']);
   const hook = fs.readFileSync(path.join(hooksDir, 'pre-commit'), 'utf-8');
   assert.match(hook, new RegExp(`PINNED_CLI='${path.join(project.kit, 'cli', 'index.js')}'`));
   assert.match(hook, /# chemx-pin: 1\.2\.3-4/);
   const workflow = fs.readFileSync(path.join(project.root, '.github', 'workflows', 'chemx-audit.yml'), 'utf-8');
   assert.match(workflow, /run: npx --yes chemx@1\.2\.3-4 audit --min-grade=B/);
   fs.writeFileSync(path.join(hooksDir, 'pre-commit'), '#!/bin/sh\nhusky run\n');
-  const report = install(project, ['--no-mcp']);
+  const report = install(project, ['--git-hooks']);
   assert.equal(fs.readFileSync(path.join(hooksDir, 'pre-commit'), 'utf-8'), '#!/bin/sh\nhusky run\n');
   assert.equal(report.actions.find((action) => action.label === 'git pre-commit').status, 'refused');
+});
+
+const snapshot = (root) => {
+  const out = {};
+  const walk = (dir) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      const isKitDir = entry.isDirectory() && entry.name === 'tools';
+      if (isKitDir) continue;
+      if (entry.isDirectory()) walk(full);
+      else out[path.relative(root, full)] = fs.readFileSync(full, 'utf-8');
+    }
+  };
+  walk(root);
+  return out;
+};
+const listed = (report, root) => report.actions.filter((action) => action.written).map((action) => path.relative(root, action.file)).sort();
+const changedFiles = (before, after) => Object.keys(after).filter((file) => before[file] !== after[file] && !file.startsWith(`.chemx${path.sep}`)).sort();
+
+test('#2576: default run touches only the settings file; each flag adds exactly its file; the list matches', () => {
+  const project = makeProject({ kitInside: true });
+  spawnSync('git', ['init', '-q'], { cwd: project.root });
+  fs.mkdirSync(path.join(project.root, '.github', 'workflows'), { recursive: true });
+  const workflow = path.join(project.root, '.github', 'workflows', 'chemx-audit.yml');
+  fs.writeFileSync(workflow, 'jobs:\n  a:\n    steps:\n      - run: npx --yes chemx audit\n');
+  fs.writeFileSync(path.join(project.root, '.git', 'hooks', 'pre-commit'), '#!/bin/sh\n# Chemical X Protocol: old\n');
+  const run = (extra) => {
+    const before = snapshot(project.root);
+    const report = install(project, ['--scope=project', ...extra]);
+    return { changed: changedFiles(before, snapshot(project.root)), names: listed(report, project.root), report };
+  };
+  const dry = run(['--dry-run', '--write-mcp', '--git-hooks', '--pin-ci', '--native-file-tools=warn']);
+  assert.deepEqual(dry.changed, []);
+  assert.deepEqual(dry.report.actions.map((action) => path.relative(project.root, action.file)).sort(), ['.chemxrc', '.claude/settings.json', '.git/hooks/pre-commit', '.github/workflows/chemx-audit.yml', '.mcp.json']);
+  const base = run([]);
+  assert.deepEqual(base.changed, ['.claude/settings.json']);
+  assert.deepEqual(base.names, base.changed);
+  const rc = run(['--native-file-tools=warn']);
+  assert.deepEqual(rc.changed, ['.chemxrc']);
+  const mcp = run(['--write-mcp']);
+  assert.deepEqual(mcp.changed, ['.mcp.json']);
+  assert.deepEqual(mcp.names, mcp.changed);
+  const git = run(['--git-hooks']);
+  assert.deepEqual(git.changed, ['.git/hooks/pre-commit']);
+  const ci = run(['--pin-ci']);
+  assert.deepEqual(ci.changed, ['.github/workflows/chemx-audit.yml']);
+  assert.deepEqual(ci.names, ci.changed);
+});
+
+test('#2576: .mcp.json for an in-project kit is project-relative and committable', () => {
+  const project = makeProject({ kitInside: true });
+  install(project, ['--scope=project', '--write-mcp']);
+  const text = fs.readFileSync(path.join(project.root, '.mcp.json'), 'utf-8');
+  assert.equal(text.includes(project.root), false);
+  const server = JSON.parse(text).mcpServers['chemical-x'];
+  assert.deepEqual(server.args, ['${CLAUDE_PROJECT_DIR:-.}/tools/kit/cli/index.js', 'mcp']);
+  assert.equal(server.env.CHEMX_PROJECT_ROOT, '${CLAUDE_PROJECT_DIR:-.}');
 });
 
 test('GAP-4: templates pin the exact kit version by default instead of an unpinned npx chemx', () => {
