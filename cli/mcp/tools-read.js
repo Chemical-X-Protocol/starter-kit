@@ -10,17 +10,21 @@ import { EXT_LANG_MAP, resolveTargetCwd } from './tools-search-util.js';
  * the caller asks (stripComments:true / compact:true), and verbatim modes print `N|` numbers.
  */
 export const handleChemxRead = (args = {}, cwd = process.cwd()) => {
-  if (!args.path) throw new Error('chemx_read requires "path" argument.');
+  const isPathMissing = !args.path;
+  if (isPathMissing) throw new Error('chemx_read requires "path" argument.');
   const targetCwd = resolveTargetCwd(args.cwd || cwd);
   let rawPath = args.path;
   let startLine = args.startLine;
   let endLine = args.endLine;
 
   const colonMatch = typeof rawPath === 'string' && rawPath.match(/^([^:]+):(\d+)(?:[-:](\d+))?$/);
-  if (colonMatch) {
+  const hasColonRange = Boolean(colonMatch);
+  if (hasColonRange) {
     rawPath = colonMatch[1];
-    if (startLine === undefined) startLine = parseInt(colonMatch[2], 10);
-    if (endLine === undefined && colonMatch[3]) endLine = parseInt(colonMatch[3], 10);
+    const isStartLineMissing = startLine === undefined;
+    if (isStartLineMissing) startLine = parseInt(colonMatch[2], 10);
+    const shouldTakeEndLine = Boolean(endLine === undefined && colonMatch[3]);
+    if (shouldTakeEndLine) endLine = parseInt(colonMatch[3], 10);
   }
 
   const targetPath = resolveSafePath(rawPath, targetCwd);
