@@ -27,7 +27,7 @@ const ARG_VAL_FLAGS = ['--target', '--as', '--to', '--agent', '--since', '--limi
 const TEAM_COMMANDS = ['status', 'task', 'lock', 'unlock', 'feed', 'post', 'inbox', 'dm', 'tokens', 'audit-run', 'triage', 'benchmark', 'train', 'migrate', 'route'];
 
 // Subcommands whose handlers do not parse --help themselves; the others print their own help.
-const HELPLESS_SUBCOMMANDS = ['post', 'dm', 'inbox', 'feed', 'tokens', 'telemetry', 'profile', 'handoff', 'train', 'triage'];
+const HELPLESS_SUBCOMMANDS = ['post', 'dm', 'inbox', 'feed', 'tokens', 'telemetry', 'profile', 'handoff', 'train', 'triage', 'audit-run'];
 
 const splitPositionals = (restArgs) => {
   const positionals = [];

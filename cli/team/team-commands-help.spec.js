@@ -12,7 +12,7 @@ const makeEmptyDir = (t) => {
   return dir;
 };
 
-for (const sub of ['post', 'dm', 'inbox', 'feed', 'handoff']) {
+for (const sub of ['post', 'dm', 'inbox', 'feed', 'handoff', 'audit-run']) {
   for (const flag of ['--help', '-h']) {
     test(`team ${sub} ${flag} returns help and opens no db`, (t) => {
       const dir = makeEmptyDir(t);
