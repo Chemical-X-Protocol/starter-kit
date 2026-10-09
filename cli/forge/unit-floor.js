@@ -5,8 +5,9 @@
 //         The stmt fp wraps the expression in ExpressionStatement, so it alone could not join the
 //         same expression used as a return argument, initializer or call argument elsewhere; N1
 //         matches expr fps against both fp* and inner_fp*, so no cross-context bucket is lost.
-//   expr  every expr unit of a spec facet: spec code groups by fn bodies and stmt windows (setup
-//         blocks such as ground-truth A16); assertion expressions alone were 5.2k rows of noise
+//   expr  a call argument in a spec facet (`assert.equal(read(x), 1)`): spec setup groups through
+//         initializers and returns (ground truth A17, `fs.mkdtempSync(...)`), fn bodies and stmt
+//         windows (A16), never through what an assertion is handed
 //   fn    a body below both gates that apply alone (G1 mass >= 8, G2 E >= 30)
 //   stmt  the only statement of its block below both gates: no window (N2 k >= 2, W >= 3 instances)
 //         can include it, so it could only ever group on its own
@@ -36,7 +37,7 @@ const blockSizesOf = (units) => {
 const createFloorTest = (units, stmtStarts, isSpec) => {
   const blockSizes = blockSizesOf(units);
   return {
-    expr: (unit) => isSpec || stmtStarts.has(unit.startOffset),
+    expr: (unit) => (isSpec && unit.slot === 'arguments') || stmtStarts.has(unit.startOffset),
     fn: (unit) => isBelowSoloGates(unit),
     stmt: (unit) => blockSizes.get(unit.blockId) === 1 && isBelowSoloGates(unit),
     tmpl: () => false

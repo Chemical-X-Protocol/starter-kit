@@ -10,7 +10,8 @@
 //         mass >= 8 and it has at least 2 non-ubiquitous anchors; at most 200 per file. Two readings
 //         of "whole": an if test counts too, because alias inlining moves named initializers there
 //         (`const isOutside = e; if (isOutside)` becomes `if (e)`), and leading `!`s are looked
-//         through, because De Morgan turns `!x && !y` into `!(x || y)`.
+//         through, because De Morgan turns `!x && !y` into `!(x || y)`. Each expr unit records its
+//         slot (init, test, argument, expression or arguments) for the store floor.
 import { hashUnit } from './hash.js';
 import { anchorWeight, countNonUbiquitous, evidence } from './anchors.js';
 
@@ -131,7 +132,7 @@ export const collectScriptUnits = (program, { ubiquitous = new Set() } = {}) => 
     });
   };
 
-  const addExpr = (node) => {
+  const addExpr = (node, slot) => {
     const isLightweight = !massAtLeast(node, EXPR_GATE.minMass);
     if (isLightweight) return;
     const hashed = hashUnit(node);
@@ -139,7 +140,7 @@ export const collectScriptUnits = (program, { ubiquitous = new Set() } = {}) => 
     const hasRoom = exprCount < EXPR_GATE.maxPerFile;
     isExprCapped = isExprCapped || (isKept && !hasRoom);
     const shouldStore = isKept && hasRoom;
-    if (shouldStore) units.push({ kind: 'expr', ...spanOf(node), ...hashed });
+    if (shouldStore) units.push({ kind: 'expr', ...spanOf(node), slot, ...hashed });
     exprCount += shouldStore ? 1 : 0;
   };
 
@@ -149,7 +150,7 @@ export const collectScriptUnits = (program, { ubiquitous = new Set() } = {}) => 
     const isBlock = node.type === 'BlockStatement';
     if (isBlock) addBlock(node);
     const candidate = exprCandidateOf(node, parent, key);
-    if (candidate) addExpr(candidate);
+    if (candidate) addExpr(candidate, key);
     for (const [childKey, value] of Object.entries(node.kids)) {
       for (const child of childList(value)) child && visit(child, node, childKey);
     }

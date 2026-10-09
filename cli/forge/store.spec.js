@@ -129,14 +129,27 @@ test('a floored expression statement keeps its expression fps for cross-context 
   assert.equal(row.inner_fp1, exprA.fp1, 'the ledger row carries inner_fp1');
 });
 
-test('a spec facet stores no expr rows but keeps its fn and stmt rows', () => {
-  const content = fs.readFileSync(path.join(KIT_ROOT, SOURCE), 'utf-8');
-  const { units } = collectFileUnits(SOURCE, content);
-  const asSource = selectStoredUnits(units).units;
+// cli/friction-fixes.spec.js:13-17, verbatim (ground truth A17.1): the mkdtemp initializer must stay.
+const A17_TEMP_PROJECT = [
+  "import fs from 'node:fs';",
+  "import os from 'node:os';",
+  "import path from 'node:path';",
+  'const makeTempProject = (prefix) => {',
+  '  const root = fs.mkdtempSync(path.join(os.tmpdir(), prefix));',
+  '  fs.writeFileSync(path.join(root, \'package.json\'), \'{"name":"friction-fixture"}\\n\');',
+  '  return root;',
+  '};'
+].join('\n');
+
+test('a spec facet drops call-argument expr rows and keeps initializers (A17)', () => {
+  const { units } = collectFileUnits('cli/friction-fixes.spec.js', A17_TEMP_PROJECT);
   const asSpec = selectStoredUnits(units, { isSpec: true }).units;
-  assert.ok(asSource.some((unit) => unit.kind === 'expr'), 'the source facet keeps expr rows');
-  assert.equal(asSpec.some((unit) => unit.kind === 'expr'), false);
-  assert.deepEqual(asSpec.map((unit) => unit.startOffset), asSource.filter((unit) => unit.kind !== 'expr').map((unit) => unit.startOffset));
+  const asSource = selectStoredUnits(units).units;
+  const isArgument = (unit) => unit.kind === 'expr' && unit.slot === 'arguments';
+  assert.ok(asSource.some(isArgument), 'path.join(...) is a call-argument expr unit');
+  assert.equal(asSpec.some(isArgument), false);
+  assert.ok(asSpec.some((unit) => unit.kind === 'expr' && unit.slot === 'init' && unit.start === 5), 'the mkdtemp initializer at :5');
+  assert.deepEqual(asSpec.map((unit) => unit.startOffset), asSource.filter((unit) => !isArgument(unit)).map((unit) => unit.startOffset));
 });
 
 test('the per-file cap keeps fn units first and reports what it dropped', () => {
