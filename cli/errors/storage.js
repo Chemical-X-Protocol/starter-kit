@@ -12,8 +12,10 @@ const pruneOldReports = (issuesDir, keep) => {
 };
 
 export const resolveTargetIssuesRepo = (options = {}, cwd = process.cwd()) => {
-  if (options.repo) return options.repo;
-  if (process.env.CHEMX_ISSUES_REPO) return process.env.CHEMX_ISSUES_REPO;
+  const hasRepoOption = Boolean(options.repo);
+  if (hasRepoOption) return options.repo;
+  const hasEnvRepo = Boolean(process.env.CHEMX_ISSUES_REPO);
+  if (hasEnvRepo) return process.env.CHEMX_ISSUES_REPO;
 
   const repoInfo = detectGitRepoInfo(cwd);
   const hasOwnerAndRepo = Boolean(repoInfo?.owner && repoInfo?.repo);
@@ -25,12 +27,14 @@ export const resolveTargetIssuesRepo = (options = {}, cwd = process.cwd()) => {
 };
 
 export const saveIssueArtifact = (cwd, issue, options = {}) => {
-  if (options.skipFileWrite) {
+  const shouldSkipFileWrite = Boolean(options.skipFileWrite);
+  if (shouldSkipFileWrite) {
     return null;
   }
   try {
     const issuesDir = path.resolve(cwd, '.chemx', 'issues');
-    if (!fs.existsSync(issuesDir)) {
+    const isMissingIssuesDir = !fs.existsSync(issuesDir);
+    if (isMissingIssuesDir) {
       fs.mkdirSync(issuesDir, { recursive: true });
     }
     const filename = `issue-${String(Date.now()).padStart(13, '0')}-${process.pid}.md`;
