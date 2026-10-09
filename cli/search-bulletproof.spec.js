@@ -59,6 +59,7 @@ test('bulletproof: handleChemxWrite and handleChemxPatch auto-sync index', () =>
     assert.ok(sym2, 'handleChemxPatch should auto-sync patched symbol into database');
   } finally {
     fs.rmSync(testFile, { force: true });
+    fs.rmSync(path.join(cwd, '.chemx', 'backups', 'scratch', 'test-auto-sync.ts.chemx-backup'), { force: true });
     syncSingleFileIndex(testFile, cwd);
   }
 });

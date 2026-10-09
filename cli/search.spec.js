@@ -1,4 +1,4 @@
-import test from 'node:test';
+import test, { after } from 'node:test';
 import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -27,6 +27,11 @@ import {
   handleProgressionCommand,
   handleHealthFilterCommand
 } from './search-commands.js';
+
+// The search-db specs share one private index instead of the kit's .chemx/index.db, which
+// other spec files re-index concurrently (removeDeletedFiles would drop these fixture rows).
+const SPEC_DB_ROOT = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-search-spec-')));
+after(() => fs.rmSync(SPEC_DB_ROOT, { recursive: true, force: true }));
 
 test('resolveTargetDir: returns custom directory if provided as first argument', () => {
   const result = resolveTargetDir('packages/core', '--dir=other/path');
@@ -70,7 +75,7 @@ test('resolveTargetDir: defaults to . when .sln or csproj exists at repo root', 
 });
 
 test('search-db: indexes symbols with line ranges and finds definition', () => {
-  const db = openIndexDb();
+  const db = openIndexDb(SPEC_DB_ROOT);
   if (!db) return;
 
   upsertFileIndex(db, {
@@ -103,7 +108,7 @@ test('search-db: indexes symbols with line ranges and finds definition', () => {
 });
 
 test('search-db: tracks imports and references accurately', () => {
-  const db = openIndexDb();
+  const db = openIndexDb(SPEC_DB_ROOT);
   if (!db) return;
 
   upsertFileIndex(db, {
@@ -134,7 +139,7 @@ test('search-db: tracks imports and references accurately', () => {
 });
 
 test('search-db: syncs and queries violations index', () => {
-  const db = openIndexDb();
+  const db = openIndexDb(SPEC_DB_ROOT);
   if (!db) return;
 
   const testViolations = [
@@ -172,7 +177,7 @@ test('search-db: syncs and queries violations index', () => {
 });
 
 test('search-commands: def, refs, deps, hazards, pack return valid payloads in JSON mode', () => {
-  const db = openIndexDb();
+  const db = openIndexDb(SPEC_DB_ROOT);
   if (!db) return;
 
   const defRes = handleDefCommand(db, 'sampleFunction', { isJson: true, isCli: false });
@@ -195,7 +200,7 @@ test('search-commands: def, refs, deps, hazards, pack return valid payloads in J
 });
 
 test('search-db: records snapshots, progression, and stamps file health', () => {
-  const db = openIndexDb();
+  const db = openIndexDb(SPEC_DB_ROOT);
   if (!db) return;
 
   const mockReport = {

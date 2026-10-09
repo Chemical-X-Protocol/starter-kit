@@ -51,6 +51,7 @@ describe('Surgical CLI Mutators Suite', () => {
 
   afterEach(() => {
     fs.rmSync(TEST_DIR, { recursive: true, force: true });
+    fs.rmSync(path.join(process.cwd(), '.chemx', 'backups', path.relative(process.cwd(), TEST_DIR)), { recursive: true, force: true });
   });
 
   it('resolves capsule directory and constituent files correctly', () => {
@@ -181,7 +182,10 @@ describe('Mutator safety', () => {
     fs.rmSync(SAFETY_DIR, { recursive: true, force: true });
     fs.mkdirSync(path.join(SAFETY_DIR, 'm-card', 'types'), { recursive: true });
   });
-  afterEach(() => fs.rmSync(SAFETY_DIR, { recursive: true, force: true }));
+  afterEach(() => {
+    fs.rmSync(SAFETY_DIR, { recursive: true, force: true });
+    fs.rmSync(path.join(process.cwd(), '.chemx', 'backups', path.relative(process.cwd(), SAFETY_DIR)), { recursive: true, force: true });
+  });
 
   it('refuses (instead of reporting success) when the props block cannot be found', () => {
     const propsFile = path.join(SAFETY_DIR, 'm-card', 'types', 'props.d.ts');

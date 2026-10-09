@@ -34,6 +34,7 @@ test('Friction 2: patch handles all parameter aliases and command strings', asyn
     assert.strictEqual(fs.readFileSync(testFile, 'utf8'), 'line 1\nFINAL_STRING\nline 3\n');
   } finally {
     if (fs.existsSync(testFile)) fs.unlinkSync(testFile);
+    fs.rmSync(path.resolve('.chemx', 'backups', 'test-patch-spec.txt.chemx-backup'), { force: true });
   }
 });
 
