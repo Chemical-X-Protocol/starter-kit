@@ -66,7 +66,8 @@ export const executeStatusUpdate = (db, taskId, status, options, task) => {
   db.prepare('UPDATE agent_tasks SET status = ?, blocked_reason = ?, result_payload = ?, diff_receipt = ?, updated_at = ? WHERE id = ?')
     .run(status, options.blockedReason || '', payloadStr, JSON.stringify(receiptObj), now, Number(taskId));
 
-  if (['done', 'failed', 'queued'].includes(status) && task.assigned_agent_id) {
+  const shouldReleaseAgent = Boolean(['done', 'failed', 'queued'].includes(status) && task.assigned_agent_id);
+  if (shouldReleaseAgent) {
     db.prepare('UPDATE agents SET current_task_id = NULL, status = ? WHERE id = ?')
       .run('idle', task.assigned_agent_id);
   }
@@ -76,15 +77,18 @@ export const buildTaskListQuery = (filter = {}) => {
   let query = 'SELECT * FROM agent_tasks';
   const conditions = [];
   const params = [];
-  if (filter.status) {
+  const hasStatusFilter = Boolean(filter.status);
+  if (hasStatusFilter) {
     conditions.push('status = ?');
     params.push(filter.status);
   }
-  if (filter.assigned_agent_id) {
+  const hasAgentFilter = Boolean(filter.assigned_agent_id);
+  if (hasAgentFilter) {
     conditions.push('assigned_agent_id = ?');
     params.push(normalizeAgentId(filter.assigned_agent_id));
   }
-  if (filter.target_path) {
+  const hasTargetPathFilter = Boolean(filter.target_path);
+  if (hasTargetPathFilter) {
     conditions.push('target_path = ?');
     params.push(filter.target_path);
   }
@@ -109,11 +113,13 @@ export const buildTaskListQuery = (filter = {}) => {
     conditions.push('priority = ?');
     params.push(Number(filter.priority));
   }
-  if (filter.moscow) {
+  const hasMoscowFilter = Boolean(filter.moscow);
+  if (hasMoscowFilter) {
     conditions.push('moscow = ?');
     params.push(filter.moscow);
   }
-  if (filter.vds_priority) {
+  const hasVdsPriorityFilter = Boolean(filter.vds_priority);
+  if (hasVdsPriorityFilter) {
     conditions.push('vds_priority = ?');
     params.push(filter.vds_priority);
   }
@@ -123,11 +129,13 @@ export const buildTaskListQuery = (filter = {}) => {
     conditions.push('needs = ?');
     params.push(needsFilter);
   }
-  if (filter.sprint_tag) {
+  const hasSprintTagFilter = Boolean(filter.sprint_tag);
+  if (hasSprintTagFilter) {
     conditions.push('sprint_tag = ?');
     params.push(filter.sprint_tag);
   }
-  if (conditions.length > 0) query += ` WHERE ${conditions.join(' AND ')}`;
+  const hasConditions = conditions.length > 0;
+  if (hasConditions) query += ` WHERE ${conditions.join(' AND ')}`;
   query += ' ORDER BY priority ASC, id ASC';
   return { query, params };
 };
