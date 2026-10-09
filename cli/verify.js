@@ -16,7 +16,7 @@ import {
   combineStepStatuses, architecturalWarningFor
 } from './verify-steps.js';
 import {
-  VERIFY_HELP, stepLine, formatTypecheckStep, formatTestStep, formatBuildStep, createProgress, formatVerdict
+  VERIFY_HELP, stepLine, formatTypecheckStep, formatTestStep, testStepIcon, formatBuildStep, createProgress, formatVerdict
 } from './verify-report.js';
 
 export {
@@ -124,7 +124,7 @@ export const runProjectVerify = async (rawArgs = [], isCli = false, options = {}
 
   progress.start('Test Suite');
   const tests = testsSection(await runTestAudit([], false, { print: false, cwd, timeoutMs, allowEmpty }));
-  progress.finish(stepLine(tests.status, 'Test Suite', formatTestStep(tests), tests.command));
+  progress.finish(stepLine(testStepIcon(tests), 'Test Suite', formatTestStep(tests), tests.command));
 
   let build = null;
   if (includeBuild) {

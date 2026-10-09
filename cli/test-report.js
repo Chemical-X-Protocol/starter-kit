@@ -30,7 +30,7 @@ export const formatTestHeadline = (report) => {
   const skippedNote = report.skipped > 0 ? `, ${report.skipped} skipped` : '';
   if (report.status === STATUS.PASS) {
     const isEmptyAllowed = report.passed === 0;
-    if (isEmptyAllowed) return `${ANSI.LIME}✔${ANSI.RESET} ${ANSI.BOLD}No tests ran (allowed by --allow-empty)${ANSI.RESET}`;
+    if (isEmptyAllowed) return `${ANSI.DIM}-${ANSI.RESET} ${ANSI.BOLD}No tests ran (allowed by --allow-empty)${ANSI.RESET}`;
     return `${ANSI.LIME}✔${ANSI.RESET} ${ANSI.BOLD}All tests passed${ANSI.RESET} ${ANSI.DIM}(${report.passed} passed${skippedNote} in ${report.durationMs}ms)${ANSI.RESET}`;
   }
   if (report.status === STATUS.INCONCLUSIVE) {
@@ -43,6 +43,8 @@ export const formatTestHeadline = (report) => {
   if (hasOnlyExecutionError) {
     return `${ANSI.RED}✖${ANSI.RESET} ${ANSI.BOLD}Test command failed (exit ${report.exitCode}):${ANSI.RESET} ${report.executionError}`;
   }
+  const didNotStart = report.failures.some((f) => f.kind === 'startup-error') && report.failed === 0;
+  if (didNotStart) return `${ANSI.RED}✖${ANSI.RESET} ${ANSI.BOLD}Test runner failed to start:${ANSI.RESET} ${report.executionError}`;
   const errorNote = report.errors > 0 ? `, ${plural(report.errors, 'unhandled error')}` : '';
   return `${ANSI.RED}✖${ANSI.RESET} ${ANSI.BOLD}Test Failures (${report.failed} failed${errorNote} out of ${report.totalTests})${ANSI.RESET}`;
 };

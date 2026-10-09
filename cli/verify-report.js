@@ -45,7 +45,13 @@ export const formatTypecheckStep = (section) => {
   return `${section.errorCount} error(s)`;
 };
 
+const isEmptyAllowed = (section) => section.status === STATUS.PASS && section.reason === 'EMPTY_ALLOWED';
+
+// An empty run that --allow-empty accepted passes the gate but proves nothing, so no green check.
+export const testStepIcon = (section) => (isEmptyAllowed(section) ? SKIPPED : section.status);
+
 export const formatTestStep = (section) => {
+  if (isEmptyAllowed(section)) return 'No tests ran (allowed by --allow-empty)';
   const skippedNote = section.skipped > 0 ? `, ${section.skipped} skipped` : '';
   if (section.status === STATUS.PASS) return `Passed (${section.passed}/${section.total}${skippedNote})`;
   if (section.status === STATUS.INCONCLUSIVE) return `Inconclusive: ${section.reason} (${section.passed} ran${skippedNote})`;
