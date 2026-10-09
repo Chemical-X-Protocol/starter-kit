@@ -42,6 +42,7 @@ export const migrateFeedColumns = (db) => {
 export const migrateLeaseColumns = (db) => {
   if (!db) return;
   migrateCols(db, 'file_leases', [['pid', 'INTEGER NOT NULL DEFAULT 0']]);
+  migrateCols(db, 'file_lock_queue', [['pid', 'INTEGER NOT NULL DEFAULT 0'], ['last_seen_at', 'INTEGER NOT NULL DEFAULT 0']]);
 };
 
 export const initTeamSchema = (db) => {
@@ -73,7 +74,8 @@ export const initTeamSchema = (db) => {
     );
     CREATE TABLE IF NOT EXISTS file_lock_queue (
       id INTEGER PRIMARY KEY AUTOINCREMENT, file_path TEXT NOT NULL, agent_id TEXT NOT NULL,
-      requested_at INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'waiting', priority INTEGER NOT NULL DEFAULT 2, purpose TEXT NOT NULL DEFAULT ''
+      requested_at INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'waiting', priority INTEGER NOT NULL DEFAULT 2, purpose TEXT NOT NULL DEFAULT '',
+      pid INTEGER NOT NULL DEFAULT 0, last_seen_at INTEGER NOT NULL DEFAULT 0
     );
     CREATE TABLE IF NOT EXISTS forum_topics (
       id INTEGER PRIMARY KEY AUTOINCREMENT, category_id TEXT NOT NULL, title TEXT NOT NULL,

@@ -32,12 +32,12 @@ export {
   promoteNextWaiter
 } from './team-db-locks.js';
 
-import { cleanExpiredLeases } from './team-db-locks.js';
+import { describeLease } from './team-db-locks.js';
 import { queryFeed } from './team-db-feed.js';
 
+// Read-only: dashboards and SSE refreshes never delete leases (see cleanExpiredLeases for the write path).
 export const getSwarmStatus = (db) => {
   if (!db) return null;
-  cleanExpiredLeases(db);
 
   const agents = db.prepare('SELECT status, COUNT(*) as count FROM agents GROUP BY status').all();
   const agentSummary = { total: 0, idle: 0, busy: 0, offline: 0 };
@@ -53,7 +53,9 @@ export const getSwarmStatus = (db) => {
     taskSummary.total += t.count;
   }
 
-  const activeLocks = db.prepare('SELECT file_path, locked_by, expires_at FROM file_leases').all();
+  const leaseStates = db.prepare('SELECT file_path, locked_by, expires_at, pid FROM file_leases').all().map((lease) => describeLease(lease));
+  const activeLocks = leaseStates.filter((lease) => lease.active).map(({ file_path, locked_by, expires_at }) => ({ file_path, locked_by, expires_at }));
+  const expiredLocks = leaseStates.length - activeLocks.length;
   const waitingLocks = db.prepare("SELECT COUNT(*) as count FROM file_lock_queue WHERE status = 'waiting'").get();
 
   const blockedTasks = db.prepare(`
@@ -82,6 +84,7 @@ export const getSwarmStatus = (db) => {
     tasks: taskSummary,
     locks: {
       active: activeLocks.length,
+      expired: expiredLocks,
       waiting: waitingLocks?.count || 0,
       leases: activeLocks
     },

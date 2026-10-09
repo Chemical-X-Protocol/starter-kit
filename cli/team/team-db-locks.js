@@ -6,24 +6,24 @@
 import path from 'node:path';
 import { isPathTraversal, resolveSafePath } from '../path-scope.js';
 import { postFeedEvent } from './team-db-feed.js';
-import { DEFAULT_TTL_MS, cleanExpiredLeases, promoteNextWaiter, enqueueWaiter } from './team-db-lock-promotion.js';
+import { DEFAULT_TTL_MS, cleanExpiredLeases, promoteNextWaiter, enqueueWaiter, describeLease } from './team-db-lock-promotion.js';
 import { withImmediateTransaction } from './team-db-transaction.js';
 
-export { cleanExpiredLeases, promoteNextWaiter } from './team-db-lock-promotion.js';
+export { cleanExpiredLeases, promoteNextWaiter, describeLease } from './team-db-lock-promotion.js';
+
+const readDbLocation = (db) => {
+  try {
+    return [typeof db?.location === 'function' ? db.location() : null, null];
+  } catch (err) {
+    return [null, err]; // a closed handle has no location; fall back to the cwd
+  }
+};
 
 const resolveBaseDir = (db, options = {}) => {
   if (options.cwd) return options.cwd;
-  try {
-    if (typeof db?.location === 'function') {
-      const loc = db.location();
-      if (loc && loc !== ':memory:' && loc.includes('.chemx')) {
-        return path.dirname(path.dirname(path.resolve(loc)));
-      }
-    }
-  } catch {
-    // fallback
-  }
-  return process.cwd();
+  const [loc] = readDbLocation(db);
+  const isProjectDb = Boolean(loc) && loc !== ':memory:' && loc.includes('.chemx');
+  return isProjectDb ? path.dirname(path.dirname(path.resolve(loc))) : process.cwd();
 };
 
 const normalizeAgentId = (id) => {
@@ -132,9 +132,11 @@ export const getFileLockStatus = (db, filePath, options = {}) => {
   }
   const cleanPath = path.relative(baseDir, resolveSafePath(filePath, baseDir));
 
-  cleanExpiredLeases(db);
-  const lease = db.prepare('SELECT * FROM file_leases WHERE file_path = ?').get(cleanPath);
+  // Read-only: an expired or orphaned lease is reported, never deleted, so a status
+  // check cannot race a concurrent acquire. Acquire and release do the cleanup.
+  const state = describeLease(db.prepare('SELECT * FROM file_leases WHERE file_path = ?').get(cleanPath));
+  const isActive = Boolean(state?.active);
   const query = "SELECT * FROM file_lock_queue WHERE file_path = ? AND status = 'waiting' ORDER BY priority ASC, id ASC";
   const waiters = db.prepare(query).all(cleanPath);
-  return { lease: lease || null, waiters };
+  return { lease: isActive ? state : null, expiredLease: isActive ? null : state, waiters };
 };

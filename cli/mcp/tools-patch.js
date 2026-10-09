@@ -45,7 +45,8 @@ export const handleChemxPatch = (args = {}, cwd = process.cwd()) => {
     targetContent,
     replacementContent,
     allowMultiple: Boolean(args.allowMultiple || args.multiple),
-    cwd
+    cwd,
+    agentId: args.agentId || args.as
   });
 
   try {

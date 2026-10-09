@@ -4,6 +4,12 @@ import { ANSI } from './theme.js';
 import { syncSingleFileIndex } from './search.js';
 import { auditFile } from './audit.js';
 import { resolveSafePath } from './path-scope.js';
+import { assertWriteLockClear } from './team/write-lock-guard.js';
+
+const readAgentFlag = (args) => {
+  const asFlag = args.find((a) => a.startsWith('--as='));
+  return asFlag ? asFlag.slice('--as='.length) : undefined;
+};
 
 /**
  * Surgically applies a search-and-replace block to a file.
@@ -42,6 +48,7 @@ export const patchFile = (targetPath, params = {}) => {
   if (!fs.existsSync(resolvedPath)) {
     throw new Error(`File not found: ${targetPath}`);
   }
+  if (!dryRun) assertWriteLockClear(resolvedPath, cwd, params.agentId);
 
   const fileContent = fs.readFileSync(resolvedPath, 'utf-8');
   const matchIndex = fileContent.indexOf(targetContent);
@@ -170,6 +177,7 @@ export const runPatcherCli = (args, isCli = false) => {
         `  --replacement="<new>"    New replacement content`,
         `  --multiple               Allow replacing multiple occurrences`,
         `  --dry-run                Preview patch without writing to disk`,
+        `  --as=<@handle>           Agent identity; refused if another agent holds the file lock`,
         `  --json                   Output result as minified JSON`,
         `  -h, --help               Show this help message`,
         ''
@@ -200,6 +208,7 @@ export const runPatcherCli = (args, isCli = false) => {
 
   try {
     const res = patchFile(filePath, {
+      agentId: readAgentFlag(args),
       targetContent,
       replacementContent,
       allowMultiple,
@@ -255,6 +264,7 @@ export const writeFile = (targetPath, params = {}) => {
   }
 
   const resolvedPath = resolveSafePath(targetPath, cwd);
+  assertWriteLockClear(resolvedPath, cwd, params.agentId);
   const dir = path.dirname(resolvedPath);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
@@ -361,6 +371,7 @@ export const runWriterCli = (args, isCli = false) => {
         '',
         `${ANSI.BOLD}OPTIONS${ANSI.RESET}`,
         `  --content="<text>"       File content to write`,
+        `  --as=<@handle>           Agent identity; refused if another agent holds the file lock`,
         `  --json                   Output result as minified JSON`,
         `  -h, --help               Show this help message`,
         ''
@@ -384,7 +395,7 @@ export const runWriterCli = (args, isCli = false) => {
   const content = contentFlag ? contentFlag.slice(contentFlag.indexOf('=') + 1) : '';
 
   try {
-    const res = writeFile(filePath, { content });
+    const res = writeFile(filePath, { content, agentId: readAgentFlag(args) });
     if (isJson) {
       process.stdout.write(JSON.stringify(res, null, 2) + '\n');
     } else {

@@ -7,6 +7,7 @@ import {
 } from '../team/team-db.js';
 import { handleError } from '../errors/index.js';
 import { isPathTraversal } from '../path-scope.js';
+import { resolveAgentId } from '../team/agent-identity.js';
 
 export const handleChemxTeamLock = async (args = {}, cwd = process.cwd()) => {
   const db = openIndexDb(cwd);
@@ -17,21 +18,25 @@ export const handleChemxTeamLock = async (args = {}, cwd = process.cwd()) => {
     return { error: 'path_traversal' };
   }
 
+  // The MCP server outlives a single call, so its pid makes dead-holder cleanup meaningful.
+  const agentId = resolveAgentId(args.agentId || args.as);
   if (action === 'acquire') {
-    return requestFileLock(db, args.filePath, args.agentId, {
+    return requestFileLock(db, args.filePath, agentId, {
       purpose: args.purpose,
       ttlMs: args.ttlMs,
+      pid: process.pid,
       cwd
     });
   }
   if (action === 'release') {
-    return releaseFileLock(db, args.filePath, args.agentId, { cwd });
+    return releaseFileLock(db, args.filePath, agentId, { cwd });
   }
   if (action === 'status') {
     const status = getFileLockStatus(db, args.filePath, { cwd });
     if (!status) return null;
     return {
       lease: status.lease,
+      expiredLease: status.expiredLease,
       waiters: toColumnar(status.waiters, ['id', 'agent_id', 'priority', 'status', 'requested_at'])
     };
   }

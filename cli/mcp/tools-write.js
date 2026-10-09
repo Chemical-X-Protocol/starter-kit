@@ -16,7 +16,8 @@ export const handleChemxWrite = (args = {}, cwd = process.cwd()) => {
   const targetPath = resolveSafePath(args.path, cwd);
   const result = writeFile(targetPath, {
     content: args.content,
-    cwd
+    cwd,
+    agentId: args.agentId || args.as
   });
 
   try {
