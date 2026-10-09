@@ -96,6 +96,11 @@ groundtruth.spec, groups that must not form:
 - B2 is rejected with a refine reason; B6 and B7 are suppressed by R7.
 - C1, C2 and C3 are not surfaced.
 
+Amended by #2600 (P3 review). The P3 run cannot reach three of these targets, so the run-level spec asserts the following instead:
+- A4: a group of at least 7 members that covers at least 5 A4 anchors, with typecheck-command.js:41-43 as drift. team-dispatch-batches.js:38 is not drift at P3, because the P2 inliner folds `isOutsideRoot` into the return at :38-40, so :38 is not a unit of its own. Expression-level drift inside an inlined statement is deferred.
+- A7: one 4-member N1 fp2 group (check-host, kit-locate, project-status, project-detector). A7.4 sits under cli/build/, which file discovery skips. No B8 reader reaches any A7 bucket: the try statements of workspace, check-mcp and cmd-wrappers-json have their own fp3, and the B8.1 excerpt of ratchet.js (:37-48) stops before its closing `};`, so it does not parse in the sandbox. The R3 and R4 evictions (workspace R3, check-mcp and cmd-wrappers-json R4) are asserted in lgg.spec on those members. Ratchet R3 is untested until its excerpt parses.
+- B6 and B7 form no group even before the LGG stage (grouping and its gates stop them), so they never reach R7 at run level. Their R7 conventions are asserted in lgg.spec.
+
 Other checks:
 - With --no-library: item recall of at least 0.70, counting partial as 0.5.
 - determinism.spec: identical group ids under shuffled input.
