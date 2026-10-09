@@ -35,16 +35,22 @@ export const classifyBashCall = (commandText) => {
     result.raw.push(...ruleHits(invocation, command, RUNNER_RULES.filter((rule) => !rule.id.startsWith('raw-source'))));
     result.search.push(...ruleHits(invocation, command, SEARCH_RULES));
     const isReadOnlyShell = READ_ONLY_TOOLS.has(invocation.tool);
-    if (isReadOnlyShell && result.category === 'other') result.category = 'shell: read-only';
+    const isUncategorized = result.category === 'other';
+    const isReadOnlyUncategorized = Boolean(isReadOnlyShell && isUncategorized);
+    if (isReadOnlyUncategorized) result.category = 'shell: read-only';
   }
   result.category = categoryFor(result);
   return result;
 };
 
 const categoryFor = (result) => {
-  if (result.bypass) return 'chemx-bypass';
-  if (result.chemx.length > 0) return 'chemx CLI';
-  if (result.raw.length > 0) return 'raw runner/git';
-  if (result.search.length > 0) return 'raw search';
+  const isBypass = Boolean(result.bypass);
+  if (isBypass) return 'chemx-bypass';
+  const hasChemxCalls = result.chemx.length > 0;
+  if (hasChemxCalls) return 'chemx CLI';
+  const hasRawRunner = result.raw.length > 0;
+  if (hasRawRunner) return 'raw runner/git';
+  const hasRawSearch = result.search.length > 0;
+  if (hasRawSearch) return 'raw search';
   return result.category;
 };
