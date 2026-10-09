@@ -220,6 +220,7 @@ test('team-triage: cross-queries codebase hazards and generates tasks', () => {
   assert.strictEqual(hazardsAfter.length, 0);
 
   // Attempting to complete task with unresolved hazards without force is refused
+  claimTask(db, generated[0].id, '@refactor-bot');
   const refused = completeTaskWithAudit(db, generated[0].id, '@refactor-bot');
   assert.strictEqual(refused.refused, true);
   assert.strictEqual(refused.hazardCount, 4);
@@ -319,6 +320,7 @@ test('team-telemetry: ingests token metrics into SQLite during completeTaskWithA
   const db = setupTestDb();
   registerAgent(db, { id: 'telemetry-coder', role: 'coder' });
   const task = createTask(db, { title: 'Add Telemetry' });
+  claimTask(db, task.id, '@telemetry-coder');
 
   const completed = completeTaskWithAudit(db, task.id, '@telemetry-coder', {
     noTargetConfirm: true,
@@ -469,9 +471,9 @@ test('team-commands: runTeamCli handles task update and re-verifies AST upon com
     assert.ok(task);
     assert.strictEqual(task.status, 'queued');
 
-    // Test update to in_progress
-    const inProg = runTeamCli(['task', 'update', String(task.id), 'in_progress', '--as=@developer'], false, tmpCwd);
-    assert.strictEqual(inProg.status, 'in_progress');
+    // Claim moves the task to in_progress and records the owner that may complete it
+    const claimed = runTeamCli(['task', 'claim', String(task.id), '--as=@developer'], false, tmpCwd);
+    assert.strictEqual(claimed.task.status, 'in_progress');
 
     // Test update to review
     const inReview = runTeamCli(['task', 'update', String(task.id), 'review', '--as=@developer'], false, tmpCwd);
@@ -502,6 +504,7 @@ test('team-triage: completeTaskWithAudit correctly detects real on-disk violatio
     target_path: testFile
   });
 
+  claimTask(db, task.id, '@auditor');
   const res = completeTaskWithAudit(db, task.id, '@auditor', { cwd: tmpDir });
   assert.strictEqual(res.refused, true);
   assert.ok(res.hazardCount > 0);
@@ -521,6 +524,7 @@ test('team-triage: completeTaskWithAudit refuses untargeted task without noTarge
   registerAgent(db, { id: 'agent-1', role: 'coder' });
   const task = createTask(db, { title: 'Untargeted Task Without Target' });
   assert.strictEqual(task.target_path, null);
+  claimTask(db, task.id, '@agent-1');
 
   const refused = completeTaskWithAudit(db, task.id, '@agent-1');
   assert.strictEqual(refused.refused, true);

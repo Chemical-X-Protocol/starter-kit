@@ -3,14 +3,29 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
 import http from 'node:http';
+import os from 'node:os';
+import { fileURLToPath } from 'node:url';
 
 import { openIndexDb } from './search-db.js';
 import { handleSwarmStatus, handlePostFeed, getAggregatedTelemetry } from './ui-handlers.js';
 import { generateSwarmHtml } from './ui-html.js';
 import { createUiServer, startUiServer } from './ui-server.js';
 
-test('ui-handlers: queries genuine SQLite index.db data and aggregates telemetry', () => {
-  const db = openIndexDb(process.cwd());
+// Source-tree scans resolve from this spec, so the suite runs from any cwd.
+const KIT_ROOT = fileURLToPath(new URL('..', import.meta.url));
+
+// Swarm UI specs run against a throwaway project so they never write into a real .chemx/index.db.
+const makeUiProject = (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-ui-spec-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const db = openIndexDb(root);
+  db.prepare('INSERT INTO files (path, mtime, size, tier, lines, chars) VALUES (?, ?, ?, ?, ?, ?)')
+    .run('src/Seed.ts', Date.now(), 10, 'utility', 1, 10);
+  return root;
+};
+
+test('ui-handlers: queries genuine SQLite index.db data and aggregates telemetry', (t) => {
+  const db = openIndexDb(makeUiProject(t));
   assert.ok(db, 'SQLite index.db must be available');
 
   const telemetry = getAggregatedTelemetry(db);
@@ -29,8 +44,8 @@ test('ui-handlers: queries genuine SQLite index.db data and aggregates telemetry
   assert.ok(status.summary);
 });
 
-test('ui-handlers: posts feed events and updates timeline in SQLite', () => {
-  const db = openIndexDb(process.cwd());
+test('ui-handlers: posts feed events and updates timeline in SQLite', (t) => {
+  const db = openIndexDb(makeUiProject(t));
   const testMessage = `Automated UI test event ${Date.now()}`;
   const result = handlePostFeed(db, {
     author: '@ui-specialist',
@@ -63,11 +78,12 @@ test('ui-html: generates standalone HTML bundle with Starship dark theme and hyd
   assert.ok(html.includes('xo-glass') || html.includes('xo-orb'));
 });
 
-test('ui-server: creates HTTP server and handles GET / and API routes', async () => {
-  const { server } = createUiServer(process.cwd());
+test('ui-server: creates HTTP server and handles GET / and API routes', async (t) => {
+  const projectRoot = makeUiProject(t);
+  const { server } = createUiServer(projectRoot);
   assert.ok(server instanceof http.Server);
 
-  const running = await startUiServer({ port: 0, cwd: process.cwd() });
+  const running = await startUiServer({ port: 0, cwd: projectRoot });
   assert.ok(running.port > 0);
   let taskJson = null;
 
@@ -214,16 +230,12 @@ test('ui-server: creates HTTP server and handles GET / and API routes', async ()
     assert.ok(htmlText.includes('cert'), 'HTML must include canvas certificate');
     assert.ok(htmlText.includes('Download PNG') || htmlText.includes('downloadPng'), 'HTML must include download PNG button');
   } finally {
-    if (taskJson?.task?.id) {
-      const db = openIndexDb(process.cwd());
-      db.prepare('DELETE FROM agent_tasks WHERE id = ?').run(taskJson.task.id);
-    }
     running.server.close();
   }
 });
 
 test('molecular architecture: all files in src/ui are strictly under 100 lines (Directive 1.A)', () => {
-  const uiDir = path.resolve(process.cwd(), 'src/ui');
+  const uiDir = path.resolve(KIT_ROOT, 'src/ui');
   const EXCLUDED_EXTS = new Set(['.html']);
   const getAllFiles = (dir) => {
     let results = [];
@@ -246,14 +258,14 @@ test('molecular architecture: all files in src/ui are strictly under 100 lines (
   for (const file of files) {
     const content = fs.readFileSync(file, 'utf-8');
     const lines = content.split('\n').length;
-    const rel = path.relative(process.cwd(), file);
+    const rel = path.relative(KIT_ROOT, file);
     assert.ok(lines < 100, `File ${rel} exceeds 100 lines (actual: ${lines})`);
   }
 });
 
 
 test('molecular architecture: molecules and organisms templates have ZERO raw DOM (Directive 1.G)', () => {
-  const uiDir = path.resolve(process.cwd(), 'src/ui');
+  const uiDir = path.resolve(KIT_ROOT, 'src/ui');
   const getAllVueFiles = (dir) => {
     let results = [];
     const list = fs.readdirSync(dir);
@@ -281,13 +293,13 @@ test('molecular architecture: molecules and organisms templates have ZERO raw DO
     assert.ok(match, `Missing template in ${file}`);
     const templateContent = match[1];
     const tagMatch = templateContent.match(rawDomTagRegex);
-    const rel = path.relative(process.cwd(), file);
+    const rel = path.relative(KIT_ROOT, file);
     assert.strictEqual(tagMatch, null, `Forbidden raw DOM element <${tagMatch ? tagMatch[1] : ''}> found in ${rel}`);
   }
 });
 
 test('molecular architecture: all views in src/ui/views/ are strictly 10 to 20 lines (Directive 1.B)', () => {
-  const viewsDir = path.resolve(process.cwd(), 'src/ui/views');
+  const viewsDir = path.resolve(KIT_ROOT, 'src/ui/views');
   const viewFiles = fs.readdirSync(viewsDir).filter((f) => f.endsWith('.vue'));
   assert.ok(viewFiles.length >= 5, `Expected at least 5 view files, found ${viewFiles.length}`);
   for (const file of viewFiles) {
@@ -299,7 +311,7 @@ test('molecular architecture: all views in src/ui/views/ are strictly 10 to 20 l
 });
 
 test('molecular architecture: zero setInterval in business and component logic (Directive 6.A)', () => {
-  const uiDir = path.resolve(process.cwd(), 'src/ui');
+  const uiDir = path.resolve(KIT_ROOT, 'src/ui');
   const tsFiles = fs.readdirSync(path.join(uiDir, 'composables')).filter((f) => f.endsWith('.ts'));
   for (const f of tsFiles) {
     const content = fs.readFileSync(path.join(uiDir, 'composables', f), 'utf-8');

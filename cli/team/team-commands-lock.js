@@ -1,6 +1,20 @@
 import { requestFileLock, releaseFileLock } from './team-db.js';
 import { formatLockHelpCard } from './team-format.js';
 import { isPathTraversal } from '../path-scope.js';
+import { resolveAgentIdentity, describeIdentityHint } from './agent-identity.js';
+
+const writeIdentityHint = (identity, isCli, isJson) => {
+  const hint = describeIdentityHint(identity);
+  const shouldHint = isCli && !isJson && Boolean(hint);
+  if (shouldHint) process.stderr.write(`\x1b[2m${hint}\x1b[0m\n`);
+};
+
+// The acting agent for a CLI call; anonymous callers get a per-process id plus a hint.
+export const resolveCliAgent = (flags, isCli) => {
+  const identity = resolveAgentIdentity(flags.as);
+  writeIdentityHint(identity, isCli, flags.isJson);
+  return identity.id;
+};
 
 export const handleLockCommand = (db, nonFlagPositional, flags, isCli, cwd = process.cwd()) => {
   const isLockHelp = flags.help || nonFlagPositional.includes('--help') || nonFlagPositional.includes('-h') || nonFlagPositional.includes('help');
@@ -33,7 +47,9 @@ export const handleLockCommand = (db, nonFlagPositional, flags, isCli, cwd = pro
     return { error: 'path_traversal' };
   }
 
-  const res = requestFileLock(db, file, flags.as || '@agent', {
+  const identity = resolveAgentIdentity(flags.as);
+  writeIdentityHint(identity, isCli, flags.isJson);
+  const res = requestFileLock(db, file, identity.id, {
     purpose: flags.purpose,
     priority: flags.priority,
     pid: flags.pid ? Number(flags.pid) : 0,
@@ -43,7 +59,8 @@ export const handleLockCommand = (db, nonFlagPositional, flags, isCli, cwd = pro
   if (isCli) {
     if (flags.isJson) process.stdout.write(`${JSON.stringify(res, null, 2)}\n`);
     else if (res.granted) process.stdout.write(`\x1b[32m✔\x1b[0m Acquired lock on ${file}\n`);
-    else process.stdout.write(`\x1b[33m⏳\x1b[0m Enqueued in FIFO lock queue at position ${res.position} (held by ${res.currentHolder})\n`);
+    else if (res.queued) process.stdout.write(`\x1b[33m⏳\x1b[0m ${res.requeued ? 'Still' : 'Enqueued'} in FIFO lock queue at position ${res.position} (held by ${res.currentHolder})\n`);
+    else process.stderr.write(`\x1b[31m✕ Lock refused: ${res.reason}\x1b[0m\n`);
   }
   return res;
 };
@@ -66,7 +83,9 @@ export const handleUnlockCommand = (db, nonFlagPositional, flags, isCli, cwd = p
     return { error: 'path_traversal' };
   }
 
-  const res = releaseFileLock(db, file, flags.as || '@agent', { cwd });
+  const identity = resolveAgentIdentity(flags.as);
+  writeIdentityHint(identity, isCli, flags.isJson);
+  const res = releaseFileLock(db, file, identity.id, { cwd });
   if (isCli) {
     if (flags.isJson) process.stdout.write(`${JSON.stringify(res, null, 2)}\n`);
     else if (res.success) process.stdout.write(`\x1b[32m✔\x1b[0m Released lock on ${file}\n`);

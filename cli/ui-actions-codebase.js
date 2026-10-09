@@ -1,6 +1,16 @@
 /**
  * Chemical X UI Action Handlers: Codebase Explorer & Symbol Inspector
  */
+import { lineLimitFor } from './audit/line-budgets.js';
+import { loadProjectConfig } from './config/index.js';
+
+const budgetRules = (cwd) => (cwd ? loadProjectConfig(cwd).rules : {});
+
+/** Line count plus the file's own limit from line-budgets.js, so the UI never hard-codes one. */
+const withLineBudget = (filePath, lines, rules) => {
+  const lineLimit = lineLimitFor(filePath, rules);
+  return { lines, lineLimit, isOverBudget: lines > lineLimit };
+};
 
 export const buildFileTree = (files = []) => {
   const root = { name: 'root', path: '', isFolder: true, children: [] };
@@ -12,6 +22,7 @@ export const buildFileTree = (files = []) => {
       if (isFile) {
         cur.children.push({
           name: parts[i], path: f.path, isFolder: false, lines: Number(f.lines || 0),
+          lineLimit: f.lineLimit, isOverBudget: Boolean(f.isOverBudget),
           tier: f.tier || 'utility', healthScore: Number(f.healthScore ?? 100), hazardCount: Number(f.hazardCount ?? 0)
         });
       } else {
@@ -28,10 +39,11 @@ export const buildFileTree = (files = []) => {
   return root.children;
 };
 
-export const handleCodebaseIndex = (db) => {
+export const handleCodebaseIndex = (db, cwd = null) => {
   if (!db) return { success: false, error: 'Database unavailable' };
+  const rules = budgetRules(cwd);
   const files = db.prepare('SELECT path, tier, lines, health_score, hazard_count FROM files ORDER BY path ASC').all().map((f) => ({
-    path: f.path, tier: f.tier || 'utility', lines: Number(f.lines || 0),
+    path: f.path, tier: f.tier || 'utility', ...withLineBudget(f.path, Number(f.lines || 0), rules),
     healthScore: Number(f.health_score ?? 100), hazardCount: Number(f.hazard_count ?? 0)
   }));
   const violations = db.prepare('SELECT file_path, rule, severity, line, hazard, directive FROM violations ORDER BY id DESC LIMIT 50').all().map((v) => ({
@@ -40,13 +52,13 @@ export const handleCodebaseIndex = (db) => {
   return { success: true, files, violations };
 };
 
-export const handleCodebaseTree = (db) => {
-  const res = handleCodebaseIndex(db);
+export const handleCodebaseTree = (db, cwd = null) => {
+  const res = handleCodebaseIndex(db, cwd);
   if (!res.success) return res;
   return { success: true, tree: buildFileTree(res.files), files: res.files, count: res.files.length };
 };
 
-export const handleCodebaseFile = (db, targetPath) => {
+export const handleCodebaseFile = (db, targetPath, cwd = null) => {
   if (!db) return { success: false, error: 'Database unavailable' };
   if (!targetPath) return { success: false, error: 'File path required' };
   const p = targetPath.trim();
@@ -69,7 +81,7 @@ export const handleCodebaseFile = (db, targetPath) => {
 
   return {
     success: true,
-    file: { path: f.path, tier: f.tier || 'utility', lines: Number(f.lines || 0), healthScore: Number(f.health_score ?? 100), hazardCount: Number(f.hazard_count ?? 0) },
+    file: { path: f.path, tier: f.tier || 'utility', ...withLineBudget(f.path, Number(f.lines || 0), budgetRules(cwd)), healthScore: Number(f.health_score ?? 100), hazardCount: Number(f.hazard_count ?? 0) },
     symbols, exports: symbols.filter((s) => s.isExport), imports, connections, violations
   };
 };

@@ -153,6 +153,12 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
       break;
     }
     case 'audit': {
+      const isStagedDelta = rawArgs.includes('--staged-delta');
+      if (isStagedDelta) {
+        const { runStagedDeltaCommand } = await import('./cmd-staged-delta.js');
+        runStagedDeltaCommand(rawArgs.slice(1));
+        break;
+      }
       const posDir = (rawArgs[1] && !rawArgs[1].startsWith('-')) ? rawArgs[1] : null;
       await runAudit(posDir, true);
       break;
@@ -166,15 +172,15 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
     case 'init': {
       const nonFlagArgs = rawArgs.slice(1).filter((arg) => !arg.startsWith('-'));
       const targetSubDir = nonFlagArgs[0] || 'src/chemical-x';
-      const { runInit } = await import('../scaffold.js');
-      await runInit(targetSubDir, rawArgs, runAudit);
+      const { runInit, scaffoldExitCode } = await import('../scaffold.js');
+      process.exitCode = scaffoldExitCode(await runInit(targetSubDir, rawArgs, runAudit));
       break;
     }
     case 'create':
     case 'scaffold': {
-      const { runScaffold } = await import('../scaffold.js');
+      const { runScaffold, scaffoldExitCode } = await import('../scaffold.js');
       const nonFlagArgs = rawArgs.slice(1).filter((arg) => !arg.startsWith('-'));
-      await runScaffold(nonFlagArgs[0], rawArgs, runAudit);
+      process.exitCode = scaffoldExitCode(await runScaffold(nonFlagArgs[0], rawArgs, runAudit));
       break;
     }
     case 'hook':
@@ -195,8 +201,8 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
       break;
     }
     case 'check': {
-      const { handleCheckCommand } = await import('../search.js');
-      handleCheckCommand(rawArgs[1], { isJson: rawArgs.includes('--json'), isCli: true });
+      const { runCheckCommand } = await import('./cmd-check.js');
+      runCheckCommand(rawArgs.slice(1));
       break;
     }
     case 'add:prop':

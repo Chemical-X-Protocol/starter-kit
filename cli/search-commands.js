@@ -17,7 +17,8 @@ import {
   queryFilesByHealth
 } from './search-db.js';
 
-const DEF_MAX_LINES = 40;
+// `chemx def` snippet window (a read cap, not a line budget).
+const DEF_SNIPPET_CAP = 40;
 
 export const handleDefCommand = (db, targetSymbol, { index = null, isJson = false, isCli = true, isFull = false, root = process.cwd() } = {}) => {
   const def = findSymbolDefinition(db, targetSymbol);
@@ -37,8 +38,8 @@ export const handleDefCommand = (db, targetSymbol, { index = null, isJson = fals
 
   let snippet = '';
   const bodyLines = Math.max(1, def.endLine - def.startLine + 1);
-  const isTruncated = !isFull && bodyLines > DEF_MAX_LINES;
-  const shownLines = isTruncated ? DEF_MAX_LINES : bodyLines;
+  const isTruncated = !isFull && bodyLines > DEF_SNIPPET_CAP;
+  const shownLines = isTruncated ? DEF_SNIPPET_CAP : bodyLines;
   try {
     const absPath = path.resolve(root, def.filePath);
     if (fs.existsSync(absPath)) {
@@ -296,7 +297,8 @@ export const handleHealthFilterCommand = (db, status, { index = null, isJson = f
   return payload;
 };
 
-export const handleCheckCommand = (targetFile, { index = null, isJson = false, isCli = true } = {}) => {
+/** options.config: a loaded project config (e.g. with --profile applied); defaults to the cwd's config. */
+export const handleCheckCommand = (targetFile, { index = null, isJson = false, isCli = true, config = null } = {}) => {
   const startTime = Date.now();
   if (!targetFile) {
     const errorMsg = 'Please specify a target file to check. Example: chemx check src/components/m-card.vue';
@@ -322,7 +324,7 @@ export const handleCheckCommand = (targetFile, { index = null, isJson = false, i
   }
 
   const relPath = path.relative(process.cwd(), absPath);
-  const violations = auditFile(absPath, relPath);
+  const violations = auditFile(absPath, relPath, config ? { config } : {});
   const durationMs = Date.now() - startTime;
 
   const criticalCount = violations.filter((v) => v.severity === 'CRITICAL').length;

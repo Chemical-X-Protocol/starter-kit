@@ -8,6 +8,7 @@ import { applyIndexSchema, registerVectorFunctions } from './search-schema-ddl.j
 import { ensureIndexVersion, readIndexMeta, isCurrentIndexVersion } from './search-index-meta.js';
 import { debugNote } from './search-debug.js';
 import { isSqliteBusyError } from './team/team-db-transaction.js';
+import { guardProjectStamp } from './db-project-stamp.js';
 
 let DatabaseSync = null;
 try {
@@ -129,13 +130,17 @@ export const openIndexDb = (cwd = process.cwd(), options = {}) => {
   let db = null;
   const canWrite = isPathWritable(dbPath);
   if (canWrite) db = openWritableDb(dbPath);
+  // A db copied in from another project is refused (closed, never cached) instead of serving its rows.
+  if (db) guardProjectStamp(db, dbPath);
 
   if (!db) {
+    const isExistingDb = fs.existsSync(dbPath);
     db = openReadOnlyDb(dbPath);
     if (!db) return null;
     registerVectorFunctions(db);
     const isStaleVersion = !isCurrentIndexVersion(readIndexMeta(db));
     DB_STATE.set(db, { isReadOnly: true, versionReset: null, isStaleVersion });
+    if (isExistingDb) guardProjectStamp(db, dbPath, { readOnly: true });
   }
 
   DB_CACHE.set(dbPath, db);

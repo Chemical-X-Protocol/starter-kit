@@ -9,7 +9,16 @@ import {
   handleCallTraceCommand,
   handleBacktraceCommand
 } from './search-commands-graph.js';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { openIndexDb, upsertFileIndex } from './search-db.js';
+
+// '@/' resolves through the project's tsconfig paths (B: module-aliases.js). The kit's own
+// tsconfig maps '@/*' to src/ui/* first, so these virtual records resolve against a neutral
+// root where only the conventional '@/' -> src/ applies.
+const NEUTRAL_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-trace-spec-'));
+process.on('exit', () => fs.rmSync(NEUTRAL_ROOT, { recursive: true, force: true }));
 
 describe('Call Trace & Backtrace Engine', () => {
   it('extracts call expressions from code snippet', () => {
@@ -39,6 +48,7 @@ describe('Call Trace & Backtrace Engine', () => {
 
     upsertFileIndex(db, {
       path: 'src/controllers/trace-cart.ts',
+      root: NEUTRAL_ROOT,
       mtime: Date.now(),
       size: 400,
       tier: 'hook',
@@ -50,6 +60,7 @@ describe('Call Trace & Backtrace Engine', () => {
 
     upsertFileIndex(db, {
       path: 'src/organisms/trace-cart.vue',
+      root: NEUTRAL_ROOT,
       mtime: Date.now(),
       size: 800,
       tier: 'organism',
@@ -63,6 +74,7 @@ describe('Call Trace & Backtrace Engine', () => {
 
     upsertFileIndex(db, {
       path: 'src/views/trace-checkout.vue',
+      root: NEUTRAL_ROOT,
       mtime: Date.now(),
       size: 500,
       tier: 'view',

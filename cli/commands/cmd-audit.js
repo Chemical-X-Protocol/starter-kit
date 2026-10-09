@@ -30,6 +30,7 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
   const { computeGateVerdict } = await import('../audit/gate-verdict.js');
   const { buildAuditSummary } = await import('../audit/audit-summary.js');
   const { writeRatchet, RATCHET_FILE } = await import('../audit/ratchet.js');
+  const { writeAuditStatus } = await import('../audit/status-file.js');
   const { loadProjectConfig: loadSharedConfig } = await import('../config/index.js');
   const { autoGenerateTasksFromAudit } = await import('../team/index.js');
   const loadNavigator = () => import('../navigator.js');
@@ -135,6 +136,7 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
   }
   const isPartialAudit = Boolean(fileList) || isFast;
   report.gate = computeGateVerdict({ projectRoot: process.cwd(), scope: auditRelDir, violations: report.violations, isPartialScan: isPartialAudit });
+  report.scope = auditRelDir;
   saveAuditSnapshot(report);
   try {
     const syncRes = syncSearchIndex(targetDir, process.cwd());
@@ -202,6 +204,7 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
   report.gate = hasThresholdFailure
     ? { ...report.gate, isPassing: false, basis: 'threshold', note: thresholdNotes.join('; ') }
     : { ...report.gate, isPassing: !hasFailingViolations };
+  writeAuditStatus(process.cwd(), { scope: auditRelDir, report });
 
   if (isJson) {
     const isFullJson = rawArgs.includes('--full');
@@ -222,8 +225,9 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
   if (isCli) {
     if (isShare) {
       const { handleShareToDiscussions } = await loadNavigator();
-      await handleShareToDiscussions(report);
-      process.exit(0);
+      const { shareExitCode, hasYesFlag } = await import('../share-consent.js');
+      const shared = await handleShareToDiscussions(report, { isYes: hasYesFlag(rawArgs) });
+      process.exit(shareExitCode(shared));
     }
 
     if (isInteractive && !isUnroll) {

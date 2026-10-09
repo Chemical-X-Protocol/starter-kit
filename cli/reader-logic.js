@@ -1,5 +1,5 @@
 import { parse } from './babel-lazy.js';
-import { blankOutsideScripts } from './sfc-scripts.js';
+import { parseSfc } from './sfc/sfc-parse.js';
 import { stripCommentsKeepingLines } from './comment-ranges.js';
 
 /**
@@ -70,8 +70,7 @@ export const summarizeTemplate = (code, filePath = '') => {
   let tpl = '';
 
   if (isVue) {
-    const match = code.match(/<template[\s\S]*?>([\s\S]*?)<\/template>/i);
-    if (match) tpl = match[1];
+    tpl = parseSfc(code, filePath).template?.content ?? '';
   } else if (isSvelte) {
     tpl = code
       .replace(/<script[\s\S]*?<\/script>/gi, '')
@@ -120,8 +119,8 @@ export const extractTemplateContent = (code, filePath = '') => {
   const isSvelte = filePath.endsWith('.svelte');
 
   if (isVue) {
-    const match = code.match(/<template[\s\S]*?>([\s\S]*?)<\/template>/i);
-    return match ? match[0].trim() : '// No <template> block found in Vue file.';
+    const template = parseSfc(code, filePath).template;
+    return template ? `<template>${template.content}</template>`.trim() : '// No <template> block found in Vue file.';
   }
 
   if (isSvelte) {
@@ -182,7 +181,7 @@ const isLogicStatement = (stmt) => {
  */
 export const generateAstLogicSkeleton = (code, filePath) => {
   const isSfc = filePath.endsWith('.vue') || filePath.endsWith('.svelte');
-  const scriptContent = isSfc ? blankOutsideScripts(code) : code;
+  const scriptContent = isSfc ? parseSfc(code, filePath).scriptOverlay : code;
   const lines = [`// Logic Skeleton: ${filePath} (${SKELETON_LABEL})`];
   const src = (node) => scriptContent.slice(node.start, node.end).trim();
   const origin = (node) => `  // L${node.loc.start.line}-${node.loc.end.line}`;

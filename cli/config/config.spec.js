@@ -1,5 +1,10 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { DEFAULT_PROFILE, getProfileDefaults, loadProjectConfig } from './index.js';
 
 describe('Chemical X Configuration & Profiles', () => {
@@ -47,5 +52,41 @@ describe('Chemical X Configuration & Profiles', () => {
     assert.strictEqual(cfg.profile, 'pragmatic');
     assert.strictEqual(cfg.rules.enforceFileLength, false);
     assert.strictEqual(cfg.rules.maxCyclomaticComplexity, 12);
+  });
+});
+
+describe('unknown profile names are reported, not silently ignored (#1475)', () => {
+  const CLI = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'index.js');
+  const withProject = (files, fn) => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-profile-'));
+    try {
+      for (const [rel, content] of Object.entries(files)) {
+        fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
+        fs.writeFileSync(path.join(root, rel), content);
+      }
+      fn(root);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  };
+
+  it('resolves an unknown --profile to the default and records the bad name', () => {
+    const cfg = loadProjectConfig('/tmp/non-existent-dir-for-chemx-test', ['--profile=bogus-profile']);
+    assert.strictEqual(cfg.profile, 'pragmatic');
+    assert.strictEqual(cfg.unknownProfile, 'bogus-profile');
+  });
+
+  it('check --profile=bogus warns on stderr naming the known profiles', () => {
+    withProject({ 'src/a.ts': 'export const a = 1;\n' }, (root) => {
+      const run = spawnSync(process.execPath, [CLI, 'check', 'src/a.ts', '--profile=bogus-profile', '--json'], { cwd: root, encoding: 'utf-8' });
+      assert.match(run.stderr, /unknown profile "bogus-profile".*pragmatic, atomic-strict, loose/);
+    });
+  });
+
+  it('an unknown profile in .chemxrc warns too', () => {
+    withProject({ '.chemxrc': '{ "profile": "strickt" }', 'src/a.ts': 'export const a = 1;\n' }, (root) => {
+      const run = spawnSync(process.execPath, [CLI, 'check', 'src/a.ts', '--json'], { cwd: root, encoding: 'utf-8' });
+      assert.match(run.stderr, /unknown profile "strickt"/);
+    });
   });
 });

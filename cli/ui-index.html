@@ -795,7 +795,7 @@ const App = {
               <div class="xo-kpi__value" style="color:var(--xo-cyan);">{{ codebase.length }}</div>
             </div>
             <div class="xo-kpi">
-              <div class="xo-kpi__label">Under 100L</div>
+              <div class="xo-kpi__label">Within line budget</div>
               <div class="xo-kpi__value" style="color:var(--xo-lime);">{{ compliantCount }}</div>
             </div>
             <div class="xo-kpi">
@@ -817,7 +817,7 @@ const App = {
             <div v-for="f in filteredCodebase" :key="f.path" class="xo-file-card">
               <div class="d-flex align-center gap-2 mb-1">
                 <v-chip v-if="f.tier" size="x-small" :class="'tier-'+f.tier">{{ f.tier }}</v-chip>
-                <v-chip v-if="f.lines>100" size="x-small" class="xo-hazard">{{ f.lines }}L ⚠</v-chip>
+                <v-chip v-if="f.isOverBudget" size="x-small" class="xo-hazard">{{ f.lines }}L ⚠</v-chip>
                 <v-chip v-else-if="f.lines" size="x-small" variant="outlined" style="border-color:rgba(255,255,255,.12);color:rgba(255,255,255,.4);">{{ f.lines }}L</v-chip>
                 <v-chip v-if="f.coverage!=null" size="x-small" color="success" variant="tonal">{{ f.coverage }}%</v-chip>
               </div>
@@ -1009,7 +1009,7 @@ const App = {
       });
     };
 
-    const compliantCount  = computed(() => codebase.value.filter(f => !f.lines || f.lines <= 100).length);
+    const compliantCount  = computed(() => codebase.value.filter(f => !f.isOverBudget).length);
     const compliancePct   = computed(() => !codebase.value.length ? 0 : Math.round(compliantCount.value / codebase.value.length * 100));
 
     const filteredCodebase = computed(() => {

@@ -15,8 +15,11 @@ import {
 } from './audit/metrics.js';
 import { generateMarkdownReport } from './audit/reporter-markdown.js';
 import { scanTree } from './audit-scan.js';
+import { createCoverageCollector, summarizeCoverage } from './audit/coverage.js';
+import { SCORE_MODEL } from './audit/metrics.js';
+import { RULESET_VERSION } from './audit/rule-revisions.js';
 
-export { auditFile, scanTree, scanDirectory } from './audit-scan.js';
+export { auditFile, resolveAuditConfig, scanTree, scanDirectory } from './audit-scan.js';
 
 export const runAudit = (targetDir = 'src', options = {}) => {
   const cwd = options.cwd || process.cwd();
@@ -25,13 +28,15 @@ export const runAudit = (targetDir = 'src', options = {}) => {
   const hookRegistry = createHookShapeRegistry();
   const config = options.config || loadProjectConfig(cwd);
   const includeTests = Boolean(options.includeTests);
+  const coverageCollector = createCoverageCollector();
   const { violations, fileStats, totalHooks } = scanTree(absoluteTarget, cwd, {
     patternRegistry,
     hookRegistry,
     fast: Boolean(options.fast),
     fileList: options.fileList || null,
     includeTests,
-    config
+    config,
+    coverage: coverageCollector
   });
 
   const crossHookViolations = hookRegistry.validateCrossHookConsistency();
@@ -51,7 +56,7 @@ export const runAudit = (targetDir = 'src', options = {}) => {
     }
     if (f.isMolecule) {
       moleculeCount += 1;
-      if (f.lineCount <= 100) {
+      if (f.lineCount <= f.lineBudget) {
         moleculeCompliantCount += 1;
       }
     }
@@ -86,6 +91,9 @@ export const runAudit = (targetDir = 'src', options = {}) => {
     targetDir,
     stage,
     options,
+    ruleset: RULESET_VERSION,
+    scoreModel: SCORE_MODEL,
+    coverage: summarizeCoverage(coverageCollector),
     scannedFiles,
     totalViolations: violations.length,
     metrics,

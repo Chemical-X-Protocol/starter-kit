@@ -1,7 +1,7 @@
 // Public facade (package export "./audit"): the engine plus the terminal/markdown presentation.
 // Core command paths import cli/audit-engine.js instead, so piped and --json runs never load
 // the presentation layer (cli/seam.spec.js).
-import { auditFile, scanTree, scanDirectory, runAudit } from './audit-engine.js';
+import { auditFile, resolveAuditConfig, scanTree, scanDirectory, runAudit } from './audit-engine.js';
 import { PILLARS, RULE_REGISTRY } from './audit/rules.js';
 import { createPatternRegistry } from './audit/pattern-detector.js';
 import {
@@ -70,7 +70,7 @@ import {
   formatGroupedPromptViolations
 } from './audit/prompts.js';
 
-export { auditFile, scanTree, scanDirectory, runAudit };
+export { auditFile, resolveAuditConfig, scanTree, scanDirectory, runAudit };
 
 export * from './audit/social.js';
 export * from './audit/prompts.js';

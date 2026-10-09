@@ -1,5 +1,10 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
+
+// The current user's Antigravity history dir; never a hard-coded home path.
+export const resolveAntigravityTranscript = (conversationId, homeDir = os.homedir()) =>
+  path.join(homeDir, '.gemini', 'antigravity', 'brain', path.basename(conversationId), '.system_generated', 'logs', 'transcript.jsonl');
 
 export const scanAttentionItems = (db, cwd = process.cwd()) => {
   const isAgRunning = Boolean(process.env.ANTIGRAVITY_AGENT === '1' || process.env.ANTIGRAVITY_LS_ADDRESS);
@@ -7,7 +12,7 @@ export const scanAttentionItems = (db, cwd = process.cwd()) => {
   const items = [];
 
   if (conversationId) {
-    const transcriptPath = path.join('/home/xopher/.gemini/antigravity/brain', conversationId, '.system_generated/logs/transcript.jsonl');
+    const transcriptPath = resolveAntigravityTranscript(conversationId);
     try {
       if (fs.existsSync(transcriptPath)) {
         const content = fs.readFileSync(transcriptPath, 'utf-8');

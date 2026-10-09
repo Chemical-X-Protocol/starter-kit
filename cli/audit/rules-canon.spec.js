@@ -14,7 +14,7 @@ export function parseConfig(str) {
   const violations = auditCode(code, 'src/config.js', 'src/config.js');
   const errorViolation = violations.find((v) => v.rule === 'ERROR_SWALLOWED_EXCEPTION');
   assert.ok(errorViolation, 'Expected ERROR_SWALLOWED_EXCEPTION for empty catch block');
-  assert.strictEqual(errorViolation.severity, 'CRITICAL');
+  assert.strictEqual(errorViolation.severity, 'HIGH');
 });
 
 test('Audit Rules: does NOT flag catch block that logs, rethrows, or returns ResultTuple', () => {

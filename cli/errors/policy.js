@@ -13,11 +13,14 @@ export const resolveCatcherPolicy = (options = {}, env = process.env, interactiv
   const isAgentEnv = Boolean(env.AGENT || env.ANTIGRAVITY || env.CURSOR || env.NON_INTERACTIVE || env.CLAUDECODE);
   const isHuman = interactive && !isAgentEnv;
   const isExplicitPrompt = Boolean(options.promptIssue || env.CHEMX_PROMPT_ISSUES === 'true');
+  const isCi = Boolean(env.CI || env.GITHUB_ACTIONS);
+  const shouldAutoPost = options.autoPost === true || env.CHEMX_AUTO_POST_ISSUES === 'true';
   return {
-    shouldSaveReport: !options.skipFileWrite && (isHuman || isExplicitSave),
+    // Opting in to a post opts in to the local report, so a failed or offline post still leaves a copy.
+    shouldSaveReport: !options.skipFileWrite && (isHuman || isExplicitSave || shouldAutoPost),
     shouldShowIssueUrl: isHuman || isExplicitPrep,
-    shouldAutoPost: options.autoPost === true || env.CHEMX_AUTO_POST_ISSUES === 'true',
-    canPromptUser: isHuman && isExplicitPrompt,
+    shouldAutoPost,
+    canPromptUser: isHuman && isExplicitPrompt && !isCi,
     useColor: interactive
   };
 };

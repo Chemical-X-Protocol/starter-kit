@@ -112,7 +112,9 @@ export const startStdioServer = (options = {}) => {
   // Teardown lifecycle: a real stdio server exits when the client closes stdin,
   // sends a termination signal, or disappears (reparented process).
   const isRealStdio = !options.input;
+  let watchParent = null;
   const shutdown = () => {
+    clearInterval(watchParent);
     if (isRealStdio) process.exit(0);
   };
   if (isRealStdio) {
@@ -120,7 +122,7 @@ export const startStdioServer = (options = {}) => {
     process.on('SIGTERM', shutdown);
     process.on('SIGHUP', shutdown);
     const initialParentPid = process.ppid;
-    const watchParent = setInterval(() => {
+    watchParent = setInterval(() => {
       const isParentGone = process.ppid !== initialParentPid;
       if (isParentGone) shutdown();
     }, 5000);

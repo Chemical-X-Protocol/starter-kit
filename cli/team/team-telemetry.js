@@ -1,5 +1,4 @@
 import fs from 'node:fs';
-import path from 'node:path';
 import { normalizeAgentId } from './team-db-task-helpers.js';
 
 export const MODEL_PRICING = {
@@ -48,20 +47,11 @@ export const calculateCost = (promptTokens = 0, completionTokens = 0, modelId = 
   return Number(totalCost.toFixed(6));
 };
 
+// Only an explicit transcript is ever attributed to a task. Guessing (first file in some
+// agent's history dir, or a shared project log) attached one unrelated transcript to every task.
 export const findTranscriptLog = (options = {}) => {
   const hasExplicitPath = Boolean(options.logPath && fs.existsSync(options.logPath));
-  if (hasExplicitPath) return options.logPath;
-  const cwd = options.cwd || process.cwd();
-  const candidates = [path.resolve(cwd, '.chemx/logs/transcript.jsonl'), path.resolve(cwd, '.system_generated/logs/transcript.jsonl')];
-  for (const p of candidates) if (fs.existsSync(p)) return p;
-  const brainDir = '/home/xopher/.gemini/antigravity/brain';
-  if (fs.existsSync(brainDir)) {
-    for (const conv of fs.readdirSync(brainDir)) {
-      const cand = path.join(brainDir, conv, '.system_generated/logs/transcript.jsonl');
-      if (fs.existsSync(cand)) return cand;
-    }
-  }
-  return null;
+  return hasExplicitPath ? options.logPath : null;
 };
 
 const parseTokensFromEntry = (entry) => {
@@ -99,29 +89,48 @@ export const parseTranscriptFile = (filePath, options = {}) => {
   return { promptTokens: p, completionTokens: c, cachedTokens: k, totalTokens: tot, costUsd };
 };
 
+const readExplicitTokens = (tokens, model) => {
+  const p = Number(tokens.prompt ?? tokens.prompt_tokens ?? 0);
+  const c = Number(tokens.completion ?? tokens.completion_tokens ?? 0);
+  const k = Number(tokens.cached ?? tokens.cached_tokens ?? 0);
+  const tot = Number(tokens.total ?? tokens.total_tokens ?? (p + c));
+  const cost = Number(tokens.cost_usd ?? calculateCost(p, c, tokens.model || tokens.modelId || model));
+  return { p, c, k, tot, cost, source: 'tokens' };
+};
+
+const readTranscriptTokens = (logPath, model) => {
+  const parsed = parseTranscriptFile(logPath, { model });
+  return { p: parsed.promptTokens, c: parsed.completionTokens, k: parsed.cachedTokens, tot: parsed.totalTokens, cost: parsed.costUsd, source: 'log' };
+};
+
+// A task's token stamp; a task never measured (telemetry_source NULL) is unknown, not zero.
+export const isTelemetryMeasured = (task = {}) => Boolean(task.telemetry_source);
+
+export const formatTaskTokenStamp = (task = {}) => {
+  if (!isTelemetryMeasured(task)) return '[tokens: unknown]';
+  const p = Number(task.prompt_tokens || 0);
+  const c = Number(task.completion_tokens || 0);
+  return `[P: ${p} | C: ${c} | Cost: $${Number(task.cost_usd || 0).toFixed(4)}]`;
+};
+
+// Returns null (unknown) when the caller supplied neither tokens nor an existing --log transcript.
 export const ingestTaskTelemetry = (db, taskId, agentId, options = {}) => {
   const canIngest = Boolean(db && taskId);
   if (!canIngest) return null;
   const model = options.model || options.modelId || options.model_id || DEFAULT_MODEL;
-  let p = 0, c = 0, k = 0, tot = 0, cost = 0.0;
-  if (options.tokens) {
-    const t = options.tokens;
-    p = Number(t.prompt ?? t.prompt_tokens ?? 0);
-    c = Number(t.completion ?? t.completion_tokens ?? 0);
-    k = Number(t.cached ?? t.cached_tokens ?? 0);
-    tot = Number(t.total ?? t.total_tokens ?? (p + c));
-    cost = Number(t.cost_usd ?? calculateCost(p, c, t.model || t.modelId || model));
-  } else {
-    const parsed = parseTranscriptFile(options.logPath || findTranscriptLog(options), { model });
-    p = parsed.promptTokens; c = parsed.completionTokens; k = parsed.cachedTokens;
-    tot = parsed.totalTokens; cost = parsed.costUsd;
-  }
-  db.prepare('UPDATE agent_tasks SET prompt_tokens=?, completion_tokens=?, cached_tokens=?, total_tokens=?, cost_usd=? WHERE id=?')
-    .run(p, c, k, tot, cost, Number(taskId));
+  const hasTokens = Boolean(options.tokens);
+  const logPath = hasTokens ? null : findTranscriptLog(options);
+  const hasSource = hasTokens || Boolean(logPath);
+  if (!hasSource) return null;
+
+  const usage = hasTokens ? readExplicitTokens(options.tokens, model) : readTranscriptTokens(logPath, model);
+  const { p, c, k, tot, cost } = usage;
+  db.prepare('UPDATE agent_tasks SET prompt_tokens=?, completion_tokens=?, cached_tokens=?, total_tokens=?, cost_usd=?, telemetry_source=? WHERE id=?')
+    .run(p, c, k, tot, cost, usage.source, Number(taskId));
   const cleanId = normalizeAgentId(agentId);
   if (cleanId) {
     db.prepare('UPDATE agents SET total_prompt_tokens=total_prompt_tokens+?, total_completion_tokens=total_completion_tokens+?, total_tokens=total_tokens+?, total_cost_usd=total_cost_usd+? WHERE id=?')
       .run(p, c, tot, cost, cleanId);
   }
-  return { prompt_tokens: p, completion_tokens: c, cached_tokens: k, total_tokens: tot, cost_usd: cost };
+  return { prompt_tokens: p, completion_tokens: c, cached_tokens: k, total_tokens: tot, cost_usd: cost, source: usage.source };
 };

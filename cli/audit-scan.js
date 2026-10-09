@@ -4,6 +4,8 @@ import path from 'node:path';
 import { isSourceFile as isPolyglotSourceFile } from './languages.js';
 import { auditCode } from './audit/rules.js';
 import { ANY_DEPTH_IGNORED_DIRS } from './search-scan.js';
+import { loadProjectConfig } from './config/index.js';
+import { countLines, getLineBudgets, resolveFileTier } from './audit/line-budgets.js';
 
 // Shares search's skip list (package stores, agent worktree copies, the chemx index) so the
 // audit never scores code that isn't the project's; build output is skipped at any depth here.
@@ -13,24 +15,41 @@ const isSourceFile = (name, options = {}) => {
   return isPolyglotSourceFile(name, { includeTests: false, ...options });
 };
 
-export const auditFile = (filePath, relativePath) => {
+const configCache = new Map();
+
+/** Project config for single-file audits (check, patch, task gates, MCP), loaded once per root. */
+export const resolveAuditConfig = (cwd = process.cwd()) => {
+  const cached = configCache.get(cwd);
+  if (cached) return cached;
+  const config = loadProjectConfig(cwd);
+  configCache.set(cwd, config);
+  return config;
+};
+
+/**
+ * Audits one file with the project config (.chemxrc profile, per-rule settings,
+ * overrides). options: { config, cwd } to override the config or its root.
+ */
+export const auditFile = (filePath, relativePath, options = {}) => {
   if (!isSourceFile(path.basename(filePath), { includeTests: true })) return [];
   const content = fs.readFileSync(filePath, 'utf-8');
-  return auditCode(content, filePath, relativePath);
+  const config = options.config || resolveAuditConfig(options.cwd || process.cwd());
+  return auditCode(content, filePath, relativePath, { config, coverage: options.coverage });
 };
 
 const auditFileEntry = (fullPath, relPath, scanOptions) => {
   const content = fs.readFileSync(fullPath, 'utf-8');
-  const lines = content.split('\n');
-  const baseName = path.basename(fullPath);
-  const isMolecule = relPath.includes('molecules') || relPath.includes('/m-') || baseName.startsWith('m-');
+  const ruleConfig = scanOptions.config?.rules || {};
+  const budgets = getLineBudgets(ruleConfig);
+  const isMolecule = resolveFileTier(relPath, ruleConfig) === 'molecule';
 
   const fileStat = {
     fullPath,
     relativePath: relPath,
-    lineCount: lines.length,
+    lineCount: countLines(content),
     charCount: content.length,
-    isMolecule
+    isMolecule,
+    lineBudget: isMolecule ? budgets.molecule : budgets.file.warn
   };
 
   const hookMatches = content.match(/\buse[A-Z0-9]\w*\b/g);
@@ -39,7 +58,8 @@ const auditFileEntry = (fullPath, relPath, scanOptions) => {
     patternRegistry: scanOptions.patternRegistry,
     hookRegistry: scanOptions.hookRegistry,
     fast: scanOptions.fast,
-    config: scanOptions.config
+    config: scanOptions.config,
+    coverage: scanOptions.coverage
   });
 
   return { fileStat, hookCount, fileViolations };

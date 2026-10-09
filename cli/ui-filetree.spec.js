@@ -7,6 +7,16 @@ import { routeGet } from './ui-server-routes.js';
 import { VIEW_FILETREE_TEMPLATE } from './ui-template-filetree.js';
 import { UI_STYLES } from './ui-styles.js';
 import { startUiServer } from './ui-server.js';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+// The studio server runs against a throwaway project so specs never open a real .chemx/index.db.
+const makeUiProject = (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-ui-project-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  return root;
+};
 
 const setupTestDb = () => {
   const db = new DatabaseSync(':memory:');
@@ -155,8 +165,8 @@ test('template & styles: UI template contains required classes and metadata elem
   assert.ok(UI_STYLES.includes('.xo-hazard'));
 });
 
-test('ui-server: HTTP integration serves /api/codebase/tree and /api/codebase/file', async () => {
-  const running = await startUiServer({ port: 0, cwd: process.cwd() });
+test('ui-server: HTTP integration serves /api/codebase/tree and /api/codebase/file', async (t) => {
+  const running = await startUiServer({ port: 0, cwd: makeUiProject(t) });
   try {
     const resTree = await running.fetch(`http://localhost:${running.port}/api/codebase/tree`);
     assert.strictEqual(resTree.status, 200);
@@ -172,4 +182,22 @@ test('ui-server: HTTP integration serves /api/codebase/tree and /api/codebase/fi
   } finally {
     running.server.close();
   }
+});
+
+test('codebase explorer flags files over their own line budget, not over a flat 100 lines (#1476)', () => {
+  const db = setupTestDb();
+  const insert = db.prepare('INSERT INTO files (path, mtime, size, tier, lines, chars, health_score, hazard_count) VALUES (?, 1, 1, ?, ?, 1, 100, 0)');
+  insert.run('src/molecules/m-card.ts', 'molecule', 150);
+  insert.run('src/molecules/m-huge.ts', 'molecule', 260);
+  insert.run('src/service.ts', 'utility', 300);
+  insert.run('src/big.ts', 'utility', 600);
+  const byPath = Object.fromEntries(handleCodebaseIndex(db).files.map((f) => [f.path, f]));
+  assert.deepStrictEqual(
+    Object.values(byPath).map((f) => [f.path, f.lineLimit, f.isOverBudget]),
+    [['src/big.ts', 500, true], ['src/molecules/m-card.ts', 250, false], ['src/molecules/m-huge.ts', 250, true], ['src/service.ts', 500, false]]
+  );
+  const leaf = handleCodebaseTree(db).tree.find((n) => n.name === 'src').children.find((n) => n.name === 'big.ts');
+  assert.strictEqual(leaf.isOverBudget, true);
+  assert.strictEqual(handleCodebaseFile(db, 'src/molecules/m-card.ts').file.isOverBudget, false);
+  assert.ok(VIEW_FILETREE_TEMPLATE.includes('node.isOverBudget'));
 });

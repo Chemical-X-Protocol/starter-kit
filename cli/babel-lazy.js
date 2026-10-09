@@ -22,3 +22,13 @@ export const traverse = (ast, visitors, ...rest) => {
   traverseFn = traverseFn ?? loadTraverse();
   return traverseFn(ast, visitors, ...rest);
 };
+
+let typesModule = null;
+const loadTypes = () => {
+  typesModule = typesModule ?? requireBabel('@babel/types');
+  return typesModule;
+};
+
+// `import { lazyTypes as t } from './babel-lazy.js'` reads like `import * as t from '@babel/types'`
+// but loads the package on the first t.isX() call, never at import time.
+export const lazyTypes = new Proxy({}, { get: (_target, key) => loadTypes()[key] });

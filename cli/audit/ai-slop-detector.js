@@ -12,7 +12,11 @@ const RESIDUE_PATTERNS = [
   ['hope this', 'helps'].join(' '),
   ['feel free', 'to tweak'].join(' '),
   ['let me know', 'if you need'].join(' '),
-  ['as', 'requested'].join(' '),
+  // Assistant framing only (the phrase followed by a pause and "here"/"I"/"below",
+  // or addressed to "you"). The bare phrase in a sentence about an API client is
+  // ordinary engineering prose.
+  ['as you', 'requested'].join(' '),
+  ['as', 'requested[,.!:]\\s*(?:here|i\\b|below)'].join(' '),
   ['as an ai', 'language model'].join(' ')
 ];
 

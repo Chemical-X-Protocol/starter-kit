@@ -10,9 +10,19 @@ const stripJsonComments = (content) => {
 const parseJsonSafe = (raw) => {
   try {
     return JSON.parse(stripJsonComments(raw));
-  } catch (parseError) {
+  } catch {
     return null;
   }
+};
+
+const warnedConfigFiles = new Set();
+
+/** A config file that exists but does not parse is reported once on stderr, never ignored silently. */
+const warnUnparseableConfig = (filePath) => {
+  const isAlreadyWarned = warnedConfigFiles.has(filePath);
+  if (isAlreadyWarned) return;
+  warnedConfigFiles.add(filePath);
+  process.stderr.write(`chemx: ignoring ${filePath}: not valid JSON (using profile defaults)\n`);
 };
 
 const normalizeRuleKeys = (rules = {}) => {
@@ -50,12 +60,14 @@ export const findAndLoadConfigFile = (cwd = process.cwd()) => {
       const content = fs.readFileSync(filePath, 'utf-8');
       const parsed = parseJsonSafe(content);
       const isObject = parsed !== null && typeof parsed === 'object';
+      if (!isObject) warnUnparseableConfig(filePath);
       if (isObject) {
         return {
           source: filePath,
           profile: parsed.profile,
           rules: normalizeRuleKeys(parsed.rules || {}),
           overrides: parsed.overrides || [],
+          tiers: parsed.tiers || null,
           raw: parsed
         };
       }

@@ -5,6 +5,16 @@ import { initTeamSchema } from './team/team-schema.js';
 import { handleSwarmStatus } from './ui-handlers.js';
 import { routeGet, routePost } from './ui-server-routes.js';
 import { startUiServer } from './ui-server.js';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+// The studio server runs against a throwaway project so specs never open a real .chemx/index.db.
+const makeUiProject = (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-ui-project-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  return root;
+};
 
 const setupTestDb = () => {
   const db = new DatabaseSync(':memory:');
@@ -104,8 +114,8 @@ test('ui-server-routes: routePost resolves canonical aliases /api/feed and /api/
   assert.ok(tasksRes.tasks.some((t) => t.title === 'Created via canonical route'));
 });
 
-test('ui-server: HTTP integration serves canonical routes /api/status, /api/feed, /api/tasks', async () => {
-  const running = await startUiServer({ port: 0, cwd: process.cwd() });
+test('ui-server: HTTP integration serves canonical routes /api/status, /api/feed, /api/tasks', async (t) => {
+  const running = await startUiServer({ port: 0, cwd: makeUiProject(t) });
   try {
     const resStatus = await running.fetch(`http://localhost:${running.port}/api/status`);
     assert.strictEqual(resStatus.status, 200);

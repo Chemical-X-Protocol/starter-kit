@@ -1,8 +1,8 @@
-import { sanitizeText, sanitizeStackTrace } from './sanitizer.js';
+import { sanitizeText, sanitizeStackTrace, sanitizeValue } from './sanitizer.js';
 
 export const buildIssueTitle = (report) => {
-  const cmd = report.command ? report.command.split(' ')[0] : 'chemx';
-  const rawMsg = report.message || 'Unknown error occurred';
+  const cmd = report.command ? sanitizeText(report.command).split(' ')[0] : 'chemx';
+  const rawMsg = sanitizeText(report.message || 'Unknown error occurred');
   const cleanMsg = rawMsg.split('\n')[0].replace(/[\r\n\t]+/g, ' ').trim();
   const truncatedMsg = cleanMsg.length > 70 ? `${cleanMsg.slice(0, 67)}...` : cleanMsg;
   return `[ChemX Failure] ${cmd}: ${truncatedMsg}`;
@@ -33,10 +33,10 @@ export const buildIssueBody = (report) => {
   ];
 
   if (report.gitBranch) {
-    lines.push(`| **Git Branch** | \`${report.gitBranch}\` |`);
+    lines.push(`| **Git Branch** | \`${sanitizeText(String(report.gitBranch))}\` |`);
   }
   if (report.gitCommit) {
-    lines.push(`| **Git Commit** | \`${report.gitCommit}\` |`);
+    lines.push(`| **Git Commit** | \`${sanitizeText(String(report.gitCommit))}\` |`);
   }
 
   lines.push('');
@@ -53,7 +53,7 @@ export const buildIssueBody = (report) => {
     lines.push('');
     lines.push('#### 🔍 Additional Metadata');
     lines.push('```json');
-    lines.push(JSON.stringify(report.context, null, 2));
+    lines.push(JSON.stringify(sanitizeValue(report.context), null, 2));
     lines.push('```');
   }
 

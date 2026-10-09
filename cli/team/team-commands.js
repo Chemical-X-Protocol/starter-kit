@@ -24,7 +24,10 @@ import { runAblationComparison, formatAblationCard } from './team-memory.js';
 import { parseFlags } from './team-flags.js';
 import { resolveListOptions, selectTaskPage, buildTaskListView } from './task-list-view.js';
 import { handleTaskSlotCommand, handleTaskTraceCommand, handleTrainCommand } from './team-commands-vds.js';
-import { handleLockCommand, handleUnlockCommand } from './team-commands-lock.js';
+import { handleLockCommand, handleUnlockCommand, resolveCliAgent } from './team-commands-lock.js';
+import { resolveTaskTier } from './task-tier.js';
+import { resolveDependencyStates } from './task-detail-sections.js';
+import { buildCompletionOptions, describeCompletion, describeStatusUpdate, writeTaskResult } from './task-completion-output.js';
 
 const ARG_VAL_FLAGS = ['--target', '--as', '--to', '--agent', '--since', '--limit', '--thread', '--task', '--parent', '--rule', '--priority', '--prio', '--moscow', '--url', '--pid'];
 
@@ -35,8 +38,13 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
     return null;
   }
 
-  const subCommand = rawArgs[0] || 'status';
-  const restArgs = rawArgs.slice(1);
+  // `--` ends options: every later word is literal text (a task title may contain --test).
+  const terminatorIndex = rawArgs.indexOf('--');
+  const hasTerminator = terminatorIndex !== -1;
+  const optionArgs = hasTerminator ? rawArgs.slice(0, terminatorIndex) : rawArgs;
+  const titleWords = hasTerminator ? rawArgs.slice(terminatorIndex + 1) : [];
+  const subCommand = optionArgs[0] || 'status';
+  const restArgs = optionArgs.slice(1);
   const flags = parseFlags(restArgs);
   const nonFlagPositional = [];
   for (let i = 0; i < restArgs.length; i++) {
@@ -165,15 +173,16 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
         return { error: `Task #${taskId} not found` };
       }
       const events = queryFeed(db, { task_id: taskId });
+      const dependencyStates = resolveDependencyStates(db, task);
       if (flags.isJson) {
-        const output = { task, events, activityCount: events.length };
+        const output = { task, dependencyStates, events, activityCount: events.length };
         if (isCli) process.stdout.write(`${JSON.stringify(output, null, 2)}\n`);
         return output;
       }
       if (isCli) {
-        process.stdout.write(formatTaskDetailCard(task, events));
+        process.stdout.write(formatTaskDetailCard(task, events, dependencyStates));
       }
-      return { task, events };
+      return { task, dependencyStates, events };
     }
     if (taskAction === 'comment' || taskAction === 'post') {
       const taskId = nonFlagPositional[1];
@@ -215,7 +224,7 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
     }
     if (taskAction === 'claim') {
       const taskId = nonFlagPositional[1];
-      const agentHandle = flags.as || '@agent';
+      const agentHandle = resolveCliAgent(flags, isCli);
       registerAgent(db, { id: agentHandle, role: 'executor' });
       const res = claimTask(db, taskId, agentHandle);
       if (isCli) {
@@ -227,112 +236,38 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
     }
     if (taskAction === 'done' || taskAction === 'complete') {
       const taskId = nonFlagPositional[1];
-      const agentHandle = flags.as || '@agent';
+      const agentHandle = resolveCliAgent(flags, isCli);
       registerAgent(db, { id: agentHandle, role: 'executor' });
-      const tokensOption = (flags.tokens || flags.promptTokens || flags.completionTokens || flags.cost) ? {
-        prompt: flags.promptTokens || flags.tokens || 0,
-        completion: flags.completionTokens || 0,
-        cached: flags.cachedTokens || 0,
-        cost_usd: flags.cost,
-        model: flags.model
-      } : undefined;
-
-      const res = completeTaskWithAudit(db, taskId, agentHandle, {
-        cwd,
-        target: flags.target,
-        force: flags.force,
-        noTargetConfirm: flags.noTargetConfirm,
-        tokens: tokensOption
-      });
-
-      if (isCli) {
-        if (flags.isJson) {
-          process.stdout.write(`${JSON.stringify(res, null, 2)}\n`);
-        } else if (res?.refused) {
-          if (res.noTarget) {
-            process.stderr.write(`\x1b[31m✕ ${res.message}\x1b[0m\n`);
-          } else {
-            process.stderr.write(`\x1b[31m✕ Cannot complete task #${taskId}: ${res.hazardCount} hazard(s) remain in ${res.targetPath}. Fix the hazards or pass --force to complete anyway.\x1b[0m\n`);
-          }
-        } else if (res?.result_payload?.verificationApplicable === false) {
-          process.stdout.write(`\x1b[33m⚠\x1b[0m Completed task #${taskId} (Unverified: no target_path specified; completed with --no-target-confirm)\n`);
-        } else if (res?.result_payload?.forced) {
-          process.stdout.write(`\x1b[33m⚠\x1b[0m Completed task #${taskId} with --force \x1b[33m(Note: ${res.result_payload.hazardCountAfter} hazard(s) still remain in ${res.target_path})\x1b[0m\n`);
-        } else if (res?.result_payload?.verified && (res?.result_payload?.hazardCountAfter || 0) === 0) {
-          process.stdout.write(`\x1b[32m✔\x1b[0m Completed task #${taskId} (Verified clean: 0 hazards in ${res.target_path || 'target'})\n`);
-        } else if (res?.result_payload?.verified && (res?.result_payload?.hazardCountAfter || 0) > 0) {
-          process.stdout.write(`\x1b[32m✔\x1b[0m Completed task #${taskId} (Verified passing: ${res.result_payload.hazardCountAfter} non-blocking warning(s) remain in ${res.target_path})\n`);
-        } else if (res?.result_payload?.hazardCountAfter > 0) {
-          process.stdout.write(`\x1b[32m✔\x1b[0m Completed task #${taskId} \x1b[33m(Note: ${res.result_payload.hazardCountAfter} hazard(s) still remain in ${res.target_path})\x1b[0m\n`);
-        } else {
-          process.stdout.write(`\x1b[32m✔\x1b[0m Completed task #${taskId}\n`);
-        }
-      }
+      const res = completeTaskWithAudit(db, taskId, agentHandle, buildCompletionOptions(flags, cwd));
+      writeTaskResult(res, flags, isCli, () => describeCompletion(res, taskId, `Completed task #${taskId}`));
       return res;
     }
     if (taskAction === 'update') {
       const taskId = nonFlagPositional[1];
       const targetStatus = flags.status || nonFlagPositional[2] || 'in_progress';
-      const agentHandle = flags.as || '@agent';
+      const agentHandle = resolveCliAgent(flags, isCli);
       registerAgent(db, { id: agentHandle, role: 'executor' });
-
-      let res;
-      if (targetStatus === 'done' || targetStatus === 'completed') {
-        const tokensOption = (flags.tokens || flags.promptTokens || flags.completionTokens || flags.cost) ? {
-          prompt: flags.promptTokens || flags.tokens || 0,
-          completion: flags.completionTokens || 0,
-          cached: flags.cachedTokens || 0,
-          cost_usd: flags.cost,
-          model: flags.model
-        } : undefined;
-
-        res = completeTaskWithAudit(db, taskId, agentHandle, {
-          cwd,
-          target: flags.target,
-          force: flags.force,
-          noTargetConfirm: flags.noTargetConfirm,
-          tokens: tokensOption
+      const isCompletion = targetStatus === 'done' || targetStatus === 'completed';
+      if (isCompletion) {
+        const res = completeTaskWithAudit(db, taskId, agentHandle, buildCompletionOptions(flags, cwd));
+        writeTaskResult(res, flags, isCli, () => describeCompletion(res, taskId, `Updated task #${taskId} to status "done"`));
+        return res;
+      }
+      const res = updateTaskStatus(db, taskId, targetStatus, { blockedReason: flags.reason || '' });
+      if (res) {
+        postFeedEvent(db, {
+          author_id: agentHandle,
+          task_id: Number(taskId),
+          event_type: 'task_status_updated',
+          message: `Updated task #${taskId} status to ${targetStatus}`
         });
-      } else {
-        res = updateTaskStatus(db, taskId, targetStatus, { blockedReason: flags.reason || '' });
-        if (res) {
-          postFeedEvent(db, {
-            author_id: agentHandle,
-            task_id: Number(taskId),
-            event_type: 'task_status_updated',
-            message: `Updated task #${taskId} status to ${targetStatus}`
-          });
-        }
       }
-
-      if (isCli) {
-        if (flags.isJson) {
-          process.stdout.write(`${JSON.stringify(res, null, 2)}\n`);
-        } else if (res?.refused) {
-          if (res.noTarget) {
-            process.stderr.write(`\x1b[31m✕ ${res.message}\x1b[0m\n`);
-          } else {
-            process.stderr.write(`\x1b[31m✕ Cannot complete task #${taskId}: ${res.hazardCount} hazard(s) remain in ${res.targetPath}. Fix the hazards or pass --force to complete anyway.\x1b[0m\n`);
-          }
-        } else if (res?.result_payload?.verificationApplicable === false) {
-          process.stdout.write(`\x1b[33m⚠\x1b[0m Updated task #${taskId} to status "done" (Unverified: no target_path specified; completed with --no-target-confirm)\n`);
-        } else if (res?.result_payload?.forced) {
-          process.stdout.write(`\x1b[33m⚠\x1b[0m Updated task #${taskId} to status "done" with --force \x1b[33m(Note: ${res.result_payload.hazardCountAfter} hazard(s) still remain in ${res.target_path})\x1b[0m\n`);
-        } else if (res?.result_payload?.verified && (res?.result_payload?.hazardCountAfter || 0) === 0) {
-          process.stdout.write(`\x1b[32m✔\x1b[0m Updated task #${taskId} to status "done" (Verified clean: 0 hazards in ${res.target_path || 'target'})\n`);
-        } else if (res?.result_payload?.verified && (res?.result_payload?.hazardCountAfter || 0) > 0) {
-          process.stdout.write(`\x1b[32m✔\x1b[0m Updated task #${taskId} to status "done" (Verified passing: ${res.result_payload.hazardCountAfter} non-blocking warning(s) remain in ${res.target_path})\n`);
-        } else if (res?.result_payload?.hazardCountAfter > 0) {
-          process.stdout.write(`\x1b[32m✔\x1b[0m Updated task #${taskId} to status "done" \x1b[33m(Note: ${res.result_payload.hazardCountAfter} hazard(s) still remain in ${res.target_path})\x1b[0m\n`);
-        } else {
-          process.stdout.write(`\x1b[32m✔\x1b[0m Updated task #${taskId} status to "${targetStatus}"\n`);
-        }
-      }
+      writeTaskResult(res, flags, isCli, () => describeStatusUpdate(res, taskId));
       return res;
     }
     const isCreateAction = ['create', 'add', 'new'].includes(taskAction);
     if (isCreateAction) {
-      const title = nonFlagPositional.slice(1).join(' ') || 'Untitled Task';
+      const title = flags.title || [...nonFlagPositional.slice(1), ...titleWords].join(' ') || 'Untitled Task';
       const authorHandle = flags.as || '@agent';
       registerAgent(db, { id: authorHandle, role: 'contributor' });
       if (flags.agent) {
@@ -341,7 +276,7 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
       const task = createTask(db, {
         title,
         description: flags.description || '',
-        tier: flags.tier || 'molecule',
+        tier: resolveTaskTier(flags.tier, flags.target),
         target_path: flags.target,
         priority: flags.priority || 2,
         assigned_agent_id: flags.agent || null,

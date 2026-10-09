@@ -19,7 +19,7 @@ const PATCH_HELP = [
   '  --replacement-file=<p>   Read the replacement from a file',
   '  --multiple               Replace every occurrence',
   '  --allow-remove=<a,b>     Top-level declarations the patch may remove',
-  '  --as=<agent>             Agent id for team lock checks (default $CHEMX_AGENT_ID or @agent)',
+  '  --as=<agent>             Agent id for team lock checks (default $CHEMX_AGENT_ID, else unique to this process)',
   '  -n, --dry-run            Print the unified diff without writing (--dryRun, --dry-run=<any> too)',
   '  --json                   Output result as JSON',
   '  -h, --help               Show this help message',

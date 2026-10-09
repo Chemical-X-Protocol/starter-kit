@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { initTeamSchema } from './team/team-schema.js';
 import { routeGet } from './ui-server-routes.js';
@@ -28,8 +31,10 @@ test('ui-server-routes: routeGet resolves single task via /api/tasks/:id', () =>
   assert.strictEqual(missingRes.error, 'Task not found');
 });
 
-test('ui-server: HTTP integration serves SPA HTML on direct frontend routes /tasks and /tasks/:id', async () => {
-  const running = await startUiServer({ port: 0, cwd: process.cwd() });
+test('ui-server: HTTP integration serves SPA HTML on direct frontend routes /tasks and /tasks/:id', async (t) => {
+  const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-ui-routes-'));
+  t.after(() => fs.rmSync(projectRoot, { recursive: true, force: true }));
+  const running = await startUiServer({ port: 0, cwd: projectRoot });
   try {
     // Direct link to /tasks
     const resTasks = await running.fetch(`http://localhost:${running.port}/tasks`);

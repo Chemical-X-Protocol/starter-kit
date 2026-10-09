@@ -1,3 +1,4 @@
+import { isMonolithHotspot } from "./audit/line-budgets.js";
 import fs from "node:fs";
 import path from "node:path";
 import {
@@ -269,7 +270,7 @@ export const buildDashboardActionGroups = ({ report, onScaffold = null, onRerun 
     action: handleGuideAction
   };
 
-  const monolithHotspots = (report?.hotspots || []).filter((h) => h.isMonolith || h.lineCount > 500);
+  const monolithHotspots = (report?.hotspots || []).filter(isMonolithHotspot);
   const monoCount = String(monolithHotspots.length).padStart(2, '0');
   const hotspotsAction = {
     key: "hotspots",

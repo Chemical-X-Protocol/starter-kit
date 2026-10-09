@@ -1,4 +1,5 @@
-import { groupViolationsBySeverity } from './reporter-utils.js';
+import { SIZE_LABELS, hasSizeClass } from './line-budgets.js';
+import { groupViolationsBySeverity, resolveMarkdownMonolithText } from './reporter-utils.js';
 import {
   PILLAR_EMOJIS,
   formatPillarReactionBadgesMarkdown,
@@ -39,12 +40,7 @@ export const DEFAULT_DISCUSSION_REPO = 'Chemical-X-Protocol/.github';
 
 export { resolveBadgeColor };
 
-export const resolveHotspotTierText = (lineCount) => {
-  if (lineCount >= 2000) return '🔴 **CRITICAL (>= 2,000 lines of code)**';
-  if (lineCount >= 1000) return '🟠 **SEVERE (>= 1,000 lines of code)**';
-  if (lineCount > 500) return '🟡 **WARNING (> 500 lines of code)**';
-  return '🟢 Compliant';
-};
+export const resolveHotspotTierText = (lineCount) => resolveMarkdownMonolithText(lineCount);
 
 export const resolvePillarProgressionBadge = (isImproved, beforeStatus, afterStatus) => {
   if (isImproved) return '🟢 **RESOLVED**';
@@ -52,9 +48,9 @@ export const resolvePillarProgressionBadge = (isImproved, beforeStatus, afterSta
   return '🔴 **DEGRADED**';
 };
 
-const isExtremeMonolith = (h) => h.lineCount >= 2000;
-const isSevereMonolith = (h) => h.lineCount >= 1000 && h.lineCount < 2000;
-const isWarningMonolith = (h) => h.lineCount >= 500 && h.lineCount < 1000;
+const isExtremeMonolith = hasSizeClass('extreme');
+const isSevereMonolith = hasSizeClass('severe');
+const isWarningMonolith = hasSizeClass('warning');
 
 export const formatWebUrl = (url) => {
   if (!url || typeof url !== 'string') return '';
@@ -169,11 +165,11 @@ export const generateDiscussionContent = (report, username, projectName = 'Codeb
   lines.push('');
   lines.push('## 2. Monolith & Architectural Hazard Summary');
   lines.push('');
-  lines.push(`* **Monolith Files (> 500 lines of code)**: **${totalMonoliths} files**`);
+  lines.push(`* **Monolith Files (${SIZE_LABELS.warning} lines of code)**: **${totalMonoliths} files**`);
   if (totalMonoliths > 0) {
-    lines.push(`  * Warning Tier (500 - 999 lines of code): ${warningMonoliths} files`);
-    lines.push(`  * Severe Tier (1,000 - 1,999 lines of code): ${severeMonoliths} files`);
-    lines.push(`  * Extreme Monoliths (2,000+ lines of code): ${extremeMonoliths} files`);
+    lines.push(`  * Warning Tier (${SIZE_LABELS.warningRange} lines of code): ${warningMonoliths} files`);
+    lines.push(`  * Severe Tier (${SIZE_LABELS.severeRange} lines of code): ${severeMonoliths} files`);
+    lines.push(`  * Extreme Monoliths (${SIZE_LABELS.extreme} lines of code): ${extremeMonoliths} files`);
   }
   lines.push(`* **Hazard Breakdown**: Critical: **${critical.length}** | High/Med: **${high.length + medium.length}** | Low: **${low.length}**`);
   lines.push('');
@@ -291,7 +287,7 @@ export const generateTransformationDiscussionContent = (
   lines.push(`| **AI Slop Index (ASI)** | ${slopBefore} / 100 (${slopBeforeGrade}) | ${slopAfter} / 100 (${slopAfterGrade}) | ${formatDelta(slopDelta)} |`);
   lines.push(`| **Critical Hazards** | ${beforeSnapshot.violations.critical} | ${afterSnapshot.violations.critical} | ${formatDelta(critDelta, true)} |`);
   lines.push(`| **Total Violations** | ${beforeSnapshot.violations.total} | ${afterSnapshot.violations.total} | ${formatDelta(totalDelta, true)} |`);
-  lines.push(`| **Monolith Files (> 500 lines of code)** | ${beforeSnapshot.monoliths.total} | ${afterSnapshot.monoliths.total} | ${formatDelta(monoDelta, true)} |`);
+  lines.push(`| **Monolith Files (${SIZE_LABELS.warning} lines of code)** | ${beforeSnapshot.monoliths.total} | ${afterSnapshot.monoliths.total} | ${formatDelta(monoDelta, true)} |`);
   lines.push(`| **Excess Token Burn** | ${beforeSnapshot.tokens.estimatedExcessTokens.toLocaleString()} tok | ${afterSnapshot.tokens.estimatedExcessTokens.toLocaleString()} tok | ${formatDelta(tokensDelta, true)} |`);
   lines.push(`| **Monolith Cost per Turn** | $${costPassBefore.toFixed(3)} | $${costPassAfter.toFixed(3)} | ${formatCostPassDelta(costPassDelta)} |`);
   lines.push(`| **Dev Context Tax (Monthly)** | $${monthlyTaxBefore.toFixed(2)}/mo | $${monthlyTaxAfter.toFixed(2)}/mo | ${formatMonthlyTaxDelta(monthlyTaxDelta)} |`);

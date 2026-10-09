@@ -1,7 +1,9 @@
 import path from 'node:path';
 import { parse } from './babel-lazy.js';
-import { extractParseableCode } from './audit/parseable-code.js';
 import { isBabelParsable } from './languages.js';
+import { parseSfc, isSfcFile, buildScriptOverlay } from './sfc/sfc-parse.js';
+import { extractSfcProps, extractTemplateComponentImports, extractScriptSrcImports, componentNameFromPath } from './sfc/sfc-metadata.js';
+import { extractModuleMetadata } from './search-ast-module.js';
 
 const TIER_PATTERNS = [
   { tier: 'atom', test: (p, b) => p.includes('atoms/') || p.includes('/a-') || b.startsWith('a-') || /(?:^|[\\/])(?:Domain|Entities|Models)[\\/]/i.test(p) },
@@ -32,81 +34,87 @@ const RESERVED_SYMBOL_NAMES = new Set([
   'namespace', 'typename', 'template', 'public', 'private', 'protected', 'static', 'const'
 ]);
 
+const JS_FAMILY_FILE = /\.(?:[cm]?[jt]sx?|vue|svelte)$/;
+
 const extractRegexFallback = (content, filePath = '') => {
   const symbols = [];
   const imports = [];
   const hooks = new Set();
   const props = [];
+  // A JS/TS/SFC file that failed to parse only gets the JS patterns; the
+  // Python/Go/C++/Rust/Kotlin patterns would invent symbols from JS text.
+  const isJsFamily = JS_FAMILY_FILE.test(filePath);
 
   const exportMatches = content.matchAll(/export\s+(?:const|function|class|type|interface|enum)\s+([A-Za-z0-9_$]+)/g);
   for (const m of exportMatches) {
     symbols.push({ name: m[1], kind: 'symbol', isExport: true, startLine: 1, endLine: 1, signature: '' });
   }
 
-  const csMatches = content.matchAll(/(?:public|internal|protected)\s+(?:static\s+|sealed\s+|abstract\s+|partial\s+)*(?:class|record|interface|struct|enum)\s+([A-Za-z0-9_]+)/g);
+  const polyglotSource = isJsFamily ? '' : content;
+  const csMatches = polyglotSource.matchAll(/(?:public|internal|protected)\s+(?:static\s+|sealed\s+|abstract\s+|partial\s+)*(?:class|record|interface|struct|enum)\s+([A-Za-z0-9_]+)/g);
   for (const m of csMatches) {
     symbols.push({ name: m[1], kind: 'class', isExport: true, startLine: 1, endLine: 1, signature: '' });
   }
 
-  const pyMatches = content.matchAll(/(?:def|class)\s+([A-Za-z0-9_]+)/g);
+  const pyMatches = polyglotSource.matchAll(/(?:def|class)\s+([A-Za-z0-9_]+)/g);
   for (const m of pyMatches) {
     symbols.push({ name: m[1], kind: 'function', isExport: true, startLine: 1, endLine: 1, signature: '' });
   }
 
-  const goMatches = content.matchAll(/(?:func(?:\s*\([^)]*\))?\s+|type\s+)([A-Za-z0-9_]+)/g);
+  const goMatches = polyglotSource.matchAll(/(?:func(?:\s*\([^)]*\))?\s+|type\s+)([A-Za-z0-9_]+)/g);
   for (const m of goMatches) {
     symbols.push({ name: m[1], kind: 'function', isExport: true, startLine: 1, endLine: 1, signature: '' });
   }
 
-  const cppTypeMatches = content.matchAll(/\b(?:class|struct|union|enum(?:\s+class)?)\s+([A-Za-z_][A-Za-z0-9_]*)/g);
+  const cppTypeMatches = polyglotSource.matchAll(/\b(?:class|struct|union|enum(?:\s+class)?)\s+([A-Za-z_][A-Za-z0-9_]*)/g);
   for (const m of cppTypeMatches) {
     if (!RESERVED_SYMBOL_NAMES.has(m[1])) {
       symbols.push({ name: m[1], kind: 'class', isExport: true, startLine: 1, endLine: 1, signature: '' });
     }
   }
 
-  const cppQualifiedMatches = content.matchAll(/\b[A-Za-z_][A-Za-z0-9_]*\s*::\s*([A-Za-z_~][A-Za-z0-9_]*)\s*\(/g);
+  const cppQualifiedMatches = polyglotSource.matchAll(/\b[A-Za-z_][A-Za-z0-9_]*\s*::\s*([A-Za-z_~][A-Za-z0-9_]*)\s*\(/g);
   for (const m of cppQualifiedMatches) {
     symbols.push({ name: m[1], kind: 'function', isExport: true, startLine: 1, endLine: 1, signature: '' });
   }
 
-  const cppDeclMatches = content.matchAll(/^[ \t]*(?:[A-Za-z_][A-Za-z0-9_:<>,*& \t]*?)\s+\*?([A-Za-z_][A-Za-z0-9_]*)\s*\([^)]*\)\s*(?:const\s*)?[;{]/gm);
+  const cppDeclMatches = polyglotSource.matchAll(/^[ \t]*(?:[A-Za-z_][A-Za-z0-9_:<>,*& \t]*?)\s+\*?([A-Za-z_][A-Za-z0-9_]*)\s*\([^)]*\)\s*(?:const\s*)?[;{]/gm);
   for (const m of cppDeclMatches) {
     if (!CPP_NON_DECLARATION_KEYWORDS.has(m[1])) {
       symbols.push({ name: m[1], kind: 'function', isExport: true, startLine: 1, endLine: 1, signature: '' });
     }
   }
 
-  const rustMatches = content.matchAll(/\b(?:pub\s+)?(?:struct|enum|trait|impl|mod|fn)\s+([A-Za-z_][A-Za-z0-9_]*)/g);
+  const rustMatches = polyglotSource.matchAll(/\b(?:pub\s+)?(?:struct|enum|trait|impl|mod|fn)\s+([A-Za-z_][A-Za-z0-9_]*)/g);
   for (const m of rustMatches) {
     if (!RESERVED_SYMBOL_NAMES.has(m[1])) {
       symbols.push({ name: m[1], kind: 'symbol', isExport: true, startLine: 1, endLine: 1, signature: '' });
     }
   }
 
-  const kotlinMatches = content.matchAll(/\b(?:data\s+|sealed\s+|open\s+|abstract\s+|inner\s+)?(?:class|object|interface|fun)\s+([A-Za-z_][A-Za-z0-9_]*)/g);
+  const kotlinMatches = polyglotSource.matchAll(/\b(?:data\s+|sealed\s+|open\s+|abstract\s+|inner\s+)?(?:class|object|interface|fun)\s+([A-Za-z_][A-Za-z0-9_]*)/g);
   for (const m of kotlinMatches) {
     if (!RESERVED_SYMBOL_NAMES.has(m[1])) {
       symbols.push({ name: m[1], kind: 'symbol', isExport: true, startLine: 1, endLine: 1, signature: '' });
     }
   }
 
-  const cppIncludes = content.matchAll(/#include\s*[<"]([^>"]+)[>"]/g);
+  const cppIncludes = polyglotSource.matchAll(/#include\s*[<"]([^>"]+)[>"]/g);
   for (const m of cppIncludes) {
     imports.push({ importedSymbol: '*', sourceModule: m[1], line: 1 });
   }
 
-  const rustUses = content.matchAll(/\buse\s+([A-Za-z_][A-Za-z0-9_]*(?:::[A-Za-z_][A-Za-z0-9_]*)+)/g);
+  const rustUses = polyglotSource.matchAll(/\buse\s+([A-Za-z_][A-Za-z0-9_]*(?:::[A-Za-z_][A-Za-z0-9_]*)+)/g);
   for (const m of rustUses) {
     imports.push({ importedSymbol: '*', sourceModule: m[1], line: 1 });
   }
 
-  const csImports = content.matchAll(/using\s+([A-Za-z0-9_.]+);/g);
+  const csImports = polyglotSource.matchAll(/using\s+([A-Za-z0-9_.]+);/g);
   for (const m of csImports) {
     imports.push({ importedSymbol: '*', sourceModule: m[1], line: 1 });
   }
 
-  const pyImports = content.matchAll(/(?:import\s+([A-Za-z0-9_.]+)|from\s+([A-Za-z0-9_.]+)\s+import)/g);
+  const pyImports = polyglotSource.matchAll(/(?:import\s+([A-Za-z0-9_.]+)|from\s+([A-Za-z0-9_.]+)\s+import)/g);
   for (const m of pyImports) {
     const mod = m[1] || m[2];
     imports.push({ importedSymbol: '*', sourceModule: mod, line: 1 });
@@ -142,103 +150,49 @@ const extractRegexFallback = (content, filePath = '') => {
   return { symbols, props, hooks: Array.from(hooks), imports };
 };
 
+const parseModule = (code) => parse(code, { sourceType: 'module', plugins: ['typescript', 'jsx'] });
+
+const parseWithBlockFallback = (code, sfc, content) => {
+  try {
+    return parseModule(code);
+  } catch (err) {
+    const inlineScripts = sfc ? sfc.scripts.filter((s) => !s.src) : [];
+    const canSplit = inlineScripts.length > 1;
+    if (!canSplit) throw err;
+    const programs = inlineScripts.map((block) => parseModule(buildScriptOverlay(content, [block])));
+    return { program: { body: programs.flatMap((ast) => ast.program.body) } };
+  }
+};
+
+const uniqueByName = (items) => [...new Map(items.map((item) => [item.name, item])).values()];
+
+const extractSfcMetadata = (base, sfc, ast, filePath, contentLines) => {
+  const localImportNames = new Set(base.imports.map((imp) => imp.importedSymbol));
+  for (const stmt of ast.program.body) {
+    const isImport = stmt.type === 'ImportDeclaration';
+    if (isImport) for (const spec of stmt.specifiers || []) localImportNames.add(spec.local.name);
+  }
+  const componentSymbol = { name: componentNameFromPath(filePath), kind: 'component', isExport: true, startLine: 1, endLine: contentLines.length, signature: '' };
+  return {
+    symbols: [componentSymbol, ...base.symbols],
+    props: uniqueByName([...extractSfcProps(ast.program), ...base.props]),
+    hooks: base.hooks,
+    imports: [...base.imports, ...extractScriptSrcImports(sfc), ...extractTemplateComponentImports(sfc, localImportNames)]
+  };
+};
+
 export const extractAstMetadata = (content, filePath) => {
   if (!isBabelParsable(filePath)) {
     return extractRegexFallback(content, filePath);
   }
-
-  const ext = path.extname(filePath);
-  const code = extractParseableCode(content, ext);
   const contentLines = content.split('\n');
-
-  const symbols = [];
-  const props = [];
-  const imports = [];
-  const hooks = new Set();
-
-  const resolveSignature = (startLine) => {
-    const lineText = contentLines[startLine - 1] || '';
-    return lineText.trim();
-  };
-
+  const sfc = isSfcFile(filePath) ? parseSfc(content, filePath) : null;
+  const code = sfc ? sfc.scriptOverlay : content;
   try {
-    const ast = parse(code, {
-      sourceType: 'module',
-      plugins: ['typescript', 'jsx']
-    });
-
-    const body = ast.program.body || [];
-    for (const node of body) {
-      if (node.type === 'ImportDeclaration') {
-        const sourceModule = node.source?.value || '';
-        const line = node.loc?.start.line || 1;
-        for (const spec of node.specifiers || []) {
-          if (spec.type === 'ImportSpecifier') {
-            const symName = spec.imported?.name || spec.local?.name;
-            imports.push({ importedSymbol: symName, sourceModule, line });
-          } else if (spec.type === 'ImportDefaultSpecifier') {
-            imports.push({ importedSymbol: 'default', sourceModule, line });
-          } else if (spec.type === 'ImportNamespaceSpecifier') {
-            imports.push({ importedSymbol: '*', sourceModule, line });
-          }
-        }
-      } else if (node.type === 'ExportNamedDeclaration') {
-        const decl = node.declaration;
-        if (decl) {
-          const startLine = decl.loc?.start.line || node.loc?.start.line || 1;
-          const endLine = decl.loc?.end.line || node.loc?.end.line || startLine;
-          const signature = resolveSignature(startLine);
-
-          if (decl.type === 'FunctionDeclaration' && decl.id) {
-            symbols.push({ name: decl.id.name, kind: 'function', isExport: true, startLine, endLine, signature });
-          } else if (decl.type === 'ClassDeclaration' && decl.id) {
-            symbols.push({ name: decl.id.name, kind: 'class', isExport: true, startLine, endLine, signature });
-          } else if (decl.type === 'VariableDeclaration') {
-            for (const v of decl.declarations) {
-              if (v.id && v.id.name) {
-                const varStart = v.loc?.start.line || startLine;
-                const varEnd = v.loc?.end.line || endLine;
-                symbols.push({ name: v.id.name, kind: 'const', isExport: true, startLine: varStart, endLine: varEnd, signature: resolveSignature(varStart) });
-              }
-            }
-          } else if (decl.type === 'TSTypeAliasDeclaration' && decl.id) {
-            symbols.push({ name: decl.id.name, kind: 'type', isExport: true, startLine, endLine, signature });
-          } else if (decl.type === 'TSInterfaceDeclaration' && decl.id) {
-            symbols.push({ name: decl.id.name, kind: 'interface', isExport: true, startLine, endLine, signature });
-            if (/props?/i.test(decl.id.name)) {
-              for (const member of decl.body.body || []) {
-                if (member.type === 'TSPropertySignature' && member.key && member.key.name) {
-                  props.push({ name: member.key.name, type: 'ts' });
-                }
-              }
-            }
-          }
-        }
-      } else if (node.type === 'ExportDefaultDeclaration') {
-        const decl = node.declaration;
-        const name = decl?.id?.name || path.basename(filePath, ext);
-        const startLine = node.loc?.start.line || 1;
-        const endLine = node.loc?.end.line || startLine;
-        symbols.push({ name, kind: 'default', isExport: true, startLine, endLine, signature: resolveSignature(startLine) });
-      } else if (node.type === 'TSInterfaceDeclaration' && node.id) {
-        if (/props?/i.test(node.id.name)) {
-          for (const member of node.body.body || []) {
-            if (member.type === 'TSPropertySignature' && member.key && member.key.name) {
-              props.push({ name: member.key.name, type: 'ts' });
-            }
-          }
-        }
-      }
-    }
-
-    // Fast hook call discovery
-    const hookMatches = code.matchAll(/\b(use[A-Z0-9][A-Za-z0-9_$]*)\b/g);
-    for (const h of hookMatches) {
-      hooks.add(h[1]);
-    }
-
-    return { symbols, props, hooks: Array.from(hooks), imports };
+    const ast = parseWithBlockFallback(code, sfc, content);
+    const base = extractModuleMetadata(ast, contentLines, filePath);
+    return sfc ? extractSfcMetadata(base, sfc, ast, filePath, contentLines) : base;
   } catch {
-    return extractRegexFallback(content);
+    return extractRegexFallback(content, filePath);
   }
 };

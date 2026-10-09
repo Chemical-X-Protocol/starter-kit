@@ -1,8 +1,9 @@
 import fs from 'node:fs';
-import { copyToClipboard } from '../audit/social-git.js';
 import { formatIssueContent } from './formatter.js';
 import { publishIssue } from './publisher.js';
-import { openBrowser, confirmAction } from '../terminal.js';
+import { sanitizeText } from './sanitizer.js';
+import { formatFailureNotice, printFailureSummary, previewPost, promptUserToPublish } from './report-output.js';
+import { isOfflineMode, describeOffline } from '../network-policy.js';
 import { resolveTargetIssuesRepo, saveIssueArtifact } from './storage.js';
 import { resolveCatcherPolicy } from './policy.js';
 
@@ -17,48 +18,18 @@ export const resolveChemxVersion = () => {
   }
 };
 
-const formatFailureNotice = (message, savedPath, issueUrl, useColor) => {
-  if (!useColor) {
-    const reportNote = savedPath ? ` (report: ${savedPath})` : '';
-    const issueNote = issueUrl ? `\nPrepped issue: ${issueUrl}` : '';
-    return `chemx failed: ${message}${reportNote}${issueNote}\n`;
-  }
-  const lines = [`\n\x1b[31m✕ Command Failed: ${message}\x1b[0m`];
-  if (issueUrl) lines.push(`  \x1b[33m• Prepped Issue:\x1b[0m ${issueUrl}`);
-  if (savedPath) lines.push(`  \x1b[33m• Local Report:\x1b[0m ${savedPath}`);
-  return lines.join('\n') + '\n';
-};
-
-const promptUserToPublish = async (targetRepo, issue) => {
-  const confirmed = await confirmAction('Post this error report directly to GitHub Issues?', 'Post Issue', 'Skip', false);
-  if (!confirmed) {
-    return { success: false, url: null, issueNumber: null, error: null };
-  }
-
-  const publishResult = await publishIssue(targetRepo, issue.title, issue.body, issue.labels);
-  if (publishResult.success) {
-    process.stdout.write(`\x1b[32m✔ Issue published: ${publishResult.url}\x1b[0m\n`);
-    openBrowser(publishResult.url);
-  } else {
-    copyToClipboard(issue.body);
-    process.stdout.write(`\x1b[33m⚠ Publish failed. Markdown copied to clipboard. Opening browser...\x1b[0m\n`);
-    openBrowser(issue.webUrl);
-  }
-  return publishResult;
-};
-
 export const handleError = async (err, options = {}) => {
   const cwd = options.cwd || process.cwd();
   const errorObj = err instanceof Error ? err : new Error(String(err));
   const targetRepo = resolveTargetIssuesRepo(options, cwd);
 
   const rawCmd = options.command || process.argv.slice(2).join(' ');
-  const command = rawCmd || 'chemx';
+  const command = sanitizeText(rawCmd) || 'chemx';
 
   const report = {
-    message: errorObj.message,
+    message: sanitizeText(errorObj.message),
     name: errorObj.name,
-    stack: errorObj.stack || '',
+    stack: sanitizeText(errorObj.stack || ''),
     command,
     cwd,
     exitCode: options.exitCode ?? 1,
@@ -70,20 +41,29 @@ export const handleError = async (err, options = {}) => {
   };
 
   const issue = formatIssueContent(report, targetRepo, options.labels);
+  // An opt-in post also saves the report, so an offline or failed post still names a local copy.
   const policy = resolveCatcherPolicy(options);
   const savedPath = policy.shouldSaveReport ? saveIssueArtifact(cwd, issue, options) : null;
 
   let publishResult = { success: false, url: null, issueNumber: null, error: null };
+  const isOffline = isOfflineMode();
 
   if (policy.shouldAutoPost) {
+    // The preview goes to stderr even when silent (--json/--silent keep stdout clean); only the MCP tool opts out with preview: false.
+    if (options.preview !== false && !isOffline) previewPost(targetRepo, issue, savedPath);
     publishResult = await publishIssue(targetRepo, issue.title, issue.body, issue.labels);
-    if (publishResult.success && !options.silent) {
+    // With options.silent the outcome is only in the returned publishResult.
+    if (!options.silent && publishResult.success) {
       process.stdout.write(`\n\x1b[32m✔ Issue automatically created: ${publishResult.url}\x1b[0m\n`);
+    } else if (!options.silent) {
+      printFailureSummary(report, issue, savedPath, publishResult.error || 'unknown error');
     }
   } else if (!options.silent) {
-    process.stderr.write(formatFailureNotice(report.message, savedPath, policy.shouldShowIssueUrl ? issue.webUrl : null, policy.useColor));
-    if (policy.canPromptUser) {
-      publishResult = await promptUserToPublish(targetRepo, issue);
+    const offlineNote = policy.canPromptUser && isOffline ? describeOffline('Posting a GitHub issue') : null;
+    const issueUrl = policy.shouldShowIssueUrl ? issue.webUrl : null;
+    process.stderr.write(formatFailureNotice(report.message, savedPath, issueUrl, policy.useColor, offlineNote));
+    if (policy.canPromptUser && !isOffline) {
+      publishResult = await promptUserToPublish(targetRepo, issue, savedPath);
     }
   }
 
@@ -112,8 +92,10 @@ export const handleError = async (err, options = {}) => {
           process.stdout.write(`  \x1b[36m• Swarm Task:\x1b[0m #${created.id} queued to track issue resolution\n`);
         }
       }
-    } catch {
-      // Non-blocking fallback if database is unavailable
+    } catch (err) {
+      // Non-blocking: the issue is already published; only the task record failed.
+      const reason = err instanceof Error ? err.message : String(err);
+      if (!options.silent) process.stderr.write(`  • Swarm task not recorded: ${reason}\n`);
     }
   }
 
