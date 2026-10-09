@@ -1,10 +1,7 @@
 import * as t from '@babel/types';
 import { RULE_REGISTRY } from './rules-registry.js';
-import {
-  countBranchingDecisions,
-  countHookCalls,
-  countDestructuredProps
-} from './structural-weight.js';
+import { countBranchingDecisions, countHookCalls } from './structural-weight.js';
+import { countSurfaceProps } from './prop-surface.js';
 
 const isComponentOrHook = (funcPath, relativePath = '') => {
   const isComponentFile = /\.(jsx|tsx|vue|svelte)$/.test(relativePath) ||
@@ -54,7 +51,7 @@ export const evaluateComponentStructuralWeight = ({
 
   const complexity = countBranchingDecisions(funcPath);
   const hooks = countHookCalls(funcPath);
-  const propCount = countDestructuredProps(funcPath);
+  const propCount = countSurfaceProps(funcPath);
   const startLoc = funcPath.node.loc?.start;
   const line = startLoc?.line || 1;
   const column = startLoc?.column || 1;
