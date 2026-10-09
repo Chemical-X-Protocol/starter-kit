@@ -52,7 +52,8 @@ export const handleJigCli = ({ rawArgs, positional, rawName, dirArg, descArg, is
     return jigRes;
   }
 
-  if (jigRes.dryRun) {
+  const isDryRunResult = Boolean(jigRes.dryRun);
+  if (isDryRunResult) {
     process.stdout.write(`\n\x1b[1m\x1b[33m[DRY RUN]\x1b[0m Would generate programmatic jig (${jigRes.kind}) at \x1b[36m${jigRes.relativeDir}/\x1b[0m:\n`);
     for (const f of jigRes.previews || []) {
       process.stdout.write(`  \x1b[33m•\x1b[0m ${f.file} (${f.lines} lines)\n`);
