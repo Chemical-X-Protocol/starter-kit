@@ -12,41 +12,48 @@ export const publishDiscussionViaGh = (repo, title, body, category = DISCUSSION_
       ['discussion', 'create', '-R', repo, '--title', title, '--body', body, '--category', category],
       { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] }
     );
-    if (res.status === 0) {
+    const isPublished = res.status === 0;
+    if (isPublished) {
       return { success: true, url: (res.stdout || '').trim(), error: null };
     }
 
     const errText = (res.stderr || '').trim();
 
-    if (errText.includes('category') && category !== DISCUSSION_CATEGORY_SLUG) {
+    const isSlugRetryNeeded = errText.includes('category') && category !== DISCUSSION_CATEGORY_SLUG;
+    if (isSlugRetryNeeded) {
       res = spawnSync(
         'gh',
         ['discussion', 'create', '-R', repo, '--title', title, '--body', body, '--category', DISCUSSION_CATEGORY_SLUG],
         { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] }
       );
-      if (res.status === 0) {
+      const isSlugPublished = res.status === 0;
+      if (isSlugPublished) {
         return { success: true, url: (res.stdout || '').trim(), error: null };
       }
     }
 
-    if (errText.includes('category') && category !== 'Audits') {
+    const isAuditsRetryNeeded = errText.includes('category') && category !== 'Audits';
+    if (isAuditsRetryNeeded) {
       res = spawnSync(
         'gh',
         ['discussion', 'create', '-R', repo, '--title', title, '--body', body, '--category', 'Audits'],
         { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] }
       );
-      if (res.status === 0) {
+      const isAuditsPublished = res.status === 0;
+      if (isAuditsPublished) {
         return { success: true, url: (res.stdout || '').trim(), error: null };
       }
     }
 
-    if (errText.includes('category')) {
+    const hasCategoryError = errText.includes('category');
+    if (hasCategoryError) {
       res = spawnSync(
         'gh',
         ['discussion', 'create', '-R', repo, '--title', title, '--body', body, '--category', 'General'],
         { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] }
       );
-      if (res.status === 0) {
+      const isGeneralPublished = res.status === 0;
+      if (isGeneralPublished) {
         return { success: true, url: (res.stdout || '').trim(), error: null };
       }
     }
@@ -64,7 +71,8 @@ export const viewDiscussionViaGh = (repo, discussionNumber) => {
       ['discussion', 'view', String(discussionNumber), '-R', repo, '--json', 'id,number,title,body,url'],
       { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] }
     );
-    if (res.status === 0 && res.stdout) {
+    const hasOutput = Boolean(res.status === 0 && res.stdout);
+    if (hasOutput) {
       return JSON.parse(res.stdout);
     }
     return null;
@@ -106,7 +114,8 @@ export const findExistingDiscussionViaGh = (repo, projectName) => {
       ['discussion', 'list', '-R', repo, '--limit', '25', '--json', 'id,number,title,body,url'],
       { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] }
     );
-    if (res.status === 0 && res.stdout) {
+    const hasOutput = Boolean(res.status === 0 && res.stdout);
+    if (hasOutput) {
       const list = JSON.parse(res.stdout);
       const targetLower = projectName.toLowerCase();
       const match = list.find((d) => {
