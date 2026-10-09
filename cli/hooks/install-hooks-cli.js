@@ -26,8 +26,10 @@ export const parseInstallArgs = (args, cwd = process.cwd()) => {
   const host = flagValue(args, 'host') ?? (args.includes('--host') ? args[args.indexOf('--host') + 1] : null);
   const scope = flagValue(args, 'scope') ?? 'local';
   const errors = [];
-  if (!SUPPORTED_HOSTS.has(host)) errors.push(`--host must be one of: ${[...SUPPORTED_HOSTS].join(', ')}`);
-  if (!SCOPES.has(scope)) errors.push('--scope must be local or project');
+  const isUnsupportedHost = !SUPPORTED_HOSTS.has(host);
+  if (isUnsupportedHost) errors.push(`--host must be one of: ${[...SUPPORTED_HOSTS].join(', ')}`);
+  const isUnknownScope = !SCOPES.has(scope);
+  if (isUnknownScope) errors.push('--scope must be local or project');
   return {
     errors,
     host,
@@ -41,7 +43,8 @@ export const parseInstallArgs = (args, cwd = process.cwd()) => {
 };
 
 const actionStatus = (action) => {
-  if (action.status === 'error') return STATUS.FAIL;
+  const isError = action.status === 'error';
+  if (isError) return STATUS.FAIL;
   const isPartial = action.status === 'refused' || action.hasRefusals;
   return isPartial ? STATUS.INCONCLUSIVE : STATUS.PASS;
 };
@@ -60,7 +63,8 @@ const renderText = (report) => {
     const where = path.relative(report.projectRoot, action.file) || action.file;
     lines.push(`  ${action.status.padEnd(9)} ${where} (${action.label})${pendingSuffix(action, report.dryRun)}`);
     for (const note of action.notes ?? []) lines.push(`            ${note}`);
-    if (action.backup) lines.push(`            backup: ${path.relative(report.projectRoot, action.backup)}`);
+    const hasBackup = Boolean(action.backup);
+    if (hasBackup) lines.push(`            backup: ${path.relative(report.projectRoot, action.backup)}`);
   }
   return `${lines.join('\n')}\n`;
 };
