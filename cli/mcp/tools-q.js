@@ -1,5 +1,6 @@
 import { syncSearchIndex } from '../search.js';
-import { openIndexDb, queryIndex } from '../search-db.js';
+import { queryIndex } from '../search-db.js';
+import { resolveTargetDir } from '../path-scope.js';
 import { toColumnar } from '../columnar.js';
 import { resolveTargetCwd } from './tools-search-util.js';
 import {
@@ -11,9 +12,10 @@ export const handleChemxQ = (args = {}, cwd = process.cwd()) => {
   const targetCwd = resolveTargetCwd(args.cwd || cwd);
   const query = args.query || args.symbol;
   if (!query) throw new Error('chemx_q requires "query" or "symbol" argument.');
-  const db = openIndexDb(targetCwd);
-  if (!db) syncSearchIndex('src', targetCwd);
-  const activeDb = openIndexDb(targetCwd);
+  // Same as CLI q: an incremental sync before every query. Syncing only when no db existed left a
+  // fresh (or warmed but empty) index answering "No matching capsules" for symbols that exist.
+  const sourceDir = args.dir || resolveTargetDir(null, null, targetCwd);
+  const activeDb = syncSearchIndex(sourceDir, targetCwd, { reindex: Boolean(args.reindex) })?.db;
   if (!activeDb) throw new Error('Unable to initialize Chemical X AST search index database.');
 
   if (args.blastRadius || args.impact) return executeBlastRadiusQuery(activeDb, query, args);

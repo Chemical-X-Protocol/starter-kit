@@ -41,10 +41,15 @@ test('concurrency: two server instances share one .chemx/index.db without errors
       s.callChemx({ action: 'q', params: { query: 'value7' } })
     ]);
     const results = await Promise.all(calls);
-    for (const res of results) {
-      const text = res.result.content.map((c) => c.text).join('\n');
-      assert.strictEqual(res.result.isError, false, text);
-      assert.doesNotMatch(text, /SQLITE_BUSY|database is locked/);
+    const texts = results.map((res) => res.result.content.map((c) => c.text).join('\n'));
+    results.forEach((res, i) => {
+      assert.strictEqual(res.result.isError, false, texts[i]);
+      assert.doesNotMatch(texts[i], /SQLITE_BUSY|database is locked/);
+    });
+    // An empty index would also pass the checks above (and the "No matching" text echoes the query): each q must name its file.
+    for (const n of [0, 1]) {
+      assert.match(texts[n * 3], /src\/mod3\.ts/, `server ${n} q value3`);
+      assert.match(texts[n * 3 + 2], /src\/mod7\.ts/, `server ${n} q value7`);
     }
     const feed = await servers[0].callChemx({ action: 'team_feed', params: { limit: 10 } });
     const feedText = feed.result.content[0].text;

@@ -117,3 +117,13 @@ test('resources and prompts use the one resolver: env root honoured, echoed, unr
   const refused = await refusing.handleRequest({ jsonrpc: '2.0', id: 3, method: 'resources/read', params: { uri: 'chemx://scorecard' } });
   assert.match(refused.error.message, /No project root/);
 });
+
+test('q: a fresh project is indexed on the first call and new files show up on the next', async () => {
+  const project = makeFixtureProject({ 'package.json': PKG, 'src/mod3.ts': 'export const value3 = 3;\n' });
+  const handler = createMcpHandler({ cwd: project, bootDir: project, env: {}, ...NO_STALE });
+  const first = await call(handler, { action: 'q', params: { query: 'value3' } });
+  assert.match(textOf(first), /src\/mod3\.ts/);
+  fs.writeFileSync(path.join(project, 'src', 'mod9.ts'), 'export const value9 = 9;\n');
+  const second = await call(handler, { action: 'q', params: { query: 'value9' } });
+  assert.match(textOf(second), /src\/mod9\.ts/);
+});
