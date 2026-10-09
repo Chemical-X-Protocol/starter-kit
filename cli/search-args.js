@@ -16,6 +16,7 @@ const BOOLEAN_FLAGS = new Set([
 ]);
 
 const LITERAL_FLAGS = new Set(['-g', '--literal']);
+const INTEGER_KEYS = new Set(['limit', 'maxDepth']);
 
 const isKnownFlag = (token) => {
   const name = token.split('=')[0];
@@ -24,8 +25,18 @@ const isKnownFlag = (token) => {
 
 const isFlagLike = (token) => token.length > 1 && token.startsWith('-');
 
+// A following `--` or known flag is never a value: `--dir -g foo` leaves --dir without one.
+const readSeparateValue = (next) => {
+  const isAbsent = next === undefined;
+  if (isAbsent) return undefined;
+  const isOption = String(next) === '--' || isKnownFlag(String(next));
+  return isOption ? undefined : next;
+};
+
+const isPositiveInteger = (raw) => /^\d+$/.test(raw) && Number(raw) > 0;
+
 export const parseSearchArgs = (rawArgs = []) => {
-  const parsed = { positionals: [], flags: new Set(), values: {}, unknownFlags: [], missingValues: [], pattern: null };
+  const parsed = { positionals: [], flags: new Set(), values: {}, unknownFlags: [], missingValues: [], invalidValues: [], pattern: null };
   let isOptionsEnded = false;
   for (let i = 0; i < rawArgs.length; i++) {
     const token = String(rawArgs[i]);
@@ -46,11 +57,13 @@ export const parseSearchArgs = (rawArgs = []) => {
     const hasInlineValue = rest.length > 0;
     const valueKey = VALUE_FLAGS.get(name);
     if (valueKey) {
-      const value = hasInlineValue ? rest.join('=') : rawArgs[i + 1];
+      const value = hasInlineValue ? rest.join('=') : readSeparateValue(rawArgs[i + 1]);
       const hasValue = value !== undefined;
       if (!hasValue) parsed.missingValues.push(name);
       if (!hasInlineValue && hasValue) i += 1;
       if (hasValue) parsed.values[valueKey] = String(value);
+      const isBadInteger = hasValue && INTEGER_KEYS.has(valueKey) && !isPositiveInteger(String(value));
+      if (isBadInteger) parsed.invalidValues.push(`${name} ${value} (expected a positive integer)`);
       continue;
     }
     const isBoolean = BOOLEAN_FLAGS.has(name);

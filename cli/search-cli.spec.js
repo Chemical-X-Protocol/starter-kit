@@ -51,6 +51,33 @@ test('parseSearchArgs: flag values never become the query and -- ends options', 
   assert.deepEqual(parseSearchArgs(['foo', '--bogus']).unknownFlags, ['--bogus']);
 });
 
+test('parseSearchArgs: a value flag never swallows the next flag, and bad numbers are reported', () => {
+  const swallowed = parseSearchArgs(['--dir', '-g', 'foo']);
+  assert.equal(swallowed.values.dir, undefined, '--dir does not take -g as its value');
+  assert.deepEqual(swallowed.missingValues, ['--dir']);
+  assert.ok(swallowed.flags.has('-g'));
+  assert.equal(swallowed.pattern, 'foo');
+  assert.deepEqual(parseSearchArgs(['-n', 'abc', 'foo']).invalidValues, ['-n abc (expected a positive integer)']);
+  assert.deepEqual(parseSearchArgs(['--max-depth=0', 'foo']).invalidValues, ['--max-depth 0 (expected a positive integer)']);
+  assert.deepEqual(parseSearchArgs(['-n', '5', 'foo']).invalidValues, []);
+});
+
+test('chemx q -g with an unquoted multi-word pattern reports the dropped words', async () => {
+  const root = makeFixture();
+  try {
+    const res = await runQ(root, ['-g', 'glass', 'extra', '--json']);
+    const payload = parseJson(res);
+    assert.equal(payload.query, 'glass');
+    assert.ok((payload.argProblems || []).some((p) => /extra/.test(p) && /quote/.test(p)), JSON.stringify(payload.argProblems));
+    const text = await runQ(root, ['-g', 'glass', 'extra']);
+    assert.match(text.stderr, /ignored extra argument.*extra/);
+    const badLimit = await runQ(root, ['-g', 'glass', '-n', 'abc']);
+    assert.match(badLimit.stderr, /-n abc/);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('chemx q: help, ranking, limits, argv, def cap, hazards and every mode are truthful', async () => {
   const root = makeFixture();
   try {

@@ -26,7 +26,7 @@ const failWith = (message, { isJson, isCli, isQuiet }) => {
 
 export const handleLiteralSearchCommand = (_db, query, {
   isCaseInsensitive = false, isLineOnly = false, isRegex = false, isHidden = false,
-  limit = 20, isJson = false, isCli = true, cwd = process.cwd(), dir = null, engine = null, isQuiet = false
+  limit = 20, isJson = false, isCli = true, cwd = process.cwd(), dir = null, engine = null, isQuiet = false, argProblems = []
 } = {}) => {
   const hasQuery = typeof query === 'string' && query.length > 0;
   if (!hasQuery) return failWith('missing search pattern (use `chemx q -g -- <pattern>` for a pattern starting with -)', { isJson, isCli, isQuiet });
@@ -51,6 +51,7 @@ export const handleLiteralSearchCommand = (_db, query, {
     engine: res.engine, root, scope: scope.scopeKey, filesSearched: res.filesSearched, filesMatched: res.filesMatched,
     count: res.matches.length, totalMatches: res.totalMatches, truncated: res.truncated, skipped: res.skipped,
     reason: hasSearchedNothing ? 'no searchable files in scope' : undefined,
+    argProblems: argProblems.length > 0 ? argProblems : undefined,
     matches: isLineOnly ? res.matches.map((m) => ({ path: m.path, line: m.line })) : res.matches
   };
 

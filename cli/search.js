@@ -61,10 +61,30 @@ const resolveScopeTarget = (parsed, cwd, root) => {
   return path.resolve(root, resolveDefaultScopeDir(root));
 };
 
-const reportArgProblems = (parsed, isJson) => {
+// Positionals no mode reads: the pattern (or query) is one token, subcommands read two.
+const countUsedPositionals = (parsed, isLiteral) => {
+  const hasLiteralPattern = parsed.pattern !== null;
+  if (isLiteral) return hasLiteralPattern ? 0 : 1;
+  const isSubcommand = Boolean(SUBCOMMAND_MODES[parsed.positionals[0]]);
+  return isSubcommand ? 2 : 1;
+};
+
+const PASSTHROUGH_PATTERN = /^(check|verify|fix|add(:.*)?|gen|g|generate)$/;
+
+const describeExtraArgs = (parsed, isLiteral) => {
+  const isPassthrough = !isLiteral && PASSTHROUGH_PATTERN.test(parsed.positionals[0] || '');
+  if (isPassthrough) return [];
+  const extra = parsed.positionals.slice(countUsedPositionals(parsed, isLiteral));
+  const hasExtra = extra.length > 0;
+  return hasExtra ? [`ignored extra argument(s) ${extra.join(' ')} (quote a multi-word pattern)`] : [];
+};
+
+const reportArgProblems = (parsed, isJson, isLiteral) => {
   const problems = [
     ...parsed.unknownFlags.map((f) => `ignored unknown flag ${f}`),
-    ...parsed.missingValues.map((f) => `missing value for ${f}`)
+    ...parsed.missingValues.map((f) => `missing value for ${f}`),
+    ...parsed.invalidValues.map((v) => `ignored invalid ${v}`),
+    ...describeExtraArgs(parsed, isLiteral)
   ];
   const hasProblems = problems.length > 0;
   if (hasProblems && !isJson) process.stderr.write(`chemx q: ${problems.join('; ')}\n`);
@@ -135,7 +155,7 @@ export const runSearch = async (rawArgs = [], isCli = true) => {
   const isJson = hasAnyFlag(parsed, ['--json', '-j', '--columnar']);
   const isColumnar = isJson && !isRawJson;
   const isLiteral = hasAnyFlag(parsed, ['-g', '--literal']);
-  const argProblems = reportArgProblems(parsed, isJson);
+  const argProblems = reportArgProblems(parsed, isJson, isLiteral);
   const first = parsed.positionals[0] || '';
   const second = parsed.positionals[1] || '';
   const cwd = process.cwd();
@@ -147,7 +167,7 @@ export const runSearch = async (rawArgs = [], isCli = true) => {
       isRegex: parsed.flags.has('--regex'),
       isHidden: parsed.flags.has('--hidden'),
       limit: readIntValue(parsed, 'limit', 20), isJson, isCli, cwd,
-      dir: parsed.values.dir ?? null
+      dir: parsed.values.dir ?? null, argProblems
     });
   }
 
