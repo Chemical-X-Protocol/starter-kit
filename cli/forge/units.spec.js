@@ -5,6 +5,9 @@ import assert from 'node:assert/strict';
 import { collectFileUnits } from './file-units.js';
 import { isForgeExcluded } from './exclusions.js';
 
+// Pins the opt-in inlining pass (off by default, #2595); the default-off mode is inline-mode.spec.js.
+process.env.CHEMX_FORGE_INLINE = '1';
+
 // cli/doctor/check-host.js:4 and :15-21
 const CHECK_HOST = [
   "import fs from 'node:fs';",

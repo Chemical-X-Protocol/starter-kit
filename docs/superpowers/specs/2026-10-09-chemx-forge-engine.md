@@ -22,7 +22,7 @@ Exclusions:
 - Flatten &&/|| into n-ary nodes. Operand order is never sorted.
 - De Morgan: fold maximal runs of negated operands, so `!a && !b` ≡ `!(a || b)`. Short-circuit order is unchanged.
 - `x !== y` becomes `!(x === y)`, and `!=` becomes `!(==)`. These are definitionally equal, including for NaN and objects.
-- Single-use const alias inlining, applied to a fixpoint. `const k = e;` is inlined only when all of these hold:
+- Single-use const alias inlining, applied to a fixpoint. **Off by default since extractor version 5 (#2595); opt in with `CHEMX_FORGE_INLINE=1`** (the version then carries +1000 so the two modes never share ledger rows). See "Inlining: measured trade-off" below. The rest of this bullet describes the opt-in pass. `const k = e;` is inlined only when all of these hold:
   - it has exactly one reference;
   - that reference is in the immediately next statement;
   - there is no write in between;
@@ -31,7 +31,20 @@ Exclusions:
   - e is not the global `eval`, the file has no direct eval or `with`, and the const is not declared in a switch case, since its scope is the whole switch.
   This undoes the CONTROL_FLOW_INLINE_BOOLEAN and NAMING_BARE_BOOLEAN forms:
   - `const isAsFlag = arg === '--as'; const shouldReadAsNext = isAsFlag && hasNextArg; if (shouldReadAsNext) flags.as = nextArg` becomes `if (arg === '--as' && hasNextArg) flags.as = nextArg`.
-  - useSwarmTasks.ts:10-11 and useSwarmFeed.ts:11-12 then hash the same.
+  - useSwarmTasks.ts:10-11 and useSwarmFeed.ts:11-12 then hash the same (only with inlining on; with it off they stay apart).
+  **Inlining: measured trade-off (#2595).** Three adversarial rounds each found about ten unsound merge classes in this pass, so it is the one canonicalization step that is off by default. Method: the real kit, ledger re-fingerprinted for each mode (`patterns --sync`, then `patterns --forge`, then `patterns --score=cli/patterns/fixtures/gt/labels.json --forge`), one run per mode, 2026-10-09, default scope with the spec rows of #2604 still in the ledger:
+
+  | | inlining on | inlining off |
+  | :--- | :--- | :--- |
+  | groups | 964 | 1125 |
+  | A recall (credit) | 17/26 (16 found, 2 partial) | 16/26 (15 found, 2 partial) |
+  | B surfaced / C surfaced | 0/11 / 0 | 0/11 / 0 |
+  | labeled groups true / false | 51 / 0 | 70 / 0 |
+  | item credit by path (fp1, fp2, fp3, N2, T, W) | 9, 1, 2, 1, 1, 3 | 7, 2, 2, 1, 1, 3 |
+
+  Per item, the only A item that changes credit is A12 (1 on, 0 off). A22 is found either way but moves from N1-fp1 to N1-fp2. The other 24 items score the same, and the same eight (A5, A6, A9, A10, A16, A17, A18, A26) are missed in both modes. On the gt sandbox (harvest-only, `forge-groundtruth.spec.js` pinned to inlining on, `inline-mode.spec.js` for off) off scored 18/26 = 0.692. The cost shows in the top 20: with inlining on, 3 of the 20 are team-flags.js window or statement fragments of the one flag shape (ranks 5, 11, 14); with it off, 6 are (ranks 3, 6, 12, 14, 15, 17), because the alias statements stay as separate units. Not measured: whether LGG at P3 recovers A12, warm `--forge` time in either mode, and a hand-judged top 20 for the off run. The A12 loss is filed as a follow-up task; nothing here claims it is recoverable.
+
+  Decision: off by default (loss of 1 A item is within the 2-item rule of #2595); the opt-in pass keeps its soundness pins in `canonicalize.soundness.spec.js` and `canonicalize.property.spec.js`, and remains documented as unsound-prone.
 - A fn unit hashes a signature node ahead of its body: arrow or function, async, generator, accessor kind, and each param's canonical pattern, so `(a, b)` never equals `(b, a)` (#2586).
 - A JSX component name (`<Foo>`, the root of `<foo.Bar>`) resolves through bindings like any identifier. A dynamic `import('x')` or global `require('x')` source becomes the `import:<src>#*` anchor. TS enums, namespaces, `import =` and `export =` are runtime code and are kept, and `declare`, `abstract` and `const` are labels.
 - `if (c) s` becomes `if (c) { s }`.

@@ -5,10 +5,14 @@
 import { withIndexTransaction } from '../search-index-write.js';
 import { writeIndexMeta } from '../search-index-meta.js';
 import { anchorWeight } from './anchors.js';
+import { isInlineRequested, INLINE_VERSION_OFFSET } from './inline-mode.js';
 
 // Bump when units, canonicalization, hashing, facets or the store floor change meaning: every file
 // whose row carries another version is fingerprinted again.
-export const FORGE_EXTRACTOR_VERSION = 4;
+// 5: alias inlining off by default (#2595). Opting in (CHEMX_FORGE_INLINE=1) adds INLINE_VERSION_OFFSET so
+// the two modes never share ledger rows.
+const EXTRACTOR_BASE = 5;
+export const FORGE_EXTRACTOR_VERSION = EXTRACTOR_BASE + (isInlineRequested() ? INLINE_VERSION_OFFSET : 0);
 
 const SQL = {
   stamps: 'SELECT path, content_hash, mtime_ms, size, extractor_version, facet_key FROM pattern_files',

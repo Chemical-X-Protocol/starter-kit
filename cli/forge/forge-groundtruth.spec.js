@@ -14,6 +14,9 @@ import { findStoredGroup, suppressGroup } from './group-store.js';
 import { readLedger } from './forge-groups.js';
 import { runPatternsReject } from '../mcp/patterns-forge-cli.js';
 
+// Pins the opt-in inlining pass (off by default, #2595); the default-off mode is inline-mode.spec.js.
+process.env.CHEMX_FORGE_INLINE = '1';
+
 delete process.env.CHEMX_PROJECT_ROOT;
 
 const ITEMS = gtItems();

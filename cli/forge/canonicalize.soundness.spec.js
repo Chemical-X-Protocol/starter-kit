@@ -5,6 +5,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { collectFileUnits } from './file-units.js';
 
+// These pairs cover the opt-in inlining pass (off by default, #2595); canonicalize reads the switch per call.
+process.env.CHEMX_FORGE_INLINE = '1';
+
 const fnUnit = (code, file = 'src/p/a.tsx') => {
   const { units, error } = collectFileUnits(file, code);
   assert.equal(error, null, `parse failed: ${code}`);

@@ -13,6 +13,9 @@ import { judgeLgg, captureParamsOf, emptyLgg } from './rejects.js';
 import { refineMembers } from './refine.js';
 import { conventionOf } from './conventions.js';
 
+// Pins the opt-in inlining pass (off by default, #2595); the default-off mode is inline-mode.spec.js.
+process.env.CHEMX_FORGE_INLINE = '1';
+
 delete process.env.CHEMX_PROJECT_ROOT;
 
 const cleanups = [];

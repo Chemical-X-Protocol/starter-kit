@@ -18,6 +18,9 @@ import { passesWFloor, W_FLOOR } from './siblings.js';
 import { gtItems } from './gt-sandbox.js';
 import { scoreGroups } from '../patterns/gt-score.js';
 
+// Pins the opt-in inlining pass (off by default, #2595); the default-off mode is inline-mode.spec.js.
+process.env.CHEMX_FORGE_INLINE = '1';
+
 delete process.env.CHEMX_PROJECT_ROOT;
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));

@@ -9,6 +9,9 @@ import assert from 'node:assert/strict';
 import { canonicalizeSource } from './canonicalize.js';
 import { printCanonical } from './canon-print.js';
 
+// These cases cover the opt-in inlining pass (off by default, #2595); canonicalize reads the switch per call.
+process.env.CHEMX_FORGE_INLINE = '1';
+
 const PARAMS = ['a', 'b', 'c', 'd', 'f'];
 const CASES_PER_TEMPLATE = 40;
 const INPUTS_PER_CASE = 12;

@@ -7,6 +7,9 @@ import { canonicalizeSource } from './canonicalize.js';
 import { printCanonical } from './canon-print.js';
 import { hashUnit } from './hash.js';
 
+// Pins the opt-in inlining pass (off by default, #2595); the default-off mode is inline-mode.spec.js.
+process.env.CHEMX_FORGE_INLINE = '1';
+
 // src/ui/composables/useSwarmTasks.ts:10-11
 const SWARM_TASKS_10_11 = `    const hasFetch = typeof fetch === 'function';
     if (!hasFetch) return;`;
