@@ -16,13 +16,15 @@ const args = process.argv.slice(2);
 const isDryRun = args.includes('--dry-run');
 const otpArg = args.find((a) => a.startsWith('--otp='));
 const otp = otpArg ? otpArg.split('=')[1] : null;
-const tagArg = args.find((a) => a.startsWith('--tag='));
-const tagIndex = args.indexOf('--tag');
-const explicitTag = tagArg
-  ? tagArg.split('=')[1]
-  : tagIndex !== -1 && args[tagIndex + 1] && !args[tagIndex + 1].startsWith('-')
-    ? args[tagIndex + 1]
-    : null;
+const readExplicitTag = () => {
+  const tagArg = args.find((a) => a.startsWith('--tag='));
+  if (tagArg) return tagArg.split('=')[1];
+  const tagIndex = args.indexOf('--tag');
+  const nextArg = tagIndex === -1 ? undefined : args[tagIndex + 1];
+  const isTagValue = Boolean(nextArg) && !nextArg.startsWith('-');
+  return isTagValue ? nextArg : null;
+};
+const explicitTag = readExplicitTag();
 
 const TARGETS = [
   {
