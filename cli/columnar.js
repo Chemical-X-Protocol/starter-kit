@@ -13,14 +13,16 @@
  * @returns {{ cols: readonly string[], rows: readonly any[][] }}
  */
 export const toColumnar = (items = [], cols = [], accessors = {}) => {
-  if (!items || items.length === 0) {
+  const isEmpty = !items || items.length === 0;
+  if (isEmpty) {
     return { cols, rows: [] };
   }
 
   const rows = items.map((item) => {
     return cols.map((col) => {
       const accessor = accessors[col];
-      if (typeof accessor === 'function') {
+      const hasAccessor = typeof accessor === 'function';
+      if (hasAccessor) {
         return accessor(item);
       }
       return item[col];
@@ -37,7 +39,8 @@ export const toColumnar = (items = [], cols = [], accessors = {}) => {
  * @returns {readonly Record<string, any>[]}
  */
 export const fromColumnar = (columnar) => {
-  if (!columnar || !columnar.cols || !columnar.rows) {
+  const isInvalid = !columnar || !columnar.cols || !columnar.rows;
+  if (isInvalid) {
     return [];
   }
 
