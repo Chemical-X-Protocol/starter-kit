@@ -92,7 +92,8 @@ export const assertImportersSurvive = (absPath, root) => {
   if (isExplicitFormat) throw new Error(`Explode refused: ${ext} modules are imported with explicit extensions, which a directory capsule cannot keep. Nothing was changed.`);
   const isJsSource = ext === '.js' || ext === '.jsx';
   const hasTsconfig = Boolean(findUp(dir, 'tsconfig.json'));
-  if (isJsSource && !hasTsconfig) throw new Error(`Explode refused: the capsule is TypeScript (index.ts, types/*.d.ts) but no tsconfig.json covers ${path.basename(absPath)}. Nothing was changed.`);
+  const isMissingTsconfigForJs = isJsSource && !hasTsconfig;
+  if (isMissingTsconfigForJs) throw new Error(`Explode refused: the capsule is TypeScript (index.ts, types/*.d.ts) but no tsconfig.json covers ${path.basename(absPath)}. Nothing was changed.`);
   const isNodeEsmJs = ext === '.js' && isModulePackage(dir);
   if (isNodeEsmJs) throw new Error('Explode refused: a .js file in a "type": "module" package is imported with an explicit extension, which a directory capsule cannot keep. Nothing was changed.');
   const importers = explicitExtensionImporters(absPath, root);
