@@ -1,6 +1,16 @@
 // Small schema-driven argv parser shared by test, typecheck and build.
 // Every flag a command documents is declared here once; anything else is reported as unknown
 // instead of being silently dropped. `--` ends option parsing and the rest is a command.
+import { shellQuote } from './test-paths.js';
+
+// One word is a whole shell command the user quoted (`chemx build "vite build"`). Several words
+// are argv the shell already split, so each is re-quoted to reach `sh -c` unchanged.
+export const joinCommandWords = (words = []) => {
+  const texts = words.map(String);
+  const isWholeCommandString = texts.length === 1;
+  const joined = isWholeCommandString ? texts[0] : texts.map(shellQuote).join(' ');
+  return joined.trim();
+};
 
 const splitInlineValue = (arg) => {
   const eqIndex = arg.indexOf('=');
@@ -9,8 +19,8 @@ const splitInlineValue = (arg) => {
 };
 
 // schema: { booleans: { '--json': 'json' }, values: { '-t': 'filter', '--filter': 'filter' } }
-// With schema.positionalCommand, an unknown flag after the first positional belongs to that
-// command (`chemx wrap tsc -p .`) instead of being reported as unknown.
+// With schema.positionalCommand, the first positional starts the user's command and every word
+// after it belongs to that command (`chemx wrap node --help`), chemx's own flags included.
 // Returns { flags, values, positionals, command, unknown, missingValues }.
 export const parseCliArgs = (rawArgs = [], schema = {}) => {
   const booleans = schema.booleans || {};
@@ -21,7 +31,7 @@ export const parseCliArgs = (rawArgs = [], schema = {}) => {
     const arg = String(rawArgs[index]);
     const isCommandSeparator = arg === '--';
     if (isCommandSeparator) {
-      const command = rawArgs.slice(index + 1).join(' ').trim();
+      const command = joinCommandWords(rawArgs.slice(index + 1));
       result.command = command.length > 0 ? command : null;
       break;
     }
@@ -47,10 +57,16 @@ export const parseCliArgs = (rawArgs = [], schema = {}) => {
     }
 
     const isFlag = arg.startsWith('-') && arg.length > 1;
-    const isCommandWord = Boolean(schema.positionalCommand) && result.positionals.length > 0;
-    const isUnknownFlag = isFlag && !isCommandWord;
-    if (isUnknownFlag) result.unknown.push(arg);
-    else result.positionals.push(arg);
+    if (isFlag) {
+      result.unknown.push(arg);
+      continue;
+    }
+    const startsCommand = Boolean(schema.positionalCommand);
+    if (startsCommand) {
+      result.positionals = rawArgs.slice(index).map(String);
+      break;
+    }
+    result.positionals.push(arg);
   }
   return result;
 };

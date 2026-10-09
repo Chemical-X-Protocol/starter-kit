@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const SAFE_TOKEN = /^[\w@%+:,./-]+$/;
+const SAFE_TOKEN = /^[\w@%+=:,./-]+$/;
 const DOUBLE_QUOTE_SAFE = /^[^"$`\\!]*$/;
 
 // Quotes a filter for `sh -c`: double quotes when that is safe, otherwise single quotes

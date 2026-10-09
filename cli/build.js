@@ -7,7 +7,7 @@ import { ANSI } from './theme.js';
 import { handleError } from './errors/index.js';
 import { STATUS, toExitCode } from './result-status.js';
 import { isInteractive } from './terminal.js';
-import { parseCliArgs, describeArgErrors, parseTimeoutSeconds } from './cli-args.js';
+import { parseCliArgs, describeArgErrors, parseTimeoutSeconds, joinCommandWords } from './cli-args.js';
 
 export const BUILD_ARGS = {
   booleans: {
@@ -21,6 +21,9 @@ export const BUILD_ARGS = {
 const BUILD_HELP = [
   'USAGE',
   '  chemx build [options] [-- <command>]',
+  '  chemx run|wrap [options] <command> [args...]',
+  '',
+  '  Options go before the command: every word from the first command word on is passed to it.',
   '',
   'OPTIONS',
   '  --command="<cmd>"        Explicit build command (same as -- <cmd>; default: the build script)',
@@ -33,9 +36,10 @@ const BUILD_HELP = [
 ].join('\n');
 
 // `-- <cmd>` wins, then --command, then a bare positional command such as `chemx build "vite build"`.
-// The router already removed `build` / `run` / `wrap`, so every positional word is the user's.
+// The router already removed `build` / `run` / `wrap`, so every positional word is the user's,
+// and parseCliArgs stopped reading chemx flags at the first of them.
 export const resolveBuildCommand = (parsed) => {
-  const positionalCommand = parsed.positionals.join(' ').trim();
+  const positionalCommand = joinCommandWords(parsed.positionals);
   return parsed.command || parsed.values.command || positionalCommand || null;
 };
 

@@ -82,3 +82,27 @@ test('cli-usage: a flag chemx does not know, before any positional command, is s
   const parsed = parseCliArgs(['--comand=exit 3'], BUILD_ARGS);
   assert.deepEqual(parsed.unknown, ['--comand=exit 3']);
 });
+
+test('cli-usage: a multi-word positional command is re-quoted word by word, so shell syntax in one word survives', () => {
+  const resolve = (args) => resolveBuildCommand(parseCliArgs(args, BUILD_ARGS));
+  assert.equal(resolve(['node', '-e', 'console.log(1+1)']), 'node -e "console.log(1+1)"');
+  assert.equal(resolve(['FOO=1', 'node', 'x.js']), 'FOO=1 node x.js', 'an env assignment stays a bare word');
+  assert.equal(resolve(['echo', "it's"]), `echo "it's"`);
+  assert.equal(parseCliArgs(['--', 'node', '-e', 'console.log(1+1)'], BUILD_ARGS).command, 'node -e "console.log(1+1)"');
+  assert.equal(parseCliArgs(['--', 'npm run build && echo ok'], BUILD_ARGS).command, 'npm run build && echo ok', 'one word is a whole shell command');
+});
+
+test('cli-usage: chemx flags after the first command word belong to the command, not to chemx', () => {
+  const parsed = parseCliArgs(['--json', 'node', '--help', '--json', '-h', '--timeout', '5'], BUILD_ARGS);
+  assert.equal(parsed.flags.json, true);
+  assert.equal(parsed.flags.help, undefined);
+  assert.equal(parsed.values.timeout, undefined);
+  assert.equal(resolveBuildCommand(parsed), 'node --help --json -h --timeout 5');
+});
+
+test('cli-usage: `chemx wrap node -e <code>` runs the code instead of a shell syntax error', { timeout: 60000 }, async () => {
+  await withProject(async (root) => {
+    const report = await runBuildAudit(['--json', 'node', '-e', 'console.log(1+1)'], false, quiet(root));
+    assert.equal(report.status, STATUS.PASS, report.executionError || JSON.stringify(report.rawTail));
+  });
+});
