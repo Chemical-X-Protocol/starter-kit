@@ -102,7 +102,8 @@ test('enrich skips non-Babel files instead of dumping them', () => {
   });
 });
 
-test('CLI --connections prints the connection card; a plain --symbol read creates no index', () => {
+test('CLI --connections prints the connection card; a plain --symbol read creates no index', async () => {
+  const { syncSearchIndex } = await import('./search.js');
   withProject({ 'a.ts': 'export const go = () => 1\n' }, (dir) => {
     const cwd = process.cwd();
     let printed = '';
@@ -112,11 +113,66 @@ test('CLI --connections prints the connection card; a plain --symbol read create
     try {
       runReaderCli(['a.ts', '--symbol=go'], false);
       assert.equal(fs.existsSync(path.join(dir, '.chemx')), false, 'symbol read must not create .chemx');
+      syncSearchIndex('.', dir);
       runReaderCli(['a.ts', '--connections'], false);
     } finally {
       process.stdout.write = write;
       process.chdir(cwd);
     }
     assert.match(printed, /File Connections: imports \d+ symbol\(s\)/);
+  });
+});
+
+const captureStdout = (dir, fn) => {
+  const cwd = process.cwd();
+  let printed = '';
+  const write = process.stdout.write;
+  process.chdir(dir);
+  process.stdout.write = (chunk) => { printed += chunk; return true; };
+  try {
+    fn();
+  } finally {
+    process.stdout.write = write;
+    process.chdir(cwd);
+  }
+  return printed;
+};
+
+const CALL_GRAPH = {
+  'calls.ts': 'export const leaf = () => 1\nexport const mid = () => leaf()\n',
+  'use.ts': "import { mid } from './calls'\nexport const top = () => mid()\n"
+};
+
+test('CLI and MCP --backtrace print the root callers from the index', async () => {
+  const { syncSearchIndex } = await import('./search.js');
+  withProject(CALL_GRAPH, (dir) => {
+    syncSearchIndex('.', dir);
+    const printed = captureStdout(dir, () => runReaderCli(['calls.ts', '--backtrace=mid'], false));
+    assert.match(printed, /--- Backtrace: mid \(\d+ caller\(s\)\) ---/);
+    assert.match(printed, /<- use\.ts/);
+    const mcp = handleChemxRead({ path: 'calls.ts', backtraceSymbol: 'mid' }, dir);
+    assert.match(mcp, /<- use\.ts/);
+  });
+});
+
+test('CLI and MCP --trace print a card even when nothing is called', async () => {
+  const { syncSearchIndex } = await import('./search.js');
+  withProject(CALL_GRAPH, (dir) => {
+    syncSearchIndex('.', dir);
+    const printed = captureStdout(dir, () => runReaderCli(['calls.ts', '--trace=leaf'], false));
+    assert.match(printed, /--- Forward Trace: leaf ---/);
+    const mcp = handleChemxRead({ path: 'use.ts', traceSymbol: 'top' }, dir);
+    assert.match(mcp, /--- Forward Trace: top ---/);
+  });
+});
+
+test('without an index, cards say so instead of reporting zero references, and no index is created', () => {
+  withProject(CALL_GRAPH, (dir) => {
+    const printed = captureStdout(dir, () => runReaderCli(['calls.ts', '--symbol=mid', '--connections', '--backtrace=mid', '--trace=mid'], false));
+    assert.doesNotMatch(printed, /referenced by 0 file/);
+    assert.match(printed, /Connections unavailable: no search index/);
+    assert.match(printed, /Backtrace unavailable: no search index/);
+    assert.match(printed, /Forward Trace unavailable: no search index/);
+    assert.equal(fs.existsSync(path.join(dir, '.chemx')), false);
   });
 });

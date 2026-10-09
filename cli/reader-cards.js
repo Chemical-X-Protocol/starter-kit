@@ -2,6 +2,7 @@
  * Index-backed cards appended to reads: connections, context envelope, forward trace and
  * backtrace. Shared by the CLI reader and the MCP read tool so both honor the same flags.
  */
+import fs from 'node:fs';
 import path from 'node:path';
 import { openIndexDb } from './search-db.js';
 import {
@@ -38,29 +39,62 @@ export const buildContextEnvelope = (db, targetPath) => {
   return '';
 };
 
+const errorText = (err) => (err instanceof Error ? err.message : String(err));
+
 export const buildTraceCard = (db, symbol) => {
   try {
     const result = calculateCallTrace(db, symbol, { maxDepth: 3 });
-    const hasCallees = Boolean(result?.callees?.length);
-    if (!hasCallees) return '';
-    const lines = result.callees.slice(0, 6).map((c) => `//   -> ${c.symbol || c} (${c.file ? path.basename(c.file) : '?'})`);
+    const callees = result?.callees || [];
+    const lines = callees.slice(0, 6).map((c) => `//   -> ${c.symbol || c} (${c.file ? path.basename(c.file) : '?'})`);
+    const isEmpty = lines.length === 0;
+    if (isEmpty) lines.push('//   (no callees found in the index)');
     return `\n// --- Forward Trace: ${symbol} ---\n${lines.join('\n')}`;
-  } catch {
-    return '';
+  } catch (err) {
+    return `\n// --- Forward Trace: ${symbol} --- failed: ${errorText(err)}`;
   }
+};
+
+const describeCaller = (c) => {
+  const isObject = c !== null && typeof c === 'object';
+  if (!isObject) return String(c);
+  const via = c.symbol ? ` via ${c.symbol}` : '';
+  return `${c.path}${via} (depth ${c.depth})`;
 };
 
 export const buildBacktraceCard = (db, symbol) => {
   try {
     const result = calculateBacktrace(db, symbol, { maxDepth: 5 });
-    const hasCallers = Boolean(result?.rootCallers?.length);
-    if (!hasCallers) return '';
-    const lines = result.rootCallers.slice(0, 5).map((c) => `//   <- ${path.basename(c)}`);
-    return `\n// --- Backtrace: ${symbol} ---\n${lines.join('\n')}`;
-  } catch {
-    return '';
+    const roots = result?.rootCallers || [];
+    const lines = roots.slice(0, 5).map((c) => `//   <- ${describeCaller(c)}`);
+    const isEmpty = lines.length === 0;
+    if (isEmpty) lines.push('//   (no callers found in the index)');
+    return `\n// --- Backtrace: ${symbol} (${result?.totalCallers || 0} caller(s)) ---\n${lines.join('\n')}`;
+  } catch (err) {
+    return `\n// --- Backtrace: ${symbol} --- failed: ${errorText(err)}`;
   }
 };
+
+const NO_INDEX_HINT = 'no search index at .chemx/index.db; run `cx q <symbol>` once to build it, then re-read';
+
+const hasBuiltIndex = (cwd) => {
+  const dbFile = path.join(cwd, '.chemx', 'index.db');
+  return fs.existsSync(dbFile);
+};
+
+const isIndexEmpty = (db) => {
+  try {
+    return Number(db.prepare('SELECT COUNT(*) AS n FROM files').get()?.n || 0) === 0;
+  } catch {
+    return true;
+  }
+};
+
+const unavailableCards = (flags) => ({
+  connection: flags.connections ? `\n// Connections unavailable: ${NO_INDEX_HINT}.` : '',
+  context: '',
+  trace: flags.traceSymbol ? `\n// Forward Trace unavailable: ${NO_INDEX_HINT}.` : '',
+  backtrace: flags.backtraceSymbol ? `\n// Backtrace unavailable: ${NO_INDEX_HINT}.` : ''
+});
 
 const openCardsDb = (cwd) => {
   try {
@@ -84,8 +118,11 @@ export const buildReadCards = (cwd, targetPath, flags = {}) => {
   const wantsContext = Boolean(flags.context && flags.symbol);
   const needsDb = Boolean(flags.connections || wantsContext || flags.traceSymbol || flags.backtraceSymbol);
   if (!needsDb) return empty;
+  const isIndexMissing = !hasBuiltIndex(cwd);
+  if (isIndexMissing) return unavailableCards(flags);
   const db = openCardsDb(cwd);
-  if (!db) return empty;
+  const isUnusable = !db || isIndexEmpty(db);
+  if (isUnusable) return unavailableCards(flags);
   return {
     connection: flags.connections ? buildConnectionCard(db, flags.symbol, targetPath) : '',
     context: wantsContext ? buildContextEnvelope(db, targetPath) : '',
