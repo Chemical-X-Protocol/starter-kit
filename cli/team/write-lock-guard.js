@@ -10,6 +10,7 @@ import { findChemxDir } from '../audit/history.js';
 import { openIndexDb } from '../search-schema.js';
 import { describeLease } from './team-db-lock-promotion.js';
 import { resolveAgentId } from './agent-identity.js';
+import { resolveLeaseScope, toLeaseKey } from './lease-key.js';
 
 const readLeaseRows = (db, keys) => {
   try {
@@ -29,9 +30,9 @@ export const findBlockingLease = (resolvedPath, cwd = process.cwd(), agentId) =>
   const db = openIndexDb(cwd);
   if (!db) return null;
 
-  // Lease keys are stored relative to the cwd the lock was taken from; normally that is the project root.
-  const projectRoot = path.dirname(chemxDir);
-  const keys = [...new Set([path.relative(projectRoot, resolvedPath), path.relative(cwd, resolvedPath)])];
+  // Lease keys are project-root relative; the cwd-relative key also catches rows written before that.
+  const projectKey = toLeaseKey(resolvedPath, resolveLeaseScope(db, { cwd }));
+  const keys = [...new Set([projectKey, path.relative(cwd, resolvedPath)].filter(Boolean))];
   const writerId = resolveAgentId(agentId);
   const isHeldByOther = (lease) => lease.active && lease.locked_by !== writerId;
   const blocking = readLeaseRows(db, keys).map((row) => describeLease(row)).find(isHeldByOther);

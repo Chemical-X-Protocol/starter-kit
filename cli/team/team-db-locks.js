@@ -3,28 +3,15 @@
  * Prevents race collisions with deterministic queueing and reactive promotion
  */
 
-import path from 'node:path';
-import { isPathTraversal, resolveSafePath } from '../path-scope.js';
 import { postFeedEvent } from './team-db-feed.js';
 import { DEFAULT_TTL_MS, cleanExpiredLeases, promoteNextWaiter, enqueueWaiter, describeLease } from './team-db-lock-promotion.js';
 import { withImmediateTransaction } from './team-db-transaction.js';
+import { resolveLeaseScope, toLeaseKey } from './lease-key.js';
 
 export { cleanExpiredLeases, promoteNextWaiter, describeLease } from './team-db-lock-promotion.js';
 
-const readDbLocation = (db) => {
-  try {
-    return [typeof db?.location === 'function' ? db.location() : null, null];
-  } catch (err) {
-    return [null, err]; // a closed handle has no location; fall back to the cwd
-  }
-};
-
-const resolveBaseDir = (db, options = {}) => {
-  if (options.cwd) return options.cwd;
-  const [loc] = readDbLocation(db);
-  const isProjectDb = Boolean(loc) && loc !== ':memory:' && loc.includes('.chemx');
-  return isProjectDb ? path.dirname(path.dirname(path.resolve(loc))) : process.cwd();
-};
+// Leases are keyed from the project root; a relative input resolves from options.cwd.
+const leaseKeyFor = (db, filePath, options) => toLeaseKey(filePath, resolveLeaseScope(db, options));
 
 const normalizeAgentId = (id) => {
   const hasId = Boolean(id);
@@ -40,11 +27,8 @@ export const requestFileLock = (db, filePath, agentId, options = {}) => {
   const canRequest = hasDb && hasPath && hasAgent;
   if (!canRequest) return { granted: false, reason: 'missing_args' };
 
-  const baseDir = resolveBaseDir(db, options);
-  if (isPathTraversal(filePath, baseDir)) {
-    return { granted: false, reason: 'path_traversal' };
-  }
-  const cleanPath = path.relative(baseDir, resolveSafePath(filePath, baseDir));
+  const cleanPath = leaseKeyFor(db, filePath, options);
+  if (!cleanPath) return { granted: false, reason: 'path_traversal' };
 
   const cleanId = normalizeAgentId(agentId);
   const pid = typeof options.pid === 'number' ? options.pid : 0;
@@ -89,11 +73,8 @@ export const releaseFileLock = (db, filePath, agentId, options = {}) => {
   const canRelease = hasDb && hasPath && hasAgent;
   if (!canRelease) return { success: false, reason: 'missing_args' };
 
-  const baseDir = resolveBaseDir(db, options);
-  if (isPathTraversal(filePath, baseDir)) {
-    return { success: false, reason: 'path_traversal' };
-  }
-  const cleanPath = path.relative(baseDir, resolveSafePath(filePath, baseDir));
+  const cleanPath = leaseKeyFor(db, filePath, options);
+  if (!cleanPath) return { success: false, reason: 'path_traversal' };
 
   const cleanId = normalizeAgentId(agentId);
 
@@ -126,11 +107,8 @@ export const getFileLockStatus = (db, filePath, options = {}) => {
   const canGet = hasDb && hasPath;
   if (!canGet) return null;
 
-  const baseDir = resolveBaseDir(db, options);
-  if (isPathTraversal(filePath, baseDir)) {
-    return { lease: null, waiters: [], error: 'path_traversal' };
-  }
-  const cleanPath = path.relative(baseDir, resolveSafePath(filePath, baseDir));
+  const cleanPath = leaseKeyFor(db, filePath, options);
+  if (!cleanPath) return { lease: null, waiters: [], error: 'path_traversal' };
 
   // Read-only: an expired or orphaned lease is reported, never deleted, so a status
   // check cannot race a concurrent acquire. Acquire and release do the cleanup.
