@@ -39,7 +39,8 @@ export const executeConnectionsQuery = (activeDb, query) => {
   }
   const deps = findFileDependencies(activeDb, query);
   const dependents = findFileDependents(activeDb, query);
-  if (deps.length > 0 || dependents.length > 0) {
+  const hasFileConnections = deps.length > 0 || dependents.length > 0;
+  if (hasFileConnections) {
     const blast = calculateBlastRadius(activeDb, query);
     return {
       file: query,
@@ -58,10 +59,12 @@ export const executeFtsFallback = (activeDb, query, scopeDirs = null) => {
     if (clean) {
       const rows = activeDb.prepare('SELECT file_path, name, tier FROM fts_index WHERE fts_index MATCH ?').all(`"${clean}"*`)
         .filter((r) => !isScoped || isPathInScope(r.file_path, scopeDirs)).slice(0, 10);
-      if (rows.length > 0) return rows.map((r) => `[FTS MATCH] ${r.file_path} (${r.name || r.tier})`).join('\n');
+      const hasFtsRows = rows.length > 0;
+      if (hasFtsRows) return rows.map((r) => `[FTS MATCH] ${r.file_path} (${r.name || r.tier})`).join('\n');
     }
   } catch (err) {
-    if (process.env.CHEMX_DEBUG) process.stderr.write(`[fts-fallback] Search failed for ${query}: ${err.message}\n`);
+    const isDebugEnabled = Boolean(process.env.CHEMX_DEBUG);
+    if (isDebugEnabled) process.stderr.write(`[fts-fallback] Search failed for ${query}: ${err.message}\n`);
   }
   return null;
 };
