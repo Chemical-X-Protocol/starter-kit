@@ -19,7 +19,8 @@ const readJson = (file) => {
 const lastAudit = (root, now) => {
   const history = readJson(path.join(root, '.chemx', 'history.json'));
   const last = Array.isArray(history) ? history[history.length - 1] : null;
-  if (!last?.health) return null;
+  const isMissingHealth = !last?.health;
+  if (isMissingHealth) return null;
   const ageMinutes = Math.max(0, Math.round((now - new Date(last.timestamp).getTime()) / 60000));
   return { grade: last.health.grade, score: last.health.score, files: last.metrics?.scannedFiles ?? null, ageMinutes };
 };
@@ -34,7 +35,8 @@ const ratchetSummary = (root) => {
 
 const staleServersFor = (root, version, procRoot) => {
   const scan = listChemxMcpProcesses(procRoot);
-  if (!scan.ok) return null;
+  const isScanFailed = !scan.ok;
+  if (isScanFailed) return null;
   const mine = scan.processes.filter((proc) => proc.root === root);
   return { running: mine.length, stale: mine.filter((proc) => proc.isStale || (proc.version && proc.version !== version)).length };
 };
@@ -53,7 +55,8 @@ export const collectProjectStatus = ({ root, procRoot = '/proc', now = Date.now(
 };
 
 export const formatAge = (minutes) => {
-  if (minutes < 60) return `${minutes}m ago`;
+  const isUnderAnHour = minutes < 60;
+  if (isUnderAnHour) return `${minutes}m ago`;
   const hours = Math.round(minutes / 60);
   return hours < 48 ? `${hours}h ago` : `${Math.round(hours / 24)}d ago`;
 };
