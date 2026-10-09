@@ -255,7 +255,7 @@ export const runSearch = async (rawArgs = [], isCli = true) => {
   const db = syncRes?.db;
 
   if (!db) {
-    const errorMsg = '✕ SQLite engine not available. Please ensure Node.js >= 22.5 is installed.';
+    const errorMsg = '✕ SQLite engine not available. Please ensure Node.js >= 22.13 is installed.';
     if (isJson) {
       process.stdout.write(JSON.stringify({ error: errorMsg, results: [] }) + '\n');
     } else {
