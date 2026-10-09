@@ -8,14 +8,18 @@ export function useSwarmCodebase() {
   const error = ref<Error | null>(null);
 
   const fetchCodebase = async () => {
-    if (typeof fetch !== 'function') return;
+    const isFetchMissing = typeof fetch !== 'function';
+    if (isFetchMissing) return;
     try {
       isLoading.value = true;
       const res = await fetch('/api/swarm/codebase');
-      if (res.ok) {
+      const isResponseOk = Boolean(res.ok);
+      if (isResponseOk) {
         const data = await res.json();
-        if (data.files) files.value = data.files;
-        if (data.violations) violations.value = data.violations;
+        const hasFiles = Boolean(data.files);
+        if (hasFiles) files.value = data.files;
+        const hasViolations = Boolean(data.violations);
+        if (hasViolations) violations.value = data.violations;
       }
     } catch (err) {
       error.value = err instanceof Error ? err : new Error(String(err));
