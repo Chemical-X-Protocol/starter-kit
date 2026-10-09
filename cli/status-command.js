@@ -9,6 +9,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { liveLeases } from './lease-view.js';
 import { activityHolder, agentFromArgs } from './team/lease-activity.js';
+import { contentionByPath, describeContention } from './team/lease-contention.js';
 
 export const STATUS_HELP = [
   'chemx status [path] [--json] [--as=@you]',
@@ -65,7 +66,18 @@ const FLAG_TEXT = { unleased: '  [unleased: someone may be mid-edit]', other: ' 
 const rowText = (row) => {
   const task = row.task ? ` task #${row.task}` : '';
   const lease = row.holder ? `  ${row.holder} "${row.purpose}"${task} ${row.minutesLeft}m left` : '';
-  return `${row.code} ${row.file}${lease}${FLAG_TEXT[row.state] || ''}`;
+  const queue = row.queue ? `  ${row.queue}` : '';
+  return `${row.code} ${row.file}${lease}${queue}${FLAG_TEXT[row.state] || ''}`;
+};
+
+// Rows of contested leases also carry who waits and when renewal stops extending (#2566).
+const withContention = (rows, top, cwd) => {
+  const contested = contentionByPath(cwd);
+  return rows.map((row) => {
+    const contention = contested.get(path.join(top, row.file));
+    const isContested = Boolean(contention);
+    return isContested ? { ...row, waiters: contention.waiters.map((w) => w.agent_id), renewalCapAt: contention.capAt, queue: describeContention(contention) } : row;
+  });
 };
 
 export const runStatus = (args = [], isCli = true, cwd = process.cwd()) => {
@@ -85,7 +97,7 @@ export const runStatus = (args = [], isCli = true, cwd = process.cwd()) => {
     return { code: 1, error: 'git failed' };
   }
   const me = activityHolder(agentFromArgs(args));
-  const rows = annotate(parsePorcelain(raw), liveLeases(cwd), top, me);
+  const rows = withContention(annotate(parsePorcelain(raw), liveLeases(cwd), top, me), top, cwd);
   const summary = countLine(rows);
   if (isCli) {
     const isJson = args.includes('--json');

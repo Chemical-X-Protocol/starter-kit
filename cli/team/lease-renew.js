@@ -15,6 +15,7 @@ import { renewHeldLease } from './team-db-locks.js';
 import { resolveAgentId } from './agent-identity.js';
 import { reacquireLapsedAfterEdit } from './lease-reacquire.js';
 import { clockTime, describeLapse } from './lease-lapse.js';
+import { markEdit } from './lease-cap.js';
 
 // lockRoot -> Set of keys, so each lock db is read once however many files the batch touched.
 const keysByRoot = (root, absPaths) => {
@@ -48,7 +49,9 @@ const renewInRoot = (lockRoot, keys, holder, options) => {
   const hasDb = Boolean(db);
   if (!hasDb) return [];
   try {
-    return held.filter((key) => renewHeldLease(db, key, holder, options).renewed).map((key) => path.join(lockRoot, key));
+    const renewed = held.filter((key) => renewHeldLease(db, key, holder, options).renewed);
+    renewed.forEach((key) => markEdit(db, key, holder, options.now)); // the cap counts from this edit
+    return renewed.map((key) => path.join(lockRoot, key));
   } finally {
     closeQuietly(db);
   }

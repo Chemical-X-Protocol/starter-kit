@@ -12,6 +12,7 @@ import path from 'node:path';
 import { isPidAlive } from './team/team-db-transaction.js';
 import { resolveAgentId as resolveTeamAgentId } from './team/agent-identity.js';
 import { chemxDbPathFor } from './sqlite-memory.js';
+import { liveWaiters } from './team/lease-cap.js';
 
 const loadSqlite = async () => {
   try {
@@ -35,7 +36,10 @@ const readLeases = (root, keys) => {
   try {
     db = new DatabaseSync(dbPath, { readOnly: true });
     const placeholders = keys.map(() => '?').join(', ');
-    const leases = db.prepare(`SELECT * FROM file_leases WHERE file_path IN (${placeholders})`).all(...keys);
+    const now = Date.now();
+    const rows = db.prepare(`SELECT * FROM file_leases WHERE file_path IN (${placeholders})`).all(...keys);
+    // An expired lease with a waiter belongs to the first waiter: the holder cannot retake it by editing (#2566).
+    const leases = rows.map((row) => (Number(row.expires_at) <= now ? { ...row, waiters: liveWaiters(db, row.file_path, now) } : row));
     db.close();
     return leases;
   } catch (err) {
@@ -80,12 +84,23 @@ const isBlockingLease = (lease, agentId) => {
   return !isExpired && !isDeadHolder && !isOwn;
 };
 
+// The caller's own lapsed lease that someone is queued behind: not blocking for others, but not retakable by its holder.
+const isLapsedWithQueue = (lease, agentId) => {
+  const isOwn = lease.locked_by === resolveAgentId(agentId);
+  const queue = (lease.waiters ?? []).filter((waiter) => waiter.agent_id !== lease.locked_by);
+  return isOwn && Number(lease.expires_at) <= Date.now() && queue.length > 0;
+};
+
 const blockingLease = (lockRoot, absPath, agentId, root) => {
   const keys = leaseKeys(lockRoot, absPath, root);
   const hasKeys = keys.length > 0;
-  const lease = hasKeys ? readLeases(lockRoot, keys).find((row) => isBlockingLease(row, agentId)) : null;
-  const hasLease = Boolean(lease);
-  return hasLease ? { file: lease.file_path, lockedBy: lease.locked_by, expiresAt: Number(lease.expires_at), purpose: lease.purpose || '' } : null;
+  const rows = hasKeys ? readLeases(lockRoot, keys) : [];
+  const lease = rows.find((row) => isBlockingLease(row, agentId));
+  if (lease) return { file: lease.file_path, lockedBy: lease.locked_by, expiresAt: Number(lease.expires_at), purpose: lease.purpose || '' };
+  const lapsed = rows.find((row) => isLapsedWithQueue(row, agentId));
+  const queue = (lapsed?.waiters ?? []).map((waiter) => waiter.agent_id);
+  const hasLapsed = Boolean(lapsed);
+  return hasLapsed ? { file: lapsed.file_path, lockedBy: queue[0], expiresAt: Number(lapsed.expires_at), purpose: lapsed.purpose || '', lapsedOwn: true, queue } : null;
 };
 
 /** @returns {{ file: string, lockedBy: string, expiresAt: number, purpose: string } | null} */

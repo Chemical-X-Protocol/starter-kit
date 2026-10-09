@@ -4,7 +4,7 @@ A lock is a lease: a row in `file_leases` in the project's `.chemx/index.db` tha
 working on one file until a stated time. Other handles' `patch`, `write`, `autofix` and `explode` on
 that file are refused while it is live. This page states exactly what holds a lease, what lets it go,
 and what each tool tells you. Every behavior below is covered by a spec in `cli/team/`
-(`lease-activity.spec.js`, `lease-lapse.spec.js`, `staged-leases.spec.js`, `team-lease-safety.spec.js`).
+(`lease-activity.spec.js`, `lease-cap.spec.js`, `lease-lapse.spec.js`, `staged-leases.spec.js`, `team-lease-safety.spec.js`).
 
 ## Commands
 
@@ -42,6 +42,37 @@ shorten a lease, extend another handle's, or revive an expired one.
 Renewal fails open: if the database is busy or missing, the command still runs and the lease simply
 isn't extended. `lock renew` remains for an explicit extension.
 
+## When others are waiting: the renewal cap
+
+Activity renewal (item 1 and 2 above) would let a holder who stays busy but stopped editing a file keep
+it forever. So the rule while anyone is queued for a lease is:
+
+- **With no waiter**, a lease renews on activity exactly as above, however long since the holder edited it.
+- **With at least one live waiter** (queued and still polling; a waiter that stopped polling for 10
+  minutes does not count), activity renewal extends the lease only up to **the holder's last edit of that
+  file + 10 minutes**, never past it. "Edit" means a chemx `patch`, `write` or the like on that file by the
+  holder; if there was none, the time the lease was granted counts. The edit itself still renews to now +
+  5 minutes and restarts the 10 minutes.
+- The cap is 10 minutes by default; set `CHEMX_LEASE_CAP_MINUTES` to change it.
+- The cap never shortens a lease. A renewal made before the waiter arrived can already run up to one TTL
+  (5 minutes) past the cap time, and `lock renew` (explicit, by the holder) is not capped.
+- When the capped lease lapses, the next `acquire` or `release` of any file in that database promotes the
+  first waiter. Until then the row stays, expired.
+- **The holder's next edit** of a lapsed file that someone is queued for is refused (nothing is written):
+  `your lease on <file> lapsed at <time> and @w is queued for it, so it is theirs next and this edit was
+  not made`. With nobody queued it re-acquires as described below.
+- **Holder notice.** The first time a waiter queues behind a lease, the holder gets one direct message
+  (`chemx team inbox`): `@w is waiting for <file> since HH:MM; commit and release it when your edit is in`,
+  naming `chemx commit <files> -m "..." --release` and `chemx team lock release <file> --as=@me`, plus the
+  cap rule. One per (file, waiter, holder); a re-poll sends nothing. The waiter's `lock acquire` output says
+  `@holder was notified` (or `was already notified`, or that notifying failed). The message sits in the
+  inbox; it does not interrupt a running agent.
+- **Where it shows.** `chemx team lock list`, `lock status <file>` and `chemx status` print, next to each
+  contested lease, `waiting: @w (since HH:MM:SS); renewal stops extending at HH:MM:SS` (`stopped` once
+  past). JSON carries `waiters`, `renewalCapAt` and, in `lock list`, `renewalCapped`.
+
+The last-edit times live in a `lease_edit_marks` table in the same database, created on first use.
+
 ## What happens on a lapse
 
 A lease with no chemx activity from its holder for 5 minutes lapses: the file is free to anyone, and
@@ -58,6 +89,7 @@ the next `acquire` or `release` of any file in that database deletes the row and
   for one TTL, and the result carries `leaseNotes` (also printed by `chemx patch` / `chemx write`):
   `lease on <file> expired at HH:MM:SS (<n> min ago); nobody had taken it, so this edit re-acquired it until HH:MM:SS`.
   If another handle took the file, the edit is refused as for any foreign lease. It is never re-acquired.
+  If someone is queued for the file, the edit is refused and the lease is not retaken (see the renewal cap).
 - **Acquire** prints `It expires at HH:MM:SS` and that any chemx activity by the holder extends it; after
   a lapse it adds when your earlier lease expired (`previousLapse` in JSON).
 

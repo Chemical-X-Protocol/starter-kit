@@ -3,7 +3,9 @@
  * A lease lapses when its TTL passes with no chemx activity from the holder. If nobody else took the
  * file meanwhile, the holder's next edit of it re-acquires the lease for one TTL and reports that it
  * did, so a lapse is never silent. If someone else holds the file, the edit was already refused by
- * the foreign-lease check and this module is not reached.
+ * the foreign-lease check and this module is not reached. If anyone is queued for the file, the
+ * lapsed lease is not retaken at all (#2566): it belongs to the first waiter, and the edit is refused
+ * up front by edit-locks.js.
  *
  * Two shapes of "lapsed and untaken": the expired row is still in file_leases, or cleanup deleted it
  * and the feed records the expiry (lease-lapse.js). Only the caller's own lapsed lease is retaken.
@@ -13,6 +15,7 @@ import { openTeamDbReadOnly, openExistingTeamDb, closeQuietly, safeGet } from '.
 import { DEFAULT_TTL_MS } from './team-db-lock-promotion.js';
 import { postFeedEvent } from './team-db-feed.js';
 import { findLapse } from './lease-lapse.js';
+import { liveWaiters } from './lease-cap.js';
 import { resolveAgentId } from './agent-identity.js';
 
 // The holder's lapse on one key, or null when there is nothing to take back.
@@ -54,6 +57,8 @@ const retakeIn = (lockRoot, key, holder, lapse, now, ttlMs) => {
   const hasDb = Boolean(db);
   if (!hasDb) return false;
   try {
+    const isContested = liveWaiters(db, key, now).length > 0;
+    if (isContested) return false;
     const isRetaken = retake(db, key, holder, lapse, now, ttlMs);
     if (!isRetaken) return false;
     postFeedEvent(db, { author_id: holder, event_type: 'lock_acquired', file_path: key, message: `${holder} re-acquired lock on ${key} after it lapsed` });

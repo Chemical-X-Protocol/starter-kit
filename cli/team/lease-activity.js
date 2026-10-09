@@ -17,6 +17,7 @@
 import { ancestorLockRoots } from './lease-roots.js';
 import { openTeamDbReadOnly, openExistingTeamDb, closeQuietly, safeGet } from './team-db-readonly.js';
 import { DEFAULT_TTL_MS } from './team-db-lock-promotion.js';
+import { renewalTarget, leaseCapMs } from './lease-cap.js';
 import { resolveAgentIdentity } from './agent-identity.js';
 
 // Commands that can outlast a lease TTL, with their CLI aliases.
@@ -50,15 +51,18 @@ const holdsLiveLease = (lockRoot, holder, now) => {
   return Boolean(row);
 };
 
-const renewInRoot = (lockRoot, holder, now, ttlMs) => {
+// Each live lease is extended to now + TTL, or only to its cap deadline while someone waits for it (lease-cap.js).
+const renewInRoot = (lockRoot, holder, now, ttlMs, capMs) => {
   const isHolding = holdsLiveLease(lockRoot, holder, now);
   if (!isHolding) return 0;
   const db = openExistingTeamDb(lockRoot);
   const hasDb = Boolean(db);
   if (!hasDb) return 0;
   try {
-    const sql = 'UPDATE file_leases SET expires_at = MAX(expires_at, ?) WHERE locked_by = ? AND expires_at > ?';
-    return Number(db.prepare(sql).run(now + ttlMs, holder, now).changes);
+    const live = db.prepare('SELECT * FROM file_leases WHERE locked_by = ? AND expires_at > ?').all(holder, now);
+    const sql = 'UPDATE file_leases SET expires_at = MAX(expires_at, ?) WHERE file_path = ? AND locked_by = ? AND expires_at > ?';
+    const update = db.prepare(sql);
+    return live.reduce((total, lease) => total + Number(update.run(renewalTarget(db, lease, now, ttlMs, capMs), lease.file_path, holder, now).changes), 0);
   } finally {
     closeQuietly(db);
   }
@@ -77,7 +81,8 @@ export const renewHolderLeases = (startDir, agentId, options = {}) => {
     if (!holder) return 0;
     const now = options.now ?? Date.now();
     const ttlMs = options.ttlMs || DEFAULT_TTL_MS;
-    return ancestorLockRoots(startDir).reduce((total, lockRoot) => total + renewInRoot(lockRoot, holder, now, ttlMs), 0);
+    const capMs = leaseCapMs(options, options.env);
+    return ancestorLockRoots(startDir).reduce((total, lockRoot) => total + renewInRoot(lockRoot, holder, now, ttlMs, capMs), 0);
   } catch (err) {
     const isDebug = Boolean(process.env.CHEMX_DEBUG);
     if (isDebug) process.stderr.write(`[lease-activity] renewal skipped: ${err.message}\n`);

@@ -45,7 +45,14 @@ const declarationDelta = (beforeParse, afterParse, allowRemoved) => {
   return { removed, added, blocked: unallowed };
 };
 
+const lapsedIssue = (file, lease) => {
+  const at = new Date(lease.expiresAt).toISOString();
+  return `your lease on ${file} lapsed at ${at} and ${lease.queue.join(', ')} ${lease.queue.length > 1 ? 'are' : 'is'} queued for it, so it is theirs next and this edit was not made (queue: ${lease.queue.join(' > ')}; see: chemx team lock status ${file})`;
+};
+
 const lockedIssue = (file, lease) => {
+  const isLapsedOwn = Boolean(lease.lapsedOwn);
+  if (isLapsedOwn) return lapsedIssue(file, lease);
   const purpose = lease.purpose ? ` (${lease.purpose})` : '';
   const until = new Date(lease.expiresAt).toISOString();
   return `locked by ${lease.lockedBy}${purpose} until ${until}; wait until ${lease.lockedBy} releases it or the lease expires (check: chemx team lock check ${file}; all locks: chemx team lock list)`;

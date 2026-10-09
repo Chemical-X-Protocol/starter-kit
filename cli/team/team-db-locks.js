@@ -8,6 +8,7 @@ import { DEFAULT_TTL_MS, cleanExpiredLeases, promoteNextWaiter, enqueueWaiter, d
 import { withImmediateTransaction } from './team-db-transaction.js';
 import { resolveLeaseScope, toLeaseKey } from './lease-key.js';
 import { findLapse, explainNotHolder } from './lease-lapse.js';
+import { notifyHolderOfWaiter } from './lease-waiter-notice.js';
 
 export { cleanExpiredLeases, promoteNextWaiter, describeLease } from './team-db-lock-promotion.js';
 
@@ -66,7 +67,9 @@ export const requestFileLock = (db, filePath, agentId, options = {}) => {
       return { granted: true, lease: { file_path: cleanPath, locked_by: cleanId, expires_at: expiresAt, pid }, ...lapseNote };
     }
 
-    return enqueueWaiter(db, cleanPath, cleanId, existingLease, options, now);
+    const queued = enqueueWaiter(db, cleanPath, cleanId, existingLease, options, now);
+    const notice = notifyHolderOfWaiter(db, { queueId: queued.queueId, waiter: cleanId, lease: existingLease, options });
+    return { ...queued, ...notice };
   });
 };
 

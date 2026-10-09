@@ -49,13 +49,21 @@ export const resolveCliAgent = (flags, isCli) => {
   return identity.id;
 };
 
-const RENEWAL_NOTE = `Any chemx command run as this handle extends it to ${DEFAULT_TTL_MS / 60000} minutes from then; with no chemx activity it lapses.`;
+const RENEWAL_NOTE = `Any chemx command run as this handle extends it to ${DEFAULT_TTL_MS / 60000} minutes from then; with no chemx activity it lapses. If someone queues for it, renewal stops after the cap (10 minutes by default) since your last edit of the file (docs/team-locks.md).`;
 
 // The acquire line: when it expires, what keeps it alive, and a lapse it replaces.
 const describeGrant = (file, res) => {
   const until = clockTime(res.lease.expires_at);
   const lapse = res.previousLapse ? ` (your earlier lease on it expired at ${clockTime(res.previousLapse.expiredAt)})` : '';
   return `\x1b[32m✔\x1b[0m Acquired lock on ${file}${lapse}. It expires at ${until}. ${RENEWAL_NOTE}\n`;
+};
+
+// What the waiter is told about the holder notice (#2566): exact, never more than was sent.
+const describeNotice = (res) => {
+  const isNotified = Boolean(res.holderNotified);
+  if (!isNotified) return `Could not notify ${res.currentHolder}; ask them to release it.`;
+  const wording = res.noticeSent ? 'was notified' : 'was already notified';
+  return `${res.notifiedHolder} ${wording} (they see it when they check their inbox).`;
 };
 
 export const handleLockCommand = (db, nonFlagPositional, flags, isCli, cwd = process.cwd()) => {
@@ -100,7 +108,7 @@ export const handleLockCommand = (db, nonFlagPositional, flags, isCli, cwd = pro
   if (isCli) {
     if (flags.isJson) process.stdout.write(`${JSON.stringify(res, null, 2)}\n`);
     else if (res.granted) process.stdout.write(describeGrant(file, res));
-    else if (res.queued) process.stdout.write(`\x1b[33m⏳\x1b[0m ${res.requeued ? 'Still' : 'Enqueued'} in FIFO lock queue at position ${res.position} (held by ${res.currentHolder})\n`);
+    else if (res.queued) process.stdout.write(`\x1b[33m⏳\x1b[0m ${res.requeued ? 'Still' : 'Enqueued'} in FIFO lock queue at position ${res.position} (held by ${res.currentHolder}). ${describeNotice(res)}\n`);
     else process.stderr.write(`\x1b[31m✕ Lock refused: ${res.reason}\x1b[0m\n`);
   }
   return res;

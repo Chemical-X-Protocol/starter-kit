@@ -8,6 +8,9 @@
 import { findForeignLease } from '../edit-locks.js';
 import { resolveSafePath } from '../path-scope.js';
 import { getFileLockStatus, listActiveLeases, renewFileLock } from './team-db-locks.js';
+import { contentionOf } from './lease-cap.js';
+import { clockTime } from './lease-lapse.js';
+import { describeContention } from './lease-contention.js';
 
 const EXIT_LOCKED = 2;
 const EXIT_ERROR = 1;
@@ -53,7 +56,8 @@ export const runLockCheck = (db, file, agentId, flags, isCli, cwd) => {
 
 export const runLockStatus = (db, file, flags, isCli, cwd) => {
   const status = getFileLockStatus(db, file, { cwd });
-  const res = { file, ...status };
+  const contention = status?.lease ? contentionOf(db, status.lease, Date.now()) : null;
+  const res = { file, ...status, ...(contention ? { renewalCapAt: contention.capAt, renewalCapped: contention.isCapped } : {}) };
   const isQuiet = !isCli;
   if (isQuiet) return res;
   if (flags.isJson) {
@@ -67,14 +71,20 @@ export const runLockStatus = (db, file, flags, isCli, cwd) => {
     : `${file}: unlocked`;
   process.stdout.write(`${head}\n`);
   const waiters = status?.waiters ?? [];
-  waiters.forEach((w, i) => process.stdout.write(`  ${i + 1}. ${w.agent_id} waiting\n`));
+  waiters.forEach((w, i) => process.stdout.write(`  ${i + 1}. ${w.agent_id} waiting since ${clockTime(w.requested_at)}\n`));
+  const isContested = hasLease && waiters.length > 0;
+  if (isContested) process.stdout.write(`  ${describeContention(contentionOf(db, lease, Date.now()))}\n`);
   return res;
 };
+
+const contestedNote = (contention) => (contention.waiters.length > 0 ? `  ${describeContention(contention)}` : '');
 
 export const runLockList = (db, flags, isCli) => {
   const now = Date.now();
   const leases = listActiveLeases(db, now);
-  const res = { leases: leases.map(({ file_path, locked_by, purpose, expires_at, pid }) => ({ file_path, locked_by, purpose, expires_at, pid })) };
+  const contested = new Map(leases.map((lease) => [lease.file_path, contentionOf(db, lease, now)]));
+  const contentionFields = ({ waiters, capAt, isCapped }) => (waiters.length > 0 ? { waiters: waiters.map((w) => w.agent_id), renewalCapAt: capAt, renewalCapped: isCapped } : {});
+  const res = { leases: leases.map(({ file_path, locked_by, purpose, expires_at, pid }) => ({ file_path, locked_by, purpose, expires_at, pid, ...contentionFields(contested.get(file_path)) })) };
   const isQuiet = !isCli;
   if (isQuiet) return res;
   if (flags.isJson) {
@@ -84,7 +94,7 @@ export const runLockList = (db, flags, isCli) => {
   const isEmpty = leases.length === 0;
   if (isEmpty) process.stdout.write('No live locks.\n');
   for (const lease of leases) {
-    process.stdout.write(`${lease.file_path}  ${lease.locked_by}${purposeNote(lease.purpose)}  until ${isoTime(lease.expires_at)} (${minutesLeft(lease.expires_at, now)}m)\n`);
+    process.stdout.write(`${lease.file_path}  ${lease.locked_by}${purposeNote(lease.purpose)}  until ${isoTime(lease.expires_at)} (${minutesLeft(lease.expires_at, now)}m)${contestedNote(contested.get(lease.file_path))}\n`);
   }
   return res;
 };
