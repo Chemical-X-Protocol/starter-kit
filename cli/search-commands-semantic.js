@@ -36,7 +36,7 @@ export const handleSemanticCommand = (db, query, { isJson = false, isCli = true,
   if (results.length === 0) {
     process.stdout.write(`  ${ANSI.DIM}No semantically matching components found.${ANSI.RESET}\n\n`);
     if (isCli) process.exit(0);
-    return payload;
+    return results;
   }
 
   for (const r of results) {
@@ -46,7 +46,7 @@ export const handleSemanticCommand = (db, query, { isJson = false, isCli = true,
   process.stdout.write('\n');
 
   if (isCli) process.exit(0);
-  return payload;
+  return results;
 };
 
 export const handleHybridCommand = (db, query, { isJson = false, isCli = true, isColumnar = false, limit = 20 } = {}) => {
@@ -83,7 +83,7 @@ export const handleHybridCommand = (db, query, { isJson = false, isCli = true, i
   if (results.length === 0) {
     process.stdout.write(`  ${ANSI.DIM}No hybrid matches found.${ANSI.RESET}\n\n`);
     if (isCli) process.exit(0);
-    return payload;
+    return results;
   }
 
   for (const r of results) {
@@ -94,5 +94,5 @@ export const handleHybridCommand = (db, query, { isJson = false, isCli = true, i
   process.stdout.write('\n');
 
   if (isCli) process.exit(0);
-  return payload;
+  return results;
 };

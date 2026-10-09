@@ -292,3 +292,20 @@ test('runSearch: resolveTargetDir is bound in module scope, not only re-exported
     `runSearch threw a ReferenceError: ${caught && caught.message}`
   );
 });
+
+test('runSearch: graph and vector modes do not throw ReferenceError', async () => {
+  const { runSearch } = await import('./search.js');
+  for (const flag of ['--blast-radius', '--semantic', '--hybrid']) {
+    let caught = null;
+    try {
+      await runSearch(['__chemx_nonexistent_symbol__', flag], false);
+    } catch (err) {
+      caught = err;
+    }
+    assert.equal(
+      caught instanceof ReferenceError,
+      false,
+      `runSearch ${flag} threw a ReferenceError: ${caught && caught.message}`
+    );
+  }
+});

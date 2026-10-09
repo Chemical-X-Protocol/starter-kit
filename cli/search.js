@@ -227,6 +227,7 @@ export const runSearch = async (rawArgs = [], isCli = true) => {
   const isRawJson = rawArgs.includes('--raw-json') || rawArgs.includes('--no-columnar');
   const isExplicitColumnar = rawArgs.includes('--columnar');
   const isJson = rawArgs.includes('--json') || isExplicitColumnar;
+  const isColumnar = isJson && !isRawJson;
   const isLiteral = rawArgs.includes('-g') || rawArgs.includes('--literal');
   const isCaseInsensitive = isLiteral && rawArgs.includes('-i');
   const isInspect = !isLiteral && (rawArgs.includes('--inspect') || rawArgs.includes('-i'));
