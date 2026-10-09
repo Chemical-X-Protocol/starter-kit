@@ -49,7 +49,7 @@ export const createMcpHandler = (options = {}) => {
   const roots = createRootsTracker({ sendRequest: options.sendRequest });
   const staleness = options.staleness === false ? null : createStalenessProbe(options.staleness || {});
   const scopeInputs = async () => ({ declaredRoot, bootRoot, mcpRoots: await roots.settled(), env });
-  const callTool = createToolCaller({ scopeInputs, staleness });
+  const callTool = createToolCaller({ scopeInputs, staleness, runFresh: options.runFresh });
   const inflight = createInflight({ notify: options.notify, progressIntervalMs: options.progressIntervalMs });
   // Resources and prompts resolve like tools/call: same order, same refusal, root echoed in _meta.
   const resourceScope = async () => resolveContext({ cwd: bootRoot, mcpRoots: await roots.settled(), serverRoot: declaredRoot, env });

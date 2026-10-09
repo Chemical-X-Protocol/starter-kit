@@ -81,7 +81,7 @@ test('identity: serverInfo.version is the package.json version and instructions 
   const pkg = JSON.parse(fs.readFileSync(path.join(KIT_ROOT, 'package.json'), 'utf-8'));
   const handler = createMcpHandler({ bootDir: KIT_ROOT, ...NO_STALE });
   const init = await handler.handleRequest({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} });
-  assert.strictEqual(init.result.serverInfo.version, pkg.version);
+  assert.match(init.result.serverInfo.version, new RegExp(`^${pkg.version.replace(/[.]/g, '\\.')}\\+cli\\.[0-9a-f]{12}$`));
   assert.match(init.result.instructions, /action: "help"/);
 });
 

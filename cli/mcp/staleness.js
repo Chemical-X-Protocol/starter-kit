@@ -1,29 +1,8 @@
 // Detects a long-running MCP server whose code on disk has moved on (new version or edited cli/).
-import fs from 'node:fs';
-import path from 'node:path';
-import crypto from 'node:crypto';
-import { KIT_ROOT, LOADED_VERSION, readPackageVersion } from './server-info.js';
+import { LOADED_VERSION, readPackageVersion } from './server-info.js';
+import { fingerprintCliSources } from './fingerprint.js';
 
-const CLI_DIR = path.join(KIT_ROOT, 'cli');
-const isSourceFile = (name) => name.endsWith('.js') && !name.endsWith('.spec.js');
-
-const collectSourceStats = (dir, out) => {
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    const abs = path.join(dir, entry.name);
-    if (entry.isDirectory()) collectSourceStats(abs, out);
-    else if (isSourceFile(entry.name)) {
-      const stat = fs.statSync(abs);
-      out.push(`${path.relative(CLI_DIR, abs)}:${stat.size}:${stat.mtimeMs}`);
-    }
-  }
-  return out;
-};
-
-export const fingerprintCliSources = (dir = CLI_DIR) => crypto
-  .createHash('sha1')
-  .update(collectSourceStats(dir, []).sort().join('\n'))
-  .digest('hex')
-  .slice(0, 12);
+export { fingerprintCliSources };
 
 const defaultProbe = () => ({ version: readPackageVersion(), fingerprint: fingerprintCliSources() });
 

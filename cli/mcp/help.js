@@ -49,5 +49,5 @@ export const renderActionHelp = (actionNames, only = null) => {
 export const SERVER_INSTRUCTIONS = [
   'Chemical X: one master tool `chemx`. Call { action: "help" } for the per-action parameter table.',
   'Pass projectRoot (absolute) on every call that targets a specific repo; writes are refused when the root was only guessed from the server start directory. Paths must sit inside the root; an absolute path never selects a root by itself.',
-  'Every result ends with a "chemx root:" line naming the root and how it was chosen. A "stale chemx MCP server" line means reconnect via /mcp.'
+  'Every result ends with a "chemx root:" line naming the root and how it was chosen. A "stale chemx MCP server" line means the code on disk changed after this server started: each call then runs in a fresh process with the code on disk (slower) under a notice on the first line, and mutating calls are refused if that code does not load. Reconnect via /mcp to restore speed.'
 ].join(' ');
