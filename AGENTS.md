@@ -30,7 +30,7 @@
   - **Hook & State Density**: Max 4 independent hooks/state setters before extracting into a domain hook or reducer.
   - **Render Tree Depth**: Max 4 nesting levels in JSX/templates; nested ternaries are strictly banned in favor of computed descriptor objects.
   - **Prop Surface Area**: Max 7 flat props before grouping into a typed domain entity model.
-  - **Line Budget**: Soft warning at 250 lines only if cyclomatic complexity is high.
+  - **Line Budget**: Soft warning at 250 lines only if cyclomatic complexity is high. Any file above 500 lines is a monolith warning (HIGH at 1,000, CRITICAL at 2,000). View entry templates (1.B) warn above 200 template lines. Type files follow the same budget (2.A). Lines are counted like `wc -l`. Tier globs for molecules and views are configurable in `.chemxrc` (`tiers: { molecule: ["**/prefabs/**"] }`).
 - **Atomic-Strict Profile (`--profile=atomic-strict`)**: Opt-in strict mode enforcing 100-line capsule caps and mandatory atomization for teams building foundational design system component primitives.
 - **The Rule of Three for Abstractions**: Premature abstraction is worse than duplication. Do NOT extract an atom or molecule until a pattern is reused across 3+ distinct features, or until it encapsulates isolated behavioral/accessibility requirements.
 

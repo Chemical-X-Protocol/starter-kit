@@ -65,7 +65,8 @@
     "@babel/parser": "^7.29.8",
     "@babel/traverse": "^7.29.8",
     "@babel/types": "^7.29.8",
-    "@chemx/x-atoms": "26.10.8-285"
+    "@chemx/x-atoms": "26.10.8-285",
+    "@vue/compiler-sfc": "3.5.43"
   },
   "devDependencies": {
     "@types/babel__traverse": "^7.28.0",

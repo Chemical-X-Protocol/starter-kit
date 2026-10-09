@@ -102,6 +102,7 @@ export const createSnapshotFromReport = (report) => {
   return {
     id: `audit-${Date.now()}`,
     timestamp: new Date().toISOString(),
+    scope: report.scope ?? null, ruleset: report.ruleset ?? null, scoreModel: report.scoreModel ?? 1,
     health: {
       score: health.score,
       grade: health.grade,

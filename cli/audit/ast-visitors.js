@@ -148,7 +148,9 @@ export const createAstVisitors = ({ relativePath, violations, hookRegistry, conf
     },
 
     ConditionalExpression(astPath) {
-      if (t.isConditionalExpression(astPath.node.consequent) || t.isConditionalExpression(astPath.node.alternate)) {
+      const isOutermostOfChain = !astPath.parentPath?.isConditionalExpression();
+      const hasNestedBranch = t.isConditionalExpression(astPath.node.consequent) || t.isConditionalExpression(astPath.node.alternate);
+      if (hasNestedBranch && isOutermostOfChain) {
         const line = astPath.node.loc?.start.line || 1;
         const meta = RULE_REGISTRY.CONTROL_FLOW_NESTED_TERNARY;
         violations.push({

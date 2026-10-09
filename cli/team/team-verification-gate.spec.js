@@ -42,11 +42,12 @@ const setupTestDb = () => {
 test('Verification Gate: refuses completion when architectural hazards remain on disk', () => {
   const db = setupTestDb();
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-gate-refuse-'));
+  fs.writeFileSync(path.join(tmpDir, '.chemxrc'), JSON.stringify({ profile: 'atomic-strict' }));
   const targetRel = 'src/molecules/m-hazard-sample.ts';
   const targetFull = path.join(tmpDir, targetRel);
   fs.mkdirSync(path.dirname(targetFull), { recursive: true });
 
-  // 260 lines triggers HIGH severity (>= 250 lines in molecule capsule)
+  // 260 lines triggers HIGH under atomic-strict (molecule cap 100, HIGH at 250)
   const lines = Array.from({ length: 260 }, (_, i) => `export const val_${i} = ${i};`).join('\n');
   fs.writeFileSync(targetFull, lines, 'utf8');
 
@@ -78,6 +79,7 @@ test('Verification Gate: refuses completion when architectural hazards remain on
 test('Verification Gate: allows completion with force override flag', () => {
   const db = setupTestDb();
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-gate-force-'));
+  fs.writeFileSync(path.join(tmpDir, '.chemxrc'), JSON.stringify({ profile: 'atomic-strict' }));
   const targetRel = 'src/molecules/m-force-sample.ts';
   const targetFull = path.join(tmpDir, targetRel);
   fs.mkdirSync(path.dirname(targetFull), { recursive: true });
@@ -191,11 +193,12 @@ test('Verification Gate: autoGenerateTasksFromAudit preserves structured provena
 test('Verification Gate: UI route intercepts status update to done and refuses unresolved hazards', () => {
   const db = setupTestDb();
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-gate-ui-'));
+  fs.writeFileSync(path.join(tmpDir, '.chemxrc'), JSON.stringify({ profile: 'atomic-strict' }));
   const targetRel = 'src/molecules/m-ui-gate.ts';
   const targetFull = path.join(tmpDir, targetRel);
   fs.mkdirSync(path.dirname(targetFull), { recursive: true });
 
-  // 260 lines triggers HIGH severity in molecule capsule
+  // 260 lines triggers HIGH under atomic-strict (molecule cap 100, HIGH at 250)
   const lines = Array.from({ length: 260 }, (_, i) => `export const u_${i} = ${i};`).join('\n');
   fs.writeFileSync(targetFull, lines, 'utf8');
 

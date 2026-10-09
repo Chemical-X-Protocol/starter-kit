@@ -4,6 +4,10 @@ import { isSourceFile as isPolyglotSourceFile } from './languages.js';
 import { loadProjectConfig } from './config/index.js';
 import { auditCode, PILLARS, RULE_REGISTRY, createHookShapeRegistry } from './audit/rules.js';
 import { createPatternRegistry } from './audit/pattern-detector.js';
+import { countLines, getLineBudgets, resolveFileTier } from './audit/line-budgets.js';
+import { createCoverageCollector, summarizeCoverage } from './audit/coverage.js';
+import { SCORE_MODEL } from './audit/metrics.js';
+import { RULESET_VERSION } from './audit/rule-revisions.js';
 import {
   buildRemediationRoadmap,
   formatRoadmapSection,
@@ -88,24 +92,41 @@ const isSourceFile = (name, options = {}) => {
   return isPolyglotSourceFile(name, { includeTests: false, ...options });
 };
 
-export const auditFile = (filePath, relativePath) => {
+const configCache = new Map();
+
+/** Project config for single-file audits (check, patch, task gates, MCP), loaded once per root. */
+export const resolveAuditConfig = (cwd = process.cwd()) => {
+  const cached = configCache.get(cwd);
+  if (cached) return cached;
+  const config = loadProjectConfig(cwd);
+  configCache.set(cwd, config);
+  return config;
+};
+
+/**
+ * Audits one file with the project config (.chemxrc profile, per-rule settings,
+ * overrides). options: { config, cwd } to override the config or its root.
+ */
+export const auditFile = (filePath, relativePath, options = {}) => {
   if (!isSourceFile(path.basename(filePath), { includeTests: true })) return [];
   const content = fs.readFileSync(filePath, 'utf-8');
-  return auditCode(content, filePath, relativePath);
+  const config = options.config || resolveAuditConfig(options.cwd || process.cwd());
+  return auditCode(content, filePath, relativePath, { config, coverage: options.coverage });
 };
 
 const auditFileEntry = (fullPath, relPath, scanOptions) => {
   const content = fs.readFileSync(fullPath, 'utf-8');
-  const lines = content.split('\n');
-  const baseName = path.basename(fullPath);
-  const isMolecule = relPath.includes('molecules') || relPath.includes('/m-') || baseName.startsWith('m-');
+  const ruleConfig = scanOptions.config?.rules || {};
+  const budgets = getLineBudgets(ruleConfig);
+  const isMolecule = resolveFileTier(relPath, ruleConfig) === 'molecule';
 
   const fileStat = {
     fullPath,
     relativePath: relPath,
-    lineCount: lines.length,
+    lineCount: countLines(content),
     charCount: content.length,
-    isMolecule
+    isMolecule,
+    lineBudget: isMolecule ? budgets.molecule : budgets.file.warn
   };
 
   const hookMatches = content.match(/\buse[A-Z0-9]\w*\b/g);
@@ -114,7 +135,8 @@ const auditFileEntry = (fullPath, relPath, scanOptions) => {
     patternRegistry: scanOptions.patternRegistry,
     hookRegistry: scanOptions.hookRegistry,
     fast: scanOptions.fast,
-    config: scanOptions.config
+    config: scanOptions.config,
+    coverage: scanOptions.coverage
   });
 
   return { fileStat, hookCount, fileViolations };
@@ -184,13 +206,15 @@ export const runAudit = (targetDir = 'src', options = {}) => {
   const hookRegistry = createHookShapeRegistry();
   const config = options.config || loadProjectConfig(cwd);
   const includeTests = Boolean(options.includeTests);
+  const coverageCollector = createCoverageCollector();
   const { violations, fileStats, totalHooks } = scanTree(absoluteTarget, cwd, {
     patternRegistry,
     hookRegistry,
     fast: Boolean(options.fast),
     fileList: options.fileList || null,
     includeTests,
-    config
+    config,
+    coverage: coverageCollector
   });
 
   const crossHookViolations = hookRegistry.validateCrossHookConsistency();
@@ -210,7 +234,7 @@ export const runAudit = (targetDir = 'src', options = {}) => {
     }
     if (f.isMolecule) {
       moleculeCount += 1;
-      if (f.lineCount <= 100) {
+      if (f.lineCount <= f.lineBudget) {
         moleculeCompliantCount += 1;
       }
     }
@@ -245,6 +269,9 @@ export const runAudit = (targetDir = 'src', options = {}) => {
     targetDir,
     stage,
     options,
+    ruleset: RULESET_VERSION,
+    scoreModel: SCORE_MODEL,
+    coverage: summarizeCoverage(coverageCollector),
     scannedFiles,
     totalViolations: violations.length,
     metrics,

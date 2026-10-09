@@ -166,11 +166,6 @@ export const RULE_REGISTRY = {
     severity: 'MEDIUM',
     directive: 'Define co-located domain interfaces in types/*.d.ts'
   },
-  TYPE_MONOLITH: {
-    pillar: PILLARS.PILLAR_4,
-    severity: 'HIGH',
-    directive: 'Decompose root type monolith into co-located capsule types'
-  },
   SYNTHETIC_MOCK_DATA: {
     pillar: PILLARS.PILLAR_4,
     severity: 'MEDIUM',

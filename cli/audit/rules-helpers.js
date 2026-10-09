@@ -1,5 +1,6 @@
 import * as t from '@babel/types';
 import { RULE_REGISTRY } from './rules-registry.js';
+import { parseSfc } from '../sfc/sfc-parse.js';
 
 export const countLogicalOperators = (node) => {
   let count = 0;
@@ -14,17 +15,12 @@ export const countLogicalOperators = (node) => {
   return count;
 };
 
-export const extractParseableCode = (content, ext) => {
-  if (ext === '.vue') {
-    const scriptMatch = content.match(/<script\b[^>]*>([\s\S]*?)<\/script>/i);
-    if (!scriptMatch) return '';
-    const scriptStartIndex = scriptMatch.index || 0;
-    const preScript = content.slice(0, scriptStartIndex);
-    const openTag = scriptMatch[0].match(/<script\b[^>]*>/i)?.[0] || '';
-    const preContent = preScript + openTag;
-    const leadingNewlines = preContent.split('\n').length - 1;
-    return '\n'.repeat(leadingNewlines) + scriptMatch[1];
-  }
+/**
+ * Babel-parsable code for a file. For .vue this is the shared SFC script overlay:
+ * every <script> block in place, everything else blanked, so lines match the file.
+ */
+export const extractParseableCode = (content, ext, filePath = 'component.vue') => {
+  if (ext === '.vue') return parseSfc(content, filePath).scriptOverlay;
   return content;
 };
 
@@ -68,50 +64,6 @@ export const checkMockDataPatterns = (content, lines, relativePath, violations) 
       });
     }
   });
-};
-
-export const resolveMonolithTier = (lineCount) => {
-  if (lineCount >= 2000) {
-    return {
-      severity: 'CRITICAL',
-      hazard: `Extreme monolith hazard (${lineCount} >= 2,000 lines)`,
-      directive: 'Immediate decomposition required: extreme monolith induces severe agent context degradation'
-    };
-  }
-  if (lineCount >= 1000) {
-    return {
-      severity: 'HIGH',
-      hazard: `Severe monolith hazard (${lineCount} >= 1,000 lines)`,
-      directive: 'Decompose file into domain capsules and molecules to prevent context degradation'
-    };
-  }
-  return {
-    severity: 'MEDIUM',
-    hazard: `Monolith line budget warning (${lineCount} > 500 lines)`,
-    directive: 'Plan decomposition into focused modules before file grows further'
-  };
-};
-
-export const resolveMoleculeTier = (lineCount) => {
-  if (lineCount >= 500) {
-    return {
-      severity: 'CRITICAL',
-      hazard: `Extreme molecule monolith (${lineCount} >= 500 lines)`,
-      directive: 'Decompose molecule capsule into smaller sub-molecules or extract state to hooks'
-    };
-  }
-  if (lineCount >= 250) {
-    return {
-      severity: 'HIGH',
-      hazard: `Oversized molecule capsule (${lineCount} >= 250 lines)`,
-      directive: 'Decompose molecule capsule into smaller sub-molecules or extract state to hooks'
-    };
-  }
-  return {
-    severity: 'MEDIUM',
-    hazard: `Molecule capsule budget warning (${lineCount} > 100 lines)`,
-    directive: 'Split molecule into focused sub-molecules or extract state to hook'
-  };
 };
 
 /**

@@ -65,7 +65,7 @@ export const reconcileAuditTasks = (db, options = {}) => {
     }
 
     try {
-      const auditRes = auditFile(fullPath, task.target_path);
+      const auditRes = auditFile(fullPath, task.target_path, { cwd });
       const violations = Array.isArray(auditRes) ? auditRes : (auditRes?.fileViolations || auditRes?.violations || []);
       const isBlocking = (v) => {
         if (v.deprecated === true) return false;
@@ -324,7 +324,7 @@ export const completeTaskWithAudit = (db, taskId, agentId, options = {}) => {
 
     if (fs.existsSync(fullPath)) {
       try {
-        const auditRes = auditFile(fullPath, task.target_path);
+        const auditRes = auditFile(fullPath, task.target_path, { cwd });
         const remainingHazards = Array.isArray(auditRes) ? auditRes : (auditRes?.fileViolations || auditRes?.violations || []);
         hazardCount = remainingHazards.length;
         healthScore = Math.max(0, 100 - hazardCount * 15);

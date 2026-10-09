@@ -314,7 +314,7 @@ Chemical X is **language-agnostic**. The core physics of AI agent code generatio
 
 ### Two-Tier Decoupled Audit Pipeline
 1. **Tier 1: Universal Polyglot Rules (Runs on ALL languages)**
-   * **Sliding-Scale Line Budgets:** Flags files exceeding 100, 500, or 1,000 lines (`LINE_BUDGET_FILE`) to eliminate LLM context rot.
+   * **Sliding-Scale Line Budgets:** Flags files above 500 lines (`LINE_BUDGET_FILE`; HIGH at 1,000, CRITICAL at 2,000) and molecules over the profile budget (`LINE_BUDGET_MOLECULE`; 250 pragmatic with high complexity, 100 atomic-strict). AGENTS.md 1.A is the policy.
    * **AI Slop Text Patterns:** Strips conversational residue (*"Here is the code"*), leaked markdown code fences, and lazy truncation placeholders (`// ... rest of implementation`).
    * **Synthetic Mock Data Scanners:** Catches fake emails (`@example.com`), `555-` phone numbers, and hardcoded dummy collections in services.
    * **Security & Secret Guards:** Scans for high-entropy API keys, JWTs, AWS credentials, and unmanaged sensitive logging.
