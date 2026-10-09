@@ -1,5 +1,6 @@
 import { ref, computed } from 'vue';
 import type { ProjectConsoleProps, ProjectConsoleEmits } from './types';
+import { ruleTree } from '../../../../hooks/rules';
 
 export function useProjectConsoleController(props: ProjectConsoleProps, emit: ProjectConsoleEmits) {
   const chatInput = ref('');
@@ -23,19 +24,25 @@ export function useProjectConsoleController(props: ProjectConsoleProps, emit: Pr
   });
 
   const handleAction = (action: 'step' | 'chat' | 'toggle-pause') => {
-    const isStepAction = action === 'step';
-    if (isStepAction) {
-      emit('step');
-      return;
-    }
-    const isTogglePauseAction = action === 'toggle-pause';
-    if (isTogglePauseAction) {
-      emit('toggle-pause');
-      return;
-    }
     const text = chatInput.value.trim();
-    const canSend = Boolean(text);
-    if (!canSend) return;
+    const gate = ruleTree(
+      {
+        route: {
+          step: action === 'step',
+          togglePause: () => action === 'toggle-pause',
+          emptyChat: () => !text
+        }
+      },
+      { failFast: true }
+    );
+    const isRoutedAway = !gate.ok;
+    if (isRoutedAway) {
+      const isStepAction = gate.first === 'route.step';
+      const isTogglePauseAction = gate.first === 'route.togglePause';
+      if (isStepAction) emit('step');
+      if (isTogglePauseAction) emit('toggle-pause');
+      return;
+    }
     emit('chat', text);
     chatInput.value = '';
   };
