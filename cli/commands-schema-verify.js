@@ -4,7 +4,7 @@ export const VERIFY_COMMANDS = [
     name: 'verify',
     aliases: ['check:all'],
     group: 'verify',
-    brief: 'Audit, types, tests',
+    brief: 'Run audit, typecheck and tests as one gate',
     usage: 'chemx verify [options]',
     summary: 'Runs the full verification pipeline: AST audit, typecheck and test suite.',
     description: 'Compact single-card verification; silent when green.',
@@ -19,7 +19,7 @@ export const VERIFY_COMMANDS = [
     name: 'test',
     aliases: ['tests', 'check:test'],
     group: 'verify',
-    brief: 'Tests, failures only',
+    brief: 'Run tests, show failures only',
     usage: 'chemx test [target] [options] [-- <command>]',
     summary: 'Run the project test suite and report only failures.',
     description: 'Detects the test runner and suppresses passing output.',
@@ -33,7 +33,7 @@ export const VERIFY_COMMANDS = [
     name: 'typecheck',
     aliases: ['check:types', 'tsc'],
     group: 'verify',
-    brief: 'Typecheck, errors',
+    brief: 'Typecheck, show errors only',
     usage: 'chemx typecheck [options] [-- <command>]',
     summary: 'Run the project type checker and report only diagnostics.',
     description: 'Uses the project typecheck script when present.',
@@ -47,7 +47,7 @@ export const VERIFY_COMMANDS = [
     name: 'lint',
     aliases: ['check:lint', 'eslint'],
     group: 'verify',
-    brief: 'ESLint, grouped output',
+    brief: 'Run ESLint, results grouped by file',
     usage: 'chemx lint [path] [options] [-- <command>]',
     summary: 'Token-conserving linter runner with automatic fix.',
     description: 'Executes ESLint with grouped diagnostics, target scoping and --fix support.',
@@ -62,7 +62,7 @@ export const VERIFY_COMMANDS = [
     name: 'build',
     aliases: ['run', 'wrap'],
     group: 'verify',
-    brief: 'Build, grouped errors',
+    brief: 'Run the build, show grouped errors',
     usage: 'chemx build [options] [-- <command>]',
     summary: 'Run the build and catalog its diagnostics.',
     description: 'Suppresses compiler noise and groups diagnostics into categories.',
@@ -76,7 +76,7 @@ export const VERIFY_COMMANDS = [
     name: 'audit',
     aliases: [],
     group: 'verify',
-    brief: 'AST architecture audit',
+    brief: 'Audit architecture rules and grade',
     usage: 'chemx audit [directory] [options]',
     summary: 'Execute the full architectural AST audit.',
     description: 'Validates structural weight, line budgets and tier rules, and populates the SQLite index.',
@@ -115,5 +115,19 @@ export const VERIFY_COMMANDS = [
     description: 'Writes chemx-badge.svg from the latest audit.',
     flags: [],
     examples: ['chemx badge']
+  },
+  {
+    name: 'docs',
+    aliases: [],
+    group: 'verify',
+    brief: 'Check chemx commands named in docs',
+    usage: 'chemx docs check [files/dirs...] [--exclude=<path fragment>] [--json]',
+    summary: 'Verify that every chemx command a markdown file names exists.',
+    description: 'Reads code spans and fenced blocks, never runs anything. Checks command, team subcommand, team task action, team lock action and MCP action names only; flags and arguments are not checked. Exits 1 and prints file:line for each failure. With no paths it reads README.md, AGENTS.md, CLAUDE.md, STANDARDS.md and docs/ under the current directory.',
+    flags: [
+      { flag: '--exclude=<fragment>', desc: 'Skip files whose path contains this text (repeatable)' },
+      { flag: '--json', desc: 'Print { files, checked, failures } as JSON' }
+    ],
+    examples: ['chemx docs check', 'chemx docs check AGENTS.md docs --exclude=docs/superpowers/']
   }
 ];

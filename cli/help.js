@@ -2,8 +2,10 @@ import { COMMANDS_SCHEMA, COMMAND_GROUPS, findCommandSchema } from './commands-s
 import { renderTtyBanner } from './tty-banner.js';
 import { optionsBeforeSeparator, isHelpFlagAt, hasHelpFlag } from './help-args.js';
 
-// Help text is generated from commands-schema.js. Top-level help stays under 1,500 bytes
-// (help.spec.js); detail lives in `chemx help <command>` and `chemx <command> --help`.
+// Help text is generated from commands-schema.js. Top-level help is bounded by shape, not
+// bytes (help.spec.js): short group headings, one line per command, a width cap per line and
+// a line cap in total. Every brief says what the command does; detail lives in
+// `chemx help <command>` and `chemx <command> --help`.
 
 const GROUP_TITLES = {
   search: 'Search and read',

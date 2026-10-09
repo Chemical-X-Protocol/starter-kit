@@ -34,13 +34,37 @@ const runAllPiped = async (argLists, cwd, parallel = 8) => {
   return results;
 };
 
-test('help: top-level help is generated from the schema and stays under 1,500 bytes', () => {
+// Shape limits replace the old byte cap: they scale with the command list and cannot be
+// met by cutting briefs down to riddles. Raise a limit deliberately, with a reason.
+const MAX_HELP_LINE_WIDTH = 64;
+const MAX_HELP_LINES = 70;
+const MIN_BRIEF_WORDS = 3;
+
+test('help: top-level help is generated from the schema and bounded by lines and width', () => {
   const text = formatTopLevelHelp();
-  assert.ok(Buffer.byteLength(text) < 1500, `top-level help is ${Buffer.byteLength(text)} bytes`);
+  const lines = text.trimEnd().split('\n');
+  const widest = Math.max(...lines.map((l) => l.length));
+  assert.ok(widest <= MAX_HELP_LINE_WIDTH, `widest help line is ${widest} characters`);
+  assert.ok(lines.length <= MAX_HELP_LINES, `top-level help is ${lines.length} lines`);
   for (const entry of COMMANDS_SCHEMA) {
     assert.ok(text.includes(entry.brief), `top-level help must list ${entry.name}`);
   }
   assert.doesNotMatch(text, /\x1b\[/);
+});
+
+test('help: every brief is a self-explanatory phrase, not a keyword list', () => {
+  const seen = new Set();
+  for (const entry of COMMANDS_SCHEMA) {
+    const words = entry.brief.trim().split(/\s+/);
+    assert.ok(words.length >= MIN_BRIEF_WORDS, `${entry.name} brief "${entry.brief}" needs at least ${MIN_BRIEF_WORDS} words`);
+    assert.match(entry.brief, /^[A-Za-z]/, `${entry.name} brief starts with a letter`);
+    assert.doesNotMatch(entry.brief, /[.]$/, `${entry.name} brief has no trailing period`);
+    assert.ok(!entry.brief.includes(String.fromCharCode(0x2014)), `${entry.name} brief has no em dash`);
+    assert.ok(!seen.has(entry.brief), `${entry.name} brief repeats another command`);
+    seen.add(entry.brief);
+  }
+  const patterns = COMMANDS_SCHEMA.find((entry) => entry.name === 'patterns');
+  assert.strictEqual(patterns.brief, 'Find repeated code worth extracting');
 });
 
 test('help: every routable token resolves to a schema entry and to its own --help', () => {
