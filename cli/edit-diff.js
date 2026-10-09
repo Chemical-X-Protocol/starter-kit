@@ -5,7 +5,8 @@
 const MAX_LCS_CELLS = 4_000_000;
 
 const splitLines = (text) => {
-  if (text === '') return [];
+  const isEmpty = text === '';
+  if (isEmpty) return [];
   const lines = text.split('\n');
   const hasTrailingNewline = lines[lines.length - 1] === '';
   if (hasTrailingNewline) lines.pop();

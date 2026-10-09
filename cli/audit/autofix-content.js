@@ -55,9 +55,11 @@ const wholeCommentSpan = (content, comment) => {
 
 const classifyComment = (text, shouldFix) => {
   const isResidue = PREAMBLE_REGEX.test(text) || RESIDUE_REGEX.test(text);
-  if (isResidue && shouldFix('AI_SLOP_CONVERSATIONAL_ARTIFACT')) return { rule: 'AI_SLOP_CONVERSATIONAL_ARTIFACT', action: 'Removed AI conversational residue comment' };
+  const shouldRemoveResidue = isResidue && shouldFix('AI_SLOP_CONVERSATIONAL_ARTIFACT');
+  if (shouldRemoveResidue) return { rule: 'AI_SLOP_CONVERSATIONAL_ARTIFACT', action: 'Removed AI conversational residue comment' };
   const isPlaceholder = TRUNCATION_REGEX.test(text.trim());
-  if (isPlaceholder && shouldFix('AI_SLOP_LAZY_PLACEHOLDER')) return { rule: 'AI_SLOP_LAZY_PLACEHOLDER', action: 'Removed lazy AI truncation placeholder comment' };
+  const shouldRemovePlaceholder = isPlaceholder && shouldFix('AI_SLOP_LAZY_PLACEHOLDER');
+  if (shouldRemovePlaceholder) return { rule: 'AI_SLOP_LAZY_PLACEHOLDER', action: 'Removed lazy AI truncation placeholder comment' };
   return null;
 };
 

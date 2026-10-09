@@ -130,8 +130,10 @@ const verifyLossless = (plan, files, names) => {
 export const explodeCapsule = (targetFilePath, options = {}) => {
   const cwd = options.cwd || process.cwd();
   const absPath = resolveSafePath(targetFilePath, cwd);
-  if (!fs.existsSync(absPath)) throw new Error(`Target file not found at ${absPath}`);
-  if (fs.statSync(absPath).isDirectory()) throw new Error(`Target ${targetFilePath} is already a directory capsule.`);
+  const isMissing = !fs.existsSync(absPath);
+  if (isMissing) throw new Error(`Target file not found at ${absPath}`);
+  const isDirectory = fs.statSync(absPath).isDirectory();
+  if (isDirectory) throw new Error(`Target ${targetFilePath} is already a directory capsule.`);
 
   const ext = path.extname(absPath).replace('.', '');
   const isSfc = ext === 'vue' || ext === 'svelte';
@@ -139,7 +141,8 @@ export const explodeCapsule = (targetFilePath, options = {}) => {
 
   const capsuleName = path.basename(absPath).replace(/\.[^.]+$/, '');
   const targetDir = path.join(path.dirname(absPath), capsuleName);
-  if (fs.existsSync(targetDir)) throw new Error(`Destination directory ${capsuleName} already exists.`);
+  const isTaken = fs.existsSync(targetDir);
+  if (isTaken) throw new Error(`Destination directory ${capsuleName} already exists.`);
 
   const content = fs.readFileSync(absPath, 'utf-8');
   const names = { capsuleName, pascalName: toPascalCase(capsuleName.replace(/^[a-z]+-/, '')), ext };

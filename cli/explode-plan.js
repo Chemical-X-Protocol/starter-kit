@@ -94,9 +94,10 @@ export const planExplode = (content, filePath) => {
   for (const s of statements) {
     const isMovedType = s.isExportedType && movedTypes.has(s.typeName);
     const isPropsType = isMovedType && /Props|Emits/.test(s.typeName);
+    const isMovedController = canMoveController && s === controller;
     if (isPropsType) buckets.props.push(s);
     else if (isMovedType) buckets.state.push(s);
-    else if (canMoveController && s === controller) buckets.controller.push(s);
+    else if (isMovedController) buckets.controller.push(s);
     else buckets.component.push(s);
   }
   const tail = content.slice(program.body.length ? program.body[program.body.length - 1].end : 0);

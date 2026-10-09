@@ -29,10 +29,9 @@ export const buildConnectionCard = (db, symbol, targetPath) => {
 export const buildContextEnvelope = (db, targetPath) => {
   try {
     const fileImports = findFileDependencies(db, targetPath);
-    if (fileImports.length > 0) {
-      const topImports = fileImports.slice(0, 5).map((i) => i.importedSymbol).filter(Boolean);
-      if (topImports.length > 0) return `// Context: module imports [${topImports.join(', ')}]\n`;
-    }
+    const topImports = fileImports.slice(0, 5).map((i) => i.importedSymbol).filter(Boolean);
+    const hasImports = topImports.length > 0;
+    if (hasImports) return `// Context: module imports [${topImports.join(', ')}]\n`;
   } catch (err) {
     if (process.env.CHEMX_DEBUG) process.stderr.write(`[context-envelope] Failed for ${targetPath}: ${err.message}\n`);
   }

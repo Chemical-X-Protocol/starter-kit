@@ -18,9 +18,12 @@ const sourceNodeOf = (node) => {
   const isCall = node.type === 'CallExpression';
   const isImportCall = isCall && node.callee?.type === 'Import';
   const isRequireCall = isCall && node.callee?.type === 'Identifier' && node.callee.name === 'require';
-  if (isImportCall || isRequireCall) return node.arguments?.[0];
-  if (node.type === 'TSImportType') return node.argument?.literal || node.argument;
-  if (node.type === 'TSExternalModuleReference') return node.expression;
+  const isModuleCall = isImportCall || isRequireCall;
+  if (isModuleCall) return node.arguments?.[0];
+  const isImportType = node.type === 'TSImportType';
+  if (isImportType) return node.argument?.literal || node.argument;
+  const isImportEquals = node.type === 'TSExternalModuleReference';
+  if (isImportEquals) return node.expression;
   return null;
 };
 

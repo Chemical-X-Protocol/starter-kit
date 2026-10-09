@@ -42,7 +42,8 @@ const readLease = (root, relPath) => {
     return lease;
   } catch (err) {
     if (process.env.CHEMX_DEBUG) process.stderr.write(`[edit-locks] lease lookup skipped: ${err.message}\n`);
-    if (db?.isOpen) db.close();
+    const isOpen = Boolean(db?.isOpen);
+    if (isOpen) db.close();
     return null;
   }
 };
@@ -57,8 +58,8 @@ const lockRoots = (root, absPath) => {
   let dir = path.dirname(absPath);
   while (true) {
     const hasDb = fs.existsSync(path.join(dir, '.chemx', 'index.db'));
-    const isNew = !roots.includes(dir);
-    if (hasDb && isNew) roots.push(dir);
+    const isNewRoot = hasDb && !roots.includes(dir);
+    if (isNewRoot) roots.push(dir);
     const parent = path.dirname(dir);
     const isTop = parent === dir;
     if (isTop) break;

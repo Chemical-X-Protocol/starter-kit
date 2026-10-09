@@ -53,7 +53,8 @@ const planEdit = (edit, root, options) => {
   const before = isExisting ? fs.readFileSync(absPath, 'utf-8') : null;
   const isDelete = Boolean(edit.delete);
   const plan = { file, absPath, before, isDelete, created: !isExisting, deleted: isDelete };
-  if (isDelete && !isExisting) return { ...plan, issue: 'cannot delete a file that does not exist' };
+  const isDeletingNothing = isDelete && !isExisting;
+  if (isDeletingNothing) return { ...plan, issue: 'cannot delete a file that does not exist' };
   const isMissingContent = !isDelete && typeof edit.content !== 'string';
   if (isMissingContent) return { ...plan, issue: 'no content given' };
 
