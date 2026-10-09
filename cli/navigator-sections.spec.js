@@ -52,17 +52,10 @@ test("navigator sections: sections run Fix, Grades, Setup, Track, then general",
   assert.deepStrictEqual(sectionKeys(sections, "general"), ["guide", "upgrade", "rerun", "exit"]);
 });
 
-test("navigator sections: clean pillars collapse into one summary row after the flagged ones", () => {
-  const grades = [grade("Tiers", 4), grade("Budgets", 1), grade("Views", 0), grade("Contracts", 0)];
+test("navigator sections: every pillar keeps its own row, clean ones included, in the given order", () => {
+  const grades = [grade("Tiers", 4), grade("Views", 0), grade("Budgets", 1), grade("Contracts", 0)];
   const sections = planNavigatorSections({ actions: fakeActions(), grades });
-  const rows = sections.find((s) => s.id === "grades").items;
-  assert.deepStrictEqual(rows.map((r) => r.key), ["pillar_Tiers", "pillar_Budgets", "clean_pillars"]);
-  assert.match(rows[2].label, /2 pillars clean/);
-});
-
-test("navigator sections: no summary row when every pillar has items", () => {
-  const sections = planNavigatorSections({ actions: fakeActions(), grades: [grade("Tiers", 2)] });
-  assert.deepStrictEqual(sectionKeys(sections, "grades"), ["pillar_Tiers"]);
+  assert.deepStrictEqual(sectionKeys(sections, "grades"), ["pillar_Tiers", "pillar_Views", "pillar_Budgets", "pillar_Contracts"]);
 });
 
 test("navigator sections: Copy Prompt and Hotspots appear in Fix only when available", () => {

@@ -221,7 +221,7 @@ chemx build --json
 Run `chemx audit` in a terminal and it opens a menu after the scorecard. It first asks whether to publish the report to GitHub Discussions; the default is **Skip to Menu**, so pressing Enter never posts anything. The menu is grouped, with a divider between groups and rows numbered from 1:
 
 - **Fix**: Self-Healing Roadmap, Copy AI Prompt (when there is a prompt to copy), Hotspots (when monolith files exist), Full Report.
-- **Grades**: one row per pillar that has open items, riskiest first, then a single `✓ N pillars clean` row that lists the clean pillars when selected.
+- **Grades**: one row per pillar, clean ones included, riskiest first.
 - **Setup**: only what is not installed yet. *Guardrails* installs the pre-commit hook and GitHub CI workflow. *Query Index* adds a `"chemx": "chemx"` package script and builds `.chemx/index.db` so agents can run `chemx q`. A row disappears once its install is detected, and the group disappears when nothing is missing.
 - **Track**: Progress, Export, Badge, Share.
 - Guide, Upgrade, Re-Run, Exit.
