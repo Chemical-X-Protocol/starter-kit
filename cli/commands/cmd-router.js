@@ -355,6 +355,11 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
       await runTesseract(rawArgs.slice(1), true);
       break;
     }
+    case 'patterns': {
+      const { runPatternsCli } = await import('../mcp/patterns-cli.js');
+      runPatternsCli(rawArgs.slice(1));
+      break;
+    }
     case 'help':
     case '--help':
     case '-h':

@@ -4,7 +4,7 @@ export const OPS_COMMANDS = [
     name: 'mcp',
     aliases: ['server', 'mcp-server'],
     group: 'agents',
-    brief: 'Start MCP stdio server',
+    brief: 'Start MCP server',
     usage: 'chemx mcp [options]',
     summary: 'Launch the Chemical X Model Context Protocol (MCP) stdio server.',
     description: 'Exposes the single `chemx` tool over JSON-RPC 2.0 on stdio.',
@@ -64,7 +64,7 @@ export const OPS_COMMANDS = [
     name: 'init',
     aliases: [],
     group: 'setup',
-    brief: 'Drop blueprints in repo',
+    brief: 'Add blueprints',
     usage: 'chemx init [directory] [options]',
     summary: 'Unpack blueprints and molecular architecture drop-in files into an existing codebase.',
     description: 'Installs blueprints, domain hooks and foundation capsules (default: src/chemical-x).',
@@ -120,11 +120,26 @@ export const OPS_COMMANDS = [
     name: 'tesseract',
     aliases: ['cube', 'matrix'],
     group: 'setup',
-    brief: 'Agent onboarding HUD',
+    brief: 'Onboarding HUD',
     usage: 'chemx tesseract [options]',
     summary: 'Agent onboarding HUD: directives, topology and swarm telemetry.',
     description: 'Prints the operational directives and current project state.',
     flags: [{ flag: '--json', desc: 'Output the payload as JSON' }],
     examples: ['chemx tesseract', 'chemx tesseract --json']
+  },
+  {
+    name: 'patterns',
+    aliases: [],
+    group: 'verify',
+    brief: 'Repeats',
+    usage: 'chemx patterns [dir] [--type=<T>] [--min=<N>] [--full]',
+    summary: 'List repeated code patterns found by the audit (same handler as the MCP patterns action).',
+    description: 'Prints compact JSON candidates with sample occurrences. Interim alias until the Forge surface lands.',
+    flags: [
+      { flag: '--type=<T>', desc: 'Only this pattern type (default: ALL)' },
+      { flag: '--min=<N>', desc: 'Minimum file count (default: 2)' },
+      { flag: '--full', desc: 'Include every occurrence instead of samples' }
+    ],
+    examples: ['chemx patterns', 'chemx patterns src --min=3']
   }
 ];

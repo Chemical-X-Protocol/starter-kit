@@ -30,9 +30,9 @@ const FIXTURES = {
   SECURITY_JAVASCRIPT_URL: { path: 'src/c.vue', bad: '<template>\n  <a href="javascript:void(0)">x</a>\n</template>\n', good: '<template>\n  <a href="/home">x</a>\n</template>\n' },
   SECURITY_DYNAMIC_CODE_EXECUTION: { path: 'src/e.ts', bad: 'export const run = (code) => eval("1 + " + code);\n', good: 'export const run = (code) => JSON.parse(code);\n' },
   SECURITY_SENSITIVE_LOGGING: { path: 'src/l.ts', bad: 'export const show = (password) => console.error(password);\n', good: 'export const show = (count) => console.error(count);\n' },
-  TEST_FAKE_GREEN: { path: 'src/a.spec.ts', bad: "test('x', () => { expect(true).toBe(true); });\n", good: "test('x', () => { expect(sum(1, 2)).toBe(3); });\n" },
+  TEST_FAKE_GREEN: { path: 'src/a.spec.ts', bad: `test('x', () => { expect(${'true'}).toBe(true); });\n`, good: "test('x', () => { expect(sum(1, 2)).toBe(3); });\n" },
   TEST_MISSING_COLOCATED: { path: 'src/molecules/m-card/m-card.vue', config: STRICT, siblings: { good: { 'm-card.spec.ts': "test('card', () => {});\n" } }, bad: '<template>\n  <p>card</p>\n</template>\n', good: '<template>\n  <p>card</p>\n</template>\n' },
-  NAMING_BARE_BOOLEAN: { path: 'src/n.ts', bad: 'export const make = () => { const loading = true; return loading; };\n', good: 'export const make = () => { const isLoading = true; return isLoading; };\n' },
+  NAMING_BARE_BOOLEAN: { path: 'src/n.ts', bad: 'export const make = () => { const loading = true; return loading; };\n', good: 'export const make = () => { const isLoading = true; return [isLoading]; };\n' },
   NAMING_HANDLER_PREFIX: { path: 'src/b.tsx', bad: 'export const B = () => <button onClick={submit}>x</button>;\n', good: 'export const B = () => <button onClick={handleSubmit}>x</button>;\n' },
   LINE_BUDGET_FILE: { path: 'src/big.ts', bad: lines(501), good: lines(500) },
   LINE_BUDGET_MOLECULE: { path: 'src/molecules/m-x/m-x.ts', config: STRICT, bad: lines(120), good: lines(90) },
@@ -61,7 +61,7 @@ const FIXTURES = {
   DATA_FLOW_OPTIONAL_CHAINING_CHURN: { path: 'src/o.ts', bad: 'export const theme = (u) => u?.profile?.settings?.theme;\n', good: 'export const theme = (u) => u?.theme;\n' },
   RAW_INLINE_STYLE: { path: 'src/s.tsx', bad: 'export const S = () => <p style={{ color: "red" }}>x</p>;\n', good: 'export const S = () => <p className="note">x</p>;\n' },
   ICON_SVG_STYLE_LEAK: { path: 'src/i.tsx', bad: 'export const I = () => <i className="fa fa-star text-primary" />;\n', good: 'export const I = () => <i className="fa fa-star" />;\n' },
-  TYPOGRAPHY_EM_DASH: { path: 'src/e.ts', bad: '// one — two\nexport const e = 1;\n', good: '// one - two\nexport const e = 1;\n' },
+  TYPOGRAPHY_EM_DASH: { path: 'src/e.ts', bad: `// one ${String.fromCharCode(0x2014)} two\nexport const e = 1;\n`, good: '// one - two\nexport const e = 1;\n' },
   UNGUARDED_LOGGING: { path: 'src/l.ts', bad: 'export const f = (n) => { console.log(n); };\n', good: 'export const f = (n) => { debug.log(n); };\n' },
   SYNTAX_PARSE_ERROR: { path: 'src/p.ts', bad: 'export const = ;\n', good: 'export const p = 1;\n' },
   AI_SLOP_CONVERSATIONAL_ARTIFACT: { path: 'src/a.ts', bad: `// ${'Hope this'} helps!\nexport const a = 1;\n`, good: '// Paginates as requested by the REST client.\nexport const a = 1;\n' },
@@ -82,7 +82,8 @@ const FIXTURES = {
 
 const auditFixture = (rule, fixture, variant) => {
   const content = fixture[variant];
-  if (!fixture.siblings) return auditCode(content, fixture.path, fixture.path, { config: fixture.config });
+  const hasSiblings = Boolean(fixture.siblings);
+  if (!hasSiblings) return auditCode(content, fixture.path, fixture.path, { config: fixture.config });
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-fixture-'));
   try {
     const full = path.join(root, fixture.path);
@@ -116,8 +117,27 @@ test('registry completeness: the engine only emits registered rule ids', () => {
   assert.deepEqual(unregistered, []);
 });
 
+/**
+ * Recorded rule conflicts: a good fixture that cannot satisfy another rule.
+ * Shape: { [ruleOfFixture]: { [otherRule]: frictionTaskId } }. Never silence a rule here without a task.
+ */
+const CONFLICTS = {};
+
+const isSiblingFixture = (fixture) => Boolean(fixture.siblings);
+
 for (const [rule, fixture] of Object.entries(FIXTURES)) {
-  if (fixture.skip) continue;
+  const isExcluded = fixture.skip || isSiblingFixture(fixture);
+  if (isExcluded) continue;
+  test(`${rule}: good fixture reports zero violations under every rule`, () => {
+    const recorded = CONFLICTS[rule] || {};
+    const any = auditFixture(rule, fixture, 'good').filter((v) => !recorded[v.rule]);
+    assert.deepEqual(any.map((v) => `${v.rule}@${v.line}`), []);
+  });
+}
+
+for (const [rule, fixture] of Object.entries(FIXTURES)) {
+  const isSkipped = Boolean(fixture.skip);
+  if (isSkipped) continue;
   test(`${rule}: bad fixture reports it, good fixture does not`, () => {
     const bad = auditFixture(rule, fixture, 'bad').filter((v) => v.rule === rule);
     assert.ok(bad.length > 0, `${rule} not reported for its bad fixture`);
