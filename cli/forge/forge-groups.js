@@ -27,8 +27,15 @@ export const PATH_ORDER = Object.freeze(['N1-fp1', 'N1-fp2', 'N1-fp3', 'N2', 'N3
 // Rejections kept in full (the others are only counted): T partitions refinement turned away.
 const REFINE_PREFIX = 'refine.';
 
-const ROWS_SQL = `SELECT id, file_path, kind, block_id, ordinal, start, end, start_line, end_line, decl_name, mass, anchors,
-  fp1, fp2, fp3, inner_fp1, inner_fp2, inner_fp3, facet_key, is_spec, meta FROM pattern_units ORDER BY file_path, start_line, start, id`;
+const ROW_COLUMNS = `id, file_path, kind, block_id, ordinal, start, end, start_line, end_line, decl_name, mass, anchors,
+  fp1, fp2, fp3, inner_fp1, inner_fp2, inner_fp3, facet_key, is_spec, meta`;
+const ROW_ORDER = 'ORDER BY file_path, start_line, start, id';
+// The default scope never reads spec-facet rows an earlier --include-tests sync left behind (#2604); the
+// filter runs in SQL, so those rows are not even materialized.
+const ROWS_SQL = {
+  all: `SELECT ${ROW_COLUMNS} FROM pattern_units ${ROW_ORDER}`,
+  noSpecs: `SELECT ${ROW_COLUMNS} FROM pattern_units WHERE is_spec = 0 ${ROW_ORDER}`
+};
 const HASHES_SQL = 'SELECT path, content_hash FROM pattern_files ORDER BY path';
 
 // Parses the JSON columns once, in place (rows are fresh objects): anchors (a sorted array) and meta
@@ -42,7 +49,7 @@ const withMeta = (row) => {
 
 /** { rows, contentHashes } from the ledger; spec-facet rows only with includeSpecs. */
 export const readLedger = (db, { includeSpecs = false } = {}) => {
-  const rows = db.prepare(ROWS_SQL).all().filter((row) => includeSpecs || !row.is_spec).map(withMeta);
+  const rows = db.prepare(includeSpecs ? ROWS_SQL.all : ROWS_SQL.noSpecs).all().map(withMeta);
   const contentHashes = new Map(db.prepare(HASHES_SQL).all().map((row) => [row.path, row.content_hash]));
   return { rows, contentHashes };
 };
