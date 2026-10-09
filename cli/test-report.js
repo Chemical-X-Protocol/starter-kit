@@ -1,6 +1,6 @@
 // Text rendering for `chemx test`. One headline per verdict, so the counts never contradict it.
 import { ANSI } from './theme.js';
-import { STATUS } from './result-status.js';
+import { STATUS, isPass, isInconclusive } from './result-status.js';
 
 export const TEST_HELP = [
   `${ANSI.BOLD}USAGE${ANSI.RESET}`,
@@ -28,12 +28,12 @@ const plural = (count, word) => `${count} ${word}${count === 1 ? '' : 's'}`;
 
 export const formatTestHeadline = (report) => {
   const skippedNote = report.skipped > 0 ? `, ${report.skipped} skipped` : '';
-  if (report.status === STATUS.PASS) {
+  if (isPass(report.status)) {
     const isEmptyAllowed = report.passed === 0;
     if (isEmptyAllowed) return `${ANSI.DIM}-${ANSI.RESET} ${ANSI.BOLD}No tests ran (allowed by --allow-empty)${ANSI.RESET}`;
     return `${ANSI.LIME}✔${ANSI.RESET} ${ANSI.BOLD}All tests passed${ANSI.RESET} ${ANSI.DIM}(${report.passed} passed${skippedNote} in ${report.durationMs}ms)${ANSI.RESET}`;
   }
-  if (report.status === STATUS.INCONCLUSIVE) {
+  if (isInconclusive(report.status)) {
     const why = report.executionError || report.detail || report.reason;
     return `${ANSI.YELLOW}?${ANSI.RESET} ${ANSI.BOLD}Inconclusive: ${report.reason}${ANSI.RESET} ${ANSI.DIM}(${why})${ANSI.RESET}`;
   }
@@ -58,7 +58,8 @@ export const formatTestReport = (report) => {
       for (const line of (failure.details || []).slice(0, 3)) out.push(`      ${ANSI.DIM}${line}${ANSI.RESET}`);
     }
     const hiddenCount = report.failures.length - 5;
-    if (hiddenCount > 0) out.push(`    ${ANSI.DIM}...and ${hiddenCount} more${ANSI.RESET}`);
+    const hasHidden = hiddenCount > 0;
+    if (hasHidden) out.push(`    ${ANSI.DIM}...and ${hiddenCount} more${ANSI.RESET}`);
   }
   const showsCommand = report.status !== STATUS.PASS;
   if (showsCommand) out.push(`  ${ANSI.DIM}[${report.command}]${ANSI.RESET}`);

@@ -2,7 +2,7 @@
 import { executeBuild } from './build/executor.js';
 import { findProjectRoot } from './build/detector.js';
 import { ANSI } from './theme.js';
-import { STATUS, toExitCode } from './result-status.js';
+import { STATUS, toExitCode, isPass, isInconclusive } from './result-status.js';
 import { parseCliArgs, describeArgErrors, parseTimeoutSeconds } from './cli-args.js';
 import { planTypecheck } from './typecheck-command.js';
 import { parseTypecheckOutput, checkNodeModules } from './verify-helpers.js';
@@ -28,18 +28,20 @@ const TYPECHECK_HELP = [
 ].join('\n');
 
 const formatTypecheckReport = (report) => {
-  if (report.status === STATUS.PASS) {
+  if (isPass(report.status)) {
     return `  ${ANSI.LIME}✔${ANSI.RESET} ${ANSI.BOLD}TypeScript typecheck clean${ANSI.RESET} ${ANSI.DIM}(${report.durationMs}ms, ${report.command})${ANSI.RESET}\n`;
   }
-  if (report.status === STATUS.INCONCLUSIVE) {
+  if (isInconclusive(report.status)) {
     return `  ${ANSI.YELLOW}?${ANSI.RESET} ${ANSI.BOLD}Typecheck inconclusive: ${report.reason}${ANSI.RESET} ${ANSI.DIM}(${report.executionError})${ANSI.RESET}\n`;
   }
-  if (report.errors.length === 0) {
+  const hasNoDiagnostics = report.errors.length === 0;
+  if (hasNoDiagnostics) {
     return `\n  ${ANSI.RED}✖${ANSI.RESET} ${ANSI.BOLD}TypeScript Execution Error:${ANSI.RESET} ${report.executionError}\n\n`;
   }
   const out = [`\n  ${ANSI.RED}✖${ANSI.RESET} ${ANSI.BOLD}TypeScript Errors (${report.errorCount} found)${ANSI.RESET}`];
   for (const err of report.errors.slice(0, 10)) out.push(`    ${ANSI.CYAN}${err.file}:${err.line}:${err.column}${ANSI.RESET} [${err.code}] ${err.message}`);
-  if (report.errors.length > 10) out.push(`    ${ANSI.DIM}...and ${report.errors.length - 10} more diagnostics${ANSI.RESET}`);
+  const hasMore = report.errors.length > 10;
+  if (hasMore) out.push(`    ${ANSI.DIM}...and ${report.errors.length - 10} more diagnostics${ANSI.RESET}`);
   return `${out.join('\n')}\n\n`;
 };
 

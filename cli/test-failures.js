@@ -38,7 +38,8 @@ const collectBlocks = (lines, mode) => {
 
 const tapErrorMessage = (body) => {
   const errorIndex = body.findIndex((l) => /^\s*error:/.test(l));
-  if (errorIndex === -1) return null;
+  const hasErrorKey = errorIndex !== -1;
+  if (!hasErrorKey) return null;
   const inline = body[errorIndex].replace(/^\s*error:\s*/, '').replace(/^['"]|['"]$/g, '');
   const isBlockScalar = inline === '|-' || inline === '|' || inline === '';
   if (!isBlockScalar) return inline;
@@ -67,7 +68,8 @@ export const extractAssertionFailures = (lines) => {
   for (const block of collectBlocks(lines, mode)) {
     const isDuplicate = seen.has(block.name) || /^failing tests:?$/i.test(block.name);
     const isRollup = mode.name === 'tap' && isSuiteRollup(block.body);
-    if (isDuplicate || isRollup) continue;
+    const shouldSkip = isDuplicate || isRollup;
+    if (shouldSkip) continue;
     seen.add(block.name);
     failures.push(toFailure(block, mode));
   }

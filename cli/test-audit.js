@@ -58,7 +58,8 @@ export const runTestAudit = async (rawArgs = [], isCli = false, options = {}) =>
   const { targets, filter } = resolveScope(parsed, options);
   const plan = planTestCommand(customCmd, cwd, { targets, filter });
   const runDir = path.relative(cwd, plan.cwd) || '.';
-  if (plan.missingTargets.length > 0) {
+  const hasMissingTargets = plan.missingTargets.length > 0;
+  if (hasMissingTargets) {
     const detail = `target(s) matched nothing: ${plan.missingTargets.join(', ')}`;
     return emit(earlyReport(STATUS.INCONCLUSIVE, plan.command, { reason: REASONS.NO_TESTS_RAN, detail, runner: plan.runner, runDir }), output);
   }

@@ -38,8 +38,10 @@ export const parseCliArgs = (rawArgs = [], schema = {}) => {
       const nextArg = rawArgs[index + 1];
       const hasNextValue = nextArg !== undefined && nextArg !== '--';
       const value = inlineValue ?? (hasNextValue ? String(nextArg) : null);
-      if (inlineValue === null && hasNextValue) index++;
-      if (value === null) result.missingValues.push(name);
+      const consumesNextArg = inlineValue === null && hasNextValue;
+      if (consumesNextArg) index++;
+      const isMissingValue = value === null;
+      if (isMissingValue) result.missingValues.push(name);
       else result.values[valueFlags[name]] = value;
       continue;
     }
@@ -55,12 +57,15 @@ export const parseCliArgs = (rawArgs = [], schema = {}) => {
 
 export const describeArgErrors = (parsed, commandName) => {
   const problems = [];
-  if (parsed.unknown.length > 0) problems.push(`unknown flag(s) ${parsed.unknown.join(', ')}`);
-  if (parsed.missingValues.length > 0) problems.push(`missing value for ${parsed.missingValues.join(', ')}`);
+  const hasUnknown = parsed.unknown.length > 0;
+  if (hasUnknown) problems.push(`unknown flag(s) ${parsed.unknown.join(', ')}`);
+  const hasMissingValues = parsed.missingValues.length > 0;
+  if (hasMissingValues) problems.push(`missing value for ${parsed.missingValues.join(', ')}`);
   const timeoutValue = parsed.values.timeout;
   const hasInvalidTimeout = timeoutValue !== undefined && parseTimeoutSeconds(timeoutValue) === null;
   if (hasInvalidTimeout) problems.push(`invalid --timeout value "${timeoutValue}" (expected seconds > 0)`);
-  if (problems.length === 0) return null;
+  const isValid = problems.length === 0;
+  if (isValid) return null;
   return `chemx ${commandName}: ${problems.join('; ')}. Run \`chemx ${commandName} --help\`.`;
 };
 

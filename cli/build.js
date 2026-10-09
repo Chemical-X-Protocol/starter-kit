@@ -90,7 +90,8 @@ export const runBuildAudit = async (rawArgs = [], isCli = false, options = {}) =
   }
 
   const terminalOutput = formatTerminalBuildReport(report, { silent: isSilent, summary: isSummary });
-  if (terminalOutput && shouldPrint) {
+  const shouldPrintReport = Boolean(terminalOutput) && shouldPrint;
+  if (shouldPrintReport) {
     process.stdout.write(terminalOutput);
   }
 

@@ -28,9 +28,11 @@ export const findLocalBin = (cwd, name) => {
   let dir = path.resolve(cwd);
   while (true) {
     const candidate = path.join(dir, 'node_modules', '.bin', name);
-    if (fs.existsSync(candidate)) return candidate;
+    const isInstalled = fs.existsSync(candidate);
+    if (isInstalled) return candidate;
     const parent = path.dirname(dir);
-    if (parent === dir) return null;
+    const isFilesystemRoot = parent === dir;
+    if (isFilesystemRoot) return null;
     dir = parent;
   }
 };
@@ -73,7 +75,8 @@ export const planTypecheck = (customCmd, cwd = process.cwd()) => {
   if (isSvelte) return checkerPlan(cwd, 'svelte-check', '', 'Svelte');
   const hasSolutionTsconfig = hasTsconfig && isSolutionStyle(readTsconfig(cwd));
   if (hasSolutionTsconfig) return solutionStylePlan(isVue ? 'vue-tsc' : 'tsc');
-  if (isVue && (hasTsconfig || deps['vue-tsc'])) return checkerPlan(cwd, 'vue-tsc', '--noEmit', 'Vue');
+  const usesVueTsc = isVue && (hasTsconfig || Boolean(deps['vue-tsc']));
+  if (usesVueTsc) return checkerPlan(cwd, 'vue-tsc', '--noEmit', 'Vue');
   if (hasTsconfig) return checkerPlan(cwd, 'tsc', '--noEmit', 'TypeScript');
 
   return {

@@ -164,7 +164,8 @@ export const runProjectVerify = async (rawArgs = [], isCli = false, options = {}
     ...(build ? { build } : {})
   };
 
-  if (isJson && shouldPrint) process.stdout.write(JSON.stringify(summary, null, 2) + '\n');
+  const shouldPrintJson = isJson && shouldPrint;
+  if (shouldPrintJson) process.stdout.write(JSON.stringify(summary, null, 2) + '\n');
   if (isText) process.stdout.write(formatVerdict(status, architecturalWarning));
   return finish(summary, status, { isCli });
 };

@@ -86,7 +86,8 @@ export const executeBuild = (command, cwd = process.cwd(), options = {}) => {
 
     child.on('close', (code, signal) => {
       const wasSignalled = code === null;
-      if (wasSignalled && signal) stderrBuffer += `\nProcess killed by ${signal}\n`;
+      const hasSignalName = wasSignalled && Boolean(signal);
+      if (hasSignalName) stderrBuffer += `\nProcess killed by ${signal}\n`;
       settle(wasSignalled ? 1 : code);
     });
   });

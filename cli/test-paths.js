@@ -9,7 +9,8 @@ const DOUBLE_QUOTE_SAFE = /^[^"$`\\!]*$/;
 // with embedded ' escaped, so a test name can never inject shell syntax.
 export const quoteFilter = (value) => {
   const text = String(value);
-  if (DOUBLE_QUOTE_SAFE.test(text)) return `"${text}"`;
+  const isDoubleQuoteSafe = DOUBLE_QUOTE_SAFE.test(text);
+  if (isDoubleQuoteSafe) return `"${text}"`;
   return `'${text.replace(/'/g, `'\\''`)}'`;
 };
 

@@ -48,7 +48,8 @@ const parseCounts = (cleanLines) => {
       continue;
     }
     const errorCount = readNumber(line, /^Errors\s+(\d+)\s+errors?/i);
-    if (errorCount !== null) counts.errors = errorCount;
+    const hasErrorCount = errorCount !== null;
+    if (hasErrorCount) counts.errors = errorCount;
     if (hasRunnerSummary) continue;
     const nodeCount = (name) => readNumber(line, new RegExp(`^(?:[ℹ#]\\s+)?${name}\\s+(\\d+)$`, 'i'));
     counts.totalTests = nodeCount('tests') ?? counts.totalTests;
@@ -72,7 +73,8 @@ const applyMarkerFallback = (counts, cleanLines) => {
   if (hasUncountedFailures) counts.failed = crosses;
   const countedTotal = counts.passed + counts.failed + counts.skipped;
   const isTotalUnderReported = counts.totalTests < counts.passed + counts.failed;
-  if (counts.totalTests === 0 || isTotalUnderReported) counts.totalTests = countedTotal;
+  const isTotalMissing = counts.totalTests === 0 || isTotalUnderReported;
+  if (isTotalMissing) counts.totalTests = countedTotal;
 };
 
 // An empty run is only genuine when the runner exited cleanly, said itself that it found no
@@ -118,7 +120,8 @@ export const parseTestOutput = (stdout = '', stderr = '', exitCode = 0, options 
   if (hasUnnamedFailures) {
     failures.unshift({ kind: 'assertion', name: `${counts.failed} failing test(s), names not parsed`, message: null, location: null, details: tailLines(lines, 10) });
   }
-  if (counts.errors === 0) counts.errors = failures.filter((f) => f.kind === 'unhandled-error').length;
+  const hasNoErrorCount = counts.errors === 0;
+  if (hasNoErrorCount) counts.errors = failures.filter((f) => f.kind === 'unhandled-error').length;
 
   const verdict = classify({
     counts, failures, lines, exitCode, options,

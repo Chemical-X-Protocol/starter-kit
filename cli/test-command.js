@@ -15,10 +15,10 @@ const NODE_TEST_SEGMENT = /\bnode\s+[^&|;]*--test\b[^&|;]*/;
 
 export const detectRunnerFromScript = (script = '') => {
   const text = String(script || '');
-  if (NODE_TEST_SEGMENT.test(text) || text.includes('node:test')) return 'node';
-  if (/\bvitest\b/.test(text)) return 'vitest';
-  if (/\bjest\b/.test(text)) return 'jest';
-  return null;
+  const isNodeTest = NODE_TEST_SEGMENT.test(text) || text.includes('node:test');
+  const runners = [['node', isNodeTest], ['vitest', /\bvitest\b/.test(text)], ['jest', /\bjest\b/.test(text)]];
+  const match = runners.find(([, isUsed]) => isUsed);
+  return match ? match[0] : null;
 };
 
 export const detectTestRunner = (cwd, pkg = loadLocalPackageJson(cwd)) => {
@@ -27,9 +27,10 @@ export const detectTestRunner = (cwd, pkg = loadLocalPackageJson(cwd)) => {
   if (fromScript) return fromScript;
   const deps = { ...(pkg?.dependencies || {}), ...(pkg?.devDependencies || {}) };
   const hasAnyFile = (names) => names.some((name) => fs.existsSync(path.join(cwd, name)));
-  if (deps.vitest || hasAnyFile(VITEST_CONFIGS)) return 'vitest';
-  if (deps.jest || hasAnyFile(JEST_CONFIGS)) return 'jest';
-  return null;
+  const usesVitest = Boolean(deps.vitest) || hasAnyFile(VITEST_CONFIGS);
+  if (usesVitest) return 'vitest';
+  const usesJest = Boolean(deps.jest) || hasAnyFile(JEST_CONFIGS);
+  return usesJest ? 'jest' : null;
 };
 
 // Splits the script's `node ... --test ...` segment into its flags and its file globs.
@@ -66,12 +67,18 @@ const buildVitestCommand = (runCwd, targets, filter) => {
   return parts.join(' ');
 };
 
+const SCOPED_BUILDERS = {
+  node: ({ script, runCwd, targets, filter }) => buildNodeCommand(script, runCwd, targets, filter),
+  vitest: ({ runCwd, targets, filter }) => buildVitestCommand(runCwd, targets, filter)
+};
+
 const buildScopedCommand = ({ runner, script, runCwd, targets, filter, pm }) => {
-  if (runner === 'node') return buildNodeCommand(script, runCwd, targets, filter);
-  if (runner === 'vitest') return buildVitestCommand(runCwd, targets, filter);
+  const runnerBuilder = SCOPED_BUILDERS[runner];
+  if (runnerBuilder) return runnerBuilder({ script, runCwd, targets, filter });
   const filterArg = filter ? ` -t ${quoteFilter(filter)}` : '';
   const targetArgs = targets.map((t) => ` ${shellQuote(t)}`).join('');
-  if (runner === 'jest') return `npx jest${targetArgs}${filterArg}`;
+  const isJest = runner === 'jest';
+  if (isJest) return `npx jest${targetArgs}${filterArg}`;
   const baseTest = pm === 'yarn' ? 'yarn test' : `${pm} test`;
   return `${baseTest} --${targetArgs}${filterArg}`;
 };
@@ -93,7 +100,8 @@ const appendScopeToCustom = (customCmd, targets, filter) => {
   const runner = detectRunnerFromScript(command);
   const words = commandWords(command);
   const missingTargets = targets.filter((t) => !words.includes(t));
-  if (missingTargets.length > 0) command += ` ${missingTargets.map(shellQuote).join(' ')}`;
+  const hasMissingTargets = missingTargets.length > 0;
+  if (hasMissingTargets) command += ` ${missingTargets.map(shellQuote).join(' ')}`;
   const hasNameFilter = words.some((word) => NAME_FILTER_FLAG.test(word));
   const needsFilter = Boolean(filter) && !hasNameFilter;
   if (!needsFilter) return command;
@@ -129,7 +137,8 @@ export const planTestCommand = (customCmd, cwd = process.cwd(), options = {}) =>
   }
 
   const isLegitTest = scripts.test && !scripts.test.includes('no test specified');
-  if (!isLegitTest && runner === 'vitest') return { command: buildVitestCommand(runCwd, [], null), cwd: runCwd, runner, missingTargets: [] };
+  const shouldRunVitestDirectly = !isLegitTest && runner === 'vitest';
+  if (shouldRunVitestDirectly) return { command: buildVitestCommand(runCwd, [], null), cwd: runCwd, runner, missingTargets: [] };
   const scriptName = pickUnscopedScript(scripts);
   const command = pm === 'yarn' ? `yarn ${scriptName}` : `${pm} run ${scriptName}`;
   return { command, cwd: runCwd, runner, missingTargets: [] };
