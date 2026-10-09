@@ -4,7 +4,8 @@
  */
 
 export const getAgent = (db, agentId) => {
-  if (!db || !agentId) return null;
+  const isMissingInput = !db || !agentId;
+  if (isMissingInput) return null;
   const cleanId = agentId.startsWith('@') ? agentId : `@${agentId}`;
   const row = db.prepare('SELECT * FROM agents WHERE id = ?').get(cleanId);
   if (!row) return null;
@@ -16,7 +17,8 @@ export const getAgent = (db, agentId) => {
 };
 
 export const registerAgent = (db, { id, name, role, capabilities = [], metadata = {} }) => {
-  if (!db || !id) return null;
+  const isMissingInput = !db || !id;
+  if (isMissingInput) return null;
   const cleanId = id.startsWith('@') ? id : `@${id}`;
   const stmt = db.prepare(`
     INSERT INTO agents (id, name, role, status, capabilities, heartbeat, metadata)
@@ -40,7 +42,8 @@ export const registerAgent = (db, { id, name, role, capabilities = [], metadata 
 };
 
 export const updateAgentHeartbeat = (db, agentId, status = 'idle', currentTaskId = null) => {
-  if (!db || !agentId) return false;
+  const isMissingInput = !db || !agentId;
+  if (isMissingInput) return false;
   const cleanId = agentId.startsWith('@') ? agentId : `@${agentId}`;
   const stmt = db.prepare(`
     UPDATE agents
@@ -57,15 +60,18 @@ export const listAgents = (db, filter = {}) => {
   const conditions = [];
   const params = [];
 
-  if (filter.status) {
+  const hasStatusFilter = Boolean(filter.status);
+  if (hasStatusFilter) {
     conditions.push('status = ?');
     params.push(filter.status);
   }
-  if (filter.role) {
+  const hasRoleFilter = Boolean(filter.role);
+  if (hasRoleFilter) {
     conditions.push('role = ?');
     params.push(filter.role);
   }
-  if (conditions.length > 0) {
+  const hasConditions = conditions.length > 0;
+  if (hasConditions) {
     query += ` WHERE ${conditions.join(' AND ')}`;
   }
   query += ' ORDER BY heartbeat DESC';
