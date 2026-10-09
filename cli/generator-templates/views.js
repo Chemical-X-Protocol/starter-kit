@@ -66,7 +66,8 @@ export type * from './types';
 };
 
 export const buildViewSpec = (name, pascalName, runner = 'node:test') => {
-  if (runner === 'vitest') {
+  const isVitest = runner === 'vitest';
+  if (isVitest) {
     return `import { describe, it, expect } from 'vitest';
 import { ${pascalName}View } from './${name}';
 
@@ -77,7 +78,8 @@ describe('${pascalName}View Table of Contents', () => {
 });
 `;
   }
-  if (runner === 'jest') {
+  const isJest = runner === 'jest';
+  if (isJest) {
     return `import { describe, it, expect } from '@jest/globals';
 import { ${pascalName}View } from './${name}';
 
