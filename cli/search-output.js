@@ -1,6 +1,6 @@
 // Shared envelope for index-backed answers: every payload says which root and scope it
 // searched, how fresh that was, and whether the answer is pass or inconclusive.
-import { STATUS, toExitCode } from './result-status.js';
+import { STATUS, toExitCode, combineStatuses } from './result-status.js';
 import { INDEX_VERSION } from './search-index-meta.js';
 import { scopeSqlFilter } from './search-root.js';
 
@@ -28,7 +28,7 @@ export const describeIndexFromSync = (syncRes) => {
 export const withIndex = (payload, index) => {
   const hasIndex = Boolean(index) && payload && typeof payload === 'object';
   if (!hasIndex) return payload;
-  const status = payload.status || index.status;
+  const status = combineStatuses([payload.status || STATUS.PASS, index.status]);
   return { ...payload, status, index };
 };
 

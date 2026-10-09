@@ -3,7 +3,7 @@ import { toColumnar } from '../columnar.js';
 import { formatIndexLine } from '../search-output.js';
 import { openSyncedIndex } from '../search-session.js';
 import { handleLiteralSearchCommand } from '../search-commands-literal.js';
-import { STATUS } from '../result-status.js';
+import { STATUS, combineStatuses } from '../result-status.js';
 import { resolveTargetCwd } from './tools-search-util.js';
 import {
   executeBlastRadiusQuery, executeSemanticQuery,
@@ -26,9 +26,10 @@ const formatTextHit = (r) => {
   return `[${r.tier}] ${location} ${match.type || 'match'}${name} (${r.lines} lines)`;
 };
 
+// Worst status wins: a graph payload's own 'pass' never hides an inconclusive index.
 const attachIndex = (result, index) => {
   const isObject = result && typeof result === 'object' && !Array.isArray(result);
-  if (isObject) return { ...result, status: result.status || index.status, index };
+  if (isObject) return { ...result, status: combineStatuses([result.status || STATUS.PASS, index.status]), index };
   return { status: index.status, index, results: result };
 };
 
