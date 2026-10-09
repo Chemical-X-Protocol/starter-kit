@@ -135,7 +135,8 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
   }
   const isPartialAudit = Boolean(fileList) || isFast;
   report.gate = computeGateVerdict({ projectRoot: process.cwd(), scope: auditRelDir, violations: report.violations, isPartialScan: isPartialAudit });
-  saveAuditSnapshot(report);
+  const historyScope = { scope: auditRelDir, isPartial: isPartialAudit };
+  saveAuditSnapshot(report, process.cwd(), historyScope);
   try {
     const syncRes = syncSearchIndex(targetDir, process.cwd());
 
@@ -229,7 +230,7 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
     if (isInteractive && !isUnroll) {
       const handleReAudit = () => {
         const refreshed = executeAstAudit(targetDir, auditOptions);
-        saveAuditSnapshot(refreshed);
+        saveAuditSnapshot(refreshed, process.cwd(), historyScope);
         return refreshed;
       };
       const { runInteractiveAuditNavigator } = await loadNavigator();
