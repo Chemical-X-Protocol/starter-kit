@@ -4,12 +4,16 @@ import { spawnSync } from "node:child_process";
 export const openBrowser = (url) => {
   const platform = process.platform;
   try {
-    if (platform === "darwin") {
+    const isDarwin = platform === "darwin";
+    if (isDarwin) {
       spawnSync("open", [url], { stdio: "ignore", timeout: 3000 });
-    } else if (platform === "win32") {
-      spawnSync("cmd.exe", ["/c", "start", '""', url], { stdio: "ignore", timeout: 3000 });
     } else {
-      spawnSync("xdg-open", [url], { stdio: "ignore", timeout: 3000 });
+      const isWindows = platform === "win32";
+      if (isWindows) {
+        spawnSync("cmd.exe", ["/c", "start", '""', url], { stdio: "ignore", timeout: 3000 });
+      } else {
+        spawnSync("xdg-open", [url], { stdio: "ignore", timeout: 3000 });
+      }
     }
   } catch (err) {
     const error = err instanceof Error ? err : new Error(String(err));
@@ -26,7 +30,8 @@ export const isInteractive = () => isStdinTty() && isStdoutTty() && !process.env
 
 export const hasGum = () => {
   if (!isInteractive()) return false;
-  if (process.argv && process.argv.some((arg) => arg === '--headless' || arg === '--ci' || arg === '--non-interactive' || arg === '--no-interactive' || arg === '--yes' || arg === '-y')) return false;
+  const hasHeadlessFlag = Boolean(process.argv && process.argv.some((arg) => arg === '--headless' || arg === '--ci' || arg === '--non-interactive' || arg === '--no-interactive' || arg === '--yes' || arg === '-y'));
+  if (hasHeadlessFlag) return false;
   try {
     return spawnSync("which", ["gum"], { stdio: "ignore" }).status === 0;
   } catch {
@@ -66,7 +71,8 @@ export const promptQuestion = (query) => {
 };
 
 export const stripAnsi = (text) => {
-  if (!text || typeof text !== "string") return "";
+  const isInvalidText = !text || typeof text !== "string";
+  if (isInvalidText) return "";
   return text
     .replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, "")
     .replace(/\x1b\][^\x07\x1b]*(\x07|\x1b\\)/g, "");
@@ -85,10 +91,12 @@ export const sanitizeOutputStreams = () => {
   if (isColorSupported()) return;
 
   const wrapStream = (stream) => {
-    if (!stream || !stream.write) return;
+    const isUnwritable = !stream || !stream.write;
+    if (isUnwritable) return;
     const origWrite = stream.write.bind(stream);
     stream.write = (chunk, encoding, callback) => {
-      if (typeof chunk === "string") {
+      const isStringChunk = typeof chunk === "string";
+      if (isStringChunk) {
         return origWrite(stripAnsi(chunk), encoding, callback);
       }
       return origWrite(chunk, encoding, callback);
