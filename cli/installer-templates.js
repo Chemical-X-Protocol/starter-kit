@@ -46,9 +46,11 @@ else
   export NO_COLOR=1
 fi
 
-# Grade thresholds only apply to the opt-in absolute gate (CHEMX_PRECOMMIT_GATE=grade).
-# Line budgets come from chemx's line-budgets.js through the staged-delta audit,
-# so this hook and \`chemx check\` never disagree.
+# Default gate: any rule whose violation count rises in a staged file vs HEAD, at any
+# severity (the audit ratchet's rule). The failure output lists each new hazard as
+# RULE@file:line. Grade thresholds only apply to the opt-in absolute gate
+# (CHEMX_PRECOMMIT_GATE=grade). Line budgets come from chemx's line-budgets.js through
+# the staged-delta audit, so this hook and \`chemx check\` never disagree.
 CONF_MIN_GRADE=""
 CONF_MIN_SCORE=""
 CONFIG_FILE="\$REPO_ROOT/.chemx/config.json"
@@ -91,13 +93,14 @@ if [ -n "\$AUDIT_BIN" ]; then
     printf "%s╰──────────────────────────────────────────────────────────────────────────╯%s\\n" "\$C_CYAN" "\$C_RESET"
     printf "Please fix the Chemical X architectural hazards reported above in staged files.\\n\\n"
     printf "Refactor Directives:\\n"
-    printf "1. Surgically resolve each flagged Critical and High severity hazard.\\n"
+    printf "1. Surgically resolve each new hazard listed above (RULE@file:line), at any severity.\\n"
     printf "2. Decompose monoliths into single-purpose crystalline capsules.\\n"
     printf "3. Preserve all existing symbols, exports, and test contracts.\\n"
     printf "4. Verify with 'chemx audit' after making changes.\\n"
     printf "%s────────────────────────────────────────────────────────────────────────────%s\\n\\n" "\$C_CYAN" "\$C_RESET"
     printf "%s💡 Tip: Run 'chemx audit' locally to inspect details or run autofixes.%s\\n" "\$C_CYAN" "\$C_RESET"
-    printf "   To bypass this check temporarily: CHEMX_SKIP_PRECOMMIT=1 git commit\\n\\n"
+    printf "   To bypass this check temporarily: CHEMX_SKIP_PRECOMMIT=1 git commit\\n"
+    printf "   That skips only this hook; chemx verify applies the same rule repo-wide and will fail on these hazards.\\n\\n"
     exit 1
   fi
 fi

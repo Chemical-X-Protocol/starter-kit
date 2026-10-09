@@ -1,16 +1,16 @@
 /**
- * Pre-commit gate on the staged delta (#1716): each staged source file's index
- * content is audited against its HEAD version, and the commit fails only when a
- * (rule, severity) count rises at MEDIUM or above. LOW increases are warnings. A
- * legacy file's absolute grade no longer blocks a hazard-neutral commit.
+ * Pre-commit gate on the staged delta (#1716, #2546): each staged source file's index
+ * content is audited against its HEAD version, and the commit fails when any rule's
+ * violation count rises, at any severity (the same rule the audit ratchet applies,
+ * via gate-delta.js). A legacy file's absolute grade does not block a hazard-neutral
+ * commit.
  */
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { auditCode } from './rules.js';
 import { loadProjectConfig } from '../config/index.js';
 import { isSourceFilePath } from '../audit-preflight-git.js';
-
-const GATED_SEVERITIES = new Set(['CRITICAL', 'HIGH', 'MEDIUM']);
+import { evaluateChanges } from './gate-delta.js';
 
 const gitText = (cwd, args) => {
   const result = spawnSync('git', args, { cwd, encoding: 'utf-8', maxBuffer: 64 * 1024 * 1024 });
@@ -39,34 +39,29 @@ const listStagedSources = (cwd) => {
   return entries.filter((entry) => isSourceFilePath(entry.file));
 };
 
-const countByRule = (violations) => {
-  const counts = new Map();
-  for (const v of violations) {
-    const key = `${v.rule}\u0000${v.severity}`;
-    counts.set(key, (counts.get(key) ?? 0) + 1);
-  }
-  return counts;
-};
-
-const compareFile = (cwd, { file, basePath, isRename }, config) => {
+const toChange = (cwd, { file, basePath, isRename }, config) => {
   const absPath = path.join(cwd, file);
   const staged = gitText(cwd, ['show', `:${file}`]) ?? '';
   const base = basePath ? gitText(cwd, ['show', `HEAD:${basePath}`]) ?? '' : '';
-  const before = countByRule(auditCode(base, absPath, file, { config }));
-  const after = countByRule(auditCode(staged, absPath, file, { config }));
-  const increases = [...after.entries()]
-    .filter(([key, count]) => count > (before.get(key) ?? 0))
-    .map(([key, count]) => {
-      const [rule, severity] = key.split('\u0000');
-      return { rule, severity, before: before.get(key) ?? 0, after: count };
-    });
-  return isRename ? { file, renamedFrom: basePath, increases } : { file, increases };
+  const before = auditCode(base, absPath, file, { config });
+  const after = auditCode(staged, absPath, file, { config });
+  return isRename ? { file, renamedFrom: basePath, before, after } : { file, before, after };
+};
+
+/**
+ * Hazard increases in `currentViolations` over the committed HEAD version of `relPath` (empty base
+ * when the file is new). Returns [] when there is no HEAD commit to compare with, so callers
+ * outside a git checkout are not blocked by a base that does not exist.
+ */
+export const hazardsAddedSinceHead = (cwd, relPath, currentViolations, config = loadProjectConfig(cwd)) => {
+  const hasHead = gitText(cwd, ['rev-parse', '--verify', 'HEAD']) !== null;
+  if (!hasHead) return [];
+  const base = gitText(cwd, ['show', `HEAD:${relPath}`]) ?? '';
+  const before = auditCode(base, path.join(cwd, relPath), relPath, { config });
+  return evaluateChanges([{ file: relPath, before, after: currentViolations }]).files;
 };
 
 export const evaluateStagedDelta = (cwd = process.cwd(), rawArgs = []) => {
   const config = loadProjectConfig(cwd, rawArgs);
-  const files = listStagedSources(cwd).map((entry) => compareFile(cwd, entry, config)).filter((f) => f.increases.length > 0);
-  const isBlocking = (increase) => GATED_SEVERITIES.has(increase.severity);
-  const isPassing = files.every((f) => !f.increases.some(isBlocking));
-  return { isPassing, files };
+  return evaluateChanges(listStagedSources(cwd).map((entry) => toChange(cwd, entry, config)));
 };

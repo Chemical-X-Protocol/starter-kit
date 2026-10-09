@@ -9,6 +9,7 @@ import path from 'node:path';
 import { auditFile } from '../audit-engine.js';
 import { calculateMolecularHealthScore, SCORE_MODEL } from '../audit/metrics.js';
 import { triageLog } from './team-triage-log.js';
+import { hazardsAddedSinceHead } from '../audit/staged-delta.js';
 
 const readCachedBlockingCount = (db, targetPath, fallbackCount) => {
   let blockingCount = fallbackCount;
@@ -65,6 +66,19 @@ const buildBlockingFilter = (options) => {
   };
 };
 
+/**
+ * Blocking hazards: the absolute CRITICAL/HIGH set (all of them with --strict), plus every
+ * hazard the file gained over its HEAD version at any severity (#2546), the same rule the
+ * pre-commit hook and the ratchet apply. A file with no HEAD version counts all its hazards as new.
+ */
+const collectBlockingHazards = (remainingHazards, options, cwd, targetPath) => {
+  const absolute = remainingHazards.filter(buildBlockingFilter(options));
+  const addedFiles = hazardsAddedSinceHead(cwd, targetPath, remainingHazards);
+  const added = addedFiles.flatMap((f) => f.increases.flatMap((i) => i.sites.map((s) => ({ ...s, rule: i.rule }))));
+  const isCovered = (site) => absolute.some((v) => v.rule === site.rule && v.line === site.line);
+  return [...absolute, ...added.filter((site) => !isCovered(site))];
+};
+
 const storeRemainingHazards = (db, targetPath, remainingHazards) => {
   db.prepare('DELETE FROM violations WHERE file_path = ?').run(targetPath);
   const hasHazards = remainingHazards.length > 0;
@@ -85,7 +99,7 @@ const verifyFromAudit = (db, task, taskId, options, resultPayload, fullPath, cwd
   const remainingHazards = Array.isArray(auditRes) ? auditRes : (auditRes?.fileViolations || auditRes?.violations || []);
   const hazardCount = remainingHazards.length;
   const healthScore = calculateMolecularHealthScore(remainingHazards, 1).score;
-  const blockingHazards = remainingHazards.filter(buildBlockingFilter(options));
+  const blockingHazards = collectBlockingHazards(remainingHazards, options, cwd, task.target_path);
   const blockingCount = blockingHazards.length;
 
   resultPayload.verified = blockingCount === 0;
