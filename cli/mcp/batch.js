@@ -17,6 +17,8 @@ export const expandBatchItems = (args) => {
     if (isCommandString) return { index, label: item, args: { command: item, projectRoot: args.projectRoot } };
     const isObjectItem = item !== null && typeof item === 'object';
     if (!isObjectItem) return { index, label: String(item), invalid: 'batch items must be command strings or action objects' };
+    const isNestedBatch = isBatchCall(item) || isBatchCall(item.params ?? {});
+    if (isNestedBatch) return { index, label: `item ${index + 1}`, invalid: 'batch items cannot themselves be batches' };
     const params = item.params ? withoutCwd(item.params) : item.params;
     const label = item.command || item.action || `item ${index + 1}`;
     return { index, label, args: { ...withoutCwd(item), params, projectRoot: item.projectRoot ?? args.projectRoot } };
@@ -28,8 +30,7 @@ export const statusOfResult = (result) => {
   if (isKnownStatus) return result.status;
   const hasCode = typeof result?.code === 'number';
   if (hasCode) return STATUS_BY_CODE[result.code] ?? STATUS.FAIL;
-  const isFailure = result?.success === false || isFailedResult(result);
-  return isFailure ? STATUS.FAIL : STATUS.PASS;
+  return isFailedResult(result) ? STATUS.FAIL : STATUS.PASS;
 };
 
 // Runs scoped items in order. `runItem(item)` returns the handler output or throws.

@@ -255,7 +255,7 @@ test('MCP Server: tools/call chemx_autofix performs deterministic cleanup', asyn
     method: 'tools/call',
     params: {
       name: 'chemx_autofix',
-      arguments: { path: testFile, dryRun: true }
+      arguments: { path: testFile, dryRun: true, projectRoot: tempDir }
     }
   });
 
@@ -272,7 +272,7 @@ test('MCP Server: tools/call chemx_autofix performs deterministic cleanup', asyn
     method: 'tools/call',
     params: {
       name: 'chemx_autofix',
-      arguments: { path: testFile, dryRun: false }
+      arguments: { path: testFile, dryRun: false, projectRoot: tempDir }
     }
   });
 
@@ -441,6 +441,7 @@ test('MCP Server: tools/call chemx_patch surgically modifies target content', as
     params: {
       name: 'chemx_patch',
       arguments: {
+        projectRoot: tmpDir,
         path: testFile,
         targetContent: 'hello world',
         replacementContent: 'hello chemical-x'
@@ -468,6 +469,7 @@ test('MCP Server: tools/call chemx_write creates and indexes file', async () => 
     params: {
       name: 'chemx_write',
       arguments: {
+        projectRoot: tmpDir,
         path: testFile,
         content: 'export const writtenConstant = 123;\n'
       }
@@ -650,6 +652,7 @@ test('MCP Server: master tool chemx handles action: "read" with auto-outlining o
         name: 'chemx',
         arguments: {
           action: 'read',
+          projectRoot: tmpDir,
           params: {
             path: largeFilePath
           }
@@ -676,6 +679,7 @@ test('MCP Server: master tool chemx handles action: "read" with auto-outlining o
         name: 'chemx',
         arguments: {
           action: 'read',
+          projectRoot: tmpDir,
           params: {
             path: largeFilePath,
             symbol: 'increment'

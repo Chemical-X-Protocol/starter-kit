@@ -190,6 +190,19 @@ const DISPATCHER = {
 
 export const ACTION_NAMES = Object.keys(DISPATCHER);
 
+// One canonical name per handler, so scoping and dispatch classify the same action.
+// Legacy tool names (chemx_<name>) map here too; nothing reaches a handler around this table.
+const ACTION_ALIASES = {
+  r: 'read', search: 'q', diff: 'd', pkg: 'p', ls: 'f', json: 'j', coordinator: 'project',
+  cube: 'tesseract', matrix: 'tesseract', audit_build: 'build', report_issue: 'issue',
+  generate_capsule: 'generate', query_patterns: 'patterns'
+};
+
+export const canonicalAction = (action) => {
+  const isAlias = typeof action === 'string' && Object.hasOwn(ACTION_ALIASES, action);
+  return isAlias ? ACTION_ALIASES[action] : action;
+};
+
 export const MCP_TOOLS = withActionEnum(BASE_MCP_TOOLS, ACTION_NAMES);
 
 export const ALL_MCP_TOOLS = withActionEnum(BASE_ALL_MCP_TOOLS, ACTION_NAMES);
@@ -214,8 +227,9 @@ export const handleChemx = async (args = {}, cwd = process.cwd()) => {
   const effectiveCwd = args.projectRoot || params?.projectRoot || cwd;
   const mergedParams = { ...params, projectRoot: effectiveCwd, cwd: effectiveCwd };
 
-  const handler = Object.hasOwn(DISPATCHER, action) ? DISPATCHER[action] : Tools[`chemx_${action}`];
-  if (handler && shouldOffload(action)) return runActionInWorker(action, mergedParams, effectiveCwd);
+  const canonical = canonicalAction(action);
+  const handler = Object.hasOwn(DISPATCHER, canonical) ? DISPATCHER[canonical] : null;
+  if (handler && shouldOffload(canonical)) return runActionInWorker(canonical, mergedParams, effectiveCwd);
   if (!handler) {
     throw new Error(`Unknown Chemical X action: "${action}". Valid actions: ${ACTION_NAMES.join(', ')}`);
   }

@@ -3,7 +3,7 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { resolveCallScope, extractCallTarget } from './call-scope.js';
+import { resolveCallScope, extractCallTarget, isMutatingCall } from './call-scope.js';
 import { parseCommand } from './tools.js';
 
 const makeProject = (marker = '.chemx') => {
@@ -26,26 +26,60 @@ test('resolveCallScope: explicit projectRoot wins over boot root', () => {
   }
 });
 
-test('resolveCallScope: absolute path prefers nearest chemx marker over nearer package.json', () => {
+test('resolveCallScope: an absolute path never picks its own root, even under a chemx marker', () => {
   const outer = makeProject();
   try {
     fs.mkdirSync(path.join(outer, 'pkg', 'src'), { recursive: true });
     fs.writeFileSync(path.join(outer, 'pkg', 'package.json'), '{}');
     const file = path.join(outer, 'pkg', 'src', 'a.js');
-    const scope = resolveCallScope({ target: { action: 'read', projectRoot: null, targetPath: file }, declaredRoot: null, bootRoot: null });
-    assert.strictEqual(scope.root, outer);
-    assert.strictEqual(scope.source, 'path');
+    const scope = resolveCallScope({ target: { action: 'read', projectRoot: null, targetPath: file }, declaredRoot: null, bootRoot: null, env: {} });
+    assert.strictEqual(scope.ok, false);
+    assert.match(scope.error, /No project root/);
   } finally {
     cleanup(outer);
   }
 });
 
+test('resolveCallScope: home-directory writes are refused when only a package.json sits above them', () => {
+  const home = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-home-')));
+  const declared = makeProject();
+  fs.writeFileSync(path.join(home, 'package.json'), '{}');
+  try {
+    const target = extractCallTarget('chemx', { action: 'write', params: { path: path.join(home, '.bashrc') } });
+    assert.strictEqual(resolveCallScope({ target, env: {} }).ok, false, 'no root at all');
+    const scoped = resolveCallScope({ target, declaredRoot: declared, env: {} });
+    assert.strictEqual(scoped.ok, false, 'declared elsewhere');
+    assert.match(scoped.error, /outside project root/);
+    assert.strictEqual(scoped.root, declared, 'refusal still names the resolved root');
+  } finally {
+    cleanup(home, declared);
+  }
+});
+
+test('extractCallTarget: legacy tool names and aliases classify like their canonical action', () => {
+  assert.strictEqual(extractCallTarget('chemx', { action: 'audit_build', params: {} }).action, 'build');
+  assert.strictEqual(extractCallTarget('chemx_audit_build', { command: 'x' }).action, 'build');
+  assert.strictEqual(isMutatingCall(extractCallTarget('chemx', { action: 'report_issue', params: { autoPost: true } })), true);
+  assert.strictEqual(isMutatingCall(extractCallTarget('chemx_report_issue', { autoPost: true })), true);
+  assert.strictEqual(isMutatingCall(extractCallTarget('chemx', { action: 'coordinator', params: {} })), true);
+});
+
+test('extractCallTarget: an empty or conflicting projectRoot is an error, never a fallthrough', () => {
+  for (const empty of ['', false, 0]) {
+    const target = extractCallTarget('chemx', { action: 'read', projectRoot: empty, params: { projectRoot: '/x' } });
+    assert.ok(target.rootError, String(empty));
+    assert.strictEqual(resolveCallScope({ target, declaredRoot: '/tmp', env: {} }).ok, false);
+  }
+  assert.ok(extractCallTarget('chemx', { action: 'read', projectRoot: '/a', params: { projectRoot: '/b' } }).rootError);
+  assert.strictEqual(extractCallTarget('chemx', { action: 'read', projectRoot: '/a', params: { projectRoot: '/a/' } }).rootError, null);
+});
+
 test('resolveCallScope: absolute read outside any project and any known root is refused', () => {
   const bare = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-bare-')));
   try {
-    const scope = resolveCallScope({ target: { action: 'read', projectRoot: null, targetPath: path.join(bare, 'x.ts') }, declaredRoot: null, bootRoot: null });
+    const scope = resolveCallScope({ target: { action: 'read', projectRoot: null, targetPath: path.join(bare, 'x.ts') }, declaredRoot: null, bootRoot: null, env: {} });
     assert.strictEqual(scope.ok, false);
-    assert.match(scope.error, /no project marker/);
+    assert.match(scope.error, /No project root/);
   } finally {
     cleanup(bare);
   }
@@ -54,9 +88,11 @@ test('resolveCallScope: absolute read outside any project and any known root is 
 test('resolveCallScope: absolute write with no marker is refused', () => {
   const bare = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-bare-')));
   try {
-    const scope = resolveCallScope({ target: { action: 'write', projectRoot: null, targetPath: path.join(bare, 'authorized_keys') }, declaredRoot: null, bootRoot: null });
+    const declared = makeProject();
+    const scope = resolveCallScope({ target: { action: 'write', projectRoot: null, targetPath: path.join(bare, 'authorized_keys') }, declaredRoot: declared, bootRoot: null, env: {} });
     assert.strictEqual(scope.ok, false);
     assert.ok(scope.error.includes('authorized_keys'));
+    cleanup(declared);
   } finally {
     cleanup(bare);
   }

@@ -24,10 +24,17 @@ const wrapperText = ({ output, code, error }) => {
   return [body.trim(), reason, `exit ${code}`].filter(Boolean).join('\n');
 };
 
+const KNOWN_STATUSES = new Set(Object.values(STATUS));
+
+// The one failure test for single calls and batch items: a tri-state status decides when present,
+// otherwise a nonzero wrapper code, success:false, an error message or isError.
 export const isFailedResult = (output) => {
+  const hasKnownStatus = KNOWN_STATUSES.has(output?.status);
+  if (hasKnownStatus) return output.status === STATUS.FAIL;
   const hasFailCode = isWrapperResult(output) && output.code !== 0;
-  const hasFailStatus = output?.status === STATUS.FAIL;
-  return hasFailCode || hasFailStatus || Boolean(output?.isError);
+  const hasFalseSuccess = output?.success === false;
+  const hasErrorMessage = typeof output?.error === 'string' && output.error.length > 0;
+  return hasFailCode || hasFalseSuccess || hasErrorMessage || Boolean(output?.isError);
 };
 
 // One handler result to { content, isError }.

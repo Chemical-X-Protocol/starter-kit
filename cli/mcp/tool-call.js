@@ -1,6 +1,6 @@
 // tools/call orchestration: scope every call (and every batch item), run it, and wrap the result.
 import { executeMcpTool } from './tools.js';
-import { resolveCallScope, extractCallTarget } from './call-scope.js';
+import { resolveCallScope, extractCallTarget, bindToRoot } from './call-scope.js';
 import { isBatchCall, expandBatchItems, runBatchItems, batchEnvelope } from './batch.js';
 import { toEnvelope, errorEnvelope, scopeLine, textItem } from './envelope.js';
 
@@ -36,10 +36,11 @@ export const createToolCaller = ({ scopeInputs, staleness = null }) => {
     }
     const refusals = scoped.filter((item) => !item.scope.ok).map((item) => `item ${item.index + 1} (${item.label}): ${item.scope.error}`);
     const isRefused = refusals.length > 0;
-    if (isRefused) return decorate(errorEnvelope(`Refusing batch; no item ran.\n${refusals.join('\n')}`), null);
+    const knownScope = scoped.find((item) => item.scope.root)?.scope ?? null;
+    if (isRefused) return decorate(errorEnvelope(`Refusing batch; no item ran.\n${refusals.join('\n')}`), knownScope);
     const isEmpty = scoped.length === 0;
     if (isEmpty) return decorate(errorEnvelope('Empty batch: nothing ran.'), null);
-    const outcome = await runBatchItems(scoped, (item) => executeMcpTool(toolName, item.args, item.scope.root));
+    const outcome = await runBatchItems(scoped, (item) => executeMcpTool(toolName, bindToRoot('chemx', item.args, item.scope.root), item.scope.root));
     return decorate(batchEnvelope(outcome), scoped[0].scope);
   };
 
@@ -47,9 +48,9 @@ export const createToolCaller = ({ scopeInputs, staleness = null }) => {
     const isBatch = MASTER_TOOL_NAMES.has(toolName) && isBatchCall(toolArgs);
     if (isBatch) return callBatch(toolName, toolArgs);
     const scope = await scopeFor(toolName, toolArgs);
-    if (!scope.ok) return decorate(errorEnvelope(`Error executing tool "${toolName}": ${scope.error}`), null);
+    if (!scope.ok) return decorate(errorEnvelope(`Error executing tool "${toolName}": ${scope.error}`), scope);
     try {
-      const output = await executeMcpTool(toolName, toolArgs, scope.root);
+      const output = await executeMcpTool(toolName, bindToRoot(toolName, toolArgs, scope.root), scope.root);
       return decorate(toEnvelope(output), scope);
     } catch (err) {
       return decorate(errorEnvelope(`Error executing tool "${toolName}": ${describeError(err)}`), scope);

@@ -9,15 +9,15 @@ export const ACTION_HELP = {
   check: '{ path } single-file rule check',
   audit: '{ path|dir?, full?, triage? } (triage writes team tasks)',
   verify: '{ dir?, includeBuild? }',
-  test: '{ dir?, testTarget?, filter?, command? } command runs only if it equals a package.json script or CHEMX_MCP_ALLOW_SHELL=1',
+  test: '{ dir?, testTarget?, filter?, command? } command runs only if it equals a package.json script or CHEMX_MCP_ALLOW_SHELL=1; testTarget is one path or glob, filter has no $ ` " \\',
   typecheck: '{ dir?, command? } command rule as test',
   build: '{ dir?, command? } command rule as test',
   autofix: '{ path?, dryRun? } writes unless dryRun',
   generate: '{ name, tier?, kind?, jig?, dryRun?, ... } writes',
   patterns: '{ dir?, type?, compact? }',
   trend: '{}',
-  d: '{ args?: string[] } git diff -U0 (alias diff)',
-  log: '{ args?: string[] } git log --oneline (default 10)',
+  d: '{ args?: string[] } git diff -U0 (alias diff); --output, --no-index, --ext-diff refused',
+  log: '{ args?: string[] } git log --oneline (default 10); --output refused',
   p: '{ query? } package.json: -s scripts, -d deps, or one key (alias pkg)',
   f: '{ filter? } tracked files incl. submodules; filter is a glob (*, **, ?) or a substring (alias ls)',
   j: '{ path } JSON: small files verbatim, larger ones as shape with scalar values (alias json)',
@@ -45,6 +45,6 @@ export const renderActionHelp = (actionNames, only = null) => {
 
 export const SERVER_INSTRUCTIONS = [
   'Chemical X: one master tool `chemx`. Call { action: "help" } for the per-action parameter table.',
-  'Pass projectRoot (absolute) on every call that targets a specific repo; writes are refused when the root was only guessed from the server start directory.',
+  'Pass projectRoot (absolute) on every call that targets a specific repo; writes are refused when the root was only guessed from the server start directory. Paths must sit inside the root; an absolute path never selects a root by itself.',
   'Every result ends with a "chemx root:" line naming the root and how it was chosen. A "stale chemx MCP server" line means reconnect via /mcp.'
 ].join(' ');
