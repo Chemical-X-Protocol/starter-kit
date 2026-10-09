@@ -5,52 +5,13 @@
  */
 import path from 'node:path';
 
+import { relativeSpecifiers, unrelocatableSpecifiers } from './explode-path-args.js';
+
+export { relativeSpecifiers, unrelocatableSpecifiers };
+
 const posix = path.posix;
 const ROOT = '/__capsule_root__';
 const RESOLVE_SUFFIXES = ['', '.ts', '.tsx', '.d.ts', '.js', '.jsx', '/index.ts', '/index.tsx', '/index.js'];
-
-const isRelative = (value) => typeof value === 'string' && (value === '.' || value === '..' || value.startsWith('./') || value.startsWith('../'));
-const isStringNode = (node) => node?.type === 'StringLiteral' || (node?.type === 'Literal' && typeof node.value === 'string');
-
-const sourceNodeOf = (node) => {
-  const hasSource = node.type === 'ImportDeclaration' || node.type === 'ExportNamedDeclaration' || node.type === 'ExportAllDeclaration' || node.type === 'ImportExpression';
-  if (hasSource) return node.source;
-  const isCall = node.type === 'CallExpression';
-  const isImportCall = isCall && node.callee?.type === 'Import';
-  const isRequireCall = isCall && node.callee?.type === 'Identifier' && node.callee.name === 'require';
-  const isModuleCall = isImportCall || isRequireCall;
-  if (isModuleCall) return node.arguments?.[0];
-  const isImportType = node.type === 'TSImportType';
-  if (isImportType) return node.argument?.literal || node.argument;
-  const isImportEquals = node.type === 'TSExternalModuleReference';
-  if (isImportEquals) return node.expression;
-  return null;
-};
-
-/**
- * Every relative module specifier under an AST node, as absolute offsets of the string literal.
- *
- * @param {object} root Babel node.
- * @returns {{ start: number, end: number, value: string }[]}
- */
-export const relativeSpecifiers = (root) => {
-  const found = [];
-  const walk = (node) => {
-    const isNode = node && typeof node.type === 'string';
-    if (!isNode) return;
-    const source = sourceNodeOf(node);
-    const isRelativeSource = isStringNode(source) && isRelative(source.value);
-    if (isRelativeSource) found.push({ start: source.start, end: source.end, value: source.value });
-    for (const [key, child] of Object.entries(node)) {
-      const isMeta = key === 'loc' || key === 'leadingComments' || key === 'trailingComments' || key === 'innerComments';
-      if (isMeta) continue;
-      const children = Array.isArray(child) ? child : [child];
-      children.forEach((c) => walk(c));
-    }
-  };
-  walk(root);
-  return found.sort((a, b) => a.start - b.start);
-};
 
 /**
  * @param {string} value Specifier relative to the original file's directory.
@@ -82,7 +43,7 @@ export const relocateText = (text, offset, specs, sub) => {
   for (const spec of specs) {
     const from = spec.start - offset;
     const quote = text[from];
-    out += text.slice(cursor, from) + quote + relocateSpecifier(spec.value, sub) + quote;
+    out += text.slice(cursor, from) + quote + (spec.prefix || '') + relocateSpecifier(spec.value, sub) + quote;
     cursor = spec.end - offset;
   }
   return out + text.slice(cursor);

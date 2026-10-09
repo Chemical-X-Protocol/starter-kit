@@ -1,7 +1,9 @@
 /**
  * Lossless partition of a compact capsule source into capsule files.
  *
- * Every top-level statement (with the comments and blank lines in front of it) is assigned to
+ * The file prologue (shebang, directives, triple-slash lines, file pragmas) is kept apart so it
+ * stays first in the component file. Every top-level statement (with the comments and blank
+ * lines in front of it) is assigned to
  * exactly one bucket: props types, state types, the controller hook, or the component file.
  * Imports always stay in the component file (and are copied into other files that need them).
  * A type or the controller moves out only when it references nothing local that stays behind,
@@ -9,14 +11,15 @@
  * buckets the source does not have.
  */
 import { parseBabel, langForPath, declaredNames } from './source-parse.js';
-import { relativeSpecifiers, relocateText } from './explode-relocate.js';
+import { relativeSpecifiers, relocateText, unrelocatableSpecifiers } from './explode-relocate.js';
+import { prologueEndOf } from './explode-prologue.js';
 
 const IDENTIFIER_REGEX = /[A-Za-z_$][\w$]*/g;
 const isTypeNode = (decl) => decl?.type === 'TSInterfaceDeclaration' || decl?.type === 'TSTypeAliasDeclaration';
 const identifiersIn = (text) => new Set(text.match(IDENTIFIER_REGEX) || []);
 
-const describeStatements = (content, program) => {
-  let cursor = 0;
+const describeStatements = (content, program, start) => {
+  let cursor = start;
   return program.body.map((node) => {
     const segment = content.slice(cursor, node.end).replace(/^\n+/, (lead) => (lead.length >= 2 ? '\n' : ''));
     cursor = node.end;
@@ -76,13 +79,15 @@ const isControllerName = (name) => Boolean(name) && name.startsWith('use') && na
 /**
  * @param {string} content Source of the compact capsule.
  * @param {string} filePath Its path (decides the parser).
- * @returns {{ statements: object[], buckets: Record<string, object[]>, imports: Map<string,object>, movedTypes: Set<string>, controllerName: string|null, declarations: string[] }}
+ * @returns {{ statements: object[], prologue: string, directives: string[], unrelocatable: string[], buckets: Record<string, object[]>, imports: Map<string,object>, movedTypes: Set<string>, controllerName: string|null, declarations: string[] }}
  */
 export const planExplode = (content, filePath) => {
   const lang = langForPath(filePath);
   if (!lang) throw new Error(`explode supports .ts/.tsx/.js/.jsx sources only (got ${filePath}); Vue/Svelte need SFC support (plan B).`);
-  const program = parseBabel(content, lang).program;
-  const statements = describeStatements(content, program);
+  const file = parseBabel(content, lang);
+  const program = file.program;
+  const prologueEnd = prologueEndOf(file);
+  const statements = describeStatements(content, program, prologueEnd);
   const localNames = new Set(statements.filter((s) => !s.isImport).flatMap((s) => s.names));
   const movedTypes = settleMovedTypes(statements, localNames);
 
@@ -100,12 +105,15 @@ export const planExplode = (content, filePath) => {
     else if (isMovedController) buckets.controller.push(s);
     else buckets.component.push(s);
   }
-  const tail = content.slice(program.body.length ? program.body[program.body.length - 1].end : 0);
+  const tail = content.slice(program.body.length ? program.body[program.body.length - 1].end : prologueEnd);
   const lastComponent = buckets.component[buckets.component.length - 1];
   if (lastComponent) lastComponent.segment += tail.replace(/\s+$/, '');
 
   return {
     statements,
+    prologue: content.slice(0, prologueEnd),
+    directives: (program.directives || []).map((d) => d.value.value),
+    unrelocatable: unrelocatableSpecifiers(program, content),
     buckets,
     imports: localImports(statements),
     movedTypes,

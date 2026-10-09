@@ -18,6 +18,8 @@ import { parseSource } from './source-parse.js';
 import { planExplode, importHeader, relocated } from './explode-plan.js';
 import { brokenSpecifiers } from './explode-relocate.js';
 import { hasPreviewFlag, findUnknownFlags, unknownFlagsMessage } from './cli-args.js';
+import { relocatePrologue } from './explode-prologue.js';
+import { assertImportersSurvive } from './explode-importers.js';
 
 const joinSegments = (bucket, sub = '') => bucket.map((s) => relocated(s, sub).segment).join('\n').replace(/^\n+/, '');
 
@@ -36,6 +38,11 @@ export const parseCompactFile = (content, ext = 'tsx') => {
     componentCode: joinSegments(plan.buckets.component.filter((s) => !s.isImport)) || null,
     reactImports
   };
+};
+
+const componentPrologue = (plan, capsuleName) => {
+  const text = relocatePrologue(plan.prologue, capsuleName).replace(/\s+$/, '');
+  return text ? `${text}\n\n` : '';
 };
 
 const buildCapsuleFiles = (plan, names) => {
@@ -76,9 +83,10 @@ const buildCapsuleFiles = (plan, names) => {
   const hasBody = body.some((s) => !s.isImport);
   const stubBody = isReact ? `export const ${pascalName} = ({ className = '' }: ${pascalName}Props) => {\n  return <div className={className} />;\n};\n` : '';
   const header = importHeader(body, plan, typeHomeFor('component'), capsuleName);
+  const prologue = componentPrologue(plan, capsuleName);
   files[`${capsuleName}.${ext}`] = hasBody
-    ? `${controllerImport}${header}${joinSegments(body, capsuleName)}\n`
-    : `import type { ${pascalName}Props } from './types';\n${stubBody}`;
+    ? `${prologue}${controllerImport}${header}${joinSegments(body, capsuleName)}\n`
+    : `${prologue}import type { ${pascalName}Props } from './types';\n${stubBody}`;
   return { files, controllerName };
 };
 
@@ -118,7 +126,13 @@ const verifyLossless = (plan, files, names) => {
   const programsByFile = Object.fromEntries(parsed.map(([name, res]) => [`${names.capsuleName}/${name}`, res.programs]));
   const originalSpecifiers = plan.statements.flatMap((s) => s.relSpecs.map((r) => r.value));
   const broken = brokenSpecifiers(programsByFile, originalSpecifiers);
+  const componentFile = bucketFile('component', names);
+  const componentPrograms = programsByFile[`${names.capsuleName}/${componentFile}`] || [];
+  const keptDirectives = componentPrograms.flatMap((p) => (p.directives || []).map((d) => d.value.value));
+  const isPrologueKept = files[componentFile].startsWith(componentPrologue(plan, names.capsuleName)) && plan.directives.every((d) => keptDirectives.includes(d));
   const problems = [
+    ...plan.unrelocatable.map((u) => `computed relative path cannot be rewritten: ${u}`),
+    ...(isPrologueKept ? [] : ['file prologue (directives, triple-slash lines, pragmas) would not stay first']),
     ...lost.map((l) => `statement not carried over: ${l}`),
     ...unparsed.map((u) => `generated file does not parse: ${u}`),
     ...missing.map((m) => `declaration missing: ${m}`),
@@ -139,6 +153,7 @@ export const explodeCapsule = (targetFilePath, options = {}) => {
   const ext = path.extname(absPath).replace('.', '');
   const isSfc = ext === 'vue' || ext === 'svelte';
   if (isSfc) throw new Error(`Explode refused: .${ext} files are not supported until SFC parsing lands (plan B). Nothing was changed.`);
+  assertImportersSurvive(fs.realpathSync(absPath), fs.realpathSync(cwd));
 
   const capsuleName = path.basename(absPath).replace(/\.[^.]+$/, '');
   const targetDir = path.join(path.dirname(absPath), capsuleName);

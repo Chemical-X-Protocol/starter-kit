@@ -141,3 +141,89 @@ test('explode verification: a specifier left at the old depth is reported as bro
   const fixed = parseSource("import { fmt } from '../format';\nexport const a = fmt;\n", 'card.ts').programs;
   assert.deepEqual(brokenSpecifiers({ 'card/card.ts': fixed }, ['./format']), []);
 });
+
+const PANEL = `// @ts-nocheck
+'use client';
+import { useState } from 'react';
+
+export const usePanelController = () => {
+  const [open, setOpen] = useState(false);
+  return { open, setOpen };
+};
+
+export function Panel() {
+  const { open } = usePanelController();
+  return <div>{String(open)}</div>;
+}
+`;
+
+test('explode: directives and file pragmas stay first in the component file', () => {
+  withDir((dir) => {
+    const file = path.join(dir, 'panel.tsx');
+    fs.writeFileSync(file, PANEL);
+    explodeCapsule(file, { cwd: dir });
+    const component = fs.readFileSync(path.join(dir, 'panel', 'panel.tsx'), 'utf-8');
+    assert.ok(component.startsWith("// @ts-nocheck\n'use client';\n"), component);
+  });
+});
+
+const ASSETS = `/// <reference path="./globals.d.ts" />
+import { fmt } from './format';
+
+const logo = new URL('./logo.svg', import.meta.url);
+const pages = import.meta.glob(['./pages/*.ts', '!./pages/skip.ts']);
+
+export function Card() {
+  return <img src={String(logo)} alt={fmt(String(Object.keys(pages).length))} />;
+}
+`;
+
+test('explode: relative paths outside import statements move with the file', () => {
+  withDir((dir) => {
+    fs.mkdirSync(path.join(dir, 'src'));
+    fs.writeFileSync(path.join(dir, 'src', 'format.ts'), 'export const fmt = (s: string) => s;\n');
+    fs.writeFileSync(path.join(dir, 'src', 'card.tsx'), ASSETS);
+    explodeCapsule(path.join(dir, 'src', 'card.tsx'), { cwd: dir });
+    const component = fs.readFileSync(path.join(dir, 'src', 'card', 'card.tsx'), 'utf-8');
+    assert.ok(component.startsWith('/// <reference path="../globals.d.ts" />\n'), component);
+    assert.match(component, /new URL\('\.\.\/logo\.svg', import\.meta\.url\)/);
+    assert.match(component, /import\.meta\.glob\(\['\.\.\/pages\/\*\.ts', '!\.\.\/pages\/skip\.ts'\]\)/);
+  });
+});
+
+test('explode: refuses a computed relative path it cannot rewrite', () => {
+  withDir((dir) => {
+    const file = path.join(dir, 'icon.tsx');
+    const src = "export const icon = (n: string) => new URL(`./icons/${n}.svg`, import.meta.url);\n";
+    fs.writeFileSync(file, src);
+    assert.throws(() => explodeCapsule(file, { cwd: dir }), /computed relative path/);
+    assert.equal(fs.readFileSync(file, 'utf-8'), src);
+    assert.equal(fs.existsSync(path.join(dir, 'icon')), false);
+  });
+});
+
+test('explode: refuses when importers use an explicit extension or the package is Node ESM JS', () => {
+  withDir((dir) => {
+    fs.writeFileSync(path.join(dir, 'package.json'), '{"type":"module"}\n');
+    fs.mkdirSync(path.join(dir, 'src'));
+    fs.writeFileSync(path.join(dir, 'src', 'util.js'), 'export const util = 1;\n');
+    fs.writeFileSync(path.join(dir, 'src', 'main.js'), "import { util } from './util.js';\nconsole.log(util);\n");
+    assert.throws(() => explodeCapsule(path.join(dir, 'src', 'util.js'), { cwd: dir }), /Explode refused/);
+    assert.equal(fs.existsSync(path.join(dir, 'src', 'util.js')), true);
+
+    fs.writeFileSync(path.join(dir, 'tsconfig.json'), '{}\n');
+    fs.writeFileSync(path.join(dir, 'src', 'calc.ts'), 'export const calc = 1;\n');
+    fs.writeFileSync(path.join(dir, 'src', 'use.ts'), "import { calc } from './calc.js';\nexport const b = calc;\n");
+    assert.throws(() => explodeCapsule(path.join(dir, 'src', 'calc.ts'), { cwd: dir }), /src\/use\.ts: '\.\/calc\.js'/);
+    assert.equal(fs.existsSync(path.join(dir, 'src', 'calc')), false);
+  });
+});
+
+test('explode: refuses .mjs and .js without a tsconfig', () => {
+  withDir((dir) => {
+    fs.writeFileSync(path.join(dir, 'a.mjs'), 'export const a = 1;\n');
+    fs.writeFileSync(path.join(dir, 'b.js'), 'module.exports = 1;\n');
+    assert.throws(() => explodeCapsule(path.join(dir, 'a.mjs'), { cwd: dir }), /\.mjs/);
+    assert.throws(() => explodeCapsule(path.join(dir, 'b.js'), { cwd: dir }), /tsconfig/);
+  });
+});
