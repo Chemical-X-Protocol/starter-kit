@@ -1,6 +1,7 @@
 {
   "profile": "pragmatic",
   "scope": ".",
+  "commit": { "skipCi": true },
   "rules": {
     "component-max-complexity": 12,
     "max-hook-density": 4,

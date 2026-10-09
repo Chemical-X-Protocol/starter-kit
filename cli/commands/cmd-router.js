@@ -81,6 +81,11 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
       runReaderCli(rawArgs.slice(1), true);
       break;
     }
+    case 'commit': {
+      const { runCommitCli } = await import('../commit/commit-cli.js');
+      await runCommitCli(rawArgs.slice(1));
+      break;
+    }
     case 'conflicts': {
       // Normally answered by the boot shim in cli/index.js before this router loads.
       const { runConflictsCli } = await import('../conflicts-cli.js');

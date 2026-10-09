@@ -1,0 +1,92 @@
+/**
+ * Chemical X Protocol: `chemx commit <files...> -m <msg>` (#2564).
+ * Guarantees: only the listed files are committed (path-limited); the repository's pre-commit hook
+ * runs (never --no-verify); another handle's live lease, a missing task id, -a/--all and unrelated
+ * staged paths each refuse before anything is staged. Not guaranteed: a failed commit leaves the
+ * listed files staged (rerunning is safe); leases are checked, not enforced by git, so a lease taken
+ * after the check is not seen; recording on the task is best effort.
+ */
+import { parseCommitArgs } from './commit-args.js';
+import { buildCommitMessage } from './commit-message.js';
+import { collectRefusals } from './commit-validate.js';
+import { gatherFacts } from './commit-facts.js';
+import { recordCommit, releaseLeases } from './commit-record.js';
+import {
+  gitRoot, stagedAmong, shortSha, hasPreCommitHook, gitWithRetry, compactFailure
+} from './commit-git.js';
+
+const NOT_A_REPO = 'Refused: not inside a git repository.';
+
+const refused = (reasons, parsed) => ({ ok: false, exitCode: 1, refusals: reasons, json: parsed.json, lines: reasons });
+
+const failed = (lines, parsed, extra = {}) => ({ ok: false, exitCode: 1, refusals: [], json: parsed.json, lines, ...extra });
+
+const lockedOutLines = (outcome) => {
+  const holder = outcome.lockHolder ? `pid ${outcome.lockHolder}` : 'holder pid not found';
+  return [`Failed: .git/index.lock stayed held after ${outcome.attempts} attempt(s) (${holder}). Nothing was committed; the listed files stay staged. Rerun when the other git process ends.`];
+};
+
+const gateFailureLines = (outcome) => [
+  'Failed: git commit did not complete (pre-commit gate or git error). Nothing was committed; the listed files stay staged. Findings:',
+  ...compactFailure(outcome.output)
+];
+
+const failureLines = (outcome) => (outcome.lockedOut ? lockedOutLines(outcome) : gateFailureLines(outcome));
+
+// Stages the listed files; returns the reasons it cannot (empty when staged and something changed).
+const stageFiles = async (root, rel, retry) => {
+  const added = await gitWithRetry(root, ['add', '--', ...rel], retry);
+  const addReasons = added.status === 0 ? [] : [`Refused: git add failed: ${added.output.trim()}`];
+  const hasChanges = stagedAmong(root, rel).length > 0;
+  const emptyReasons = hasChanges || addReasons.length > 0 ? [] : ['Refused: nothing to commit in the listed files (no changes).'];
+  return [...addReasons, ...emptyReasons];
+};
+
+const commitArgsFor = (message, rel) => [
+  'commit', '-m', message.subject, ...message.paragraphs.flatMap((paragraph) => ['-m', paragraph]), '--', ...rel
+];
+
+// Everything that happens after git accepted the commit.
+const afterCommit = (root, cwd, facts, message, hasHook) => {
+  const sha = shortSha(root);
+  const { db, committer, taskId, rel, parsed } = facts;
+  const recorded = recordCommit(db, { committer, taskId, noTask: parsed.noTask, sha, subject: message.subject, files: rel });
+  const released = parsed.release ? releaseLeases(db, committer, parsed.files, cwd) : [];
+  const gate = hasHook ? 'pre-commit hook passed' : 'no pre-commit hook is installed in this repository';
+  return { sha, subject: message.subject, files: rel, gate, task: taskId ? `#${taskId}` : `none (${parsed.noTask})`, recorded, released, warnings: facts.leaseWarnings };
+};
+
+export const formatSuccessLines = (data, isReleaseAsked) => {
+  const recordLine = data.recorded ? 'recorded: activity event posted' : 'recorded: no (team db unavailable)';
+  const releaseLine = isReleaseAsked ? [`leases released: ${data.released.length ? data.released.join(', ') : 'none held'}`] : [];
+  const warnLines = data.warnings.map((warning) => `warning: your lease on ${warning.file} had expired before this commit`);
+  return [`sha: ${data.sha}`, `subject: ${data.subject}`, `files: ${data.files.join(', ')}`, `gate: ${data.gate}`, `task: ${data.task}`, recordLine, ...releaseLine, ...warnLines];
+};
+
+/**
+ * @param {string[]} args Everything after `chemx commit`.
+ * @param {{ cwd?: string, env?: object, sleep?: Function, delaysMs?: number[] }} [options]
+ * @returns {Promise<{ ok: boolean, exitCode: number, lines: string[], refusals: string[], json: boolean, data?: object }>}
+ */
+export const runCommit = async (args, options = {}) => {
+  const cwd = options.cwd ?? process.cwd();
+  const env = options.env ?? process.env;
+  const parsed = parseCommitArgs(args);
+  const root = gitRoot(cwd);
+  const facts = root ? gatherFacts(parsed, cwd, root, env) : null;
+  const preflight = facts ? collectRefusals(facts) : [NOT_A_REPO];
+  // The hook runs as the committer, so its lease check sees the same handle as this command.
+  const gitEnv = facts?.committer ? { ...env, CHEMX_AGENT_ID: facts.committer } : env;
+  const retry = { sleep: options.sleep, delaysMs: options.delaysMs, env: gitEnv };
+  const staging = preflight.length === 0 ? await stageFiles(root, facts.rel, retry) : [];
+  const reasons = [...preflight, ...staging];
+  const isRefused = reasons.length > 0;
+  if (isRefused) return refused(reasons, parsed);
+  const message = buildCommitMessage({ messages: parsed.messages, taskId: facts.taskId, noTask: parsed.noTask, config: facts.config, env });
+  const hasHook = hasPreCommitHook(root);
+  const outcome = await gitWithRetry(root, commitArgsFor(message, facts.rel), retry);
+  const isCommitFailed = outcome.status !== 0;
+  if (isCommitFailed) return failed(failureLines(outcome), parsed, { attempts: outcome.attempts, lockHolder: outcome.lockHolder });
+  const data = afterCommit(root, cwd, facts, message, hasHook);
+  return { ok: true, exitCode: 0, refusals: [], json: parsed.json, lines: formatSuccessLines(data, parsed.release), data };
+};
