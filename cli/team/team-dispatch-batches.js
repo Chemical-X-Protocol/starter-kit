@@ -47,7 +47,8 @@ const descriptionFiles = (task, options) => {
   if (!useDescription) return [];
   // With a root, a mention that stays absolute lies outside the project (scratch files, other repos).
   const hasRoot = Boolean(options.root);
-  const isInProject = (file) => !hasRoot || !path.isAbsolute(file);
+  // A ../ mention climbs out of the root: an agent is never handed one (#2506).
+  const isInProject = (file) => !file.startsWith('../') && (!hasRoot || !path.isAbsolute(file));
   const mentioned = extractDescriptionFiles(task?.description)
     .map((file) => normalizeTaskFile(file, options.root))
     .filter(Boolean)
@@ -79,6 +80,7 @@ const toEntry = (task, options) => ({
   needs: task.needs || DEFAULT_NEEDS,
   rule: String(task.rule_id || ''),
   parentId: task.parent_id ?? null,
+  escapes: task.escapes === true,
   files: taskFiles(task, options)
 });
 
@@ -105,6 +107,11 @@ const screenEntries = (entries, options) => {
   const ready = [];
   const skipped = [];
   for (const entry of entries) {
+    const isOutsideRoot = entry.escapes;
+    if (isOutsideRoot) {
+      skipped.push(skip(entry, 'target_outside_root'));
+      continue;
+    }
     const hasFiles = entry.files.length > 0;
     const allowFileless = options.allowFileless === true;
     const isFileless = !hasFiles;

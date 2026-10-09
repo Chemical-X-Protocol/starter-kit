@@ -12,6 +12,8 @@ import { readExistingProjectConfig } from '../config/loader.js';
 import { DEFAULT_NEEDS } from '../audit/rules-registry.js';
 import { isValidNeeds, needsForRules } from './team-needs.js';
 import { dispatchScope, planDispatchBatches } from './team-dispatch-batches.js';
+import { rootRelativePath } from './coordination-repos.js';
+import { isEscapingTarget } from './task-target.js';
 
 export const DEFAULT_MODEL_ROUTING = Object.freeze({
   light: Object.freeze({ model: 'haiku', effort: 'low' }),
@@ -42,13 +44,25 @@ const matchesRule = (task, rule) => {
   return rules.includes(String(rule));
 };
 
-// A repo is a project-relative path prefix in the shared db (e.g. "apps/foo").
+// A repo is a root-relative package path (e.g. "apps/foo", "."): the task's repo column, or for
+// rows without one a prefix of the (root-relative) target.
 const matchesRepo = (task, repo) => {
-  const prefix = String(repo).replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/+$/, '');
+  const prefix = String(repo).replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/+$/, '') || '.';
+  const isOwnRepo = task.repo === prefix;
   const target = String(task.target_path || '').replace(/\\/g, '/').replace(/^\.\//, '');
   const isExact = target === prefix;
   const isInside = target.startsWith(`${prefix}/`);
-  return isExact || isInside;
+  return isOwnRepo || isExact || isInside;
+};
+
+// The file an agent gets is root-relative (<repo>/<target>); a target that climbs out of the
+// root is never handed out (#2506): the task is marked and dispatch skips it.
+const toDispatchTarget = (row) => {
+  const hasTarget = Boolean(row.target_path);
+  if (!hasTarget) return row;
+  const joined = rootRelativePath(row.repo, row.target_path);
+  const escapes = isEscapingTarget(row.target_path) || isEscapingTarget(joined);
+  return { ...row, repo_target: row.target_path, target_path: escapes ? null : joined, escapes };
 };
 
 const applyFilters = (tasks, options) => {
@@ -75,6 +89,7 @@ export const selectDispatchTasks = (db, options = {}) => {
   const status = options.status || 'queued';
   const hasNeedsColumn = hasColumn(db, 'agent_tasks', 'needs');
   const needsColumn = hasNeedsColumn ? 't.needs' : 'NULL';
+  const repoColumn = hasColumn(db, 'agent_tasks', 'repo') ? 't.repo' : "'.'";
   const childPlaceholders = OPEN_CHILD_STATUSES.map(() => '?').join(', ');
   const clauses = [
     't.status = ?',
@@ -90,7 +105,7 @@ export const selectDispatchTasks = (db, options = {}) => {
   let rows = [];
   try {
     rows = db.prepare(`
-      SELECT t.id, t.title, t.description, t.target_path, t.priority, t.rule_id, t.parent_id, ${needsColumn} AS needs
+      SELECT t.id, t.title, t.description, t.target_path, t.priority, t.rule_id, t.parent_id, ${needsColumn} AS needs, ${repoColumn} AS repo
       FROM agent_tasks t
       WHERE ${clauses.join(' AND ')}
       ORDER BY t.priority ASC, t.id ASC
@@ -100,7 +115,7 @@ export const selectDispatchTasks = (db, options = {}) => {
   }
   const tasks = rows.map((row) => {
     const hasOwnTier = isValidNeeds(row.needs);
-    return { ...row, needs: resolveTaskNeeds(row), needsSource: hasOwnTier ? 'task' : 'rule' };
+    return toDispatchTarget({ ...row, needs: resolveTaskNeeds(row), needsSource: hasOwnTier ? 'task' : 'rule' });
   });
   return applyFilters(tasks, options);
 };

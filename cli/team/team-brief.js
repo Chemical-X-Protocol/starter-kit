@@ -5,6 +5,7 @@
  */
 
 import { closeQuietly, openTeamDbReadOnly } from './team-db-readonly.js';
+import { teamRootFor } from './coordination-target.js';
 import { getAgentProfile, latestHandoff, listLiveLocks, toAgentHandle } from './team-profile.js';
 import { capLines, handoffLine, listTop } from './team-profile-format.js';
 
@@ -24,12 +25,16 @@ const readBrief = (db, handle, now) => {
   };
 };
 
-/** @returns {object | null} null when there is no handle, no sqlite or no .chemx/index.db under root. */
+/**
+ * Reads the team db that holds root's rows (the coordination db, or an unmerged package db, #2488).
+ * @returns {object | null} null when there is no handle, no sqlite, no such db, or a refused spec root.
+ */
 export const collectTeamBrief = ({ root, agentId, now = Date.now() } = {}) => {
   const handle = toAgentHandle(agentId);
   const hasInputs = Boolean(handle) && Boolean(root);
   if (!hasInputs) return null;
-  const db = openTeamDbReadOnly(root);
+  const teamRoot = teamRootFor(root);
+  const db = teamRoot ? openTeamDbReadOnly(teamRoot) : null;
   const hasDb = Boolean(db);
   if (!hasDb) return null;
   try {

@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import { registerAgent } from '../team/team-db-agents.js';
 import { AGENT_ID_ENV, resolveAgentIdentity, toSessionHandle } from '../team/agent-identity.js';
 import { closeQuietly, openExistingTeamDb } from '../team/team-db-readonly.js';
+import { teamRootFor } from '../team/coordination-target.js';
 
 export const SESSION_ID_ENV = 'CHEMX_SESSION_ID';
 // Only plain ids are written into a sourced shell file; anything else is skipped, never quoted.
@@ -67,11 +68,15 @@ export const exportSessionIdentity = (payload, env = process.env) => {
   }
 };
 
-/** Heartbeat for a known agent, registration for a new one; only in an existing db, never a per-process handle. */
+/**
+ * Heartbeat for a known agent, registration for a new one; only in an existing db, never a
+ * per-process handle. The db is the one holding root's team rows (#2488), not root's own.
+ */
 export const touchAgentPresence = (root, identity, { sessionId = null, env = process.env } = {}) => {
   const isStable = Boolean(identity?.id) && identity.source !== 'process';
   if (!isStable) return false;
-  const db = openExistingTeamDb(root);
+  const teamRoot = teamRootFor(root, { env });
+  const db = teamRoot ? openExistingTeamDb(teamRoot) : null;
   const hasDb = Boolean(db);
   if (!hasDb) return false;
   try {

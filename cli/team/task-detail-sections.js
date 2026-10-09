@@ -48,6 +48,10 @@ export const formatTaskBriefLines = (task, dependencyStates = []) => {
   const moscow = task.moscow || '(none)';
   const needs = task.needs || '(none)';
   lines.push(`  \x1b[1mSprint:\x1b[0m   ${sprint} │ \x1b[1mMoSCoW:\x1b[0m ${moscow} │ \x1b[1mNeeds:\x1b[0m ${needs}`);
+  // The owning package, relative to the coordination root; the target below is relative to it.
+  const repo = task.repo || '.';
+  const target = task.target_path ? ` │ \x1b[1mTarget:\x1b[0m ${task.target_path}` : '';
+  lines.push(`  \x1b[1mRepo:\x1b[0m     ${repo}${target}`);
 
   const hasParent = Boolean(task.parent_id);
   if (hasParent) lines.push(`  \x1b[1mParent:\x1b[0m   #${task.parent_id}`);

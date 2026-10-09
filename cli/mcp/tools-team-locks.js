@@ -1,4 +1,4 @@
-import { openIndexDb } from '../search-db.js';
+import { openTeamContext } from '../team/coordination-db.js';
 import { toColumnar } from '../columnar.js';
 import {
   requestFileLock,
@@ -10,8 +10,8 @@ import { isPathTraversal } from '../path-scope.js';
 import { resolveAgentId } from '../team/agent-identity.js';
 
 export const handleChemxTeamLock = async (args = {}, cwd = process.cwd()) => {
-  const db = openIndexDb(cwd);
-  if (!db) return { error: 'sqlite_unavailable' };
+  const { db, refused } = openTeamContext(cwd);
+  if (!db) return { error: refused || 'sqlite_unavailable' };
   const action = args.action || 'status';
 
   const hasTraversalPath = Boolean(args.filePath && isPathTraversal(args.filePath, cwd));

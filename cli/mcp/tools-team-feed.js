@@ -1,4 +1,4 @@
-import { openIndexDb } from '../search-db.js';
+import { openTeamContext } from '../team/coordination-db.js';
 import { toColumnar } from '../columnar.js';
 import {
   getSwarmStatus,
@@ -10,8 +10,8 @@ import { formatSwarmStatusCard } from '../team/team-format.js';
 import { resolveAgentId } from '../team/agent-identity.js';
 
 export const handleChemxTeamStatus = async (args = {}, cwd = process.cwd()) => {
-  const db = openIndexDb(cwd);
-  if (!db) return { error: 'sqlite_unavailable' };
+  const { db, refused } = openTeamContext(cwd);
+  if (!db) return { error: refused || 'sqlite_unavailable' };
   const status = getSwarmStatus(db);
   return {
     agents: status.agents,
@@ -29,8 +29,8 @@ export const handleChemxTeamStatus = async (args = {}, cwd = process.cwd()) => {
 };
 
 export const handleChemxTeamFeed = async (args = {}, cwd = process.cwd()) => {
-  const db = openIndexDb(cwd);
-  if (!db) return { error: 'sqlite_unavailable' };
+  const { db, refused } = openTeamContext(cwd);
+  if (!db) return { error: refused || 'sqlite_unavailable' };
   // No sinceId: queryFeed returns the newest `limit` events (chronological), not the oldest.
   const events = queryFeed(db, {
     since_id: args.sinceId,
@@ -43,8 +43,8 @@ export const handleChemxTeamFeed = async (args = {}, cwd = process.cwd()) => {
 };
 
 export const handleChemxTeamPost = async (args = {}, cwd = process.cwd()) => {
-  const db = openIndexDb(cwd);
-  if (!db) return { error: 'sqlite_unavailable' };
+  const { db, refused } = openTeamContext(cwd);
+  if (!db) return { error: refused || 'sqlite_unavailable' };
   const authorHandle = resolveAgentId(args.authorId || args.as);
   registerAgent(db, { id: authorHandle, role: 'contributor' });
   return postFeedEvent(db, {

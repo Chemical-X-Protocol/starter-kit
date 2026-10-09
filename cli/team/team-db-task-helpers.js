@@ -131,6 +131,12 @@ export const buildTaskListQuery = (filter = {}) => {
     conditions.push('needs = ?');
     params.push(needsFilter);
   }
+  // repo: one owning package ('.' = the coordination root); absent means every repo.
+  const hasRepoFilter = typeof filter.repo === 'string' && filter.repo !== '';
+  if (hasRepoFilter) {
+    conditions.push('repo = ?');
+    params.push(filter.repo);
+  }
   const hasSprintTagFilter = Boolean(filter.sprint_tag);
   if (hasSprintTagFilter) {
     conditions.push('sprint_tag = ?');
@@ -142,8 +148,15 @@ export const buildTaskListQuery = (filter = {}) => {
   return { query, params };
 };
 
-export const queryUnassignedHazards = (db) => {
+// options.schema names where agent_tasks lives on this connection ('main', or an ATTACHed team db);
+// options.repo limits the open-task match to one repo; options.insideOnly skips ../ and absolute paths.
+export const queryUnassignedHazards = (db, options = {}) => {
   if (!db) return [];
+  const tasks = `${options.schema || 'main'}.agent_tasks`;
+  const hasRepo = typeof options.repo === 'string';
+  const repoClause = hasRepo ? 'AND t.repo = ?' : '';
+  const vInside = options.insideOnly ? "AND v.file_path NOT LIKE '../%' AND substr(v.file_path, 1, 1) != '/'" : '';
+  const fInside = options.insideOnly ? "AND f.path NOT LIKE '../%' AND substr(f.path, 1, 1) != '/'" : '';
   const query = `
     SELECT 
       COALESCE(v.file_path, f.path) as path,
@@ -155,8 +168,8 @@ export const queryUnassignedHazards = (db) => {
       GROUP_CONCAT(DISTINCT v.rule) as rules_summary
     FROM violations v
     LEFT JOIN files f ON f.path = v.file_path
-    LEFT JOIN agent_tasks t ON t.target_path = v.file_path AND t.status IN ('queued', 'in_progress', 'review')
-    WHERE t.id IS NULL
+    LEFT JOIN ${tasks} t ON t.target_path = v.file_path AND t.status IN ('queued', 'in_progress', 'review') ${repoClause}
+    WHERE t.id IS NULL ${vInside}
     GROUP BY v.file_path
     UNION
     SELECT
@@ -168,15 +181,16 @@ export const queryUnassignedHazards = (db) => {
       f.hazard_count as violation_count,
       'ARCHITECTURAL_HAZARD' as rules_summary
     FROM files f
-    LEFT JOIN agent_tasks t ON t.target_path = f.path AND t.status IN ('queued', 'in_progress', 'review')
+    LEFT JOIN ${tasks} t ON t.target_path = f.path AND t.status IN ('queued', 'in_progress', 'review') ${repoClause}
     WHERE (f.health_score < 90 OR f.hazard_count > 0)
-      AND t.id IS NULL
+      AND t.id IS NULL ${fInside}
       AND f.path NOT IN (SELECT file_path FROM violations)
     GROUP BY f.path
     ORDER BY health_score ASC, hazard_count DESC
   `;
+  const params = hasRepo ? [options.repo, options.repo] : [];
   try {
-    return db.prepare(query).all();
+    return db.prepare(query).all(...params);
   } catch {
     return [];
   }

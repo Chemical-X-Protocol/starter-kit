@@ -14,7 +14,8 @@ import { DEFAULT_MAX_AGENTS, DEFAULT_MAX_TASKS_PER_AGENT } from './team-dispatch
 const DISPATCH_USAGE = [
   'Usage: chemx team dispatch [filters] [capacity] [--json | --workflow | --headless]',
   '  Plans file-disjoint agent batches for queued tasks and routes each batch by its needs tier.',
-  '  Filters:  --rule=<RULE> --needs=light|standard|deep --parent=<id> --repo=<name> --limit=<n>',
+  '  Filters:  --rule=<RULE> --needs=light|standard|deep --parent=<id> --repo=<path> --limit=<n>',
+  '  Files are relative to the team db root; a task whose target leaves that root is skipped (target_outside_root).',
   `  Capacity: --max-agents=<n> (default ${DEFAULT_MAX_AGENTS}) --per-agent=<n> tasks per agent (default ${DEFAULT_MAX_TASKS_PER_AGENT})`,
   '  Output:   summary (default), --json plan, --workflow Claude Code Workflow script, --headless claude -p commands'
 ].join('\n');
@@ -26,8 +27,9 @@ export const handleDispatchCommand = (db, flags = {}, isCli = false, cwd = proce
     return { usage: DISPATCH_USAGE };
   }
 
+  // flags.root is the team db's root (team-commands.js), so every file is root-relative.
   const plan = buildDispatchPlan(db, {
-    root: cwd,
+    root: flags.root || cwd,
     limit: flags.limit ? Number(flags.limit) : undefined,
     parent: flags.parent,
     rule: flags.rule,

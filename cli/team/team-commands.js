@@ -1,499 +1,100 @@
 /**
  * Chemical X Protocol: Swarm CLI Command Handlers
- * Parses arguments and dispatches actions for team status, feed, tasks, and locks
+ * Parses arguments and dispatches actions for team status, feed, tasks, locks and merges.
+ * The team db comes from openTeamContext (coordination-db.js): the coordination root's db for any
+ * cwd, or an unmerged package silo until `chemx team migrate` merges it (#2488).
  */
 
-import { openIndexDb } from '../search-db.js';
-import { toColumnar } from '../columnar.js';
-import {
-  getSwarmStatus,
-  queryFeed,
-  postFeedEvent,
-  listTasks,
-  getTask,
-  createTask,
-  claimTask,
-  updateTaskStatus,
-  registerAgent
-} from './team-db.js';
-import { getAgentMailbox, sendDirectMessage } from './team-db-mailbox.js';
-import { autoGenerateTasksFromAudit, completeTaskWithAudit, queryUnassignedHazards, reconcileAuditTasks } from './team-triage.js';
-import { formatSwarmStatusCard, formatFeedTimeline, formatTaskListCard, formatMailboxCard, formatTaskDetailCard, formatTeamHelpCard, formatTaskHelpCard } from './team-format.js';
-import { getSwarmTokenBreakdown, formatTokenBreakdownCard } from './team-tokens.js';
-import { runAblationComparison, formatAblationCard } from './team-memory.js';
+import { openTeamContext, describeTeamDbFailure } from './coordination-db.js';
+import { formatTeamHelpCard } from './team-format.js';
 import { parseFlags } from './team-flags.js';
-import { resolveListOptions, selectTaskPage, buildTaskListView } from './task-list-view.js';
-import { handleTaskHandoffCommand } from './team-task-handoff.js';
-import { handleTaskSlotCommand, handleTaskTraceCommand, handleTrainCommand } from './team-commands-vds.js';
-import { handleLockCommand, handleUnlockCommand, resolveCliAgent } from './team-commands-lock.js';
+import { handleTrainCommand } from './team-commands-vds.js';
+import { handleLockCommand, handleUnlockCommand } from './team-commands-lock.js';
 import { runCheckStagedArgs } from './team-commands-lock-staged.js';
-import { resolveTaskTier } from './task-tier.js';
-import { resolveDependencyStates } from './task-detail-sections.js';
-import { buildCompletionOptions, describeCompletion, describeStatusUpdate, writeTaskResult } from './task-completion-output.js';
-import { refuseUnknownTask } from './team-task-guard.js';
-import { checkNeedsInput } from './team-needs.js';
 import { handleProfileCommand, handleHandoffCommand } from './team-commands-profile.js';
 import { handleDispatchCommand } from './team-commands-dispatch.js';
 import { handleRunTokens, parseRunArgs } from './team-commands-tokens.js';
+import { isBoardCommand, runBoardCommand } from './team-commands-board.js';
+import { runTaskCommand } from './team-commands-task.js';
+import { runTriage } from './team-commands-triage.js';
+import { handleMigrateCommand } from './team-commands-migrate.js';
+import { parseRepoFlags, resolveTaskIdArgs, REPO_VALUE_FLAGS } from './team-commands-repo.js';
 
-const ARG_VAL_FLAGS = ['--target', '--as', '--to', '--agent', '--since', '--limit', '--thread', '--task', '--parent', '--rule', '--priority', '--prio', '--moscow', '--needs', '--url', '--pid'];
+const ARG_VAL_FLAGS = ['--target', '--as', '--to', '--agent', '--since', '--limit', '--thread', '--task', '--parent', '--rule', '--priority', '--prio', '--moscow', '--needs', '--url', '--pid', ...REPO_VALUE_FLAGS];
 
-export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => {
-  // The commit guard reads leases read-only and must not open (create, migrate) a team db first.
-  const isStagedCheck = rawArgs[0] === 'lock' && rawArgs[1] === 'check-staged';
-  if (isStagedCheck) return runCheckStagedArgs(rawArgs.slice(2), isCli, cwd);
-  const db = openIndexDb(cwd);
-  if (!db) {
-    if (isCli) process.stderr.write('\x1b[31m✕ SQLite database unavailable.\x1b[0m\n');
-    return null;
-  }
+const TEAM_COMMANDS = ['status', 'task', 'lock', 'unlock', 'feed', 'post', 'inbox', 'dm', 'tokens', 'triage', 'benchmark', 'train', 'migrate'];
 
-  // `--` ends options: every later word is literal text (a task title may contain --test).
-  const terminatorIndex = rawArgs.indexOf('--');
-  const hasTerminator = terminatorIndex !== -1;
-  const optionArgs = hasTerminator ? rawArgs.slice(0, terminatorIndex) : rawArgs;
-  const titleWords = hasTerminator ? rawArgs.slice(terminatorIndex + 1) : [];
-  const subCommand = optionArgs[0] || 'status';
-  const restArgs = optionArgs.slice(1);
-  const flags = parseFlags(restArgs);
-  const nonFlagPositional = [];
+const splitPositionals = (restArgs) => {
+  const positionals = [];
   for (let i = 0; i < restArgs.length; i++) {
     const a = restArgs[i];
     const isFlagToken = a.startsWith('-');
     if (isFlagToken) continue;
     const isVal = i > 0 && ARG_VAL_FLAGS.includes(restArgs[i - 1]);
     if (isVal) continue;
-    nonFlagPositional.push(a);
+    positionals.push(a);
   }
+  return positionals;
+};
 
-  const isTeamHelp = subCommand === '--help' || subCommand === '-h' || subCommand === 'help' || (subCommand === 'status' && flags.help);
-  if (isTeamHelp) {
-    if (isCli) process.stdout.write(formatTeamHelpCard());
-    return { help: true, commands: ['status', 'task', 'lock', 'unlock', 'feed', 'post', 'inbox', 'dm', 'tokens', 'triage', 'benchmark', 'train'] };
-  }
+// `--` ends options: every later word is literal text (a task title may contain --test).
+const parseArgs = (rawArgs) => {
+  const terminatorIndex = rawArgs.indexOf('--');
+  const hasTerminator = terminatorIndex !== -1;
+  const optionArgs = hasTerminator ? rawArgs.slice(0, terminatorIndex) : rawArgs;
+  const titleWords = hasTerminator ? rawArgs.slice(terminatorIndex + 1) : [];
+  const restArgs = optionArgs.slice(1);
+  const flags = { ...parseFlags(restArgs), ...parseRepoFlags(restArgs) };
+  return { subCommand: optionArgs[0] || 'status', restArgs, flags, positionals: splitPositionals(restArgs), titleWords };
+};
 
-  const isStatus = subCommand === 'status';
-  if (isStatus) {
-    const status = getSwarmStatus(db);
-    if (flags.isJson) {
-      const output = {
-        agents: status.agents,
-        tasks: status.tasks,
-        locks: {
-          active: status.locks.active,
-          waiting: status.locks.waiting,
-          leases: toColumnar(status.locks.leases, ['file_path', 'locked_by', 'expires_at'])
-        },
-        tokens: status.tokens,
-        blockedTasks: toColumnar(status.blockedTasks, ['id', 'title', 'assigned_agent_id', 'blocked_reason']),
-        recentFeed: toColumnar(status.recentFeed, ['id', 'timestamp', 'author_id', 'event_type', 'message'])
-      };
-      if (isCli) process.stdout.write(`${JSON.stringify(output, null, 2)}\n`);
-      return output;
-    }
-    if (isCli) process.stdout.write(formatSwarmStatusCard(status));
-    return status;
-  }
+const SUB_COMMANDS = {
+  task: (ctx, args, isCli, cwd) => runTaskCommand(ctx, args.positionals, args.flags, args.titleWords, isCli, cwd),
+  lock: (ctx, args, isCli, cwd) => handleLockCommand(ctx.db, args.positionals, args.flags, isCli, cwd),
+  unlock: (ctx, args, isCli, cwd) => handleUnlockCommand(ctx.db, args.positionals, args.flags, isCli, cwd),
+  triage: (ctx, args, isCli, cwd) => runTriage(ctx, args.flags, isCli, cwd),
+  train: (ctx, args, isCli) => handleTrainCommand(ctx.db, args.positionals[0] || 'status', args.flags, isCli, args.flags.isJson),
+  profile: (ctx, args, isCli) => handleProfileCommand(ctx.db, args.positionals, args.flags, isCli),
+  handoff: (ctx, args, isCli) => handleHandoffCommand(ctx.db, args.positionals, args.flags, isCli, args.titleWords),
+  dispatch: (ctx, args, isCli, cwd) => handleDispatchCommand(ctx.db, { ...args.flags, root: ctx.root }, isCli, cwd)
+};
 
+const runSubCommand = (ctx, args, isCli, cwd) => {
+  const { subCommand } = args;
   const isTokens = subCommand === 'tokens' || subCommand === 'telemetry';
-  const runOptions = isTokens ? parseRunArgs(restArgs) : null;
-  if (runOptions) {
-    return handleRunTokens(db, runOptions, flags.isJson, isCli, cwd);
-  }
-  if (isTokens) {
-    const breakdown = getSwarmTokenBreakdown(db);
-    if (flags.isJson) {
-      if (isCli) process.stdout.write(`${JSON.stringify(breakdown, null, 2)}\n`);
-      return breakdown;
-    }
-    if (isCli) process.stdout.write(formatTokenBreakdownCard(breakdown));
-    return breakdown;
-  }
-
-  const isFeed = subCommand === 'feed';
-  if (isFeed) {
-    const events = queryFeed(db, {
-      since_id: flags.since,
-      thread_id: flags.thread,
-      task_id: flags.task,
-      event_type: flags.type,
-      agent_id: flags.agent
-    });
-    if (flags.isJson) {
-      const col = toColumnar(events, ['id', 'timestamp', 'author_id', 'recipient_id', 'event_type', 'file_path', 'message']);
-      if (isCli) process.stdout.write(`${JSON.stringify(col, null, 2)}\n`);
-      return col;
-    }
-    if (isCli) process.stdout.write(formatFeedTimeline(events));
-    return events;
-  }
-
-  const isPost = subCommand === 'post';
-  if (isPost) {
-    const msg = nonFlagPositional.join(' ') || 'Status check';
-    const ev = postFeedEvent(db, {
-      author_id: flags.as || '@agent',
-      recipient_id: flags.to || null,
-      thread_id: flags.thread || null,
-      task_id: flags.task || null,
-      event_type: flags.type || 'broadcast',
-      message: msg,
-      metadata: flags.metadata || {}
-    });
-    if (isCli) {
-      if (flags.isJson) process.stdout.write(`${JSON.stringify(ev, null, 2)}\n`);
-      else process.stdout.write(`\x1b[32m✔\x1b[0m Posted event #${ev.id} to feed\n`);
-    }
-    return ev;
-  }
-
-  const isTask = subCommand === 'task';
-  if (isTask) {
-    // Only the action slot can ask for help; a task titled "... startup and help" must still be created.
-    const isTaskHelp = flags.help || nonFlagPositional[0] === 'help';
-    if (isTaskHelp) {
-      if (isCli) process.stdout.write(formatTaskHelpCard());
-      return { help: true, actions: ['list', 'show', 'add', 'claim', 'handoff', 'done', 'update', 'comment', 'triage', 'reconcile', 'set-target', 'vds-slot', 'trace'] };
-    }
-    const taskAction = nonFlagPositional[0] || 'list';
-    const unknownTask = refuseUnknownTask(db, taskAction, nonFlagPositional[1], { isCli, cwd });
-    if (unknownTask) return unknownTask;
-    const isListAction = taskAction === 'list';
-    if (isListAction) {
-      const listNeeds = checkNeedsInput(flags.needs);
-      const hasListNeedsError = Boolean(listNeeds.error);
-      if (hasListNeedsError) {
-        if (isCli) process.stderr.write(`\x1b[31m✕ ${listNeeds.error}\x1b[0m\n`);
-        return { error: listNeeds.error };
-      }
-      const listOptions = resolveListOptions({ status: flags.status, all: flags.all, limit: flags.limit });
-      const tasks = listTasks(db, {
-        status: listOptions.status,
-        assigned_agent_id: flags.agent,
-        parentId: flags.parent,
-        rule: flags.rule,
-        priority: flags.priority,
-        sprint_tag: flags.sprint,
-        moscow: flags.moscow,
-        needs: listNeeds.needs
-      });
-      const { page, total } = selectTaskPage(tasks, listOptions);
-      if (flags.isJson) {
-        const view = buildTaskListView(page, total);
-        if (isCli) process.stdout.write(`${JSON.stringify(view)}\n`);
-        return view;
-      }
-      if (isCli) {
-        process.stdout.write(formatTaskListCard(page));
-        const hasMore = total > page.length;
-        if (hasMore) process.stdout.write(`\x1b[2mShowing ${page.length} of ${total}. Use --all, --status=, or --limit= for more.\x1b[0m\n`);
-      }
-      return page;
-    }
-    const isShowAction = ['show', 'view', 'info'].includes(taskAction);
-    if (isShowAction) {
-      const taskId = nonFlagPositional[1];
-      if (!taskId) {
-        if (isCli) process.stderr.write('\x1b[31m✕ Task ID required: chemx team task show <id>\x1b[0m\n');
-        return { error: 'taskId required' };
-      }
-      const task = getTask(db, taskId);
-      if (!task) {
-        if (isCli) process.stderr.write(`\x1b[31m✕ Task #${taskId} not found\x1b[0m\n`);
-        return { error: `Task #${taskId} not found` };
-      }
-      const events = queryFeed(db, { task_id: taskId });
-      const dependencyStates = resolveDependencyStates(db, task);
-      if (flags.isJson) {
-        const output = { task, dependencyStates, events, activityCount: events.length };
-        if (isCli) process.stdout.write(`${JSON.stringify(output, null, 2)}\n`);
-        return output;
-      }
-      if (isCli) {
-        process.stdout.write(formatTaskDetailCard(task, events, dependencyStates));
-      }
-      return { task, dependencyStates, events };
-    }
-    const isCommentAction = taskAction === 'comment' || taskAction === 'post';
-    if (isCommentAction) {
-      const taskId = nonFlagPositional[1];
-      if (!taskId) {
-        if (isCli) process.stderr.write('\x1b[31m✕ Task ID required: chemx team task comment <id> <message>\x1b[0m\n');
-        return { error: 'taskId required' };
-      }
-      const msg = nonFlagPositional.slice(2).join(' ') || flags.message;
-      if (!msg) {
-        if (isCli) process.stderr.write('\x1b[31m✕ Message required\x1b[0m\n');
-        return { error: 'message required' };
-      }
-      const authorHandle = flags.as || '@agent';
-      registerAgent(db, { id: authorHandle, role: 'contributor' });
-      const ev = postFeedEvent(db, {
-        author_id: authorHandle,
-        task_id: Number(taskId),
-        event_type: flags.type || 'status_update',
-        message: msg
-      });
-      if (isCli) {
-        if (flags.isJson) process.stdout.write(`${JSON.stringify(ev, null, 2)}\n`);
-        else process.stdout.write(`\x1b[32m✔\x1b[0m Posted update to task #${taskId}: ${msg}\n`);
-      }
-      return ev;
-    }
-    const isVdsSlot = taskAction === 'vds-slot' || taskAction === 'slot';
-    if (isVdsSlot) {
-      const taskId = nonFlagPositional[1];
-      const moscow = nonFlagPositional[2] || flags.moscow || 'must';
-      const prio = nonFlagPositional[3] || flags.priority || 'critical';
-      return handleTaskSlotCommand(db, taskId, moscow, prio, isCli, flags.isJson);
-    }
-    const isTrace = taskAction === 'trace';
-    if (isTrace) {
-      const taskId = nonFlagPositional[1];
-      const url = nonFlagPositional[2] || flags.url;
-      return handleTaskTraceCommand(db, taskId, url, isCli, flags.isJson);
-    }
-    const isClaimAction = taskAction === 'claim';
-    if (isClaimAction) {
-      const taskId = nonFlagPositional[1];
-      const agentHandle = resolveCliAgent(flags, isCli);
-      registerAgent(db, { id: agentHandle, role: 'executor' });
-      const res = claimTask(db, taskId, agentHandle);
-      if (isCli) {
-        if (flags.isJson) process.stdout.write(`${JSON.stringify(res, null, 2)}\n`);
-        else {
-          const didClaim = Boolean(res.success);
-          if (didClaim) process.stdout.write(`\x1b[32m✔\x1b[0m Claimed task #${taskId}\n`);
-          else process.stderr.write(`\x1b[31m✕ Claim failed: ${res.message || res.reason}\x1b[0m\n`);
-        }
-      }
-      return res;
-    }
-    const isHandoffAction = taskAction === 'handoff';
-    if (isHandoffAction) return handleTaskHandoffCommand(db, nonFlagPositional, flags, isCli);
-    const isDoneAction = taskAction === 'done' || taskAction === 'complete';
-    if (isDoneAction) {
-      const taskId = nonFlagPositional[1];
-      const agentHandle = resolveCliAgent(flags, isCli);
-      registerAgent(db, { id: agentHandle, role: 'executor' });
-      const res = completeTaskWithAudit(db, taskId, agentHandle, buildCompletionOptions(flags, cwd));
-      writeTaskResult(res, flags, isCli, () => describeCompletion(res, taskId, `Completed task #${taskId}`));
-      return res;
-    }
-    const isUpdateAction = taskAction === 'update';
-    if (isUpdateAction) {
-      const taskId = nonFlagPositional[1];
-      const targetStatus = flags.status || nonFlagPositional[2] || 'in_progress';
-      const agentHandle = resolveCliAgent(flags, isCli);
-      registerAgent(db, { id: agentHandle, role: 'executor' });
-      const isCompletion = targetStatus === 'done' || targetStatus === 'completed';
-      if (isCompletion) {
-        const res = completeTaskWithAudit(db, taskId, agentHandle, buildCompletionOptions(flags, cwd));
-        writeTaskResult(res, flags, isCli, () => describeCompletion(res, taskId, `Updated task #${taskId} to status "done"`));
-        return res;
-      }
-      const res = updateTaskStatus(db, taskId, targetStatus, { blockedReason: flags.reason || '' });
-      if (res) {
-        postFeedEvent(db, {
-          author_id: agentHandle,
-          task_id: Number(taskId),
-          event_type: 'task_status_updated',
-          message: `Updated task #${taskId} status to ${targetStatus}`
-        });
-      }
-      writeTaskResult(res, flags, isCli, () => describeStatusUpdate(res, taskId));
-      return res;
-    }
-    const isCreateAction = ['create', 'add', 'new'].includes(taskAction);
-    if (isCreateAction) {
-      const createNeeds = checkNeedsInput(flags.needs);
-      const hasCreateNeedsError = Boolean(createNeeds.error);
-      if (hasCreateNeedsError) {
-        if (isCli) process.stderr.write(`\x1b[31m✕ ${createNeeds.error}\x1b[0m\n`);
-        return { error: createNeeds.error };
-      }
-      const title = flags.title || [...nonFlagPositional.slice(1), ...titleWords].join(' ') || 'Untitled Task';
-      const authorHandle = flags.as || '@agent';
-      registerAgent(db, { id: authorHandle, role: 'contributor' });
-      const hasAssignee = Boolean(flags.agent);
-      if (hasAssignee) {
-        registerAgent(db, { id: flags.agent, role: 'executor' });
-      }
-      const task = createTask(db, {
-        title,
-        description: flags.description || '',
-        tier: resolveTaskTier(flags.tier, flags.target),
-        target_path: flags.target,
-        priority: flags.priority || 2,
-        assigned_agent_id: flags.agent || null,
-        parent_id: flags.parent ?? null,
-        dependencies: flags.dependencies || [],
-        sprint_tag: flags.sprint || '',
-        moscow: flags.moscow,
-        needs: createNeeds.needs,
-        rule_id: flags.rule || ''
-      });
-      if (task) {
-        postFeedEvent(db, {
-          author_id: authorHandle,
-          task_id: task.id,
-          event_type: 'task_created',
-          message: `Created task #${task.id}: ${task.title}`
-        });
-      }
-      if (isCli) {
-        if (flags.isJson) process.stdout.write(`${JSON.stringify(task, null, 2)}\n`);
-        else process.stdout.write(`\x1b[32m✔\x1b[0m Created task #${task.id}: ${task.title}\n`);
-      }
-      return task;
-    }
-    const isTriageAction = taskAction === 'triage';
-    if (isTriageAction) {
-      const tasks = autoGenerateTasksFromAudit(db, { cwd, maxTasks: flags.priority || 10 });
-      if (isCli) {
-        const hasTriagedTasks = tasks.length > 0;
-        if (flags.isJson) process.stdout.write(`${JSON.stringify(tasks, null, 2)}\n`);
-        else if (hasTriagedTasks) process.stdout.write(`\x1b[32m✔\x1b[0m Triage generated ${tasks.length} task(s) from AST index\n`);
-        else process.stdout.write('\x1b[34mℹ\x1b[0m Triage found 0 architectural hazards to convert into tasks. (All files compliant!)\n');
-      }
-      return tasks;
-    }
-    const isReconcileAction = taskAction === 'reconcile' || taskAction === 'prune';
-    if (isReconcileAction) {
-      const resolved = reconcileAuditTasks(db, { cwd });
-      if (isCli) {
-        const hasResolvedTasks = resolved.length > 0;
-        if (flags.isJson) process.stdout.write(`${JSON.stringify(resolved, null, 2)}\n`);
-        else if (hasResolvedTasks) process.stdout.write(`\x1b[32m✔\x1b[0m Reconciled and auto-resolved ${resolved.length} task(s) whose hazards were fixed.\n`);
-        else process.stdout.write('\x1b[34mℹ\x1b[0m 0 tasks needed reconciliation.\n');
-      }
-      return resolved;
-    }
-    const isSetTargetAction = taskAction === 'set-target' || taskAction === 'target';
-    if (isSetTargetAction) {
-      const taskId = nonFlagPositional[1];
-      const targetPath = flags.target || nonFlagPositional[2];
-      const hasTaskId = Boolean(taskId);
-      const hasTargetPath = Boolean(targetPath);
-      const canSet = hasTaskId && hasTargetPath;
-      if (!canSet) {
-        if (isCli) process.stderr.write('\x1b[31m✕ Usage: chemx team task set-target <taskId> <path>\x1b[0m\n');
-        return { error: 'Usage: chemx team task set-target <taskId> <path>' };
-      }
-      db.prepare('UPDATE agent_tasks SET target_path = ?, updated_at = ? WHERE id = ?').run(targetPath, Date.now(), Number(taskId));
-      const updated = getTask(db, taskId);
-      if (isCli) {
-        if (flags.isJson) process.stdout.write(`${JSON.stringify(updated, null, 2)}\n`);
-        else process.stdout.write(`\x1b[32m✔\x1b[0m Updated task #${taskId} target_path to ${targetPath}\n`);
-      }
-      return updated;
-    }
-
-    if (isCli) {
-      process.stderr.write(`\x1b[31m✕ Unknown task action: "${taskAction}". Available actions: list, show, view, add, claim, done, update, comment, triage, reconcile, set-target\x1b[0m\n`);
-    }
-    return { error: `Unknown task action: ${taskAction}` };
-  }
-
-  const isLock = subCommand === 'lock';
-  if (isLock) {
-    return handleLockCommand(db, nonFlagPositional, flags, isCli, cwd);
-  }
-
-  const isUnlock = subCommand === 'unlock';
-  if (isUnlock) {
-    return handleUnlockCommand(db, nonFlagPositional, flags, isCli, cwd);
-  }
-
-  const isTriage = subCommand === 'triage';
-  if (isTriage) {
-    const tasks = autoGenerateTasksFromAudit(db, { cwd, maxTasks: flags.priority || 10 });
-    if (isCli) {
-      const hasTriagedTasks = tasks.length > 0;
-      if (flags.isJson) process.stdout.write(`${JSON.stringify(tasks, null, 2)}\n`);
-      else if (hasTriagedTasks) process.stdout.write(`\x1b[32m✔\x1b[0m Triage generated ${tasks.length} task(s) from AST index\n`);
-      else process.stdout.write('\x1b[34mℹ\x1b[0m Triage found 0 architectural hazards to convert into tasks. (All files compliant!)\n');
-    }
-    return tasks;
-  }
-
-  const isInbox = subCommand === 'inbox';
-  if (isInbox) {
-    const agentId = flags.agent || flags.as || nonFlagPositional[0] || '@agent';
-    const mailbox = getAgentMailbox(db, agentId, {
-      since: flags.since,
-      limit: flags.limit,
-      markRead: flags.markRead
-    });
-    if (flags.isJson) {
-      if (isCli) process.stdout.write(`${JSON.stringify(mailbox, null, 2)}\n`);
-      return mailbox;
-    }
-    const card = formatMailboxCard(mailbox);
-    if (isCli) process.stdout.write(card);
-    return mailbox;
-  }
-
-  const isDm = subCommand === 'dm';
-  if (isDm) {
-    const to = flags.to || nonFlagPositional[0];
-    const msg = flags.to ? nonFlagPositional.join(' ') : nonFlagPositional.slice(1).join(' ');
-    const hasRecipient = Boolean(to);
-    const hasMsg = Boolean(msg);
-    const canSend = hasRecipient && hasMsg;
-    if (!canSend) {
-      if (isCli) process.stderr.write('\x1b[31m✕ Usage: chemx team dm <@recipient> <message>\x1b[0m\n');
-      return { error: 'Recipient and message required' };
-    }
-    const res = sendDirectMessage(db, {
-      author_id: flags.as || '@agent',
-      recipient_id: to,
-      message: msg,
-      task_id: flags.task || null,
-      thread_id: flags.thread || null,
-      metadata: flags.metadata || {}
-    });
-    if (isCli) {
-      if (flags.isJson) process.stdout.write(`${JSON.stringify(res, null, 2)}\n`);
-      else process.stdout.write(`\x1b[32m✔\x1b[0m Sent DM #${res.id} to ${res.recipient_id}\n`);
-    }
-    return res;
-  }
-
-  const isTrain = subCommand === 'train';
-  if (isTrain) {
-    return handleTrainCommand(db, nonFlagPositional[0] || 'status', flags, isCli, flags.isJson);
-  }
-
-  const isBenchmark = ['benchmark', 'ablation', 'memory'].includes(subCommand);
-  if (isBenchmark) {
-    const ablation = runAblationComparison(db);
-    if (flags.isJson) {
-      if (isCli) process.stdout.write(`${JSON.stringify(ablation, null, 2)}\n`);
-      return ablation;
-    }
-    const card = formatAblationCard(ablation);
-    if (isCli) process.stdout.write(card);
-    return ablation;
-  }
-
-  const isProfile = subCommand === 'profile';
-  if (isProfile) {
-    return handleProfileCommand(db, nonFlagPositional, flags, isCli);
-  }
-
-  const isHandoff = subCommand === 'handoff';
-  if (isHandoff) {
-    return handleHandoffCommand(db, nonFlagPositional, flags, isCli, titleWords);
-  }
-
-  const isDispatch = subCommand === 'dispatch';
-  if (isDispatch) {
-    return handleDispatchCommand(db, flags, isCli, cwd);
-  }
-
+  const runOptions = isTokens ? parseRunArgs(args.restArgs) : null;
+  if (runOptions) return handleRunTokens(ctx.db, runOptions, args.flags.isJson, isCli, cwd);
+  const isBoard = isBoardCommand(subCommand);
+  if (isBoard) return runBoardCommand(ctx.db, subCommand, args.flags, args.positionals, isCli);
+  const isKnown = Object.hasOwn(SUB_COMMANDS, subCommand);
+  if (isKnown) return SUB_COMMANDS[subCommand](ctx, args, isCli, cwd);
   if (isCli) {
-    process.stderr.write(`\x1b[31m✕ Unknown team command: "${subCommand}". Available commands: status, task, feed, post, lock, unlock, triage, inbox, dm, profile, handoff, dispatch, benchmark\x1b[0m\n`);
+    process.stderr.write(`\x1b[31m✕ Unknown team command: "${subCommand}". Available commands: status, task, feed, post, lock, unlock, triage, inbox, dm, profile, handoff, dispatch, benchmark, migrate\x1b[0m\n`);
   }
   return { error: `Unknown team command: ${subCommand}` };
+};
+
+export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => {
+  // The commit guard reads leases read-only and must not open (create, migrate) a team db first.
+  const isStagedCheck = rawArgs[0] === 'lock' && rawArgs[1] === 'check-staged';
+  if (isStagedCheck) return runCheckStagedArgs(rawArgs.slice(2), isCli, cwd);
+  const args = parseArgs(rawArgs);
+  const isTeamHelp = ['--help', '-h', 'help'].includes(args.subCommand) || (args.subCommand === 'status' && args.flags.help);
+  if (isTeamHelp) {
+    if (isCli) process.stdout.write(formatTeamHelpCard());
+    return { help: true, commands: TEAM_COMMANDS };
+  }
+  // migrate opens its own target (the coordination db, or --into) and never the cwd's silo.
+  const isMigrate = args.subCommand === 'migrate';
+  if (isMigrate) return handleMigrateCommand(args.flags, isCli, cwd);
+  const ctx = openTeamContext(cwd);
+  const isUnavailable = !ctx.db;
+  if (isUnavailable) {
+    if (isCli) process.stderr.write(`\x1b[31m✕ ${describeTeamDbFailure(ctx)}\x1b[0m\n`);
+    return null;
+  }
+  // Every task-id argument (positional id, --parent, --task, --deps) resolves for the caller's repo.
+  const taskAction = args.subCommand === 'task' ? (args.positionals[0] || 'list') : '';
+  const resolved = resolveTaskIdArgs(ctx.db, ctx, taskAction, args.positionals, args.flags, isCli);
+  return runSubCommand(ctx, { ...args, positionals: resolved.positionals, flags: resolved.flags }, isCli, cwd);
 };

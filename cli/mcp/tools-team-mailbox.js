@@ -1,10 +1,10 @@
-import { openIndexDb } from '../search-db.js';
+import { openTeamContext } from '../team/coordination-db.js';
 import { getAgentMailbox, sendDirectMessage } from '../team/team-db-mailbox.js';
 import { resolveAgentId } from '../team/agent-identity.js';
 
 export const handleChemxTeamInbox = async (args = {}, cwd = process.cwd()) => {
-  const db = openIndexDb(cwd);
-  if (!db) return { error: 'sqlite_unavailable' };
+  const { db, refused } = openTeamContext(cwd);
+  if (!db) return { error: refused || 'sqlite_unavailable' };
   const agentId = resolveAgentId(args.agentId || args.agent || args.as);
   return getAgentMailbox(db, agentId, {
     since: args.since || args.sinceId,
@@ -14,8 +14,8 @@ export const handleChemxTeamInbox = async (args = {}, cwd = process.cwd()) => {
 };
 
 export const handleChemxTeamDm = async (args = {}, cwd = process.cwd()) => {
-  const db = openIndexDb(cwd);
-  if (!db) return { error: 'sqlite_unavailable' };
+  const { db, refused } = openTeamContext(cwd);
+  if (!db) return { error: refused || 'sqlite_unavailable' };
   const authorId = resolveAgentId(args.authorId || args.as);
   const recipientId = args.recipientId || args.to || args.recipient;
   const hasRecipient = Boolean(recipientId);

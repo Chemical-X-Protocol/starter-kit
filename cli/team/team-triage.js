@@ -1,29 +1,28 @@
 /**
  * Chemical X Protocol: Codebase Index Triage Bridge
- * Connects AST health metrics with autonomous swarm task generation
+ * Connects AST health metrics with autonomous swarm task generation.
+ * Task targets are relative to their repo (#2488): options.root is the team db's root, so a
+ * target resolves as <root>/<task.repo>/<target_path>. Without options.root, options.cwd is used
+ * as before. options.indexDb is the package's code index when it is not the team db.
  */
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { createTask, updateTaskStatus, getTask } from './team-db-tasks.js';
+import { updateTaskStatus, getTask } from './team-db-tasks.js';
 import { releaseFileLock } from './team-db-locks.js';
 import { postFeedEvent } from './team-db-feed.js';
-import { registerAgent } from './team-db-agents.js';
 import { ingestTaskTelemetry } from './team-telemetry.js';
-import { runAudit as executeAstAudit, auditFile } from '../audit-engine.js';
-import { syncSearchIndex, syncViolationsIndex, recordAuditSnapshot } from '../search.js';
+import { auditFile } from '../audit-engine.js';
 
 import { queryUnassignedHazards } from './team-db-task-helpers.js';
 import { checkCompletionOwnership, buildOwnershipRefusal, buildCompletionGuard } from './team-task-ownership.js';
 import { triageLog } from './team-triage-log.js';
 import { verifyTaskTarget } from './team-triage-verify.js';
-import { resolveRuleNeeds } from '../audit/rules-registry.js';
-import { backfillAuditTaskNeeds, needsForRules, rollUpParentNeeds } from './team-needs.js';
+import { backfillAuditTaskNeeds } from './team-needs.js';
+import { generateTriageTasks } from './team-triage-generate.js';
+import { repoDir } from './coordination-repos.js';
 
 export { ingestTaskTelemetry, queryUnassignedHazards };
-
-const SEVERITY_PRIORITY = { CRITICAL: 1, HIGH: 2 };
-const priorityForSeverity = (severity, otherwise) => SEVERITY_PRIORITY[severity] ?? otherwise;
 
 const checkAndCompleteParent = (db, parentId, resolvedTasks) => {
   if (!parentId) return;
@@ -49,22 +48,26 @@ const isDeprecatedViolation = (v) => {
   return isDeprecated || isDeprecatedDirective;
 };
 
-export const reconcileAuditTasks = (db, options = {}) => {
-  if (!db) return [];
-  const cwd = options.cwd || process.cwd();
-
-  const openAuditTasks = db.prepare(`
-    SELECT id, target_path, title, status, parent_id, rule_id
+const openAuditTasksOf = (db, repo) => {
+  const hasRepo = typeof repo === 'string';
+  return db.prepare(`
+    SELECT id, target_path, title, status, parent_id, rule_id, repo
     FROM agent_tasks
     WHERE status IN ('queued', 'in_progress', 'review')
       AND target_path IS NOT NULL
-      AND origin_type = 'audit'
-  `).all();
+      AND origin_type = 'audit' ${hasRepo ? 'AND repo = ?' : ''}
+  `).all(...(hasRepo ? [repo] : []));
+};
 
+// options.repo limits reconciliation to one repo's tasks (its audit config is the one in force).
+export const reconcileAuditTasks = (db, options = {}) => {
+  if (!db) return [];
+  const cwd = options.cwd || process.cwd();
   const resolvedTasks = [];
 
-  for (const task of openAuditTasks) {
-    const fullPath = path.isAbsolute(task.target_path) ? task.target_path : path.resolve(cwd, task.target_path);
+  for (const task of openAuditTasksOf(db, options.repo)) {
+    const taskDir = options.root ? repoDir(options.root, task.repo) : cwd;
+    const fullPath = path.isAbsolute(task.target_path) ? task.target_path : path.resolve(taskDir, task.target_path);
     const fileExists = fs.existsSync(fullPath);
 
     if (!fileExists) {
@@ -81,7 +84,7 @@ export const reconcileAuditTasks = (db, options = {}) => {
     }
 
     try {
-      const auditRes = auditFile(fullPath, task.target_path, { cwd });
+      const auditRes = auditFile(fullPath, task.target_path, { cwd: taskDir });
       const violations = Array.isArray(auditRes) ? auditRes : (auditRes?.fileViolations || auditRes?.violations || []);
       const isBlocking = (v) => !isDeprecatedViolation(v) && (v.severity === 'CRITICAL' || v.severity === 'HIGH');
       // A task owns one rule: it stays open while that rule still fires on the file, whatever
@@ -121,176 +124,22 @@ export const reconcileAuditTasks = (db, options = {}) => {
   return resolvedTasks;
 };
 
+/** Reconciles, backfills needs tiers, then turns unassigned indexed hazards into tasks. */
 export const autoGenerateTasksFromAudit = (db, options = {}) => {
   if (!db) return [];
-  const cwd = options.cwd || process.cwd();
-
   reconcileAuditTasks(db, options);
   backfillAuditTaskNeeds(db);
+  return generateTriageTasks(db, options);
+};
 
-  // If violations and files are empty, auto-audit to seed index if possible
+const readFileMetric = (indexDb, targetPath, column) => {
+  const hasTarget = Boolean(targetPath);
+  if (!hasTarget) return null;
   try {
-    const violationsCount = db.prepare('SELECT COUNT(*) as count FROM violations').get()?.count || 0;
-    const filesCount = db.prepare('SELECT COUNT(*) as count FROM files').get()?.count || 0;
-    const isIndexEmpty = violationsCount === 0 && filesCount === 0;
-    if (isIndexEmpty) {
-      const targetDir = options.targetDir || (fs.existsSync(path.resolve(cwd, 'src')) ? 'src' : '.');
-      const report = executeAstAudit(targetDir, { cwd });
-      const hasReportViolations = Boolean(report?.violations);
-      if (hasReportViolations) {
-        const syncRes = syncSearchIndex(targetDir, cwd);
-        syncViolationsIndex(db, report.violations, { scope: syncRes?.scope || null });
-        recordAuditSnapshot(db, report);
-      }
-    }
-  } catch (err) {
-    triageLog.warn('seed audit', cwd, err); // fall through to the existing db state
+    return indexDb.prepare(`SELECT ${column} AS value FROM files WHERE path = ?`).get(targetPath)?.value ?? null;
+  } catch {
+    return null; // chemx-allow: best-effort a team db without the code index has no file rows
   }
-
-  const limit = options.maxTasks || 10;
-  const createdTasks = [];
-
-  registerAgent(db, {
-    id: '@triage-bot',
-    name: 'Triage Bot',
-    role: 'triage',
-    capabilities: ['audit', 'triage', 'task_creation']
-  });
-
-  let rulesWithViolations = [];
-  try {
-    rulesWithViolations = db.prepare(`
-      SELECT 
-        v.rule,
-        v.severity,
-        v.hazard,
-        v.directive,
-        COUNT(DISTINCT v.file_path) as file_count,
-        COUNT(v.id) as violation_count
-      FROM violations v
-      LEFT JOIN agent_tasks t ON t.target_path = v.file_path AND t.rule_id = v.rule AND t.status IN ('queued', 'in_progress', 'review')
-      WHERE t.id IS NULL
-      GROUP BY v.rule
-      ORDER BY 
-        CASE v.severity WHEN 'CRITICAL' THEN 1 WHEN 'HIGH' THEN 2 WHEN 'MEDIUM' THEN 3 ELSE 4 END ASC,
-        violation_count DESC
-    `).all();
-  } catch (err) {
-    triageLog.warn('rule grouping', 'violations', err);
-  }
-
-  const hasGroupedRules = rulesWithViolations.length > 0;
-  const isHierarchical = options.hierarchy === true;
-
-  if (hasGroupedRules) {
-    for (const ruleInfo of rulesWithViolations) {
-      const shouldGroup = isHierarchical || ruleInfo.file_count > 1;
-      let parentTask = null;
-
-      if (shouldGroup) {
-        parentTask = db.prepare(`
-          SELECT * FROM agent_tasks 
-          WHERE origin_type = 'audit' AND rule_id = ? AND parent_id IS NULL AND status IN ('queued', 'in_progress', 'review')
-        `).get(ruleInfo.rule);
-
-        if (!parentTask) {
-          const dirSummary = ruleInfo.directive ? `: ${ruleInfo.directive.slice(0, 60)}` : '';
-          parentTask = createTask(db, {
-            title: `[${ruleInfo.rule}]${dirSummary} (${ruleInfo.file_count} files)`,
-            description: `Hazard: ${ruleInfo.hazard || 'Architectural hazard detected'}\nDirective: ${ruleInfo.directive || 'Refactor into molecular compliance'}\nTotal violations: ${ruleInfo.violation_count} across ${ruleInfo.file_count} file(s).`,
-            tier: 'organism',
-            priority: priorityForSeverity(ruleInfo.severity, 3),
-            origin_type: 'audit',
-            rule_id: ruleInfo.rule,
-            needs: resolveRuleNeeds(ruleInfo.rule),
-            parent_id: null
-          });
-          if (parentTask) createdTasks.push(parentTask);
-        }
-      }
-
-      const fileRows = db.prepare(`
-        SELECT 
-          v.file_path,
-          GROUP_CONCAT(DISTINCT v.line) as lines,
-          v.hazard,
-          v.directive,
-          COALESCE(f.tier, 'molecule') as tier,
-          COALESCE(f.health_score, 80) as health_score,
-          COALESCE(f.lines, 0) as file_lines
-        FROM violations v
-        LEFT JOIN files f ON f.path = v.file_path
-        LEFT JOIN agent_tasks t ON t.target_path = v.file_path AND t.rule_id = v.rule AND t.status IN ('queued', 'in_progress', 'review')
-        WHERE v.rule = ? AND t.id IS NULL
-        GROUP BY v.file_path
-      `).all(ruleInfo.rule);
-
-      for (const fv of fileRows) {
-        const lineStr = fv.lines ? ` (Lines: ${fv.lines})` : '';
-        const taskTitle = shouldGroup
-          ? `${fv.file_path}: Fix ${ruleInfo.rule}`
-          : `Resolve architectural hazards in ${fv.file_path} (${ruleInfo.rule})`;
-        const childTask = createTask(db, {
-          title: taskTitle,
-          description: `File: ${fv.file_path}${lineStr}\nHazard: ${fv.hazard || ruleInfo.hazard}\nDirective: ${fv.directive || ruleInfo.directive}`,
-          tier: fv.tier || 'molecule',
-          target_path: fv.file_path,
-          priority: parentTask ? parentTask.priority : priorityForSeverity(ruleInfo.severity, 2),
-          origin_type: 'audit',
-          rule_id: ruleInfo.rule,
-          needs: resolveRuleNeeds(ruleInfo.rule),
-          parent_id: parentTask ? parentTask.id : null,
-          violation_snapshot: {
-            path: fv.file_path,
-            tier: fv.tier,
-            lines: fv.file_lines,
-            violationLines: fv.lines,
-            healthBefore: fv.health_score,
-            hazardCountBefore: 1,
-            rules: ruleInfo.rule
-          }
-        });
-        if (childTask) createdTasks.push(childTask);
-      }
-      if (parentTask) rollUpParentNeeds(db, parentTask.id);
-    }
-  }
-
-  const remainingCandidates = queryUnassignedHazards(db).slice(0, limit);
-  for (const item of remainingCandidates) {
-    const rulesText = item.rules_summary ? ` (${item.rules_summary})` : '';
-    const task = createTask(db, {
-      title: `Resolve architectural hazards in ${item.path}${rulesText}`,
-      description: `Target file has health score ${item.health_score}/100 with ${item.hazard_count || item.violation_count || 1} detected hazard(s). Refactor into molecular compliance.`,
-      tier: item.tier || 'molecule',
-      target_path: item.path,
-      priority: item.health_score < 70 ? 1 : 2,
-      origin_type: 'audit',
-      rule_id: item.rules_summary || 'ARCHITECTURAL_HAZARD',
-      needs: needsForRules(item.rules_summary) ?? resolveRuleNeeds('ARCHITECTURAL_HAZARD'),
-      violation_snapshot: {
-        path: item.path,
-        tier: item.tier,
-        lines: item.lines,
-        healthBefore: item.health_score,
-        hazardCountBefore: item.hazard_count || item.violation_count || 1,
-        rules: item.rules_summary
-      }
-    });
-    if (task) createdTasks.push(task);
-  }
-
-  const hasCreatedTasks = createdTasks.length > 0;
-  if (hasCreatedTasks) {
-    postFeedEvent(db, {
-      author_id: '@triage-bot',
-      event_type: 'triage_generated',
-      message: `Generated ${createdTasks.length} refactoring task(s) from AST index`,
-      metadata: { taskIds: createdTasks.map((t) => t.id) }
-    });
-  }
-
-  return createdTasks;
 };
 
 export const completeTaskWithAudit = (db, taskId, agentId, options = {}) => {
@@ -298,6 +147,7 @@ export const completeTaskWithAudit = (db, taskId, agentId, options = {}) => {
   if (!canComplete) return null;
   const task = getTask(db, taskId);
   if (!task) return null;
+  const indexDb = options.indexDb || db;
 
   const ownership = checkCompletionOwnership(task, agentId, options);
   const isOwnershipAllowed = Boolean(ownership.allowed);
@@ -347,13 +197,13 @@ export const completeTaskWithAudit = (db, taskId, agentId, options = {}) => {
     resultPayload.verified = false;
     resultPayload.noTargetConfirmed = true;
   } else {
-    const refusal = verifyTaskTarget(db, task, taskId, options, resultPayload);
+    const refusal = verifyTaskTarget(indexDb, task, taskId, options, resultPayload);
     if (refusal) return refusal;
-    releaseFileLock(db, task.target_path, agentId);
+    releaseFileLock(db, task.target_path, agentId, { cwd: options.cwd });
   }
 
-  const healthBefore = task.violation_snapshot?.healthBefore ?? (task.target_path ? (db.prepare('SELECT health_score FROM files WHERE path = ?').get(task.target_path)?.health_score ?? null) : null);
-  const hazardsBefore = task.violation_snapshot?.hazardCountBefore ?? (task.target_path ? (db.prepare('SELECT hazard_count FROM files WHERE path = ?').get(task.target_path)?.hazard_count ?? null) : null);
+  const healthBefore = task.violation_snapshot?.healthBefore ?? readFileMetric(indexDb, task.target_path, 'health_score');
+  const hazardsBefore = task.violation_snapshot?.hazardCountBefore ?? readFileMetric(indexDb, task.target_path, 'hazard_count');
   const hazardsAfter = resultPayload.hazardCountAfter ?? 0;
   const healthAfter = resultPayload.healthAfter ?? 100;
   const diffReceipt = {

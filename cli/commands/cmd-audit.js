@@ -32,7 +32,7 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
   const { writeRatchet, RATCHET_FILE } = await import('../audit/ratchet.js');
   const { writeAuditStatus } = await import('../audit/status-file.js');
   const { loadProjectConfig: loadSharedConfig } = await import('../config/index.js');
-  const { autoGenerateTasksFromAudit } = await import('../team/index.js');
+  const { triageFromIndex } = await import('../team/team-commands-triage.js');
   const loadNavigator = () => import('../navigator.js');
   const formatTerminalReport = async (r) => (await import('../audit/reporter.js')).formatTerminalReport(r);
   const runScaffold = async (...args) => (await import('../scaffold.js')).runScaffold(...args);
@@ -179,11 +179,13 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
       // A --fast or --git audit checks only part of the scope, so it vouches for no file.
       syncViolationsIndex(syncRes.db, report.violations, { scope: isPartialAudit ? null : syncRes.scope });
       if (shouldTriage) {
-        const createdTasks = autoGenerateTasksFromAudit(syncRes.db, { cwd: process.cwd(), targetDir });
+        // Hazards come from this package's index; tasks go to the team db for the cwd (#2488).
+        const triaged = triageFromIndex(syncRes.db, { cwd: process.cwd(), targetDir });
+        const createdTasks = triaged.created;
         hasTriaged = true;
         const { listTasks } = await import('../team/index.js');
         const { collectTaskRules } = await import('../audit/prompt-rule-lines.js');
-        report.taskRules = collectTaskRules(listTasks(syncRes.db));
+        report.taskRules = collectTaskRules(listTasks(triaged.teamDb, { repo: triaged.repo }));
         const shouldLogTriage = isCli && !isJson && createdTasks.length > 0;
         if (shouldLogTriage) {
           process.stdout.write(`\x1b[32m✔\x1b[0m Auto-triage synchronized ${createdTasks.length} team task(s) in SQLite backlog.\n`);
