@@ -1,11 +1,12 @@
 import { MCP_TOOLS, ALL_MCP_TOOLS } from './manifests.js';
-import { handleAudit, handleGetRefactorPrompt } from './tools-audit.js';
-import { handleQueryPatterns, handleAutofix } from './tools-patterns.js';
-import { handleAuditBuild, handleChemxTypecheck, handleChemxTest, handleChemxVerify } from './tools-verify.js';
-import { handleGenerateCapsule, handleChemxTrend } from './tools-generate.js';
-import { handleChemxQ, handleChemxRead, handleChemxPatch, handleChemxCheck, handleChemxWrite } from './tools-search.js';
-import { handleChemxTeam, handleChemxTeamStatus, handleChemxTeamFeed, handleChemxTeamPost, handleChemxTeamTask, handleChemxTeamLock, handleChemxTeamInbox, handleChemxTeamDm, handleChemxReportIssue } from './tools-team.js';
-import { handleChemxProject } from './tools-project.js';
+import {
+  handleAudit, handleGetRefactorPrompt, handleQueryPatterns, handleAutofix,
+  handleAuditBuild, handleChemxTypecheck, handleChemxTest, handleChemxVerify,
+  handleGenerateCapsule, handleChemxTrend,
+  handleChemxQ, handleChemxRead, handleChemxPatch, handleChemxCheck, handleChemxWrite,
+  handleChemxTeam, handleChemxTeamStatus, handleChemxTeamFeed, handleChemxTeamPost, handleChemxTeamTask,
+  handleChemxTeamLock, handleChemxTeamInbox, handleChemxTeamDm, handleChemxReportIssue, handleChemxProject
+} from './tools-lazy.js';
 
 export {
   MCP_TOOLS, ALL_MCP_TOOLS, handleChemxQ, handleChemxRead, handleChemxPatch, handleChemxCheck, handleChemxWrite,

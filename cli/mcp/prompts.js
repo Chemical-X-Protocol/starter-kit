@@ -1,6 +1,5 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { auditFile } from '../audit.js';
 
 export const MCP_PROMPTS = [
   {
@@ -48,6 +47,7 @@ export const getMcpPrompt = async (name, args = {}) => {
       if (fs.existsSync(resolvedPath) && fs.statSync(resolvedPath).isFile()) {
         const fileContent = fs.readFileSync(resolvedPath, 'utf-8');
         const lineCount = fileContent.split(/\r?\n/).length;
+        const { auditFile } = await import('../audit.js');
         const violations = auditFile(resolvedPath, relPath);
         diagnosticLines.push(
           '',

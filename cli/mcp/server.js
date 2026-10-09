@@ -3,7 +3,6 @@ import fs from 'node:fs';
 import { MCP_TOOLS, executeMcpTool } from './tools.js';
 import { MCP_RESOURCES, readMcpResource } from './resources.js';
 import { MCP_PROMPTS, getMcpPrompt } from './prompts.js';
-import { warmIndexDb } from '../search-db.js';
 import { resolveCallScope, extractCallTarget, hasProjectMarker } from './call-scope.js';
 
 export const SERVER_INFO = {
@@ -12,6 +11,19 @@ export const SERVER_INFO = {
 };
 
 export const PROTOCOL_VERSION = '2024-11-05';
+
+// Best-effort index warmup runs after the initialize reply, so the handshake
+// never waits on the index and parser stack (startup-latency-eager-imports).
+const scheduleIndexWarmup = (root) => {
+  setImmediate(async () => {
+    try {
+      const { warmIndexDb } = await import('../search-db.js');
+      warmIndexDb(root);
+    } catch (warmupError) {
+      process.stderr.write(`[mcp] index warmup skipped: ${warmupError instanceof Error ? warmupError.message : String(warmupError)}\n`);
+    }
+  });
+};
 
 export const createMcpHandler = (options = {}) => {
   let declaredRoot = options.cwd || null;
@@ -32,9 +44,7 @@ export const createMcpHandler = (options = {}) => {
       } else if (Array.isArray(params?.workspaceFolders) && params.workspaceFolders[0]?.uri?.startsWith('file://')) {
         declaredRoot = new URL(params.workspaceFolders[0].uri).pathname;
       }
-      if (declaredRoot) {
-        try { warmIndexDb(declaredRoot); } catch { /* chemx-allow: best-effort index warmup */ }
-      }
+      if (declaredRoot) scheduleIndexWarmup(declaredRoot);
       return {
         jsonrpc: '2.0',
         id,
