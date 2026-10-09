@@ -41,7 +41,8 @@ export const checkTemplateRenderDepth = (template, relativePath, config) => {
     if (crossesLimit) return;
     for (const child of node.children || []) visit(child, nextDepth);
   };
-  if (template?.ast) visit(template.ast, 0);
+  const hasTemplateAst = Boolean(template?.ast);
+  if (hasTemplateAst) visit(template.ast, 0);
   return violations;
 };
 
