@@ -14,7 +14,8 @@ export const handleTaskSlotCommand = (db, taskId, moscow = 'must', priority = 'c
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     } else {
       process.stdout.write(`\x1b[32m✔\x1b[0m Task #${taskId} slotted to [${moscow.toUpperCase()} / ${priority.toUpperCase()}]\n`);
-      if (result.displaced?.length > 0) {
+      const hasDisplaced = result.displaced?.length > 0;
+      if (hasDisplaced) {
         process.stdout.write(`\x1b[33m⚡ Displaced:\x1b[0m ${result.displaced.map((d) => `#${d.id} -> [${d.to.moscow}/${d.to.priority}]`).join(', ')}\n`);
       }
     }
