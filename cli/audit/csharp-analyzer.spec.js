@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { analyzeCSharpCode, maskCommentsAndStrings } from "./csharp-analyzer.js";
 import { calculateAiSlopScore, calculateMolecularHealthScore } from "./metrics.js";
+import { auditCode } from "./rules.js";
 
 test("csharp-analyzer: maskCommentsAndStrings preserves layout and line count", () => {
   const code = "// comment\n/* block */\nstring s = \"hello\";\n";
@@ -213,4 +214,76 @@ public class OrderTests
 
   const sqliteViolation = violations.find((v) => v.rule === "SYNTHETIC_MOCK_DATA" && v.hazard.includes("SQLite"));
   assert.ok(sqliteViolation, "Must flag UseSqlite/DataSource=:memory: provider");
+});
+
+// Ported from ae78a51 (endLine, quoted text), 7f485f8, a0ff222 and 7c30410: C# shallow catches go
+// through the same chemx-allow post-filter as JS, so these rows run auditCode on a .cs path.
+const csharpCatchHits = (code) => auditCode(code, "Services/CacheWarmer.cs", "Services/CacheWarmer.cs", { config: {} })
+  .filter((v) => v.rule === "AI_SLOP_SHALLOW_CATCH");
+
+const wrapCSharpCatch = (catchBlock, above = "") => `
+public class CacheWarmer
+{
+    public void Run()
+    {
+        try
+        {
+            Warm();
+        }
+${above}${catchBlock}
+    }
+}
+`;
+
+test("csharp-analyzer: a best-effort annotation anywhere in a multi-line catch exempts it", () => {
+  const placements = [
+    wrapCSharpCatch("        catch (Exception)\n        {\n            // chemx-allow: best-effort warmup is optional\n        }"),
+    wrapCSharpCatch("        catch (Exception)\n        {\n        }", "        // chemx-allow: best-effort warmup is optional\n"),
+    wrapCSharpCatch("        catch (Exception) { } // chemx-allow: best-effort warmup is optional"),
+    wrapCSharpCatch("        catch (Exception)\n        {\n        } // chemx-allow: best-effort warmup is optional"),
+    wrapCSharpCatch("        catch (Exception)\n        {\n            /* chemx-allow: best-effort\n             * warmup is optional */\n        }")
+  ];
+  for (const code of placements) {
+    assert.deepEqual(csharpCatchHits(code), [], code);
+  }
+});
+
+test("csharp-analyzer: annotation text in a string on the catch line does not exempt it", () => {
+  const quoted = "        catch (Exception) { } Log(\"chemx-allow: best-effort quoted, not a comment\");";
+  assert.equal(csharpCatchHits(wrapCSharpCatch(quoted)).length, 1);
+});
+
+test("csharp-analyzer: a Stroustrup annotation trailing the try block brace exempts the catch", () => {
+  const placements = [
+    "try {\n    X();\n} // chemx-allow: best-effort reason\ncatch { }\n",
+    "try {\n    X();\n} /* chemx-allow: best-effort reason */\ncatch { }\n",
+    "try\n{\n    X();\n} // chemx-allow: best-effort reason\ncatch (Exception)\n{\n}\n",
+    "try {\n    Log(\"}{\");\n} // chemx-allow: best-effort braces in strings are masked\ncatch { }\n"
+  ];
+  for (const code of placements) {
+    assert.deepEqual(csharpCatchHits(code), [], code);
+    assert.deepEqual(csharpCatchHits(code.replace(/\n/g, "\r\n")), [], code);
+  }
+});
+
+test("csharp-analyzer: a commented brace that closes an inner catch or another block does not exempt", () => {
+  const innerCatch = "try {\n    try { X(); } catch {\n    } // chemx-allow: best-effort inner\n} catch { }\n";
+  assert.deepEqual(csharpCatchHits(innerCatch).map((hit) => hit.line), [4]);
+  const ifBlock = "try {\n    if (a) {\n        X();\n    } // chemx-allow: best-effort reason\n} catch { }\n";
+  assert.deepEqual(csharpCatchHits(ifBlock).map((hit) => hit.line), [5]);
+});
+
+test("csharp-analyzer: a reasonless or punctuation-only annotation is flagged and says so", () => {
+  for (const code of [
+    wrapCSharpCatch("        catch (Exception) { } // chemx-allow: best-effort"),
+    wrapCSharpCatch("        catch (Exception) { } // chemx-allow: best-effort ..."),
+    wrapCSharpCatch("        catch (Exception) { }", "        /* chemx-allow: best-effort */\n").replace(/\n/g, "\r\n")
+  ]) {
+    const hits = csharpCatchHits(code);
+    assert.equal(hits.length, 1, code);
+    assert.ok(hits[0].hazard.includes("needs a reason"), hits[0].hazard);
+  }
+  const ish = csharpCatchHits(wrapCSharpCatch("        catch (Exception) { } // chemx-allow: best-effort-ish reason"));
+  assert.equal(ish.length, 1);
+  assert.equal(ish[0].hazard.includes("needs a reason"), false, ish[0].hazard);
 });

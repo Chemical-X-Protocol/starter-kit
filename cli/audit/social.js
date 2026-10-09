@@ -1,5 +1,5 @@
 import { SIZE_LABELS, hasSizeClass } from './line-budgets.js';
-import { groupViolationsBySeverity, resolveMarkdownMonolithText } from './reporter-utils.js';
+import { groupViolationsBySeverity, resolveMarkdownMonolithText, resolveReportMoleculeLineLimit } from './reporter-utils.js';
 import {
   PILLAR_EMOJIS,
   formatPillarReactionBadgesMarkdown,
@@ -181,7 +181,7 @@ export const generateDiscussionContent = (report, username, projectName = 'Codeb
     lines.push('This project follows Chemical X Molecular Architecture principles with isolated capsules and self-cleaning hooks.');
   } else {
     lines.push('### Seeking Refactoring Feedback');
-    lines.push('Looking for recommendations on breaking down flagged monolithic debts into crystalline molecule capsules (< 100 lines of code). Any advice is welcome!');
+    lines.push(`Looking for recommendations on breaking down flagged monolithic debts into crystalline molecule capsules (<= ${resolveReportMoleculeLineLimit(report)} lines of code). Any advice is welcome!`);
   }
   lines.push('');
   lines.push('*Audited using [Chemical X Protocol Starter Kit](https://github.com/Chemical-X-Protocol/awesome-secret-sauce).*');
@@ -316,7 +316,7 @@ export const generateTransformationDiscussionContent = (
   lines.push('---');
   lines.push('');
   lines.push('### Community Takeaway');
-  lines.push('Refactored using Chemical X Molecular Architecture standards. Monoliths decomposed into crystalline domain capsules (< 100 lines of code) with self-cleaning hooks.');
+  lines.push(`Refactored using Chemical X Molecular Architecture standards. Monoliths decomposed into crystalline domain capsules (<= ${resolveReportMoleculeLineLimit(afterSnapshot)} lines of code) with self-cleaning hooks.`);
   lines.push('');
   lines.push('*Transformation tracked via [Chemical X Protocol Starter Kit](https://github.com/Chemical-X-Protocol/awesome-secret-sauce).*');
 

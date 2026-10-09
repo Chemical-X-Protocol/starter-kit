@@ -6,9 +6,11 @@ import { installAllMcpConfigs } from './mcp/installer.js';
 import { writeFileSafely } from './mcp/installer-write.js';
 import { addPackageScripts } from './mcp/installer-package.js';
 import { runPillarsWizard } from './pillars-wizard.js';
+import { readExistingProjectConfig } from './config/loader.js';
 
 export { buildPreCommitHookScript, buildGitHubWorkflowScript } from './installer-templates.js';
 export { installAllMcpConfigs } from './mcp/installer.js';
+export { readExistingProjectConfig } from './config/loader.js';
 
 export const resolveGitHooksDir = (targetDir = '.') => {
   const resolvedTarget = path.resolve(targetDir);
@@ -89,6 +91,28 @@ export const saveProjectConfig = (targetDir = '.', config = {}) => {
   if (!fs.existsSync(chemxDir)) fs.mkdirSync(chemxDir, { recursive: true });
   fs.writeFileSync(path.join(chemxDir, 'config.json'), JSON.stringify(config, null, 2), 'utf-8');
   process.stdout.write(`  \x1b[32m✔\x1b[0m Saved project settings to: .chemx/config.json\n`);
+};
+
+// Legacy keys nothing reads: line budgets follow the profile via cli/audit/line-budgets.js.
+const LEGACY_LINE_BUDGET_KEYS = ['maxLineCount', 'maxMoleculeLineCount'];
+
+/** The installer's settings merged over the existing config, so pillars, profile and framework survive. */
+export const buildInstallerProjectConfig = (opts = {}, existing = {}) => {
+  const merged = { ...existing, minGrade: opts.minGrade, minScore: opts.minScore };
+  for (const key of LEGACY_LINE_BUDGET_KEYS) delete merged[key];
+  return merged;
+};
+
+/** Saves the merged config; a config that does not parse as an object is left untouched (returns false). */
+export const saveInstallerProjectConfig = (targetDir = '.', opts = {}) => {
+  const existing = readExistingProjectConfig(targetDir);
+  const isUnreadable = existing === null;
+  if (isUnreadable) {
+    process.stdout.write('  \x1b[33m⚠\x1b[0m Kept .chemx/config.json unchanged: it does not parse as a JSON object, so minGrade and minScore were not saved. Fix it and re-run the installer.\n');
+    return false;
+  }
+  saveProjectConfig(targetDir, buildInstallerProjectConfig(opts, existing));
+  return true;
 };
 
 export const areGuardrailsInstalled = (targetDir = '.') => {
@@ -217,6 +241,6 @@ export const runInstallWizard = async (targetDir = '.') => {
   if (shouldQuery) await installAgentSearchConfig(targetDir);
 
   // Line budgets are not written here: they follow the profile via cli/audit/line-budgets.js.
-  saveProjectConfig(targetDir, { minGrade: opts.minGrade, minScore: opts.minScore });
+  saveInstallerProjectConfig(targetDir, opts);
   process.stdout.write('\n\x1b[1m\x1b[32m✔ Chemical X configuration installed successfully!\x1b[0m\n\n');
 };

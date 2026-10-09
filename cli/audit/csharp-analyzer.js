@@ -4,6 +4,7 @@
  * cyclomatic complexity, control flow nesting depth, and AI slop.
  */
 import { RULE_REGISTRY } from './rules-registry.js';
+import { resolveCSharpCatchSpan } from './shallow-catch-csharp.js';
 
 const IN_MEMORY_DB_PATTERN = /\bUseInMemoryDatabase\s*\(/;
 const SQLITE_PROVIDER_PATTERN = /\b(?:UseSqlite|SqliteConnection|DataSource\s*=\s*:memory:)\b/;
@@ -336,6 +337,7 @@ export const analyzeCSharpCode = (content, relativePath, violations, config = {}
     violations.push({
       filePath: relativePath,
       line: lineNum,
+      ...resolveCSharpCatchSpan(m, { content, maskedContent }, lineNum),
       column: 1,
       hazard: 'Empty or shallow catch block detected in C# handler/service',
       rule: 'AI_SLOP_SHALLOW_CATCH',

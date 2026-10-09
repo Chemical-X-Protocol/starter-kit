@@ -1,4 +1,4 @@
-import { SIZE_LABELS, classifyFileSize } from './line-budgets.js';
+import { SIZE_LABELS, classifyFileSize, getLineBudgets } from './line-budgets.js';
 export {
   CHEMX_COLORS,
   CHEMX_RGB,
@@ -244,3 +244,6 @@ export const formatPillarReactionBadgesMarkdown = (pillars = {}) => {
   }
   return badges.join(' ');
 };
+
+/** The molecule limit a report was measured against; older reports fall back to the default profile budget. */
+export const resolveReportMoleculeLineLimit = (report) => report?.metrics?.moleculeLineLimit ?? getLineBudgets().molecule;

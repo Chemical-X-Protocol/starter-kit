@@ -49,6 +49,3 @@ export const isSwallowedCatch = (astPath) => {
 
   return !hasActiveHandling;
 };
-
-/** Empty catches are HIGH; a non-empty body that still discards the error is MEDIUM. */
-export const resolveSwallowedCatchSeverity = (catchNode) => (isEmptyCatchBody(catchNode) ? 'HIGH' : 'MEDIUM');

@@ -7,6 +7,7 @@ import {
   hasAnyTypeAnnotation,
   isRedundantPassthroughReturn
 } from './rules-predicates.js';
+import { resolveCatchEscalation, resolveCatchSpan } from './shallow-catch-escalation.js';
 
 const RESIDUE_PATTERNS = [
   ['hope this', 'helps'].join(' '),
@@ -173,15 +174,16 @@ export const createAiSlopVisitors = ({ relativePath, violations }) => {
       const isShallowCatch = isShallowCatchBody(body, t);
 
       if (isShallowCatch) {
-        const line = astPath.node.loc?.start.line || 1;
         const meta = RULE_REGISTRY.AI_SLOP_SHALLOW_CATCH;
+        const { severity, binding } = resolveCatchEscalation(astPath);
         violations.push({
           filePath: relativePath,
-          line,
-          column: astPath.node.loc?.start.column || 1,
-          hazard: 'Shallow catch paranoia wrapper (silent suppression without handling)',
+          ...resolveCatchSpan(astPath),
+          hazard: binding
+            ? `Shallow catch leaves "${binding}" unset; it is read after the try (silent undefined propagation)`
+            : 'Shallow catch paranoia wrapper (silent suppression without handling)',
           rule: 'AI_SLOP_SHALLOW_CATCH',
-          severity: meta.severity,
+          severity,
           pillar: meta.pillar,
           directive: meta.directive,
           isAiSlop: true

@@ -178,3 +178,73 @@ test('pillars-wizard: an existing backup is never overwritten', async () => {
     assert.ok(exists(tmpDir, 'CLAUDE.md.chemx-backup.2'));
   });
 });
+
+// Ported from e1cc24a and 4cc1188: the wizard reads .chemx/config.json like the installer.
+const captureStdoutAsync = async (fn) => {
+  const originalWrite = process.stdout.write;
+  let captured = '';
+  process.stdout.write = (chunk) => {
+    captured += String(chunk);
+    return true;
+  };
+  try {
+    return { result: await fn(), output: captured };
+  } finally {
+    process.stdout.write = originalWrite;
+  }
+};
+
+const writeRel = (dir, rel, content) => {
+  fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
+  fs.writeFileSync(path.join(dir, rel), content);
+};
+
+test('pillars-wizard: --write keeps the profile of a commented .chemx/config.json', async () => {
+  await withTmp('chemx-pillars-commented-', async (tmpDir) => {
+    writeRel(tmpDir, '.chemx/config.json', '// team\n{"profile":"atomic-strict","pillars":{"a":true}}');
+    const { result } = await captureStdoutAsync(() => runPillarsWizard(['--preset=minimal', '-y', '--write'], tmpDir));
+    assert.strictEqual(result.success, true);
+    const config = JSON.parse(readRel(tmpDir, '.chemx/config.json'));
+    assert.strictEqual(config.profile, 'atomic-strict');
+    assert.deepStrictEqual(config.pillars, result.pillarsConfig);
+  });
+});
+
+const BROKEN_CONFIG = '{"profile":"atomic-strict",,"pillars":{"a":true}}';
+
+for (const extraArgs of [[], ['--force']]) {
+  test(`pillars-wizard: an unparsable .chemx/config.json is kept and reported as refused ${extraArgs.join(' ') || 'without --force'}`, async () => {
+    await withTmp('chemx-pillars-broken-', async (tmpDir) => {
+      writeRel(tmpDir, '.chemx/config.json', BROKEN_CONFIG);
+      const { result, output } = await captureStdoutAsync(() =>
+        runPillarsWizard(['--preset=recommended', '-y', '--write', ...extraArgs], tmpDir)
+      );
+      assert.strictEqual(result.success, false);
+      assert.deepStrictEqual(result.refused, [path.join('.chemx', 'config.json')]);
+      assert.strictEqual(planFor(result, 'config.json').action, 'refused');
+      assert.strictEqual(readRel(tmpDir, '.chemx/config.json'), BROKEN_CONFIG);
+      assert.strictEqual(exists(tmpDir, 'CLAUDE.md'), false);
+      assert.strictEqual(exists(tmpDir, '.chemx/config.json.chemx-backup'), false);
+      assert.match(output, /\.chemx\/config\.json: it does not parse as a JSON object/);
+    });
+  });
+}
+
+test('pillars-wizard: a dry run plans the unparsable .chemx/config.json as refused', async () => {
+  await withTmp('chemx-pillars-broken-dry-', async (tmpDir) => {
+    writeRel(tmpDir, '.chemx/config.json', BROKEN_CONFIG);
+    const { result } = await captureStdoutAsync(() => runPillarsWizard(['--preset=minimal', '--json'], tmpDir));
+    assert.strictEqual(result.dryRun, true);
+    assert.strictEqual(planFor(result, 'config.json').action, 'refused');
+    assert.strictEqual(result.unparsableConfig, path.join('.chemx', 'config.json'));
+  });
+});
+
+test('pillars-wizard: a whitespace-only .chemx/config.json counts as {} and gets the pillars written', async () => {
+  await withTmp('chemx-pillars-blank-', async (tmpDir) => {
+    writeRel(tmpDir, '.chemx/config.json', ' \n');
+    const { result } = await captureStdoutAsync(() => runPillarsWizard(['--preset=minimal', '-y', '--write'], tmpDir));
+    assert.strictEqual(result.success, true);
+    assert.deepStrictEqual(JSON.parse(readRel(tmpDir, '.chemx/config.json')), { pillars: result.pillarsConfig });
+  });
+});

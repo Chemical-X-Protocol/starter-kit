@@ -9,7 +9,8 @@ import {
   BOLD,
   RESET,
   groupViolationsBySeverity,
-  resolveHotspotBadge
+  resolveHotspotBadge,
+  resolveReportMoleculeLineLimit
 } from './reporter-utils.js';
 import { renderGroupedViolationsTerminal } from './reporter-grouping.js';
 import { buildMasterPrompt, formatPromptBox } from './prompts.js';
@@ -97,6 +98,7 @@ export const formatFailuresSection = (report) => {
 
 export const formatPassesSection = (report) => {
   const { metrics, health, pillars, hotspots, contextAnalysis } = report;
+  const moleculeLimit = resolveReportMoleculeLineLimit(report);
   const passedPillars = Object.entries(pillars).filter(isPassedPillar);
   const lines = [];
 
@@ -108,7 +110,7 @@ export const formatPassesSection = (report) => {
 
   lines.push(`   Molecular Health Score:    ${BOLD}${GREEN}${health.score}/100${RESET} [Grade: ${BOLD}${GREEN}${health.grade}${RESET}]`);
   lines.push(`   Passing Pillars:         ${BOLD}${GREEN}${passedPillars.length} / ${Object.keys(pillars).length} Pillars PASSED${RESET}`);
-  lines.push(`   Capsule Compliance:      ${BOLD}${GREEN}${metrics.moleculeCompliantPct}%${RESET} molecules compliant (< 100 lines of code)`);
+  lines.push(`   Capsule Compliance:      ${BOLD}${GREEN}${metrics.moleculeCompliantPct}%${RESET} molecules compliant (<= ${moleculeLimit} lines of code)`);
   lines.push(`   Total Files Scanned:     ${metrics.scannedFiles} source files (${metrics.totalLoc} total lines of code)`);
   lines.push(`${GREEN}----------------------------------------------------------------------${RESET}`);
 
@@ -124,7 +126,7 @@ export const formatPassesSection = (report) => {
 
   lines.push(`   ${BOLD}${CYAN}STANDARDS MET & CLEAN AREAS:${RESET}`);
   if (metrics.moleculeCompliantPct === 100) {
-    lines.push(`   ${GREEN}✔${RESET} 100% Molecule Capsule Limit (< 100 lines per molecule)`);
+    lines.push(`   ${GREEN}✔${RESET} 100% Molecule Capsule Limit (<= ${moleculeLimit} lines per molecule)`);
   }
   const hasExtremeMonolith = hotspots.some(isExtremeMonolith);
   if (!hasExtremeMonolith) {

@@ -53,6 +53,11 @@ export const isShallowCatchBody = (body, t) => {
   return false;
 };
 
+export const isShallowCatchClause = (handler, t) => {
+  if (!handler) return false;
+  return isShallowCatchBody(handler.body?.body || [], t);
+};
+
 export const hasAnyTypeAnnotation = (param, t) => {
   if (!param || !t.isIdentifier(param)) return false;
   const typeAnn = param.typeAnnotation;
