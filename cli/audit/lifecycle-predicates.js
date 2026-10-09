@@ -46,12 +46,14 @@ export const collectTeardowns = (programPath) => {
     CallExpression(callPath) {
       const name = resolveCalleeName(callPath.node.callee);
       const [first, second] = callPath.node.arguments;
-      if (CLEAR_CALLS.has(name)) {
+      const isClearCall = CLEAR_CALLS.has(name);
+      if (isClearCall) {
         const key = toSourceKey(first);
         clearedHandles.add(key);
         clearedHandles.add(lastSegment(key));
       }
-      if (name === 'removeEventListener') {
+      const isRemoveListener = name === 'removeEventListener';
+      if (isRemoveListener) {
         removedListeners.push({ event: toSourceKey(first), handler: toSourceKey(second) });
       }
     }
