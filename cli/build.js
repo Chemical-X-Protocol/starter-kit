@@ -56,7 +56,9 @@ export const runBuildAudit = async (rawArgs = [], isCli = false, options = {}) =
 
   const isFailedBuild = report.exitCode !== 0;
   const hasIssueFlag = rawArgs.includes('--prep-issue') || rawArgs.includes('--post-issue');
-  const shouldHandleError = isFailedBuild && (hasIssueFlag || options.postIssue || (isCli && !isJson));
+  // A wrapped command exiting non-zero is the user's build failing, not a chemx crash:
+  // only prepare an issue report when asked (--prep-issue / --post-issue).
+  const shouldHandleError = isFailedBuild && (hasIssueFlag || options.postIssue);
 
   if (shouldHandleError) {
     const errorDetails = `Build command failed with exit code ${report.exitCode}: ${command}`;
@@ -64,7 +66,8 @@ export const runBuildAudit = async (rawArgs = [], isCli = false, options = {}) =
       cwd,
       command,
       exitCode: report.exitCode,
-      autoPost: rawArgs.includes('--post-issue') || options.postIssue,
+      autoPost: Boolean(rawArgs.includes('--post-issue') || options.postIssue),
+      prepIssue: true,
       silent: isSilent || isJson,
       context: {
         totalErrors: report.totalErrors,

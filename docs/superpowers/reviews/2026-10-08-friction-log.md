@@ -17,3 +17,6 @@
 - [G4] pre-commit gate (grade B on staged files) blocks commits that touch legacy ui-sse.js/ui-db-studio.js/ui-server-routes.js for pre-existing ERROR_SWALLOWED_EXCEPTION hazards, and flags a `catch { sendJson(res, 400, ...) }` that handles the error as CRITICAL. Used CHEMX_SKIP_PRECOMMIT=1 for G4 commits; verify ratchet is the real gate.
 - [G4] `chemx audit --git --json` returns only hazard counts (no file/line/rule list); had to scrape `--unroll` text (~200 lines of banner/ASCII art) to find the 10 criticals.
 - [G4] `chemx test` not usable for this kit (vitest picked); ran node --test with bypass (same as runner-detection-wrong-runner).
+- [G4] `chemx q -g x --help` crashes with ReferenceError printSearchHelp is not defined (now reported as one line by the catcher); belongs to G6/help.
+- [G4] shell `cp` is aliased to `cp -i` in the agent shell; a copy over an existing file hung a background test run until killed (use `command cp -f`).
+- [G4] `chemx read` on a 119-line spec returns only an AST outline of test callbacks (useless for specs); fell back to the Read tool.
