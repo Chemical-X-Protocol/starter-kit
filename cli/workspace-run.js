@@ -112,7 +112,7 @@ export const refuseMonorepoRootAudit = (posDir, rawArgs, cwd = process.cwd()) =>
   const hasScope = Boolean(posDir) || rawArgs.some((arg) => /^--(?:dir=|all-packages$|git$|changed$)/.test(arg));
   const workspace = hasScope ? null : workspaceAt(findProjectRoot(cwd));
   if (!workspace) return false;
-  const report = refusalReport('audit', workspace, 'pass --dir=<package>, or use --changed');
+  const report = refusalReport('audit', workspace, 'pass --dir=<package>, use --changed');
   const isJson = rawArgs.includes('--json');
   process.stdout.write(isJson ? `${formatAgentJson(report)}\n` : formatRefusal(report));
   process.exitCode = toExitCode(report.status);

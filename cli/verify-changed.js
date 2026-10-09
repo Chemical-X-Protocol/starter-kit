@@ -23,7 +23,7 @@ export const testArgsFor = (changes, base) => (changes ? ['--changed', ...(base 
 // --all-packages verifies every package, anything else is refused with the package list.
 // runInPackage(pkg, args) resolves to that package's own verify summary.
 export const verifyWorkspace = async (workspace, { changed, base, allPackages }, runInPackage) => {
-  if (!changed) return allPackagesOrRefuse(workspace, 'verify', allPackages, 'use --dir=<package> or --changed', (pkg) => runInPackage(pkg, []));
+  if (!changed) return allPackagesOrRefuse(workspace, 'verify', allPackages, 'use --dir=<package>, use --changed', (pkg) => runInPackage(pkg, []));
   const changes = changedPackages(workspace, base);
   if (!changes.ok) return { status: STATUS.INCONCLUSIVE, success: false, reason: 'NO_CHANGES', error: `cannot list changed files: ${changes.error}`, packages: [] };
   const args = testArgsFor(changes, base);

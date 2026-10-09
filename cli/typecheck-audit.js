@@ -94,7 +94,7 @@ export const runTypecheckAudit = async (rawArgs = [], isCli = false, options = {
     const allPackages = Boolean(parsed.flags.allPackages || options.allPackages);
     const timeoutArgs = parsed.values.timeout ? [`--timeout=${parsed.values.timeout}`] : [];
     const runInPackage = (pkg) => runTypecheckAudit(timeoutArgs, false, { timeoutMs: options.timeoutMs, cwd: pkg.dir, print: false, json: true, inWorkspace: true });
-    return emitWorkspace(await allPackagesOrRefuse(workspace, 'typecheck', allPackages, 'or pass -- <command>', runInPackage), output, formatTypecheckReport);
+    return emitWorkspace(await allPackagesOrRefuse(workspace, 'typecheck', allPackages, 'pass -- <command>', runInPackage), output, formatTypecheckReport);
   }
   const nmStatus = checkNodeModules(cwd);
   if (nmStatus) {

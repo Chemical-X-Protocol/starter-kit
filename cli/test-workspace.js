@@ -51,5 +51,5 @@ export const planWorkspaceTest = async (workspace, scope, runInPackage, cwd) => 
     const notes = ['the root test script was not run (it would cover the whole monorepo); target root files explicitly'];
     return runPerPackage(units, (unit) => runInPackage(unit.args, unit.pkg.dir), { notes });
   }
-  return refusalReport('test', workspace, 'pass paths inside packages, or use --changed');
+  return refusalReport('test', workspace, 'pass paths inside packages, use --changed');
 };
