@@ -3,10 +3,8 @@
 // read back as unit trees. Every member below is named by its labeled file and line.
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
 import path from 'node:path';
 import { createGtSandbox } from './gt-sandbox.js';
-import { openIndexDb } from '../search-schema.js';
 import { readLedger } from './forge-groups.js';
 import { createTreeReader } from './unit-trees.js';
 import { instanceOfRow } from './group-shape.js';
@@ -21,8 +19,8 @@ const cleanups = [];
 const state = {};
 before(() => {
   const sandbox = createGtSandbox({ after: (cleanup) => cleanups.push(cleanup) });
-  const ledger = readLedger(openIndexDb(sandbox.dir));
-  const reader = createTreeReader((file) => fs.readFileSync(path.join(sandbox.dir, file), 'utf-8'), ledger.rows);
+  const ledger = readLedger(sandbox.openDb());
+  const reader = createTreeReader(sandbox.readFile, ledger.rows);
   Object.assign(state, { ledger, reader, fp2: new Map(ledger.rows.map((row) => [row.id, row.fp2])) });
 });
 after(() => cleanups.forEach((cleanup) => cleanup()));

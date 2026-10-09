@@ -14,6 +14,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseFixture } from '../patterns/gt-text.js';
 import { syncFingerprints } from './fingerprint-sync.js';
+import { openIndexDb } from '../search-schema.js';
 import { scaffoldScript } from './gt-scaffold.js';
 
 const KIT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -66,7 +67,9 @@ export const writeGtSandbox = (dir, labels = readGtLabels()) => {
 };
 
 /**
- * A fingerprinted sandbox in a new temp dir (removed after the test t). Returns { dir, files, sync }.
+ * A fingerprinted sandbox in a new temp dir (removed after the test t). Returns { dir, files, sync,
+ * openDb, readFile }: openDb() opens the sandbox's own index db (never the project's), readFile(rel)
+ * reads a sandbox file.
  */
 export const createGtSandbox = (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-forge-gt-'));
@@ -74,5 +77,7 @@ export const createGtSandbox = (t) => {
   fs.mkdirSync(path.join(dir, '.chemx'));
   const files = writeGtSandbox(dir);
   const sync = syncFingerprints(dir, { targetDir: dir, log: () => {} });
-  return { dir, files, sync };
+  const openDb = () => openIndexDb(dir);
+  const readFile = (relativePath) => fs.readFileSync(path.join(dir, relativePath), 'utf-8');
+  return { dir, files, sync, openDb, readFile };
 };

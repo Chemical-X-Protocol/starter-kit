@@ -9,7 +9,6 @@ import { runForgeGroups } from './forge-groups.js';
 import { toScorerGroups } from './group-shape.js';
 import { REJECT_CODES } from './rejects.js';
 import { scoreGroups } from '../patterns/gt-score.js';
-import { openIndexDb } from '../search-schema.js';
 import { LEVEL_WEIGHTS, TOP_SURFACED } from './rank.js';
 import { findStoredGroup, suppressGroup } from './group-store.js';
 
@@ -109,7 +108,7 @@ test('every rejected group carries its reason code and every failing code', () =
 });
 
 test('the run is stored: pattern_groups rows by status, members by role', () => {
-  const db = openIndexDb(state.sandbox.dir);
+  const db = state.sandbox.openDb();
   const statuses = db.prepare('SELECT status, COUNT(*) AS n FROM pattern_groups GROUP BY status ORDER BY status').all();
   const stored = Object.fromEntries(statuses.map((row) => [row.status, row.n]));
   assert.equal(stored.candidate, state.result.groups.filter((group) => group.status === 'candidate').length);
@@ -164,7 +163,7 @@ test('a warm run reuses the stored verdicts and gives the same groups', () => {
 
 test('a suppression (patterns reject) holds over the next run: the group is suppressed, never surfaced', () => {
   const target = state.result.groups.find((group) => group.rank === 1);
-  const db = openIndexDb(state.sandbox.dir);
+  const db = state.sandbox.openDb();
   const found = findStoredGroup(db, target.id.slice(0, 8));
   assert.equal(found.group.id, target.id);
   suppressGroup(db, { group: found.group, reason: 'ground-truth spec: suppression round trip', agent: '@forge-p3b' });
