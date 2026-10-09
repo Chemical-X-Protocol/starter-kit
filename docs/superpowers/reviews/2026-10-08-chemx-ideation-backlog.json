@@ -1,0 +1,534 @@
+{
+ "workstreams": [
+  {
+   "name": "WS-A x-atoms: ship-ready design system the studio can consume",
+   "goal": "Make @chemx/x-atoms importable without a consumer bundler, add the atoms the studio still lacks, and publish a catalog.json that all chemx atom-aware tooling reads. Also make x-atoms the cleanest code chemx grades.",
+   "repo": "x-atoms",
+   "depends_on": [],
+   "items": [
+    {
+     "title": "Fix broken entry points, order exports types-first, and ship prebuilt per-framework bundles plus CSS",
+     "detail": "Remove or implement the dangling imports at src/svelte.ts:5 (x-dialog.svelte does not exist) and src/react.ts:5 (XDialogReact does not exist). Implementing XDialog for Svelte and React is preferred so all three frameworks match. Turn vite.config.ts into a multi-entry library build: dist/x-atoms.es.js (core), dist/vue.es.js, dist/svelte.es.js, dist/react.es.js, and dist/x-atoms.css (glass-theme.scss plus starship tokens compiled). Vue, Vuetify, Svelte and React stay external, matching the peer ranges. Add `prepare`/`prepack` scripts that build. Point every package.json export subpath (., ./core, ./vue, ./svelte, ./react, ./theme, add ./styles.css) at dist, with `types` listed before `import`. This builds on the user's uncommitted package.json change: start from it, don't revert it. Add a drift spec comparing dist export keys against the src entries.",
+     "acceptance": "(1) `node -e \"import('@chemx/x-atoms/vue').then(m=>console.log(!!m.XBtn&&!!m.XCard&&!!m.createXAtomsPlugin))\"` prints true when run from apps/chemical-x/starter-kit, with no bundler. (2) dist/x-atoms.css exists and contains `.x-btn--glass`. (3) `node --test src/core/*.spec.mjs scripts/*.spec.mjs` includes a dist-drift spec, which fails if the export keys of dist/*.es.js differ from those of src/{index,vue,svelte,react}.ts. (4) Every relative import in src/{vue,svelte,react}.ts resolves on disk, checked by a spec. (5) In package.json, every exports subpath lists `types` first. (6) dist contains no copy of vue or vuetify, verified with grep for `createVNode` definitions or the bundle size threshold.",
+     "files": "apps/chemical-x/x-atoms/vite.config.ts, package.json, src/svelte.ts, src/react.ts, src/atoms/x-dialog/ (new x-dialog.svelte, x-dialog.tsx), src/styles/glass-theme.scss, scripts/dist-drift.spec.mjs (new)",
+     "effort": "M",
+     "priority": 1
+    },
+    {
+     "title": "Generate catalog.json (the single source of truth for atom-aware tooling)",
+     "detail": "Add scripts/build-catalog.mjs, run from `prepare`. For each atom and molecule it emits: tag, PascalName, tier (atom|molecule), frameworks[] (detected from which adapter files exist), props[] with enums (taken from controllers and src/core types such as ComponentSize, SemanticStatus and ComponentVariant), emits[], slots[], and import subpath per framework. Hand-annotated per-component atom.meta.json files supply `replaces` (for example x-btn replaces v-btn and button), `aliases` (a-button, AtomButton), `propMap` (sm/md/lg to small/default/large; ghost to variant=text; danger to color=error; tone to color; open to modelValue; removable to closable), and `safe1to1`. Export the result as `@chemx/x-atoms/catalog` (JSON). Controllers and TS types are the source of truth for props; adapters only signal which frameworks are supported. A spec fails when the catalog is stale.",
+     "acceptance": "(1) `node scripts/build-catalog.mjs` writes dist/catalog.json with 18 or more atoms and 10 or more molecules. x-menu reports frameworks ['vue'] until it gets ports. (2) Every Vue export in src/vue.ts appears in the catalog, enforced by a spec. (3) catalog-sync.spec fails if dist/catalog.json differs from a fresh generation. (4) `import catalog from '@chemx/x-atoms/catalog' with {type:'json'}` resolves in Node. (5) The entry for x-btn includes replaces ['v-btn','button'] and sizes ['x-small','small','default','large','x-large'].",
+     "files": "apps/chemical-x/x-atoms/scripts/build-catalog.mjs (new), src/atoms/*/atom.meta.json and src/molecules/*/atom.meta.json (new), package.json (exports ./catalog, prepare), scripts/catalog-sync.spec.mjs (new)",
+     "effort": "M",
+     "priority": 2
+    },
+    {
+     "title": "Add the atoms the studio needs: XText, XStack, XGrid, XTextarea, XNavDrawer, and the chemx tone palette",
+     "detail": "Move the studio's a-text upstream as XText (tag, variant, tone). Add XStack and XGrid as the official layout atoms, so higher tiers stop using ACard padding=none as a div. Add XTextarea (the DB studio SQL box) and XNavDrawer (wraps v-navigation-drawer; used by o-nav-drawer). Each ships as controller + .vue + .svelte + .tsx + atom.meta.json + spec. Extend starshipColors and starshipDarkTheme with lime, pink and sky tones. Add idle and active to the XAvatar status union, alongside online, offline, busy and away, so the studio maps 1:1. Update the README atom list, and add a spec asserting that the README count equals the number of atom dirs.",
+     "acceptance": "(1) XText, XStack, XGrid, XTextarea and XNavDrawer are exported from ./vue, ./svelte and ./react, and each appears in catalog.json with all 3 frameworks. (2) Each has a *.controller.ts and a colocated spec that imports the controller. (3) starshipDarkTheme.colors includes lime, pink and sky. (4) readme-count.spec passes, and the README no longer says 'Atoms (15)'. (5) createXAtomsPlugin registers x-text, x-stack, x-grid, x-textarea and x-nav-drawer.",
+     "files": "apps/chemical-x/x-atoms/src/atoms/{x-text,x-stack,x-grid,x-textarea,x-nav-drawer}/ (new), src/atoms/x-avatar/x-avatar.controller.ts, src/core/tokens.ts, src/theme/starship-theme.ts, src/vue.ts, src/svelte.ts, src/react.ts, README.md, docs/CHANGELOG.md",
+     "effort": "M",
+     "priority": 3
+    },
+    {
+     "title": "x-atoms passes its own grading: lifecycle helpers, no nested ternaries, adapter default parity, generated SCSS tokens",
+     "detail": "Replace raw timers in m-toast.vue:32, m-search-input.controller.ts:38 and m-search-input.tsx:34 with core createDisposer/listen. Remove the 4 nested ternaries in m-data-table.tsx (lines 74 and 102). Remove RAW_INLINE_STYLE from x-progress-linear.tsx and x-tooltip.tsx. Align default `variant` across vue, svelte and tsx for x-btn, x-card, x-chip and x-alert. React currently defaults to 'glass', so this needs a CHANGELOG note. Group the PROP_SURFACE_BLOAT props on the .tsx adapters (x-list-item has 15). Generate styles/_tokens.scss from src/core/tokens.ts, and add a drift spec. Add a cross-adapter parity spec (missing adapter, missing controller, default drift). This replaces the proposed chemx ATOM_PARITY_GAP, ATOM_DEFAULT_DRIFT and ATOM_VOCAB_DRIFT rules, so x-menu either gets a controller or an explicit parityExceptions entry in atom.meta.json.",
+     "acceptance": "(1) `chemx audit src --json --full` run in apps/chemical-x/x-atoms reports 0 TIMER_DISCIPLINE, 0 CONTROL_FLOW_NESTED_TERNARY and 0 RAW_INLINE_STYLE. (2) Once WS-B item 1 lands (Svelte extraction), the same audit under --profile=atomic-strict reports grade A or better with 0 CRITICAL. (3) adapter-parity.spec passes. It asserts identical default props across the three adapters and that every atom has a controller or a declared exception. (4) tokens-scss.spec fails if styles/_tokens.scss differs from the version generated from tokens.ts.",
+     "files": "apps/chemical-x/x-atoms/src/molecules/m-toast/m-toast.vue, src/molecules/m-search-input/{m-search-input.controller.ts,m-search-input.tsx}, src/molecules/m-data-table/m-data-table.tsx, src/atoms/x-progress-linear/x-progress-linear.tsx, src/atoms/x-tooltip/x-tooltip.tsx, src/atoms/{x-btn,x-card,x-chip,x-alert}/*.tsx, src/atoms/x-menu/ (controller), src/styles/_tokens.scss, scripts/build-tokens-scss.mjs (new), scripts/adapter-parity.spec.mjs (new), docs/CHANGELOG.md",
+     "effort": "S",
+     "priority": 4
+    },
+    {
+     "title": "Vue component mount tests for every atom and molecule",
+     "detail": "x-atoms has only 10 core node:test cases and no component tests. Add vitest with happy-dom, @vue/test-utils and a Vuetify test setup as dev dependencies. Write at least one mount test per Vue atom and molecule that checks rendered output and emitted events, such as XCheckbox update:modelValue and MPagination pageChange. Add a `test` script that runs both the node:test core specs and the vitest component specs.",
+     "acceptance": "(1) `pnpm --filter @chemx/x-atoms test` passes and runs at least 28 component spec files (18 atoms + 10 molecules), plus a spec for each new atom from item 3. (2) Every component spec imports its own .vue file. (3) `chemx test` run inside apps/chemical-x/x-atoms reports them silently on pass.",
+     "files": "apps/chemical-x/x-atoms/package.json (devDeps, test script), vitest.config.ts (new), src/test/setup-vuetify.ts (new), src/atoms/*/*.spec.ts and src/molecules/*/*.spec.ts (new)",
+     "effort": "M",
+     "priority": 5
+    }
+   ]
+  },
+  {
+   "name": "WS-B Audit engine: template AST, precision, honest scoring, per-scope state",
+   "goal": "Make the audit able to see templates (Vue and Svelte), stop the false positives that make every scope grade F/0, give each rule fixture pairs, and record per-scope gate state that the studio and hooks can read.",
+   "repo": "starter-kit",
+   "depends_on": [],
+   "items": [
+    {
+     "title": "Template AST layer for .vue and .svelte, with Svelte script extraction",
+     "detail": "Add cli/audit/template-ast.js. It lazy-loads vue/compiler-sfc and svelte/compiler as optionalDependencies, parses only and never compiles, and returns a normalized element tree: tag, attrs, directives, :style bindings and source offsets. Extend extractParseableCode (cli/audit/rules-helpers.js:17) to return every <script> block of a .vue file and the <script lang=ts> block of a .svelte file, so Babel never receives raw Svelte markup. Port the 5 template regexes in extended-text-patterns.js to the AST, keeping the regexes as a fallback when the compilers are missing. Make RAW_INLINE_STYLE fire on Vue `style` and `:style`. Either implement RENDER_TREE_DEPTH_EXCEEDED using the profile's maxRenderDepth, reusing structural-weight.js measureJsxDepth for JSX and the template tree for SFCs, or delete it from the registry and from AGENTS.md section A. Export a `getTemplateTree(file, code)` API for WS-C rules.",
+     "acceptance": "(1) `chemx audit ../x-atoms/src --json --full` reports 0 SYNTAX_PARSE_ERROR, down from 26. (2) A .vue fixture containing `:style=\"{color:'#f00'}\"` fires RAW_INLINE_STYLE. (3) RENDER_TREE_DEPTH_EXCEEDED fires on a depth-5 fixture under atomic-strict (maxRenderDepth=4) and stays silent at depth 4, or the rule ID no longer appears anywhere in cli/ or AGENTS.md. (4) With the compilers stubbed as unavailable, the audit does not throw and --json meta contains `templateAst:'unavailable'`. (5) `chemx audit src/ui` wall time grows by less than 15% against a baseline recorded in the spec.",
+     "files": "cli/audit/template-ast.js (new), cli/audit/template-ast.spec.js (new), cli/audit/rules-helpers.js, cli/audit/extended-text-patterns.js, cli/audit/extended-visitors.js, cli/audit/structural-weight.js, cli/config/profiles.js, cli/audit/rules-registry.js, package.json (optionalDependencies)",
+     "effort": "M",
+     "priority": 1
+    },
+    {
+     "title": "Predicate precision: reactive error sinks, environment guards, and a fake-green spec check",
+     "detail": "Make isSwallowedCatch (cli/audit/rules-predicates.js:270) treat a catch as handled when it assigns to a reactive or error sink (`x.value =`, `errorMessage =`, `state.error =`) and the right-hand side references the caught binding. That clears the 18 src/ui criticals without hiding `err.value = null`. Treat `typeof X !== 'function'` and `typeof window === 'undefined'` return guards as named environment conditions rather than CONTROL_FLOW_SILENT_GUARD, per the control-flow lexicon spec section 4.1. Extend TEST_FAKE_GREEN to flag a colocated spec that imports nothing from its sibling capsule. All 10 src/ui/molecules/*/*.spec.ts files currently match that pattern.",
+     "acceptance": "(1) Should-not-fire fixtures: `catch(e){ error.value = e }` and `if (typeof fetch !== 'function') return;`. Should-fire fixtures: `catch{}`, a catch whose body is only a comment, `catch(e){ error.value = null }`, and a bare `if(!x) return;`. (2) `chemx audit src/ui --json` reports 0 ERROR_SWALLOWED_EXCEPTION from the reactive-error pattern and 15 fewer CONTROL_FLOW_SILENT_GUARD. (3) TEST_FAKE_GREEN fires on src/ui/molecules/m-task-card/m-task-card.spec.ts in its current form.",
+     "files": "cli/audit/rules-predicates.js, cli/audit/rules.js, cli/audit/extended-text-patterns.js (TEST_FAKE_GREEN), cli/audit/fixtures/ERROR_SWALLOWED_EXCEPTION/, cli/audit/fixtures/CONTROL_FLOW_SILENT_GUARD/, cli/audit/fixtures/TEST_FAKE_GREEN/",
+     "effort": "M",
+     "priority": 2
+    },
+    {
+     "title": "Fixture-pair harness and registry-completeness spec (spec criterion 1)",
+     "detail": "Add cli/audit/fixtures.spec.js. It iterates RULE_REGISTRY, runs auditCode over fixtures/<RULE_ID>/should-fire.* and should-not-fire.* in every language the rule supports (.js, .ts, .vue, .tsx, .svelte), and asserts the rule ID fires on should-fire files and does not fire on should-not-fire files. Rules without fixtures go in an explicit allowlist (legacy-allowlist.json) whose length a spec only lets shrink. Every ruleId string the code can emit must be registered. That forces MACRO_TASK_OVER_MICRO_TASK (autofix.js:89-94) to be renamed to RENDER_HACK_TIMEOUT, or registered. Align the autofix with the directive (nextTick or RAF instead of queueMicrotask), or update the directive text. Add a frozen fixtures/_catalog/catalog.json for WS-C atom rules. Seed the should-not-fire files from confirmed real false positives. Also fix autofix so it skips ``` fences in .md files, and stop AI_SLOP_LAZY_PLACEHOLDER autofix from deleting the marker; it should report only.",
+     "acceptance": "(1) fixtures.spec passes with at least 20 rules covered and the remainder in legacy-allowlist.json. A test fails if the allowlist grows. (2) `grep -rn MACRO_TASK_OVER_MICRO_TASK cli/` finds only a registered or renamed ID, and autofix with rules:['RENDER_HACK_TIMEOUT'] applies the fix. (3) Autofix on a README with 2 ``` fences leaves both fences. (4) `chemx test` runs fixtures.spec within the existing cli glob.",
+     "files": "cli/audit/fixtures.spec.js (new), cli/audit/fixtures/** (new), cli/audit/fixtures/legacy-allowlist.json (new), cli/audit/autofix.js, cli/audit/rules-registry.js",
+     "effort": "L",
+     "priority": 3
+    },
+    {
+     "title": "Density-based health score (scoreModel 2) so grades separate scopes",
+     "detail": "Replace the log10(files+1) normalization in cli/audit/metrics.js:5 and calculateAiSlopScore with severity-weighted violations per KLOC on a documented curve. Show the raw counts next to the grade. Add `scoreModel:2` to the audit JSON and to history entries so `chemx trend` does not report a false regression across the change. Ratchet and gate semantics stay unchanged.",
+     "acceptance": "(1) A property spec: scores strictly decrease for fixture scopes with 1, 5, 20 and 60 MEDIUM violations per KLOC; the score never rises when violations are added; duplicating a scope (same density) leaves the score unchanged. (2) A golden spec on frozen copies of today's src/ui (49), x-atoms/src (60) and cli (218) yields three distinct grades. (3) gate-coherence.spec and gate-verdict.spec pass unchanged. (4) `chemx trend` marks entries whose scoreModel differs instead of diffing them.",
+     "files": "cli/audit/metrics.js, cli/audit/history.js, cli/audit/history.d.ts, cli/audit/metrics.spec.js (new), CHANGELOG or docs note",
+     "effort": "S",
+     "priority": 4
+    },
+    {
+     "title": "Per-scope ratchet, scope-keyed history, .chemx/status.json, and an audit coverage block",
+     "detail": "Make chemx-ratchet.json a map of scope to per-rule ceilings, so src/ui and ../x-atoms/src stop falling back to the severity gate. Add `scope` and `gate` to every .chemx/history.json entry. Add cli/audit/status-file.js. It writes .chemx/status.json ({version, scopes:{<scope>:{updatedAt, grade, score, gate:{passing, ratchet:{new, fixed}}, violations}}, tasks, index}) and is called next to computeGateVerdict from cmd-audit.js, verify and mcp/tools-audit.js. WS-E reads this file. Add a `coverage` block to audit JSON ({analyzedFiles, skippedCount, skippedTop5:[{file, reason}]}) that counts code or template files the analyzers skip (.html, .astro, .mdx), plus files in package.json `files` that were not analyzed. The TTY grade line appends 'coverage NN%' when anything was skipped.",
+     "acceptance": "(1) Running `chemx audit cli` then `chemx audit src/ui` leaves status.json holding both scopes; a spec asserts that auditing scope A never changes scope B. (2) `chemx audit src/ui --json` reports gate.mode 'ratchet' once that scope has a ratchet entry. (3) Every new history entry has scope and gate. (4) `chemx audit src/ui --json` coverage.skippedTop5 lists src/ui/index.html with reason 'html not analyzed' until WS-D deletes it. (5) The audit JSON stays within the 1,500-token budget (5.1) on the cli scope.",
+     "files": "cli/audit/ratchet.js, cli/audit/ratchet.spec.js, cli/audit/gate-verdict.js, cli/audit/history.js, cli/audit/status-file.js (new), cli/audit/status-file.spec.js (new), cli/commands/cmd-audit.js (status write call only), cli/mcp/tools-audit.js (status write call only), cli/verify-helpers.js, chemx-ratchet.json",
+     "effort": "M",
+     "priority": 5
+    }
+   ]
+  },
+  {
+   "name": "WS-C Atom-aware grading and generation",
+   "goal": "Let chemx see and enforce the x-atoms migration: a catalog loader, a tier classifier that knows x-*, zero-raw-DOM and atom-substitution rules, measurable atom coverage, a codemod, generators that emit real x-atoms code, and agent lookup.",
+   "repo": "starter-kit",
+   "depends_on": [
+    "WS-B Audit engine: template AST, precision, honest scoring, per-scope state",
+    "WS-A x-atoms: ship-ready design system the studio can consume"
+   ],
+   "items": [
+    {
+     "title": "Catalog loader plus a catalog-aware tier classifier",
+     "detail": "Add cli/design-system/catalog-loader.js with the adapter API loadCatalog(cwd) -> {hasAtoms, entries, source}. It loads `@chemx/x-atoms/catalog` (or any package in ATOMS_PACKAGES, project-detector.js:79) when installed, and can synthesize entries from a local primitives dir (COMPASS src/components/primitives, 61 x-* SFCs; studio src/ui/atoms). A `.chemxrc designSystem.catalog` path overrides it. It imports nothing from reporter, banner or ui modules. Until WS-A item 2 merges, it develops against the frozen fixtures/_catalog/catalog.json. Fix resolveArchitectureTier in cli/search-ast.js:7: x- prefixes and primitives/ map to atom, and the most specific directory segment wins, so x-atoms/src/molecules/m-toast is a molecule. Add `x-` to CAPSULE_PREFIXES (cli/index.js:34). Bump the index schema version so tiers get resynced.",
+     "acceptance": "(1) Table-driven spec: src/components/primitives/x-btn/x-btn.vue gives atom, apps/chemical-x/x-atoms/src/molecules/m-toast/m-toast.vue gives molecule, src/ui/atoms/a-card/a-card.vue gives atom. (2) loadCatalog returns hasAtoms:true with 28 or more entries for apps/my-card-vault and for starter-kit (package), about 61 entries for the COMPASS root (local primitives), and hasAtoms:false for an empty tmp repo. (3) An import-graph spec asserts that catalog-loader.js loads no reporter-*, navigator* or ui-* module. (4) `chemx q --tier=atom` no longer lists x-atoms molecules.",
+     "files": "cli/design-system/catalog-loader.js (new), cli/design-system/catalog-loader.spec.js (new), cli/project-detector.js, cli/search-ast.js, cli/search-schema.js (schema version), cli/index.js (CAPSULE_PREFIXES), cli/audit/fixtures/_catalog/catalog.json (shared with WS-B)",
+     "effort": "M",
+     "priority": 1
+    },
+    {
+     "title": "Fix the generators and patcher so they emit real x-atoms APIs, with a contract spec",
+     "detail": "The react.js:8, svelte.js:7 and compact.js:10 templates emit `import { AtomButton } from '<atomsPackage>'`, and vue.js:17/60/94 emits <a-button>. None of these exist. Take component names and subpath imports from the catalog: XBtn from @chemx/x-atoms/react or /svelte, and <x-btn> for Vue under createXAtomsPlugin. Update the patcher.js:120/317 directive text ('AtomButton, AtomInput') and the AtomSurface/AtomText/AtomBadge/AtomButton import in cli/mcp/resources.js:67. Rewrite generator.spec.js:114-125 and generator-templates.spec.js:45-57,167. Add generator-contract.spec, which generates a vue, react, svelte and compact capsule with atomsPackage='@chemx/x-atoms', parses each with its compiler, and resolves every imported name and Vue tag against the catalog.",
+     "acceptance": "(1) `chemx q -g AtomButton` (or git grep) finds 0 matches in cli/ outside a migration note. (2) generator-contract.spec reports 0 unresolved names for all 4 templates. (3) A freshly generated Vue m-demo capsule uses <x-btn>, is under 100 lines, and gets grade A under `chemx audit <tmp> --profile=atomic-strict` once item 3 exists.",
+     "files": "cli/generator-templates/{react,svelte,compact,vue}.js, cli/generator.js, cli/patcher.js, cli/mcp/resources.js, cli/generator.spec.js, cli/generator-templates.spec.js, cli/generator-contract.spec.js (new)",
+     "effort": "S",
+     "priority": 2
+    },
+    {
+     "title": "TIER_RAW_DOM: the missing Zero-Raw-DOM pillar rule, gated by the pillars config",
+     "detail": "Add a template-AST rule (it needs WS-B item 1) that flags native interactive or structural elements (button, input, select, textarea, dialog, table, plus a configurable div/span policy) outside the atom tier, in .vue, .svelte and .tsx. Gate it on pillars.zeroRawDom from cli/pillars-schema.js; this is the first real coupling between the pillar config and rule gating. Severity is MED under pragmatic and CRIT under atomic-strict. Extract the patcher.js:106/305 write guard and this rule into one shared predicate module.",
+     "acceptance": "(1) Fixture pairs should-fire and should-not-fire in .vue, .svelte and .tsx; atom-tier files are exempt. (2) The rules-survey probe molecule (raw <button style>, <input>) fires TIER_RAW_DOM twice. (3) With zeroRawDom:false the rule is silent. (4) A shared-predicate spec asserts identical verdicts from patcher.js and the rule on 10 snippets. (5) The pillar breakdown shows Zero-Raw-DOM FAILED when a CRIT fires.",
+     "files": "cli/audit/rules-atoms/tier-raw-dom.js (new), cli/design-system/raw-dom-predicate.js (new), cli/patcher.js, cli/pillars-schema.js, cli/config/profiles.js, cli/audit/rules-registry.js (registration lines), cli/audit/metrics.js (pillar mapping line), cli/audit/fixtures/TIER_RAW_DOM/",
+     "effort": "M",
+     "priority": 3
+    },
+    {
+     "title": "ATOM_SUBSTITUTION_AVAILABLE and LOCAL_ATOM_SHADOWS_PACKAGE: grade the unfinished migration",
+     "detail": "ATOM_SUBSTITUTION_AVAILABLE: when hasAtoms is true, flag v-* and raw tags listed in a catalog entry's `replaces` when they appear outside the atom tier. The message names the replacement, the import and the prop mapping, for example `<v-text-field> -> <x-text-field> (XTextField from @chemx/x-atoms/vue)`. Entries with safe1to1:false (such as v-sheet layout) downgrade to an info hint. LOCAL_ATOM_SHADOWS_PACKAGE: flag a local atom whose name matches a catalog alias (a-button to XBtn, a-input to XTextField, and so on), with a propMap and callSites count. Use the explicit alias table only; similarity matching is info-only. Thin wrappers that import the package atom are not flagged. Hits are excluded from AI-slop scoring, and severity can be overridden in .chemxrc.",
+     "acceptance": "(1) `chemx audit src/ui --json` in starter-kit, on today's tree, emits exactly 7 LOCAL_ATOM_SHADOWS_PACKAGE findings (a-button, a-card, a-chip, a-badge, a-avatar, a-dialog, a-input), each carrying replacement, propMap and callSites. a-text and a-canvas are not flagged. (2) Fixtures: <v-btn> in a molecule fires with a message naming XBtn and @chemx/x-atoms/vue; <v-btn> inside atoms/x-btn/x-btn.vue does not fire; <v-tabs> does not fire. (3) A repo with no catalog produces 0 hits. (4) The probe molecule fires on v-btn, v-card and v-dialog.",
+     "files": "cli/audit/rules-atoms/atom-substitution.js (new), cli/audit/rules-atoms/local-atom-shadows.js (new), cli/audit/rules-registry.js (registration lines), cli/audit/fixtures/{ATOM_SUBSTITUTION_AVAILABLE,LOCAL_ATOM_SHADOWS_PACKAGE}/",
+     "effort": "M",
+     "priority": 4
+    },
+    {
+     "title": "Atom coverage metric, reported in audit JSON and history and enforced by a ratchet floor",
+     "detail": "Compute atomCoverage per file and per scope as atom tags / (atom tags + substitutable v-* + raw DOM outside atoms), plus localShadowCount. Uses of layout-only container atoms count as neutral. Emit it under meta.atomCoverage in --json and as one line in the TTY report. After WS-B item 5 lands, persist it in history and status.json per scope, and add a non-decreasing atomCoverage.floor to the per-scope ratchet. The metric is omitted, not reported as 0%, when no catalog is loaded.",
+     "acceptance": "(1) `chemx audit ../my-card-vault/src --json` reports atomCoverage within 1 point of an independent tag count from a spec helper. (2) Swapping one x-btn back to v-btn in a fixture fails the gate with 'atomCoverage X% < floor Y%'; the reverse passes and suggests tightening the floor. (3) History entries include atomCoverage. (4) There is no atomCoverage key when hasAtoms is false.",
+     "files": "cli/audit/atom-coverage.js (new), cli/audit/atom-coverage.spec.js (new), cli/audit/ratchet.js (floor support, after WS-B), cli/audit/status-file.js (field), cli/audit/reporter-summary.js (one line)",
+     "effort": "M",
+     "priority": 5
+    },
+    {
+     "title": "ATOM_AS_LAYOUT and DESIGN_TOKEN_HARDCODED_COLOR: stop div-laundering and token drift",
+     "detail": "ATOM_AS_LAYOUT flags a container atom with padding=none, transparent or subtle that only wraps children, when it is used N or more times in a file, and suggests XStack or XGrid. The studio has 108 ACard and 90 AText uses, and t-social-layout.vue has 6 nested ACards. DESIGN_TOKEN_HARDCODED_COLOR scans .scss files and <style> blocks, but only when a token catalog is loaded (catalog tokens, or a project token file named in .chemxrc so the studio's own palette can be the reference). It reports the nearest token by deltaE and the suggested variable. Feed both rules into the styling-hygiene pillar, which today passes without checking .scss.",
+     "acceptance": "(1) On today's tree, `chemx audit src/ui` fires ATOM_AS_LAYOUT on t-social-layout.vue, o-settings-panel.vue and o-db-studio.vue. (2) The token rule reports about 155 literals in src/ui SCSS, and each finding names the nearest token with its deltaE. #62c9ff maps to the starship cyan token with deltaE 0. (3) The styling pillar shows WARN or FAILED for src/ui. (4) .scss files are not scanned when no token catalog is loaded, enforced by a spec.",
+     "files": "cli/audit/rules-atoms/atom-as-layout.js (new), cli/audit/rules-atoms/design-token-color.js (new), cli/languages.js (conditional .scss), cli/audit/rules-registry.js, cli/audit/fixtures/{ATOM_AS_LAYOUT,DESIGN_TOKEN_HARDCODED_COLOR}/",
+     "effort": "M",
+     "priority": 6
+    },
+    {
+     "title": "Prefer existing catalog molecules in pattern-detector, roadmap and generator",
+     "detail": "Before pattern-detector.js:46-145 invents a capsule name (m-feature-card, m-button-row), it should match the detected structure and prop surface against catalog molecules (MKpiTile, MStatStrip, MEmptyState, MActionBar, MConfirmDialog, MDataTable) and suggest reuse. buildRemediationRoadmap items gain kind:'reuse'|'extract'. `chemx g m-stat-strip` warns, and requires --force, when a catalog molecule matches by name or role. These are suggestions only and are never autofixed.",
+     "acceptance": "(1) On src/ui, the ACard>(AText+AText) pattern (17x) suggests 'MKpiTile (@chemx/x-atoms/vue)' with reuse:true. (2) Roadmap JSON items carry kind. (3) `chemx g m-stat-strip` in a project with x-atoms prints a one-line warning and exits without writing unless --force is passed. (4) A snapshot spec shows suggestions are unchanged when no catalog is loaded.",
+     "files": "cli/audit/pattern-detector.js, cli/audit/pattern-detector.spec.js, cli/audit/roadmap.js, cli/generator.js",
+     "effort": "S",
+     "priority": 7
+    },
+    {
+     "title": "`chemx fix --atoms` codemod driven by catalog propMap and safe1to1",
+     "detail": "Add an autofix pass that splices edits at template-AST offsets. It renames tags (v-btn and a-button to x-btn), rewrites mapped props (size lg to large, variant ghost to text, variant danger to color error, :open to v-model, @close to @update:modelValue), and adds or updates imports, skipping the import when createXAtomsPlugin is registered globally. The default is a dry-run unified diff; --apply writes. Unmapped props get a `<!-- chemx: review prop X -->` note. Tags that are not 1:1 are reported as 'skipped: needs review' and never rewritten, which covers the COMPASS x-dialog z-index and slot semantics.",
+     "acceptance": "(1) `chemx fix src/ui --atoms --dry-run` prints a diff and writes nothing; a spec checks file mtimes. (2) Golden before.vue and after.vue pairs for each of the 7 duplicated studio atoms match byte for byte. (3) Running it again on its own output produces no changes. (4) After --apply on the fixtures, the output parses with vue/compiler-sfc, and ATOM_SUBSTITUTION_AVAILABLE and LOCAL_ATOM_SHADOWS_PACKAGE report 0 for those files.",
+     "files": "cli/audit/autofix-atoms.js (new), cli/audit/autofix-atoms.spec.js (new), cli/audit/fixtures/autofix-atoms/ (golden pairs), cli/audit/autofix.js (dispatch hook), cli/commands/cmd-wrappers.js (flag)",
+     "effort": "L",
+     "priority": 8
+    },
+    {
+     "title": "`chemx atoms` lookup command, catalog entries indexed into q, and atomHints in check",
+     "detail": "`chemx atoms [query]` and `chemx atoms --for <v-tag|raw-tag>` print compact cards under 200 tokens: tag, import line per framework, props with enums, emits, slots, and what the atom replaces. Index catalog entries into .chemx/index.db as tier=atom symbols with source:'catalog', so `chemx q XBtn` resolves to the package and blast-radius ignores these entries. Add an `atomHints` array (at most 3 lines, 300 B) to `chemx check --json` that lists new v-* or raw tags with their catalog replacement. Hints are diffed against `git show HEAD:<file>`, using WS-F's --since delta once it exists. Register the MCP `atoms` action through WS-E's DISPATCHER-derived enum.",
+     "acceptance": "(1) `chemx atoms --for v-text-field` prints XTextField with its vue, react and svelte import lines in 8 lines or fewer. (2) `chemx q XBtn` from the starter-kit root returns the x-atoms definition. (3) Adding <v-btn> to a fixture molecule and running `chemx check f.vue --json` gives exactly one atomHint naming XBtn; tags that already existed are not repeated. (4) MCP `chemx({action:'atoms',params:{query:'dialog'}})` returns JSON with its frameworks after WS-E item 1. (5) Projects without a catalog get no atomHints key.",
+     "files": "cli/design-system/atoms-command.js (new), cli/design-system/atom-hints.js (new), cli/search-db.js (catalog ingest), cli/commands/cmd-router.js (append route), cli/commands-schema.js (append entry), cli/mcp/tools.js (append DISPATCHER entry)",
+     "effort": "M",
+     "priority": 9
+    }
+   ]
+  },
+  {
+   "name": "WS-D Studio rebuilt on x-atoms (served = audited)",
+   "goal": "Replace the served 1,290-line CDN monolith with a Vite-built SFC studio composed from @chemx/x-atoms, so the code users run is the code chemx grades. Fix the studio's security and honesty problems first.",
+   "repo": "starter-kit",
+   "depends_on": [
+    "WS-A x-atoms: ship-ready design system the studio can consume"
+   ],
+   "items": [
+    {
+     "title": "Harden the studio server: loopback default, Origin/Content-Type/token checks, read-only SQL",
+     "detail": "cli/ui-server.js binds 0.0.0.0:4173 with no auth. parseJsonBody ignores Content-Type, which allows CSRF through text/plain. POST /api/database/query reaches executeSqlQuery (cli/ui-db-studio.js), which runs DROP and DELETE. Change the default bind to 127.0.0.1, require --host for LAN use, and print a startup line that names the flag. Reject POSTs that lack application/json or carry a foreign Origin. Require a per-launch token, injected into __CHEMX_HYDRATED_STATE__, on every mutating /api route. Open the studio SQL connection read-only for both query endpoints; vacuum, prune and reset keep their dedicated routes. This item has no dependencies and should land before the UI rebuild.",
+     "acceptance": "ui-security.spec asserts the following. (1) The default listen address is 127.0.0.1, and --host=0.0.0.0 logs a warning. (2) A cross-origin text/plain POST gets 403. (3) A mutating route without the token gets 403. (4) `DROP TABLE tasks` sent to /api/db/query and /api/database/query fails and the table survives. (5) The settings vacuum and prune actions still succeed.",
+     "files": "cli/ui-server.js, cli/ui-server-routes.js, cli/ui-handlers.js, cli/ui-db-studio.js, cli/ui-html.js (token injection), cli/ui-security.spec.js (new)",
+     "effort": "S",
+     "priority": 1
+    },
+    {
+     "title": "Honest savings: measured-or-nothing, with an MEmptyState",
+     "detail": "calculateSavings (cli/ui-actions-helpers.js:6) floors the baseline at 480k tokens, hardcodes latencyReductionRatio '3.8x', and computes contextOverflowErrorsAvoided as taskCount*2.5. index.html falls back to 165000 tokens and $1.65 at lines 382, 953 and 1226, and those numbers end up on the PNG certificate. Return {measured:false} with no numeric fields when there is no telemetry. Label every figure as measured or estimated. Disable certificate export when nothing has been measured. In the SFC tree, m-savings-modal renders MEmptyState ('no telemetry yet').",
+     "acceptance": "(1) calculateSavings({}) returns {measured:false} and no number fields. (2) With an empty telemetry table, the savings field from /api/swarm/status is null and the modal shows MEmptyState (component spec). (3) A grep spec finds 0 occurrences of 165000, '$1.65' and '3.8x' in shipped files under cli/ and src/ui/.",
+     "files": "cli/ui-actions-helpers.js, cli/ui-actions.js, src/ui/molecules/m-savings-modal/*, src/ui/molecules/m-savings-badge/*, src/ui/index.html and cli/ui-index.html (remove fallbacks until retired)",
+     "effort": "S",
+     "priority": 2
+    },
+    {
+     "title": "Real Vite entry for the studio, built to cli/ui-dist and served offline",
+     "detail": "Add src/ui/main.ts: createApp, then createVuetify({theme: starshipDarkTheme}) plus the chemx tones, then createXAtomsPlugin(), imports of @chemx/x-atoms/styles.css, and a view router. Add vite.studio.config.ts that builds to cli/ui-dist/ with hashed assets, plus scripts `build:studio` and a release check that ui-dist is fresh. Change cli/ui-html.js to serve cli/ui-dist/index.html with hydrated state and the token injected, keeping the old HTML behind `chemx ui --legacy` until item 6 lands. In `chemx ui --dev`, mount Vite middleware for HMR in place of the fs.watch reload. Nothing in core may import ui-dist or src/ui.",
+     "acceptance": "(1) `pnpm --filter @chemx/starter-kit build:studio` writes cli/ui-dist/index.html and its assets, and `npm pack --dry-run` lists them. (2) An e2e spec starts `chemx ui` and asserts that no request goes to unpkg or jsdelivr, and that every view mounts. (3) `chemx ui --dev` serves through Vite. (4) A seam spec asserts that importing cli/audit.js and cli/mcp/server.js loads no module under cli/ui-dist or src/ui.",
+     "files": "src/ui/main.ts (new), src/ui/app.vue (new), src/ui/router.ts (new), vite.studio.config.ts (new), cli/ui-html.js, cli/ui-dev-watcher.js, cli/ui-server.js, package.json (scripts, devDeps vite and @vitejs/plugin-vue, files)",
+     "effort": "L",
+     "priority": 3
+    },
+    {
+     "title": "Swap the studio's local atoms for x-atoms and remove div-laundering",
+     "detail": "Delete src/ui/atoms/{a-button,a-card,a-chip,a-badge,a-avatar,a-dialog,a-input} and use XBtn, XCard, XChip, XBadge(inline) or XChip x-small, XAvatar, XDialog and XTextField. Use WS-C's `chemx fix --atoms` when it is available; otherwise follow the migration inventory maps by hand (sizes sm/md/lg to small/default/large, ghost to variant=text, danger to color=error, tone to color, open to v-model, removable to closable). Replace a-text with XText. Replace ACard padding=none layout wrappers with XStack and XGrid, including t-social-layout's 6 nested ACards. Rebuild the molecule mapping on x-atoms molecules: m-token-stat becomes MKpiTile, m-lock-row becomes XListItem, the savings modal uses MStatStrip, and so on. a-canvas may stay local.",
+     "acceptance": "(1) src/ui/atoms holds only a-canvas, or is empty. (2) There are 0 `<A[A-Z]` tags under src/ui except ACanvas. (3) `chemx audit src/ui --profile=atomic-strict --json` reports TIER_RAW_DOM=0, LOCAL_ATOM_SHADOWS_PACKAGE=0 and ATOM_AS_LAYOUT=0 once WS-C rules exist. (4) Every file stays under 100 lines, and the ui.spec.js line-budget spec passes.",
+     "files": "src/ui/atoms/*, src/ui/molecules/*/*.vue, src/ui/organisms/*/*.vue, src/ui/templates/t-social-layout/*, src/ui/index.ts",
+     "effort": "L",
+     "priority": 4
+    },
+    {
+     "title": "One SSE-backed useSwarmStream; surface errors through XAlert and MToast",
+     "detail": "Replace the per-composable /api/swarm/status polling in useSwarmTasks, useSwarmLocks, useSwarmState, useSwarmFeed and the others with a single useSwarmStream on /api/swarm/events. It uses x-atoms createDisposer for teardown and backoff for reconnects, and the domain composables derive from it. Route the existing error and errorMessage state into XAlert (inline) and MToast (transient). Composables return the HOOK_SHAPE_CONTRACT shape. Keep the dev-reload SSE channel separate.",
+     "acceptance": "(1) A composable spec with fetch and EventSource spies shows at most one /api/swarm/status request and one EventSource across all views. (2) Killing the server shows an XAlert in the active view within 5 s (component spec with a fake EventSource). (3) `chemx audit src/ui/composables --json` reports 0 ERROR_SWALLOWED_EXCEPTION, 0 CONTROL_FLOW_SILENT_GUARD and 0 HOOK_SHAPE_CONTRACT findings.",
+     "files": "src/ui/composables/useSwarmStream.ts (new), src/ui/composables/useSwarm*.ts, cli/ui-sse.js, cli/ui-server.js",
+     "effort": "M",
+     "priority": 5
+    },
+    {
+     "title": "Port monolith-only features into TOC views and wire or retire the orphan routes",
+     "detail": "These features exist only in index.html: the prompt Workbench, the task detail sheet (update, assign, comments), and DB table browse. Port them, and wire the SQL execute box using XTextarea, MDataTable and MPagination. Use MTabsNav for status and tier filters, MConfirmDialog for vacuum, prune, reset and lock override, MToast for settings messages, MStatStrip for metrics, MEmptyState for empty lists, and XSkeleton while loading. Every view is a table-of-contents view of 25 lines or fewer, containing only slots and composables. Wire /api/codebase/tree, /api/codebase/file, /api/db/structure, /api/locks/override and /api/tasks/:id to views, or mark them internal in ui-server-routes.js.",
+     "acceptance": "(1) parity.spec lists all 10 screens and every API route the legacy UI called, and asserts that a new view calls each one. (2) Every file in src/ui/views is 25 lines or fewer. (3) Each orphan route is either called by a view or has an `internal:true` annotation that a spec checks. (4) `chemx ui` without --legacy exposes Workbench, Task detail and DB browse (e2e).",
+     "files": "src/ui/views/v-swarm-*.vue, src/ui/views/v-workbench.vue (new), src/ui/organisms/{o-task-board,o-task-detail (new),o-db-studio,o-lock-hub,o-settings-panel,o-codebase-catalog,o-workbench (new)}/*, cli/ui-server-routes.js, src/ui/parity.spec.ts (new)",
+     "effort": "L",
+     "priority": 6
+    },
+    {
+     "title": "Retire the three duplicate UIs and the dead template layer",
+     "detail": "Once parity.spec is green, delete src/ui/index.html, cli/ui-index.html and the 1,527-LOC dead set: cli/ui-template*.js (12 files), cli/ui-client-*.js (6) and cli/ui-styles.js. Remove --legacy. Rewrite or delete ui-kanban, ui-filetree, ui-vbulletin, ui-e2e-verification and ui-workbench-dbstudio specs so they test the new views and routes. Drop the ui.spec.js .html line-budget exemption.",
+     "acceptance": "(1) The listed files no longer exist, and `npm pack --dry-run` lists no ui-index.html or ui-template*. (2) `chemx test` is green. (3) ui.spec.js has no .html exemption. (4) `chemx audit src/ui --json` coverage.skippedCount is 0.",
+     "files": "src/ui/index.html, cli/ui-index.html, cli/ui-template*.js, cli/ui-client-*.js, cli/ui-styles.js, cli/ui-html.js, cli/ui.spec.js, cli/ui-{kanban,filetree,vbulletin,e2e-verification,workbench-dbstudio}.spec.js",
+     "effort": "M",
+     "priority": 7
+    },
+    {
+     "title": "Real mount specs for studio molecules, and run src/ui specs in the test pipeline",
+     "detail": "Replace the 10 fake-green src/ui/molecules/*/*.spec.ts files. Each should mount its component with @vue/test-utils and the x-atoms plugin and assert rendered x-atoms output, for example m-task-card renders an XChip containing the task status. Add src/ui specs to `npm test` and `chemx test`, using vitest for UI specs only if node:test cannot mount Vuetify reliably.",
+     "acceptance": "(1) Each molecule spec imports its own .vue or controller, so WS-B's TEST_FAKE_GREEN extension reports 0 on src/ui. (2) `pnpm test` runs the src/ui specs, and they pass. (3) No molecule spec asserts only on local literals; a spec-lint check enforces that.",
+     "files": "src/ui/molecules/*/*.spec.ts, package.json (test script), vitest.studio.config.ts (new, if needed)",
+     "effort": "M",
+     "priority": 8
+    },
+    {
+     "title": "Architecture screens from x-atoms molecules: audit, ratchet trend, lexicon, and a live atom catalog",
+     "detail": "Add read-only routes /api/audit?scope= (serves the last cached audit JSON, with an explicit rerun that respects the audit budget and never runs --triage or --rebaseline), /api/ratchet (reads per-scope history and status.json from WS-B), /api/lexicon, and /api/atoms (the catalog from WS-C's loader). Add views: v-audit (pillars as MStatStrip, hotspots as MDataTable with click-through to `read --outline`, gate as XAlert), v-ratchet (per-scope trend), v-lexicon, and v-atoms. v-atoms renders one live instance of every catalog entry with its props and tokens, which makes it the x-atoms playground.",
+     "acceptance": "(1) GET /api/audit?scope=src/ui returns the same pillars and hotspots as `chemx audit src/ui --json` (comparison spec). (2) A v-atoms spec fails if any catalog entry has no rendered instance. (3) v-ratchet charts only the selected scope. (4) Every new view is 25 lines or fewer with 0 TIER_RAW_DOM. (5) No route accepts triage or rebaseline parameters.",
+     "files": "cli/ui-actions-studio.js, cli/ui-server-routes.js, src/ui/views/{v-audit,v-ratchet,v-lexicon,v-atoms}.vue (new), src/ui/organisms/{o-audit-board,o-atom-catalog}/ (new), src/ui/composables/useAudit.ts (new)",
+     "effort": "M",
+     "priority": 9
+    }
+   ]
+  },
+  {
+   "name": "WS-E MCP contract and Claude Code integration",
+   "goal": "Make the MCP surface truthful and root-safe, and give Claude Code first-class hooks, a status card, a statusline, skills and an installer, all built on engine commands rather than prose.",
+   "repo": "starter-kit",
+   "depends_on": [
+    "WS-B Audit engine: template AST, precision, honest scoring, per-scope state"
+   ],
+   "items": [
+    {
+     "title": "MCP contract: enum derived from DISPATCHER, real help, server instructions, version, cwd threading",
+     "detail": "Build the master tool's action enum and per-action param hints from DISPATCHER metadata (cli/mcp/tools.js), with an explicit `hidden` allowlist for old aliases and the Tools['chemx_'+action] fallbacks. Implement do/batch/trace/backtrace as thin wrappers over the existing CLI, or remove them from the enum. Expose the working trend, r, team_inbox, team_dm, coordinator, cube and matrix actions. Make action 'help' return 600 B or less, and `help <action>` return that action's params. Unknown actions get a did-you-mean based on edit distance. Return an `instructions` string of 400 B or less from initialize. Read SERVER_INFO.version from package.json (it is hardcoded '26.9.14' at server.js:11). Thread the resolved root into the d, log, p, f and j handlers, which currently use process.cwd(). Trim tools/list to 4,000 B or less by moving examples into help.",
+     "acceptance": "(1) mcp-contract.spec asserts that the enum equals the DISPATCHER keys minus hidden, and that a smoke call for every enum action returns non-error on a fixture project. (2) help is 600 B or less; the tools/list payload is 4,000 B or less. (3) initialize returns serverInfo.version equal to package.json's version and an instructions string. (4) A scope-isolation spec boots the server in a tmp dir and calls p, f and d with projectRoot set to fixture B; results come from B. (5) The trace action no longer throws 'Unknown Chemical X action'.",
+     "files": "cli/mcp/manifests.js, cli/mcp/tools.js, cli/mcp/server.js, cli/mcp/tools-search.js, cli/mcp/server.spec.js, cli/mcp/mcp-contract.spec.js (new)",
+     "effort": "M",
+     "priority": 1
+    },
+    {
+     "title": "Safe default MCP root: env default, roots/list, resolved-root echo, and cross-project write refusal",
+     "detail": "Resolution order is: explicit params.projectRoot; then CHEMX_PROJECT_ROOT (relative values resolved against cwd and treated as a default, so the nearest .chemx marker still wins; this removes the call-scope.js:62 absolute-only rejection); then the client's roots/list when the client advertises roots (requested after notifications/initialized); then cwd. Pass the resolved root to getMcpPrompt (server.js:201), prompts.js (remove process.cwd()) and readMcpResource (server.js:142). Prefix each response with `root=<rel> (<source>)`. write, patch and generate refuse a target whose nearest marker belongs to a different project unless projectRoot is passed explicitly; under the loose profile this is a warning only. Update the host-shims CLAUDE.md text so agents no longer pass projectRoot by hand.",
+     "acceptance": "(1) With env CHEMX_PROJECT_ROOT=. and the server started elsewhere, a q call searches the configured root and its response starts with `root=. (env)`. (2) A fake-client spec shows roots/list is requested after initialized and its result is used. (3) A spec asserts prompts.js contains no process.cwd(). (4) Patching apps/youmeos/x.ts with root apps/my-card-vault and no explicit projectRoot is refused, and the message names both roots. (5) The host-shims.spec 400-token budget still passes.",
+     "files": "cli/mcp/call-scope.js, cli/mcp/call-scope.spec.js, cli/mcp/server.js, cli/mcp/prompts.js, cli/mcp/resources.js, cli/mcp/tools.js, cli/host-shims.js",
+     "effort": "M",
+     "priority": 2
+    },
+    {
+     "title": "`chemx agent-hook` engine command: pre-tool guard, session-start card, statusline",
+     "detail": "Add cli/host/claude-hook.js, registered as `agent-hook` because hook, hooks, install-hooks and setup-ci are already taken. pre-tool promotes the untracked root .claude/hooks/chemx-guard.mjs into a declarative, spec-tested rule table. It denies raw vitest, jest, tsc --noEmit and eslint with a reason naming the `chemx test|typecheck|lint -- <orig>` equivalent, and only for simple commands (no pipes, &&, ; or $()). It allows Grep or rg when the target is outside index scope or the index is stale, attaching an additionalContext note. It honours `# chemx-bypass:` and CHEMX_HOOK_PASSTHROUGH=1. Hint strings are generated from commands-schema and name a single MCP shape. session-start reads .chemx/status.json (from WS-B), never runs an audit, and emits a card of 300 B or less. If index.db is older than the newest source file, it starts `q --sync` in the background. hosts/claude/bin/chemx-statusline.mjs imports nothing from cli/ and prints `chemx B 88 | ratchet -3 | 3 tasks`. It also has a --segment mode. It does not implement the allow-and-rewrite mode, because that would bypass the user's permission prompt.",
+     "acceptance": "(1) claude-hook.spec reproduces the current guard's decisions on a table of 40 commands (pipes, &&, env prefixes, pnpm exec, bypass comments, non-source cat). (2) Every emitted hint validates against the master tool schema. (3) session-start output is 300 B or less, and a spec with a stubbed audit module asserts the audit is never called. (4) The statusline runs in under 50 ms on a fake stdin payload, and an import-graph spec shows 0 imports from cli/. (5) The hook imports no reporter, banner or ui modules.",
+     "files": "cli/host/claude-hook.js (new), cli/host/claude-hook.spec.js (new), cli/host/rules-table.js (new), hosts/claude/bin/chemx-statusline.mjs (new), cli/commands/cmd-router.js (append route), cli/commands-schema.js (append entry)",
+     "effort": "M",
+     "priority": 3
+    },
+    {
+     "title": "post-edit hook on `check --since=HEAD`, with atom hints and an opt-in stop-gate",
+     "detail": "Builds on WS-F item 4 (check --since) and WS-C item 9 (atomHints). The post-edit hook skips files that are not source and skips spec, test and .d.ts files. It prints nothing when the file is clean. A new CRITICAL produces decision:block with the rule and line. A new HIGH or MEDIUM finding, a line-budget crossing, or an atom hint produces at most 600 B of additionalContext. stop-gate is opt-in (CHEMX_HOOK_STOP_GATE=1). It skips when stop_hook_active is set, runs `audit --git --json`, and blocks only on ratchet failure.",
+     "acceptance": "(1) Editing a file that has existing debt without adding violations produces empty hook output. (2) Adding `catch {}` produces exactly one ERROR_SWALLOWED_EXCEPTION block payload. (3) Adding <v-btn> to a fixture molecule with x-atoms installed produces a context line naming XBtn. (4) Every payload is 600 B or less (spec). (5) stop-gate with stop_hook_active:true exits 0 and prints nothing.",
+     "files": "cli/host/claude-hook.js (post-edit, stop-gate handlers), cli/host/claude-hook-edit.spec.js (new)",
+     "effort": "S",
+     "priority": 4
+    },
+    {
+     "title": "Installer for Claude Code plus a plugin package",
+     "detail": "Add installClaudeCodeConfig to cli/mcp/installer.js. It writes or merges .mcp.json (in-repo cli/index.js via resolveMcpServerCommand, version-pinned, never a bare `npx -y chemx`, env CHEMX_PROJECT_ROOT and CHEMX_HOST=claude-code). It merges hook entries using `$CLAUDE_PROJECT_DIR/node_modules/.bin/chemx agent-hook <event>` into .claude/settings.json while keeping existing entries, writes a settings.json.chemx.bak backup first, and adds permissions mcp__chemical-x__chemx and Bash(chemx:*). It requires --yes when non-interactive. Add a Claude Code row to wizard option 2 in cli/installer.js. Ship a plugin at hosts/claude/; the kit-root hooks/ folder already holds Vue composables. The plugin contains .claude-plugin/plugin.json, .mcp.json, hooks/hooks.json, commands (audit, verify, fix, atoms, grade), a chemx-refactorer agent that splits one hotspot into molecules under 100 lines and finishes with `check --since`, and the skills from item 8. Add .claude-plugin/marketplace.json at the kit root. Pin the npx fallback in resolveMcpServerCommand to @chemx/starter-kit@<version>.",
+     "acceptance": "(1) In a tmp repo whose settings already contain hooks, the installer keeps them, and a second run makes no changes (idempotency spec). (2) The .mcp.json it writes never contains `npx -y chemx` without a version. (3) A plugin-shape spec validates plugin.json, hooks.json, 5 commands and 1 agent, and checks that every referenced script exists. (4) Wizard option 2 lists Claude Code.",
+     "files": "cli/mcp/installer.js, cli/mcp/installer.spec.js, cli/installer.js, hosts/claude/** (new), .claude-plugin/marketplace.json (new), .cursor/mcp.json and .vscode/mcp.json (pin version)",
+     "effort": "M",
+     "priority": 5
+    },
+    {
+     "title": "`chemx doctor`: named wiring checks with safe --fix",
+     "detail": "Add checks, each returning {id, status, evidence, fix}. mcp.config.stale_binary: root .mcp.json resolves to the published chemx@26.9.20 through my-card-vault. mcp.version.hardcoded. mcp.enum_dispatch_parity, which imports the real DISPATCHER. index.scope.excludes_cli. index.paths.outside_root. gate.ratchet_scope_mismatch. atoms.vue_entry_unresolvable. atoms.catalog_stale. hooks.installed. --fix applies only safe fixes: reindex, write .mcp.json, and add gitignore entries. Also expose it as MCP action `doctor`. Exit code is 1 on any fail and 0 on warnings.",
+     "acceptance": "(1) On today's COMPASS tree, `chemx doctor --json` reports mcp.config.stale_binary, mcp.version.hardcoded and gate.ratchet_scope_mismatch as failing. (2) Each check has a pass fixture and a fail fixture. (3) It runs in under 1.5 s with no audit. (4) --fix is idempotent, and a second run reports those checks as pass.",
+     "files": "cli/host/doctor.js (new), cli/host/doctor-checks/*.js (new), cli/host/doctor.spec.js (new), cli/commands/cmd-router.js (append), cli/commands-schema.js (append), cli/mcp/tools.js (append DISPATCHER entry)",
+     "effort": "M",
+     "priority": 6
+    },
+    {
+     "title": "`chemx friction`: automatic capture of wrong calls and bypasses",
+     "detail": "The MCP server and agent-hook append a redacted JSONL row (command name plus a 120-character snippet filtered through the SECURITY_HARDCODED_SECRET patterns) to .chemx/friction.jsonl for: unknown actions, schema-param mismatches, uses of the `# chemx-bypass:` comment, and zero-result literal searches. The file rotates at 1 MB and `chemx init` gitignores it. `chemx friction --top [--json]` ranks rows by kind and key. `--to-team` creates deduplicated swarm tasks.",
+     "acceptance": "(1) An unknown-action MCP call appends {ts, kind:'unknown_action', action, root}. (2) A Bash command carrying the bypass comment logs kind:'bypass' with the reason. (3) The text output of `chemx friction --top` is 15 lines or fewer. (4) A secret-like token in a command is redacted (spec). (5) Running --to-team twice creates no duplicate tasks.",
+     "files": "cli/host/friction.js (new), cli/host/friction.spec.js (new), cli/mcp/tools.js (error path), cli/host/claude-hook.js, cli/commands/cmd-router.js (append), cli/commands-schema.js (append)",
+     "effort": "S",
+     "priority": 7
+    },
+    {
+     "title": "Split AGENTS.md into generated skills, with a doc-truth spec",
+     "detail": "Generate .claude/skills/chemx-{architecture,navigation,atoms}/SKILL.md (each body 1,500 tokens or less, with per-pillar reference files) from AGENTS.md section anchors via `chemx init --host=claude-code` and the plugin. The doc-truth spec asserts that every rule ID, MCP action, command and prop value named in AGENTS.md, the shims and the skills exists in RULE_REGISTRY, DISPATCHER, commands-schema or the catalog. Today it fails on trustTier, the section K sub-tool advice contradicting section M, the section G raw-DOM claim (until WS-C), RENDER_TREE_DEPTH (until WS-B), size=\"lg\" at AGENTS.md:350, and the contradictory atom naming (x-* vs a-*). Fix those texts. Add .github/copilot-instructions.md to HOST_SHIM_FILES so it is generated and no longer mentions view_file.",
+     "acceptance": "(1) doc-truth.spec passes after the edits, and it fails on a fixture doc that mentions `trustTier`. (2) The skill files are generated, and each body is 1,500 tokens or less. (3) copilot-instructions.md is generated and contains no view_file. (4) The CLAUDE.md shim stays at 400 tokens or less and points to the skills, not @AGENTS.md.",
+     "files": "AGENTS.md, cli/host-shims.js, cli/host-shims.spec.js, cli/host/skills-gen.js (new), cli/doc-truth.spec.js (new), .github/copilot-instructions.md, CLAUDE.md, llms.txt",
+     "effort": "M",
+     "priority": 8
+    },
+    {
+     "title": "Warm socket fast path for hooks",
+     "detail": "The running MCP server, or `chemx daemon`, listens on .chemx/run/chemx.sock with mode 0600 and serves JSON-line operations (check, status, atoms, pre-tool). hosts/claude/bin/chemx-hook.mjs imports only node:net, node:fs and node:path, tries the socket with a 200 ms connect timeout, and otherwise spawns `chemx agent-hook`. The daemon reports its version and file mtimes, and the client restarts it on mismatch. Windows stays disabled until named pipes are tested.",
+     "acceptance": "(1) With the server running, post-edit on a 300-line .vue file completes in under 500 ms p50 over 20 runs (bench spec). (2) Without the socket, the JSON output is identical (parity spec). (3) Stale sockets are detected and replaced, and the socket is removed on exit.",
+     "files": "cli/host/socket-server.js (new), cli/mcp/server.js (start listener), hosts/claude/bin/chemx-hook.mjs (new), cli/host/socket.spec.js (new)",
+     "effort": "L",
+     "priority": 9
+    }
+   ]
+  },
+  {
+   "name": "WS-F Core CLI surface: 5.4 seam, 5.5 help diet, search truth, check delta, speed",
+   "goal": "Finish the agreed Pass 2 items 5.4 and 5.5, make the search the guard forces on agents honest about what it covers, and give hooks a fast, delta-aware check.",
+   "repo": "starter-kit",
+   "depends_on": [],
+   "items": [
+    {
+     "title": "5.4: TTY-gated presentation through lazy imports, plus a seam spec",
+     "detail": "cli/audit.js:52 statically imports about 20 symbols from ./audit/reporter.js, including the banner, REPORT_CARD_ASCII and formatGrade* functions. Move every reporter-*, navigator-banner, tesseract-hud and ui-* import behind dynamic imports in cmd-audit.js that run only when stdout is a TTY and --json is absent. Add cli/seam.spec.js, which records loaded module URLs with node:module register() hooks during `audit cli --json` and an MCP audit call, and asserts that no reporter-banner, reporter-ascii, reporter-grades, reporter-hotspot-graph, reporter-sections, navigator, tesseract or ui- module is loaded. This seam is where chemx core and chemx-studio will later split. Coordinate with WS-B, which adds a status-file call to cmd-audit.js.",
+     "acceptance": "(1) seam.spec passes for the --json and MCP paths. (2) A forced-isTTY run still renders the full report, so no await is missing. (3) Piped non-TTY human output is under 1,500 bytes. (4) Importing cli/audit.js loads at least 30% fewer modules than the baseline recorded in the spec.",
+     "files": "cli/audit.js, cli/commands/cmd-audit.js, cli/audit/reporter.js, cli/seam.spec.js (new)",
+     "effort": "M",
+     "priority": 1
+    },
+    {
+     "title": "5.5: generate help from commands-schema and add a command-matrix smoke spec",
+     "detail": "Make commands-schema.js complete. It currently has no entry for write, explode, trend, tokens, project, benchmark, install-mcp, typecheck, test, check, badge, hook*, add:* or fix. Generate the top-level help from the schema at one line per command, with a pointer to `chemx help <cmd>`, and generate per-command help from the same schema. Make `chemx rules` list RULE_REGISTRY, or rename the alias so it doesn't imply a rule listing; the pillars wizard stays at `pillars`. Fix `chemx build --help`, which currently runs tsc.",
+     "acceptance": "(1) The output of `chemx --help` is under 1,500 bytes. It is 16,887 bytes today. (2) A schema-coverage spec fails if any ALLOWED_COMMANDS alias has no schema entry. (3) A matrix spec runs `<cmd> --help` for every command and asserts exit 0, under 500 ms, no child_process spawn (stubbed), and an unchanged .chemx/history.json mtime. (4) `chemx rules` prints rule IDs.",
+     "files": "cli/commands-schema.js, cli/help.js, cli/help.spec.js, cli/index.js, cli/commands/cmd-router.js, cli/commands/cmd-wrappers.js, cli/help-matrix.spec.js (new)",
+     "effort": "M",
+     "priority": 2
+    },
+    {
+     "title": "Literal search recall and index staleness",
+     "detail": "Literal `q -g` scans only indexed files, and the index skips cli/ (search-db.js:55). `q -g process.cwd -l` returns 1 file where rg finds 117, and `starshipDarkTheme` returns nothing from the x-atoms submodule. Change literal mode to walk the gitignore-aware file list used by `chemx f` (or use rg when installed) and resolve paths against the index root, not process.cwd(). Always report scannedFiles, scope and source. Stamp the index with HEAD and the newest mtime, and warn or resync when it is stale. Make `read --symbol` resolve through the index def lookup from importing files. NOTE: cli/search.js, cli/search.spec.js and cli/search-commands-semantic.js have uncommitted user changes. Start from them (commit or stash with the user's consent first) and never discard them.",
+     "acceptance": "(1) search-recall.spec builds a fixture corpus (.js, .ts, .vue, .svelte, .html, a nested submodule and a gitignored dir) and asserts that `q -g X -l` matches `git grep -l X` for 20 needles. (2) --json includes scannedFiles, scope and source, and the text output never prints 'No literal matches' without saying what scope was searched. (3) Touching a file after indexing makes the next q report stale or resync. (4) `chemx read cli/ui-handlers.js --symbol=calculateSavings` resolves to ui-actions-helpers.js.",
+     "files": "cli/search.js, cli/search-commands.js, cli/search-db.js, cli/search-queries.js, cli/reader (read --symbol path), cli/search-recall.spec.js (new)",
+     "effort": "M",
+     "priority": 3
+    },
+    {
+     "title": "`chemx check --since=<rev>` delta mode and honest unanalyzed output",
+     "detail": "Audit `git show <rev>:<file>` alongside the working copy, and report only new violations, keyed by rule plus a normalized snippet. Fall back to per-rule count deltas when keys collide. Line-budget crossings count as new violations. Never print 'Crystalline' for a file the analyzers skip. Return analyzed:false with a reason instead, for example `src/ui/index.html` now gives 0 hazards in 1 ms. WS-E's post-edit hook and WS-C's atomHints consume this.",
+     "acceptance": "(1) On a fixture file with 5 existing violations plus 1 new one, `check --since=HEAD --json` reports exactly 1. (2) Shifting lines above an existing violation does not make it count as new. (3) Going from 99 to 101 lines reports a line-budget crossing. (4) `chemx check src/ui/index.html --json` returns analyzed:false.",
+     "files": "cli/search-commands.js (handleCheckCommand), cli/audit/delta.js (new), cli/audit/delta.spec.js (new)",
+     "effort": "M",
+     "priority": 4
+    },
+    {
+     "title": "Startup budget: lazy command modules and lazy Babel",
+     "detail": "Cold `--version` takes 0.97 to 1.62 s, and importing audit.js takes 1.49 s. Change cmd-router to dynamically import each command module, and lazy-load Babel and the analyzers. Add a perf spec that counts loaded modules rather than wall time, so it stays stable in CI.",
+     "acceptance": "(1) The perf spec asserts that `chemx --version` loads 10 or fewer modules. (2) `check <fixture> --json` loads no reporter, team or ui module. (3) All existing cli specs pass.",
+     "files": "cli/index.js, cli/commands/cmd-router.js, cli/audit/rules.js, cli/perf.spec.js (new)",
+     "effort": "M",
+     "priority": 5
+    },
+    {
+     "title": "Token-budget ratchet for agent-facing output",
+     "detail": "Add chemx-budget.json with byte ceilings per surface: help (1,500), tools/list (4,000), verify-pass (120), post-edit-clean (0), session-start (300), atoms card, the success output of each MCP action on a fixture repo, and the audit JSON. budget.spec measures each surface. A ceiling can only be raised by a hand edit with a `reason` field, and the CI template runs the spec. --verbose and --full are exempt.",
+     "acceptance": "(1) chemx-budget.json lists 12 or more surfaces. (2) budget.spec fails when any surface exceeds its ceiling, and fails if a raised ceiling has no reason. (3) .github/workflows/chemx-audit.yml (or its template) runs budget.spec.",
+     "files": "chemx-budget.json (new), cli/budget.spec.js (new), cli/installer-templates.js (CI template)",
+     "effort": "S",
+     "priority": 6
+    }
+   ]
+  },
+  {
+   "name": "WS-G COMPASS root wiring and docs alignment",
+   "goal": "Point COMPASS's Claude Code session at the in-repo kit, rather than the stale published chemx@26.9.20 that runs from my-card-vault, and make the COMPASS rule docs describe x-atoms as it actually is.",
+   "repo": "compass-root",
+   "depends_on": [
+    "WS-E MCP contract and Claude Code integration"
+   ],
+   "items": [
+    {
+     "title": "Fix root .mcp.json so it runs the in-repo kit with CHEMX_PROJECT_ROOT",
+     "detail": "Replace `pnpm --dir apps/my-card-vault chemx:mcp` with `node apps/chemical-x/starter-kit/cli/index.js mcp`, with env CHEMX_PROJECT_ROOT='.' and CHEMX_HOST='claude-code'. A relative root depends on WS-E item 2. Before that lands, use the absolute path. Commit the pnpm-workspace.yaml x-atoms override the user has already made, after confirming it with the user.",
+     "acceptance": "(1) In a new Claude Code session, MCP initialize returns serverInfo.version equal to the version in apps/chemical-x/starter-kit/package.json. (2) A `chemx({action:'q',params:{query:'createXAtomsPlugin'}})` call reports root=. (env). (3) `chemx doctor` (WS-E) reports mcp.config.stale_binary as pass.",
+     "files": ".mcp.json, pnpm-workspace.yaml",
+     "effort": "S",
+     "priority": 1
+    },
+    {
+     "title": "Replace the untracked local guard with the kit's agent-hook",
+     "detail": "Once WS-E item 3 lands, point .claude/settings.local.json hooks (or run `chemx install --host=claude-code` to write .claude/settings.json) at `chemx agent-hook pre-tool`. Retire .claude/hooks/chemx-guard.mjs. It is untracked and user-owned, so confirm with the user before removing it.",
+     "acceptance": "(1) A raw `npx vitest run` Bash call in a session is denied with the `chemx test --` hint. (2) A Grep outside the index scope is allowed with a note. (3) .claude/hooks/chemx-guard.mjs is no longer referenced by any settings file.",
+     "files": ".claude/settings.json (new) or .claude/settings.local.json, .claude/hooks/chemx-guard.mjs",
+     "effort": "S",
+     "priority": 2
+    },
+    {
+     "title": "Align COMPASS rule docs with x-atoms reality",
+     "detail": "Update .agent/rules/vuetify.md. Use valid size values (large, not lg). Point out x-sheet, m-tabs-nav and x-progress-linear, which already exist. Add rules for x-tooltip, x-badge, x-alert, x-avatar, x-divider and x-skeleton. Correct the paths: atoms live in src/components/primitives and are registered via src/core/primitives.ts. Remove the reference to docs/Design-System-Atoms.md, which does not exist, and point at `chemx atoms` instead. In root CLAUDE.md, change the line 'chemx audit: 7-Pillar AST architecture audit' to describe the registry pillars accurately.",
+     "acceptance": "(1) A WS-E doc-truth-style check, run against .agent/rules/vuetify.md with the x-atoms catalog, reports 0 unknown tags or prop values. (2) The doc contains no reference to Design-System-Atoms.md or src/components/atoms.",
+     "files": ".agent/rules/vuetify.md, CLAUDE.md",
+     "effort": "S",
+     "priority": 3
+    }
+   ]
+  },
+  {
+   "name": "WS-H Dogfood gate and Pass 3 claim tests (convergence)",
+   "goal": "Once the other workstreams merge, make chemx's own studio, generators and x-atoms the reference projects its grading is measured against, and re-measure every number chemx publishes (spec criteria 5 and 6).",
+   "repo": "both",
+   "depends_on": [
+    "WS-A x-atoms: ship-ready design system the studio can consume",
+    "WS-B Audit engine: template AST, precision, honest scoring, per-scope state",
+    "WS-C Atom-aware grading and generation",
+    "WS-D Studio rebuilt on x-atoms (served = audited)",
+    "WS-E MCP contract and Claude Code integration",
+    "WS-F Core CLI surface: 5.4 seam, 5.5 help diet, search truth, check delta, speed"
+   ],
+   "items": [
+    {
+     "title": "Dogfood gate: studio, generated capsules and x-atoms grade A under atomic-strict",
+     "detail": "Add cli/dogfood.spec.js and a CI job. It audits starter-kit src/ui and ../x-atoms/src with --profile=atomic-strict. It also generates one capsule per framework into a tmp dir and audits each one. All must reach grade A with 0 CRITICAL or HIGH and 0 TIER_RAW_DOM outside atoms. Record per-scope ratchets for cli, src/ui and ../x-atoms/src in a reviewed PR to chemx-ratchet.json, never with --rebaseline in CI. Start in report-only mode and switch to blocking once src/ui reaches A. Add a studio-scope badge to the README with `chemx badge`.",
+     "acceptance": "(1) `pnpm test` includes dogfood.spec and it fails if any of the 3 scopes is below A once blocking mode is on. (2) chemx-ratchet.json has independent entries for the three scopes. (3) The README shows the studio badge.",
+     "files": "apps/chemical-x/starter-kit/cli/dogfood.spec.js (new), chemx-ratchet.json, .github/workflows/chemx-audit.yml, README.md",
+     "effort": "M",
+     "priority": 1
+    },
+    {
+     "title": "Criterion 6: the cli scope ratchet reaches green",
+     "detail": "After the WS-B precision fixes, re-measure cli. Today's ratchet failures are ERROR_SWALLOWED_EXCEPTION 0 to 65, CONTROL_FLOW_SILENT_GUARD 0 to 17, DATA_FLOW_OPTIONAL_CHAINING_CHURN 0 to 7, AI_SLOP_SHALLOW_CATCH 30 to 33, and CONTROL_FLOW_INLINE_BOOLEAN 87 to 88. Fix the real violations that remain. Any ceiling raise goes through a diffable PR with a reason. Run this after the other workstreams merge, because it touches many cli files.",
+     "acceptance": "(1) `chemx verify` on cli exits 0, with no rule above its ceiling. (2) AI_SLOP_SHALLOW_CATCH false positives on cli/ are 0, as spec criterion 1 requires. (3) CI fails when the cli ratchet is red.",
+     "files": "apps/chemical-x/starter-kit/cli/** (violation fixes), chemx-ratchet.json",
+     "effort": "L",
+     "priority": 2
+    },
+    {
+     "title": "Pass 3 claims spec: re-measure every published number",
+     "detail": "Add cli/claims.spec.js. It parses numeric claims from README.md, llms.txt, benchmarks/README.md and the --enrich guidance in the host shims (spec 6.2), and re-measures each one against targeted-read baselines rather than the whole-file straw man (6.1). The PR gate checks only that the claims parse; the slow measurements run nightly. Make --enrich fall back to plain --outline with a one-line note when the enriched output is more than 40% of the raw file.",
+     "acceptance": "(1) claims.spec fails when a published percentage drifts more than 5 points from the measured value. (2) The bench headline is updated to the targeted-read figure (expected 52-60%). (3) An --enrich call on a fixture whose enriched output exceeds 40% returns the outline plus a note.",
+     "files": "apps/chemical-x/starter-kit/cli/claims.spec.js (new), README.md, llms.txt, benchmarks/README.md, cli/host-shims.js, cli/mcp/tools-read.js",
+     "effort": "M",
+     "priority": 3
+    }
+   ]
+  }
+ ],
+ "dropped": [
+  {
+   "title": "Design-system self-grade rules ATOM_PARITY_GAP / ATOM_DEFAULT_DRIFT / ATOM_VOCAB_DRIFT in chemx",
+   "reason": "Overfit to one package. It is replaced by x-atoms' own adapter-parity and default-drift specs (WS-A item 4) plus catalog frameworks[], which catch the same drift without adding package-specific rules to core."
+  },
+  {
+   "title": "LAYER_BOUNDARY_VIOLATION general import-graph rule with .chemxrc boundaries",
+   "reason": "For the agreed core/studio seam, WS-F's seam.spec (module-load assertions) proves the boundary more cheaply. A general boundary DSL for user projects is speculative until the seam lands, so it is deferred."
+  },
+  {
+   "title": "Analyzing inline Vue templates inside .html files",
+   "reason": "Moot once WS-D retires src/ui/index.html and cli/ui-index.html. The coverage block (WS-B item 5) and check analyzed:false (WS-F item 4) handle unanalyzed files honestly in the meantime."
+  },
+  {
+   "title": "PreToolUse allow+updatedInput rewrite mode (CHEMX_HOOK_REWRITE)",
+   "reason": "An 'allow' decision skips the user's permission prompt. Deny-with-reason gets the same redirect and leaves permissions untouched."
+  },
+  {
+   "title": "Deny raw Read of >300-line files once per session",
+   "reason": "Intrusive and likely to annoy, for little gain once skills and the status card steer agents toward `read --outline`."
+  },
+  {
+   "title": "SubagentStop hook posting summaries to the chemx team feed",
+   "reason": "Speculative, with no evidence of demand. It adds noise to the swarm DB."
+  },
+  {
+   "title": "Migrating COMPASS's 61 local primitives and my-card-vault (including adding the glass CSS import) to x-atoms",
+   "reason": "Out of scope for this request, which is about the chemx studio using x-atoms. WS-C's catalog loader can already grade COMPASS against its local primitives, and the COMPASS x-dialog and x-btn semantics differ (z-index, featureStatus), so swapping them needs its own plan."
+  },
+  {
+   "title": "Vuetify-free Vue adapter for x-atoms",
+   "reason": "A large API fork that nothing needs once the studio has a real Vite build with Vuetify (WS-D item 3)."
+  },
+  {
+   "title": "Duplicate: second 'catalog manifest + loader' idea",
+   "reason": "Merged into WS-A item 2 (catalog generation in x-atoms) and WS-C item 1 (pluggable loader in chemx)."
+  },
+  {
+   "title": "Duplicate: second and third 'template AST / Svelte extraction / precision pass' ideas",
+   "reason": "Merged into WS-B items 1 and 2."
+  },
+  {
+   "title": "Duplicate: second 'chemx atoms command + MCP action' and 'generator contract / tier classifier' ideas",
+   "reason": "Merged into WS-C items 1, 2 and 9. The x-atoms-side contract checks are in WS-A items 1 and 2."
+  },
+  {
+   "title": "Duplicate: second 'MCP enum from DISPATCHER' and 'fixture pairs for all 51 rules' ideas",
+   "reason": "Merged into WS-E item 1 and WS-B item 3 respectively."
+  },
+  {
+   "title": "Duplicate: second 'density score', 'per-scope ratchet/status.json' and 'check --since' ideas",
+   "reason": "Merged into WS-B items 4 and 5 and WS-F item 4. WS-E item 4 consumes them."
+  },
+  {
+   "title": "Duplicate: 'honest savings + safe defaults' combined idea",
+   "reason": "Split into WS-D item 1 (server hardening) and WS-D item 2 (honest savings). The claims part goes to WS-H item 3."
+  }
+ ]
+}
