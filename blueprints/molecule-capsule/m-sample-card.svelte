@@ -13,7 +13,8 @@
   const isHighValue = $derived(value > 1000);
 
   const badge = $derived.by((): SampleCardBadgeDescriptor => {
-    if (status !== 'active') {
+    const isArchived = status !== 'active';
+    if (isArchived) {
       return {
         text: status,
         className: 'm-sample-card__badge m-sample-card__badge--archived'
