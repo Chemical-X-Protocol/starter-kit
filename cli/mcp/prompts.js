@@ -1,10 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { describeLineBudgetPolicy } from '../config/profiles.js';
 
 export const MCP_PROMPTS = [
   {
     name: 'chemx_remediate_hotspot',
-    description: 'Generate surgical instructions to decompose a monolithic hotspot file into crystalline capsules (< 100 lines) and a declarative Table-of-Contents view.',
+    description: 'Generate surgical instructions to decompose a monolithic hotspot file into crystalline capsules within the AGENTS.md line budget and a declarative Table-of-Contents view.',
     arguments: [
       {
         name: 'filePath',
@@ -53,7 +54,7 @@ export const getMcpPrompt = async (name, args = {}) => {
           '',
           '### LIVE AST DIAGNOSTICS:',
           `- Target File: \`${relPath}\``,
-          `- Total Lines: ${lineCount}L (Molecular limit: 100L)`,
+          `- Total Lines: ${lineCount}L (${describeLineBudgetPolicy()})`,
           `- Active Violations: ${violations.length}`
         );
         if (violations.length > 0) {
@@ -69,11 +70,11 @@ export const getMcpPrompt = async (name, args = {}) => {
         '',
         '### EXECUTION DIRECTIVES:',
         '1. Pre-Split Pattern Discovery: Survey cross-file patterns before slicing; extract canonical shared capsules first.',
-        '2. Molecular Capsule Limit: Maximum 100 lines per molecule capsule file.',
+        `2. Molecular Capsule Limit: ${describeLineBudgetPolicy()}`,
         '3. Table-of-Contents Views: Top-level page views must be 10-20 line declarative templates assembling components via named slots.',
         '4. Two-Stage Atomic Booleans: Break complex multi-clause conditionals into atomic single-concept booleans.',
         '5. Composable Return Contracts: Classify hook/composable returns into flat State, Status, and verb-prefixed Actions buckets (HOOK_SHAPE_CONTRACT).',
-        '6. Co-located Types: Co-locate granular types/*.d.ts inside each capsule (< 100 lines). Avoid type monoliths.',
+        '6. Co-located Types: Co-locate granular types/*.d.ts inside each capsule. Avoid type monoliths.',
         '7. Zero synthetic or mock data: Return live data or explicit empty states.',
         `8. Framework: Calibrate bindings for ${framework}.`,
         ...diagnosticLines,
