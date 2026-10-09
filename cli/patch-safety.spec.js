@@ -197,3 +197,49 @@ test('patch from a subdirectory still honors a lease taken at the project root',
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+const SFC = `<template>
+  <div class="counter">{{ count }} // not a comment</div>
+</template>
+
+<script setup lang="ts">
+import { ref } from 'vue'
+const count = ref(0) // hope this helps
+</script>
+
+<style scoped>
+.counter { background: url(//cdn.example.com/a.png); }
+</style>
+`;
+
+const MD = '# Title\n\n```js\n// hope this helps\nconst a = 1\n```\n\nSee //cdn.example.com and $& and $1.\n';
+
+test('patch: a Vue SFC keeps template and style byte-for-byte; a broken script is refused', () => {
+  const dir = makeProject({ 'src/c.vue': SFC });
+  try {
+    patchFile('src/c.vue', { targetContent: 'ref(0)', replacementContent: 'ref(1)', cwd: dir, skipIndex: true });
+    assert.equal(read(dir, 'src/c.vue'), SFC.replace('ref(0)', 'ref(1)'));
+    patchFile('src/c.vue', { targetContent: '{{ count }}', replacementContent: '{{ count * 2 }}', cwd: dir, skipIndex: true });
+    assert.equal(read(dir, 'src/c.vue'), SFC.replace('ref(0)', 'ref(1)').replace('{{ count }}', '{{ count * 2 }}'));
+    const before = read(dir, 'src/c.vue');
+    assert.throws(() => patchFile('src/c.vue', { targetContent: 'ref(1)', replacementContent: 'ref(1', cwd: dir, skipIndex: true }), /does not parse/);
+    assert.equal(read(dir, 'src/c.vue'), before);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('patch and write: Markdown is replaced literally and nothing else changes', () => {
+  const dir = makeProject({ 'docs/a.md': MD });
+  try {
+    patchFile('docs/a.md', { targetContent: '# Title', replacementContent: '# Title $&', cwd: dir, skipIndex: true });
+    assert.equal(read(dir, 'docs/a.md'), MD.replace('# Title', () => '# Title $&'));
+    assert.throws(() => writeFile('docs/a.md', { content: 'x', cwd: dir, skipIndex: true }), /overwrite/);
+    writeFile('docs/b.md', { content: MD, cwd: dir, skipIndex: true });
+    assert.equal(read(dir, 'docs/b.md'), MD);
+    writeFile('src/w.vue', { content: SFC, cwd: dir, skipIndex: true });
+    assert.equal(read(dir, 'src/w.vue'), SFC);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
