@@ -180,6 +180,11 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
       process.exitCode = await runDoctorCli(rawArgs.slice(1));
       break;
     }
+    case 'friction': {
+      const { runFrictionCli } = await import('../friction/friction-cli.js');
+      process.exitCode = await runFrictionCli(rawArgs.slice(1));
+      break;
+    }
     case 'pillars':
     case 'rules':
     case 'config:pillars': {

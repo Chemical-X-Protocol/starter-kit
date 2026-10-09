@@ -493,3 +493,14 @@ Raw inline `style="..."` attributes are strictly prohibited. Visual styling flow
 ### C. "No Fake Doc-Sync" Anti-Pattern
 - Mirroring the "No Fake Green" testing rule in Section 10.D, superficial doc edits (whitespace tweaks, comment formatting, minor typo fixes) made merely to pass CI touch-checks without addressing substantive semantic changes are strictly prohibited.
 - Documentation reviews must verify substantive alignment between code behavior and documented contracts.
+
+## 13. Host Enforcement and Friction
+
+### A. Installed Hooks, Not Prose
+* Install the Claude Code integration with `chemx install-hooks --host=claude [--scope=local|project] [--dry-run]`. It adds the PreToolUse guard (`chemx hook claude-pre-tool`), the PostToolUse check (`claude-post-edit`), the SessionStart card and the statusline, and points `.mcp.json` at the same chemx. Run `chemx doctor` when MCP answers look stale; `chemx doctor --fix` repairs hooks and the MCP launch only.
+* The guard tokenizes the shell command. Raw test/typecheck/lint/build runners, `git diff`/`git log` and reads of repo source files are routed through chemx. Native Read/Edit are never denied.
+
+### B. Bypass and Friction
+* When chemx truly cannot do the job, append `# chemx-bypass: <reason>` to the Bash command. The bypass and every guard denial are logged to `.chemx/friction.jsonl`.
+* `chemx friction` summarises that log; `chemx friction add "<note>"` records a gap by hand; `chemx friction export --to=<file.md>` appends new entries to a Markdown friction log.
+* Measure adoption with `chemx friction --usage <transcript dir>` (Claude Code agent JSONL transcripts): chemx vs raw calls per subcommand, bypass reasons, recursive grep vs `chemx q`, chemx output piped through filters, MCP calls and guard denials.

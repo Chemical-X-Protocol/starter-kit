@@ -457,5 +457,23 @@ export const COMMANDS_SCHEMA = [
       'chemx doctor',
       'chemx doctor --fix'
     ]
+  },
+  {
+    name: 'friction',
+    aliases: [],
+    usage: 'chemx friction [summary | add "<note>" | export --to=<file.md>] | --usage <transcript dir>',
+    summary: 'Read back guard denials, bypasses and wrong calls; measure chemx adoption from agent transcripts.',
+    description: 'Hooks append denials and `# chemx-bypass:` reasons to .chemx/friction.jsonl automatically; unknown chemx commands are captured too. export appends new entries (cursor-tracked) to a Markdown log. --usage reads Claude Code JSONL transcripts and counts chemx vs raw calls, bypass reasons, grep -r vs q, piped chemx output, MCP calls and guard denials.',
+    flags: [
+      { flag: '--usage', desc: 'Usage report from transcript files or directories' },
+      { flag: '--to=<file.md>', desc: 'export target' },
+      { flag: '--dry-run', desc: 'export: show what would be appended' },
+      { flag: '--json', desc: 'Machine-readable output' }
+    ],
+    examples: [
+      'chemx friction',
+      'chemx friction export --to=docs/friction-log.md',
+      'chemx friction --usage ~/.claude/projects/<project>/<session>/subagents'
+    ]
   }
 ];

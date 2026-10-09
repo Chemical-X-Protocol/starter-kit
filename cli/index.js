@@ -108,7 +108,7 @@ export const ALLOWED_COMMANDS = new Set([
   'ui', 'preview', 'dashboard',
   'create', 'scaffold',
   'init',
-  'hook', 'hooks', 'install-hooks', 'setup-ci', 'doctor',
+  'hook', 'hooks', 'install-hooks', 'setup-ci', 'doctor', 'friction',
   'add:prop', 'add:state', 'add:action', 'fix',
   'tesseract', 'cube', 'matrix',
   'help', '--help', '-h',
@@ -142,6 +142,8 @@ const main = async () => {
   const isCommandValid = isAllowedCommand || isCapsuleCmd;
   if (!isCommandValid) {
     process.stderr.write(`Unknown command "${firstArg}". Run --help for usage.\n`);
+    const { recordWrongCall } = await import('./friction/wrong-call.js');
+    recordWrongCall(process.cwd(), firstArg, rawArgs);
     process.exit(1);
   }
 

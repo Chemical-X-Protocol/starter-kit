@@ -11,7 +11,9 @@ const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*(\[[^\]]*\])?\+?=/;
 const SHELL_NAMES = new Set(['bash', 'sh', 'zsh', 'dash']);
 const MAX_DEPTH = 4;
 
-const newCommand = () => ({ argv: [], assigns: [], redirects: [], subs: [] });
+const PIPE_OPS = new Set(['|', '|&']);
+
+const newCommand = (pipeline = 0) => ({ argv: [], assigns: [], redirects: [], subs: [], pipeline });
 
 const isAssignmentWord = (token) => ASSIGNMENT.test(token.raw);
 
@@ -49,18 +51,21 @@ const placeWord = (token, current, parser) => {
 const groupTokens = (tokens) => {
   const commands = [];
   const comments = [];
-  const parser = { skippingList: null, pendingRedirect: null };
+  const parser = { skippingList: null, pendingRedirect: null, pipeline: 0 };
   let current = newCommand();
 
-  const finish = () => {
+  // Commands joined by | or |& share a pipeline number; any other operator starts a new pipeline.
+  const finish = (operator = null) => {
     const hasContent = current.argv.length + current.assigns.length + current.redirects.length + current.subs.length > 0;
     if (hasContent) commands.push(current);
-    current = newCommand();
+    const isPipe = PIPE_OPS.has(operator);
+    if (!isPipe) parser.pipeline += 1;
+    current = newCommand(parser.pipeline);
   };
 
   for (const token of tokens) {
     if (token.type === 'comment') { comments.push(token.value); continue; }
-    if (token.type === 'op') { parser.pendingRedirect = null; parser.skippingList = null; finish(); continue; }
+    if (token.type === 'op') { parser.pendingRedirect = null; parser.skippingList = null; finish(token.value); continue; }
     if (token.type === 'redir') {
       parser.pendingRedirect = { op: token.op, fd: token.fd, target: '', body: null, token };
       current.redirects.push(parser.pendingRedirect);
@@ -85,6 +90,7 @@ const attachBodies = (commands) => {
 export const parseShell = (source, depth = 0) => {
   const { commands, comments } = groupTokens(lexShell(String(source ?? '')));
   attachBodies(commands);
+  for (const command of commands) command.depth = depth;
   const isTooDeep = depth >= MAX_DEPTH;
   if (isTooDeep) return { commands, comments };
   const nested = [];
