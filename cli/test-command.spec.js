@@ -111,3 +111,22 @@ test('cli-args: unknown flags and missing values are reported, and -- ends optio
   assert.equal(parseCliArgs(['--', 'vite', 'build', '--mode=x'], schema).command, 'vite build --mode=x');
   assert.equal(parseCliArgs(['--command=exit 3'], schema).values.command, 'exit 3');
 });
+
+test('test-command: a custom command keeps the filter even when its text appears elsewhere in the command', () => {
+  const vitest = planTestCommand('vitest run', process.cwd(), { targets: ['cli/a.spec.js'], filter: 'a' });
+  assert.equal(vitest.command, 'vitest run cli/a.spec.js -t "a"');
+  const npx = planTestCommand('npx vitest run tests/math.spec.ts', process.cwd(), { filter: 'math' });
+  assert.equal(npx.command, 'npx vitest run tests/math.spec.ts -t "math"');
+});
+
+test('test-command: a custom command that already carries a name filter or the target is not doubled', () => {
+  const withFilter = planTestCommand('npx vitest run -t "x"', process.cwd(), { filter: 'y' });
+  assert.equal(withFilter.command, 'npx vitest run -t "x"');
+  const withPattern = planTestCommand('node --test --test-name-pattern=foo cli/a.spec.js', process.cwd(), { filter: 'bar', targets: ['cli/a.spec.js'] });
+  assert.equal(withPattern.command, 'node --test --test-name-pattern=foo cli/a.spec.js');
+});
+
+test('test-command: the node --test filter is inserted after the --test token, not inside --test-reporter', () => {
+  const plan = planTestCommand('node --test-reporter=tap --test cli/a.spec.js', process.cwd(), { filter: 'foo' });
+  assert.equal(plan.command, 'node --test-reporter=tap --test --test-name-pattern="foo" cli/a.spec.js');
+});

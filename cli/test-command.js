@@ -75,15 +75,24 @@ const pickUnscopedScript = (scripts) => {
   return isWatchVitest && oneShot ? oneShot : 'test';
 };
 
+// Whole shell words with surrounding quotes removed, so `vitest run` never "contains" a filter `a`.
+const commandWords = (command) => command.split(/\s+/).filter(Boolean).map((word) => word.replace(/^(['"])(.*)\1$/, '$2'));
+const NAME_FILTER_FLAG = /^(?:-t|--filter|--test-name-pattern|--testNamePattern)(?:=|$)/;
+const NODE_TEST_FLAG = /(^|\s)--test(?=\s|$)/;
+
 const appendScopeToCustom = (customCmd, targets, filter) => {
   let command = customCmd.trim();
   const runner = detectRunnerFromScript(command);
-  const missingTargets = targets.filter((t) => !command.includes(t));
+  const words = commandWords(command);
+  const missingTargets = targets.filter((t) => !words.includes(t));
   if (missingTargets.length > 0) command += ` ${missingTargets.map(shellQuote).join(' ')}`;
-  const needsFilter = filter && !command.includes(filter);
-  if (needsFilter && runner === 'node') return command.replace(/--test\b/, `--test --test-name-pattern=${quoteFilter(filter)}`);
-  if (needsFilter) command += ` -t ${quoteFilter(filter)}`;
-  return command;
+  const hasNameFilter = words.some((word) => NAME_FILTER_FLAG.test(word));
+  const needsFilter = Boolean(filter) && !hasNameFilter;
+  if (!needsFilter) return command;
+  const canInsertAfterTestFlag = runner === 'node' && NODE_TEST_FLAG.test(command);
+  if (canInsertAfterTestFlag) return command.replace(NODE_TEST_FLAG, `$1--test --test-name-pattern=${quoteFilter(filter)}`);
+  const flag = runner === 'node' ? '--test-name-pattern=' : '-t ';
+  return `${command} ${flag}${quoteFilter(filter)}`;
 };
 
 // Returns { command, cwd, runner, missingTargets }. missingTargets lists node --test targets
