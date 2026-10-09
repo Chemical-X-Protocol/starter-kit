@@ -8,13 +8,16 @@ export function useSwarmFeed(author = '@ui-specialist') {
   const error = ref<Error | null>(null);
 
   const fetchFeed = async () => {
-    if (typeof fetch !== 'function') return;
+    const isFetchUnavailable = typeof fetch !== 'function';
+    if (isFetchUnavailable) return;
     try {
       isLoading.value = true;
       const res = await fetch('/api/swarm/status');
-      if (res.ok) {
+      const isResponseOk = Boolean(res.ok);
+      if (isResponseOk) {
         const data = await res.json();
-        if (data.posts) posts.value = data.posts;
+        const hasPosts = Boolean(data.posts);
+        if (hasPosts) posts.value = data.posts;
       }
     } catch (err) {
       error.value = err instanceof Error ? err : new Error(String(err));
@@ -25,7 +28,8 @@ export function useSwarmFeed(author = '@ui-specialist') {
   };
 
   const poller = useSelfCleaningTimeout(() => {
-    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+    const isPageHidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
+    if (isPageHidden) {
       poller.start();
       return;
     }
@@ -33,7 +37,8 @@ export function useSwarmFeed(author = '@ui-specialist') {
   }, 3000);
 
   const sendPost = async (message: string) => {
-    if (typeof fetch !== 'function') return;
+    const isFetchUnavailable = typeof fetch !== 'function';
+    if (isFetchUnavailable) return;
     try {
       await fetch('/api/swarm/feed', {
         method: 'POST',
