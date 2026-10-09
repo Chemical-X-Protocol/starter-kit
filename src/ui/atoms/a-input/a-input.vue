@@ -22,7 +22,8 @@ const handleInput = (event: Event) => {
 };
 
 const handleKeyDown = (event: KeyboardEvent) => {
-  if (event.key === 'Enter') {
+  const isEnterKey = event.key === 'Enter';
+  if (isEnterKey) {
     emit('submit');
   }
 };
