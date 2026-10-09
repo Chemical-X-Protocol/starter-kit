@@ -55,13 +55,16 @@ export const handleChemxPatch = (args = {}, cwd = process.cwd()) => {
   };
 };
 
+const DRY_RUN_KEYS = ['dryRun', 'dry-run', 'dry_run', 'n'];
+
 /**
- * MCP callers spell the preview flag several ways; all of them mean "do not write".
+ * MCP callers spell the preview flag several ways; all of them mean "do not write". When the
+ * spellings disagree, the preview wins: a truthy value under any of them blocks the write.
  *
  * @param {object} args Tool params.
  * @returns {boolean}
  */
-export const isDryRunRequested = (args = {}) => Boolean(args.dryRun ?? args['dry-run'] ?? args.dry_run ?? args.n);
+export const isDryRunRequested = (args = {}) => DRY_RUN_KEYS.some((key) => Boolean(args?.[key]));
 
 export const handleChemxCheck = (args = {}, cwd = process.cwd()) => {
   if (args.path === 'RESTART_MCP') {

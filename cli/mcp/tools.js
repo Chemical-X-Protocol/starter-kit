@@ -22,7 +22,21 @@ const parseListFlags = (parts) => {
   return flags;
 };
 
+const DRY_RUN_FLAG_REGEX = /(^|\s)(--dry-run|-n)(\s|$)/;
+const MUTATING_ACTIONS = new Set(['write', 'patch', 'autofix', 'explode', 'generate']);
+
+/**
+ * Parses a command string. A `--dry-run`/`-n` in the command string of a mutating action always
+ * means preview, whatever the params say, so the string form and the params form agree.
+ */
 export const parseCommand = (command, params) => {
+  const parsed = parseCommandParts(command, params);
+  const isMutating = MUTATING_ACTIONS.has(parsed.action) || String(parsed.action).startsWith('add');
+  const isPreview = isMutating && DRY_RUN_FLAG_REGEX.test(command);
+  return isPreview ? { ...parsed, params: { ...parsed.params, dryRun: true } } : parsed;
+};
+
+const parseCommandParts = (command, params) => {
   const parts = command.trim().split(/\s+/);
   const subCmd = parts[0];
   if (subCmd === 'audit') return { action: subCmd, params: { path: parts[1], ...params } };
@@ -94,10 +108,14 @@ export const parseCommand = (command, params) => {
         path: parts[1] || params?.path,
         target: params?.target || params?.targetContent || params?.search,
         replacement: params?.replacement || params?.replacementContent || params?.replace,
-        dryRun: /(^|\s)(--dry-run|-n)(\s|$)/.test(command) || undefined,
         ...params
       }
     };
+  }
+  if (subCmd === 'write') {
+    const positional = parts.slice(1).find((p) => !p.startsWith('-'));
+    const hasOverwrite = /(^|\s)--overwrite(\s|$)/.test(command);
+    return { action: 'write', params: { path: positional, overwrite: hasOverwrite || undefined, ...params } };
   }
   if (subCmd === 'q' || subCmd === 'search') return { action: 'q', params: { query: parts.slice(1).join(' '), ...params } };
   if (subCmd === 'team') {
