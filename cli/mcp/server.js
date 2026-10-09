@@ -3,6 +3,7 @@ import { MCP_RESOURCES, readMcpResource } from './resources.js';
 import { MCP_PROMPTS, getMcpPrompt } from './prompts.js';
 import { warmIndexDb } from '../search-db.js';
 import { hasProjectMarker } from './call-scope.js';
+import { resolveContext } from './context.js';
 import { createRootsTracker } from './roots.js';
 import { createToolCaller } from './tool-call.js';
 import { createStalenessProbe } from './staleness.js';
@@ -46,7 +47,18 @@ export const createMcpHandler = (options = {}) => {
   const scopeInputs = async () => ({ declaredRoot, bootRoot, mcpRoots: await roots.settled(), env });
   const callTool = createToolCaller({ scopeInputs, staleness });
   const inflight = createInflight({ notify: options.notify, progressIntervalMs: options.progressIntervalMs });
-  const resourceRoot = () => roots.current()[0] ?? declaredRoot ?? bootRoot ?? startDir;
+  // Resources and prompts resolve like tools/call: same order, same refusal, root echoed in _meta.
+  const resourceScope = async () => resolveContext({ cwd: bootRoot, mcpRoots: await roots.settled(), serverRoot: declaredRoot, env });
+  const withScope = async (id, label, produce) => {
+    const scope = await resourceScope();
+    if (!scope.ok) return replyError(id, -32602, `${label} failed: ${scope.error}`);
+    try {
+      const result = await produce(scope.root);
+      return reply(id, { ...result, _meta: { root: scope.root, rootSource: scope.rootSource, version: scope.version } });
+    } catch (err) {
+      return replyError(id, -32602, `${label} failed: ${describeError(err)}`);
+    }
+  };
   let isInitialized = false;
 
   const initialize = (id, params) => {
@@ -73,21 +85,9 @@ export const createMcpHandler = (options = {}) => {
       return cancelled ? null : reply(id, value);
     },
     'resources/list': (id) => reply(id, { resources: MCP_RESOURCES }),
-    'resources/read': async (id, params) => {
-      try {
-        return reply(id, { contents: [await readMcpResource(params?.uri, resourceRoot())] });
-      } catch (err) {
-        return replyError(id, -32602, `Resource read failed: ${describeError(err)}`);
-      }
-    },
+    'resources/read': (id, params) => withScope(id, 'Resource read', async (root) => ({ contents: [await readMcpResource(params?.uri, root)] })),
     'prompts/list': (id) => reply(id, { prompts: MCP_PROMPTS }),
-    'prompts/get': async (id, params) => {
-      try {
-        return reply(id, await getMcpPrompt(params?.name, params?.arguments || {}, resourceRoot()));
-      } catch (err) {
-        return replyError(id, -32602, `Prompt retrieval failed: ${describeError(err)}`);
-      }
-    }
+    'prompts/get': (id, params) => withScope(id, 'Prompt retrieval', (root) => getMcpPrompt(params?.name, params?.arguments || {}, root))
   };
 
   const handleRequest = async (request) => {

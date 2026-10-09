@@ -103,3 +103,17 @@ test('context: dbPath names the index the db layer will actually open', async ()
   assert.strictEqual(context.rootSource, 'projectRoot');
   assert.strictEqual(context.dbPath, path.join(outer, '.chemx', 'index.db'));
 });
+
+test('resources and prompts use the one resolver: env root honoured, echoed, unresolved refused', async () => {
+  const envProject = makeFixtureProject({ 'package.json': PKG, 'AGENTS.md': 'PROJECT-DIRECTIVE-MARKER\n' });
+  const handler = createMcpHandler({ bootDir: KIT_ROOT, env: { CHEMX_PROJECT_ROOT: envProject }, ...NO_STALE });
+  const read = await handler.handleRequest({ jsonrpc: '2.0', id: 1, method: 'resources/read', params: { uri: 'chemx://directives' } });
+  assert.match(read.result.contents[0].text, /PROJECT-DIRECTIVE-MARKER/);
+  assert.deepStrictEqual([read.result._meta.root, read.result._meta.rootSource], [envProject, 'env']);
+  const prompt = await handler.handleRequest({ jsonrpc: '2.0', id: 2, method: 'prompts/get', params: { name: 'chemx_remediate_hotspot', arguments: { filePath: 'a.ts' } } });
+  assert.strictEqual(prompt.result._meta.rootSource, 'env');
+  const unmarked = makeFixtureProject({ 'package.json': PKG }, null);
+  const refusing = createMcpHandler({ bootDir: unmarked, env: {}, ...NO_STALE });
+  const refused = await refusing.handleRequest({ jsonrpc: '2.0', id: 3, method: 'resources/read', params: { uri: 'chemx://scorecard' } });
+  assert.match(refused.error.message, /No project root/);
+});
