@@ -64,13 +64,15 @@ const firstErrorLine = (execution) => {
 };
 
 const typecheckStatusOf = (execution, errors) => {
-  if (execution.timedOut) return STATUS.INCONCLUSIVE;
+  const hasTimedOut = Boolean(execution.timedOut);
+  if (hasTimedOut) return STATUS.INCONCLUSIVE;
   const isClean = execution.exitCode === 0 && errors.length === 0;
   return isClean ? STATUS.PASS : STATUS.FAIL;
 };
 
 const describeExecutionError = (execution, hasBareFailure, timeoutMs) => {
-  if (execution.timedOut) return `Timed out after ${timeoutMs}ms`;
+  const hasTimedOut = Boolean(execution.timedOut);
+  if (hasTimedOut) return `Timed out after ${timeoutMs}ms`;
   return hasBareFailure ? firstErrorLine(execution) : null;
 };
 
@@ -78,7 +80,8 @@ export const runTypecheckAudit = async (rawArgs = [], isCli = false, options = {
   const parsed = parseCliArgs(rawArgs, TYPECHECK_ARGS);
   const isJson = Boolean(parsed.flags.json) || options.json === true;
   const output = { isJson, isCli, shouldPrint: options.print !== false };
-  if (parsed.flags.help) {
+  const isHelpRequested = Boolean(parsed.flags.help);
+  if (isHelpRequested) {
     if (output.shouldPrint) process.stdout.write(isJson ? `${JSON.stringify({ help: true, success: true })}\n` : TYPECHECK_HELP);
     if (isCli) process.exit(0);
     return { help: true, success: true };
