@@ -306,7 +306,9 @@ export const runMutatorCli = async (rawArgs = [], isCli = true) => {
       return result;
     }
 
-    process.stdout.write(`\n${ANSI.BOLD}${ANSI.LIME}✔ Chemical X Surgical Mutation Applied:${ANSI.RESET}\n`);
+    const isNothingApplied = result.fixed === false;
+    const heading = isNothingApplied ? `${ANSI.BOLD}${ANSI.GOLD}No changes written:` : `${ANSI.BOLD}${ANSI.LIME}✔ Chemical X Surgical Mutation Applied:`;
+    process.stdout.write(`\n${heading}${ANSI.RESET}\n`);
     if (result.updatedFiles) {
       for (const f of result.updatedFiles) {
         process.stdout.write(`  ${ANSI.CYAN}•${ANSI.RESET} Updated ${f}\n`);
