@@ -113,3 +113,16 @@ test('install safety: npm postinstall writes nothing into the consumer project o
     fs.rmSync(home, { recursive: true, force: true });
   }
 });
+
+test('install safety: install-hooks backs up an existing pre-commit hook instead of overwriting it', async () => {
+  const { installPreCommitHook } = await import('../installer.js');
+  const dir = tmp('chemx-inst-hook-');
+  try {
+    const hookPath = path.join(dir, '.git', 'hooks', 'pre-commit');
+    writeFile(hookPath, '#!/bin/sh\nnpx lint-staged\n');
+    installPreCommitHook(dir, { minGrade: 'B', minScore: 80 });
+    assert.strictEqual(fs.readFileSync(`${hookPath}.bak`, 'utf-8'), '#!/bin/sh\nnpx lint-staged\n');
+    assert.ok(fs.readFileSync(hookPath, 'utf-8').includes('Chemical X'));
+    assert.ok((fs.statSync(hookPath).mode & 0o111) !== 0, 'hook stays executable');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});

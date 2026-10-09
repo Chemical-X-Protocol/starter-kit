@@ -3,6 +3,7 @@ import path from 'node:path';
 import { hasGum, gumChoose, gumInput, promptQuestion } from './terminal.js';
 import { buildPreCommitHookScript, buildGitHubWorkflowScript } from './installer-templates.js';
 import { installAllMcpConfigs } from './mcp/installer.js';
+import { writeFileSafely } from './mcp/installer-write.js';
 import { runPillarsWizard } from './pillars-wizard.js';
 
 export { buildPreCommitHookScript, buildGitHubWorkflowScript } from './installer-templates.js';
@@ -49,8 +50,11 @@ export const installPreCommitHook = (targetDir = '.', options = {}) => {
   }
 
   const hookPath = path.join(gitHooksDir, 'pre-commit');
-  fs.writeFileSync(hookPath, buildPreCommitHookScript(options.minGrade, options.minScore), { mode: 0o755 });
+  const status = writeFileSafely(hookPath, buildPreCommitHookScript(options.minGrade, options.minScore));
+  fs.chmodSync(hookPath, 0o755);
   const relativeHook = path.relative(path.resolve(targetDir), hookPath);
+  const hasBackup = status === 'written' && fs.existsSync(`${hookPath}.bak`);
+  if (hasBackup) process.stdout.write(`  \x1b[33mℹ\x1b[0m Previous pre-commit hook saved as ${relativeHook}.bak\n`);
   process.stdout.write(`  \x1b[32m✔\x1b[0m Installed git pre-commit hook: ${relativeHook} (chmod +x)\n`);
   ensurePackageScripts(targetDir);
   return true;
