@@ -13,11 +13,13 @@ import { syncAntigravityMcpSchemas } from './antigravity.js';
 import { describeServerOrigin } from './server-info.js';
 
 export const runMcpServer = async (rawArgs = []) => {
-  if (rawArgs.includes('--sync')) {
+  const hasSyncFlag = rawArgs.includes('--sync');
+  if (hasSyncFlag) {
     const targetDir = rawArgs.find((a) => !a.startsWith('-')) || null;
     return syncAntigravityMcpSchemas(targetDir);
   }
-  if (rawArgs.includes('--install')) {
+  const hasInstallFlag = rawArgs.includes('--install');
+  if (hasInstallFlag) {
     return runMcpInstaller(rawArgs);
   }
   // Stdio server must keep stdout strictly reserved for JSON-RPC messages.
