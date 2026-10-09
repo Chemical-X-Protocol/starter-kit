@@ -498,6 +498,7 @@ Raw inline `style="..."` attributes are strictly prohibited. Visual styling flow
 
 ### A. Installed Hooks, Not Prose
 * Install the Claude Code integration with `chemx install-hooks --host=claude [--scope=local|project] [--dry-run]`. It adds the PreToolUse guard (`chemx hook claude-pre-tool`), the PostToolUse check (`claude-post-edit`), the SessionStart card and the statusline, and points `.mcp.json` at the same chemx. Run `chemx doctor` when MCP answers look stale; `chemx doctor --fix` repairs hooks and the MCP launch only.
+* Alternatively install the Claude Code plugin (`plugins/claude-code`, marketplace `.claude-plugin/marketplace.json`): the same hooks, the chemical-x MCP server and a short chemx skill, resolving the kit from `CHEMX_KIT`, the project's node_modules or PATH. Use the plugin or install-hooks, not both, or every hook runs twice. The statusline comes only from install-hooks.
 * The guard tokenizes the shell command. Raw test/typecheck/lint/build runners, `git diff`/`git log` and reads of repo source files are routed through chemx. Native Read/Edit are never denied.
 
 ### B. Bypass and Friction

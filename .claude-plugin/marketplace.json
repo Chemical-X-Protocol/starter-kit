@@ -1,0 +1,11 @@
+{
+  "name": "chemical-x",
+  "owner": { "name": "Chemical X Protocol" },
+  "plugins": [
+    {
+      "name": "chemx",
+      "source": "./plugins/claude-code",
+      "description": "chemx guard, post-edit check, session card, chemical-x MCP server and usage skill for Claude Code."
+    }
+  ]
+}
