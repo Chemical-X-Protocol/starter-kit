@@ -96,6 +96,18 @@ export const ALLOWED_COMMANDS = new Set([
 const HELP_FLAGS = new Set(['help', '--help', '-h']);
 const VERSION_FLAGS = new Set(['version', '--version', '-v']);
 
+// Any command run as a lease holder keeps that holder's leases alive; long ones keep renewing while
+// they run. Fails open: a renewal problem must never stop the command (cli/team/lease-activity.js).
+const trackLeaseActivity = async (command) => {
+  try {
+    const activity = await import('./team/lease-activity.js');
+    activity.trackLeaseActivity(process.cwd(), activity.agentFromArgs(rawArgs), command);
+  } catch (err) {
+    const isDebug = Boolean(process.env.CHEMX_DEBUG);
+    if (isDebug) process.stderr.write(`[lease-activity] skipped: ${err.message}\n`);
+  }
+};
+
 const main = async () => {
   const firstArg = rawArgs[0];
 
@@ -121,6 +133,7 @@ const main = async () => {
     process.exit(1);
   }
 
+  await trackLeaseActivity(firstArg);
   const { dispatchCommand } = await import('./commands/cmd-router.js');
   await dispatchCommand(firstArg, rawArgs, runAudit, getPackageVersion, isCapsulePrefix);
 };

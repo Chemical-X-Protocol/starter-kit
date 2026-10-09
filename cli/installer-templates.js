@@ -46,6 +46,32 @@ else
   export NO_COLOR=1
 fi
 
+# Lease guard (#2492): a staged file under another handle's live lease blocks the commit. Only a
+# report that starts with "Commit blocked:" refuses; a crash, or a chemx without the subcommand,
+# never blocks a commit. Committer = CHEMX_AGENT_ID (unset: a human, so any live agent lease blocks).
+LEASE_BIN="\$CHEMX_BIN"
+if [ -z "\$LEASE_BIN" ]; then
+  if [ -f "./cli/index.js" ]; then
+    LEASE_BIN="node ./cli/index.js"
+  elif [ -x "./node_modules/.bin/chemx" ]; then
+    LEASE_BIN="./node_modules/.bin/chemx"
+  elif command -v chemx >/dev/null 2>&1; then
+    LEASE_BIN="chemx"
+  fi
+fi
+if [ -n "\$LEASE_BIN" ]; then
+  LEASE_OUT=\$(eval "\$LEASE_BIN team lock check-staged < /dev/null" 2>&1)
+  case "\$LEASE_OUT" in
+    "Commit blocked:"*)
+      printf "\\n%s%s[Chemical X] %s%s\\n\\n" "\$C_BOLD" "\$C_RED" "\$LEASE_OUT" "\$C_RESET"
+      exit 1
+      ;;
+    "Warning:"*)
+      printf "%s%s%s\\n" "\$C_YELLOW" "\$LEASE_OUT" "\$C_RESET"
+      ;;
+  esac
+fi
+
 # Default gate: any rule whose violation count rises in a staged file vs HEAD, at any
 # severity (the audit ratchet's rule). The failure output lists each new hazard as
 # RULE@file:line. Grade thresholds only apply to the opt-in absolute gate

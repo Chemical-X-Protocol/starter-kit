@@ -342,5 +342,24 @@ export const executeMcpTool = async (name, args = {}, cwd = process.cwd()) => {
   const handle = resolveToolHandler(toolName);
   if (!handle) throw new Error(`Unknown tool: ${name}`);
   const effectiveCwd = args.projectRoot || args?.params?.projectRoot || args?.params?.cwd || cwd;
-  return handle(args, effectiveCwd);
+  const stopKeepalive = await trackActivity(toolName, args, effectiveCwd);
+  try {
+    return await handle(args, effectiveCwd);
+  } finally {
+    stopKeepalive();
+  }
+};
+
+// Any call made as a lease holder keeps that holder's leases alive, and a long one (test, verify,
+// build, ...) keeps renewing while it runs. Loaded on first call so `initialize` stays fast; fails
+// open, so a renewal problem never fails the call (cli/team/lease-activity.js).
+const trackActivity = async (toolName, args, cwd) => {
+  try {
+    const activity = await import('../team/lease-activity.js');
+    return activity.trackMcpLeaseActivity(toolName, args, cwd);
+  } catch (err) {
+    const isDebug = Boolean(process.env.CHEMX_DEBUG);
+    if (isDebug) process.stderr.write(`[lease-activity] skipped: ${err.message}\n`);
+    return () => {};
+  }
 };

@@ -7,6 +7,7 @@ import { postFeedEvent } from './team-db-feed.js';
 import { DEFAULT_TTL_MS, cleanExpiredLeases, promoteNextWaiter, enqueueWaiter, describeLease } from './team-db-lock-promotion.js';
 import { withImmediateTransaction } from './team-db-transaction.js';
 import { resolveLeaseScope, toLeaseKey } from './lease-key.js';
+import { findLapse, explainNotHolder } from './lease-lapse.js';
 
 export { cleanExpiredLeases, promoteNextWaiter, describeLease } from './team-db-lock-promotion.js';
 
@@ -44,6 +45,8 @@ export const requestFileLock = (db, filePath, agentId, options = {}) => {
 
     const isAvailable = !existingLease || existingLease.locked_by === cleanId;
     if (isAvailable) {
+      // Read before the grant: a granted lease ends the lapse record's relevance.
+      const lapse = existingLease ? null : findLapse(db, cleanPath, cleanId);
       const upsertSql = `INSERT INTO file_leases (file_path, locked_by, acquired_at, expires_at, purpose, pid)
         VALUES (?, ?, ?, ?, ?, ?)
         ON CONFLICT(file_path) DO UPDATE SET
@@ -59,7 +62,8 @@ export const requestFileLock = (db, filePath, agentId, options = {}) => {
         message: `${cleanId} acquired lock on ${cleanPath}`
       });
 
-      return { granted: true, lease: { file_path: cleanPath, locked_by: cleanId, expires_at: expiresAt, pid } };
+      const lapseNote = lapse ? { previousLapse: lapse } : {};
+      return { granted: true, lease: { file_path: cleanPath, locked_by: cleanId, expires_at: expiresAt, pid }, ...lapseNote };
     }
 
     return enqueueWaiter(db, cleanPath, cleanId, existingLease, options, now);
@@ -84,7 +88,10 @@ export const releaseFileLock = (db, filePath, agentId, options = {}) => {
     const existingLease = db.prepare('SELECT * FROM file_leases WHERE file_path = ?').get(cleanPath);
     const isHolder = Boolean(existingLease) && existingLease.locked_by === cleanId;
     if (!isHolder) {
-      return { success: false, reason: 'not_holder' };
+      const lapse = findLapse(db, cleanPath, cleanId);
+      const message = explainNotHolder(cleanPath, lapse, existingLease, Date.now());
+      const lapseNote = lapse ? { lapse } : {};
+      return { success: false, reason: 'not_holder', message, heldBy: existingLease?.locked_by ?? null, ...lapseNote };
     }
 
     db.prepare('DELETE FROM file_leases WHERE file_path = ?').run(cleanPath);

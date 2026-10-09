@@ -3,8 +3,11 @@ import { formatLockHelpCard } from './team-format.js';
 import { isPathTraversal } from '../path-scope.js';
 import { resolveAgentIdentity, describeIdentityHint } from './agent-identity.js';
 import { runLockCheck, runLockStatus, runLockList, runLockRenew } from './team-commands-lock-views.js';
+import { runLockCheckStaged } from './team-commands-lock-staged.js';
+import { clockTime } from './lease-lapse.js';
+import { DEFAULT_TTL_MS } from './team-db-lock-promotion.js';
 
-const LOCK_ACTIONS = ['acquire', 'release', 'unlock', 'check', 'status', 'list', 'renew'];
+const LOCK_ACTIONS = ['acquire', 'release', 'unlock', 'check', 'check-staged', 'status', 'list', 'renew'];
 
 // The first positional names the action when it is one; otherwise it is the file (default acquire).
 // So `lock list` lists, and a file literally named "list" needs `lock acquire list`.
@@ -46,16 +49,27 @@ export const resolveCliAgent = (flags, isCli) => {
   return identity.id;
 };
 
+const RENEWAL_NOTE = `Any chemx command run as this handle extends it to ${DEFAULT_TTL_MS / 60000} minutes from then; with no chemx activity it lapses.`;
+
+// The acquire line: when it expires, what keeps it alive, and a lapse it replaces.
+const describeGrant = (file, res) => {
+  const until = clockTime(res.lease.expires_at);
+  const lapse = res.previousLapse ? ` (your earlier lease on it expired at ${clockTime(res.previousLapse.expiredAt)})` : '';
+  return `\x1b[32m✔\x1b[0m Acquired lock on ${file}${lapse}. It expires at ${until}. ${RENEWAL_NOTE}\n`;
+};
+
 export const handleLockCommand = (db, nonFlagPositional, flags, isCli, cwd = process.cwd()) => {
   const isLockHelp = flags.help || nonFlagPositional.includes('--help') || nonFlagPositional.includes('-h') || nonFlagPositional.includes('help');
   if (isLockHelp) {
     if (isCli) process.stdout.write(formatLockHelpCard());
-    return { help: true, actions: ['acquire', 'release', 'check', 'status', 'list', 'renew'] };
+    return { help: true, actions: ['acquire', 'release', 'check', 'check-staged', 'status', 'list', 'renew'] };
   }
 
   const { action, file } = parseLockAction(nonFlagPositional);
   const isList = action === 'list';
   if (isList) return runLockList(db, flags, isCli);
+  const isCheckStaged = action === 'check-staged';
+  if (isCheckStaged) return runLockCheckStaged(nonFlagPositional.slice(1), flags, isCli, cwd);
 
   if (!file) {
     if (isCli) process.stderr.write('\x1b[31m✕ File path required: chemx team lock [acquire|release|check|status|renew] <filePath> (or: chemx team lock list)\x1b[0m\n');
@@ -85,7 +99,7 @@ export const handleLockCommand = (db, nonFlagPositional, flags, isCli, cwd = pro
 
   if (isCli) {
     if (flags.isJson) process.stdout.write(`${JSON.stringify(res, null, 2)}\n`);
-    else if (res.granted) process.stdout.write(`\x1b[32m✔\x1b[0m Acquired lock on ${file}\n`);
+    else if (res.granted) process.stdout.write(describeGrant(file, res));
     else if (res.queued) process.stdout.write(`\x1b[33m⏳\x1b[0m ${res.requeued ? 'Still' : 'Enqueued'} in FIFO lock queue at position ${res.position} (held by ${res.currentHolder})\n`);
     else process.stderr.write(`\x1b[31m✕ Lock refused: ${res.reason}\x1b[0m\n`);
   }
@@ -116,7 +130,7 @@ export const handleUnlockCommand = (db, nonFlagPositional, flags, isCli, cwd = p
   if (isCli) {
     if (flags.isJson) process.stdout.write(`${JSON.stringify(res, null, 2)}\n`);
     else if (isReleased) process.stdout.write(`\x1b[32m✔\x1b[0m Released lock on ${file}\n`);
-    else process.stderr.write(`\x1b[31m✕ Unlock failed: ${res.reason}\x1b[0m\n`);
+    else process.stderr.write(`\x1b[31m✕ Unlock failed: ${res.message ?? res.reason}\x1b[0m\n`);
   }
   return res;
 };

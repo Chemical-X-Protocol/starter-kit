@@ -26,6 +26,7 @@ import { resolveListOptions, selectTaskPage, buildTaskListView } from './task-li
 import { handleTaskHandoffCommand } from './team-task-handoff.js';
 import { handleTaskSlotCommand, handleTaskTraceCommand, handleTrainCommand } from './team-commands-vds.js';
 import { handleLockCommand, handleUnlockCommand, resolveCliAgent } from './team-commands-lock.js';
+import { runCheckStagedArgs } from './team-commands-lock-staged.js';
 import { resolveTaskTier } from './task-tier.js';
 import { resolveDependencyStates } from './task-detail-sections.js';
 import { buildCompletionOptions, describeCompletion, describeStatusUpdate, writeTaskResult } from './task-completion-output.js';
@@ -37,6 +38,9 @@ import { handleDispatchCommand } from './team-commands-dispatch.js';
 const ARG_VAL_FLAGS = ['--target', '--as', '--to', '--agent', '--since', '--limit', '--thread', '--task', '--parent', '--rule', '--priority', '--prio', '--moscow', '--needs', '--url', '--pid'];
 
 export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => {
+  // The commit guard reads leases read-only and must not open (create, migrate) a team db first.
+  const isStagedCheck = rawArgs[0] === 'lock' && rawArgs[1] === 'check-staged';
+  if (isStagedCheck) return runCheckStagedArgs(rawArgs.slice(2), isCli, cwd);
   const db = openIndexDb(cwd);
   if (!db) {
     if (isCli) process.stderr.write('\x1b[31m✕ SQLite database unavailable.\x1b[0m\n');

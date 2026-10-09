@@ -16,7 +16,7 @@ import { parseSource } from './source-parse.js';
 import { buildUnifiedDiff } from './edit-diff.js';
 import { writeAtomic, removeWithBackup, restoreFromBackup } from './edit-atomic.js';
 import { findForeignLease } from './edit-locks.js';
-import { renewLeasesAfterEdit } from './team/lease-renew.js';
+import { syncLeasesAfterEdit } from './team/lease-renew.js';
 import { countLines } from './line-count.js';
 
 export class EditRefusedError extends Error {
@@ -122,10 +122,12 @@ export const applyEdits = (edits, options = {}) => {
   if (hasIssues) throw new EditRefusedError(issues);
 
   const isPreview = dryRun;
+  let leaseNotes = [];
   if (!isPreview) {
     commitPlans(plans, root);
-    // Renew-on-edit: a caller who already holds a lease on a written file keeps it one more TTL.
-    renewLeasesAfterEdit(root, plans.map((p) => p.absPath), options.agentId);
+    // Renew-on-edit: a live lease of the caller's on a written file gets one more TTL; a lapsed,
+    // untaken one is re-acquired and the result says so.
+    leaseNotes = syncLeasesAfterEdit(root, plans.map((p) => p.absPath), options.agentId).notes;
   }
 
   const files = plans.map((p) => ({
@@ -141,5 +143,6 @@ export const applyEdits = (edits, options = {}) => {
     backup: p.backup ? path.relative(root, p.backup) : null,
     diff: buildUnifiedDiff(p.before ?? '', p.after, { path: p.file, isNew: p.created, isDeleted: p.isDelete })
   }));
-  return { dryRun, files, diff: files.map((f) => f.diff).filter(Boolean).join('\n') };
+  const noteField = leaseNotes.length > 0 ? { leaseNotes } : {};
+  return { dryRun, files, diff: files.map((f) => f.diff).filter(Boolean).join('\n'), ...noteField };
 };

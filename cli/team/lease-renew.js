@@ -8,32 +8,13 @@
  * Lock roots and keys mirror edit-locks.js (findForeignLease) so renewal sees the same rows the
  * refusal check sees.
  */
-import fs from 'node:fs';
 import path from 'node:path';
+import { lockRoots, leaseKeys } from './lease-roots.js';
 import { openTeamDbReadOnly, openExistingTeamDb, closeQuietly, safeAll } from './team-db-readonly.js';
 import { renewHeldLease } from './team-db-locks.js';
 import { resolveAgentId } from './agent-identity.js';
-
-const lockRoots = (root, absPath) => {
-  const roots = [root];
-  let dir = path.dirname(absPath);
-  while (true) {
-    const hasDb = fs.existsSync(path.join(dir, '.chemx', 'index.db'));
-    const isNewRoot = hasDb && !roots.includes(dir);
-    if (isNewRoot) roots.push(dir);
-    const parent = path.dirname(dir);
-    const isTop = parent === dir;
-    if (isTop) break;
-    dir = parent;
-  }
-  return roots;
-};
-
-const leaseKeys = (lockRoot, absPath, root) => {
-  const keys = [path.relative(lockRoot, absPath), path.relative(root, absPath)];
-  const isInside = (key) => key !== '' && !key.startsWith('..') && !path.isAbsolute(key);
-  return keys.filter(isInside);
-};
+import { reacquireLapsedAfterEdit } from './lease-reacquire.js';
+import { clockTime, describeLapse } from './lease-lapse.js';
 
 // lockRoot -> Set of keys, so each lock db is read once however many files the batch touched.
 const keysByRoot = (root, absPaths) => {
@@ -94,4 +75,20 @@ export const renewLeasesAfterEdit = (root, absPaths, agentId, options = {}) => {
     if (isDebug) process.stderr.write(`[lease-renew] renewal skipped: ${err.message}\n`);
     return [];
   }
+};
+
+/**
+ * Everything an edit does to the caller's leases: extend live ones, retake lapsed untaken ones.
+ * `notes` are ready-to-print sentences for every lease that had lapsed; renewals need no note.
+ * @returns {{ renewed: string[], reacquired: object[], notes: string[] }}
+ */
+export const syncLeasesAfterEdit = (root, absPaths, agentId, options = {}) => {
+  const renewed = renewLeasesAfterEdit(root, absPaths, agentId, options);
+  const reacquired = reacquireLapsedAfterEdit(root, absPaths, agentId, options);
+  const now = options.now ?? Date.now();
+  const notes = reacquired.map((lease) => {
+    const lapsed = describeLapse(lease.key, { expiredAt: lease.lapsedAt }, now);
+    return `${lapsed}; nobody had taken it, so this edit re-acquired it until ${clockTime(lease.expiresAt)}`;
+  });
+  return { renewed, reacquired, notes };
 };

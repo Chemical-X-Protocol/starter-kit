@@ -135,7 +135,8 @@ export const cleanExpiredLeases = (db, now = Date.now()) => {
         author_id: '@system',
         event_type: 'lock_expired',
         file_path: lease.file_path,
-        message: `Lease expired for ${lease.file_path} held by ${lease.locked_by} (${reason})`
+        message: `Lease expired for ${lease.file_path} held by ${lease.locked_by} (${reason})`,
+        metadata: { holder: lease.locked_by, expires_at: lease.expires_at, acquired_at: lease.acquired_at, purpose: lease.purpose || '', reason }
       });
       promoteNextWaiter(db, lease.file_path);
       cleaned.push(lease);

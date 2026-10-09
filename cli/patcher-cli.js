@@ -111,6 +111,7 @@ const printOutcome = (res, verb, isJson) => {
   const writeVerb = res.created ? 'Created' : 'Updated';
   const doneVerb = verb === 'patch' ? 'Patched' : writeVerb;
   process.stdout.write(`${ANSI.GREEN}✔ ${doneVerb} ${res.file}${where}${res.backup ? ` (backup: ${res.backup})` : ''}${ANSI.RESET}\n`);
+  (res.leaseNotes ?? []).forEach((note) => process.stdout.write(`  ${ANSI.GOLD}⚠ ${note}${ANSI.RESET}\n`));
   const isOverBudget = Boolean(res.lineBudget) && !res.lineBudget.passed;
   if (isOverBudget) {
     process.stdout.write(`  ${ANSI.RED}⚠ Line Budget: ${res.lineBudget.lines}L exceeds ${res.lineBudget.limit}L limit (Directive 1.A)${ANSI.RESET}\n`);
