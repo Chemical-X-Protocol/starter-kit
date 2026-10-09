@@ -7,7 +7,8 @@ export const toPascalCase = (str) =>
 
 export const toCamelCase = (str) => {
   const p = toPascalCase(str);
-  if (str.startsWith('use-') || str.startsWith('use')) {
+  const isUseName = str.startsWith('use-') || str.startsWith('use');
+  if (isUseName) {
     return `use${p}`;
   }
   return p.charAt(0).toLowerCase() + p.slice(1);
