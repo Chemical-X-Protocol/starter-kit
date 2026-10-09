@@ -58,8 +58,9 @@ Unit behaviour:
 Incrementality and cost:
 - A second `chemx patterns` with no edits parses 0 files, and touching one file re-fingerprints exactly 1.
 - A patch through chemx updates that file's rows without an audit.
-- Measured audit overhead is at most +15% cold and at most +3% warm.
-- pattern_units is at most 40k rows on the kit.
+- Enforced time guarantee is warm (measured 2026-10-09, decision feed #6773): Forge adds 1.9ms to a 305ms audit (under 3%), and warm sync takes 14ms idle and 132ms with 5 edits (under 1s).
+- Cold costs are published as measured, not as targets met: cold sync 651ms against the 305ms target, and uncapped cold audit 857ms against 350ms. Both are improved under #2554.
+- The 40k pattern_units budget applies to the default audit scope (measured 32,416 on 2026-10-09). Spec files are a separate facet whose count is published, not capped (total 55,983).
 
 General:
 - Every file is under 500 lines.
