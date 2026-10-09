@@ -20,10 +20,12 @@ export const formatHazards = ({ relativePath, scope, violations, catalog }) => {
   for (const violation of sorted.slice(0, MAX_HAZARDS)) {
     lines.push(`- L${violation.line ?? '?'} ${violation.rule} [${violation.severity}]: ${violation.hazard}`);
     const hints = helperHintsFor(catalog, violation.rule, relativePath);
-    if (hints.length > 0) lines.push(`  x-atoms: ${hints.slice(0, 2).join(' | ')}`);
+    const hasHints = hints.length > 0;
+    if (hasHints) lines.push(`  x-atoms: ${hints.slice(0, 2).join(' | ')}`);
   }
   const hiddenCount = sorted.length - MAX_HAZARDS;
-  if (hiddenCount > 0) lines.push(`- ...${hiddenCount} more: chemx check ${relativePath}`);
+  const hasHiddenHazards = hiddenCount > 0;
+  if (hasHiddenHazards) lines.push(`- ...${hiddenCount} more: chemx check ${relativePath}`);
   return lines.join('\n');
 };
 
