@@ -312,7 +312,12 @@ export const runMutatorCli = async (rawArgs = [], isCli = true) => {
         process.stdout.write(`  ${ANSI.CYAN}•${ANSI.RESET} Updated ${f}\n`);
       }
     }
-    if (result.fixed !== undefined) {
+    const skippedEntries = result.skipped || [];
+    for (const s of skippedEntries) {
+      process.stdout.write(`  ${ANSI.GOLD}•${ANSI.RESET} Skipped ${s.file}: ${s.reason}\n`);
+    }
+    const isReportedFile = result.fixed !== undefined && skippedEntries.length === 0;
+    if (isReportedFile) {
       const msg = result.fixed ? `Fixed ${result.replacementsCount} mechanical hazard(s)` : 'File was already clean';
       process.stdout.write(`  ${ANSI.MINT}•${ANSI.RESET} ${msg} in ${result.file}\n`);
     }

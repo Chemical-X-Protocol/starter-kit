@@ -25,17 +25,25 @@ export const FIXABLE_EXTENSIONS = new Set(['.tsx', '.ts', '.jsx', '.js', '.mjs',
 const isFixable = (filePath) => FIXABLE_EXTENSIONS.has(path.extname(filePath).toLowerCase());
 
 const collectFiles = (targetPath) => {
-  const stat = fs.statSync(targetPath);
-  if (stat.isFile()) return isFixable(targetPath) ? [targetPath] : [];
+  const isFile = fs.statSync(targetPath).isFile();
+  if (isFile) return isFixable(targetPath) ? [targetPath] : [];
 
   let files = [];
   for (const entry of fs.readdirSync(targetPath, { withFileTypes: true })) {
-    if (IGNORED_DIRS.has(entry.name)) continue;
+    const isIgnored = IGNORED_DIRS.has(entry.name);
+    if (isIgnored) continue;
     const fullPath = path.join(targetPath, entry.name);
-    if (entry.isDirectory()) files = files.concat(collectFiles(fullPath));
-    else if (isFixable(entry.name)) files.push(fullPath);
+    const isDirectory = entry.isDirectory();
+    const isFixableFile = !isDirectory && isFixable(entry.name);
+    if (isDirectory) files = files.concat(collectFiles(fullPath));
+    else if (isFixableFile) files.push(fullPath);
   }
   return files;
+};
+
+const excludedReason = (filePath) => {
+  const ext = path.extname(filePath).toLowerCase() || 'extensionless';
+  return `${ext} files are not autofix targets (fixable: ${[...FIXABLE_EXTENSIONS].join(' ')}); nothing was checked`;
 };
 
 /**
@@ -53,7 +61,10 @@ export const runAutofix = (targetPath, options = {}) => {
   const resolvedTarget = resolveSafePath(target, cwd);
   const root = fs.realpathSync(cwd);
   const empty = { target, dryRun, filesScanned: 0, filesChanged: 0, totalFixes: 0, fixes: [], suggestions: [], skipped: [] };
-  if (!fs.existsSync(resolvedTarget)) return empty;
+  const isMissing = !fs.existsSync(resolvedTarget);
+  if (isMissing) return { ...empty, skipped: [{ file: target, reason: 'target does not exist; nothing was checked' }] };
+  const isExcludedFile = fs.statSync(resolvedTarget).isFile() && !isFixable(resolvedTarget);
+  if (isExcludedFile) return { ...empty, skipped: [{ file: path.relative(root, resolvedTarget), reason: excludedReason(resolvedTarget) }] };
 
   const files = collectFiles(resolvedTarget);
   const fixes = [];

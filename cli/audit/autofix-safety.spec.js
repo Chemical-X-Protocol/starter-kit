@@ -69,3 +69,18 @@ test('autofix: a file that does not parse is skipped untouched, except edge fenc
   assert.equal(fenced.fixedContent, 'export const a = 1;\n');
   assert.equal(fenced.fixes.length, 2);
 });
+
+test('autofix: an explicit excluded or missing target is reported as skipped, not as clean', () => {
+  const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-autofix-skip-')));
+  try {
+    fs.writeFileSync(path.join(dir, 'README.md'), '# Title\n\n// hope this helps\n');
+    const md = runAutofix('README.md', { cwd: dir, dryRun: true });
+    assert.equal(md.skipped.length, 1);
+    assert.equal(md.skipped[0].file, 'README.md');
+    assert.match(md.skipped[0].reason, /\.md files are not autofix targets/);
+    const missing = runAutofix('nope.ts', { cwd: dir, dryRun: true });
+    assert.match(missing.skipped[0].reason, /does not exist/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
