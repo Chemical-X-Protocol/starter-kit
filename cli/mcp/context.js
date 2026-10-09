@@ -29,7 +29,8 @@ const realResolve = (target) => {
   let current = target;
   while (!fs.existsSync(current)) {
     const parent = path.dirname(current);
-    if (parent === current) return target;
+    const isFilesystemRoot = parent === current;
+    if (isFilesystemRoot) return target;
     tail.unshift(path.basename(current));
     current = parent;
   }
@@ -57,7 +58,8 @@ const locateProjectRoot = (projectRoot, declaredRoots) => {
 const locateRoot = ({ projectRoot, mcpRoots, serverRoot, envRoot, bootDir }) => {
   const hasProjectRoot = !(projectRoot === undefined || projectRoot === null);
   if (hasProjectRoot) return locateProjectRoot(projectRoot, [...mcpRoots, serverRoot].filter(Boolean));
-  if (mcpRoots.length > 0) return { ok: true, root: mcpRoots[0], rootSource: 'mcpRoots' };
+  const hasMcpRoots = mcpRoots.length > 0;
+  if (hasMcpRoots) return { ok: true, root: mcpRoots[0], rootSource: 'mcpRoots' };
   if (serverRoot) return { ok: true, root: serverRoot, rootSource: 'declared' };
   if (envRoot) return { ok: true, root: envRoot, rootSource: 'env' };
   if (bootDir) return { ok: true, root: bootDir, rootSource: 'boot' };
@@ -68,7 +70,8 @@ export const resolveContext = ({ cwd = null, projectRoot = null, mcpRoots = [], 
   const envRoot = isExistingDir(env.CHEMX_PROJECT_ROOT) ? env.CHEMX_PROJECT_ROOT : null;
   const bootDir = cwd && hasChemxMarker(cwd) ? cwd : null;
   const located = locateRoot({ projectRoot, mcpRoots, serverRoot, envRoot, bootDir });
-  if (!located.ok) return located;
+  const hasLocateFailed = !located.ok;
+  if (hasLocateFailed) return located;
   const allowedRoots = parseAllowedRoots(env);
   const isPinned = allowedRoots.length > 0;
   const isAllowed = !isPinned || allowedRoots.some((allowed) => isInsideDir(allowed, located.root));
