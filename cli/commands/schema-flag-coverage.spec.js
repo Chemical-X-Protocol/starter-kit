@@ -34,3 +34,18 @@ test('check accepts --profile, --json and --compact', () => {
   assert.equal(findUnknownFlag('check', ['check', 'a.vue', '--profile=atomic-strict', '--json', '--compact']), null);
   assert.equal(findUnknownFlag('check', ['check', 'a.vue', '--profile', 'atomic-strict']), null);
 });
+
+test('test help lists the lane flags the docs name (#4509)', () => {
+  const listed = findCommandSchema('test').flags.map((f) => f.flag.split(/[=\s]/)[0]);
+  for (const flag of ['--slow', '--all', '--changed', '--base', '--related', '--depth', '--profile', '--top']) {
+    assert.ok(listed.includes(flag), `test help omits ${flag}`);
+  }
+});
+
+test('team task help lists close and the flags its handlers read (#4509)', async () => {
+  const { formatTaskHelpCard } = await import('../team/team-format.js');
+  const card = formatTaskHelpCard().replace(/\x1b\[[0-9;]*m/g, '');
+  for (const word of ['close', '--parent', '--desc', '--repo', '--all-repos', '--duplicate-of', '--cancel']) {
+    assert.ok(card.includes(word), `team task help omits ${word}`);
+  }
+});

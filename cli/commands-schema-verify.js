@@ -25,7 +25,15 @@ export const VERIFY_COMMANDS = [
     description: 'Detects the test runner and suppresses passing output.',
     flags: [
       { flag: '--json', desc: 'Output test summary as minified JSON' },
-      { flag: '--raw', desc: 'Do not suppress passing test output' }
+      { flag: '--raw', desc: 'Do not suppress passing test output' },
+      { flag: '--slow', desc: 'Run only the slow lane (docs/test-lanes.md)' },
+      { flag: '--all', desc: 'Run both lanes' },
+      { flag: '--changed', desc: 'Run specs affected by changed files, by the import graph' },
+      { flag: '--base=<rev>', desc: 'With --changed: compare against this revision' },
+      { flag: '--related <files...>', desc: 'Run specs affected by the files you name' },
+      { flag: '--depth=<n>', desc: 'With --changed or --related: only specs within n import hops (deeper ones are reported as not run)' },
+      { flag: '--profile', desc: 'Time each spec file in its own process, slowest first' },
+      { flag: '--top=<n>', desc: 'With --profile: show the n slowest' }
     ],
     examples: ['chemx test', 'chemx test src/store.spec.ts --json']
   },
