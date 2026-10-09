@@ -6,7 +6,8 @@ export function useSwarmSettings() {
   const isExecuting = ref<boolean>(false);
 
   const executeAction = async (action: string, payload: Record<string, any> = {}) => {
-    if (typeof fetch !== 'function') return;
+    const isFetchMissing = typeof fetch !== 'function';
+    if (isFetchMissing) return;
     try {
       isExecuting.value = true;
       const res = await fetch('/api/swarm/settings/action', {
@@ -15,10 +16,12 @@ export function useSwarmSettings() {
         body: JSON.stringify({ action, ...payload })
       });
       const data = await res.json();
-      lastMessage.value = data.message || (data.success ? 'Success' : data.error || 'Action failed');
+      const isSuccessResult = Boolean(data.success);
+      lastMessage.value = data.message || (isSuccessResult ? 'Success' : data.error || 'Action failed');
       isSuccess.value = Boolean(data.success);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Action request failed';
+      const isErrorInstance = err instanceof Error;
+      const message = isErrorInstance ? err.message : 'Action request failed';
       lastMessage.value = message;
       isSuccess.value = false;
     } finally {
