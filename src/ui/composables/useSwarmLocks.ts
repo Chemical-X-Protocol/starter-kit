@@ -7,13 +7,17 @@ export function useSwarmLocks() {
   const error = ref<Error | null>(null);
 
   const fetchLocks = async () => {
-    if (typeof fetch !== 'function') return;
+    const hasFetch = typeof fetch === 'function';
+    if (!hasFetch) return;
     try {
       const res = await fetch('/api/swarm/status');
-      if (res.ok) {
+      const isOk = Boolean(res.ok);
+      if (isOk) {
         const data = await res.json();
-        if (data.leases) leases.value = data.leases;
-        if (data.waitingLocksCount !== undefined) waitingLocksCount.value = data.waitingLocksCount;
+        const hasLeases = Boolean(data.leases);
+        if (hasLeases) leases.value = data.leases;
+        const hasWaitingCount = data.waitingLocksCount !== undefined;
+        if (hasWaitingCount) waitingLocksCount.value = data.waitingLocksCount;
       }
     } catch (err) {
       error.value = err instanceof Error ? err : new Error(String(err));
@@ -21,7 +25,8 @@ export function useSwarmLocks() {
   };
 
   const acquireLock = async (filePath: string, agentId = '@coordinator') => {
-    if (typeof fetch !== 'function') return;
+    const hasFetch = typeof fetch === 'function';
+    if (!hasFetch) return;
     try {
       await fetch('/api/swarm/locks/acquire', {
         method: 'POST',
@@ -35,7 +40,8 @@ export function useSwarmLocks() {
   };
 
   const releaseLock = async (filePath: string, agentId = '@coordinator') => {
-    if (typeof fetch !== 'function') return;
+    const hasFetch = typeof fetch === 'function';
+    if (!hasFetch) return;
     try {
       await fetch('/api/swarm/locks/release', {
         method: 'POST',
