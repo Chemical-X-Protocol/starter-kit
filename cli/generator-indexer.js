@@ -33,7 +33,8 @@ export const indexGeneratedFiles = (cwd, targetDir, filesCreated = []) => {
   for (const relFile of filesCreated) {
     const absPath = path.join(targetDir, relFile);
     const relPath = path.relative(cwd, absPath);
-    if (fs.existsSync(absPath)) {
+    const isPresent = Boolean(fs.existsSync(absPath));
+    if (isPresent) {
       const astData = parseFileAst(absPath, relPath);
       upsertFileIndex(db, astData);
     }
