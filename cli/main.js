@@ -36,7 +36,8 @@ const isCapsulePrefix = (arg) => CAPSULE_PREFIXES.some((p) => arg.startsWith(p))
 
 const loadProjectConfig = () => {
   const cfgPath = path.resolve(process.cwd(), '.chemx', 'config.json');
-  if (!fs.existsSync(cfgPath)) return {};
+  const isMissing = Boolean(!fs.existsSync(cfgPath));
+  if (isMissing) return {};
   try {
     return JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
   } catch {
@@ -62,7 +63,8 @@ export const startMcpServer  = runMcpServer;
 export const runMcpInstaller = async (...a) => (await import('./mcp/index.js')).runMcpInstaller(...a);
 export const runReaderCli    = async (...a) => {
   const readerCards = await import('./reader-cards-gate.js');
-  if (readerCards.argsWantReadCards(a[0] || [])) await readerCards.loadReadCards();
+  const wantsReadCards = Boolean(readerCards.argsWantReadCards(a[0] || []));
+  if (wantsReadCards) await readerCards.loadReadCards();
   return (await import('./reader.js')).runReaderCli(...a);
 };
 export const readTokenOptimized = async (...a) => (await import('./reader.js')).readTokenOptimized(...a);
