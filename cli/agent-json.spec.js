@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { formatAgentJson, groupDiagnosticsByFile } from './agent-json.js';
+import { formatAgentJson, formatDiagnosticRow } from './agent-json.js';
 import { runCli } from './spec-support/run-cli.js';
 
 const ESC = '\x1b';
@@ -19,13 +19,16 @@ const TSC_ERRORS = [
   "src/app.ts(3,10): error TS2305: Module './api' has no exported member 'fetchUser'."
 ];
 
-const makeProject = () => {
+// success, exitCode, command, durationMs and errorCount: the fixed cost of any --json report.
+const ENVELOPE_BUDGET_BYTES = 120;
+
+const makeProject = (errorLines = TSC_ERRORS) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-json-ratio-'));
   fs.mkdirSync(path.join(dir, 'node_modules'));
   fs.mkdirSync(path.join(dir, 'spec'));
   // Colored like a forced-color child would print it, to prove ANSI never reaches the payload.
-  const colored = TSC_ERRORS.map((line) => `${ESC}[96m${line.split('(')[0]}${ESC}[0m(${line.split('(').slice(1).join('(')}`);
-  fs.writeFileSync(path.join(dir, 'tc.cjs'), `process.stdout.write(${JSON.stringify(`${colored.join('\n')}\n\nFound 7 errors in 4 files.\n`)}); process.exit(2);\n`);
+  const colored = errorLines.map((line) => `${ESC}[96m${line.split('(')[0]}${ESC}[0m(${line.split('(').slice(1).join('(')}`);
+  fs.writeFileSync(path.join(dir, 'tc.cjs'), `process.stdout.write(${JSON.stringify(`${colored.join('\n')}\n\nFound ${errorLines.length} errors.\n`)}); process.exit(2);\n`);
   fs.writeFileSync(path.join(dir, 'spec', 'math.spec.cjs'), [
     "const test = require('node:test');",
     "const assert = require('node:assert');",
@@ -45,14 +48,23 @@ const rawBytes = (dir, command) => {
   return Buffer.byteLength(`${res.stdout}${res.stderr}`);
 };
 
-test('agent json: diagnostics group by file as compact rows, ANSI stripped', () => {
+test('agent json: diagnostics become compact "file:line:col CODE message" rows, ANSI stripped', () => {
   const rows = [
     { category: 'TYPE_ERROR', severity: 'ERROR', file: `${ESC}[96msrc/a.ts${ESC}[0m`, line: 1, column: 5, code: 'TS2322', message: 'bad', suggestion: 'Review TypeScript compiler diagnostic.' },
     { severity: 'WARNING', file: 'src/a.ts', line: 9, column: 1, code: 'TS6133', message: 'unused' }
   ];
-  assert.deepStrictEqual(groupDiagnosticsByFile(rows), { 'src/a.ts': ['1:5 TS2322 bad', '9:1 warning TS6133 unused'] });
+  assert.strictEqual(formatDiagnosticRow(rows[0]), 'src/a.ts:1:5 TS2322 bad');
   const json = formatAgentJson({ success: false, executionError: null, errors: rows, note: `${ESC}[31mred${ESC}[0m` });
-  assert.strictEqual(json, '{"success":false,"errors":{"src/a.ts":["1:5 TS2322 bad","9:1 warning TS6133 unused"]},"note":"red"}');
+  assert.strictEqual(json, '{"success":false,"errors":["src/a.ts:1:5 TS2322 bad","src/a.ts:9:1 warning TS6133 unused"],"note":"red"}');
+});
+
+test('agent json: errors is always an array, one entry per diagnostic, empty or not', () => {
+  const none = JSON.parse(formatAgentJson({ success: true, errors: [] }));
+  const one = JSON.parse(formatAgentJson({ success: false, errors: [{ file: 'a.ts', line: 1, message: 'x' }] }));
+  assert.ok(Array.isArray(none.errors) && Array.isArray(one.errors), 'same type with and without diagnostics');
+  assert.strictEqual(none.errors.length, 0);
+  assert.strictEqual(one.errors.length, 1);
+  assert.strictEqual(one.errors[0], 'a.ts:1 x');
 });
 
 test('agent json: typecheck and test --json are never larger than the raw tool output', () => {
@@ -71,7 +83,21 @@ test('agent json: typecheck and test --json are never larger than the raw tool o
   }
   const typecheck = JSON.parse(runCli(['typecheck', '--json'], { cwd: dir }).stdout);
   assert.strictEqual(typecheck.errorCount, 7);
-  assert.deepStrictEqual(typecheck.errors['src/routes/router.ts'], ["5:1 TS1005 ';' expected.", "77:30 TS2345 Argument of type 'number' is not assignable to parameter of type 'string'."]);
+  assert.strictEqual(typecheck.errors.length, 7);
+  assert.deepStrictEqual(typecheck.errors.slice(4, 6), ["src/routes/router.ts:5:1 TS1005 ';' expected.", "src/routes/router.ts:77:30 TS2345 Argument of type 'number' is not assignable to parameter of type 'string'."]);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test(`agent json: with one error the report is at most the raw output plus a ${ENVELOPE_BUDGET_BYTES}-byte envelope`, () => {
+  const dir = makeProject(TSC_ERRORS.slice(0, 1));
+  const run = runCli(['typecheck', '--json'], { cwd: dir, timeout: 60000 });
+  const report = JSON.parse(run.stdout);
+  assert.strictEqual(report.errorCount, 1);
+  const rowBytes = Buffer.byteLength(report.errors[0]);
+  assert.ok(rowBytes < Buffer.byteLength(TSC_ERRORS[0]), `a diagnostic row (${rowBytes} bytes) is shorter than its raw tsc line`);
+  const jsonBytes = Buffer.byteLength(run.stdout);
+  const rawSize = rawBytes(dir, 'node tc.cjs');
+  assert.ok(jsonBytes <= rawSize + ENVELOPE_BUDGET_BYTES, `${jsonBytes} JSON bytes > ${rawSize} raw + ${ENVELOPE_BUDGET_BYTES} envelope`);
   fs.rmSync(dir, { recursive: true, force: true });
 });
 

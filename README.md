@@ -140,15 +140,11 @@ $ npx chemx typecheck
   ✔ TypeScript typecheck clean (1820ms)
 
 # Machine-readable output for AI agents
+# (one minified line; `errors` is always an array of "file:line:col CODE message" rows)
 $ npx chemx typecheck --json
-{
-  "success": true,
-  "exitCode": 0,
-  "command": "npm run typecheck",
-  "durationMs": 1820,
-  "errorCount": 0,
-  "errors": []
-}
+{"success":true,"exitCode":0,"command":"npm run typecheck","durationMs":1820,"errorCount":0,"errors":[]}
+$ npx chemx typecheck --json   # with a type error
+{"success":false,"exitCode":2,"command":"npm run typecheck","durationMs":1009,"errorCount":1,"errors":["src/a.ts:1:7 TS2322 Type 'string' is not assignable to type 'number'."]}
 ```
 
 #### 3. Production Build: Raw Build vs `chemx build`
