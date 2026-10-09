@@ -87,7 +87,8 @@ export const buildInstallerProjectConfig = (opts = {}, existing = {}) => {
 /** Saves the merged config; a config that does not parse as an object is left untouched (returns false). */
 export const saveInstallerProjectConfig = (targetDir = '.', opts = {}) => {
   const existing = readExistingProjectConfig(targetDir);
-  if (existing === null) {
+  const isUnreadable = existing === null;
+  if (isUnreadable) {
     process.stdout.write('  \x1b[33m⚠\x1b[0m Kept .chemx/config.json unchanged: it does not parse as a JSON object, so minGrade and minScore were not saved. Fix it and re-run the installer.\n');
     return false;
   }

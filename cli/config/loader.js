@@ -24,7 +24,8 @@ const measureString = (text, index) => {
   while (cursor < text.length) {
     const char = text[cursor];
     cursor += char === BACKSLASH ? 2 : 1;
-    if (char === QUOTE) break;
+    const isClosingQuote = char === QUOTE;
+    if (isClosingQuote) break;
   }
   return Math.min(cursor, text.length) - index;
 };
@@ -59,7 +60,8 @@ export const parseJsonSafe = (raw) => {
  */
 export const readExistingProjectConfig = (targetDir = '.') => {
   const configPath = path.resolve(targetDir, '.chemx', 'config.json');
-  if (!fs.existsSync(configPath)) return {};
+  const hasConfig = fs.existsSync(configPath);
+  if (!hasConfig) return {};
   const content = fs.readFileSync(configPath, 'utf-8');
   const isBlank = content.trim() === '';
   if (isBlank) return {};
