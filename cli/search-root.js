@@ -3,7 +3,7 @@
 // stored relative to it, whatever subdirectory chemx was started from.
 import path from 'node:path';
 import { findChemxDir } from './audit/chemx-dir.js';
-import { resolveTargetDir } from './path-scope.js';
+import { resolveProjectScope } from './project-scope.js';
 
 const toPosix = (p) => p.split(path.sep).join('/');
 
@@ -33,9 +33,9 @@ export const normalizeScope = (targetDirs, root, cwd = root) => {
   return { scopeDirs: finalDirs, scopeKey: finalDirs.join(','), outside };
 };
 
-// Default scope when no --dir is given: the project's own default (src/ or .), resolved
-// from the root, never from the subdirectory the command happened to start in.
-export const resolveDefaultScopeDir = (root) => resolveTargetDir(null, null, root);
+// Default scope when no --dir is given: the project scope (config `scope`, else the whole root),
+// resolved from the root, never from the subdirectory the command happened to start in.
+export const resolveDefaultScopeDir = (root) => resolveProjectScope(root).relDir;
 
 export const isPathInScope = (relPath, scopeDirs) => scopeDirs.some((dir) => {
   const isWholeProject = dir === '.';

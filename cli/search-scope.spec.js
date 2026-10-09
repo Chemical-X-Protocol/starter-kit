@@ -132,7 +132,7 @@ test('chemx q and MCP q never serve a file deleted after a wider sync', async ()
     fs.rmSync(path.join(root, 'lib/ghost.js'));
     const narrow = runQ(root, ['ghostAlpha']);
     assert.equal(narrow.payload.count, 0, JSON.stringify(narrow.payload.rows || narrow.payload.results));
-    assert.equal(narrow.payload.index.scope, 'src');
+    assert.equal(narrow.payload.index.scope, '.', 'the default scope is the whole project (no src guess, #2037)');
     const { handleChemxQ } = await import('./mcp/tools-q.js');
     clearDbCache();
     const text = handleChemxQ({ query: 'ghostAlpha' }, root);

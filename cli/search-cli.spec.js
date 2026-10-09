@@ -92,7 +92,7 @@ test('chemx q: help, ranking, limits, argv, def cap, hazards and every mode are 
     assert.equal(ranked.count, 2);
     assert.equal(ranked.total, 3, 'definition + helper file + the hook call site in useA.ts');
     assert.equal(ranked.truncated, true);
-    assert.equal(ranked.index.scope, 'src');
+    assert.equal(ranked.index.scope, '.', 'the default scope is the whole project (no src guess, #2037)');
 
     const truncated = parseJson(await runQ(root, ['use', '-n', '1', '--json', '--raw-json']));
     assert.equal(truncated.truncated, true, 'a page smaller than the total says so');

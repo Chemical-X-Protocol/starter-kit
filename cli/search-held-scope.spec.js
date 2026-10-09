@@ -9,9 +9,12 @@ import { spawnSync } from 'node:child_process';
 import { clearDbCache } from './search-db.js';
 import { withIndex } from './search-output.js';
 
+// These specs pin the project scope to src (config `scope`) so the default scope is narrower
+// than the scopes the index holds.
 const makeProject = (files) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-g6-held-'));
   fs.mkdirSync(path.join(root, '.chemx'));
+  fs.writeFileSync(path.join(root, '.chemx', 'config.json'), JSON.stringify({ scope: 'src' }));
   for (const [rel, content] of Object.entries(files)) {
     fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
     fs.writeFileSync(path.join(root, rel), content);

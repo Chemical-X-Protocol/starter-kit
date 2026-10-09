@@ -16,7 +16,8 @@ const scopeFromPath = (projectRoot, requested, source) => {
   return { ok: true, dir, relDir: toRelDir(projectRoot, dir), source };
 };
 
-const readConfiguredScope = (projectRoot) => {
+// The `scope` key of .chemx/config.json (or chemx.config), or null. Shared with project-scope.js.
+export const readConfiguredScope = (projectRoot) => {
   const scope = findAndLoadConfigFile(projectRoot).raw?.scope;
   const isUsable = typeof scope === 'string' && scope.length > 0;
   return isUsable ? scope : null;

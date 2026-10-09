@@ -29,7 +29,7 @@ test('MCP chemx_q sees files created and deleted outside chemx (no ghost results
     fs.rmSync(target);
     const deleted = await callQ(handler, { query: 'useZebraFreshness', projectRoot: root });
     assert.doesNotMatch(deleted, /useZebraFreshness\.ts/, 'deleted file is not served');
-    assert.match(deleted, /# index: scope src/);
+    assert.match(deleted, /# index: scope \. /);
   } finally {
     clearDbCache();
     fs.rmSync(root, { recursive: true, force: true });
