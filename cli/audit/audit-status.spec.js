@@ -5,11 +5,13 @@ import path from 'node:path';
 import os from 'node:os';
 import { runAudit } from '../audit.js';
 import { writeAuditStatus, readAuditStatus } from './status-file.js';
-import { createSnapshotFromReport } from './history.js';
+import { createSnapshotFromReport, findChemxDir } from './history.js';
+import { execFileSync } from 'node:child_process';
 import { RULESET_VERSION } from './rule-revisions.js';
 
 const withProject = (files, fn) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-status-'));
+  execFileSync('git', ['init', '-q'], { cwd: root });
   for (const [rel, content] of Object.entries(files)) {
     fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
     fs.writeFileSync(path.join(root, rel), content);
@@ -63,5 +65,16 @@ test('history snapshots carry scope, ruleset and score model', () => {
     assert.equal(snapshot.scope, 'src');
     assert.equal(snapshot.ruleset, RULESET_VERSION);
     assert.equal(snapshot.scoreModel, 2);
+  });
+});
+
+test('status.json lands beside audit history and never leaves an untracked .chemx/ in the project', () => {
+  withProject(FILES, (root) => {
+    const report = runAudit('src', { cwd: root });
+    report.gate = { isPassing: true, basis: 'ratchet', regressions: [], adopted: [] };
+    writeAuditStatus(root, { scope: 'src', report });
+    assert.ok(fs.existsSync(path.join(findChemxDir(root), 'status.json')));
+    const untracked = execFileSync('git', ['status', '--porcelain', '--untracked-files=all'], { cwd: root, encoding: 'utf-8' });
+    assert.doesNotMatch(untracked, /\.chemx\//, untracked);
   });
 });

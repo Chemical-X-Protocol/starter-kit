@@ -2,11 +2,15 @@
  * `.chemx/status.json`: the latest audit verdict per scope, for hooks, statuslines
  * and agents that need the gate state without re-running the audit.
  *   { version: 1, latestScope, scopes: { <scope>: { updatedAt, ruleset, scoreModel, health, gate, coverage, hazards } } }
+ * It lives in the same .chemx/ as audit history (findChemxDir), which ensureChemxDir
+ * gitignores, so an audit never leaves an untracked .chemx/ in the audited project.
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { findChemxDir, ensureChemxDir } from './history.js';
 
 export const STATUS_FILE = path.join('.chemx', 'status.json');
+const STATUS_BASENAME = 'status.json';
 const STATUS_VERSION = 1;
 
 const countBySeverity = (violations = []) => {
@@ -20,7 +24,7 @@ const countBySeverity = (violations = []) => {
 
 export const readAuditStatus = (projectRoot) => {
   try {
-    const parsed = JSON.parse(fs.readFileSync(path.join(projectRoot, STATUS_FILE), 'utf-8'));
+    const parsed = JSON.parse(fs.readFileSync(path.join(findChemxDir(projectRoot), STATUS_BASENAME), 'utf-8'));
     const hasScopes = parsed !== null && typeof parsed === 'object' && typeof parsed.scopes === 'object';
     return hasScopes ? parsed : null;
   } catch {
@@ -53,8 +57,8 @@ export const writeAuditStatus = (projectRoot, { scope, report }) => {
     scopes: { ...existing.scopes, [scope]: buildScopeStatus(report) }
   };
   try {
-    fs.mkdirSync(path.join(projectRoot, '.chemx'), { recursive: true });
-    fs.writeFileSync(path.join(projectRoot, STATUS_FILE), JSON.stringify(payload, null, 2) + '\n', 'utf-8');
+    const chemxDir = ensureChemxDir(projectRoot);
+    fs.writeFileSync(path.join(chemxDir, STATUS_BASENAME), JSON.stringify(payload, null, 2) + '\n', 'utf-8');
     return payload;
   } catch {
     return null;
