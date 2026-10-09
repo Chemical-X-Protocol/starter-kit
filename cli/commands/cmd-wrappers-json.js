@@ -27,11 +27,14 @@ const formatPkgQuery = (pkg, query) => {
     const scriptLine = scriptKeys.length ? `Scripts (${scriptKeys.length}): ${scriptKeys.join(', ')}\n` : '';
     return `Package: ${pkg.name || 'unnamed'}@${pkg.version || '0.0.0'}\n${scriptLine}`;
   }
-  if (query === '-s' || query === '--scripts') return listOrNone(Object.entries(scripts).map(([k, v]) => `${k}: ${v}\n`), 'scripts');
-  if (query === '-d' || query === '--deps') {
+  const isScriptsFlag = query === '-s' || query === '--scripts';
+  if (isScriptsFlag) return listOrNone(Object.entries(scripts).map(([k, v]) => `${k}: ${v}\n`), 'scripts');
+  const isDepsFlag = query === '-d' || query === '--deps';
+  if (isDepsFlag) {
     return listOrNone([...Object.entries(deps).map(([k, v]) => `${k}: ${v}\n`), ...Object.entries(devDeps).map(([k, v]) => `[dev] ${k}: ${v}\n`)], 'dependencies');
   }
-  if (Object.hasOwn(scripts, query)) return `${query}: ${scripts[query]}\n`;
+  const hasScriptKey = Object.hasOwn(scripts, query);
+  if (hasScriptKey) return `${query}: ${scripts[query]}\n`;
   const version = deps[query] || devDeps[query];
   return version ? `${query}: ${version}\n` : null;
 };
@@ -39,7 +42,8 @@ const formatPkgQuery = (pkg, query) => {
 export const runPkg = async (rawArgs = [], isCli = true, cwd = process.cwd()) => {
   const query = rawArgs.filter((a) => a !== 'p' && a !== 'pkg')[0];
   const pkgPath = path.join(cwd, 'package.json');
-  if (!fs.existsSync(pkgPath)) return fail(`No package.json found in ${cwd}.`, isCli);
+  const isMissingPkg = !fs.existsSync(pkgPath);
+  if (isMissingPkg) return fail(`No package.json found in ${cwd}.`, isCli);
   let pkg;
   try {
     pkg = readJson(pkgPath).parsed;
@@ -47,7 +51,8 @@ export const runPkg = async (rawArgs = [], isCli = true, cwd = process.cwd()) =>
     return fail(`Invalid package.json: ${err.message}`, isCli);
   }
   const output = formatPkgQuery(pkg, query);
-  if (output === null) return fail(`Key "${query}" not found in scripts or dependencies of ${pkgPath}.`, isCli);
+  const isMissingKey = output === null;
+  if (isMissingKey) return fail(`Key "${query}" not found in scripts or dependencies of ${pkgPath}.`, isCli);
   return emitWrapperResult({ output, code: 0 }, isCli);
 };
 
@@ -62,12 +67,14 @@ const isScalar = (value) => value === null || typeof value !== 'object';
 export const describeJson = (value, depth = 0) => {
   if (isScalar(value)) return formatScalar(value);
   if (Array.isArray(value)) {
-    if (value.length === 0) return '[]';
+    const isEmptyArray = value.length === 0;
+    if (isEmptyArray) return '[]';
     const isShortScalarList = value.length <= MAX_INLINE_ARRAY && value.every(isScalar);
     if (isShortScalarList) return `[${value.map(formatScalar).join(', ')}]`;
     return `${depth > 2 ? 'array' : `[${describeJson(value[0], depth + 1)}, ...]`} (${value.length} items)`;
   }
-  if (depth > 2) return `{ ... ${Object.keys(value).length} keys }`;
+  const isDeepContainer = depth > 2;
+  if (isDeepContainer) return `{ ... ${Object.keys(value).length} keys }`;
   const indent = '  '.repeat(depth + 1);
   const keys = Object.keys(value);
   const fields = keys.slice(0, MAX_FIELDS).map((k) => `${indent}${k}: ${describeJson(value[k], depth + 1)}`);
@@ -79,7 +86,8 @@ export const runJsonShape = async (rawArgs = [], isCli = true, cwd = process.cwd
   const targetFile = rawArgs.filter((a) => a !== 'j' && a !== 'json')[0];
   if (!targetFile) return fail('Usage: chemx j <path-to-json-file>', isCli);
   const fullPath = path.resolve(cwd, targetFile);
-  if (!fs.existsSync(fullPath)) return fail(`File not found: ${fullPath}`, isCli);
+  const isMissingFile = !fs.existsSync(fullPath);
+  if (isMissingFile) return fail(`File not found: ${fullPath}`, isCli);
   let json;
   try {
     json = readJson(fullPath);
