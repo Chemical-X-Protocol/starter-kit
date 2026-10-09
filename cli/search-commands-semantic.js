@@ -41,7 +41,8 @@ export const handleSemanticCommand = (db, query, { index = null, isJson = false,
   }
 
   process.stdout.write(`\n${ANSI.BOLD}${ANSI.CYAN}Feature-hash similarity for "${query}":${ANSI.RESET} ${ANSI.DIM}(${results.length} matches)${ANSI.RESET}\n`);
-  if (results.length === 0) {
+  const hasNoSimilarResults = results.length === 0;
+  if (hasNoSimilarResults) {
     process.stdout.write(`  ${ANSI.DIM}No similar names found (feature-hash similarity is lexical; try q -g or hybrid).${ANSI.RESET}\n\n`);
     if (isCli) process.exit();
     return results;
@@ -90,7 +91,8 @@ export const handleHybridCommand = (db, query, { index = null, isJson = false, i
   }
 
   process.stdout.write(`\n${ANSI.BOLD}${ANSI.CYAN}Hybrid (BM25 + feature-hash) results for "${query}":${ANSI.RESET} ${ANSI.DIM}(${results.length} ranked)${ANSI.RESET}\n`);
-  if (results.length === 0) {
+  const hasNoHybridResults = results.length === 0;
+  if (hasNoHybridResults) {
     process.stdout.write(`  ${ANSI.DIM}No hybrid matches found.${ANSI.RESET}\n\n`);
     if (isCli) process.exit();
     return results;
