@@ -63,25 +63,38 @@ const searchWithJs = (root, scopeDirs, options, collect) => {
   return stats;
 };
 
-const searchWithRipgrep = (root, scopeDirs, options, collect) => {
-  const args = ['--json', '--no-config', options.isCaseInsensitive ? '--ignore-case' : '--case-sensitive', '--glob', '!.git', '--glob', '!.claude', '--glob', '!.chemx', '--sort', 'path'];
-  if (!options.isRegex) args.push('--fixed-strings');
-  if (options.isHidden) args.push('--hidden');
-  args.push('--', options.pattern, ...scopeDirs);
+const RG_FILTER_ARGS = ['--no-config', '--glob', '!.git', '--glob', '!.claude', '--glob', '!.chemx'];
+
+const runRipgrep = (root, args) => {
   const res = spawnSync('rg', args, { cwd: root, encoding: 'utf-8', maxBuffer: 512 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] });
   const isRgError = res.status !== 0 && res.status !== 1;
   if (isRgError) throw new Error(`rg failed: ${(res.stderr || '').trim()}`);
-  const stats = { filesSearched: 0, skippedBinary: 0, skippedLarge: 0 };
-  for (const raw of (res.stdout || '').split('\n')) {
+  return res.stdout || '';
+};
+
+// rg's --json summary only counts files it reported on (0 when nothing matches), so the
+// searched-file count comes from `rg --files` under the same filters.
+const countRipgrepFiles = (root, scopeDirs, options) => {
+  const args = ['--files', ...RG_FILTER_ARGS];
+  if (options.isHidden) args.push('--hidden');
+  args.push('--', ...scopeDirs);
+  return runRipgrep(root, args).split('\n').filter(Boolean).length;
+};
+
+const searchWithRipgrep = (root, scopeDirs, options, collect) => {
+  const args = ['--json', ...RG_FILTER_ARGS, options.isCaseInsensitive ? '--ignore-case' : '--case-sensitive', '--sort', 'path'];
+  if (!options.isRegex) args.push('--fixed-strings');
+  if (options.isHidden) args.push('--hidden');
+  args.push('--', options.pattern, ...scopeDirs);
+  const stdout = runRipgrep(root, args);
+  const stats = { filesSearched: countRipgrepFiles(root, scopeDirs, options), skippedBinary: 0, skippedLarge: 0 };
+  for (const raw of stdout.split('\n')) {
     if (!raw) continue;
     const event = JSON.parse(raw);
     const isMatchEvent = event.type === 'match';
-    if (isMatchEvent) {
-      const rel = (event.data.path.text || '').replace(/^\.\//, '');
-      collect({ path: rel, line: event.data.line_number, text: clampLine((event.data.lines.text || '').replace(/\n$/, '')) });
-    }
-    const isSummary = event.type === 'summary';
-    if (isSummary) stats.filesSearched = Number(event.data.stats.searches || 0);
+    if (!isMatchEvent) continue;
+    const rel = (event.data.path.text || '').replace(/^\.\//, '');
+    collect({ path: rel, line: event.data.line_number, text: clampLine((event.data.lines.text || '').replace(/\n$/, '')) });
   }
   return stats;
 };

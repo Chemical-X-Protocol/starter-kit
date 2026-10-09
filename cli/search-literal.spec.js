@@ -68,7 +68,26 @@ for (const engine of ENGINES) {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+
+  test(`literal search (${engine}): a zero-match search still reports every file it searched`, () => {
+    const root = makeRepo();
+    try {
+      const none = runLiteralSearch({ root, pattern: 'zzzNoSuchStringXyz', engine });
+      assert.equal(none.totalMatches, 0);
+      assert.ok(none.filesSearched >= 5, `files searched counted without matches (got ${none.filesSearched})`);
+      const few = runLiteralSearch({ root, pattern: '@mixin', engine });
+      assert.ok(few.filesSearched >= 5, `count is not limited to matching files (got ${few.filesSearched})`);
+      const cmd = handleLiteralSearchCommand(null, 'zzzNoSuchStringXyz', { isJson: false, isCli: false, isQuiet: true, cwd: root, engine });
+      assert.equal(cmd.status, 'pass', 'a searched scope with no match is a truthful negative');
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
 }
+
+test('literal search: the rg engine is exercised when ripgrep is on PATH', { skip: isRipgrepAvailable() ? false : 'ripgrep not on PATH; run with rg on PATH to cover the rg engine' }, () => {
+  assert.ok(ENGINES.includes('rg'));
+});
 
 test('literal search command: truncation is explicit and line-only drops text', () => {
   const res = handleLiteralSearchCommand(null, 'import', { limit: 3, isJson: false, isCli: false, cwd: KIT_ROOT, isLineOnly: true });
