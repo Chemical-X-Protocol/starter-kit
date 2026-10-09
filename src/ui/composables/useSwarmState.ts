@@ -19,20 +19,27 @@ export function useSwarmState() {
   const error = ref<Error | null>(null);
 
   const applyData = (data: any = {}) => {
-    if (data.agents) agents.value = data.agents;
-    if (data.posts) posts.value = data.posts;
-    if (data.telemetry) telemetry.value = data.telemetry;
-    if (data.savings) savings.value = data.savings;
+    const hasAgents = Boolean(data.agents);
+    if (hasAgents) agents.value = data.agents;
+    const hasPosts = Boolean(data.posts);
+    if (hasPosts) posts.value = data.posts;
+    const hasTelemetry = Boolean(data.telemetry);
+    if (hasTelemetry) telemetry.value = data.telemetry;
+    const hasSavings = Boolean(data.savings);
+    if (hasSavings) savings.value = data.savings;
   };
 
   const fetchSwarmData = async () => {
     try {
-      if (typeof window !== 'undefined' && (window as any).__CHEMX_HYDRATED_STATE__) {
+      const isHydrated = typeof window !== 'undefined' && Boolean((window as any).__CHEMX_HYDRATED_STATE__);
+      if (isHydrated) {
         applyData((window as any).__CHEMX_HYDRATED_STATE__);
       }
-      if (typeof fetch === 'function') {
+      const isFetchAvailable = typeof fetch === 'function';
+      if (isFetchAvailable) {
         const res = await fetch('/api/swarm/status');
-        if (res.ok) applyData(await res.json());
+        const isResponseOk = Boolean(res.ok);
+        if (isResponseOk) applyData(await res.json());
       }
     } catch (err) {
       error.value = err instanceof Error ? err : new Error(String(err));
@@ -43,7 +50,8 @@ export function useSwarmState() {
   };
 
   const poller = useSelfCleaningTimeout(() => {
-    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+    const isHidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
+    if (isHidden) {
       poller.start();
       return;
     }
@@ -51,7 +59,8 @@ export function useSwarmState() {
   }, 2000);
 
   const sendPost = async (message: string) => {
-    if (typeof fetch !== 'function') return;
+    const isFetchMissing = typeof fetch !== 'function';
+    if (isFetchMissing) return;
     try {
       await fetch('/api/swarm/feed', {
         method: 'POST',
