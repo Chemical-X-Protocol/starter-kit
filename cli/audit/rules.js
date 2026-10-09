@@ -22,13 +22,14 @@ import { createPatternVisitors, recordTemplatePatterns } from './pattern-detecto
 import { createHookShapeRegistry } from './hook-shape-validator.js';
 import { isBabelParsable, getLanguageForFile } from '../languages.js';
 import { analyzeCSharpCode } from './csharp-analyzer.js';
+import { countLines } from '../line-count.js';
 
 export { PILLARS, RULE_REGISTRY, createHookShapeRegistry };
 
 export const auditCode = (content, filePath, relativePath, options = {}) => {
   const violations = [];
   const lines = content.split('\n');
-  const lineCount = lines.length;
+  const lineCount = countLines(content);
   const ext = path.extname(filePath);
   const baseName = path.basename(filePath);
 
