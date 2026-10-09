@@ -25,7 +25,9 @@ export const RULE_REVISIONS = Object.freeze({
   LINE_BUDGET_FILE: 3,
   LINE_BUDGET_MOLECULE: 3,
   VIEW_MONOLITH: 3,
-  SYNTAX_PARSE_ERROR: 3
+  SYNTAX_PARSE_ERROR: 3,
+  RENDER_TREE_DEPTH_EXCEEDED: 3,
+  A11Y_CLICKABLE_NON_SEMANTIC: 3
 });
 
 export const resolveRuleRevision = (rule) => RULE_REVISIONS[rule] ?? 1;

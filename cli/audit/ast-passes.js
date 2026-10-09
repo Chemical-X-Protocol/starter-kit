@@ -11,6 +11,7 @@ import { createExtendedVisitors } from './extended-visitors.js';
 import { createPatternVisitors } from './pattern-detector.js';
 import { createHookShapeRegistry } from './hook-shape-validator.js';
 import { buildScriptOverlay } from '../sfc/sfc-parse.js';
+import { createJsxRenderDepthVisitor } from './render-depth.js';
 
 const traverseFn = traverse.default || traverse;
 const PARSE_OPTIONS = { sourceType: 'module', plugins: ['typescript', 'jsx'] };
@@ -60,6 +61,7 @@ export const runAstPasses = (asts, { relativePath, violations, ruleConfig, optio
       createAstVisitors({ relativePath, violations, hookRegistry, config: ruleConfig }),
       createAiSlopVisitors({ relativePath, violations }),
       createExtendedVisitors({ relativePath, violations }),
+      createJsxRenderDepthVisitor({ relativePath, violations, config: ruleConfig }),
       options.patternRegistry ? createPatternVisitors(options.patternRegistry, relativePath) : {}
     ];
     traverseFn(ast, mergeVisitorSets(visitorSets));

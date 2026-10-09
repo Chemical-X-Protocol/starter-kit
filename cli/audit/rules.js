@@ -10,6 +10,7 @@ import { applyAuditPostFilters } from './suppressions.js';
 import { applyRuleOverrides } from './rule-overrides.js';
 import { checkLineBudgets } from './budget-rules.js';
 import { auditTemplate } from './template-rules.js';
+import { checkTemplateRenderDepth } from './render-depth.js';
 import { parseSfc, isSfcFile } from '../sfc/sfc-parse.js';
 import { COVERAGE_KINDS, recordFileCoverage } from './coverage.js';
 import { parseScriptAsts, runAstPasses } from './ast-passes.js';
@@ -45,10 +46,11 @@ const runTextPasses = (content, lines, filePath, relativePath, ruleConfig, viola
   if (isCSharp) analyzeCSharpCode(content, relativePath, violations, ruleConfig);
 };
 
-const runSfcTemplatePasses = (sfc, relativePath, options, violations) => {
+const runSfcTemplatePasses = (sfc, relativePath, options, ruleConfig, violations) => {
   for (const error of sfc.errors) violations.push(parseErrorViolation(relativePath, error.line, `SFC: ${error.message}`));
   if (!sfc.template) return;
   violations.push(...auditTemplate(sfc.template, relativePath));
+  violations.push(...checkTemplateRenderDepth(sfc.template, relativePath, ruleConfig));
   if (options.patternRegistry) {
     recordTemplatePatterns(options.patternRegistry, sfc.template.content, relativePath, sfc.template.startLine - 1);
   }
@@ -69,7 +71,7 @@ const collectRawViolations = (content, filePath, relativePath, options, ruleConf
   const isAstEligible = !options.fast && isBabelParsable(filePath);
   let coverageKind = isAstEligible ? COVERAGE_KINDS.AST : COVERAGE_KINDS.TEXT_ONLY;
 
-  if (isAstEligible && sfc) runSfcTemplatePasses(sfc, relativePath, options, violations);
+  if (isAstEligible && sfc) runSfcTemplatePasses(sfc, relativePath, options, ruleConfig, violations);
   const code = sfc ? sfc.scriptOverlay : content;
   const hasCode = isAstEligible && code.trim().length > 0;
   const isEmptyScript = isAstEligible && !hasCode && !sfc?.template;
