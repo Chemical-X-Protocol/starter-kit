@@ -15,7 +15,8 @@ import {
   DIM,
   BOLD,
   RESET,
-  groupViolationsBySeverity
+  groupViolationsBySeverity,
+  resolveReportMoleculeLineLimit
 } from './reporter-utils.js';
 import { getReportCardAsciiLines } from './reporter-ascii.js';
 import { renderGroupedViolationsTerminal } from './reporter-grouping.js';
@@ -226,6 +227,7 @@ export const formatGradeBSection = (report, options = {}) => {
 
 export const formatGradeASection = (report) => {
   const { metrics, health, pillars, hotspots, contextAnalysis } = report;
+  const moleculeLimit = resolveReportMoleculeLineLimit(report);
   const passedPillars = Object.entries(pillars || {}).filter(([_, p]) => p.status === 'PASSED');
   const lines = [];
 
@@ -239,7 +241,7 @@ export const formatGradeASection = (report) => {
   lines.push(`${GREEN}======================================================================${RESET}`);
   lines.push(`   Molecular Health Score:  ${BOLD}${GREEN}${health.score}/100${RESET} [Grade: ${BOLD}${GREEN}${health.grade}${RESET}]`);
   lines.push(`   Passing Pillars:       ${BOLD}${GREEN}${passedPillars.length} / ${Object.keys(pillars).length} Pillars PASSED${RESET}`);
-  lines.push(`   Capsule Compliance:    ${BOLD}${GREEN}${metrics.moleculeCompliantPct}%${RESET} compliant (< 100 lines of code)`);
+  lines.push(`   Capsule Compliance:    ${BOLD}${GREEN}${metrics.moleculeCompliantPct}%${RESET} compliant (<= ${moleculeLimit} lines of code)`);
   lines.push(`${GREEN}----------------------------------------------------------------------${RESET}`);
 
   lines.push(`\n   ${BOLD}${GREEN}✔ COMPLIANT PILLARS (${passedPillars.length} / ${Object.keys(pillars).length}):${RESET}`);
@@ -254,7 +256,7 @@ export const formatGradeASection = (report) => {
 
   lines.push(`   ${BOLD}${CYAN}STANDARDS MET & CLEAN CODEBASE ASSETS:${RESET}`);
   if (metrics.moleculeCompliantPct === 100) {
-    lines.push(`   ${GREEN}✔${RESET} 100% Molecule Capsule Limit (< 100 lines per molecule)`);
+    lines.push(`   ${GREEN}✔${RESET} 100% Molecule Capsule Limit (<= ${moleculeLimit} lines per molecule)`);
   }
   const hasExtremeMonolith = hotspots.some(hasSizeClass('extreme'));
   if (!hasExtremeMonolith) {

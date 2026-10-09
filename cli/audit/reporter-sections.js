@@ -17,7 +17,8 @@ import {
   resolveTopSectionColor,
   resolveIndividualPillarGrade,
   PILLAR_EMOJIS,
-  formatPillarReactionBadgesTerminal
+  formatPillarReactionBadgesTerminal,
+  resolveReportMoleculeLineLimit
 } from './reporter-utils.js';
 import { getAsciiGradeLines, getReportCardAsciiLines } from './reporter-ascii.js';
 import { renderGroupedViolationsTerminal } from './reporter-grouping.js';
@@ -71,7 +72,7 @@ export const formatScorecardSection = (report, themeColor = null) => {
   lines.push(`   Files Scanned:       ${BOLD}${metrics.scannedFiles}${RESET} source files`);
   lines.push(`   Total Lines of Code: ${BOLD}${metrics.totalLoc}${RESET} lines of code (avg: ${metrics.avgLoc} lines/file)`);
   lines.push(`   Largest File:        ${BOLD}${metrics.largestFile.filePath || 'None'}${RESET} (${metrics.largestFile.lineCount} lines)`);
-  lines.push(`   Molecule Capsules:   ${metrics.moleculeCount} found (${metrics.moleculeCompliantPct}% compliant < 100 lines of code)`);
+  lines.push(`   Molecule Capsules:   ${metrics.moleculeCount} found (${metrics.moleculeCompliantPct}% compliant <= ${resolveReportMoleculeLineLimit(report)} lines of code)`);
   lines.push(`   Custom Hooks:        ${metrics.hookCount} detected`);
   lines.push(`   ${sectionColor}----------------------------------------------------------------------${RESET}`);
   lines.push(`   ${DIM}ℹ Notice: Architectural grade measures AST rules only.${RESET}`);
