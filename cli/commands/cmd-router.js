@@ -6,6 +6,14 @@
 
 import { printHelp } from '../help.js';
 
+/** `install-mcp`, `setup-mcp` and `mcp --install` share one path, so they share one exit code. */
+const runInstallMcpCommand = async (args) => {
+  const { runMcpInstaller } = await import('../mcp/index.js');
+  const { toExitCode } = await import('../result-status.js');
+  const installResult = await runMcpInstaller(args);
+  process.exitCode = toExitCode(installResult.status);
+};
+
 /**
  * Dispatch the resolved CLI command to its handler module.
  * @param {string} firstArg
@@ -45,6 +53,8 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
     case 'mcp':
     case 'mcp-server':
     case 'server': {
+      const isInstallRun = rawArgs.includes('--install');
+      if (isInstallRun) { await runInstallMcpCommand(rawArgs.slice(1)); break; }
       const { runMcpServer } = await import('../mcp/index.js');
       await runMcpServer(rawArgs.slice(1));
       break;
@@ -227,10 +237,7 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
     }
     case 'install-mcp':
     case 'setup-mcp': {
-      const { runMcpInstaller } = await import('../mcp/index.js');
-      const { toExitCode } = await import('../result-status.js');
-      const installResult = await runMcpInstaller(rawArgs.slice(1));
-      process.exitCode = toExitCode(installResult.status);
+      await runInstallMcpCommand(rawArgs.slice(1));
       break;
     }
     case '-v':

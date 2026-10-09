@@ -4,6 +4,7 @@ import { hasGum, gumChoose, gumInput, promptQuestion } from './terminal.js';
 import { buildPreCommitHookScript, buildGitHubWorkflowScript } from './installer-templates.js';
 import { installAllMcpConfigs } from './mcp/installer.js';
 import { writeFileSafely } from './mcp/installer-write.js';
+import { addPackageScripts } from './mcp/installer-package.js';
 import { runPillarsWizard } from './pillars-wizard.js';
 
 export { buildPreCommitHookScript, buildGitHubWorkflowScript } from './installer-templates.js';
@@ -109,23 +110,17 @@ export const areGuardrailsInstalled = (targetDir = '.') => {
 };
 
 export const ensurePackageScripts = (targetDir = '.') => {
-  const resolvedTarget = path.resolve(targetDir);
-  const pkgPath = path.join(resolvedTarget, 'package.json');
-  if (!fs.existsSync(pkgPath)) return false;
-
-  try {
-    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
-    pkg.scripts = pkg.scripts || {};
-    if (!pkg.scripts.chemx) {
-      pkg.scripts.chemx = 'chemx';
-      fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n', 'utf-8');
-      process.stdout.write('  \x1b[32m✔\x1b[0m Configured minimal "chemx": "chemx" entry in package.json\n');
-    }
-    return true;
-  } catch {
-    process.stdout.write('  \x1b[33m⚠\x1b[0m Could not update package.json scripts\n');
+  const result = addPackageScripts(path.join(path.resolve(targetDir), 'package.json'), () => ({ chemx: 'chemx' }));
+  const isAbsent = result.status === 'absent';
+  if (isAbsent) return false;
+  const isRefused = result.status === 'refused';
+  if (isRefused) {
+    process.stdout.write(`  \x1b[33m⚠\x1b[0m Could not update package.json scripts: ${result.reason}\n`);
     return false;
   }
+  const isWritten = result.status === 'written';
+  if (isWritten) process.stdout.write('  \x1b[32m✔\x1b[0m Configured minimal "chemx": "chemx" entry in package.json\n');
+  return true;
 };
 
 export const installAgentSearchConfig = async (targetDir = '.') => {
