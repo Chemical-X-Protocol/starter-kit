@@ -76,3 +76,20 @@ test('a non-positive or non-numeric molecule warning falls back to the profile d
   }
   assert.equal(getLineBudgets({ ...getProfileDefaults('pragmatic'), maxLineCountWarning: '180' }).molecule, 180);
 });
+
+// Same pattern as main's cli/docs-drift.spec.js flatCap; these files join its GUIDANCE_FILES on merge
+// (ported from 2b58305 and b0c0213).
+const PROFILE_BUDGET_TEXT_FILES = [
+  'app/components/molecules/funnel/funnel-system-layers-core.data.ts',
+  'cli/audit/reporter-grades.js', 'cli/audit/reporter-sections.js', 'cli/audit/reporter-summary.js', 'cli/audit/social.js'
+];
+
+test('guidance and report text name the profile molecule budget, not a flat 100-line cap', () => {
+  const flatCap = /(<\s*100\s*(lines?|LOC|L\b)|under 100 lines|100 lines is an outer bound|100-line budget|max(imum)? 100 lines)/i;
+  const hits = PROFILE_BUDGET_TEXT_FILES.flatMap((rel) =>
+    fs.readFileSync(new URL(`../../${rel}`, import.meta.url), 'utf-8').split('\n').flatMap((line, index) => {
+      const isHit = flatCap.test(line) && !/atomic-strict/.test(line);
+      return isHit ? [`${rel}:${index + 1}: ${line.trim().slice(0, 120)}`] : [];
+    }));
+  assert.deepEqual(hits, []);
+});
