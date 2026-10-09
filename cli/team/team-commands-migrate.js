@@ -33,7 +33,9 @@ export const MIGRATE_USAGE = [
   '  Re-running adds only rows written',
   '  after the previous merge. --keep-ids=source keeps the source\'s task ids on its first merge and',
   '  renumbers colliding board tasks instead (each renumbered id keeps an alias).',
-  '  Free text (#ids in titles and messages) is not rewritten; task show resolves old ids by alias.'
+  '  Not rewritten: free text (#ids in titles and messages) and task ids stored inside feed metadata',
+  '  JSON (triage taskIds, resolvedTaskIds); after a renumber those arrays name the board\'s tasks.',
+  '  task show resolves old ids by alias.'
 ].join('\n');
 
 // An explicit copy for rehearsals: team schema applied, no project stamp (it lives elsewhere).
@@ -104,7 +106,7 @@ export const formatMigrateReport = (report) => {
     junkLine,
     `  source tasks changed after the previous merge (not re-synced): ${report.changedAfterMerge}`,
     `  backups: ${report.backups.length > 0 ? report.backups.join(', ') : 'none (dry run)'}`,
-    '  not rewritten: free text (#ids in titles, messages, task_url); task show resolves old ids through task_aliases.'
+    '  not rewritten: free text (#ids in titles, messages, task_url) and task ids inside feed metadata JSON (taskIds, resolvedTaskIds); task show resolves old ids through task_aliases.'
   ];
   return `${lines.join('\n')}\n`;
 };
