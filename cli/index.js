@@ -15,7 +15,8 @@ import { wantsEarlyConflictCommand, runConflictsCli, runConflictDiff, explainLoa
 const CLI_FILE = fileURLToPath(import.meta.url);
 
 const isDirectExecution = () => {
-  if (!process.argv[1]) return false;
+  const hasEntryPath = Boolean(process.argv[1]);
+  if (!hasEntryPath) return false;
   try {
     return CLI_FILE === fs.realpathSync(process.argv[1]);
   } catch {
@@ -52,4 +53,5 @@ export const {
   handleError, withErrorCatcher, publishIssue, ALLOWED_COMMANDS
 } = main;
 
-if (IS_DIRECT && !EARLY) main.runMain();
+const shouldRunMain = IS_DIRECT && !EARLY;
+if (shouldRunMain) main.runMain();
