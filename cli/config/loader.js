@@ -52,6 +52,22 @@ export const parseJsonSafe = (raw) => {
   }
 };
 
+/**
+ * The saved .chemx/config.json for writers (installer, pillars wizard): {} when missing or
+ * blank, the parsed object, or null when the file exists but is not a JSON object, so a
+ * writer can leave it untouched instead of replacing it.
+ */
+export const readExistingProjectConfig = (targetDir = '.') => {
+  const configPath = path.resolve(targetDir, '.chemx', 'config.json');
+  if (!fs.existsSync(configPath)) return {};
+  const content = fs.readFileSync(configPath, 'utf-8');
+  const isBlank = content.trim() === '';
+  if (isBlank) return {};
+  const parsed = parseJsonSafe(content);
+  const isConfigObject = parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed);
+  return isConfigObject ? parsed : null;
+};
+
 const warnedConfigFiles = new Set();
 
 /** A config file that exists but does not parse is reported once on stderr, never ignored silently. */

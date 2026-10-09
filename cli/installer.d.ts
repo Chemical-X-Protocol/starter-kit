@@ -17,7 +17,10 @@ export declare function buildPreCommitHookScript(minGrade?: string, minScore?: n
 export declare function buildGitHubWorkflowScript(minGrade?: string, minScore?: number): string;
 export declare function installPreCommitHook(targetDir?: string, options?: InstallOptions): boolean;
 export declare function installGitHubWorkflow(targetDir?: string, options?: InstallOptions): boolean;
-export declare function saveProjectConfig(targetDir?: string, config?: Partial<ProjectConfig>): void;
+export declare function saveProjectConfig(targetDir?: string, config?: Record<string, unknown>): void;
+export declare function readExistingProjectConfig(targetDir?: string): Record<string, unknown> | null;
+export declare function buildInstallerProjectConfig(opts?: InstallOptions, existing?: Record<string, unknown>): Record<string, unknown>;
+export declare function saveInstallerProjectConfig(targetDir?: string, opts?: InstallOptions): boolean;
 export declare function areGuardrailsInstalled(targetDir?: string): boolean;
 export declare function ensurePackageScripts(targetDir?: string): boolean;
 export declare function installAgentSearchConfig(targetDir?: string): Promise<boolean>;
