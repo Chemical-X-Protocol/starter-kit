@@ -8,6 +8,9 @@ import { formatTaskListCard, formatTaskDetailCard } from '../team/team-format.js
 import { enforceSingleSlot, verifyTraceability, generateTaskPermalink } from '../team/team-vds.js';
 import { freezeReleaseTrain } from '../team/team-release-train.js';
 import { resolveListOptions, selectTaskPage, buildTaskListView } from '../team/task-list-view.js';
+import { resolveAgentId } from '../team/agent-identity.js';
+import { resolveTaskTier } from '../team/task-tier.js';
+import { resolveDependencyStates } from '../team/task-detail-sections.js';
 
 export const handleChemxTeamTask = async (args = {}, cwd = process.cwd()) => {
   const db = openIndexDb(cwd);
@@ -31,11 +34,13 @@ export const handleChemxTeamTask = async (args = {}, cwd = process.cwd()) => {
     const task = getTask(db, args.taskId || args.id);
     if (!task) return { error: `Task #${args.taskId || args.id} not found` };
     const events = queryFeed(db, { task_id: args.taskId || args.id });
+    const dependencyStates = resolveDependencyStates(db, task);
     return {
       task,
+      dependencyStates,
       events,
       activityCount: events.length,
-      card: formatTaskDetailCard(task, events)
+      card: formatTaskDetailCard(task, events, dependencyStates)
     };
   }
   const isCommentAction = action === 'comment' || action === 'post';
@@ -59,7 +64,7 @@ export const handleChemxTeamTask = async (args = {}, cwd = process.cwd()) => {
     const task = createTask(db, {
       title: args.title,
       target_path: args.targetPath || args.target,
-      tier: args.tier || 'molecule',
+      tier: resolveTaskTier(args.tier, args.targetPath || args.target),
       priority: args.priority || 2,
       assigned_agent_id: args.assignedAgentId || null,
       parent_id: parentId ?? null
@@ -75,24 +80,24 @@ export const handleChemxTeamTask = async (args = {}, cwd = process.cwd()) => {
     return task;
   }
   if (action === 'claim') {
-    const agentHandle = args.agentId || '@agent';
+    const agentHandle = resolveAgentId(args.agentId || args.as);
     registerAgent(db, { id: agentHandle, role: 'executor' });
     return claimTask(db, args.taskId, agentHandle);
   }
   if (action === 'done' || action === 'complete') {
-    const agentHandle = args.agentId || '@agent';
+    const agentHandle = resolveAgentId(args.agentId || args.as);
     registerAgent(db, { id: agentHandle, role: 'executor' });
-    return completeTaskWithAudit(db, args.taskId, agentHandle, { cwd, target: args.target || args.targetPath, force: args.force, noTargetConfirm: args.noTargetConfirm, tokens: args.tokens });
+    return completeTaskWithAudit(db, args.taskId, agentHandle, { cwd, target: args.target || args.targetPath, force: args.force, noTargetConfirm: args.noTargetConfirm, tokens: args.tokens, logPath: args.logPath });
   }
   if (action === 'block') {
     return updateTaskStatus(db, args.taskId, 'blocked', { blockedReason: args.blockedReason || 'Blocked' });
   }
   if (action === 'update') {
     const targetStatus = args.status || 'in_progress';
-    const agentHandle = args.agentId || '@agent';
+    const agentHandle = resolveAgentId(args.agentId || args.as);
     registerAgent(db, { id: agentHandle, role: 'executor' });
     if (targetStatus === 'done' || targetStatus === 'completed') {
-      return completeTaskWithAudit(db, args.taskId, agentHandle, { cwd, target: args.target || args.targetPath, force: args.force, noTargetConfirm: args.noTargetConfirm, tokens: args.tokens });
+      return completeTaskWithAudit(db, args.taskId, agentHandle, { cwd, target: args.target || args.targetPath, force: args.force, noTargetConfirm: args.noTargetConfirm, tokens: args.tokens, logPath: args.logPath });
     }
     return updateTaskStatus(db, args.taskId, targetStatus, { blockedReason: args.blockedReason || '' });
   }

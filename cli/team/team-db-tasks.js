@@ -80,6 +80,9 @@ export const updateTaskStatus = (db, taskId, status, options = {}) => {
   return withImmediateTransaction(db, () => {
     const task = getTask(db, taskId);
     if (!task) return null;
+    // options.guard re-checks preconditions on the locked row; a returned value aborts the write.
+    const veto = typeof options.guard === 'function' ? options.guard(task) : null;
+    if (veto) return veto;
     executeStatusUpdate(db, taskId, status, options, task);
     return getTask(db, taskId);
   });

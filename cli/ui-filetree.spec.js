@@ -7,6 +7,16 @@ import { routeGet } from './ui-server-routes.js';
 import { VIEW_FILETREE_TEMPLATE } from './ui-template-filetree.js';
 import { UI_STYLES } from './ui-styles.js';
 import { startUiServer } from './ui-server.js';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+// The studio server runs against a throwaway project so specs never open a real .chemx/index.db.
+const makeUiProject = (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-ui-project-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  return root;
+};
 
 const setupTestDb = () => {
   const db = new DatabaseSync(':memory:');
@@ -155,8 +165,8 @@ test('template & styles: UI template contains required classes and metadata elem
   assert.ok(UI_STYLES.includes('.xo-hazard'));
 });
 
-test('ui-server: HTTP integration serves /api/codebase/tree and /api/codebase/file', async () => {
-  const running = await startUiServer({ port: 0, cwd: process.cwd() });
+test('ui-server: HTTP integration serves /api/codebase/tree and /api/codebase/file', async (t) => {
+  const running = await startUiServer({ port: 0, cwd: makeUiProject(t) });
   try {
     const resTree = await running.fetch(`http://localhost:${running.port}/api/codebase/tree`);
     assert.strictEqual(resTree.status, 200);

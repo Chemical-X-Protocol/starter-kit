@@ -8,6 +8,11 @@ import { openIndexDb } from '../search-schema.js';
 import { createTask, getTask } from './team-db-tasks.js';
 import { getFileLockStatus } from './team-db-locks.js';
 
+// Child imports resolve from this file, never from process.cwd(), so the spec runs from any directory.
+const SCHEMA_URL = new URL('../search-schema.js', import.meta.url).href;
+const TASKS_URL = new URL('./team-db-tasks.js', import.meta.url).href;
+const LOCKS_URL = new URL('./team-db-locks.js', import.meta.url).href;
+
 const runWorkerScript = (cwd, code) => {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, ['--input-type=module', '-e', code], {
@@ -34,8 +39,8 @@ test('swarm multi-process: 4 worker processes contend to claim single task', asy
   const task = createTask(db, { title: 'Contended Task #1', status: 'queued' });
 
   const workerCode = (workerId) => `
-    import { openIndexDb } from '${path.resolve('cli/search-schema.js')}';
-    import { claimTask } from '${path.resolve('cli/team/team-db-tasks.js')}';
+    import { openIndexDb } from '${SCHEMA_URL}';
+    import { claimTask } from '${TASKS_URL}';
     const db = openIndexDb('${tmpDir}');
     const res = claimTask(db, ${task.id}, '@worker-${workerId}');
     console.log(JSON.stringify(res));
@@ -59,7 +64,7 @@ test('swarm multi-process: 4 worker processes contend to claim single task', asy
   assert.strictEqual(finalTask.status, 'in_progress');
   assert.ok(finalTask.assigned_agent_id.startsWith('@worker-'));
 
-  try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (err) { void err; }
+  fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
 test('swarm multi-process: file lock contention and FIFO promotion across processes', async () => {
@@ -72,8 +77,8 @@ test('swarm multi-process: file lock contention and FIFO promotion across proces
   assert.strictEqual(w0Res.granted, true);
 
   const acquireScript = (workerId) => `
-    import { openIndexDb } from '${path.resolve('cli/search-schema.js')}';
-    import { requestFileLock } from '${path.resolve('cli/team/team-db-locks.js')}';
+    import { openIndexDb } from '${SCHEMA_URL}';
+    import { requestFileLock } from '${LOCKS_URL}';
     const db = openIndexDb('${tmpDir}');
     const res = requestFileLock(db, '${testFile}', '@worker-${workerId}');
     console.log(JSON.stringify(res));
@@ -100,8 +105,8 @@ test('swarm multi-process: file lock contention and FIFO promotion across proces
 
   // Release lock from worker 0 in child process and assert FIFO waiter is promoted
   const releaseScript = `
-    import { openIndexDb } from '${path.resolve('cli/search-schema.js')}';
-    import { releaseFileLock } from '${path.resolve('cli/team/team-db-locks.js')}';
+    import { openIndexDb } from '${SCHEMA_URL}';
+    import { releaseFileLock } from '${LOCKS_URL}';
     const db = openIndexDb('${tmpDir}');
     const res = releaseFileLock(db, '${testFile}', '@worker-0');
     console.log(JSON.stringify(res));
@@ -116,7 +121,7 @@ test('swarm multi-process: file lock contention and FIFO promotion across proces
   assert.strictEqual(statusAfterRelease.lease.locked_by, '@worker-1');
   assert.strictEqual(statusAfterRelease.waiters.length, 2);
 
-  try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (err) { void err; }
+  fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
 test('swarm multi-process: lock automatically releases when holding worker process crashes', async () => {
@@ -126,8 +131,8 @@ test('swarm multi-process: lock automatically releases when holding worker proce
 
   // Spawn child process that acquires lock and immediately exits (crashes)
   const crashScript = `
-    import { openIndexDb } from '${path.resolve('cli/search-schema.js')}';
-    import { requestFileLock } from '${path.resolve('cli/team/team-db-locks.js')}';
+    import { openIndexDb } from '${SCHEMA_URL}';
+    import { requestFileLock } from '${LOCKS_URL}';
     const db = openIndexDb('${tmpDir}');
     requestFileLock(db, '${testFile}', '@crashing-worker', { ttlMs: 3600000, pid: process.pid });
     process.exit(1);
@@ -138,8 +143,8 @@ test('swarm multi-process: lock automatically releases when holding worker proce
 
   // New healthy worker requests lock; deceased worker's lock should be reclaimed
   const healthyScript = `
-    import { openIndexDb } from '${path.resolve('cli/search-schema.js')}';
-    import { requestFileLock } from '${path.resolve('cli/team/team-db-locks.js')}';
+    import { openIndexDb } from '${SCHEMA_URL}';
+    import { requestFileLock } from '${LOCKS_URL}';
     const db = openIndexDb('${tmpDir}');
     const res = requestFileLock(db, '${testFile}', '@healthy-worker');
     console.log(JSON.stringify(res));
@@ -152,7 +157,7 @@ test('swarm multi-process: lock automatically releases when holding worker proce
   assert.strictEqual(healthyParsed.granted, true, 'Healthy worker must acquire lock reclaimed from dead process');
   assert.strictEqual(healthyParsed.lease.locked_by, '@healthy-worker');
 
-  try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (err) { void err; }
+  fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
 test('swarm multi-process: multiple worker processes race to mark tasks done', async () => {
@@ -166,8 +171,8 @@ test('swarm multi-process: multiple worker processes race to mark tasks done', a
   }));
 
   const doneScript = (taskId, workerId) => `
-    import { openIndexDb } from '${path.resolve('cli/search-schema.js')}';
-    import { updateTaskStatus } from '${path.resolve('cli/team/team-db-tasks.js')}';
+    import { openIndexDb } from '${SCHEMA_URL}';
+    import { updateTaskStatus } from '${TASKS_URL}';
     const db = openIndexDb('${tmpDir}');
     const res = updateTaskStatus(db, ${taskId}, 'done', {
       resultPayload: { finishedBy: '@finisher-${workerId}' }
@@ -189,5 +194,5 @@ test('swarm multi-process: multiple worker processes race to mark tasks done', a
     assert.strictEqual(finalTask.status, 'done');
   }
 
-  try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (err) { void err; }
+  fs.rmSync(tmpDir, { recursive: true, force: true });
 });

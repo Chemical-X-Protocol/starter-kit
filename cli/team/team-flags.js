@@ -69,6 +69,9 @@ export const parseFlags = (args = []) => {
     if (arg.startsWith('--deps=')) flags.dependencies = valueAfterEquals.split(',').map((id) => Number(id.trim())).filter(Number.isInteger);
     if (arg.startsWith('--sprint=')) flags.sprint = valueAfterEquals;
     if (arg.startsWith('--moscow=')) flags.moscow = valueAfterEquals;
+    if (arg.startsWith('--reason=')) flags.reason = valueAfterEquals;
+    if (arg.startsWith('--log=')) flags.log = valueAfterEquals;
+    if (arg.startsWith('--title=')) flags.title = valueAfterEquals;
     if (arg.startsWith('--metadata=')) {
       const raw = arg.slice('--metadata='.length);
       try {

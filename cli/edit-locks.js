@@ -3,12 +3,13 @@
  *
  * Read-only: it never creates the database or cleans leases. A lease blocks a mutation
  * when it is unexpired, its holder process (if recorded) is alive, and it belongs to an
- * agent other than the caller (options.agentId, else $CHEMX_AGENT_ID, else '@agent').
+ * agent other than the caller (options.agentId, else $CHEMX_AGENT_ID, else a per-process handle).
  */
 import './silence-warnings.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { isPidAlive } from './team/team-db-transaction.js';
+import { resolveAgentId as resolveTeamAgentId } from './team/agent-identity.js';
 
 const loadSqlite = async () => {
   try {
@@ -21,15 +22,8 @@ const loadSqlite = async () => {
 };
 const DatabaseSync = await loadSqlite();
 
-export const DEFAULT_AGENT_ID = '@agent';
-
-export const normalizeAgent = (id) => {
-  const value = String(id || DEFAULT_AGENT_ID);
-  const isPrefixed = value.startsWith('@');
-  return isPrefixed ? value : `@${value}`;
-};
-
-export const resolveAgentId = (agentId) => normalizeAgent(agentId || process.env.CHEMX_AGENT_ID);
+// One identity rule for locks and edits: explicit, then $CHEMX_AGENT_ID, then a per-process handle.
+export const resolveAgentId = (agentId) => resolveTeamAgentId(agentId);
 
 const readLease = (root, relPath) => {
   const dbPath = path.join(root, '.chemx', 'index.db');

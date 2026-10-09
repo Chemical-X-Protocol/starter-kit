@@ -136,6 +136,12 @@ const isDirectExecution = () => {
 
 if (isDirectExecution()) {
   main().catch(async (err) => {
+    // An expected, user-actionable refusal is not a chemx failure: print it, no issue report.
+    const isRefusal = err?.isRefusal === true;
+    if (isRefusal) {
+      process.stderr.write(`✕ ${err.message}\n`);
+      process.exit(1);
+    }
     await handleError(err, {
       command: process.argv.slice(2).join(' '),
       cwd: process.cwd(),

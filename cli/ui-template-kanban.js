@@ -1,3 +1,4 @@
+import { formatTaskTokenStamp } from './team/team-telemetry.js';
 import { TASK_DETAILS_SHEET_TEMPLATE } from './ui-template-task-sheet.js';
 
 export const KANBAN_COLUMNS = [
@@ -14,12 +15,8 @@ export const groupTasksByColumn = (tasks = []) => ({
   blocked: tasks.filter((t) => t.status === 'blocked' || t.status === 'failed')
 });
 
-export const formatKanbanTokenStamp = (t = {}) => {
-  const p = Number(t.prompt_tokens || 250);
-  const c = Number(t.completion_tokens || 45);
-  const cost = t.cost_usd != null ? Number(t.cost_usd) : ((p * 0.000003) + (c * 0.000015));
-  return `[P: ${p} | C: ${c} | Cost: $${cost.toFixed(4)}]`;
-};
+// Never invent tokens for an unmeasured task; the stamp says unknown.
+export const formatKanbanTokenStamp = (t = {}) => formatTaskTokenStamp(t);
 
 export const VIEW_KANBAN_TEMPLATE = `
     <!-- 5-Column Kanban: Queued, In Progress, Review, Completed, Blocked -->
@@ -67,7 +64,7 @@ export const VIEW_KANBAN_TEMPLATE = `
               <span class="a-badge badge-warning" style="font-size:9px;">{{ (t.vds_priority || 'medium').toUpperCase() }}</span>
               <span class="a-badge badge-primary" style="cursor:pointer;" title="Click to view agent profile" @click="openAgentProfile(t.assigned_agent_id || t.assignedAgentId)">{{ t.assigned_agent_id || t.assignedAgentId || '@unassigned' }}</span>
             </div>
-            <span class="vb-token-stamp">{{ t.tokenStamp || ('[P: ' + (t.prompt_tokens || 250) + ' | C: ' + (t.completion_tokens || 45) + ' | Cost: $' + (Number(t.cost_usd || 0.0014)).toFixed(4) + ']') }}</span>
+            <span class="vb-token-stamp">{{ t.tokenStamp || '[tokens: unknown]' }}</span>
 
             <div v-if="taskRefusals && taskRefusals[t.id]" style="background:#450a0a; border:1px solid #dc2626; color:#fca5a5; padding:5px 6px; border-radius:3px; margin:4px 0; font-size:10px;">
               <strong>⛔ Verification Refused:</strong> {{ taskRefusals[t.id].message }}

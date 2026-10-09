@@ -53,8 +53,9 @@ test('ui-template-kanban: 5-column grouping categorizes all statuses correctly',
 });
 
 test('ui-template-kanban: token stamp is formatted to 4 decimals', () => {
-  const stamp = formatKanbanTokenStamp({ prompt_tokens: 300, completion_tokens: 50, cost_usd: 0.0017 });
+  const stamp = formatKanbanTokenStamp({ prompt_tokens: 300, completion_tokens: 50, cost_usd: 0.0017, telemetry_source: 'tokens' });
   assert.strictEqual(stamp, '[P: 300 | C: 50 | Cost: $0.0017]');
+  assert.strictEqual(formatKanbanTokenStamp({ prompt_tokens: 0 }), '[tokens: unknown]', 'an unmeasured task invents no tokens');
 });
 
 test('ui-styles: includes Kanban and task status styling', () => {
@@ -201,8 +202,7 @@ test('ui-handlers: handleSwarmStatus returns enriched tasks with token stamps', 
   assert.strictEqual(task.tier, 'molecule');
   assert.strictEqual(task.priority, 1);
   assert.strictEqual(task.assignedAgentId, '@worker_m3');
-  assert.ok(task.tokenStamp.startsWith('[P:'));
-  assert.ok(task.tokenStamp.includes('Cost: $'));
+  assert.strictEqual(task.tokenStamp, '[tokens: unknown]', 'an unmeasured task invents no tokens');
 });
 
 test('ui-template-kanban: includes Bubblegum-style task details hover sheet and backdrop', () => {

@@ -14,8 +14,19 @@ import { runAudit as executeAstAudit, auditFile } from '../audit-engine.js';
 import { syncSearchIndex, syncViolationsIndex, recordAuditSnapshot } from '../search.js';
 
 import { queryUnassignedHazards } from './team-db-task-helpers.js';
+import { checkCompletionOwnership, buildOwnershipRefusal, buildCompletionGuard } from './team-task-ownership.js';
 
 export { ingestTaskTelemetry, queryUnassignedHazards };
+
+// Triage is best-effort: a step that cannot run is reported under DEBUG and skipped.
+const triageLog = {
+  warn: (step, subject, err) => {
+    if (process.env.DEBUG) process.stderr.write(`[triage] ${step} skipped for ${subject}: ${err?.message || err}\n`);
+  }
+};
+
+const SEVERITY_PRIORITY = { CRITICAL: 1, HIGH: 2 };
+const priorityForSeverity = (severity, otherwise) => SEVERITY_PRIORITY[severity] ?? otherwise;
 
 const checkAndCompleteParent = (db, parentId, resolvedTasks) => {
   if (!parentId) return;
@@ -90,8 +101,8 @@ export const reconcileAuditTasks = (db, options = {}) => {
         resolvedTasks.push({ id: task.id, target_path: task.target_path, reason: 'hazards_resolved' });
         checkAndCompleteParent(db, task.parent_id, resolvedTasks);
       }
-    } catch {
-      // Continue if audit cannot be evaluated
+    } catch (err) {
+      triageLog.warn('reconcile audit', task.target_path, err);
     }
   }
 
@@ -126,8 +137,8 @@ export const autoGenerateTasksFromAudit = (db, options = {}) => {
         recordAuditSnapshot(db, report);
       }
     }
-  } catch {
-    // Fall through to existing db state
+  } catch (err) {
+    triageLog.warn('seed audit', cwd, err); // fall through to the existing db state
   }
 
   const limit = options.maxTasks || 10;
@@ -158,8 +169,8 @@ export const autoGenerateTasksFromAudit = (db, options = {}) => {
         CASE v.severity WHEN 'CRITICAL' THEN 1 WHEN 'HIGH' THEN 2 WHEN 'MEDIUM' THEN 3 ELSE 4 END ASC,
         violation_count DESC
     `).all();
-  } catch {
-    rulesWithViolations = [];
+  } catch (err) {
+    triageLog.warn('rule grouping', 'violations', err);
   }
 
   const hasGroupedRules = rulesWithViolations.length > 0;
@@ -182,7 +193,7 @@ export const autoGenerateTasksFromAudit = (db, options = {}) => {
             title: `[${ruleInfo.rule}]${dirSummary} (${ruleInfo.file_count} files)`,
             description: `Hazard: ${ruleInfo.hazard || 'Architectural hazard detected'}\nDirective: ${ruleInfo.directive || 'Refactor into molecular compliance'}\nTotal violations: ${ruleInfo.violation_count} across ${ruleInfo.file_count} file(s).`,
             tier: 'organism',
-            priority: ruleInfo.severity === 'CRITICAL' ? 1 : (ruleInfo.severity === 'HIGH' ? 2 : 3),
+            priority: priorityForSeverity(ruleInfo.severity, 3),
             origin_type: 'audit',
             rule_id: ruleInfo.rule,
             parent_id: null
@@ -217,7 +228,7 @@ export const autoGenerateTasksFromAudit = (db, options = {}) => {
           description: `File: ${fv.file_path}${lineStr}\nHazard: ${fv.hazard || ruleInfo.hazard}\nDirective: ${fv.directive || ruleInfo.directive}`,
           tier: fv.tier || 'molecule',
           target_path: fv.file_path,
-          priority: parentTask ? parentTask.priority : (ruleInfo.severity === 'CRITICAL' ? 1 : 2),
+          priority: parentTask ? parentTask.priority : priorityForSeverity(ruleInfo.severity, 2),
           origin_type: 'audit',
           rule_id: ruleInfo.rule,
           parent_id: parentTask ? parentTask.id : null,
@@ -272,21 +283,24 @@ export const autoGenerateTasksFromAudit = (db, options = {}) => {
 };
 
 export const completeTaskWithAudit = (db, taskId, agentId, options = {}) => {
-  if (!db || !taskId) return null;
+  const canComplete = Boolean(db) && Boolean(taskId);
+  if (!canComplete) return null;
   const task = getTask(db, taskId);
   if (!task) return null;
 
-  const telemetry = ingestTaskTelemetry(db, taskId, agentId, options);
-  const conversationId = options.conversationId || (task.result_payload && task.result_payload.conversationId) || process.env.CONVERSATION_ID || '536da3e7-6be6-47b6-b308-58786d395e36';
-  const chatLink = `conversation://${conversationId}`;
+  const ownership = checkCompletionOwnership(task, agentId, options);
+  if (!ownership.allowed) return buildOwnershipRefusal(task, ownership);
+
+  // No guessed conversation: only an explicit id (option, payload or env) is recorded.
+  const conversationId = options.conversationId || task.result_payload?.conversationId || process.env.CONVERSATION_ID || null;
   let resultPayload = {
     ...task.result_payload,
     completedBy: agentId,
     completedAt: Date.now(),
     conversationId,
-    chatLink,
-    telemetry
+    chatLink: conversationId ? `conversation://${conversationId}` : null
   };
+  if (ownership.override) resultPayload.ownershipOverride = ownership.override;
 
   const targetOverride = options.target || options.targetPath;
   if (targetOverride) {
@@ -297,7 +311,9 @@ export const completeTaskWithAudit = (db, taskId, agentId, options = {}) => {
         Date.now(),
         Number(taskId)
       );
-    } catch {}
+    } catch (err) {
+      triageLog.warn('set target', `task #${taskId}`, err);
+    }
   }
 
   if (!task.target_path) {
@@ -360,11 +376,7 @@ export const completeTaskWithAudit = (db, taskId, agentId, options = {}) => {
           };
         }
 
-        if (blockingCount > 0 && options.force === true) {
-          resultPayload.forced = true;
-        } else {
-          resultPayload.forced = false;
-        }
+        resultPayload.forced = blockingCount > 0 && options.force === true;
 
         // Update database files and violations state
         db.prepare('DELETE FROM violations WHERE file_path = ?').run(task.target_path);
@@ -378,8 +390,8 @@ export const completeTaskWithAudit = (db, taskId, agentId, options = {}) => {
           }
         }
         db.prepare('UPDATE files SET health_score = ?, hazard_count = ? WHERE path = ?').run(healthScore, hazardCount, task.target_path);
-      } catch {
-        // Fallback to cached file row if audit fails
+      } catch (err) {
+        triageLog.warn('completion audit', task.target_path, err); // fall back to the cached file row
         const fileRow = db.prepare('SELECT health_score, hazard_count, lines FROM files WHERE path = ?').get(task.target_path);
         if (fileRow) {
           let blockingCount = fileRow.hazard_count;
@@ -390,8 +402,8 @@ export const completeTaskWithAudit = (db, taskId, agentId, options = {}) => {
             if (blockingRow && typeof blockingRow.count === 'number') {
               blockingCount = blockingRow.count > 0 ? blockingRow.count : fileRow.hazard_count;
             }
-          } catch {
-            blockingCount = fileRow.hazard_count;
+          } catch (err) {
+            triageLog.warn('blocking count', task.target_path, err);
           }
 
           if (blockingCount > 0 && options.force !== true) {
@@ -410,11 +422,7 @@ export const completeTaskWithAudit = (db, taskId, agentId, options = {}) => {
           resultPayload.hazardCountAfter = fileRow.hazard_count;
           resultPayload.blockingHazardCountAfter = blockingCount;
           resultPayload.linesAfter = fileRow.lines;
-          if (blockingCount > 0 && options.force === true) {
-            resultPayload.forced = true;
-          } else {
-            resultPayload.forced = false;
-          }
+          resultPayload.forced = blockingCount > 0 && options.force === true;
         }
       }
     } else {
@@ -428,8 +436,8 @@ export const completeTaskWithAudit = (db, taskId, agentId, options = {}) => {
           if (blockingRow && typeof blockingRow.count === 'number') {
             blockingCount = blockingRow.count > 0 ? blockingRow.count : fileRow.hazard_count;
           }
-        } catch {
-          blockingCount = fileRow.hazard_count;
+        } catch (err) {
+          triageLog.warn('blocking count', task.target_path, err);
         }
 
         if (blockingCount > 0 && options.force !== true) {
@@ -448,11 +456,7 @@ export const completeTaskWithAudit = (db, taskId, agentId, options = {}) => {
         resultPayload.hazardCountAfter = fileRow.hazard_count;
         resultPayload.blockingHazardCountAfter = blockingCount;
         resultPayload.linesAfter = fileRow.lines;
-        if (blockingCount > 0 && options.force === true) {
-          resultPayload.forced = true;
-        } else {
-          resultPayload.forced = false;
-        }
+        resultPayload.forced = blockingCount > 0 && options.force === true;
       }
     }
     releaseFileLock(db, task.target_path, agentId);
@@ -473,9 +477,13 @@ export const completeTaskWithAudit = (db, taskId, agentId, options = {}) => {
     completedAt: Date.now(),
     completedBy: agentId
   };
+  if (ownership.override) diffReceipt.ownershipOverride = ownership.override;
   resultPayload.receipt = diffReceipt;
 
-  const updatedTask = updateTaskStatus(db, taskId, 'done', { resultPayload, diffReceipt });
+  // Ownership is re-checked on the locked row; telemetry is ingested only once every gate passed.
+  const guard = buildCompletionGuard(agentId, options, () => { resultPayload.telemetry = ingestTaskTelemetry(db, taskId, agentId, options); });
+  const updatedTask = updateTaskStatus(db, taskId, 'done', { resultPayload, diffReceipt, guard });
+  if (updatedTask?.refused) return updatedTask;
 
   postFeedEvent(db, {
     author_id: agentId,

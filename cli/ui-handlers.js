@@ -2,6 +2,7 @@ import { getSwarmStatus, postFeedEvent, listTasks } from './team/team-db.js';
 import { calculateSavings } from './ui-actions-helpers.js';
 import { getForumCategories, resolveAgentMeta, formatTokenStamp, updateAgentSignatureInDb } from './ui-forum-data.js';
 import { getForumTopics, getTopicPosts, createForumTopic } from './ui-forum-topics.js';
+import { formatTaskTokenStamp } from './team/team-telemetry.js';
 
 const fallbackTelemetry = { promptTokens: 0, completionTokens: 0, totalTokens: 0, totalCost: 0 };
 
@@ -50,8 +51,6 @@ export const handleSwarmStatus = (db, cwd = process.cwd()) => {
   }));
 
   const tasks = rawTasks.map((t) => {
-    const p = t.prompt_tokens || 250, c = t.completion_tokens || 45;
-    const cost = t.cost_usd != null ? Number(t.cost_usd) : ((p * 0.000003) + (c * 0.000015));
     const subtaskCount = rawTasks.filter((st) => st.parent_id === t.id).length;
     return {
       ...t,
@@ -61,7 +60,7 @@ export const handleSwarmStatus = (db, cwd = process.cwd()) => {
       parentId: t.parent_id,
       subtaskCount,
       assignedAgentId: t.assigned_agent_id,
-      tokenStamp: `[P: ${p} | C: ${c} | Cost: $${cost.toFixed(4)}]`
+      tokenStamp: formatTaskTokenStamp(t)
     };
   });
 

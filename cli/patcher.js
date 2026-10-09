@@ -4,6 +4,7 @@ import { resolveSafePath } from './path-scope.js';
 import { replaceLiteral } from './literal-replace.js';
 import { applyEdits } from './apply-edits.js';
 import { evaluateGuardrails } from './edit-guardrails.js';
+import { assertWriteLockClear } from './team/write-lock-guard.js';
 
 export { runPatcherCli, runWriterCli } from './patcher-cli.js';
 
@@ -46,6 +47,8 @@ export const patchFile = (targetPath, params = {}) => {
   const resolvedPath = resolveSafePath(targetPath, cwd);
   const isMissingFile = !fs.existsSync(resolvedPath);
   if (isMissingFile) throw new Error(`File not found: ${targetPath}`);
+  // A foreign lease refuses with CHEMX_FILE_LOCKED (exit 1) before applyEdits plans anything.
+  if (!dryRun) assertWriteLockClear(resolvedPath, cwd, agentId);
 
   const fileContent = fs.readFileSync(resolvedPath, 'utf-8');
   const replaced = replaceLiteral(fileContent, targetContent, replacementContent, { allowMultiple, filePath: targetPath });
@@ -99,6 +102,7 @@ export const writeFile = (targetPath, params = {}) => {
   if (isMissingContent) throw new Error('content is required for writeFile');
 
   const resolvedPath = resolveSafePath(targetPath, cwd);
+  if (!dryRun) assertWriteLockClear(resolvedPath, cwd, agentId);
   const isExisting = fs.existsSync(resolvedPath);
   const isBlockedOverwrite = isExisting && !overwrite;
   if (isBlockedOverwrite) {
