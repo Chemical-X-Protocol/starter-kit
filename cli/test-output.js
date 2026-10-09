@@ -106,7 +106,8 @@ const classifyEmptyRun = ({ counts, noTestsLine, exitCode, options, lines }) => 
 };
 
 const classify = ({ counts, failures, fatalLine, noTestsLine, exitCode, options, lines }) => {
-  if (options.timedOut) return { status: STATUS.INCONCLUSIVE, reason: REASONS.STEP_TIMEOUT, executionError: `Timed out after ${options.timeoutMs || '?'}ms` };
+  const isTimedOut = Boolean(options.timedOut);
+  if (isTimedOut) return { status: STATUS.INCONCLUSIVE, reason: REASONS.STEP_TIMEOUT, executionError: `Timed out after ${options.timeoutMs || '?'}ms` };
   if (fatalLine) return { status: STATUS.FAIL, reason: null, executionError: fatalLine };
   const startupError = failures.find((f) => f.kind === 'startup-error');
   const hasFailures = counts.failed > 0 || counts.errors > 0 || failures.length > 0;
