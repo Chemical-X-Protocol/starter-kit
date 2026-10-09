@@ -49,7 +49,8 @@ export type * from './types';
 `;
 
 export const buildHookSpec = (name, camelName, runner = 'node:test') => {
-  if (runner === 'vitest') {
+  const isVitest = runner === 'vitest';
+  if (isVitest) {
     return `import { describe, it, expect } from 'vitest';
 import { ${camelName} } from './${name}';
 
@@ -60,7 +61,8 @@ describe('${camelName} Hook Composable', () => {
 });
 `;
   }
-  if (runner === 'jest') {
+  const isJest = runner === 'jest';
+  if (isJest) {
     return `import { describe, it, expect } from '@jest/globals';
 import { ${camelName} } from './${name}';
 
