@@ -30,8 +30,10 @@ export const createUiServer = (cwd = process.cwd(), options = {}) => {
     if (isFaviconRequest) return res.writeHead(204).end();
 
     const gate = checkUiRequest(req, auth, url);
-    if (!gate.allowed) return sendJson(res, gate.status, { success: false, error: gate.error });
-    const cookieHeaders = gate.setCookie ? { 'Set-Cookie': gate.setCookie } : {};
+    const isDenied = !gate.allowed;
+    if (isDenied) return sendJson(res, gate.status, { success: false, error: gate.error });
+    const hasSetCookie = Boolean(gate.setCookie);
+    const cookieHeaders = hasSetCookie ? { 'Set-Cookie': gate.setCookie } : {};
 
     const shouldServeHtml = isGet && !isApi;
     if (shouldServeHtml) {
@@ -70,7 +72,8 @@ export const startUiServer = async (options = {}) => {
   const auth = createUiAuth({ bindHost: host, token: options.token, allowHosts: options.allowHosts });
   const { server, db } = createUiServer(cwd, { auth });
 
-  if (options.dev) {
+  const isDevMode = Boolean(options.dev);
+  if (isDevMode) {
     const { startUiDevWatcher } = await import('./ui-dev-watcher.js');
     const watcher = startUiDevWatcher(cwd, () => broadcastSseReload());
     server.on('close', () => watcher.close());
@@ -91,7 +94,8 @@ export const startUiServer = async (options = {}) => {
       if (options.isCli) {
         if (!isLoopbackHost(host)) warnPublicBind(host);
         process.stdout.write(`\x1b[32m✔ Chemical X Live Swarm Web UI listening on ${host}:${actualPort}:\x1b[0m \x1b[36m${url}\x1b[0m\n`);
-        if (options.dev) process.stdout.write(`\x1b[35m🔥 Dev Hot Reload: ENABLED (watching UI files for instant updates)\x1b[0m\n`);
+        const isDevMode = Boolean(options.dev);
+        if (isDevMode) process.stdout.write(`\x1b[35m🔥 Dev Hot Reload: ENABLED (watching UI files for instant updates)\x1b[0m\n`);
       }
       resolve({ server, port: actualPort, url, db, token: auth.token, fetch: createUiFetch(auth.token) });
     });
