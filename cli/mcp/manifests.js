@@ -216,7 +216,7 @@ export const SUB_TOOLS = [
         tier: {
           type: 'string',
           enum: ['m', 'a', 'o', 't'],
-          description: 'Architectural tier: m (molecule < 100 lines), a (atom), o (organism), t (template).'
+          description: 'Architectural tier: m (molecule), a (atom), o (organism), t (template).'
         },
         targetDir: {
           type: 'string',

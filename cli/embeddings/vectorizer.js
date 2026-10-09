@@ -1,4 +1,4 @@
-// Chemical X In-Process Semantic Vectorizer (< 100 lines per Directive 1.A)
+// Chemical X In-Process Semantic Vectorizer
 export const VECTOR_DIMENSIONS = 128;
 
 const hashString = (str, seed = 0) => {
@@ -59,7 +59,8 @@ export const deserializeVector = (buf) => {
 };
 
 export const cosineSimilarity = (vecA, vecB) => {
-  if (!vecA || !vecB || vecA.length !== vecB.length) return 0;
+  const isComparable = Boolean(vecA) && Boolean(vecB) && vecA.length === vecB.length;
+  if (!isComparable) return 0;
   let dot = 0;
   for (let i = 0; i < vecA.length; i++) {
     dot += vecA[i] * vecB[i];
