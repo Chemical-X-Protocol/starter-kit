@@ -8,6 +8,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runSandboxTypecheck, planSandboxTypecheck, buildSandboxTsconfig, SANDBOX_REASONS } from './typecheck-sandbox.js';
 import { STATUS } from './result-status.js';
+import { runTypecheckAudit } from './typecheck-audit.js';
 
 const KIT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -77,6 +78,16 @@ test('sandbox reports inconclusive for a missing or empty directory', () => {
   } finally {
     fs.rmSync(empty, { recursive: true, force: true });
   }
+});
+
+test('CLI path: --no-checkjs reaches the sandbox, default still checks JS', async () => {
+  await withSandbox(UNTYPED_PIECE, async (dir) => {
+    const run = (extra) => runTypecheckAudit([`--sandbox=${dir}`, '--json', ...extra], false, { cwd: KIT_ROOT, print: false });
+    const checked = await run([]);
+    assert.equal(checked.status, STATUS.FAIL);
+    const skipped = await run(['--no-checkjs']);
+    assert.equal(skipped.status, STATUS.PASS, JSON.stringify(skipped.errors));
+  });
 });
 
 test('sandbox tsconfig is strict and honours checkJs', () => {

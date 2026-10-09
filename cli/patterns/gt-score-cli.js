@@ -4,7 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { handleQueryPatterns } from '../mcp/tools-patterns.js';
-import { loadLabels, resolveLabels, staleAnchorIds } from './gt-resolve.js';
+import { loadLabels, resolveLabels, staleAnchorIds, mismatchedAnchorIds } from './gt-resolve.js';
 import { scoreGroups } from './gt-score.js';
 
 const flagValue = (args, name) => args.find((arg) => arg.startsWith(`--${name}=`))?.slice(name.length + 3);
@@ -16,17 +16,18 @@ export const legacyGroups = (candidates) => candidates.map((candidate) => ({
   occurrences: (candidate.occurrences ?? []).map((occ) => ({ file: occ.filePath, startLine: occ.line, endLine: occ.line }))
 }));
 
-const readLegacy = (dir, cwd) => legacyGroups(handleQueryPatterns({ dir, compact: false }, cwd).candidates);
+// dir is omitted when not given, so the scored scan scope is the same default as plain `chemx patterns`.
+const readLegacy = (dir, cwd) => legacyGroups(handleQueryPatterns({ ...(dir ? { dir } : {}), compact: false }, cwd).candidates);
 
 const readGroups = (args, cwd) => {
   const input = flagValue(args, 'input');
-  const dir = flagValue(args, 'dir') ?? '.';
+  const dir = flagValue(args, 'dir') ?? args.find((arg) => !arg.startsWith('-'));
   return input ? JSON.parse(fs.readFileSync(path.resolve(cwd, input), 'utf-8')) : readLegacy(dir, cwd);
 };
 
 const percent = (value) => (value === null ? 'n/a' : `${(value * 100).toFixed(0)}%`);
 
-export const formatScore = (report, staleIds) => {
+export const formatScore = (report, staleIds, mismatchIds = []) => {
   const { recallA, falseItems, precision } = report;
   const surfacedList = falseItems.surfaced.join(' ');
   const lines = [
@@ -41,6 +42,8 @@ export const formatScore = (report, staleIds) => {
   }
   const hasStale = staleIds.length > 0;
   if (hasStale) lines.push(`stale anchors (${staleIds.length}): ${staleIds.join(' ')}`);
+  const hasMismatch = mismatchIds.length > 0;
+  if (hasMismatch) lines.push(`fixture/label hash mismatch (${mismatchIds.length}): ${mismatchIds.join(' ')}`);
   return `${lines.join('\n')}\n`;
 };
 
@@ -50,8 +53,9 @@ export const runPatternsScore = (args, cwd = process.cwd()) => {
   const items = resolveLabels(labels, path.dirname(labelsPath), cwd);
   const report = scoreGroups(items, readGroups(args, cwd));
   const staleIds = staleAnchorIds(items);
+  const mismatchIds = mismatchedAnchorIds(items);
   const wantsJson = args.includes('--json');
-  const text = wantsJson ? `${JSON.stringify({ ...report, staleAnchors: staleIds }, null, 2)}\n` : formatScore(report, staleIds);
+  const text = wantsJson ? `${JSON.stringify({ ...report, staleAnchors: staleIds, mismatchedAnchors: mismatchIds }, null, 2)}\n` : formatScore(report, staleIds, mismatchIds);
   process.stdout.write(text);
   return report;
 };

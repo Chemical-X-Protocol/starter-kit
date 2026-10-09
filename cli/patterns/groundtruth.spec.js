@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseFixture, excerptHash, locateExcerpt } from './gt-text.js';
+import { parseFixture, excerptHash, locateExcerpt, findExcerptHits, assignOrderedHits } from './gt-text.js';
 import { scoreGroups, MIN_DENSITY } from './gt-score.js';
 import { legacyGroups } from './gt-score-cli.js';
 
@@ -52,6 +52,19 @@ test('anchors are located by content and survive line shifts', () => {
   const found = locateExcerpt(shifted, excerpt, anchor.startLine);
   assert.equal(found.startLine, padding.length + 1 + 1 + excerpt.findIndex((line) => line.trim() !== ''));
   assert.equal(locateExcerpt(padding, excerpt, 1), null);
+});
+
+test('identical-text anchors resolve to distinct spans in file order after a line shift', () => {
+  const a23 = LABELS.items.find((item) => item.id === 'A23');
+  const excerpt = parseFixture(fs.readFileSync(path.join(GT_DIR, 'A23.txt'), 'utf-8'))[0].lines;
+  const block = (tag) => [...Array.from({ length: 14 }, (_, i) => `// ${tag} filler ${i}`), ...excerpt];
+  const fileLines = [...block('a'), ...block('b'), ...block('c')];
+  const hits = findExcerptHits(fileLines, excerpt);
+  assert.equal(hits.length, 3);
+  const anchors = [{ startLine: hits[0].startLine - 9 }, { startLine: hits[1].startLine - 9 }];
+  const spans = assignOrderedHits(anchors, hits);
+  assert.deepEqual(spans, [hits[0], hits[1]]);
+  assert.ok(a23.anchors.length > 1);
 });
 
 test('a complete A group scores 1, two of five anchors score 0.5, a lone anchor scores 0', () => {

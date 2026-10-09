@@ -77,7 +77,8 @@ const sandboxReport = (fields) => ({
 // Runs the sandbox check and returns a report in the same shape as `chemx typecheck`.
 export const runSandboxTypecheck = async (sandboxArg, { cwd = process.cwd(), checkJs = true, timeoutMs = null, raw = false } = {}) => {
   const plan = planSandboxTypecheck(sandboxArg, { cwd, checkJs });
-  if (!plan.command) return sandboxReport({ status: plan.status, reason: plan.reason, executionError: plan.message, checker: plan.checker });
+  const isUnrunnable = !plan.command;
+  if (isUnrunnable) return sandboxReport({ status: plan.status, reason: plan.reason, executionError: plan.message, checker: plan.checker });
   try {
     const execution = await executeBuild(plan.command, cwd, { raw, timeoutMs });
     const errors = parseTypecheckOutput(execution.stdout, execution.stderr);

@@ -26,16 +26,38 @@ const indexNonBlank = (fileLines) => {
 
 const matchesAt = (kept, needle, offset) => needle.every((text, i) => kept[offset + i].text === text);
 
-// Returns { startLine, endLine } of the excerpt inside fileLines (1-indexed), nearest to hintLine, or null.
-export const locateExcerpt = (fileLines, excerptLines, hintLine = 1) => {
+// Every { startLine, endLine } where the excerpt occurs inside fileLines (1-indexed), in file order.
+export const findExcerptHits = (fileLines, excerptLines) => {
   const needle = normalizeLines(excerptLines);
   const kept = indexNonBlank(fileLines);
   const hits = [];
   for (let offset = 0; offset + needle.length <= kept.length; offset += 1) {
     if (matchesAt(kept, needle, offset)) hits.push({ startLine: kept[offset].line, endLine: kept[offset + needle.length - 1].line });
   }
+  return hits;
+};
+
+const nearestHit = (hits, hintLine) => {
   const distance = (hit) => Math.abs(hit.startLine - hintLine);
   return hits.reduce((best, hit) => (best === null || distance(hit) < distance(best) ? hit : best), null);
+};
+
+// Returns { startLine, endLine } of the excerpt inside fileLines (1-indexed), nearest to hintLine, or null.
+export const locateExcerpt = (fileLines, excerptLines, hintLine = 1) => nearestHit(findExcerptHits(fileLines, excerptLines), hintLine);
+
+// Assigns identical-text anchors to distinct hits, keeping their file order: each anchor (sorted by its stored
+// startLine) takes the nearest hit that lies after the previous anchor's hit. Anchors sharing one stored
+// startLine (two items labelling the same site) share one hit. Returns spans parallel to `anchors`.
+export const assignOrderedHits = (anchors, hits) => {
+  const sites = [...new Set(anchors.map((anchor) => anchor.startLine))].sort((a, b) => a - b);
+  const spanBySite = new Map();
+  let floor = 0;
+  for (const site of sites) {
+    const hit = nearestHit(hits.filter((candidate) => candidate.startLine > floor), site);
+    spanBySite.set(site, hit);
+    if (hit) floor = hit.startLine;
+  }
+  return anchors.map((anchor) => spanBySite.get(anchor.startLine));
 };
 
 // Parses a fixture file into [{ id, spec, hash, lines }].

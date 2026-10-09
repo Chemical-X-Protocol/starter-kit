@@ -11,7 +11,7 @@ import { formatAgentJson } from './agent-json.js';
 import { workspaceAt, emitWorkspace, allPackagesOrRefuse } from './workspace-run.js';
 
 const TYPECHECK_ARGS = {
-  booleans: { '--json': 'json', '--raw': 'raw', '--checkjs': 'checkjs', '--all-packages': 'allPackages', '--help': 'help', '-h': 'help' },
+  booleans: { '--json': 'json', '--raw': 'raw', '--checkjs': 'checkjs', '--no-checkjs': 'noCheckjs', '--all-packages': 'allPackages', '--help': 'help', '-h': 'help' },
   values: { '--timeout': 'timeout', '--sandbox': 'sandbox' }
 };
 
@@ -27,6 +27,7 @@ const TYPECHECK_HELP = [
   '  --all-packages           At a monorepo root: check every workspace package (else refused)',
   '  --sandbox=<dir>          Check a directory of loose JS/TS pieces under a temp strict tsconfig (checkJs, noImplicitAny)',
   '  --checkjs                With --sandbox: check JS files (the default for a sandbox)',
+  '  --no-checkjs             With --sandbox: skip JS files and check only TS (wins over --checkjs)',
   '  --json                   Output structured diagnostics as JSON',
   '  --raw                    Stream the checker output as it runs',
   '  -h, --help               Show this help message',
@@ -98,7 +99,7 @@ export const runTypecheckAudit = async (rawArgs = [], isCli = false, options = {
   const isSandboxRun = Boolean(parsed.values.sandbox);
   if (isSandboxRun) {
     const timeoutMs = parseTimeoutSeconds(parsed.values.timeout) ?? options.timeoutMs ?? null;
-    const sandboxReport = await runSandboxTypecheck(parsed.values.sandbox, { cwd, timeoutMs, raw: Boolean(parsed.flags.raw) });
+    const sandboxReport = await runSandboxTypecheck(parsed.values.sandbox, { cwd, timeoutMs, raw: Boolean(parsed.flags.raw), checkJs: !parsed.flags.noCheckjs });
     return emit(sandboxReport, output);
   }
   const workspace = options.inWorkspace || customCmd ? null : workspaceAt(cwd);
