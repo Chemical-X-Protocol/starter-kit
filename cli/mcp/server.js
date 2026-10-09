@@ -6,9 +6,19 @@ import { MCP_PROMPTS, getMcpPrompt } from './prompts.js';
 import { warmIndexDb } from '../search-db.js';
 import { resolveCallScope, extractCallTarget, hasProjectMarker } from './call-scope.js';
 
+const PACKAGE_JSON_URL = new URL('../../package.json', import.meta.url);
+
+const readPackageVersion = () => {
+  try {
+    return JSON.parse(fs.readFileSync(PACKAGE_JSON_URL, 'utf-8')).version || 'unknown';
+  } catch {
+    return 'unknown';
+  }
+};
+
 export const SERVER_INFO = {
   name: 'chemical-x-mcp',
-  version: '26.9.14'
+  version: readPackageVersion()
 };
 
 export const PROTOCOL_VERSION = '2024-11-05';
@@ -281,10 +291,32 @@ export const startStdioServer = (options = {}) => {
     process.stderr.write(`[mcp:stdio] stdin error: ${err?.message || err}\n`);
   });
 
-  const rl = readline.createInterface({
+  let rl;
+  const isRealStdio = !options.input;
+  const shutdown = () => {
+    if (isRealStdio) process.exit(0);
+  };
+
+  if (isRealStdio) {
+    process.on('SIGINT', shutdown);
+    process.on('SIGTERM', shutdown);
+    process.on('SIGHUP', shutdown);
+
+    const initialParentPid = process.ppid;
+    const watchParent = setInterval(() => {
+      const isParentGone = process.ppid !== initialParentPid;
+      if (isParentGone) shutdown();
+    }, 5000);
+    watchParent.unref();
+  }
+
+  rl = readline.createInterface({
     input,
     terminal: false
   });
+
+  rl.on('close', shutdown);
+  input.on('end', shutdown);
 
   rl.on('line', async (line) => {
     const trimmed = line.trim();

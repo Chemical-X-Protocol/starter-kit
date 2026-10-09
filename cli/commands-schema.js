@@ -129,7 +129,6 @@ export const COMMANDS_SCHEMA = [
     ],
     examples: [
       'npx chemx mcp',
-      'pnpm chemx:mcp',
       'npx chemx mcp --sync'
     ]
   },

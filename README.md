@@ -355,7 +355,6 @@ This automatically registers the Chemical X server in:
 - `.cursor/mcp.json` (Cursor IDE)
 - `.vscode/mcp.json` (VS Code)
 - `~/.gemini/config/mcp_config.json` (Antigravity)
-- Injects `chemx:mcp`, `chemx:verify`, `chemx:test`, and `chemx:typecheck` into your `package.json` scripts
 
 ### Manual MCP Server Configuration
 

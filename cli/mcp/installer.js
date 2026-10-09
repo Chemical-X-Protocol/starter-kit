@@ -6,6 +6,7 @@ import { syncAntigravityMcpSchemas } from './antigravity.js';
 export { syncAntigravityMcpSchemas } from './antigravity.js';
 
 const SERVER_KEY = 'chemical-x';
+const PUBLISHED_MCP_ARGS = ['exec', '-y', '--', 'chemx@latest', 'mcp'];
 
 const toResultSync = (operation) => {
   try {
@@ -40,29 +41,25 @@ export const mergeMcpServerConfig = (existingJsonString = '', serverDef = {}) =>
 export const resolveMcpServerCommand = (targetDir = '.') => {
   const resolvedTarget = path.resolve(targetDir);
 
-  const localCreateChemx = path.join(resolvedTarget, 'node_modules', 'create-chemx', 'cli', 'index.js');
+  const localChemx = path.join(resolvedTarget, 'node_modules', 'chemx', 'cli', 'index.js');
   const localScopedChemx = path.join(resolvedTarget, 'node_modules', '@chemx', 'starter-kit', 'cli', 'index.js');
-  const inRepoStarterKit = path.join(resolvedTarget, 'apps', 'chemical-x', 'starter-kit', 'cli', 'index.js');
+  const localCreateChemx = path.join(resolvedTarget, 'node_modules', 'create-chemx', 'cli', 'index.js');
 
-  const hasCreateChemx = fs.existsSync(localCreateChemx);
-  const hasScopedChemx = fs.existsSync(localScopedChemx);
-  const hasInRepoStarterKit = fs.existsSync(inRepoStarterKit);
-
-  if (hasInRepoStarterKit) {
+  if (fs.existsSync(localChemx)) {
     return {
       command: 'node',
-      args: ['./apps/chemical-x/starter-kit/cli/index.js', 'mcp']
+      args: ['./node_modules/chemx/cli/index.js', 'mcp']
     };
   }
 
-  if (hasScopedChemx) {
+  if (fs.existsSync(localScopedChemx)) {
     return {
       command: 'node',
       args: ['./node_modules/@chemx/starter-kit/cli/index.js', 'mcp']
     };
   }
 
-  if (hasCreateChemx) {
+  if (fs.existsSync(localCreateChemx)) {
     return {
       command: 'node',
       args: ['./node_modules/create-chemx/cli/index.js', 'mcp']
@@ -71,7 +68,7 @@ export const resolveMcpServerCommand = (targetDir = '.') => {
 
   return {
     command: 'npm',
-    args: ['exec', '-y', '--', 'chemx', 'mcp']
+    args: PUBLISHED_MCP_ARGS
   };
 };
 
@@ -82,8 +79,7 @@ export const installProjectMcpConfig = (targetDir = '.', options = {}) => {
 
   const results = {
     cursor: false,
-    vscode: false,
-    packageJson: false
+    vscode: false
   };
 
   // 1. Configure .cursor/mcp.json
@@ -110,48 +106,6 @@ export const installProjectMcpConfig = (targetDir = '.', options = {}) => {
     process.stdout.write('  \x1b[32m✔\x1b[0m Configured VS Code MCP server in: .vscode/mcp.json\n');
   }
 
-  // 3. Inject helper scripts to consumer package.json if available
-  const pkgPath = path.join(resolvedTarget, 'package.json');
-  if (fs.existsSync(pkgPath)) {
-    const [pkgContent, readError] = toResultSync(() => fs.readFileSync(pkgPath, 'utf-8'));
-    if (!readError && pkgContent) {
-      const [pkg, parseError] = toResultSync(() => JSON.parse(pkgContent));
-      if (!parseError && pkg && typeof pkg === 'object') {
-        if (!pkg.scripts) pkg.scripts = {};
-
-        let modified = false;
-        if (!pkg.scripts['chemx:mcp'] && !pkg.scripts['mcp']) {
-          pkg.scripts['chemx:mcp'] = 'chemx mcp';
-          modified = true;
-        }
-        if (!pkg.scripts['chemx:verify']) {
-          pkg.scripts['chemx:verify'] = 'chemx verify';
-          modified = true;
-        }
-        if (!pkg.scripts['chemx:test']) {
-          pkg.scripts['chemx:test'] = 'chemx test';
-          modified = true;
-        }
-        if (!pkg.scripts['chemx:typecheck']) {
-          pkg.scripts['chemx:typecheck'] = 'chemx typecheck';
-          modified = true;
-        }
-
-        if (modified) {
-          const [, writeError] = toResultSync(() => {
-            fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n', 'utf-8');
-          });
-          if (!writeError) {
-            results.packageJson = true;
-            if (!isSilent) {
-              process.stdout.write('  \x1b[32m✔\x1b[0m Added chemx verification & MCP scripts to package.json\n');
-            }
-          }
-        }
-      }
-    }
-  }
-
   return results;
 };
 
@@ -164,16 +118,7 @@ export const installAntigravityMcpConfig = (targetDir = '.', options = {}) => {
   if (!hasConfigDir) return false;
 
   const configFile = path.join(configDir, 'mcp_config.json');
-  const resolvedTarget = path.resolve(targetDir);
-  const directStarter = path.join(resolvedTarget, 'cli', 'index.js');
-  const monorepoStarter = path.join(resolvedTarget, 'apps', 'chemical-x', 'starter-kit', 'cli', 'index.js');
-  const localStarter = fs.existsSync(directStarter)
-    ? directStarter
-    : (fs.existsSync(monorepoStarter) ? monorepoStarter : null);
-
-  const serverDef = localStarter
-    ? { command: process.execPath, args: [localStarter, 'mcp'] }
-    : { command: 'npm', args: ['exec', '-y', '--', 'chemx', 'mcp'] };
+  const serverDef = { command: 'npm', args: PUBLISHED_MCP_ARGS };
 
   try {
     const existing = fs.existsSync(configFile) ? fs.readFileSync(configFile, 'utf-8') : '';

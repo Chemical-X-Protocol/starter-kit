@@ -40,7 +40,7 @@ test('resolveMcpServerCommand: falls back to npm exec when no local node_modules
   try {
     const cmd = resolveMcpServerCommand(tmpDir);
     assert.strictEqual(cmd.command, 'npm');
-    assert.deepStrictEqual(cmd.args, ['exec', '-y', '--', 'chemx', 'mcp']);
+    assert.deepStrictEqual(cmd.args, ['exec', '-y', '--', 'chemx@latest', 'mcp']);
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
@@ -61,16 +61,16 @@ test('resolveMcpServerCommand: detects local node_modules/create-chemx', () => {
   }
 });
 
-test('installProjectMcpConfig: creates .cursor and .vscode configs and updates package.json', () => {
+test('installProjectMcpConfig: creates .cursor and .vscode configs without modifying package.json', () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-inst-test-'));
   try {
     const pkgPath = path.join(tmpDir, 'package.json');
-    fs.writeFileSync(pkgPath, JSON.stringify({ name: 'test-app', scripts: { dev: 'vite' } }), 'utf-8');
+    const initialPkg = JSON.stringify({ name: 'test-app', scripts: { dev: 'vite' } }, null, 2);
+    fs.writeFileSync(pkgPath, initialPkg, 'utf-8');
 
     const res = installProjectMcpConfig(tmpDir, { silent: true });
     assert.strictEqual(res.cursor, true);
     assert.strictEqual(res.vscode, true);
-    assert.strictEqual(res.packageJson, true);
 
     const cursorPath = path.join(tmpDir, '.cursor', 'mcp.json');
     assert.ok(fs.existsSync(cursorPath));
@@ -80,11 +80,8 @@ test('installProjectMcpConfig: creates .cursor and .vscode configs and updates p
     const vscodePath = path.join(tmpDir, '.vscode', 'mcp.json');
     assert.ok(fs.existsSync(vscodePath));
 
-    const updatedPkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
-    assert.strictEqual(updatedPkg.scripts['chemx:mcp'], 'chemx mcp');
-    assert.strictEqual(updatedPkg.scripts['chemx:verify'], 'chemx verify');
-    assert.strictEqual(updatedPkg.scripts['chemx:test'], 'chemx test');
-    assert.strictEqual(updatedPkg.scripts['chemx:typecheck'], 'chemx typecheck');
+    const unchangedPkg = fs.readFileSync(pkgPath, 'utf-8');
+    assert.strictEqual(unchangedPkg, initialPkg);
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }

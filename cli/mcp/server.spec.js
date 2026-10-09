@@ -772,3 +772,11 @@ test('MCP Server: chemx mcp without a positional dir does not declare its start 
   assert.deepStrictEqual(resolveServerOptions([]), {});
   assert.deepStrictEqual(resolveServerOptions(['/some/project']), { cwd: '/some/project' });
 });
+
+test('MCP Server: startStdioServer registers close teardown listeners', async () => {
+  const inStream = new PassThrough();
+  const outStream = new PassThrough();
+  const { rl } = startStdioServer({ input: inStream, output: outStream });
+  assert.ok(rl.listenerCount('close') > 0);
+  rl.close();
+});
