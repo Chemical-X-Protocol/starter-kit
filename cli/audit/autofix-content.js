@@ -68,7 +68,8 @@ const commentEdits = (content, ranges, shouldFix, fixes) => {
   for (const comment of [...ranges.comments].sort((a, b) => a.start - b.start)) {
     const text = content.slice(comment.start, comment.end);
     const removal = classifyComment(text, shouldFix);
-    if (removal) {
+    const isRemoved = Boolean(removal);
+    if (isRemoved) {
       edits.push({ ...wholeCommentSpan(content, comment), text: '' });
       fixes.push({ line: lineOfIndex(content, comment.start), ...removal });
       continue;
@@ -83,7 +84,8 @@ const commentEdits = (content, ranges, shouldFix, fixes) => {
 };
 
 const timerSuggestions = (content, ranges, shouldFix) => {
-  if (!shouldFix('MACRO_TASK_OVER_MICRO_TASK')) return [];
+  const isTimerRuleOn = shouldFix('MACRO_TASK_OVER_MICRO_TASK');
+  if (!isTimerRuleOn) return [];
   const skip = [...ranges.comments, ...ranges.literals];
   return [...content.matchAll(TIMER_REGEX)]
     .filter((m) => insideAny(ranges.codeRegions, m.index) && !insideAny(skip, m.index))
@@ -108,7 +110,8 @@ export const autofixContent = (content, options = {}) => {
   const fenceShouldRun = shouldFix('AI_SLOP_CONVERSATIONAL_ARTIFACT');
   const base = fenceShouldRun ? stripEdgeFences(content, filePath, fixes) : content;
   const ranges = findSourceRanges(base, filePath);
-  if (!ranges) return { fixedContent: base, fixes, suggestions: [], skipped: 'no tokenizer for this file type, or it does not parse' };
+  const isTokenized = Boolean(ranges);
+  if (!isTokenized) return { fixedContent: base, fixes, suggestions: [], skipped: 'no tokenizer for this file type, or it does not parse' };
 
   const edits = commentEdits(base, ranges, shouldFix, fixes);
   let fixedContent = base;

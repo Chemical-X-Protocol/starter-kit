@@ -80,7 +80,8 @@ export const runAutofix = (targetPath, options = {}) => {
     const file = path.relative(root, filePath);
     const original = fs.readFileSync(filePath, 'utf-8');
     const result = autofixContent(original, { ...options, filePath });
-    if (result.skipped) skipped.push({ file, reason: result.skipped });
+    const isSkipped = Boolean(result.skipped);
+    if (isSkipped) skipped.push({ file, reason: result.skipped });
     result.suggestions.forEach((s) => suggestions.push({ file, ...s }));
     const isChanged = result.fixes.length > 0 && result.fixedContent !== original;
     if (!isChanged) continue;

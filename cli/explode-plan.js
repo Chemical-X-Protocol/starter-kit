@@ -83,7 +83,8 @@ const isControllerName = (name) => Boolean(name) && name.startsWith('use') && na
  */
 export const planExplode = (content, filePath) => {
   const lang = langForPath(filePath);
-  if (!lang) throw new Error(`explode supports .ts/.tsx/.js/.jsx sources only (got ${filePath}); Vue/Svelte need SFC support (plan B).`);
+  const isSupported = Boolean(lang);
+  if (!isSupported) throw new Error(`explode supports .ts/.tsx/.js/.jsx sources only (got ${filePath}); Vue/Svelte need SFC support (plan B).`);
   const file = parseBabel(content, lang);
   const program = file.program;
   const prologueEnd = prologueEndOf(file);
@@ -107,7 +108,8 @@ export const planExplode = (content, filePath) => {
   }
   const tail = content.slice(program.body.length ? program.body[program.body.length - 1].end : prologueEnd);
   const lastComponent = buckets.component[buckets.component.length - 1];
-  if (lastComponent) lastComponent.segment += tail.replace(/\s+$/, '');
+  const hasComponent = Boolean(lastComponent);
+  if (hasComponent) lastComponent.segment += tail.replace(/\s+$/, '');
 
   return {
     statements,
@@ -141,7 +143,8 @@ export const importHeader = (bucket, plan, typeHome, sub = '') => {
   const byModule = new Map();
   for (const id of [...refs].filter((r) => plan.movedTypes.has(r) && !own.has(r))) {
     const from = typeHome(id);
-    if (!from) continue;
+    const isElsewhere = Boolean(from);
+    if (!isElsewhere) continue;
     byModule.set(from, [...(byModule.get(from) || []), id]);
   }
   const typeImports = [...byModule].map(([from, names]) => `import type { ${names.sort().join(', ')} } from '${from}';`);

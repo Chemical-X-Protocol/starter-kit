@@ -30,7 +30,8 @@ const findUp = (startDir, name) => {
 
 const isModulePackage = (dir) => {
   const pkg = findUp(dir, 'package.json');
-  if (!pkg) return false;
+  const hasPackage = Boolean(pkg);
+  if (!hasPackage) return false;
   try {
     return JSON.parse(fs.readFileSync(pkg, 'utf-8')).type === 'module';
   } catch {

@@ -207,7 +207,8 @@ export const generateAstLogicSkeleton = (code, filePath) => {
     const out = [];
     for (const stmt of fnNode.body.body || []) {
       const innerFns = stmt.type === 'VariableDeclaration' ? stmt.declarations.filter((d) => isFunctionInit(d.init)) : [];
-      if (innerFns.length > 0) {
+      const hasInnerFunctions = innerFns.length > 0;
+      if (hasInnerFunctions) {
         innerFns.forEach((d) => out.push(...emitFunction(d.init, stmt, `${stmt.kind} ${scriptContent.slice(d.start, d.init.body.start).trim()}`, indent)));
       } else if (isLogicStatement(stmt)) {
         const isJsxReturn = stmt.type === 'ReturnStatement' && ['JSXElement', 'JSXFragment'].includes(stmt.argument?.type);
@@ -228,13 +229,18 @@ export const generateAstLogicSkeleton = (code, filePath) => {
 
   for (const node of ast.program.body) {
     const decl = node.type === 'ExportNamedDeclaration' || node.type === 'ExportDefaultDeclaration' ? node.declaration : node;
-    if (!decl) continue;
-    if (node.type === 'ImportDeclaration') {
+    const hasDeclaration = Boolean(decl);
+    if (!hasDeclaration) continue;
+    const isImport = node.type === 'ImportDeclaration';
+    const isFunctionDeclaration = decl.type === 'FunctionDeclaration';
+    const isVariableDeclaration = decl.type === 'VariableDeclaration';
+    if (isImport) {
       const specifiers = node.importKind === 'type' ? [] : node.specifiers.filter((sp) => sp.importKind !== 'type').map((sp) => sp.local?.name).filter(Boolean);
-      if (specifiers.length > 0) importsSummary.push(`// Imports: [${specifiers.join(', ')}] from '${node.source.value}'`);
-    } else if (decl.type === 'FunctionDeclaration') {
+      const hasValueImports = specifiers.length > 0;
+      if (hasValueImports) importsSummary.push(`// Imports: [${specifiers.join(', ')}] from '${node.source.value}'`);
+    } else if (isFunctionDeclaration) {
       logicBlocks.push(emitFunction(decl, node, headerOf(node, decl)).join('\n'));
-    } else if (decl.type === 'VariableDeclaration') {
+    } else if (isVariableDeclaration) {
       const fnDecls = decl.declarations.filter((d) => isFunctionInit(d.init));
       fnDecls.forEach((d) => logicBlocks.push(emitFunction(d.init, node, headerOf(node, d.init), '').join('\n')));
       const hasState = fnDecls.length === 0 && decl.declarations.some(isStateKind);
@@ -242,11 +248,15 @@ export const generateAstLogicSkeleton = (code, filePath) => {
     }
   }
 
-  if (importsSummary.length > 0) lines.push(...importsSummary, '');
-  if (stateDeclarations.length > 0) lines.push(...stateDeclarations, '');
-  if (logicBlocks.length > 0) lines.push(logicBlocks.join('\n\n'));
+  const hasImports = importsSummary.length > 0;
+  const hasState = stateDeclarations.length > 0;
+  const hasLogic = logicBlocks.length > 0;
+  if (hasImports) lines.push(...importsSummary, '');
+  if (hasState) lines.push(...stateDeclarations, '');
+  if (hasLogic) lines.push(logicBlocks.join('\n\n'));
 
   const tplSummary = summarizeTemplate(code, filePath);
-  if (tplSummary) lines.push('', tplSummary);
+  const hasTemplateSummary = Boolean(tplSummary);
+  if (hasTemplateSummary) lines.push('', tplSummary);
   return lines.join('\n');
 };

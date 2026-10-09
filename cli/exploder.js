@@ -71,7 +71,8 @@ const buildCapsuleFiles = (plan, names) => {
   };
 
   const controllerName = plan.controllerName || (isReact ? `use${pascalName}Controller` : null);
-  if (plan.controllerName) {
+  const hasController = Boolean(plan.controllerName);
+  if (hasController) {
     files[`${capsuleName}.controller.ts`] = `${importHeader(plan.buckets.controller, plan, typeHomeFor('controller'), capsuleName)}${joinSegments(plan.buckets.controller, capsuleName)}\n`;
   } else if (isReact) {
     files[`${capsuleName}.controller.ts`] = `import { useState } from 'react';\n\nexport const ${controllerName} = () => {\n  const [isActive] = useState<boolean>(false);\n  return { isActive };\n};\n`;
@@ -229,8 +230,9 @@ export const runExplodeCli = async (rawArgs = [], isCli = true) => {
       for (const [name, file] of Object.entries(result.placement)) {
         process.stdout.write(`  ${name} -> ${file}\n`);
       }
-      if (result.backup) process.stdout.write(`  original kept at ${result.backup}\n`);
-      if (result.dryRun) process.stdout.write(`\n${result.diff}\n`);
+      const hasBackup = Boolean(result.backup);
+      if (hasBackup) process.stdout.write(`  original kept at ${result.backup}\n`);
+      if (isDryRun) process.stdout.write(`\n${result.diff}\n`);
       process.stdout.write('\n');
     }
     if (isCli) process.exit(0);

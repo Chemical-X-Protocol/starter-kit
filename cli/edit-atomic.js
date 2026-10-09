@@ -34,7 +34,8 @@ export const writeAtomic = (absPath, content, root) => {
   const dir = path.dirname(absPath);
   fs.mkdirSync(dir, { recursive: true });
   const backup = saveBackup(absPath, root);
-  const mode = backup ? fs.statSync(absPath).mode : undefined;  const tmp = path.join(dir, `.${path.basename(absPath)}.chemx-tmp-${process.pid}-${Date.now()}`);
+  const mode = backup ? fs.statSync(absPath).mode : undefined;
+  const tmp = path.join(dir, `.${path.basename(absPath)}.chemx-tmp-${process.pid}-${Date.now()}`);
   try {
     fs.writeFileSync(tmp, content, 'utf-8');
     const hasMode = mode !== undefined;

@@ -80,7 +80,8 @@ const printOutcome = (res, verb, isJson) => {
     process.stdout.write(`${JSON.stringify(res, null, 2)}\n`);
     return;
   }
-  if (res.dryRun) {
+  const isPreview = Boolean(res.dryRun);
+  if (isPreview) {
     process.stdout.write(`${ANSI.GOLD}[DRY RUN] Would ${verb} ${res.file}. No changes were written to disk.${ANSI.RESET}\n`);
     process.stdout.write(`${res.diff || '(no change)'}\n`);
     printDeclarations(res);
@@ -91,12 +92,14 @@ const printOutcome = (res, verb, isJson) => {
   const writeVerb = res.created ? 'Created' : 'Updated';
   const doneVerb = verb === 'patch' ? 'Patched' : writeVerb;
   process.stdout.write(`${ANSI.GREEN}✔ ${doneVerb} ${res.file}${where}${res.backup ? ` (backup: ${res.backup})` : ''}${ANSI.RESET}\n`);
-  if (res.lineBudget && !res.lineBudget.passed) {
+  const isOverBudget = Boolean(res.lineBudget) && !res.lineBudget.passed;
+  if (isOverBudget) {
     process.stdout.write(`  ${ANSI.RED}⚠ Line Budget: ${res.lineBudget.lines}L exceeds ${res.lineBudget.limit}L limit (Directive 1.A)${ANSI.RESET}\n`);
   }
   printDeclarations(res);
   printParseNote(res);
-  if (res.violationsCount > 0) {
+  const hasViolations = res.violationsCount > 0;
+  if (hasViolations) {
     process.stdout.write(`  ${ANSI.GOLD}⚠ ${res.violationsCount} architecture hazard(s) detected (Run chemx check ${res.file})${ANSI.RESET}\n`);
   }
 };
@@ -126,7 +129,8 @@ export const runPatcherCli = (args, isCli = false) => {
   if (hasUnknownFlags) return fail(unknownFlagsMessage('patch', unknown), isCli);
   const { values, positionals } = parseValueFlags(args, PATCH_FLAGS);
   const filePath = positionals[0];
-  if (!filePath) return fail('Missing file path. Usage: chemx patch <file> --target="text" --replacement="new" [--json]', isCli);
+  const hasFilePath = Boolean(filePath);
+  if (!hasFilePath) return fail('Missing file path. Usage: chemx patch <file> --target="text" --replacement="new" [--json]', isCli);
 
   return runGuarded(() => patchFile(filePath, {
     targetContent: fromFileOr(values.target ?? null, values.targetFile),
@@ -157,7 +161,8 @@ export const runWriterCli = (args, isCli = false) => {
   if (hasUnknownFlags) return fail(unknownFlagsMessage('write', unknown), isCli);
   const { values, positionals } = parseValueFlags(args, WRITE_FLAGS);
   const filePath = positionals[0];
-  if (!filePath) return fail('Missing file path. Usage: chemx write <file> --content="text" [--json]', isCli);
+  const hasFilePath = Boolean(filePath);
+  if (!hasFilePath) return fail('Missing file path. Usage: chemx write <file> --content="text" [--json]', isCli);
 
   return runGuarded(() => writeFile(filePath, {
     content: readWriteContent(args, values),

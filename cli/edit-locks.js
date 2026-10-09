@@ -14,7 +14,8 @@ const loadSqlite = async () => {
   try {
     return (await import('node:sqlite')).DatabaseSync;
   } catch (err) {
-    if (process.env.CHEMX_DEBUG) process.stderr.write(`[edit-locks] node:sqlite unavailable: ${err.message}\n`);
+    const isDebug = Boolean(process.env.CHEMX_DEBUG);
+    if (isDebug) process.stderr.write(`[edit-locks] node:sqlite unavailable: ${err.message}\n`);
     return null;
   }
 };
@@ -41,7 +42,8 @@ const readLease = (root, relPath) => {
     db.close();
     return lease;
   } catch (err) {
-    if (process.env.CHEMX_DEBUG) process.stderr.write(`[edit-locks] lease lookup skipped: ${err.message}\n`);
+    const isDebug = Boolean(process.env.CHEMX_DEBUG);
+    if (isDebug) process.stderr.write(`[edit-locks] lease lookup skipped: ${err.message}\n`);
     const isOpen = Boolean(db?.isOpen);
     if (isOpen) db.close();
     return null;
@@ -71,7 +73,8 @@ const lockRoots = (root, absPath) => {
 const blockingLease = (lockRoot, absPath, agentId) => {
   const relPath = path.relative(lockRoot, absPath);
   const lease = readLease(lockRoot, relPath);
-  if (!lease) return null;
+  const hasLease = Boolean(lease);
+  if (!hasLease) return null;
   const isExpired = Number(lease.expires_at) <= Date.now();
   const isDeadHolder = Number(lease.pid) > 0 && !isPidAlive(Number(lease.pid));
   const isOwn = lease.locked_by === resolveAgentId(agentId);
@@ -88,7 +91,8 @@ const blockingLease = (lockRoot, absPath, agentId) => {
 export const findForeignLease = (root, absPath, agentId) => {
   for (const lockRoot of lockRoots(root, absPath)) {
     const lease = blockingLease(lockRoot, absPath, agentId);
-    if (lease) return lease;
+    const isBlocked = Boolean(lease);
+    if (isBlocked) return lease;
   }
   return null;
 };

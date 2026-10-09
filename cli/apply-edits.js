@@ -61,7 +61,8 @@ const planEdit = (edit, root, options) => {
 
   const after = isDelete ? '' : edit.content;
   const lease = findForeignLease(root, absPath, options.agentId);
-  if (lease) return { ...plan, issue: `locked by ${lease.lockedBy}${lease.purpose ? ` (${lease.purpose})` : ''}; wait until ${lease.lockedBy} releases it or the lease expires (check: chemx team lock list)` };
+  const isLocked = Boolean(lease);
+  if (isLocked) return { ...plan, issue: `locked by ${lease.lockedBy}${lease.purpose ? ` (${lease.purpose})` : ''}; wait until ${lease.lockedBy} releases it or the lease expires (check: chemx team lock list)` };
   if (isDelete) return { ...plan, after, parse: { kind: 'n/a', ok: true }, declarations: { removed: [], added: [] } };
 
   const afterParse = parseSource(after, absPath);
@@ -113,7 +114,8 @@ export const applyEdits = (edits, options = {}) => {
   const hasIssues = issues.length > 0;
   if (hasIssues) throw new EditRefusedError(issues);
 
-  if (!dryRun) commitPlans(plans, root);
+  const isPreview = dryRun;
+  if (!isPreview) commitPlans(plans, root);
 
   const files = plans.map((p) => ({
     file: p.file,
