@@ -2,12 +2,28 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { hasGum, gumInput, promptQuestion, renderBanner } from './terminal.js';
-import { obtainLicenseKey, fetchStarterKitFiles, loadLocalBlueprintFiles } from './license.js';
+import { obtainLicenseKey, fetchStarterKitFiles, loadLocalBlueprintFiles, isLicenseCancelled } from './license.js';
+import { STATUS, toExitCode } from './result-status.js';
 import { runPillarsWizard } from './pillars-wizard.js';
 import { resolvePackageManager } from './build/detector.js';
 import { resolveFramework } from './project-detector.js';
 import { getFrameworkConfig, buildScaffoldPackageJson, resolveScaffoldTarget } from './scaffold-frameworks.js';
 import { printInitHelp, printScaffoldHelp } from './help.js';
+
+const CANCELLED_RESULT = Object.freeze({ status: STATUS.FAIL, cancelled: true, reason: 'Cancelled at the license prompt.' });
+
+// A user who picks Exit at the license prompt chose to stop; that is not an error exit.
+export const scaffoldExitCode = (result) => {
+  const isUserCancel = Boolean(result && result.cancelled);
+  if (isUserCancel) return 0;
+  return toExitCode(result ? result.status : STATUS.FAIL);
+};
+
+// Resolves blueprint files for a license key, or the bundled Community set when there is none.
+const resolveBlueprintFiles = async (licenseKey) => {
+  if (!licenseKey) return { status: STATUS.PASS, files: loadLocalBlueprintFiles(), reason: null };
+  return fetchStarterKitFiles(licenseKey);
+};
 
 const extractTargetName = (projectName, rawArgs) => {
   if (projectName && !projectName.startsWith('-')) return projectName;
@@ -36,7 +52,7 @@ export const runScaffold = async (projectName, rawArgs = [], onRunAudit = null) 
 
   if (isHelpRequested) {
     printScaffoldHelp();
-    return;
+    return { status: STATUS.PASS, help: true };
   }
 
   renderBanner('Chemical X: Molecular Architecture Scaffolder (npm create chemx)');
@@ -47,7 +63,7 @@ export const runScaffold = async (projectName, rawArgs = [], onRunAudit = null) 
   const fwConfig = getFrameworkConfig(frameworkId);
 
   const licenseKey = await obtainLicenseKey(rawArgs, onRunAudit);
-  let rawFiles = {};
+  if (isLicenseCancelled(licenseKey)) return CANCELLED_RESULT;
 
   if (!licenseKey) {
     process.stdout.write(
@@ -55,10 +71,11 @@ export const runScaffold = async (projectName, rawArgs = [], onRunAudit = null) 
       'Open-source molecular architecture standard for high-velocity AI coding.\n' +
       `Framework Flavor: \x1b[1m\x1b[36m${fwConfig.name}\x1b[0m\n\n`
     );
-    rawFiles = loadLocalBlueprintFiles();
-  } else {
-    rawFiles = await fetchStarterKitFiles(licenseKey);
   }
+  const download = await resolveBlueprintFiles(licenseKey);
+  const isDownloadFailed = download.status === STATUS.FAIL;
+  if (isDownloadFailed) return { status: STATUS.FAIL, reason: download.reason };
+  const rawFiles = download.files;
 
   let targetName = extractTargetName(projectName, rawArgs);
   if (!targetName) {
@@ -70,9 +87,11 @@ export const runScaffold = async (projectName, rawArgs = [], onRunAudit = null) 
   const finalDirName = (targetName || 'my-molecular-app').trim();
   const targetDir = path.resolve(process.cwd(), finalDirName);
 
-  if (fs.existsSync(targetDir) && fs.readdirSync(targetDir).length > 0) {
-    process.stderr.write(`\x1b[31m✕ Error: Directory '${finalDirName}' already exists and is not empty.\x1b[0m\n`);
-    process.exit(1);
+  const isTargetOccupied = fs.existsSync(targetDir) && fs.readdirSync(targetDir).length > 0;
+  if (isTargetOccupied) {
+    const reason = `Directory '${finalDirName}' already exists and is not empty.`;
+    process.stderr.write(`\x1b[31m✕ Error: ${reason}\x1b[0m\n`);
+    return { status: STATUS.FAIL, reason };
   }
 
   process.stdout.write(`Scaffolding ${fwConfig.name} Molecular Architecture into: \x1b[36m${finalDirName}/\x1b[0m\n`);
@@ -128,6 +147,7 @@ export const runScaffold = async (projectName, rawArgs = [], onRunAudit = null) 
   process.stdout.write('  3. Run npx chemx generate m-<feature> to create capsules\n');
   process.stdout.write('  4. Run npx chemx audit to scan for line budget compliance\n');
   process.stdout.write('  5. Run npx chemx verify to verify AST rules, typecheck, and tests\n\n');
+  return { status: STATUS.PASS, targetDir };
 };
 
 export const runInit = async (targetSubDir = 'src/chemical-x', rawArgs = [], onRunAudit = null) => {
@@ -141,7 +161,7 @@ export const runInit = async (targetSubDir = 'src/chemical-x', rawArgs = [], onR
 
   if (isHelpRequested) {
     printInitHelp();
-    return;
+    return { status: STATUS.PASS, help: true };
   }
 
   const safeTargetSubDir = (targetSubDir && !targetSubDir.startsWith('-'))
@@ -152,17 +172,18 @@ export const runInit = async (targetSubDir = 'src/chemical-x', rawArgs = [], onR
 
   const targetDir = path.resolve(process.cwd(), safeTargetSubDir);
   const licenseKey = await obtainLicenseKey(rawArgs, onRunAudit);
-  let files = {};
+  if (isLicenseCancelled(licenseKey)) return CANCELLED_RESULT;
 
   if (!licenseKey) {
     process.stdout.write(
       '\n\x1b[38;2;98;201;255m⚡ Chemical X: Community Drop-in (Free)\x1b[0m\n' +
       'Unpacking standard blueprints for your project. Support community standards: chemicalx.xophz.com\n\n'
     );
-    files = loadLocalBlueprintFiles();
-  } else {
-    files = await fetchStarterKitFiles(licenseKey);
   }
+  const download = await resolveBlueprintFiles(licenseKey);
+  const isDownloadFailed = download.status === STATUS.FAIL;
+  if (isDownloadFailed) return { status: STATUS.FAIL, reason: download.reason };
+  const files = download.files;
 
   process.stdout.write(`Unpacking blueprints and hooks into: \x1b[36m${safeTargetSubDir}/\x1b[0m\n`);
 
@@ -185,6 +206,7 @@ export const runInit = async (targetSubDir = 'src/chemical-x', rawArgs = [], onR
   process.stdout.write(
     `\n\x1b[1m\x1b[32m✔ Successfully installed ${count} Chemical X assets into ${safeTargetSubDir}!\x1b[0m\n\n`
   );
+  return { status: STATUS.PASS, targetDir, count };
 };
 
 export { runGenerateCapsule, runGenerateWizard } from './generator.js';

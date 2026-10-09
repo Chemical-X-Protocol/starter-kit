@@ -147,8 +147,8 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
       }
       const nonFlagArgs = rawArgs.slice(1).filter((arg) => !arg.startsWith('-'));
       const targetSubDir = nonFlagArgs[0] || 'src/chemical-x';
-      const { runInit } = await import('../scaffold.js');
-      await runInit(targetSubDir, rawArgs, runAudit);
+      const { runInit, scaffoldExitCode } = await import('../scaffold.js');
+      process.exitCode = scaffoldExitCode(await runInit(targetSubDir, rawArgs, runAudit));
       break;
     }
     case 'create':
@@ -159,9 +159,9 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
         printScaffoldHelp();
         break;
       }
-      const { runScaffold } = await import('../scaffold.js');
+      const { runScaffold, scaffoldExitCode } = await import('../scaffold.js');
       const nonFlagArgs = rawArgs.slice(1).filter((arg) => !arg.startsWith('-'));
-      await runScaffold(nonFlagArgs[0], rawArgs, runAudit);
+      process.exitCode = scaffoldExitCode(await runScaffold(nonFlagArgs[0], rawArgs, runAudit));
       break;
     }
     case 'hook':

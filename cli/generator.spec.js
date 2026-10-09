@@ -1,3 +1,4 @@
+import './spec-isolated-home.js';
 import test from 'node:test';
 import assert from 'node:assert';
 import fs from 'node:fs';
