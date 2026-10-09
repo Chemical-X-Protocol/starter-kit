@@ -2,18 +2,21 @@
  * Mutation-time check of chemx team file locks (file_leases in .chemx/index.db).
  * The one lock decision: applyEdits and the patch/write guard (team/write-lock-guard.js) both use it.
  *
- * Read-only: it never creates the database or cleans leases. A lease blocks a mutation
+ * findForeignLease is read-only (takeLeaseWhenFree, #4492, is the one writer): it never creates the database or cleans leases. A lease blocks a mutation
  * when it is unexpired, its holder process (if recorded) is alive, and it belongs to an
  * agent other than the caller (options.agentId, else $CHEMX_AGENT_ID, else a per-process handle).
  * Which dbs it reads comes from the coordination resolver (team/lease-roots.js, #2581), and every
  * open goes through openTeamDbReadOnly, so a spec process never reads a real db.
  */
 import './silence-warnings.js';
+import path from 'node:path';
 import { isPidAlive } from './team/team-db-transaction.js';
-import { resolveAgentId as resolveTeamAgentId } from './team/agent-identity.js';
+import { resolveAgentId as resolveTeamAgentId, resolveAgentIdentity } from './team/agent-identity.js';
+import { requestFileLock } from './team/team-db-locks.js';
+import { teamRootFor } from './team/coordination-target.js';
 import { liveWaiters } from './team/lease-cap.js';
 import { lockRoots, leaseKeys } from './team/lease-roots.js';
-import { openTeamDbReadOnly, closeQuietly } from './team/team-db-readonly.js';
+import { openTeamDbReadOnly, openExistingTeamDb, closeQuietly } from './team/team-db-readonly.js';
 
 // One identity rule for locks and edits: explicit, then $CHEMX_AGENT_ID, then a per-process handle.
 export const resolveAgentId = (agentId) => resolveTeamAgentId(agentId);
@@ -75,4 +78,51 @@ export const findForeignLease = (root, absPath, agentId) => {
     if (isBlocked) return lease;
   }
   return null;
+};
+
+const hasLiveLease = (root, absPath) => lockRoots(root, absPath).some((lockRoot) => {
+  const rows = readLeases(lockRoot, leaseKeys(lockRoot, absPath, root));
+  return rows.some((row) => Number(row.expires_at) > Date.now() && !(Number(row.pid) > 0 && !isPidAlive(Number(row.pid))));
+});
+
+// The agent's in_progress task becomes the lease purpose ("#<id>"); none claimed leaves it empty.
+const claimedPurpose = (db, agentId) => {
+  try {
+    const row = db.prepare("SELECT id FROM agent_tasks WHERE assigned_agent_id = ? AND status = 'in_progress' ORDER BY updated_at DESC, id DESC LIMIT 1").get(agentId);
+    return row ? `#${row.id}` : '';
+  } catch {
+    return ''; // chemx-allow: best-effort a db without the task table leaves the purpose empty
+  }
+};
+
+/**
+ * #4492: an identified agent (explicit id, $CHEMX_AGENT_ID or a session handle) that edits a file nobody
+ * leases takes the lease first: same TTL and renewal rules as `team lock acquire`, a lock_acquired feed
+ * event, purpose = its in_progress task. Anonymous callers, a missing team db and a spec process outside
+ * the temp dir take nothing. Best effort: a failure here never blocks the edit, and callers run the
+ * foreign-lease check first, so a file leased by someone else is refused before this runs.
+ * @returns {{ taken: boolean, reason?: string, lease?: object }}
+ */
+export const takeLeaseWhenFree = (root, absPath, agentId, env = process.env) => {
+  const identity = resolveAgentIdentity(agentId, env);
+  const isAnonymous = identity.source === 'process';
+  if (isAnonymous) return { taken: false, reason: 'anonymous' };
+  const lockRoot = teamRootFor(path.dirname(absPath));
+  const hasTeamRoot = Boolean(lockRoot);
+  if (!hasTeamRoot) return { taken: false, reason: 'no_team_db' };
+  const isLeased = hasLiveLease(root, absPath);
+  if (isLeased) return { taken: false, reason: 'already_leased' };
+  const db = openExistingTeamDb(lockRoot);
+  const hasDb = Boolean(db);
+  if (!hasDb) return { taken: false, reason: 'no_team_db' };
+  try {
+    const res = requestFileLock(db, absPath, identity.id, { cwd: root, purpose: claimedPurpose(db, identity.id) });
+    return res.granted ? { taken: true, lease: res.lease } : { taken: false, reason: res.reason || 'not_granted' };
+  } catch (err) {
+    const isDebug = Boolean(process.env.CHEMX_DEBUG);
+    if (isDebug) process.stderr.write(`[edit-locks] auto lease skipped: ${err.message}\n`);
+    return { taken: false, reason: 'error' };
+  } finally {
+    closeQuietly(db);
+  }
 };

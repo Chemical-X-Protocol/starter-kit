@@ -6,7 +6,7 @@ import { replaceLiteral } from './literal-replace.js';
 import { applyEdits } from './apply-edits.js';
 import { applySearchReplaceBlocks } from './search-replace-blocks.js';
 import { evaluateGuardrails } from './edit-guardrails.js';
-import { assertWriteLockClear } from './team/write-lock-guard.js';
+import { claimWriteLease } from './team/write-lock-guard.js';
 import { fingerprintFile } from './forge/fingerprint-file.js';
 import { introducedViolationsOf } from './audit/gate-delta.js';
 import { noteCounterfactual } from './telemetry/call-ledger.js';
@@ -94,7 +94,7 @@ export const patchFile = (targetPath, params = {}) => {
   const isMissingFile = !fs.existsSync(resolvedPath);
   if (isMissingFile) throw new Error(`File not found: ${targetPath}`);
   // A foreign lease refuses with CHEMX_FILE_LOCKED (exit 1) before applyEdits plans anything.
-  if (!dryRun) assertWriteLockClear(resolvedPath, cwd, agentId);
+  if (!dryRun) claimWriteLease(resolvedPath, cwd, agentId);
 
   const fileContent = fs.readFileSync(resolvedPath, 'utf-8');
   const beforeGuardrails = skipCheck ? { violations: [] } : evaluateGuardrails({ absPath: resolvedPath, relPath: targetPath, content: fileContent, skipCheck, cwd });
@@ -162,7 +162,7 @@ export const writeFile = (targetPath, params = {}) => {
   if (isMissingContent) throw new Error('content is required for writeFile');
 
   const resolvedPath = resolveSafePath(targetPath, cwd);
-  if (!dryRun) assertWriteLockClear(resolvedPath, cwd, agentId);
+  if (!dryRun) claimWriteLease(resolvedPath, cwd, agentId);
   const isExisting = fs.existsSync(resolvedPath);
   const isBlockedOverwrite = isExisting && !overwrite;
   if (isBlockedOverwrite) {

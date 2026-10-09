@@ -5,13 +5,22 @@
  * so patch/write and autofix/explode/mutators can never disagree about a lease.
  */
 
-import { findForeignLease } from '../edit-locks.js';
+import { findForeignLease, takeLeaseWhenFree } from '../edit-locks.js';
 
 export const findBlockingLease = (resolvedPath, cwd = process.cwd(), agentId) => {
   const lease = findForeignLease(cwd, resolvedPath, agentId);
   const isClear = !lease;
   if (isClear) return null;
   return { file_path: lease.file, locked_by: lease.lockedBy, expires_at: lease.expiresAt, purpose: lease.purpose, active: true, lapsed_own: Boolean(lease.lapsedOwn), queue: lease.queue ?? [] };
+};
+
+/**
+ * patch/write entry (#4492): refuse a foreign lease, then let an identified agent take the lease on a
+ * file nobody leases. Anonymous callers only get the refusal check. Generators keep assertWriteLockClear.
+ */
+export const claimWriteLease = (resolvedPath, cwd = process.cwd(), agentId) => {
+  assertWriteLockClear(resolvedPath, cwd, agentId);
+  return takeLeaseWhenFree(cwd, resolvedPath, agentId);
 };
 
 export const assertWriteLockClear = (resolvedPath, cwd = process.cwd(), agentId) => {
