@@ -23,7 +23,8 @@ export const findSimilarSymbols = (db, symbolName, limit = 3, minSimilarity = 0.
   if (!isInputValid) return [];
 
   const cleanSymbol = String(symbolName).trim();
-  if (cleanSymbol.length === 0) return [];
+  const isEmptySymbol = cleanSymbol.length === 0;
+  if (isEmptySymbol) return [];
 
   const existingRow = db.prepare(
     "SELECT vector FROM embeddings WHERE target_type = 'symbol' AND target_name = ? LIMIT 1"
