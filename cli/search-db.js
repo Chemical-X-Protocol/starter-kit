@@ -26,18 +26,15 @@ export {
 } from './search-queries.js';
 
 import { debugNote } from './search-debug.js';
+import { toRowStamp } from './index-row-check.js';
 import { rankIndexHits } from './search-rank.js';
 import { isPathInScope, scopeSqlFilter } from './search-root.js';
 
+// path -> row stamp { mtime, size, version, contentHash, syncedAt } (index-row-check.js).
 export const getAllIndexedFiles = (db) => {
   if (!db) return new Map();
-  const rows = db.prepare('SELECT path, mtime, size, extractor_version FROM files').all();
-  const fileMap = new Map();
-  for (const row of rows) {
-    const version = row.extractor_version === null ? null : Number(row.extractor_version);
-    fileMap.set(row.path, { mtime: Number(row.mtime), size: Number(row.size), version });
-  }
-  return fileMap;
+  const rows = db.prepare('SELECT path, mtime, size, extractor_version, content_hash, synced_at FROM files').all();
+  return new Map(rows.map((row) => [row.path, toRowStamp(row)]));
 };
 
 export { resolveModulePath, moduleKeysFor } from './search-resolve.js';

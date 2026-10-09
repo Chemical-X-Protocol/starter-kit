@@ -81,6 +81,52 @@ test('a read of one file syncs that file first, with one stat and no scope walk'
   }
 });
 
+const symbolsOf = (root, rel) => openIndexDb(root).prepare('SELECT name FROM symbols WHERE file_path = ?').all(rel).map((r) => r.name);
+
+test('a same-size rewrite in the same clock tick (mtime unchanged) is caught by the content hash', () => {
+  const root = makeProject({ 'src/r.ts': 'export const useR1 = () => 1;\n', 'src/s.ts': 'export const useS1 = () => 1;\n' });
+  try {
+    ensureFresh(root);
+    // The race: a file written at T is synced at T, then rewritten (same size) inside the same tick.
+    const rewriteInSameTick = (rel) => {
+      const file = path.join(root, rel);
+      const tick = new Date();
+      fs.utimesSync(file, tick, tick);
+      ensureFresh(root, { paths: [rel], scope: false });
+      const before = fs.statSync(file);
+      fs.writeFileSync(file, fs.readFileSync(file, 'utf-8').replace('1', '2').replace('1', '2'));
+      fs.utimesSync(file, tick, tick);
+      assert.equal(fs.statSync(file).size, before.size);
+      assert.equal(Math.floor(fs.statSync(file).mtimeMs), Math.floor(before.mtimeMs));
+    };
+    rewriteInSameTick('src/r.ts');
+    const scoped = ensureFresh(root);
+    assert.ok(scoped.freshness.hashed >= 1, JSON.stringify(scoped.freshness));
+    assert.deepEqual(symbolsOf(root, 'src/r.ts'), ['useR2']);
+    rewriteInSameTick('src/s.ts');
+    const atHand = ensureFresh(root, { paths: ['src/s.ts'], scope: false });
+    assert.deepEqual([atHand.freshness.hashed, atHand.freshness.reindexed], [1, 1]);
+    assert.deepEqual(symbolsOf(root, 'src/s.ts'), ['useS2']);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('a row whose file is clearly older than its sync is trusted on stat alone (no hashing)', () => {
+  const root = makeProject(BASE);
+  try {
+    const hourAgo = new Date(Date.now() - 3600 * 1000);
+    for (const rel of Object.keys(BASE)) fs.utimesSync(path.join(root, rel), hourAgo, hourAgo);
+    ensureFresh(root);
+    const warm = ensureFresh(root);
+    assert.equal(warm.freshness.hashed, 0);
+    assert.equal(warm.freshness.reindexed, 0);
+    assert.equal(warm.freshness.checked, 2);
+  } finally {
+    cleanup(root);
+  }
+});
+
 test('deletes and renames on disk are reflected by the next answer', () => {
   const root = makeProject(BASE);
   try {

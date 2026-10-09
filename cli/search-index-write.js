@@ -4,7 +4,7 @@ import path from 'node:path';
 import { generateEmbedding, serializeVector, VECTOR_DIMENSIONS } from './embeddings/vectorizer.js';
 import { buildFtsTokens } from './search-tokenizer.js';
 import { resolveModulePath } from './search-resolve.js';
-import { withImmediateTransaction } from './team/team-db-transaction.js';
+import { withImmediateTransaction, isSqliteBusyError } from './team/team-db-transaction.js';
 import { INDEX_VERSION } from './search-index-meta.js';
 
 export const EMBEDDING_MODEL = 'feature-hash-128';
@@ -19,7 +19,7 @@ const SQL = {
   deleteImports: 'DELETE FROM imports WHERE importer_path = ?',
   deleteEmbeddings: 'DELETE FROM embeddings WHERE file_path = ?',
   deleteFts: 'DELETE FROM fts_index WHERE file_path = ?',
-  insertFile: 'INSERT INTO files (path, mtime, size, tier, lines, chars, extractor_version) VALUES (?, ?, ?, ?, ?, ?, ?)',
+  insertFile: 'INSERT INTO files (path, mtime, size, tier, lines, chars, extractor_version, content_hash, synced_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
   insertSymbol: 'INSERT INTO symbols (file_path, name, kind, is_export, start_line, end_line, signature) VALUES (?, ?, ?, ?, ?, ?, ?)',
   insertProp: 'INSERT INTO props (file_path, name, prop_type) VALUES (?, ?, ?)',
   insertHook: 'INSERT INTO hooks (file_path, name) VALUES (?, ?)',
@@ -69,7 +69,8 @@ const writeFileRows = (db, record) => {
   const root = record.root || process.cwd();
 
   deleteFileRows(db, filePath);
-  s.insertFile.run(filePath, mtime, size, tier, lines, chars, INDEX_VERSION);
+  // A record without contentHash/syncedAt (generator-indexer) is stored racy: hash-checked or re-parsed next sync.
+  s.insertFile.run(filePath, mtime, size, tier, lines, chars, INDEX_VERSION, record.contentHash ?? null, record.syncedAt ?? null);
   for (const sym of symbols) {
     const startLine = sym.startLine || 1;
     s.insertSymbol.run(filePath, sym.name, sym.kind, sym.isExport ? 1 : 0, startLine, sym.endLine || startLine, sym.signature || '');
@@ -103,16 +104,30 @@ export const upsertFileIndexBatch = (db, records, batchSize = 200) => {
   }
 };
 
+const BUSY_TIMEOUT_MS = 5000;
+
+const writeSyncedStamps = (db, entries) => {
+  const stmt = db.prepare('UPDATE files SET synced_at = ? WHERE path = ?');
+  for (const entry of entries) stmt.run(entry.syncedAt, entry.path);
+};
+
 // Racy rows whose content hash still matched (index-row-check.js): only synced_at moves, so the
 // row stops being racy once its file is older than RACY_SLACK_MS. entries: [{ path, syncedAt }].
+// Best effort and never waits: the rows are already proven true, so when another process holds
+// the write lock the stamp is skipped (the rows are hashed again next sync) and 0 is returned.
 export const stampRowsSynced = (db, entries) => {
   const hasEntries = entries.length > 0;
   if (!hasEntries) return 0;
-  withIndexTransaction(db, () => {
-    const stmt = db.prepare('UPDATE files SET synced_at = ? WHERE path = ?');
-    for (const entry of entries) stmt.run(entry.syncedAt, entry.path);
-  });
-  return entries.length;
+  try {
+    db.exec('PRAGMA busy_timeout = 0;');
+    withIndexTransaction(db, () => writeSyncedStamps(db, entries), 1);
+    return entries.length;
+  } catch (err) {
+    if (isSqliteBusyError(err)) return 0;
+    throw err;
+  } finally {
+    db.exec(`PRAGMA busy_timeout = ${BUSY_TIMEOUT_MS};`);
+  }
 };
 
 export const deleteFileIndexRows = (db, filePaths) => {

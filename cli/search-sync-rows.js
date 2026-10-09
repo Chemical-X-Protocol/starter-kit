@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { resolveArchitectureTier, extractAstMetadata } from './search-ast.js';
-import { INDEX_VERSION } from './search-index-meta.js';
+import { checkRowAgainstDisk, hashContent } from './index-row-check.js';
 import { isPathInScope, isScopeCovered } from './search-root.js';
 import { debugNote } from './search-debug.js';
 import { conflictHunksOf, describeConflicts } from './conflicts.js';
@@ -17,7 +17,10 @@ const refuseConflicted = (content, relPath) => {
   throw err;
 };
 
+// syncedAt is taken before the stat, so a write racing this parse leaves the row racy
+// (index-row-check.js) and the next sync compares content hashes instead of trusting mtime.
 export const parseIndexRecord = (fullPath, relPath, root) => {
+  const syncedAt = Date.now();
   const stat = fs.statSync(fullPath);
   const content = fs.readFileSync(fullPath, 'utf-8');
   refuseConflicted(content, relPath);
@@ -25,25 +28,33 @@ export const parseIndexRecord = (fullPath, relPath, root) => {
   return {
     path: relPath, root, mtime: Math.floor(stat.mtimeMs), size: stat.size,
     tier: resolveArchitectureTier(relPath), lines: content.split('\n').length, chars: content.length,
+    contentHash: hashContent(content), syncedAt,
     symbols, props, hooks, imports
   };
 };
 
-const isUnchanged = (cached, fullPath) => {
-  const hasCurrentRow = Boolean(cached) && cached.version === INDEX_VERSION;
-  if (!hasCurrentRow) return false;
-  const stat = fs.statSync(fullPath);
-  return cached.mtime === Math.floor(stat.mtimeMs) && cached.size === stat.size;
+// Re-checks one row: 'fresh' and 'racy-clean' rows are kept (racy-clean ones get a new synced_at
+// stamp in `touched`), anything else is re-parsed. --reindex re-parses every file.
+const checkEntry = (acc, cached, fullPath, relPath, options) => {
+  acc.checked += 1;
+  const isForced = Boolean(options.reindex);
+  const check = isForced ? { verdict: 'stale', hashed: false } : checkRowAgainstDisk(cached, fullPath);
+  acc.hashed += check.hashed ? 1 : 0;
+  const isRacyClean = check.verdict === 'racy-clean';
+  if (isRacyClean) acc.touched.push({ path: relPath, syncedAt: acc.startedAt });
+  return check.verdict === 'stale';
 };
 
 // Parses new or changed files; a file that cannot be read is skipped and its row dropped.
+// Returns { records, skippedFiles, touched, checked, hashed }.
 export const collectRecords = (entries, indexedMap, root, options) => {
   const records = [];
   const skippedFiles = [];
+  const acc = { touched: [], checked: 0, hashed: 0, startedAt: Date.now() };
   for (const { fullPath, relPath } of entries) {
     try {
-      const isFresh = !options.reindex && isUnchanged(indexedMap.get(relPath), fullPath);
-      if (isFresh) continue;
+      const needsParse = checkEntry(acc, indexedMap.get(relPath), fullPath, relPath, options);
+      if (!needsParse) continue;
       records.push(parseIndexRecord(fullPath, relPath, root));
     } catch (err) {
       const conflict = err?.conflictLine ? { conflictLine: err.conflictLine } : {};
@@ -51,7 +62,7 @@ export const collectRecords = (entries, indexedMap, root, options) => {
       debugNote.warn(`skipped ${relPath}`, err);
     }
   }
-  return { records, skippedFiles };
+  return { records, skippedFiles, touched: acc.touched, checked: acc.checked, hashed: acc.hashed };
 };
 
 // Rows outside the walked scope, a stat per row and no directory walk: deleted files are gone,

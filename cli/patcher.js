@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { ruleTree } from './rules.js';
-import { syncSingleFileIndex } from './search.js';
+import { ensureFresh } from './index-freshness.js';
 import { resolveSafePath } from './path-scope.js';
 import { replaceLiteral } from './literal-replace.js';
 import { applyEdits } from './apply-edits.js';
@@ -12,9 +12,15 @@ import { introducedViolationsOf } from './audit/gate-delta.js';
 
 export { runPatcherCli, runWriterCli } from './patcher-cli.js';
 
+// The written file is the file at hand: ensureFresh re-parses it (or drops its rows when it is
+// gone). `indexed` is true only when its rows now match the file; a file the index does not
+// admit (not source, outside scope, git-ignored) or a busy/read-only db reports false.
 const syncSearchIndex = (absPath, cwd) => {
   try {
-    return Boolean(syncSingleFileIndex(absPath, cwd));
+    const session = ensureFresh(cwd, { paths: [absPath], scope: false });
+    const isRefused = (session.freshness?.notIndexed || []).length > 0;
+    const isSynced = session.index?.status === 'pass';
+    return isSynced && !isRefused;
   } catch {
     return false;
   }

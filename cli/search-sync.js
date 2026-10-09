@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { openIndexDb, getIndexDbState } from './search-schema.js';
 import { getAllIndexedFiles } from './search-db.js';
-import { upsertFileIndex, deleteFileIndexRows } from './search-index-write.js';
+import { upsertFileIndex, deleteFileIndexRows, stampRowsSynced } from './search-index-write.js';
 import { readIndexMeta, describeVersionReset } from './search-index-meta.js';
 import { resolveIndexRoot, normalizeScope, isPathInScope, isScopeCovered, toRootRelative } from './search-root.js';
 import { scanScope } from './search-scan.js';
@@ -79,6 +79,9 @@ export const syncSearchIndex = (targetDir = 'src', cwd = process.cwd(), options 
     debugNote.warn('sync write lock', err);
     return staleResult(db, root, requested, 'index busy: another chemx process holds the write lock; rows were not refreshed');
   }
+  // Racy rows proven by their content hash: a new synced_at, best effort and lock-free (a no-op
+  // sync never waits for the write lock).
+  stampRowsSynced(db, [...inScope.touched, ...outScope.touched]);
   const isLargeSync = plan.records.length + committed.removedCount > LARGE_SYNC_THRESHOLD;
   if (isLargeSync) {
     try { db.exec('PRAGMA wal_checkpoint(TRUNCATE);'); } catch (err) { debugNote.warn('wal checkpoint', err); }
@@ -91,7 +94,9 @@ export const syncSearchIndex = (targetDir = 'src', cwd = process.cwd(), options 
     status: isEmptyScope ? 'empty' : 'fresh',
     staleReason: isEmptyScope ? `no indexable source files in scope ${requested.scopeKey}` : null,
     updatedCount: plan.records.length, removedCount: committed.removedCount, totalFiles: files.length, skippedFiles, versionNotice,
-    indexedScopes: committed.scopeKey
+    indexedScopes: committed.scopeKey,
+    // Files compared with disk (walked scope plus re-stat'd rows outside it) and racy rows hashed.
+    checkedCount: inScope.checked + outScope.checked, hashedCount: inScope.hashed + outScope.hashed
   };
 };
 

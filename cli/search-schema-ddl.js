@@ -12,7 +12,9 @@ const TABLES_SQL = `
     chars INTEGER NOT NULL,
     health_score INTEGER NOT NULL DEFAULT 100,
     hazard_count INTEGER NOT NULL DEFAULT 0,
-    extractor_version INTEGER
+    extractor_version INTEGER,
+    content_hash TEXT,
+    synced_at INTEGER
   );
 
   CREATE TABLE IF NOT EXISTS symbols (
@@ -128,6 +130,10 @@ const COLUMN_MIGRATIONS = [
   ['files', 'hazard_count', 'INTEGER NOT NULL DEFAULT 0'],
   // NULL marks a row written by a chemx that predates per-row stamping: re-parsed, never trusted.
   ['files', 'extractor_version', 'INTEGER'],
+  // Racy-clean check (index-row-check.js, #2552): sha1 of the parsed content and the ms time the
+  // row was synced. NULL (rows from an older chemx) makes the row racy with no hash: re-parsed once.
+  ['files', 'content_hash', 'TEXT'],
+  ['files', 'synced_at', 'INTEGER'],
   ['imports', 'resolved_path', "TEXT NOT NULL DEFAULT ''"]
 ];
 
