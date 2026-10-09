@@ -274,6 +274,16 @@ EOF
 chemx write <file> --content="export const a = 1;" [--overwrite] [--dry-run]
 ```
 
+#### Index freshness: what an index-backed answer guarantees
+Every reader of `.chemx/index.db` (q in every index mode; `q -g` reads files, not the index; trace, backtrace, read `--connections`/`--trace`/`--backtrace`, test `--changed`, the studio codebase view, tesseract, patch/write re-indexing) syncs before it answers, through one primitive (`cli/index-freshness.js`):
+
+- **Files at hand first.** A read of `X`, or a patch/write of `X`, re-checks `X`'s row with one stat. Graph answers then sync their whole scope.
+- **Scope.** The default scope is the project scope: the `scope` key of `.chemx/config.json`, else the whole root. In a git repo it holds the git-tracked source files plus untracked files `.gitignore` allows; git-ignored files are indexed only through an explicit `--dir`.
+- **Row check.** A row is trusted on mtime + size only when its file's mtime is more than 2s older than the row's sync time. Otherwise the row is racy (git's racily-clean rule) and its stored sha1 decides, so a same-size rewrite inside the same clock tick is caught. Deleted and renamed files lose their rows.
+- **Stamp.** The answer's index line ends with `synced N files, k re-indexed, r removed, Tms` (JSON: `index.freshness`). When the db is read-only, another process holds the write lock past `busy_timeout` (5s), or a scope dir is missing, the answer is `inconclusive` (exit 3) and says why: it came from the rows as they were.
+- **Not covered.** Files outside the scope, files the parsers do not handle, and edits made after the stamp was printed. `chemx doctor` reports stale rows (on stat, every row) and coverage (scope files with no row) without changing anything.
+- **Cost** (measured on this kit, 971 files): warm no-change sync 32ms, one file at hand 1ms, cold build about 3s.
+
 ### 3. Crystalline Capsule Generator
 Scaffold production-ready component capsules matching strict zero-raw-DOM standards:
 ```bash
