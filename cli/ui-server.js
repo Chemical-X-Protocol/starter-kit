@@ -4,7 +4,7 @@ import { handleSwarmStatus } from './ui-handlers.js';
 import { generateSwarmHtml } from './ui-html.js';
 import { routeGet, routePost, parseJsonBody } from './ui-server-routes.js';
 import { handleSseConnection, broadcastSseUpdate, broadcastSseReload, closeSseHub } from './ui-sse.js';
-import { createUiAuth, checkUiRequest, createUiFetch, isLoopbackHost, DEFAULT_UI_HOST } from './ui-auth.js';
+import { createUiAuth, checkUiRequest, createUiFetch, isLoopbackHost, resolveUiUrlHost, DEFAULT_UI_HOST } from './ui-auth.js';
 import { openConsoleDb } from './ui-sql-guard.js';
 
 const sendJson = (res, status, payload, extraHeaders = {}, afterSend = null) => {
@@ -67,7 +67,7 @@ export const startUiServer = async (options = {}) => {
   const port = options.port !== undefined ? options.port : 4173;
   const host = options.host || DEFAULT_UI_HOST;
   const cwd = options.cwd || process.cwd();
-  const auth = createUiAuth({ bindHost: host, token: options.token });
+  const auth = createUiAuth({ bindHost: host, token: options.token, allowHosts: options.allowHosts });
   const { server, db } = createUiServer(cwd, { auth });
 
   if (options.dev) {
@@ -86,7 +86,7 @@ export const startUiServer = async (options = {}) => {
       const addr = server.address();
       const actualPort = typeof addr === 'object' && addr ? addr.port : port;
       auth.cookieName = `chemx_ui_${actualPort}`;
-      const urlHost = host.includes(':') && !host.startsWith('[') ? `[${host}]` : host;
+      const urlHost = resolveUiUrlHost(host);
       const url = `http://${urlHost}:${actualPort}/?token=${auth.token}`;
       if (options.isCli) {
         if (!isLoopbackHost(host)) warnPublicBind(host);

@@ -5,6 +5,9 @@
  * one is sent, and a JSON Content-Type on POST (no CORS simple requests).
  */
 import crypto from 'node:crypto';
+import { buildAllowedHosts } from './ui-auth-hosts.js';
+
+export { resolveUiUrlHost, isWildcardHost } from './ui-auth-hosts.js';
 
 export const UI_TOKEN_HEADER = 'x-chemx-token';
 export const DEFAULT_UI_HOST = '127.0.0.1';
@@ -15,6 +18,7 @@ export const isLoopbackHost = (host = '') => LOOPBACK_HOSTS.has(String(host).toL
 export const createUiAuth = (options = {}) => ({
   token: options.token || crypto.randomBytes(24).toString('base64url'),
   bindHost: options.bindHost || DEFAULT_UI_HOST,
+  allowedHosts: buildAllowedHosts({ ...options, bindHost: options.bindHost || DEFAULT_UI_HOST }),
   cookieName: 'chemx_ui_token'
 });
 
@@ -38,7 +42,8 @@ const isSameToken = (candidate, token) => {
 
 const isAllowedHostHeader = (req, auth) => {
   const hostname = hostnameOf(String(req.headers.host || '')).toLowerCase();
-  return isLoopbackHost(hostname) || hostname === String(auth.bindHost).toLowerCase();
+  const allowedHosts = auth.allowedHosts || buildAllowedHosts({ bindHost: auth.bindHost });
+  return allowedHosts.has(hostname);
 };
 
 const isSameOriginRequest = (req) => {
@@ -69,6 +74,9 @@ export const checkUiRequest = (req, auth, url) => {
   if (!isAuthorized) return deny(401, 'Missing or invalid chemx UI token. Open the URL printed by `chemx ui`.');
   const isPost = req.method === 'POST';
   if (isPost && !isJsonContentType(req)) return deny(415, 'POST requires Content-Type: application/json');
+  // Accepted risk: cookies are not port-scoped, so other servers on the same
+  // loopback host receive this HttpOnly cookie. It only authorizes this
+  // launch of the UI (the token changes every run).
   const setCookie = hasValidQueryToken
     ? `${auth.cookieName}=${encodeURIComponent(auth.token)}; HttpOnly; SameSite=Strict; Path=/`
     : null;

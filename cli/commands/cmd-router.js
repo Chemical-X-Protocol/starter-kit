@@ -274,7 +274,8 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
       const hostArg = rawArgs.find((a) => a.startsWith('--host='));
       const host = hostArg ? hostArg.split('=')[1] : undefined;
       const isDev = rawArgs.includes('--dev') || rawArgs.includes('-d') || process.env.CHEMX_UI_DEV === '1';
-      const { server } = await startUiServer({ port, host, dev: isDev, isCli: true, cwd: process.cwd() });
+      const allowHosts = rawArgs.filter((a) => a.startsWith('--allow-host=')).flatMap((a) => a.slice('--allow-host='.length).split(',')).filter(Boolean);
+      const { server } = await startUiServer({ port, host, allowHosts, dev: isDev, isCli: true, cwd: process.cwd() });
       await new Promise((resolve) => {
         const shutdown = () => {
           server.close(() => resolve());
