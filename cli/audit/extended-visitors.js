@@ -24,7 +24,8 @@ const SENSITIVE_KEYWORDS = new Set([
 
 const isSensitiveName = (name = '') => {
   const normalized = String(name).toLowerCase();
-  if (SENSITIVE_KEYWORDS.has(normalized)) return true;
+  const isSensitiveKeyword = SENSITIVE_KEYWORDS.has(normalized);
+  if (isSensitiveKeyword) return true;
   return /^(pass(word)?|token|secret|api[_-]?key)$/i.test(normalized);
 };
 
@@ -127,8 +128,11 @@ export const createExtendedVisitors = ({ relativePath, violations }) => {
         if (targetAttr) {
           if (t.isStringLiteral(targetAttr.value)) {
             isTargetBlank = targetAttr.value.value.trim().toLowerCase() === '_blank';
-          } else if (t.isJSXExpressionContainer(targetAttr.value) && t.isStringLiteral(targetAttr.value.expression)) {
-            isTargetBlank = targetAttr.value.expression.value.trim().toLowerCase() === '_blank';
+          } else {
+            const isExpressionStringTarget = t.isJSXExpressionContainer(targetAttr.value) && t.isStringLiteral(targetAttr.value.expression);
+            if (isExpressionStringTarget) {
+              isTargetBlank = targetAttr.value.expression.value.trim().toLowerCase() === '_blank';
+            }
           }
         }
 
@@ -139,9 +143,12 @@ export const createExtendedVisitors = ({ relativePath, violations }) => {
             if (t.isStringLiteral(relAttr.value)) {
               const val = relAttr.value.value.toLowerCase();
               hasRelProtection = val.includes('noopener') || val.includes('noreferrer');
-            } else if (t.isJSXExpressionContainer(relAttr.value) && t.isStringLiteral(relAttr.value.expression)) {
-              const val = relAttr.value.expression.value.toLowerCase();
-              hasRelProtection = val.includes('noopener') || val.includes('noreferrer');
+            } else {
+              const isExpressionStringRel = t.isJSXExpressionContainer(relAttr.value) && t.isStringLiteral(relAttr.value.expression);
+              if (isExpressionStringRel) {
+                const val = relAttr.value.expression.value.toLowerCase();
+                hasRelProtection = val.includes('noopener') || val.includes('noreferrer');
+              }
             }
           }
 
@@ -177,7 +184,8 @@ export const createExtendedVisitors = ({ relativePath, violations }) => {
           if (t.isObjectExpression(expr)) {
             for (const prop of expr.properties) {
               const isHtmlProp = t.isObjectProperty(prop) && prop.key?.name === '__html';
-              if (isHtmlProp && t.isCallExpression(prop.value)) {
+              const isHtmlCallProp = Boolean(isHtmlProp && t.isCallExpression(prop.value));
+              if (isHtmlCallProp) {
                 const calleeName = prop.value.callee?.name || prop.value.callee?.property?.name || '';
                 const hasSanitizeCallee = /sanitize/i.test(calleeName);
                 if (hasSanitizeCallee) isSanitized = true;
@@ -243,8 +251,11 @@ export const createExtendedVisitors = ({ relativePath, violations }) => {
           const expr = val.expression;
           if (t.isStringLiteral(expr)) {
             isJsUrl = JAVASCRIPT_URL_REGEX.test(expr.value);
-          } else if (t.isTemplateLiteral(expr) && expr.quasis.length > 0) {
-            isJsUrl = JAVASCRIPT_URL_REGEX.test(expr.quasis[0].value.raw);
+          } else {
+            const isTemplateUrl = t.isTemplateLiteral(expr) && expr.quasis.length > 0;
+            if (isTemplateUrl) {
+              isJsUrl = JAVASCRIPT_URL_REGEX.test(expr.quasis[0].value.raw);
+            }
           }
         }
 
@@ -269,7 +280,8 @@ export const createExtendedVisitors = ({ relativePath, violations }) => {
       const callee = astPath.node.callee;
 
       // Pillar 9: Dynamic code execution via eval()
-      if (t.isIdentifier(callee) && callee.name === 'eval') {
+      const isEvalCall = t.isIdentifier(callee) && callee.name === 'eval';
+      if (isEvalCall) {
         const line = astPath.node.loc?.start.line || 1;
         const meta = RULE_REGISTRY.SECURITY_DYNAMIC_CODE_EXECUTION;
         violations.push({
@@ -285,7 +297,8 @@ export const createExtendedVisitors = ({ relativePath, violations }) => {
       }
 
       // Pillar 9: String-based code execution in setTimeout/setInterval
-      if (t.isIdentifier(callee) && (callee.name === 'setTimeout' || callee.name === 'setInterval')) {
+      const isTimerCall = t.isIdentifier(callee) && (callee.name === 'setTimeout' || callee.name === 'setInterval');
+      if (isTimerCall) {
         const firstArg = astPath.node.arguments[0];
         const isStringExecution = t.isStringLiteral(firstArg) || t.isTemplateLiteral(firstArg);
         if (isStringExecution) {
@@ -329,7 +342,8 @@ export const createExtendedVisitors = ({ relativePath, violations }) => {
     NewExpression(astPath) {
       // Pillar 9: Dynamic code execution via new Function()
       const callee = astPath.node.callee;
-      if (t.isIdentifier(callee) && callee.name === 'Function') {
+      const isFunctionConstructor = t.isIdentifier(callee) && callee.name === 'Function';
+      if (isFunctionConstructor) {
         const line = astPath.node.loc?.start.line || 1;
         const meta = RULE_REGISTRY.SECURITY_DYNAMIC_CODE_EXECUTION;
         violations.push({
