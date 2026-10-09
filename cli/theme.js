@@ -47,7 +47,8 @@ export const getChemicalXGradientColor = (t) => {
   let g = 0;
   let b = 0;
 
-  if (clamped < 0.45) {
+  const isBeforeMidpoint = clamped < 0.45;
+  if (isBeforeMidpoint) {
     const factor = clamped / 0.45;
     r = Math.round(244 * (1 - factor) + 56 * factor);
     g = Math.round(63 * (1 - factor) + 189 * factor);
@@ -70,12 +71,14 @@ export const getChemicalXGradientColor = (t) => {
 export const formatChemicalXGradient = (text) => {
   if (!text) return '';
   const len = text.length;
-  if (len === 1) return `${ANSI.PINK}${ANSI.BOLD}${text}${ANSI.RESET}`;
+  const isSingleChar = len === 1;
+  if (isSingleChar) return `${ANSI.PINK}${ANSI.BOLD}${text}${ANSI.RESET}`;
 
   let out = '';
   for (let i = 0; i < len; i++) {
     const ch = text[i];
-    if (ch === ' ') {
+    const isSpace = ch === ' ';
+    if (isSpace) {
       out += ' ';
       continue;
     }
