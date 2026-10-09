@@ -79,7 +79,7 @@ export const createMcpHandler = (options = {}) => {
     'prompts/list': (id) => reply(id, { prompts: MCP_PROMPTS }),
     'prompts/get': async (id, params) => {
       try {
-        return reply(id, await getMcpPrompt(params?.name, params?.arguments || {}));
+        return reply(id, await getMcpPrompt(params?.name, params?.arguments || {}, resourceRoot()));
       } catch (err) {
         return replyError(id, -32602, `Prompt retrieval failed: ${describeError(err)}`);
       }
