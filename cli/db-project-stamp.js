@@ -22,10 +22,22 @@ const readPackageName = (root) => {
   }
 };
 
-// Stable across edits and moves, different between unrelated projects.
+// Top-level layout: hidden entries (.chemx, .git) and node_modules are tooling, not content.
+const readTopLevelEntries = (root) => {
+  try {
+    const isContent = (name) => !name.startsWith('.') && name !== 'node_modules';
+    return fs.readdirSync(root).filter(isContent).sort();
+  } catch { // chemx-allow: best-effort an unreadable root contributes no entries
+    return [];
+  }
+};
+
+// Content fingerprint: package name (or directory name) plus the top-level layout. Stable
+// across moves and file edits; two unrelated projects that share a name still differ.
 export const computeProjectFingerprint = (root) => {
   const identity = readPackageName(root) || path.basename(root);
-  return crypto.createHash('sha256').update(`chemx-project:${identity}`).digest('hex').slice(0, 16);
+  const layout = readTopLevelEntries(root).join('\n');
+  return crypto.createHash('sha256').update(`chemx-project:${identity}\n${layout}`).digest('hex').slice(0, 16);
 };
 
 const readStamp = (db) => {
@@ -58,22 +70,32 @@ export const evaluateProjectStamp = (stamp, root, fingerprint, options = {}) => 
   if (isAdopted) return { action: 'restamp', reason: 'adopted' };
   const pathExists = options.pathExists || fs.existsSync;
   const isOriginalStillThere = pathExists(path.join(stamp.root_path, '.chemx', 'index.db'));
-  const isMove = !isOriginalStillThere && stamp.fingerprint === fingerprint;
-  if (isMove) return { action: 'restamp', reason: 'moved' };
-  return { action: 'refuse', reason: isOriginalStillThere ? 'copied' : 'different_project' };
+  const isSameContent = stamp.fingerprint === fingerprint;
+  if (!isSameContent) return { action: 'refuse', reason: 'different_project' };
+  // Same contents elsewhere: a move when the original db is gone, otherwise a copy of it.
+  return isOriginalStillThere ? { action: 'refuse', reason: 'copied' } : { action: 'restamp', reason: 'moved' };
 };
 
-const buildMismatchError = (dbPath, stamp, root, fingerprint) => {
+const describeMismatch = (reason, stamp, root, fingerprint) => {
+  const isCopy = reason === 'copied';
+  if (isCopy) {
+    return `it was made for ${stamp.root_path}, and ${root} is a copy of the same project (fingerprint ${fingerprint}) ` +
+      `while the original db still exists there. Its tasks, locks and leases belong to that checkout.`;
+  }
+  return `it belongs to ${stamp.root_path} (fingerprint ${stamp.fingerprint}), a different project from ${root} ` +
+    `(fingerprint ${fingerprint}); the .chemx directory was carried over from there. Its tasks, locks and index rows do not describe this one.`;
+};
+
+const buildMismatchError = (dbPath, stamp, root, fingerprint, reason) => {
   const err = new Error(
-    `Refusing to open ${dbPath}: it belongs to project ${stamp.root_path} (fingerprint ${stamp.fingerprint}), ` +
-    `not ${root} (fingerprint ${fingerprint}). The .chemx directory was probably copied from that project, and ` +
-    `its tasks, locks and index rows do not describe this one. To start fresh, delete ${dbPath} and its -wal/-shm files; ` +
-    `to adopt it for this project, rerun with ${ADOPT_ENV}=1.`
+    `Refusing to open ${dbPath}: ${describeMismatch(reason, stamp, root, fingerprint)} ` +
+    `To start fresh, delete ${dbPath} and its -wal/-shm files; to adopt it for this project, rerun with ${ADOPT_ENV}=1.`
   );
   err.code = PROJECT_MISMATCH_CODE;
   err.isRefusal = true;
   err.stampedRoot = stamp.root_path;
   err.currentRoot = root;
+  err.reason = reason;
   return err;
 };
 
@@ -84,7 +106,7 @@ export const applyProjectStamp = (db, dbPath, options = {}) => {
   const stamp = readStamp(db);
   const verdict = evaluateProjectStamp(stamp, root, fingerprint, { adopt: env[ADOPT_ENV] === '1' });
   const isRefused = verdict.action === 'refuse';
-  if (isRefused) throw buildMismatchError(dbPath, stamp, root, fingerprint);
+  if (isRefused) throw buildMismatchError(dbPath, stamp, root, fingerprint, verdict.reason);
   const needsWrite = verdict.action !== 'ok' && options.readOnly !== true;
   if (needsWrite) writeStamp(db, root, fingerprint);
   return { ...verdict, root, fingerprint };
