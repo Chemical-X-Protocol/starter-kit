@@ -103,27 +103,29 @@ test('patchFile: micro-indexes file into SQLite immediately upon write', () => {
   }
 });
 
-test('patchFile: evaluates Directive 1.A line limits and warns when molecule exceeds 100 lines', () => {
+const patchMoleculeTo = (lineCount, chemxrc) => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-patch-budget-'));
   const moleculeFile = path.join(tmpDir, 'm-trade-slip.ts');
   fs.writeFileSync(moleculeFile, 'export const isSample = true;\n', 'utf-8');
-
+  if (chemxrc) fs.writeFileSync(path.join(tmpDir, '.chemxrc'), JSON.stringify(chemxrc));
   try {
-    // Generate 105 lines
-    const bigContent = Array.from({ length: 105 }, (_, i) => `export const line${i} = ${i};`).join('\n');
-    const result = patchFile(moleculeFile, {
-      targetContent: 'export const isSample = true;',
-      replacementContent: bigContent,
-      cwd: tmpDir
-    });
-
-    assert.strictEqual(result.lineBudget.passed, false);
-    assert.strictEqual(result.lineBudget.limit, 100);
-    assert.ok(result.lineBudget.lines >= 105);
-    assert.ok(result.lineBudget.warning.includes('Directive 1.A'));
+    const bigContent = Array.from({ length: lineCount }, (_, i) => `export const line${i} = ${i};`).join('\n');
+    return patchFile(moleculeFile, { targetContent: 'export const isSample = true;', replacementContent: bigContent, cwd: tmpDir });
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
+};
+
+test('patchFile: the molecule line limit follows the profile via line-budgets.js (Directive 1.A/1.C)', () => {
+  const pragmatic = patchMoleculeTo(105);
+  assert.strictEqual(pragmatic.lineBudget.limit, 250);
+  assert.strictEqual(pragmatic.lineBudget.passed, true);
+
+  const strict = patchMoleculeTo(105, { profile: 'atomic-strict' });
+  assert.strictEqual(strict.lineBudget.passed, false);
+  assert.strictEqual(strict.lineBudget.limit, 100);
+  assert.ok(strict.lineBudget.lines >= 105);
+  assert.ok(strict.lineBudget.warning.includes('Directive 1.A'));
 });
 
 test('patchFile: detects Directive 1.G raw DOM violations in molecule files', () => {

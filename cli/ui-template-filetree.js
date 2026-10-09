@@ -8,8 +8,8 @@ export const VIEW_FILETREE_TEMPLATE = `
         <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
           <strong>🧬 Codebase AST Explorer & Inspector</strong>
           <span class="a-badge badge-primary">{{ codebaseFiles.length }} Files</span>
-          <span class="a-badge badge-lime">{{ cleanFileCount }} &le;100L</span>
-          <span class="a-badge badge-pink">{{ monolithFileCount }} &gt;100L</span>
+          <span class="a-badge badge-lime">{{ cleanFileCount }} within line budget</span>
+          <span class="a-badge badge-pink">{{ monolithFileCount }} over line budget</span>
           <span v-if="codebaseHazardCount > 0" class="badge-hazard">⚠️ {{ codebaseHazardCount }} Hazards</span>
         </div>
         <div style="display:flex; gap:6px; align-items:center;">
@@ -30,7 +30,7 @@ export const VIEW_FILETREE_TEMPLATE = `
             </div>
             <div v-else class="filetree-file" :class="{ 'filetree-file--selected': selectedFilePath === node.path }" @click="selectFile(node.path)">
               <span>📄</span><span style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:11px;" :title="node.path">{{ node.name }}</span>
-              <span class="a-badge" :class="node.lines > 100 ? 'badge-pink' : 'badge-lime'">{{ node.lines }}L</span>
+              <span class="a-badge" :class="node.isOverBudget ? 'badge-pink' : 'badge-lime'">{{ node.lines }}L</span>
               <span class="a-badge badge-primary" style="font-size:9px;">{{ node.tier }}</span>
               <span class="a-badge" :class="node.healthScore < 80 ? 'badge-warning' : 'badge-lime'" style="font-size:9px;">{{ node.healthScore }}%</span>
               <span v-if="node.hazardCount > 0" class="badge-hazard" style="font-size:9px;">⚠️{{ node.hazardCount }}</span>
@@ -46,7 +46,7 @@ export const VIEW_FILETREE_TEMPLATE = `
               <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">
                 <strong style="color:#62c9ff; font-size:12px; word-break:break-all;">{{ selectedFileDetail.file.path }}</strong>
                 <div style="display:flex; gap:6px; align-items:center;">
-                  <span class="a-badge" :class="selectedFileDetail.file.lines > 100 ? 'badge-pink' : 'badge-lime'">{{ selectedFileDetail.file.lines }} Lines</span>
+                  <span class="a-badge" :class="selectedFileDetail.file.isOverBudget ? 'badge-pink' : 'badge-lime'">{{ selectedFileDetail.file.lines }} Lines</span>
                   <span class="a-badge badge-primary">{{ selectedFileDetail.file.tier }}</span>
                   <span class="a-badge badge-lime">Health: {{ selectedFileDetail.file.healthScore }}%</span>
                   <span v-if="selectedFileDetail.file.hazardCount > 0" class="badge-hazard">⚠️ {{ selectedFileDetail.file.hazardCount }} Hazards</span>

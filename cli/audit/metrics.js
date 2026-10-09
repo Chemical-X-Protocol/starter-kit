@@ -1,4 +1,4 @@
-import { classifyFileSize } from './line-budgets.js';
+import { classifyFileSize, getLineBudgets } from './line-budgets.js';
 import { PILLARS } from './rules.js';
 
 export const isSlopViolation = (v) => Boolean(v.isAiSlop || (v.rule && v.rule.startsWith('AI_SLOP_')));
@@ -106,6 +106,12 @@ export const MODEL_PRICING_RATES = {
   gpt4o: { name: 'GPT-4o ($2.50/1M)', costPerMillion: 2.5 }
 };
 
+/** For fileStats built without a lineBudget: the default profile's budget for the file's tier. */
+const fallbackLineBudget = (f) => {
+  const budgets = getLineBudgets();
+  return f.isMolecule ? budgets.molecule : budgets.file.warn;
+};
+
 export const calculateTokenBurnAnalytics = (fileStats, options = {}) => {
   let totalRawChars = 0;
   let excessChars = 0;
@@ -113,7 +119,7 @@ export const calculateTokenBurnAnalytics = (fileStats, options = {}) => {
   for (const f of fileStats) {
     totalRawChars += f.charCount;
     // Budget from the line-budget policy (about 36 chars per line).
-    const lineBudget = f.lineBudget ?? (f.isMolecule ? 100 : 500);
+    const lineBudget = f.lineBudget ?? fallbackLineBudget(f);
     const maxChars = lineBudget * CHARS_PER_LINE;
     if (f.charCount > maxChars) {
       excessChars += f.charCount - maxChars;

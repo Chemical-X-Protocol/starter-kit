@@ -82,6 +82,20 @@ export const getLineBudgets = (config = {}) => {
   return { profile, file: FILE_BUDGET, molecule: moleculeBudget, isMoleculeHardCap, viewTemplate: VIEW_TEMPLATE_BUDGET };
 };
 
+/**
+ * The whole-file line limit a path is held to: the profile's molecule budget for
+ * molecule capsules, otherwise the file budget's warning line. Patcher receipts and
+ * the UI's over-budget badges read this instead of hard-coding 100/500.
+ */
+export const lineLimitFor = (relativePath, config = {}) => {
+  const budgets = getLineBudgets(config);
+  const isMolecule = resolveFileTier(relativePath, config) === 'molecule';
+  return isMolecule ? budgets.molecule : budgets.file.warn;
+};
+
+/** One-line policy text for prompts and banners, derived from the budgets above. */
+export const LINE_BUDGET_SUMMARY = `Max ${FILE_BUDGET.warn} lines/file; molecule capsules ${MOLECULE_BUDGET_BY_PROFILE.pragmatic} lines (pragmatic) or ${MOLECULE_BUDGET_BY_PROFILE['atomic-strict']} (atomic-strict)`;
+
 const GLOB_TOKENS = [
   ['**/', '(?:.*/)?'],
   ['**', '.*'],

@@ -4,6 +4,8 @@ import { ANSI } from './theme.js';
 import { syncSingleFileIndex } from './search.js';
 import { auditFile } from './audit.js';
 import { resolveSafePath } from './path-scope.js';
+import { lineLimitFor, resolveFileTier } from './audit/line-budgets.js';
+import { loadProjectConfig } from './config/index.js';
 
 /**
  * Surgically applies a search-and-replace block to a file.
@@ -81,9 +83,9 @@ export const patchFile = (targetPath, params = {}) => {
 
   // Architectural guardrails: check line budget and rules
   const relPath = path.relative(cwd, resolvedPath);
-  const baseName = path.basename(resolvedPath);
-  const isMolecule = relPath.includes('molecules') || relPath.includes('/m-') || baseName.startsWith('m-');
-  const maxLineBudget = isMolecule ? 100 : 500;
+  const projectRules = loadProjectConfig(cwd).rules;
+  const isMolecule = resolveFileTier(relPath, projectRules) === 'molecule';
+  const maxLineBudget = lineLimitFor(relPath, projectRules);
   const isBudgetExceeded = newLines > maxLineBudget;
 
   const lineBudget = {
@@ -279,9 +281,9 @@ export const writeFile = (targetPath, params = {}) => {
   }
 
   const relPath = path.relative(cwd, resolvedPath);
-  const baseName = path.basename(resolvedPath);
-  const isMolecule = relPath.includes('molecules') || relPath.includes('/m-') || baseName.startsWith('m-');
-  const maxLineBudget = isMolecule ? 100 : 500;
+  const projectRules = loadProjectConfig(cwd).rules;
+  const isMolecule = resolveFileTier(relPath, projectRules) === 'molecule';
+  const maxLineBudget = lineLimitFor(relPath, projectRules);
   const isBudgetExceeded = newLines > maxLineBudget;
 
   const lineBudget = {
