@@ -35,6 +35,12 @@ const VERIFY_ARGS = {
   values: { '--dir': 'dir', '--timeout': 'timeout', '--profile': 'profile' }
 };
 
+// verify takes no positional arguments; `chemx verify src` must not silently verify everything.
+const describeStrayPositionals = (parsed) => {
+  const hasStray = parsed.positionals.length > 0;
+  return hasStray ? `chemx verify: unexpected argument(s) ${parsed.positionals.join(' ')}; use --dir=<path> to pick a directory.` : null;
+};
+
 const finish = (summary, status, { isCli }) => {
   if (isCli) process.exit(toExitCode(status));
   return summary;
@@ -50,13 +56,14 @@ export const runProjectVerify = async (rawArgs = [], isCli = false, options = {}
   const parsed = parseCliArgs(rawArgs, VERIFY_ARGS);
   const isJson = Boolean(parsed.flags.json) || options.json === true;
   const shouldPrint = options.print !== false;
-  if (parsed.flags.help) {
+  const wantsHelp = Boolean(parsed.flags.help) || parsed.positionals[0] === 'help';
+  if (wantsHelp) {
     if (shouldPrint) process.stdout.write(isJson ? `${JSON.stringify({ help: true, success: true })}\n` : VERIFY_HELP);
     if (isCli) process.exit(0);
     return { help: true, success: true };
   }
 
-  const argError = describeArgErrors(parsed, 'verify');
+  const argError = describeArgErrors(parsed, 'verify') || describeStrayPositionals(parsed);
   if (argError) {
     const summary = { status: STATUS.FAIL, success: false, error: argError };
     printEarly(summary, isJson, shouldPrint);

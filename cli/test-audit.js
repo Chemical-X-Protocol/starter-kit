@@ -13,7 +13,6 @@ const TEST_ARGS = {
   booleans: { '--json': 'json', '--raw': 'raw', '--allow-empty': 'allowEmpty', '--help': 'help', '-h': 'help' },
   values: { '--target': 'target', '--filter': 'filter', '-t': 'filter', '--test-name-pattern': 'filter', '--timeout': 'timeout' }
 };
-const COMMAND_ALIASES = new Set(['test', 'tests', 'check:test']);
 
 const emptyCounts = { totalTests: 0, passed: 0, failed: 0, skipped: 0, errors: 0 };
 
@@ -29,9 +28,9 @@ const emit = (report, { isJson, isCli, shouldPrint }) => {
 };
 
 const resolveScope = (parsed, options) => {
-  const positionals = parsed.positionals.filter((arg, index) => !(index === 0 && COMMAND_ALIASES.has(arg)));
   const explicit = options.target || parsed.values.target;
-  const targets = explicit ? [String(explicit)] : positionals;
+  // The router already removed the command name, so a positional `test` is a real target directory.
+  const targets = explicit ? [String(explicit)] : parsed.positionals;
   return { targets, filter: options.filter || parsed.values.filter || null };
 };
 

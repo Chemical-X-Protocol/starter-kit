@@ -9,14 +9,13 @@ import { STATUS, toExitCode } from './result-status.js';
 import { isInteractive } from './terminal.js';
 import { parseCliArgs, describeArgErrors, parseTimeoutSeconds } from './cli-args.js';
 
-const IGNORED_COMMAND_TOKENS = new Set(['build', 'run', 'wrap']);
-
 export const BUILD_ARGS = {
   booleans: {
     '--json': 'json', '--silent': 'silent', '--raw': 'raw', '--summary': 'summary',
     '--prep-issue': 'prepIssue', '--post-issue': 'postIssue', '--help': 'help', '-h': 'help'
   },
-  values: { '--command': 'command', '--timeout': 'timeout' }
+  values: { '--command': 'command', '--timeout': 'timeout' },
+  positionalCommand: true
 };
 
 const BUILD_HELP = [
@@ -34,8 +33,9 @@ const BUILD_HELP = [
 ].join('\n');
 
 // `-- <cmd>` wins, then --command, then a bare positional command such as `chemx build "vite build"`.
+// The router already removed `build` / `run` / `wrap`, so every positional word is the user's.
 export const resolveBuildCommand = (parsed) => {
-  const positionalCommand = parsed.positionals.filter((arg) => !IGNORED_COMMAND_TOKENS.has(arg)).join(' ').trim();
+  const positionalCommand = parsed.positionals.join(' ').trim();
   return parsed.command || parsed.values.command || positionalCommand || null;
 };
 

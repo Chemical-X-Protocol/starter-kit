@@ -43,10 +43,18 @@ const readNodeSegment = (script = '') => {
   };
 };
 
-const buildNodeCommand = (script, targets, filter) => {
+// node --test does not walk a directory argument (it tries to load it as a module), so a
+// directory target becomes a glob of the spec files inside it.
+const NODE_DIR_GLOB = '**/*.{test,spec}.{js,mjs,cjs}';
+const toNodeTarget = (runCwd, target) => {
+  const isDirectory = fs.statSync(path.resolve(runCwd, target), { throwIfNoEntry: false })?.isDirectory();
+  return isDirectory ? `${target.replace(/\/+$/, '')}/${NODE_DIR_GLOB}` : target;
+};
+
+const buildNodeCommand = (script, runCwd, targets, filter) => {
   const { flags, files } = readNodeSegment(script);
   const pattern = filter ? [`--test-name-pattern=${quoteFilter(filter)}`] : [];
-  const fileArgs = targets.length > 0 ? targets.map(shellQuote) : files;
+  const fileArgs = targets.length > 0 ? targets.map((t) => shellQuote(toNodeTarget(runCwd, t))) : files;
   return ['node', ...flags, ...pattern, ...fileArgs].join(' ');
 };
 
@@ -59,7 +67,7 @@ const buildVitestCommand = (runCwd, targets, filter) => {
 };
 
 const buildScopedCommand = ({ runner, script, runCwd, targets, filter, pm }) => {
-  if (runner === 'node') return buildNodeCommand(script, targets, filter);
+  if (runner === 'node') return buildNodeCommand(script, runCwd, targets, filter);
   if (runner === 'vitest') return buildVitestCommand(runCwd, targets, filter);
   const filterArg = filter ? ` -t ${quoteFilter(filter)}` : '';
   const targetArgs = targets.map((t) => ` ${shellQuote(t)}`).join('');

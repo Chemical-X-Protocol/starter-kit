@@ -9,6 +9,8 @@ const splitInlineValue = (arg) => {
 };
 
 // schema: { booleans: { '--json': 'json' }, values: { '-t': 'filter', '--filter': 'filter' } }
+// With schema.positionalCommand, an unknown flag after the first positional belongs to that
+// command (`chemx wrap tsc -p .`) instead of being reported as unknown.
 // Returns { flags, values, positionals, command, unknown, missingValues }.
 export const parseCliArgs = (rawArgs = [], schema = {}) => {
   const booleans = schema.booleans || {};
@@ -43,7 +45,9 @@ export const parseCliArgs = (rawArgs = [], schema = {}) => {
     }
 
     const isFlag = arg.startsWith('-') && arg.length > 1;
-    if (isFlag) result.unknown.push(arg);
+    const isCommandWord = Boolean(schema.positionalCommand) && result.positionals.length > 0;
+    const isUnknownFlag = isFlag && !isCommandWord;
+    if (isUnknownFlag) result.unknown.push(arg);
     else result.positionals.push(arg);
   }
   return result;
@@ -53,6 +57,9 @@ export const describeArgErrors = (parsed, commandName) => {
   const problems = [];
   if (parsed.unknown.length > 0) problems.push(`unknown flag(s) ${parsed.unknown.join(', ')}`);
   if (parsed.missingValues.length > 0) problems.push(`missing value for ${parsed.missingValues.join(', ')}`);
+  const timeoutValue = parsed.values.timeout;
+  const hasInvalidTimeout = timeoutValue !== undefined && parseTimeoutSeconds(timeoutValue) === null;
+  if (hasInvalidTimeout) problems.push(`invalid --timeout value "${timeoutValue}" (expected seconds > 0)`);
   if (problems.length === 0) return null;
   return `chemx ${commandName}: ${problems.join('; ')}. Run \`chemx ${commandName} --help\`.`;
 };

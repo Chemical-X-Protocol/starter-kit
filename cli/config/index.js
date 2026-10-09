@@ -1,13 +1,14 @@
 import { PROFILES, DEFAULT_PROFILE, getProfileDefaults } from './profiles.js';
 import { findAndLoadConfigFile } from './loader.js';
 
+// Accepts both `--profile=<name>` and `--profile <name>`.
 const parseCliProfile = (rawArgs = []) => {
-  const profileArg = rawArgs.find((arg) => arg.startsWith('--profile='));
-  if (profileArg) {
-    const parts = profileArg.split('=');
-    return parts[1]?.trim()?.toLowerCase() || null;
-  }
-  return null;
+  const args = rawArgs.map(String);
+  const inlineArg = args.find((arg) => arg.startsWith('--profile='));
+  const spacedIndex = args.indexOf('--profile');
+  const value = inlineArg ? inlineArg.slice('--profile='.length) : args[spacedIndex + 1];
+  const hasValue = (Boolean(inlineArg) || spacedIndex !== -1) && typeof value === 'string';
+  return hasValue ? value.trim().toLowerCase() || null : null;
 };
 
 export const loadProjectConfig = (cwd = process.cwd(), rawArgs = []) => {

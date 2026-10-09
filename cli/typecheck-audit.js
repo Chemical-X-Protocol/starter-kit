@@ -81,7 +81,7 @@ export const runTypecheckAudit = async (rawArgs = [], isCli = false, options = {
 
   const customCmd = parsed.command || options.command;
   const argError = describeArgErrors(parsed, 'typecheck');
-  if (argError) return emit(earlyReport(STATUS.FAIL, customCmd || 'typecheck', { executionError: argError }), output);
+  if (argError) return emit(earlyReport(STATUS.FAIL, customCmd || 'typecheck', { reason: 'USAGE', executionError: argError }), output);
 
   const cwd = findProjectRoot(options.cwd || process.cwd());
   const nmStatus = checkNodeModules(cwd);
