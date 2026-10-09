@@ -8,6 +8,7 @@ import { createToolCaller } from './tool-call.js';
 import { createStalenessProbe } from './staleness.js';
 import { SERVER_INFO } from './server-info.js';
 import { SERVER_INSTRUCTIONS } from './help.js';
+import { createInflight } from './inflight.js';
 
 export { startStdioServer } from './stdio.js';
 export { SERVER_INFO };
@@ -44,6 +45,7 @@ export const createMcpHandler = (options = {}) => {
   const staleness = options.staleness === false ? null : createStalenessProbe(options.staleness || {});
   const scopeInputs = async () => ({ declaredRoot, bootRoot, mcpRoots: await roots.settled(), env });
   const callTool = createToolCaller({ scopeInputs, staleness });
+  const inflight = createInflight({ notify: options.notify, progressIntervalMs: options.progressIntervalMs });
   const resourceRoot = () => roots.current()[0] ?? declaredRoot ?? bootRoot ?? startDir;
   let isInitialized = false;
 
@@ -58,7 +60,8 @@ export const createMcpHandler = (options = {}) => {
 
   const NOTIFICATIONS = {
     'notifications/initialized': () => roots.refresh(),
-    'notifications/roots/list_changed': () => roots.refresh()
+    'notifications/roots/list_changed': () => roots.refresh(),
+    'notifications/cancelled': (params) => inflight.cancel(params?.requestId)
   };
 
   const METHODS = {
@@ -66,7 +69,8 @@ export const createMcpHandler = (options = {}) => {
     'tools/list': (id) => reply(id, { tools: MCP_TOOLS }),
     'tools/call': async (id, params) => {
       if (!isValidToolCall(params)) return replyError(id, -32602, INVALID_TOOL_CALL);
-      return reply(id, await callTool(params.name, params.arguments ?? {}));
+      const { cancelled, value } = await inflight.run(id, params, () => callTool(params.name, params.arguments ?? {}));
+      return cancelled ? null : reply(id, value);
     },
     'resources/list': (id) => reply(id, { resources: MCP_RESOURCES }),
     'resources/read': async (id, params) => {
