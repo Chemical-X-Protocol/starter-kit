@@ -103,6 +103,26 @@ test('static attributes are sorted, so their order never matters', () => {
   assert.equal(reordered.fp1, original.fp1);
 });
 
+test('sorting never moves a static attribute across a v-bind spread (the later one wins)', () => {
+  const withSpread = (attrs) => tilesOf(SAVINGS_TILES.replace('variant="subtle" padding="none"', attrs))[0];
+  const spreadFirst = withSpread('v-bind="$attrs" variant="subtle" padding="none"');
+  const spreadLast = withSpread('variant="subtle" padding="none" v-bind="$attrs"');
+  const spreadFirstReordered = withSpread('v-bind="$attrs" padding="none" variant="subtle"');
+  assert.notEqual(spreadFirst.fp1, spreadLast.fp1);
+  assert.notEqual(spreadFirst.fp3, spreadLast.fp3);
+  assert.equal(spreadFirstReordered.fp1, spreadFirst.fp1, 'a run between spreads is still sorted');
+});
+
+test('a JSX spread keeps its position relative to static attributes', () => {
+  const element = (source) => {
+    const { ast } = canonicalizeSource(source);
+    return collectJsxTemplateUnits(ast, source, { minMass: 1 })[0];
+  };
+  const before = element('const host = (p) => <XCard tone="info" {...p}><b>x</b></XCard>;');
+  const after = element('const host = (p) => <XCard {...p} tone="info"><b>x</b></XCard>;');
+  assert.notEqual(before.fp1, after.fp1);
+});
+
 test('JSX elements use the same normalizer: PascalCase tags, events, interpolations', () => {
   const { ast } = canonicalizeSource(SAMPLE_CARD_JSX);
   const units = collectJsxTemplateUnits(ast, SAMPLE_CARD_JSX);

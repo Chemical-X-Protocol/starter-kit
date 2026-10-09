@@ -3,6 +3,9 @@
 // non-null `!` are stripped; `x !== y` becomes `!(x === y)` (and `!=` becomes `!(==)`); an expressionless
 // template literal becomes a string; an expression-bodied arrow becomes `{ return e }`; a bare `if` or
 // loop body becomes a block. Member property names and object keys become PropName / KeyName leaves.
+// Literal text keeps what the runtime sees: a tagged template's quasis are labelled by their raw text
+// (the tag can read `strings.raw`), and JSXText collapses whitespace exactly the way JSX does (only
+// runs that contain a line break are dropped, so `<b> x</b>` keeps its leading space).
 //
 // Canonical node: { type, label, kids, isExpr, loc, ident, lit }
 //   kids   insertion-ordered { [visitorKey]: node | null | node[] } (Babel VISITOR_KEYS order)
@@ -42,9 +45,20 @@ const LITERAL_LABELS = {
   NullLiteral: () => ['null', 'null']
 };
 
+/** JSX text as the JSX transform emits it: per line, trim the sides that touch a line break. */
+const jsxTextValue = (value) => {
+  const lines = value.replace(/\t/g, ' ').split(/\r\n|\n|\r/);
+  const lastIndex = lines.length - 1;
+  const kept = lines.map((line, index) => {
+    const leadTrimmed = index === 0 ? line : line.replace(/^ +/, '');
+    return index === lastIndex ? leadTrimmed : leadTrimmed.replace(/ +$/, '');
+  });
+  return kept.filter((line) => line.length > 0).join(' ');
+};
+
 const TEXT_LABELS = {
   JSXIdentifier: (node) => node.name,
-  JSXText: (node) => node.value.trim(),
+  JSXText: (node) => jsxTextValue(node.value),
   TemplateElement: (node) => node.value.cooked ?? node.value.raw,
   DirectiveLiteral: (node) => node.value
 };
@@ -133,6 +147,15 @@ const convertTemplate = (node, ctx) => {
   return makeNode('StringLiteral', JSON.stringify(value), {}, node, { lit: 'string' });
 };
 
+/** A tagged template keeps its TemplateLiteral shape and raw quasi text (never a cooked string). */
+const convertTaggedTemplate = (node, ctx) => {
+  const template = node.quasi;
+  const quasis = template.quasis.map((quasi) => makeNode('TemplateElement', `raw:${quasi.value.raw}`, {}, quasi));
+  const expressions = template.expressions.map((expression) => convertNode(expression, ctx)).filter(Boolean);
+  const quasi = makeNode('TemplateLiteral', '', { quasis, expressions }, template);
+  return makeNode(node.type, flagLabel(node), { tag: convertNode(node.tag, ctx), quasi }, node);
+};
+
 const convertBinary = (node, ctx) => {
   const positiveOperator = NEGATED_EQUALITY[node.operator];
   if (!positiveOperator) return convertGeneric(node, ctx);
@@ -154,6 +177,7 @@ const convertArrow = (node, ctx) => {
 const SPECIAL = {
   Identifier: convertIdentifier,
   TemplateLiteral: convertTemplate,
+  TaggedTemplateExpression: convertTaggedTemplate,
   BinaryExpression: convertBinary,
   ArrowFunctionExpression: convertArrow,
   TSParameterProperty: (node, ctx) => convertNode(node.parameter, ctx),

@@ -105,6 +105,18 @@ test('parentheses, TS annotations, as and non-null are stripped; plain templates
   assert.equal(windowHash('return `plain`;').fp1, windowHash("return 'plain';").fp1);
 });
 
+test('a tagged template hashes its raw text; an untagged one its cooked value', () => {
+  assert.notEqual(windowHash('return String.raw`a\\nb`;').fp1, windowHash('return String.raw`a\nb`;').fp1);
+  assert.equal(windowHash('return `a\\nb`;').fp1, windowHash('return `a\nb`;').fp1);
+  assert.notEqual(windowHash('return f`plain`;').fp1, windowHash("return f('plain');").fp1);
+});
+
+test('JSX text keeps same-line spaces and drops only whitespace runs that hold a line break', () => {
+  assert.notEqual(windowHash('return <b> x</b>;').fp1, windowHash('return <b>x</b>;').fp1);
+  assert.equal(windowHash('return <b>\n  x\n</b>;').fp1, windowHash('return <b>x</b>;').fp1);
+  assert.equal(windowHash('return <b>a\n  b</b>;').fp1, windowHash('return <b>a b</b>;').fp1);
+});
+
 test('an expression-bodied arrow equals its { return e } form', () => {
   assert.equal(windowHash('return (x) => x + 1;').fp1, windowHash('return (x) => { return x + 1; };').fp1);
 });

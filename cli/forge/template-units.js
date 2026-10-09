@@ -6,7 +6,9 @@
 //   v-if/for/... L1 IF=<expr>; L2/L3 IF        @e  L1 EVENT(e)=<expr>; L2/L3 EVENT(e)
 //   slot         SLOT(name) at every level      children TEXT / INTERP (their text kept only at L1)
 // Static attributes are sorted, directives keep their order. At L3 static and bound attributes are
-// one sorted ATTR group. mass counts elements, attributes and text/interp children.
+// one sorted ATTR group. Sorting never crosses a spread (JSX {...p}, Vue v-bind="obj"): the later of
+// a spread and a same-named attribute wins, so each run between spreads is sorted on its own and the
+// spreads stay where they were. mass counts elements, attributes and text/interp children.
 import { hash64 } from './murmur.js';
 import { normalizeJsxElement, vueRootElements } from './template-normalize.js';
 import { traverse } from '../babel-lazy.js';
@@ -32,10 +34,28 @@ const LABELS = {
   dir: (attr) => [`DIR(${attr.name})=${attr.exp}`, `DIR(${attr.name})`, `DIR(${attr.name})`]
 };
 
-const orderedAttrs = (attrs, level) => {
+const SPREAD_NAMES = new Set(['spread:', 'bind:']);
+const isSpreadAttr = (attr) => attr.kind === 'dir' && SPREAD_NAMES.has(attr.name);
+
+const orderedRun = (attrs, level) => {
   const isValueAttr = (attr) => attr.kind === 'static' || (level === 2 && attr.kind === 'bind');
   const sorted = attrs.filter(isValueAttr).sort(byName);
   return [...sorted, ...attrs.filter((attr) => !isValueAttr(attr))];
+};
+
+const orderedAttrs = (attrs, level) => {
+  const ordered = [];
+  let run = [];
+  for (const attr of attrs) {
+    const isSpread = isSpreadAttr(attr);
+    if (isSpread) {
+      ordered.push(...orderedRun(run, level), attr);
+      run = [];
+      continue;
+    }
+    run.push(attr);
+  }
+  return [...ordered, ...orderedRun(run, level)];
 };
 
 const LEAF_LABELS = {
