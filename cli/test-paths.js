@@ -29,7 +29,8 @@ const findOwnerOf = (root, target, ownsRun) => {
   if (!exists) return null;
   let dir = fs.statSync(absolute).isDirectory() ? absolute : path.dirname(absolute);
   while (dir.startsWith(root + path.sep)) {
-    if (ownsRun(dir)) return dir;
+    const isRunOwner = Boolean(ownsRun(dir));
+    if (isRunOwner) return dir;
     dir = path.dirname(dir);
   }
   return root;
