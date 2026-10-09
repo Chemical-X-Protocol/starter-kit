@@ -1,6 +1,7 @@
 /**
  * chemx commit from a submodule (#2488): the event goes to the coordination db, never into the
- * package's own code-index db, so the package is not turned into a legacy silo. Temp dirs only.
+ * package's own code-index db, so the package is not turned into a legacy silo. Every project is a
+ * temp dir (fs.mkdtemp via coordination-fixture.js); CHEMX_PROJECT_ROOT is deleted below.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

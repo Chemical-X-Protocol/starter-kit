@@ -7,9 +7,9 @@ import '../silence-warnings.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { migrateTeamDb } from './team-migrate.js';
-import { openTeamContext } from './coordination-db.js';
+import { openTeamContext, resolveTeamDbTarget, teamDbPathFor } from './coordination-db.js';
 import { initTeamSchema } from './team-schema.js';
-import { closeQuietly } from './team-db-readonly.js';
+import { closeQuietly, openTeamDbReadOnly } from './team-db-readonly.js';
 
 const loadSqlite = async () => {
   try {
@@ -24,8 +24,13 @@ export const MIGRATE_USAGE = [
   'Usage: chemx team migrate --from <package>/.chemx/index.db [--dry-run] [--json]',
   '         [--keep-ids=target|source] [--drop-junk] [--source-repo=<repo>] [--into=<db>]',
   '  Merges a package db\'s team rows (tasks, comments, feed, DMs, agents, leases, lock queue,',
-  '  projects, usage) into the coordination db. --dry-run writes nothing and prints the plan.',
-  '  Backs up both dbs (VACUUM INTO) first and prints the paths. Re-running adds only rows written',
+  '  projects, usage) into the coordination db. --dry-run merges nothing: it opens the coordination db',
+  '  read-only, refuses when that db does not exist yet, and prints the plan. (The cwd\'s own tool-call',
+  '  telemetry may still add a row to a db it runs in.) A real run applies the team schema to the',
+  '  coordination db (creating it if missing), then backs up both dbs (VACUUM INTO) before any merged',
+  '  row is written, and prints the paths. A row that collides with an existing board row is kept as the',
+  '  board has it and reported as a conflict; the report says so and lists counts, not keys.',
+  '  Re-running adds only rows written',
   '  after the previous merge. --keep-ids=source keeps the source\'s task ids on its first merge and',
   '  renumbers colliding board tasks instead (each renumbered id keeps an alias).',
   '  Free text (#ids in titles and messages) is not rewritten; task show resolves old ids by alias.'
@@ -41,9 +46,23 @@ const openIntoDb = (dbPath) => {
   return { db, isOwned: true };
 };
 
+// Read-only: resolves the coordination root without opening (so creating) any db.
+const openDryTarget = (cwd) => {
+  const target = resolveTeamDbTarget(cwd);
+  const isRefused = Boolean(target.refused);
+  if (isRefused) return { error: target.refused };
+  const dbPath = teamDbPathFor(target.coordinationRoot);
+  const db = openTeamDbReadOnly(target.coordinationRoot);
+  const isMissing = !db;
+  if (isMissing) return { error: `No coordination db at ${dbPath}; a dry run opens it read-only and does not create one.` };
+  return { db, path: dbPath, root: target.coordinationRoot, isOwned: true };
+};
+
 const openTarget = (cwd, flags) => {
   const hasInto = Boolean(flags.into);
-  if (hasInto) return { ...openIntoDb(path.resolve(cwd, flags.into)), path: path.resolve(cwd, flags.into), root: openTeamContext(cwd).coordinationRoot };
+  if (hasInto) return { ...openIntoDb(path.resolve(cwd, flags.into)), path: path.resolve(cwd, flags.into), root: resolveTeamDbTarget(cwd).coordinationRoot };
+  const isDry = Boolean(flags.dryRun);
+  if (isDry) return openDryTarget(cwd);
   const coordination = openTeamContext(openTeamContext(cwd).coordinationRoot);
   const isUnavailable = !coordination.db;
   if (isUnavailable) return { error: coordination.refused || 'SQLite database unavailable.' };
@@ -53,6 +72,17 @@ const openTarget = (cwd, flags) => {
 const describeTables = (tables) => Object.entries(tables)
   .filter(([, counts]) => counts.pending + counts.alreadyMerged + counts.junk > 0)
   .map(([table, counts]) => `  ${table}: ${counts.pending} to merge, ${counts.alreadyMerged} already merged, ${counts.renumbered} renumbered, ${counts.junk} junk candidates`);
+
+// What the insert really did, per table. A conflict is a source row the board already had a row for:
+// the board row stays, the source row is not inserted, and it is not retried on a re-run.
+const describeApplied = (applied) => {
+  const rows = Object.entries(applied?.tables ?? {}).filter(([, counts]) => counts.inserted + counts.conflicts + counts.dangling > 0);
+  const lines = rows.map(([table, counts]) => `  applied ${table}: inserted ${counts.inserted}, kept board row instead ${counts.conflicts}, dangling refs dropped ${counts.dangling}`);
+  const conflicted = rows.filter(([, counts]) => counts.conflicts > 0).map(([table]) => table);
+  const hasConflicts = conflicted.length > 0;
+  const warning = hasConflicts ? [`  WARNING: source rows were not inserted in ${conflicted.join(', ')} (an existing board row has the same key, e.g. a lease on the same file). They are not retried on a re-run; check them by hand.`] : [];
+  return [...lines, ...warning];
+};
 
 const describeTargets = (targets) => {
   const repos = Object.entries(targets.byRepo).map(([repo, count]) => `${repo}: ${count}`).join(', ') || 'none';
@@ -69,6 +99,7 @@ export const formatMigrateReport = (report) => {
     `Team merge (${mode}): ${report.source.path} (repo ${report.source.repo}) -> ${report.target.path}`,
     `  keep ids: ${report.keepIds}; first merge of this source: ${report.isFirstRun ? 'yes' : 'no'}; board tasks renumbered: ${report.boardRenumbered}`,
     ...describeTables(report.tables),
+    ...describeApplied(report.applied),
     describeTargets(report.targets),
     junkLine,
     `  source tasks changed after the previous merge (not re-synced): ${report.changedAfterMerge}`,
@@ -110,6 +141,10 @@ export const handleMigrateCommand = (flags, isCli, cwd = process.cwd()) => {
     });
     if (isCli) writeReport(report, flags.isJson);
     return report;
+  } catch (err) {
+    const failure = { ok: false, error: `Migration stopped: ${err instanceof Error ? err.message : String(err)}` };
+    if (isCli) writeReport(failure, flags.isJson);
+    return failure;
   } finally {
     if (target.isOwned) closeQuietly(target.db);
   }
