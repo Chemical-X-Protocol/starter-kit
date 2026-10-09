@@ -66,7 +66,9 @@ const parseViewDestructured = (viewCode) => {
     const rawKeys = keysStr.split(',').map((k) => k.trim()).filter(Boolean);
     for (const rawKey of rawKeys) {
       const cleanKey = rawKey.split(':')[0].trim();
-      if (cleanKey && !cleanKey.startsWith('...')) {
+      const isRestKey = cleanKey.startsWith('...');
+      const isValidKey = Boolean(cleanKey) && !isRestKey;
+      if (isValidKey) {
         destructuredKeys.add(cleanKey);
       }
     }
@@ -75,7 +77,8 @@ const parseViewDestructured = (viewCode) => {
 };
 
 export const runFrameworkPrePublishGate = async () => {
-  if (process.env.CHEMX_PREPUBLISH_PASSED === '1') {
+  const isAlreadyVerified = process.env.CHEMX_PREPUBLISH_PASSED === '1';
+  if (isAlreadyVerified) {
     process.stdout.write('✔ Chemical X Pre-Publish Framework Gate already verified. Skipping redundant run.\n');
     return;
   }
@@ -86,7 +89,8 @@ export const runFrameworkPrePublishGate = async () => {
   const testDesc = 'add, toggle, and remove tasks with an input field';
   const scratchDir = path.resolve(ROOT_DIR, 'scratch/pre-publish-gate');
 
-  if (fs.existsSync(scratchDir)) {
+  const scratchExists = fs.existsSync(scratchDir);
+  if (scratchExists) {
     fs.rmSync(scratchDir, { recursive: true, force: true });
   }
   fs.mkdirSync(scratchDir, { recursive: true });
@@ -107,7 +111,8 @@ export const runFrameworkPrePublishGate = async () => {
       `--desc=${testDesc}`
     ]);
 
-    if (!res?.success) {
+    const isScaffoldSuccessful = Boolean(res?.success);
+    if (!isScaffoldSuccessful) {
       process.stderr.write(`  \x1b[31m✕ [${fw}] Failed to scaffold capsule\x1b[0m\n`);
       hasErrors = true;
       continue;
@@ -118,7 +123,10 @@ export const runFrameworkPrePublishGate = async () => {
     const viewPath = path.join(capsuleDir, `m-task-list.${ext}`);
     const controllerPath = path.join(capsuleDir, 'm-task-list.controller.ts');
 
-    if (!fs.existsSync(viewPath) || !fs.existsSync(controllerPath)) {
+    const hasView = fs.existsSync(viewPath);
+    const hasController = fs.existsSync(controllerPath);
+    const hasBothFiles = hasView && hasController;
+    if (!hasBothFiles) {
       process.stderr.write(`  \x1b[31m✕ [${fw}] Missing view or controller file on disk\x1b[0m\n`);
       hasErrors = true;
       continue;
@@ -132,15 +140,18 @@ export const runFrameworkPrePublishGate = async () => {
     const destructuredKeys = parseViewDestructured(viewContent);
     const missingKeys = [];
     for (const k of destructuredKeys) {
-      if (!returnedKeys.has(k)) missingKeys.push(k);
+      const isKeyReturned = returnedKeys.has(k);
+      if (!isKeyReturned) missingKeys.push(k);
     }
-    if (missingKeys.length > 0) {
+    const hasMissingKeys = missingKeys.length > 0;
+    if (hasMissingKeys) {
       process.stderr.write(`  \x1b[31m✕ [${fw}] Return-shape diff failed: view references undefined exports [${missingKeys.join(', ')}]\x1b[0m\n`);
       hasErrors = true;
     }
 
     // 2. Prohibited anti-patterns (method collision)
-    if (controllerContent.includes('.filter.value')) {
+    const hasCollidingFilter = controllerContent.includes('.filter.value');
+    if (hasCollidingFilter) {
       process.stderr.write(`  \x1b[31m✕ [${fw}] Detected invalid .filter.value collision in controller\x1b[0m\n`);
       hasErrors = true;
     }
@@ -158,7 +169,8 @@ export const runFrameworkPrePublishGate = async () => {
       (d) => d.file && d.file.fileName === controllerPath
     );
 
-    if (diagnostics.length > 0) {
+    const hasDiagnostics = diagnostics.length > 0;
+    if (hasDiagnostics) {
       process.stderr.write(`  \x1b[31m✕ [${fw}] TypeScript type-check failed with ${diagnostics.length} error(s):\x1b[0m\n`);
       for (const diag of diagnostics) {
         const lineChar = diag.file && diag.start !== undefined ? diag.file.getLineAndCharacterOfPosition(diag.start) : { line: 0, character: 0 };
@@ -173,7 +185,8 @@ export const runFrameworkPrePublishGate = async () => {
     // 4. Audit check
     const auditViolations = auditFile(viewPath, `m-task-list.${ext}`);
     const mismatches = auditViolations.filter((v) => v.rule === 'CONTROLLER_VIEW_MISMATCH');
-    if (mismatches.length > 0) {
+    const hasMismatches = mismatches.length > 0;
+    if (hasMismatches) {
       process.stderr.write(`  \x1b[31m✕ [${fw}] Audit flagged CONTROLLER_VIEW_MISMATCH\x1b[0m\n`);
       hasErrors = true;
     }
@@ -182,7 +195,9 @@ export const runFrameworkPrePublishGate = async () => {
   // Cleanup
   try {
     fs.rmSync(scratchDir, { recursive: true, force: true });
-  } catch {}
+  } catch {
+    // chemx-allow: best-effort cleanup of scratch directory
+  }
 
   if (hasErrors) {
     process.stderr.write('\n\x1b[31m✕ Pre-publish framework gate FAILED. Publish aborted.\x1b[0m\n');

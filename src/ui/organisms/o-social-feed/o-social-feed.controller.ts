@@ -3,10 +3,28 @@ import type { FeedPostRecord } from '../../molecules/m-feed-post/types';
 import type { SocialFeedProps, FeedChannelFilter, SocialFeedEmits } from './types';
 
 const matchesChannel = (post: FeedPostRecord, filter: FeedChannelFilter): boolean => {
-  if (filter === 'all') return true;
-  if (filter === 'general') return !post.channel || post.channel === 'general';
-  if (filter === 'alerts') return post.eventType.includes('alert') || post.eventType.includes('block');
-  if (filter === 'locks') return post.eventType.includes('lock');
+  const isAllFilter = filter === 'all';
+  if (isAllFilter) return true;
+
+  const isGeneralFilter = filter === 'general';
+  if (isGeneralFilter) {
+    const isUnassignedChannel = !post.channel;
+    const isGeneralChannel = post.channel === 'general';
+    return isUnassignedChannel || isGeneralChannel;
+  }
+
+  const isAlertsFilter = filter === 'alerts';
+  if (isAlertsFilter) {
+    const isAlertEvent = post.eventType.includes('alert');
+    const isBlockEvent = post.eventType.includes('block');
+    return isAlertEvent || isBlockEvent;
+  }
+
+  const isLocksFilter = filter === 'locks';
+  if (isLocksFilter) {
+    return post.eventType.includes('lock');
+  }
+
   return true;
 };
 
@@ -28,7 +46,8 @@ export function useSocialFeedController(props: SocialFeedProps, emit: SocialFeed
 
   const handleBroadcast = (msg: string) => {
     const clean = msg.trim();
-    if (clean.length === 0) return;
+    const isEmptyMessage = clean.length === 0;
+    if (isEmptyMessage) return;
     emit('post', clean);
   };
 

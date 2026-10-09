@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { STATUS } from '../result-status.js';
+import { chemxDbPathFor } from '../sqlite-memory.js';
 
 const SAMPLE_LIMIT = 400;
 
@@ -26,11 +27,12 @@ export const countStaleFiles = (rows, projectRoot) => rows.filter((row) => {
 }).length;
 
 export const checkIndex = async ({ projectRoot }) => {
-  const dbPath = path.join(projectRoot, '.chemx', 'index.db');
-  const hasIndex = fs.existsSync(dbPath);
+  const dbPath = chemxDbPathFor(projectRoot);
+  const hasIndex = Boolean(dbPath) && fs.existsSync(dbPath);
   if (!hasIndex) return { id: 'index', status: STATUS.INCONCLUSIVE, summary: 'no .chemx/index.db yet (built on first chemx q / audit)' };
   const opened = await openReadOnly(dbPath);
-  if (opened.error) return { id: 'index', status: STATUS.INCONCLUSIVE, summary: `index unreadable: ${opened.error}` };
+  const isUnreadable = Boolean(opened.error);
+  if (isUnreadable) return { id: 'index', status: STATUS.INCONCLUSIVE, summary: `index unreadable: ${opened.error}` };
   try {
     const totals = opened.db.prepare('SELECT COUNT(*) AS files, MAX(mtime) AS newest, SUM(size) AS bytes FROM files').get();
     const sample = opened.db.prepare(`SELECT path, mtime FROM files ORDER BY mtime DESC LIMIT ${SAMPLE_LIMIT}`).all();

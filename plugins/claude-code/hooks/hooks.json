@@ -1,9 +1,9 @@
 {
-  "description": "Chemical X: route raw runners, git diff/log and source reads through chemx; check edited files; session status card.",
+  "description": "Chemical X: route raw runners, git diff/log, source reads and native file tools through chemx; honour chemx file locks; check edited files; session status card.",
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash|Grep",
+        "matcher": "Bash|Grep|Read|Edit|Write|MultiEdit|NotebookEdit|Glob",
         "hooks": [
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/chemx-launch.mjs\" hook claude-pre-tool", "timeout": 10 }
         ]
@@ -11,7 +11,7 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "Edit|Write|MultiEdit",
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
         "hooks": [
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/chemx-launch.mjs\" hook claude-post-edit", "timeout": 30 }
         ]

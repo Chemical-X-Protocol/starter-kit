@@ -1,13 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { runAudit } from './audit.js';
 
 test('audit: options.stage tags the report as draft or strict', () => {
-  const tmpDir = path.resolve(process.cwd(), 'scratch/test-audit-stage');
-  if (fs.existsSync(tmpDir)) fs.rmSync(tmpDir, { recursive: true, force: true });
-  fs.mkdirSync(tmpDir, { recursive: true });
+  // Outside the repo: the audit honours .gitignore, so a file under the gitignored scratch/ is never scanned.
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-audit-stage-'));
 
   // Sample file with an inline multi-clause boolean (MEDIUM severity)
   const code = `export const check = (a: number, b: number, c: number) => {

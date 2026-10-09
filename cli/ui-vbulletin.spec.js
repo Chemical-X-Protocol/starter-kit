@@ -100,7 +100,8 @@ test('ui-forum-data: agent meta resolution and signature customization in databa
   assert.strictEqual(meta.model, 'Claude 3.5 Sonnet');
   assert.strictEqual(meta.signature, 'Original Signature');
   assert.strictEqual(meta.statusBeacon, 'idle');
-  assert.strictEqual(meta.joinDate, 'Sep 2026');
+  assert.strictEqual(meta.joinDate, '', 'no join date is recorded, so none is invented');
+  assert.strictEqual(meta.lastSeen, now);
 
   const updateRes = updateAgentSignatureInDb(db, '@worker_m2', 'Custom vBulletin Sig // Molecular');
   assert.strictEqual(updateRes, true);
@@ -108,6 +109,30 @@ test('ui-forum-data: agent meta resolution and signature customization in databa
   const updatedRaw = db.prepare("SELECT * FROM agents WHERE id = '@worker_m2'").get();
   const updatedMeta = resolveAgentMeta(updatedRaw);
   assert.strictEqual(updatedMeta.signature, 'Custom vBulletin Sig // Molecular');
+});
+
+test('ui-forum-data: agents without metadata get generic labels, never invented personas', () => {
+  const meta = resolveAgentMeta({ id: '@frontend-engineer' });
+  assert.strictEqual(meta.name, '@frontend-engineer');
+  assert.strictEqual(meta.model, 'Unknown');
+  assert.strictEqual(meta.role, 'Unknown');
+  assert.strictEqual(meta.signature, '');
+  assert.strictEqual(meta.joinDate, '');
+  assert.strictEqual(meta.userTitle, 'Swarm Contributor');
+});
+
+test('ui-forum-data: categories on an empty db name no author and skip archived feed rows', () => {
+  const db = setupTestDb();
+  const empty = getForumCategories(db);
+  for (const cat of empty) {
+    assert.strictEqual(cat.authorBadge, 'Unknown');
+    assert.strictEqual(cat.postsCount, 0);
+    assert.strictEqual(cat.lastPostTimestamp, 0);
+  }
+  db.prepare("INSERT INTO agent_feed (timestamp, author_id, event_type, message, metadata) VALUES (?, '@seed', 'broadcast', 'archived', ?)").run(Date.now(), JSON.stringify({ archived: 1 }));
+  const general = getForumCategories(db).find((c) => c.id === 'general');
+  assert.strictEqual(general.postsCount, 0);
+  assert.strictEqual(general.authorBadge, 'Unknown');
 });
 
 test('ui-handlers and routes: provides forum categories, agent directory, and signature update endpoints', () => {

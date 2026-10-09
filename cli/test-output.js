@@ -21,13 +21,28 @@ export const REASONS = Object.freeze({
 const TEST_FILE_NAME = /\.(?:test|spec)\.(?:c|m)?[jt]sx?$|\.(?:c|m)?[jt]sx?$/;
 
 // node --test reports a file that ran no tests (for example a name pattern matched nothing)
-// as one passing pseudo-test named after the file, preceded by a `1..0` plan.
-const countEmptyNodeFiles = (cleanLines) => cleanLines.filter((line, index) => {
+// as one passing pseudo-test named after the file, preceded by a `1..0` plan in TAP mode,
+// or as a passing test named after the spec file in spec reporter mode.
+const isTapEmptyNodeFile = (line, index, cleanLines) => {
   const isEmptyPlan = line === '1..0';
   const subtest = (cleanLines[index + 1] || '').match(/^# Subtest: (.+)$/);
   const okLine = cleanLines[index + 2] || '';
-  return isEmptyPlan && subtest && TEST_FILE_NAME.test(subtest[1]) && okLine.endsWith(`- ${subtest[1]}`);
-}).length;
+  const isSubtestSpec = Boolean(subtest && TEST_FILE_NAME.test(subtest[1]));
+  const isOkSubtest = Boolean(subtest && okLine.endsWith(`- ${subtest[1]}`));
+  return isEmptyPlan && isSubtestSpec && isOkSubtest;
+};
+
+const isSpecEmptyNodeFile = (line) => {
+  const match = line.match(/^[✔✓]\s+(\S+)\s+\([\d.]+m?s\)$/);
+  return Boolean(match && TEST_FILE_NAME.test(match[1]));
+};
+
+const countEmptyNodeFiles = (cleanLines) => {
+  const tapCount = cleanLines.filter((l, i) => isTapEmptyNodeFile(l, i, cleanLines)).length;
+  const hasTapCount = tapCount > 0;
+  if (hasTapCount) return tapCount;
+  return cleanLines.filter(isSpecEmptyNodeFile).length;
+};
 
 const readNumber = (line, pattern) => {
   const match = line.match(pattern);
@@ -65,7 +80,7 @@ const parseCounts = (cleanLines) => {
 };
 
 const applyMarkerFallback = (counts, cleanLines) => {
-  const checkmarks = cleanLines.filter((l) => /^(?:✔|✓)/.test(l)).length;
+  const checkmarks = cleanLines.filter((l) => /^(?:✔|✓)/.test(l) && !isSpecEmptyNodeFile(l)).length;
   const crosses = cleanLines.filter((l) => /^(?:✖|×|✗|✕)/.test(l) || l.startsWith('FAIL ')).length;
   const hasUncountedPasses = counts.passed === 0 && checkmarks > 0;
   if (hasUncountedPasses) counts.passed = checkmarks;

@@ -23,11 +23,16 @@ const decide = (input, env = {}) => {
 let failures = 0;
 for (const [command, expected] of CASES) {
   const got = decide({ tool_name: 'Bash', tool_input: { command } });
-  if (got !== expected) failures++;
-  console.log(`${got === expected ? 'ok  ' : 'FAIL'} ${got.padEnd(5)} ${command}`);
+  const isMatch = got === expected;
+  if (!isMatch) failures++;
+  process.stdout.write(`${isMatch ? 'ok  ' : 'FAIL'} ${got.padEnd(5)} ${command}\n`);
 }
 const grepTool = decide({ tool_name: 'Grep', tool_input: { pattern: 'x' } });
 const enforced = decide({ tool_name: 'Bash', tool_input: { command: 'grep -rn x src' } }, { CHEMX_GUARD_SEARCH: '1' });
-console.log(`${grepTool === 'allow' ? 'ok  ' : 'FAIL'} ${grepTool.padEnd(5)} Grep tool (search not enforced yet)`);
-console.log(`${enforced === 'deny' ? 'ok  ' : 'FAIL'} ${enforced.padEnd(5)} grep -rn with CHEMX_GUARD_SEARCH=1`);
-process.exit(failures + (grepTool !== 'allow') + (enforced !== 'deny'));
+const isGrepAllowed = grepTool === 'allow';
+const isEnforcedDeny = enforced === 'deny';
+process.stdout.write(`${isGrepAllowed ? 'ok  ' : 'FAIL'} ${grepTool.padEnd(5)} Grep tool (search not enforced yet)\n`);
+process.stdout.write(`${isEnforcedDeny ? 'ok  ' : 'FAIL'} ${enforced.padEnd(5)} grep -rn with CHEMX_GUARD_SEARCH=1\n`);
+const grepFailures = isGrepAllowed ? 0 : 1;
+const enforcedFailures = isEnforcedDeny ? 0 : 1;
+process.exit(failures + grepFailures + enforcedFailures);

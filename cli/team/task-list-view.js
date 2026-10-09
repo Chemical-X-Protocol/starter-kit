@@ -4,6 +4,8 @@ export const DEFAULT_LIST_STATUSES = ['queued', 'in_progress', 'review', 'blocke
 export const DEFAULT_LIST_LIMIT = 20;
 const TITLE_MAX = 48;
 const LIST_COLUMNS = ['id', 'status', 'priority', 'assigned_agent_id', 'title'];
+// Capability tier column: only present once a listed task carries one, so untiered lists stay compact.
+const NEEDS_COLUMN_AFTER = 'priority';
 
 const truncateTitle = (task) => {
   const title = task.title ?? '';
@@ -35,8 +37,15 @@ export const selectTaskPage = (tasks, { statuses, limit }) => {
   return { page, total: matching.length };
 };
 
+const listColumnsFor = (page) => {
+  const hasNeeds = page.some((task) => Boolean(task.needs));
+  if (!hasNeeds) return LIST_COLUMNS;
+  const insertAt = LIST_COLUMNS.indexOf(NEEDS_COLUMN_AFTER) + 1;
+  return [...LIST_COLUMNS.slice(0, insertAt), 'needs', ...LIST_COLUMNS.slice(insertAt)];
+};
+
 export const buildTaskListView = (page, total) => {
-  const col = toColumnar(page, LIST_COLUMNS, { title: truncateTitle });
+  const col = toColumnar(page, listColumnsFor(page), { title: truncateTitle });
   const hasMore = total > page.length;
   const hint = hasMore ? `showing ${page.length} of ${total}; use --all, --status=, or --limit=` : undefined;
   return { ...col, total, ...(hint ? { hint } : {}) };

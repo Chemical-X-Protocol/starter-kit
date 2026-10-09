@@ -48,12 +48,12 @@ test('#1742: staged hazards still block', () => {
   assert.deepEqual([status, report.files, report.gate.passing], [1, 1, false]);
 });
 
-test('#1742: the kit pre-commit script and the hook template use the staged, index-free audit with a progress line', () => {
+test('#1716: the kit pre-commit script and the hook template gate on the staged delta, with --git only behind the opt-in grade gate', () => {
   const script = fs.readFileSync(path.join(KIT, 'scripts', 'pre-commit.sh'), 'utf-8');
   for (const text of [script, buildPreCommitHookScript()]) {
-    assert.match(text, /audit --staged --no-index /);
-    assert.match(text, /Auditing %s staged file\(s\)/);
-    assert.match(text, /AUDIT_BIN="\$CHEMX_BIN"/);
-    assert.doesNotMatch(text, /audit --git /);
+    assert.match(text, /--staged-delta/);
+    assert.match(text, /CHEMX_PRECOMMIT_GATE" = "grade"/);
+    assert.doesNotMatch(text, /audit --staged /);
   }
+  assert.match(buildPreCommitHookScript(), /AUDIT_BIN="\$CHEMX_BIN"/);
 });

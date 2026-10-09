@@ -3,10 +3,14 @@ import type { SwarmAgent } from '../../molecules/m-agent-card/types';
 import type { AgentRailProps, AgentFilter, AgentRailEmits } from './types';
 
 const isMatchingFilter = (agent: SwarmAgent, filter: AgentFilter): boolean => {
-  if (filter === 'all') return true;
-  if (filter === 'active') return agent.status === 'busy';
-  if (filter === 'idle') return agent.status === 'idle';
-  if (filter === 'offline') return agent.status === 'offline';
+  const isAllFilter = filter === 'all';
+  if (isAllFilter) return true;
+  const isActiveFilter = filter === 'active';
+  if (isActiveFilter) return agent.status === 'busy';
+  const isIdleFilter = filter === 'idle';
+  if (isIdleFilter) return agent.status === 'idle';
+  const isOfflineFilter = filter === 'offline';
+  if (isOfflineFilter) return agent.status === 'offline';
   return true;
 };
 

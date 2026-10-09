@@ -286,8 +286,10 @@ chemx use-task-filter
 ### 4. Database-Driven Multi-Agent Swarm Coordination
 Coordinate multi-agent swarms using the local SQLite store (`.chemx/index.db`) without multi-thousand-token markdown specification bloat:
 ```bash
-# Auto-triage: convert AST audit hazards directly into assignable team tasks
-chemx team task triage
+# Auto-triage: a full-scope `chemx audit` converts hazards into assignable team tasks by default.
+# Partial runs (--git, --fast, --staged, --no-index) never triage; `--no-triage` opts out.
+chemx audit
+chemx team task triage   # triage on demand
 
 # List tasks assigned to a specific agent
 chemx team task list --agent=@agent-alpha

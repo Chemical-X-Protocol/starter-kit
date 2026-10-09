@@ -145,23 +145,39 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
   const isPartialAudit = Boolean(fileList) || isFast;
   report.gate = computeGateVerdict({ projectRoot: process.cwd(), scope: auditRelDir, violations: report.violations, isPartialScan: isPartialAudit });
   report.scope = auditRelDir;
-  saveAuditSnapshot(report, process.cwd(), { scope: auditRelDir, isPartial: isPartialAudit });
+  const historyScope = { scope: auditRelDir, isPartial: isPartialAudit };
+  saveAuditSnapshot(report, process.cwd(), historyScope);
   const hasSkippedConflicts = report.skippedConflicts?.length > 0;
   if (hasSkippedConflicts) {
     const { describeSkipped } = await import('../conflicts.js');
     process.stderr.write(`⚠ audit ${describeSkipped(report.skippedConflicts)}\n`);
   }
+  // Triage needs a full-scope audit and the index sync: partial runs vouch for only some files.
+  const isTriageOptOut = rawArgs.includes('--no-triage');
+  const hasIndexSync = !rawArgs.includes('--no-index') && !isStagedScope;
+  // --git / --changed that fell back to a full scan (nothing changed) is still a git-scoped intent.
+  const isPartialIntent = isPartialAudit || hasGitFlag;
+  const shouldTriage = !isTriageOptOut && !isPartialIntent && hasIndexSync;
+  const isTriageRequested = rawArgs.includes('--triage');
+  const isTriageIgnored = isTriageRequested && !shouldTriage && !isTriageOptOut;
+  if (isTriageIgnored) {
+    process.stderr.write('triage skipped: partial scan (--fast/--git/--staged) or --no-index\n');
+  }
+  let hasTriaged = false;
   try {
     // Pre-commit runs skip the full index sync (tens of seconds); the audit itself needs no index.
-    const shouldSyncIndex = !rawArgs.includes('--no-index') && !isStagedScope;
+    const shouldSyncIndex = hasIndexSync;
     const syncRes = shouldSyncIndex ? syncSearchIndex(targetDir, process.cwd()) : null;
 
     if (syncRes?.db) {
       // A --fast or --git audit checks only part of the scope, so it vouches for no file.
       syncViolationsIndex(syncRes.db, report.violations, { scope: isPartialAudit ? null : syncRes.scope });
-      const shouldTriage = rawArgs.includes('--triage');
       if (shouldTriage) {
         const createdTasks = autoGenerateTasksFromAudit(syncRes.db, { cwd: process.cwd(), targetDir });
+        hasTriaged = true;
+        const { listTasks } = await import('../team/index.js');
+        const { collectTaskRules } = await import('../audit/prompt-rule-lines.js');
+        report.taskRules = collectTaskRules(listTasks(syncRes.db));
         const shouldLogTriage = isCli && !isJson && createdTasks.length > 0;
         if (shouldLogTriage) {
           process.stdout.write(`\x1b[32m✔\x1b[0m Auto-triage synchronized ${createdTasks.length} team task(s) in SQLite backlog.\n`);
@@ -248,6 +264,7 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
     if (isInteractive && !isUnroll) {
       const handleReAudit = () => {
         const refreshed = executeAstAudit(targetDir, auditOptions);
+        refreshed.taskRules = report.taskRules;
         saveAuditSnapshot(refreshed, process.cwd(), historyScope);
         return refreshed;
       };
@@ -293,7 +310,7 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
           if (isScoreFail) process.stdout.write(`  \x1b[31m•\x1b[0m Score ${report.health.score}/100 is below required minimum score ${minScore}/100\n`);
           if (isDefaultFail) process.stdout.write(`  \x1b[31m•\x1b[0m Unresolved hazards: ${critical.length} Critical, ${high.length} High (run 'chemx audit --unroll' to inspect)\n`);
           if (isStrictFail) process.stdout.write(`  \x1b[31m•\x1b[0m Strict mode: ${report.violations.length} total violation(s) detected\n`);
-          process.stdout.write('  \x1b[36m💡 Convert hazards into team tasks: chemx team task triage\x1b[0m\n');
+          if (!hasTriaged) process.stdout.write('  \x1b[36m💡 Convert hazards into team tasks: chemx team task triage\x1b[0m\n');
         }
       }
     }

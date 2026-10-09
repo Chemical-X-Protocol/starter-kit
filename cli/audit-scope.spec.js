@@ -50,12 +50,13 @@ test('audit scope: single candidate audits project root', async () => {
   });
 });
 
-test('audit scope: multiple candidates without config refuses', async () => {
+test('audit scope: several source roots and no config audits the project root', async () => {
   await withProject({ dirs: ['src', 'cli'] }, (root) => {
     const scope = resolveAuditScope({ projectRoot: root });
-    assert.strictEqual(scope.ok, false);
-    assert.strictEqual(scope.reason, 'ambiguous');
-    assert.deepStrictEqual(scope.candidates, ['cli', 'src']);
+    assert.strictEqual(scope.ok, true);
+    assert.strictEqual(scope.source, 'root');
+    assert.strictEqual(scope.relDir, '.');
+    assert.strictEqual(scope.dir, root);
   });
 });
 
@@ -75,16 +76,15 @@ test('audit scope: explicit dir that does not exist refuses', async () => {
   });
 });
 
-test('audit scope: verify refuses ambiguous scope and runs no checks', async () => {
+test('audit scope: verify with several source roots scopes the audit to the root', async () => {
   await withProject({ dirs: ['src', 'cli', 'node_modules'] }, async (root) => {
     const summary = await runProjectVerify(['--json'], false, { cwd: root, print: false });
-    assert.strictEqual(summary.success, false);
-    assert.deepStrictEqual(summary.scope.candidates, ['cli', 'src']);
-    assert.strictEqual(summary.typecheck, undefined);
+    assert.notStrictEqual(summary.scope?.reason, 'ambiguous');
+    assert.strictEqual(summary.scope?.candidates, undefined);
   });
 });
 
-test('audit scope: cli audit --git audits the change set even when scope is ambiguous', async () => {
+test('audit scope: cli audit --git audits the change set with several source roots', async () => {
   await withProject({ dirs: ['src', 'cli'] }, async (root) => {
     const { execSync } = await import('node:child_process');
     const { runAudit } = await import('./commands/cmd-audit.js');

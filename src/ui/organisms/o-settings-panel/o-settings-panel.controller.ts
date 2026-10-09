@@ -5,7 +5,8 @@ export function useSettingsPanelController(props: SettingsPanelProps, emit: Sett
   const busyTimeoutMs = ref('5000');
 
   const handleAction = (type: 'vacuum' | 'clear_feed' | 'reset_leases' | 'heartbeat' | 'busy_timeout') => {
-    if (type === 'busy_timeout') {
+    const isBusyTimeout = type === 'busy_timeout';
+    if (isBusyTimeout) {
       emit('action', 'busy_timeout', { timeoutMs: Number(busyTimeoutMs.value) || 5000 });
       return;
     }

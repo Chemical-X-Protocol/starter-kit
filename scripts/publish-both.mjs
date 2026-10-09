@@ -96,7 +96,7 @@ try {
     if (otp) publishArgs.push(`--otp=${otp}`);
     if (tag) publishArgs.push('--tag', tag);
 
-    console.log(`\n\x1b[36m[starter-kit] Publishing: ${target.name} (dry-run: ${isDryRun}${tag ? `, tag: ${tag}` : ''})\x1b[0m`);
+    process.stdout.write(`\n\x1b[36m[starter-kit] Publishing: ${target.name} (dry-run: ${isDryRun}${tag ? `, tag: ${tag}` : ''})\x1b[0m\n`);
     const proc = spawnSync('npm', publishArgs, {
       cwd: PKG_DIR,
       stdio: 'inherit',
@@ -104,16 +104,17 @@ try {
     });
 
     results.push({ name: target.name, success: proc.status === 0 });
-    if (proc.error) console.error(`\x1b[31m✕ ${target.name}: ${proc.error.message}\x1b[0m`);
+    const hasProcError = Boolean(proc.error);
+    if (hasProcError) process.stderr.write(`\x1b[31m✕ ${target.name}: ${proc.error.message}\x1b[0m\n`);
   }
 } finally {
   fs.writeFileSync(PKG_JSON, originalContent, 'utf-8');
 }
 
-console.log('\n\x1b[1m\x1b[36m--- starter-kit Publish Summary ---\x1b[0m');
-for (const line of formatPublishSummary(results)) console.log(line);
-console.log('\x1b[1m\x1b[36m-----------------------------------\x1b[0m\n');
+process.stdout.write('\n\x1b[1m\x1b[36m--- starter-kit Publish Summary ---\x1b[0m\n');
+for (const line of formatPublishSummary(results)) process.stdout.write(line + '\n');
+process.stdout.write('\x1b[1m\x1b[36m-----------------------------------\x1b[0m\n\n');
 
 process.exitCode = computePublishExitCode(results, TARGETS.length);
 const hasFailedPublish = process.exitCode !== 0;
-if (hasFailedPublish) console.error('\x1b[31m✕ One or more publishes failed.\x1b[0m');
+if (hasFailedPublish) process.stderr.write('\x1b[31m✕ One or more publishes failed.\x1b[0m\n');

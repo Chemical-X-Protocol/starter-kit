@@ -1,5 +1,8 @@
 import { toColumnar } from '../columnar.js';
 import { registerAgent } from './team-db-agents.js';
+import { NOT_ARCHIVED_SQL } from './team-db-feed.js';
+import { describeLease } from './team-db-lock-promotion.js';
+import { resolveAgentId } from './agent-identity.js';
 
 export const normalizeHandle = (handle) => {
   if (!handle) return null;
@@ -8,7 +11,7 @@ export const normalizeHandle = (handle) => {
 
 export const sendDirectMessage = (db, params = {}) => {
   if (!db) return null;
-  const author = normalizeHandle(params.author_id) || '@agent';
+  const author = resolveAgentId(params.author_id);
   const recipient = normalizeHandle(params.recipient_id);
   if (!recipient) throw new Error('recipient_id is required');
   registerAgent(db, { id: author, role: 'contributor' });
@@ -47,8 +50,9 @@ export const getAgentMailbox = (db, agentId, options = {}) => {
 
   const limit = Math.min(Number(options.limit || 50), 200);
   const msgParams = [cleanId];
-  let msgSql = 'SELECT id, timestamp, author_id, thread_id, task_id, read_at, message FROM agent_feed WHERE recipient_id = ?';
-  if (options.since) {
+  let msgSql = `SELECT id, timestamp, author_id, thread_id, task_id, read_at, message FROM agent_feed WHERE recipient_id = ? AND ${NOT_ARCHIVED_SQL}`;
+  const hasSince = Boolean(options.since);
+  if (hasSince) {
     msgSql += ' AND id > ?';
     msgParams.push(Number(options.since));
   }
@@ -56,23 +60,26 @@ export const getAgentMailbox = (db, agentId, options = {}) => {
   msgParams.push(limit);
   const messages = db.prepare(msgSql).all(...msgParams);
 
+  // Expired leases and leases whose holder process is dead are not held any more; listing them
+  // would tell the agent it still owns files it lost.
   const leases = db.prepare(`
-    SELECT file_path, locked_by, expires_at, purpose
+    SELECT file_path, locked_by, expires_at, purpose, pid
     FROM file_leases
     WHERE locked_by = ?
     ORDER BY expires_at ASC
-  `).all(cleanId);
+  `).all(cleanId).map((lease) => describeLease(lease)).filter((lease) => lease.active);
 
   const unreadRow = db.prepare(`
     SELECT COUNT(*) as count FROM agent_feed
-    WHERE recipient_id = ? AND read_at IS NULL
+    WHERE recipient_id = ? AND read_at IS NULL AND ${NOT_ARCHIVED_SQL}
   `).get(cleanId);
   const unreadCount = Number(unreadRow?.count || 0);
 
-  if (options.markRead) {
+  const shouldMarkRead = Boolean(options.markRead);
+  if (shouldMarkRead) {
     db.prepare(`
       UPDATE agent_feed SET read_at = ?
-      WHERE recipient_id = ? AND read_at IS NULL
+      WHERE recipient_id = ? AND read_at IS NULL AND ${NOT_ARCHIVED_SQL}
     `).run(Date.now(), cleanId);
   }
 

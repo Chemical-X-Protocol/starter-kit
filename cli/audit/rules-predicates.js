@@ -333,3 +333,28 @@ export const isRawBooleanArg = (arg, t) => {
   return false;
 };
 
+// A bail-out exits without a value (bare `return;` or `throw`). A branch that returns a value is a
+// resolver or validator answer (Directive 3.H's prescribed shape), not a call-site bail-out.
+const isBailOutExit = (stmt, t) => {
+  const isThrow = t.isThrowStatement(stmt);
+  const isBareReturn = t.isReturnStatement(stmt) && !stmt.argument;
+  return isThrow || isBareReturn;
+};
+
+const finalStatementOf = (consequent, t) => {
+  const isBlock = t.isBlockStatement(consequent);
+  if (!isBlock) return consequent;
+  const stmts = consequent.body;
+  return stmts[stmts.length - 1] ?? null;
+};
+
+/** An `if` with no else whose branch ends by bailing out of the function. */
+export const isGuardClause = (node, t) => {
+  const isPlainIf = t.isIfStatement(node) && !node.alternate;
+  if (!isPlainIf) return false;
+  const finalStatement = finalStatementOf(node.consequent, t);
+  const hasFinalStatement = Boolean(finalStatement);
+  return hasFinalStatement && isBailOutExit(finalStatement, t);
+};
+
+

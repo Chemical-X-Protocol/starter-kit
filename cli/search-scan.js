@@ -6,6 +6,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { isSourceFile } from './languages.js';
 import { debugNote } from './search-debug.js';
+import { listGitFiles } from './git-file-listing.js';
+import { findAndLoadConfigFile } from './config/loader.js';
 
 export const ANY_DEPTH_IGNORED_DIRS = new Set([
   'node_modules', '.git', 'vendor', 'dist', 'coverage',
@@ -70,10 +72,31 @@ export const scanScope = (root, scopeDirs) => {
     }
     walk(abs, root, fileList);
   }
+  const gitFiles = listGitFiles(root);
+  const gitFilesSet = Array.isArray(gitFiles) ? new Set(gitFiles) : null;
+  const config = findAndLoadConfigFile(root);
+  const userExcludes = Array.isArray(config?.raw?.exclude) ? config.raw.exclude : [];
+
   fileList.files = fileList.files.filter((f) => {
     const isDuplicate = seen.has(f.relPath);
+    if (isDuplicate) return false;
     seen.add(f.relPath);
-    return !isDuplicate;
+
+    const isExcludedByUser = userExcludes.some((pattern) => path.matchesGlob(f.relPath, pattern));
+    if (isExcludedByUser) return false;
+
+    const hasGitFilter = gitFilesSet !== null;
+    if (hasGitFilter) {
+      const isExplicitTarget = scopeDirs.some((dir) => {
+        const isCustomScope = dir !== '.' && dir !== 'src';
+        return isCustomScope && (f.relPath === dir || f.relPath.startsWith(`${dir}/`));
+      });
+      const isAllowedByGit = gitFilesSet.has(f.relPath);
+      const isKept = isAllowedByGit || isExplicitTarget;
+      if (!isKept) return false;
+    }
+
+    return true;
   });
   return fileList;
 };

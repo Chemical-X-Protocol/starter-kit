@@ -17,7 +17,7 @@ import { applyEdits } from './apply-edits.js';
 import { parseSource } from './source-parse.js';
 import { planExplode, importHeader, relocated } from './explode-plan.js';
 import { brokenSpecifiers } from './explode-relocate.js';
-import { hasPreviewFlag, findUnknownFlags, unknownFlagsMessage } from './cli-args.js';
+import { hasPreviewFlag, findUnknownFlags, unknownFlagsMessage, parseValueFlags } from './cli-args.js';
 import { relocatePrologue } from './explode-prologue.js';
 import { assertImportersSurvive } from './explode-importers.js';
 
@@ -203,12 +203,15 @@ const bucketFile = (bucket, names) => ({
 export const runExplodeCli = async (rawArgs = [], isCli = true) => {
   const isJson = rawArgs.includes('--json');
   const isDryRun = hasPreviewFlag(rawArgs);
-  const target = rawArgs.find((a) => !a.startsWith('-'));
-  const unknown = findUnknownFlags(rawArgs, []);
+  // --as=@handle or --as @handle: the identity applyEdits checks team locks against.
+  const { values: flagValues, positionals } = parseValueFlags(rawArgs, { as: ['--as'] });
+  const target = positionals[0];
+  const unknown = findUnknownFlags(rawArgs, ['--as']);
   const hasUnknownFlags = unknown.length > 0;
   const hasTarget = Boolean(target);
+  const isUnusable = hasUnknownFlags || !hasTarget;
 
-  if (hasUnknownFlags || !hasTarget) {
+  if (isUnusable) {
     const msg = hasUnknownFlags ? unknownFlagsMessage('explode', unknown) : 'Usage: npx chemx explode <file-path> [--dry-run] [--json]';
     if (isJson) {
       process.stdout.write(JSON.stringify({ error: msg, success: false }) + '\n');
@@ -221,7 +224,7 @@ export const runExplodeCli = async (rawArgs = [], isCli = true) => {
   }
 
   try {
-    const result = explodeCapsule(target, { dryRun: isDryRun });
+    const result = explodeCapsule(target, { dryRun: isDryRun, agentId: flagValues.as });
     if (isJson) {
       process.stdout.write(JSON.stringify(result) + '\n');
     } else {

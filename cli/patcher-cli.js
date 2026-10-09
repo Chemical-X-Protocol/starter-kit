@@ -5,6 +5,7 @@
  */
 import fs from 'node:fs';
 import { ANSI } from './theme.js';
+import { isStdinTty } from './terminal.js';
 import { parseValueFlags, hasFlag, splitList, hasPreviewFlag, findUnknownFlags, unknownFlagsMessage } from './cli-args.js';
 import { patchFile, writeFile } from './patcher.js';
 import { parseSearchReplaceBlocks } from './search-replace-blocks.js';
@@ -114,9 +115,27 @@ const printOutcome = (res, verb, isJson) => {
   }
   printDeclarations(res);
   printParseNote(res);
-  const hasViolations = res.violationsCount > 0;
-  if (hasViolations) {
-    process.stdout.write(`  ${ANSI.GOLD}⚠ ${res.violationsCount} architecture hazard(s) detected (Run chemx check ${res.file})${ANSI.RESET}\n`);
+  const introduced = res.introducedViolations || [];
+  const preExisting = res.preExistingViolations || [];
+  const hasIntroduced = introduced.length > 0;
+  if (hasIntroduced) {
+    process.stdout.write(`  ${ANSI.RED}⚠ ${introduced.length} introduced architecture hazard(s):${ANSI.RESET}\n`);
+    for (const h of introduced) {
+      process.stdout.write(`    [${h.severity}] line ${h.line}: ${h.hazard}\n`);
+    }
+  }
+  const hasPreExisting = preExisting.length > 0;
+  if (hasPreExisting) {
+    process.stdout.write(`  ${ANSI.DIM}  (${preExisting.length} pre-existing hazard(s))${ANSI.RESET}\n`);
+  }
+  const hasNoIntroduced = introduced.length === 0;
+  const hasNoPreExisting = preExisting.length === 0;
+  const hasNeither = hasNoIntroduced && hasNoPreExisting;
+  if (hasNeither) {
+    const hasViolations = res.violationsCount > 0;
+    if (hasViolations) {
+      process.stdout.write(`  ${ANSI.GOLD}⚠ ${res.violationsCount} architecture hazard(s) detected (Run chemx check ${res.file})${ANSI.RESET}\n`);
+    }
   }
 };
 
@@ -140,7 +159,7 @@ const PATCH_SWITCHES = ['--multiple', '--allow-multiple'];
 const NO_PATCH_INPUT = `chemx patch needs SEARCH/REPLACE blocks on stdin (chemx patch <file> <<'EOF' ... EOF) or --target/--replacement. Nothing was changed.`;
 
 // An interactive terminal never counts as input: refusing beats blocking on, or writing, nothing.
-const readStdin = () => (process.stdin.isTTY ? null : fs.readFileSync(0, 'utf-8'));
+const readStdin = () => (isStdinTty() ? null : fs.readFileSync(0, 'utf-8'));
 
 const readStdinBlocks = () => {
   const text = readStdin() ?? '';

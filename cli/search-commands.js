@@ -42,7 +42,8 @@ export const handleDefCommand = (db, targetSymbol, { index = null, isJson = fals
   const shownLines = isTruncated ? DEF_SNIPPET_CAP : bodyLines;
   try {
     const absPath = path.resolve(root, def.filePath);
-    if (fs.existsSync(absPath)) {
+    const doesPathExist = fs.existsSync(absPath);
+    if (doesPathExist) {
       const fileLines = fs.readFileSync(absPath, 'utf-8').split('\n');
       const start = Math.max(1, def.startLine) - 1;
       const end = Math.min(fileLines.length, start + shownLines);
@@ -107,7 +108,8 @@ export const handleRefsCommand = (db, targetSymbol, { index = null, isJson = fal
   }
 
   process.stdout.write(`\n${ANSI.BOLD}${ANSI.CYAN}References for "${targetSymbol}":${ANSI.RESET} ${ANSI.DIM}(${refs.length} found)${ANSI.RESET}\n`);
-  if (refs.length === 0) {
+  const hasNoRefs = refs.length === 0;
+  if (hasNoRefs) {
     process.stdout.write(`  ${ANSI.DIM}No files import "${targetSymbol}".${ANSI.RESET}\n\n`);
     if (isCli) process.exit();
     return payload;
@@ -141,7 +143,8 @@ export const handleDepsCommand = (db, targetFile, { index = null, isJson = false
 
   process.stdout.write(`\n${ANSI.BOLD}${ANSI.CYAN}Dependency Graph:${ANSI.RESET} ${ANSI.BOLD}${targetFile}${ANSI.RESET}\n`);
   process.stdout.write(`  ${ANSI.MINT}Upstream Dependencies (${dependencies.length}):${ANSI.RESET}\n`);
-  if (dependencies.length === 0) {
+  const hasNoDependencies = dependencies.length === 0;
+  if (hasNoDependencies) {
     process.stdout.write(`    ${ANSI.DIM}None${ANSI.RESET}\n`);
   } else {
     for (const d of dependencies) {
@@ -150,7 +153,8 @@ export const handleDepsCommand = (db, targetFile, { index = null, isJson = false
   }
 
   process.stdout.write(`  ${ANSI.GOLD}Downstream Consumers (${dependents.length}):${ANSI.RESET}\n`);
-  if (dependents.length === 0) {
+  const hasNoDependents = dependents.length === 0;
+  if (hasNoDependents) {
     process.stdout.write(`    ${ANSI.DIM}None${ANSI.RESET}\n`);
   } else {
     for (const dep of dependents) {
@@ -167,7 +171,8 @@ export const handlePackCommand = (db, target, { index = null, isJson = false, is
   let file = inspectIndexedFile(db, target);
   if (!file) {
     const matches = queryIndex(db, { query: target, limit: 1 });
-    if (matches.length > 0) file = matches[0];
+    const hasMatches = matches.length > 0;
+    if (hasMatches) file = matches[0];
   }
 
   if (!file) {
@@ -183,7 +188,7 @@ export const handlePackCommand = (db, target, { index = null, isJson = false, is
 
   const dependencies = findFileDependencies(db, file.path);
   const dependents = findFileDependents(db, file.path);
-  const hazards = queryViolations(db, { filePath: file.path });
+  const hazards = queryViolations(db, { filePath: file.path, limit: 50 });
 
   const pack = {
     file: {
@@ -217,14 +222,18 @@ export const handlePackCommand = (db, target, { index = null, isJson = false, is
 };
 
 const resolveGradeColor = (score) => {
-  if (score >= 90) return ANSI.LIME;
-  if (score >= 80) return ANSI.CYAN;
+  const isLimeScore = score >= 90;
+  if (isLimeScore) return ANSI.LIME;
+  const isCyanScore = score >= 80;
+  if (isCyanScore) return ANSI.CYAN;
   return ANSI.GOLD;
 };
 
 const resolveHealthScoreColor = (score) => {
-  if (score >= 90) return ANSI.LIME;
-  if (score >= 70) return ANSI.GOLD;
+  const isLimeScore = score >= 90;
+  if (isLimeScore) return ANSI.LIME;
+  const isGoldScore = score >= 70;
+  if (isGoldScore) return ANSI.GOLD;
   return ANSI.RED;
 };
 
@@ -242,7 +251,8 @@ export const handleProgressionCommand = (db, { index = null, isJson = false, isC
   }
 
   process.stdout.write(`\n${ANSI.BOLD}${ANSI.CYAN}Chemical X Health Progression:${ANSI.RESET} ${ANSI.DIM}(${history.length} snapshots in SQLite)${ANSI.RESET}\n`);
-  if (history.length === 0) {
+  const hasNoHistory = history.length === 0;
+  if (hasNoHistory) {
     process.stdout.write(`  ${ANSI.DIM}No audit snapshots recorded yet. Run an audit to log your baseline.${ANSI.RESET}\n\n`);
     if (isCli) process.exit();
     return payload;
@@ -277,7 +287,8 @@ export const handleHealthFilterCommand = (db, status, { index = null, isJson = f
   const headerColor = status === 'failing' ? ANSI.GOLD : ANSI.LIME;
 
   process.stdout.write(`\n${ANSI.BOLD}${headerColor}${title}:${ANSI.RESET} ${ANSI.DIM}(${files.length} files)${ANSI.RESET}\n`);
-  if (files.length === 0) {
+  const hasNoFiles = files.length === 0;
+  if (hasNoFiles) {
     const emptyMsg = status === 'failing'
       ? 'Outstanding! Zero degraded files found. All files are crystalline.'
       : 'No crystalline files recorded.';
@@ -302,7 +313,8 @@ export const handleCheckCommand = (targetFile, { index = null, isJson = false, i
   const startTime = Date.now();
   if (!targetFile) {
     const errorMsg = 'Please specify a target file to check. Example: chemx check src/components/m-card.vue';
-    if (isJson && isCli) {
+    const shouldOutputJson = isJson && isCli;
+    if (shouldOutputJson) {
       process.stdout.write(JSON.stringify({ error: errorMsg, success: false }) + '\n');
     } else if (isCli) {
       process.stderr.write(`\x1b[31m✕ ${errorMsg}\x1b[0m\n`);
@@ -312,9 +324,11 @@ export const handleCheckCommand = (targetFile, { index = null, isJson = false, i
   }
 
   const absPath = path.resolve(process.cwd(), targetFile);
-  if (!fs.existsSync(absPath)) {
+  const doesFileExist = fs.existsSync(absPath);
+  if (!doesFileExist) {
     const errorMsg = `File not found: ${targetFile}`;
-    if (isJson && isCli) {
+    const shouldOutputJson = isJson && isCli;
+    if (shouldOutputJson) {
       process.stdout.write(JSON.stringify({ error: errorMsg, success: false }) + '\n');
     } else if (isCli) {
       process.stderr.write(`\x1b[31m✕ ${errorMsg}\x1b[0m\n`);
@@ -362,7 +376,8 @@ export const handleCheckCommand = (targetFile, { index = null, isJson = false, i
     const color = v.severity === 'CRITICAL' ? ANSI.RED : ANSI.GOLD;
     process.stdout.write(`  ${color}[${v.severity}]${ANSI.RESET} Line ${v.line}: ${v.rule}\n`);
     process.stdout.write(`    ${ANSI.DIM}Hazard: ${v.hazard}${ANSI.RESET}\n`);
-    if (v.directive) {
+    const hasDirective = Boolean(v.directive);
+    if (hasDirective) {
       process.stdout.write(`    ${ANSI.CYAN}Directive: ${v.directive}${ANSI.RESET}\n`);
     }
   }
@@ -382,6 +397,3 @@ export {
 export { handleSemanticCommand, handleHybridCommand } from './search-commands-semantic.js';
 export { handleHazardsCommand } from './search-commands-hazards.js';
 export { handleLiteralSearchCommand } from './search-commands-literal.js';
-
-
-

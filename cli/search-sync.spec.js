@@ -133,3 +133,26 @@ test('concurrent processes upserting the same paths never hit UNIQUE failures', 
     cleanup(root);
   }
 });
+
+test('indexing scope honors .gitignore and excludes gitignored files from default index', async () => {
+  const root = makeProject({
+    '.gitignore': 'ignored/\n*.bak\n',
+    'src/valid.ts': 'export const valid = 1;\n',
+    'ignored/hidden.ts': 'export const hidden = 1;\n'
+  });
+  try {
+    const { spawnSync } = await import('node:child_process');
+    spawnSync('git', ['init'], { cwd: root });
+    spawnSync('git', ['add', '.gitignore', 'src/valid.ts'], { cwd: root });
+    syncSearchIndex('.', root);
+    assert.deepEqual(indexedPaths(root), ['src/valid.ts']);
+
+    fs.writeFileSync(path.join(root, '.chemxrc'), JSON.stringify({ exclude: ['src/skip-*.ts'] }));
+    fs.writeFileSync(path.join(root, 'src/skip-me.ts'), 'export const skipMe = 1;\n');
+    clearDbCache();
+    syncSearchIndex('.', root, { reindex: true });
+    assert.deepEqual(indexedPaths(root), ['src/valid.ts']);
+  } finally {
+    cleanup(root);
+  }
+});

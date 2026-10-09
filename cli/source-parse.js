@@ -24,9 +24,12 @@ const pluginsForLang = (lang) => {
 
 export const langForPath = (filePath) => {
   const ext = path.extname(String(filePath)).toLowerCase();
-  if (TS_EXTENSIONS.has(ext)) return 'ts';
-  if (TSX_EXTENSIONS.has(ext)) return 'tsx';
-  if (JS_EXTENSIONS.has(ext)) return 'js';
+  const isTs = TS_EXTENSIONS.has(ext);
+  if (isTs) return 'ts';
+  const isTsx = TSX_EXTENSIONS.has(ext);
+  if (isTsx) return 'tsx';
+  const isJs = JS_EXTENSIONS.has(ext);
+  if (isJs) return 'js';
   return null;
 };
 
@@ -44,12 +47,18 @@ export const parseBabel = (code, lang, options = {}) => parse(code, {
 });
 
 const collectPatternNames = (pattern, names) => {
-  if (!pattern) return;
-  if (pattern.type === 'Identifier') names.push(pattern.name);
-  if (pattern.type === 'ObjectPattern') pattern.properties.forEach((p) => collectPatternNames(p.value || p.argument, names));
-  if (pattern.type === 'ArrayPattern') pattern.elements.forEach((el) => collectPatternNames(el, names));
-  if (pattern.type === 'RestElement') collectPatternNames(pattern.argument, names);
-  if (pattern.type === 'AssignmentPattern') collectPatternNames(pattern.left, names);
+  const hasNoPattern = !pattern;
+  if (hasNoPattern) return;
+  const isIdentifier = pattern.type === 'Identifier';
+  if (isIdentifier) names.push(pattern.name);
+  const isObjectPattern = pattern.type === 'ObjectPattern';
+  if (isObjectPattern) pattern.properties.forEach((p) => collectPatternNames(p.value || p.argument, names));
+  const isArrayPattern = pattern.type === 'ArrayPattern';
+  if (isArrayPattern) pattern.elements.forEach((el) => collectPatternNames(el, names));
+  const isRestElement = pattern.type === 'RestElement';
+  if (isRestElement) collectPatternNames(pattern.argument, names);
+  const isAssignmentPattern = pattern.type === 'AssignmentPattern';
+  if (isAssignmentPattern) collectPatternNames(pattern.left, names);
 };
 
 /**
@@ -60,15 +69,20 @@ const collectPatternNames = (pattern, names) => {
  */
 export const declaredNames = (node) => {
   const names = [];
-  if (!node) return names;
-  if (node.type === 'ExportNamedDeclaration') return declaredNames(node.declaration);
-  if (node.type === 'ExportDefaultDeclaration') {
+  const hasNoNode = !node;
+  if (hasNoNode) return names;
+  const isExportNamed = node.type === 'ExportNamedDeclaration';
+  if (isExportNamed) return declaredNames(node.declaration);
+  const isExportDefault = node.type === 'ExportDefaultDeclaration';
+  if (isExportDefault) {
     names.push('default');
     const innerId = node.declaration?.id?.name;
-    if (innerId) names.push(innerId);
+    const hasInnerId = Boolean(innerId);
+    if (hasInnerId) names.push(innerId);
     return names;
   }
-  if (node.type === 'VariableDeclaration') {
+  const isVariableDecl = node.type === 'VariableDeclaration';
+  if (isVariableDecl) {
     node.declarations.forEach((d) => collectPatternNames(d.id, names));
     return names;
   }

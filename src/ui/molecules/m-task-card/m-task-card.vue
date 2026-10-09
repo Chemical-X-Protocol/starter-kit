@@ -20,7 +20,10 @@ const {
 
 const handleChat = () => {
   const link = props.task.chatLink || (props.task.conversationId ? `conversation://${props.task.conversationId}` : '');
-  if (link && typeof window !== 'undefined') {
+  const hasLink = Boolean(link);
+  const isBrowser = typeof window !== 'undefined';
+  const canOpenLink = hasLink && isBrowser;
+  if (canOpenLink) {
     window.open(link, '_blank');
   }
 };

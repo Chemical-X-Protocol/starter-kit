@@ -20,15 +20,32 @@ export {
 
 const parseListFlags = (parts) => {
   const flags = {};
-  for (const part of parts) {
+  parts.forEach((part, index) => {
     const isAllFlag = part === '--all';
     const isStatusFlag = part.startsWith('--status=');
     const isLimitFlag = part.startsWith('--limit=');
+    const isNeedsEquals = part.startsWith('--needs=');
+    const isNeedsSpaced = part === '--needs' && index + 1 < parts.length;
     if (isAllFlag) flags.all = true;
     if (isStatusFlag) flags.status = part.split('=')[1];
     if (isLimitFlag) flags.limit = parseInt(part.split('=')[1], 10);
-  }
+    if (isNeedsEquals) flags.needs = part.slice('--needs='.length);
+    if (isNeedsSpaced) flags.needs = parts[index + 1];
+  });
   return flags;
+};
+
+// Drops the `--needs` flag (both spellings) so it never leaks into a task title.
+const dropNeedsTokens = (tokens) => {
+  const kept = [];
+  for (let i = 0; i < tokens.length; i += 1) {
+    const isNeedsSpaced = tokens[i] === '--needs';
+    const isNeedsEquals = tokens[i].startsWith('--needs=');
+    if (isNeedsSpaced) i += 1;
+    const isOtherToken = !isNeedsSpaced && !isNeedsEquals;
+    if (isOtherToken) kept.push(tokens[i]);
+  }
+  return kept;
 };
 
 const MUTATING_ACTIONS = new Set(['write', 'patch', 'autofix', 'explode', 'generate']);
@@ -148,7 +165,7 @@ const parseCommandParts = (command, params) => {
       const isCreate = ['add', 'create', 'new'].includes(taskSub);
       if (isCreate) {
         parsedParams.subAction = 'add';
-        const titleTokens = parts.slice(TEAM_ACTIONS[parts[1]] ? 3 : 2);
+        const titleTokens = dropNeedsTokens(parts.slice(TEAM_ACTIONS[parts[1]] ? 3 : 2));
         const needsTitle = titleTokens.length > 0 && !parsedParams.title;
         if (needsTitle) {
           parsedParams.title = titleTokens.join(' ').replace(/^["']|["']$/g, '');
@@ -166,7 +183,7 @@ const parseCommandParts = (command, params) => {
     const isCreate = ['add', 'create', 'new'].includes(taskSub);
     if (isCreate) {
       parsedParams.subAction = 'add';
-      const titleTokens = parts.slice(2);
+      const titleTokens = dropNeedsTokens(parts.slice(2));
       const needsTitle = titleTokens.length > 0 && !parsedParams.title;
       if (needsTitle) {
         parsedParams.title = titleTokens.join(' ').replace(/^["']|["']$/g, '');
@@ -321,6 +338,6 @@ export const executeMcpTool = async (name, args = {}, cwd = process.cwd()) => {
   const toolName = name === 'chemx_master' ? 'chemx' : name;
   const handle = resolveToolHandler(toolName);
   if (!handle) throw new Error(`Unknown tool: ${name}`);
-  const effectiveCwd = args.projectRoot || args?.params?.projectRoot || cwd;
+  const effectiveCwd = args.projectRoot || args?.params?.projectRoot || args?.params?.cwd || cwd;
   return handle(args, effectiveCwd);
 };

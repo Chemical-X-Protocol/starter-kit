@@ -9,6 +9,7 @@ import {
 } from './team-db-task-helpers.js';
 import { withImmediateTransaction } from './team-db-transaction.js';
 import { generateTaskPermalink } from './team-vds.js';
+import { parseNeedsInput } from './team-needs.js';
 
 export const getTask = (db, taskId) => {
   const canGet = Boolean(db) && Boolean(taskId);
@@ -23,12 +24,13 @@ export const createTask = (db, taskData) => {
   const canCreate = Boolean(db) && Boolean(taskData?.title);
   if (!canCreate) return null;
 
+  const needs = parseNeedsInput(taskData.needs);
   const now = Date.now();
   const sql = `INSERT INTO agent_tasks (
     title, description, tier, target_path, target_symbol, status, priority, assigned_agent_id,
     blocked_reason, parent_id, dependencies, created_at, updated_at, result_payload, origin_type,
-    rule_id, violation_snapshot, diff_receipt, moscow, vds_priority, vds_phase, vds_status, task_url, sprint_tag
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+    rule_id, violation_snapshot, diff_receipt, moscow, vds_priority, vds_phase, vds_status, task_url, sprint_tag, needs
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
   const info = db.prepare(sql).run(
     taskData.title, taskData.description || '', taskData.tier || '',
     taskData.target_path || null, taskData.target_symbol || '', taskData.status || 'queued',
@@ -41,7 +43,7 @@ export const createTask = (db, taskData) => {
     JSON.stringify(taskData.diff_receipt || {}),
     taskData.moscow || 'must', taskData.vds_priority || 'medium',
     taskData.vds_phase || 'planning', taskData.vds_status || 'ready',
-    taskData.task_url || '', taskData.sprint_tag || ''
+    taskData.task_url || '', taskData.sprint_tag || '', needs
   );
   const createdId = info.lastInsertRowid;
   if (!taskData.task_url) {

@@ -7,7 +7,8 @@ export function useCodebaseCatalogController(props: CodebaseCatalogProps, emit: 
   const tiers = ['all', 'atom', 'molecule', 'organism', 'view', 'cli', 'utility'];
 
   const matchesTier = (file: CodebaseFileRecord, tier: string) => {
-    if (tier === 'all') return true;
+    const isAllTier = tier === 'all';
+    if (isAllTier) return true;
     return (file.tier || '').toLowerCase() === tier.toLowerCase();
   };
 

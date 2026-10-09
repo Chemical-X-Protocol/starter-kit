@@ -13,12 +13,19 @@ const { start: startCopiedReset } = useTimeoutFn(() => {
   copied.value = false;
 }, 2500, { immediate: false });
 
-const handleCopyAudit = async () => {
-  if (typeof navigator === 'undefined' || !navigator.clipboard) return;
+const handleCopyAudit = async (): Promise<[boolean, Error | null]> => {
+  const isClipboardAvailable = typeof navigator !== 'undefined' && Boolean(navigator.clipboard);
+  if (!isClipboardAvailable) {
+    return [false, new Error('Clipboard API unavailable')];
+  }
   const [, err] = await toResult(navigator.clipboard.writeText(auditCmd));
-  if (err) return;
+  const hasCopyError = Boolean(err);
+  if (hasCopyError) {
+    return [false, err];
+  }
   copied.value = true;
   startCopiedReset();
+  return [true, null];
 };
 </script>
 

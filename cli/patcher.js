@@ -54,6 +54,9 @@ export const patchFile = (targetPath, params = {}) => {
   if (!dryRun) assertWriteLockClear(resolvedPath, cwd, agentId);
 
   const fileContent = fs.readFileSync(resolvedPath, 'utf-8');
+  const beforeGuardrails = skipCheck ? { violations: [] } : evaluateGuardrails({ absPath: resolvedPath, relPath: targetPath, content: fileContent, skipCheck, cwd });
+  const beforeKeys = new Set(beforeGuardrails.violations.map((v) => `${v.rule}:${v.hazard}`));
+
   const replaceOptions = { allowMultiple, filePath: targetPath };
   const replaced = hasBlocks
     ? applySearchReplaceBlocks(fileContent, params.blocks, replaceOptions)
@@ -62,6 +65,10 @@ export const patchFile = (targetPath, params = {}) => {
   const fileResult = applied.files[0];
   const shouldIndex = !skipIndex && !dryRun;
   const indexed = shouldIndex ? syncIndex(resolvedPath, cwd) : false;
+
+  const guardrails = evaluateGuardrails({ absPath: resolvedPath, relPath: fileResult.file, content: replaced.content, skipCheck, cwd });
+  const introducedViolations = guardrails.violations.filter((v) => !beforeKeys.has(`${v.rule}:${v.hazard}`));
+  const preExistingViolations = guardrails.violations.filter((v) => beforeKeys.has(`${v.rule}:${v.hazard}`));
 
   return {
     file: fileResult.file,
@@ -80,7 +87,9 @@ export const patchFile = (targetPath, params = {}) => {
     parse: fileResult.parse,
     declarations: fileResult.declarations,
     diff: fileResult.diff,
-    ...evaluateGuardrails({ absPath: resolvedPath, relPath: fileResult.file, content: replaced.content, skipCheck, cwd })
+    ...guardrails,
+    introducedViolations,
+    preExistingViolations
   };
 };
 
@@ -116,10 +125,18 @@ export const writeFile = (targetPath, params = {}) => {
     throw new Error(`Refusing to overwrite existing file ${targetPath}. Pass overwrite:true (CLI: --overwrite), or use patch for a partial change.`);
   }
 
+  const beforeContent = isExisting ? fs.readFileSync(resolvedPath, 'utf-8') : null;
+  const beforeGuardrails = beforeContent && !skipCheck ? evaluateGuardrails({ absPath: resolvedPath, relPath: targetPath, content: beforeContent, skipCheck, cwd }) : { violations: [] };
+  const beforeKeys = new Set(beforeGuardrails.violations.map((v) => `${v.rule}:${v.hazard}`));
+
   const applied = applyEdits([{ path: resolvedPath, content, allowRemoved }], { cwd, dryRun, agentId });
   const fileResult = applied.files[0];
   const shouldIndex = !skipIndex && !dryRun;
   const indexed = shouldIndex ? syncIndex(resolvedPath, cwd) : false;
+
+  const guardrails = evaluateGuardrails({ absPath: resolvedPath, relPath: fileResult.file, content, skipCheck, cwd });
+  const introducedViolations = guardrails.violations.filter((v) => !beforeKeys.has(`${v.rule}:${v.hazard}`));
+  const preExistingViolations = guardrails.violations.filter((v) => beforeKeys.has(`${v.rule}:${v.hazard}`));
 
   return {
     file: fileResult.file,
@@ -132,6 +149,8 @@ export const writeFile = (targetPath, params = {}) => {
     parse: fileResult.parse,
     declarations: fileResult.declarations,
     diff: fileResult.diff,
-    ...evaluateGuardrails({ absPath: resolvedPath, relPath: fileResult.file, content, skipCheck, cwd })
+    ...guardrails,
+    introducedViolations,
+    preExistingViolations
   };
 };

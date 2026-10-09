@@ -81,7 +81,35 @@ test('session-start card stays under the 300-token budget and states root, versi
   for (const fact of ['chemx 1.2.3', 'root /repo', 'B (84/100) over 120 files, 2h ago', 'Ratchet (cli): 5 rules, ceiling 125', 'WARNING: 2 chemx MCP server(s)']) assert.ok(card.includes(fact), fact);
   const minimal = buildSessionCard({ ...STATUS, audit: null, ratchet: null, servers: null, mcpLaunch: { ok: false, summary: 'chemical-x not configured' } });
   assert.match(minimal, /MCP launch: chemical-x not configured\. Run chemx doctor --fix\./);
-  assert.doesNotMatch(minimal, /Last audit|Ratchet|WARNING/);
+  assert.doesNotMatch(minimal, /Last audit|Ratchet|WARNING|Team /);
+  assert.match(card, /Edit with chemx patch\/write/);
+  assert.doesNotMatch(card, /Native Read\/Edit are always allowed/);
+});
+
+test('session-start card keeps the team brief and routing lines inside the budget with a worst-case team', () => {
+  const many = (count, render) => ({ count, items: Array.from({ length: 3 }, (_, index) => render(index)) });
+  const team = {
+    agentId: '@claude-3f9a1c7e',
+    claims: many(25, (index) => ({ id: 2000 + index, title: 'T'.repeat(200), status: 'in_progress' })),
+    myLocks: { count: 4, items: [] },
+    unreadDms: 97,
+    othersLocks: many(40, (index) => ({ file: `cli/${'deep/'.repeat(20)}file-${index}.js`, holder: '@peer' })),
+    latestHandoff: { from: '@previous', at: Date.now(), taskId: 7, message: 'word '.repeat(500) },
+  };
+  const card = buildSessionCard({ ...STATUS, mcpLaunch: { ok: false, summary: 'chemical-x not configured' }, team });
+  assert.ok(card.length <= CARD_CHAR_BUDGET && card.length / 4 < 300, `card is ${card.length} chars`);
+  assert.match(card, /Team @claude-3f9a1c7e: claims 25/);
+  assert.match(card, /Guard bypass: .*Edit with chemx patch\/write \(they honour team locks\)\.$/, 'routing lines are never cut');
+});
+
+test('session-start exports the session handle to CLAUDE_ENV_FILE and briefs from the project db', async () => {
+  const root = tempProject();
+  const envFile = path.join(root, 'claude-env.sh');
+  const env = { CLAUDE_PROJECT_DIR: root, CHEMX_PROC_ROOT: path.join(root, 'no-proc'), CLAUDE_ENV_FILE: envFile };
+  const bare = (await runSessionStart({ session_id: 'abcdef12-3456' }, env)).hookSpecificOutput.additionalContext;
+  assert.match(fs.readFileSync(envFile, 'utf-8'), /^export CHEMX_AGENT_ID=@claude-abcdef12\nexport CHEMX_SESSION_ID=abcdef12-3456\n$/);
+  assert.doesNotMatch(bare, /Team /, 'no db, no brief');
+  assert.equal(fs.existsSync(path.join(root, '.chemx', 'index.db')), false, 'the hook never creates a db');
 });
 
 test('statusline is one plain line with grade, ratchet and stale-server state', () => {

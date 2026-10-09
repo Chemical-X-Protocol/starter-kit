@@ -4,6 +4,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { isUsableProjectRoot } from '../sqlite-memory.js';
 
 const CURSOR_FILE = path.join('.chemx', 'friction.cursor');
 const LINE_LIMIT = 220;
@@ -14,8 +15,10 @@ export const summariseFriction = (entries) => {
   const byReason = {};
   for (const entry of entries) {
     byKind[entry.kind] = (byKind[entry.kind] ?? 0) + 1;
-    if (entry.rule) byRule[entry.rule] = (byRule[entry.rule] ?? 0) + 1;
-    if (entry.reason) byReason[entry.reason] = (byReason[entry.reason] ?? 0) + 1;
+    const hasRule = Boolean(entry.rule);
+    const hasReason = Boolean(entry.reason);
+    if (hasRule) byRule[entry.rule] = (byRule[entry.rule] ?? 0) + 1;
+    if (hasReason) byReason[entry.reason] = (byReason[entry.reason] ?? 0) + 1;
   }
   return { total: entries.length, byKind, byRule, byReason };
 };
@@ -33,6 +36,8 @@ const readCursor = (root) => {
 };
 
 export const exportFriction = ({ root, entries, target, dryRun = false }) => {
+  const isUsableRoot = isUsableProjectRoot(root);
+  if (!isUsableRoot) return { appended: 0, pending: 0, lines: [] };
   const cursor = readCursor(root);
   const fresh = entries.filter((entry) => String(entry.ts ?? '') > cursor);
   const lines = fresh.map(toMarkdownLine);

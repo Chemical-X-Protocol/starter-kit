@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { openIndexDb, syncViolationsIndex } from './search-db.js';
+import { openIndexDb, syncViolationsIndex, queryViolations, inspectIndexedFile, upsertFileIndex } from './search-db.js';
 import { assessAuditFreshness } from './search-commands-hazards.js';
 
 const VIOLATION = { filePath: 'src/mechanics/useAuth.ts', rule: 'R', severity: 'HIGH', pillar: 'p', line: 1, hazard: 'h', directive: 'd' };
@@ -84,4 +84,24 @@ test('q hazards <file>: an unchanged file inside the audited scope passes', () =
     assert.equal(freshness.relPath, 'src/big.ts');
     assert.equal(freshness.auditScope, 'src');
   });
+});
+
+test('queryViolations: delimiter-bounded filePath match prevents false positives', () => {
+  const db = openIndexDb(':memory:');
+  syncViolationsIndex(db, [
+    { filePath: 'src/user.ts', rule: 'R1', severity: 'HIGH', pillar: 'p', line: 1, hazard: 'h1', directive: 'd' },
+    { filePath: 'src/super-user.ts', rule: 'R2', severity: 'HIGH', pillar: 'p', line: 2, hazard: 'h2', directive: 'd' },
+    { filePath: 'src/user.ts.bak', rule: 'R3', severity: 'HIGH', pillar: 'p', line: 3, hazard: 'h3', directive: 'd' }
+  ]);
+  const userResults = queryViolations(db, { filePath: 'user.ts' });
+  assert.equal(userResults.length, 1);
+  assert.equal(userResults[0].filePath, 'src/user.ts');
+});
+
+test('inspectIndexedFile: delimiter-bounded path match prevents false positives', () => {
+  const db = openIndexDb(':memory:');
+  upsertFileIndex(db, { path: 'src/super-a.ts', mtime: 1, size: 10, tier: 'utility', lines: 1, chars: 10, symbols: [], imports: [] });
+  upsertFileIndex(db, { path: 'src/a.ts', mtime: 1, size: 10, tier: 'utility', lines: 1, chars: 10, symbols: [], imports: [] });
+  const inspected = inspectIndexedFile(db, 'a.ts');
+  assert.equal(inspected.path, 'src/a.ts');
 });

@@ -24,7 +24,9 @@ export const migrateVdsColumns = (db) => {
     ['vds_phase', "TEXT NOT NULL DEFAULT 'planning'"],
     ['vds_status', "TEXT NOT NULL DEFAULT 'ready'"],
     ['task_url', "TEXT NOT NULL DEFAULT ''"],
-    ['sprint_tag', "TEXT NOT NULL DEFAULT ''"]
+    ['sprint_tag', "TEXT NOT NULL DEFAULT ''"],
+    // Capability tier (light | standard | deep); NULL means not yet assessed.
+    ['needs', 'TEXT']
   ]);
 };
 

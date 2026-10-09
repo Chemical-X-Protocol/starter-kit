@@ -1,20 +1,11 @@
-/**
- * Chemical X Protocol: Forum Categories and Postbit Data Engine
- */
-const DEFAULT_MODEL = 'Gemini 3.8 Flash', DEFAULT_SIG = 'Chemical X Swarm Agent // Autonomous Molecular Worker';
+// Chemical X Protocol: Forum Categories and Postbit Data Engine.
+import { NOT_ARCHIVED_SQL } from './team/team-db-feed.js';
 
-const KNOWN_AGENTS = {
-  '@orchestrator': { name: 'Swarm Orchestrator', role: 'orchestrator', model: 'Gemini 3.8 Flash', userTitle: 'Swarm Orchestrator' },
-  '@teamwork-lead': { name: 'Teamwork Lead', role: 'coordinator', model: 'Gemini 3.8 Flash', userTitle: 'Swarm Coordinator' },
-  '@victory-auditor': { name: 'Victory Auditor', role: 'auditor', model: 'Gemini 3.8 Flash', userTitle: 'Forensic Auditor' },
-  '@frontend-engineer': { name: 'Frontend Specialist', role: 'specialist', model: 'Gemini 3.8 Flash', userTitle: 'UI Specialist' },
-  '@database-specialist': { name: 'Database Specialist', role: 'specialist', model: 'Gemini 3.8 Flash', userTitle: 'DB Specialist' },
-  '@sentinel': { name: 'System Sentinel', role: 'sentinel', model: 'Gemini 3.8 Flash', userTitle: 'System Sentinel' },
-  '@system': { name: 'Chemical X Core', role: 'system', model: 'Gemini 3.8 Flash', userTitle: 'System Engine' },
-  '@user': { name: 'Project Director', role: 'director', model: 'Human Operator', userTitle: 'Project Director' }
-};
+export const UNKNOWN_LABEL = 'Unknown';
 
 const ROLE_TITLES = { orchestrator: 'Swarm Orchestrator', coordinator: 'Swarm Coordinator', auditor: 'Forensic Auditor', director: 'Project Director', sentinel: 'System Sentinel', system: 'System Engine', specialist: 'Domain Specialist', worker: 'Core Implementer' };
+const LEAD_ROLES = new Set(['coordinator', 'orchestrator', 'director']);
+const STATUS_BEACONS = new Set(['busy', 'offline']);
 
 const resolveUserTitle = (role, metaTitle) => {
   if (metaTitle) return metaTitle;
@@ -24,9 +15,13 @@ const resolveUserTitle = (role, metaTitle) => {
 };
 
 const resolveStatusBeacon = (status) => {
-  if (status === 'busy') return 'busy';
-  if (status === 'offline') return 'offline';
-  return 'idle';
+  const isKnownBeacon = STATUS_BEACONS.has(status);
+  return isKnownBeacon ? status : 'idle';
+};
+
+const parseMeta = (metadata) => {
+  const isText = typeof metadata === 'string';
+  return isText ? JSON.parse(metadata || '{}') : (metadata || {});
 };
 
 export const STANDARD_CATEGORIES = [
@@ -37,44 +32,48 @@ export const STANDARD_CATEGORIES = [
   { id: 'general', name: 'General Chat', desc: 'Agent feed chatter, status broadcasts, and swarm banter.' }
 ];
 
-export const getForumCategories = (db) => {
-  if (!db) return STANDARD_CATEGORIES.map((c) => ({ ...c, threadsCount: 0, postsCount: 0, lastPostTimestamp: Date.now(), authorBadge: '@system' }));
-  const now = Date.now();
-  const feedCount = db.prepare('SELECT COUNT(*) as c FROM agent_feed').get()?.c || 0;
-  const taskCount = db.prepare('SELECT COUNT(*) as c FROM agent_tasks').get()?.c || 0;
-  const activeTasks = db.prepare("SELECT COUNT(*) as c FROM agent_tasks WHERE status IN ('in_progress', 'queued')").get()?.c || 0;
-  const blockedTasks = db.prepare("SELECT COUNT(*) as c FROM agent_tasks WHERE status = 'blocked' OR priority = 1").get()?.c || 0;
-  const leaseCount = db.prepare('SELECT COUNT(*) as c FROM file_leases').get()?.c || 0;
-  const queueCount = db.prepare('SELECT COUNT(*) as c FROM file_lock_queue').get()?.c || 0;
-  const latestFeed = db.prepare('SELECT timestamp, author_id FROM agent_feed ORDER BY id DESC LIMIT 1').get();
-  const latestBroadcast = db.prepare("SELECT timestamp, author_id FROM agent_feed WHERE event_type = 'broadcast' ORDER BY id DESC LIMIT 1").get();
-  const latestTask = db.prepare('SELECT updated_at, assigned_agent_id FROM agent_tasks ORDER BY updated_at DESC LIMIT 1').get();
-  const latestLease = db.prepare('SELECT acquired_at, locked_by FROM file_leases ORDER BY acquired_at DESC LIMIT 1').get();
+const emptyCategory = (category) => ({ ...category, threadsCount: 0, postsCount: 0, lastPostTimestamp: 0, authorBadge: UNKNOWN_LABEL });
+const countOf = (db, sql) => db.prepare(sql).get()?.c || 0;
+const latestOf = (row, atKey, byKey) => ({ at: Number(row?.[atKey] || 0), by: row?.[byKey] || UNKNOWN_LABEL });
 
+export const getForumCategories = (db) => {
+  if (!db) return STANDARD_CATEGORIES.map(emptyCategory);
+  const liveFeed = `FROM agent_feed WHERE ${NOT_ARCHIVED_SQL}`;
+  const blockedWhere = "WHERE status = 'blocked' OR priority = 1";
+  const feedCount = countOf(db, `SELECT COUNT(*) as c ${liveFeed}`);
+  const broadcastCount = countOf(db, `SELECT COUNT(*) as c ${liveFeed} AND event_type = 'broadcast'`);
+  const taskCount = countOf(db, 'SELECT COUNT(*) as c FROM agent_tasks');
+  const activeTasks = countOf(db, "SELECT COUNT(*) as c FROM agent_tasks WHERE status IN ('in_progress', 'queued')");
+  const blockedTasks = countOf(db, `SELECT COUNT(*) as c FROM agent_tasks ${blockedWhere}`);
+  const leaseCount = countOf(db, 'SELECT COUNT(*) as c FROM file_leases');
+  const queueCount = countOf(db, 'SELECT COUNT(*) as c FROM file_lock_queue');
+  const feed = latestOf(db.prepare(`SELECT timestamp, author_id ${liveFeed} ORDER BY id DESC LIMIT 1`).get(), 'timestamp', 'author_id');
+  const broadcast = latestOf(db.prepare(`SELECT timestamp, author_id ${liveFeed} AND event_type = 'broadcast' ORDER BY id DESC LIMIT 1`).get(), 'timestamp', 'author_id');
+  const task = latestOf(db.prepare('SELECT updated_at, assigned_agent_id FROM agent_tasks ORDER BY updated_at DESC LIMIT 1').get(), 'updated_at', 'assigned_agent_id');
+  const blocker = latestOf(db.prepare(`SELECT updated_at, assigned_agent_id FROM agent_tasks ${blockedWhere} ORDER BY updated_at DESC LIMIT 1`).get(), 'updated_at', 'assigned_agent_id');
+  const lease = latestOf(db.prepare('SELECT acquired_at, locked_by FROM file_leases ORDER BY acquired_at DESC LIMIT 1').get(), 'acquired_at', 'locked_by');
+  const [announcements, directives, warRoom, locks, general] = STANDARD_CATEGORIES;
   return [
-    { id: 'announcements', name: 'Announcements', desc: STANDARD_CATEGORIES[0].desc, threadsCount: 1, postsCount: Math.max(1, db.prepare("SELECT COUNT(*) as c FROM agent_feed WHERE event_type = 'broadcast'").get()?.c || 0), lastPostTimestamp: latestBroadcast?.timestamp || now, authorBadge: latestBroadcast?.author_id || '@orchestrator' },
-    { id: 'directives', name: 'Active Swarm Directives', desc: STANDARD_CATEGORIES[1].desc, threadsCount: activeTasks, postsCount: taskCount, lastPostTimestamp: latestTask?.updated_at || now, authorBadge: latestTask?.assigned_agent_id || '@coordinator' },
-    { id: 'war-room', name: 'War Room', desc: STANDARD_CATEGORIES[2].desc, threadsCount: blockedTasks, postsCount: blockedTasks, lastPostTimestamp: now, authorBadge: '@sentinel' },
-    { id: 'locks', name: 'Lock Registry', desc: STANDARD_CATEGORIES[3].desc, threadsCount: leaseCount, postsCount: leaseCount + queueCount, lastPostTimestamp: latestLease?.acquired_at || now, authorBadge: latestLease?.locked_by || '@coordinator' },
-    { id: 'general', name: 'General Chat', desc: STANDARD_CATEGORIES[4].desc, threadsCount: Math.max(1, Math.ceil(feedCount / 5)), postsCount: feedCount, lastPostTimestamp: latestFeed?.timestamp || now, authorBadge: latestFeed?.author_id || '@frontend-engineer' }
+    { ...announcements, threadsCount: Math.min(1, broadcastCount), postsCount: broadcastCount, lastPostTimestamp: broadcast.at, authorBadge: broadcast.by },
+    { ...directives, threadsCount: activeTasks, postsCount: taskCount, lastPostTimestamp: task.at, authorBadge: task.by },
+    { ...warRoom, threadsCount: blockedTasks, postsCount: blockedTasks, lastPostTimestamp: blocker.at, authorBadge: blocker.by },
+    { ...locks, threadsCount: leaseCount, postsCount: leaseCount + queueCount, lastPostTimestamp: lease.at, authorBadge: lease.by },
+    { ...general, threadsCount: Math.ceil(feedCount / 5), postsCount: feedCount, lastPostTimestamp: feed.at, authorBadge: feed.by }
   ];
 };
 
 export const resolveAgentMeta = (agent, leases = [], feedPosts = []) => {
-  const meta = typeof agent.metadata === 'string' ? JSON.parse(agent.metadata || '{}') : (agent.metadata || {});
-  const known = KNOWN_AGENTS[agent.id] || {};
-  const model = meta.model || known.model || DEFAULT_MODEL;
-  const signature = meta.signature || known.signature || (agent.role === 'coordinator' ? 'Swarm DAG Coordinator // File Lease Registry' : DEFAULT_SIG);
-  const userTitle = resolveUserTitle(agent.role || known.role, meta.userTitle || known.userTitle);
-  const rankStars = (agent.role === 'coordinator' || agent.role === 'orchestrator' || known.role === 'orchestrator' || known.role === 'director') ? '★★★★★' : '★★★★☆';
+  const meta = parseMeta(agent.metadata);
+  const role = agent.role || '';
+  const isLead = LEAD_ROLES.has(role);
   const held = leases.filter((l) => l.lockedBy === agent.id).map((l) => l.filePath);
   const postsCount = feedPosts.filter((p) => (p.author || p.author_id) === agent.id).length;
-  const statusBeacon = resolveStatusBeacon(agent.status);
-
   return {
-    id: agent.id, name: agent.name || known.name || agent.id, role: agent.role || known.role || 'worker', status: agent.status || 'idle',
-    statusBeacon, model, userTitle, rankStars, joinDate: 'Sep 2026', postsCount, heldLeases: held,
-    currentTaskId: agent.currentTaskId || agent.current_task_id || null, signature
+    id: agent.id, name: agent.name || agent.id, role: role || UNKNOWN_LABEL, status: agent.status || 'idle',
+    statusBeacon: resolveStatusBeacon(agent.status), model: meta.model || UNKNOWN_LABEL,
+    userTitle: resolveUserTitle(role, meta.userTitle), rankStars: isLead ? '★★★★★' : '★★★★☆',
+    joinDate: meta.joinDate || '', lastSeen: Number(agent.heartbeat || 0), postsCount, heldLeases: held,
+    currentTaskId: agent.currentTaskId || agent.current_task_id || null, signature: meta.signature || ''
   };
 };
 

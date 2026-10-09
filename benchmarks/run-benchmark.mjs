@@ -8,7 +8,9 @@ const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, '..');
 
 export const estimateTokens = (text) => {
-  if (!text || typeof text !== 'string') return 0;
+  const isString = typeof text === 'string';
+  const hasText = isString && Boolean(text);
+  if (!hasText) return 0;
   return Math.round(text.length / 3.8);
 };
 
@@ -81,13 +83,15 @@ export const runBenchmarks = () => {
 
   for (const cap of capsuleTargets) {
     const fullDir = path.resolve(rootDir, cap.dir);
-    if (!fs.existsSync(fullDir)) continue;
+    const dirExists = fs.existsSync(fullDir);
+    if (!dirExists) continue;
 
     const files = fs.readdirSync(fullDir, { recursive: true });
     let totalCapContent = '';
     for (const f of files) {
       const p = path.join(fullDir, f);
-      if (fs.statSync(p).isFile()) {
+      const isFile = fs.statSync(p).isFile();
+      if (isFile) {
         totalCapContent += `// File: ${f}\n` + fs.readFileSync(p, 'utf-8') + '\n';
       }
     }
@@ -187,7 +191,7 @@ const avgReduction = Math.round(((totalTrad - totalChemx) / totalTrad) * 100);
 
 const readmeContent = `# Chemical X Protocol: Empirical Token Reduction Benchmark
 
-> *"Small, single-purpose files aren't just cleaner - they're cheaper to work with. Every file opened loads its full contents into context; a smaller file means less scanning, less irrelevant code loaded per task, and lower token cost per edit, compounding across a session."* — Directive 1.A
+> *"Small, single-purpose files aren't just cleaner - they're cheaper to work with. Every file opened loads its full contents into context; a smaller file means less scanning, less irrelevant code loaded per task, and lower token cost per edit, compounding across a session."* - Directive 1.A
 
 This benchmark suite empirically validates the **70%–92% token reduction** delivered by Chemical X AST-guided navigation, surgical readers, and compact verification cards.
 
@@ -230,12 +234,13 @@ node benchmarks/run-benchmark.mjs
 `;
 
 const benchmarkDir = path.resolve(rootDir, 'benchmarks');
-if (!fs.existsSync(benchmarkDir)) {
+const benchmarkDirExists = fs.existsSync(benchmarkDir);
+if (!benchmarkDirExists) {
   fs.mkdirSync(benchmarkDir, { recursive: true });
 }
 
 fs.writeFileSync(path.join(benchmarkDir, 'README.md'), readmeContent, 'utf-8');
-console.log('\n✔ Successfully executed token reduction benchmark suite:');
-console.log(table);
-console.log(`\nAverage Token Reduction: ${avgReduction}%`);
-console.log(`Report updated at: ${path.relative(rootDir, path.join(benchmarkDir, 'README.md'))}\n`);
+process.stdout.write('\n✔ Successfully executed token reduction benchmark suite:\n');
+process.stdout.write(table + '\n');
+process.stdout.write(`\nAverage Token Reduction: ${avgReduction}%\n`);
+process.stdout.write(`Report updated at: ${path.relative(rootDir, path.join(benchmarkDir, 'README.md'))}\n\n`);

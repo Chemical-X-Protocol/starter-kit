@@ -29,8 +29,11 @@ import { resolveTaskTier } from './task-tier.js';
 import { resolveDependencyStates } from './task-detail-sections.js';
 import { buildCompletionOptions, describeCompletion, describeStatusUpdate, writeTaskResult } from './task-completion-output.js';
 import { refuseUnknownTask } from './team-task-guard.js';
+import { checkNeedsInput } from './team-needs.js';
+import { handleProfileCommand, handleHandoffCommand } from './team-commands-profile.js';
+import { handleDispatchCommand } from './team-commands-dispatch.js';
 
-const ARG_VAL_FLAGS = ['--target', '--as', '--to', '--agent', '--since', '--limit', '--thread', '--task', '--parent', '--rule', '--priority', '--prio', '--moscow', '--url', '--pid'];
+const ARG_VAL_FLAGS = ['--target', '--as', '--to', '--agent', '--since', '--limit', '--thread', '--task', '--parent', '--rule', '--priority', '--prio', '--moscow', '--needs', '--url', '--pid'];
 
 export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => {
   const db = openIndexDb(cwd);
@@ -147,6 +150,12 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
     if (unknownTask) return unknownTask;
     const isListAction = taskAction === 'list';
     if (isListAction) {
+      const listNeeds = checkNeedsInput(flags.needs);
+      const hasListNeedsError = Boolean(listNeeds.error);
+      if (hasListNeedsError) {
+        if (isCli) process.stderr.write(`\x1b[31m✕ ${listNeeds.error}\x1b[0m\n`);
+        return { error: listNeeds.error };
+      }
       const listOptions = resolveListOptions({ status: flags.status, all: flags.all, limit: flags.limit });
       const tasks = listTasks(db, {
         status: listOptions.status,
@@ -155,7 +164,8 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
         rule: flags.rule,
         priority: flags.priority,
         sprint_tag: flags.sprint,
-        moscow: flags.moscow
+        moscow: flags.moscow,
+        needs: listNeeds.needs
       });
       const { page, total } = selectTaskPage(tasks, listOptions);
       if (flags.isJson) {
@@ -284,6 +294,12 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
     }
     const isCreateAction = ['create', 'add', 'new'].includes(taskAction);
     if (isCreateAction) {
+      const createNeeds = checkNeedsInput(flags.needs);
+      const hasCreateNeedsError = Boolean(createNeeds.error);
+      if (hasCreateNeedsError) {
+        if (isCli) process.stderr.write(`\x1b[31m✕ ${createNeeds.error}\x1b[0m\n`);
+        return { error: createNeeds.error };
+      }
       const title = flags.title || [...nonFlagPositional.slice(1), ...titleWords].join(' ') || 'Untitled Task';
       const authorHandle = flags.as || '@agent';
       registerAgent(db, { id: authorHandle, role: 'contributor' });
@@ -302,6 +318,7 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
         dependencies: flags.dependencies || [],
         sprint_tag: flags.sprint || '',
         moscow: flags.moscow,
+        needs: createNeeds.needs,
         rule_id: flags.rule || ''
       });
       if (task) {
@@ -448,8 +465,23 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
     return ablation;
   }
 
+  const isProfile = subCommand === 'profile';
+  if (isProfile) {
+    return handleProfileCommand(db, nonFlagPositional, flags, isCli);
+  }
+
+  const isHandoff = subCommand === 'handoff';
+  if (isHandoff) {
+    return handleHandoffCommand(db, nonFlagPositional, flags, isCli, titleWords);
+  }
+
+  const isDispatch = subCommand === 'dispatch';
+  if (isDispatch) {
+    return handleDispatchCommand(db, flags, isCli, cwd);
+  }
+
   if (isCli) {
-    process.stderr.write(`\x1b[31m✕ Unknown team command: "${subCommand}". Available commands: status, task, feed, post, lock, unlock, triage, inbox, dm, benchmark\x1b[0m\n`);
+    process.stderr.write(`\x1b[31m✕ Unknown team command: "${subCommand}". Available commands: status, task, feed, post, lock, unlock, triage, inbox, dm, profile, handoff, dispatch, benchmark\x1b[0m\n`);
   }
   return { error: `Unknown team command: ${subCommand}` };
 };

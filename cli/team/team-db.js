@@ -35,6 +35,8 @@ export {
 import { describeLease } from './team-db-locks.js';
 import { queryFeed } from './team-db-feed.js';
 
+const RECENT_FEED_LIMIT = 4;
+
 // Read-only: dashboards and SSE refreshes never delete leases (see cleanExpiredLeases for the write path).
 export const getSwarmStatus = (db) => {
   if (!db) return null;
@@ -77,7 +79,9 @@ export const getSwarmStatus = (db) => {
     cost_usd: Number(Number(tokenRow.cost).toFixed(6))
   };
 
-  const recentFeed = queryFeed(db, { limit: 5 });
+  // Latest mode: the newest rows in chronological order. Four matches what the status card prints
+  // (formatSwarmStatusCard takes slice(0, 4)), so the card never drops the newest event.
+  const recentFeed = queryFeed(db, { limit: RECENT_FEED_LIMIT });
 
   return {
     agents: agentSummary,

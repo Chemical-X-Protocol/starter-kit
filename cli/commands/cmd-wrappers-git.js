@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
+import { chemxDbPathFor } from '../sqlite-memory.js';
 
 const SOURCE_EXTENSIONS = new Set(['.js', '.jsx', '.ts', '.tsx', '.vue', '.svelte', '.mjs', '.cjs']);
 const MAX_MICRO_SYNC_FILES = 5;
@@ -9,14 +10,16 @@ const MAX_MICRO_SYNC_FILES = 5;
 // Opportunistically re-index up to 5 modified source files. Best effort by design.
 // Only runs when the project already has an index, and loads the AST stack lazily,
 // so `chemx d` stays cheap.
-const tryMicroSyncModifiedFiles = async (cwd) => {
-  const hasIndexDb = fs.existsSync(path.join(cwd, '.chemx', 'index.db'));
+export const tryMicroSyncModifiedFiles = async (cwd) => {
+  const indexDbPath = chemxDbPathFor(cwd);
+  const hasIndexDb = Boolean(indexDbPath) && fs.existsSync(indexDbPath);
   if (!hasIndexDb) return;
   let statusOut = '';
   try {
     statusOut = execFileSync('git', ['status', '--porcelain'], { cwd, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 1500 });
   } catch (err) {
-    if (process.env.CHEMX_DEBUG) process.stderr.write(`[d] micro-sync skipped: ${err.message}\n`);
+    const isDebug = Boolean(process.env.CHEMX_DEBUG);
+    if (isDebug) process.stderr.write(`[d] micro-sync skipped: ${err.message}\n`);
     return;
   }
   const modified = statusOut.split('\n').map((line) => line.slice(3).trim()).filter((f) => SOURCE_EXTENSIONS.has(path.extname(f)));
@@ -27,14 +30,16 @@ const tryMicroSyncModifiedFiles = async (cwd) => {
     try {
       syncSingleFileIndex(file, cwd);
     } catch (err) {
-      if (process.env.CHEMX_DEBUG) process.stderr.write(`[d] micro-sync failed for ${file}: ${err.message}\n`);
+      const isDebug = Boolean(process.env.CHEMX_DEBUG);
+      if (isDebug) process.stderr.write(`[d] micro-sync failed for ${file}: ${err.message}\n`);
     }
   }
 };
 
 export const runGit = (gitArgs, cwd) => {
   const res = spawnSync('git', gitArgs, { cwd, encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] });
-  if (res.error) return { stdout: '', code: 1, error: `git error: ${res.error.message}` };
+  const hasSpawnError = Boolean(res.error);
+  if (hasSpawnError) return { stdout: '', code: 1, error: `git error: ${res.error.message}` };
   const code = res.status ?? 1;
   const isFailure = code !== 0;
   const stderr = (res.stderr || '').trim();
@@ -44,8 +49,10 @@ export const runGit = (gitArgs, cwd) => {
 
 export const emitWrapperResult = (result, isCli) => {
   if (!isCli) return result;
-  if (result.output) process.stdout.write(result.output);
-  if (result.error) process.stderr.write(`${result.error}\n`);
+  const hasOutput = Boolean(result.output);
+  const hasError = Boolean(result.error);
+  if (hasOutput) process.stdout.write(result.output);
+  if (hasError) process.stderr.write(`${result.error}\n`);
   return result;
 };
 

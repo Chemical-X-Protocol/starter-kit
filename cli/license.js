@@ -47,7 +47,8 @@ export const verifyWithGatekeeper = async (keyOrUser, deviceId = null) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ key: keyOrUser, deviceId: effectiveDeviceId })
     });
-    if (!res.ok) return { valid: false };
+    const isResponseOk = res.ok;
+    if (!isResponseOk) return { valid: false };
     return await res.json();
   } catch {
     return { valid: false };
@@ -80,7 +81,8 @@ export const saveLicenseKey = (licenseKey) => {
 const persistEnteredKey = (rawKey) => {
   const normalizedKey = rawKey.trim().toUpperCase();
   const saveResult = saveLicenseKey(normalizedKey);
-  if (saveResult.saved) {
+  const isSaved = Boolean(saveResult.saved);
+  if (isSaved) {
     process.stdout.write(`\x1b[32m✔ License saved to ${saveResult.path} (mode 0600)\x1b[0m\n\n`);
   }
   return { licensed: true, key: normalizedKey };
@@ -133,32 +135,39 @@ export const obtainLicenseKey = async (rawArgs = [], onRunAudit = null) => {
       'Chemical X Scaffolding Requires a Paid License:'
     );
 
-    if (choice.startsWith('1.')) {
+    const isLearnChoice = choice.startsWith('1.');
+    if (isLearnChoice) {
       process.stdout.write(`\x1b[36mOpening Chemical X Portal in default browser:\x1b[0m ${URL_LEARN}\n`);
       openBrowser(URL_LEARN);
       process.stdout.write('\nOnce completed, paste your Sponsor / VIP License Key below.\n');
       return gumInput('License Key (CX-XXXX-XXXX-XXXX):', 'CX-XXXX-XXXX-XXXX');
     }
 
-    if (choice.startsWith('2.')) {
+    const isStandardChoice = choice.startsWith('2.');
+    if (isStandardChoice) {
       process.stdout.write(`\x1b[36mOpening Standard Vault checkout (Single Dev License) in default browser:\x1b[0m ${URL_STANDARD}\n`);
       openBrowser(URL_STANDARD);
       process.stdout.write('\nOnce completed, paste your Sponsor / VIP License Key below.\n');
       return gumInput('License Key (CX-XXXX-XXXX-XXXX):', 'CX-XXXX-XXXX-XXXX');
     }
 
-    if (choice.startsWith('3.')) {
+    const isMasterChoice = choice.startsWith('3.');
+    if (isMasterChoice) {
       process.stdout.write(`\x1b[36mOpening Team Power Puff checkout (Unlimited Lifetime) in default browser:\x1b[0m ${URL_MASTER}\n`);
       openBrowser(URL_MASTER);
       process.stdout.write('\nOnce completed, paste your Sponsor / VIP License Key below.\n');
       return gumInput('License Key (CX-XXXX-XXXX-XXXX):', 'CX-XXXX-XXXX-XXXX');
     }
 
-    if (choice.startsWith('4.')) {
+    const isEnterKeyChoice = choice.startsWith('4.');
+    if (isEnterKeyChoice) {
       return gumInput('License Key (CX-XXXX-XXXX-XXXX):', 'CX-XXXX-XXXX-XXXX');
     }
 
-    if (choice.startsWith('5.') && onRunAudit) {
+    const isAuditChoice = choice.startsWith('5.');
+    const hasAuditHandler = Boolean(onRunAudit);
+    const shouldRunAudit = isAuditChoice && hasAuditHandler;
+    if (shouldRunAudit) {
       await onRunAudit(null, true);
     }
 
@@ -181,33 +190,41 @@ export const obtainLicenseKey = async (rawArgs = [], onRunAudit = null) => {
   const selection = await promptQuestion('Select option [1-6] (default: 1): ');
   const effectiveChoice = selection.trim() || '1';
 
-  if (effectiveChoice === '1') {
+  const isChoice1 = effectiveChoice === '1';
+  if (isChoice1) {
     process.stdout.write(`Opening: ${URL_LEARN}\n`);
     openBrowser(URL_LEARN);
     return promptQuestion('Enter License Key after review (or press Enter to exit): ');
   }
 
-  if (effectiveChoice === '2') {
+  const isChoice2 = effectiveChoice === '2';
+  if (isChoice2) {
     process.stdout.write(`Opening: ${URL_STANDARD}\n`);
     openBrowser(URL_STANDARD);
     return promptQuestion('Enter License Key after purchase: ');
   }
 
-  if (effectiveChoice === '3') {
+  const isChoice3 = effectiveChoice === '3';
+  if (isChoice3) {
     process.stdout.write(`Opening: ${URL_MASTER}\n`);
     openBrowser(URL_MASTER);
     return promptQuestion('Enter License Key after purchase: ');
   }
 
-  if (effectiveChoice === '4') {
+  const isChoice4 = effectiveChoice === '4';
+  if (isChoice4) {
     return promptQuestion('Enter License Key (CX-XXXX-XXXX-XXXX): ');
   }
 
-  if (effectiveChoice === '5' && onRunAudit) {
+  const isChoice5 = effectiveChoice === '5';
+  const hasAuditHandler = Boolean(onRunAudit);
+  const shouldRunAuditPrompt = isChoice5 && hasAuditHandler;
+  if (shouldRunAuditPrompt) {
     await onRunAudit(null, true);
   }
 
-  if (effectiveChoice === '6') {
+  const isChoice6 = effectiveChoice === '6';
+  if (isChoice6) {
     return LICENSE_CANCELLED;
   }
 
@@ -257,29 +274,39 @@ export const checkOrPromptEvaluation = async (actionLabel = 'generate capsule', 
       `Evaluation Mode: ${actionLabel}`
     );
 
-    if (choice.startsWith('1.') || !choice) {
+    const isContinueChoice = choice.startsWith('1.');
+    const isNoChoice = !choice;
+    const shouldContinueEval = isContinueChoice || isNoChoice;
+    if (shouldContinueEval) {
       return { licensed: false, proceed: true };
     }
 
-    if (choice.startsWith('2.')) {
+    const isEnterKeyChoice = choice.startsWith('2.');
+    if (isEnterKeyChoice) {
       const enteredKey = gumInput('License Key (CX-XXXX-XXXX-XXXX):', 'CX-XXXX-XXXX-XXXX');
-      if (enteredKey && enteredKey !== 'CX-XXXX-XXXX-XXXX') {
+      const hasEnteredKey = Boolean(enteredKey);
+      const isPlaceholderKey = enteredKey === 'CX-XXXX-XXXX-XXXX';
+      const isValidKeyInput = hasEnteredKey && !isPlaceholderKey;
+      if (isValidKeyInput) {
         return persistEnteredKey(enteredKey);
       }
       return { licensed: false, proceed: true };
     }
 
-    if (choice.startsWith('3.')) {
+    const isBuyChoice = choice.startsWith('3.');
+    if (isBuyChoice) {
       openBrowser(URL_MASTER);
       process.stdout.write(`\x1b[36mOpened checkout in default browser:\x1b[0m ${URL_MASTER}\n`);
       const keyAfterBuy = gumInput('Enter License Key once purchased (or press Enter to skip):');
-      if (keyAfterBuy) {
+      const hasKeyAfterBuy = Boolean(keyAfterBuy);
+      if (hasKeyAfterBuy) {
         return persistEnteredKey(keyAfterBuy);
       }
       return { licensed: false, proceed: true };
     }
 
-    if (choice.startsWith('4.')) {
+    const isCancelChoice = choice.startsWith('4.');
+    if (isCancelChoice) {
       return { licensed: false, proceed: false, cancelled: true };
     }
 
@@ -298,28 +325,34 @@ export const checkOrPromptEvaluation = async (actionLabel = 'generate capsule', 
   const sel = await promptQuestion('Select option [1-4] (default: 1): ');
   const choice = sel.trim() || '1';
 
-  if (choice === '1') {
+  const isChoice1 = choice === '1';
+  if (isChoice1) {
     return { licensed: false, proceed: true };
   }
 
-  if (choice === '2') {
+  const isChoice2 = choice === '2';
+  if (isChoice2) {
     const entered = await promptQuestion('Enter License Key (CX-XXXX-XXXX-XXXX): ');
-    if (entered) {
+    const hasEntered = Boolean(entered);
+    if (hasEntered) {
       return persistEnteredKey(entered);
     }
     return { licensed: false, proceed: true };
   }
 
-  if (choice === '3') {
+  const isChoice3 = choice === '3';
+  if (isChoice3) {
     openBrowser(URL_MASTER);
     const entered = await promptQuestion('Enter License Key after purchase (or Enter to skip): ');
-    if (entered) {
+    const hasEntered = Boolean(entered);
+    if (hasEntered) {
       return persistEnteredKey(entered);
     }
     return { licensed: false, proceed: true };
   }
 
-  if (choice === '4') {
+  const isChoice4 = choice === '4';
+  if (isChoice4) {
     return { licensed: false, proceed: false, cancelled: true };
   }
 
@@ -347,7 +380,8 @@ const requestStarterKit = async (baseUrl, licenseKey, deviceId) => {
 
 const verifyViaGatekeeperFallback = async (licenseKey, deviceId, networkError) => {
   const gatekeeperCheck = await verifyWithGatekeeper(licenseKey, deviceId);
-  if (gatekeeperCheck.valid) {
+  const isValidGatekeeper = Boolean(gatekeeperCheck.valid);
+  if (isValidGatekeeper) {
     saveLicenseKey(licenseKey);
     process.stdout.write(
       `\x1b[32m✔ Verified via Gatekeeper for @${gatekeeperCheck.github_user || 'sponsor'} [Tier: ${gatekeeperCheck.tier}]\x1b[0m\n\n`
@@ -392,7 +426,8 @@ export const fetchStarterKitFiles = async (licenseKey) => {
 export const loadLocalBlueprintFiles = () => {
   const blueprintsDir = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../blueprints');
   const files = {};
-  if (!fs.existsSync(blueprintsDir)) return files;
+  const doesBlueprintsExist = fs.existsSync(blueprintsDir);
+  if (!doesBlueprintsExist) return files;
 
   const walk = (dir, base = '') => {
     const entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -409,4 +444,3 @@ export const loadLocalBlueprintFiles = () => {
   walk(blueprintsDir);
   return files;
 };
-

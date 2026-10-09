@@ -3,6 +3,7 @@ import { isStdoutTty } from '../terminal.js';
 import { currentRequestSignal } from '../request-context.js';
 import { scheduleTimeout } from '../timers.js';
 import { canSignalGroups, killTree, trackChild, untrackChild } from './child-registry.js';
+import { SLOT_OWNER_ENV } from '../test-slots.js';
 
 const DEFAULT_TIMEOUT_MS = 15 * 60 * 1000;
 const KILL_GRACE_MS = 2000;
@@ -28,6 +29,33 @@ const childEnv = (isRawStream, extraEnv = {}) => {
   return { ...parentEnv, ...colorEnv(isRawStream), ...extraEnv };
 };
 
+// Test runners must not see the caller's project or identity: findChemxDir honours
+// CHEMX_PROJECT_ROOT before the cwd, so a spec that opens a temp-dir db under an MCP server
+// (launched with that variable set) would write into the real project's team db.
+// Build, lint and typecheck commands keep the full environment.
+export const TEST_ISOLATED_ENV_KEYS = ['CHEMX_PROJECT_ROOT', 'CHEMX_AGENT_ID'];
+
+// A test run is one that asks for isolation, or one started by runWithinBudget (it always
+// stamps the slot-owner variable on the runner's env).
+export const isTestRunEnv = (options = {}) => {
+  const isRequested = options.isolateTestEnv === true;
+  const hasSlotOwner = Boolean(options.env?.[SLOT_OWNER_ENV]);
+  return isRequested || hasSlotOwner;
+};
+
+export const isolateTestEnv = (env) => {
+  const isolated = { ...env };
+  for (const key of TEST_ISOLATED_ENV_KEYS) delete isolated[key];
+  return isolated;
+};
+
+export const buildChildEnv = (isRawStream, options = {}) => {
+  const env = childEnv(isRawStream, options.env);
+  const isTestRun = isTestRunEnv(options);
+  if (!isTestRun) return env;
+  return isolateTestEnv(env);
+};
+
 // Runs a shell command with stdin closed (no runner can enter watch mode, wait on a prompt or
 // read the MCP JSON-RPC stream), a timeout, and cancellation through options.signal or the
 // current request context. The child gets its own process group (tracked by child-registry,
@@ -44,7 +72,7 @@ export const executeBuild = (command, cwd = process.cwd(), options = {}) => new 
   let stopReason = null;
   let isSettled = false;
 
-  const child = spawn(command, { shell: true, cwd, detached: canSignalGroups, stdio: ['ignore', 'pipe', 'pipe'], env: childEnv(isRawStream, options.env) });
+  const child = spawn(command, { shell: true, cwd, detached: canSignalGroups, stdio: ['ignore', 'pipe', 'pipe'], env: buildChildEnv(isRawStream, options) });
   trackChild(child);
 
   const stop = (reason) => {
@@ -58,7 +86,8 @@ export const executeBuild = (command, cwd = process.cwd(), options = {}) => new 
   const cancelTimeout = scheduleTimeout(() => stop('timeout'), timeoutMs);
   const onAbort = () => stop('cancelled');
   signal?.addEventListener('abort', onAbort, { once: true });
-  if (signal?.aborted) onAbort();
+  const isAlreadyAborted = Boolean(signal?.aborted);
+  if (isAlreadyAborted) onAbort();
 
   child.stdout.on('data', (chunk) => {
     const text = chunk.toString();

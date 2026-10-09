@@ -7,6 +7,7 @@ import {
   registerAgent
 } from '../team/team-db.js';
 import { formatSwarmStatusCard } from '../team/team-format.js';
+import { resolveAgentId } from '../team/agent-identity.js';
 
 export const handleChemxTeamStatus = async (args = {}, cwd = process.cwd()) => {
   const db = openIndexDb(cwd);
@@ -30,6 +31,7 @@ export const handleChemxTeamStatus = async (args = {}, cwd = process.cwd()) => {
 export const handleChemxTeamFeed = async (args = {}, cwd = process.cwd()) => {
   const db = openIndexDb(cwd);
   if (!db) return { error: 'sqlite_unavailable' };
+  // No sinceId: queryFeed returns the newest `limit` events (chronological), not the oldest.
   const events = queryFeed(db, {
     since_id: args.sinceId,
     thread_id: args.threadId,
@@ -43,7 +45,7 @@ export const handleChemxTeamFeed = async (args = {}, cwd = process.cwd()) => {
 export const handleChemxTeamPost = async (args = {}, cwd = process.cwd()) => {
   const db = openIndexDb(cwd);
   if (!db) return { error: 'sqlite_unavailable' };
-  const authorHandle = args.authorId || '@agent';
+  const authorHandle = resolveAgentId(args.authorId || args.as);
   registerAgent(db, { id: authorHandle, role: 'contributor' });
   return postFeedEvent(db, {
     message: args.message,

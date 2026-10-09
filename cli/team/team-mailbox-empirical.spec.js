@@ -5,6 +5,7 @@ import { initTeamSchema } from './team-schema.js';
 import { sendDirectMessage, getAgentMailbox, normalizeHandle } from './team-db-mailbox.js';
 import { createTask, claimTask, getTask } from './team-db-tasks.js';
 import { registerAgent, getAgent } from './team-db-agents.js';
+import { resolveAgentId } from './agent-identity.js';
 
 const setupDb = () => {
   const db = new DatabaseSync(':memory:');
@@ -41,7 +42,9 @@ test('empirical: handle normalization (@agent vs agent)', () => {
     recipient_id: 'eve',
     message: 'Message without author'
   });
-  assert.strictEqual(dm3.author_id, '@agent');
+  // No author: the caller's own identity (CHEMX_AGENT_ID or a per-process id), never a shared '@agent'.
+  assert.strictEqual(dm3.author_id, resolveAgentId());
+  assert.notStrictEqual(dm3.author_id, '@agent');
   assert.strictEqual(dm3.recipient_id, '@eve');
 
   assert.throws(() => sendDirectMessage(db, { author_id: 'alice', message: 'No recipient' }), {

@@ -10,6 +10,8 @@ import { resolvePackageManager } from './build/detector.js';
 import { resolveFramework } from './project-detector.js';
 import { getFrameworkConfig, buildScaffoldPackageJson, resolveScaffoldTarget } from './scaffold-frameworks.js';
 import { printInitHelp, printScaffoldHelp } from './help.js';
+import { readFlagValue } from './cli-args.js';
+import { writeGeneratedFiles } from './generator-writes.js';
 
 const CANCELLED_RESULT = Object.freeze({ status: STATUS.FAIL, cancelled: true, reason: 'Cancelled at the license prompt.' });
 
@@ -26,8 +28,26 @@ const resolveBlueprintFiles = async (licenseKey) => {
   return fetchStarterKitFiles(licenseKey);
 };
 
+// Writes every file only after each path clears the team-lock check (--as names the caller).
+// A lock held by another agent returns a FAIL result instead of a half-unpacked tree.
+const writeScaffoldFiles = (fullPaths, rawArgs) => {
+  const agentId = readFlagValue(rawArgs, ['--as']).value;
+  const files = fullPaths.map(([absPath, content]) => ({ absPath, content }));
+  const dirs = [...new Set(files.map((f) => path.dirname(f.absPath)))];
+  try {
+    writeGeneratedFiles({ dirs, files, cwd: process.cwd(), agentId });
+    return null;
+  } catch (err) {
+    const isLocked = err.code === 'CHEMX_FILE_LOCKED';
+    if (!isLocked) throw err;
+    process.stderr.write(`\x1b[31m✕ ${err.message}\x1b[0m\n`);
+    return { status: STATUS.FAIL, reason: err.message };
+  }
+};
+
 const extractTargetName = (projectName, rawArgs) => {
-  if (projectName && !projectName.startsWith('-')) return projectName;
+  const isNamed = Boolean(projectName) && !projectName.startsWith('-');
+  if (isNamed) return projectName;
   const isHeadless =
     rawArgs.includes('--headless') ||
     rawArgs.includes('--yes') ||
@@ -100,7 +120,8 @@ export const runScaffold = async (projectName, rawArgs = [], onRunAudit = null) 
 
   const scaffoldFiles = {};
   for (const rel of fwConfig.files) {
-    if (rawFiles[rel] !== undefined) {
+    const hasBlueprint = rawFiles[rel] !== undefined;
+    if (hasBlueprint) {
       scaffoldFiles[rel] = rawFiles[rel];
     }
   }
@@ -108,19 +129,12 @@ export const runScaffold = async (projectName, rawArgs = [], onRunAudit = null) 
   scaffoldFiles['_package.json'] = JSON.stringify(buildScaffoldPackageJson(finalDirName, fwConfig), null, 2) + '\n';
   scaffoldFiles['.chemx/config.json'] = JSON.stringify({ framework: fwConfig.id }, null, 2) + '\n';
 
-  for (const [relPath, content] of Object.entries(scaffoldFiles)) {
-    const isForbidden = fwConfig.forbiddenExtensions.some((ext) => relPath.endsWith(ext));
-    if (isForbidden) continue;
-
-    const targetRel = resolveScaffoldTarget(relPath);
-    const fullPath = path.join(targetDir, targetRel);
-    const dirName = path.dirname(fullPath);
-    if (!fs.existsSync(dirName)) {
-      fs.mkdirSync(dirName, { recursive: true });
-    }
-    fs.writeFileSync(fullPath, content, 'utf-8');
-    process.stdout.write(`  \x1b[32m✔\x1b[0m ${targetRel}\n`);
-  }
+  const isAllowed = ([relPath]) => !fwConfig.forbiddenExtensions.some((ext) => relPath.endsWith(ext));
+  const planned = Object.entries(scaffoldFiles).filter(isAllowed).map(([relPath, content]) => [resolveScaffoldTarget(relPath), content]);
+  const refusal = writeScaffoldFiles(planned.map(([targetRel, content]) => [path.join(targetDir, targetRel), content]), rawArgs);
+  const isRefused = Boolean(refusal);
+  if (isRefused) return refusal;
+  for (const [targetRel] of planned) process.stdout.write(`  \x1b[32m✔\x1b[0m ${targetRel}\n`);
 
   const isYes = rawArgs.includes('-y') || rawArgs.includes('--yes') || !isStdinTty();
   await runPillarsWizard(isYes ? ['--preset=recommended', '-y', '--write'] : ['--write'], targetDir);
@@ -167,7 +181,7 @@ export const runInit = async (targetSubDir = 'src/chemical-x', rawArgs = [], onR
 
   const safeTargetSubDir = (targetSubDir && !targetSubDir.startsWith('-'))
     ? targetSubDir
-    : (rawArgs.slice(1).find((arg) => !arg.startsWith('-')) || 'src/chemical-x');
+    : (rawArgs.slice(1).find((arg, i) => !arg.startsWith('-') && !readFlagValue(rawArgs, ['--as']).consumed.includes(i + 1)) || 'src/chemical-x');
 
   await renderTtyBanner('Chemical X: In-Repo Capsule Drop-in');
 
@@ -188,21 +202,13 @@ export const runInit = async (targetSubDir = 'src/chemical-x', rawArgs = [], onR
 
   process.stdout.write(`Unpacking blueprints and hooks into: \x1b[36m${safeTargetSubDir}/\x1b[0m\n`);
 
-  let count = 0;
-  for (const [relPath, content] of Object.entries(files)) {
-    const isConfigBlueprint = ['_package.json', '_tsconfig.json', '_vitest.config.ts'].includes(relPath);
-    if (isConfigBlueprint) {
-      continue;
-    }
-    const fullPath = path.join(targetDir, relPath);
-    const dirName = path.dirname(fullPath);
-    if (!fs.existsSync(dirName)) {
-      fs.mkdirSync(dirName, { recursive: true });
-    }
-    fs.writeFileSync(fullPath, content, 'utf-8');
-    process.stdout.write(`  \x1b[32m✔\x1b[0m ${relPath}\n`);
-    count++;
-  }
+  const isDropIn = ([relPath]) => !['_package.json', '_tsconfig.json', '_vitest.config.ts'].includes(relPath);
+  const planned = Object.entries(files).filter(isDropIn);
+  const refusal = writeScaffoldFiles(planned.map(([relPath, content]) => [path.join(targetDir, relPath), content]), rawArgs);
+  const isRefused = Boolean(refusal);
+  if (isRefused) return refusal;
+  for (const [relPath] of planned) process.stdout.write(`  \x1b[32m✔\x1b[0m ${relPath}\n`);
+  const count = planned.length;
 
   process.stdout.write(
     `\n\x1b[1m\x1b[32m✔ Successfully installed ${count} Chemical X assets into ${safeTargetSubDir}!\x1b[0m\n\n`

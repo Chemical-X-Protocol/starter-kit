@@ -4,6 +4,7 @@ import path from 'node:path';
 import { groupViolationsBySeverity } from './reporter-utils.js';
 import { hasMatchingAuditMetrics } from './rules-predicates.js';
 import { findChemxDir, ensureChemxDir } from './chemx-dir.js';
+import { chemxPathFor, isUsableProjectRoot } from '../sqlite-memory.js';
 
 export { findChemxDir, ensureChemxDir };
 
@@ -125,8 +126,8 @@ export const createSnapshotFromReport = (report, { scope = null, isPartial = fal
 };
 
 export const getAuditHistory = (cwd = process.cwd()) => {
-  const historyPath = path.resolve(cwd, '.chemx', 'history.json');
-  const hasHistoryFile = fs.existsSync(historyPath);
+  const historyPath = chemxPathFor(cwd, 'history.json');
+  const hasHistoryFile = Boolean(historyPath) && fs.existsSync(historyPath);
   if (!hasHistoryFile) return [];
   try {
     const raw = fs.readFileSync(historyPath, 'utf-8');
@@ -139,9 +140,9 @@ export const getAuditHistory = (cwd = process.cwd()) => {
 
 export const getAuditBaseline = (cwd = process.cwd()) => {
   const history = getAuditHistory(cwd);
-  const baselinePath = path.resolve(cwd, '.chemx', 'baseline.json');
+  const baselinePath = chemxPathFor(cwd, 'baseline.json');
   let explicitBaseline = null;
-  const hasBaselineFile = fs.existsSync(baselinePath);
+  const hasBaselineFile = Boolean(baselinePath) && fs.existsSync(baselinePath);
   if (hasBaselineFile) {
     try {
       const raw = fs.readFileSync(baselinePath, 'utf-8');
@@ -177,6 +178,8 @@ export const getAuditBaseline = (cwd = process.cwd()) => {
 };
 
 export const setAuditBaseline = (snapshot, cwd = process.cwd()) => {
+  const isUsable = isUsableProjectRoot(cwd);
+  if (!isUsable) return snapshot;
   ensureChemxDir(cwd);
   const baselinePath = path.resolve(cwd, '.chemx', 'baseline.json');
   try {
@@ -188,8 +191,10 @@ export const setAuditBaseline = (snapshot, cwd = process.cwd()) => {
 };
 
 export const saveAuditSnapshot = (report, cwd = process.cwd(), scopeInfo = {}) => {
-  ensureChemxDir(cwd);
   const snapshot = createSnapshotFromReport(report, scopeInfo);
+  const isUsable = isUsableProjectRoot(cwd);
+  if (!isUsable) return { snapshot, history: [], baseline: null, isNewBaseline: false, totalAudits: 0 };
+  ensureChemxDir(cwd);
   const history = getAuditHistory(cwd);
 
   // Prevent duplicate snapshots if the same scope is saved again within 5 seconds with same metrics

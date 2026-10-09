@@ -76,7 +76,7 @@ export const isColorSupported = () => {
   const hasNoColorArg = Boolean(process.argv && process.argv.some((arg) => arg === "--no-color" || arg === "--color=false"));
   const hasNoColorEnv = Boolean(process.env.NO_COLOR);
   const isDumbTerminal = process.env.TERM === "dumb";
-  const isPipedStdout = !isStdoutTty();
+  const isPipedStdout = Boolean(process.stdout && !process.stdout.isTTY);
   const shouldDisableColor = hasNoColorArg || hasNoColorEnv || isDumbTerminal || isPipedStdout;
   return !shouldDisableColor;
 };

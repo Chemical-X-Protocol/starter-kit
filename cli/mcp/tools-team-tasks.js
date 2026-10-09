@@ -3,7 +3,7 @@ import {
   listTasks, getTask, queryFeed, createTask,
   claimTask, updateTaskStatus, registerAgent, postFeedEvent
 } from '../team/team-db.js';
-import { completeTaskWithAudit, autoGenerateTasksFromAudit } from '../team/team-triage.js';
+import { completeTaskWithAudit, autoGenerateTasksFromAudit, reconcileAuditTasks } from '../team/team-triage.js';
 import { formatTaskListCard, formatTaskDetailCard } from '../team/team-format.js';
 import { enforceSingleSlot, verifyTraceability, generateTaskPermalink } from '../team/team-vds.js';
 import { freezeReleaseTrain } from '../team/team-release-train.js';
@@ -11,20 +11,26 @@ import { resolveListOptions, selectTaskPage, buildTaskListView } from '../team/t
 import { resolveAgentId } from '../team/agent-identity.js';
 import { resolveTaskTier } from '../team/task-tier.js';
 import { resolveDependencyStates } from '../team/task-detail-sections.js';
+import { checkNeedsInput } from '../team/team-needs.js';
 
 export const handleChemxTeamTask = async (args = {}, cwd = process.cwd()) => {
   const db = openIndexDb(cwd);
   if (!db) return { error: 'sqlite_unavailable' };
   let action = args.action || args.subAction;
-  if (!action) {
+  const hasNoAction = !action;
+  if (hasNoAction) {
     action = Boolean(args.title) ? 'add' : 'list';
   }
 
-  if (action === 'list') {
+  const isListAction = action === 'list';
+  if (isListAction) {
     const parentId = args.parentId !== undefined ? args.parentId : args.parent;
     const rule = args.rule || args.ruleId;
+    const listNeeds = checkNeedsInput(args.needs);
+    const hasListNeedsError = Boolean(listNeeds.error);
+    if (hasListNeedsError) return { error: listNeeds.error };
     const listOptions = resolveListOptions({ status: args.status, all: args.all, limit: args.limit });
-    const tasks = listTasks(db, { status: listOptions.status, assigned_agent_id: args.agentId, parentId, rule, priority: args.priority });
+    const tasks = listTasks(db, { status: listOptions.status, assigned_agent_id: args.agentId, parentId, rule, priority: args.priority, needs: listNeeds.needs });
     const { page, total } = selectTaskPage(tasks, listOptions);
     const view = buildTaskListView(page, total);
     return args.card ? { ...view, card: formatTaskListCard(page) } : view;
@@ -54,10 +60,15 @@ export const handleChemxTeamTask = async (args = {}, cwd = process.cwd()) => {
       message: args.message || 'Status update'
     });
   }
-  if (action === 'create' || action === 'add') {
+  const isCreateAction = action === 'create' || action === 'add';
+  if (isCreateAction) {
+    const createNeeds = checkNeedsInput(args.needs);
+    const hasCreateNeedsError = Boolean(createNeeds.error);
+    if (hasCreateNeedsError) return { error: createNeeds.error };
     const authorHandle = args.agentId || '@agent';
     registerAgent(db, { id: authorHandle, role: 'contributor' });
-    if (args.assignedAgentId) {
+    const hasAssignedAgent = Boolean(args.assignedAgentId);
+    if (hasAssignedAgent) {
       registerAgent(db, { id: args.assignedAgentId, role: 'executor' });
     }
     const parentId = args.parentId !== undefined ? args.parentId : args.parent;
@@ -66,10 +77,12 @@ export const handleChemxTeamTask = async (args = {}, cwd = process.cwd()) => {
       target_path: args.targetPath || args.target,
       tier: resolveTaskTier(args.tier, args.targetPath || args.target),
       priority: args.priority || 2,
+      needs: createNeeds.needs,
       assigned_agent_id: args.assignedAgentId || null,
       parent_id: parentId ?? null
     });
-    if (task) {
+    const hasTask = Boolean(task);
+    if (hasTask) {
       postFeedEvent(db, {
         author_id: authorHandle,
         task_id: task.id,
@@ -79,29 +92,35 @@ export const handleChemxTeamTask = async (args = {}, cwd = process.cwd()) => {
     }
     return task;
   }
-  if (action === 'claim') {
+  const isClaimAction = action === 'claim';
+  if (isClaimAction) {
     const agentHandle = resolveAgentId(args.agentId || args.as);
     registerAgent(db, { id: agentHandle, role: 'executor' });
     return claimTask(db, args.taskId, agentHandle);
   }
-  if (action === 'done' || action === 'complete') {
+  const isDoneAction = action === 'done' || action === 'complete';
+  if (isDoneAction) {
     const agentHandle = resolveAgentId(args.agentId || args.as);
     registerAgent(db, { id: agentHandle, role: 'executor' });
     return completeTaskWithAudit(db, args.taskId, agentHandle, { cwd, target: args.target || args.targetPath, force: args.force, noTargetConfirm: args.noTargetConfirm, tokens: args.tokens, logPath: args.logPath });
   }
-  if (action === 'block') {
+  const isBlockAction = action === 'block';
+  if (isBlockAction) {
     return updateTaskStatus(db, args.taskId, 'blocked', { blockedReason: args.blockedReason || 'Blocked' });
   }
-  if (action === 'update') {
+  const isUpdateAction = action === 'update';
+  if (isUpdateAction) {
     const targetStatus = args.status || 'in_progress';
     const agentHandle = resolveAgentId(args.agentId || args.as);
     registerAgent(db, { id: agentHandle, role: 'executor' });
-    if (targetStatus === 'done' || targetStatus === 'completed') {
+    const isDoneStatus = targetStatus === 'done' || targetStatus === 'completed';
+    if (isDoneStatus) {
       return completeTaskWithAudit(db, args.taskId, agentHandle, { cwd, target: args.target || args.targetPath, force: args.force, noTargetConfirm: args.noTargetConfirm, tokens: args.tokens, logPath: args.logPath });
     }
     return updateTaskStatus(db, args.taskId, targetStatus, { blockedReason: args.blockedReason || '' });
   }
-  if (action === 'set-target' || action === 'target') {
+  const isSetTargetAction = action === 'set-target' || action === 'target';
+  if (isSetTargetAction) {
     const hasTaskId = Boolean(args.taskId);
     const hasTargetPath = Boolean(args.targetPath);
     const canSet = hasTaskId && hasTargetPath;
@@ -109,8 +128,13 @@ export const handleChemxTeamTask = async (args = {}, cwd = process.cwd()) => {
     db.prepare('UPDATE agent_tasks SET target_path = ?, updated_at = ? WHERE id = ?').run(args.targetPath, Date.now(), Number(args.taskId));
     return db.prepare('SELECT * FROM agent_tasks WHERE id = ?').get(Number(args.taskId));
   }
-  if (action === 'triage') {
+  const isTriageAction = action === 'triage';
+  if (isTriageAction) {
     return autoGenerateTasksFromAudit(db, { cwd, maxTasks: args.maxTasks || 10 });
+  }
+  const isReconcileAction = action === 'reconcile' || action === 'prune';
+  if (isReconcileAction) {
+    return reconcileAuditTasks(db, { cwd });
   }
   const isSlotAction = action === 'slot' || action === 'vds-slot';
   if (isSlotAction) {
@@ -122,7 +146,8 @@ export const handleChemxTeamTask = async (args = {}, cwd = process.cwd()) => {
     const taskId = Number(args.taskId || args.id);
     const permalink = args.url || args.taskUrl || generateTaskPermalink(taskId);
     const check = verifyTraceability(permalink);
-    if (!check.valid) return { error: check.error };
+    const isTraceValid = Boolean(check.valid);
+    if (!isTraceValid) return { error: check.error };
     db.prepare('UPDATE agent_tasks SET task_url = ?, updated_at = ? WHERE id = ?').run(check.permalink, Date.now(), taskId);
     postFeedEvent(db, {
       author_id: args.agentId || '@stream_guard',

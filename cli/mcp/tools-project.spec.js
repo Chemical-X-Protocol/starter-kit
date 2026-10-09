@@ -5,6 +5,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { handleChemxProject } from './tools-project.js';
 import { handleChemx } from './tools.js';
+import { resolveAgentId } from '../team/agent-identity.js';
+
+// findChemxDir honours CHEMX_PROJECT_ROOT before the cwd; drop it so the temp project is the db.
+delete process.env.CHEMX_PROJECT_ROOT;
 
 // Each test gets its own throwaway project so project sessions and triage never touch a real .chemx/index.db.
 const makeTempProject = (t) => {
@@ -38,12 +42,25 @@ test('mcp-tools: handleChemxProject lifecycle operations', async (t) => {
   assert.ok(stepRes);
   assert.equal(stepRes.status, 'ok');
   assert.equal(stepRes.turn, 1);
+  // The task goes to the caller's own identity, never a hardcoded persona such as '@coder'.
+  const caller = resolveAgentId();
+  assert.equal(stepRes.agent, caller);
+  assert.ok(stepRes.task, 'step claims the queued goal task');
+  assert.equal(stepRes.task.status, 'in_progress');
+  assert.equal(stepRes.task.assigned_agent_id, caller);
+
+  // A second step must not "verify" the in-progress task by marking it done unchecked.
+  const secondStep = await handleChemxProject({ subAction: 'step' }, cwd);
+  assert.equal(secondStep.status, 'ok');
+  assert.equal(secondStep.task, null);
+  assert.match(secondStep.action, /^awaiting_1_active_task/);
 
   const statusRes = await handleChemxProject({
     subAction: 'status'
   }, cwd);
   assert.ok(statusRes.session);
-  assert.equal(statusRes.session.current_turn, 1);
+  assert.equal(statusRes.session.current_turn, 2);
+  assert.equal(statusRes.activeTasks.length, 1, 'the claimed task stays in progress');
 });
 
 test('mcp-tools: master tool chemx command parser routes project', async (t) => {

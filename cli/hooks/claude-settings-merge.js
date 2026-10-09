@@ -5,9 +5,12 @@ const OWNED_COMMAND = /cli\/hooks\/entry\.js|chemx-guard\.mjs|\b(?:chemx|cx)\s+h
 
 export const isChemxHookCommand = (command) => OWNED_COMMAND.test(String(command ?? ''));
 
+export const PRE_TOOL_MATCHER = 'Bash|Grep|Read|Edit|Write|MultiEdit|NotebookEdit|Glob';
+export const POST_EDIT_MATCHER = 'Edit|Write|MultiEdit|NotebookEdit';
+
 export const desiredClaudeHooks = (launcher) => ({
-  PreToolUse: { matcher: 'Bash|Grep', hooks: [{ type: 'command', command: launcher.hookCommand('claude-pre-tool'), timeout: 10 }] },
-  PostToolUse: { matcher: 'Edit|Write|MultiEdit', hooks: [{ type: 'command', command: launcher.hookCommand('claude-post-edit'), timeout: 30 }] },
+  PreToolUse: { matcher: PRE_TOOL_MATCHER, hooks: [{ type: 'command', command: launcher.hookCommand('claude-pre-tool'), timeout: 10 }] },
+  PostToolUse: { matcher: POST_EDIT_MATCHER, hooks: [{ type: 'command', command: launcher.hookCommand('claude-post-edit'), timeout: 30 }] },
   SessionStart: { hooks: [{ type: 'command', command: launcher.hookCommand('session-start'), timeout: 10 }] },
 });
 
@@ -22,7 +25,8 @@ const withoutOwnedHooks = (groups) => {
     const hooks = Array.isArray(group?.hooks) ? group.hooks : [];
     const foreign = hooks.filter((hook) => !isChemxHookCommand(hook?.command));
     const hadOwned = foreign.length !== hooks.length;
-    if (hadOwned && firstOwnedIndex === -1) firstOwnedIndex = kept.length;
+    const isFirstOwned = hadOwned && firstOwnedIndex === -1;
+    if (isFirstOwned) firstOwnedIndex = kept.length;
     const isEmptied = hadOwned && foreign.length === 0;
     if (isEmptied) continue;
     kept.push(hadOwned ? { ...group, hooks: foreign } : group);

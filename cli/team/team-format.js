@@ -17,17 +17,20 @@ export const formatSwarmStatusCard = (status) => {
   for (const lease of (l.leases || [])) {
     lines.push(`    \x1b[90m•\x1b[0m ${lease.file_path} \x1b[35m[${lease.locked_by}]\x1b[0m`);
   }
-  if (status.tokens) {
+  const hasTokens = Boolean(status.tokens);
+  if (hasTokens) {
     const tok = status.tokens;
     lines.push(`  \x1b[1mTokens:\x1b[0m   ${tok.prompt.toLocaleString()} prompt │ ${tok.completion.toLocaleString()} comp │ ${tok.cached.toLocaleString()} cached │ \x1b[32m$${tok.cost_usd.toFixed(4)} est\x1b[0m`);
   }
-  if (status.blockedTasks?.length > 0) {
+  const hasBlockedTasks = Boolean(status.blockedTasks?.length > 0);
+  if (hasBlockedTasks) {
     lines.push('', '  \x1b[1m\x1b[31m⚠ Active Blockers:\x1b[0m');
     for (const bt of status.blockedTasks) {
       lines.push(`    \x1b[31m•\x1b[0m #${bt.id} (${bt.assigned_agent_id || 'unassigned'}): ${bt.title} - \x1b[33m${bt.blocked_reason}\x1b[0m`);
     }
   }
-  if (status.recentFeed?.length > 0) {
+  const hasRecentFeed = Boolean(status.recentFeed?.length > 0);
+  if (hasRecentFeed) {
     lines.push('', '  \x1b[1mRecent Activity Feed:\x1b[0m');
     for (const ev of status.recentFeed.slice(0, 4)) {
       const timeStr = new Date(ev.timestamp).toLocaleTimeString();
@@ -39,7 +42,8 @@ export const formatSwarmStatusCard = (status) => {
 };
 
 export const formatFeedTimeline = (events = []) => {
-  if (events.length === 0) {
+  const hasNoEvents = events.length === 0;
+  if (hasNoEvents) {
     return '\n  \x1b[90mNo activity feed entries found.\x1b[0m\n\n';
   }
   const lines = [
@@ -58,12 +62,14 @@ export const formatFeedTimeline = (events = []) => {
 };
 
 export const formatTaskListCard = (tasks = []) => {
-  if (!tasks.length) return '  (No tasks found in backlog.)\n';
+  const hasNoTasks = tasks.length === 0;
+  if (hasNoTasks) return '  (No tasks found in backlog.)\n';
   const taskMap = new Map(tasks.map((t) => [t.id, t]));
   const childrenMap = new Map();
   for (const t of tasks) {
     const pid = t.parent_id && taskMap.has(t.parent_id) ? t.parent_id : null;
-    if (!childrenMap.has(pid)) childrenMap.set(pid, []);
+    const hasPid = childrenMap.has(pid);
+    if (!hasPid) childrenMap.set(pid, []);
     childrenMap.get(pid).push(t);
   }
   const lines = [];
@@ -72,7 +78,8 @@ export const formatTaskListCard = (tasks = []) => {
       const indent = depth > 0 ? '  '.repeat(depth) + '└── ' : '  ';
       const assignee = t.assigned_agent_id ? `(${t.assigned_agent_id})` : '(unassigned)';
       const target = t.target_path ? ` [${t.target_path}]` : '';
-      lines.push(`${indent}#${t.id} [${t.status}] ${assignee}${target}: ${t.title}`);
+      const needs = t.needs ? ` <${t.needs}>` : '';
+      lines.push(`${indent}#${t.id} [${t.status}]${needs} ${assignee}${target}: ${t.title}`);
       renderNodes(t.id, depth + 1);
     }
   };
@@ -81,7 +88,8 @@ export const formatTaskListCard = (tasks = []) => {
 };
 
 export const formatMailboxCard = (mailbox) => {
-  if (!mailbox) return '  (No mailbox data)\n';
+  const hasNoMailbox = !mailbox;
+  if (hasNoMailbox) return '  (No mailbox data)\n';
   const lines = [''];
   lines.push(`\x1b[1m\x1b[36m📬 [Chemical X] Mailbox for ${mailbox.agentId}\x1b[0m`);
   lines.push(`\x1b[90m${'-'.repeat(54)}\x1b[0m`);
@@ -89,7 +97,8 @@ export const formatMailboxCard = (mailbox) => {
 
   const taskRows = mailbox.tasks?.rows || [];
   lines.push(`  \x1b[1mActive Tasks (${taskRows.length}):\x1b[0m`);
-  if (taskRows.length === 0) {
+  const hasNoTasks = taskRows.length === 0;
+  if (hasNoTasks) {
     lines.push('    \x1b[90m(No active tasks)\x1b[0m');
   } else {
     for (const row of taskRows) {
@@ -99,7 +108,8 @@ export const formatMailboxCard = (mailbox) => {
 
   const msgRows = mailbox.messages?.rows || [];
   lines.push(`  \x1b[1mIncoming DMs (${msgRows.length}):\x1b[0m`);
-  if (msgRows.length === 0) {
+  const hasNoMessages = msgRows.length === 0;
+  if (hasNoMessages) {
     lines.push('    \x1b[90m(No direct messages)\x1b[0m');
   } else {
     for (const row of msgRows) {
@@ -110,7 +120,8 @@ export const formatMailboxCard = (mailbox) => {
 
   const leaseRows = mailbox.leases?.rows || [];
   lines.push(`  \x1b[1mActive Leases (${leaseRows.length}):\x1b[0m`);
-  if (leaseRows.length === 0) {
+  const hasNoLeases = leaseRows.length === 0;
+  if (hasNoLeases) {
     lines.push('    \x1b[90m(No held leases)\x1b[0m');
   } else {
     for (const row of leaseRows) {
@@ -123,7 +134,8 @@ export const formatMailboxCard = (mailbox) => {
 };
 
 export const formatTaskDetailCard = (task, events = [], dependencyStates = []) => {
-  if (!task) return '  (Task not found)\n';
+  const hasNoTask = !task;
+  if (hasNoTask) return '  (Task not found)\n';
   const lines = [''];
   const statusColors = {
     queued: '\x1b[33mqueued\x1b[0m',
@@ -142,23 +154,29 @@ export const formatTaskDetailCard = (task, events = [], dependencyStates = []) =
   lines.push(`  \x1b[1mStatus:\x1b[0m   ${statusStr} │ \x1b[1mPriority:\x1b[0m ${pStr} │ \x1b[1mTier:\x1b[0m ${tierStr || '(none)'}`);
   lines.push(`  \x1b[1mAssignee:\x1b[0m ${task.assigned_agent_id || '(unassigned)'} │ \x1b[1mOrigin:\x1b[0m ${task.origin_type || 'manual'}`);
 
-  if (task.target_path) {
+  const hasTargetPath = Boolean(task.target_path);
+  if (hasTargetPath) {
     lines.push(`  \x1b[1mTarget:\x1b[0m   ${task.target_path}`);
   }
-  if (task.blocked_reason) {
+  const hasBlockedReason = Boolean(task.blocked_reason);
+  if (hasBlockedReason) {
     lines.push(`  \x1b[1m\x1b[31mBlocker:\x1b[0m  \x1b[33m${task.blocked_reason}\x1b[0m`);
   }
   lines.push(...formatTaskBriefLines(task, dependencyStates));
 
   lines.push(...formatTelemetryLines(task));
 
-  if (task.diff_receipt?.verified || task.result_payload?.verified) {
+  const isDiffVerified = Boolean(task.diff_receipt?.verified);
+  const isResultVerified = Boolean(task.result_payload?.verified);
+  const isAstVerified = isDiffVerified || isResultVerified;
+  if (isAstVerified) {
     const r = task.diff_receipt?.healthAfter ? task.diff_receipt : task.result_payload;
     lines.push(`  \x1b[32m🛡️ AST Verification:\x1b[0m Clean (Health: ${r.healthAfter ?? 100}/100)`);
   }
 
   lines.push('', '  \x1b[1mActivity & Status Stream (Asana Timeline):\x1b[0m');
-  if (events.length === 0) {
+  const hasNoEvents = events.length === 0;
+  if (hasNoEvents) {
     lines.push('    \x1b[90m(No updates recorded yet)\x1b[0m');
   } else {
     for (const ev of events) {
@@ -238,6 +256,7 @@ export const formatTaskHelpCard = () => {
     '    \x1b[33m--limit\x1b[0m <n>             Rows to show (default 20)',
     '    \x1b[33m--agent\x1b[0m <@agent>         Filter tasks assigned to agent',
     '    \x1b[33m--prio\x1b[0m <1-5>             Task priority filter or setting',
+    '    \x1b[33m--needs\x1b[0m <tier>           Capability tier the task needs: light, standard, deep (add sets it, list filters)',
     '    \x1b[33m--force, -f\x1b[0m              Force complete task even with remaining hazards',
     '    \x1b[33m--json\x1b[0m                   Output machine-readable JSON format',
     '    \x1b[33m--help, -h\x1b[0m               Show this help message',

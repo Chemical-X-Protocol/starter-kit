@@ -7,6 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { parseInstallArgs, runInstallHooks } from './install-hooks-cli.js';
 import { buildGitHubWorkflowScript, buildPreCommitHookScript } from '../installer-templates.js';
 import { readKitVersion } from './launcher.js';
+import { desiredClaudeHooks } from './claude-settings-merge.js';
 
 const created = [];
 after(() => { for (const dir of created) fs.rmSync(dir, { recursive: true, force: true }); });
@@ -32,6 +33,8 @@ test('fresh install writes the three hook events, statusLine and the .mcp.json l
   const settings = settingsOf(project.root);
   assert.deepEqual(Object.keys(settings.hooks).sort(), ['PostToolUse', 'PreToolUse', 'SessionStart']);
   assert.match(settings.hooks.PreToolUse[0].hooks[0].command, /cli\/hooks\/entry\.js" claude-pre-tool$/);
+  assert.equal(settings.hooks.PreToolUse[0].matcher, 'Bash|Grep|Read|Edit|Write|MultiEdit|NotebookEdit|Glob');
+  assert.equal(settings.hooks.PostToolUse[0].matcher, 'Edit|Write|MultiEdit|NotebookEdit');
   assert.match(settings.statusLine.command, /statusline$/);
   const server = readJson(path.join(project.root, '.mcp.json')).mcpServers['chemical-x'];
   assert.deepEqual(server, { command: 'node', args: [path.join(project.kit, 'cli', 'index.js'), 'mcp'], env: { CHEMX_PROJECT_ROOT: project.root, NO_COLOR: '1' } });
@@ -130,4 +133,10 @@ test('GAP-4: templates pin the exact kit version by default instead of an unpinn
   const version = readKitVersion();
   assert.match(buildGitHubWorkflowScript(), new RegExp(`run: npx --yes chemx@${version.replace(/\./g, '\\.')} audit`));
   assert.doesNotMatch(buildPreCommitHookScript(), /AUDIT_BIN="npx chemx"/);
+});
+
+test('the Claude Code plugin hooks.json uses the same matchers as install-hooks', () => {
+  const pluginHooks = readJson(path.resolve(import.meta.dirname, '..', '..', 'plugins', 'claude-code', 'hooks', 'hooks.json')).hooks;
+  const desired = desiredClaudeHooks({ hookCommand: (name) => name });
+  for (const event of ['PreToolUse', 'PostToolUse']) assert.equal(pluginHooks[event][0].matcher, desired[event].matcher, event);
 });

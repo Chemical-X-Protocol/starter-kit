@@ -2,13 +2,16 @@ import { computed } from 'vue';
 import type { TokenStatProps } from './types';
 
 export const formatCompactNumber = (val: number = 0): string => {
-  if (val >= 1_000_000) return `${(val / 1_000_000).toFixed(2)}M`;
-  if (val >= 1_000) return `${(val / 1_000).toFixed(1)}k`;
+  const isMillions = val >= 1_000_000;
+  if (isMillions) return `${(val / 1_000_000).toFixed(2)}M`;
+  const isThousands = val >= 1_000;
+  if (isThousands) return `${(val / 1_000).toFixed(1)}k`;
   return String(val);
 };
 
 export const formatCurrency = (val?: number): string => {
-  if (val === undefined || val === null) return '';
+  const isAbsent = val === undefined || val === null;
+  if (isAbsent) return '';
   return `$${val.toFixed(4)}`;
 };
 

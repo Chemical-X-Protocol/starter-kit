@@ -95,7 +95,8 @@ export const queryIndex = (db, options = {}) => queryIndexPage(db, options).resu
 
 export const inspectIndexedFile = (db, filePath) => {
   if (!db) return null;
-  const fileRow = db.prepare('SELECT * FROM files WHERE path = ? OR path LIKE ?').get(filePath, `%${filePath}%`);
+  const cleanPath = String(filePath || '').trim().replace(/^\.\//, '');
+  const fileRow = db.prepare('SELECT * FROM files WHERE path = ? OR path LIKE ?').get(cleanPath, `%/${cleanPath}`);
   if (!fileRow) return null;
   return populateFileDetails(db, fileRow);
 };

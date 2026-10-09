@@ -6,6 +6,7 @@ import { auditCode } from './audit/rules.js';
 import { ANY_DEPTH_IGNORED_DIRS } from './search-scan.js';
 import { loadProjectConfig } from './config/index.js';
 import { countLines, getLineBudgets, resolveFileTier } from './audit/line-budgets.js';
+import { listGitFiles } from './git-file-listing.js';
 import { conflictHunksOf, describeConflicts } from './conflicts.js';
 
 // One CRITICAL finding instead of a parse error: an unmerged file is never clean.
@@ -52,6 +53,9 @@ export const auditFile = (filePath, relativePath, options = {}) => {
 
 const auditFileEntry = (fullPath, relPath, scanOptions) => {
   const content = fs.readFileSync(fullPath, 'utf-8');
+  const hunks = conflictHunksOf(content);
+  const isConflicted = hunks.length > 0;
+  if (isConflicted) return { skipped: { path: relPath, hunks } };
   const ruleConfig = scanOptions.config?.rules || {};
   const budgets = getLineBudgets(ruleConfig);
   const isMolecule = resolveFileTier(relPath, ruleConfig) === 'molecule';
@@ -78,6 +82,46 @@ const auditFileEntry = (fullPath, relPath, scanOptions) => {
   return { fileStat, hookCount, fileViolations };
 };
 
+const hasIgnoredSegment = (relPath) => relPath.split('/').some((segment) => IGNORED_DIRS.has(segment));
+
+const walkSourceFiles = (dir, includeTests, out) => {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const fullPath = path.join(dir, entry.name);
+    const isWalkable = entry.isDirectory() && !IGNORED_DIRS.has(entry.name);
+    const isWantedFile = !entry.isDirectory() && isSourceFile(entry.name, { includeTests });
+    if (isWalkable) walkSourceFiles(fullPath, includeTests, out);
+    if (isWantedFile) out.push(fullPath);
+  }
+};
+
+// A target whose every file is git-ignored lists empty under --exclude-standard. The caller named
+// that directory explicitly, so it is audited by a plain walk instead of a silent false green.
+const isTargetIgnored = (targetDir) => {
+  const everything = listGitFiles(targetDir, { includeIgnored: true });
+  return Array.isArray(everything) && everything.length > 0;
+};
+
+// One git listing per scan (.gitignore honoured); a plain walk when the dir is not in a repo.
+// IGNORED_DIRS still applies on top so worktree copies and package stores never score.
+const discoverSourceFiles = (targetDir, includeTests) => {
+  const gitFiles = listGitFiles(targetDir);
+  const isGitRepo = Array.isArray(gitFiles);
+  const found = [];
+  const isListingEmpty = isGitRepo && gitFiles.length === 0;
+  const shouldWalk = !isGitRepo || (isListingEmpty && isTargetIgnored(targetDir));
+  if (shouldWalk) {
+    walkSourceFiles(targetDir, includeTests, found);
+    return found;
+  }
+  for (const rel of gitFiles.sort()) {
+    const isSkipped = hasIgnoredSegment(rel) || !isSourceFile(path.basename(rel), { includeTests });
+    const fullPath = path.join(targetDir, rel);
+    const isPresentSource = !isSkipped && fs.existsSync(fullPath);
+    if (isPresentSource) found.push(fullPath);
+  }
+  return found;
+};
+
 export const scanTree = (targetDir, baseDir, scanOptions = {}) => {
   let violations = [];
   let fileStats = [];
@@ -99,11 +143,13 @@ export const scanTree = (targetDir, baseDir, scanOptions = {}) => {
   const includeTests = Boolean(scanOptions.includeTests || isTargetingTests);
   const effectiveScanOptions = { ...scanOptions, includeTests };
 
-  if (scanOptions.fileList && scanOptions.fileList.length > 0) {
+  const hasFileList = Boolean(scanOptions.fileList && scanOptions.fileList.length > 0);
+  if (hasFileList) {
     for (const item of scanOptions.fileList) {
       const fullPath = path.isAbsolute(item) ? item : path.resolve(baseDir, item);
       const relPath = path.relative(baseDir, fullPath);
-      if (fs.existsSync(fullPath) && isSourceFile(path.basename(fullPath), { includeTests: true })) {
+      const isListedSource = fs.existsSync(fullPath) && isSourceFile(path.basename(fullPath), { includeTests: true });
+      if (isListedSource) {
         take(auditFileEntry(fullPath, relPath, effectiveScanOptions));
       }
     }
@@ -114,22 +160,8 @@ export const scanTree = (targetDir, baseDir, scanOptions = {}) => {
     return { violations, fileStats, totalHooks, skippedConflicts };
   }
 
-  const entries = fs.readdirSync(targetDir, { withFileTypes: true });
-  for (const entry of entries) {
-    const fullPath = path.join(targetDir, entry.name);
-    const relPath = path.relative(baseDir, fullPath);
-
-    if (entry.isDirectory()) {
-      if (!IGNORED_DIRS.has(entry.name)) {
-        const sub = scanTree(fullPath, baseDir, effectiveScanOptions);
-        violations = violations.concat(sub.violations);
-        fileStats = fileStats.concat(sub.fileStats);
-        totalHooks += sub.totalHooks;
-        skippedConflicts = skippedConflicts.concat(sub.skippedConflicts);
-      }
-    } else if (isSourceFile(entry.name, { includeTests })) {
-      take(auditFileEntry(fullPath, relPath, effectiveScanOptions));
-    }
+  for (const fullPath of discoverSourceFiles(targetDir, includeTests)) {
+    take(auditFileEntry(fullPath, path.relative(baseDir, fullPath), effectiveScanOptions));
   }
 
   return { violations, fileStats, totalHooks, skippedConflicts };

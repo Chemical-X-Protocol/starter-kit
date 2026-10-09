@@ -18,6 +18,7 @@ import { scanTree } from './audit-scan.js';
 import { createCoverageCollector, summarizeCoverage } from './audit/coverage.js';
 import { SCORE_MODEL } from './audit/metrics.js';
 import { RULESET_VERSION } from './audit/rule-revisions.js';
+import { getLineBudgets } from './audit/line-budgets.js';
 
 export { auditFile, resolveAuditConfig, scanTree, scanDirectory } from './audit-scan.js';
 
@@ -74,6 +75,7 @@ export const runAudit = (targetDir = 'src', options = {}) => {
     moleculeCount,
     moleculeCompliantCount,
     moleculeCompliantPct,
+    moleculeLineLimit: getLineBudgets(config?.rules).molecule,
     hookCount: totalHooks
   };
 

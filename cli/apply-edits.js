@@ -16,6 +16,7 @@ import { parseSource } from './source-parse.js';
 import { buildUnifiedDiff } from './edit-diff.js';
 import { writeAtomic, removeWithBackup, restoreFromBackup } from './edit-atomic.js';
 import { findForeignLease } from './edit-locks.js';
+import { renewLeasesAfterEdit } from './team/lease-renew.js';
 import { countLines } from './line-count.js';
 
 export class EditRefusedError extends Error {
@@ -44,6 +45,12 @@ const declarationDelta = (beforeParse, afterParse, allowRemoved) => {
   return { removed, added, blocked: unallowed };
 };
 
+const lockedIssue = (file, lease) => {
+  const purpose = lease.purpose ? ` (${lease.purpose})` : '';
+  const until = new Date(lease.expiresAt).toISOString();
+  return `locked by ${lease.lockedBy}${purpose} until ${until}; wait until ${lease.lockedBy} releases it or the lease expires (check: chemx team lock check ${file}; all locks: chemx team lock list)`;
+};
+
 const planEdit = (edit, root, options) => {
   const absPath = resolveSafePath(edit.path, root);
   const file = path.relative(root, absPath);
@@ -62,7 +69,7 @@ const planEdit = (edit, root, options) => {
   const after = isDelete ? '' : edit.content;
   const lease = findForeignLease(root, absPath, options.agentId);
   const isLocked = Boolean(lease);
-  if (isLocked) return { ...plan, issue: `locked by ${lease.lockedBy}${lease.purpose ? ` (${lease.purpose})` : ''}; wait until ${lease.lockedBy} releases it or the lease expires (check: chemx team lock list)` };
+  if (isLocked) return { ...plan, issue: lockedIssue(file, lease) };
   if (isDelete) return { ...plan, after, parse: { kind: 'n/a', ok: true }, declarations: { removed: [], added: [] } };
 
   const afterParse = parseSource(after, absPath);
@@ -115,7 +122,11 @@ export const applyEdits = (edits, options = {}) => {
   if (hasIssues) throw new EditRefusedError(issues);
 
   const isPreview = dryRun;
-  if (!isPreview) commitPlans(plans, root);
+  if (!isPreview) {
+    commitPlans(plans, root);
+    // Renew-on-edit: a caller who already holds a lease on a written file keeps it one more TTL.
+    renewLeasesAfterEdit(root, plans.map((p) => p.absPath), options.agentId);
+  }
 
   const files = plans.map((p) => ({
     file: p.file,

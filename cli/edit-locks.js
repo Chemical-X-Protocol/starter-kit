@@ -11,6 +11,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { isPidAlive } from './team/team-db-transaction.js';
 import { resolveAgentId as resolveTeamAgentId } from './team/agent-identity.js';
+import { chemxDbPathFor } from './sqlite-memory.js';
 
 const loadSqlite = async () => {
   try {
@@ -27,8 +28,8 @@ const DatabaseSync = await loadSqlite();
 export const resolveAgentId = (agentId) => resolveTeamAgentId(agentId);
 
 const readLeases = (root, keys) => {
-  const dbPath = path.join(root, '.chemx', 'index.db');
-  const canRead = Boolean(DatabaseSync) && fs.existsSync(dbPath);
+  const dbPath = chemxDbPathFor(root);
+  const canRead = Boolean(DatabaseSync) && Boolean(dbPath) && fs.existsSync(dbPath);
   if (!canRead) return [];
   let db = null;
   try {
@@ -49,7 +50,8 @@ const readLeases = (root, keys) => {
 // Lock dbs that can hold a lease on the file: the workspace root's, plus every ancestor of the
 // file with a .chemx/index.db, so running from a subdirectory never hides a project-root lease.
 const lockRoots = (root, absPath) => {
-  const roots = [root];
+  const hasUsableRoot = Boolean(chemxDbPathFor(root));
+  const roots = hasUsableRoot ? [root] : [];
   let dir = path.dirname(absPath);
   while (true) {
     const hasDb = fs.existsSync(path.join(dir, '.chemx', 'index.db'));

@@ -9,13 +9,16 @@ export function useSwarmAttention() {
   const pendingCount = ref<number>(0);
   const errorMessage = ref<string | null>(null);
 
-  const fetchAttention = async () => {
-    if (typeof fetch !== 'function') return;
+  const fetchAttention = async (): Promise<[AttentionItem[] | null, Error | null]> => {
+    const isFetchAvailable = typeof fetch === 'function';
+    if (!isFetchAvailable) return [null, new Error('fetch is not available')];
     try {
       const res = await fetch('/api/swarm/attention');
-      if (!res.ok) {
-        errorMessage.value = `Server responded with ${res.status}`;
-        return;
+      const isResponseOk = res.ok;
+      if (!isResponseOk) {
+        const error = new Error(`Server responded with ${res.status}`);
+        errorMessage.value = error.message;
+        return [null, error];
       }
       const data = await res.json();
       items.value = data.items || [];
@@ -23,36 +26,47 @@ export function useSwarmAttention() {
       conversationId.value = data.conversationId || null;
       pendingCount.value = data.pendingCount || 0;
       errorMessage.value = null;
+      return [items.value, null];
     } catch (err) {
-      errorMessage.value = err instanceof Error ? err.message : 'Failed to fetch attention items';
+      const error = err instanceof Error ? err : new Error('Failed to fetch attention items');
+      errorMessage.value = error.message;
+      return [null, error];
     } finally {
       poller.start();
     }
   };
 
   const poller = useSelfCleaningTimeout(() => {
-    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+    const isDocumentAvailable = typeof document !== 'undefined';
+    const isTabHidden = isDocumentAvailable && document.visibilityState === 'hidden';
+    if (isTabHidden) {
       poller.start();
       return;
     }
     fetchAttention();
   }, 3000);
 
-  const confirmItem = async (itemId: string, action: 'approve' | 'reject') => {
-    if (typeof fetch !== 'function') return;
+  const confirmItem = async (itemId: string, action: 'approve' | 'reject'): Promise<[boolean, Error | null]> => {
+    const isFetchAvailable = typeof fetch === 'function';
+    if (!isFetchAvailable) return [false, new Error('fetch is not available')];
     try {
       const res = await fetch('/api/swarm/attention/action', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ itemId, action })
       });
-      if (!res.ok) {
-        errorMessage.value = `Action failed with ${res.status}`;
-        return;
+      const isResponseOk = res.ok;
+      if (!isResponseOk) {
+        const error = new Error(`Action failed with ${res.status}`);
+        errorMessage.value = error.message;
+        return [false, error];
       }
       await fetchAttention();
+      return [true, null];
     } catch (err) {
-      errorMessage.value = err instanceof Error ? err.message : 'Action request failed';
+      const error = err instanceof Error ? err : new Error('Action request failed');
+      errorMessage.value = error.message;
+      return [false, error];
     }
   };
 

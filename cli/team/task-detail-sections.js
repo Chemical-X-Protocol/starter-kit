@@ -46,7 +46,8 @@ export const formatTaskBriefLines = (task, dependencyStates = []) => {
   const lines = [];
   const sprint = task.sprint_tag || '(none)';
   const moscow = task.moscow || '(none)';
-  lines.push(`  \x1b[1mSprint:\x1b[0m   ${sprint} │ \x1b[1mMoSCoW:\x1b[0m ${moscow}`);
+  const needs = task.needs || '(none)';
+  lines.push(`  \x1b[1mSprint:\x1b[0m   ${sprint} │ \x1b[1mMoSCoW:\x1b[0m ${moscow} │ \x1b[1mNeeds:\x1b[0m ${needs}`);
 
   const hasParent = Boolean(task.parent_id);
   if (hasParent) lines.push(`  \x1b[1mParent:\x1b[0m   #${task.parent_id}`);

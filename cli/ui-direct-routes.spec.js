@@ -58,3 +58,21 @@ test('ui-server: HTTP integration serves SPA HTML on direct frontend routes /tas
     running.server.close();
   }
 });
+
+test('ui-server: GET /api/tasks with an invalid needs filter answers 500 JSON and keeps serving', async (t) => {
+  const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-ui-needs-'));
+  t.after(() => fs.rmSync(projectRoot, { recursive: true, force: true }));
+  const running = await startUiServer({ port: 0, cwd: projectRoot });
+  try {
+    const bad = await running.fetch(`http://localhost:${running.port}/api/tasks?needs=bogus`);
+    assert.strictEqual(bad.status, 500);
+    const body = await bad.json();
+    assert.strictEqual(body.success, false);
+    assert.match(body.error, /Invalid needs/);
+
+    const good = await running.fetch(`http://localhost:${running.port}/api/tasks`);
+    assert.strictEqual(good.status, 200);
+  } finally {
+    running.server.close();
+  }
+});

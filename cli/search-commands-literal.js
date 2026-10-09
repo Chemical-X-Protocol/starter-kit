@@ -62,6 +62,14 @@ export const handleLiteralSearchCommand = (_db, query, {
     return payload;
   }
 
+  if (isLineOnly) {
+    for (const m of res.matches) {
+      process.stdout.write(`${m.path}:${m.line}\n`);
+    }
+    finish(status, isCli);
+    return payload;
+  }
+
   const plural = res.totalMatches === 1 ? '' : 'es';
   process.stdout.write(`\n${ANSI.BOLD}${ANSI.CYAN}Literal search${ANSI.RESET} "${query}" ${ANSI.DIM}(${payload.mode}${isCaseInsensitive ? ', ignore-case' : ''}): ${res.totalMatches} match${plural} in ${res.filesMatched} files${ANSI.RESET}\n`);
   process.stdout.write(`  ${ANSI.DIM}${describeScope(res, root, scope.scopeKey)}${ANSI.RESET}\n`);

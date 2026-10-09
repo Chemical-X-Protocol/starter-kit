@@ -44,41 +44,53 @@ export const postFeedEvent = (db, eventData = {}) => {
   return { ...row, metadata: JSON.parse(row.metadata || '{}') };
 };
 
+// Rows whose metadata carries $.archived = 1 stay in the table (cleanup archives, never deletes)
+// but drop out of feed, status and mailbox listings.
+export const NOT_ARCHIVED_SQL = "COALESCE(json_extract(CASE WHEN json_valid(metadata) THEN metadata END, '$.archived'), 0) != 1";
+
+const parseRow = (r) => ({ ...r, metadata: JSON.parse(r.metadata || '{}') });
+
+// With since_id the feed reads forward in id order (a cursor). Without it, it returns the newest
+// `limit` rows, still in chronological order, so status cards show recent activity, not the oldest rows.
 export const queryFeed = (db, filter = {}) => {
   if (!db) return [];
   let query = 'SELECT * FROM agent_feed';
-  const conditions = [];
+  const conditions = [NOT_ARCHIVED_SQL];
   const params = [];
+  const hasCursor = Boolean(filter.since_id);
 
-  if (filter.since_id) {
+  if (hasCursor) {
     conditions.push('id > ?');
     params.push(Number(filter.since_id));
   }
-  if (filter.thread_id) {
+  const hasThread = Boolean(filter.thread_id);
+  if (hasThread) {
     conditions.push('(thread_id = ? OR id = ?)');
     params.push(Number(filter.thread_id), Number(filter.thread_id));
   }
-  if (filter.task_id) {
+  const hasTask = Boolean(filter.task_id);
+  if (hasTask) {
     conditions.push('task_id = ?');
     params.push(Number(filter.task_id));
   }
-  if (filter.event_type) {
+  const hasEventType = Boolean(filter.event_type);
+  if (hasEventType) {
     conditions.push('event_type = ?');
     params.push(filter.event_type);
   }
-  if (filter.agent_id) {
+  const hasAgent = Boolean(filter.agent_id);
+  if (hasAgent) {
     const cleanId = formatHandle(filter.agent_id);
     conditions.push('(recipient_id IS NULL OR recipient_id = ? OR author_id = ?)');
     params.push(cleanId, cleanId);
   }
 
-  const hasConditions = conditions.length > 0;
-  if (hasConditions) query += ` WHERE ${conditions.join(' AND ')}`;
+  query += ` WHERE ${conditions.join(' AND ')}`;
   const limit = Math.min(Number(filter.limit || 50), 200);
-  query += ` ORDER BY id ASC LIMIT ${limit}`;
+  const direction = hasCursor ? 'ASC' : 'DESC';
+  query += ` ORDER BY id ${direction} LIMIT ${limit}`;
 
-  return db.prepare(query).all(...params).map((r) => ({
-    ...r,
-    metadata: JSON.parse(r.metadata || '{}')
-  }));
+  const rows = db.prepare(query).all(...params).map(parseRow);
+  if (hasCursor) return rows;
+  return rows.reverse();
 };

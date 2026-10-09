@@ -1,8 +1,8 @@
-import fs from 'node:fs';
 import path from 'node:path';
 import { toPascalCase, toCamelCase } from './generator-templates/naming.js';
 import { detectTestRunner, detectJigBaseDir } from './project-detector.js';
 import { indexGeneratedFiles } from './generator-indexer.js';
+import { writeGeneratedFiles } from './generator-writes.js';
 
 export const JIG_KINDS = new Set([
   'service',
@@ -16,20 +16,23 @@ export const JIG_KINDS = new Set([
   'spec'
 ]);
 
+const JIG_KIND_ALIASES = { endpoint: 'route', repository: 'repo', utility: 'util' };
+
 export const normalizeJigKind = (rawKind = '') => {
   const norm = String(rawKind).trim().toLowerCase();
-  if (norm === 'endpoint') return 'route';
-  if (norm === 'repository') return 'repo';
-  if (norm === 'utility') return 'util';
-  if (JIG_KINDS.has(norm)) return norm;
-  return 'service';
+  const alias = JIG_KIND_ALIASES[norm];
+  const isAlias = Boolean(alias);
+  if (isAlias) return alias;
+  const isKnown = JIG_KINDS.has(norm);
+  return isKnown ? norm : 'service';
 };
 
 const normalizeMethods = (rawMethods) => {
   if (!rawMethods) return [];
   if (Array.isArray(rawMethods)) {
     return rawMethods.map((m) => {
-      if (typeof m === 'string') {
+      const isSignature = typeof m === 'string';
+      if (isSignature) {
         const match = m.match(/^([a-zA-Z0-9_]+)(?:\(([^)]*)\))?(?::\s*([a-zA-Z0-9_<>[\]]+))?$/);
         if (match) {
           return { name: match[1], params: match[2] || '', returnType: match[3] || 'Promise<ResultTuple<any>>', isAsync: true };
@@ -44,7 +47,8 @@ const normalizeMethods = (rawMethods) => {
       };
     });
   }
-  if (typeof rawMethods === 'string') {
+  const isCommaList = typeof rawMethods === 'string';
+  if (isCommaList) {
     return rawMethods.split(',').map((s) => s.trim()).filter(Boolean).map((name) => ({
       name,
       params: '',
@@ -66,7 +70,8 @@ const normalizeState = (rawState) => {
   if (!rawState) return [];
   const list = toEntryList(rawState);
   return list.map((item) => {
-    if (typeof item === 'object' && item !== null && item.name) {
+    const isNamedObject = typeof item === 'object' && item !== null && Boolean(item.name);
+    if (isNamedObject) {
       return { name: item.name, type: item.type || 'string', default: item.default ?? 'null' };
     }
     const parts = String(item).split(':').map((p) => p.trim());
@@ -78,11 +83,13 @@ const normalizeRoutes = (rawRoutes) => {
   if (!rawRoutes) return [];
   const list = toEntryList(rawRoutes);
   return list.map((r) => {
-    if (typeof r === 'object' && r !== null && r.method) {
+    const isRouteObject = typeof r === 'object' && r !== null && Boolean(r.method);
+    if (isRouteObject) {
       return { method: r.method.toUpperCase(), path: r.path || '/' };
     }
     const parts = String(r).trim().split(/\s+/).map((p) => p.trim());
-    if (parts.length >= 2) return { method: parts[0].toUpperCase(), path: parts[1] };
+    const hasMethodAndPath = parts.length >= 2;
+    if (hasMethodAndPath) return { method: parts[0].toUpperCase(), path: parts[1] };
     return { method: 'GET', path: parts[0] || '/' };
   }).filter((r) => Boolean(r.method && r.path));
 };
@@ -408,7 +415,8 @@ export const createJigFiles = ({
   desc = '',
   description = '',
   dryRun = false,
-  cwd = process.cwd()
+  cwd = process.cwd(),
+  agentId = undefined
 } = {}) => {
   const normKind = normalizeJigKind(kind);
   let cleanName = String(name || `sample-${normKind}`).trim().toLowerCase();
@@ -442,16 +450,10 @@ export const createJigFiles = ({
     builtFiles = buildSpecOnlyFile({ name: slug, pascalName, runner });
   }
 
-  const filesToCreate = [];
-  if (builtFiles.code) {
-    filesToCreate.push({ relName: `${slug}.ts`, content: builtFiles.code });
-  }
-  if (builtFiles.types) {
-    filesToCreate.push({ relName: `${slug}.types.d.ts`, content: builtFiles.types });
-  }
-  if (builtFiles.spec) {
-    filesToCreate.push({ relName: `${slug}.spec.ts`, content: builtFiles.spec });
-  }
+  const fileSlots = [['code', `${slug}.ts`], ['types', `${slug}.types.d.ts`], ['spec', `${slug}.spec.ts`]];
+  const filesToCreate = fileSlots
+    .filter(([key]) => Boolean(builtFiles[key]))
+    .map(([key, relName]) => ({ relName, content: builtFiles[key] }));
 
   const previews = filesToCreate.map((f) => ({
     file: f.relName,
@@ -460,14 +462,10 @@ export const createJigFiles = ({
 
   const filesCreated = filesToCreate.map((f) => f.relName);
 
-  if (!dryRun) {
-    if (!fs.existsSync(resolvedTargetDir)) {
-      fs.mkdirSync(resolvedTargetDir, { recursive: true });
-    }
-    for (const f of filesToCreate) {
-      const absPath = path.join(resolvedTargetDir, f.relName);
-      fs.writeFileSync(absPath, f.content, 'utf-8');
-    }
+  const isWrite = !dryRun;
+  if (isWrite) {
+    const files = filesToCreate.map((f) => ({ absPath: path.join(resolvedTargetDir, f.relName), content: f.content }));
+    writeGeneratedFiles({ dirs: [resolvedTargetDir], files, cwd, agentId });
     indexGeneratedFiles(cwd, resolvedTargetDir, filesCreated);
   }
 

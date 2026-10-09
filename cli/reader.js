@@ -373,9 +373,16 @@ export const readTokenOptimized = (targetPath, options = {}) => {
   }
 
   const slice = sliceWithTransforms(rawContent, resolvedPath, startIdx, endIdx, options);
-  const trailer = isCapped
-    ? `// [Truncated at the ${maxLines}-line chemx read window. Use startLine=${endIdx + 1} to inspect subsequent lines]`
-    : null;
+  const isCliHint = options.hintSyntax === 'cli';
+  const nextEnd = Math.min(totalLines, endIdx + maxLines);
+  const formatTruncationHint = () => {
+    if (!isCapped) return null;
+    if (isCliHint) {
+      return `// [Truncated at the ${maxLines}-line chemx read window. Use chemx read ${rawPath}:${endIdx + 1}-${nextEnd} to inspect subsequent lines]`;
+    }
+    return `// [Truncated at the ${maxLines}-line chemx read window. Use startLine=${endIdx + 1} to inspect subsequent lines]`;
+  };
+  const trailer = formatTruncationHint();
 
   return {
     file: rawPath,

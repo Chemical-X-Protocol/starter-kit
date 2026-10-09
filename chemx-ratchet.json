@@ -1,19 +1,13 @@
 {
   "version": 2,
-  "ruleset": 4,
+  "ruleset": 5,
   "scopes": {
     ".": {
-      "ruleset": 4,
+      "ruleset": 5,
       "allRules": true,
       "rules": {
-        "CONTROL_FLOW_INLINE_BOOLEAN": 919,
-        "CONTROL_FLOW_SILENT_GUARD": 3,
-        "ERROR_SWALLOWED_EXCEPTION": 1,
-        "HOOK_RETURN_OVERLOAD": 1,
-        "RAW_INLINE_STYLE": 1,
-        "TYPE_COLOCATION": 1,
-        "TYPOGRAPHY_EM_DASH": 1,
-        "UNGUARDED_LOGGING": 12
+        "CONTROL_FLOW_CASCADE_GUARDS": 11,
+        "CONTROL_FLOW_INLINE_BOOLEAN": 612
       },
       "revisions": {
         "A11Y_CLICKABLE_NON_SEMANTIC": 3,
@@ -27,6 +21,7 @@
         "AI_SLOP_UTILITY_REINVENTION": 1,
         "COMBINATOR_RAW_BOOLEAN": 2,
         "COMPLEXITY_CYCLOMATIC_HIGH": 1,
+        "CONTROL_FLOW_CASCADE_GUARDS": 5,
         "CONTROL_FLOW_DISPATCH_SWITCH": 1,
         "CONTROL_FLOW_INLINE_BOOLEAN": 3,
         "CONTROL_FLOW_NESTED_TERNARY": 3,
@@ -69,7 +64,7 @@
       }
     },
     "cli": {
-      "ruleset": 4,
+      "ruleset": 5,
       "allRules": true,
       "rules": {
         "CONTROL_FLOW_INLINE_BOOLEAN": 804
@@ -86,6 +81,7 @@
         "AI_SLOP_UTILITY_REINVENTION": 1,
         "COMBINATOR_RAW_BOOLEAN": 2,
         "COMPLEXITY_CYCLOMATIC_HIGH": 1,
+        "CONTROL_FLOW_CASCADE_GUARDS": 5,
         "CONTROL_FLOW_DISPATCH_SWITCH": 1,
         "CONTROL_FLOW_INLINE_BOOLEAN": 3,
         "CONTROL_FLOW_NESTED_TERNARY": 3,

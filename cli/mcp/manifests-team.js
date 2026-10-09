@@ -60,7 +60,8 @@ export const TEAM_SUB_TOOLS = [
         tier: { type: 'string', description: 'Component tier (for create)' },
         priority: { type: 'number', description: 'Priority weight 1-3 (for create)' },
         blockedReason: { type: 'string', description: 'Reason for blocker (for block)' },
-        status: { type: 'string', description: 'Filter by status (for list)' }
+        status: { type: 'string', description: 'Filter by status (for list)' },
+        needs: { type: 'string', enum: ['light', 'standard', 'deep'], description: 'Minimum capability tier the task needs (for create; filter for list)' }
       }
     }
   },

@@ -25,7 +25,7 @@ const handleClose = () => {
   >
     <div
       class="a-dialog"
-      :style="{ maxWidth: props.maxWidth }"
+      :style="{ '--dialog-max-width': props.maxWidth }"
       role="dialog"
       aria-modal="true"
     >

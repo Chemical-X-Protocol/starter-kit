@@ -101,6 +101,59 @@ export const releaseFileLock = (db, filePath, agentId, options = {}) => {
   });
 };
 
+/**
+ * Renew-on-edit and `lock renew`: extends the holder's own live lease to now + one TTL.
+ * One UPDATE scoped to the holder's unexpired row; it never shortens a longer lease and
+ * never touches another agent's lease, the queue or the feed.
+ */
+export const renewHeldLease = (db, leaseKey, agentId, options = {}) => {
+  const now = options.now ?? Date.now();
+  const expiresAt = now + (options.ttlMs || DEFAULT_TTL_MS);
+  const cleanId = normalizeAgentId(agentId);
+  const sql = 'UPDATE file_leases SET expires_at = MAX(expires_at, ?) WHERE file_path = ? AND locked_by = ? AND expires_at > ?';
+  const res = db.prepare(sql).run(expiresAt, leaseKey, cleanId, now);
+  return { renewed: Number(res.changes) > 0, expires_at: expiresAt };
+};
+
+const renewRefusal = (state, cleanId) => {
+  const hasLease = Boolean(state);
+  if (!hasLease) return 'no_lease';
+  const isHolder = state.locked_by === cleanId;
+  if (!isHolder) return 'not_holder';
+  const isLive = Boolean(state.active);
+  if (!isLive) return 'expired';
+  return null;
+};
+
+export const renewFileLock = (db, filePath, agentId, options = {}) => {
+  const hasDb = Boolean(db);
+  const hasPath = Boolean(filePath);
+  const hasAgent = Boolean(agentId);
+  const canRenew = hasDb && hasPath && hasAgent;
+  if (!canRenew) return { renewed: false, reason: 'missing_args' };
+
+  const cleanPath = leaseKeyFor(db, filePath, options);
+  if (!cleanPath) return { renewed: false, reason: 'path_traversal' };
+
+  const cleanId = normalizeAgentId(agentId);
+  const state = describeLease(db.prepare('SELECT * FROM file_leases WHERE file_path = ?').get(cleanPath));
+  const reason = renewRefusal(state, cleanId);
+  const isRefused = Boolean(reason);
+  if (isRefused) return { renewed: false, reason, file_path: cleanPath, lease: state };
+
+  const res = renewHeldLease(db, cleanPath, cleanId, options);
+  const expiresAt = Math.max(Number(state.expires_at), res.expires_at);
+  return { renewed: res.renewed, file_path: cleanPath, locked_by: cleanId, expires_at: expiresAt, purpose: state.purpose || '' };
+};
+
+/** Live leases only (unexpired, holder alive), soonest expiry first. Read-only. */
+export const listActiveLeases = (db, now = Date.now()) => {
+  const hasDb = Boolean(db);
+  if (!hasDb) return [];
+  const rows = db.prepare('SELECT * FROM file_leases ORDER BY expires_at ASC').all();
+  return rows.map((row) => describeLease(row, now)).filter((lease) => lease.active);
+};
+
 export const getFileLockStatus = (db, filePath, options = {}) => {
   const hasDb = Boolean(db);
   const hasPath = Boolean(filePath);

@@ -83,6 +83,7 @@ export const MASTER_MCP_TOOL = {
           as: { type: 'string', description: 'Agent handle alias (e.g. @antigravity)' },
           title: { type: 'string', description: 'Task title (for team task add)' },
           priority: { type: 'number', description: 'Priority weight 1-3 (for team task add)' },
+          needs: { type: 'string', enum: ['light', 'standard', 'deep'], description: 'team task add: capability tier; team task list: filter' },
           force: { type: 'boolean', description: 'Force complete task even if hazards remain (for team task done)' },
           tokens: { type: 'number', description: 'Prompt tokens consumed by task' },
           cost: { type: 'number', description: 'Estimated dollar cost for task' },

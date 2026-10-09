@@ -1,0 +1,97 @@
+/**
+ * Chemical X Protocol: renew-on-edit.
+ * After applyEdits writes files, the caller's own live lease on each one is extended by one TTL,
+ * so a stage that keeps editing never loses its lock halfway through. A caller with no lease on
+ * the file never opens the db for writing: a read-only lookup comes first, then one UPDATE per
+ * lock db that really holds a lease of theirs. Fails open: any error leaves leases as they were.
+ *
+ * Lock roots and keys mirror edit-locks.js (findForeignLease) so renewal sees the same rows the
+ * refusal check sees.
+ */
+import fs from 'node:fs';
+import path from 'node:path';
+import { openTeamDbReadOnly, openExistingTeamDb, closeQuietly, safeAll } from './team-db-readonly.js';
+import { renewHeldLease } from './team-db-locks.js';
+import { resolveAgentId } from './agent-identity.js';
+
+const lockRoots = (root, absPath) => {
+  const roots = [root];
+  let dir = path.dirname(absPath);
+  while (true) {
+    const hasDb = fs.existsSync(path.join(dir, '.chemx', 'index.db'));
+    const isNewRoot = hasDb && !roots.includes(dir);
+    if (isNewRoot) roots.push(dir);
+    const parent = path.dirname(dir);
+    const isTop = parent === dir;
+    if (isTop) break;
+    dir = parent;
+  }
+  return roots;
+};
+
+const leaseKeys = (lockRoot, absPath, root) => {
+  const keys = [path.relative(lockRoot, absPath), path.relative(root, absPath)];
+  const isInside = (key) => key !== '' && !key.startsWith('..') && !path.isAbsolute(key);
+  return keys.filter(isInside);
+};
+
+// lockRoot -> Set of keys, so each lock db is read once however many files the batch touched.
+const keysByRoot = (root, absPaths) => {
+  const byRoot = new Map();
+  for (const absPath of absPaths) {
+    for (const lockRoot of lockRoots(root, absPath)) {
+      const keys = byRoot.get(lockRoot) ?? new Set();
+      leaseKeys(lockRoot, absPath, root).forEach((key) => keys.add(key));
+      byRoot.set(lockRoot, keys);
+    }
+  }
+  return byRoot;
+};
+
+const heldLiveKeys = (lockRoot, keys, holder, now) => {
+  const db = openTeamDbReadOnly(lockRoot);
+  const hasDb = Boolean(db);
+  if (!hasDb) return [];
+  const placeholders = keys.map(() => '?').join(', ');
+  const sql = `SELECT file_path FROM file_leases WHERE locked_by = ? AND expires_at > ? AND file_path IN (${placeholders})`;
+  const rows = safeAll(db, sql, [holder, now, ...keys]);
+  closeQuietly(db);
+  return rows.map((row) => row.file_path);
+};
+
+const renewInRoot = (lockRoot, keys, holder, options) => {
+  const held = heldLiveKeys(lockRoot, keys, holder, options.now);
+  const hasHeld = held.length > 0;
+  if (!hasHeld) return [];
+  const db = openExistingTeamDb(lockRoot);
+  const hasDb = Boolean(db);
+  if (!hasDb) return [];
+  try {
+    return held.filter((key) => renewHeldLease(db, key, holder, options).renewed).map((key) => path.join(lockRoot, key));
+  } finally {
+    closeQuietly(db);
+  }
+};
+
+/**
+ * @param {string} root Workspace root applyEdits resolved paths against.
+ * @param {string[]} absPaths Files the batch wrote or deleted.
+ * @param {string} [agentId] The caller (explicit, else $CHEMX_AGENT_ID, else session, else process).
+ * @param {{ ttlMs?: number, now?: number }} [options]
+ * @returns {string[]} Absolute paths whose lease was extended.
+ */
+export const renewLeasesAfterEdit = (root, absPaths, agentId, options = {}) => {
+  try {
+    const holder = resolveAgentId(agentId);
+    const opts = { ...options, now: options.now ?? Date.now() };
+    const renewed = [];
+    for (const [lockRoot, keys] of keysByRoot(root, absPaths)) {
+      renewed.push(...renewInRoot(lockRoot, [...keys], holder, opts));
+    }
+    return renewed;
+  } catch (err) {
+    const isDebug = Boolean(process.env.CHEMX_DEBUG);
+    if (isDebug) process.stderr.write(`[lease-renew] renewal skipped: ${err.message}\n`);
+    return [];
+  }
+};

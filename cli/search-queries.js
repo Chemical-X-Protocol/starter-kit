@@ -141,8 +141,9 @@ export const queryViolations = (db, options = {}) => {
     params.push(severity.toUpperCase());
   }
   if (filePath) {
+    const cleanPath = String(filePath).trim().replace(/^\.\//, '');
     sql += ' AND (file_path = ? OR file_path LIKE ?)';
-    params.push(filePath, `%${filePath}%`);
+    params.push(cleanPath, `%/${cleanPath}`);
   }
 
   sql += " ORDER BY (severity = 'CRITICAL') DESC, (severity = 'HIGH') DESC, file_path ASC, line ASC LIMIT ?";

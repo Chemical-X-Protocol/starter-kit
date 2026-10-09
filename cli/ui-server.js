@@ -41,7 +41,8 @@ export const createUiServer = (cwd = process.cwd(), options = {}) => {
     if (isGet) {
       const isSse = pathname === '/api/swarm/events' || pathname === '/api/events';
       if (isSse) return handleSseConnection(req, res, db);
-      const result = routeGet(req.url, db, cwd);
+      const [result, getError] = runRoute(() => routeGet(req.url, db, cwd));
+      if (getError) return sendJson(res, 500, { success: false, error: getError.message }, cookieHeaders);
       if (result) return sendJson(res, 200, result, cookieHeaders);
     }
 
@@ -55,8 +56,7 @@ export const createUiServer = (cwd = process.cwd(), options = {}) => {
     return sendJson(res, 404, { error: 'Not found' });
   });
 
-  server.on('close', closeSseHub);
-  server.on('close', () => consoleDb?.close());
+  server.on('close', () => { closeSseHub(); consoleDb?.close(); });
   return { server, db, auth };
 };
 

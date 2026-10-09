@@ -155,13 +155,20 @@ export const runSearch = async (rawArgs = [], isCli = true) => {
   const cwd = process.cwd();
 
   if (isLiteral) {
-    return handleLiteralSearchCommand(null, parsed.pattern ?? first, {
+    const pattern = parsed.pattern ?? first;
+    const pathArg = parsed.pattern ? parsed.positionals[0] : parsed.positionals[1];
+    const dir = parsed.values.dir ?? pathArg ?? null;
+    const isLineOnly = hasAnyFlag(parsed, ['-l', '--lines']);
+    const defaultLimit = isLineOnly ? Number.MAX_SAFE_INTEGER : 20;
+    const limit = parsed.values.limit !== undefined ? readIntValue(parsed, 'limit', 20) : defaultLimit;
+
+    return handleLiteralSearchCommand(null, pattern, {
       isCaseInsensitive: hasAnyFlag(parsed, ['-i', '--ignore-case']),
-      isLineOnly: hasAnyFlag(parsed, ['-l', '--lines']),
+      isLineOnly,
       isRegex: parsed.flags.has('--regex'),
       isHidden: parsed.flags.has('--hidden'),
-      limit: readIntValue(parsed, 'limit', 20), isJson, isCli, cwd,
-      dir: parsed.values.dir ?? null, argProblems
+      limit, isJson, isCli, cwd,
+      dir, argProblems
     });
   }
 

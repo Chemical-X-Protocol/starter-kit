@@ -1,4 +1,14 @@
 <script lang="ts">
+  export interface AtomButtonProps {
+    type?: 'button' | 'submit' | 'reset';
+    disabled?: boolean;
+    ariaLabel?: string;
+    variant?: 'primary' | 'ghost' | 'glass';
+    class?: string;
+    onclick?: (e: MouseEvent) => void;
+    children?: import('svelte').Snippet;
+  }
+
   let {
     type = 'button',
     disabled = false,
@@ -7,15 +17,7 @@
     class: className = '',
     onclick,
     children
-  } = $props<{
-    type?: 'button' | 'submit' | 'reset';
-    disabled?: boolean;
-    ariaLabel?: string;
-    variant?: 'primary' | 'ghost' | 'glass';
-    class?: string;
-    onclick?: (e: MouseEvent) => void;
-    children?: import('svelte').Snippet;
-  }>();
+  } = $props<AtomButtonProps>();
 </script>
 
 <button

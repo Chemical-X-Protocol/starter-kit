@@ -17,6 +17,7 @@ import { resolveAuditScope } from '../audit-scope.js';
 import { computeGateVerdict } from '../audit/gate-verdict.js';
 import { buildAuditSummary } from '../audit/audit-summary.js';
 import { loadProjectConfig } from '../config/index.js';
+import { loadTaskRules } from '../team/team-task-rules.js';
 
 export const handleAudit = (args = {}, cwd = process.cwd()) => {
   const baseCwd = resolveTargetCwd(cwd);
@@ -90,6 +91,7 @@ export const handleGetRefactorPrompt = (args = {}, cwd = process.cwd()) => {
   const targetDir = auditScope.relDir;
   const scope = args.scope || 'master';
   const report = executeAstAudit(auditScope.dir, { cwd: resolveTargetCwd(cwd) });
+  report.taskRules = loadTaskRules(resolveTargetCwd(cwd));
 
   const PROMPT_BUILDERS = {
     'grade-f': buildGradeFPrompt,

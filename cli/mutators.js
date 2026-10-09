@@ -5,7 +5,7 @@ import { ANSI } from './theme.js';
 import { STATUS, toExitCode } from './result-status.js';
 import { runAutofix } from './audit/autofix.js';
 import { applyEdits } from './apply-edits.js';
-import { hasPreviewFlag, findUnknownFlags, unknownFlagsMessage } from './cli-args.js';
+import { hasPreviewFlag, findUnknownFlags, unknownFlagsMessage, parseValueFlags } from './cli-args.js';
 
 const relToCwd = (absPath) => path.relative(process.cwd(), absPath);
 
@@ -30,8 +30,10 @@ export const resolveCapsuleFiles = (targetPath, cwd = process.cwd()) => {
   const flatTypes = path.join(dir, 'types.d.ts');
 
   const resolveTypesFile = (granularPath, flatPath) => {
-    if (fs.existsSync(granularPath)) return granularPath;
-    if (fs.existsSync(flatPath)) return flatPath;
+    const hasGranular = fs.existsSync(granularPath);
+    if (hasGranular) return granularPath;
+    const hasFlat = fs.existsSync(flatPath);
+    if (hasFlat) return flatPath;
     return null;
   };
 
@@ -61,12 +63,14 @@ export const addPropToCapsule = (targetPath, propDefinition, options = {}) => {
   let propType;
   let isOptional = true;
 
-  if (typeof propDefinition === 'string' && propDefinition.includes(':')) {
+  const isStringDefinition = typeof propDefinition === 'string';
+  const isTypedDefinition = isStringDefinition && propDefinition.includes(':');
+  if (isTypedDefinition) {
     const [rawName, ...typeParts] = propDefinition.split(':');
     propName = rawName.trim().replace(/[\?!]$/, '');
     propType = typeParts.join(':').trim() || 'string';
     isOptional = !rawName.endsWith('!') && options.optional !== false;
-  } else if (typeof propDefinition === 'string') {
+  } else if (isStringDefinition) {
     propName = propDefinition.trim().replace(/[\?!]$/, '');
     propType = typeof options === 'string' ? options : (options.type || 'string');
     isOptional = !propDefinition.endsWith('!') && options.optional !== false;
@@ -89,7 +93,8 @@ export const addPropToCapsule = (targetPath, propDefinition, options = {}) => {
   const isValidName = /^[A-Za-z_$][\w$]*$/.test(propName);
   if (!isValidName) throw new Error(`Invalid prop name "${propName}".`);
   const regexExists = new RegExp(`\\b${propName.replace(/\$/g, '\\$')}\\??\\s*:`);
-  if (regexExists.test(typesContent)) {
+  const isAlreadyDeclared = regexExists.test(typesContent);
+  if (isAlreadyDeclared) {
     return { success: true, alreadyExists: true, propName, propType, updatedFiles };
   }
 
@@ -102,17 +107,21 @@ export const addPropToCapsule = (targetPath, propDefinition, options = {}) => {
   typesContent = typesContent.replace(propsBlock, (_m, head, tail) => `${head}\n${propDeclaration}${tail}`);
   edits.push({ path: files.typesPropsFile, content: typesContent });
 
-  if (files.compPath && fs.existsSync(files.compPath)) {
+  const hasComponent = Boolean(files.compPath) && fs.existsSync(files.compPath);
+  if (hasComponent) {
     let compContent = fs.readFileSync(files.compPath, 'utf-8');
     let compModified = false;
+    const isPropMissing = !compContent.includes(propName);
+    const isTsxTarget = files.compExt === 'tsx' && isPropMissing;
+    const isSvelteTarget = files.compExt === 'svelte' && isPropMissing;
 
-    if (files.compExt === 'tsx' && !compContent.includes(propName)) {
+    if (isTsxTarget) {
       const fcMatch = compContent.match(/(\(\{\s*\n\s*)([a-zA-Z0-9_]+)/);
       if (fcMatch) {
         compContent = compContent.replace(fcMatch[0], () => `${fcMatch[1]}${propName},\n  ${fcMatch[2]}`);
         compModified = true;
       }
-    } else if (files.compExt === 'svelte' && !compContent.includes(propName)) {
+    } else if (isSvelteTarget) {
       const svelteMatch = compContent.match(/(const\s*\{\s*\n\s*)([a-zA-Z0-9_]+)/);
       if (svelteMatch) {
         compContent = compContent.replace(svelteMatch[0], () => `${svelteMatch[1]}${propName},\n  ${svelteMatch[2]}`);
@@ -141,14 +150,16 @@ export const addStateToCapsule = (targetPath, statusName, payload = '', options 
   }
 
   let stateContent = fs.readFileSync(files.typesStateFile, 'utf-8');
-  if (stateContent.includes(`status: '${cleanStatus}'`)) {
+  const isAlreadyDeclared = stateContent.includes(`status: '${cleanStatus}'`);
+  if (isAlreadyDeclared) {
     return { success: true, alreadyExists: true, statusName: cleanStatus, updatedFiles };
   }
 
   const cleanPayload = (typeof payload === 'string' ? payload : '').trim();
   const resolvePayloadString = (p) => {
     if (!p) return '';
-    if (p.startsWith('readonly')) return `; ${p}`;
+    const isReadonly = p.startsWith('readonly');
+    if (isReadonly) return `; ${p}`;
     return `; readonly ${p}`;
   };
   const payloadStr = resolvePayloadString(cleanPayload);
@@ -181,11 +192,15 @@ export const addActionToController = (targetPath, actionName, options = {}) => {
   }
 
   let controllerContent = fs.readFileSync(files.controllerPath, 'utf-8');
-  if (controllerContent.includes(`const ${handlerName} =`)) {
+  const isAlreadyDeclared = controllerContent.includes(`const ${handlerName} =`);
+  if (isAlreadyDeclared) {
     return { success: true, alreadyExists: true, handlerName, updatedFiles };
   }
 
-  if (controllerContent.includes('ControllerOptions') && !controllerContent.includes(`on${pascalAction}?:`)) {
+  const hasOptionsInterface = controllerContent.includes('ControllerOptions');
+  const isCallbackMissing = !controllerContent.includes(`on${pascalAction}?:`);
+  const needsCallbackOption = hasOptionsInterface && isCallbackMissing;
+  if (needsCallbackOption) {
     controllerContent = controllerContent.replace(
       /(interface\s+ControllerOptions\s*\{[\s\S]*?)(\n\s*\})/,
       (_m, head, tail) => `${head}\n  readonly on${pascalAction}?: () => void;${tail}`
@@ -218,7 +233,8 @@ export const addActionToController = (targetPath, actionName, options = {}) => {
 
 export const autoFixFile = (targetFile, options = {}) => {
   const absPath = path.resolve(options.cwd || process.cwd(), targetFile);
-  if (!fs.existsSync(absPath)) {
+  const isMissing = !fs.existsSync(absPath);
+  if (isMissing) {
     throw new Error(`File not found: ${targetFile}`);
   }
 
@@ -267,8 +283,10 @@ const printDirectorySummary = (result) => {
 export const runMutatorCli = async (rawArgs = [], isCli = true) => {
   const isJson = rawArgs.includes('--json');
   const isDryRun = hasPreviewFlag(rawArgs);
-  const unknown = findUnknownFlags(rawArgs, []);
-  const nonFlags = rawArgs.filter((a) => !a.startsWith('-'));
+  const unknown = findUnknownFlags(rawArgs, ['--as']);
+  // --as=@handle or --as @handle: the identity applyEdits checks team locks against.
+  const { values: flagValues, positionals: nonFlags } = parseValueFlags(rawArgs, { as: ['--as'] });
+  const agentId = flagValues.as;
   const first = nonFlags[0] || '';
   const second = nonFlags[1] || '';
 
@@ -277,7 +295,8 @@ export const runMutatorCli = async (rawArgs = [], isCli = true) => {
   let value = nonFlags[2] || '';
   let extra = nonFlags.slice(3).join(' ');
 
-  if (first === 'add' && ['prop', 'state', 'action'].includes(second)) {
+  const isAddSubcommand = first === 'add' && ['prop', 'state', 'action'].includes(second);
+  if (isAddSubcommand) {
     command = `add:${second}`;
     target = nonFlags[2] || '';
     value = nonFlags[3] || '';
@@ -294,22 +313,22 @@ export const runMutatorCli = async (rawArgs = [], isCli = true) => {
       if (!hasArgs) {
         throw new Error('Usage: chemx add:prop <capsule-path> <name>:<type>');
       }
-      result = addPropToCapsule(target, value, { dryRun: isDryRun });
+      result = addPropToCapsule(target, value, { dryRun: isDryRun, agentId });
     } else if (command === 'add:state') {
       const hasArgs = Boolean(target) && Boolean(value);
       if (!hasArgs) {
         throw new Error('Usage: chemx add:state <capsule-path> <statusName> [payload]');
       }
-      result = addStateToCapsule(target, value, extra, { dryRun: isDryRun });
+      result = addStateToCapsule(target, value, extra, { dryRun: isDryRun, agentId });
     } else if (command === 'add:action') {
       const hasArgs = Boolean(target) && Boolean(value);
       if (!hasArgs) {
         throw new Error('Usage: chemx add:action <capsule-path> <actionName>');
       }
-      result = addActionToController(target, value, { dryRun: isDryRun });
+      result = addActionToController(target, value, { dryRun: isDryRun, agentId });
     } else if (command === 'fix') {
       const fixTarget = target || 'src';
-      result = autoFixFile(fixTarget, { dryRun: isDryRun });
+      result = autoFixFile(fixTarget, { dryRun: isDryRun, agentId });
     } else {
       throw new Error(`Unknown mutator command "${command}". Available: add:prop, add:state, add:action, fix`);
     }
@@ -326,13 +345,15 @@ export const runMutatorCli = async (rawArgs = [], isCli = true) => {
       return result;
     }
 
-    if (result.dryRun) {
+    const isDryRunResult = Boolean(result.dryRun);
+    if (isDryRunResult) {
       const wouldUpdate = result.updatedFiles || [...new Set((result.fixes || []).map((f) => f.file))];
       process.stdout.write(`\n\x1b[1m\x1b[33m[DRY RUN]\x1b[0m Would update ${wouldUpdate.length} file(s):\n`);
       for (const f of wouldUpdate) {
         process.stdout.write(`  \x1b[33m•\x1b[0m ${f}\n`);
       }
-      if (result.diff) process.stdout.write(`\n${result.diff}\n`);
+      const hasDiff = Boolean(result.diff);
+      if (hasDiff) process.stdout.write(`\n${result.diff}\n`);
       for (const s of result.suggestions || []) {
         process.stdout.write(`  suggestion ${s.file || ''}:${s.line} ${s.rule}: ${s.suggestion}\n`);
       }
@@ -344,7 +365,8 @@ export const runMutatorCli = async (rawArgs = [], isCli = true) => {
     const isNothingApplied = changedFileCount(result) === 0;
     const heading = isNothingApplied ? `${ANSI.BOLD}${ANSI.GOLD}No changes written:` : `${ANSI.BOLD}${ANSI.LIME}✔ Chemical X Surgical Mutation Applied:`;
     process.stdout.write(`\n${heading}${ANSI.RESET}\n`);
-    if (result.updatedFiles) {
+    const hasUpdatedFiles = Boolean(result.updatedFiles);
+    if (hasUpdatedFiles) {
       for (const f of result.updatedFiles) {
         process.stdout.write(`  ${ANSI.CYAN}•${ANSI.RESET} Updated ${f}\n`);
       }

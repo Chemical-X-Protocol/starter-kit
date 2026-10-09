@@ -155,3 +155,21 @@ test('chemx q --dir with a mistyped dir is inconclusive (exit 3) and keeps the i
     cleanup(root);
   }
 });
+
+test('MCP q synchronizes newly created and edited files on demand', async () => {
+  const root = makeProject({ 'src/initial.js': 'export const initialOne = 1;\n' });
+  try {
+    const { handleChemxQ } = await import('./mcp/tools-q.js');
+    clearDbCache();
+    const initialText = handleChemxQ({ query: 'initialOne' }, root);
+    assert.match(String(initialText), /initial\.js/);
+
+    fs.writeFileSync(path.join(root, 'src/useZebraFreshness.ts'), 'export function useZebraFreshness() { return 1; }\n');
+    clearDbCache();
+    const freshResult = handleChemxQ({ query: 'useZebraFreshness', columnar: true }, root);
+    assert.equal(freshResult.total, 1);
+    assert.equal(freshResult.rows[0][0], 'src/useZebraFreshness.ts');
+  } finally {
+    cleanup(root);
+  }
+});

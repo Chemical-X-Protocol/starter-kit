@@ -7,7 +7,6 @@ import { checkOrPromptEvaluation } from './license.js';
 import {
   toPascalCase,
   toCamelCase,
-  resolveArchetype,
   buildReactComponent,
   buildVueComponent,
   buildSvelteComponent,
@@ -28,15 +27,16 @@ import {
   buildSvelteView,
   buildViewParamsType,
   buildViewIndex,
-  buildViewSpec,
-  buildCompactCapsule
+  buildViewSpec
 } from './generator-templates.js';
 import { detectFramework, resolveFramework, detectTierBaseDir, detectInstalledFamily, detectTestRunner, detectStylingStack } from './project-detector.js';
 import { indexGeneratedFiles } from './generator-indexer.js';
 import { printGenerateHelp } from './generator-help.js';
 import { createJigFiles, JIG_KINDS } from './generator-jig.js';
 import { handleJigCli } from './generator-jig-cli.js';
-import { hasPreviewFlag } from './cli-args.js';
+import { hasPreviewFlag, readFlagValue } from './cli-args.js';
+import { createCompactCapsule } from './generator-compact.js';
+import { writeGeneratedFiles } from './generator-writes.js';
 export { printGenerateHelp } from './generator-help.js';
 export { createJigFiles, JIG_KINDS } from './generator-jig.js';
 export { handleJigCli } from './generator-jig-cli.js';
@@ -66,10 +66,12 @@ const resolveSelectedTier = (explicitTier, cleanName) => {
     const matched = TIERS.find((t) => t.tier === normalized || t.tier.startsWith(normalized) || t.prefix.startsWith(normalized));
     if (matched) return matched;
   }
-  if (cleanName.startsWith('use-') || cleanName.startsWith('use')) {
+  const isHookName = cleanName.startsWith('use');
+  if (isHookName) {
     return TIERS.find((t) => t.tier === 'hook');
   }
-  if (cleanName.startsWith('v-') || cleanName.endsWith('-view')) {
+  const isViewName = cleanName.startsWith('v-') || cleanName.endsWith('-view');
+  if (isViewName) {
     return TIERS.find((t) => t.tier === 'view');
   }
   const prefixMatch = cleanName.match(/^([a-z])-+/);
@@ -79,6 +81,15 @@ const resolveSelectedTier = (explicitTier, cleanName) => {
     if (matched) return matched;
   }
   return TIERS[0];
+};
+
+// Tier prefix rules: hooks are use-<x>, views v-<x>, everything else <tier prefix><x>.
+const capsuleNameFor = (selectedTier, cleanName) => {
+  const isHook = selectedTier.tier === 'hook';
+  if (isHook) return `use-${cleanName.replace(/^use-?/, '')}`;
+  const isView = selectedTier.tier === 'view';
+  if (isView) return `v-${cleanName.replace(/^v-?/, '').replace(/-view$/, '')}`;
+  return `${selectedTier.prefix}${cleanName.replace(/^[a-z]-/, '')}`;
 };
 
 export const detectBaseDir = (cwd = process.cwd()) => {
@@ -99,7 +110,8 @@ export const createCapsuleFiles = ({
   css = null,
   compact = false,
   flat = false,
-  dryRun = false
+  dryRun = false,
+  agentId = undefined
 }) => {
   const capsuleDesc = desc || description || '';
   const cleanName = (name || 'user-avatar').trim().toLowerCase();
@@ -114,17 +126,7 @@ export const createCapsuleFiles = ({
     (f) => f.id === resolvedFrameworkId || f.ext === resolvedFrameworkId
   ) || FRAMEWORKS[0];
 
-  let capsuleName = cleanName;
-  if (selectedTier.tier === 'hook') {
-    const stripped = cleanName.replace(/^use-?/, '');
-    capsuleName = `use-${stripped}`;
-  } else if (selectedTier.tier === 'view') {
-    const stripped = cleanName.replace(/^v-?/, '').replace(/-view$/, '');
-    capsuleName = `v-${stripped}`;
-  } else {
-    const stripped = cleanName.replace(/^[a-z]-/, '');
-    capsuleName = `${selectedTier.prefix}${stripped}`;
-  }
+  const capsuleName = capsuleNameFor(selectedTier, cleanName);
 
   const baseSlug = capsuleName.replace(/^[a-z]+-/, '');
   const pascalName = toPascalCase(baseSlug);
@@ -137,79 +139,32 @@ export const createCapsuleFiles = ({
   const isHookOrView = selectedTier.tier === 'hook' || selectedTier.tier === 'view';
   const canUseCompact = isCompact && !isHookOrView;
   if (canUseCompact) {
-    const compFile = `${capsuleName}.${selectedFramework.ext}`;
-    const targetFilePath = path.resolve(resolvedParent, compFile);
-
-    if (!dryRun && fs.existsSync(targetFilePath)) {
-      throw new Error(`File ${compFile} already exists at ${targetFilePath}.`);
-    }
-
-    const archetype = resolveArchetype(capsuleName, capsuleDesc, explicitTemplate);
-    const installedFamily = detectInstalledFamily(cwd);
-    const compactContent = buildCompactCapsule({
-      capsuleName,
-      pascalName,
-      framework: selectedFramework.id,
-      archetype,
-      atomsPackage: installedFamily.atomsPackage
-    });
-
-    const filesCreated = [compFile];
-    const previews = [{ file: compFile, lines: compactContent.split('\n').length }];
-
-    if (!dryRun) {
-      if (!fs.existsSync(resolvedParent)) {
-        fs.mkdirSync(resolvedParent, { recursive: true });
-      }
-      fs.writeFileSync(targetFilePath, compactContent, 'utf-8');
-    }
-
-    const relTargetDir = path.relative(cwd, targetFilePath);
-
-    return {
-      success: true,
-      compact: true,
-      dryRun: Boolean(dryRun),
-      capsuleName,
-      pascalName,
-      framework: selectedFramework.id,
-      tier: selectedTier.tier,
-      targetDir: targetFilePath,
-      relativeDir: relTargetDir,
-      directory: relTargetDir,
-      files: filesCreated,
-      filesCreated,
-      previews
-    };
+    return createCompactCapsule({ capsuleName, pascalName, capsuleDesc, explicitTemplate, selectedFramework, selectedTier, resolvedParent, cwd, dryRun, agentId });
   }
 
   const targetDir = path.resolve(resolvedParent, capsuleName);
   const runner = detectTestRunner(targetDir || cwd);
 
-  if (!dryRun && fs.existsSync(targetDir)) {
+  const isTaken = !dryRun && fs.existsSync(targetDir);
+  if (isTaken) {
     throw new Error(`Directory ${capsuleName} already exists at ${targetDir}.`);
   }
 
-  if (!dryRun) {
-    fs.mkdirSync(targetDir, { recursive: true });
-  }
   const typesDir = path.join(targetDir, 'types');
-  if (!dryRun) {
-    fs.mkdirSync(typesDir, { recursive: true });
-  }
-
   const filesCreated = [];
   const previews = [];
+  const pendingFiles = [];
 
+  // Files are collected first and written together once every path clears the team-lock check.
   const recordFile = (relFile, absPath, content) => {
     filesCreated.push(relFile);
     previews.push({ file: relFile, lines: content.split('\n').length });
-    if (!dryRun) {
-      fs.writeFileSync(absPath, content, 'utf-8');
-    }
+    pendingFiles.push({ absPath, content });
   };
 
-  if (selectedTier.tier === 'hook') {
+  const isHookTier = selectedTier.tier === 'hook';
+  const isViewTier = selectedTier.tier === 'view';
+  if (isHookTier) {
     const hookFile = `${capsuleName}.ts`;
     const specFile = `${capsuleName}.spec.ts`;
 
@@ -221,7 +176,7 @@ export const createCapsuleFiles = ({
     recordFile('types/return.d.ts', path.join(typesDir, 'return.d.ts'), buildHookReturnType(pascalName));
     recordFile('types/index.ts', path.join(typesDir, 'index.ts'), buildTypesIndex(['options', 'return']));
     recordFile('types.d.ts', path.join(targetDir, 'types.d.ts'), "export * from './types/index';\n");
-  } else if (selectedTier.tier === 'view') {
+  } else if (isViewTier) {
     const viewFile = `${capsuleName}.${selectedFramework.ext}`;
     const specFile = `${capsuleName}.spec.ts`;
 
@@ -267,7 +222,9 @@ export const createCapsuleFiles = ({
     }
   }
 
-  if (!dryRun) {
+  const isWrite = !dryRun;
+  if (isWrite) {
+    writeGeneratedFiles({ dirs: [targetDir, typesDir], files: pendingFiles, cwd, agentId });
     indexGeneratedFiles(cwd, targetDir, filesCreated);
   }
 
@@ -292,7 +249,8 @@ export const createCapsuleFiles = ({
 export const runGenerateWizard = async (rawArgs = []) => {
   const isHelp = rawArgs.includes('--help') || rawArgs.includes('-h') || rawArgs.includes('help');
   if (isHelp) {
-    if (rawArgs.includes('--json')) {
+    const isJsonHelp = rawArgs.includes('--json');
+    if (isJsonHelp) {
       process.stdout.write(JSON.stringify({ help: true, success: true }) + '\n');
     } else {
       await printGenerateHelp();
@@ -309,15 +267,21 @@ export const runGenerateWizard = async (rawArgs = []) => {
 
   const useGum = hasGum();
 
-  const positional = rawArgs.filter((a) => !a.startsWith('-') && !IGNORED_NAME_TOKENS.has(a));
+  // --as=@handle or --as @handle: the identity team locks are checked against; its value is never a name.
+  const asFlag = readFlagValue(rawArgs, ['--as']);
+  const agentId = asFlag.value;
+  const positional = rawArgs.filter((a, i) => !a.startsWith('-') && !IGNORED_NAME_TOKENS.has(a) && !asFlag.consumed.includes(i));
   let explicitTier = (rawArgs.find((a) => a.startsWith('--tier=')) || '').split('=')[1];
   let rawName = null;
+  const isFirstTier = positional.length >= 1 && KNOWN_TIER_NAMES.has(positional[0].toLowerCase());
+  const isTierThenName = isFirstTier && positional.length >= 2;
+  const hasPositional = positional.length >= 1;
 
-  if (positional.length >= 2 && KNOWN_TIER_NAMES.has(positional[0].toLowerCase())) {
+  if (isTierThenName) {
     explicitTier = positional[0].toLowerCase();
     rawName = positional[1];
-  } else if (positional.length >= 1) {
-    if (KNOWN_TIER_NAMES.has(positional[0].toLowerCase())) {
+  } else if (hasPositional) {
+    if (isFirstTier) {
       explicitTier = positional[0].toLowerCase();
     } else {
       rawName = positional[0];
@@ -334,20 +298,12 @@ export const runGenerateWizard = async (rawArgs = []) => {
 
   const isBareOrMinimal = rawArgs.includes('--bare') || rawArgs.includes('--minimal');
   const templateFlagMatch = (rawArgs.find((a) => a.startsWith('--template=')) || '').split('=')[1];
-  let templateArg = templateFlagMatch || null;
-  if (!templateArg && isBareOrMinimal) {
-    templateArg = 'minimal';
-  } else if (!templateArg && rawArgs.includes('--controls')) {
-    templateArg = 'controls';
-  } else if (!templateArg && rawArgs.includes('--canvas')) {
-    templateArg = 'canvas';
-  }
+  const templateShorthands = [[isBareOrMinimal, 'minimal'], [rawArgs.includes('--controls'), 'controls'], [rawArgs.includes('--canvas'), 'canvas']];
+  const templateArg = templateFlagMatch || templateShorthands.find(([isSet]) => isSet)?.[1] || null;
 
   const cssFlagMatch = (rawArgs.find((a) => a.startsWith('--css=')) || '').split('=')[1];
-  let cssArg = cssFlagMatch || null;
-  if (!cssArg && rawArgs.includes('--no-scss')) {
-    cssArg = 'none';
-  }
+  const isNoScss = rawArgs.includes('--no-scss');
+  const cssArg = cssFlagMatch || (isNoScss ? 'none' : null);
 
   const hasCompactFlag = rawArgs.includes('--compact');
   const hasFlatFlag = rawArgs.includes('--flat');
@@ -363,11 +319,12 @@ export const runGenerateWizard = async (rawArgs = []) => {
   }
 
   const shouldPromptName = !rawName && !isYes;
+  const isMissingNameUnattended = !rawName && isYes;
   if (shouldPromptName) {
     rawName = useGum
       ? gumInput('Capsule feature name (e.g. user-avatar, spark-kpi, auth-status):', 'user-avatar')
       : await promptQuestion('Capsule feature name [user-avatar]: ');
-  } else if (!rawName && isYes) {
+  } else if (isMissingNameUnattended) {
     // Non-interactive (piped, --json or -y): never invent a default capsule name.
     const message = 'Missing capsule name. Usage: chemx generate <name> [options]';
     if (isJson) {
@@ -395,17 +352,7 @@ export const runGenerateWizard = async (rawArgs = []) => {
     if (found) selectedFramework = found;
   }
 
-  let capsuleName = cleanName;
-  if (selectedTier.tier === 'hook') {
-    const stripped = cleanName.replace(/^use-?/, '');
-    capsuleName = `use-${stripped}`;
-  } else if (selectedTier.tier === 'view') {
-    const stripped = cleanName.replace(/^v-?/, '').replace(/-view$/, '');
-    capsuleName = `v-${stripped}`;
-  } else {
-    const stripped = cleanName.replace(/^[a-z]-/, '');
-    capsuleName = `${selectedTier.prefix}${stripped}`;
-  }
+  const capsuleName = capsuleNameFor(selectedTier, cleanName);
 
   const detectedDir = detectTierBaseDir(selectedTier.tier, process.cwd());
   let targetParent = dirArg || (isYes ? detectedDir : null);
@@ -419,9 +366,12 @@ export const runGenerateWizard = async (rawArgs = []) => {
       ? gumChoose(dirChoices, 'Select Destination Directory')
       : await promptQuestion(`Destination Directory [1=${detectedDir}, 2=current, 3=custom] (default: 1): `);
 
-    if (dirPick && dirPick.startsWith('2.')) {
+    const pick = dirPick || '';
+    const isCurrentDir = pick.startsWith('2.');
+    const isCustomDir = pick.startsWith('3.');
+    if (isCurrentDir) {
       targetParent = '.';
-    } else if (dirPick && dirPick.startsWith('3.')) {
+    } else if (isCustomDir) {
       targetParent = useGum
         ? gumInput('Enter custom parent directory path:', detectedDir)
         : await promptQuestion(`Enter custom parent directory path [${detectedDir}]: `);
@@ -443,7 +393,8 @@ export const runGenerateWizard = async (rawArgs = []) => {
       template: templateArg,
       css: cssArg,
       compact: isCompact,
-      dryRun: isDryRun
+      dryRun: isDryRun,
+      agentId
     });
   } catch (err) {
     const errMessage = err instanceof Error ? err.message : String(err);
@@ -460,7 +411,8 @@ export const runGenerateWizard = async (rawArgs = []) => {
     return result;
   }
 
-  if (result.dryRun) {
+  const isDryRunResult = Boolean(result.dryRun);
+  if (isDryRunResult) {
     process.stdout.write(`\n\x1b[1m\x1b[33m[DRY RUN]\x1b[0m Would generate crystalline capsule at \x1b[36m${result.relativeDir}/\x1b[0m:\n`);
     for (const f of result.previews || []) {
       process.stdout.write(`  \x1b[33m•\x1b[0m ${f.file} (${f.lines} lines)\n`);

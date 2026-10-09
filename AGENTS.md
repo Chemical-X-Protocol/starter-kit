@@ -324,6 +324,42 @@ Use same-name shorthand across all languages; eliminate redundant `key: key` dup
 - Halting execution requires an explicit contract: return a `ResultTuple` (`return [null, error]`), emit diagnostic logging (`logger.warn(...)`), update a user-facing error state (`state.error = '...'`), or throw a domain invariant.
 - **Exemptions**: Benign lifecycle no-ops (`abortSignal.aborted`, `!isMounted`), optional prop callbacks (`!props.onClick`), debounce/throttle timers, and pure query predicates.
 
+### H. Domain Validator Functions (Multi-Condition Extraction)
+- When a decision or validation sequence requires 3 or more conditions, cascading early returns at the call site fragment linear control flow and obscure decision logic.
+- Extract multi-condition validation sequences into a pure **Domain Validator Function** (`validate<Action>` or `can<Action>`):
+  - **Stage 1 (Atomic Primitives)**: Raw facts and domain predicates (`hasItems`, `balance >= cost`).
+  - **Stage 2 (Domain Validator)**: Pure function that evaluates the atomic conditions and returns a `ResultTuple` (`[boolean, string | null]`) or `boolean`.
+  - **Stage 3 (Call-Site Guard)**: Single, unnested evaluation reading the validator verdict.
+- **2-Stage Booleans vs Domain Validators**:
+  - Use 2-Stage Booleans (3.A) for 1 or 2 atomic conditions at the call site.
+  - Use Domain Validator Functions for 3 or more conditions (`CONTROL_FLOW_CASCADE_GUARDS`).
+  ```typescript
+  // ❌ Bad: Cascading early returns at call site (>= 3 guards)
+  const handleCheckout = () => {
+    if (!hasItems(cart)) return;
+    if (!isAddressValid(user)) return;
+    if (user.balance < totalCost) return;
+    processPayment();
+  };
+
+  // ✅ Good: Extracted pure domain validator function
+  const validateCheckout = (cart: Cart, user: User, totalCost: number): [boolean, string | null] => {
+    if (!hasItems(cart)) return [false, 'cart_empty'];
+    if (!isAddressValid(user)) return [false, 'invalid_address'];
+    if (user.balance < totalCost) return [false, 'insufficient_funds'];
+    return [true, null];
+  };
+
+  const handleCheckout = () => {
+    const [canProceed, rejectionReason] = validateCheckout(cart, user, totalCost);
+    if (!canProceed) {
+      logger.warn(rejectionReason);
+      return;
+    }
+    processPayment();
+  };
+  ```
+
 ---
 
 ## 4. Reactivity, Composables & Hooks

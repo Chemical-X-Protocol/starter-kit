@@ -136,6 +136,8 @@ export interface AuditReport {
   readonly patterns?: readonly PatternCandidate[];
   readonly roadmap?: readonly RoadmapPhase[];
   readonly violations: readonly HazardViolation[];
+  /** Rules that currently have open backlog tasks; drives the prompt Action lines. Undefined when unknown. */
+  readonly taskRules?: readonly string[];
 }
 
 export interface AuditOptions {
@@ -172,7 +174,26 @@ export interface DeduplicatePromptOptions {
 }
 
 export declare function deduplicateRolePreambles(promptText: string, options?: DeduplicatePromptOptions): string;
-export declare function formatGroupedPromptViolations(violations?: readonly HazardViolation[]): string[];
+export interface GroupedPromptOptions {
+  readonly detailedLocations?: boolean;
+  readonly taskRules?: readonly string[];
+}
+
+export type NeedsTier = 'light' | 'standard' | 'deep';
+
+export interface RuleMeta {
+  readonly pillar: string;
+  readonly severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+  readonly needs: NeedsTier;
+  readonly directive: string;
+}
+
+export declare const NEEDS_TIERS: readonly NeedsTier[];
+export declare const DEFAULT_NEEDS: NeedsTier;
+export declare const UNREGISTERED_RULE_NEEDS: Readonly<Record<string, NeedsTier>>;
+export declare const RULE_REGISTRY: Readonly<Record<string, RuleMeta>>;
+export declare function resolveRuleNeeds(rule?: string): NeedsTier;
+export declare function formatGroupedPromptViolations(violations?: readonly HazardViolation[], options?: GroupedPromptOptions): string[];
 export declare function buildGradeFPrompt(report: AuditReport, options?: PromptOptions): string;
 export declare function buildGradeDPrompt(report: AuditReport, options?: PromptOptions): string;
 export declare function buildGradeCPrompt(report: AuditReport, options?: PromptOptions): string;

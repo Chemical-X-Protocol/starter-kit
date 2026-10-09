@@ -1,7 +1,7 @@
 import fs from 'node:fs';
-import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { classifyConsoleSql, CONSOLE_UNAVAILABLE_ERROR } from './ui-sql-guard.js';
+import { chemxDbPathFor } from './sqlite-memory.js';
 
 const countTableRows = (db, name) => {
   const quoted = `"${String(name).replace(/"/g, '""')}"`;
@@ -14,8 +14,9 @@ const countTableRows = (db, name) => {
 
 export const getDatabaseMetrics = (db, cwd = process.cwd()) => {
   if (!db) return { success: false, error: 'Database unavailable' };
-  const dbPath = path.join(cwd, '.chemx', 'index.db');
-  const fileSize = fs.statSync(dbPath, { throwIfNoEntry: false })?.size ?? 0;
+  const dbPath = chemxDbPathFor(cwd);
+  const hasDbPath = Boolean(dbPath);
+  const fileSize = hasDbPath ? (fs.statSync(dbPath, { throwIfNoEntry: false })?.size ?? 0) : 0;
 
   const pageSize = db.prepare('PRAGMA page_size').get()?.page_size || 4096;
   const pageCount = db.prepare('PRAGMA page_count').get()?.page_count || 0;
@@ -53,7 +54,8 @@ export const executeSqlQuery = (db, sql = '', maxRows = 100) => {
   if (!trimmed) return { success: false, error: 'Empty SQL statement' };
 
   const verdict = classifyConsoleSql(trimmed);
-  if (!verdict.allowed) return { success: false, error: verdict.reason, query: trimmed };
+  const isBlocked = !verdict.allowed;
+  if (isBlocked) return { success: false, error: verdict.reason, query: trimmed };
 
   try {
     const start = performance.now();

@@ -5,7 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { decidePreTool } from './claude-pre-tool.js';
+import { DatabaseSync } from 'node:sqlite';
+import { buildPreToolContext, decidePreTool, toPreToolOutput } from './claude-pre-tool.js';
 import { RUNNER_RULES, SEARCH_RULES } from './guard-rules.js';
 import { ALL_BASH_CASES } from './guard-cases.js';
 
@@ -19,11 +20,75 @@ for (const [command, expected] of ALL_BASH_CASES) {
   });
 }
 
-test('native Read, Edit, Write and Glob are never denied, even with search enforced', () => {
-  for (const tool of ['Read', 'Edit', 'Write', 'MultiEdit', 'Glob', 'NotebookEdit']) {
-    const result = decidePreTool({ tool_name: tool, tool_input: { file_path: '/repo/src/a.ts' } }, { ...CONTEXT, enforceSearch: true });
-    assert.equal(result.decision, 'allow', tool);
+const NATIVE_TOOLS = ['Read', 'Edit', 'Write', 'MultiEdit', 'Glob', 'NotebookEdit'];
+const native = (tool, file = '/repo/src/a.ts') => ({ tool_name: tool, tool_input: { file_path: file, notebook_path: file, pattern: 'src/**' } });
+
+test('native file tools follow nativeFileTools: block denies, warn allows with a pointer, allow is silent', () => {
+  for (const tool of NATIVE_TOOLS) {
+    const blocked = decidePreTool(native(tool), { ...CONTEXT, mode: 'block' });
+    assert.equal(blocked.decision, 'deny', tool);
+    assert.match(toPreToolOutput(blocked).hookSpecificOutput.permissionDecisionReason, /chemx (read|patch|write|f) /, tool);
+    const warned = toPreToolOutput(decidePreTool(native(tool), { ...CONTEXT, mode: 'warn' }));
+    assert.deepEqual(Object.keys(warned.hookSpecificOutput).sort(), ['additionalContext', 'hookEventName'], `${tool}: warn never sets permissionDecision`);
+    assert.equal(toPreToolOutput(decidePreTool(native(tool), { ...CONTEXT, mode: 'allow' })), null, tool);
   }
+});
+
+test('block mode leaves paths outside the root, .claude/ and images alone', () => {
+  const block = { ...CONTEXT, mode: 'block' };
+  for (const file of ['/tmp/scratch/a.ts', '/repo/.claude/settings.json', '/repo/assets/logo.png']) {
+    for (const tool of ['Read', 'Edit', 'Write']) assert.equal(decidePreTool(native(tool, file), block).decision, 'allow', `${tool} ${file}`);
+  }
+});
+
+test('Grep keeps CHEMX_GUARD_SEARCH and otherwise follows the policy', () => {
+  const grep = { tool_name: 'Grep', tool_input: { pattern: 'x' } };
+  assert.equal(decidePreTool(grep, { ...CONTEXT, mode: 'allow', enforceSearch: true }).rule, 'native-grep');
+  assert.equal(decidePreTool(grep, { ...CONTEXT, mode: 'block' }).decision, 'deny');
+  assert.equal(decidePreTool({ tool_name: 'Grep', tool_input: { pattern: 'x', path: '/tmp' } }, { ...CONTEXT, mode: 'block' }).decision, 'allow');
+});
+
+const lockedProject = (expiresAt = Date.now() + 60_000) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-native-lock-'));
+  fs.mkdirSync(path.join(root, '.chemx'));
+  const db = new DatabaseSync(path.join(root, '.chemx', 'index.db'));
+  db.exec('CREATE TABLE file_leases (file_path TEXT PRIMARY KEY, locked_by TEXT, acquired_at INTEGER, expires_at INTEGER, purpose TEXT, pid INTEGER DEFAULT 0)');
+  db.prepare('INSERT INTO file_leases VALUES (?, ?, ?, ?, ?, 0)').run('src/a.ts', '@holder', Date.now(), expiresAt, '#2009');
+  db.close();
+  return root;
+};
+
+test('native edits are denied while another handle holds a live chemx lock; the holder and Read pass', () => {
+  const root = lockedProject();
+  const file = path.join(root, 'src', 'a.ts');
+  const context = (agentId) => ({ cwd: root, root, enforceSearch: false, mode: 'allow', agentId });
+  for (const tool of ['Edit', 'Write', 'MultiEdit', 'NotebookEdit']) {
+    const denied = decidePreTool(native(tool, file), context('@other'));
+    assert.deepEqual([denied.decision, denied.rule], ['deny', 'native-edit-lock'], tool);
+    assert.match(denied.reason, /src\/a\.ts is locked by @holder \(#2009\)/);
+    assert.equal(decidePreTool(native(tool, file), context('@holder')).decision, 'allow', `${tool} by the holder`);
+  }
+  assert.equal(decidePreTool(native('Read', file), context('@other')).decision, 'allow');
+  assert.equal(decidePreTool(native('Edit', file), context(null)).decision, 'allow', 'no identity: fail open');
+  assert.equal(decidePreTool(native('Edit', file), { ...context('@other'), mode: 'warn' }).rule, 'native-edit-lock');
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('expired leases and lookup errors do not block', () => {
+  const root = lockedProject(Date.now() - 1000);
+  const file = path.join(root, 'src', 'a.ts');
+  assert.equal(decidePreTool(native('Edit', file), { cwd: root, root, mode: 'allow', agentId: '@other' }).decision, 'allow');
+  const throwing = () => { throw new Error('db gone'); };
+  assert.equal(decidePreTool(native('Edit', file), { cwd: root, root, mode: 'allow', agentId: '@other', findLease: throwing }).decision, 'allow');
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('context: identity from CHEMX_AGENT_ID, else @claude-<session8>; mode from env', () => {
+  const env = { CLAUDE_PROJECT_DIR: '/nonexistent-root', CHEMX_NATIVE_FILE_TOOLS: 'block' };
+  assert.equal(buildPreToolContext({ session_id: 'abcdef1234567' }, env).agentId, '@claude-abcdef12');
+  assert.equal(buildPreToolContext({ session_id: 'abcdef1234567' }, { ...env, CHEMX_AGENT_ID: '@me' }).agentId, '@me');
+  assert.equal(buildPreToolContext({}, env).agentId, null);
+  assert.equal(buildPreToolContext({}, env).mode, 'block');
 });
 
 test('Grep and recursive shell search are allowed until CHEMX_GUARD_SEARCH=1', () => {

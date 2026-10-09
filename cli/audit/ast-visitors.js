@@ -8,7 +8,8 @@ import {
   isSilentGuardClause,
   countOptionalChainingDepth,
   isCombinatorCall,
-  isRawBooleanArg
+  isRawBooleanArg,
+  isGuardClause
 } from './rules-predicates.js';
 import { isSwallowedCatch } from './catch-predicates.js';
 import { resolveCatchEscalation, resolveCatchSpan } from './shallow-catch-escalation.js';
@@ -228,6 +229,50 @@ export const createAstVisitors = ({ relativePath, violations, hookRegistry, conf
           directive: meta.directive
         });
       }
+    },
+
+    BlockStatement(astPath) {
+      const body = astPath.node.body;
+      const hasTooFewStatements = !body || body.length < 3;
+      if (hasTooFewStatements) return;
+
+      let currentGuards = [];
+
+      // A cascade is 3+ bail-out guards followed by the action they protect (Directive 3.H);
+      // a run of guards that ends the block protects nothing and is not reported.
+      const flushCluster = (isFollowedByAction) => {
+        const hasCascade = isFollowedByAction && currentGuards.length >= 3;
+        if (hasCascade) {
+          const firstGuard = currentGuards[0];
+          const guardCount = currentGuards.length;
+          const line = firstGuard.loc?.start.line || 1;
+          const column = firstGuard.loc?.start.column || 1;
+          const meta = RULE_REGISTRY.CONTROL_FLOW_CASCADE_GUARDS;
+          violations.push({
+            filePath: relativePath,
+            line,
+            column,
+            hazard: `Cascading guard clauses detected (${guardCount} guards >= 3 limit). Suggestion: Extract into a domain validator function (e.g. const [isAllowed, reason] = validateAction(...)) per Directive 3.H.`,
+            rule: 'CONTROL_FLOW_CASCADE_GUARDS',
+            severity: meta.severity,
+            pillar: meta.pillar,
+            directive: meta.directive
+          });
+        }
+        currentGuards = [];
+      };
+
+      for (const stmt of body) {
+        const isGuard = isGuardClause(stmt, t);
+        if (isGuard) {
+          currentGuards.push(stmt);
+        } else if (t.isVariableDeclaration(stmt)) {
+          continue;
+        } else {
+          flushCluster(true);
+        }
+      }
+      flushCluster(false);
     },
 
     // Pillar 5: Design System & Inline Styles

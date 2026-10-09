@@ -1,3 +1,5 @@
+import { parseNeedsInput } from './team-needs.js';
+
 export const normalizeAgentId = (id) => {
   if (!id) return null;
   return id.startsWith('@') ? id : `@${id}`;
@@ -17,6 +19,7 @@ export const parseTaskRow = (row) => {
     vds_status: row.vds_status || 'ready',
     task_url: row.task_url || '',
     sprint_tag: row.sprint_tag || '',
+    needs: row.needs ?? null,
     dependencies: parseJson(row.dependencies, []),
     result_payload: parseJson(row.result_payload, {}),
     violation_snapshot: parseJson(row.violation_snapshot, {}),
@@ -113,6 +116,12 @@ export const buildTaskListQuery = (filter = {}) => {
   if (filter.vds_priority) {
     conditions.push('vds_priority = ?');
     params.push(filter.vds_priority);
+  }
+  const needsFilter = parseNeedsInput(filter.needs);
+  const hasNeedsFilter = needsFilter !== null;
+  if (hasNeedsFilter) {
+    conditions.push('needs = ?');
+    params.push(needsFilter);
   }
   if (filter.sprint_tag) {
     conditions.push('sprint_tag = ?');

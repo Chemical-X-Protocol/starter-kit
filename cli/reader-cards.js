@@ -5,6 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { openIndexDb } from './search-db.js';
+import { chemxDbPathFor } from './sqlite-memory.js';
 import {
   findSymbolReferences, findFileDependencies, findFileDependents, calculateBlastRadius,
   calculateCallTrace, calculateBacktrace,
@@ -33,7 +34,8 @@ export const buildContextEnvelope = (db, targetPath) => {
     const hasImports = topImports.length > 0;
     if (hasImports) return `// Context: module imports [${topImports.join(', ')}]\n`;
   } catch (err) {
-    if (process.env.CHEMX_DEBUG) process.stderr.write(`[context-envelope] Failed for ${targetPath}: ${err.message}\n`);
+    const isDebug = Boolean(process.env.CHEMX_DEBUG);
+    if (isDebug) process.stderr.write(`[context-envelope] Failed for ${targetPath}: ${err.message}\n`);
   }
   return '';
 };
@@ -76,8 +78,9 @@ export const buildBacktraceCard = (db, symbol) => {
 const NO_INDEX_HINT = 'no search index at .chemx/index.db; run `cx q <symbol>` once to build it, then re-read';
 
 const hasBuiltIndex = (cwd) => {
-  const dbFile = path.join(cwd, '.chemx', 'index.db');
-  return fs.existsSync(dbFile);
+  const dbFile = chemxDbPathFor(cwd);
+  const hasPath = Boolean(dbFile);
+  return hasPath && fs.existsSync(dbFile);
 };
 
 const isIndexEmpty = (db) => {
@@ -99,7 +102,8 @@ const openCardsDb = (cwd) => {
   try {
     return openIndexDb(cwd);
   } catch (err) {
-    if (process.env.CHEMX_DEBUG) process.stderr.write(`[read-cards] index unavailable: ${err.message}\n`);
+    const isDebug = Boolean(process.env.CHEMX_DEBUG);
+    if (isDebug) process.stderr.write(`[read-cards] index unavailable: ${err.message}\n`);
     return null;
   }
 };

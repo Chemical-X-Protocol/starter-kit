@@ -25,7 +25,8 @@ const loadBabel = () => {
 };
 
 const isSpecOrTest = (filePath) => {
-  if (!filePath || typeof filePath !== 'string') return false;
+  const isInvalidPath = !filePath || typeof filePath !== 'string';
+  if (isInvalidPath) return false;
   return filePath.includes('.spec.') || filePath.includes('.test.') || filePath.includes('__tests__');
 };
 
@@ -94,24 +95,38 @@ export const extractCalleesFromCode = (code) => {
     traverse(ast, {
       CallExpression(nodePath) {
         const callee = nodePath.node.callee;
-        if (callee.type === 'Identifier') {
+        const isIdentifier = callee.type === 'Identifier';
+        const isMemberExpr = callee.type === 'MemberExpression';
+        if (isIdentifier) {
           callees.add(callee.name);
-        } else if (callee.type === 'MemberExpression') {
+        } else if (isMemberExpr) {
           const obj = callee.object?.name || callee.object?.property?.name || '';
           const prop = callee.property?.name || '';
-          if (obj && prop) callees.add(`${obj}.${prop}`);
-          else if (prop) callees.add(prop);
+          const hasObjAndProp = Boolean(obj && prop);
+          const hasPropOnly = Boolean(prop);
+          if (hasObjAndProp) {
+            callees.add(`${obj}.${prop}`);
+          } else if (hasPropOnly) {
+            callees.add(prop);
+          }
         }
       },
       OptionalCallExpression(nodePath) {
         const callee = nodePath.node.callee;
-        if (callee.type === 'Identifier') {
+        const isIdentifier = callee.type === 'Identifier';
+        const isMemberExpr = callee.type === 'MemberExpression';
+        if (isIdentifier) {
           callees.add(callee.name);
-        } else if (callee.type === 'MemberExpression') {
+        } else if (isMemberExpr) {
           const obj = callee.object?.name || '';
           const prop = callee.property?.name || '';
-          if (obj && prop) callees.add(`${obj}.${prop}`);
-          else if (prop) callees.add(prop);
+          const hasObjAndProp = Boolean(obj && prop);
+          const hasPropOnly = Boolean(prop);
+          if (hasObjAndProp) {
+            callees.add(`${obj}.${prop}`);
+          } else if (hasPropOnly) {
+            callees.add(prop);
+          }
         }
       }
     });
@@ -119,7 +134,8 @@ export const extractCalleesFromCode = (code) => {
     debugNote.warn('callee extraction fell back to regex', err);
     const matches = code.matchAll(/\b([A-Za-z0-9_$]+)\s*\(/g);
     for (const m of matches) {
-      if (!['if', 'for', 'while', 'switch', 'catch', 'function'].includes(m[1])) {
+      const isControlKeyword = ['if', 'for', 'while', 'switch', 'catch', 'function'].includes(m[1]);
+      if (!isControlKeyword) {
         callees.add(m[1]);
       }
     }
@@ -155,12 +171,14 @@ export const calculateCallTrace = (db, targetSymbolOrPath, options = {}) => {
   const visited = new Set([symbolName]);
 
   const traceCallees = (symbol, filePath, currentDepth) => {
-    if (currentDepth > maxDepth) return [];
+    const exceedsMaxDepth = currentDepth > maxDepth;
+    if (exceedsMaxDepth) return [];
 
     let codeSlice = '';
     let fullText = '';
     const absPath = path.isAbsolute(filePath) ? filePath : path.resolve(options.root || process.cwd(), filePath);
-    if (fs.existsSync(absPath)) {
+    const doesPathExist = fs.existsSync(absPath);
+    if (doesPathExist) {
       fullText = fs.readFileSync(absPath, 'utf-8');
       const block = extractSymbolBlock(fullText, symbol, absPath);
       if (block) {
@@ -179,7 +197,8 @@ export const calculateCallTrace = (db, targetSymbolOrPath, options = {}) => {
     const results = [];
 
     for (const c of foundCallees) {
-      if (visited.has(c)) continue;
+      const isAlreadyVisited = visited.has(c);
+      if (isAlreadyVisited) continue;
       visited.add(c);
 
       const calleeSym = findCalleeDefinition(db, c, filePath);
@@ -218,7 +237,9 @@ export const calculateCallTrace = (db, targetSymbolOrPath, options = {}) => {
           });
         } else {
           const isLocal = new RegExp(`(?:const|function|let|var|class)\\s+${baseName}\\b`).test(fullText);
-          if (isLocal && baseName !== symbol) {
+          const isNotSelf = baseName !== symbol;
+          const shouldTraceLocal = isLocal && isNotSelf;
+          if (shouldTraceLocal) {
             const subCallees = traceCallees(baseName, filePath, currentDepth + 1);
             results.push({
               symbol: c,

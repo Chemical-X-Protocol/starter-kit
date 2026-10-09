@@ -1,11 +1,15 @@
 // `chemx hook claude-pre-tool`: Claude Code PreToolUse guard. Routes raw runners, git diff/log and
-// repo source reads through chemx. Native Read/Edit/Write are never denied; Grep and recursive
-// shell search are denied only with CHEMX_GUARD_SEARCH=1 (until literal `q -g` is a full search).
-// Escape hatch: a `# chemx-bypass: <reason>` shell comment, logged as friction.
+// repo source reads through chemx. Native Read/Edit/Write/MultiEdit/NotebookEdit/Grep/Glob follow
+// the `nativeFileTools` policy (native-tool-policy.js: block denies, warn allows with a chemx
+// pointer, allow is silent), and native edits are denied while another handle holds a live chemx
+// lock on the file (native-edit-lock.js). Grep and recursive shell search are always denied with
+// CHEMX_GUARD_SEARCH=1. Escape hatch for Bash: a `# chemx-bypass: <reason>` comment, logged as friction.
 
 import { parseShell } from './shell-parse.js';
 import { resolveInvocation, isChemxInvocation } from './guard-invocation.js';
 import { activeRules } from './guard-rules.js';
+import { NATIVE_FILE_TOOLS, decideNativeTool, resolveNativeToolMode } from './native-tool-policy.js';
+import { decideEditLock, resolveHookAgentId } from './native-edit-lock.js';
 
 const BYPASS_PATTERN = /chemx-bypass:\s*(\S.*)$/;
 const SEGMENT_LIMIT = 120;
@@ -42,15 +46,22 @@ const denyReason = (segment, use) => `chemx guard: \`${segment}\` must go throug
 const grepDenyReason = (pattern) => `chemx guard: use chemx for code search instead of Grep. Literal: \`chemx q -g "${pattern || '<text>'}" -l\`. `
   + 'Symbols/components: `chemx q "<name>" [--inspect|--blast-radius]`.';
 
-// Pure decision: payload + context -> { decision, reason?, rule?, bypassReason? }.
+const decideNativeFileTool = (tool, input, context) => {
+  const isGrepEnforced = tool === 'Grep' && context.enforceSearch;
+  if (isGrepEnforced) return { decision: 'deny', rule: 'native-grep', reason: grepDenyReason(input.pattern) };
+  const { root, cwd, mode, agentId } = context;
+  const policy = decideNativeTool({ tool, input, root, cwd, mode });
+  const isPolicyDeny = policy.decision === 'deny';
+  if (isPolicyDeny) return policy;
+  return decideEditLock({ tool, input, root, cwd, agentId, findLease: context.findLease }) ?? policy;
+};
+
+// Pure decision (lock reads aside): payload + context -> { decision, reason?, rule?, bypassReason?, additionalContext? }.
 export const decidePreTool = (payload, context) => {
   const tool = payload?.tool_name;
   const input = payload?.tool_input ?? {};
-  const isGrepTool = tool === 'Grep';
-  if (isGrepTool) {
-    const isSearchEnforced = context.enforceSearch;
-    return isSearchEnforced ? { decision: 'deny', rule: 'native-grep', reason: grepDenyReason(input.pattern) } : allow();
-  }
+  const isNativeFileTool = NATIVE_FILE_TOOLS.has(tool);
+  if (isNativeFileTool) return decideNativeFileTool(tool, input, context);
   const isBash = tool === 'Bash';
   if (!isBash) return allow();
   const command = String(input.command ?? '');
@@ -64,11 +75,17 @@ export const decidePreTool = (payload, context) => {
 export const buildPreToolContext = (payload, env = process.env) => {
   const cwd = payload?.cwd || process.cwd();
   const root = env.CLAUDE_PROJECT_DIR || cwd;
-  return { cwd, root, enforceSearch: env.CHEMX_GUARD_SEARCH === '1' };
+  const mode = resolveNativeToolMode(root, env);
+  const agentId = resolveHookAgentId(payload, env);
+  return { cwd, root, enforceSearch: env.CHEMX_GUARD_SEARCH === '1', mode, agentId };
 };
 
+// Deny carries permissionDecision; a warn-mode allow carries only additionalContext, so it never
+// skips Claude Code's own permission prompt.
 export const toPreToolOutput = (result) => {
   const isDeny = result.decision === 'deny';
-  if (!isDeny) return null;
-  return { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: result.reason } };
+  if (isDeny) return { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: result.reason } };
+  const hasContext = typeof result.additionalContext === 'string' && result.additionalContext !== '';
+  if (!hasContext) return null;
+  return { hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext: result.additionalContext } };
 };

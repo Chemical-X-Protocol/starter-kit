@@ -17,6 +17,8 @@ import { queryUnassignedHazards } from './team-db-task-helpers.js';
 import { checkCompletionOwnership, buildOwnershipRefusal, buildCompletionGuard } from './team-task-ownership.js';
 import { triageLog } from './team-triage-log.js';
 import { verifyTaskTarget } from './team-triage-verify.js';
+import { resolveRuleNeeds } from '../audit/rules-registry.js';
+import { backfillAuditTaskNeeds, needsForRules, rollUpParentNeeds } from './team-needs.js';
 
 export { ingestTaskTelemetry, queryUnassignedHazards };
 
@@ -40,12 +42,19 @@ const checkAndCompleteParent = (db, parentId, resolvedTasks) => {
   }
 };
 
+const isDeprecatedViolation = (v) => {
+  const isDeprecated = v.deprecated === true;
+  const isDirectiveString = typeof v.directive === 'string';
+  const isDeprecatedDirective = isDirectiveString && v.directive.includes('Deprecated');
+  return isDeprecated || isDeprecatedDirective;
+};
+
 export const reconcileAuditTasks = (db, options = {}) => {
   if (!db) return [];
   const cwd = options.cwd || process.cwd();
 
   const openAuditTasks = db.prepare(`
-    SELECT id, target_path, title, status, parent_id
+    SELECT id, target_path, title, status, parent_id, rule_id
     FROM agent_tasks
     WHERE status IN ('queued', 'in_progress', 'review')
       AND target_path IS NOT NULL
@@ -74,16 +83,13 @@ export const reconcileAuditTasks = (db, options = {}) => {
     try {
       const auditRes = auditFile(fullPath, task.target_path, { cwd });
       const violations = Array.isArray(auditRes) ? auditRes : (auditRes?.fileViolations || auditRes?.violations || []);
-      const isBlocking = (v) => {
-        const isDeprecated = v.deprecated === true;
-        if (isDeprecated) return false;
-        const isDirectiveString = typeof v.directive === 'string';
-        const isDeprecatedDirective = isDirectiveString && v.directive.includes('Deprecated');
-        if (isDeprecatedDirective) return false;
-        return v.severity === 'CRITICAL' || v.severity === 'HIGH';
-      };
-      const blockingHazards = violations.filter(isBlocking);
-      const isClean = blockingHazards.length === 0;
+      const isBlocking = (v) => !isDeprecatedViolation(v) && (v.severity === 'CRITICAL' || v.severity === 'HIGH');
+      // A task owns one rule: it stays open while that rule still fires on the file, whatever
+      // its severity. Tasks without a rule fall back to the blocking-severity check.
+      const hasOwnRule = typeof task.rule_id === 'string' && task.rule_id !== '';
+      const firesOwnRule = (v) => v.rule === task.rule_id && !isDeprecatedViolation(v);
+      const remaining = hasOwnRule ? violations.filter(firesOwnRule) : violations.filter(isBlocking);
+      const isClean = remaining.length === 0;
 
       if (isClean) {
         updateTaskStatus(db, task.id, 'done', {
@@ -91,7 +97,7 @@ export const reconcileAuditTasks = (db, options = {}) => {
             reconciled: true,
             resolvedAt: Date.now(),
             hazardCount: violations.length,
-            reason: 'Auto-reconciled: 0 blocking hazards remain'
+            reason: hasOwnRule ? `Auto-reconciled: ${task.rule_id} no longer fires` : 'Auto-reconciled: 0 blocking hazards remain'
           }
         });
         resolvedTasks.push({ id: task.id, target_path: task.target_path, reason: 'hazards_resolved' });
@@ -120,6 +126,7 @@ export const autoGenerateTasksFromAudit = (db, options = {}) => {
   const cwd = options.cwd || process.cwd();
 
   reconcileAuditTasks(db, options);
+  backfillAuditTaskNeeds(db);
 
   // If violations and files are empty, auto-audit to seed index if possible
   try {
@@ -195,6 +202,7 @@ export const autoGenerateTasksFromAudit = (db, options = {}) => {
             priority: priorityForSeverity(ruleInfo.severity, 3),
             origin_type: 'audit',
             rule_id: ruleInfo.rule,
+            needs: resolveRuleNeeds(ruleInfo.rule),
             parent_id: null
           });
           if (parentTask) createdTasks.push(parentTask);
@@ -230,6 +238,7 @@ export const autoGenerateTasksFromAudit = (db, options = {}) => {
           priority: parentTask ? parentTask.priority : priorityForSeverity(ruleInfo.severity, 2),
           origin_type: 'audit',
           rule_id: ruleInfo.rule,
+          needs: resolveRuleNeeds(ruleInfo.rule),
           parent_id: parentTask ? parentTask.id : null,
           violation_snapshot: {
             path: fv.file_path,
@@ -243,6 +252,7 @@ export const autoGenerateTasksFromAudit = (db, options = {}) => {
         });
         if (childTask) createdTasks.push(childTask);
       }
+      if (parentTask) rollUpParentNeeds(db, parentTask.id);
     }
   }
 
@@ -257,6 +267,7 @@ export const autoGenerateTasksFromAudit = (db, options = {}) => {
       priority: item.health_score < 70 ? 1 : 2,
       origin_type: 'audit',
       rule_id: item.rules_summary || 'ARCHITECTURAL_HAZARD',
+      needs: needsForRules(item.rules_summary) ?? resolveRuleNeeds('ARCHITECTURAL_HAZARD'),
       violation_snapshot: {
         path: item.path,
         tier: item.tier,

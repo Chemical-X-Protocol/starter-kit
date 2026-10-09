@@ -52,9 +52,11 @@ const missing = [];
 for (const area of merged) {
   for (const f of area.findings) {
     const verdict = f.verdict?.verdict ?? 'unverified';
-    if (verdict === 'refuted') continue;
+    const isRefuted = verdict === 'refuted';
+    if (isRefuted) continue;
     const group = owner.get(f.id);
-    if (!group) missing.push(`${area.area}/${f.id}`);
+    const hasGroup = Boolean(group);
+    if (!hasGroup) missing.push(`${area.area}/${f.id}`);
     rows.push({ group: group ?? '??', sev: f.verdict?.severity ?? f.severity, verdict, area: area.area, id: f.id, title: f.title });
   }
 }
@@ -64,5 +66,10 @@ rows.sort((a, b) => ORDER.indexOf(a.group) - ORDER.indexOf(b.group) || SEV[a.sev
 const table = ['| Group | Sev | Verdict | Area | Finding id | Title |', '| :--- | :--- | :--- | :--- | :--- | :--- |',
   ...rows.map((r) => `| ${r.group} | ${r.sev} | ${r.verdict} | ${r.area} | \`${r.id}\` | ${r.title.replace(/\|/g, '/')} |`)].join('\n');
 fs.writeFileSync(outPath, table + '\n');
-console.log(`${rows.length} findings mapped; per group:`, JSON.stringify(Object.fromEntries(ORDER.map((g) => [g, rows.filter((r) => r.group === g).length]).filter(([, n]) => n))));
-if (missing.length) { console.error('UNMAPPED:', missing.join(', ')); process.exit(1); }
+const groupCounts = JSON.stringify(Object.fromEntries(ORDER.map((g) => [g, rows.filter((r) => r.group === g).length]).filter(([, n]) => n)));
+process.stdout.write(`${rows.length} findings mapped; per group: ${groupCounts}\n`);
+const hasMissing = missing.length > 0;
+if (hasMissing) {
+  process.stderr.write(`UNMAPPED: ${missing.join(', ')}\n`);
+  process.exit(1);
+}

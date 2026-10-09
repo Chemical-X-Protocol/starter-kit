@@ -336,11 +336,12 @@ test('formatGroupedPromptViolations: outputs token-compact task action by defaul
     }
   ];
 
-  const lines = formatGroupedPromptViolations(violations);
+  const lines = formatGroupedPromptViolations(violations, { taskRules: ['SECURITY_RAW_HTML_INJECTION'] });
   const text = lines.join('\n');
 
   assert.ok(text.includes('[SECURITY_RAW_HTML_INJECTION]'));
   assert.ok(text.includes('(2 items)'));
+  assert.ok(text.includes('Needs:     standard'));
   assert.ok(text.includes('Action:    chemx team task list --rule=SECURITY_RAW_HTML_INJECTION'));
   // Does not dump file locations tree by default
   assert.ok(!text.includes('Locations:'));
@@ -364,4 +365,25 @@ test('formatGroupedPromptViolations: renders file tree when detailedLocations is
 
   assert.ok(text.includes('Locations:'));
   assert.ok(text.includes('view-a.vue:10'));
+});
+
+test('formatGroupedPromptViolations: omits the Action line for rules with no tasks', () => {
+  const violations = [{ rule: 'LINE_BUDGET_FILE', severity: 'CRITICAL', hazard: 'h', directive: 'd', filePath: 'a.js', line: 1 }];
+  const withoutInfo = formatGroupedPromptViolations(violations).join('\n');
+  const withEmpty = formatGroupedPromptViolations(violations, { taskRules: [] }).join('\n');
+  const withOther = formatGroupedPromptViolations(violations, { taskRules: ['OTHER_RULE'] }).join('\n');
+  for (const text of [withoutInfo, withEmpty, withOther]) {
+    assert.ok(!text.includes('Action:'));
+    assert.ok(text.includes('Needs:     deep'));
+  }
+});
+
+test('buildGradeFPrompt: threads report.taskRules into the rule groups', () => {
+  const report = {
+    violations: [{ rule: 'LINE_BUDGET_FILE', severity: 'CRITICAL', hazard: 'h', directive: 'd', filePath: 'a.js', line: 1 }],
+    hotspots: [],
+    taskRules: ['LINE_BUDGET_FILE']
+  };
+  assert.ok(buildGradeFPrompt(report).includes('chemx team task list --rule=LINE_BUDGET_FILE'));
+  assert.ok(!buildGradeFPrompt({ ...report, taskRules: [] }).includes('team task list --rule='));
 });
