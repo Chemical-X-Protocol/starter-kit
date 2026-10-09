@@ -125,14 +125,16 @@ Other checks:
 
 Conflict resolution:
 - library.spec fails if any piece or good exemplar reports any rule, or if a negative matches.
-- nullable-timer-handle passes CONTROL_FLOW_INLINE_BOOLEAN, TIMER_DISCIPLINE and vue-tsc strict together.
+- nullable-timer-handle passes CONTROL_FLOW_INLINE_BOOLEAN, TIMER_DISCIPLINE and `tsc --strict` together (as shipped; `.vue` pieces and vue-tsc are not covered yet).
 - Its two negatives fail: the const-alias form reports TIMER_DISCIPLINE, and the inline `!== null` guard reports INLINE_BOOLEAN.
 - A fixture for `if (timerId !== null) clearTimeout(timerId)` gets a hazard whose remedy names the piece.
 
 Ruleset handling:
-- A bumped RULE_REVISIONS re-verifies entries.
+- A bumped RULE_REVISIONS re-verifies entries (shipped as the `reverifyLibrary` function; automatic invocation moves to the library command, #4446).
 - A deliberately failing entry becomes quarantined and files a Library: task.
-- Unrelated open blueprints are not invalidated.
+- Unrelated open blueprints are not invalidated (no blueprint ids exist yet; spec is #4450).
+
+P4 as shipped (task #2537): library format, registry, verify, reverify, three seed entries (read-json-or, is-path-inside, nullable-timer-handle) and the remedy line. Moved to follow-ups under #2532: library command #4446, exemplars/fixtures/interaction matrix #4447, rule_conflicts rows #4448, remaining six seed entries #4449, blueprint-survival spec #4450.
 
 General: `chemx verify` is green.
 

@@ -11,7 +11,8 @@ import path from 'node:path';
 import { auditCode } from '../audit/rules.js';
 import { getProfileDefaults } from '../config/profiles.js';
 import { closeOwnTeamHandles } from '../team/coordination-db.js';
-import { LIBRARY_ROOT, loadLibrary } from './registry.js';
+import { LIBRARY_ROOT, KIT_ROOT_DIR, loadLibrary } from './registry.js';
+import { RULE_REVISIONS } from '../audit/rule-revisions.js';
 import { verifyItem } from './verify.js';
 import { checkNegatives, checkFp } from './verify-checks.js';
 import { reverifyLibrary } from './reverify.js';
@@ -67,7 +68,8 @@ test('the inline null guard on a mutable handle gets a hazard whose remedy names
   const source = 'export function stopIt() {\n  let timerId: ReturnType<typeof setTimeout> | undefined;\n  if (timerId !== null) clearTimeout(timerId);\n}\n';
   const hazards = auditCode(source, 'src/t.ts', 'src/t.ts', { config: STRICT }).filter((v) => v.rule === 'CONTROL_FLOW_INLINE_BOOLEAN');
   assert.equal(hazards.length, 1);
-  assert.match(hazards[0].hazard, /chemx library show vue-ts\/nullable-timer-handle/);
+  assert.match(hazards[0].hazard, /library\/vue-ts\/nullable-timer-handle\/piece\.ts/);
+  assert.ok(fs.existsSync(path.join(KIT_ROOT_DIR, 'library/vue-ts/nullable-timer-handle/piece.ts')), 'the remedy path must exist');
 });
 
 test('the remedy appears only when the test narrows a mutable ref that the branch uses', () => {
@@ -167,6 +169,23 @@ test('reverify without write changes no file', async (t) => {
   const before = SEED_IDS.map((id) => treeOf(root, id));
   await reverifyLibrary(loadLibrary(root), { write: false, ruleset: { version: 12, revisionsHash: 'otherhash000' } });
   assert.deepEqual(SEED_IDS.map((id) => treeOf(root, id)), before);
+});
+
+test('editing the revision table changes currentRuleset, re-stamps entries and quarantines the failing one', async (t) => {
+  const root = copyLibrary(t);
+  const live = currentRuleset();
+  const bumped = currentRuleset({ revisionTable: { ...RULE_REVISIONS, TIMER_DISCIPLINE: 99 } });
+  assert.equal(bumped.version, live.version);
+  assert.notEqual(bumped.revisionsHash, live.revisionsHash);
+  assert.equal(currentRuleset({ version: live.version + 1 }).version, live.version + 1);
+
+  fs.appendFileSync(path.join(root, 'node-js/is-path-inside/piece.js'), 'export const both = (a, b) => {\n  if (a && b) return 1;\n  return 0;\n};\n');
+  const outcomes = await reverifyLibrary(loadLibrary(root), { write: true, ruleset: bumped });
+  const byId = Object.fromEntries(outcomes.map((outcome) => [outcome.id, outcome.action]));
+  assert.equal(byId['node-js/read-json-or'], 'restamped');
+  assert.equal(byId['node-js/is-path-inside'], 'quarantined');
+  const stamped = JSON.parse(fs.readFileSync(path.join(root, 'node-js/read-json-or/entry.json'), 'utf-8'));
+  assert.deepEqual(stamped.verifiedRuleset, bumped);
 });
 
 test('under the live ruleset no kit entry would be quarantined', async () => {

@@ -12,10 +12,10 @@ const HASH_LENGTH = 12;
 const byCodePoint = (a, b) => Number(a > b) - Number(a < b);
 
 /** The ruleset the audit currently enforces: { version, revisionsHash } (ids and revisions, not code). */
-export const currentRuleset = () => {
-  const revisions = Object.entries(RULE_REVISIONS).sort(([a], [b]) => byCodePoint(a, b));
-  const body = JSON.stringify([RULESET_VERSION, revisions, Object.keys(RULE_REGISTRY).sort(byCodePoint)]);
-  return { version: RULESET_VERSION, revisionsHash: crypto.createHash('sha256').update(body).digest('hex').slice(0, HASH_LENGTH) };
+export const currentRuleset = ({ revisionTable = RULE_REVISIONS, version = RULESET_VERSION } = {}) => {
+  const revisions = Object.entries(revisionTable).sort(([a], [b]) => byCodePoint(a, b));
+  const body = JSON.stringify([version, revisions, Object.keys(RULE_REGISTRY).sort(byCodePoint)]);
+  return { version, revisionsHash: crypto.createHash('sha256').update(body).digest('hex').slice(0, HASH_LENGTH) };
 };
 
 /** Units of a text as if it lived at relativePath (library/ itself is excluded from detection). */

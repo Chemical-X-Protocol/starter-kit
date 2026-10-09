@@ -8,7 +8,7 @@
 import * as t from '@babel/types';
 import { toSourceKey } from './lifecycle-predicates.js';
 
-export const MUTABLE_REF_REMEDY = 'Canonical: chemx library show vue-ts/nullable-timer-handle (act on the handle directly; an alias of the test breaks narrowing and handle tracking).';
+export const MUTABLE_REF_REMEDY = 'Canonical: library/vue-ts/nullable-timer-handle/piece.ts (act on the handle directly; an alias of the test breaks narrowing and handle tracking).';
 
 const NULLISH_COMPARISONS = new Set(['===', '!==', '==', '!=']);
 const MUTABLE_BINDING_KINDS = new Set(['let', 'var']);

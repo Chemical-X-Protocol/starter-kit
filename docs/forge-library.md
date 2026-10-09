@@ -27,10 +27,10 @@ The fp of an entry is the `fn` unit named by `exportName`, fingerprinted as if t
 | `vue-ts/nullable-timer-handle` | resolution | Canonical for `CONTROL_FLOW_INLINE_BOOLEAN` and `TIMER_DISCIPLINE`: `clearTimeout(timerId)` with no branch. Taken from `src/ui/composables/useSelfCleaningTimeout.ts`. |
 
 nullable-timer-handle negatives: the const-alias form (`const id = timerId; const hasTimer = id !== null; if (hasTimer) clearTimeout(id)`) reports `TIMER_DISCIPLINE`; the inline guard (`if (timerId !== null) clearTimeout(timerId)`) reports `CONTROL_FLOW_INLINE_BOOLEAN`.
-That inline-guard hazard ends with `Canonical: chemx library show vue-ts/nullable-timer-handle`, added by
+That inline-guard hazard ends with `Canonical: library/vue-ts/nullable-timer-handle/piece.ts`, added by
 `narrowsMutableRef` (`cli/audit/mutable-ref-predicate.js`): the test compares a `let` binding or a member to
-null/undefined and the branch uses it. Detection is unchanged, so there is no ruleset bump. The command named in the
-remedy is not wired yet.
+null/undefined and the branch uses it. Detection is unchanged, so there is no ruleset bump. The remedy names a file path because the
+`chemx library` command does not exist yet (#4446); library.spec checks the path exists.
 
 ## Verification (`cli/library/library.spec.js`, run by `npm test`)
 
@@ -46,7 +46,9 @@ plus a hash of RULE_REVISIONS and the registered rule ids). Otherwise it runs on
 audit, autofix, negatives). A pass re-stamps and sets `verified`; a failure sets `quarantined` and, once per newly
 quarantined entry, files `Library: <id> fails <RULE> after ruleset <v>` (needs standard, parent #2532) through
 `fileLibraryTask`, which is idempotent by title. Blueprint ids do not include the ruleset (engine doc), and reverify
-touches only `entry.json`. Nothing calls `reverifyLibrary` automatically yet.
+touches only `entry.json`. Nothing calls `reverifyLibrary` automatically yet (wiring belongs to the library command, #4446). library.spec
+covers the function end to end up to that point: `currentRuleset({ revisionTable, version })` changes its hash when the
+revision table is edited, and the re-verify then re-stamps or quarantines.
 
 ## Not built yet
 
