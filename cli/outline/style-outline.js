@@ -32,8 +32,10 @@ export const outlineStylesheet = (code) => {
     const described = isTopLevel ? describeTopLevel(text) : null;
     if (described) lines.push(described);
     for (const ch of text) {
-      if (ch === '{') depth += 1;
-      if (ch === '}') depth = Math.max(0, depth - 1);
+      const isOpenBrace = ch === '{';
+      const isCloseBrace = ch === '}';
+      if (isOpenBrace) depth += 1;
+      if (isCloseBrace) depth = Math.max(0, depth - 1);
     }
   }
   return lines;
