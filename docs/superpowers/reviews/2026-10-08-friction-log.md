@@ -22,3 +22,7 @@
 - [G6] No multi-file `chemx check`: auditing ~45 changed files meant one process per file (~3s startup each), >120s; wanted `chemx check --changed` or `check a.js b.js`.
 - [G6] Timing-bound specs flake at load avg ~47 (team concurrency p95 50.14ms > 50ms, copyToClipboard 1481ms, `chemx foo` 2271ms); they passed on rerun.
 - [G6] Stray `:memory:/.chemx/index.db` dir in the MAIN kit checkout is untracked and outside the G6 worktree, so it was not deleted by this branch; delete it at integration (`rm -rf ':memory:'` in the kit root). The code path that created it is fixed and specced.
+- [G6 r2] No `rg` on PATH in the implementer shell (the zsh `rg` is a function wrapping the claude binary), so the rg literal engine went untested in round 1 and its zero-match count bug shipped. Ran the suite with the reviewer's ripgrep 13.0.0 symlink on PATH; the spec now prints a visible skip when rg is absent.
+- [G6 r2] `chemx read` refuses paths outside the worktree root ("Path traversal rejected") even for read-only inspection of a /tmp fixture; used the Read tool instead.
+- [G6 r2] PreToolUse guard blocks `cat a b c` for reading several small modules at once; chemx read takes one path per call, so reading 4 modules costs 4 calls.
+- [G6 r2] Load average 58-60 during this round: one `chemx q` CLI run takes 3-4s wall (1.4s user), CLI-spawning specs take 20-27s, the 6-process race repro took 55-213s. Timing is environmental, not a regression.
