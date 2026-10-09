@@ -1,7 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { parse } from '@babel/parser';
-import traverseModule from '@babel/traverse';
+import { parse, traverse } from './babel-lazy.js';
 import { ANSI } from './theme.js';
 import { resolveSafePath } from './path-scope.js';
 import { isBabelParsable } from './languages.js';
@@ -28,7 +27,6 @@ export {
 } from './reader-logic.js';
 export { runReaderCli } from './reader-cli.js';
 
-const traverse = traverseModule.default || traverseModule;
 
 /**
  * Extracts an AST structural outline of a file (types, exports, props, signatures).

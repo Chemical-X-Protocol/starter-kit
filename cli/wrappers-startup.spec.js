@@ -48,6 +48,20 @@ test(`startup: each wrapper stays under ${USER_CPU_BUDGET_MS}ms of user CPU (bes
   fs.rmSync(repo, { recursive: true, force: true });
 });
 
+test(`startup: a plain read (whole small file or line range) loads no Babel and stays under ${USER_CPU_BUDGET_MS}ms`, () => {
+  const repo = makeRepo();
+  for (const args of [['read', 'f0.js'], ['read', 'f0.js:1-1'], ['read', 'f0.js', '--start=1', '--end=1']]) {
+    const runs = [0, 1, 2].map(() => runCli(args, { cwd: repo }));
+    assert.strictEqual(runs[0].status, 0, runs[0].stderr);
+    assert.match(runs[0].stdout, /export const a = 1;/);
+    const babel = runs[0].modules.filter((url) => url.includes('@babel/'));
+    assert.deepStrictEqual(babel.slice(0, 3), [], `chemx ${args.join(' ')} loaded Babel`);
+    const best = Math.min(...runs.map((r) => r.userCpuMs));
+    assert.ok(best < USER_CPU_BUDGET_MS, `chemx ${args.join(' ')} used ${best}ms user CPU`);
+  }
+  fs.rmSync(repo, { recursive: true, force: true });
+});
+
 test('d: the "compacted" footer appears only when the diff was replaced by a shorter --stat', () => {
   const repo = makeRepo(90);
   for (let i = 0; i < 90; i += 1) fs.writeFileSync(path.join(repo, `f${i}.js`), 'export const a = 2;\n');
