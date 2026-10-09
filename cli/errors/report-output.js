@@ -54,7 +54,8 @@ export const promptUserToPublish = async (targetRepo, issue, savedPath = null) =
   }
 
   const publishResult = await publishIssue(targetRepo, issue.title, issue.body, issue.labels);
-  if (publishResult.success) {
+  const isPublished = Boolean(publishResult.success);
+  if (isPublished) {
     process.stdout.write(`\x1b[32m✔ Issue published: ${publishResult.url}\x1b[0m\n`);
     openBrowser(publishResult.url);
   } else {
