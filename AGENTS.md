@@ -10,12 +10,12 @@
 | :--- | :--- | :--- |
 | `grep -rn "pattern" .` | `chemx q -g "pattern"` or `chemx q -g "pattern" -l` | Fixed-string search of every text file `.gitignore` allows (submodules, docs, styles, JSON, PHP); full `path:line:text` lines or line-only (-l); `--regex` opts into regex; `-- <pattern>` for a pattern starting with `-`. Uses `rg` when installed, a JS walker otherwise; the header states files searched and the engine. |
 | `git diff` | `chemx d` | Zero-context (`-U0`), auto-collapses to `--stat` if > 80 lines, micro-syncs index. |
-| `git log` | `chemx log -n 5` | Single-line compact commit history (~8 tokens/commit). |
+| `git log` | `chemx log -n 5` | One-line commit history (5 commits measured about 140 tokens on 2026-10-09, roughly 28 per commit). |
 | `find . -name "*.vue"` | `chemx f "*.vue"` | Strictly filters by `.gitignore` and ignored dirs. |
-| `cat package.json` | `chemx p -s` / `chemx p <script>` | Instant single script or dep extraction (~3 tokens vs 300 lines). |
+| `cat package.json` | `chemx p -s` / `chemx p <script>` | Single script or dep extraction (`p -s` listing 15 scripts measured about 240 tokens on 2026-10-09). |
 | `cat <data.json>` | `chemx j <file.json>` | Structural schema shape only; collapses repeating arrays. |
-| `cat <file>` / `head <file>` | `chemx read <file> --outline` | AST signatures only (~50 tokens vs thousands). |
-| `npm test` / `tsc` | `chemx test` / `chemx verify` | Silent on success; returns only failing diffs. |
+| `cat <file>` / `head <file>` | `chemx read <file> --outline` | AST signatures only (outline of `cli/reader.js` measured about 300 tokens against about 4,800 for the file, 2026-10-09; other targets in `benchmarks/README.md`). |
+| `npm test` / `tsc` | `chemx test` / `chemx verify` | Prints a summary on success and the failing diffs on failure. |
 | `cat .chemx/history.json` | `chemx audit --feed=scopes` / MCP `audit_feed` | Recorded audit results as flat rows (per scope, per run or per pillar) without re-running the audit; `--json` for every row. |
 | Auditing each package by hand | `chemx audit --each=submodules` | One scoped audit per submodule or workspace package, then a one-line-per-package summary. |
 | Multiple CLI actions | `chemx do "<cmd1>" "<cmd2>"` | Executes sequentially in a single warm Node process. |
@@ -99,10 +99,10 @@ Use same-name shorthand across all languages; eliminate redundant `key: key` dup
 - **Prohibition on Method Slicing**: Never split methods sharing internal instance state into isolated files or micro-functions. Atomization must not destroy the cohesive state machine.
 - **Decomposition Protocol**: When approaching file line limits, decompose exclusively by extracting pure, stateless helper functions, mathematical derivations, and boundary validators out of the class into standalone utility capsules, preserving the class methods and instance state together.
 
-### K. The Verification-First Protocol & Zero-Token-Burn Pipeline
+### K. The Verification-First Protocol & Compact Verification Pipeline
 - **Verification First Rule**: AI agents MUST NEVER execute raw, unthrottled `npm test`, `pnpm test`, `vitest`, `tsc --noEmit`, or `npm run build` directly in a bash subshell. Raw shell executions flood the context window with hundreds of lines of passing checkmarks, compiler noise, and bundle asset tables, burning thousands of tokens and causing premature context exhaustion.
 - **MCP Verification Tools First**: Agents MUST invoke the dedicated Chemical X MCP tools or CLI wrappers (`pnpm chemx <subcommand>` or `npx chemx <subcommand>`):
-  1. `chemx_verify` (or `pnpm chemx verify --json` / `npx chemx verify --json`): Runs the full verification pipeline (AST Audit + Typecheck + Tests) and returns a single token-compact status card (~45 tokens if green).
+  1. `chemx_verify` (or `pnpm chemx verify --json` / `npx chemx verify --json`): Runs the full verification pipeline (AST Audit + Typecheck + Tests) and returns a short status card when green (size not benchmarked).
   2. `chemx_typecheck` (or `pnpm chemx typecheck --json` / `npx chemx typecheck --json`): Runs silent TypeScript typecheck; returns structured diagnostics only if errors exist.
   3. `chemx_test` (or `pnpm chemx test --json` / `npx chemx test --json`): Runs silent project tests; suppresses passing tests and returns ONLY failing test assertions and stack diffs.
   4. `chemx_audit_build` (or `pnpm chemx build --json` / `npx chemx build --json`): Runs silent production builds; catalogs diagnostics into TypeScript, Rollup, and style budgets.
@@ -110,14 +110,15 @@ Use same-name shorthand across all languages; eliminate redundant `key: key` dup
 
 ### L. Database-First Swarm Coordination & The Zero-Markdown-Monolith Directive
 - **Database as the Master Source of Truth**: The multi-agent orchestrator and subagents MUST record all milestones, task assignments, status changes, file locks, and architectural contracts directly in `.chemx/index.db` (`agent_tasks`, `file_lock_queue`, `agent_feed`) rather than creating monolithic, multi-thousand-token markdown specification files.
-- **Prohibition on Monolithic Project Markdown Parsing**: Subagents MUST NOT load giant monolithic `PROJECT.md` or status markdown files into context. Subagents query only their assigned task slice and dependencies via `pnpm chemx team task list --agent=@my-id` or MCP `chemx_team_task`, slashing token consumption by 80%+.
+- **Prohibition on Monolithic Project Markdown Parsing**: Subagents MUST NOT load giant monolithic `PROJECT.md` or status markdown files into context. Subagents query only their assigned task slice and dependencies via `pnpm chemx team task list --agent=@my-id` or MCP `chemx_team_task`.
+- **Leases and handoff**: A file lock is a 5-minute lease that any chemx command run as the holder extends and that lapses after 5 minutes without activity (`docs/team-locks.md`). The commit hook refuses staged files another handle leases live. `chemx team task handoff <id> @<to> --as=@<from>` passes a task on (assignee or task creator only); it keeps the task `in_progress`, records from/to/by in the feed, and does not move file locks, so the old holder releases and the new owner acquires.
 - **Project Markdown as a Generated Read-Only Projection**: If a human-readable `PROJECT.md` is requested, it MUST be generated on-demand as a read-only projection compiled from the database state via `pnpm chemx team status` or export tools.
 
-### M. The Master MCP Tool Protocol & Zero-Permission Dispatch
+### M. The Master MCP Tool Protocol & Single-Permission Dispatch
 - **Master Gateway Rule**: When operating inside environments with per-tool permission controls (e.g. Antigravity, Claude Desktop, Cursor), AI agents MUST invoke the unified master MCP tool `chemx` (or `chemx({ action, params })`) rather than invoking fragmented tool names or dropping down to bash subshells.
 - **Antigravity Tool Mapping**: In Google Antigravity, `chemx` is registered under server name `chemical-x` (`call_mcp_tool` with `ServerName: "chemical-x"`, `ToolName: "chemx"`). Always prioritize this tool for all AST reading, querying, testing, verification, and file operations.
 - **Strict Ban on Fragmented Sub-Tool Calls**: Agents are strictly prohibited from calling individual tool names (such as `chemx_read`, `chemx_audit`, or `chemx_write`) directly when the master gateway tool is available. Every distinct tool name triggers a separate permission confirmation dialog for the user, resulting in severe prompt fatigue. Calling `chemx({ action, params })` or `chemx({ command })` routes through a single authorization point.
-- **One-Time Approval Advantage**: The `chemx` master tool provides a single authorization point for the user. Once approved, all operations (`test`, `build`, `verify`, `typecheck`, `audit`, `check`, `patch`, `write`, `read`, `team`, `q`, `autofix`, `issue`) execute silently in-process with zero terminal confirmation prompts.
+- **One-Time Approval Advantage**: The `chemx` master tool provides a single authorization point for the user. Once approved, all operations (`test`, `build`, `verify`, `typecheck`, `audit`, `check`, `patch`, `write`, `read`, `team`, `q`, `autofix`, `issue`) run in-process through one tool, so the host asks for one approval for the tool instead of one per action (hosts that prompt per call still may).
 - **In-Band JSON-RPC Communication (Zero Disk Dumps)**: All query, inspection, and verification tools must communicate strictly in-band via MCP `CallToolResult` objects (`content: [{ type: "text", text: "..." }]`). Tools must never dump intermediate text files (.txt/.md) or scratch files to disk for AI consumption.
 - **Command Forwarding Syntax**: Agents may invoke either structured action objects (`chemx({ action: 'test' })`, `chemx({ action: 'build' })`, `chemx({ action: 'audit', params: { path: 'src' } })`) or CLI command strings (`chemx({ command: 'test' })`, `chemx({ command: 'build' })`, `chemx({ command: 'audit src' })`).
 - **Master Action & Parameter Dispatch Matrix**:
@@ -156,7 +157,7 @@ Use same-name shorthand across all languages; eliminate redundant `key: key` dup
   chemx({ action: 'write', params: { path: 'src/...', content: '...', overwrite: true } });
   chemx({ action: 'check', params: { path: 'src/...' } });
 
-  // Deterministic Parameterized Scaffolding (Universal Jig - 90%+ Token Reduction)
+  // Deterministic Parameterized Scaffolding (Programmatic Jig; token saving not benchmarked)
   chemx({ action: 'generate', params: { jig: true, kind: 'service', name: 'payment-gateway', methods: [{ name: 'charge', params: 'amount: number' }] } });
   chemx({ action: 'generate', params: { jig: true, kind: 'route', name: 'api-orders', routes: ['GET /orders', 'POST /orders'] } });
   chemx({ action: 'generate', params: { jig: true, kind: 'store', name: 'session-store' } });
@@ -176,12 +177,12 @@ Use same-name shorthand across all languages; eliminate redundant `key: key` dup
 - **Targeted Symbol-Only Extraction**: AI agents MUST NEVER dump entire source files into context. When an agent needs to inspect a function, hook, interface, or class, it MUST request only that specific symbol: `chemx({ action: 'read', params: { path, symbol: '<name>' } })`.
 - **Read Window Auto-Outline**: Files longer than the chemx read window (100 lines by default), read without a target symbol or slice, automatically render an AST outline to prevent token exhaustion and host buffer spillovers (such as IDE `output.txt` dumps). The read window is a tool budget, not an architecture rule; file size is governed by 1.A.
 - **Enrich Mode (Component Capsules Only)**: When an agent needs both exported signatures AND logic flow for a component capsule, use `enrich: true` with `outline: true`: one response card holds the outline and a compacted logic skeleton, optionally with a forward trace or reverse caller chain (`traceSymbol`, `backtraceSymbol`). The skeleton generator is tuned for components; on procedural modules (services, CLI code, utilities) enrich saves only a few percent over reading the whole file, so use plain `outline: true` or `symbol: '<name>'` there.
-- **Symbol Connection Graph Over Multi-File Dumps**: Rather than reading multiple files to understand imports and consumers, agents MUST request symbol connections: `chemx({ action: 'read', params: { path, symbol: '<name>', connections: true } })` or `chemx({ action: 'q', params: { query, connections: true } })`. This instantly returns the definition, imported dependencies, and caller references in ~45 tokens.
+- **Symbol Connection Graph Over Multi-File Dumps**: Rather than reading multiple files to understand imports and consumers, agents MUST request symbol connections: `chemx({ action: 'read', params: { path, symbol: '<name>', connections: true } })` or `chemx({ action: 'q', params: { query, connections: true } })`. This returns the definition, imported dependencies, and caller references. Size grows with the symbol: `q <symbol> --connections` measured about 140 tokens and `read --symbol --connections` about 2,400 for `readTokenOptimized` on 2026-10-09.
 - **Token-First File Inspection & Native Fallback**: AI agents should prioritize Chemical X AST readers (`chemx read --outline` or `chemx read --symbol`) to conserve tokens. Dumping raw files burns thousands of tokens and causes premature context exhaustion. If an agent requires exact raw verification or unformatted bytes, native tools (`view_file`, `grep`, `cat`) are permitted as an intentional fallback.
 
-### O. Universal Programmatic File Jig & Closed-Loop Execution Protocol
+### O. Programmatic File Jig & Closed-Loop Execution Protocol
 - **Deterministic Parameterized Synthesis**: When creating non-UI files (services, API route handlers, state stores, database repositories, utilities, or test specs), AI agents MUST NOT emit hundreds of lines of mechanical boilerplate via raw file writing tools. Agents MUST invoke `chemx generate --jig=<kind>` or `chemx({ action: 'generate', params: { jig: true, kind, name, ... } })`.
-- **The 90%+ Output Token Reduction Thesis**: Passing a 30-50 token structured parameter set replaces 1,000-2,500 output tokens of repetitive TypeScript, imports, error tuples, and test boilerplate.
+- **The Output Token Thesis (not benchmarked)**: A short structured parameter set stands in for repetitive TypeScript, imports, error tuples, and test boilerplate. No measurement of the saving exists in this repo; prefer the jig for consistency of the output, not for a promised saving.
 - **The Closed-Loop ChemX Execution Cycle**:
   1. *Generate (Jig)*: Stamp out compliant architecture via `chemx({ action: 'generate', params: { jig: true, ... } })`.
   2. *Read (Outline)*: Inspect AST shape via `chemx({ action: 'read', params: { path, outline: true } })`.
@@ -518,9 +519,9 @@ Raw inline `style="..."` attributes are strictly prohibited. Visual styling flow
 ### D. No Fake Green
 - Never write a test that trivially passes without exercising real logic (e.g. asserting `true === true`, mocking away the exact behavior under test).
 
-### E. Silent Verification & Zero Passing Noise
+### E. Silent Verification & No Passing Noise
 - AI agents executing tests or verifying code MUST invoke `chemx_test` (or `npx chemx test --json`) and `chemx_verify` (or `npx chemx verify --json`).
-- Strictly prohibit executing verbose raw `npm test` or `pnpm test` in the shell: hundreds of passing test markers pollute context. If tests pass, agents consume a ~25-token green acknowledgment; if tests fail, agents consume only the failing test name, assertion message, and diff.
+- Strictly prohibit executing verbose raw `npm test` or `pnpm test` in the shell: hundreds of passing test markers pollute context. If tests pass, agents get a short green summary; if tests fail, they get the failing test names, assertion messages, and diffs.
 - **Test loop, in order of cost** (details: `docs/test-lanes.md`):
   1. `chemx test --changed --depth=3`: only the specs within 3 import hops of your change. Fastest, and NOT proof: the report lists how many deeper specs were skipped.
   2. `chemx test --changed`: every spec the import graph says your change can reach, fast lane only. Slow-lane specs that it reaches are named as not run.
@@ -567,7 +568,7 @@ Raw inline `style="..."` attributes are strictly prohibited. Visual styling flow
 ### A. Installed Hooks, Not Prose
 * Install the Claude Code integration with `chemx install-hooks --host=claude [--scope=local|project] [--dry-run]`. It adds the PreToolUse guard (`chemx hook claude-pre-tool`), the PostToolUse check (`claude-post-edit`), the SessionStart card and the statusline, and points `.mcp.json` at the same chemx. Run `chemx doctor` when MCP answers look stale; `chemx doctor --fix` repairs hooks and the MCP launch only.
 * Alternatively install the Claude Code plugin (`plugins/claude-code`, marketplace `.claude-plugin/marketplace.json`): the same hooks, the chemical-x MCP server and a short chemx skill, resolving the kit from `CHEMX_KIT`, the project's node_modules or PATH. Use the plugin or install-hooks, not both, or every hook runs twice. The statusline comes only from install-hooks.
-* The guard tokenizes the shell command. Raw test/typecheck/lint/build runners, `git diff`/`git log` and reads of repo source files are routed through chemx. Native Read/Edit are never denied.
+* The guard tokenizes the shell command. Raw test/typecheck/lint/build runners, `git diff`/`git log` and reads of repo source files are routed through chemx. Native Read, Edit, Write and Grep on project text files are warned by default (`nativeFileTools` in `.chemxrc`, or `CHEMX_NATIVE_FILE_TOOLS`): `warn` names the chemx equivalent, `block` denies the call, `allow` is silent.
 
 ### B. Bypass and Friction
 * When chemx truly cannot do the job, append `# chemx-bypass: <reason>` to the Bash command. The bypass and every guard denial are logged to `.chemx/friction.jsonl`.
