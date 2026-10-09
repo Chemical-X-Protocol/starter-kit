@@ -16,6 +16,7 @@ export const VERIFY_HELP = [
   '  --allow-empty            Accept a test run that collects zero tests',
   '  --changed                Audit only changed source files and run only the affected specs',
   '                           (typecheck stays whole-project); --base=<rev> compares from merge-base',
+  '  --all-packages           At a monorepo root: verify every workspace package (else refused)',
   '  --profile=<name>         Rule profile for the AST audit',
   '  --json                   Output summary status card as JSON',
   '  -h, --help               Show this help message',

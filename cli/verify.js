@@ -19,7 +19,8 @@ import {
   VERIFY_HELP, stepLine, formatTypecheckStep, formatTestStep, testStepIcon, formatBuildStep, createProgress, formatVerdict, isEmptyAllowed
 } from './verify-report.js';
 import { formatAgentJson } from './agent-json.js';
-import { resolveVerifyChanges, changedAuditOptions, testArgsFor } from './verify-changed.js';
+import { resolveVerifyChanges, changedAuditOptions, testArgsFor, verifyWorkspace, formatVerifyLine } from './verify-changed.js';
+import { workspaceAt, emitWorkspace } from './workspace-run.js';
 
 export {
   parseCommandFromArgs,
@@ -33,7 +34,7 @@ export { runTypecheckAudit } from './typecheck-audit.js';
 export { runTestAudit } from './test-audit.js';
 
 const VERIFY_ARGS = {
-  booleans: { '--json': 'json', '--build': 'build', '--allow-empty': 'allowEmpty', '--changed': 'changed', '--help': 'help', '-h': 'help' },
+  booleans: { '--json': 'json', '--build': 'build', '--allow-empty': 'allowEmpty', '--changed': 'changed', '--all-packages': 'allPackages', '--help': 'help', '-h': 'help' },
   values: { '--dir': 'dir', '--timeout': 'timeout', '--profile': 'profile', '--base': 'base' }
 };
 
@@ -77,6 +78,13 @@ export const runProjectVerify = async (rawArgs = [], isCli = false, options = {}
   const baseDir = options.cwd || process.cwd();
   const explicitAbsDir = explicitDir ? path.resolve(baseDir, explicitDir) : null;
   const cwd = findProjectRoot(explicitAbsDir ?? baseDir);
+  const workspace = options.inWorkspace || explicitDir ? null : workspaceAt(cwd);
+  if (workspace) {
+    const flags = { changed: Boolean(parsed.flags.changed || options.changed), base: parsed.values.base || options.base || null, allPackages: Boolean(parsed.flags.allPackages || options.allPackages) };
+    const packageOptions = { print: false, json: true, inWorkspace: true, timeoutMs, allowEmpty, includeBuild };
+    const runInPackage = (pkg, args) => runProjectVerify(args, false, { ...packageOptions, cwd: pkg.dir });
+    return emitWorkspace(await verifyWorkspace(workspace, flags, runInPackage), { isJson, isCli, shouldPrint }, formatVerifyLine);
+  }
   const scope = resolveAuditScope({ projectRoot: cwd, explicitDir: explicitAbsDir });
 
   const nmStatus = checkNodeModules(cwd);

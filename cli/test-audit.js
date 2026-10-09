@@ -6,13 +6,15 @@ import { parseCliArgs, describeArgErrors, parseTimeoutSeconds } from './cli-args
 import { planTestCommand } from './test-command.js';
 import { runWithinBudget } from './test-run.js';
 import { resolveChangeScope } from './test-scope.js';
+import { planWorkspaceTest } from './test-workspace.js';
+import { workspaceAt, emitWorkspace } from './workspace-run.js';
 import { parseTestOutput, REASONS } from './test-output.js';
 import { formatTestReport, TEST_HELP } from './test-report.js';
 import { checkNodeModules } from './verify-helpers.js';
 import { formatAgentJson } from './agent-json.js';
 
 const TEST_ARGS = {
-  booleans: { '--json': 'json', '--raw': 'raw', '--allow-empty': 'allowEmpty', '--changed': 'changed', '--related': 'related', '--help': 'help', '-h': 'help' },
+  booleans: { '--json': 'json', '--raw': 'raw', '--allow-empty': 'allowEmpty', '--changed': 'changed', '--related': 'related', '--all-packages': 'allPackages', '--help': 'help', '-h': 'help' },
   values: { '--target': 'target', '--filter': 'filter', '-t': 'filter', '--test-name-pattern': 'filter', '--timeout': 'timeout', '--base': 'base' }
 };
 
@@ -28,6 +30,27 @@ const emit = (report, { isJson, isCli, shouldPrint }) => {
   if (isCli) process.exit(toExitCode(report.status));
   return report;
 };
+
+// At a monorepo root the same flags pick packages (test-workspace.js).
+const relatedFiles = (parsed, options) => (Array.isArray(options.related) ? options.related : parsed.positionals);
+const plainTargets = (parsed, options) => {
+  const explicit = options.target || parsed.values.target;
+  return explicit ? [String(explicit)] : parsed.positionals;
+};
+
+const workspaceScope = (parsed, options) => {
+  const hasRelated = Boolean(parsed.flags.related || options.related);
+  const related = hasRelated ? relatedFiles(parsed, options) : [];
+  return {
+    targets: hasRelated ? [] : plainTargets(parsed, options),
+    related, filter: options.filter || parsed.values.filter || null,
+    changed: Boolean(parsed.flags.changed || options.changed), base: parsed.values.base || options.base || null,
+    allPackages: Boolean(parsed.flags.allPackages || options.allPackages), allowEmpty: Boolean(parsed.flags.allowEmpty || options.allowEmpty)
+  };
+};
+
+// A package run inside a workspace fan-out: scope flags travel as args, never twice.
+const packageOptions = ({ changed, base, related, target, filter, allPackages, allowEmpty, ...rest }) => ({ ...rest, print: false, json: true, inWorkspace: true });
 
 // --changed / --related: positionals are related files (specs or sources) and the targets are
 // the affected specs (test-scope.js). Otherwise positionals are runner targets as given.
@@ -61,6 +84,12 @@ export const runTestAudit = async (rawArgs = [], isCli = false, options = {}) =>
   if (argError) return emit(earlyReport(STATUS.FAIL, customCmd || 'test', { reason: 'USAGE', executionError: argError }), output);
 
   const cwd = findProjectRoot(options.cwd || process.cwd());
+  const workspace = options.inWorkspace || customCmd ? null : workspaceAt(cwd);
+  if (workspace) {
+    const scope = workspaceScope(parsed, options);
+    const runInPackage = (args, dir) => runTestAudit([...args, '--json'], false, { ...packageOptions(options), cwd: dir });
+    return emitWorkspace(await planWorkspaceTest(workspace, scope, runInPackage, options.cwd || process.cwd()), output, formatTestReport);
+  }
   const nmStatus = checkNodeModules(cwd);
   if (nmStatus) {
     const friendlyMsg = nmStatus.msg('testing');

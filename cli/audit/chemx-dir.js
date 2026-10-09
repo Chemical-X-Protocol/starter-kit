@@ -1,9 +1,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { isSqliteMemoryTarget, isLinkedWorktreeRoot } from '../sqlite-memory.js';
+import { isWorkspacePackageDir } from '../workspace.js';
 
 // Locates (and creates) the .chemx directory that holds history and the index db.
-// The walk prefers an existing ancestor .chemx, but never crosses a linked git worktree root.
+// The walk prefers an existing ancestor .chemx, but never crosses a checkout boundary (a linked
+// worktree, a submodule or any nested git checkout) or a workspace package root: each package
+// and each checkout keeps its own index instead of sharing a parent's.
+const isIndexBoundary = (dir) => isLinkedWorktreeRoot(fs, path, dir) || fs.existsSync(path.join(dir, '.git')) || isWorkspacePackageDir(dir);
 
 export const findChemxDir = (startDir = process.cwd()) => {
   const hasCustomRoot = Boolean(process.env.CHEMX_PROJECT_ROOT);
@@ -12,28 +16,17 @@ export const findChemxDir = (startDir = process.cwd()) => {
   }
 
   let current = path.resolve(startDir);
-  let gitRoot = null;
   while (true) {
     const candidate = path.join(current, '.chemx');
     const hasExistingChemx = fs.existsSync(candidate);
     if (hasExistingChemx) {
       return candidate;
     }
-    const hasGit = !gitRoot && fs.existsSync(path.join(current, '.git'));
-    if (hasGit) {
-      gitRoot = current;
-    }
-    const isWorktreeBoundary = isLinkedWorktreeRoot(fs, path, current);
-    if (isWorktreeBoundary) break;
+    if (isIndexBoundary(current)) return candidate;
     const parent = path.dirname(current);
     const isRootReached = parent === current;
     if (isRootReached) break;
     current = parent;
-  }
-
-  const hasDiscoveredGitRoot = Boolean(gitRoot);
-  if (hasDiscoveredGitRoot) {
-    return path.join(gitRoot, '.chemx');
   }
 
   return path.resolve(startDir, '.chemx');

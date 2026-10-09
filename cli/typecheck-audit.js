@@ -7,9 +7,10 @@ import { parseCliArgs, describeArgErrors, parseTimeoutSeconds } from './cli-args
 import { planTypecheck } from './typecheck-command.js';
 import { parseTypecheckOutput, checkNodeModules } from './verify-helpers.js';
 import { formatAgentJson } from './agent-json.js';
+import { workspaceAt, emitWorkspace, allPackagesOrRefuse } from './workspace-run.js';
 
 const TYPECHECK_ARGS = {
-  booleans: { '--json': 'json', '--raw': 'raw', '--help': 'help', '-h': 'help' },
+  booleans: { '--json': 'json', '--raw': 'raw', '--all-packages': 'allPackages', '--help': 'help', '-h': 'help' },
   values: { '--timeout': 'timeout' }
 };
 
@@ -22,6 +23,7 @@ const TYPECHECK_HELP = [
   '',
   `${ANSI.BOLD}OPTIONS${ANSI.RESET}`,
   '  --timeout=<seconds>      Stop the check after this long (result: inconclusive)',
+  '  --all-packages           At a monorepo root: check every workspace package (else refused)',
   '  --json                   Output structured diagnostics as JSON',
   '  --raw                    Stream the checker output as it runs',
   '  -h, --help               Show this help message',
@@ -87,6 +89,13 @@ export const runTypecheckAudit = async (rawArgs = [], isCli = false, options = {
   if (argError) return emit(earlyReport(STATUS.FAIL, customCmd || 'typecheck', { reason: 'USAGE', executionError: argError }), output);
 
   const cwd = findProjectRoot(options.cwd || process.cwd());
+  const workspace = options.inWorkspace || customCmd ? null : workspaceAt(cwd);
+  if (workspace) {
+    const allPackages = Boolean(parsed.flags.allPackages || options.allPackages);
+    const timeoutArgs = parsed.values.timeout ? [`--timeout=${parsed.values.timeout}`] : [];
+    const runInPackage = (pkg) => runTypecheckAudit(timeoutArgs, false, { timeoutMs: options.timeoutMs, cwd: pkg.dir, print: false, json: true, inWorkspace: true });
+    return emitWorkspace(await allPackagesOrRefuse(workspace, 'typecheck', allPackages, 'or pass -- <command>', runInPackage), output, formatTypecheckReport);
+  }
   const nmStatus = checkNodeModules(cwd);
   if (nmStatus) {
     const friendlyMsg = nmStatus.msg('typechecking');

@@ -119,7 +119,7 @@ test('workspace: verify --changed at the root verifies only the owning package',
     fs.appendFileSync(path.join(root, 'packages/beta/src/b.js'), '// changed\n');
     const summary = await runProjectVerify(['--changed', '--json'], false, quiet(root));
     assert.deepEqual(summary.packages.map((p) => p.package), ['@m/beta']);
-    assert.deepEqual(summary.packages[0].report.scope.files, ['src/b.js']);
+    assert.deepEqual(summary.packages[0].scope.files, ['src/b.js']);
   });
 });
 
