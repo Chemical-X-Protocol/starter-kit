@@ -1,5 +1,7 @@
 // Presentation for `chemx q -g`: grep-style `path:line:text`, the searched scope and engine
 // in every header, and an explicit "showing N of M" when matches are cut by -n.
+import fs from 'node:fs';
+import path from 'node:path';
 import { ANSI } from './theme.js';
 import { runLiteralSearch } from './search-literal.js';
 import { resolveIndexRoot, normalizeScope } from './search-root.js';
@@ -9,6 +11,8 @@ const describeScope = (res, root, scopeKey) => {
   const hiddenNote = res.skipped.hidden ? 'hidden paths skipped (--hidden)' : 'hidden paths included';
   return `searched ${res.filesSearched} files in ${scopeKey} under ${root} via ${res.engine}; ${hiddenNote}; .gitignore honoured`;
 };
+
+const findMissingScope = (scopeDirs, root) => scopeDirs.filter((dir) => !fs.existsSync(path.join(root, dir)));
 
 const finish = (status, isCli) => {
   if (!isCli) return;
@@ -34,10 +38,16 @@ export const handleLiteralSearchCommand = (_db, query, {
   if (!hasQuery) return failWith('missing search pattern (use `chemx q -g -- <pattern>` for a pattern starting with -)', { isJson, isCli, isQuiet });
 
   const root = resolveIndexRoot(cwd);
-  const hasDir = typeof dir === 'string' && dir.length > 0;
+  const hasDirString = typeof dir === 'string' && dir.length > 0;
+  const hasDirList = Array.isArray(dir) && dir.length > 0;
+  const hasDir = hasDirString || hasDirList;
   const scope = hasDir ? normalizeScope(dir, root, cwd) : { scopeDirs: ['.'], scopeKey: '.', outside: [] };
   const hasOutside = scope.outside.length > 0;
   if (hasOutside) return failWith(`--dir ${scope.outside.join(', ')} is outside the project root ${root}`, { isJson, isCli, isQuiet });
+
+  const missing = hasDir ? findMissingScope(scope.scopeDirs, root) : [];
+  const hasMissing = missing.length > 0;
+  if (hasMissing) return failWith(`path not found: ${missing.join(', ')} (relative to ${root}); nothing was searched`, { isJson, isCli, isQuiet });
 
   let res;
   try {

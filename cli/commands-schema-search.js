@@ -22,6 +22,7 @@ export const SEARCH_COMMANDS = [
       { flag: '--hazards', desc: 'Query architectural rule violations (with --rule=<id>, --critical)' },
       { flag: '--pack', desc: 'Assemble a token-packed context bundle for a target symbol or file' },
       { flag: '-g, --literal', desc: 'Repo-wide fixed-string search (.gitignore honoured, submodules, docs), full path:line:text; --regex, --hidden, -- <pattern>' },
+      { flag: '-g <pattern> <path>...', desc: 'Scope a literal search to files or directories (relative to the project root); a missing path is an error, and with no path the whole project is searched' },
       { flag: '-n, --limit <N>', desc: 'Max results (q default 50, -g default 20); truncation is always stated' },
       { flag: '--dir=<path>', desc: 'Scope to search (default: the project default, src/ or .)' },
       { flag: '-l, --lines', desc: 'Line-only output (path:line)' },

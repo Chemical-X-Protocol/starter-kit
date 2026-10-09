@@ -62,7 +62,7 @@ const resolveScopeTarget = (parsed, cwd, root) => {
 // Positionals no mode reads: the pattern (or query) is one token, subcommands read two.
 const countUsedPositionals = (parsed, isLiteral) => {
   const hasLiteralPattern = parsed.pattern !== null;
-  if (isLiteral) return hasLiteralPattern ? 0 : 1;
+  if (isLiteral) return parsed.positionals.length;
   const isSubcommand = Boolean(SUBCOMMAND_MODES[parsed.positionals[0]]);
   return isSubcommand ? 2 : 1;
 };
@@ -157,8 +157,9 @@ export const runSearch = async (rawArgs = [], isCli = true) => {
 
   if (isLiteral) {
     const pattern = parsed.pattern ?? first;
-    const pathArg = parsed.pattern ? parsed.positionals[0] : parsed.positionals[1];
-    const dir = parsed.values.dir ?? pathArg ?? null;
+    const pathArgs = parsed.pattern ? parsed.positionals : parsed.positionals.slice(1);
+    const hasPathArgs = pathArgs.length > 0;
+    const dir = parsed.values.dir ?? (hasPathArgs ? pathArgs : null);
     const isLineOnly = hasAnyFlag(parsed, ['-l', '--lines']);
     const defaultLimit = isLineOnly ? Number.MAX_SAFE_INTEGER : 20;
     const limit = parsed.values.limit !== undefined ? readIntValue(parsed, 'limit', 20) : defaultLimit;

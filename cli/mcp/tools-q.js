@@ -60,7 +60,7 @@ export const handleChemxQ = (args = {}, cwd = process.cwd()) => {
   const isLiteral = Boolean(args.literal);
   if (isLiteral) {
     return handleLiteralSearchCommand(null, query, {
-      isJson: false, isCli: false, cwd: targetCwd, dir: args.dir || null,
+      isJson: false, isCli: false, cwd: targetCwd, dir: args.paths || args.path || args.dir || null,
       isRegex: Boolean(args.regex), isCaseInsensitive: Boolean(args.ignoreCase), isLineOnly: Boolean(args.lines || args.linesOnly),
       isHidden: Boolean(args.hidden), limit: typeof args.limit === 'number' ? args.limit : 50, isQuiet: true
     });

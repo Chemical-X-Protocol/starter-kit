@@ -28,6 +28,7 @@ export const MASTER_MCP_TOOL = {
         properties: {
           query: { type: 'string', description: 'Search term or symbol name (for q/search); semantic mode ranks by feature-hash name similarity' },
           literal: { type: 'boolean', description: 'Repo-wide fixed-string search for q (-g): every text file .gitignore allows, full path:line:text' },
+          paths: { type: 'array', items: { type: 'string' }, description: 'q literal: files or directories (relative to the project root) to search instead of the whole project; a path that does not exist is an error. A single path may be given as path.' },
           regex: { type: 'boolean', description: 'Treat the literal query as a regular expression (for q literal)' },
           lines: { type: 'boolean', description: 'Line-only output path:line for q (-l)' },
           blastRadius: { type: 'boolean', description: 'Map direct consumers, transitive dependents & impacted tiers (for q)' },
