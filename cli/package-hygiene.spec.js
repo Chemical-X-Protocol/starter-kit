@@ -32,3 +32,20 @@ test('package hygiene: the publish workflow runs the test suite before publishin
   const publishIndex = workflow.indexOf('run: npm run publish:both');
   assert.ok(testIndex !== -1 && testIndex < publishIndex, 'npm test runs before publish:both');
 });
+
+test('package hygiene: a committed lockfile matches package.json, so CI can use npm ci', () => {
+  const pkg = JSON.parse(readKitFile('package.json'));
+  const lock = JSON.parse(readKitFile('package-lock.json'));
+  assert.ok(lock.lockfileVersion >= 2, 'lockfile v2+ (packages map)');
+  const root = lock.packages[''];
+  assert.deepStrictEqual(root.dependencies || {}, pkg.dependencies || {}, 'lock root dependencies equal package.json (regenerate with npm install --package-lock-only)');
+  assert.deepStrictEqual(root.devDependencies || {}, pkg.devDependencies || {}, 'lock root devDependencies equal package.json');
+});
+
+test('package hygiene: kit workflows install with npm ci, never an npm install fallback', () => {
+  for (const name of ['publish.yml', 'chemx-audit.yml']) {
+    const workflow = readKitFile(`.github/workflows/${name}`);
+    assert.match(workflow, /\bnpm ci\b/, `${name} uses npm ci`);
+    assert.doesNotMatch(workflow, /\bnpm install\b/, `${name} has no npm install`);
+  }
+});
