@@ -1,7 +1,19 @@
 import { parse } from '@babel/parser';
 import traverseModule from '@babel/traverse';
+import { ruleTree } from '../rules.js';
 
 const traverse = traverseModule.default || traverseModule;
+
+const validateStateIdentifier = (path, stateVars) => ruleTree({
+  identifier: {
+    notStateVar: !stateVars.has(path.node.name),
+    notReferenced: () => !path.isReferencedIdentifier(),
+    inTypePosition: () => Boolean(path.findParent((p) => p.isTSType() || p.isTypeAnnotation())),
+    alreadyValueAccess: () => path.parent.type === 'MemberExpression' &&
+      path.parent.object === path.node &&
+      path.parent.property.name === 'value'
+  }
+}, { failFast: true });
 
 export const convertReactControllerToVue = (code) => {
   let out = code.replace(/import\s*\{[^}]*\}\s*from\s*['"]react['"];?\n?/, "import { ref, computed } from 'vue';\n");
@@ -25,21 +37,16 @@ export const convertReactControllerToVue = (code) => {
 
     traverse(ast, {
       Identifier(path) {
-        if (!stateVars.has(path.node.name)) return;
-        if (!path.isReferencedIdentifier()) return;
-        if (path.findParent((p) => p.isTSType() || p.isTypeAnnotation())) return;
-        if (
-          path.parent.type === 'MemberExpression' &&
-          path.parent.object === path.node &&
-          path.parent.property.name === 'value'
-        ) {
-          return;
-        }
+        const gate = validateStateIdentifier(path, stateVars);
+        const shouldSkip = !gate.ok;
+        if (shouldSkip) return;
         const fnParent = path.getFunctionParent();
         const retParent = path.findParent((p) => p.isReturnStatement());
-        if (retParent && retParent.getFunctionParent() === fnParent && fnParent?.parent?.type === 'VariableDeclarator') {
+        const isDeclaratorReturn = Boolean(retParent && retParent.getFunctionParent() === fnParent && fnParent?.parent?.type === 'VariableDeclarator');
+        if (isDeclaratorReturn) {
           const declaratorId = fnParent.parent.id;
-          if (declaratorId?.name?.startsWith('use') || declaratorId?.name?.startsWith('create')) {
+          const isFactoryName = Boolean(declaratorId?.name?.startsWith('use') || declaratorId?.name?.startsWith('create'));
+          if (isFactoryName) {
             return;
           }
         }
@@ -79,13 +86,15 @@ export const convertReactControllerToSvelte = (code, name, pascalName) => {
 
   out = out.replace(/useMemo\(\s*\(\)\s*=>\s*([\s\S]*?),\s*\[[^\]]*\]\s*\)/g, (match, body) => {
     const trimmed = body.trim();
-    if (trimmed.startsWith('{')) {
+    const isBlockBody = trimmed.startsWith('{');
+    if (isBlockBody) {
       return `$derived.by(() => ${trimmed})`;
     }
     return `$derived(${trimmed})`;
   });
 
-  if (!out.includes(`create${pascalName}Controller`)) {
+  const lacksCreateAlias = !out.includes(`create${pascalName}Controller`);
+  if (lacksCreateAlias) {
     out += `\nexport const create${pascalName}Controller = use${pascalName}Controller;\n`;
   }
 
