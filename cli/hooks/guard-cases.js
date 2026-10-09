@@ -6,14 +6,14 @@ export const PORTED_CASES = [
   ['pnpm vitest run x', 'deny'], ['npx vue-tsc --noEmit', 'deny'], ['eslint src', 'deny'], ['pnpm build', 'deny'],
   ['grep -rn foo src', 'allow'], ['rg foo', 'allow'], ['git diff', 'deny'], ['git diff --quiet', 'allow'],
   ['git log -3', 'deny'], ['cat src/routes/router.ts', 'deny'], ["cat > /tmp/x.mjs <<'EOF'", 'allow'],
-  ['cat <<EOF > out.js', 'allow'], ["pgrep -af 'cli/index.js mcp'", 'allow'], ['tail -5 build.log', 'allow'],
+  ['cat <<EOF > /tmp/out.js', 'allow'], ["pgrep -af 'cli/index.js mcp'", 'allow'], ['tail -5 build.log', 'allow'],
   ['sed -n 1,5p src/app.vue', 'deny'], ['chemx test', 'allow'], ['git status', 'allow'],
   ['pnpm vitest run # chemx-bypass: kitchen config', 'allow'],
   ['node probe.mjs src/a.js | tail -8', 'allow'], ['wc -l src/a.js src/b.ts | sort | head', 'allow'],
   ['grep -n foo src/a.js | head', 'allow'], ['cat src/a.ts | wc -l', 'deny'],
-  ["printf '%s\\n' \"- chemx test picked vitest; git log too\" >> notes.md", 'allow'],
+  ["printf '%s\\n' \"- chemx test picked vitest; git log too\" >> /tmp/notes.md", 'allow'],
   ['git commit -m "run vitest and git diff later"', 'allow'],
-  ["cat >> notes.md <<'EOF'\nuse pnpm vitest run and git log here\nEOF", 'allow'],
+  ["cat >> /tmp/notes.md <<'EOF'\nuse pnpm vitest run and git log here\nEOF", 'allow'],
   ["node a.mjs <<'EOF'\nprose\nEOF\npnpm vitest run", 'deny'],
 ];
 

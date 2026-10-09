@@ -3,6 +3,7 @@
 
 import { appendFriction } from '../friction/friction-log.js';
 import { buildPreToolContext, decidePreTool, toPreToolOutput } from './claude-pre-tool.js';
+import { logBypassToDb } from './bypass-log.js';
 
 const readStdin = async (stream) => {
   const chunks = [];
@@ -24,10 +25,19 @@ const recordPreToolFriction = (payload, context, result, env) => {
   return null;
 };
 
-const runPreTool = (payload, env) => {
+// Only a bypass that overrode a matching rule is counted in the coordination db (best effort, fails open).
+const recordBypassInDb = async (payload, context, result) => {
+  const didOverride = result.overrode === true;
+  if (!didOverride) return false;
+  const command = String(payload?.tool_input?.command ?? '');
+  return logBypassToDb({ root: context.root, handle: context.agentId, reason: result.bypassReason, rule: result.rule, command, session: payload?.session_id ?? null });
+};
+
+const runPreTool = async (payload, env) => {
   const context = buildPreToolContext(payload, env);
   const result = decidePreTool(payload, context);
   recordPreToolFriction(payload, context, result, env);
+  await recordBypassInDb(payload, context, result);
   return toPreToolOutput(result);
 };
 

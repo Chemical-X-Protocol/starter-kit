@@ -1,13 +1,18 @@
-// `chemx hook claude-pre-tool`: Claude Code PreToolUse guard. Routes raw runners, git diff/log and
-// repo source reads through chemx. Native Read/Edit/Write/MultiEdit/NotebookEdit/Grep/Glob follow
-// the `nativeFileTools` policy (native-tool-policy.js: block denies, warn allows with a chemx
-// pointer, allow is silent), and native edits are denied while another handle holds a live chemx
-// lock on the file (native-edit-lock.js). Grep and recursive shell search are always denied with
-// CHEMX_GUARD_SEARCH=1. Escape hatch for Bash: a `# chemx-bypass: <reason>` comment, logged as friction.
+// `chemx hook claude-pre-tool`: the one Claude Code PreToolUse guard (the bootstrap
+// .claude/hooks/chemx-guard.mjs delegates here). It denies raw runners, repo-source reads and
+// searches, shell writes into repo files (redirects, tee, sed -i, perl -i), node --test, git
+// diff/log/show and find, each with the exact chemx call to use. Nudge rules (git status/add/commit,
+// hand-rolled waits, ls of repo dirs) allow the call and attach advice; guardNudges: "block" in
+// .chemxrc promotes them. Native Read/Edit/Write/MultiEdit/NotebookEdit/Glob/Grep follow the
+// `nativeFileTools` policy (native-tool-policy.js), and native edits are denied while another
+// handle holds a live chemx lock (native-edit-lock.js). Search rules are on unless
+// CHEMX_GUARD_SEARCH=0. Escape hatch for Bash: a `# chemx-bypass: <reason>` comment, which is
+// logged to .chemx/friction.jsonl and the coordination db feed.
 
 import { parseShell } from './shell-parse.js';
 import { resolveInvocation, isChemxInvocation } from './guard-invocation.js';
 import { activeRules } from './guard-rules.js';
+import { isPromotedNudge, resolveNudgePromotion } from './guard-config.js';
 import { NATIVE_FILE_TOOLS, decideNativeTool, resolveNativeToolMode } from './native-tool-policy.js';
 import { decideEditLock, resolveHookAgentId } from './native-edit-lock.js';
 
@@ -24,36 +29,71 @@ export const findBypassReason = (comments) => {
   return null;
 };
 
-export const findViolation = (command, context) => {
-  const { commands, comments } = parseShell(command);
-  const bypassReason = findBypassReason(comments);
+const segmentOf = (parsed) => {
+  const redirects = parsed.redirects.map((redirect) => `${redirect.op} ${redirect.target}`.trim());
+  return [...parsed.argv, ...redirects].join(' ').slice(0, SEGMENT_LIMIT);
+};
+
+const useOf = (rule, invocation, parsed, context) => (typeof rule.use === 'function' ? rule.use(invocation, parsed, context) : rule.use);
+
+const collectHits = (parsedCommands, context) => {
   const rules = activeRules(context);
-  for (const parsed of commands) {
+  const hits = [];
+  for (const parsed of parsedCommands) {
     const hasArgv = parsed.argv.length > 0;
     if (!hasArgv) continue;
     const invocation = resolveInvocation(parsed.argv);
     const isOwnedByChemx = isChemxInvocation(invocation);
     if (isOwnedByChemx) continue;
     const rule = rules.find((candidate) => candidate.matches(invocation, parsed, context));
-    if (rule) return { rule, segment: parsed.argv.join(' ').slice(0, SEGMENT_LIMIT), bypassReason };
+    if (rule) hits.push({ rule, segment: segmentOf(parsed), use: useOf(rule, invocation, parsed, context) });
   }
-  return { rule: null, segment: null, bypassReason };
+  return hits;
 };
 
-const denyReason = (segment, use) => `chemx guard: \`${segment}\` must go through chemx. Use: ${use}. `
-  + 'If chemx truly cannot do this, append `# chemx-bypass: <reason>`; the bypass is logged as chemx friction.';
+// { rule, segment, use } of the first blocking hit (null when none), the advisory nudges, and the bypass reason.
+export const findViolation = (command, context) => {
+  const { commands, comments } = parseShell(command);
+  const bypassReason = findBypassReason(comments);
+  const hits = collectHits(commands, context);
+  const isAdvisory = (hit) => hit.rule.severity === 'nudge' && !isPromotedNudge(hit.rule, context.nudgePromotion);
+  const blocking = hits.find((hit) => !isAdvisory(hit)) ?? null;
+  const nudges = hits.filter(isAdvisory);
+  return { rule: blocking?.rule ?? null, segment: blocking?.segment ?? null, use: blocking?.use ?? null, bypassReason, nudges };
+};
 
-const grepDenyReason = (pattern) => `chemx guard: use chemx for code search instead of Grep. Literal: \`chemx q -g "${pattern || '<text>'}" -l\`. `
-  + 'Symbols/components: `chemx q "<name>" [--inspect|--blast-radius]`.';
+const denyReason = (segment, use, isPromoted) => {
+  const lead = isPromoted ? 'chemx guard (nudge promoted to a block by guardNudges)' : 'chemx guard';
+  return `${lead}: \`${segment}\` must go through chemx. Use: ${use}. `
+    + 'If chemx truly cannot do this, append `# chemx-bypass: <reason>`; the bypass is logged as chemx friction.';
+};
+
+const nudgeContext = (nudges) => {
+  const lines = nudges.map((nudge) => `- \`${nudge.segment}\`: ${nudge.use}`);
+  return ['chemx guard (advice only, the call was not blocked): chemx has a replacement for:', ...lines,
+    'To make these blocks, set "guardNudges": "block" in .chemxrc. To skip a hint, append `# chemx-bypass: <reason>` (logged).'].join('\n');
+};
 
 const decideNativeFileTool = (tool, input, context) => {
+  const { root, cwd, mode, agentId, scratchDir } = context;
   const isGrepEnforced = tool === 'Grep' && context.enforceSearch;
-  if (isGrepEnforced) return { decision: 'deny', rule: 'native-grep', reason: grepDenyReason(input.pattern) };
-  const { root, cwd, mode, agentId } = context;
-  const policy = decideNativeTool({ tool, input, root, cwd, mode });
+  const effectiveMode = isGrepEnforced ? 'block' : mode;
+  const policy = decideNativeTool({ tool, input, root, cwd, mode: effectiveMode, scratchDir });
   const isPolicyDeny = policy.decision === 'deny';
   if (isPolicyDeny) return policy;
   return decideEditLock({ tool, input, root, cwd, agentId, findLease: context.findLease }) ?? policy;
+};
+
+const decideBash = (input, context) => {
+  const command = String(input.command ?? '');
+  const { rule, segment, use, bypassReason, nudges } = findViolation(command, context);
+  const hasBypass = bypassReason !== null;
+  const overrodeRule = rule?.id ?? nudges[0]?.rule.id ?? null;
+  if (hasBypass) return allow({ bypassReason, rule: overrodeRule, overrode: overrodeRule !== null });
+  if (rule) return { decision: 'deny', rule: rule.id, segment, reason: denyReason(segment, use, rule.severity === 'nudge') };
+  const hasNudges = nudges.length > 0;
+  if (hasNudges) return allow({ rule: nudges[0].rule.id, nudged: nudges.map((nudge) => nudge.rule.id), additionalContext: nudgeContext(nudges) });
+  return allow();
 };
 
 // Pure decision (lock reads aside): payload + context -> { decision, reason?, rule?, bypassReason?, additionalContext? }.
@@ -63,13 +103,7 @@ export const decidePreTool = (payload, context) => {
   const isNativeFileTool = NATIVE_FILE_TOOLS.has(tool);
   if (isNativeFileTool) return decideNativeFileTool(tool, input, context);
   const isBash = tool === 'Bash';
-  if (!isBash) return allow();
-  const command = String(input.command ?? '');
-  const { rule, segment, bypassReason } = findViolation(command, context);
-  const hasBypass = bypassReason !== null;
-  if (hasBypass) return allow({ bypassReason, rule: rule?.id ?? null });
-  if (!rule) return allow();
-  return { decision: 'deny', rule: rule.id, segment, reason: denyReason(segment, rule.use) };
+  return isBash ? decideBash(input, context) : allow();
 };
 
 export const buildPreToolContext = (payload, env = process.env) => {
@@ -77,10 +111,12 @@ export const buildPreToolContext = (payload, env = process.env) => {
   const root = env.CLAUDE_PROJECT_DIR || cwd;
   const mode = resolveNativeToolMode(root, env);
   const agentId = resolveHookAgentId(payload, env);
-  return { cwd, root, enforceSearch: env.CHEMX_GUARD_SEARCH === '1', mode, agentId };
+  const nudgePromotion = resolveNudgePromotion(root, env);
+  const scratchDir = payload?.scratchpad_dir ?? null;
+  return { cwd, root, enforceSearch: env.CHEMX_GUARD_SEARCH !== '0', mode, agentId, nudgePromotion, scratchDir };
 };
 
-// Deny carries permissionDecision; a warn-mode allow carries only additionalContext, so it never
+// Deny carries permissionDecision; an advisory allow carries only additionalContext, so it never
 // skips Claude Code's own permission prompt.
 export const toPreToolOutput = (result) => {
   const isDeny = result.decision === 'deny';

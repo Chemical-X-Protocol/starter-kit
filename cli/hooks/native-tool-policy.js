@@ -2,10 +2,12 @@
 // Glob). Mode `nativeFileTools` ('block' | 'warn' | 'allow', default 'warn') comes from
 // $CHEMX_NATIVE_FILE_TOOLS, then .chemxrc / .chemx/config.json. Only text files inside the project
 // are in scope: paths outside the root, under .claude/ or node_modules/, and binary or media files
-// (which chemx cannot render) are always free. Every pointer names the exact chemx equivalent.
+// (which chemx cannot render) are always free; files inside any other git repo are in scope too.
+// Every pointer names the exact chemx equivalent.
 
 import path from 'node:path';
 import { isInsideDirectory } from './guard-paths.js';
+import { isInOtherRepo } from './repo-membership.js';
 import { findAndLoadConfigFile, readExistingProjectConfig } from '../config/loader.js';
 
 export const NATIVE_FILE_TOOLS = new Set(['Read', 'Edit', 'Write', 'MultiEdit', 'NotebookEdit', 'Grep', 'Glob']);
@@ -112,17 +114,19 @@ const HINTS = {
 
 export const nativeToolHint = (tool, file, input = {}) => HINTS[tool](file, input);
 
-const FREE_NOTE = 'Native tools stay free outside the project, under .claude/ and node_modules/, and for binary files.';
+const FREE_NOTE = 'Native tools stay free outside any git repo, under .claude/ and node_modules/, in the scratchpad, and for binary files.';
 
 /**
  * Pure decision for one native file tool call.
  * @returns {{ decision: 'allow'|'deny', rule: string|null, inScope: boolean, reason?: string, additionalContext?: string }}
  */
-export const decideNativeTool = ({ tool, input = {}, root, cwd, mode }) => {
+export const decideNativeTool = ({ tool, input = {}, root, cwd, mode, scratchDir = null }) => {
   const isNativeTool = NATIVE_FILE_TOOLS.has(tool);
   if (!isNativeTool) return { decision: 'allow', rule: null, inScope: false };
   const absolute = path.resolve(cwd || root, nativeToolTarget(tool, input));
-  const inScope = isPolicyScopedPath(absolute, root);
+  const isScratch = Boolean(scratchDir) && isInsideDirectory(absolute, scratchDir);
+  const isRepoFile = isPolicyScopedPath(absolute, root) || isInOtherRepo(absolute, root);
+  const inScope = isRepoFile && !isScratch;
   const effectiveMode = normalizeMode(mode) ?? DEFAULT_POLICY_MODE;
   const isEnforced = inScope && effectiveMode !== 'allow';
   if (!isEnforced) return { decision: 'allow', rule: null, inScope };

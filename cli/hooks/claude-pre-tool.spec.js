@@ -91,17 +91,20 @@ test('context: identity from CHEMX_AGENT_ID, else @claude-<session8>; mode from 
   assert.equal(buildPreToolContext({}, env).mode, 'block');
 });
 
-test('Grep and recursive shell search are allowed until CHEMX_GUARD_SEARCH=1', () => {
+test('search rules follow enforceSearch (on by default, off with CHEMX_GUARD_SEARCH=0)', () => {
   assert.equal(decidePreTool({ tool_name: 'Grep', tool_input: { pattern: 'x' } }, CONTEXT).decision, 'allow');
   const enforced = { ...CONTEXT, enforceSearch: true };
   assert.equal(decidePreTool({ tool_name: 'Grep', tool_input: { pattern: 'x' } }, enforced).decision, 'deny');
   assert.equal(decidePreTool(bash('grep -rn x src'), enforced).decision, 'deny');
   assert.equal(decidePreTool(bash('rg foo'), enforced).decision, 'deny');
-  assert.equal(decidePreTool(bash('grep -n foo src/a.js'), enforced).decision, 'allow');
+  assert.equal(decidePreTool(bash('grep -n foo src/a.js'), enforced).decision, 'deny', 'grep on a repo source file');
+  assert.equal(decidePreTool(bash('grep -n foo src/a.js'), CONTEXT).decision, 'allow', 'search rules off');
+  assert.equal(decidePreTool(bash('git log --oneline | grep foo'), enforced).decision, 'deny', 'git log itself is still a rule');
+  assert.equal(decidePreTool(bash('chemx q foo | grep -n bar | head'), enforced).decision, 'allow', 'grep as a pipe filter');
 });
 
 test('every suggestion the guard prints is itself allowed (#1673)', () => {
-  for (const rule of [...RUNNER_RULES, ...SEARCH_RULES]) {
+  for (const rule of [...RUNNER_RULES, ...SEARCH_RULES].filter((candidate) => typeof candidate.use === 'string')) {
     const suggestion = rule.use.replace('<build command>', 'npm run build').split(/\s{2}|\(| \| /)[0].replace(/<[^>]+>/g, 'x').replace(/\[[^\]]*\]/g, '').trim();
     const result = decidePreTool(bash(suggestion), { ...CONTEXT, enforceSearch: true });
     assert.equal(result.decision, 'allow', `${rule.id}: ${suggestion}`);
