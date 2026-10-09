@@ -24,8 +24,10 @@ const leaseLines = (leases) => {
   if (isUnchecked) return [head, `  not checked: ${leases.note}`];
   return [
     head,
-    `  lapsed under an active holder: ${leases.lapsed.length}`,
+    `  lapsed and edited afterwards (violation): ${leases.lapsed.length}`,
     ...list(leases.lapsed, (l) => `${at(l.expiresAt)} ${short(l.file)} held by ${l.handle} (${l.label || l.agentId})${l.editedAfterLapse ? ' [edited after the lapse]' : ''}`),
+    `  info: lapsed with no edit afterwards (not a violation): ${leases.benign?.length ?? 0}`,
+    ...list(leases.benign ?? [], (l) => `${at(l.expiresAt)} ${short(l.file)} held by ${l.handle}`),
     `  abandoned (expired after the holder finished): ${leases.abandoned.length}`,
     ...list(leases.abandoned, (l) => `${at(l.expiresAt)} ${short(l.file)} held by ${l.handle}`),
     `  waiters: ${leases.waiters.total}, starved or never granted: ${leases.waiters.starved.length}`,
@@ -77,7 +79,9 @@ const costLines = (cost) => [
 
 export const renderAuditRun = (report) => {
   const missing = report.missingTranscripts.length;
-  const verdict = report.ok ? 'no guarantee violated' : `VIOLATED: ${report.violations.join('; ')}`;
+  const benign = report.leases.benign?.length ?? 0;
+  const info = benign ? ` (info: ${benign} lease lapse${benign === 1 ? '' : 's'} with no edit afterwards, not counted)` : '';
+  const verdict = (report.ok ? 'no guarantee violated' : `VIOLATED: ${report.violations.join('; ')}`) + info;
   return [
     `Audit of run ${report.runId} (${report.agents} agents${missing ? `, ${missing} transcripts missing` : ''})`,
     verdict, '',

@@ -84,13 +84,13 @@ const hijacksOf = (audits, medianCost) => audits.map((a) => {
 }).filter(Boolean);
 
 const leaseSection = (db, agents, starveMs) => {
-  if (!db) return { available: false, note: 'no coordination db was readable, so lease lapses and waiters were not checked', lapsed: [], abandoned: [], waiters: { total: 0, starved: [] } };
+  if (!db) return { available: false, note: 'no coordination db was readable, so lease lapses and waiters were not checked', lapsed: [], benign: [], abandoned: [], waiters: { total: 0, starved: [] } };
   const lapses = leaseLapses(db, agents);
-  return { available: true, note: 'from the feed: only lapses recorded by a build that writes lock_expired and not archived are visible', lapsed: lapses.filter((l) => l.kind === 'lapsed'), abandoned: lapses.filter((l) => l.kind === 'abandoned'), waiters: leaseWaiters(db, agents, { starveMs }) };
+  return { available: true, note: 'from the feed: only lapses recorded by a build that writes lock_expired and not archived are visible', lapsed: lapses.filter((l) => l.kind === 'lapsed'), benign: lapses.filter((l) => l.kind === 'benign'), abandoned: lapses.filter((l) => l.kind === 'abandoned'), waiters: leaseWaiters(db, agents, { starveMs }) };
 };
 
 const violationsOf = (r) => [
-  [r.leases.lapsed.length, 'lease lapsed under an active holder'],
+  [r.leases.lapsed.length, 'lease lapsed and the holder edited afterwards'],
   [r.leases.waiters.starved.length, 'waiter starved or never granted'],
   [r.bypasses.shell.length + r.bypasses.native.length, 'chemx bypass (shell write or native tool on a repo file)'],
   [r.bypasses.guard.length, 'guard-bypass event'],

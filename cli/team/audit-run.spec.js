@@ -183,6 +183,7 @@ test('db: a lapse under an active holder, an abandoned lease, a starved waiter a
   const expired = (file, holder, expiresAt) => feed(db, { at: expiresAt + 1000, author: '@system', file, type: 'lock_expired', meta: { holder, expires_at: expiresAt, acquired_at: BASE, purpose: '#11' } });
   expired('cli/a.js', '@clean-one', BASE + 30000);
   expired('cli/z.js', '@clean-one', BASE + 120000);
+  expired('cli/b.js', '@clean-one', BASE + 40000);
   db.prepare('INSERT INTO lease_edit_marks (file_path, locked_by, edited_at) VALUES (?, ?, ?)').run('cli/a.js', '@clean-one', BASE + 31000);
   feed(db, { at: BASE + 5000, author: '@clean-one', file: 'cli/q.js', type: 'lock_acquired' });
   db.prepare("INSERT INTO file_lock_queue (file_path, agent_id, requested_at, status) VALUES ('cli/q.js', '@dirty-two', ?, 'waiting')").run(BASE + 20000);
@@ -191,6 +192,8 @@ test('db: a lapse under an active holder, an abandoned lease, a starved waiter a
   assert.equal(report.leases.available, true);
   assert.deepEqual(report.leases.lapsed.map((l) => `${l.handle} ${l.file} ${l.editedAfterLapse}`), ['@clean-one cli/a.js true']);
   assert.deepEqual(report.leases.abandoned.map((l) => l.file), ['cli/z.js']);
+  assert.deepEqual(report.leases.benign.map((l) => l.file), ['cli/b.js']);
+  assert.ok(!report.violations.some((v) => v.startsWith('2 x lease')));
   assert.equal(report.leases.waiters.starved.length, 1);
   assert.equal(report.leases.waiters.starved[0].holder, '@clean-one');
   assert.equal(report.leases.waiters.starved[0].granted, false);

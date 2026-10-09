@@ -5,7 +5,8 @@
  * writes lock_expired cleaned it and an archive pass has not hidden the event.
  *
  *   lapses     lock_expired events whose holder is a run handle and whose expiry fell inside that agent's
- *              activity window (transcript start..end). Expiry after the agent ended is `abandoned`: the
+ *              activity window (transcript start..end). kind 'lapsed' = the holder edited the file after the
+ *              expiry (a violation); kind 'benign' = no edit followed (information only, #2584). Expiry after the agent ended is `abandoned`: the
  *              agent left the lease behind, which is a release gap, not a lapse under an active holder.
  *   waiters    file_lock_queue rows of run handles; starved when never granted or granted later than starveMs.
  *   bypasses   guard-bypass feed events (the `# chemx-bypass: <reason>` log) authored by a run handle.
@@ -49,10 +50,12 @@ const lapseItem = (row, agent, marks) => {
   const expiresAt = Number(meta.expires_at) || row.timestamp;
   const editedAt = marks.get(`${row.file_path}\u0000${meta.holder}`) ?? null;
   const isActive = agent.startedAt <= expiresAt && expiresAt <= agent.endedAt;
+  const isEdited = editedAt !== null && editedAt > expiresAt;
+  const activeKind = isEdited ? 'lapsed' : 'benign';
   return {
-    kind: isActive ? 'lapsed' : 'abandoned', file: row.file_path, handle: meta.holder, label: agent.label, agentId: agent.agentId,
+    kind: isActive ? activeKind : 'abandoned', file: row.file_path, handle: meta.holder, label: agent.label, agentId: agent.agentId,
     acquiredAt: Number(meta.acquired_at) || null, expiresAt, recordedAt: row.timestamp, purpose: meta.purpose || '',
-    editedAfterLapse: editedAt !== null && editedAt > expiresAt
+    editedAfterLapse: isEdited
   };
 };
 
