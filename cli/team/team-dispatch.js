@@ -15,13 +15,16 @@ import { dispatchScope, planDispatchBatches } from './team-dispatch-batches.js';
 import { rootRelativePath } from './coordination-repos.js';
 import { isEscapingTarget } from './task-target.js';
 
+// light routes to sonnet/low; haiku is kept for tasks that say they are mechanical (#2494, team-dispatch-v2.js).
 export const DEFAULT_MODEL_ROUTING = Object.freeze({
-  light: Object.freeze({ model: 'haiku', effort: 'low' }),
+  light: Object.freeze({ model: 'sonnet', effort: 'low' }),
   standard: Object.freeze({ model: 'sonnet', effort: 'medium' }),
   deep: Object.freeze({ model: 'opus', effort: 'high' })
 });
 const EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max'];
 const OPEN_CHILD_STATUSES = ['queued', 'in_progress', 'review', 'blocked'];
+// Explicit ids (--tasks) may name any open task; claimed ones are screened later, never silently taken.
+const OPEN_STATUSES = OPEN_CHILD_STATUSES;
 const RULE_SEPARATOR = /[,\s]+/;
 
 const hasColumn = (db, table, column) => {
@@ -78,25 +81,35 @@ const applyFilters = (tasks, options) => {
   return hasLimit ? selected.slice(0, limit) : selected;
 };
 
-/**
- * Queued (or options.status), unassigned leaf tasks in priority order, read-only.
- * Group tasks with open children are left out so a parent and its children never both dispatch.
- * Tolerates a db without the needs column. Each row: id, title, description, target_path,
- * priority, rule_id, parent_id, needs (resolved), needsSource ('task' | 'rule').
- */
-export const selectDispatchTasks = (db, options = {}) => {
-  if (!db) return [];
-  const status = options.status || 'queued';
-  const hasNeedsColumn = hasColumn(db, 'agent_tasks', 'needs');
-  const needsColumn = hasNeedsColumn ? 't.needs' : 'NULL';
-  const repoColumn = hasColumn(db, 'agent_tasks', 'repo') ? 't.repo' : "'.'";
-  const childPlaceholders = OPEN_CHILD_STATUSES.map(() => '?').join(', ');
+const placeholders = (values) => values.map(() => '?').join(', ');
+
+// Queue mode: queued (or options.status), unassigned leaves. Explicit ids: those ids while still open.
+const selectionClauses = (options) => {
+  const ids = (options.ids || []).map(Number).filter(Number.isInteger);
+  const hasIds = ids.length > 0;
+  if (hasIds) return { clauses: [`t.id IN (${placeholders(ids)})`, `t.status IN (${placeholders(OPEN_STATUSES)})`], params: [...ids, ...OPEN_STATUSES] };
   const clauses = [
     't.status = ?',
     "(t.assigned_agent_id IS NULL OR t.assigned_agent_id = '')",
-    `NOT EXISTS (SELECT 1 FROM agent_tasks c WHERE c.parent_id = t.id AND c.status IN (${childPlaceholders}))`
+    `NOT EXISTS (SELECT 1 FROM agent_tasks c WHERE c.parent_id = t.id AND c.status IN (${placeholders(OPEN_CHILD_STATUSES)}))`
   ];
-  const params = [status, ...OPEN_CHILD_STATUSES];
+  return { clauses, params: [options.status || 'queued', ...OPEN_CHILD_STATUSES] };
+};
+
+/**
+ * Queued (or options.status), unassigned leaf tasks in priority order, read-only; with options.ids,
+ * those ids while open (queued, in_progress, review, blocked), assigned or not.
+ * Group tasks with open children are left out so a parent and its children never both dispatch.
+ * Tolerates a db without the needs column. Each row: id, title, description, target_path, status,
+ * priority, rule_id, parent_id, assigned_agent_id, dependencies, violation_snapshot, needs (resolved),
+ * needsSource ('task' | 'rule').
+ */
+export const selectDispatchTasks = (db, options = {}) => {
+  if (!db) return [];
+  const hasNeedsColumn = hasColumn(db, 'agent_tasks', 'needs');
+  const needsColumn = hasNeedsColumn ? 't.needs' : 'NULL';
+  const repoColumn = hasColumn(db, 'agent_tasks', 'repo') ? 't.repo' : "'.'";
+  const { clauses, params } = selectionClauses(options);
   const hasParent = options.parent !== undefined && options.parent !== null && options.parent !== '';
   if (hasParent) {
     clauses.push('t.parent_id = ?');
@@ -105,7 +118,8 @@ export const selectDispatchTasks = (db, options = {}) => {
   let rows = [];
   try {
     rows = db.prepare(`
-      SELECT t.id, t.title, t.description, t.target_path, t.priority, t.rule_id, t.parent_id, ${needsColumn} AS needs, ${repoColumn} AS repo
+      SELECT t.id, t.title, t.description, t.target_path, t.status, t.priority, t.rule_id, t.parent_id, t.assigned_agent_id,
+        t.dependencies, t.violation_snapshot, ${needsColumn} AS needs, ${repoColumn} AS repo
       FROM agent_tasks t
       WHERE ${clauses.join(' AND ')}
       ORDER BY t.priority ASC, t.id ASC
@@ -174,8 +188,9 @@ const defaultKnownFile = (root) => (file) => {
 /**
  * Full dispatch plan: select, batch, route. options: root, agentId (the dispatcher; its own
  * leases are not foreign), repo, parent, rule, needs, status, limit, maxAgents, maxTasksPerAgent,
- * routing (overrides config), leaseCheck (overrides findForeignLease), isKnownFile (overrides the
- * on-disk check that filters description mentions), frictionParent.
+ * routing (overrides config), leaseCheck (overrides findForeignLease), useDescription (opt in to files
+ * mentioned in descriptions; off by default, #2429), isKnownFile (overrides the on-disk check that
+ * filters those mentions), frictionParent.
  */
 export const buildDispatchPlan = (db, options = {}) => {
   const root = path.resolve(options.root || process.cwd());
@@ -186,7 +201,9 @@ export const buildDispatchPlan = (db, options = {}) => {
   const scope = dispatchScope(options);
   const leaseCheck = options.leaseCheck || defaultLeaseCheck(root, dispatcher);
   const isKnownFile = options.isKnownFile || defaultKnownFile(root);
-  const planned = planDispatchBatches(tasks, { ...options, root, scope, leaseCheck, isKnownFile });
+  // Ownership comes from target_path only (#2429): paths mentioned in a description are not the files a fix touches.
+  const useDescription = options.useDescription === true;
+  const planned = planDispatchBatches(tasks, { ...options, root, scope, leaseCheck, isKnownFile, useDescription });
   const batches = planned.batches.map((batch) => ({ ...batch, ...routeModel(batch.needs, routing) }));
   const dispatched = batches.reduce((count, batch) => count + batch.tasks.length, 0);
   const hasConfigRouting = Boolean(routing);

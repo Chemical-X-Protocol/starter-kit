@@ -98,7 +98,7 @@ test('renderDispatchWorkflow: meta literal on line 1 and a body that pipelines o
   };
   const result = await module.default(hooks.agent, hooks.pipeline, hooks.phase, hooks.log, undefined);
   assert.deepEqual(calls.map((call) => [call.opts.label, call.opts.model, call.opts.effort, call.opts.phase]), [
-    ['@dispatch-2006-1', 'haiku', 'low', 'Dispatch'],
+    ['@dispatch-2006-1', 'sonnet', 'low', 'Dispatch'],
     ['@dispatch-2006-2', 'opus', 'high', 'Dispatch']
   ]);
   assert.deepEqual(result, [
@@ -112,7 +112,7 @@ test('renderDispatchHeadless: one background claude -p per batch with its model,
   const script = renderDispatchHeadless(makePlan());
   const runs = script.split('\n').filter((line) => line.startsWith('CHEMX_AGENT_ID='));
   assert.equal(runs.length, 2);
-  assert.ok(runs[0].startsWith("CHEMX_AGENT_ID='@dispatch-2006-1' claude --model 'haiku' -p '"));
+  assert.ok(runs[0].startsWith("CHEMX_AGENT_ID='@dispatch-2006-1' claude --model 'sonnet' -p '"));
   assert.ok(runs[1].startsWith("CHEMX_AGENT_ID='@dispatch-2006-2' claude --model 'opus' -p '"));
   assert.ok(script.includes(`cd ${shellQuote("/work/it's root")} || exit 1`));
   assert.ok(script.trimEnd().endsWith('wait'));
@@ -129,7 +129,7 @@ test('shellQuote: survives single quotes', () => {
 test('renderDispatchSummary: header, one line per batch, skipped tasks', () => {
   const lines = renderDispatchSummary(makePlan()).split('\n');
   assert.ok(lines[0].includes('2 agent(s), 2 task(s), 1 skipped (routing: defaults)'));
-  assert.ok(lines[1].includes('@dispatch-2006-1 haiku/low [light] #11 :: src/a.vue'));
+  assert.ok(lines[1].includes('@dispatch-2006-1 sonnet/low [light] #11 :: src/a.vue'));
   assert.ok(lines[3].includes('skipped #13 locked (cli/c.js held by @peer)'));
 });
 

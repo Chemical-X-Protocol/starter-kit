@@ -57,7 +57,7 @@ const SUB_COMMANDS = {
   train: (ctx, args, isCli) => handleTrainCommand(ctx.db, args.positionals[0] || 'status', args.flags, isCli, args.flags.isJson),
   profile: (ctx, args, isCli) => handleProfileCommand(ctx.db, args.positionals, args.flags, isCli),
   handoff: (ctx, args, isCli) => handleHandoffCommand(ctx.db, args.positionals, args.flags, isCli, args.titleWords),
-  dispatch: (ctx, args, isCli, cwd) => handleDispatchCommand(ctx.db, { ...args.flags, root: ctx.root }, isCli, cwd)
+  dispatch: (ctx, args, isCli, cwd) => handleDispatchCommand(ctx.db, { ...args.flags, root: ctx.root, rawArgs: args.restArgs }, isCli, cwd)
 };
 
 const runSubCommand = (ctx, args, isCli, cwd) => {

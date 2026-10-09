@@ -92,7 +92,8 @@ test('selectDispatchTasks: tolerates a db without the needs column and a missing
 });
 
 test('routeModel: built-in defaults per tier; unknown tiers route as standard', () => {
-  assert.deepEqual(routeModel('light'), { model: 'haiku', effort: 'low' });
+  // light is sonnet/low since #2494; haiku is reserved for tasks that say they are mechanical (team-dispatch-v2.js).
+  assert.deepEqual(routeModel('light'), { model: 'sonnet', effort: 'low' });
   assert.deepEqual(routeModel('standard'), { model: 'sonnet', effort: 'medium' });
   assert.deepEqual(routeModel('deep'), { model: 'opus', effort: 'high' });
   assert.deepEqual(routeModel('huge', null), { ...DEFAULT_MODEL_ROUTING.standard });
@@ -143,13 +144,32 @@ test('buildDispatchPlan: live foreign lease skips the task, own lease does not, 
   assert.equal(plan.batches[0].handle, '@dispatch-queue-1');
 });
 
+test('buildDispatchPlan: files come from target_path only unless useDescription opts in (#2429)', () => {
+  const db = openDb();
+  insertTask(db, { target_path: 'cli/a.js', description: 'touches cli/b.js too' });
+  const plan = buildDispatchPlan(db, { root: '/nonexistent-root', routing: null, leaseCheck: () => null, isKnownFile: () => true });
+  assert.deepEqual(plan.batches[0].files, ['cli/a.js']);
+  const opted = buildDispatchPlan(db, { root: '/nonexistent-root', routing: null, leaseCheck: () => null, isKnownFile: () => true, useDescription: true });
+  assert.deepEqual(opted.batches[0].files, ['cli/a.js', 'cli/b.js']);
+});
+
+test('selectDispatchTasks: explicit ids select open tasks whatever their assignee, never closed ones', () => {
+  const db = openDb();
+  const queued = insertTask(db, { target_path: 'cli/a.js' });
+  const claimed = insertTask(db, { target_path: 'cli/b.js', status: 'in_progress', assigned_agent_id: '@peer' });
+  const done = insertTask(db, { target_path: 'cli/c.js', status: 'done' });
+  const rows = selectDispatchTasks(db, { ids: [queued, claimed, done] });
+  assert.deepEqual(ids(rows), [queued, claimed]);
+  assert.equal(rows[1].assigned_agent_id, '@peer');
+});
+
 test('buildDispatchPlan: routing override and injected lease check bypass config and disk', () => {
   const db = openDb();
   const parent = insertTask(db, { title: 'Group' });
   insertTask(db, { target_path: 'cli/a.js', needs: 'light', parent_id: parent });
   const plan = buildDispatchPlan(db, { root: '/nonexistent-root', routing: null, leaseCheck: () => null, parent });
   assert.equal(plan.routingSource, 'defaults');
-  assert.deepEqual([plan.batches[0].model, plan.batches[0].effort], ['haiku', 'low']);
+  assert.deepEqual([plan.batches[0].model, plan.batches[0].effort], ['sonnet', 'low']);
   assert.equal(plan.batches[0].handle, `@dispatch-${parent}-1`);
   assert.deepEqual(plan.totals, { selected: 1, dispatched: 1, skipped: 0, agents: 1 });
 });
