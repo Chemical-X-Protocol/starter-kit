@@ -91,8 +91,11 @@ export interface SearchResultPayload {
 export interface SyncSearchIndexResult {
   readonly db: any;
   readonly root: string;
+  /** Dirs this sync walked: the requested scope, plus every held scope when includeHeldScopes. */
   readonly scopeDirs: readonly string[];
   readonly scope: string;
+  /** The scope the caller asked for (status 'empty' refers to it). */
+  readonly requestedScope: string;
   /** fresh; stale (outside root, read-only, write lock busy); missing (scope dir absent); empty (no indexable files). */
   readonly status: 'fresh' | 'stale' | 'missing' | 'empty';
   readonly staleReason: string | null;
@@ -108,7 +111,7 @@ export interface SyncSearchIndexResult {
 export declare function syncSearchIndex(
   targetDir?: string | readonly string[],
   cwd?: string,
-  options?: { reindex?: boolean; includeInternal?: boolean }
+  options?: { reindex?: boolean; includeInternal?: boolean; includeHeldScopes?: boolean }
 ): SyncSearchIndexResult | null;
 
 export declare function runSearch(

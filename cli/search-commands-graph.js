@@ -5,7 +5,7 @@ import {
   calculateBacktrace
 } from './search-db.js';
 import { openSyncedIndex } from './search-session.js';
-import { applyExitStatus, indexStatusOf } from './search-output.js';
+import { applyExitStatus, indexStatusOf, printIndexLine } from './search-output.js';
 import { STATUS, toExitCode } from './result-status.js';
 
 export { handleBlastRadiusCommand } from './search-commands-blast.js';
@@ -116,7 +116,8 @@ export const runTraceCli = async (args = [], isCli = true) => {
   const maxDepthFlag = args.find((a) => a.startsWith('--max-depth=') || a.startsWith('-d='));
   const maxDepth = maxDepthFlag ? parseInt(maxDepthFlag.split('=')[1], 10) : 3;
 
-  const { db, index, root } = openSyncedIndex(process.cwd());
+  const { db, index, root } = openSyncedIndex(process.cwd(), null, { includeHeldScopes: true });
+  printIndexLine(index, isJson);
   applyExitStatus(indexStatusOf(index), isCli);
   return handleCallTraceCommand(db, target, { index, isJson, isCli, maxDepth, root });
 };
@@ -133,7 +134,8 @@ export const runBacktraceCli = async (args = [], isCli = true) => {
   const maxDepthFlag = args.find((a) => a.startsWith('--max-depth=') || a.startsWith('-d='));
   const maxDepth = maxDepthFlag ? parseInt(maxDepthFlag.split('=')[1], 10) : 5;
 
-  const { db, index } = openSyncedIndex(process.cwd());
+  const { db, index } = openSyncedIndex(process.cwd(), null, { includeHeldScopes: true });
+  printIndexLine(index, isJson);
   applyExitStatus(indexStatusOf(index), isCli);
   return handleBacktraceCommand(db, target, { index, isJson, isCli, maxDepth });
 };

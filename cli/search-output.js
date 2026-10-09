@@ -16,6 +16,7 @@ export const describeIndexFromSync = (syncRes) => {
     scope: syncRes.scope,
     scopeDirs: syncRes.scopeDirs,
     files: fileCount,
+    requested: syncRes.requestedScope && syncRes.requestedScope !== syncRes.scope ? syncRes.requestedScope : undefined,
     indexedScopes: hasWiderIndex ? syncRes.indexedScopes : undefined,
     version: INDEX_VERSION,
     status: isStale ? STATUS.INCONCLUSIVE : STATUS.PASS,
@@ -43,10 +44,18 @@ export const applyExitStatus = (status, isCli) => {
 export const formatIndexLine = (index) => {
   const hasIndex = Boolean(index);
   if (!hasIndex) return '';
-  const wider = index.indexedScopes ? `; index holds ${index.indexedScopes} (rows outside ${index.scope} are re-checked on disk; graph, def and semantic answers may include them)` : '';
-  const base = `index: scope ${index.scope} (${index.files} files) under ${index.root}${wider}`;
+  const wider = index.indexedScopes ? `; index holds ${index.indexedScopes} (rows outside ${index.scope} are re-checked on disk, not searched)` : '';
+  const requested = index.requested ? ` (requested ${index.requested}; graph answers walk every held scope)` : '';
+  const base = `index: scope ${index.scope}${requested} (${index.files} files) under ${index.root}${wider}`;
   const notice = index.notice ? `; ${index.notice}` : '';
   const isInconclusive = index.status === STATUS.INCONCLUSIVE;
   const verdict = isInconclusive ? `; INCONCLUSIVE: ${index.reason}` : '';
   return `${base}${notice}${verdict}`;
+};
+
+// Text answers other than the default query page print the index line first, since their
+// handlers exit when done. JSON answers carry it in the envelope instead.
+export const printIndexLine = (index, isJson) => {
+  const shouldPrint = Boolean(index) && !isJson;
+  if (shouldPrint) process.stdout.write(`# ${formatIndexLine(index)}\n`);
 };

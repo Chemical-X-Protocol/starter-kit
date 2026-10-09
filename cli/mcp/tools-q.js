@@ -12,8 +12,11 @@ import {
 
 // Every MCP q call runs the mtime sync first (a stat per file), so files created, edited or
 // deleted outside chemx (Edit tool, git checkout, editors) are never answered from old rows.
+const GRAPH_ARGS = ['blastRadius', 'impact', 'semantic', 'trace', 'backtrace', 'hybrid', 'connections', 'symbol'];
+
 export const syncIndexForQuery = (targetCwd, args = {}) => {
-  const session = openSyncedIndex(targetCwd, args.dir);
+  const includeHeldScopes = GRAPH_ARGS.some((key) => Boolean(args[key]));
+  const session = openSyncedIndex(targetCwd, args.dir, { includeHeldScopes });
   const hasDb = Boolean(session.db);
   if (!hasDb) throw new Error('Unable to initialize Chemical X AST search index database.');
   return session;

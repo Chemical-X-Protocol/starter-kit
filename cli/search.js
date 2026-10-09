@@ -23,7 +23,7 @@ import { printSearchHelp } from './help.js';
 import { syncSearchIndex, syncSingleFileIndex } from './search-sync.js';
 import { parseSearchArgs, hasAnyFlag, readIntValue } from './search-args.js';
 import { resolveIndexRoot, resolveDefaultScopeDir } from './search-root.js';
-import { describeIndexFromSync, applyExitStatus, indexStatusOf } from './search-output.js';
+import { describeIndexFromSync, applyExitStatus, indexStatusOf, printIndexLine } from './search-output.js';
 import { buildQueryPayload, printQueryPage } from './search-query-view.js';
 import { STATUS } from './result-status.js';
 
@@ -176,21 +176,25 @@ export const runSearch = async (rawArgs = [], isCli = true) => {
 
   const startTime = Date.now();
   const root = resolveIndexRoot(cwd);
+  const { mode, isSubcommand } = resolveMode(parsed, first);
   const syncRes = syncSearchIndex(resolveScopeTarget(parsed, cwd, root), cwd, {
     reindex: parsed.flags.has('--reindex'),
-    includeInternal: parsed.flags.has('--include-internal')
+    includeInternal: parsed.flags.has('--include-internal'),
+    includeHeldScopes: mode !== 'query'
   });
   if (!syncRes?.db) return failNoSqlite(isJson, isCli);
   const db = syncRes.db;
   const index = { ...describeIndexFromSync(syncRes), argProblems: argProblems.length > 0 ? argProblems : undefined };
   applyExitStatus(indexStatusOf(index), isCli);
 
-  const { mode, isSubcommand } = resolveMode(parsed, first);
   const limit = readIntValue(parsed, 'limit', mode === 'query' ? 50 : 20);
   const opts = { index, isJson, isCli, isColumnar, root };
   const ctx = { db, parsed, first, second, root, limit, opts, target: isSubcommand ? second : first };
   const handler = MODE_HANDLERS[mode];
-  if (handler) return handler(ctx);
+  if (handler) {
+    printIndexLine(index, isJson);
+    return handler(ctx);
+  }
 
   const query = first.trim();
   const page = queryIndexPage(db, { query, tier: parsed.values.tier || null, limit, scopeDirs: syncRes.scopeDirs });
