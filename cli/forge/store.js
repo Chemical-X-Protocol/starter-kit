@@ -1,7 +1,7 @@
 // Forge fingerprint ledger in index.db (design doc, Data model and INCREMENTAL PATH). A changed file is
 // replaced in one transaction: its old fps are read, its rows deleted (explicitly, so it holds with
 // foreign_keys off too) and the new ones inserted; both fp sets are returned for the dirty set.
-// Every SELECT orders by file_path, start; nothing here sorts with localeCompare.
+// Row reads are ordered (start_line, start, id); nothing here sorts with localeCompare.
 import { withIndexTransaction } from '../search-index-write.js';
 import { writeIndexMeta } from '../search-index-meta.js';
 import { anchorWeight } from './anchors.js';
