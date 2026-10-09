@@ -1,6 +1,6 @@
 # Forge groups: `chemx patterns --forge`
 
-Tasks #2536 (Forge P3), #2600 (its review fixes) and #2532 (the Forge epic). This page says what the Forge grouping run does after the fingerprint ledger is current, what it stores, and what its output means. The design is `docs/superpowers/specs/2026-10-09-chemx-forge-engine.md` (sections 5-8); this page covers what the code does today.
+Tasks #2536 (Forge P3), #2600 (its review fixes), #4431 (folding, run cache), #2603, #2604 and #2532 (the Forge epic). This page says what the Forge grouping run does after the fingerprint ledger is current, what it stores, and what its output means. The design is `docs/superpowers/specs/2026-10-09-chemx-forge-engine.md` (sections 5-8); this page covers what the code does today.
 
 The plain `chemx patterns` is still the legacy detector, which the roadmap reads. Everything here runs behind `--forge` until P5 swaps the surfaces.
 
@@ -14,9 +14,9 @@ The plain `chemx patterns` is still the legacy detector, which the roadmap reads
 | `... --path=<P> --kind=<K> --json` | Filters (`--path=W`, `--kind=fn`), or the whole run as JSON |
 | `chemx patterns reject <id> --reason="..." --as=@handle` | Suppresses a stored group, then posts the decision to the team feed and links the post to the suppression. A stored row without a suppression key is refused, and nothing is written or posted |
 | `chemx patterns --groups` | The run as JSON, in the shape the ground-truth scorer reads |
-| `chemx patterns --score=<labels.json> --forge` | Scores the run against the ground truth |
+| `chemx patterns --score=<labels.json> --forge [--include-tests]` | Refreshes the ledger (as `--forge` does), then scores the run against the ground truth. `--include-tests` syncs and groups the spec facet too, which the spec items A16 and A17 need (#2603) |
 
-A listing line reads `rank. id path kind | sites/files | E mass holes | first site | drift, dependsOn, evicted counts`.
+A listing line reads `rank. id path kind | sites/files | E mass holes | first site | drift, dependsOn, evicted, folds counts`. `folds N` counts the groups folded into that slot; `--explain=<id>` lists them with their reason, and a folded group's `--explain` names the slot it folded into.
 
 ## The run
 
@@ -38,7 +38,18 @@ A listing line reads `rank. id path kind | sites/files | E mass holes | first si
    The reason is R7 when it fails, else the first failing code.
 4. **Refinement** (`refine.js`): when the failing code belongs to some members, they are evicted with a reason and the LGG is computed again (up to 3 rounds). For R3, R4 and R5 these are the members on the failing side of a hole. For R1 and R2, each member outside the largest fp2 class is judged against one reference member; its reason is that pair's R4, R3 or R5 when present, else the pair's first code. The kept members must still pass their gate (W: its floor), else the group is rejected `refine.<rule>`.
 5. **Drift** (`drift.js`, `root-shapes.js`): for an accepted group with E >= 30, a unit or window that carries only the group's shared anchors, at least 2/3 of them, weighs at least half the group's mass, and has the same root shape, is drift. A root shape reads statements through their initializer, test or expression and looks through `!`. A logical chain also accepts each operand's shape.
-6. **Ranking** (`rank.js`): `score = (instances - 1) * mass * (1 - holeRatio) * levelWeight * (spec ? 0.5 : 1)`. The level weights are fp1 1.0, fp2 and N2 0.9, W 0.8, N3, fp3 and T 0.6. A group inside a higher-scored group is folded into it (`foldedInto`). A group whose every instance contains a lower-scored group's instance depends on it (`dependsOn`). Ranks count only unfolded candidates.
+6. **Ranking** (`rank.js`, `fold.js`): `score = (instances - 1) * mass * (1 - holeRatio) * levelWeight * (spec ? 0.5 : 1)`. The level weights are fp1 1.0, fp2 and N2 0.9, W 0.8, N3, fp3 and T 0.6. Folding then gives each repeated shape one slot. Walking groups by score, a group joins the family of a higher-scored group when:
+
+   | Reason | Rule |
+   | :--- | :--- |
+   | `inside` | every instance lies inside an instance of that family |
+   | `overlap` | at least half of its instances cross that family's instances (they overlap and neither contains the other) |
+   | `block` | W only: at least half of its instances overlap, in any way, that family's W instances (sibling windows of one block, such as A1's flags) |
+   | `wrapper` | every instance strictly contains an instance of that family that is lighter by less than the G1 mass floor (8), such as `const reason = <expr>` around the expression group. A fn group never folds this way |
+   | `variant` | it has one fp3 skeleton on every instance, equal to that group's, with the same kind and facet and a shared-anchor Jaccard of at least 0.5 (fp2 variants of one statement) |
+   | `fragment` | second pass, any score: a family strictly contains all of its instances but at most 1 (2 for W), the most its residual sites could be without forming a group of their own |
+
+   Folding never changes a group's members, LGG or verdict; folded groups are stored, scored by the ground-truth scorer and listed under their slot (`foldedInto`, `foldReason`, and `folded` on the slot). A group whose every instance contains an instance of a lower-scored group of another family depends on it (`dependsOn`). Ranks count only slots.
 7. **Suppressions**: a group whose suppression key (path, kind, facet and the members' file#fp2 sequences, so line drift does not lose it) matches a `patterns reject` gets status `suppressed`. It is never surfaced and is counted in the summary. T partitions that refinement rejected are stored with their suppression key too.
 
 W's merge of same-block buckets uses the same LGG (`unify-step.js`). A pair is parsed only when its fp3 is equal or its anchors (literals and keys aside) differ in 1 or 2 places. A merge is refused by every code except R5, which is judged on the merged group.
@@ -53,6 +64,12 @@ W's merge of same-block buckets uses the same LGG (`unify-step.js`). A pair is p
 | `pattern_group_members` | units by role: `member`, `drift`, `evicted` (with the code) |
 | `pattern_suppressions` | `patterns reject` decisions by suppression key and path |
 | `pattern_unify_cache`, `pattern_shape_cache` | W merge decisions by instance pair, and row shapes by unit, both with content-hash keys |
+| `pattern_run_cache` | the last whole-run result per scope (`--include-tests`, `--idioms`) under its run key, plus which run `pattern_groups` holds (`run-cache.js`) |
+| `pattern_body_end_cache` | each read file's function-body last statements, keyed by the engine hash and the file's content sha1 (`body-end-cache.js`) |
+
+A run whose inputs are all unchanged is read back whole from `pattern_run_cache`. Its run key covers every in-scope `pattern_files` row (path, content hash, facet, extractor version; spec-facet files only with `--include-tests`), the engine hash (the source of every module the grouping imports from `forge-groups.js` inside `cli/forge/` and `cli/sfc/`, plus `cli/rules.js` and `cli/babel-lazy.js`), the scope flags, `CHEMX_FORGE_INLINE` and the suppressions. When any in-scope file's mtime or size differs from its ledger stamp, no key is made and the run is computed and not cached. A hit rewrites `pattern_groups` only when another scope's run replaced them. Callers that pass `unify`, `judge: false`, `cache` or `runCache: false` always compute.
+
+The default scope reads no spec-facet rows, even when an earlier `--include-tests` sync left them in the ledger; the filter runs in SQL (#2604). `patterns --sync` (refused by the router flag guard until #4478 lands) reports `scopeRows` (the rows grouping of that scope reads) and `specRows` next to `ledgerRows` (every row stored).
 
 A later run reuses a stored verdict when its grouping finds the same member set (`source_id` is the content-derived id before refinement). It reuses merge decisions and row shapes when the units' content is unchanged. Every cache entry carries `FORGE_EXTRACTOR_VERSION` and `LGG_STAGE_VERSION`. Bump `LGG_STAGE_VERSION` when the LGG, the codes, refinement, unify or root shapes change meaning.
 
@@ -66,4 +83,10 @@ A later run reuses a stored verdict when its grouping finds the same member set 
 - The sandbox (`gt-sandbox.js`, `gt-scaffold.js`) wraps excerpts cut from inside a function in a scaffold that binds their free names, so they are statement units as in the real file.
 - Template groups get no script LGG: they are judged on facet and convention after the structural-role refinement of `templates.js`.
 - N1 fp1 groups are judged without parsing, since an L1-equal LGG holds only capture-name refs. `--explain` shows `lgg: none` for them.
-- Known gaps: `cli/build/` is skipped by the audit's file discovery, so `cli/build/detector.js` (A7.4) is never fingerprinted. A warm run on the kit takes about 3 s, against a 1 s budget; the grouping before the LGG stage already takes about 2 s.
+- `cli/forge/fold.spec.js` pins each fold rule and its negatives on hand-built groups; `cli/forge/run-cache.spec.js` pins hit, off on an unsynced edit, a new key after a sync or a suppression, the restore of `pattern_groups`, and the body-end store; `cli/forge/ledger-scope.spec.js` pins #2604 and `cli/patterns/gt-score-cli.spec.js` pins #2603.
+- Measured on the real kit on 2026-10-09 (one session, other agents running, load average 7 to 14, so these are noisy):
+  - Top 20 after folding, hand-judged by @forge-refine: 19 distinct shapes. This is one judge on one run, not a precision claim. The reporter-header expression (`lines.push` of the rule line) and the header window remain two slots, because the expression has 3 closing-rule sites outside the windows. Before folding, @forge-measure counted 12 distinct shapes in the top 20 (feed #7332).
+  - `chemx patterns --forge` with nothing changed (a run-cache hit): 0.68 to 0.98 s wall over 5 runs at load average about 7. Most of it is process start and module loading: importing the patterns CLI evaluates `@babel/types` and `@babel/traverse` through `search-schema.js` (#4482).
+  - After any edit or grouping-code change the run is computed again: 4.3 to 7.3 s with the verdict, unify, shape and body-end caches warm, and 6.35 s for one CLI run. Incremental regrouping is #4485.
+  - Ground-truth A recall, harvest-only: 16/26 (62%) in the default scope and 17/26 (65%) with `--include-tests`, below the 0.70 target. The open items are listed in #4484. A6's labels are stale (#4483) and A12 was lost when alias inlining went off by default (#2595).
+- Known gaps: `cli/build/` is skipped by the audit's file discovery, so `cli/build/detector.js` (A7.4) is never fingerprinted.
