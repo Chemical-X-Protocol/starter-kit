@@ -1,40 +1,52 @@
 import test from 'node:test';
 import assert from 'node:assert';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { handleChemx } from './mcp/tools.js';
 import { auditCode } from './audit/rules.js';
+import { openIndexDb } from './search-db.js';
+import { listTasks } from './team/team-db-tasks.js';
+
+// Every spec that touches the task DB or the filesystem runs in its own temp project,
+// never in the kit's real .chemx/index.db (it used to gain 3 junk tasks per run).
+const makeTempProject = (prefix) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  fs.writeFileSync(path.join(root, 'package.json'), '{"name":"friction-fixture"}\n');
+  return root;
+};
 
 test('Friction 1: team_task add and team task add persist task rows', async () => {
-  const resCmd = await handleChemx({ command: 'team task add CLI Task Test' });
+  const projectRoot = makeTempProject('chemx-friction-tasks-');
+  const resCmd = await handleChemx({ command: 'team task add CLI Task Test', projectRoot });
   assert.ok(resCmd && resCmd.id, 'Expected task object with id from team task add');
   assert.strictEqual(resCmd.title, 'CLI Task Test');
 
-  const resCmd2 = await handleChemx({ command: 'team_task add Direct SubCmd Task' });
+  const resCmd2 = await handleChemx({ command: 'team_task add Direct SubCmd Task', projectRoot });
   assert.ok(resCmd2 && resCmd2.id, 'Expected task object with id from team_task add');
   assert.strictEqual(resCmd2.title, 'Direct SubCmd Task');
 
-  const resInfer = await handleChemx({ action: 'team_task', params: { title: 'Inferred Add Task' } });
+  const resInfer = await handleChemx({ action: 'team_task', params: { title: 'Inferred Add Task' }, projectRoot });
   assert.ok(resInfer && resInfer.id, 'Expected task object with id when title is given');
   assert.strictEqual(resInfer.title, 'Inferred Add Task');
+
+  const titlesInTempDb = listTasks(openIndexDb(projectRoot)).map((task) => task.title);
+  assert.deepStrictEqual(titlesInTempDb.sort(), ['CLI Task Test', 'Direct SubCmd Task', 'Inferred Add Task']);
 });
 
 test('Friction 2: patch handles all parameter aliases and command strings', async () => {
-  const testFile = path.resolve('test-patch-spec.txt');
+  const projectRoot = makeTempProject('chemx-friction-patch-');
+  const testFile = path.join(projectRoot, 'test-patch-spec.txt');
   fs.writeFileSync(testFile, 'line 1\nOLD_STRING\nline 3\n');
 
-  try {
-    await handleChemx({ action: 'patch', params: { path: 'test-patch-spec.txt', target: 'OLD_STRING', replace: 'NEW_STRING_1' } });
-    assert.strictEqual(fs.readFileSync(testFile, 'utf8'), 'line 1\nNEW_STRING_1\nline 3\n');
+  await handleChemx({ action: 'patch', params: { path: 'test-patch-spec.txt', target: 'OLD_STRING', replace: 'NEW_STRING_1' }, projectRoot });
+  assert.strictEqual(fs.readFileSync(testFile, 'utf8'), 'line 1\nNEW_STRING_1\nline 3\n');
 
-    await handleChemx({ action: 'patch', params: { path: 'test-patch-spec.txt', search: 'NEW_STRING_1', replacement: 'NEW_STRING_2' } });
-    assert.strictEqual(fs.readFileSync(testFile, 'utf8'), 'line 1\nNEW_STRING_2\nline 3\n');
+  await handleChemx({ action: 'patch', params: { path: 'test-patch-spec.txt', search: 'NEW_STRING_1', replacement: 'NEW_STRING_2' }, projectRoot });
+  assert.strictEqual(fs.readFileSync(testFile, 'utf8'), 'line 1\nNEW_STRING_2\nline 3\n');
 
-    await handleChemx({ action: 'patch', params: { path: 'test-patch-spec.txt', targetContent: 'NEW_STRING_2', replacementContent: 'FINAL_STRING' } });
-    assert.strictEqual(fs.readFileSync(testFile, 'utf8'), 'line 1\nFINAL_STRING\nline 3\n');
-  } finally {
-    if (fs.existsSync(testFile)) fs.unlinkSync(testFile);
-  }
+  await handleChemx({ action: 'patch', params: { path: 'test-patch-spec.txt', targetContent: 'NEW_STRING_2', replacementContent: 'FINAL_STRING' }, projectRoot });
+  assert.strictEqual(fs.readFileSync(testFile, 'utf8'), 'line 1\nFINAL_STRING\nline 3\n');
 });
 
 test('Friction 3: Vue file AST line numbers match file line numbers exactly', () => {

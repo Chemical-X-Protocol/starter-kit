@@ -63,6 +63,12 @@ export const parseFlags = (args = []) => {
     if (arg.startsWith('--cached-tokens=')) flags.cachedTokens = parseInt(arg.split('=')[1], 10);
     if (arg.startsWith('--cost=')) flags.cost = parseFloat(arg.split('=')[1]);
     if (arg.startsWith('--model=')) flags.model = arg.split('=')[1];
+    const valueAfterEquals = arg.slice(arg.indexOf('=') + 1);
+    const isDescFlag = arg.startsWith('--desc=') || arg.startsWith('--description=');
+    if (isDescFlag) flags.description = valueAfterEquals;
+    if (arg.startsWith('--deps=')) flags.dependencies = valueAfterEquals.split(',').map((id) => Number(id.trim())).filter(Number.isInteger);
+    if (arg.startsWith('--sprint=')) flags.sprint = valueAfterEquals;
+    if (arg.startsWith('--moscow=')) flags.moscow = valueAfterEquals;
     if (arg.startsWith('--metadata=')) {
       const raw = arg.slice('--metadata='.length);
       try {

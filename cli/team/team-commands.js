@@ -134,7 +134,9 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
         assigned_agent_id: flags.agent,
         parentId: flags.parent,
         rule: flags.rule,
-        priority: flags.priority
+        priority: flags.priority,
+        sprint_tag: flags.sprint,
+        moscow: flags.moscow
       });
       const { page, total } = selectTaskPage(tasks, listOptions);
       if (flags.isJson) {
@@ -337,11 +339,16 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
       }
       const task = createTask(db, {
         title,
+        description: flags.description || '',
         tier: flags.tier || 'molecule',
         target_path: flags.target,
         priority: flags.priority || 2,
         assigned_agent_id: flags.agent || null,
-        parent_id: flags.parent ?? null
+        parent_id: flags.parent ?? null,
+        dependencies: flags.dependencies || [],
+        sprint_tag: flags.sprint || '',
+        moscow: flags.moscow,
+        rule_id: flags.rule || ''
       });
       if (task) {
         postFeedEvent(db, {
