@@ -18,6 +18,9 @@ const KIT_ROOT = fileURLToPath(new URL('..', import.meta.url));
 const makeUiProject = (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-ui-spec-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  // The UI reads a freshly synced index (#2552), so the seeded row needs the file on disk.
+  fs.mkdirSync(path.join(root, 'src'));
+  fs.writeFileSync(path.join(root, 'src', 'Seed.ts'), 'export const seed = 1;\n');
   const db = openIndexDb(root);
   db.prepare('INSERT INTO files (path, mtime, size, tier, lines, chars) VALUES (?, ?, ?, ?, ?, ?)')
     .run('src/Seed.ts', Date.now(), 10, 'utility', 1, 10);
