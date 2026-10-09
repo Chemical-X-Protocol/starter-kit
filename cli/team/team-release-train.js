@@ -39,7 +39,8 @@ export const freezeReleaseTrain = (db, options = {}) => {
   const candidates = db.prepare("SELECT id, title, target_path FROM agent_tasks WHERE vds_status = 'awaiting_tag' OR status = 'review'").all();
   const candidateIds = candidates.map((c) => c.id);
 
-  if (candidateIds.length > 0) {
+  const hasCandidates = candidateIds.length > 0;
+  if (hasCandidates) {
     const placeholders = candidateIds.map(() => '?').join(',');
     const now = Date.now();
     db.prepare(`
