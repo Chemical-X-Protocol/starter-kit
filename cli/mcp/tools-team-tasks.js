@@ -28,10 +28,26 @@ const resolveIdArgs = (ctx, args) => {
   return { args: { ...args, taskId: id, id }, notice: ref.notice };
 };
 
+// The target is already stored (re-based) by completeTask, so verification reads it from the task row.
 const completionOptions = (ctx, args, cwd) => {
   const task = getTask(ctx.db, args.taskId);
   const taskDir = task ? repoDir(ctx.root, task.repo) : cwd;
-  return { cwd: taskDir, indexDb: openIndexDb(taskDir) || ctx.db, target: args.target || args.targetPath, force: args.force, noTargetConfirm: args.noTargetConfirm, tokens: args.tokens, logPath: args.logPath };
+  return { cwd: taskDir, indexDb: openIndexDb(taskDir) || ctx.db, target: undefined, force: args.force, noTargetConfirm: args.noTargetConfirm, tokens: args.tokens, logPath: args.logPath };
+};
+
+const storeTarget = (ctx, taskId, placed) => ctx.db.prepare('UPDATE agent_tasks SET target_path = ?, repo = ?, updated_at = ? WHERE id = ?')
+  .run(placed.target_path, placed.repo, Date.now(), Number(taskId));
+
+// done/complete with a target re-bases it to its owning repo first, like the CLI's `task done --target` (#2581).
+const completeTask = (ctx, args, cwd, agentHandle) => {
+  const target = args.target || args.targetPath;
+  const hasTarget = typeof target === 'string' && target !== '';
+  const placed = hasTarget ? prepareTaskTarget(ctx, cwd, target) : null;
+  const isRefused = Boolean(placed?.error);
+  if (isRefused) return { error: placed.error, refused: true };
+  const hasPlaced = Boolean(placed);
+  if (hasPlaced) storeTarget(ctx, args.taskId, placed);
+  return completeTaskWithAudit(ctx.db, args.taskId, agentHandle, completionOptions(ctx, args, cwd));
 };
 
 const setTarget = (ctx, args, cwd) => {
@@ -42,7 +58,7 @@ const setTarget = (ctx, args, cwd) => {
   const placed = prepareTaskTarget(ctx, cwd, args.targetPath);
   const isRefused = Boolean(placed.error);
   if (isRefused) return { error: placed.error, refused: true };
-  ctx.db.prepare('UPDATE agent_tasks SET target_path = ?, repo = ?, updated_at = ? WHERE id = ?').run(placed.target_path, placed.repo, Date.now(), Number(args.taskId));
+  storeTarget(ctx, args.taskId, placed);
   return ctx.db.prepare('SELECT * FROM agent_tasks WHERE id = ?').get(Number(args.taskId));
 };
 
@@ -146,7 +162,7 @@ export const handleChemxTeamTask = async (rawArgs = {}, cwd = process.cwd()) => 
   if (isDoneAction) {
     const agentHandle = resolveAgentId(args.agentId || args.as);
     registerAgent(db, { id: agentHandle, role: 'executor' });
-    return completeTaskWithAudit(db, args.taskId, agentHandle, completionOptions(ctx, args, cwd));
+    return completeTask(ctx, args, cwd, agentHandle);
   }
   const isBlockAction = action === 'block';
   if (isBlockAction) {
@@ -159,7 +175,7 @@ export const handleChemxTeamTask = async (rawArgs = {}, cwd = process.cwd()) => 
     registerAgent(db, { id: agentHandle, role: 'executor' });
     const isDoneStatus = targetStatus === 'done' || targetStatus === 'completed';
     if (isDoneStatus) {
-      return completeTaskWithAudit(db, args.taskId, agentHandle, completionOptions(ctx, args, cwd));
+      return completeTask(ctx, args, cwd, agentHandle);
     }
     return updateTaskStatus(db, args.taskId, targetStatus, { blockedReason: args.blockedReason || '' });
   }

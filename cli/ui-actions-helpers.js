@@ -3,6 +3,15 @@
  * Savings calculation, database actions, and payload sanitization
  */
 
+// The code index may be a different db than the team db (#2581); a team-only db has no files table.
+export const countIndexedFiles = (indexDb) => {
+  try {
+    return indexDb.prepare('SELECT COUNT(*) as count FROM files').get()?.count ?? 0;
+  } catch {
+    return 0; // chemx-allow: best-effort a team-only db has no code index to count
+  }
+};
+
 export const calculateSavings = (telemetry = {}, fileCount = 59, taskCount = 7) => {
   const actualTokens = Number(telemetry.totalTokens || 0);
   const actualCost = Number(telemetry.totalCost || 0);

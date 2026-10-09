@@ -1,5 +1,5 @@
 import { getSwarmStatus, postFeedEvent, listTasks } from './team/team-db.js';
-import { calculateSavings } from './ui-actions-helpers.js';
+import { calculateSavings, countIndexedFiles } from './ui-actions-helpers.js';
 import { getForumCategories, resolveAgentMeta, formatTokenStamp, updateAgentSignatureInDb } from './ui-forum-data.js';
 import { getForumTopics, getTopicPosts, createForumTopic } from './ui-forum-topics.js';
 import { formatTaskTokenStamp } from './team/team-telemetry.js';
@@ -19,7 +19,8 @@ export const getAggregatedTelemetry = (db) => {
   return row || fallbackTelemetry;
 };
 
-export const handleSwarmStatus = (db, cwd = process.cwd()) => {
+// Team rows come from db; the file count from indexDb, a different db once the team db is shared (#2581).
+export const handleSwarmStatus = (db, cwd = process.cwd(), indexDb = db) => {
   if (!db) return { error: 'Database unavailable' };
   const rawStatus = getSwarmStatus(db) || {};
   const rawFeed = db.prepare('SELECT * FROM agent_feed ORDER BY id DESC LIMIT 50').all() || [];
@@ -64,7 +65,7 @@ export const handleSwarmStatus = (db, cwd = process.cwd()) => {
     };
   });
 
-  const fileCount = db.prepare("SELECT COUNT(*) as count FROM files").get()?.count || 59;
+  const fileCount = countIndexedFiles(indexDb) || 59;
   const savings = calculateSavings(telemetry, fileCount, tasks.length);
   const forumCategories = getForumCategories(db);
   const topics = getForumTopics(db);

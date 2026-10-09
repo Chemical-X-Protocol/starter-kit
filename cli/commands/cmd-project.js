@@ -1,9 +1,12 @@
 /**
  * cmd-project.js: Persistent Coordinator and Projects CLI Handler
- * Dispatches init, status, step, chat, pause, resume, and learnings
+ * Dispatches init, status, step, chat, pause, resume, and learnings.
+ * Project sessions, messages and learnings are team rows: they live in the coordination db for cwd
+ * (team/coordination-db.js, #2581); only `step`'s audit triage reads cwd's code index.
  */
 
 import { openIndexDb } from '../search-db.js';
+import { openTeamContext, describeTeamDbFailure } from '../team/coordination-db.js';
 import {
   initProjectSession, getActiveProjectSession, getProjectSession,
   postProjectMessage, getProjectMessages, updateProjectSession
@@ -14,9 +17,10 @@ import { formatProjectStatusCard } from '../team/team-projects-format.js';
 import { listTasks } from '../team/team-db-tasks.js';
 
 export const runProjectCli = async (rawArgs = [], isCli = false, cwd = process.cwd()) => {
-  const db = openIndexDb(cwd);
+  const ctx = openTeamContext(cwd);
+  const { db } = ctx;
   if (!db) {
-    if (isCli) process.stderr.write('\x1b[31m✕ SQLite database unavailable.\x1b[0m\n');
+    if (isCli) process.stderr.write(`\x1b[31m✕ ${describeTeamDbFailure(ctx)}\x1b[0m\n`);
     return null;
   }
 
@@ -38,7 +42,7 @@ export const runProjectCli = async (rawArgs = [], isCli = false, cwd = process.c
 
   const isStepCommand = subCommand === 'step' || subCommand === 'turn';
   if (isStepCommand) {
-    const res = executeCoordinatorStep(db, { cwd });
+    const res = executeCoordinatorStep(db, { cwd, indexDb: openIndexDb(cwd) || db, root: ctx.root, repo: ctx.repo });
     if (isCli) {
       if (isJson) process.stdout.write(`${JSON.stringify(res, null, 2)}\n`);
       else process.stdout.write(`\x1b[36m⚡ [Turn ${res.turn || 0}]\x1b[0m ${res.action || res.status} - Status: ${res.status}\n`);

@@ -51,7 +51,8 @@ export const executeCoordinatorStep = (db, options = {}) => {
 
   const isBacklogEmpty = activeTasks.length === 0 && queuedTasks.length === 0;
   if (isBacklogEmpty) {
-    const generated = autoGenerateTasksFromAudit(db, { cwd: options.cwd || process.cwd() });
+    // Hazards come from the code index (options.indexDb); tasks go to the team db (#2581).
+    const generated = autoGenerateTasksFromAudit(db, { cwd: options.cwd || process.cwd(), indexDb: options.indexDb, root: options.root, repo: options.repo });
     const isNothingGenerated = generated.length === 0;
     if (isNothingGenerated) {
       const defaultTask = createTask(db, {

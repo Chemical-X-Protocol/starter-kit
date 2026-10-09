@@ -1,9 +1,12 @@
 /**
  * Chemical X Protocol: MCP Project & Coordinator Tools
- * Exposes persistent coordinator lifecycle, step execution, and memory via MCP
+ * Exposes persistent coordinator lifecycle, step execution, and memory via MCP.
+ * Project rows live in the coordination db for the call's root (team/coordination-db.js, #2581);
+ * only `step`'s audit triage reads the root's code index.
  */
 
 import { openIndexDb } from '../search-db.js';
+import { openTeamContext } from '../team/coordination-db.js';
 import {
   initProjectSession,
   getActiveProjectSession,
@@ -16,9 +19,10 @@ import { executeCoordinatorStep } from '../team/team-projects-coordinator.js';
 import { listTasks } from '../team/team-db-tasks.js';
 
 export const handleChemxProject = async (args = {}, cwd = process.cwd()) => {
-  const db = openIndexDb(cwd);
+  const ctx = openTeamContext(cwd);
+  const { db } = ctx;
   if (!db) {
-    return { error: 'SQLite database unavailable' };
+    return { error: ctx.refused || 'SQLite database unavailable' };
   }
 
   const subAction = args.subAction || args.action || 'status';
@@ -36,7 +40,7 @@ export const handleChemxProject = async (args = {}, cwd = process.cwd()) => {
 
   const isStep = subAction === 'step' || subAction === 'turn';
   if (isStep) {
-    return executeCoordinatorStep(db, { cwd, costUsd: args.costUsd });
+    return executeCoordinatorStep(db, { cwd, costUsd: args.costUsd, indexDb: openIndexDb(cwd) || db, root: ctx.root, repo: ctx.repo });
   }
 
   const isChat = subAction === 'chat' || subAction === 'msg';

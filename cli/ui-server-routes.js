@@ -19,26 +19,27 @@ import { getDatabaseMetrics, executeSqlQuery } from './ui-db-studio.js';
 import { scanAttentionItems, confirmAttentionItem } from './ui-attention.js';
 import { withFreshIndex } from './ui-fresh-index.js';
 
-export const routeGet = (pathname, db, cwd = process.cwd(), queryParams = {}) => {
+// db: team rows (coordination db, #2581); indexDb (default db): code index for codebase, metrics, db studio.
+export const routeGet = (pathname, db, cwd = process.cwd(), queryParams = {}, { indexDb = db } = {}) => {
   const [cleanPath, search] = (pathname || '').split('?');
   const parsedParams = search ? Object.fromEntries(new URLSearchParams(search)) : queryParams;
   const normPath = cleanPath.replace(/^\/api\/swarm\//, '/api/');
 
   const routes = {
-    '/api/status': () => handleSwarmStatus(db, cwd),
+    '/api/status': () => handleSwarmStatus(db, cwd, indexDb),
     '/api/feed': () => ({ success: true, feed: queryFeed(db, parsedParams) }),
     '/api/tasks': () => ({ success: true, tasks: listTasks(db, parsedParams) }),
     '/api/categories': () => ({ success: true, categories: getForumCategories(db) }),
-    '/api/agents': () => ({ success: true, agents: handleSwarmStatus(db, cwd).agents }),
-    '/api/codebase': () => withFreshIndex(cwd, {}, () => handleCodebaseIndex(db, cwd)),
-    '/api/codebase/tree': () => withFreshIndex(cwd, {}, () => handleCodebaseTree(db, cwd)),
-    '/api/codebase/file': () => withFreshIndex(cwd, { paths: [parsedParams.path], scope: false }, () => handleCodebaseFile(db, parsedParams.path, cwd)),
-    '/api/database/metrics': () => getDatabaseMetrics(db, cwd),
+    '/api/agents': () => ({ success: true, agents: handleSwarmStatus(db, cwd, indexDb).agents }),
+    '/api/codebase': () => withFreshIndex(cwd, {}, () => handleCodebaseIndex(indexDb, cwd)),
+    '/api/codebase/tree': () => withFreshIndex(cwd, {}, () => handleCodebaseTree(indexDb, cwd)),
+    '/api/codebase/file': () => withFreshIndex(cwd, { paths: [parsedParams.path], scope: false }, () => handleCodebaseFile(indexDb, parsedParams.path, cwd)),
+    '/api/database/metrics': () => getDatabaseMetrics(indexDb, cwd),
     '/api/topics': () => handleGetTopics(db, parsedParams.category),
     '/api/topics/posts': () => handleGetTopicPosts(db, parsedParams.topicId || parsedParams.topic_id),
     '/api/attention': () => scanAttentionItems(db, cwd),
-    '/api/db/tables': () => handleDbTables(db, cwd),
-    '/api/db/browse': () => handleDbBrowse(db, parsedParams), '/api/db/structure': () => handleDbStructure(db, parsedParams)
+    '/api/db/tables': () => handleDbTables(indexDb, cwd),
+    '/api/db/browse': () => handleDbBrowse(indexDb, parsedParams), '/api/db/structure': () => handleDbStructure(indexDb, parsedParams)
   };
 
   const hasRoute = Object.prototype.hasOwnProperty.call(routes, normPath);

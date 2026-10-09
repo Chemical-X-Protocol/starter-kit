@@ -1,5 +1,6 @@
 import http from 'node:http';
 import { openIndexDb } from './search-db.js';
+import { openTeamDb } from './team/coordination-db.js';
 import { handleSwarmStatus } from './ui-handlers.js';
 import { generateSwarmHtml } from './ui-html.js';
 import { routeGet, routePost, parseJsonBody } from './ui-server-routes.js';
@@ -19,7 +20,8 @@ const runRoute = (handler) => {
 };
 
 export const createUiServer = (cwd = process.cwd(), options = {}) => {
-  const db = openIndexDb(cwd);
+  const indexDb = openIndexDb(cwd);
+  const db = openTeamDb(cwd) || indexDb; // team rows: coordination db (#2581); code index, studio, console: indexDb
   const auth = options.auth || createUiAuth();
   const consoleDb = openConsoleDb(cwd);
   const server = http.createServer(async (req, res) => {
@@ -35,12 +37,12 @@ export const createUiServer = (cwd = process.cwd(), options = {}) => {
     const cookieHeaders = hasSetCookie ? { 'Set-Cookie': gate.setCookie } : {};
     const shouldServeHtml = isGet && !isApi;
     if (shouldServeHtml) {
-      return res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', ...cookieHeaders }).end(generateSwarmHtml(handleSwarmStatus(db)));
+      return res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', ...cookieHeaders }).end(generateSwarmHtml(handleSwarmStatus(db, cwd, indexDb)));
     }
     if (isGet) {
       const isSse = pathname === '/api/swarm/events' || pathname === '/api/events';
       if (isSse) return handleSseConnection(req, res, db);
-      const [result, getError] = runRoute(() => routeGet(req.url, db, cwd));
+      const [result, getError] = runRoute(() => routeGet(req.url, db, cwd, {}, { indexDb }));
       if (getError) return sendJson(res, 500, { success: false, error: getError.message }, cookieHeaders);
       if (result) return sendJson(res, 200, result, cookieHeaders);
     }
@@ -55,7 +57,7 @@ export const createUiServer = (cwd = process.cwd(), options = {}) => {
   });
 
   server.on('close', () => { closeSseHub(); consoleDb?.close(); });
-  return { server, db, auth };
+  return { server, db, indexDb, auth };
 };
 
 const warnPublicBind = (host) => process.stderr.write(
