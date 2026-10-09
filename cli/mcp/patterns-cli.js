@@ -48,7 +48,19 @@ const runPatternsGroups = (args, cwd) => {
   return result;
 };
 
+const KNOWN_FLAGS = new Set(['type', 'min', 'full', 'forge', 'sync', 'groups', 'include-tests', 'tests', 'idioms', 'rejected', 'explain', 'path', 'kind', 'limit', 'json', 'score', 'input', 'dir', 'reason', 'as']);
+
+/** Flags (`--name` or `--name=value`) this command does not read; they are refused rather than ignored. */
+export const unknownPatternsFlags = (args) => args.filter((a) => a.startsWith('--') && !KNOWN_FLAGS.has(a.slice(2).split('=')[0]));
+
 export const runPatternsCli = (args, cwd = process.cwd()) => {
+  const unknown = unknownPatternsFlags(args);
+  const hasUnknown = unknown.length > 0;
+  if (hasUnknown) {
+    process.stderr.write(`patterns: unknown flag${unknown.length > 1 ? 's' : ''} ${unknown.join(' ')}; nothing was run. Known: ${[...KNOWN_FLAGS].map((f) => `--${f}`).join(' ')}\n`);
+    process.exitCode = 2;
+    return null;
+  }
   const isRejectRun = args[0] === 'reject';
   if (isRejectRun) return runPatternsReject(args, cwd);
   const isScoreRun = args.some((arg) => arg.startsWith('--score='));

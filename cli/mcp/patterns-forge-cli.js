@@ -64,10 +64,11 @@ const explaining = (result, id) => {
   return [matches.length === 0 ? `no group ${id} in this run` : `group id ${id} is ambiguous (${matches.length} groups)`];
 };
 
-const asJson = (result) => ({
+// --json honors --limit only when the flag is given: the top N groups by rank (unranked last).
+const asJson = (result, limit = null) => ({
   status: 'ok',
   stats: result.stats,
-  groups: toScorerGroups(result.groups).map((group, index) => ({ ...group, rank: result.groups[index].rank, score: result.groups[index].score, holes: result.groups[index].lgg?.holes ?? [], drift: result.groups[index].drift, dependsOn: result.groups[index].dependsOn, evicted: result.groups[index].evicted })),
+  groups: toScorerGroups(result.groups).map((group, index) => ({ ...group, rank: result.groups[index].rank, score: result.groups[index].score, holes: result.groups[index].lgg?.holes ?? [], drift: result.groups[index].drift, dependsOn: result.groups[index].dependsOn, evicted: result.groups[index].evicted })).sort(byRank).slice(0, limit ?? undefined),
   rejected: toScorerGroups([...result.rejected, ...result.suppressed, ...result.refined])
 });
 
@@ -81,7 +82,7 @@ export const runPatternsForge = (args, cwd = process.cwd()) => {
     return null;
   }
   const lines = options.explain ? explaining(result, options.explain) : listing(result, options);
-  const text = options.json ? JSON.stringify(asJson(result), null, 2) : lines.join('\n');
+  const text = options.json ? JSON.stringify(asJson(result, flagValue(args, 'limit') === undefined ? null : options.limit), null, 2) : lines.join('\n');
   process.stdout.write(`${text}\n`);
   return result;
 };
