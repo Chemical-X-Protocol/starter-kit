@@ -4,9 +4,11 @@ import type { LockRowProps, LockRowEmits } from './types';
 export function useLockRowController(props: LockRowProps, emit: LockRowEmits) {
   const hasAgent = computed(() => Boolean(props.lease.lockedBy));
   const expiresAtText = computed(() => {
-    if (!props.lease.expiresAt) return 'Active Lease';
+    const isMissingExpiry = !props.lease.expiresAt;
+    if (isMissingExpiry) return 'Active Lease';
     const remainingMs = props.lease.expiresAt - Date.now();
-    if (remainingMs <= 0) return 'Expired';
+    const isExpired = remainingMs <= 0;
+    if (isExpired) return 'Expired';
     return `TTL: ${Math.round(remainingMs / 1000)}s`;
   });
 
