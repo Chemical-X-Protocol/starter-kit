@@ -6,7 +6,8 @@ export const resolveBadgeDescriptor = (
   status: 'active' | 'archived',
   isHighValue: boolean
 ): SampleCardBadgeDescriptor => {
-  if (status !== 'active') {
+  const isArchived = status !== 'active';
+  if (isArchived) {
     return {
       text: status,
       className: 'm-sample-card__badge m-sample-card__badge--archived'
