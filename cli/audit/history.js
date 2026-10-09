@@ -15,7 +15,38 @@ const GREEN = '\x1b[32m';
 const YELLOW = '\x1b[33m';
 const RED = '\x1b[31m';
 
-export const createSnapshotFromReport = (report) => {
+// History is capped per audited scope, so a burst of submodule audits can't evict the
+// whole-repo trend; the overall cap keeps history.json bounded across many scopes.
+export const HISTORY_PER_SCOPE = 50;
+export const HISTORY_TOTAL = 500;
+
+// History and baseline writes are best-effort (a sandbox may mount .chemx read-only):
+// the audit still reports, and CHEMX_DEBUG says why nothing was recorded.
+const historyNote = {
+  warn: (context, err) => {
+    if (!process.env.CHEMX_DEBUG) return;
+    const message = err instanceof Error ? err.message : String(err ?? '');
+    process.stderr.write(`[audit history] ${context}: ${message}\n`);
+  }
+};
+
+// Entries written before scopes were recorded have no `scope` and share one bucket.
+const scopeKey = (snapshot) => snapshot.scope ?? '';
+
+export const trimAuditHistory = (history, { perScope = HISTORY_PER_SCOPE, total = HISTORY_TOTAL } = {}) => {
+  const countByScope = new Map();
+  const keptNewestFirst = [];
+  for (let i = history.length - 1; i >= 0 && keptNewestFirst.length < total; i--) {
+    const key = scopeKey(history[i]);
+    const count = countByScope.get(key) ?? 0;
+    if (count >= perScope) continue;
+    countByScope.set(key, count + 1);
+    keptNewestFirst.push(history[i]);
+  }
+  return keptNewestFirst.reverse();
+};
+
+export const createSnapshotFromReport = (report, { scope = null, isPartial = false } = {}) => {
   const { metrics, health, hotspots = [], violations = [], pillars = {}, contextAnalysis = {} } = report;
   const { critical, high, medium, low } = groupViolationsBySeverity(violations);
 
@@ -36,7 +67,7 @@ export const createSnapshotFromReport = (report) => {
   return {
     id: `audit-${Date.now()}`,
     timestamp: new Date().toISOString(),
-    scope: report.scope ?? null, ruleset: report.ruleset ?? null, scoreModel: report.scoreModel ?? 1,
+    scope: scope ?? report.scope ?? null, isPartial, ruleset: report.ruleset ?? null, scoreModel: report.scoreModel ?? 1,
     health: {
       score: health.score,
       grade: health.grade,
@@ -112,7 +143,7 @@ export const getAuditBaseline = (cwd = process.cwd()) => {
       const raw = fs.readFileSync(baselinePath, 'utf-8');
       explicitBaseline = JSON.parse(raw);
     } catch (err) {
-      const error = err instanceof Error ? err : new Error(String(err));
+      historyNote.warn('baseline.json unreadable, using history floor', err);
       explicitBaseline = null;
     }
   }
@@ -144,20 +175,20 @@ export const setAuditBaseline = (snapshot, cwd = process.cwd()) => {
   const baselinePath = path.resolve(cwd, '.chemx', 'baseline.json');
   try {
     fs.writeFileSync(baselinePath, JSON.stringify(snapshot, null, 2), 'utf-8');
-  } catch {
-    // Read-only filesystem in sandbox
+  } catch (err) {
+    historyNote.warn('baseline.json not written', err);
   }
   return snapshot;
 };
 
-export const saveAuditSnapshot = (report, cwd = process.cwd()) => {
+export const saveAuditSnapshot = (report, cwd = process.cwd(), scopeInfo = {}) => {
   ensureChemxDir(cwd);
-  const snapshot = createSnapshotFromReport(report);
+  const snapshot = createSnapshotFromReport(report, scopeInfo);
   const history = getAuditHistory(cwd);
 
-  // Prevent duplicate snapshots if called multiple times within 5 seconds with same metrics
-  if (history.length > 0) {
-    const last = history[history.length - 1];
+  // Prevent duplicate snapshots if the same scope is saved again within 5 seconds with same metrics
+  const last = history.findLast((s) => scopeKey(s) === scopeKey(snapshot));
+  if (last) {
     const timeDiff = Math.abs(Date.now() - new Date(last.timestamp).getTime());
     const isSameMetrics = hasMatchingAuditMetrics(last, snapshot);
 
@@ -174,13 +205,12 @@ export const saveAuditSnapshot = (report, cwd = process.cwd()) => {
 
   history.push(snapshot);
 
-  // Keep last 50 snapshots
-  const trimmed = history.slice(-50);
+  const trimmed = trimAuditHistory(history);
   const historyPath = path.resolve(cwd, '.chemx', 'history.json');
   try {
     fs.writeFileSync(historyPath, JSON.stringify(trimmed, null, 2), 'utf-8');
-  } catch {
-    // Read-only filesystem in sandbox
+  } catch (err) {
+    historyNote.warn('history.json not written', err);
   }
 
   // Auto-establish first run or lower score as baseline floor
@@ -194,8 +224,8 @@ export const saveAuditSnapshot = (report, cwd = process.cwd()) => {
     try {
       fs.writeFileSync(baselinePath, JSON.stringify(snapshot, null, 2), 'utf-8');
       isNewBaseline = true;
-    } catch {
-      // Read-only filesystem in sandbox
+    } catch (err) {
+      historyNote.warn('new baseline not written', err);
     }
   }
 

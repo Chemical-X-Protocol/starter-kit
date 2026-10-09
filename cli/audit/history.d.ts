@@ -3,6 +3,10 @@ import type { MolecularHealthScore, CodebaseMetrics, PillarStatus, ContextTokenA
 export interface AuditSnapshot {
   readonly id: string;
   readonly timestamp: string;
+  /** Audited directory relative to the project root ('.' for the root); null or absent on older entries. */
+  readonly scope?: string | null;
+  /** True for --fast and --git audits, which check only part of the scope. */
+  readonly isPartial?: boolean;
   readonly health: MolecularHealthScore;
   readonly metrics: CodebaseMetrics;
   readonly violations: {
@@ -59,11 +63,19 @@ export interface SaveSnapshotResult {
 }
 
 export declare function ensureChemxDir(cwd?: string): string;
-export declare function createSnapshotFromReport(report: AuditReport): AuditSnapshot;
+export interface SnapshotScope {
+  readonly scope?: string | null;
+  readonly isPartial?: boolean;
+}
+
+export declare const HISTORY_PER_SCOPE: number;
+export declare const HISTORY_TOTAL: number;
+export declare function trimAuditHistory<T extends { readonly scope?: string | null }>(history: readonly T[], limits?: { perScope?: number; total?: number }): T[];
+export declare function createSnapshotFromReport(report: AuditReport, scopeInfo?: SnapshotScope): AuditSnapshot;
 export declare function getAuditHistory(cwd?: string): AuditSnapshot[];
 export declare function getAuditBaseline(cwd?: string): AuditSnapshot | null;
 export declare function setAuditBaseline(snapshot: AuditSnapshot, cwd?: string): AuditSnapshot;
-export declare function saveAuditSnapshot(report: AuditReport, cwd?: string): SaveSnapshotResult;
+export declare function saveAuditSnapshot(report: AuditReport, cwd?: string, scopeInfo?: SnapshotScope): SaveSnapshotResult;
 export declare function calculateTransformationDelta(beforeSnapshot: AuditSnapshot, afterSnapshot: AuditSnapshot): TransformationDelta;
 export declare function formatTransformationTerminal(beforeSnapshot: AuditSnapshot, afterSnapshot: AuditSnapshot): string;
 export declare function formatHistoryTimelineTerminal(history: readonly AuditSnapshot[]): string;
