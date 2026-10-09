@@ -121,8 +121,8 @@ export const autoGenerateTasksFromAudit = (db, options = {}) => {
       const targetDir = options.targetDir || (fs.existsSync(path.resolve(cwd, 'src')) ? 'src' : '.');
       const report = executeAstAudit(targetDir, { cwd });
       if (report?.violations) {
-        syncSearchIndex(targetDir, cwd);
-        syncViolationsIndex(db, report.violations);
+        const syncRes = syncSearchIndex(targetDir, cwd);
+        syncViolationsIndex(db, report.violations, { scope: syncRes?.scope || null });
         recordAuditSnapshot(db, report);
       }
     }

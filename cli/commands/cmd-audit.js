@@ -140,7 +140,8 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
     const syncRes = syncSearchIndex(targetDir, process.cwd());
 
     if (syncRes?.db) {
-      syncViolationsIndex(syncRes.db, report.violations);
+      // A --fast or --git audit checks only part of the scope, so it vouches for no file.
+      syncViolationsIndex(syncRes.db, report.violations, { scope: isPartialAudit ? null : syncRes.scope });
       const shouldTriage = rawArgs.includes('--triage');
       if (shouldTriage) {
         const createdTasks = autoGenerateTasksFromAudit(syncRes.db, { cwd: process.cwd(), targetDir });

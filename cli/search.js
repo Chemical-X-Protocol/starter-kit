@@ -1,23 +1,5 @@
-import fs from 'node:fs';
 import path from 'node:path';
-import { isSourceFile as isPolyglotSourceFile } from './languages.js';
-import {
-  openIndexDb,
-  getAllIndexedFiles,
-  removeDeletedFiles,
-  upsertFileIndex,
-  queryIndex,
-  inspectIndexedFile,
-  getIndexStats,
-  isSqliteAvailable,
-  findSymbolDefinition,
-  findSymbolReferences,
-  findFileDependencies,
-  findFileDependents,
-  syncViolationsIndex,
-  queryViolations
-} from './search-db.js';
-import { resolveArchitectureTier, extractAstMetadata } from './search-ast.js';
+import { queryIndexPage } from './search-db.js';
 import {
   handleDefCommand,
   handleRefsCommand,
@@ -34,12 +16,15 @@ import {
   handleHybridCommand,
   handleLiteralSearchCommand
 } from './search-commands.js';
-import { toColumnar } from './columnar.js';
 import { resolveTargetDir } from './path-scope.js';
-import { ANSI } from './theme.js';
+import { syncSearchIndex, syncSingleFileIndex } from './search-sync.js';
+import { parseSearchArgs, hasAnyFlag, readIntValue } from './search-args.js';
+import { resolveIndexRoot, resolveDefaultScopeDir } from './search-root.js';
+import { describeIndexFromSync, applyExitStatus, indexStatusOf, printIndexLine } from './search-output.js';
+import { buildQueryPayload, printQueryPage } from './search-query-view.js';
+import { STATUS } from './result-status.js';
 
 export { toColumnar, fromColumnar } from './columnar.js';
-
 export {
   openIndexDb, upsertFileIndex, getIndexStats,
   findSymbolDefinition, findSymbolReferences,
@@ -53,415 +38,169 @@ export {
   handleSemanticCommand, handleHybridCommand,
   handleLiteralSearchCommand
 } from './search-commands.js';
-
-const IGNORED_DIRS = new Set([
-  'node_modules', 'dist', 'build', 'vendor', '.git',
-  '.next', '.turbo', '.output', '.nuxt', '.cache', 'out',
-  '.chemx', 'blueprints', 'scratch', 'benchmarks', '.gemini', '.claude', '.cursor', 'temp', 'coverage'
-]);
-
-const EXCLUDED_NAME_PATTERNS = ['.test.', '.spec.', '.min.'];
-
-const isSourceFile = (name) => isPolyglotSourceFile(name);
-
-const scanFilesRecursively = (dir, baseDir, fileList = []) => {
-  if (!fs.existsSync(dir)) return fileList;
-  const entries = fs.readdirSync(dir, { withFileTypes: true });
-  for (const entry of entries) {
-    const fullPath = path.join(dir, entry.name);
-    const relPath = path.relative(baseDir, fullPath);
-
-    if (entry.isDirectory()) {
-      if (!IGNORED_DIRS.has(entry.name)) {
-        scanFilesRecursively(fullPath, baseDir, fileList);
-      }
-    } else if (isSourceFile(entry.name)) {
-      fileList.push({ fullPath, relPath });
-    }
-  }
-  return fileList;
-};
-
-export const syncSearchIndex = (targetDir = 'src', cwd = process.cwd(), options = {}) => {
-  const db = openIndexDb(cwd);
-  if (!db) return null;
-
-  const isWritable = () => { try { fs.accessSync(path.join(cwd, '.chemx'), fs.constants.W_OK); return true; } catch { return false; } };
-  const shouldSkipSync = !isWritable() && !options.reindex;
-  if (shouldSkipSync) return { db, updatedCount: 0 };
-
-  const targetDirs = Array.isArray(targetDir) ? targetDir : [targetDir];
-  if (options.includeInternal && fs.existsSync(path.resolve(cwd, 'cli'))) {
-    targetDirs.push('cli');
-  }
-
-  const scanned = targetDirs.flatMap((d) => {
-    const abs = path.resolve(cwd, d);
-    return fs.existsSync(abs) ? scanFilesRecursively(abs, cwd) : [];
-  });
-  const currentPaths = scanned.map((s) => s.relPath);
-
-  const indexedMap = options.reindex ? new Map() : getAllIndexedFiles(db);
-  let updatedCount = 0;
-
-  for (const { fullPath, relPath } of scanned) {
-    try {
-      const stat = fs.statSync(fullPath);
-      const mtime = Math.floor(stat.mtimeMs);
-      const size = stat.size;
-
-      const cached = indexedMap.get(relPath);
-      const isUnchanged = cached && cached.mtime === mtime && cached.size === size;
-
-      if (isUnchanged && !options.reindex) {
-        continue;
-      }
-
-      const content = fs.readFileSync(fullPath, 'utf-8');
-      const lines = content.split('\n').length;
-      const chars = content.length;
-      const tier = resolveArchitectureTier(relPath);
-      const { symbols, props, hooks, imports } = extractAstMetadata(content, fullPath);
-
-      upsertFileIndex(db, {
-        path: relPath,
-        mtime,
-        size,
-        tier,
-        lines,
-        chars,
-        symbols,
-        props,
-        hooks,
-        imports
-      });
-      updatedCount += 1;
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error(String(err));
-      if (process.env.CHEMX_DEBUG) {
-        process.stderr.write(`[search-index] Skipped ${relPath}: ${error.message}\n`);
-      }
-    }
-  }
-
-  removeDeletedFiles(db, currentPaths, cwd, { includeInternal: options.includeInternal });
-  return { db, updatedCount, totalFiles: scanned.length };
-};
-
-export const syncSingleFileIndex = (targetPath, cwd = process.cwd()) => {
-  const db = openIndexDb(cwd);
-  if (!db) return null;
-
-  const fullPath = path.isAbsolute(targetPath) ? targetPath : path.resolve(cwd, targetPath);
-  const relPath = path.relative(cwd, fullPath);
-
-  if (!fs.existsSync(fullPath)) {
-    db.prepare('DELETE FROM files WHERE path = ?').run(relPath);
-    db.prepare('DELETE FROM fts_index WHERE file_path = ?').run(relPath);
-    db.prepare('DELETE FROM imports WHERE importer_path = ?').run(relPath);
-    return { db, status: 'deleted', path: relPath };
-  }
-
-  const stat = fs.statSync(fullPath);
-  const mtime = Math.floor(stat.mtimeMs);
-  const size = stat.size;
-  const content = fs.readFileSync(fullPath, 'utf-8');
-  const lines = content.split('\n').length;
-  const chars = content.length;
-  const tier = resolveArchitectureTier(relPath);
-  const { symbols, props, hooks, imports } = extractAstMetadata(content, fullPath);
-
-  upsertFileIndex(db, {
-    path: relPath,
-    mtime,
-    size,
-    tier,
-    lines,
-    chars,
-    symbols,
-    props,
-    hooks,
-    imports
-  });
-
-  return {
-    db,
-    status: 'indexed',
-    path: relPath,
-    tier,
-    lines,
-    symbolsCount: symbols.length,
-    propsCount: props.length,
-    hooksCount: hooks.length
-  };
-};
-
-const formatTierBadge = (tier) => {
-  const map = {
-    atom: `${ANSI.LIME}[atom]${ANSI.RESET}`,
-    molecule: `${ANSI.CYAN}[molecule]${ANSI.RESET}`,
-    organism: `${ANSI.PURPLE}[organism]${ANSI.RESET}`,
-    template: `${ANSI.GOLD}[template]${ANSI.RESET}`,
-    view: `${ANSI.PINK}[view]${ANSI.RESET}`,
-    hook: `${ANSI.MINT}[hook]${ANSI.RESET}`,
-    type: `${ANSI.DIM}[type]${ANSI.RESET}`
-  };
-  return map[tier] || `${ANSI.DIM}[${tier}]${ANSI.RESET}`;
-};
-
-export { resolveTargetDir };
+export { syncSearchIndex, syncSingleFileIndex, resolveTargetDir };
 export { printSearchHelp } from './help.js';
+
+const SQLITE_MISSING = 'SQLite engine not available. Please ensure Node.js >= 22.5 is installed.';
+
+const failNoSqlite = (isJson, isCli) => {
+  const message = `✕ ${SQLITE_MISSING}`;
+  if (isJson) process.stdout.write(JSON.stringify({ status: STATUS.INCONCLUSIVE, error: message, results: [] }) + '\n');
+  else process.stderr.write(`${message}\n`);
+  applyExitStatus(STATUS.INCONCLUSIVE, isCli);
+  if (isCli) process.exit();
+  return [];
+};
+
+// --dir is relative to where chemx was started; the default scope is the project's own.
+const resolveScopeTarget = (parsed, cwd, root) => {
+  const hasDirFlag = parsed.values.dir !== undefined;
+  if (hasDirFlag) return parsed.values.dir === '' ? cwd : parsed.values.dir;
+  return path.resolve(root, resolveDefaultScopeDir(root));
+};
+
+// Positionals no mode reads: the pattern (or query) is one token, subcommands read two.
+const countUsedPositionals = (parsed, isLiteral) => {
+  const hasLiteralPattern = parsed.pattern !== null;
+  if (isLiteral) return hasLiteralPattern ? 0 : 1;
+  const isSubcommand = Boolean(SUBCOMMAND_MODES[parsed.positionals[0]]);
+  return isSubcommand ? 2 : 1;
+};
+
+const PASSTHROUGH_PATTERN = /^(check|verify|fix|add(:.*)?|gen|g|generate)$/;
+
+const describeExtraArgs = (parsed, isLiteral) => {
+  const isPassthrough = !isLiteral && PASSTHROUGH_PATTERN.test(parsed.positionals[0] || '');
+  if (isPassthrough) return [];
+  const extra = parsed.positionals.slice(countUsedPositionals(parsed, isLiteral));
+  const hasExtra = extra.length > 0;
+  return hasExtra ? [`ignored extra argument(s) ${extra.join(' ')} (quote a multi-word pattern)`] : [];
+};
+
+const reportArgProblems = (parsed, isJson, isLiteral) => {
+  const problems = [
+    ...parsed.unknownFlags.map((f) => `ignored unknown flag ${f}`),
+    ...parsed.missingValues.map((f) => `missing value for ${f}`),
+    ...parsed.invalidValues.map((v) => `ignored invalid ${v}`),
+    ...describeExtraArgs(parsed, isLiteral)
+  ];
+  const hasProblems = problems.length > 0;
+  if (hasProblems && !isJson) process.stderr.write(`chemx q: ${problems.join('; ')}\n`);
+  return problems;
+};
+
+const MODE_HANDLERS = {
+  def: (ctx) => handleDefCommand(ctx.db, ctx.second, { ...ctx.opts, isFull: ctx.parsed.flags.has('--full') }),
+  refs: (ctx) => handleRefsCommand(ctx.db, ctx.second, ctx.opts),
+  deps: (ctx) => handleDepsCommand(ctx.db, ctx.second, ctx.opts),
+  blast: (ctx) => handleBlastRadiusCommand(ctx.db, ctx.target, { ...ctx.opts, maxDepth: readIntValue(ctx.parsed, 'maxDepth', 5) }),
+  trace: (ctx) => handleCallTraceCommand(ctx.db, ctx.target, { ...ctx.opts, maxDepth: readIntValue(ctx.parsed, 'maxDepth', 3) }),
+  backtrace: (ctx) => handleBacktraceCommand(ctx.db, ctx.target, { ...ctx.opts, maxDepth: readIntValue(ctx.parsed, 'maxDepth', 5) }),
+  semantic: (ctx) => handleSemanticCommand(ctx.db, ctx.target, { ...ctx.opts, tier: ctx.parsed.values.tier || null, limit: ctx.limit }),
+  hybrid: (ctx) => handleHybridCommand(ctx.db, ctx.target, { ...ctx.opts, tier: ctx.parsed.values.tier || null, limit: ctx.limit }),
+  hazards: (ctx) => handleHazardsCommand(ctx.db, {
+    rule: ctx.parsed.values.rule || null,
+    severity: ctx.parsed.flags.has('--critical') ? 'CRITICAL' : null,
+    filePath: ctx.second || null,
+    root: ctx.root
+  }, ctx.opts),
+  pack: (ctx) => handlePackCommand(ctx.db, ctx.second, ctx.opts),
+  progression: (ctx) => handleProgressionCommand(ctx.db, ctx.opts),
+  failing: (ctx) => handleHealthFilterCommand(ctx.db, 'failing', ctx.opts),
+  crystalline: (ctx) => handleHealthFilterCommand(ctx.db, 'crystalline', ctx.opts)
+};
+
+const SUBCOMMAND_MODES = {
+  def: 'def', refs: 'refs', deps: 'deps', dependencies: 'deps', blast: 'blast', impact: 'blast',
+  trace: 'trace', backtrace: 'backtrace', semantic: 'semantic', hybrid: 'hybrid', hazards: 'hazards',
+  pack: 'pack', context: 'pack', progression: 'progression', history: 'progression',
+  failing: 'failing', degraded: 'failing', crystalline: 'crystalline', clean: 'crystalline'
+};
+
+const FLAG_MODES = [
+  [['--blast-radius', '--blast', '--impact'], 'blast'], [['--trace'], 'trace'], [['--backtrace'], 'backtrace'],
+  [['--semantic'], 'semantic'], [['--hybrid'], 'hybrid'], [['--progression'], 'progression'],
+  [['--failing', '--degraded'], 'failing'], [['--crystalline', '--clean'], 'crystalline']
+];
+
+const resolveMode = (parsed, first) => {
+  const subcommandMode = SUBCOMMAND_MODES[first];
+  if (subcommandMode) return { mode: subcommandMode, isSubcommand: true };
+  const flagMode = FLAG_MODES.find(([flags]) => hasAnyFlag(parsed, flags));
+  return { mode: flagMode ? flagMode[1] : 'query', isSubcommand: false };
+};
+
+const runPassthroughCommand = (parsed, rawArgs, first, second, isJson, isCli) => {
+  const isCheckCommand = first === 'check' || first === 'verify';
+  if (isCheckCommand) return { handled: true, value: handleCheckCommand(second, { isJson, isCli }) };
+  const isMutatorAction = first === 'fix' || first.startsWith('add:') || (first === 'add' && ['prop', 'state', 'action'].includes(second));
+  if (isMutatorAction) return { handled: true, value: import('./mutators.js').then((m) => m.runMutatorCli(rawArgs, isCli)) };
+  const isGenerateCommand = ['gen', 'g', 'generate'].includes(first);
+  if (isGenerateCommand) return { handled: true, value: import('./generator.js').then((m) => m.runGenerateWizard(rawArgs.slice(1))) };
+  return { handled: false };
+};
 
 // Help requests never reach runSearch: the CLI router (help.js) owns them, so `help`
 // and `-h` here are query data (`chemx q help`, `chemx q -g -h`).
 export const runSearch = async (rawArgs = [], isCli = true) => {
-  const isRawJson = rawArgs.includes('--raw-json') || rawArgs.includes('--no-columnar');
-  const isExplicitColumnar = rawArgs.includes('--columnar');
-  const isJson = rawArgs.includes('--json') || isExplicitColumnar;
+  const parsed = parseSearchArgs(rawArgs);
+
+  const isRawJson = hasAnyFlag(parsed, ['--raw-json', '--no-columnar']);
+  const isJson = hasAnyFlag(parsed, ['--json', '-j', '--columnar']);
   const isColumnar = isJson && !isRawJson;
-  const isLiteral = rawArgs.includes('-g') || rawArgs.includes('--literal');
-  const isCaseInsensitive = isLiteral && rawArgs.includes('-i');
-  const isInspect = !isLiteral && (rawArgs.includes('--inspect') || rawArgs.includes('-i'));
-  const isLineOnly = rawArgs.includes('-l') || rawArgs.includes('--lines');
-  const isIncludeInternal = rawArgs.includes('--include-internal');
-  const isReindex = rawArgs.includes('--reindex');
-  const tierFlag = rawArgs.find((a) => a.startsWith('--tier='));
-  const tier = tierFlag ? tierFlag.split('=')[1] : null;
-  const dirFlag = rawArgs.find((a) => a.startsWith('--dir='));
-  const targetDir = resolveTargetDir(dirFlag);
-
-  let matchLimit = 20;
-  const limitFlag = rawArgs.find((a) => a.startsWith('-n=') || a.startsWith('--limit='));
-  if (limitFlag) {
-    matchLimit = parseInt(limitFlag.split('=')[1], 10) || 20;
-  } else {
-    const nIndex = rawArgs.indexOf('-n');
-    if (nIndex !== -1 && rawArgs[nIndex + 1]) {
-      matchLimit = parseInt(rawArgs[nIndex + 1], 10) || 20;
-    }
-  }
-
-  const startTime = Date.now();
-  const syncRes = syncSearchIndex(targetDir, process.cwd(), { reindex: isReindex, includeInternal: isIncludeInternal });
-  const db = syncRes?.db;
-
-  if (!db) {
-    const errorMsg = '✕ SQLite engine not available. Please ensure Node.js >= 22.5 is installed.';
-    if (isJson) {
-      process.stdout.write(JSON.stringify({ error: errorMsg, results: [] }) + '\n');
-    } else {
-      process.stderr.write(`\x1b[31m${errorMsg}\x1b[0m\n`);
-    }
-    if (isCli) process.exit(1);
-    return [];
-  }
-
-  const nonFlagArgs = rawArgs.filter((a) => !a.startsWith('-'));
-  const firstArg = nonFlagArgs[0] || '';
-  const secondArg = nonFlagArgs[1] || '';
+  const isLiteral = hasAnyFlag(parsed, ['-g', '--literal']);
+  const argProblems = reportArgProblems(parsed, isJson, isLiteral);
+  const first = parsed.positionals[0] || '';
+  const second = parsed.positionals[1] || '';
+  const cwd = process.cwd();
 
   if (isLiteral) {
-    let query = '';
-    const gIndex = rawArgs.indexOf('-g');
-    const literalIndex = rawArgs.indexOf('--literal');
-    const flagIndex = gIndex !== -1 ? gIndex : literalIndex;
-    const hasNextArg = flagIndex !== -1 && Boolean(rawArgs[flagIndex + 1]);
-    const isNextArgQuery = hasNextArg && !rawArgs[flagIndex + 1].startsWith('-');
-    if (isNextArgQuery) {
-      query = rawArgs[flagIndex + 1];
-    } else {
-      query = nonFlagArgs[0] || '';
-    }
-    return handleLiteralSearchCommand(db, query, {
-      isCaseInsensitive,
-      isLineOnly,
-      limit: matchLimit,
-      isJson,
-      isCli,
-      cwd: process.cwd()
+    return handleLiteralSearchCommand(null, parsed.pattern ?? first, {
+      isCaseInsensitive: hasAnyFlag(parsed, ['-i', '--ignore-case']),
+      isLineOnly: hasAnyFlag(parsed, ['-l', '--lines']),
+      isRegex: parsed.flags.has('--regex'),
+      isHidden: parsed.flags.has('--hidden'),
+      limit: readIntValue(parsed, 'limit', 20), isJson, isCli, cwd,
+      dir: parsed.values.dir ?? null, argProblems
     });
   }
 
-  const isCheckCommand = firstArg === 'check' || firstArg === 'verify';
-  if (isCheckCommand) {
-    return handleCheckCommand(secondArg, { isJson, isCli });
+  const passthrough = runPassthroughCommand(parsed, rawArgs, first, second, isJson, isCli);
+  if (passthrough.handled) return passthrough.value;
+
+  const startTime = Date.now();
+  const root = resolveIndexRoot(cwd);
+  const { mode, isSubcommand } = resolveMode(parsed, first);
+  const syncRes = syncSearchIndex(resolveScopeTarget(parsed, cwd, root), cwd, {
+    reindex: parsed.flags.has('--reindex'),
+    includeInternal: parsed.flags.has('--include-internal'),
+    includeHeldScopes: mode !== 'query'
+  });
+  if (!syncRes?.db) return failNoSqlite(isJson, isCli);
+  const db = syncRes.db;
+  const index = { ...describeIndexFromSync(syncRes), argProblems: argProblems.length > 0 ? argProblems : undefined };
+  applyExitStatus(indexStatusOf(index), isCli);
+
+  const limit = readIntValue(parsed, 'limit', mode === 'query' ? 50 : 20);
+  const opts = { index, isJson, isCli, isColumnar, root };
+  const ctx = { db, parsed, first, second, root, limit, opts, target: isSubcommand ? second : first };
+  const handler = MODE_HANDLERS[mode];
+  if (handler) {
+    printIndexLine(index, isJson);
+    return handler(ctx);
   }
 
-  const isFixCommand = firstArg === 'fix';
-  const isAddPrefix = firstArg.startsWith('add:');
-  const isAddTarget = firstArg === 'add' && ['prop', 'state', 'action'].includes(secondArg);
-  const isMutatorAction = isFixCommand || isAddPrefix || isAddTarget;
-  if (isMutatorAction) {
-    const { runMutatorCli } = await import('./mutators.js');
-    return runMutatorCli(rawArgs, isCli);
-  }
-
-  const isGenerateCommand = ['gen', 'g', 'generate'].includes(firstArg);
-  if (isGenerateCommand) {
-    const { runGenerateWizard } = await import('./generator.js');
-    return runGenerateWizard(rawArgs.slice(1));
-  }
-
-  const isDefCommand = firstArg === 'def';
-  if (isDefCommand) {
-    return handleDefCommand(db, secondArg, { isJson, isCli });
-  }
-
-  const isRefsCommand = firstArg === 'refs';
-  if (isRefsCommand) {
-    return handleRefsCommand(db, secondArg, { isJson, isCli });
-  }
-
-  const isDepsCommand = firstArg === 'deps' || firstArg === 'dependencies';
-  if (isDepsCommand) {
-    return handleDepsCommand(db, secondArg, { isJson, isCli });
-  }
-
-  const isBlastRadiusCommand = firstArg === 'blast' || firstArg === 'impact' ||
-    rawArgs.includes('--blast-radius') || rawArgs.includes('--blast') || rawArgs.includes('--impact');
-  if (isBlastRadiusCommand) {
-    const target = (firstArg === 'blast' || firstArg === 'impact') ? secondArg : firstArg;
-    const maxDepthFlag = rawArgs.find((a) => a.startsWith('--max-depth='));
-    const maxDepth = maxDepthFlag ? parseInt(maxDepthFlag.split('=')[1], 10) : 5;
-    return handleBlastRadiusCommand(db, target, { isJson, isCli, isColumnar, maxDepth });
-  }
-
-  const isTraceCommand = firstArg === 'trace' || rawArgs.includes('--trace');
-  if (isTraceCommand) {
-    const target = firstArg === 'trace' ? secondArg : firstArg;
-    const maxDepthFlag = rawArgs.find((a) => a.startsWith('--max-depth='));
-    const maxDepth = maxDepthFlag ? parseInt(maxDepthFlag.split('=')[1], 10) : 3;
-    return handleCallTraceCommand(db, target, { isJson, isCli, maxDepth });
-  }
-
-  const isBacktraceCommand = firstArg === 'backtrace' || rawArgs.includes('--backtrace');
-  if (isBacktraceCommand) {
-    const target = firstArg === 'backtrace' ? secondArg : firstArg;
-    const maxDepthFlag = rawArgs.find((a) => a.startsWith('--max-depth='));
-    const maxDepth = maxDepthFlag ? parseInt(maxDepthFlag.split('=')[1], 10) : 5;
-    return handleBacktraceCommand(db, target, { isJson, isCli, maxDepth });
-  }
-
-  const isSemanticCommand = firstArg === 'semantic' || rawArgs.includes('--semantic');
-  if (isSemanticCommand) {
-    const query = firstArg === 'semantic' ? secondArg : firstArg;
-    return handleSemanticCommand(db, query, { isJson, isCli, isColumnar, tier, limit: 20 });
-  }
-
-  const isHybridCommand = firstArg === 'hybrid' || rawArgs.includes('--hybrid');
-  if (isHybridCommand) {
-    const query = firstArg === 'hybrid' ? secondArg : firstArg;
-    return handleHybridCommand(db, query, { isJson, isCli, isColumnar, tier, limit: 20 });
-  }
-
-  const isHazardsCommand = firstArg === 'hazards';
-  if (isHazardsCommand) {
-    const ruleFlag = rawArgs.find((a) => a.startsWith('--rule='));
-    const rule = ruleFlag ? ruleFlag.split('=')[1] : null;
-    const isCritical = rawArgs.includes('--critical');
-    const severity = isCritical ? 'CRITICAL' : null;
-    return handleHazardsCommand(db, { rule, severity, filePath: secondArg || null }, { isJson, isCli });
-  }
-
-  const isPackCommand = firstArg === 'pack' || firstArg === 'context';
-  if (isPackCommand) {
-    return handlePackCommand(db, secondArg, { isJson, isCli });
-  }
-
-  const hasProgressionFlag = rawArgs.includes('--progression');
-  const isProgressionAlias = firstArg === 'progression' || firstArg === 'history';
-  const isProgressionCommand = isProgressionAlias || hasProgressionFlag;
-  if (isProgressionCommand) {
-    return handleProgressionCommand(db, { isJson, isCli });
-  }
-
-  const hasFailingFlag = rawArgs.includes('--failing') || rawArgs.includes('--degraded');
-  const isFailingAlias = firstArg === 'failing' || firstArg === 'degraded';
-  const isFailingCommand = isFailingAlias || hasFailingFlag;
-  if (isFailingCommand) {
-    return handleHealthFilterCommand(db, 'failing', { isJson, isCli });
-  }
-
-  const hasCleanFlag = rawArgs.includes('--crystalline') || rawArgs.includes('--clean');
-  const isCleanAlias = firstArg === 'crystalline' || firstArg === 'clean';
-  const isCleanCommand = isCleanAlias || hasCleanFlag;
-  if (isCleanCommand) {
-    return handleHealthFilterCommand(db, 'crystalline', { isJson, isCli });
-  }
-
-  const cleanQuery = firstArg.trim();
-  const results = queryIndex(db, { query: cleanQuery, tier, limit: 50 });
+  const query = first.trim();
+  const page = queryIndexPage(db, { query, tier: parsed.values.tier || null, limit, scopeDirs: syncRes.scopeDirs });
   const durationMs = Date.now() - startTime;
-
   if (isJson) {
-    if (isColumnar) {
-      const columnarData = toColumnar(results, ['path', 'tier', 'lines', 'symbols', 'props', 'hooks'], {
-        symbols: (r) => (r.symbols || []).map((s) => s.name),
-        props: (r) => (r.props || []).map((p) => p.name),
-        hooks: (r) => r.hooks || []
-      });
-      const payload = {
-        query: cleanQuery,
-        tier,
-        count: results.length,
-        durationMs,
-        format: 'columnar',
-        cols: columnarData.cols,
-        rows: columnarData.rows
-      };
-      process.stdout.write(JSON.stringify(payload) + '\n');
-      if (isCli) process.exit(0);
-      return payload;
-    }
-
-    const payload = {
-      query: cleanQuery,
-      tier,
-      count: results.length,
-      durationMs,
-      suggestion: results.length === 0 ? `chemx q -g "${cleanQuery}"` : undefined,
-      results
-    };
+    const payload = buildQueryPayload(page, { query, tier: parsed.values.tier || null, durationMs, isColumnar, index });
     process.stdout.write(JSON.stringify(payload) + '\n');
-    if (isCli) process.exit(0);
-    return results;
+    if (isCli) process.exit();
+    return isColumnar ? payload : page.results;
   }
-
-  // CLI output formatting
-  process.stdout.write(`\n${ANSI.BOLD}${ANSI.CYAN}Chemical X Query Machine${ANSI.RESET} ${ANSI.DIM}(${results.length} results in ${durationMs}ms)${ANSI.RESET}\n`);
-
-  if (results.length === 0) {
-    process.stdout.write(`  ${ANSI.DIM}No matching capsules, symbols, or files found for "${cleanQuery}".${ANSI.RESET}\n`);
-    process.stdout.write(`  ${ANSI.CYAN}💡 Try literal search: chemx q -g "${cleanQuery}"${ANSI.RESET}\n\n`);
-    if (isCli) process.exit(0);
-    return results;
-  }
-
-  if (isInspect) {
-    for (const r of results) {
-      process.stdout.write(`\n  ${formatTierBadge(r.tier)} ${ANSI.BOLD}${r.path}${ANSI.RESET} ${ANSI.DIM}(${r.lines} lines, ${r.chars} chars)${ANSI.RESET}\n`);
-      if (r.symbols.length > 0) {
-        const symList = r.symbols.map((s) => `${s.name}${s.isExport ? '*' : ''}`).join(', ');
-        process.stdout.write(`    ${ANSI.MINT}Symbols:${ANSI.RESET} ${symList}\n`);
-      }
-      if (r.props.length > 0) {
-        const propList = r.props.map((p) => p.name).join(', ');
-        process.stdout.write(`    ${ANSI.GOLD}Props:${ANSI.RESET} ${propList}\n`);
-      }
-      if (r.hooks.length > 0) {
-        process.stdout.write(`    ${ANSI.PURPLE}Hooks:${ANSI.RESET} ${r.hooks.join(', ')}\n`);
-      }
-    }
-  } else {
-    for (const r of results) {
-      const mainSymbol = r.symbols.find((s) => s.isExport)?.name;
-      const symSummary = mainSymbol ? ` (${mainSymbol})` : '';
-      const hookSummary = r.hooks.length > 0 ? ` [${r.hooks.slice(0, 3).join(', ')}]` : '';
-      process.stdout.write(`  ${formatTierBadge(r.tier)} ${ANSI.BOLD}${r.path}${ANSI.RESET}${ANSI.DIM}:${r.lines}L${ANSI.RESET}${ANSI.CYAN}${symSummary}${ANSI.RESET}${ANSI.DIM}${hookSummary}${ANSI.RESET}\n`);
-    }
-  }
-
-  process.stdout.write(`\n  ${ANSI.DIM}Tip: Run with --inspect for props/hooks breakdown or --json for AI agent queries.${ANSI.RESET}\n\n`);
-  if (isCli) process.exit(0);
-  return results;
+  const isInspect = hasAnyFlag(parsed, ['--inspect', '-i']);
+  printQueryPage(page, { query, durationMs, isInspect, index });
+  if (isCli) process.exit();
+  return page.results;
 };

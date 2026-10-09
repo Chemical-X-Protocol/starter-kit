@@ -1,12 +1,9 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import { generateEmbedding, serializeVector, VECTOR_DIMENSIONS } from './embeddings/vectorizer.js';
-import { buildFtsTokens } from './search-tokenizer.js';
 
 export {
   isSqliteAvailable,
   resolveIndexDbPath,
   openIndexDb,
+  getIndexDbState,
   warmIndexDb,
   clearDbCache
 } from './search-schema.js';
@@ -28,268 +25,73 @@ export {
   queryFilesByHealth
 } from './search-queries.js';
 
+import { debugNote } from './search-debug.js';
+import { rankIndexHits } from './search-rank.js';
+import { isPathInScope, scopeSqlFilter } from './search-root.js';
+
 export const getAllIndexedFiles = (db) => {
   if (!db) return new Map();
-  const rows = db.prepare('SELECT path, mtime, size FROM files').all();
+  const rows = db.prepare('SELECT path, mtime, size, extractor_version FROM files').all();
   const fileMap = new Map();
   for (const row of rows) {
-    fileMap.set(row.path, { mtime: Number(row.mtime), size: Number(row.size) });
+    const version = row.extractor_version === null ? null : Number(row.extractor_version);
+    fileMap.set(row.path, { mtime: Number(row.mtime), size: Number(row.size), version });
   }
   return fileMap;
 };
 
-export const removeDeletedFiles = (db, currentFilePaths, cwd = process.cwd(), { includeInternal = false } = {}) => {
-  if (!db) return 0;
-  const indexed = getAllIndexedFiles(db);
-  let removedCount = 0;
+export { resolveModulePath, moduleKeysFor } from './search-resolve.js';
+export { upsertFileIndex, upsertFileIndexBatch, deleteFileIndexRows, withIndexTransaction } from './search-index-write.js';
 
-  const deleteStmt = db.prepare('DELETE FROM files WHERE path = ?');
-  const deleteFtsStmt = db.prepare('DELETE FROM fts_index WHERE file_path = ?');
-  const deleteImportsStmt = db.prepare('DELETE FROM imports WHERE importer_path = ?');
+const FILE_ROW_SQL = 'SELECT * FROM files WHERE path = ?';
 
-  const currentSet = new Set(currentFilePaths);
-
-  for (const [filePath] of indexed.entries()) {
-    const fullPath = path.isAbsolute(filePath) ? filePath : path.resolve(cwd, filePath);
-    const isFileMissing = !fs.existsSync(fullPath);
-    const isIgnored = (!includeInternal && filePath.startsWith('cli/')) ||
-      filePath.startsWith('.chemx/') ||
-      filePath.startsWith('blueprints/') ||
-      filePath.startsWith('scratch/') ||
-      filePath.startsWith('benchmarks/');
-    const isNotCurrent = currentFilePaths.length > 0 && !currentSet.has(filePath) && (!includeInternal && filePath.startsWith('cli/'));
-
-    if (isFileMissing || isIgnored || isNotCurrent) {
-      deleteStmt.run(filePath);
-      deleteFtsStmt.run(filePath);
-      deleteImportsStmt.run(filePath);
-      removedCount += 1;
-    }
-  }
-
-  return removedCount;
-};
-
-export const resolveModulePath = (importerPath, sourceModule, cwd = process.cwd()) => {
-  if (!sourceModule || typeof sourceModule !== 'string') return '';
-  const isRelative = sourceModule.startsWith('.') || sourceModule.startsWith('/');
-  const isAliased = sourceModule.startsWith('@/');
-  if (!isRelative && !isAliased) return '';
-
-  let basePath;
-  if (isAliased) {
-    basePath = path.resolve(cwd, 'src', sourceModule.slice(2));
-  } else {
-    basePath = path.resolve(cwd, path.dirname(importerPath), sourceModule);
-  }
-
-  const extensions = ['', '.ts', '.js', '.vue', '.tsx', '.jsx', '.d.ts'];
-  for (const ext of extensions) {
-    const candidate = basePath + ext;
-    if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
-      return path.relative(cwd, candidate);
-    }
-  }
-
-  for (const ext of ['.ts', '.js', '.vue', '.tsx', '.jsx', '.d.ts']) {
-    const indexCandidate = path.join(basePath, `index${ext}`);
-    if (fs.existsSync(indexCandidate) && fs.statSync(indexCandidate).isFile()) {
-      return path.relative(cwd, indexCandidate);
-    }
-  }
-
-  // Fallback path normalization for virtual/mock files
-  if (isAliased) {
-    return path.normalize(path.join('src', sourceModule.slice(2)));
-  }
-  return path.normalize(path.join(path.dirname(importerPath), sourceModule));
-};
-
-export const upsertFileIndex = (db, record) => {
-  if (!db) return;
-  const {
-    path: filePath,
-    mtime,
-    size,
-    tier,
-    lines,
-    chars,
-    symbols = [],
-    props = [],
-    hooks = [],
-    imports = []
-  } = record;
-
-  // Clean old entries for this file
-  db.prepare('DELETE FROM files WHERE path = ?').run(filePath);
-  db.prepare('DELETE FROM fts_index WHERE file_path = ?').run(filePath);
-  db.prepare('DELETE FROM imports WHERE importer_path = ?').run(filePath);
-  db.prepare('DELETE FROM embeddings WHERE file_path = ?').run(filePath);
-
-  // Insert file record
-  const insertFileStmt = db.prepare(`
-    INSERT INTO files (path, mtime, size, tier, lines, chars)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `);
-  insertFileStmt.run(filePath, mtime, size, tier, lines, chars);
-
-  // Insert symbols with line locations and signature
-  if (symbols.length > 0) {
-    const insertSymbolStmt = db.prepare(`
-      INSERT INTO symbols (file_path, name, kind, is_export, start_line, end_line, signature)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `);
-    for (const sym of symbols) {
-      insertSymbolStmt.run(
-        filePath,
-        sym.name,
-        sym.kind,
-        sym.isExport ? 1 : 0,
-        sym.startLine || 1,
-        sym.endLine || sym.startLine || 1,
-        sym.signature || ''
-      );
-    }
-  }
-
-  // Insert props
-  if (props.length > 0) {
-    const insertPropStmt = db.prepare(`
-      INSERT INTO props (file_path, name, prop_type)
-      VALUES (?, ?, ?)
-    `);
-    for (const p of props) {
-      insertPropStmt.run(filePath, p.name, p.type || '');
-    }
-  }
-
-  // Insert hooks
-  if (hooks.length > 0) {
-    const insertHookStmt = db.prepare(`
-      INSERT INTO hooks (file_path, name)
-      VALUES (?, ?)
-    `);
-    for (const h of hooks) {
-      insertHookStmt.run(filePath, h);
-    }
-  }
-
-  // Insert imports with resolved relative paths
-  if (imports.length > 0) {
-    const insertImportStmt = db.prepare(`
-      INSERT INTO imports (importer_path, imported_symbol, source_module, resolved_path, line)
-      VALUES (?, ?, ?, ?, ?)
-    `);
-    for (const imp of imports) {
-      const resolved = resolveModulePath(filePath, imp.sourceModule);
-      insertImportStmt.run(filePath, imp.importedSymbol, imp.sourceModule, resolved, imp.line || 1);
-    }
-  }
-
-  // Insert into FTS index
-  const tokensText = buildFtsTokens({ symbols, props, hooks, imports, filePath });
-  const mainName = symbols.find((s) => s.isExport)?.name || path.basename(filePath);
-
-  db.prepare(`
-    INSERT INTO fts_index (file_path, name, kind, tier, tokens)
-    VALUES (?, ?, ?, ?, ?)
-  `).run(filePath, mainName, tier, tier, tokensText);
-
-  // Insert vector embeddings
+const queryFtsFallback = (db, cleanQuery, limit) => {
+  const clean = cleanQuery.replace(/[^\w\s-]/g, ' ').trim();
+  const hasTerms = clean.length > 0;
+  if (!hasTerms) return [];
   try {
-    const insertEmbeddingStmt = db.prepare(`
-      INSERT INTO embeddings (file_path, target_type, target_name, vector, dimensions, model, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `);
-    const fileVec = generateEmbedding(`${mainName} ${tier} ${tokensText}`);
-    insertEmbeddingStmt.run(filePath, 'capsule', mainName, serializeVector(fileVec), VECTOR_DIMENSIONS, 'fast-subword', Date.now());
-
-    for (const s of symbols) {
-      if (s.isExport) {
-        const symText = `${s.name} ${s.kind} ${s.signature || ''}`;
-        const symVec = generateEmbedding(symText);
-        insertEmbeddingStmt.run(filePath, 'symbol', s.name, serializeVector(symVec), VECTOR_DIMENSIONS, 'fast-subword', Date.now());
-      }
-    }
-  } catch {
-    // Graceful degradation if vector generation fails
+    const ftsRows = db.prepare('SELECT DISTINCT file_path FROM fts_index WHERE fts_index MATCH ?').all(`"${clean}"*`);
+    const paths = ftsRows.map((r) => r.file_path);
+    return paths.map((p) => db.prepare(FILE_ROW_SQL).get(p)).filter(Boolean)
+      .sort((a, b) => Number(a.lines) - Number(b.lines))
+      .map((row) => ({ path: row.path, rank: 0, type: 'fts', name: null, line: null }));
+  } catch (err) {
+    debugNote.warn('fts fallback', err);
+    return [];
   }
 };
 
-export const queryIndex = (db, { query = '', tier = null, kind = null, limit = 50 } = {}) => {
-  if (!db) return [];
-
+// Ranked page of matches: { results, total, truncated, limit }. Each result carries `match`.
+// scopeDirs (root-relative) limits answers to the scope the caller synced; null means every row.
+export const queryIndexPage = (db, { query = '', tier = null, limit = 50, scopeDirs = null } = {}) => {
+  const emptyPage = { results: [], total: 0, truncated: false, limit };
+  if (!db) return emptyPage;
   const cleanQuery = query.trim();
   const hasQuery = cleanQuery.length > 0;
+  const hasTierFilter = Boolean(tier) && tier !== 'all';
+  const scopeFilter = scopeSqlFilter('path', scopeDirs);
 
   if (!hasQuery) {
-    let sql = 'SELECT * FROM files';
-    const params = [];
-    if (tier) {
-      sql = 'SELECT * FROM files WHERE tier = ?';
-      params.push(tier);
-    }
-    sql += ' ORDER BY path ASC LIMIT ?';
-    params.push(limit);
-
-    const rows = db.prepare(sql).all(...params);
-    return rows.map((r) => populateFileDetails(db, r));
+    const where = ` WHERE ${scopeFilter.sql}${hasTierFilter ? ' AND tier = ?' : ''}`;
+    const params = hasTierFilter ? [...scopeFilter.params, tier] : scopeFilter.params;
+    const total = Number(db.prepare(`SELECT COUNT(*) AS c FROM files${where}`).get(...params)?.c || 0);
+    const rows = db.prepare(`SELECT * FROM files${where} ORDER BY path ASC LIMIT ?`).all(...params, limit);
+    return { results: rows.map((r) => populateFileDetails(db, r)), total, truncated: total > rows.length, limit };
   }
 
-  // Search via symbols, path, or FTS
-  const wildcard = `%${cleanQuery}%`;
-  let sql = `
-    SELECT DISTINCT f.*
-    FROM files f
-    LEFT JOIN symbols s ON f.path = s.file_path
-    LEFT JOIN props p ON f.path = p.file_path
-    LEFT JOIN hooks h ON f.path = h.file_path
-    WHERE (
-      f.path LIKE ?
-      OR s.name LIKE ?
-      OR p.name LIKE ?
-      OR h.name LIKE ?
-    )
-  `;
-  const params = [wildcard, wildcard, wildcard, wildcard];
-
-  if (tier) {
-    sql += ' AND f.tier = ?';
-    params.push(tier);
-  }
-
-  sql += ' ORDER BY (f.path LIKE ?) DESC, f.lines ASC LIMIT ?';
-  params.push(wildcard, limit);
-
-  const matchedFiles = db.prepare(sql).all(...params);
-  if (matchedFiles.length > 0) {
-    return matchedFiles.map((f) => populateFileDetails(db, f));
-  }
-
-  try {
-    const clean = cleanQuery.replace(/[^\w\s-]/g, ' ').trim();
-    if (clean) {
-      const ftsRows = db.prepare(`
-        SELECT DISTINCT file_path FROM fts_index
-        WHERE fts_index MATCH ?
-        LIMIT ?
-      `).all(`"${clean}"*`, limit);
-
-      if (ftsRows.length > 0) {
-        const placeholders = ftsRows.map(() => '?').join(',');
-        const ftsFiles = db.prepare(`
-          SELECT * FROM files WHERE path IN (${placeholders})
-          ORDER BY lines ASC
-        `).all(...ftsRows.map((r) => r.file_path));
-        return ftsFiles.map((f) => populateFileDetails(db, f));
-      }
-    }
-  } catch {
-    // Non-blocking FTS fallback
-  }
-
-  return [];
+  const isScoped = Array.isArray(scopeDirs) && scopeDirs.length > 0;
+  const isInScope = (hit) => !isScoped || isPathInScope(hit.path, scopeDirs);
+  const ranked = rankIndexHits(db, cleanQuery, tier).filter(isInScope);
+  const hits = ranked.length > 0 ? ranked : queryFtsFallback(db, cleanQuery, limit).filter(isInScope);
+  const page = hits.slice(0, limit);
+  const results = page.map((hit) => {
+    const details = populateFileDetails(db, db.prepare(FILE_ROW_SQL).get(hit.path));
+    return { ...details, match: { type: hit.type, name: hit.name, line: hit.line } };
+  });
+  return { results, total: hits.length, truncated: hits.length > page.length, limit };
 };
+
+export const queryIndex = (db, options = {}) => queryIndexPage(db, options).results;
 
 export const inspectIndexedFile = (db, filePath) => {
   if (!db) return null;

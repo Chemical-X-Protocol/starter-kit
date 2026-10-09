@@ -52,7 +52,7 @@ const buildBacktraceCard = (db, symbol) => {
   try {
     const result = calculateBacktrace(db, symbol, { maxDepth: 5 });
     if (!result || !result.rootCallers || result.rootCallers.length === 0) return '';
-    const lines = result.rootCallers.slice(0, 5).map((c) => `//   <- ${path.basename(c)}`);
+    const lines = result.rootCallers.slice(0, 5).map((c) => `//   <- ${c.path} [${c.tier}]`);
     return `\n// --- Backtrace: ${symbol} ---\n${lines.join('\n')}`;
   } catch {
     return '';

@@ -3,28 +3,24 @@ import {
   findFileDependents, calculateBlastRadius, querySemanticIndex, queryHybridIndex
 } from '../search-queries.js';
 import { toColumnar } from '../columnar.js';
+import { buildBlastPayload } from '../search-commands-blast.js';
+import { isPathInScope } from '../search-root.js';
 
 export const executeBlastRadiusQuery = (activeDb, query, args = {}) => {
   const blast = calculateBlastRadius(activeDb, query, { maxDepth: args.maxDepth || 5 });
-  const allConsumers = [...blast.directConsumers, ...blast.transitiveConsumers];
-  const col = toColumnar(allConsumers, ['path', 'tier', 'depth']);
-  return {
-    target: blast.target, seed: blast.seedPath, count: blast.totalImpactCount,
-    depth: blast.depth, tiers: blast.tiers, format: 'columnar',
-    cols: col.cols, rows: col.rows, tests: blast.impactedTests.map((t) => t.path || t)
-  };
+  return buildBlastPayload(blast, { isColumnar: true });
 };
 
 export const executeSemanticQuery = (activeDb, query, args = {}) => {
   const results = querySemanticIndex(activeDb, query, { limit: args.limit || 20, tier: args.tier });
   const col = toColumnar(results, ['filePath', 'targetType', 'targetName', 'tier', 'similarity']);
-  return { query, mode: 'semantic', count: results.length, format: 'columnar', cols: col.cols, rows: col.rows };
+  return { query, mode: 'feature-hash similarity', model: 'feature-hash-128 (not a learned embedding)', count: results.length, format: 'columnar', cols: col.cols, rows: col.rows };
 };
 
 export const executeHybridQuery = (activeDb, query, args = {}) => {
   const results = queryHybridIndex(activeDb, query, { limit: args.limit || 20 });
   const col = toColumnar(results, ['filePath', 'name', 'tier', 'score', 'ftsRank', 'vecRank']);
-  return { query, mode: 'hybrid (BM25 + Vector RRF)', count: results.length, format: 'columnar', cols: col.cols, rows: col.rows };
+  return { query, mode: 'hybrid (BM25 + feature-hash RRF)', model: 'feature-hash-128 (not a learned embedding)', count: results.length, format: 'columnar', cols: col.cols, rows: col.rows };
 };
 
 export const executeConnectionsQuery = (activeDb, query) => {
@@ -55,11 +51,13 @@ export const executeConnectionsQuery = (activeDb, query) => {
   return null;
 };
 
-export const executeFtsFallback = (activeDb, query) => {
+export const executeFtsFallback = (activeDb, query, scopeDirs = null) => {
+  const isScoped = Array.isArray(scopeDirs) && scopeDirs.length > 0;
   try {
     const clean = query.replace(/[^\w\s-]/g, ' ').trim();
     if (clean) {
-      const rows = activeDb.prepare('SELECT file_path, name, tier FROM fts_index WHERE fts_index MATCH ? LIMIT 10').all(`"${clean}"*`);
+      const rows = activeDb.prepare('SELECT file_path, name, tier FROM fts_index WHERE fts_index MATCH ?').all(`"${clean}"*`)
+        .filter((r) => !isScoped || isPathInScope(r.file_path, scopeDirs)).slice(0, 10);
       if (rows.length > 0) return rows.map((r) => `[FTS MATCH] ${r.file_path} (${r.name || r.tier})`).join('\n');
     }
   } catch (err) {

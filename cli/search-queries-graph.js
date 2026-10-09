@@ -2,6 +2,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { extractSymbolBlock } from './reader.js';
+import { debugNote } from './search-debug.js';
+import { resolveGraphSeed, walkConsumers, findUnresolvedImporters, findSymbolRow, findCalleeDefinition } from './search-graph-edges.js';
+import { moduleKeysFor } from './search-resolve.js';
 
 const _require = createRequire(import.meta.url);
 let _parse = null;
@@ -12,9 +15,10 @@ const loadBabel = () => {
     _parse = _require('@babel/parser').parse;
     const t = _require('@babel/traverse');
     _traverse = t.default?.default || t.default || t;
-  } catch {
+  } catch (err) {
     _parse = null;
     _traverse = null;
+    debugNote.warn('babel unavailable for call trace', err);
   }
   return { parse: _parse, traverse: _traverse };
 };
@@ -24,105 +28,45 @@ const isSpecOrTest = (filePath) => {
   return filePath.includes('.spec.') || filePath.includes('.test.') || filePath.includes('__tests__');
 };
 
+const emptyBlast = (target, extra = {}) => ({
+  target, seedPath: '', totalImpactCount: 0, depth: 0, directConsumers: [], transitiveConsumers: [],
+  impactedTests: [], impactedComponents: [], possibleConsumers: [], candidates: [], tiers: {}, ...extra
+});
+
+// Consumers by exact module resolution only (see search-graph-edges.js). An ambiguous or
+// unknown target returns candidates / notFound instead of guessing a seed.
 export const calculateBlastRadius = (db, targetPathOrSymbol, options = {}) => {
-  if (!db || !targetPathOrSymbol) {
-    return {
-      target: targetPathOrSymbol || '',
-      seedPath: '',
-      totalImpactCount: 0,
-      depth: 0,
-      directConsumers: [],
-      transitiveConsumers: [],
-      impactedTests: [],
-      impactedComponents: [],
-      tiers: {}
-    };
-  }
+  const cleanTarget = String(targetPathOrSymbol || '').trim();
+  const hasInput = Boolean(db) && cleanTarget.length > 0;
+  if (!hasInput) return emptyBlast(cleanTarget, { notFound: true });
 
-  const cleanTarget = targetPathOrSymbol.trim();
   const maxDepth = typeof options.maxDepth === 'number' ? options.maxDepth : 5;
+  const seed = resolveGraphSeed(db, cleanTarget);
+  const isAmbiguous = seed.candidates.length > 0;
+  if (isAmbiguous) return emptyBlast(cleanTarget, { ambiguous: true, candidates: seed.candidates });
+  const isNotFound = !seed.seedPath;
+  if (isNotFound) return emptyBlast(cleanTarget, { notFound: true });
 
-  let seedPath = '';
-  let targetSymbolName = cleanTarget;
-  const fileRow = db.prepare('SELECT path FROM files WHERE path = ? OR path LIKE ? LIMIT 1')
-    .get(cleanTarget, `%${cleanTarget}%`);
-
-  if (fileRow) {
-    seedPath = fileRow.path;
-  } else {
-    const symRow = db.prepare('SELECT file_path, name FROM symbols WHERE name = ? LIMIT 1').get(cleanTarget);
-    if (symRow) {
-      seedPath = symRow.file_path;
-      targetSymbolName = symRow.name;
-    }
-  }
-
-  const seedBaseName = seedPath ? path.basename(seedPath).replace(/\.[^.]+$/, '') : cleanTarget;
-
-  const querySql = `
-    WITH RECURSIVE blast_tree(importer_path, depth, chain) AS (
-      SELECT DISTINCT i.importer_path, 1, i.importer_path
-      FROM imports i
-      WHERE (i.resolved_path = ? AND i.resolved_path != '')
-         OR (? != '' AND (i.source_module LIKE '%' || ? || '%' OR i.imported_symbol = ?))
-
-      UNION
-
-      SELECT DISTINCT i.importer_path, bt.depth + 1, bt.chain || ' -> ' || i.importer_path
-      FROM imports i
-      JOIN blast_tree bt ON (
-        (i.resolved_path = bt.importer_path AND i.resolved_path != '')
-        OR i.source_module LIKE '%' || bt.importer_path || '%'
-      )
-      WHERE bt.depth < ?
-        AND instr(bt.chain, i.importer_path) = 0
-    )
-    SELECT bt.importer_path, min(bt.depth) as depth, bt.chain, COALESCE(f.tier, 'utility') as tier
-    FROM blast_tree bt
-    LEFT JOIN files f ON bt.importer_path = f.path
-    WHERE bt.importer_path != ?
-    GROUP BY bt.importer_path
-    ORDER BY depth ASC, bt.importer_path ASC;
-  `;
-
-  const rows = db.prepare(querySql).all(
-    seedPath,
-    seedBaseName,
-    seedBaseName,
-    targetSymbolName,
-    maxDepth,
-    seedPath
-  );
-
-  const consumers = rows.map((r) => ({
-    path: r.importer_path,
-    depth: Number(r.depth),
-    chain: r.chain,
-    tier: r.tier,
-    isTest: isSpecOrTest(r.importer_path)
+  const tierOf = db.prepare('SELECT tier FROM files WHERE path = ?');
+  const consumers = walkConsumers(db, seed.seedPath, { symbol: seed.symbol, maxDepth }).map((c) => ({
+    path: c.path, depth: c.depth, chain: c.chain,
+    tier: tierOf.get(c.path)?.tier || 'utility', isTest: isSpecOrTest(c.path)
   }));
-
-  const directConsumers = consumers.filter((c) => c.depth === 1);
-  const transitiveConsumers = consumers.filter((c) => c.depth > 1);
-  const impactedTests = consumers.filter((c) => c.isTest);
-  const impactedComponents = consumers.filter((c) => !c.isTest);
-
   const tiers = {};
-  for (const c of consumers) {
-    tiers[c.tier] = (tiers[c.tier] || 0) + 1;
-  }
-
-  const maxReachedDepth = consumers.reduce((acc, c) => Math.max(acc, c.depth), 0);
+  for (const c of consumers) tiers[c.tier] = (tiers[c.tier] || 0) + 1;
 
   return {
     target: cleanTarget,
-    seedPath,
+    seedPath: seed.seedPath,
+    symbol: seed.symbol,
     totalImpactCount: consumers.length,
-    depth: maxReachedDepth,
-    directConsumers,
-    transitiveConsumers,
-    impactedTests,
-    impactedComponents,
+    depth: consumers.reduce((acc, c) => Math.max(acc, c.depth), 0),
+    directConsumers: consumers.filter((c) => c.depth === 1),
+    transitiveConsumers: consumers.filter((c) => c.depth > 1),
+    impactedTests: consumers.filter((c) => c.isTest),
+    impactedComponents: consumers.filter((c) => !c.isTest),
+    possibleConsumers: findUnresolvedImporters(db, seed.symbol),
+    candidates: [],
     tiers
   };
 };
@@ -138,7 +82,8 @@ export const extractCalleesFromCode = (code) => {
   const callees = new Set();
   const { parse, traverse } = loadBabel();
   try {
-    if (!parse || !traverse) throw new Error('babel unavailable');
+    const hasBabel = Boolean(parse) && Boolean(traverse);
+    if (!hasBabel) throw new Error('babel unavailable');
     const ast = parse(code, {
       sourceType: 'module',
       plugins: ['typescript', 'jsx', 'decorators-legacy', 'topLevelAwait'],
@@ -168,7 +113,8 @@ export const extractCalleesFromCode = (code) => {
         }
       }
     });
-  } catch {
+  } catch (err) {
+    debugNote.warn('callee extraction fell back to regex', err);
     const matches = code.matchAll(/\b([A-Za-z0-9_$]+)\s*\(/g);
     for (const m of matches) {
       if (!['if', 'for', 'while', 'switch', 'catch', 'function'].includes(m[1])) {
@@ -188,20 +134,15 @@ export const extractCalleesFromCode = (code) => {
  * @returns {object} Call trace tree payload.
  */
 export const calculateCallTrace = (db, targetSymbolOrPath, options = {}) => {
-  if (!db || !targetSymbolOrPath) {
+  const hasInput = Boolean(db) && Boolean(targetSymbolOrPath);
+  if (!hasInput) {
     return { target: targetSymbolOrPath || '', totalCallees: 0, depth: 0, callees: [] };
   }
 
   const cleanTarget = targetSymbolOrPath.trim();
   const maxDepth = typeof options.maxDepth === 'number' ? options.maxDepth : 3;
 
-  const symRow = db.prepare(`
-    SELECT s.name, s.kind, s.start_line, s.end_line, s.file_path, f.tier
-    FROM symbols s
-    JOIN files f ON s.file_path = f.path
-    WHERE s.name = ?
-    LIMIT 1
-  `).get(cleanTarget);
+  const symRow = findSymbolRow(db, cleanTarget, '');
 
   let targetPath = symRow ? symRow.file_path : cleanTarget;
   let symbolName = symRow ? symRow.name : cleanTarget;
@@ -216,7 +157,7 @@ export const calculateCallTrace = (db, targetSymbolOrPath, options = {}) => {
 
     let codeSlice = '';
     let fullText = '';
-    const absPath = path.isAbsolute(filePath) ? filePath : path.resolve(process.cwd(), filePath);
+    const absPath = path.isAbsolute(filePath) ? filePath : path.resolve(options.root || process.cwd(), filePath);
     if (fs.existsSync(absPath)) {
       fullText = fs.readFileSync(absPath, 'utf-8');
       const block = extractSymbolBlock(fullText, symbol);
@@ -239,13 +180,7 @@ export const calculateCallTrace = (db, targetSymbolOrPath, options = {}) => {
       if (visited.has(c)) continue;
       visited.add(c);
 
-      const calleeSym = db.prepare(`
-        SELECT s.name, s.kind, s.start_line, s.end_line, s.file_path, f.tier
-        FROM symbols s
-        JOIN files f ON s.file_path = f.path
-        WHERE s.name = ?
-        LIMIT 1
-      `).get(c);
+      const calleeSym = findCalleeDefinition(db, c, filePath);
 
       if (calleeSym) {
         const subCallees = traceCallees(calleeSym.name, calleeSym.file_path, currentDepth + 1);
@@ -263,10 +198,11 @@ export const calculateCallTrace = (db, targetSymbolOrPath, options = {}) => {
         const importRow = db.prepare(`
           SELECT source_module
           FROM imports
-          WHERE (importer_path = ? OR importer_path LIKE ?)
+          WHERE importer_path = ?
             AND (imported_symbol = ? OR imported_symbol = ? OR imported_symbol = '*')
+          ORDER BY line
           LIMIT 1
-        `).get(filePath, `%${path.basename(filePath)}%`, c, baseName);
+        `).get(filePath, c, baseName);
 
         if (importRow) {
           results.push({
@@ -301,9 +237,12 @@ export const calculateCallTrace = (db, targetSymbolOrPath, options = {}) => {
 
   const calleeTree = traceCallees(symbolName, targetPath, 1);
   const totalCount = visited.size - 1;
+  const isIndexedFile = !symRow && Boolean(db.prepare('SELECT 1 FROM files WHERE path = ?').get(cleanTarget));
+  const isNotFound = !symRow && !isIndexedFile;
 
   return {
     target: symbolName,
+    notFound: isNotFound,
     filePath: targetPath,
     startLine,
     tier,
@@ -315,6 +254,7 @@ export const calculateCallTrace = (db, targetSymbolOrPath, options = {}) => {
 
 /**
  * Calculates reverse backtrace: upstream callers leading to target symbol.
+ * Callers come from the same exact-resolution walk as blast radius; each path appears once.
  *
  * @param {object} db SQLite index database.
  * @param {string} targetSymbolOrPath Target symbol or file path.
@@ -322,82 +262,46 @@ export const calculateCallTrace = (db, targetSymbolOrPath, options = {}) => {
  * @returns {object} Backtrace causal path payload.
  */
 export const calculateBacktrace = (db, targetSymbolOrPath, options = {}) => {
-  if (!db || !targetSymbolOrPath) {
-    return { target: targetSymbolOrPath || '', totalCallers: 0, depth: 0, chains: [], callers: [] };
-  }
+  const cleanTarget = String(targetSymbolOrPath || '').trim();
+  const empty = { target: cleanTarget, seedPath: '', totalCallers: 0, depth: 0, chains: [], callers: [], rootCallers: [], candidates: [] };
+  const hasInput = Boolean(db) && cleanTarget.length > 0;
+  if (!hasInput) return { ...empty, notFound: true };
 
-  const cleanTarget = targetSymbolOrPath.trim();
   const maxDepth = typeof options.maxDepth === 'number' ? options.maxDepth : 5;
+  const seed = resolveGraphSeed(db, cleanTarget);
+  const isAmbiguous = seed.candidates.length > 0;
+  if (isAmbiguous) return { ...empty, ambiguous: true, candidates: seed.candidates };
+  const isNotFound = !seed.seedPath;
+  if (isNotFound) return { ...empty, notFound: true };
 
-  let seedPath = '';
-  let targetSymbolName = cleanTarget;
-  const symRow = db.prepare('SELECT file_path, name FROM symbols WHERE name = ? LIMIT 1').get(cleanTarget);
-  if (symRow) {
-    seedPath = symRow.file_path;
-    targetSymbolName = symRow.name;
-  } else {
-    const fileRow = db.prepare('SELECT path FROM files WHERE path = ? OR path LIKE ? LIMIT 1').get(cleanTarget, `%${cleanTarget}%`);
-    if (fileRow) seedPath = fileRow.path;
+  const tierOf = db.prepare('SELECT tier FROM files WHERE path = ?');
+  const callers = walkConsumers(db, seed.seedPath, { symbol: seed.symbol, maxDepth }).map((c) => {
+    const tier = tierOf.get(c.path)?.tier || 'utility';
+    const isEntryTier = ['view', 'page', 'route', 'template'].includes(tier);
+    return { path: c.path, symbol: c.importedSymbol, depth: c.depth, chain: c.chain, tier, isEntry: isEntryTier || isSpecOrTest(c.path) };
+  });
+  const consumedPaths = new Set();
+  for (const caller of callers) {
+    const parent = caller.chain.split(' <- ').slice(-2, -1)[0];
+    consumedPaths.add(parent);
   }
-
-  const seedBaseName = seedPath ? path.basename(seedPath).replace(/\.[^.]+$/, '') : cleanTarget;
-
-  const querySql = `
-    WITH RECURSIVE backtrace_tree(caller_path, caller_symbol, depth, chain) AS (
-      SELECT DISTINCT i.importer_path, i.imported_symbol, 1, i.importer_path || ' (' || i.imported_symbol || ')'
-      FROM imports i
-      WHERE (? != '' AND i.imported_symbol = ?)
-         OR (i.resolved_path = ? AND i.resolved_path != '')
-         OR (? != '' AND i.source_module LIKE '%' || ? || '%')
-
-      UNION
-
-      SELECT DISTINCT i.importer_path, i.imported_symbol, bt.depth + 1, i.importer_path || ' -> ' || bt.chain
-      FROM imports i
-      JOIN backtrace_tree bt ON (
-        (i.resolved_path = bt.caller_path AND i.resolved_path != '')
-        OR i.source_module LIKE '%' || bt.caller_path || '%'
-      )
-      WHERE bt.depth < ?
-        AND instr(bt.chain, i.importer_path) = 0
-    )
-    SELECT bt.caller_path, bt.caller_symbol, min(bt.depth) as depth, bt.chain, COALESCE(f.tier, 'utility') as tier
-    FROM backtrace_tree bt
-    LEFT JOIN files f ON bt.caller_path = f.path
-    WHERE bt.caller_path != ?
-    GROUP BY bt.caller_path, bt.caller_symbol
-    ORDER BY depth DESC, bt.caller_path ASC;
-  `;
-
-  const rows = db.prepare(querySql).all(
-    targetSymbolName,
-    targetSymbolName,
-    seedPath,
-    seedBaseName,
-    seedBaseName,
-    maxDepth,
-    seedPath
-  );
-
-  const callers = rows.map((r) => ({
-    path: r.caller_path,
-    symbol: r.caller_symbol,
-    depth: Number(r.depth),
-    chain: r.chain,
-    tier: r.tier,
-    isEntry: ['view', 'page', 'route', 'template'].includes(r.tier) || isSpecOrTest(r.caller_path)
-  }));
-
-  const chains = callers.map((c) => `${c.chain} -> ${cleanTarget}`);
   const maxReachedDepth = callers.reduce((acc, c) => Math.max(acc, c.depth), 0);
+  const leafCallers = callers.filter((c) => !consumedPaths.has(c.path));
+  // A root entry point is a caller nothing in the index imports, whatever its tier.
+  const hasImporter = (filePath) => {
+    const keys = moduleKeysFor(filePath);
+    return Boolean(db.prepare(`SELECT 1 FROM imports WHERE resolved_path IN (${keys.map(() => '?').join(', ')}) LIMIT 1`).get(...keys));
+  };
+  const rootCallers = callers.filter((c) => !hasImporter(c.path));
 
   return {
     target: cleanTarget,
-    seedPath,
+    seedPath: seed.seedPath,
     totalCallers: callers.length,
     depth: maxReachedDepth,
-    chains,
+    chains: Array.from(new Set(leafCallers.map((c) => c.chain.split(' <- ').reverse().join(' -> ')))),
     callers,
-    rootCallers: callers.filter((c) => c.isEntry || c.depth === maxReachedDepth)
+    rootCallers,
+    candidates: []
   };
 };

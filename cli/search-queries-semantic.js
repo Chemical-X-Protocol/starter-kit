@@ -5,9 +5,25 @@ import {
   cosineSimilarity
 } from './embeddings/vectorizer.js';
 import { formatFtsQuery } from './search-tokenizer.js';
+import { debugNote } from './search-debug.js';
 
+// One row per file#name: capsule and symbol vectors for the same export keep the best score.
+const dedupeByTarget = (rows, limit) => {
+  const best = new Map();
+  for (const row of rows) {
+    const key = `${row.filePath}#${row.targetName}`;
+    const current = best.get(key);
+    const isBetter = !current || row.similarity > current.similarity;
+    if (isBetter) best.set(key, row);
+  }
+  return Array.from(best.values()).sort((a, b) => b.similarity - a.similarity).slice(0, limit);
+};
+
+// Feature-hash similarity: 128-dim FNV hashing of names, tiers and trigrams. It is lexical
+// fuzz, not a learned embedding: it does not know that "login" relates to "authentication".
 export const querySemanticIndex = (db, queryText, options = {}) => {
-  if (!db || !queryText) return [];
+  const hasInput = Boolean(db) && Boolean(queryText);
+  if (!hasInput) return [];
   const cleanQuery = queryText.trim();
   const limit = options.limit || 20;
   const minSimilarity = typeof options.minSimilarity === 'number' ? options.minSimilarity : 0.2;
@@ -20,7 +36,9 @@ export const querySemanticIndex = (db, queryText, options = {}) => {
   try {
     db.prepare('SELECT vec_cosine(?, ?)').get(queryBuf, queryBuf);
     hasVecCosine = true;
-  } catch {}
+  } catch (err) {
+    debugNote.warn('vec_cosine unavailable, scoring in JS', err);
+  }
 
   if (hasVecCosine) {
     let sql = `
@@ -36,17 +54,17 @@ export const querySemanticIndex = (db, queryText, options = {}) => {
       params.push(tierFilter, tierFilter);
     }
     sql += ' ORDER BY similarity DESC LIMIT ?';
-    params.push(limit);
+    params.push(limit * 3);
 
     const rows = db.prepare(sql).all(...params);
-    return rows.map((r) => ({
+    return dedupeByTarget(rows.map((r) => ({
       filePath: r.file_path,
       targetType: r.target_type,
       targetName: r.target_name,
       tier: r.tier || 'utility',
       lines: Number(r.lines || 0),
       similarity: Number(r.similarity.toFixed(4))
-    }));
+    })), limit);
   }
 
   let sql = 'SELECT e.file_path, e.target_type, e.target_name, e.vector, f.tier, f.lines FROM embeddings e LEFT JOIN files f ON e.file_path = f.path';
@@ -72,12 +90,12 @@ export const querySemanticIndex = (db, queryText, options = {}) => {
     }
   }
 
-  scored.sort((a, b) => b.similarity - a.similarity);
-  return scored.slice(0, limit);
+  return dedupeByTarget(scored, limit);
 };
 
 export const queryHybridIndex = (db, queryText, options = {}) => {
-  if (!db || !queryText) return [];
+  const hasInput = Boolean(db) && Boolean(queryText);
+  if (!hasInput) return [];
   const limit = options.limit || 20;
   const cleanQuery = queryText.trim();
 
@@ -92,7 +110,9 @@ export const queryHybridIndex = (db, queryText, options = {}) => {
         ORDER BY rank
         LIMIT ?
       `).all(ftsQuery, limit * 2);
-    } catch {}
+    } catch (err) {
+      debugNote.warn('hybrid fts query', err);
+    }
   }
 
   if (ftsRows.length === 0) {
@@ -107,7 +127,9 @@ export const queryHybridIndex = (db, queryText, options = {}) => {
           LIMIT ?
         `).all(`"${sanitized}"*`, limit * 2);
       }
-    } catch {}
+    } catch (err) {
+      debugNote.warn('hybrid fts fallback', err);
+    }
   }
 
   const semanticResults = querySemanticIndex(db, cleanQuery, { limit: limit * 2, minSimilarity: 0.15 });
@@ -129,7 +151,9 @@ export const queryHybridIndex = (db, queryText, options = {}) => {
     });
   });
 
-  semanticResults.forEach((r, idx) => {
+  // RRF counts each file once per ranker: a file's capsule and symbol vectors share its best rank.
+  const semanticByFile = semanticResults.filter((r, idx) => semanticResults.findIndex((other) => other.filePath === r.filePath) === idx);
+  semanticByFile.forEach((r, idx) => {
     const key = r.filePath;
     const rrfScore = 1.0 / (RRF_CONSTANT + (idx + 1));
     if (combined.has(key)) {

@@ -88,11 +88,31 @@ export interface SearchResultPayload {
   readonly results: readonly FileIndexRecord[];
 }
 
+export interface SyncSearchIndexResult {
+  readonly db: any;
+  readonly root: string;
+  /** Dirs this sync walked: the requested scope, plus every held scope when includeHeldScopes. */
+  readonly scopeDirs: readonly string[];
+  readonly scope: string;
+  /** The scope the caller asked for (status 'empty' refers to it). */
+  readonly requestedScope: string;
+  /** fresh; stale (outside root, read-only, write lock busy); missing (scope dir absent); empty (no indexable files). */
+  readonly status: 'fresh' | 'stale' | 'missing' | 'empty';
+  readonly staleReason: string | null;
+  readonly updatedCount: number;
+  readonly removedCount: number;
+  readonly totalFiles: number;
+  readonly skippedFiles: readonly { path: string; reason: string }[];
+  readonly versionNotice: string | null;
+  /** Every scope the index holds (comma list); rows outside the requested scope are re-checked on disk. */
+  readonly indexedScopes: string | null;
+}
+
 export declare function syncSearchIndex(
-  targetDir?: string,
+  targetDir?: string | readonly string[],
   cwd?: string,
-  options?: { reindex?: boolean }
-): { db: any; updatedCount: number; totalFiles: number } | null;
+  options?: { reindex?: boolean; includeInternal?: boolean; includeHeldScopes?: boolean }
+): SyncSearchIndexResult | null;
 
 export declare function runSearch(
   rawArgs?: string[],
@@ -127,7 +147,8 @@ export declare function findFileDependents(
 
 export declare function syncViolationsIndex(
   db: any,
-  violations?: readonly any[]
+  violations?: readonly any[],
+  options?: { scope?: string | null }
 ): number;
 
 export declare function queryViolations(
@@ -172,7 +193,7 @@ export declare function queryFilesByHealth(
 
 export interface SingleFileIndexResult {
   readonly db: any;
-  readonly status: 'indexed' | 'deleted';
+  readonly status: 'indexed' | 'deleted' | 'out-of-scope';
   readonly path: string;
   readonly tier?: string;
   readonly lines?: number;

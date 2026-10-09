@@ -1,6 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { ANSI } from './theme.js';
+import { withIndex } from './search-output.js';
+import { STATUS, toExitCode } from './result-status.js';
+import { debugNote } from './search-debug.js';
 import { auditFile } from './audit-engine.js';
 import {
   findSymbolDefinition,
@@ -14,31 +17,40 @@ import {
   queryFilesByHealth
 } from './search-db.js';
 
-export const handleDefCommand = (db, targetSymbol, { isJson = false, isCli = true } = {}) => {
+const DEF_MAX_LINES = 40;
+
+export const handleDefCommand = (db, targetSymbol, { index = null, isJson = false, isCli = true, isFull = false, root = process.cwd() } = {}) => {
   const def = findSymbolDefinition(db, targetSymbol);
-  if (!def) {
-    const errorMsg = `Symbol "${targetSymbol}" not found in index.`;
+  const isNotFound = !def;
+  if (isNotFound) {
+    const errorMsg = `Symbol "${targetSymbol}" not found in index${index ? ` scope ${index.scope}` : ''}.`;
+    const notFound = withIndex({ status: STATUS.INCONCLUSIVE, reason: errorMsg, error: errorMsg, symbol: targetSymbol }, index);
+    if (isCli) process.exitCode = toExitCode(notFound.status);
     if (isJson) {
-      process.stdout.write(JSON.stringify({ error: errorMsg, symbol: targetSymbol }) + '\n');
+      process.stdout.write(JSON.stringify(notFound) + '\n');
     } else {
-      process.stdout.write(`  ${ANSI.DIM}${errorMsg}${ANSI.RESET}\n\n`);
+      process.stdout.write(`  ${ANSI.GOLD}? Inconclusive: ${errorMsg}${ANSI.RESET}\n\n`);
     }
-    if (isCli) process.exit(0);
+    if (isCli) process.exit();
     return null;
   }
 
   let snippet = '';
+  const bodyLines = Math.max(1, def.endLine - def.startLine + 1);
+  const isTruncated = !isFull && bodyLines > DEF_MAX_LINES;
+  const shownLines = isTruncated ? DEF_MAX_LINES : bodyLines;
   try {
-    const absPath = path.resolve(process.cwd(), def.filePath);
+    const absPath = path.resolve(root, def.filePath);
     if (fs.existsSync(absPath)) {
       const fileLines = fs.readFileSync(absPath, 'utf-8').split('\n');
       const start = Math.max(1, def.startLine) - 1;
-      const end = Math.min(fileLines.length, def.endLine);
+      const end = Math.min(fileLines.length, start + shownLines);
       snippet = fileLines.slice(start, end).join('\n');
     }
   } catch (err) {
     const error = err instanceof Error ? err : new Error(String(err));
     snippet = `// Error reading file: ${error.message}`;
+    debugNote.warn(`def snippet ${def.filePath}`, error);
   }
 
   const payload = {
@@ -50,12 +62,17 @@ export const handleDefCommand = (db, targetSymbol, { isJson = false, isCli = tru
     endLine: def.endLine,
     tier: def.tier,
     signature: def.signature,
+    bodyLines,
+    shownLines,
+    truncated: isTruncated,
     snippet
   };
+  const truncationNote = `[truncated: showing ${shownLines} of ${bodyLines} lines; use --full or chemx read ${def.filePath} --symbol=${def.name}]`;
+  if (isTruncated) payload.note = truncationNote;
 
   if (isJson) {
-    process.stdout.write(JSON.stringify(payload) + '\n');
-    if (isCli) process.exit(0);
+    process.stdout.write(JSON.stringify(withIndex(payload, index)) + '\n');
+    if (isCli) process.exit();
     return payload;
   }
 
@@ -67,13 +84,14 @@ export const handleDefCommand = (db, targetSymbol, { isJson = false, isCli = tru
     const lineNum = String(def.startLine + idx).padStart(4, ' ');
     process.stdout.write(`${ANSI.DIM}${lineNum} |${ANSI.RESET} ${line}\n`);
   });
+  if (isTruncated) process.stdout.write(`${ANSI.GOLD}${truncationNote}${ANSI.RESET}\n`);
   process.stdout.write('\n');
 
-  if (isCli) process.exit(0);
+  if (isCli) process.exit();
   return payload;
 };
 
-export const handleRefsCommand = (db, targetSymbol, { isJson = false, isCli = true } = {}) => {
+export const handleRefsCommand = (db, targetSymbol, { index = null, isJson = false, isCli = true } = {}) => {
   const refs = findSymbolReferences(db, targetSymbol);
   const payload = {
     symbol: targetSymbol,
@@ -82,15 +100,15 @@ export const handleRefsCommand = (db, targetSymbol, { isJson = false, isCli = tr
   };
 
   if (isJson) {
-    process.stdout.write(JSON.stringify(payload) + '\n');
-    if (isCli) process.exit(0);
+    process.stdout.write(JSON.stringify(withIndex(payload, index)) + '\n');
+    if (isCli) process.exit();
     return payload;
   }
 
   process.stdout.write(`\n${ANSI.BOLD}${ANSI.CYAN}References for "${targetSymbol}":${ANSI.RESET} ${ANSI.DIM}(${refs.length} found)${ANSI.RESET}\n`);
   if (refs.length === 0) {
     process.stdout.write(`  ${ANSI.DIM}No files import "${targetSymbol}".${ANSI.RESET}\n\n`);
-    if (isCli) process.exit(0);
+    if (isCli) process.exit();
     return payload;
   }
 
@@ -99,11 +117,11 @@ export const handleRefsCommand = (db, targetSymbol, { isJson = false, isCli = tr
   }
   process.stdout.write('\n');
 
-  if (isCli) process.exit(0);
+  if (isCli) process.exit();
   return payload;
 };
 
-export const handleDepsCommand = (db, targetFile, { isJson = false, isCli = true } = {}) => {
+export const handleDepsCommand = (db, targetFile, { index = null, isJson = false, isCli = true } = {}) => {
   const dependencies = findFileDependencies(db, targetFile);
   const dependents = findFileDependents(db, targetFile);
   const payload = {
@@ -115,8 +133,8 @@ export const handleDepsCommand = (db, targetFile, { isJson = false, isCli = true
   };
 
   if (isJson) {
-    process.stdout.write(JSON.stringify(payload) + '\n');
-    if (isCli) process.exit(0);
+    process.stdout.write(JSON.stringify(withIndex(payload, index)) + '\n');
+    if (isCli) process.exit();
     return payload;
   }
 
@@ -140,43 +158,11 @@ export const handleDepsCommand = (db, targetFile, { isJson = false, isCli = true
   }
   process.stdout.write('\n');
 
-  if (isCli) process.exit(0);
+  if (isCli) process.exit();
   return payload;
 };
 
-export const handleHazardsCommand = (db, options = {}, { isJson = false, isCli = true } = {}) => {
-  const hazards = queryViolations(db, options);
-  const payload = {
-    count: hazards.length,
-    hazards
-  };
-
-  if (isJson) {
-    process.stdout.write(JSON.stringify(payload) + '\n');
-    if (isCli) process.exit(0);
-    return payload;
-  }
-
-  process.stdout.write(`\n${ANSI.BOLD}${ANSI.CYAN}Architectural Hazards in SQLite:${ANSI.RESET} ${ANSI.DIM}(${hazards.length} open)${ANSI.RESET}\n`);
-  if (hazards.length === 0) {
-    process.stdout.write(`  ${ANSI.LIME}✔ Zero hazards registered in index. All pillars healthy.${ANSI.RESET}\n\n`);
-    if (isCli) process.exit(0);
-    return payload;
-  }
-
-  for (const h of hazards) {
-    const color = h.severity === 'CRITICAL' ? ANSI.RED : ANSI.GOLD;
-    process.stdout.write(`  ${color}[${h.severity}]${ANSI.RESET} ${ANSI.BOLD}${h.filePath}:${h.line}${ANSI.RESET} ${ANSI.DIM}(${h.rule})${ANSI.RESET}\n`);
-    process.stdout.write(`    ${ANSI.DIM}Hazard:${ANSI.RESET} ${h.hazard}\n`);
-    process.stdout.write(`    ${ANSI.CYAN}Directive:${ANSI.RESET} ${h.directive}\n`);
-  }
-  process.stdout.write('\n');
-
-  if (isCli) process.exit(0);
-  return payload;
-};
-
-export const handlePackCommand = (db, target, { isJson = false, isCli = true } = {}) => {
+export const handlePackCommand = (db, target, { index = null, isJson = false, isCli = true } = {}) => {
   let file = inspectIndexedFile(db, target);
   if (!file) {
     const matches = queryIndex(db, { query: target, limit: 1 });
@@ -190,7 +176,7 @@ export const handlePackCommand = (db, target, { isJson = false, isCli = true } =
     } else {
       process.stdout.write(`  ${ANSI.DIM}${errorMsg}${ANSI.RESET}\n\n`);
     }
-    if (isCli) process.exit(0);
+    if (isCli) process.exit();
     return null;
   }
 
@@ -214,8 +200,8 @@ export const handlePackCommand = (db, target, { isJson = false, isCli = true } =
   };
 
   if (isJson) {
-    process.stdout.write(JSON.stringify(pack) + '\n');
-    if (isCli) process.exit(0);
+    process.stdout.write(JSON.stringify(withIndex(pack, index)) + '\n');
+    if (isCli) process.exit();
     return pack;
   }
 
@@ -225,7 +211,7 @@ export const handlePackCommand = (db, target, { isJson = false, isCli = true } =
   process.stdout.write(`  ${ANSI.PINK}Dependents:${ANSI.RESET} ${dependents.length} downstream consumers\n`);
   process.stdout.write(`  ${ANSI.RED}Open Hazards:${ANSI.RESET} ${hazards.length}\n\n`);
 
-  if (isCli) process.exit(0);
+  if (isCli) process.exit();
   return pack;
 };
 
@@ -241,7 +227,7 @@ const resolveHealthScoreColor = (score) => {
   return ANSI.RED;
 };
 
-export const handleProgressionCommand = (db, { isJson = false, isCli = true } = {}) => {
+export const handleProgressionCommand = (db, { index = null, isJson = false, isCli = true } = {}) => {
   const history = getAuditProgression(db, 15);
   const payload = {
     count: history.length,
@@ -249,15 +235,15 @@ export const handleProgressionCommand = (db, { isJson = false, isCli = true } = 
   };
 
   if (isJson) {
-    process.stdout.write(JSON.stringify(payload) + '\n');
-    if (isCli) process.exit(0);
+    process.stdout.write(JSON.stringify(withIndex(payload, index)) + '\n');
+    if (isCli) process.exit();
     return payload;
   }
 
   process.stdout.write(`\n${ANSI.BOLD}${ANSI.CYAN}Chemical X Health Progression:${ANSI.RESET} ${ANSI.DIM}(${history.length} snapshots in SQLite)${ANSI.RESET}\n`);
   if (history.length === 0) {
     process.stdout.write(`  ${ANSI.DIM}No audit snapshots recorded yet. Run an audit to log your baseline.${ANSI.RESET}\n\n`);
-    if (isCli) process.exit(0);
+    if (isCli) process.exit();
     return payload;
   }
 
@@ -268,11 +254,11 @@ export const handleProgressionCommand = (db, { isJson = false, isCli = true } = 
   }
   process.stdout.write('\n');
 
-  if (isCli) process.exit(0);
+  if (isCli) process.exit();
   return payload;
 };
 
-export const handleHealthFilterCommand = (db, status, { isJson = false, isCli = true } = {}) => {
+export const handleHealthFilterCommand = (db, status, { index = null, isJson = false, isCli = true } = {}) => {
   const files = queryFilesByHealth(db, { status, limit: 100 });
   const payload = {
     filter: status,
@@ -281,8 +267,8 @@ export const handleHealthFilterCommand = (db, status, { isJson = false, isCli = 
   };
 
   if (isJson) {
-    process.stdout.write(JSON.stringify(payload) + '\n');
-    if (isCli) process.exit(0);
+    process.stdout.write(JSON.stringify(withIndex(payload, index)) + '\n');
+    if (isCli) process.exit();
     return payload;
   }
 
@@ -295,7 +281,7 @@ export const handleHealthFilterCommand = (db, status, { isJson = false, isCli = 
       ? 'Outstanding! Zero degraded files found. All files are crystalline.'
       : 'No crystalline files recorded.';
     process.stdout.write(`  ${ANSI.LIME}✔ ${emptyMsg}${ANSI.RESET}\n\n`);
-    if (isCli) process.exit(0);
+    if (isCli) process.exit();
     return payload;
   }
 
@@ -306,11 +292,11 @@ export const handleHealthFilterCommand = (db, status, { isJson = false, isCli = 
   }
   process.stdout.write('\n');
 
-  if (isCli) process.exit(0);
+  if (isCli) process.exit();
   return payload;
 };
 
-export const handleCheckCommand = (targetFile, { isJson = false, isCli = true } = {}) => {
+export const handleCheckCommand = (targetFile, { index = null, isJson = false, isCli = true } = {}) => {
   const startTime = Date.now();
   if (!targetFile) {
     const errorMsg = 'Please specify a target file to check. Example: chemx check src/components/m-card.vue';
@@ -355,7 +341,7 @@ export const handleCheckCommand = (targetFile, { isJson = false, isCli = true } 
 
   if (isJson) {
     if (isCli) {
-      process.stdout.write(JSON.stringify(payload) + '\n');
+      process.stdout.write(JSON.stringify(withIndex(payload, index)) + '\n');
       process.exit(isClean ? 0 : 1);
     }
     return payload;
@@ -363,7 +349,7 @@ export const handleCheckCommand = (targetFile, { isJson = false, isCli = true } 
 
   if (isClean) {
     process.stdout.write(`\n${ANSI.BOLD}${ANSI.LIME}✔ Crystalline:${ANSI.RESET} ${relPath} ${ANSI.DIM}(0 hazards, ${durationMs}ms)${ANSI.RESET}\n\n`);
-    if (isCli) process.exit(0);
+    if (isCli) process.exit();
     return payload;
   }
 
@@ -384,101 +370,6 @@ export const handleCheckCommand = (targetFile, { isJson = false, isCli = true } 
   return payload;
 };
 
-export const handleLiteralSearchCommand = (db, query, {
-  isCaseInsensitive = false,
-  isLineOnly = false,
-  limit = 20,
-  isJson = false,
-  isCli = true,
-  cwd = process.cwd()
-} = {}) => {
-  if (!query) {
-    if (isCli) process.stderr.write('Missing search query for literal search.\n');
-    return [];
-  }
-
-  const indexed = db ? db.prepare('SELECT path FROM files ORDER BY path ASC').all() : [];
-  let filePaths = indexed.map((r) => r.path);
-
-  const matches = [];
-  let totalMatches = 0;
-  const flags = isCaseInsensitive ? 'i' : '';
-  let regex;
-  try {
-    regex = new RegExp(query, flags);
-  } catch {
-    const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    regex = new RegExp(escaped, flags);
-  }
-
-  for (const relPath of filePaths) {
-    const fullPath = path.resolve(cwd, relPath);
-    if (!fs.existsSync(fullPath)) continue;
-
-    let content;
-    try {
-      content = fs.readFileSync(fullPath, 'utf-8');
-    } catch {
-      continue;
-    }
-
-    const lines = content.split('\n');
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      if (regex.test(line)) {
-        totalMatches++;
-        if (matches.length < limit) {
-          const trimmed = line.trim();
-          const clamped = trimmed.length > 60 ? trimmed.slice(0, 57) + '...' : trimmed;
-          matches.push({
-            path: relPath,
-            line: i + 1,
-            snippet: clamped
-          });
-        }
-      }
-    }
-  }
-
-  if (isJson) {
-    const payload = {
-      query,
-      isCaseInsensitive,
-      isLineOnly,
-      count: matches.length,
-      totalMatches,
-      matches: isLineOnly ? matches.map((m) => ({ path: m.path, line: m.line })) : matches
-    };
-    process.stdout.write(JSON.stringify(payload) + '\n');
-    if (isCli) process.exit(0);
-    return payload;
-  }
-
-  if (matches.length === 0) {
-    process.stdout.write(`  ${ANSI.DIM}No literal matches found for "${query}".${ANSI.RESET}\n\n`);
-    if (isCli) process.exit(0);
-    return [];
-  }
-
-  process.stdout.write(`\n${ANSI.BOLD}${ANSI.CYAN}Chemical X Literal Search:${ANSI.RESET} ${ANSI.DIM}"${query}" (${totalMatches} total match${totalMatches === 1 ? '' : 'es'})${ANSI.RESET}\n`);
-
-  for (const m of matches) {
-    if (isLineOnly) {
-      process.stdout.write(`  ${ANSI.BOLD}${m.path}${ANSI.RESET}:${ANSI.GOLD}${m.line}${ANSI.RESET}\n`);
-    } else {
-      process.stdout.write(`  ${ANSI.BOLD}${m.path}${ANSI.RESET}:${ANSI.GOLD}${m.line}${ANSI.RESET}: ${m.snippet}\n`);
-    }
-  }
-
-  if (totalMatches > limit) {
-    process.stdout.write(`\n  ${ANSI.DIM}// [Showing ${limit} of ${totalMatches} matches. Use -n <num> to expand, or -l for line-only]${ANSI.RESET}\n`);
-  }
-  process.stdout.write('\n');
-
-  if (isCli) process.exit(0);
-  return matches;
-};
-
 export {
   handleBlastRadiusCommand,
   handleCallTraceCommand,
@@ -487,6 +378,8 @@ export {
   runBacktraceCli
 } from './search-commands-graph.js';
 export { handleSemanticCommand, handleHybridCommand } from './search-commands-semantic.js';
+export { handleHazardsCommand } from './search-commands-hazards.js';
+export { handleLiteralSearchCommand } from './search-commands-literal.js';
 
 
 

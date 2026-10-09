@@ -1,14 +1,23 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { syncSingleFileIndex } from './search.js';
 import { openIndexDb, queryIndex } from './search-db.js';
 import { handleChemxPatch, handleChemxWrite, handleChemxRead, handleChemxQ } from './mcp/tools-search.js';
 
+// Each spec gets its own project root (with .chemx and src/) so it never writes into the kit index.
+const makeProjectRoot = () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-bulletproof-'));
+  fs.mkdirSync(path.join(root, '.chemx'));
+  fs.mkdirSync(path.join(root, 'src'));
+  return root;
+};
+
 test('bulletproof: syncSingleFileIndex updates index.db and generates embeddings', () => {
-  const cwd = process.cwd();
-  const testFile = path.resolve(cwd, 'scratch/test-bulletproof-target.ts');
+  const cwd = makeProjectRoot();
+  const testFile = path.resolve(cwd, 'src/test-bulletproof-target.ts');
   fs.mkdirSync(path.dirname(testFile), { recursive: true });
   fs.writeFileSync(testFile, 'export const bulletproofHelper = (val: string): boolean => val.length > 0;\n', 'utf-8');
 
@@ -33,13 +42,13 @@ test('bulletproof: syncSingleFileIndex updates index.db and generates embeddings
 });
 
 test('bulletproof: handleChemxWrite and handleChemxPatch auto-sync index', () => {
-  const cwd = process.cwd();
-  const testFile = path.resolve(cwd, 'scratch/test-auto-sync.ts');
+  const cwd = makeProjectRoot();
+  const testFile = path.resolve(cwd, 'src/test-auto-sync.ts');
   fs.mkdirSync(path.dirname(testFile), { recursive: true });
 
   // Write new file via MCP
   handleChemxWrite({
-    path: 'scratch/test-auto-sync.ts',
+    path: 'src/test-auto-sync.ts',
     content: 'export const autoSyncInitial = () => 42;\n'
   }, cwd);
 
@@ -49,7 +58,7 @@ test('bulletproof: handleChemxWrite and handleChemxPatch auto-sync index', () =>
 
   // Patch file via MCP
   handleChemxPatch({
-    path: 'scratch/test-auto-sync.ts',
+    path: 'src/test-auto-sync.ts',
     targetContent: 'autoSyncInitial',
     replacementContent: 'autoSyncPatched'
   }, cwd);
@@ -63,8 +72,8 @@ test('bulletproof: handleChemxWrite and handleChemxPatch auto-sync index', () =>
 });
 
 test('bulletproof: queryIndex and handleChemxQ fallback to FTS5 on symbol misses', () => {
-  const cwd = process.cwd();
-  const testFile = path.resolve(cwd, 'scratch/test-fts-target.ts');
+  const cwd = makeProjectRoot();
+  const testFile = path.resolve(cwd, 'src/test-fts-target.ts');
   fs.mkdirSync(path.dirname(testFile), { recursive: true });
   fs.writeFileSync(testFile, 'const secretUnexportedToken = "xyz123";\n', 'utf-8');
   syncSingleFileIndex(testFile, cwd);
@@ -83,14 +92,14 @@ test('bulletproof: queryIndex and handleChemxQ fallback to FTS5 on symbol misses
 });
 
 test('bulletproof: handleChemxRead wraps in language-fenced markdown and adds context envelope', () => {
-  const cwd = process.cwd();
-  const testFile = path.resolve(cwd, 'scratch/test-read-envelope.ts');
+  const cwd = makeProjectRoot();
+  const testFile = path.resolve(cwd, 'src/test-read-envelope.ts');
   fs.mkdirSync(path.dirname(testFile), { recursive: true });
-  fs.writeFileSync(testFile, 'import { openIndexDb } from "./cli/search-schema.js";\nexport const testReadSym = () => 1;\n', 'utf-8');
+  fs.writeFileSync(testFile, 'import { openIndexDb } from "./search-schema.js";\nexport const testReadSym = () => 1;\n', 'utf-8');
   syncSingleFileIndex(testFile, cwd);
 
   const res = handleChemxRead({
-    path: 'scratch/test-read-envelope.ts',
+    path: 'src/test-read-envelope.ts',
     symbol: 'testReadSym'
   }, cwd);
 
