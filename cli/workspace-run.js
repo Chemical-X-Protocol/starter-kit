@@ -33,7 +33,8 @@ export const refusalReport = (command, workspace, scopeHint) => ({
 // returned as rootFiles; a root manifest or lockfile among them can affect every package.
 export const changedPackages = (workspace, base) => {
   const listing = listChangedFiles(workspace.root, { base });
-  if (!listing.ok) return { ok: false, error: listing.error };
+  const hasListingFailed = !listing.ok;
+  if (hasListingFailed) return { ok: false, error: listing.error };
   const owners = new Map();
   const rootFiles = [];
   for (const file of listing.files) {
