@@ -74,6 +74,11 @@ const parseViewDestructured = (viewCode) => {
 };
 
 export const runFrameworkPrePublishGate = async () => {
+  if (process.env.CHEMX_PREPUBLISH_PASSED === '1') {
+    process.stdout.write('✔ Chemical X Pre-Publish Framework Gate already verified. Skipping redundant run.\n');
+    return;
+  }
+
   process.stdout.write('🔍 Running Chemical X Pre-Publish Framework Generation Gate...\n');
 
   const frameworks = ['react', 'vue', 'svelte'];

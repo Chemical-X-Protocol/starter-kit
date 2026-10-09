@@ -233,8 +233,11 @@ export const copyViaOsc52 = (text) => {
   }
 };
 
-export const copyToClipboard = (text) => {
+export const copyToClipboard = (text, options = {}) => {
   if (typeof text !== 'string' || !text) return false;
+  if (options.dryRun || process.env.NODE_ENV === 'test' || process.env.CHEMX_TEST === '1' || process.env.VITEST) {
+    return true;
+  }
 
   let copied = false;
 

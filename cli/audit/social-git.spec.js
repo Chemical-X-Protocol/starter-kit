@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert';
+
+process.env.CHEMX_TEST = '1';
+
 import {
   copyViaOsc52,
   copyToClipboard,

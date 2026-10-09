@@ -76,6 +76,7 @@ const results = [];
 
 // Pre-publish mechanical gate: verify all frameworks compile and typecheck cleanly
 await runFrameworkPrePublishGate();
+process.env.CHEMX_PREPUBLISH_PASSED = '1';
 
 try {
   for (const target of TARGETS) {
@@ -88,7 +89,7 @@ try {
 
     fs.writeFileSync(PKG_JSON, JSON.stringify(pkg, null, 2) + '\n', 'utf-8');
 
-    const publishArgs = ['publish', '--access', 'public'];
+    const publishArgs = ['publish', '--access', 'public', '--ignore-scripts'];
     if (isDryRun) publishArgs.push('--dry-run');
     if (otp) publishArgs.push(`--otp=${otp}`);
     if (tag) publishArgs.push('--tag', tag);
@@ -96,7 +97,8 @@ try {
     console.log(`\n\x1b[36m[starter-kit] Publishing: ${target.name} (dry-run: ${isDryRun}${tag ? `, tag: ${tag}` : ''})\x1b[0m`);
     const proc = spawnSync('npm', publishArgs, {
       cwd: PKG_DIR,
-      stdio: 'inherit'
+      stdio: 'inherit',
+      env: { ...process.env, CHEMX_PREPUBLISH_PASSED: '1' }
     });
 
     results.push({ name: target.name, success: proc.status === 0 });
