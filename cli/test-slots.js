@@ -43,9 +43,11 @@ const withMutex = (dir, fn) => {
       fs.mkdirSync(lock);
       break;
     } catch (error) {
-      if (error.code !== 'EEXIST') throw error;
+      const isOtherError = error.code !== 'EEXIST';
+      if (isOtherError) throw error;
       const mtime = fs.statSync(lock, { throwIfNoEntry: false })?.mtimeMs ?? Date.now();
-      if (Date.now() - mtime > MUTEX_STALE_MS) fs.rmSync(lock, { recursive: true, force: true });
+      const isStale = Date.now() - mtime > MUTEX_STALE_MS;
+      if (isStale) fs.rmSync(lock, { recursive: true, force: true });
       else sleepSync(5);
     }
   }
@@ -116,10 +118,12 @@ export const acquireTestSlots = async (options = {}) => {
   let hasAnnounced = false;
   for (;;) {
     const { taken, holders } = claimFreeSlots(dir, budget, want);
-    if (taken.length > 0) return holdSlots(taken, budget, Date.now() - start);
+    const hasTakenSlots = taken.length > 0;
+    if (hasTakenSlots) return holdSlots(taken, budget, Date.now() - start);
     if (!hasAnnounced) onWait(waitLine(budget, holders));
     hasAnnounced = true;
-    if (options.signal?.aborted) throw new Error('chemx test: cancelled while waiting for a test slot');
+    const isAborted = Boolean(options.signal?.aborted);
+    if (isAborted) throw new Error('chemx test: cancelled while waiting for a test slot');
     await delay(options.pollMs ?? DEFAULT_POLL_MS);
   }
 };
