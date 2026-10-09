@@ -43,9 +43,16 @@ export const isSpecPath = (relativePath) => {
 
 export const facetKeyOf = (facet) => `${facet.lang}:${facet.runtime}:${facet.spec ? 'spec' : 'src'}:${facet.packageRoot}`;
 
+/** The facet key with only its packageRoot replaced (lang, runtime and spec come from content and name). */
+export const withPackageRoot = (facetKey, packageRoot) => `${facetKey.split(':').slice(0, 3).join(':')}:${packageRoot}`;
+
+/** The packageRoot part of a facet key (a root may itself hold ':'). */
+export const packageRootOfKey = (facetKey) => facetKey.split(':').slice(3).join(':');
+
 /**
  * Facet resolver for one project root. Package roots are looked up once per directory.
- * facetOf(relativePath, content) returns { lang, runtime, spec, packageRoot, key }.
+ * facetOf(relativePath, content) returns { lang, runtime, spec, packageRoot, key };
+ * packageRootOfFile(relativePath) resolves only the package root, from disk, without content.
  */
 export const createFacetResolver = (root) => {
   const packageRoots = new Map();
@@ -73,5 +80,7 @@ export const createFacetResolver = (root) => {
     return { ...facet, key: facetKeyOf(facet) };
   };
 
-  return { facetOf };
+  const packageRootOfFile = (relativePath) => packageRootOf(path.posix.dirname(toPosix(relativePath)));
+
+  return { facetOf, packageRootOfFile };
 };

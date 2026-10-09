@@ -11,7 +11,7 @@ import { anchorWeight } from './anchors.js';
 export const FORGE_EXTRACTOR_VERSION = 2;
 
 const SQL = {
-  stamps: 'SELECT path, content_hash, mtime_ms, size, extractor_version FROM pattern_files',
+  stamps: 'SELECT path, content_hash, mtime_ms, size, extractor_version, facet_key FROM pattern_files',
   oldFps: 'SELECT fp1, fp2, fp3, inner_fp1, inner_fp2, inner_fp3 FROM pattern_units WHERE file_path = ?',
   deleteUnits: 'DELETE FROM pattern_units WHERE file_path = ?',
   deleteFile: 'DELETE FROM pattern_files WHERE path = ?',
@@ -21,6 +21,8 @@ const SQL = {
       lang = excluded.lang, facet_key = excluded.facet_key, extractor_version = excluded.extractor_version,
       unit_count = excluded.unit_count, dropped_count = excluded.dropped_count, updated_at = excluded.updated_at`,
   touchFile: 'UPDATE pattern_files SET mtime_ms = ?, size = ? WHERE path = ?',
+  facetFile: 'UPDATE pattern_files SET facet_key = ? WHERE path = ?',
+  facetUnits: 'UPDATE pattern_units SET facet_key = ? WHERE file_path = ?',
   insertUnit: `INSERT INTO pattern_units (file_path, kind, block_id, ordinal, start, end, start_line, end_line, decl_name, is_export,
     mass, anchor_weight, anchors, fp1, fp2, fp3, inner_fp1, inner_fp2, inner_fp3, facet_key, is_spec, meta)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -74,11 +76,14 @@ const fpsOf = (rows) => rows.flatMap((row) => [
   row.innerFp1 ?? row.inner_fp1, row.innerFp2 ?? row.inner_fp2, row.innerFp3 ?? row.inner_fp3
 ].filter(Boolean));
 
-/** Map<path, { contentHash, mtimeMs, size, extractorVersion }> of every ledger file. */
+/** Map<path, { contentHash, mtimeMs, size, extractorVersion, facetKey }> of every ledger file. */
 export const readFileStamps = (db) => {
   const stamps = new Map();
   for (const row of statementsFor(db).stamps.all()) {
-    stamps.set(row.path, { contentHash: row.content_hash, mtimeMs: Number(row.mtime_ms), size: Number(row.size), extractorVersion: Number(row.extractor_version) });
+    stamps.set(row.path, {
+      contentHash: row.content_hash, mtimeMs: Number(row.mtime_ms), size: Number(row.size),
+      extractorVersion: Number(row.extractor_version), facetKey: row.facet_key
+    });
   }
   return stamps;
 };
@@ -109,6 +114,18 @@ export const replaceFileUnits = (db, record) => withIndexTransaction(db, () => {
 export const touchFileStamp = (db, filePath, { mtimeMs, size }) => {
   statementsFor(db).touchFile.run(Math.trunc(mtimeMs), size, filePath);
 };
+
+/**
+ * Moves an unchanged file's rows to another facet (its package root moved: a package.json was added or
+ * removed). Returns the fps it holds, which are dirty for both the old and the new facet.
+ */
+export const updateFileFacet = (db, filePath, facetKey) => withIndexTransaction(db, () => {
+  const s = statementsFor(db);
+  const fps = fpsOf(s.oldFps.all(filePath));
+  s.facetFile.run(facetKey, filePath);
+  s.facetUnits.run(facetKey, filePath);
+  return fps;
+});
 
 /** Deletes the ledger rows of these files. Returns the fps they held. */
 export const removeLedgerFiles = (db, filePaths) => withIndexTransaction(db, () => {

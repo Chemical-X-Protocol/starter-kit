@@ -66,6 +66,23 @@ test('a second sync parses 0 files; an edit re-fingerprints exactly 1; a touch p
   assert.equal(sync(dir).touched, 0, 'the touched stamp now passes the mtime prefilter');
 });
 
+test('a package.json added or removed re-facets unchanged files without parsing them', (t) => {
+  const dir = makeProject(t);
+  sync(dir);
+  const facetsOf = () => new Set(openIndexDb(dir).prepare('SELECT facet_key FROM pattern_units').all().map((row) => row.facet_key));
+  assert.deepEqual([...facetsOf()], ['js:plain:src:.']);
+  fs.writeFileSync(path.join(dir, 'lib/package.json'), JSON.stringify({ name: 'lib' }));
+  const moved = sync(dir);
+  assert.equal(moved.parsed, 0, 'content is unchanged');
+  assert.equal(moved.refaceted, SOURCES.length);
+  assert.ok(moved.dirty > 0, 'groups of both facets are refreshed');
+  assert.deepEqual([...facetsOf()], ['js:plain:src:lib']);
+  assert.equal(sync(dir).refaceted, 0, 'the new facet is stored');
+  fs.rmSync(path.join(dir, 'lib/package.json'));
+  assert.equal(sync(dir).refaceted, SOURCES.length);
+  assert.deepEqual([...facetsOf()], ['js:plain:src:.']);
+});
+
 test('a deleted file loses its ledger rows', (t) => {
   const dir = makeProject(t);
   sync(dir);

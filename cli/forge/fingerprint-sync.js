@@ -20,7 +20,7 @@ const syncOne = (session, fullPath) => {
   const stamp = session.stampOf(fullPath);
   const isPrefiltered = isStatCurrent(stamp, stat);
   if (isPrefiltered) {
-    session.noteUnchanged();
+    session.noteUnchanged(fullPath);
     return;
   }
   const status = fingerprintInSession(session, fullPath, stat);
@@ -38,7 +38,8 @@ const resolveTarget = (cwd, root, targetDir) => {
 /**
  * Brings the ledger up to date for targetDir (default: the audit scope). options: { targetDir,
  * includeTests, log }. Returns { status, scope, files, parsed, unchanged, touched, removed, capped,
- * errors, rows (written now), ledgerRows (stored in all), dirty, ms }; status is 'unavailable' without a writable index db.
+ * errors, refaceted, rows (written now), ledgerRows (stored in all), dirty, ms }; status is 'unavailable' without a
+ * writable index db. refaceted counts unchanged files moved to a new package-root facet.
  */
 export const syncFingerprints = (cwd = process.cwd(), { targetDir = null, includeTests = false, log } = {}) => {
   const startedAt = performance.now();
@@ -53,7 +54,7 @@ export const syncFingerprints = (cwd = process.cwd(), { targetDir = null, includ
   const summary = session.finish();
   return {
     status: 'ok', scope, files: files.length, parsed: summary.fingerprinted, unchanged: summary.unchanged,
-    touched: summary.touched, removed: summary.removed, capped: summary.capped, errors: summary.errors,
+    touched: summary.touched, removed: summary.removed, capped: summary.capped, errors: summary.errors, refaceted: summary.refaceted,
     rows: summary.rows, ledgerRows: summary.ledgerRows, dirty: summary.dirty, ms: Math.round(performance.now() - startedAt)
   };
 };

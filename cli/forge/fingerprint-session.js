@@ -9,14 +9,14 @@ import path from 'node:path';
 import { withIndexTransaction } from '../search-index-write.js';
 import { toRootRelative } from '../search-root.js';
 import { ANY_DEPTH_IGNORED_DIRS, ROOT_ONLY_IGNORED_DIRS } from '../search-scan.js';
-import { createFacetResolver } from './facets.js';
+import { createFacetResolver, packageRootOfKey, withPackageRoot } from './facets.js';
 import { isForgeExcluded } from './exclusions.js';
 import { isForgeSource } from './file-units.js';
 import { createFileFingerprint } from './fingerprint-visitors.js';
 import { selectStoredUnits, STORE_FLOOR } from './unit-floor.js';
 import {
   readFileStamps, isStampCurrent, replaceFileUnits, removeLedgerFiles, touchFileStamp, stampExtractorVersion, countLedgerUnits,
-  FORGE_EXTRACTOR_VERSION
+  updateFileFacet, FORGE_EXTRACTOR_VERSION
 } from './store.js';
 
 export const contentHashOf = (content) => crypto.createHash('sha1').update(content).digest('hex');
@@ -57,7 +57,7 @@ export const createForgeSession = (db, { root, log = writeStderr, batchSize = 10
   const stamps = readFileStamps(db);
   const facets = createFacetResolver(root);
   const dirty = new Set();
-  const stats = { fingerprinted: 0, unchanged: 0, deferred: 0, touched: 0, removed: 0, capped: 0, errors: 0, rows: 0 };
+  const stats = { fingerprinted: 0, unchanged: 0, deferred: 0, touched: 0, removed: 0, capped: 0, errors: 0, rows: 0, refaceted: 0 };
   const open = new Map();
   const work = { seenChars: 0, fingerprintedChars: 0 };
   let queue = [];
@@ -106,9 +106,27 @@ export const createForgeSession = (db, { root, log = writeStderr, batchSize = 10
     stats.rows += selected.units.length;
     const stat = entry.stat ?? statOf(path.join(root, relPath));
     queue.push({ path: relPath, contentHash: entry.contentHash, ...stat, facet: entry.facet, units: selected.units, droppedCount: selected.capDropped });
-    stamps.set(relPath, { contentHash: entry.contentHash, ...stat, extractorVersion: FORGE_EXTRACTOR_VERSION });
+    stamps.set(relPath, { contentHash: entry.contentHash, ...stat, extractorVersion: FORGE_EXTRACTOR_VERSION, facetKey: entry.facet.key });
     const isBatchFull = queue.length >= batchSize;
     if (isBatchFull) flush();
+  };
+
+  /**
+   * Re-facets an unchanged file whose package root moved (a package.json appeared or went away):
+   * the content stamp cannot see that, so every unchanged file is checked by path.
+   */
+  const refreshFacet = (relPath) => {
+    const stamp = stamps.get(relPath);
+    const storedKey = stamp?.facetKey;
+    if (!storedKey) return;
+    const packageRoot = facets.packageRootOfFile(relPath);
+    const isSameRoot = packageRootOfKey(storedKey) === packageRoot;
+    if (isSameRoot) return;
+    flush();
+    const facetKey = withPackageRoot(storedKey, packageRoot);
+    markDirty(updateFileFacet(db, relPath, facetKey));
+    stamps.set(relPath, { ...stamp, facetKey });
+    stats.refaceted += 1;
   };
 
   /**
@@ -127,7 +145,10 @@ export const createForgeSession = (db, { root, log = writeStderr, batchSize = 10
     const stamp = stamps.get(relPath);
     const isUnchanged = isStampCurrent(stamp, contentHash);
     stats.unchanged += isUnchanged ? 1 : 0;
-    if (isUnchanged) return null;
+    if (isUnchanged) {
+      refreshFacet(relPath);
+      return null;
+    }
     const isOverBudget = !claimBudget(content.length);
     stats.deferred += isOverBudget ? 1 : 0;
     if (isOverBudget) return null;
@@ -170,7 +191,10 @@ export const createForgeSession = (db, { root, log = writeStderr, batchSize = 10
   return {
     beginFile, commitFile, touch, pruneMissing, finish, flush,
     forget: (fullPath) => remove([relativeOf(fullPath)]),
-    noteUnchanged: () => { stats.unchanged += 1; },
+    noteUnchanged: (fullPath) => {
+      stats.unchanged += 1;
+      refreshFacet(relativeOf(fullPath));
+    },
     stampOf: (fullPath) => stamps.get(relativeOf(fullPath)) ?? null,
     relativeOf,
     dirty,
