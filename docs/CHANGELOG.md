@@ -92,7 +92,7 @@ These can change what an existing command or script does.
 
 ### Known issues
 
-- `team migrate` does not remap task ids inside feed metadata (#2488).
+- `team migrate` remaps task ids in structured fields and feed metadata, but not in free text: a `#id` written in a renumbered task's title or a message keeps its old number, and `chemx team task show` resolves it through `task_aliases` (#2488, #2581).
 - Forge cold-run budgets run as `todo` specs until #2554 lands (#2569).
 - The `d`, `log`, `p`, `f` and `j` MCP wrappers can still read the server's working directory instead of `projectRoot`; use the CLI for those in a sub-app.
 - Forge recall is 65% on the labeled sandbox, so treat group lists as candidates, not a complete inventory (#2536).
