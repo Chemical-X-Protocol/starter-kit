@@ -62,15 +62,15 @@ test('parseSearchArgs: a value flag never swallows the next flag, and bad number
   assert.deepEqual(parseSearchArgs(['-n', '5', 'foo']).invalidValues, []);
 });
 
-test('chemx q -g with an unquoted multi-word pattern reports the dropped words', async () => {
+test('chemx q -g with an unquoted multi-word pattern treats extra words as paths and teaches quoting', async () => {
   const root = makeFixture();
   try {
     const res = await runQ(root, ['-g', 'glass', 'extra', '--json']);
     const payload = parseJson(res);
-    assert.equal(payload.query, 'glass');
-    assert.ok((payload.argProblems || []).some((p) => /extra/.test(p) && /quote/.test(p)), JSON.stringify(payload.argProblems));
+    assert.equal(payload.status, 'fail');
+    assert.match(payload.error, /path not found: extra\. To search for a phrase, quote it: chemx q -g "glass extra"/);
     const text = await runQ(root, ['-g', 'glass', 'extra']);
-    assert.match(text.stderr, /ignored extra argument.*extra/);
+    assert.match(text.stderr, /path not found: extra\. To search for a phrase, quote it/);
     const badLimit = await runQ(root, ['-g', 'glass', '-n', 'abc']);
     assert.match(badLimit.stderr, /-n abc/);
   } finally {

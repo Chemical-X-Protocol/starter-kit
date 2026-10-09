@@ -47,7 +47,9 @@ export const handleLiteralSearchCommand = (_db, query, {
 
   const missing = hasDir ? findMissingScope(scope.scopeDirs, root) : [];
   const hasMissing = missing.length > 0;
-  if (hasMissing) return failWith(`path not found: ${missing.join(', ')} (relative to ${root}); nothing was searched`, { isJson, isCli, isQuiet });
+  const isPositionalScope = Array.isArray(dir);
+  const phraseHint = isPositionalScope ? `. To search for a phrase, quote it: chemx q -g "${[query, ...missing].join(' ')}"` : '';
+  if (hasMissing) return failWith(`path not found: ${missing.join(', ')}${phraseHint} (relative to ${root}); nothing was searched`, { isJson, isCli, isQuiet });
 
   let res;
   try {
