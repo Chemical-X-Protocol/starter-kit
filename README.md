@@ -313,7 +313,13 @@ chemx team status
 # 5 minutes without activity, and the commit hook refuses staged files another handle holds live.
 # Exact renewal, lapse and commit-guard behavior: docs/team-locks.md
 chemx team lock acquire src/components/m-card.vue --as=@agent-alpha --purpose="#1"
+
+# In a monorepo, team rows are meant to live in one db at the monorepo root; a package db keeps
+# serving its package until `chemx team migrate` merges it. Rules and runbook: docs/coordination-db.md
+chemx team task list --all-repos
 ```
+
+All reference pages: [docs/INDEX.md](docs/INDEX.md).
 
 ### 5. Live Swarm Web UI & Direct Task Routing
 Launch the Chemical X Swarm Control Panel backed by SQLite (`.chemx/index.db`) with full SPA routing and deep linking:
