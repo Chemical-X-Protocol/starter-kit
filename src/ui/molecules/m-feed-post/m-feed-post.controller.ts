@@ -20,9 +20,11 @@ export const resolveEventConfig = (eventType: string = ''): EventConfig => {
 export const formatRelativeTime = (timestamp: number): string => {
   if (!timestamp) return '';
   const seconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
-  if (seconds < 60) return `${seconds}s ago`;
+  const isUnderMinute = seconds < 60;
+  if (isUnderMinute) return `${seconds}s ago`;
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
+  const isUnderHour = minutes < 60;
+  if (isUnderHour) return `${minutes}m ago`;
   return `${Math.floor(minutes / 60)}h ago`;
 };
 
