@@ -127,3 +127,50 @@ test('test-output: a passing test whose name mentions "No test files found" does
   const parsed = parseTestOutput(output, '', 0);
   assert.equal(parsed.status, STATUS.PASS);
 });
+
+test('test-output: a vitest startup error (broken config) fails with the error, never an empty run', () => {
+  const parsed = parseTestOutput('', fixture('vt-startup-error.txt'), 1);
+  assert.equal(parsed.status, STATUS.FAIL);
+  assert.equal(parsed.reason, null);
+  const messages = parsed.failures.map((f) => f.message).join('\n');
+  assert.match(messages, /Error: Build failed with 1 error/);
+  assert.match(messages, /Unexpected "}"/, 'the esbuild ✘ [ERROR] line is reported');
+  assert.ok(parsed.failures.some((f) => f.location === 'vitest.config.mjs:1:427'));
+});
+
+test('test-output: --allow-empty never turns a crashed runner into a pass', () => {
+  const crashed = parseTestOutput('', fixture('vt-startup-error.txt'), 1, { allowEmpty: true });
+  assert.equal(crashed.status, STATUS.FAIL);
+  const missingBinary = parseTestOutput('', 'sh: 1: nonexistent-runner-xyz: not found\n', 127, { allowEmpty: true });
+  assert.equal(missingBinary.status, STATUS.FAIL);
+  assert.match(missingBinary.executionError, /nonexistent-runner-xyz: not found/);
+});
+
+test('test-output: a non-zero exit with no tests and no "no tests" line is a FAIL with the first error line', () => {
+  const parsed = parseTestOutput('', 'Error: Cannot find module \'/x/setup.js\'\n    at foo (bar.js:1:1)\n', 1);
+  assert.equal(parsed.status, STATUS.FAIL);
+  assert.equal(parsed.executionError, 'Error: Cannot find module \'/x/setup.js\'');
+});
+
+test('test-output: the runner\'s own "No test files found" exit 1 is still the empty run --allow-empty accepts', () => {
+  const parsed = parseTestOutput(fixture('vt-nofiles.txt'), '', 1, { allowEmpty: true });
+  assert.equal(parsed.status, STATUS.PASS);
+  assert.equal(parsed.reason, REASONS.EMPTY_ALLOWED);
+});
+
+test('test-output: vitest separator lines with a [n/m] counter are not failure details', () => {
+  const output = [
+    ' FAIL  tests/c.spec.ts [ tests/c.spec.ts ]',
+    'Error: import boom',
+    ' ❯ tests/c.spec.ts:1:7',
+    '',
+    '⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯',
+    '',
+    ' Test Files  1 failed (1)',
+    '      Tests  no tests'
+  ].join('\n');
+  const parsed = parseTestOutput(output, '', 1);
+  assert.equal(parsed.status, STATUS.FAIL);
+  assert.equal(parsed.failures[0].message, 'Error: import boom');
+  assert.ok(!parsed.failures[0].details.some((d) => /⎯/.test(d)), parsed.failures[0].details.join(' | '));
+});

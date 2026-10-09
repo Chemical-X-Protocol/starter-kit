@@ -7,6 +7,7 @@ import {
   extractAssertionFailures,
   extractUnhandledErrors,
   findFatalLine,
+  findFirstErrorLine,
   findNoTestsLine,
   tailLines
 } from './test-failures.js';
@@ -74,20 +75,28 @@ const applyMarkerFallback = (counts, cleanLines) => {
   if (counts.totalTests === 0 || isTotalUnderReported) counts.totalTests = countedTotal;
 };
 
+// An empty run is only genuine when the runner exited cleanly, said itself that it found no
+// tests, or collected tests and skipped them all. Anything else is a runner that never started.
+const isGenuinelyEmpty = (counts, noTestsLine, exitCode) => exitCode === 0 || Boolean(noTestsLine) || counts.skipped > 0;
+
+const classifyEmptyRun = ({ counts, noTestsLine, exitCode, options, lines }) => {
+  const isCrash = !isGenuinelyEmpty(counts, noTestsLine, exitCode);
+  if (isCrash) return { status: STATUS.FAIL, reason: null, executionError: findFirstErrorLine(lines) || `Command exited with code ${exitCode}` };
+  const status = options.allowEmpty ? STATUS.PASS : STATUS.INCONCLUSIVE;
+  const reason = options.allowEmpty ? REASONS.EMPTY_ALLOWED : REASONS.NO_TESTS_RAN;
+  const detail = noTestsLine || `0 tests ran (${counts.skipped} skipped)`;
+  return { status, reason, executionError: null, detail };
+};
+
 const classify = ({ counts, failures, fatalLine, noTestsLine, exitCode, options, lines }) => {
   if (options.timedOut) return { status: STATUS.INCONCLUSIVE, reason: REASONS.STEP_TIMEOUT, executionError: `Timed out after ${options.timeoutMs || '?'}ms` };
   if (fatalLine) return { status: STATUS.FAIL, reason: null, executionError: fatalLine };
+  const startupError = failures.find((f) => f.kind === 'startup-error');
   const hasFailures = counts.failed > 0 || counts.errors > 0 || failures.length > 0;
-  if (hasFailures) return { status: STATUS.FAIL, reason: null, executionError: null };
-  const ranCount = counts.passed + counts.failed;
+  if (hasFailures) return { status: STATUS.FAIL, reason: null, executionError: startupError?.message ?? null };
   // The runner's own "no tests" line only explains an empty run; a test *named* after it must not cause one.
-  const isEmptyRun = ranCount === 0;
-  if (isEmptyRun) {
-    const status = options.allowEmpty ? STATUS.PASS : STATUS.INCONCLUSIVE;
-    const reason = options.allowEmpty ? REASONS.EMPTY_ALLOWED : REASONS.NO_TESTS_RAN;
-    const detail = noTestsLine || `0 tests ran (${counts.skipped} skipped)`;
-    return { status, reason, executionError: null, detail };
-  }
+  const isEmptyRun = counts.passed + counts.failed === 0;
+  if (isEmptyRun) return classifyEmptyRun({ counts, noTestsLine, exitCode, options, lines });
   const exitedDirty = exitCode !== 0;
   if (exitedDirty) {
     const tail = tailLines(lines, 10);

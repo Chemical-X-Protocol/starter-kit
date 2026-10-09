@@ -8,7 +8,7 @@ const MAX_DETAILS = 6;
 
 const ERROR_LINE = /^(?:expect\(|[A-Z][\w.]*(?:Error|Exception)\b|Error\b|AssertionError\b|expected\b)/;
 const LOCATION_LINE = /(\/?(?:[\w.@~+-]+\/)*[\w.@~+-]+\.(?:c|m)?[jt]sx?|[\w./-]+\.vue):(\d+)(?::(\d+))?/;
-const NOISE_LINE = /^(?:-{3}|\.{3}|duration_ms:|type:|failureType:|code:|operator:|stack:|ℹ|✔|✓|\d*\|)|ExperimentalWarning|^[⎯─]+$|^[-+] (?:Expected|Received)$/;
+const NOISE_LINE = /^(?:-{3}|\.{3}|duration_ms:|type:|failureType:|code:|operator:|stack:|ℹ|✔|✓|\d*\|)|ExperimentalWarning|^[⎯─]+(?:\[\d+\/\d+\][⎯─]*)?$|^[-+] (?:Expected|Received)$/;
 
 // Jest also prints `FAIL <file>` per file, so its `●` test headers must win over the vitest mode.
 const HEADER_MODES = [
@@ -75,20 +75,40 @@ export const extractAssertionFailures = (lines) => {
 };
 
 // Vitest prints unhandled errors in their own section; tests can all pass while the run fails.
+// A "Startup Error" section means the runner never got as far as collecting tests (broken config).
+const SECTION_HEADER = /^⎯+\s*(Uncaught Exception|Unhandled Rejection|Unhandled Error|Startup Error)\s*⎯+$/;
+
+const describeSection = (title, window) => {
+  const message = window.find((l) => ERROR_LINE.test(l)) || window.find(Boolean) || title;
+  const originLine = window.find((l) => /This error originated in "/.test(l));
+  const origin = originLine ? originLine.match(/originated in "([^"]+)"/)[1] : null;
+  const locationLine = window.find((l) => l.startsWith('❯') && LOCATION_LINE.test(l));
+  const location = locationLine ? locationLine.match(LOCATION_LINE)[0] : null;
+  const isStartup = title === 'Startup Error';
+  const kind = isStartup ? 'startup-error' : 'unhandled-error';
+  const label = isStartup ? 'Startup error' : 'Unhandled error';
+  const name = origin ? `${label} (${origin})` : label;
+  return { kind, name, message, location, details: [message, location, origin && `originated in ${origin}`].filter(Boolean) };
+};
+
+// esbuild (vite/vitest config and transforms) reports `✘ [ERROR] <message>` followed by `file:line:col:`.
+const ESBUILD_ERROR = /^✘\s+\[ERROR\]\s+(.+)$/;
+
+const describeEsbuildError = (message, window) => {
+  const locationLine = window.find((l) => LOCATION_LINE.test(l));
+  const location = locationLine ? locationLine.match(LOCATION_LINE)[0] : null;
+  return { kind: 'startup-error', name: 'Build error', message, location, details: [message, location].filter(Boolean) };
+};
+
 export const extractUnhandledErrors = (lines) => {
   const trimmed = lines.map((l) => l.trim());
   const errors = [];
   trimmed.forEach((line, index) => {
-    const isSectionHeader = /^⎯+\s*(?:Uncaught Exception|Unhandled Rejection|Unhandled Error)\s*⎯+$/.test(line);
-    if (!isSectionHeader) return;
     const window = trimmed.slice(index + 1, index + MAX_BLOCK_LINES);
-    const message = window.find((l) => ERROR_LINE.test(l)) || window.find(Boolean) || 'Unhandled error';
-    const originLine = window.find((l) => /This error originated in "/.test(l));
-    const origin = originLine ? originLine.match(/originated in "([^"]+)"/)[1] : null;
-    const locationLine = window.find((l) => l.startsWith('❯') && LOCATION_LINE.test(l));
-    const location = locationLine ? locationLine.match(LOCATION_LINE)[0] : null;
-    const name = origin ? `Unhandled error (${origin})` : 'Unhandled error';
-    errors.push({ kind: 'unhandled-error', name, message, location, details: [message, location, origin && `originated in ${origin}`].filter(Boolean) });
+    const section = line.match(SECTION_HEADER);
+    if (section) errors.push(describeSection(section[1], window));
+    const esbuild = line.match(ESBUILD_ERROR);
+    if (esbuild) errors.push(describeEsbuildError(esbuild[1], window.slice(0, 4)));
   });
   return errors;
 };
@@ -100,6 +120,14 @@ export const findFatalLine = (lines) => lines.map((l) => l.trim()).find((l) => F
 const NO_TESTS_LINE = /No test files found|No tests found|Could not find '[^']+'|no test specified|Missing script:?\s*"?test\b/i;
 
 export const findNoTestsLine = (lines) => lines.map((l) => l.trim()).find((l) => NO_TESTS_LINE.test(l)) || null;
+
+const ERROR_HINT = /error|not found|cannot|failed/i;
+
+// The first line that reads like an error, for a run that died before reporting any test.
+export const findFirstErrorLine = (lines) => {
+  const meaningful = lines.map((l) => l.trim()).filter((l) => l.length > 0 && !NOISE_LINE.test(l));
+  return meaningful.find((l) => ERROR_HINT.test(l)) || meaningful[meaningful.length - 1] || null;
+};
 
 export const tailLines = (lines, count = 10) => lines
   .map((l) => l.trim())
