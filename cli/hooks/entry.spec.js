@@ -48,6 +48,12 @@ const DENIED = [
   ['echo x > cli/team/team-route.js', 'fallback-shell-write'],
   ['git diff', 'fallback-git-read'],
   ['git log -n 3', 'fallback-git-read'],
+  ['git -C x log', 'fallback-git-read'],
+  ['git -c core.pager=cat diff', 'fallback-git-read'],
+  ['sed --in-place s/a/b/ f.js', 'fallback-shell-write'],
+  ['perl -pi -e s/a/b/ f.js', 'fallback-shell-write'],
+  ['cp a b', 'fallback-shell-write'],
+  ['dd if=a of=b', 'fallback-shell-write'],
   ['cat cli/hooks/entry.js', 'fallback-cat-source'],
   ['sed -n 1,20p cli/hooks/entry.js', 'fallback-sed-n'],
 ];

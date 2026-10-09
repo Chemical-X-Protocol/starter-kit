@@ -23,8 +23,8 @@ const FILE_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
 const BYPASS_PATTERN = /#\s*chemx-bypass:\s*\S/;
 
 const FALLBACK_BASH_RULES = [
-  { rule: 'fallback-shell-write', pattern: /(?:^|[\s;&|(])sed\s+(?:-[a-zA-Z]*\s+)*-[a-zA-Z]*i|(?:^|[\s;&|(])tee\s|(?:^|[^>&0-9])>>?\s*(?!\/dev\/|&)[^\s&|;]+/, hint: 'write files with chemx patch or chemx write' },
-  { rule: 'fallback-git-read', pattern: /(?:^|[\s;&|(])git\s+(?:-[^\s]+\s+)*(?:diff|log|show)\b/, hint: 'use chemx d or chemx log' },
+  { rule: 'fallback-shell-write', pattern: /(?:^|[\s;&|(])sed\s+(?:-[a-zA-Z]*\s+)*(?:-[a-zA-Z]*i|--in-place)|(?:^|[\s;&|(])perl\s+(?:-[a-zA-Z]*\s+)*-[a-zA-Z]*i|(?:^|[\s;&|(])(?:cp|mv|install)\s|(?:^|[\s;&|(])dd\s[^|;&]*\bof=|(?:^|[\s;&|(])tee\s|(?:^|[^>&0-9])>>?\s*(?!\/dev\/|&)[^\s&|;]+/, hint: 'write files with chemx patch or chemx write' },
+  { rule: 'fallback-git-read', pattern: /(?:^|[\s;&|(])git\s+(?:(?:-C|-c)\s+\S+\s+|-[^\s]+\s+)*(?:diff|log|show)\b/, hint: 'use chemx d or chemx log' },
   { rule: 'fallback-cat-source', pattern: new RegExp(`(?:^|[\\s;&|(])cat\\s+[^|;&]*\\.${SOURCE_EXT}\\b`), hint: 'use chemx read' },
   { rule: 'fallback-sed-n', pattern: new RegExp(`(?:^|[\\s;&|(])sed\\s+-n\\b[^|;&]*\\.${SOURCE_EXT}\\b`), hint: 'use chemx read <file>:<a>-<b>' },
 ];
