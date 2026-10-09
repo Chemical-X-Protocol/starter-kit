@@ -68,7 +68,8 @@ export const runReaderCli = (args, isCli = false) => {
   if (colonMatch) {
     filePath = colonMatch[1];
     startLine = parseInt(colonMatch[2], 10);
-    if (colonMatch[3]) endLine = parseInt(colonMatch[3], 10);
+    const hasEndLineSuffix = Boolean(colonMatch[3]);
+    if (hasEndLineSuffix) endLine = parseInt(colonMatch[3], 10);
   }
 
   const isJson = args.includes('--json') || args.includes('-j');
@@ -99,8 +100,10 @@ export const runReaderCli = (args, isCli = false) => {
       const sFlag = args.find((a) => a.startsWith('-s='));
       if (sFlag) {
         const val = sFlag.split('=')[1];
-        if (/^\d+$/.test(val)) {
-          if (startLine === undefined) startLine = parseInt(val, 10);
+        const isNumericValue = /^\d+$/.test(val);
+        if (isNumericValue) {
+          const isStartLineMissing = startLine === undefined;
+          if (isStartLineMissing) startLine = parseInt(val, 10);
         } else {
           symbol = val;
         }
@@ -108,12 +111,14 @@ export const runReaderCli = (args, isCli = false) => {
     }
   }
 
-  if (startLine === undefined) {
+  const isStartLineMissing = startLine === undefined;
+  if (isStartLineMissing) {
     const startFlag = args.find((a) => a.startsWith('--start='));
     if (startFlag) startLine = parseInt(startFlag.split('=')[1], 10);
   }
 
-  if (endLine === undefined) {
+  const isEndLineMissing = endLine === undefined;
+  if (isEndLineMissing) {
     const endFlag = args.find((a) => a.startsWith('--end=') || a.startsWith('-e='));
     if (endFlag) endLine = parseInt(endFlag.split('=')[1], 10);
   }
@@ -146,10 +151,12 @@ export const runReaderCli = (args, isCli = false) => {
     if (isJson) {
       process.stdout.write(JSON.stringify(res, null, 2) + '\n');
     } else {
-      if (res.conflict) process.stdout.write(`${ANSI.GOLD}⚠ ${res.conflict}${ANSI.RESET}\n`);
+      const hasConflict = Boolean(res.conflict);
+      if (hasConflict) process.stdout.write(`${ANSI.GOLD}⚠ ${res.conflict}${ANSI.RESET}\n`);
       process.stdout.write(`${ANSI.BOLD}${ANSI.CYAN}--- ${formatReadHeader(res)} ---${ANSI.RESET}\n`);
       process.stdout.write(formatReadBody(res) + '\n');
-      if (res.enriched) {
+      const hasEnriched = Boolean(res.enriched);
+      if (hasEnriched) {
         process.stdout.write(res.enriched + '\n');
       }
       if (cardText) process.stdout.write(`${cardText.trim()}\n`);
