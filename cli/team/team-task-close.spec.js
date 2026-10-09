@@ -12,6 +12,7 @@ import { getTask } from './team-db-tasks.js';
 import { queryFeed } from './team-db-feed.js';
 import { selectDispatchTasks } from './team-dispatch.js';
 import { runTeamCli } from './team-commands.js';
+import { checkDependenciesMet } from './team-db-task-helpers.js';
 import { duplicateLinks, formatDuplicateLinks } from './team-task-close.js';
 
 delete process.env.CHEMX_PROJECT_ROOT;
@@ -49,6 +50,17 @@ test('close: the assignee can cancel with a reason', (t) => {
   const db = readDb(root);
   assert.equal(getTask(db, copy).status, 'cancelled');
   assert.match(queryFeed(db, { task_id: copy }).at(-1).message, /superseded by a redesign/);
+});
+
+test('close: a dependent of a closed task is no longer blocked', (t) => {
+  const { root, original, copy } = makeBoard(t);
+  const dependent = runTeamCli(['task', 'add', 'waits on the copy', '--as=@orch'], false, root).id;
+  close(root, copy, `--duplicate-of=${original}`, '@orch');
+  const db = readDb(root);
+  db.prepare('UPDATE agent_tasks SET dependencies = ? WHERE id = ?').run(JSON.stringify([copy]), dependent);
+  assert.equal(checkDependenciesMet(db, dependent, getTask), true);
+  db.prepare('UPDATE agent_tasks SET dependencies = ? WHERE id = ?').run(JSON.stringify([original]), dependent);
+  assert.equal(checkDependenciesMet(db, dependent, getTask), false);
 });
 
 test('close: a closed task leaves the default list and dispatch', (t) => {

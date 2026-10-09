@@ -28,6 +28,9 @@ export const parseTaskRow = (row) => {
   };
 };
 
+// Terminal states that satisfy a dependency: done, plus tasks closed as duplicate or cancelled (#2575).
+const SATISFIED_DEPENDENCY_STATUSES = ['done', 'duplicate', 'cancelled'];
+
 export const checkDependenciesMet = (db, taskId, getTask) => {
   const task = getTask(db, taskId);
   if (!task) return true;
@@ -35,7 +38,7 @@ export const checkDependenciesMet = (db, taskId, getTask) => {
   if (!hasDeps) return true;
 
   const placeholders = task.dependencies.map(() => '?').join(',');
-  const query = `SELECT COUNT(*) as unfinished FROM agent_tasks WHERE id IN (${placeholders}) AND status != 'done'`;
+  const query = `SELECT COUNT(*) as unfinished FROM agent_tasks WHERE id IN (${placeholders}) AND status NOT IN (${SATISFIED_DEPENDENCY_STATUSES.map((s) => `'${s}'`).join(',')})`;
   const res = db.prepare(query).get(...task.dependencies);
   return Number(res?.unfinished || 0) === 0;
 };
