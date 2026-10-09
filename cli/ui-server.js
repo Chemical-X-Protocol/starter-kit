@@ -7,9 +7,11 @@ import { handleSseConnection, broadcastSseUpdate, broadcastSseReload, closeSseHu
 import { createUiAuth, checkUiRequest, createUiFetch, isLoopbackHost, DEFAULT_UI_HOST } from './ui-auth.js';
 import { openConsoleDb } from './ui-sql-guard.js';
 
-const sendJson = (res, status, payload, extraHeaders = {}) => {
+const sendJson = (res, status, payload, extraHeaders = {}, afterSend = null) => {
   res.writeHead(status, { 'Content-Type': 'application/json', ...extraHeaders });
   res.end(JSON.stringify(payload));
+  if (afterSend) afterSend();
+  return res;
 };
 
 const runRoute = (handler) => {
@@ -25,24 +27,22 @@ export const createUiServer = (cwd = process.cwd(), options = {}) => {
     const { pathname } = url;
     const isGet = req.method === 'GET', isPost = req.method === 'POST';
     const isApi = pathname.startsWith('/api/'), isFavicon = pathname === '/favicon.ico';
-    if (isGet && isFavicon) { res.writeHead(204); res.end(); return; }
+    if (isGet && isFavicon) return res.writeHead(204).end();
 
     const gate = checkUiRequest(req, auth, url);
-    if (!gate.allowed) { sendJson(res, gate.status, { success: false, error: gate.error }); return; }
+    if (!gate.allowed) return sendJson(res, gate.status, { success: false, error: gate.error });
     const cookieHeaders = gate.setCookie ? { 'Set-Cookie': gate.setCookie } : {};
 
     const shouldServeHtml = isGet && !isApi;
     if (shouldServeHtml) {
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', ...cookieHeaders });
-      res.end(generateSwarmHtml(handleSwarmStatus(db)));
-      return;
+      return res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', ...cookieHeaders }).end(generateSwarmHtml(handleSwarmStatus(db)));
     }
 
     if (isGet) {
       const isSse = pathname === '/api/swarm/events' || pathname === '/api/events';
-      if (isSse) { handleSseConnection(req, res, db); return; }
+      if (isSse) return handleSseConnection(req, res, db);
       const result = routeGet(req.url, db, cwd);
-      if (result) { sendJson(res, 200, result, cookieHeaders); return; }
+      if (result) return sendJson(res, 200, result, cookieHeaders);
     }
 
     if (isPost) {
@@ -50,9 +50,9 @@ export const createUiServer = (cwd = process.cwd(), options = {}) => {
       if (parseError) return sendJson(res, 400, { error: 'Invalid JSON payload' });
       const [result, routeError] = runRoute(() => routePost(req.url, db, body, cwd, { consoleDb: consoleDb || db }));
       if (routeError) return sendJson(res, 500, { success: false, error: routeError.message });
-      if (result) { sendJson(res, 200, result); broadcastSseUpdate(db); return; }
+      if (result) return sendJson(res, 200, result, {}, () => broadcastSseUpdate(db));
     }
-    sendJson(res, 404, { error: 'Not found' });
+    return sendJson(res, 404, { error: 'Not found' });
   });
 
   server.on('close', closeSseHub);

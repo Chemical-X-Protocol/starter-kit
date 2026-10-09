@@ -20,3 +20,4 @@
 - [G4] `chemx q -g x --help` crashes with ReferenceError printSearchHelp is not defined (now reported as one line by the catcher); belongs to G6/help.
 - [G4] shell `cp` is aliased to `cp -i` in the agent shell; a copy over an existing file hung a background test run until killed (use `command cp -f`).
 - [G4] `chemx read` on a 119-line spec returns only an AST outline of test callbacks (useless for specs); fell back to the Read tool.
+- [G4] `verify --dir=cli` ratchet fails on the untouched base too: chemx-ratchet.json has no baseline for ERROR_SWALLOWED_EXCEPTION (65), CONTROL_FLOW_SILENT_GUARD (17), DATA_FLOW_OPTIONAL_CHAINING_CHURN (7), AI_SLOP_SHALLOW_CATCH 30 vs 33. Group gate "no rule above the ratchet" cannot pass without a baseline refresh; G4 compared against base instead (G4 lowers SWALLOWED 65->64, SILENT_GUARD 17->12, INLINE_BOOLEAN 88->87).
