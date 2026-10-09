@@ -54,7 +54,8 @@ export const handleCodebaseIndex = (db, cwd = null) => {
 
 export const handleCodebaseTree = (db, cwd = null) => {
   const res = handleCodebaseIndex(db, cwd);
-  if (!res.success) return res;
+  const hasFailed = !res.success;
+  if (hasFailed) return res;
   return { success: true, tree: buildFileTree(res.files), files: res.files, count: res.files.length };
 };
 
