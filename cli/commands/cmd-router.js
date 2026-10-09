@@ -5,6 +5,7 @@
  */
 
 import { printHelp, printCommandHelp, resolveCommandHelpTopic } from '../help.js';
+import { findUnknownFlag } from './unknown-flags.js';
 
 // Wrappers return { code }; a non-zero code must reach the process exit status.
 const setExitCodeFrom = (result) => {
@@ -34,6 +35,13 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
   if (helpTopic) {
     const isCapsuleTopic = isCapsulePrefix(helpTopic);
     return printCommandHelp(isCapsuleTopic ? 'generate' : helpTopic);
+  }
+  // A typo'd flag must not run silently; passthrough commands are exempt (see unknown-flags.js).
+  const unknownFlagMessage = findUnknownFlag(firstArg, rawArgs);
+  if (unknownFlagMessage) {
+    process.stderr.write(`${unknownFlagMessage}\n`);
+    process.exitCode = 1;
+    return;
   }
   switch (firstArg) {
     case 'team':
