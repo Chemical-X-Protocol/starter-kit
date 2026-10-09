@@ -16,3 +16,8 @@
 - `chemx d --stat` prints the full -U0 patch plus the stat, because the wrapper always passes -U0 and git treats -U as implying -p; a stat-only view needs raw git
 - `chemx audit cli --json` lists ratchet regressions by rule but no file:line; finding the one offending file needed `--full` plus a JSON filter (verify --json has no per-violation locations either)
 - specs run inside a .claude/worktrees/<group> checkout open the MAIN checkout's .chemx/index.db (findChemxDir walks up to the first existing .chemx), so spot-check 'Fix 1: Index isolation' fails only in worktrees and spec runs pollute the main index
+- `chemx read <file> --full` on a file over 100 lines still returns only the outline (wrappers.spec.js, 121 lines); reading a line range needed the Read tool
+- `chemx read cli/mcp/tools-team.js --symbol=handleChemxReportIssue` says "not found" for a re-exported symbol without naming the module that defines it (tools-team-locks.js); needed grep
+- the bash guard blocks `head -c` on a non-source /tmp repro script (.mjs written by the reviewer) and routes it to chemx read; used the Read tool
+- MCP `q` returned "No matching capsules" for symbols that exist in a fresh project and ignored `reindex` (synced only when no db file existed); fixed in G3 (tools-q.js), the old concurrency spec passed on the empty index
+- `chemx verify --json` ratchet in a clean archive still lists CONTROL_FLOW_INLINE_BOOLEAN 88 vs baseline 87 with no file:line, so proving "no new violations from this change" means comparing counts against the base by hand
