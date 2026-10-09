@@ -98,6 +98,14 @@ test('a component lands in a generated capsule directory with the framework exte
   assert.equal(placement.module, 'src/ui/m-stat-tile/m-stat-tile.vue');
 });
 
+test('a statement group in .vue members gets a script module of the facet lang, never a .vue module', () => {
+  const anchors = ['call:trim'];
+  const ts = groupOf('ts:vue:src:.', [instance('src/a.vue', anchors), instance('src/b.vue', anchors)]);
+  const js = groupOf('js:vue:src:.', [instance('src/a.vue', anchors), instance('src/b.vue', anchors)]);
+  assert.equal(placeGroup({ group: ts, kind: 'extract-function', name: 'doThing' }, filesystem([])).module, 'src/do-thing.ts');
+  assert.equal(placeGroup({ group: js, kind: 'extract-function', name: 'doThing' }, filesystem([])).module, 'src/do-thing.js');
+});
+
 test('names: subtokens, the majority of member names with a verb first, library names, taken names', () => {
   assert.deepEqual(tokensOf('readJsonOr'), ['read', 'json', 'or']);
   assert.deepEqual(tokensOf('read_JSON-file'), ['read', 'json', 'file']);
@@ -112,4 +120,7 @@ test('names: subtokens, the majority of member names with a verb first, library 
   assert.equal(nameGroup(group, { ...context, takenNames: new Set(['readJsonOr', 'readFile']) }, { exportName: 'readJsonOr' }).name, 'parseJson');
   const anonymous = groupOf('js:plain:src:.', [instance('a.js', ['call:startsWith', 'call:isAbsolute'], { kind: 'expr' }), instance('b.js', ['call:startsWith', 'call:isAbsolute'], { kind: 'expr' })]);
   assert.equal(nameGroup(anonymous, { enclosingNameOf: () => null }).name, 'isAbsoluteStartsWith');
+  const named = { enclosingNameOf: (member) => ({ 'a.js': 'isOutside', 'b.js': 'isOutsideProject' })[member.file], takenNames: new Set() };
+  const withPath = (file) => instance(file, ['call:startsWith', 'call:isAbsolute', 'import:path#default'], { kind: 'expr' });
+  assert.equal(nameGroup(groupOf('js:plain:src:.', [withPath('a.js'), withPath('b.js')]), named).name, 'isOutside');
 });

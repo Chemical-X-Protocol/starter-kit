@@ -49,7 +49,10 @@ export const EDIT_COMMANDS = [
     usage: 'chemx add:<prop|state|action> <capsule-path> <name>:<type>',
     summary: 'Mutate a capsule by adding a prop, state field or action.',
     description: '`chemx add <tier> <name>` without prop/state/action runs the generate wizard.',
-    flags: [{ flag: '--dry-run', desc: 'Preview the mutation without writing' }],
+    flags: [
+      { flag: '--dry-run', desc: 'Preview the mutation without writing' },
+      { flag: '--json', desc: 'Output the result as JSON (chemx fix)' }
+    ],
     examples: ['chemx add:prop src/m-card count:number', 'chemx add state src/m-card isOpen:boolean']
   },
   {

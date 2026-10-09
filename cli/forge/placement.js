@@ -84,9 +84,17 @@ const commonDirOf = (files) => {
 
 const joinPath = (dir, file) => (dir === '' ? file : `${dir}/${file}`);
 
-const scriptExtensionOf = (files) => {
+// A component file (.vue, .svelte) never hosts a plain function: its script extension is that of the facet lang.
+const COMPONENT_EXTENSION_SET = new Set(['.vue', '.svelte']);
+const LANG_EXTENSIONS = { ts: '.ts', js: '.js' };
+
+const scriptExtensionOf = (files, lang = 'js') => {
   const counts = new Map();
-  for (const file of files) counts.set(extensionOf(file), (counts.get(extensionOf(file)) ?? 0) + 1);
+  for (const file of files) {
+    const own = extensionOf(file);
+    const extension = COMPONENT_EXTENSION_SET.has(own) ? (LANG_EXTENSIONS[lang] ?? '.js') : own;
+    counts.set(extension, (counts.get(extension) ?? 0) + 1);
+  }
   return [...counts].sort(([a, x], [b, y]) => y - x || byCodePoint(a, b))[0][0];
 };
 
@@ -119,7 +127,7 @@ const newModuleOf = ({ kind, name, dir, files, lang, runtime }) => {
   const isComponent = kind === 'extract-component';
   if (isComponent) return componentModule(dir, name, lang, runtime);
   const stem = kind === 'extract-composable' || kind === 'extract-hook' ? camelOf(tokensOf(name)) : kebabOf(tokensOf(name));
-  return joinPath(dir, `${stem}${scriptExtensionOf(files)}`);
+  return joinPath(dir, `${stem}${scriptExtensionOf(files, lang)}`);
 };
 
 /** The `use` name a composable or hook must carry. */

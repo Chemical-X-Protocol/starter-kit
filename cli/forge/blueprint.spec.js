@@ -103,6 +103,14 @@ test('A4 is hosted by cli/path-scope.js and carries a drift decision hole at sta
   assert.equal(blueprint.autoApplicable, false);
 });
 
+test('A4 takes its params from the home member, so the signature is never an empty arrow', () => {
+  const blueprint = buildBlueprint(a4(), contextOf(state.dir, state.result, state.ledger));
+  const names = blueprint.piece.params.map((param) => param.name);
+  assert.ok(names.length > 0, 'a group with no LGG holes still takes the home member free variables');
+  assert.equal(blueprint.piece.signature, `export const ${blueprint.piece.name} = (${names.join(', ')}) =>`);
+  assert.equal(blueprint.autoApplicable, false);
+});
+
 test('no cli blueprint has a hook or composable kind or a .ts, .tsx or .vue module', () => {
   const context = contextOf(state.dir, state.result, state.ledger);
   const blueprints = state.result.groups.filter((group) => group.instances.some((instance) => instance.file.startsWith('cli/'))).map((group) => buildBlueprint(group, context));

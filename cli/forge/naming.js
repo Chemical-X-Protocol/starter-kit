@@ -82,7 +82,11 @@ export const nameGroup = (group, context, library = null) => {
   const isExpression = rootKindOf(group) === 'expr';
   const fromMembers = majorityTokens(memberNameTokens(group, context));
   const noun = nounTokens(anchors).filter((token) => !fromMembers.includes(token));
-  const memberTokens = fromMembers.length > 0 && fromMembers.length < 2 ? [...fromMembers, ...noun.slice(0, 1)] : fromMembers;
+  // A lone predicate prefix ('is') is completed by the first call-anchor word it lacks (isAbsolute), else by a module noun.
+  const isLonePrefix = fromMembers.length === 1 && PREDICATE_PREFIXES.has(fromMembers[0]);
+  const callWord = callTokens(anchors).find((token) => !PREDICATE_PREFIXES.has(token) && !fromMembers.includes(token));
+  const completion = isLonePrefix && callWord ? [callWord] : noun.slice(0, 1);
+  const memberTokens = fromMembers.length > 0 && fromMembers.length < 2 ? [...fromMembers, ...completion] : fromMembers;
   const anchorTokens = withPredicate(uniqueTokens([...callTokens(anchors), ...noun]).slice(0, MAX_TOKENS), isExpression);
   const ranked = [
     ...(library ? [[library.exportName, 'library']] : []),

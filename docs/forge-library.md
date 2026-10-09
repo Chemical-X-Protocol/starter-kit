@@ -30,7 +30,7 @@ nullable-timer-handle negatives: the const-alias form (`const id = timerId; cons
 That inline-guard hazard ends with `Canonical: library/vue-ts/nullable-timer-handle/piece.ts`, added by
 `narrowsMutableRef` (`cli/audit/mutable-ref-predicate.js`): the test compares a `let` binding or a member to
 null/undefined and the branch uses it. Detection is unchanged, so there is no ruleset bump. The remedy names a file path because the
-`chemx library` command does not exist yet (#4446); library.spec checks the path exists.
+library command does not exist yet (#4446); library.spec checks the path exists.
 
 ## Verification (`cli/library/library.spec.js`, run by `npm test`)
 

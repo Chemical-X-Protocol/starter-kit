@@ -4,7 +4,8 @@
 // placement and the library piece@version, never on the ruleset, the clock or the input order.
 // Scope of this build: naming, placement, kind, holes, needs, rejected members and call sites. The
 // piece body is the library piece's code for a matched group; for any other group it is null (the heal
-// engine, P6, writes it from the home member and the LGG), and behaviorDelta is always empty.
+// engine, P6, writes it from the home member and the LGG). A group with no LGG holes takes its params from the
+// home member's free variables and reports members of opposite polarity as behaviorDelta (blueprint-members.js).
 import crypto from 'node:crypto';
 import path from 'node:path';
 import { FORGE_EXTRACTOR_VERSION } from './store.js';
@@ -14,6 +15,7 @@ import { nameGroup, tokensOf, isIdentifier } from './naming.js';
 import { placeGroup, kindOf, hookNameOf, langOfKey, runtimeOfKey } from './placement.js';
 import { matchLibrary, pieceExistsIn } from './library-match.js';
 import { findRejectedMembers } from './rejected-members.js';
+import { deriveMembers } from './blueprint-members.js';
 
 export const BLUEPRINT_SCHEMA = 'chemx.blueprint/1';
 
@@ -97,10 +99,19 @@ const specifierOf = (from, module) => {
   return relative.startsWith('.') ? relative : `./${relative}`;
 };
 
-const callSitesOf = ({ instances, name, kind, module, context }) => instances.map((instance) => {
+const memberSiteOf = (members, index) => {
+  const site = members?.sites[index];
+  const isMixed = members !== null && members.behaviorDelta.length > 0;
+  const args = site && site.names.length > 0 ? { args: site.names } : {};
+  const polarity = isMixed && site.polarity !== members.majority ? { negated: true } : {};
+  return { ...args, ...polarity };
+};
+
+const callSitesOf = ({ instances, name, kind, module, context, members = null }) => instances.map((instance, index) => {
   const row = context.rowsById.get(instance.unitIds[0]);
   const needsImport = FUNCTION_KINDS.has(kind) && instance.file !== module;
   return {
+    ...memberSiteOf(members, index),
     file: instance.file,
     range: [instance.startLine, instance.endLine],
     contentHash: context.contentHashes.get(instance.file) ?? null,
@@ -115,7 +126,7 @@ const docDefaultOf = (name, count, library) => {
   return fromLibrary ?? `${phrase.charAt(0).toUpperCase()}${phrase.slice(1)}, shared by ${count} call sites.`;
 };
 
-const holesOf = ({ name, naming, group, drift, placement, kind, library, count }) => {
+const holesOf = ({ name, naming, group, drift, placement, kind, library, count, members = null }) => {
   const isAdvisory = kind === 'advisory';
   const holes = [{
     id: 'name', kind: 'name', tier: 'light', default: name, candidates: naming.candidates,
@@ -129,6 +140,13 @@ const holesOf = ({ name, naming, group, drift, placement, kind, library, count }
   }
   for (const hole of (group.lgg?.holes ?? []).filter((entry) => entry.kind === 'transform')) {
     holes.push({ id: `variant-${hole.id}`, kind: 'variant', tier: 'standard', default: 'identity', candidates: ['identity'], constraints: { examples: hole.examples } });
+  }
+  const isMixedPolarity = members !== null && members.behaviorDelta.length > 0;
+  if (isMixedPolarity) {
+    holes.push({
+      id: 'variant-polarity', kind: 'variant', tier: 'standard', default: members.majority, candidates: ['plain', 'negated'],
+      constraints: { prompt: 'members disagree on polarity; the piece keeps one and the others call it with a leading !', members: members.polarity }
+    });
   }
   const hasDrift = drift.length > 0;
   if (hasDrift) {
@@ -187,12 +205,15 @@ export const buildBlueprint = (group, context) => {
   const kind = kindOf({ group: ordered, facetKey: group.facetKey, placementOk: placement.ok, libraryExists });
   const drift = ordered.drift.map((span) => ({ at: atOf(span), reason: span.reason ?? 'anchor subset' })).sort((a, b) => byCodePoint(a.at, b.at));
   const rejectedMembers = findRejectedMembers(ordered, context);
-  const params = paramsOf(ordered, library);
-  const holes = holesOf({ name, naming, group: ordered, drift, placement, kind, library, count: instances.length });
-  const behaviorDelta = [];
+  const holeParams = paramsOf(ordered, library);
+  const members = holeParams.length === 0 && FUNCTION_KINDS.has(kind) ? deriveMembers(instances, context) : null;
+  const params = members ? members.params : holeParams;
+  const holes = holesOf({ name, naming, group: ordered, drift, placement, kind, library, count: instances.length, members });
+  const behaviorDelta = members ? members.behaviorDelta : [];
   const coveringSpecs = unique(files.flatMap((file) => context.coveringSpecsOf(file)));
   const needs = needsOf({ kind, holes, fileCount: files.length, drift, behaviorDelta, hasCoveringSpec: coveringSpecs.length > 0, placement, group: ordered });
-  const isAuto = needs === 'light' && holes.every((hole) => hole.default !== null) && behaviorDelta.length === 0 && drift.length === 0;
+  const hasShape = params.length > 0 || library !== null;
+  const isAuto = needs === 'light' && hasShape && holes.every((hole) => hole.default !== null) && behaviorDelta.length === 0 && drift.length === 0;
   const first = instances[0];
   const module = placement.module;
   const body = {
@@ -215,7 +236,7 @@ export const buildBlueprint = (group, context) => {
       home: atOf(first), signature: signatureOf(kind, name, params), params,
       imports: library ? library.imports : [], body: library ? library.text : null
     },
-    callSites: callSitesOf({ instances, name, kind, module, context }),
+    callSites: callSitesOf({ instances, name, kind, module, context, members }),
     children: [],
     dependsOn: unique(group.dependsOn ?? []),
     unblocks: [],
