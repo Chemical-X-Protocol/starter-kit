@@ -156,7 +156,7 @@ export const handleChemxTeamTask = async (rawArgs = {}, cwd = process.cwd()) => 
   if (isClaimAction) {
     const agentHandle = resolveAgentId(args.agentId || args.as);
     registerAgent(db, { id: agentHandle, role: 'executor' });
-    return claimTask(db, args.taskId, agentHandle);
+    return claimTask(db, args.taskId, agentHandle, { ignoreDeps: args.ignoreDeps });
   }
   const isDoneAction = action === 'done' || action === 'complete';
   if (isDoneAction) {

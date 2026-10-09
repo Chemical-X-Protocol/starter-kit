@@ -75,7 +75,11 @@ export const executeTaskClaim = (db, taskId, cleanId) => {
 
 export const executeStatusUpdate = (db, taskId, status, options, task) => {
   const now = Date.now();
-  const payloadStr = JSON.stringify(options.resultPayload || task.result_payload || {});
+  // A replacing resultPayload must not drop the deps_override record (#2589).
+  const keptOverride = task.result_payload?.deps_override;
+  const basePayload = options.resultPayload || task.result_payload || {};
+  const mergedPayload = keptOverride && !basePayload.deps_override ? { ...basePayload, deps_override: keptOverride } : basePayload;
+  const payloadStr = JSON.stringify(mergedPayload);
   const receiptObj = options.diffReceipt || options.resultPayload?.receipt || task.diff_receipt || {};
   db.prepare('UPDATE agent_tasks SET status = ?, blocked_reason = ?, result_payload = ?, diff_receipt = ?, updated_at = ? WHERE id = ?')
     .run(status, options.blockedReason || '', payloadStr, JSON.stringify(receiptObj), now, Number(taskId));

@@ -3,7 +3,7 @@ import assert from 'node:assert';
 import { DatabaseSync } from 'node:sqlite';
 import { initTeamSchema } from './team-schema.js';
 import { registerAgent } from './team-db-agents.js';
-import { createTask, claimTask, getTask } from './team-db-tasks.js';
+import { createTask, claimTask, getTask, updateTaskStatus } from './team-db-tasks.js';
 
 const setup = () => {
   const db = new DatabaseSync(':memory:');
@@ -18,6 +18,15 @@ test('claim with unmet deps is refused without ignoreDeps', () => {
   const { db, child } = setup();
   assert.strictEqual(claimTask(db, child.id, '@w1').reason, 'dependencies_unmet');
   assert.strictEqual(claimTask(db, child.id, '@w1', { ignoreDeps: '  ' }).reason, 'dependencies_unmet');
+});
+
+test('a later status update with a resultPayload keeps the override record', () => {
+  const { db, child } = setup();
+  claimTask(db, child.id, '@w1', { ignoreDeps: 'landed first' });
+  updateTaskStatus(db, child.id, 'blocked', { blockedReason: 'x', resultPayload: { note: 'n' } });
+  const payload = getTask(db, child.id).result_payload;
+  assert.strictEqual(payload.deps_override.reason, 'landed first');
+  assert.strictEqual(payload.note, 'n');
 });
 
 test('claim with ignoreDeps succeeds and records the reason', () => {
