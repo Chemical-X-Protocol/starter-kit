@@ -21,3 +21,7 @@
 - the bash guard blocks `head -c` on a non-source /tmp repro script (.mjs written by the reviewer) and routes it to chemx read; used the Read tool
 - MCP `q` returned "No matching capsules" for symbols that exist in a fresh project and ignored `reindex` (synced only when no db file existed); fixed in G3 (tools-q.js), the old concurrency spec passed on the empty index
 - `chemx verify --json` ratchet in a clean archive still lists CONTROL_FLOW_INLINE_BOOLEAN 88 vs baseline 87 with no file:line, so proving "no new violations from this change" means comparing counts against the base by hand
+- round 3: the bash guard blocks `cat -n` on several source files at once (no multi-file chemx read); used three Read calls
+- round 3: the bash guard blocks `cat` on reviewer repro scripts under /tmp (outside the repo); used the Read tool again
+- round 3: `chemx test` still picks vitest for this kit, so every spec run is `node --test ... # chemx-bypass: runner-detection-wrong-runner`
+- round 3: spot-check-fixes 'Fix 1: Index isolation' reads the index found by walking up from process.cwd(); a worktree without .chemx shares the main checkout's db, so the spec fails for environmental reasons (not G3)
