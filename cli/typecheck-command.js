@@ -6,10 +6,20 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { resolvePackageManager, loadLocalPackageJson } from './build/detector.js';
 import { STATUS } from './result-status.js';
+import { readTsconfig, isSolutionStyle } from './tsconfig-shape.js';
 
 export const TYPECHECK_REASONS = Object.freeze({
   CHECKER_MISSING: 'CHECKER_MISSING',
-  NOT_APPLICABLE: 'NOT_APPLICABLE'
+  NOT_APPLICABLE: 'NOT_APPLICABLE',
+  SOLUTION_TSCONFIG: 'SOLUTION_TSCONFIG'
+});
+
+const solutionStylePlan = (checker) => ({
+  command: null,
+  checker,
+  status: STATUS.INCONCLUSIVE,
+  reason: TYPECHECK_REASONS.SOLUTION_TSCONFIG,
+  message: `tsconfig.json only references other configs, so \`${checker} --noEmit\` would check no files; add a "typecheck" script (for example "${checker} --build --force")`
 });
 
 const TYPECHECK_SCRIPTS = ['typecheck', 'type-check', 'check-types', 'tsc'];
@@ -61,6 +71,8 @@ export const planTypecheck = (customCmd, cwd = process.cwd()) => {
   const isVue = Boolean(deps.vue || deps.nuxt || deps['vue-tsc']);
 
   if (isSvelte) return checkerPlan(cwd, 'svelte-check', '', 'Svelte');
+  const hasSolutionTsconfig = hasTsconfig && isSolutionStyle(readTsconfig(cwd));
+  if (hasSolutionTsconfig) return solutionStylePlan(isVue ? 'vue-tsc' : 'tsc');
   if (isVue && (hasTsconfig || deps['vue-tsc'])) return checkerPlan(cwd, 'vue-tsc', '--noEmit', 'Vue');
   if (hasTsconfig) return checkerPlan(cwd, 'tsc', '--noEmit', 'TypeScript');
 

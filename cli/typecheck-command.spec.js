@@ -77,3 +77,22 @@ test('typecheck: the project typecheck script still wins over detection', async 
     assert.match(planTypecheck(null, root).command, /run type-check$/);
   });
 });
+
+test('typecheck: a solution-style tsconfig (files: [] + references) is inconclusive, not a --noEmit run that checks nothing', async () => {
+  await withProject({ pkg: VUE_PKG, bins: { 'vue-tsc': VUE_TSC_FAILING } }, (root) => {
+    const solution = '{\n  // create-vue layout\n  "files": [],\n  "references": [{ "path": "./tsconfig.app.json" }, { "path": "./tsconfig.node.json" },],\n}\n';
+    fs.writeFileSync(path.join(root, 'tsconfig.json'), solution);
+    const plan = planTypecheck(null, root);
+    assert.equal(plan.command, null);
+    assert.equal(plan.status, STATUS.INCONCLUSIVE);
+    assert.equal(plan.reason, TYPECHECK_REASONS.SOLUTION_TSCONFIG);
+    assert.match(plan.message, /typecheck" script/);
+  });
+});
+
+test('typecheck: a tsconfig with references but its own files is still checked directly', async () => {
+  await withProject({ pkg: VUE_PKG, bins: { 'vue-tsc': VUE_TSC_FAILING } }, (root) => {
+    fs.writeFileSync(path.join(root, 'tsconfig.json'), '{ "include": ["src"], "references": [{ "path": "./tsconfig.node.json" }] }');
+    assert.match(planTypecheck(null, root).command, /vue-tsc --noEmit$/);
+  });
+});
