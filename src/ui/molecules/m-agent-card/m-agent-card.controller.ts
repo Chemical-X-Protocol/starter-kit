@@ -13,7 +13,8 @@ const ROLE_TONES: Record<string, BadgeTone> = {
 export const resolveRoleTone = (role: string = ''): BadgeTone => {
   const normalized = role.toLowerCase().replace(/[^a-z]/g, '');
   for (const [key, tone] of Object.entries(ROLE_TONES)) {
-    if (normalized.includes(key)) return tone;
+    const isRoleMatch = Boolean(normalized.includes(key));
+    if (isRoleMatch) return tone;
   }
   return 'primary';
 };
@@ -21,9 +22,11 @@ export const resolveRoleTone = (role: string = ''): BadgeTone => {
 export const formatHeartbeat = (timestamp: number): string => {
   if (!timestamp) return 'inactive';
   const deltaSec = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
-  if (deltaSec < 60) return `${deltaSec}s ago`;
+  const isUnderMinute = deltaSec < 60;
+  if (isUnderMinute) return `${deltaSec}s ago`;
   const deltaMin = Math.floor(deltaSec / 60);
-  if (deltaMin < 60) return `${deltaMin}m ago`;
+  const isUnderHour = deltaMin < 60;
+  if (isUnderHour) return `${deltaMin}m ago`;
   return `${Math.floor(deltaMin / 60)}h ago`;
 };
 
