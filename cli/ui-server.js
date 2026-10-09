@@ -28,18 +28,15 @@ export const createUiServer = (cwd = process.cwd(), options = {}) => {
     const isGet = req.method === 'GET', isPost = req.method === 'POST';
     const isApi = pathname.startsWith('/api/'), isFaviconRequest = isGet && pathname === '/favicon.ico';
     if (isFaviconRequest) return res.writeHead(204).end();
-
     const gate = checkUiRequest(req, auth, url);
     const isDenied = !gate.allowed;
     if (isDenied) return sendJson(res, gate.status, { success: false, error: gate.error });
     const hasSetCookie = Boolean(gate.setCookie);
     const cookieHeaders = hasSetCookie ? { 'Set-Cookie': gate.setCookie } : {};
-
     const shouldServeHtml = isGet && !isApi;
     if (shouldServeHtml) {
       return res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', ...cookieHeaders }).end(generateSwarmHtml(handleSwarmStatus(db)));
     }
-
     if (isGet) {
       const isSse = pathname === '/api/swarm/events' || pathname === '/api/events';
       if (isSse) return handleSseConnection(req, res, db);
@@ -47,7 +44,6 @@ export const createUiServer = (cwd = process.cwd(), options = {}) => {
       if (getError) return sendJson(res, 500, { success: false, error: getError.message }, cookieHeaders);
       if (result) return sendJson(res, 200, result, cookieHeaders);
     }
-
     if (isPost) {
       const [body, parseError] = await parseJsonBody(req).then((value) => [value, null], (err) => [null, err]);
       if (parseError) return sendJson(res, 400, { error: 'Invalid JSON payload' });
@@ -78,7 +74,6 @@ export const startUiServer = async (options = {}) => {
     const watcher = startUiDevWatcher(cwd, () => broadcastSseReload());
     server.on('close', () => watcher.close());
   }
-
   return new Promise((resolve, reject) => {
     server.on('error', (err) => {
       if (options.isCli) process.stderr.write(`\x1b[31m✖ UI error: ${err.message}\x1b[0m\n`);

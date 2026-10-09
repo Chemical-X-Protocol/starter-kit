@@ -7,7 +7,7 @@ export function useSelfCleaningTimeout(fn: () => void | Promise<void>, delayMs: 
   const stop = () => {
     const hasTimer = timerId !== null;
     if (hasTimer) {
-      clearTimeout(timerId);
+      clearTimeout(timerId as ReturnType<typeof setTimeout>);
       timerId = null;
     }
     isRunning = false;
