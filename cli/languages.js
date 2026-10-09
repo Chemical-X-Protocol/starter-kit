@@ -96,7 +96,8 @@ const EXCLUDED_NAME_PATTERNS = ['.min.'];
 export const getLanguageByExtension = (ext) => {
   const normalized = ext.toLowerCase();
   for (const lang of Object.values(LANGUAGE_DEFINITIONS)) {
-    if (lang.extensions.has(normalized)) return lang;
+    const hasExtension = lang.extensions.has(normalized);
+    if (hasExtension) return lang;
   }
   return null;
 };
@@ -109,10 +110,13 @@ export const getLanguageForFile = (filePath) => {
 export const isSourceFile = (name, options = {}) => {
   const { includeTests = true } = options;
   const ext = path.extname(name).toLowerCase();
-  if (!ALL_EXTENSIONS.has(ext)) return false;
-  if (name.endsWith('.d.ts')) return false;
+  const isKnownExtension = ALL_EXTENSIONS.has(ext);
+  if (!isKnownExtension) return false;
+  const isDeclarationFile = name.endsWith('.d.ts');
+  if (isDeclarationFile) return false;
 
-  if (EXCLUDED_NAME_PATTERNS.some((pat) => name.includes(pat))) {
+  const isExcludedName = EXCLUDED_NAME_PATTERNS.some((pat) => name.includes(pat));
+  if (isExcludedName) {
     return false;
   }
 
