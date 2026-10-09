@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { hasGum, gumChoose, gumInput, promptQuestion, isStdinTty } from './terminal.js';
+import { hasGum, gumChoose, gumInput, promptQuestion, isStdinTty, isStderrTty } from './terminal.js';
 import { renderTtyBanner } from './tty-banner.js';
 import { describeLineBudgetPolicy } from './config/profiles.js';
 import { checkOrPromptEvaluation } from './license.js';
@@ -363,16 +363,15 @@ export const runGenerateWizard = async (rawArgs = []) => {
       ? gumInput('Capsule feature name (e.g. user-avatar, spark-kpi, auth-status):', 'user-avatar')
       : await promptQuestion('Capsule feature name [user-avatar]: ');
   } else if (!rawName && isYes) {
-    const hasExplicitFlags = rawArgs.some((a) => a.startsWith('-'));
-    if (hasExplicitFlags) {
-      const err = new Error('Missing capsule name. Usage: npx chemx generate <name> [options]');
-      if (isJson) {
-        process.stdout.write(JSON.stringify({ error: err.message, success: false }) + '\n');
-        process.exit(1);
-      }
-      process.stderr.write(`\x1b[31m✕ Error: ${err.message}\x1b[0m\n`);
+    // Non-interactive (piped, --json or -y): never invent a default capsule name.
+    const message = 'Missing capsule name. Usage: chemx generate <name> [options]';
+    if (isJson) {
+      process.stdout.write(JSON.stringify({ error: message, success: false }) + '\n');
       process.exit(1);
     }
+    const errorLine = `✕ Error: ${message}`;
+    process.stderr.write(isStderrTty() ? `\x1b[31m${errorLine}\x1b[0m\n` : `${errorLine}\n`);
+    process.exit(1);
   }
   const cleanName = (rawName || 'user-avatar').trim().toLowerCase();
   const selectedTier = resolveSelectedTier(explicitTier, cleanName);
