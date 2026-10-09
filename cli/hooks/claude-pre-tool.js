@@ -20,7 +20,13 @@ import { contextForCommand } from './guard-paths.js';
 import { isPromotedNudge, resolveNudgePromotion } from './guard-config.js';
 import { NATIVE_FILE_TOOLS, decideNativeTool, resolveNativeToolMode } from './native-tool-policy.js';
 import { decideEditLock, resolveHookAgentId } from './native-edit-lock.js';
-import { ROUTE_GUARD_TOOLS, decideRouteGuard, resolveRouteGuardMode } from './guard-route.js';
+
+// The route guard pulls in the dispatch modules, which agents edit mid-flight. Load it on its own so
+// a broken dispatch module only disables routing advice, not every other rule.
+let routeGuard = null;
+try {
+  routeGuard = await import('./guard-route.js');
+} catch { /* chemx-allow: best-effort routing advice is optional, the other rules still run */ }
 
 const BYPASS_PATTERN = /chemx-bypass:\s*(\S.*)$/;
 const SEGMENT_LIMIT = 120;
@@ -111,8 +117,8 @@ export const decidePreTool = (payload, context) => {
   if (isNativeFileTool) return decideNativeFileTool(tool, input, context);
   const isBash = tool === 'Bash';
   if (isBash) return decideBash(input, context);
-  const isLaunch = ROUTE_GUARD_TOOLS.has(tool);
-  return (isLaunch ? decideRouteGuard(tool, input, context) : null) ?? allow();
+  const isLaunch = routeGuard !== null && routeGuard.ROUTE_GUARD_TOOLS.has(tool);
+  return (isLaunch ? routeGuard.decideRouteGuard(tool, input, context) : null) ?? allow();
 };
 
 export const buildPreToolContext = (payload, env = process.env) => {
@@ -122,8 +128,8 @@ export const buildPreToolContext = (payload, env = process.env) => {
   const agentId = resolveHookAgentId(payload, env);
   const nudgePromotion = resolveNudgePromotion(root, env);
   const scratchDir = payload?.scratchpad_dir ?? null;
-  const routeGuard = resolveRouteGuardMode(root, env);
-  return { cwd, root, enforceSearch: env.CHEMX_GUARD_SEARCH !== '0', mode, agentId, nudgePromotion, scratchDir, routeGuard };
+  const routeGuardMode = routeGuard === null ? 'off' : routeGuard.resolveRouteGuardMode(root, env);
+  return { cwd, root, enforceSearch: env.CHEMX_GUARD_SEARCH !== '0', mode, agentId, nudgePromotion, scratchDir, routeGuard: routeGuardMode };
 };
 
 // Deny carries permissionDecision; an advisory allow carries only additionalContext, so it never

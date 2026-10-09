@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { Readable, Writable } from 'node:stream';
+import { spawnSync } from 'node:child_process';
 import { runEntry, fallbackPreTool, claimWindow, postGuardCrash, CRASH_WINDOW_MS } from './entry.js';
 
 const tempDir = (t) => {
@@ -75,6 +76,42 @@ test('fallback denies native Edit on a repo file but not Write outside the repo'
   assert.equal(JSON.parse(inside.out).hookSpecificOutput.permissionDecision, 'deny');
   const outside = await runBroken(t, { tool_name: 'Write', tool_input: { file_path: path.join(os.tmpdir(), 'elsewhere.txt') } }, root);
   assert.equal(outside.out, '');
+});
+
+const READ_CASES = [
+  [{ tool_name: 'Read', tool_input: { file_path: 'cli/hooks/entry.js' } }, true],
+  [{ tool_name: 'Glob', tool_input: { pattern: '**/*.js' } }, true],
+  [{ tool_name: 'Grep', tool_input: { pattern: 'x', path: 'cli' } }, true],
+  [{ tool_name: 'Read', tool_input: { file_path: path.join(os.tmpdir(), 'elsewhere.txt') } }, false],
+  [{ tool_name: 'Grep', tool_input: { pattern: 'x', path: os.tmpdir() } }, false],
+];
+
+for (const [payload, isDenied] of READ_CASES) {
+  test(`fallback ${isDenied ? 'denies' : 'allows'} native ${payload.tool_name} ${JSON.stringify(payload.tool_input)}`, async (t) => {
+    const { out } = await runBroken(t, payload, tempDir(t));
+    if (!isDenied) return assert.equal(out, '');
+    const parsed = JSON.parse(out);
+    assert.equal(parsed.hookSpecificOutput.permissionDecision, 'deny');
+    assert.match(parsed.hookSpecificOutput.permissionDecisionReason, /fallback-native-read/);
+  });
+}
+
+test('a route guard that throws on import leaves the other guard rules running', async (t) => {
+  const dir = tempDir(t);
+  const hooks = JSON.stringify(new URL('./claude-pre-tool.js', import.meta.url).href);
+  const hookSource = [
+    "import { registerHooks } from 'node:module';",
+    "registerHooks({ resolve(spec, ctx, next) { if (spec.endsWith('guard-route.js')) return { url: 'data:text/javascript,throw new SyntaxError(%22boom%22)', shortCircuit: true }; return next(spec, ctx); } });",
+    `const mod = await import(${hooks});`,
+    "const deny = mod.decidePreTool({ tool_name: 'Bash', tool_input: { command: 'git diff' } }, mod.buildPreToolContext({ cwd: process.cwd() }, {}));",
+    "const launch = mod.decidePreTool({ tool_name: 'Agent', tool_input: {} }, mod.buildPreToolContext({ cwd: process.cwd() }, {}));",
+    'console.log(JSON.stringify({ deny: deny.decision, launch: launch.decision }));',
+  ].join('\n');
+  const script = path.join(dir, 'probe.mjs');
+  fs.writeFileSync(script, hookSource);
+  const result = spawnSync(process.execPath, [script], { cwd: dir, encoding: 'utf-8' });
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(JSON.parse(result.stdout), { deny: 'deny', launch: 'allow' });
 });
 
 test('fallback allows ordinary commands and honors a bypass comment', async (t) => {

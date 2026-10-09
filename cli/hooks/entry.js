@@ -6,7 +6,8 @@
 // claude-pre-tool applies a small built-in ruleset instead of failing open, and a `guard-crash`
 // feed event with the load error is posted, at most once per CRASH_WINDOW_MS per root. The built-in
 // rules are deliberately coarse and are NOT the full guard: they cover shell writes into repo
-// files, git diff/log/show, cat and sed -n on source files, and native Edit/Write on repo files.
+// files, git diff/log/show, cat and sed -n on source files, native Edit/Write on repo files, and
+// native Read/Glob/Grep on repo paths (a Glob or Grep with no path counts as the repo).
 // Only if the fallback itself throws does the call go through unchecked. Other hooks fail open.
 
 import fs from 'node:fs';
@@ -20,6 +21,7 @@ export const CRASH_WINDOW_MS = 60_000;
 const BUSY_TIMEOUT_MS = 400;
 const SOURCE_EXT = '(?:js|mjs|cjs|ts|tsx|jsx|vue|json|php|py|sh|md|css|scss|html|yml|yaml)';
 const FILE_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
+const READ_TOOLS = new Set(['Read', 'Glob', 'Grep']);
 const BYPASS_PATTERN = /#\s*chemx-bypass:\s*\S/;
 
 const FALLBACK_BASH_RULES = [
@@ -43,17 +45,29 @@ const isInsideRepo = (file, root) => {
   return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
 };
 
+const fallbackEdit = (input, root, loadError) => {
+  const file = input.file_path ?? input.notebook_path;
+  const isRepoFile = typeof file === 'string' && isInsideRepo(file, root);
+  return isRepoFile ? deny('fallback-native-edit', 'use chemx patch or chemx write', loadError) : null;
+};
+
+// Read names a file; Glob and Grep name a directory, or none, which means the working directory.
+const fallbackRead = (tool, input, root, loadError) => {
+  const target = input.file_path ?? input.path;
+  const hasTarget = typeof target === 'string' && target !== '';
+  const isRepoTarget = hasTarget ? isInsideRepo(target, root) : tool !== 'Read';
+  return isRepoTarget ? deny('fallback-native-read', 'use chemx read, chemx q or chemx f', loadError) : null;
+};
+
 // Returns a PreToolUse output object (deny) or null (allow).
 export const fallbackPreTool = (payload, env, loadError) => {
   const root = env.CLAUDE_PROJECT_DIR || payload?.cwd || process.cwd();
   const tool = payload?.tool_name;
   const input = payload?.tool_input ?? {};
   const isFileTool = FILE_TOOLS.has(tool);
-  if (isFileTool) {
-    const file = input.file_path ?? input.notebook_path;
-    const isRepoFile = typeof file === 'string' && isInsideRepo(file, root);
-    return isRepoFile ? deny('fallback-native-edit', 'use chemx patch or chemx write', loadError) : null;
-  }
+  if (isFileTool) return fallbackEdit(input, root, loadError);
+  const isReadTool = READ_TOOLS.has(tool);
+  if (isReadTool) return fallbackRead(tool, input, root, loadError);
   const isBash = tool === 'Bash';
   if (!isBash) return null;
   const command = String(input.command ?? '');
