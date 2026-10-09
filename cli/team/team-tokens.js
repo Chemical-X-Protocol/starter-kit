@@ -12,7 +12,9 @@ export const getSwarmTokenBreakdown = (db) => {
       COALESCE(SUM(completion_tokens), 0) as completionTokens,
       COALESCE(SUM(total_tokens), 0) as totalTokens,
       COALESCE(SUM(cost_usd), 0) as totalCost,
-      COUNT(*) as totalTasks
+      COUNT(*) as totalTasks,
+      COUNT(telemetry_source) as measuredTasks,
+      COUNT(*) - COUNT(telemetry_source) as unmeasuredTasks
     FROM agent_tasks
   `).get() || {};
 
@@ -61,6 +63,7 @@ export const formatTokenBreakdownCard = (b) => {
     `\x1b[90m${'─'.repeat(58)}\x1b[0m`,
     `  \x1b[1mTotal:\x1b[0m   ${(o.totalTokens || 0).toLocaleString()} tokens │ \x1b[32m$${Number(o.totalCost || 0).toFixed(4)}\x1b[0m │ ${o.totalTasks || 0} tasks`,
     `  \x1b[1mDetail:\x1b[0m  ${(o.promptTokens || 0).toLocaleString()} prompt │ ${(o.completionTokens || 0).toLocaleString()} completion`,
+    `  \x1b[1mMeasured:\x1b[0m ${o.measuredTasks || 0} of ${o.totalTasks || 0} tasks (${o.unmeasuredTasks || 0} unknown, not zero)`,
     '',
     '  \x1b[1mBy Architectural Tier / Feature:\x1b[0m'
   ];

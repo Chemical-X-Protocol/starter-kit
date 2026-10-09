@@ -67,3 +67,14 @@ export const formatTaskBriefLines = (task, dependencyStates = []) => {
   }
   return lines;
 };
+
+// Telemetry for the task card: measured tokens, or "unknown" for a done task never measured.
+export const formatTelemetryLines = (task) => {
+  const isMeasured = Boolean(task.telemetry_source);
+  if (isMeasured) {
+    const tok = Number(task.total_tokens || 0);
+    return [`  \x1b[1mTelemetry:\x1b[0m ${tok.toLocaleString()} tokens │ \x1b[32m${Number(task.cost_usd || 0).toFixed(4)}\x1b[0m (${task.telemetry_source})`];
+  }
+  const isDone = task.status === 'done';
+  return isDone ? ['  \x1b[1mTelemetry:\x1b[0m \x1b[90munknown (no --tokens or --log at completion)\x1b[0m'] : [];
+};

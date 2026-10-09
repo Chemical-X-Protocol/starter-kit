@@ -1,4 +1,4 @@
-import { formatTaskBriefLines } from './task-detail-sections.js';
+import { formatTaskBriefLines, formatTelemetryLines } from './task-detail-sections.js';
 
 export const formatSwarmStatusCard = (status) => {
   const a = status.agents;
@@ -150,10 +150,7 @@ export const formatTaskDetailCard = (task, events = [], dependencyStates = []) =
   }
   lines.push(...formatTaskBriefLines(task, dependencyStates));
 
-  const tok = task.total_tokens || ((task.prompt_tokens || 0) + (task.completion_tokens || 0));
-  if (tok > 0 || task.cost_usd > 0) {
-    lines.push(`  \x1b[1mTelemetry:\x1b[0m ${tok.toLocaleString()} tokens │ \x1b[32m${Number(task.cost_usd || 0).toFixed(4)}\x1b[0m`);
-  }
+  lines.push(...formatTelemetryLines(task));
 
   if (task.diff_receipt?.verified || task.result_payload?.verified) {
     const r = task.diff_receipt?.healthAfter ? task.diff_receipt : task.result_payload;

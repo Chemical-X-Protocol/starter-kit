@@ -103,6 +103,16 @@ const readTranscriptTokens = (logPath, model) => {
   return { p: parsed.promptTokens, c: parsed.completionTokens, k: parsed.cachedTokens, tot: parsed.totalTokens, cost: parsed.costUsd, source: 'log' };
 };
 
+// A task's token stamp; a task never measured (telemetry_source NULL) is unknown, not zero.
+export const isTelemetryMeasured = (task = {}) => Boolean(task.telemetry_source);
+
+export const formatTaskTokenStamp = (task = {}) => {
+  if (!isTelemetryMeasured(task)) return '[tokens: unknown]';
+  const p = Number(task.prompt_tokens || 0);
+  const c = Number(task.completion_tokens || 0);
+  return `[P: ${p} | C: ${c} | Cost: $${Number(task.cost_usd || 0).toFixed(4)}]`;
+};
+
 // Returns null (unknown) when the caller supplied neither tokens nor an existing --log transcript.
 export const ingestTaskTelemetry = (db, taskId, agentId, options = {}) => {
   const canIngest = Boolean(db && taskId);
@@ -115,8 +125,8 @@ export const ingestTaskTelemetry = (db, taskId, agentId, options = {}) => {
 
   const usage = hasTokens ? readExplicitTokens(options.tokens, model) : readTranscriptTokens(logPath, model);
   const { p, c, k, tot, cost } = usage;
-  db.prepare('UPDATE agent_tasks SET prompt_tokens=?, completion_tokens=?, cached_tokens=?, total_tokens=?, cost_usd=? WHERE id=?')
-    .run(p, c, k, tot, cost, Number(taskId));
+  db.prepare('UPDATE agent_tasks SET prompt_tokens=?, completion_tokens=?, cached_tokens=?, total_tokens=?, cost_usd=?, telemetry_source=? WHERE id=?')
+    .run(p, c, k, tot, cost, usage.source, Number(taskId));
   const cleanId = normalizeAgentId(agentId);
   if (cleanId) {
     db.prepare('UPDATE agents SET total_prompt_tokens=total_prompt_tokens+?, total_completion_tokens=total_completion_tokens+?, total_tokens=total_tokens+?, total_cost_usd=total_cost_usd+? WHERE id=?')

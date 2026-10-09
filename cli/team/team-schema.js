@@ -20,8 +20,17 @@ const migrateCols = (db, tbl, cols) => {
   }
 };
 
+// telemetry_source: 'tokens' | 'log' | 'legacy'; NULL means unknown (never measured), not zero.
+const migrateTelemetrySource = (db) => {
+  const existing = new Set(db.prepare('PRAGMA table_info(agent_tasks)').all().map((c) => c.name));
+  if (existing.has('telemetry_source')) return;
+  migrateCols(db, 'agent_tasks', [['telemetry_source', 'TEXT']]);
+  db.exec("UPDATE agent_tasks SET telemetry_source = 'legacy' WHERE total_tokens > 0 OR cost_usd > 0;");
+};
+
 export const migrateTelemetryColumns = (db) => {
   if (!db) return;
+  migrateTelemetrySource(db);
   migrateCols(db, 'agent_tasks', [
     ['prompt_tokens', 'INTEGER NOT NULL DEFAULT 0'], ['completion_tokens', 'INTEGER NOT NULL DEFAULT 0'],
     ['cached_tokens', 'INTEGER NOT NULL DEFAULT 0'], ['total_tokens', 'INTEGER NOT NULL DEFAULT 0'],
@@ -62,7 +71,8 @@ export const initTeamSchema = (db) => {
       created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, prompt_tokens INTEGER NOT NULL DEFAULT 0,
       completion_tokens INTEGER NOT NULL DEFAULT 0, cached_tokens INTEGER NOT NULL DEFAULT 0, total_tokens INTEGER NOT NULL DEFAULT 0,
       cost_usd REAL NOT NULL DEFAULT 0.0, result_payload TEXT NOT NULL DEFAULT '{}', origin_type TEXT NOT NULL DEFAULT 'manual',
-      rule_id TEXT NOT NULL DEFAULT '', violation_snapshot TEXT NOT NULL DEFAULT '{}', diff_receipt TEXT NOT NULL DEFAULT '{}'
+      rule_id TEXT NOT NULL DEFAULT '', violation_snapshot TEXT NOT NULL DEFAULT '{}', diff_receipt TEXT NOT NULL DEFAULT '{}',
+      telemetry_source TEXT
     );
     CREATE TABLE IF NOT EXISTS agent_feed (
       id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp INTEGER NOT NULL, author_id TEXT NOT NULL,
