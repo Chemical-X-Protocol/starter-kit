@@ -173,3 +173,10 @@ test('test-command: node flags keep their space-separated values when targets or
     assert.equal(planTestCommand(null, root, { filter: 'setup' }).command, `${flags} --test-name-pattern="setup" src/*.test.js`);
   });
 });
+
+test('test-command: `$` sequences in a filter are kept literally, never read as replacement patterns', () => {
+  const amp = planTestCommand('node --test cli/x.spec.js', process.cwd(), { filter: 'costs $&' });
+  assert.equal(amp.command, `node --test --test-name-pattern='costs $&' cli/x.spec.js`);
+  const group = planTestCommand('node --test cli/x.spec.js', process.cwd(), { filter: "price $1 $' total" });
+  assert.equal(group.command, `node --test --test-name-pattern='price $1 $'\\'' total' cli/x.spec.js`);
+});

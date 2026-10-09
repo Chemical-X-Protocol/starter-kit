@@ -140,7 +140,7 @@ const appendScopeToCustom = (customCmd, targets, filter) => {
   const needsFilter = Boolean(filter) && !hasNameFilter;
   if (!needsFilter) return command;
   const canInsertAfterTestFlag = runner === 'node' && NODE_TEST_FLAG.test(command);
-  if (canInsertAfterTestFlag) return command.replace(NODE_TEST_FLAG, `$1--test --test-name-pattern=${quoteFilter(filter)}`);
+  if (canInsertAfterTestFlag) return command.replace(NODE_TEST_FLAG, (match, lead) => `${lead}--test --test-name-pattern=${quoteFilter(filter)}`);
   const flag = runner === 'node' ? '--test-name-pattern=' : '-t ';
   return `${command} ${flag}${quoteFilter(filter)}`;
 };
