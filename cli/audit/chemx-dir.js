@@ -1,35 +1,40 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { isSqliteMemoryTarget, isLinkedWorktreeRoot } from '../sqlite-memory.js';
-import { isWorkspacePackageDir } from '../workspace.js';
+import { hasProjectMarker, isForbiddenRoot, forbiddenRootRefusal } from '../project-markers.js';
 
 // Locates (and creates) the .chemx directory that holds history and the index db.
-// The walk prefers an existing ancestor .chemx, but never crosses a checkout boundary (a linked
-// worktree, a submodule or any nested git checkout) or a workspace package root: each package
-// and each checkout keeps its own index instead of sharing a parent's.
-const isIndexBoundary = (dir) => isLinkedWorktreeRoot(fs, path, dir) || fs.existsSync(path.join(dir, '.git')) || isWorkspacePackageDir(dir);
+// The walk prefers an existing ancestor .chemx, but stops at the first project marker (.git,
+// package.json, .chemxrc; a linked worktree has a .git file): each package and each checkout keeps
+// its own index instead of sharing a parent's. It never climbs into the OS temp dir, its ancestors
+// or the filesystem root, and never answers one of them (#2570): a stray /tmp/.chemx is ignored.
+const isIndexBoundary = (dir) => isLinkedWorktreeRoot(fs, path, dir) || hasProjectMarker(dir);
+
+// Throws for a forbidden root: callers would otherwise create a db at /tmp or /.
+const refuseForbidden = (dir) => {
+  const refusal = forbiddenRootRefusal(dir);
+  if (refusal) throw new Error(refusal);
+  return dir;
+};
 
 export const findChemxDir = (startDir = process.cwd()) => {
   const hasCustomRoot = Boolean(process.env.CHEMX_PROJECT_ROOT);
   if (hasCustomRoot) {
-    return path.resolve(process.env.CHEMX_PROJECT_ROOT, '.chemx');
+    return path.join(refuseForbidden(path.resolve(process.env.CHEMX_PROJECT_ROOT)), '.chemx');
   }
 
   let current = path.resolve(startDir);
-  while (true) {
+  while (!isForbiddenRoot(current)) {
     const candidate = path.join(current, '.chemx');
     const hasExistingChemx = fs.existsSync(candidate);
     if (hasExistingChemx) {
       return candidate;
     }
     if (isIndexBoundary(current)) return candidate;
-    const parent = path.dirname(current);
-    const isRootReached = parent === current;
-    if (isRootReached) break;
-    current = parent;
+    current = path.dirname(current);
   }
 
-  return path.resolve(startDir, '.chemx');
+  return path.join(refuseForbidden(path.resolve(startDir)), '.chemx');
 };
 
 export const ensureChemxDir = (cwd = process.cwd()) => {

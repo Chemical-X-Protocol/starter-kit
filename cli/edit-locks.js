@@ -5,77 +5,41 @@
  * Read-only: it never creates the database or cleans leases. A lease blocks a mutation
  * when it is unexpired, its holder process (if recorded) is alive, and it belongs to an
  * agent other than the caller (options.agentId, else $CHEMX_AGENT_ID, else a per-process handle).
+ * Which dbs it reads comes from the coordination resolver (team/lease-roots.js, #2581), and every
+ * open goes through openTeamDbReadOnly, so a spec process never reads a real db.
  */
 import './silence-warnings.js';
-import fs from 'node:fs';
-import path from 'node:path';
 import { isPidAlive } from './team/team-db-transaction.js';
 import { resolveAgentId as resolveTeamAgentId } from './team/agent-identity.js';
-import { chemxDbPathFor } from './sqlite-memory.js';
 import { liveWaiters } from './team/lease-cap.js';
-
-const loadSqlite = async () => {
-  try {
-    return (await import('node:sqlite')).DatabaseSync;
-  } catch (err) {
-    const isDebug = Boolean(process.env.CHEMX_DEBUG);
-    if (isDebug) process.stderr.write(`[edit-locks] node:sqlite unavailable: ${err.message}\n`);
-    return null;
-  }
-};
-const DatabaseSync = await loadSqlite();
+import { lockRoots, leaseKeys } from './team/lease-roots.js';
+import { openTeamDbReadOnly, closeQuietly } from './team/team-db-readonly.js';
 
 // One identity rule for locks and edits: explicit, then $CHEMX_AGENT_ID, then a per-process handle.
 export const resolveAgentId = (agentId) => resolveTeamAgentId(agentId);
 
 const readLeases = (root, keys) => {
-  const dbPath = chemxDbPathFor(root);
-  const canRead = Boolean(DatabaseSync) && Boolean(dbPath) && fs.existsSync(dbPath);
+  const db = openTeamDbReadOnly(root);
+  const canRead = Boolean(db);
   if (!canRead) return [];
-  let db = null;
   try {
-    db = new DatabaseSync(dbPath, { readOnly: true });
     const placeholders = keys.map(() => '?').join(', ');
     const now = Date.now();
     const rows = db.prepare(`SELECT * FROM file_leases WHERE file_path IN (${placeholders})`).all(...keys);
     // An expired lease with a waiter belongs to the first waiter: the holder cannot retake it by editing (#2566).
-    const leases = rows.map((row) => (Number(row.expires_at) <= now ? { ...row, waiters: liveWaiters(db, row.file_path, now) } : row));
-    db.close();
-    return leases;
+    return rows.map((row) => (Number(row.expires_at) <= now ? { ...row, waiters: liveWaiters(db, row.file_path, now) } : row));
   } catch (err) {
     const isDebug = Boolean(process.env.CHEMX_DEBUG);
     if (isDebug) process.stderr.write(`[edit-locks] lease lookup skipped: ${err.message}\n`);
-    const isOpen = Boolean(db?.isOpen);
-    if (isOpen) db.close();
     return [];
+  } finally {
+    closeQuietly(db);
   }
 };
 
-// Lock dbs that can hold a lease on the file: the workspace root's, plus every ancestor of the
-// file with a .chemx/index.db, so running from a subdirectory never hides a project-root lease.
-const lockRoots = (root, absPath) => {
-  const hasUsableRoot = Boolean(chemxDbPathFor(root));
-  const roots = hasUsableRoot ? [root] : [];
-  let dir = path.dirname(absPath);
-  while (true) {
-    const hasDb = fs.existsSync(path.join(dir, '.chemx', 'index.db'));
-    const isNewRoot = hasDb && !roots.includes(dir);
-    if (isNewRoot) roots.push(dir);
-    const parent = path.dirname(dir);
-    const isTop = parent === dir;
-    if (isTop) break;
-    dir = parent;
-  }
-  return roots;
-};
-
-// Keys a lease on absPath can carry in lockRoot's db: relative to that root, and the legacy
-// caller-cwd-relative key that rows written before project-root keys used.
-const leaseKeys = (lockRoot, absPath, root) => {
-  const keys = [path.relative(lockRoot, absPath), path.relative(root, absPath)];
-  const isInside = (key) => key !== '' && !key.startsWith('..') && !path.isAbsolute(key);
-  return [...new Set(keys.filter(isInside))];
-};
+// Lock dbs that can hold a lease on the file (the caller's root, then every team db the coordination
+// resolver names for the file, team/lease-roots.js) and the keys a lease can carry in each: relative
+// to that db's root, and the legacy caller-cwd-relative key that rows written before project-root keys used.
 
 const isBlockingLease = (lease, agentId) => {
   const isExpired = Number(lease.expires_at) <= Date.now();

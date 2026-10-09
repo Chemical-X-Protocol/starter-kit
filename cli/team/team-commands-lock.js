@@ -109,7 +109,7 @@ export const handleLockCommand = (db, nonFlagPositional, flags, isCli, cwd = pro
     if (flags.isJson) process.stdout.write(`${JSON.stringify(res, null, 2)}\n`);
     else if (res.granted) process.stdout.write(describeGrant(file, res));
     else if (res.queued) process.stdout.write(`\x1b[33m⏳\x1b[0m ${res.requeued ? 'Still' : 'Enqueued'} in FIFO lock queue at position ${res.position} (held by ${res.currentHolder}). ${describeNotice(res)}\n`);
-    else process.stderr.write(`\x1b[31m✕ Lock refused: ${res.reason}\x1b[0m\n`);
+    else process.stderr.write(`\x1b[31m✕ Lock refused: ${res.message || res.reason}\x1b[0m\n`);
   }
   return res;
 };

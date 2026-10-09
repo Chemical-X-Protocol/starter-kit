@@ -3,17 +3,63 @@
  * Prevents race collisions with deterministic queueing and reactive promotion
  */
 
+import path from 'node:path';
 import { postFeedEvent } from './team-db-feed.js';
 import { DEFAULT_TTL_MS, cleanExpiredLeases, promoteNextWaiter, enqueueWaiter, describeLease } from './team-db-lock-promotion.js';
 import { withImmediateTransaction } from './team-db-transaction.js';
 import { resolveLeaseScope, toLeaseKey } from './lease-key.js';
 import { findLapse, explainNotHolder } from './lease-lapse.js';
 import { notifyHolderOfWaiter } from './lease-waiter-notice.js';
+import { lockRoots } from './lease-roots.js';
+import { openTeamDbReadOnly, closeQuietly, safeGet } from './team-db-readonly.js';
 
 export { cleanExpiredLeases, promoteNextWaiter, describeLease } from './team-db-lock-promotion.js';
 
 // Leases are keyed from the project root; a relative input resolves from options.cwd.
 const leaseKeyFor = (db, filePath, options) => toLeaseKey(filePath, resolveLeaseScope(db, options));
+
+const leaseInOtherDb = (lockRoot, absPath, cleanId, now) => {
+  const key = path.relative(lockRoot, absPath);
+  const isInside = key !== '' && !key.startsWith('..') && !path.isAbsolute(key);
+  const db = isInside ? openTeamDbReadOnly(lockRoot) : null;
+  const hasDb = Boolean(db);
+  if (!hasDb) return null;
+  try {
+    const lease = describeLease(safeGet(db, 'SELECT * FROM file_leases WHERE file_path = ?', [key]), now);
+    const isForeign = Boolean(lease?.active) && lease.locked_by !== cleanId;
+    return isForeign ? { ...lease, lockRoot } : null;
+  } finally {
+    closeQuietly(db);
+  }
+};
+
+/**
+ * A live lease another handle holds on the same file in another team db (#2581). Until
+ * `chemx team migrate` merges a package db, it and the coordination db both serve leases, keyed
+ * from different roots; a lock taken from the root and one taken from the package must still
+ * collide. Read-only and outside this db's transaction, so two requests racing through different
+ * dbs in the same instant can both pass; the edit guard (edit-locks.js) still reads both dbs.
+ */
+export const findLeaseInOtherDb = (db, cleanPath, cleanId, options = {}) => {
+  const scope = resolveLeaseScope(db, options);
+  const absPath = path.resolve(scope.projectRoot, cleanPath);
+  const now = options.now ?? Date.now();
+  const others = lockRoots(scope.projectRoot, absPath).filter((lockRoot) => lockRoot !== scope.projectRoot);
+  for (const lockRoot of others) {
+    const lease = leaseInOtherDb(lockRoot, absPath, cleanId, now);
+    if (lease) return lease;
+  }
+  return null;
+};
+
+const refuseForOtherDb = (lease, cleanPath) => ({
+  granted: false,
+  reason: 'held_in_other_db',
+  heldBy: lease.locked_by,
+  lease: { file_path: lease.file_path, locked_by: lease.locked_by, expires_at: Number(lease.expires_at), purpose: lease.purpose || '' },
+  dbPath: path.join(lease.lockRoot, '.chemx', 'index.db'),
+  message: `${cleanPath} is leased by ${lease.locked_by} in ${path.join(lease.lockRoot, '.chemx', 'index.db')} (an unmerged package db or the coordination db); not queued here. Wait with chemx wait --lock-free=<file>.`
+});
 
 const normalizeAgentId = (id) => {
   const hasId = Boolean(id);
@@ -34,6 +80,8 @@ export const requestFileLock = (db, filePath, agentId, options = {}) => {
 
   const cleanId = normalizeAgentId(agentId);
   const pid = typeof options.pid === 'number' ? options.pid : 0;
+  const otherDbLease = findLeaseInOtherDb(db, cleanPath, cleanId, options);
+  if (otherDbLease) return refuseForOtherDb(otherDbLease, cleanPath);
 
   return withImmediateTransaction(db, () => {
     cleanExpiredLeases(db);

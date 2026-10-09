@@ -1,32 +1,21 @@
 /**
  * Chemical X Protocol: where leases for a path can live.
- * A lease row sits in the .chemx/index.db of the project that owns the file, keyed by the path
- * relative to that project root. Running from a subdirectory or a sub-package must still see a
- * lease held in an ancestor project, so lookups walk every ancestor that has a db.
+ * A lease row sits in a team db, keyed by the path relative to that db's root. Which dbs count comes
+ * from the coordination resolver (#2581, coordination-target.js teamDbRootsFor): each package db
+ * between the path and the coordination root that has not been merged, then the coordination db.
+ * Running from a subdirectory or a sub-package still sees a lease held in the coordination db, and
+ * no db outside the coordination root (a stray /tmp/.chemx, a parent checkout) is ever read.
  */
-import fs from 'node:fs';
 import path from 'node:path';
+import { teamDbRootsFor } from './coordination-target.js';
 
-const hasLockDb = (dir) => fs.existsSync(path.join(dir, '.chemx', 'index.db'));
+/** Every team db root that can hold a lease for startDir (inclusive), nearest first. */
+export const ancestorLockRoots = (startDir) => teamDbRootsFor(startDir);
 
-/** Every ancestor of startDir (inclusive) that has a .chemx/index.db, nearest first. */
-export const ancestorLockRoots = (startDir) => {
-  const roots = [];
-  let dir = path.resolve(startDir);
-  while (true) {
-    if (hasLockDb(dir)) roots.push(dir);
-    const parent = path.dirname(dir);
-    const isTop = parent === dir;
-    if (isTop) break;
-    dir = parent;
-  }
-  return roots;
-};
-
-/** The workspace root plus every ancestor of the file with a db (same rule as edit-locks.js). */
+/** The caller's root plus every team db root that can hold a lease on the file (same rule as edit-locks.js). */
 export const lockRoots = (root, absPath) => {
   const roots = [root];
-  for (const dir of ancestorLockRoots(path.dirname(absPath))) {
+  for (const dir of teamDbRootsFor(path.dirname(absPath))) {
     const isNewRoot = !roots.includes(dir);
     if (isNewRoot) roots.push(dir);
   }
@@ -37,5 +26,5 @@ export const lockRoots = (root, absPath) => {
 export const leaseKeys = (lockRoot, absPath, root) => {
   const keys = [path.relative(lockRoot, absPath), path.relative(root, absPath)];
   const isInside = (key) => key !== '' && !key.startsWith('..') && !path.isAbsolute(key);
-  return keys.filter(isInside);
+  return [...new Set(keys.filter(isInside))];
 };

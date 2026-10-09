@@ -101,7 +101,8 @@ test('context: dbPath names the index the db layer will actually open', async ()
   fs.writeFileSync(path.join(inner, 'package.json'), PKG);
   const context = resolveContext({ projectRoot: inner, env: {} });
   assert.strictEqual(context.rootSource, 'projectRoot');
-  assert.strictEqual(context.dbPath, path.join(outer, '.chemx', 'index.db'));
+  // The walk stops at the first project marker (#2570): inner's package.json, not outer's .chemx.
+  assert.strictEqual(context.dbPath, path.join(inner, '.chemx', 'index.db'));
 });
 
 test('resources and prompts use the one resolver: env root honoured, echoed, unresolved refused', async () => {

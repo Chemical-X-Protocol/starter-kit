@@ -6,7 +6,11 @@
  *      path or a .git/modules pointer) and from a linked worktree to its main checkout; else
  *   2. the outermost workspace root (pnpm-workspace.yaml or package.json workspaces) inside the
  *      nearest checkout; else
- *   3. the package itself: the nearest checkout, else the nearest package.json, else the start dir.
+ *   3. the package itself: the nearest checkout, else the first dir on the way up with a project
+ *      marker (.git, package.json, .chemxrc) or an existing .chemx/index.db (the dir the code index
+ *      would use too), else the start dir.
+ * No walk climbs into the OS temp dir, its ancestors or the filesystem root, and a root that lands
+ * there is refused (#2570): a stray /tmp/.chemx never captures a temp project.
  * CHEMX_PROJECT_ROOT and an MCP projectRoot only choose the start directory; they never move the
  * root. The code index keeps resolving per project (search-schema.js); package scoping of the
  * index is part B of #2488.
@@ -17,6 +21,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { readWorkspaceGlobs } from '../workspace.js';
+import { hasProjectMarker, isForbiddenRoot, forbiddenRootRefusal } from '../project-markers.js';
 
 const realDir = (dir) => {
   try {
@@ -44,8 +49,11 @@ export const isInsideOrEqual = (outer, inner) => {
   return !isOutside;
 };
 
+// The ancestors a root search may visit: never the temp dir, its ancestors or the filesystem root.
+const searchableAncestors = (startDir) => ancestorsOf(startDir).filter((dir) => !isForbiddenRoot(dir));
+
 const hasGit = (dir) => fs.existsSync(path.join(dir, '.git'));
-const nearestCheckout = (startDir) => ancestorsOf(startDir).find(hasGit) ?? null;
+const nearestCheckout = (startDir) => searchableAncestors(startDir).find(hasGit) ?? null;
 
 // The gitdir a `.git` FILE points at (submodule or linked worktree), or null for a real .git dir.
 const readGitPointer = (dir) => {
@@ -106,11 +114,12 @@ const isWorkspaceRoot = (dir) => Boolean(readWorkspaceGlobs(dir));
 
 // Outermost workspace root among the ancestors, never above the nearest checkout's boundary.
 const outermostWorkspace = (startDir, boundary) => {
-  const candidates = ancestorsOf(startDir).filter((dir) => !boundary || isInsideOrEqual(boundary, dir));
+  const candidates = searchableAncestors(startDir).filter((dir) => !boundary || isInsideOrEqual(boundary, dir));
   return candidates.filter(isWorkspaceRoot).pop() ?? null;
 };
 
-const nearestPackage = (startDir) => ancestorsOf(startDir).find((dir) => fs.existsSync(path.join(dir, 'package.json'))) ?? null;
+const isProjectStop = (dir) => hasProjectMarker(dir) || fs.existsSync(path.join(dir, '.chemx', 'index.db'));
+const firstMarker = (startDir) => searchableAncestors(startDir).find(isProjectStop) ?? null;
 
 const locateRoot = (startDir) => {
   const checkout = nearestCheckout(startDir);
@@ -119,7 +128,7 @@ const locateRoot = (startDir) => {
   if (hasSuperproject) return { root: superproject, mode: 'superproject' };
   const workspace = outermostWorkspace(startDir, superproject);
   if (workspace) return { root: workspace, mode: 'workspace' };
-  const own = superproject || nearestPackage(startDir) || path.resolve(startDir);
+  const own = superproject || firstMarker(startDir) || path.resolve(startDir);
   return { root: own, mode: 'standalone' };
 };
 
@@ -133,6 +142,13 @@ const specRefusal = (root, env) => {
 };
 
 /**
+ * Why no team db may be opened at root, or null. Every opener of team rows asks this (#2581):
+ * the temp dir and the filesystem root are never a root, and a spec process (node --test) never
+ * opens a db outside the OS temp dir, whichever path it took to get there.
+ */
+export const teamDbRefusal = (root, env = process.env) => forbiddenRootRefusal(root) || specRefusal(root, env);
+
+/**
  * @param {string} startDir Where the caller runs (cwd, MCP projectRoot, hook root).
  * @param {{ env?: object }} [options]
  * @returns {{ root: string, mode: 'superproject'|'workspace'|'standalone', refused: string|null }}
@@ -141,5 +157,5 @@ export const resolveCoordinationRoot = (startDir = process.cwd(), options = {}) 
   const env = options.env || process.env;
   const located = locateRoot(realDir(startDir));
   const root = realDir(located.root);
-  return { root, mode: located.mode, refused: specRefusal(root, env) };
+  return { root, mode: located.mode, refused: teamDbRefusal(root, env) };
 };

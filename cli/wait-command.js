@@ -92,7 +92,7 @@ const checkTask = (opts, cwd) => {
 
 const checkLock = (opts, cwd, now) => {
   const abs = path.resolve(cwd, opts.lockFree);
-  const lease = liveLeases(cwd, now).find((item) => item.abs === abs);
+  const lease = liveLeases(cwd, now, [path.dirname(abs)]).find((item) => item.abs === abs);
   const note = lease ? `${opts.lockFree} held by ${lease.locked_by}` : `${opts.lockFree} has no live lease`;
   return { done: !lease, note };
 };
