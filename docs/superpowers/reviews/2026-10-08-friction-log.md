@@ -24,3 +24,8 @@
 - [G1 review] `git diff --name-only <base>` is blocked; `chemx d <base> --name-only` works but compares against the moving base tip, so files other groups changed on base appear as this branch's changes.
 - [G1 review] TIMER_DISCIPLINE flags a setTimeout inside a Promise executor even when settle() clears it; the executor keeps an `armTimer` helper that returns the handle, which satisfies the "returns cleanup" heuristic. The rule should accept a timer whose handle is cleared in the same scope.
 - [G1 review] `chemx read --symbol=` and `--outline` were enough for every read this round; `chemx q -g` still not used (G6).
+- [G1 review 2] `chemx audit --help` runs the full audit and prints the banner instead of the audit usage (G5 scope).
+- [G1 review 2] `chemx read cli/mcp/tools-search.js --symbol=resolveTargetCwd` says "not found" for a re-exported symbol without naming the module that defines it (tools-search-util.js); had to grep.
+- [G1 review 2] Used `git diff --name-only <base>` with `# chemx-bypass: name-only diff listing` to list G1-touched files for the inline-if grep; it also lists files other groups changed on the moving base tip (team/*), same gap as the previous entry.
+- [G1 review 2] Guard blocks `sed -n` on source even for a 50-line window; Read was fine, but `chemx read --start/--end` is the suggested path and was not tried.
+- [G1 review 2] spot-check-fixes "Fix 1" still fails in the full suite and alone, from the shared main-checkout .chemx/index.db (G6 scope); every other spec passes.
