@@ -104,9 +104,12 @@ export const startStdioServer = (options = {}) => {
 
   const routeLine = async (line) => {
     const route = classifyLine(line);
-    if (route.kind === 'reply') writeJsonRpc(route.frame);
-    if (route.kind === 'response') outgoing.settleResponse(route.message);
-    if (route.kind === 'request') await dispatchMessage(route.message);
+    const isReply = route.kind === 'reply';
+    if (isReply) writeJsonRpc(route.frame);
+    const isResponse = route.kind === 'response';
+    if (isResponse) outgoing.settleResponse(route.message);
+    const isRequest = route.kind === 'request';
+    if (isRequest) await dispatchMessage(route.message);
   };
 
   // Teardown lifecycle: a real stdio server exits when the client closes stdin,
