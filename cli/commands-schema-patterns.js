@@ -21,8 +21,14 @@ export const PATTERNS_COMMANDS = [
       { flag: '--json', desc: 'Print JSON instead of lines (with --forge or --score)' },
       { flag: '--path=<P>', desc: 'With --forge: only groups with a member under this path' },
       { flag: '--kind=<K>', desc: 'With --forge: only groups of this kind' },
-      { flag: '--include-tests', desc: 'Also fingerprint spec files (--sync, --groups, --forge)' },
-      { flag: '--idioms', desc: 'Keep idiom groups (--groups, --forge)' }
+      { flag: '--include-tests', desc: 'Also fingerprint spec files (--sync, --groups, --forge, --score --forge)' },
+      { flag: '--tests', desc: 'Same as --include-tests' },
+      { flag: '--idioms', desc: 'Keep idiom groups (--groups, --forge)' },
+      { flag: '--sync', desc: 'Refresh the Forge fingerprint ledger only and print its counts as JSON' },
+      { flag: '--groups', desc: 'Refresh the ledger, then print the Forge groups as JSON in the scorer shape' },
+      { flag: '--input=<groups.json>', desc: 'With --score: score these groups instead of a detector' },
+      { flag: '--dir=<d>', desc: 'With --score: the legacy detector scans this directory' },
+      { flag: '--reason=<text>', desc: 'With `patterns reject`: why the group is suppressed' }
     ],
     examples: ['chemx patterns', 'chemx patterns src --min=3', 'chemx patterns --forge', 'chemx patterns --forge --limit=20 --json', 'chemx patterns --forge --explain=3f2a9c0d', 'chemx patterns reject 3f2a9c0d --reason="house shape" --as=@me']
   },
