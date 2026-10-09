@@ -22,7 +22,7 @@ import { commitsWithoutTask, editsWithoutLease, unclosedClaims, hijackSignals } 
 import { optionOf } from './team-commands-tokens.js';
 import { openTeamContext } from './coordination-db.js';
 import { renderAuditRun } from './audit-run-render.js';
-import { leaseLapses, leaseWaiters, guardBypasses, leasesTaken, taskStatuses } from './audit-run-db.js';
+import { leaseLapses, leaseWaiters, guardBypasses, guardCrashes, leasesTaken, taskStatuses } from './audit-run-db.js';
 
 const median = (values) => {
   const sorted = [...values].sort((a, b) => a - b);
@@ -94,6 +94,7 @@ const violationsOf = (r) => [
   [r.leases.waiters.starved.length, 'waiter starved or never granted'],
   [r.bypasses.shell.length + r.bypasses.native.length, 'chemx bypass (shell write or native tool on a repo file)'],
   [r.bypasses.guard.length, 'guard-bypass event'],
+  [r.bypasses.crashes.length, 'guard-crash window (enforcement gap)'],
   [r.protocol.uncommitted.length, 'commit without a task id'],
   [r.protocol.unleasedEdits.length, 'edit without a lease'],
   [r.protocol.unclosedClaims.length, 'claim never closed'],
@@ -116,7 +117,7 @@ export const auditRun = (run, ctx = {}) => {
   const report = {
     runId: run.runId, dir: run.dir, agents: audits.length, missingTranscripts: run.missingTranscripts,
     leases: leaseSection(full.db, priced.rows, ctx.starveMs),
-    bypasses: { shell: audits.flatMap((a) => a.bypasses.filter((b) => b.type === 'shell-write')), native: audits.flatMap((a) => a.bypasses.filter((b) => b.type === 'native-tool')), guard: full.db ? guardBypasses(full.db, priced.rows) : [] },
+    bypasses: { shell: audits.flatMap((a) => a.bypasses.filter((b) => b.type === 'shell-write')), native: audits.flatMap((a) => a.bypasses.filter((b) => b.type === 'native-tool')), guard: full.db ? guardBypasses(full.db, priced.rows) : [], crashes: full.db ? guardCrashes(full.db, priced.rows) : [] },
     adoption: summarizeAdoption(audits.flatMap((a) => a.classified)),
     protocol: { uncommitted: audits.flatMap((a) => a.commits), unleasedEdits: audits.flatMap((a) => a.unleased), unclosedClaims: audits.flatMap((a) => a.unclosed) },
     hijacks: hijacksOf(audits, isLargeEnough ? medianCost : 0),

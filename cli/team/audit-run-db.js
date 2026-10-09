@@ -102,6 +102,37 @@ export const leaseWaiters = (db, agents, { starveMs = DEFAULT_LEASE_CAP_MS } = {
   return { total: mine.length, starved };
 };
 
+const CRASH_GAP_MS = 2 * 60_000;
+
+/**
+ * guard-crash feed events (cli/hooks/entry.js) inside the run window, grouped into windows: events less than
+ * CRASH_GAP_MS apart share one. A crash is not tied to a run handle (the hook may post as @claude), so every
+ * crash in the window counts, and each window is an enforcement gap: the guard ran on its coarse fallback rules.
+ * entry.js rate limits posts to one per minute per root, so `count` is a floor, not the number of crashed calls.
+ */
+export const guardCrashes = (db, agents) => {
+  const win = windowOf(agents);
+  if (!win) return [];
+  const rows = safeAll(db, "SELECT * FROM agent_feed WHERE event_type = 'guard-crash' AND timestamp >= ? AND timestamp <= ? ORDER BY timestamp, id", [win.from, win.to + SLACK_MS]);
+  const windows = [];
+  for (const r of rows) {
+    const meta = metaOf(r);
+    const last = windows[windows.length - 1];
+    const isSame = last !== undefined && r.timestamp - last.to < CRASH_GAP_MS;
+    const target = isSame ? last : { from: r.timestamp, to: r.timestamp, count: 0, hooks: [], errors: [] };
+    const isNew = !isSame;
+    if (isNew) windows.push(target);
+    target.to = r.timestamp;
+    target.count += 1;
+    const error = meta.error ?? r.message;
+    const isNewHook = Boolean(meta.hook) && !target.hooks.includes(meta.hook);
+    const isNewError = !target.errors.includes(error);
+    target.hooks.push(...(isNewHook ? [meta.hook] : []));
+    target.errors.push(...(isNewError ? [error] : []));
+  }
+  return windows;
+};
+
 /** guard-bypass feed events by run handles inside the run window. */
 export const guardBypasses = (db, agents) => {
   const win = windowOf(agents);

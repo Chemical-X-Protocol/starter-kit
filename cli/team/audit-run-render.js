@@ -43,7 +43,9 @@ const bypassLines = (b) => [
   `  native tools on repo files: ${b.native.length}`,
   ...list(b.native, (x) => `${at(x.at)} ${who(x)} ${x.how} ${x.target}`),
   `  guard-bypass events: ${b.guard.length}`,
-  ...list(b.guard, (x) => `${at(x.at)} ${x.handle} [${x.rule ?? 'rule?'}] ${x.reason}`)
+  ...list(b.guard, (x) => `${at(x.at)} ${x.handle} [${x.rule ?? 'rule?'}] ${x.reason}`),
+  `  guard-crash windows (enforcement gaps; count is a floor, posts are rate limited): ${b.crashes.length}`,
+  ...list(b.crashes, (x) => `${at(x.from)}..${at(x.to)} ${x.count} event(s) [${x.hooks.join(',') || 'hook?'}] ${x.errors.join(' | ')}`)
 ];
 
 const top = (rows) => rows.slice(0, SHOWN).map((r) => `${r.command} x${r.count}`).join(', ') || 'none';

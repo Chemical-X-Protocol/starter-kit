@@ -206,6 +206,21 @@ test('db: a lapse under an active holder, an abandoned lease, a starved waiter a
   assert.match(text, /binary patch/);
 });
 
+test('db: guard-crash events group into windows and show as enforcement gaps', (t) => {
+  const env = makeEnv(t);
+  writeRun(env, 'wf_crash', [cleanAgent(env.repo)]);
+  const db = makeDb(t, env);
+  const crash = (at, author, error) => feed(db, { at, author, type: 'guard-crash', message: `guard-crash claude-pre-tool: ${error}`, meta: { hook: 'claude-pre-tool', error } });
+  crash(BASE + 1000, '@claude', 'SyntaxError one');
+  crash(BASE + 61000, '@clean-one', 'SyntaxError one');
+  crash(BASE + 600000, '@claude', 'ENOENT two');
+  const report = audit(env, 'wf_crash', db);
+  assert.deepEqual(report.bypasses.crashes.map((c) => `${c.count} ${c.errors.join('|')}`), ['2 SyntaxError one', '1 ENOENT two']);
+  assert.ok(report.violations.some((v) => v.includes('guard-crash')));
+  assert.match(renderAuditRun(report), /guard-crash windows[^\n]*: 2/);
+  assert.deepEqual(audit(env, 'wf_crash').bypasses.crashes, []);
+});
+
 test('cli: a violated run exits 1 unless --no-fail; --strict is accepted; --json parses', (t) => {
   const env = makeEnv(t);
   const dirty = writeRun(env, 'wf_dirty', [dirtyAgent(env.repo)]);
