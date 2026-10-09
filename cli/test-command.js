@@ -33,6 +33,18 @@ export const detectTestRunner = (cwd, pkg = loadLocalPackageJson(cwd)) => {
   return usesJest ? 'jest' : null;
 };
 
+// npm init writes `echo "Error: no test specified" && exit 1`, which is a placeholder, not a runner.
+const isPlaceholderScript = (script) => /no test specified/.test(script);
+
+// A directory owns a scoped run only when it declares a runner of its own: a runner config,
+// a runner dependency, or a real `test` script (any runner, mocha and ava included).
+const declaresTestRunner = (dir) => {
+  const pkg = loadLocalPackageJson(dir);
+  const script = pkg?.scripts?.test || '';
+  const hasRealScript = script.length > 0 && !isPlaceholderScript(script);
+  return hasRealScript || detectTestRunner(dir, pkg) !== null;
+};
+
 // Splits the script's `node ... --test ...` segment into its flags and its file globs.
 const readNodeSegment = (script = '') => {
   const segment = (String(script).match(NODE_TEST_SEGMENT) || ['node --test'])[0].trim();
@@ -121,7 +133,7 @@ export const planTestCommand = (customCmd, cwd = process.cwd(), options = {}) =>
     return { command: appendScopeToCustom(customCmd, targets, filter), cwd, runner: detectRunnerFromScript(customCmd), missingTargets: [] };
   }
 
-  const owner = findOwningPackageDir(cwd, targets);
+  const owner = findOwningPackageDir(cwd, targets, declaresTestRunner);
   const runCwd = owner.dir;
   const pkg = loadLocalPackageJson(runCwd);
   const scripts = pkg?.scripts || {};
@@ -136,7 +148,7 @@ export const planTestCommand = (customCmd, cwd = process.cwd(), options = {}) =>
     return { command, cwd: runCwd, runner, missingTargets };
   }
 
-  const isLegitTest = scripts.test && !scripts.test.includes('no test specified');
+  const isLegitTest = Boolean(scripts.test) && !isPlaceholderScript(scripts.test);
   const shouldRunVitestDirectly = !isLegitTest && runner === 'vitest';
   if (shouldRunVitestDirectly) return { command: buildVitestCommand(runCwd, [], null), cwd: runCwd, runner, missingTargets: [] };
   const scriptName = pickUnscopedScript(scripts);

@@ -130,3 +130,34 @@ test('test-command: the node --test filter is inserted after the --test token, n
   const plan = planTestCommand('node --test-reporter=tap --test cli/a.spec.js', process.cwd(), { filter: 'foo' });
   assert.equal(plan.command, 'node --test-reporter=tap --test --test-name-pattern="foo" cli/a.spec.js');
 });
+
+test('test-command: a sub-package without its own runner does not take the run away from the root runner', () => {
+  const files = {
+    'package.json': { scripts: { test: 'vitest run' }, devDependencies: { vitest: '^5' } },
+    'packages/foo/package.json': { name: 'foo', version: '1.0.0' },
+    'packages/bar/package.json': { name: 'bar', scripts: { test: 'echo "Error: no test specified" && exit 1' } },
+    'packages/foo/x.spec.ts': '',
+    'packages/bar/y.spec.ts': ''
+  };
+  withProject(files, (root) => {
+    const foo = planTestCommand(null, root, { targets: ['packages/foo/x.spec.ts'] });
+    assert.equal(foo.cwd, path.resolve(root));
+    assert.equal(foo.command, 'npx vitest run packages/foo/x.spec.ts');
+    const bar = planTestCommand(null, root, { targets: ['packages/bar/y.spec.ts'] });
+    assert.equal(bar.cwd, path.resolve(root), 'the npm placeholder script is not a runner');
+  });
+});
+
+test('test-command: a sub-package with a runner config or a real test script owns the run', () => {
+  const files = {
+    'package.json': { scripts: { test: 'vitest run' } },
+    'packages/cfg/vitest.config.ts': 'export default {}',
+    'packages/cfg/a.spec.ts': '',
+    'packages/mocha/package.json': { scripts: { test: 'mocha' } },
+    'packages/mocha/b.spec.js': ''
+  };
+  withProject(files, (root) => {
+    assert.equal(planTestCommand(null, root, { targets: ['packages/cfg/a.spec.ts'] }).cwd, path.join(root, 'packages/cfg'));
+    assert.equal(planTestCommand(null, root, { targets: ['packages/mocha/b.spec.js'] }).cwd, path.join(root, 'packages/mocha'));
+  });
+});

@@ -68,7 +68,7 @@ export const runTestAudit = async (rawArgs = [], isCli = false, options = {}) =>
   const timeoutMs = parseTimeoutSeconds(parsed.values.timeout) ?? options.timeoutMs ?? null;
   const isRaw = Boolean(parsed.flags.raw) || options.raw === true;
   const execution = await executeBuild(plan.command, plan.cwd, { raw: isRaw, timeoutMs });
-  const result = parseTestOutput(execution.stdout, execution.stderr, execution.exitCode, { allowEmpty, timedOut: execution.timedOut, timeoutMs });
+  const result = parseTestOutput(execution.stdout, execution.stderr, execution.exitCode, { allowEmpty, scoped: targets.length > 0 || Boolean(filter), timedOut: execution.timedOut, timeoutMs });
 
   const report = {
     status: result.status,

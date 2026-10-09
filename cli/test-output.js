@@ -126,7 +126,7 @@ export const parseTestOutput = (stdout = '', stderr = '', exitCode = 0, options 
   const verdict = classify({
     counts, failures, lines, exitCode, options,
     fatalLine: findFatalLine(String(stderr).split(/\r?\n/).map((l) => stripAnsi(l))),
-    noTestsLine: findNoTestsLine(lines)
+    noTestsLine: findNoTestsLine(lines, { scoped: Boolean(options.scoped) })
   });
 
   return { success: verdict.status === STATUS.PASS, ...verdict, ...counts, failures };

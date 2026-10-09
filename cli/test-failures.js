@@ -119,9 +119,15 @@ const FATAL_LINE = /FATAL ERROR|JavaScript heap out of memory|Process killed by 
 
 export const findFatalLine = (lines) => lines.map((l) => l.trim()).find((l) => FATAL_LINE.test(l)) || null;
 
-const NO_TESTS_LINE = /No test files found|No tests found|Could not find '[^']+'|no test specified|Missing script:?\s*"?test\b/i;
+const NO_TESTS_LINE = /No test files found|No tests found|Could not find '[^']+'/i;
+// No `test` script (or npm's placeholder) means no runner at all. That only reads as "nothing to
+// run" for an unscoped run; asking for specific tests and getting no runner is a failure.
+const NO_RUNNER_LINE = /no test specified|Missing script:?\s*"?test\b/i;
 
-export const findNoTestsLine = (lines) => lines.map((l) => l.trim()).find((l) => NO_TESTS_LINE.test(l)) || null;
+export const findNoTestsLine = (lines, { scoped = false } = {}) => {
+  const patterns = scoped ? [NO_TESTS_LINE] : [NO_TESTS_LINE, NO_RUNNER_LINE];
+  return lines.map((l) => l.trim()).find((l) => patterns.some((pattern) => pattern.test(l))) || null;
+};
 
 const ERROR_HINT = /error|not found|cannot|failed/i;
 

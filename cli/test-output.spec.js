@@ -174,3 +174,14 @@ test('test-output: vitest separator lines with a [n/m] counter are not failure d
   assert.equal(parsed.failures[0].message, 'Error: import boom');
   assert.ok(!parsed.failures[0].details.some((d) => /⎯/.test(d)), parsed.failures[0].details.join(' | '));
 });
+
+test('test-output: a missing test script is a failure, not an empty run, when specific tests were asked for', () => {
+  const stderr = 'npm error Missing script: "test"\nnpm error\nnpm error To see a list of scripts, run:\nnpm error   npm run';
+  const scoped = parseTestOutput('', stderr, 1, { scoped: true });
+  assert.equal(scoped.status, 'fail');
+  assert.match(scoped.executionError, /Missing script/);
+  assert.equal(parseTestOutput('', stderr, 1, { scoped: true, allowEmpty: true }).status, 'fail', '--allow-empty never hides it');
+  const placeholder = parseTestOutput('Error: no test specified', '', 1, { scoped: true, allowEmpty: true });
+  assert.equal(placeholder.status, 'fail');
+  assert.equal(parseTestOutput('', stderr, 1, {}).status, 'inconclusive', 'an unscoped project with no test script ran nothing');
+});
