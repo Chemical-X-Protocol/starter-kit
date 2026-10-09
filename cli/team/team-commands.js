@@ -25,6 +25,8 @@ import { parseFlags } from './team-flags.js';
 import { resolveListOptions, selectTaskPage, buildTaskListView } from './task-list-view.js';
 import { handleTaskSlotCommand, handleTaskTraceCommand, handleTrainCommand } from './team-commands-vds.js';
 import { handleLockCommand, handleUnlockCommand, resolveCliAgent } from './team-commands-lock.js';
+import { resolveTaskTier } from './task-tier.js';
+import { resolveDependencyStates } from './task-detail-sections.js';
 
 const ARG_VAL_FLAGS = ['--target', '--as', '--to', '--agent', '--since', '--limit', '--thread', '--task', '--parent', '--rule', '--priority', '--prio', '--moscow', '--url', '--pid'];
 
@@ -165,15 +167,16 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
         return { error: `Task #${taskId} not found` };
       }
       const events = queryFeed(db, { task_id: taskId });
+      const dependencyStates = resolveDependencyStates(db, task);
       if (flags.isJson) {
-        const output = { task, events, activityCount: events.length };
+        const output = { task, dependencyStates, events, activityCount: events.length };
         if (isCli) process.stdout.write(`${JSON.stringify(output, null, 2)}\n`);
         return output;
       }
       if (isCli) {
-        process.stdout.write(formatTaskDetailCard(task, events));
+        process.stdout.write(formatTaskDetailCard(task, events, dependencyStates));
       }
-      return { task, events };
+      return { task, dependencyStates, events };
     }
     if (taskAction === 'comment' || taskAction === 'post') {
       const taskId = nonFlagPositional[1];
@@ -343,7 +346,7 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
       const task = createTask(db, {
         title,
         description: flags.description || '',
-        tier: flags.tier || 'molecule',
+        tier: resolveTaskTier(flags.tier, flags.target),
         target_path: flags.target,
         priority: flags.priority || 2,
         assigned_agent_id: flags.agent || null,

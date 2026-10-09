@@ -1,3 +1,5 @@
+import { formatTaskBriefLines } from './task-detail-sections.js';
+
 export const formatSwarmStatusCard = (status) => {
   const a = status.agents;
   const t = status.tasks;
@@ -120,7 +122,7 @@ export const formatMailboxCard = (mailbox) => {
   return lines.join('\n');
 };
 
-export const formatTaskDetailCard = (task, events = []) => {
+export const formatTaskDetailCard = (task, events = [], dependencyStates = []) => {
   if (!task) return '  (Task not found)\n';
   const lines = [''];
   const statusColors = {
@@ -137,7 +139,7 @@ export const formatTaskDetailCard = (task, events = []) => {
 
   lines.push(`\x1b[1m\x1b[36m📋 [Chemical X Task #${task.id}]\x1b[0m \x1b[1m${task.title}\x1b[0m`);
   lines.push(`\x1b[90m${'─'.repeat(58)}\x1b[0m`);
-  lines.push(`  \x1b[1mStatus:\x1b[0m   ${statusStr} │ \x1b[1mPriority:\x1b[0m ${pStr} │ \x1b[1mTier:\x1b[0m ${tierStr || 'utility'}`);
+  lines.push(`  \x1b[1mStatus:\x1b[0m   ${statusStr} │ \x1b[1mPriority:\x1b[0m ${pStr} │ \x1b[1mTier:\x1b[0m ${tierStr || '(none)'}`);
   lines.push(`  \x1b[1mAssignee:\x1b[0m ${task.assigned_agent_id || '(unassigned)'} │ \x1b[1mOrigin:\x1b[0m ${task.origin_type || 'manual'}`);
 
   if (task.target_path) {
@@ -146,6 +148,7 @@ export const formatTaskDetailCard = (task, events = []) => {
   if (task.blocked_reason) {
     lines.push(`  \x1b[1m\x1b[31mBlocker:\x1b[0m  \x1b[33m${task.blocked_reason}\x1b[0m`);
   }
+  lines.push(...formatTaskBriefLines(task, dependencyStates));
 
   const tok = task.total_tokens || ((task.prompt_tokens || 0) + (task.completion_tokens || 0));
   if (tok > 0 || task.cost_usd > 0) {
