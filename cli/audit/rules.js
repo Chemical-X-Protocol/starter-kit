@@ -49,10 +49,12 @@ const runTextPasses = (content, lines, filePath, relativePath, ruleConfig, viola
 
 const runSfcTemplatePasses = (sfc, relativePath, options, ruleConfig, violations) => {
   for (const error of sfc.errors) violations.push(parseErrorViolation(relativePath, error.line, `SFC: ${error.message}`));
-  if (!sfc.template) return;
+  const isTemplateMissing = !sfc.template;
+  if (isTemplateMissing) return;
   violations.push(...auditTemplate(sfc.template, relativePath));
   violations.push(...checkTemplateRenderDepth(sfc.template, relativePath, ruleConfig));
-  if (options.patternRegistry) {
+  const hasPatternRegistry = Boolean(options.patternRegistry);
+  if (hasPatternRegistry) {
     recordTemplatePatterns(options.patternRegistry, sfc.template.content, relativePath, sfc.template.startLine - 1);
   }
 };
@@ -72,7 +74,8 @@ const collectRawViolations = (content, filePath, relativePath, options, ruleConf
   const isAstEligible = !options.fast && isBabelParsable(filePath);
   let coverageKind = isAstEligible ? COVERAGE_KINDS.AST : COVERAGE_KINDS.TEXT_ONLY;
 
-  if (isAstEligible && sfc) runSfcTemplatePasses(sfc, relativePath, options, ruleConfig, violations);
+  const shouldRunSfcPasses = Boolean(isAstEligible && sfc);
+  if (shouldRunSfcPasses) runSfcTemplatePasses(sfc, relativePath, options, ruleConfig, violations);
   const code = sfc ? sfc.scriptOverlay : content;
   const hasCode = isAstEligible && code.trim().length > 0;
   const isEmptyScript = isAstEligible && !hasCode && !sfc?.template;
@@ -80,7 +83,8 @@ const collectRawViolations = (content, filePath, relativePath, options, ruleConf
 
   if (hasCode) {
     const parsed = parseScriptAsts(code, sfc, content);
-    if (parsed.error) {
+    const hasParseError = Boolean(parsed.error);
+    if (hasParseError) {
       violations.push(parseErrorViolation(relativePath, parsed.error.line, parsed.error.message));
       coverageKind = COVERAGE_KINDS.PARSE_ERROR;
     } else {
