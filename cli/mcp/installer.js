@@ -4,6 +4,7 @@ import os from 'node:os';
 import { syncAntigravityMcpSchemas } from './antigravity.js';
 import { planMcpConfigMerge, writeFileSafely, installServerEntry } from './installer-write.js';
 import { parseJsonc } from './installer-jsonc.js';
+import { STATUS, combineStatuses } from '../result-status.js';
 
 export { syncAntigravityMcpSchemas } from './antigravity.js';
 export { planMcpConfigMerge } from './installer-write.js';
@@ -34,10 +35,12 @@ export const resolveMcpServerCommand = (targetDir = '.') => {
   return { command: 'npm', args: ['exec', '-y', '--', 'chemx', 'mcp'] };
 };
 
+const isRefusedEntry = (result) => result.status === 'refused';
+
 const reportEntry = (result, label, isSilent) => {
   if (isSilent) return;
   const rel = path.basename(path.dirname(result.file)) + '/' + path.basename(result.file);
-  const isRefused = result.status === 'refused';
+  const isRefused = isRefusedEntry(result);
   if (isRefused) { process.stderr.write(`  \x1b[33m⚠\x1b[0m Skipped ${label} (${rel}): ${result.reason}\n`); return; }
   const verb = result.status === 'unchanged' ? 'Already configured' : 'Configured';
   process.stdout.write(`  \x1b[32m✔\x1b[0m ${verb} ${label} MCP server in: ${rel}\n`);
@@ -50,14 +53,17 @@ const addPackageScripts = (resolvedTarget) => {
   if (!fs.existsSync(pkgPath)) return false;
   const text = fs.readFileSync(pkgPath, 'utf-8');
   const [pkg, parseError] = parseJsonc(text);
-  if (parseError || !pkg || typeof pkg !== 'object') return false;
+  const isEditablePackage = !parseError && Boolean(pkg) && typeof pkg === 'object';
+  if (!isEditablePackage) return false;
   const scripts = { ...(pkg.scripts || {}) };
   const hasMcpScript = Boolean(scripts['chemx:mcp'] || scripts.mcp);
   const wanted = hasMcpScript ? CHEMX_SCRIPTS : { 'chemx:mcp': 'chemx mcp', ...CHEMX_SCRIPTS };
   const missing = Object.entries(wanted).filter(([name]) => !scripts[name]);
-  if (missing.length === 0) return false;
+  const hasNothingToAdd = missing.length === 0;
+  if (hasNothingToAdd) return false;
   pkg.scripts = { ...scripts, ...Object.fromEntries(missing) };
-  return writeFileSafely(pkgPath, JSON.stringify(pkg, null, detectIndent(text)) + '\n') === 'written';
+  const { status } = writeFileSafely(pkgPath, JSON.stringify(pkg, null, detectIndent(text)) + '\n', { backup: false });
+  return status === 'written';
 };
 
 export const installProjectMcpConfig = (targetDir = '.', options = {}) => {
@@ -71,8 +77,8 @@ export const installProjectMcpConfig = (targetDir = '.', options = {}) => {
   reportEntry(vscode, 'VS Code', isSilent);
   const packageJson = options.addScripts === false ? false : addPackageScripts(resolvedTarget);
   if (packageJson && !isSilent) process.stdout.write('  \x1b[32m✔\x1b[0m Added chemx verification & MCP scripts to package.json\n');
-  const refused = [cursor, vscode].filter((r) => r.status === 'refused');
-  return { cursor: cursor.status !== 'refused', vscode: vscode.status !== 'refused', packageJson, refused };
+  const refused = [cursor, vscode].filter(isRefusedEntry);
+  return { cursor: !isRefusedEntry(cursor), vscode: !isRefusedEntry(vscode), packageJson, refused };
 };
 
 const resolveAntigravityServer = (resolvedTarget) => {
@@ -81,33 +87,43 @@ const resolveAntigravityServer = (resolvedTarget) => {
   return localStarter ? { command: process.execPath, args: [localStarter, 'mcp'] } : { command: 'npm', args: ['exec', '-y', '--', 'chemx', 'mcp'] };
 };
 
-/** Writes ~/.gemini config only when options.includeHome is true (explicit --global). */
-export const installAntigravityMcpConfig = (targetDir = '.', options = {}) => {
+/** Returns the Antigravity entry result, or null when it was not attempted (no ~/.gemini or no --global). */
+const installAntigravityEntry = (targetDir, options) => {
   const isSilent = Boolean(options.silent);
   const homeDir = options.homeDir || os.homedir();
   const configDir = path.join(homeDir, '.gemini', 'config');
   const hasConfigDir = fs.existsSync(configDir);
-  if (!hasConfigDir) return false;
-  if (options.includeHome !== true) {
+  if (!hasConfigDir) return null;
+  const isHomeAllowed = options.includeHome === true;
+  if (!isHomeAllowed) {
     if (!isSilent) process.stdout.write('  ℹ Antigravity detected: run `chemx install-mcp --global` to register chemx in ~/.gemini (not done automatically).\n');
-    return false;
+    return null;
   }
   const result = installServerEntry(path.join(configDir, 'mcp_config.json'), resolveAntigravityServer(path.resolve(targetDir)), { serversKey: 'mcpServers' });
   reportEntry(result, 'Antigravity', isSilent);
-  if (result.status === 'refused') return false;
-  syncAntigravityMcpSchemas(path.join(homeDir, '.gemini', 'antigravity', 'mcp', 'chemical-x'), { silent: isSilent });
-  return true;
+  const isRefused = isRefusedEntry(result);
+  if (!isRefused) syncAntigravityMcpSchemas(path.join(homeDir, '.gemini', 'antigravity', 'mcp', 'chemical-x'), { silent: isSilent });
+  return result;
+};
+
+/** Writes ~/.gemini config only when options.includeHome is true (explicit --global). */
+export const installAntigravityMcpConfig = (targetDir = '.', options = {}) => {
+  const result = installAntigravityEntry(targetDir, options);
+  return Boolean(result) && !isRefusedEntry(result);
 };
 
 export const installAllMcpConfigs = (targetDir = '.', options = {}) => {
   const isSilent = Boolean(options.silent);
   if (!isSilent) process.stdout.write('\n\x1b[1m\x1b[38;2;98;201;255m⚡ Chemical X: Registering Model Context Protocol (MCP) Server\x1b[0m\n');
   const projectResults = installProjectMcpConfig(targetDir, options);
-  const antigravity = installAntigravityMcpConfig(targetDir, options);
-  const hasRefusals = projectResults.refused.length > 0;
+  const antigravityResult = installAntigravityEntry(targetDir, options);
+  const antigravity = Boolean(antigravityResult) && !isRefusedEntry(antigravityResult);
+  const refused = [...projectResults.refused, antigravityResult].filter((r) => Boolean(r) && isRefusedEntry(r));
+  const hasRefusals = refused.length > 0;
+  const status = combineStatuses([STATUS.PASS, ...refused.map(() => STATUS.FAIL)]);
   if (!isSilent) {
     const summary = hasRefusals ? '\x1b[33m⚠ Chemical X MCP server configured with skipped files (see above).\x1b[0m' : '\x1b[1m\x1b[32m✔ Chemical X MCP server configured.\x1b[0m';
     process.stdout.write(`${summary}\n\n`);
   }
-  return { ...projectResults, antigravity };
+  return { ...projectResults, refused, antigravity, status };
 };

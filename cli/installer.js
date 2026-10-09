@@ -38,6 +38,11 @@ export const resolveGitHooksDir = (targetDir = '.') => {
   return null;
 };
 
+const CHEMX_HOOK_MARKER = '# Chemical X Protocol: Pre-Commit';
+
+/** True when a hook file is a chemx-generated hook (safe to replace without a backup). */
+export const isChemxHook = (text = '') => String(text).split('\n').slice(0, 3).some((line) => line.startsWith(CHEMX_HOOK_MARKER));
+
 export const installPreCommitHook = (targetDir = '.', options = {}) => {
   const gitHooksDir = resolveGitHooksDir(targetDir);
   if (!gitHooksDir) {
@@ -50,11 +55,11 @@ export const installPreCommitHook = (targetDir = '.', options = {}) => {
   }
 
   const hookPath = path.join(gitHooksDir, 'pre-commit');
-  const status = writeFileSafely(hookPath, buildPreCommitHookScript(options.minGrade, options.minScore));
+  const { backupPath } = writeFileSafely(hookPath, buildPreCommitHookScript(options.minGrade, options.minScore), { isOwnContent: isChemxHook });
   fs.chmodSync(hookPath, 0o755);
   const relativeHook = path.relative(path.resolve(targetDir), hookPath);
-  const hasBackup = status === 'written' && fs.existsSync(`${hookPath}.bak`);
-  if (hasBackup) process.stdout.write(`  \x1b[33mℹ\x1b[0m Previous pre-commit hook saved as ${relativeHook}.bak\n`);
+  const hasBackup = Boolean(backupPath);
+  if (hasBackup) process.stdout.write(`  \x1b[33mℹ\x1b[0m Previous pre-commit hook saved as ${path.relative(path.resolve(targetDir), backupPath)}\n`);
   process.stdout.write(`  \x1b[32m✔\x1b[0m Installed git pre-commit hook: ${relativeHook} (chmod +x)\n`);
   ensurePackageScripts(targetDir);
   return true;
@@ -87,15 +92,9 @@ export const areGuardrailsInstalled = (targetDir = '.') => {
   }
 
   const hookPath = path.join(hooksDir, 'pre-commit');
-  let hasHook = false;
-  if (fs.existsSync(hookPath)) {
-    try {
-      const hookContent = fs.readFileSync(hookPath, 'utf-8');
-      hasHook = hookContent.includes('Chemical X') || hookContent.includes('chemx');
-    } catch {
-      hasHook = false;
-    }
-  }
+  const isHookFile = fs.statSync(hookPath, { throwIfNoEntry: false })?.isFile() ?? false;
+  const hookContent = isHookFile ? fs.readFileSync(hookPath, 'utf-8') : '';
+  const hasHook = hookContent.includes('Chemical X') || hookContent.includes('chemx');
 
   return hasWf && hasHook;
 };
@@ -142,13 +141,30 @@ export const installAgentSearchConfig = async (targetDir = '.') => {
   return true;
 };
 
+/** Maps a wizard choice to what gets installed. Only option 2 names and writes ~/.gemini. */
+export const planWizardTargets = (targetChoice = '1') => {
+  const choice = String(targetChoice);
+  const isMcpOnly = choice.includes('MCP Server only') || choice === '2';
+  const isHookOnly = choice.includes('Hook only') || choice === '5';
+  const isCiOnly = choice.includes('CI Workflow only') || choice === '6';
+  const isAll = choice.includes('All') || choice === '1';
+  return {
+    isMcpOnly,
+    includeHome: isMcpOnly,
+    shouldHook: !isCiOnly,
+    shouldWf: !isHookOnly,
+    shouldMcp: isAll,
+    shouldQuery: isAll
+  };
+};
+
 export const runInstallWizard = async (targetDir = '.') => {
   const isGit = Boolean(resolveGitHooksDir(targetDir));
   process.stdout.write('\n\x1b[1m\x1b[38;2;98;201;255mChemical X: Architecture Guardrail & Query Installer\x1b[0m\n\n');
   const targetChoice = hasGum()
     ? gumChoose([
-        '1. Install All Guardrails (Pre-Commit Hook + GitHub CI + MCP Server + Query Machine)',
-        '2. Model Context Protocol (MCP) Server only (.cursor, .vscode, Antigravity)',
+        '1. Install All Guardrails (Pre-Commit Hook + GitHub CI + project MCP config + Query Machine)',
+        '2. Model Context Protocol (MCP) Server only (.cursor, .vscode, and Antigravity in ~/.gemini)',
         '3. Architectural Pillars & Agent Steering Wizard (AGENTS.md seed + CLAUDE.md, .cursorrules, llms.txt shims)',
         '4. Agent Query Machine only ("pnpm q" script + SQLite index)',
         '5. Git Pre-Commit Hook only (.git/hooks/pre-commit)',
@@ -158,9 +174,9 @@ export const runInstallWizard = async (targetDir = '.') => {
     : await promptQuestion('Select target: [1] All, [2] MCP, [3] Pillars Wizard, [4] Query Machine, [5] Hook, [6] CI, [7] Cancel (default: 1): ');
   if (targetChoice?.includes('Cancel') || targetChoice === '7') return;
 
-  const isMcpOnly = targetChoice.includes('MCP Server only') || targetChoice === '2';
-  if (isMcpOnly) {
-    installAllMcpConfigs(targetDir, { silent: false, includeHome: true });
+  const targets = planWizardTargets(targetChoice);
+  if (targets.isMcpOnly) {
+    installAllMcpConfigs(targetDir, { silent: false, includeHome: targets.includeHome });
     return;
   }
 
@@ -183,11 +199,7 @@ export const runInstallWizard = async (targetDir = '.') => {
   const opts = { minGrade: minGrade.trim().toUpperCase(), minScore };
 
   process.stdout.write('\n\x1b[1mInstalling guardrails...\x1b[0m\n');
-  const shouldHook = !targetChoice.includes('CI Workflow only') && targetChoice !== '6';
-  const shouldWf = !targetChoice.includes('Hook only') && targetChoice !== '5';
-  const isAll = targetChoice.includes('All') || targetChoice === '1';
-  const shouldMcp = isAll;
-  const shouldQuery = isAll;
+  const { shouldHook, shouldWf, shouldMcp, shouldQuery, includeHome } = targets;
 
   if (shouldHook) {
     if (isGit) installPreCommitHook(targetDir, opts);
@@ -197,7 +209,7 @@ export const runInstallWizard = async (targetDir = '.') => {
     }
   }
   if (shouldWf) installGitHubWorkflow(targetDir, opts);
-  if (shouldMcp) installAllMcpConfigs(targetDir, { silent: false, includeHome: true });
+  if (shouldMcp) installAllMcpConfigs(targetDir, { silent: false, includeHome });
   if (shouldQuery) await installAgentSearchConfig(targetDir);
 
   saveProjectConfig(targetDir, { minGrade: opts.minGrade, minScore: opts.minScore, maxLineCount: 500, maxMoleculeLineCount: 100 });

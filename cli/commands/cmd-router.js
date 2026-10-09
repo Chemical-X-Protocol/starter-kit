@@ -228,7 +228,9 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
     case 'install-mcp':
     case 'setup-mcp': {
       const { runMcpInstaller } = await import('../mcp/index.js');
-      await runMcpInstaller(rawArgs.slice(1));
+      const { toExitCode } = await import('../result-status.js');
+      const installResult = await runMcpInstaller(rawArgs.slice(1));
+      process.exitCode = toExitCode(installResult.status);
       break;
     }
     case '-v':

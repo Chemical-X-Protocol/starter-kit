@@ -3,7 +3,8 @@
  * - unparseable files are refused, never replaced;
  * - files with comments are refused (a rewrite would drop them) with a manual snippet;
  * - other servers and keys are kept; only the chemical-x entry changes;
- * - writes are atomic (temp + rename) and back up the previous file to <file>.bak.
+ * - writes are atomic (temp + rename), follow symlinks and keep CRLF;
+ * - the first time chemx touches a user file it is backed up to a new <file>.bak[.N].
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -43,20 +44,49 @@ export const planMcpConfigMerge = (existingText = '', entry = {}, options = {}) 
     const isStaleBlockEmpty = Object.keys(rest).length === 0;
     if (isStaleBlockEmpty) delete next[staleKey];
   }
-  return { ok: true, content: JSON.stringify(next, null, 2) + '\n' };
+  const hadEntry = hasServersObject && SERVER_KEY in parsed[serversKey];
+  return { ok: true, content: JSON.stringify(next, null, 2) + '\n', hadEntry };
 };
 
-/** Atomic write with a .bak of the previous content. Returns 'written' | 'unchanged'. */
-export const writeFileSafely = (file, content) => {
-  const hasExisting = fs.existsSync(file);
-  const previous = hasExisting ? fs.readFileSync(file, 'utf-8') : null;
-  if (previous === content) return 'unchanged';
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  if (hasExisting) fs.writeFileSync(`${file}.bak`, previous, 'utf-8');
-  const tmp = `${file}.chemx-tmp-${process.pid}`;
-  fs.writeFileSync(tmp, content, 'utf-8');
-  fs.renameSync(tmp, file);
-  return 'written';
+const resolveWriteTarget = (file) => {
+  const isExistingLink = fs.lstatSync(file, { throwIfNoEntry: false })?.isSymbolicLink() ?? false;
+  return isExistingLink ? fs.realpathSync(file) : file;
+};
+
+const matchLineEndings = (previous, content) => {
+  const usesCrlf = typeof previous === 'string' && previous.includes('\r\n');
+  return usesCrlf ? content.replace(/\r?\n/g, '\r\n') : content;
+};
+
+/** First free backup name: <file>.bak, then <file>.bak.1, .bak.2 ... Never an existing file. */
+const nextBackupPath = (file) => {
+  let candidate = `${file}.bak`;
+  for (let n = 1; fs.existsSync(candidate); n++) candidate = `${file}.bak.${n}`;
+  return candidate;
+};
+
+/**
+ * Atomic write. Follows symlinks to their target and keeps CRLF line endings.
+ * options.backup (default true): copy the previous content to a new backup file first.
+ * options.isOwnContent(previous): true when the previous content is chemx output; no backup then.
+ * Returns { status: 'written' | 'unchanged', backupPath }.
+ */
+export const writeFileSafely = (file, content, options = {}) => {
+  const target = resolveWriteTarget(file);
+  const hasExisting = fs.existsSync(target);
+  const previous = hasExisting ? fs.readFileSync(target, 'utf-8') : null;
+  const finalContent = matchLineEndings(previous, content);
+  const isUnchanged = previous === finalContent;
+  if (isUnchanged) return { status: 'unchanged', backupPath: null };
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  const isOwnContent = hasExisting && Boolean(options.isOwnContent?.(previous));
+  const shouldBackup = hasExisting && options.backup !== false && !isOwnContent;
+  const backupPath = shouldBackup ? nextBackupPath(file) : null;
+  if (shouldBackup) fs.writeFileSync(backupPath, previous, 'utf-8');
+  const tmp = `${target}.chemx-tmp-${process.pid}`;
+  fs.writeFileSync(tmp, finalContent, 'utf-8');
+  fs.renameSync(tmp, target);
+  return { status: 'written', backupPath };
 };
 
 /** Plans and writes one MCP config file. Returns { file, status, reason? }. */
@@ -64,5 +94,6 @@ export const installServerEntry = (file, entry, options = {}) => {
   const existing = fs.existsSync(file) ? fs.readFileSync(file, 'utf-8') : '';
   const plan = planMcpConfigMerge(existing, entry, options);
   if (!plan.ok) return { file, status: 'refused', reason: plan.reason };
-  return { file, status: writeFileSafely(file, plan.content) };
+  const { status, backupPath } = writeFileSafely(file, plan.content, { backup: !plan.hadEntry });
+  return { file, status, backupPath };
 };

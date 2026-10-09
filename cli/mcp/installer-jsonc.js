@@ -13,10 +13,12 @@ const scanOutsideStrings = (text, onCode) => {
       out += ch;
       const isEscape = ch === '\\';
       if (isEscape) { out += text[i + 1] ?? ''; i++; continue; }
-      if (ch === '"') inString = false;
+      const closesString = ch === '"';
+      if (closesString) inString = false;
       continue;
     }
-    if (ch === '"') { inString = true; out += ch; continue; }
+    const opensString = ch === '"';
+    if (opensString) { inString = true; out += ch; continue; }
     const step = onCode(text, i);
     out += step.emit;
     i += step.skip;
