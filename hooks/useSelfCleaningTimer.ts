@@ -8,7 +8,8 @@ export const useSelfCleaningInterval = (callback: () => void, delayMs: number | 
   }, [callback]);
 
   useEffect(() => {
-    if (delayMs === null) return;
+    const isDisabled = delayMs === null;
+    if (isDisabled) return;
     const intervalId = setInterval(() => savedCallback.current(), delayMs);
     return () => clearInterval(intervalId);
   }, [delayMs]);
@@ -22,7 +23,8 @@ export const useSelfCleaningTimeout = (callback: () => void, delayMs: number | n
   }, [callback]);
 
   useEffect(() => {
-    if (delayMs === null) return;
+    const isDisabled = delayMs === null;
+    if (isDisabled) return;
     const timerId = setTimeout(() => savedCallback.current(), delayMs);
     return () => clearTimeout(timerId);
   }, [delayMs]);
