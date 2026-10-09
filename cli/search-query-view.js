@@ -60,7 +60,8 @@ export const printQueryPage = (page, { query, durationMs, isInspect, index }) =>
     return;
   }
   for (const r of page.results) out.push(isInspect ? formatInspect(r) : formatMatch(r));
-  if (page.truncated) out.push(`\n  ${ANSI.GOLD}Truncated: ${page.total - shown} more. Use -n <num> to see more.${ANSI.RESET}`);
+  const isTruncated = Boolean(page.truncated);
+  if (isTruncated) out.push(`\n  ${ANSI.GOLD}Truncated: ${page.total - shown} more. Use -n <num> to see more.${ANSI.RESET}`);
   out.push(`\n  ${ANSI.DIM}Tip: --inspect for props/hooks, --json for agents.${ANSI.RESET}\n`);
   process.stdout.write(out.join('\n') + '\n');
 };
