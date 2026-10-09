@@ -5,6 +5,7 @@
 import path from 'node:path';
 import { auditCode } from './audit/rules.js';
 import { isSourceFile } from './languages.js';
+import { countLines } from './line-count.js';
 
 const RAW_DOM_REGEX = /<\s*(button|input|textarea|select)\b[^>]*>/i;
 const isSevere = (severity) => (v) => v.severity === severity;
@@ -16,7 +17,8 @@ const isMoleculePath = (relPath) => {
 
 const rawDomViolation = (relPath, content) => {
   const match = content.match(RAW_DOM_REGEX);
-  if (!match) return null;
+  const hasRawDom = Boolean(match);
+  if (!hasRawDom) return null;
   const tag = match[1];
   return {
     filePath: relPath,
@@ -44,7 +46,7 @@ const auditInMemory = (absPath, relPath, content) => {
  * @returns {{ lineBudget: object, isClean: boolean, violationsCount: number, criticalCount: number, highCount: number, violations: object[] }}
  */
 export const evaluateGuardrails = ({ absPath, relPath, content, skipCheck = false }) => {
-  const lines = content.split('\n').length;
+  const lines = countLines(content);
   const isMolecule = isMoleculePath(relPath);
   const limit = isMolecule ? 100 : 500;
   const isBudgetExceeded = lines > limit;
@@ -59,7 +61,8 @@ export const evaluateGuardrails = ({ absPath, relPath, content, skipCheck = fals
 
   const violations = skipCheck ? [] : auditInMemory(absPath, relPath, content);
   const domViolation = !skipCheck && isMolecule ? rawDomViolation(relPath, content) : null;
-  if (domViolation) violations.push(domViolation);
+  const hasDomViolation = Boolean(domViolation);
+  if (hasDomViolation) violations.push(domViolation);
 
   return {
     lineBudget,

@@ -275,3 +275,17 @@ test('patch: an already-broken file reports that the parse checks could not run 
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('patch: the line budget counts lines the same way newLines does', async () => {
+  const { evaluateGuardrails } = await import('./edit-guardrails.js');
+  const exactly500 = 'export const a = 1;\n'.repeat(500);
+  assert.equal(evaluateGuardrails({ absPath: '/x/a.ts', relPath: 'a.ts', content: exactly500, skipCheck: true }).lineBudget.passed, true);
+  const dir = makeProject({ 'src/price.ts': 'export const x = 1\nexport const y = 2\n' });
+  try {
+    const res = patchFile('src/price.ts', { targetContent: 'x = 1', replacementContent: 'x = 1\nexport const z = 3', cwd: dir, skipIndex: true, dryRun: true });
+    assert.equal(res.lineBudget.lines, res.newLines);
+    assert.equal(res.newLines, 3);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
