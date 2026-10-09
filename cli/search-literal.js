@@ -84,9 +84,12 @@ const classifyRipgrepFiles = (root, scopeDirs, options) => {
   for (const listed of runRipgrep(root, args).split('\n').filter(Boolean)) {
     const rel = listed.replace(/^\.\//, '');
     const kind = classifySearchFile(root, rel, MAX_FILE_BYTES);
-    if (kind === 'text') textFiles.add(rel);
-    if (kind === 'binary') stats.skippedBinary += 1;
-    if (kind === 'large') stats.skippedLarge += 1;
+    const isTextFile = kind === 'text';
+    if (isTextFile) textFiles.add(rel);
+    const isBinaryFile = kind === 'binary';
+    if (isBinaryFile) stats.skippedBinary += 1;
+    const isLargeFile = kind === 'large';
+    if (isLargeFile) stats.skippedLarge += 1;
   }
   stats.filesSearched = textFiles.size;
   return { textFiles, stats };
