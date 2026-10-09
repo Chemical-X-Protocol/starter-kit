@@ -4,6 +4,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { COMMANDS_SCHEMA, ROUTABLE_COMMAND_TOKENS, findCommandSchema } from './commands-schema.js';
 import { printHelp, printInitHelp, printScaffoldHelp, formatTopLevelHelp, resolveCommandHelpTopic } from './help.js';
@@ -191,4 +192,14 @@ test('cli: chemx create --help and scaffold -h display usage', () => {
       `chemx ${cmd} ${flag} output should include scaffolder usage instructions`
     );
   }
+});
+
+test('commands-schema: each schema data module stays under the 150-line lexicon guideline', () => {
+  const cliDir = path.dirname(fileURLToPath(import.meta.url));
+  const modules = fs.readdirSync(cliDir).filter((name) => /^commands-schema.*\.js$/.test(name) && !name.endsWith('.spec.js'));
+  assert.ok(modules.length >= 5, `found ${modules.join(', ')}`);
+  const oversized = modules
+    .map((name) => [name, fs.readFileSync(path.join(cliDir, name), 'utf8').split('\n').length - 1])
+    .filter(([, lines]) => lines > 150);
+  assert.deepStrictEqual(oversized, []);
 });

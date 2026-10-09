@@ -1,0 +1,86 @@
+// Command schema entries for the edit group. Assembled in commands-schema.js.
+import { describeLineBudgetPolicy } from './config/profiles.js';
+
+export const EDIT_COMMANDS = [
+  {
+    name: 'patch',
+    aliases: ['edit'],
+    group: 'edit',
+    brief: 'Exact search/replace edit',
+    usage: 'chemx patch <file> --target="<old>" --replacement="<new>" [options]',
+    summary: 'Surgically patch a target file using exact search and replacement blocks.',
+    description: 'Replaces targeted text blocks, then re-indexes and audits the file.',
+    flags: [
+      { flag: '--target="<old>"', desc: 'Exact text block to replace' },
+      { flag: '--replacement="<new>"', desc: 'New replacement content' },
+      { flag: '--multiple', desc: 'Allow replacing multiple occurrences' },
+      { flag: '--dry-run', desc: 'Preview patch without writing to disk' },
+      { flag: '--json', desc: 'Output result as minified JSON' }
+    ],
+    examples: [
+      'chemx patch src/api.ts --target="v1" --replacement="v2"',
+      'chemx patch src/App.tsx --target="oldCode" --replacement="newCode" --dry-run'
+    ]
+  },
+  {
+    name: 'write',
+    aliases: [],
+    group: 'edit',
+    brief: 'Write a whole file',
+    usage: 'chemx write <file> --content="<text>" [options]',
+    summary: 'Write a file, then re-index and audit it.',
+    description: 'Creates or replaces one file inside the project root.',
+    flags: [
+      { flag: '--content="<text>"', desc: 'File content to write' },
+      { flag: '--json', desc: 'Output result as minified JSON' }
+    ],
+    examples: ['chemx write src/keep.ts --content="export const keep = true;\\n"']
+  },
+  {
+    name: 'add',
+    aliases: ['add:prop', 'add:state', 'add:action', 'fix'],
+    group: 'edit',
+    brief: 'Add a prop, state or action',
+    usage: 'chemx add:<prop|state|action> <capsule-path> <name>:<type>',
+    summary: 'Mutate a capsule by adding a prop, state field or action.',
+    description: '`chemx add <tier> <name>` without prop/state/action runs the generate wizard.',
+    flags: [{ flag: '--dry-run', desc: 'Preview the mutation without writing' }],
+    examples: ['chemx add:prop src/m-card count:number', 'chemx add state src/m-card isOpen:boolean']
+  },
+  {
+    name: 'explode',
+    aliases: ['unpack'],
+    group: 'edit',
+    brief: 'Split a file into a capsule',
+    usage: 'chemx explode <file-path> [options]',
+    summary: 'Unpack a monolithic file into a capsule directory.',
+    description: 'Moves top-level declarations into capsule files.',
+    flags: [
+      { flag: '--dry-run', desc: 'Preview the capsule plan without writing' },
+      { flag: '--json', desc: 'Output the plan as JSON' }
+    ],
+    examples: ['chemx explode src/big-file.ts --dry-run']
+  },
+  {
+    name: 'generate',
+    aliases: ['g', 'gen', 'capsule', 'jig'],
+    group: 'edit',
+    brief: 'Scaffold a capsule',
+    usage: 'chemx generate [tier] <name> [options]',
+    summary: 'Scaffold a molecular capsule.',
+    description: `Generates a capsule with co-located controller, types, styles and specs. ${describeLineBudgetPolicy()} Names starting with m-, a-, o-, t-, use- or v- also run this command.`,
+    flags: [
+      { flag: '--desc="<text>"', desc: 'Describe functionality to tailor archetype and state' },
+      { flag: '--dry-run', desc: 'Preview planned files and lines without touching disk' },
+      { flag: '--tier=<tier>', desc: 'Specify tier: atom, molecule, organism, hook, view' },
+      { flag: '--framework=<id>', desc: 'Framework flavor: react, vue, svelte' },
+      { flag: '--lean', desc: 'Generate minimal capsule without controller/spec' },
+      { flag: '--json', desc: 'Output the plan as JSON' }
+    ],
+    examples: [
+      'chemx generate m-task-list --framework=react',
+      'chemx generate m-task-list --desc="add, toggle, remove items"',
+      'chemx generate m-task-list --dry-run'
+    ]
+  }
+];
