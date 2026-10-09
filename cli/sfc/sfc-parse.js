@@ -46,7 +46,8 @@ const toTemplateBlock = (block) => ({
 
 const formatError = (err) => {
   const message = err instanceof Error ? err.message : String(err);
-  const line = err?.loc?.start?.line ?? 1;
+  const errorLoc = err?.loc;
+  const line = errorLoc?.start?.line ?? 1;
   return { message, line };
 };
 
@@ -82,14 +83,16 @@ const parseUncached = (content, filename) => {
 export const parseSfc = (content, filename = 'component.vue') => {
   const key = `${filename}\u0000${content}`;
   const hit = cache.get(key);
-  if (hit) return hit;
+  const isCached = Boolean(hit);
+  if (isCached) return hit;
   let result;
   try {
     result = parseUncached(content, filename);
   } catch (err) {
     result = { errors: [formatError(err)], scripts: [], template: null, styles: [], scriptOverlay: '' };
   }
-  if (cache.size >= CACHE_LIMIT) cache.delete(cache.keys().next().value);
+  const isCacheFull = cache.size >= CACHE_LIMIT;
+  if (isCacheFull) cache.delete(cache.keys().next().value);
   cache.set(key, result);
   return result;
 };

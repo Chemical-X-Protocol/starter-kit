@@ -3,7 +3,8 @@ import path from 'node:path';
 
 export const loadProjectConfig = (cwd = process.cwd()) => {
   const cfgPath = path.resolve(cwd, '.chemx', 'config.json');
-  if (!fs.existsSync(cfgPath)) return {};
+  const hasConfig = fs.existsSync(cfgPath);
+  if (!hasConfig) return {};
   try {
     return JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
   } catch {
@@ -14,9 +15,12 @@ export const loadProjectConfig = (cwd = process.cwd()) => {
 export const normalizeFramework = (val) => {
   if (!val) return null;
   const str = String(val).toLowerCase().trim();
-  if (['react', 'tsx', 'jsx'].includes(str)) return 'react';
-  if (['vue', 'vue3', 'nuxt'].includes(str)) return 'vue';
-  if (['svelte', 'svelte5', 'kit'].includes(str)) return 'svelte';
+  const isReact = ['react', 'tsx', 'jsx'].includes(str);
+  if (isReact) return 'react';
+  const isVue = ['vue', 'vue3', 'nuxt'].includes(str);
+  if (isVue) return 'vue';
+  const isSvelte = ['svelte', 'svelte5', 'kit'].includes(str);
+  if (isSvelte) return 'svelte';
   return null;
 };
 
@@ -27,23 +31,28 @@ export const resolveFramework = ({ frameworkArg = null, cwd = process.cwd() } = 
 
   // 2. Project config in .chemx/config.json
   const config = loadProjectConfig(cwd);
-  if (config.framework) {
+  const hasConfiguredFramework = Boolean(config.framework);
+  if (hasConfiguredFramework) {
     const fromConfig = normalizeFramework(config.framework);
     if (fromConfig) return fromConfig;
   }
 
   // 3. Auto-detect from package.json dependencies
   const pkgPath = path.resolve(cwd, 'package.json');
-  if (fs.existsSync(pkgPath)) {
+  const hasPackageJson = fs.existsSync(pkgPath);
+  if (hasPackageJson) {
     try {
       const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
       const deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
 
-      if (deps.vue || deps.nuxt || deps['@nuxt/kit']) return 'vue';
-      if (deps.svelte || deps['@sveltejs/kit']) return 'svelte';
-      if (deps.react || deps.next) return 'react';
+      const usesVue = Boolean(deps.vue || deps.nuxt || deps['@nuxt/kit']);
+      if (usesVue) return 'vue';
+      const usesSvelte = Boolean(deps.svelte || deps['@sveltejs/kit']);
+      if (usesSvelte) return 'svelte';
+      const usesReact = Boolean(deps.react || deps.next);
+      if (usesReact) return 'react';
     } catch {
-      // ignore
+      // chemx-allow: best-effort an unreadable package.json falls through to the hard default framework
     }
   }
 
@@ -57,16 +66,21 @@ export const detectFramework = (cwd = process.cwd()) => {
 
 export const detectTestRunner = (startDir = process.cwd()) => {
   let curr = path.resolve(startDir);
-  while (curr && curr !== path.dirname(curr)) {
+  for (;;) {
+    const hasParentDir = Boolean(curr && curr !== path.dirname(curr));
+    if (!hasParentDir) break;
     const pkgPath = path.join(curr, 'package.json');
-    if (fs.existsSync(pkgPath)) {
+    const hasPackageJson = fs.existsSync(pkgPath);
+    if (hasPackageJson) {
       try {
         const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
         const deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
-        if (deps.vitest || (pkg.scripts?.test && pkg.scripts.test.includes('vitest'))) return 'vitest';
-        if (deps.jest || (pkg.scripts?.test && pkg.scripts.test.includes('jest'))) return 'jest';
+        const usesVitest = Boolean(deps.vitest || (pkg.scripts?.test && pkg.scripts.test.includes('vitest')));
+        if (usesVitest) return 'vitest';
+        const usesJest = Boolean(deps.jest || (pkg.scripts?.test && pkg.scripts.test.includes('jest')));
+        if (usesJest) return 'jest';
       } catch {
-        // ignore
+        // chemx-allow: best-effort an unreadable package.json falls back to the node:test runner
       }
       break;
     }
@@ -81,12 +95,14 @@ const PALETTE_PACKAGES = ['@chemx/o-command-palette', '@chemx/command-palette', 
 
 const resolveLocalAtomsCandidate = (cwd) => {
   const componentAtomsPath = path.resolve(cwd, 'src/components/atoms');
-  if (fs.existsSync(componentAtomsPath)) {
+  const hasComponentAtoms = fs.existsSync(componentAtomsPath);
+  if (hasComponentAtoms) {
     return '@/components/atoms';
   }
 
   const directAtomsPath = path.resolve(cwd, 'src/atoms');
-  if (fs.existsSync(directAtomsPath)) {
+  const hasDirectAtoms = fs.existsSync(directAtomsPath);
+  if (hasDirectAtoms) {
     return '@/atoms';
   }
 
@@ -95,7 +111,8 @@ const resolveLocalAtomsCandidate = (cwd) => {
 
 export const detectInstalledFamily = (cwd = process.cwd()) => {
   const pkgPath = path.resolve(cwd, 'package.json');
-  if (!fs.existsSync(pkgPath)) {
+  const hasPackageJson = fs.existsSync(pkgPath);
+  if (!hasPackageJson) {
     return { hasAtoms: false, atomsPackage: null, hasPalette: false, palettePackage: null };
   }
 
@@ -233,21 +250,26 @@ export const detectTierBaseDir = (tier, cwd = process.cwd(), presetOverride = nu
   const config = loadProjectConfig(cwd);
   const activePreset = presetOverride || config.preset;
 
-  if (activePreset && PRESET_DIRECTORY_MAPS[activePreset]?.[tier]) {
+  const hasPresetDir = Boolean(activePreset && PRESET_DIRECTORY_MAPS[activePreset]?.[tier]);
+  if (hasPresetDir) {
     return PRESET_DIRECTORY_MAPS[activePreset][tier];
   }
 
-  if (config.dirs && config.dirs[tier]) {
+  const hasConfiguredDir = Boolean(config.dirs && config.dirs[tier]);
+  if (hasConfiguredDir) {
     const configuredPath = path.resolve(cwd, config.dirs[tier]);
-    if (fs.existsSync(configuredPath)) return config.dirs[tier];
+    const isConfiguredDirPresent = fs.existsSync(configuredPath);
+    if (isConfiguredDirPresent) return config.dirs[tier];
   }
 
   const candidates = TIER_DIRECTORY_MAPS[tier] || TIER_DIRECTORY_MAPS.molecule;
   for (const c of candidates) {
-    if (fs.existsSync(path.resolve(cwd, c))) return c;
+    const isCandidatePresent = fs.existsSync(path.resolve(cwd, c));
+    if (isCandidatePresent) return c;
   }
 
-  if (fs.existsSync(path.resolve(cwd, 'app/components'))) {
+  const hasAppComponents = fs.existsSync(path.resolve(cwd, 'app/components'));
+  if (hasAppComponents) {
     return PRESET_DIRECTORY_MAPS.app[tier] || 'app/components';
   }
 
@@ -258,13 +280,16 @@ export const detectJigBaseDir = (kind, { cwd = process.cwd(), preset = null } = 
   const config = loadProjectConfig(cwd);
   const activePreset = preset || config.preset;
 
-  if (activePreset && PRESET_DIRECTORY_MAPS[activePreset]?.[kind]) {
+  const hasPresetDir = Boolean(activePreset && PRESET_DIRECTORY_MAPS[activePreset]?.[kind]);
+  if (hasPresetDir) {
     return PRESET_DIRECTORY_MAPS[activePreset][kind];
   }
 
-  if (config.dirs && config.dirs[kind]) {
+  const hasConfiguredDir = Boolean(config.dirs && config.dirs[kind]);
+  if (hasConfiguredDir) {
     const configuredPath = path.resolve(cwd, config.dirs[kind]);
-    if (fs.existsSync(configuredPath)) return config.dirs[kind];
+    const isConfiguredDirPresent = fs.existsSync(configuredPath);
+    if (isConfiguredDirPresent) return config.dirs[kind];
   }
 
   const defaultDirMap = {
@@ -278,10 +303,12 @@ export const detectJigBaseDir = (kind, { cwd = process.cwd(), preset = null } = 
 
   const candidates = defaultDirMap[kind] || [`src/${kind}s`];
   for (const c of candidates) {
-    if (fs.existsSync(path.resolve(cwd, c))) return c;
+    const isCandidatePresent = fs.existsSync(path.resolve(cwd, c));
+    if (isCandidatePresent) return c;
   }
 
-  if (fs.existsSync(path.resolve(cwd, 'app'))) {
+  const hasAppDir = fs.existsSync(path.resolve(cwd, 'app'));
+  if (hasAppDir) {
     return PRESET_DIRECTORY_MAPS.app[kind] || `app/${kind}s`;
   }
 
@@ -309,7 +336,8 @@ export const detectStylingStack = (cwd = process.cwd()) => {
   let hasTailwind = false;
   let hasScss = false;
 
-  if (fs.existsSync(pkgPath)) {
+  const hasPackageJson = fs.existsSync(pkgPath);
+  if (hasPackageJson) {
     try {
       const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
       const deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
@@ -317,7 +345,7 @@ export const detectStylingStack = (cwd = process.cwd()) => {
       hasTailwind = TAILWIND_PACKAGES.some((pkgName) => Boolean(deps[pkgName]));
       hasScss = SCSS_PACKAGES.some((pkgName) => Boolean(deps[pkgName]));
     } catch {
-      // ignore parse errors
+      // chemx-allow: best-effort an unreadable package.json leaves styling detection to the tailwind config probe
     }
   }
 

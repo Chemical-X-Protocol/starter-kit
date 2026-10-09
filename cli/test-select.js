@@ -16,9 +16,12 @@ const SETUP_FILE = /(?:^|\/)(?:setup-?tests?|test-?setup|vitest\.setup|jest\.set
 
 const unprovableReason = (change, graph) => {
   const file = change.path;
-  if (MANIFEST.test(file)) return `${file} changed (dependencies or scripts can affect any spec)`;
-  if (CONFIG.test(file)) return `${file} changed (runner/compiler config applies to every spec)`;
-  if (SPEC_SUPPORT.test(file) || SETUP_FILE.test(file)) return `${file} changed (shared spec support/fixtures)`;
+  const isManifest = MANIFEST.test(file);
+  if (isManifest) return `${file} changed (dependencies or scripts can affect any spec)`;
+  const isRunnerConfig = CONFIG.test(file);
+  if (isRunnerConfig) return `${file} changed (runner/compiler config applies to every spec)`;
+  const isSharedSupport = SPEC_SUPPORT.test(file) || SETUP_FILE.test(file);
+  if (isSharedSupport) return `${file} changed (shared spec support/fixtures)`;
   const isDeletedModule = change.status === 'D' && !SPEC_FILE.test(file) && /\.(?:[cm]?[jt]sx?|vue|svelte)$/.test(file);
   if (isDeletedModule) return `${file} was deleted (its importers can no longer be resolved)`;
   const isDirectory = change.status !== 'D' && !graph.files.has(file) && !graph.isFile(file);
@@ -41,9 +44,11 @@ const readersOf = (file, graph) => {
 const selectOpenDependents = (graph, select) => {
   for (const [file, why] of graph.open || []) {
     const reason = `may load any changed file: ${file} ${why}`;
-    if (SPEC_FILE.test(file)) select(file, reason);
+    const isOpenSpec = SPEC_FILE.test(file);
+    if (isOpenSpec) select(file, reason);
     for (const [dependent, chain] of walkDependents(graph, file)) {
-      if (SPEC_FILE.test(dependent)) select(dependent, `${reason}; depends on ${chain}`);
+      const isDependentSpec = SPEC_FILE.test(dependent);
+      if (isDependentSpec) select(dependent, `${reason}; depends on ${chain}`);
     }
   }
 };
@@ -54,35 +59,46 @@ export const selectAffectedSpecs = ({ changes, graph, suite }) => {
   const blockers = changes.map((change) => unprovableReason(change, graph)).filter(Boolean);
   const hasUnreadable = (graph.unreadable || []).length > 0;
   if (hasUnreadable) blockers.push(`graph inconclusive: unreadable ${graph.unreadable.slice(0, 3).join(', ')}`);
-  if (blockers.length > 0) return { mode: 'full', reason: blockers.join('; '), specs: [], unaffected: [] };
+  const hasBlockers = blockers.length > 0;
+  if (hasBlockers) return { mode: 'full', reason: blockers.join('; '), specs: [], unaffected: [] };
 
   const reasons = new Map();
   const select = (spec, reason) => {
-    if (!suite.has(spec)) return false;
-    if (!reasons.has(spec)) reasons.set(spec, []);
+    const isInSuite = suite.has(spec);
+    if (!isInSuite) return false;
+    const isFirstReason = !reasons.has(spec);
+    if (isFirstReason) reasons.set(spec, []);
     reasons.get(spec).push(reason);
     return true;
   };
   const unaffected = [];
   for (const change of changes) {
     const file = change.path;
-    if (change.status === 'D') {
+    const isDeleted = change.status === 'D';
+    if (isDeleted) {
       unaffected.push({ path: file, reason: 'deleted spec' });
       continue;
     }
     let hits = 0;
-    if (SPEC_FILE.test(file) && select(file, 'changed')) hits++;
-    for (const spec of colocatedSpecs(file, suite)) if (spec !== file && select(spec, `colocated with ${file}`)) hits++;
+    const wasSelfSelected = Boolean(SPEC_FILE.test(file) && select(file, 'changed'));
+    if (wasSelfSelected) hits++;
+    for (const spec of colocatedSpecs(file, suite)) {
+      const wasColocatedSelected = Boolean(spec !== file && select(spec, `colocated with ${file}`));
+      if (wasColocatedSelected) hits++;
+    }
     const isModule = graph.files.has(file);
     const seeds = isModule ? [file] : readersOf(file, graph);
     for (const seed of seeds) {
       const via = isModule ? '' : ` (${seed} names ${path.posix.basename(file)})`;
-      if (seed !== file && SPEC_FILE.test(seed) && select(seed, `names ${file}`)) hits++;
+      const wasNamingSpecSelected = Boolean(seed !== file && SPEC_FILE.test(seed) && select(seed, `names ${file}`));
+      if (wasNamingSpecSelected) hits++;
       for (const [dependent, chain] of walkDependents(graph, seed)) {
-        if (SPEC_FILE.test(dependent) && select(dependent, `depends on ${chain}${via}`)) hits++;
+        const wasDependentSelected = Boolean(SPEC_FILE.test(dependent) && select(dependent, `depends on ${chain}${via}`));
+        if (wasDependentSelected) hits++;
       }
     }
-    if (hits === 0) unaffected.push({ path: file, reason: isModule ? 'no spec in the suite depends on it through a resolved import' : 'no module imports or names it' });
+    const hasNoHits = hits === 0;
+    if (hasNoHits) unaffected.push({ path: file, reason: isModule ? 'no spec in the suite depends on it through a resolved import' : 'no module imports or names it' });
   }
   const hasLiveChange = changes.some((change) => change.status !== 'D');
   if (hasLiveChange) selectOpenDependents(graph, select);

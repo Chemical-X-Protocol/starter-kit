@@ -48,8 +48,10 @@ export const isConsoleCallStatement = (stmt, t) => {
 };
 
 export const isShallowCatchBody = (body, t) => {
-  if (body.length === 0) return true;
-  if (body.length === 1) return isConsoleCallStatement(body[0], t);
+  const isEmptyBody = body.length === 0;
+  if (isEmptyBody) return true;
+  const isSingleStatement = body.length === 1;
+  if (isSingleStatement) return isConsoleCallStatement(body[0], t);
   return false;
 };
 
@@ -59,17 +61,22 @@ export const isShallowCatchClause = (handler, t) => {
 };
 
 export const hasAnyTypeAnnotation = (param, t) => {
-  if (!param || !t.isIdentifier(param)) return false;
+  const isIdentifierParam = Boolean(param && t.isIdentifier(param));
+  if (!isIdentifierParam) return false;
   const typeAnn = param.typeAnnotation;
-  if (!typeAnn || !t.isTSTypeAnnotation(typeAnn)) return false;
+  const hasTsAnnotation = Boolean(typeAnn && t.isTSTypeAnnotation(typeAnn));
+  if (!hasTsAnnotation) return false;
   return t.isTSAnyKeyword(typeAnn.typeAnnotation);
 };
 
 export const isRedundantPassthroughReturn = (curr, next, t) => {
-  if (!t.isVariableDeclaration(curr) || curr.declarations.length !== 1) return false;
+  const isSingleDeclaration = t.isVariableDeclaration(curr) && curr.declarations.length === 1;
+  if (!isSingleDeclaration) return false;
   const decl = curr.declarations[0];
-  if (!t.isIdentifier(decl.id)) return false;
-  if (!t.isReturnStatement(next) || !t.isIdentifier(next.argument)) return false;
+  const hasIdentifierId = t.isIdentifier(decl.id);
+  if (!hasIdentifierId) return false;
+  const isReturnOfIdentifier = t.isReturnStatement(next) && t.isIdentifier(next.argument);
+  if (!isReturnOfIdentifier) return false;
   return decl.id.name === next.argument.name;
 };
 
@@ -84,16 +91,21 @@ export const isCustomHookFunction = (astPath) => {
 };
 
 export const resolveStartLine = (primaryNode, fallbackNode, defaultLine = 1) => {
-  const primaryLine = primaryNode?.loc?.start?.line;
-  if (primaryLine !== undefined) return primaryLine;
-  const fallbackLine = fallbackNode?.loc?.start?.line;
-  if (fallbackLine !== undefined) return fallbackLine;
+  const primaryStart = primaryNode?.loc?.start;
+  const primaryLine = primaryStart?.line;
+  const hasPrimaryLine = primaryLine !== undefined;
+  if (hasPrimaryLine) return primaryLine;
+  const fallbackStart = fallbackNode?.loc?.start;
+  const fallbackLine = fallbackStart?.line;
+  const hasFallbackLine = fallbackLine !== undefined;
+  if (hasFallbackLine) return fallbackLine;
   return defaultLine;
 };
 
 export const resolveFirstDefined = (...candidates) => {
   for (const val of candidates) {
-    if (val !== null && val !== undefined) return val;
+    const isDefined = val !== null && val !== undefined;
+    if (isDefined) return val;
   }
   return undefined;
 };
@@ -187,15 +199,20 @@ const isDiagnosticOrErrorStatement = (stmt, t) => {
       if (t.isMemberExpression(callee)) {
         const objName = t.isIdentifier(callee.object) ? callee.object.name : '';
         const propName = t.isIdentifier(callee.property) ? callee.property.name : '';
-        if (['console', 'logger', 'log'].includes(objName)) return true;
-        if (/^(?:error|warn|info|trace|notify|alert)/i.test(propName)) return true;
+        const isLoggerObject = ['console', 'logger', 'log'].includes(objName);
+        if (isLoggerObject) return true;
+        const isReportingMethod = /^(?:error|warn|info|trace|notify|alert)/i.test(propName);
+        if (isReportingMethod) return true;
       }
-      if (t.isIdentifier(callee) && /^(?:report|notify|alert|set.*Error|handleError)/i.test(callee.name)) return true;
+      const isReportingFunction = t.isIdentifier(callee) && /^(?:report|notify|alert|set.*Error|handleError)/i.test(callee.name);
+      if (isReportingFunction) return true;
     }
     if (t.isAssignmentExpression(expr)) {
       const left = expr.left;
-      if (t.isMemberExpression(left) && t.isIdentifier(left.property) && /error/i.test(left.property.name)) return true;
-      if (t.isIdentifier(left) && /error/i.test(left.name)) return true;
+      const isErrorPropertyWrite = t.isMemberExpression(left) && t.isIdentifier(left.property) && /error/i.test(left.property.name);
+      if (isErrorPropertyWrite) return true;
+      const isErrorVariableWrite = t.isIdentifier(left) && /error/i.test(left.name);
+      if (isErrorVariableWrite) return true;
     }
   }
   return false;
@@ -203,7 +220,8 @@ const isDiagnosticOrErrorStatement = (stmt, t) => {
 
 export const isSilentGuardClause = (ifPath, t) => {
   const node = ifPath.node;
-  if (!node || node.alternate) return false;
+  const isPlainIfWithoutElse = Boolean(node && !node.alternate);
+  if (!isPlainIfWithoutElse) return false;
 
   let hasBareReturn = false;
   let hasDiagnosticOrHandling = false;
@@ -225,7 +243,8 @@ export const isSilentGuardClause = (ifPath, t) => {
     }
   }
 
-  if (!hasBareReturn || hasDiagnosticOrHandling) return false;
+  const isSilentBareReturn = hasBareReturn && !hasDiagnosticOrHandling;
+  if (!isSilentBareReturn) return false;
 
   // 3.G targets error conditions; a named guard such as `if (!canCheckout) return;`
   // is the documented 3.A/3.C contract, not a silent failure.
@@ -275,7 +294,8 @@ export const isSilentGuardClause = (ifPath, t) => {
   const isMutatingName = MUTATING_FUNCTION_PATTERNS.some((pat) => pat.test(funcName));
   const isPurePredicate = PURE_PREDICATE_PATTERNS.some((pat) => pat.test(funcName));
 
-  if (isPurePredicate && !isAsync && !isMutatingName) return false;
+  const isSyncPurePredicate = isPurePredicate && !isAsync && !isMutatingName;
+  if (isSyncPurePredicate) return false;
 
   const isTargetFunction = isAsync || isMutatingName;
   if (!isTargetFunction) return false;
@@ -287,7 +307,8 @@ export const countOptionalChainingDepth = (node, t) => {
   let count = 0;
   let curr = node;
   while (curr && (t.isOptionalMemberExpression(curr) || t.isOptionalCallExpression(curr) || t.isMemberExpression(curr))) {
-    if (curr.optional) {
+    const isOptionalLink = Boolean(curr.optional);
+    if (isOptionalLink) {
       count++;
     }
     curr = curr.object || curr.callee;

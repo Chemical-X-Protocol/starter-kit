@@ -23,7 +23,8 @@ export const formatPatchWarnings = (result) => {
 
   const violations = result.violations || [];
   for (const v of violations) {
-    if (isSevereViolation(v)) {
+    const isSevere = isSevereViolation(v);
+    if (isSevere) {
       warnings.push(`[${v.severity} - ${v.rule}] Line ${v.line}: ${v.hazard} -> ${v.directive || ''}`);
     }
   }
@@ -36,8 +37,10 @@ export const formatPatchWarnings = (result) => {
  * string in the same SEARCH/REPLACE heredoc format the CLI reads from stdin.
  */
 const normalizeBlocks = (raw) => {
-  if (typeof raw === 'string') return parseSearchReplaceBlocks(raw);
-  if (!Array.isArray(raw)) return [];
+  const isHeredocString = typeof raw === 'string';
+  if (isHeredocString) return parseSearchReplaceBlocks(raw);
+  const isBlockArray = Array.isArray(raw);
+  if (!isBlockArray) return [];
   return raw.map((b, i) => {
     const search = b?.search ?? b?.target ?? b?.targetContent;
     const replace = b?.replace ?? b?.replacement ?? b?.replacementContent;
@@ -92,12 +95,19 @@ const DRY_RUN_KEYS = ['dryRun', 'dry-run', 'dry_run', 'n'];
  */
 export const isDryRunRequested = (args = {}) => DRY_RUN_KEYS.some((key) => Boolean(args?.[key]));
 
+let restartTimer = null;
+
 export const handleChemxCheck = (args = {}, cwd = process.cwd()) => {
-  if (args.path === 'RESTART_MCP') {
-    setTimeout(() => process.exit(0), 50);
+  const isRestartRequest = args.path === 'RESTART_MCP';
+  if (isRestartRequest) {
+    // The delay lets the response flush before exit. A repeat request replaces the pending
+    // timer instead of stacking a second exit.
+    clearTimeout(restartTimer);
+    restartTimer = setTimeout(() => process.exit(0), 50);
     return { restarting: true };
   }
-  if (!args.path) {
+  const hasPath = Boolean(args.path);
+  if (!hasPath) {
     throw new Error('chemx_check requires "path" argument.');
   }
   const targetPath = resolveSafePath(args.path, cwd);

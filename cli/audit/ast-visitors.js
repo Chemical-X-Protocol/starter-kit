@@ -48,16 +48,19 @@ export const createAstVisitors = ({ relativePath, violations, hookRegistry, conf
       astPath.traverse({
         CallExpression(callPath) {
           const callee = callPath.node.callee;
-          if (t.isIdentifier(callee) && /^use[A-Z0-9]/.test(callee.name)) {
+          const isHookCall = t.isIdentifier(callee) && /^use[A-Z0-9]/.test(callee.name);
+          if (isHookCall) {
             const isExcluded = CONTROLLER_WRAPPER_EXCLUSIONS.has(callee.name);
-            if (!isExcluded && callPath.getFunctionParent() === astPath) {
+            const isOwnHookCall = !isExcluded && callPath.getFunctionParent() === astPath;
+            if (isOwnHookCall) {
               hookCount += 1;
             }
           }
         }
       });
 
-      if (hookCount > 5) {
+      const isHookSaturated = hookCount > 5;
+      if (isHookSaturated) {
         const line = astPath.node.loc?.start.line || 1;
         const meta = RULE_REGISTRY.HOOK_SATURATION;
         violations.push({
@@ -76,7 +79,8 @@ export const createAstVisitors = ({ relativePath, violations, hookRegistry, conf
       if (isCustomHook) {
         astPath.traverse({
           ReturnStatement(retPath) {
-            if (retPath.getFunctionParent() === astPath) {
+            const isOwnReturn = retPath.getFunctionParent() === astPath;
+            if (isOwnReturn) {
               validateHookReturnShape({
                 retPath,
                 astPath,
@@ -93,9 +97,11 @@ export const createAstVisitors = ({ relativePath, violations, hookRegistry, conf
     // Pillar 2: Control Flow Complexity
     JSXExpressionContainer(astPath) {
       const expr = astPath.node.expression;
-      if (t.isLogicalExpression(expr) || t.isUnaryExpression(expr)) {
+      const isBooleanExpression = t.isLogicalExpression(expr) || t.isUnaryExpression(expr);
+      if (isBooleanExpression) {
         const opCount = countJunctionOperators(expr);
-        if (opCount > MAX_TEMPLATE_JUNCTIONS) {
+        const hasTooManyJunctions = opCount > MAX_TEMPLATE_JUNCTIONS;
+        if (hasTooManyJunctions) {
           const line = resolveStartLine(expr, astPath.node, 1);
           const meta = RULE_REGISTRY.CONTROL_FLOW_INLINE_BOOLEAN;
           violations.push({
@@ -116,7 +122,8 @@ export const createAstVisitors = ({ relativePath, violations, hookRegistry, conf
       const expr = astPath.node.test;
       const isLookupChain = resolveIfChainLength(astPath) >= LOOKUP_CHAIN_MIN_BRANCHES;
       const isUnnamedTest = !isNamedCondition(expr);
-      if (isUnnamedTest && !isLookupChain) {
+      const shouldFlagTest = isUnnamedTest && !isLookupChain;
+      if (shouldFlagTest) {
         const line = resolveStartLine(expr, astPath.node, 1);
         const meta = RULE_REGISTRY.CONTROL_FLOW_INLINE_BOOLEAN;
         violations.push({
@@ -151,7 +158,8 @@ export const createAstVisitors = ({ relativePath, violations, hookRegistry, conf
     ConditionalExpression(astPath) {
       const isOutermostOfChain = !astPath.parentPath?.isConditionalExpression();
       const hasNestedBranch = t.isConditionalExpression(astPath.node.consequent) || t.isConditionalExpression(astPath.node.alternate);
-      if (hasNestedBranch && isOutermostOfChain) {
+      const isNestedTernaryRoot = hasNestedBranch && isOutermostOfChain;
+      if (isNestedTernaryRoot) {
         const line = astPath.node.loc?.start.line || 1;
         const meta = RULE_REGISTRY.CONTROL_FLOW_NESTED_TERNARY;
         violations.push({
@@ -169,18 +177,22 @@ export const createAstVisitors = ({ relativePath, violations, hookRegistry, conf
 
     SwitchStatement(astPath) {
       const cases = astPath.node.cases || [];
-      if (cases.length < 3) return;
+      const hasTooFewCases = cases.length < 3;
+      if (hasTooFewCases) return;
 
       const isDispatchConsequent = (statements) => {
-        if (!statements || statements.length === 0) return false;
-        if (statements.length === 1) {
+        const isEmptyConsequent = !statements || statements.length === 0;
+        if (isEmptyConsequent) return false;
+        const isSingleStatement = statements.length === 1;
+        if (isSingleStatement) {
           const s = statements[0];
           if (t.isReturnStatement(s)) return true;
           if (t.isBlockStatement(s)) {
             return s.body.length === 1 && t.isReturnStatement(s.body[0]);
           }
         }
-        if (statements.length === 2) {
+        const isStatementPair = statements.length === 2;
+        if (isStatementPair) {
           const [first, second] = statements;
           if (t.isBreakStatement(second)) {
             return t.isExpressionStatement(first) || t.isAssignmentExpression(first);
@@ -193,7 +205,8 @@ export const createAstVisitors = ({ relativePath, violations, hookRegistry, conf
       let nonDefaultCount = 0;
 
       for (const switchCase of cases) {
-        if (!switchCase.test) continue;
+        const isDefaultCase = !switchCase.test;
+        if (isDefaultCase) continue;
         nonDefaultCount += 1;
         if (isDispatchConsequent(switchCase.consequent)) {
           dispatchCaseCount += 1;
@@ -220,11 +233,15 @@ export const createAstVisitors = ({ relativePath, violations, hookRegistry, conf
     // Pillar 5: Design System & Inline Styles
     JSXAttribute(astPath) {
       const attrName = astPath.node.name?.name;
-      if (attrName === 'style') {
+      const isStyleAttr = attrName === 'style';
+      const isClassAttr = attrName === 'className' || attrName === 'class';
+      if (isStyleAttr) {
         const value = astPath.node.value;
-        if (t.isJSXExpressionContainer(value) && t.isObjectExpression(value.expression)) {
+        const isObjectStyle = t.isJSXExpressionContainer(value) && t.isObjectExpression(value.expression);
+        if (isObjectStyle) {
           const preferTokens = config?.preferDesignTokens || 'warning';
-          if (preferTokens !== 'off') {
+          const isTokenCheckEnabled = preferTokens !== 'off';
+          if (isTokenCheckEnabled) {
             const line = astPath.node.loc?.start.line || 1;
             const meta = RULE_REGISTRY.RAW_INLINE_STYLE;
             const severity = preferTokens === 'error' ? 'HIGH' : meta.severity;
@@ -240,11 +257,13 @@ export const createAstVisitors = ({ relativePath, violations, hookRegistry, conf
             });
           }
         }
-      } else if (attrName === 'className' || attrName === 'class') {
+      } else if (isClassAttr) {
         const value = astPath.node.value;
         const strVal = t.isStringLiteral(value) ? value.value : '';
-        if (strVal && (strVal.includes('fa-') || strVal.includes('fa '))) {
-          if (/\btext-(primary|secondary|danger|warning|success|info|light|dark|\w+)\b/.test(strVal)) {
+        const hasFontAwesomeClass = Boolean(strVal && (strVal.includes('fa-') || strVal.includes('fa ')));
+        if (hasFontAwesomeClass) {
+          const hasTextColorClass = /\btext-(primary|secondary|danger|warning|success|info|light|dark|\w+)\b/.test(strVal);
+          if (hasTextColorClass) {
             const line = astPath.node.loc?.start.line || 1;
             const meta = RULE_REGISTRY.ICON_SVG_STYLE_LEAK;
             violations.push({
@@ -267,7 +286,8 @@ export const createAstVisitors = ({ relativePath, violations, hookRegistry, conf
       const callee = astPath.node.callee;
 
       // Timer Discipline
-      if (t.isIdentifier(callee) && (callee.name === 'setInterval' || callee.name === 'setTimeout')) {
+      const isTimerCall = t.isIdentifier(callee) && (callee.name === 'setInterval' || callee.name === 'setTimeout');
+      if (isTimerCall) {
         const args = astPath.node.arguments;
         const delayArg = args[1];
 
@@ -323,7 +343,8 @@ export const createAstVisitors = ({ relativePath, violations, hookRegistry, conf
       }
 
       // Pillar 6: Orphaned Event Listener
-      if (t.isMemberExpression(callee) && t.isIdentifier(callee.property, { name: 'addEventListener' })) {
+      const isAddListenerCall = t.isMemberExpression(callee) && t.isIdentifier(callee.property, { name: 'addEventListener' });
+      if (isAddListenerCall) {
         const hasCleanup = isListenerDisposed(astPath, teardowns);
         if (!hasCleanup) {
           const line = astPath.node.loc?.start.line || 1;
@@ -386,7 +407,8 @@ export const createAstVisitors = ({ relativePath, violations, hookRegistry, conf
       const isParentOptional = t.isOptionalMemberExpression(astPath.parent) || t.isOptionalCallExpression(astPath.parent);
       if (!isParentOptional) {
         const depth = countOptionalChainingDepth(astPath.node, t);
-        if (depth >= 3) {
+        const isDeepChain = depth >= 3;
+        if (isDeepChain) {
           const line = astPath.node.loc?.start.line || 1;
           const meta = RULE_REGISTRY.DATA_FLOW_OPTIONAL_CHAINING_CHURN;
           violations.push({
@@ -405,8 +427,10 @@ export const createAstVisitors = ({ relativePath, violations, hookRegistry, conf
 
     // Pillar 4: Type Co-location
     TSTypeLiteral(astPath) {
-      if (astPath.node.members.length > 3) {
-        if (!astPath.findParent((p) => p.isTSTypeAliasDeclaration() || p.isTSInterfaceDeclaration())) {
+      const isLargeLiteral = astPath.node.members.length > 3;
+      if (isLargeLiteral) {
+        const isInlinedType = !astPath.findParent((p) => p.isTSTypeAliasDeclaration() || p.isTSInterfaceDeclaration());
+        if (isInlinedType) {
           const line = astPath.node.loc?.start.line || 1;
           const meta = RULE_REGISTRY.TYPE_COLOCATION;
           violations.push({

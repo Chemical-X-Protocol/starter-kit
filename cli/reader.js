@@ -16,7 +16,8 @@ import { conflictHunksOf, describeConflicts } from './conflicts.js';
 import { resolveRevisionRead } from './read-revision.js';
 
 const assertReadableFile = (resolvedPath, rawPath, targetPath) => {
-  if (!fs.existsSync(resolvedPath)) {
+  const isMissingFile = !fs.existsSync(resolvedPath);
+  if (isMissingFile) {
     throw new Error(`File not found: ${rawPath}`);
   }
   const stat = fs.statSync(resolvedPath);
@@ -94,7 +95,8 @@ export const generateAstOutline = (code, filePath) => {
 
   const lines = [`// Outline: ${filePath}`];
   if (companionAnnotation) lines.push(companionAnnotation);
-  if (!scriptContent.trim()) return lines.join('\n');
+  const hasNoScript = !scriptContent.trim();
+  if (hasNoScript) return lines.join('\n');
 
   // Babel cannot parse C/C++, Python, Go, Rust, Java, C# or Kotlin. It also does not
   // throw on them, because errorRecovery swallows the failure and yields an empty AST.
@@ -103,7 +105,8 @@ export const generateAstOutline = (code, filePath) => {
     const meta = extractAstMetadata(scriptContent, filePath);
     const seen = new Set();
     for (const sym of meta.symbols) {
-      if (!sym?.name || seen.has(sym.name)) continue;
+      const isUnnamedOrSeen = !sym?.name || seen.has(sym.name);
+      if (isUnnamedOrSeen) continue;
       seen.add(sym.name);
       lines.push(`${OUTLINE_KIND_LABELS[sym.kind] || 'symbol'} ${sym.name}`);
     }
@@ -119,7 +122,8 @@ export const generateAstOutline = (code, filePath) => {
     lines.push(...outlineModuleAst(ast, scriptContent));
   } catch (err) {
     // Regex fallback for non-parseable files
-    if (process.env.CHEMX_DEBUG) process.stderr.write(`[outline] parse failed, using regex fallback: ${err.message}\n`);
+    const isDebugEnabled = Boolean(process.env.CHEMX_DEBUG);
+    if (isDebugEnabled) process.stderr.write(`[outline] parse failed, using regex fallback: ${err.message}\n`);
     const typeMatches = scriptContent.match(/export\s+(type|interface|const|function|class)\s+([a-zA-Z0-9_$]+)/g) || [];
     typeMatches.forEach((m) => lines.push(m.trim()));
   }
@@ -146,12 +150,15 @@ const extractSymbolBlockByText = (code, symbol) => {
   let endIndex = targetIndex;
   for (let i = targetIndex; i < lines.length; i++) {
     for (const char of lines[i]) {
-      if (char === '{') { depth++; hasBrace = true; }
-      if (char === '}') depth--;
+      const isOpenBrace = char === '{';
+      if (isOpenBrace) { depth++; hasBrace = true; }
+      const isCloseBrace = char === '}';
+      if (isCloseBrace) depth--;
     }
     const isClosed = hasBrace && depth <= 0;
     const isOneLiner = !hasBrace && (lines[i].includes(';') || i + 1 >= lines.length || lines[i + 1].trim() === '');
-    if (isClosed || isOneLiner) { endIndex = i; break; }
+    const isBlockEnd = isClosed || isOneLiner;
+    if (isBlockEnd) { endIndex = i; break; }
   }
   const slice = lines.slice(targetIndex, endIndex + 1).join('\n');
   const match = { name: symbol, kind: 'text', startLine: targetIndex + 1, endLine: endIndex + 1, code: slice };
@@ -215,8 +222,10 @@ export const readTokenOptimized = (targetPath, options = {}) => {
   const colonMatch = typeof targetPath === 'string' && targetPath.match(/^([^:]+):(\d+)(?:[-:](\d+))?$/);
   if (colonMatch) {
     rawPath = colonMatch[1];
-    if (startLine === undefined) startLine = parseInt(colonMatch[2], 10);
-    if (endLine === undefined && colonMatch[3]) endLine = parseInt(colonMatch[3], 10);
+    const needsStartLine = startLine === undefined;
+    if (needsStartLine) startLine = parseInt(colonMatch[2], 10);
+    const needsEndLine = endLine === undefined && Boolean(colonMatch[3]);
+    if (needsEndLine) endLine = parseInt(colonMatch[3], 10);
   }
 
   const cwd = options.cwd || process.cwd();
@@ -234,7 +243,8 @@ export const readTokenOptimized = (targetPath, options = {}) => {
   const conflictNote = conflictHunks.length > 0 ? describeConflicts(rawPath, conflictHunks) : null;
   if (conflictNote) options = { ...options, template: false, logic: false, outline: false, symbol: undefined, enrich: false };
 
-  if (options.template) {
+  const wantsTemplate = Boolean(options.template);
+  if (wantsTemplate) {
     const templateText = extractTemplateContent(rawContent, targetPath);
     const templateIndex = rawContent.indexOf(templateText);
     const isVerbatimSlice = templateIndex !== -1 && templateText.length > 0;
@@ -249,9 +259,11 @@ export const readTokenOptimized = (targetPath, options = {}) => {
     };
   }
 
-  if (options.logic) {
+  const wantsLogic = Boolean(options.logic);
+  if (wantsLogic) {
     let logicSource = rawContent;
-    if (options.symbol) {
+    const wantsLogicSymbol = Boolean(options.symbol);
+    if (wantsLogicSymbol) {
       const block = extractSymbolBlock(rawContent, options.symbol, resolvedPath);
       if (!block) {
         throw new Error(`Symbol "${options.symbol}" not found in ${targetPath}`);
@@ -259,7 +271,8 @@ export const readTokenOptimized = (targetPath, options = {}) => {
       logicSource = block.code;
     }
     let logicText = generateAstLogicSkeleton(logicSource, path.relative(cwd, resolvedPath) || targetPath, options);
-    if (options.compact !== false) {
+    const isCompactAllowed = options.compact !== false;
+    if (isCompactAllowed) {
       logicText = compactCode(logicText);
     }
     return {
@@ -273,7 +286,8 @@ export const readTokenOptimized = (targetPath, options = {}) => {
     };
   }
 
-  if (options.outline) {
+  const wantsOutline = Boolean(options.outline);
+  if (wantsOutline) {
     const outlineText = generateAstOutline(rawContent, targetPath);
     const enriched = options.enrich ? enrichOutline(rawContent, targetPath, options) : null;
     return {
@@ -287,7 +301,8 @@ export const readTokenOptimized = (targetPath, options = {}) => {
     };
   }
 
-  if (options.symbol) {
+  const wantsSymbol = Boolean(options.symbol);
+  if (wantsSymbol) {
     const block = extractSymbolBlock(rawContent, options.symbol, resolvedPath);
     if (!block) {
       throw new Error(`Symbol "${options.symbol}" not found in ${targetPath}`);
@@ -386,18 +401,21 @@ export const readTokenOptimized = (targetPath, options = {}) => {
 const sliceWithTransforms = (rawContent, filePath, startIdx, endIdx, options) => {
   const notes = [];
   let sourceLines = rawContent.split('\n');
-  if (options.stripComments) {
+  const wantsStripComments = Boolean(options.stripComments);
+  if (wantsStripComments) {
     const stripped = stripCommentsKeepingLines(rawContent, filePath);
     const isStripped = stripped !== null;
     if (isStripped) sourceLines = stripped.split('\n');
     notes.push(isStripped ? 'comments stripped' : 'strip-comments unsupported for this file; shown verbatim');
   }
   let entries = sourceLines.slice(startIdx, endIdx).map((text, i) => ({ n: startIdx + i + 1, text }));
-  if (options.compact) {
+  const wantsCompact = Boolean(options.compact);
+  if (wantsCompact) {
     const before = entries.length;
     entries = entries.filter((entry, i) => !(entry.text.trim() === '' && i > 0 && entries[i - 1].text.trim() === ''));
     const removed = before - entries.length;
-    if (removed > 0) notes.push(`${removed} blank line(s) removed; numbers are original`);
+    const hasRemovedLines = removed > 0;
+    if (hasRemovedLines) notes.push(`${removed} blank line(s) removed; numbers are original`);
   }
   const isContiguous = entries.every((entry, i) => entry.n === startIdx + i + 1);
   return {

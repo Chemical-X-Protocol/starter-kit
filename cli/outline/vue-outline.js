@@ -9,7 +9,12 @@ const MACROS = new Set(['defineProps', 'defineEmits', 'defineModel', 'defineExpo
 const OPTION_SECTIONS = ['props', 'emits', 'data', 'computed', 'methods', 'watch', 'setup', 'state', 'getters', 'actions'];
 
 const isCallNamed = (node, names) => t.isCallExpression(node) && t.isIdentifier(node.callee) && names.has(node.callee.name);
-const keyName = (key) => (t.isIdentifier(key) ? key.name : t.isStringLiteral(key) ? key.value : '');
+const keyName = (key) => {
+  const isIdentifierKey = t.isIdentifier(key);
+  if (isIdentifierKey) return key.name;
+  const isStringKey = t.isStringLiteral(key);
+  return isStringKey ? key.value : '';
+};
 const objectKeys = (obj) => (t.isObjectExpression(obj) ? obj.properties.map((p) => keyName(p.key)).filter(Boolean) : []);
 const compact = (text) => text.replace(/\s+/g, ' ').trim();
 
@@ -53,13 +58,15 @@ const describeSections = (obj, indent = '  ') => {
   const lines = [];
   for (const prop of obj.properties) {
     const section = keyName(prop.key);
-    if (!OPTION_SECTIONS.includes(section)) continue;
+    const isOptionSection = OPTION_SECTIONS.includes(section);
+    if (!isOptionSection) continue;
     const value = t.isObjectProperty(prop) ? prop.value : prop;
     const returned = returnedObject(value);
     const members = returned ? objectKeys(returned) : objectKeys(value);
     const isArray = t.isArrayExpression(value);
     const names = isArray ? value.elements.filter(t.isStringLiteral).map((el) => el.value) : members;
-    if (names.length > 0) lines.push(`${indent}${section}: ${names.join(', ')}`);
+    const hasNames = names.length > 0;
+    if (hasNames) lines.push(`${indent}${section}: ${names.join(', ')}`);
   }
   return lines;
 };

@@ -30,26 +30,31 @@ export const showConversionMenu = async (onScaffold = null) => {
         '6. Back to Navigator'
       ], 'Unlock Chemical X: Team Power Puff & Scaffolding:');
 
-      if (choice.startsWith('1.')) {
+      const isSponsorChoice = choice.startsWith('1.');
+      if (isSponsorChoice) {
         process.stdout.write(`\n\x1b[36mOpening GitHub Sponsors in browser:\x1b[0m ${URL_SPONSOR}\n\n`);
         openBrowser(URL_SPONSOR);
         continue;
       }
-      if (choice.startsWith('2.')) {
+      const isStandardChoice = choice.startsWith('2.');
+      if (isStandardChoice) {
         process.stdout.write(`\n\x1b[36mOpening Standard Vault checkout (Single Dev License):\x1b[0m ${URL_STANDARD}\n\n`);
         openBrowser(URL_STANDARD);
         continue;
       }
-      if (choice.startsWith('3.')) {
+      const isTeamChoice = choice.startsWith('3.');
+      if (isTeamChoice) {
         process.stdout.write(`\n\x1b[36mOpening Team Power Puff checkout (Unlimited Lifetime):\x1b[0m ${URL_MASTER}\n\n`);
         openBrowser(URL_MASTER);
         continue;
       }
-      if (choice.startsWith('4.')) {
+      const isLicenseChoice = choice.startsWith('4.');
+      if (isLicenseChoice) {
         if (onScaffold) await onScaffold();
         break;
       }
-      if (choice.startsWith('5.')) {
+      const isLearnChoice = choice.startsWith('5.');
+      if (isLearnChoice) {
         process.stdout.write(`\n\x1b[36mOpening Chemical X Portal in browser:\x1b[0m ${URL_LEARN}\n\n`);
         openBrowser(URL_LEARN);
         continue;
@@ -72,26 +77,31 @@ export const showConversionMenu = async (onScaffold = null) => {
 
     const selection = await promptQuestion('Select option [1-6] (default: 6): ');
     const effectiveSelection = selection.trim() || '6';
-    if (effectiveSelection === '1') {
+    const isSponsorTyped = effectiveSelection === '1';
+    if (isSponsorTyped) {
       process.stdout.write(`\nOpening: ${URL_SPONSOR}\n\n`);
       openBrowser(URL_SPONSOR);
       continue;
     }
-    if (effectiveSelection === '2') {
+    const isStandardTyped = effectiveSelection === '2';
+    if (isStandardTyped) {
       process.stdout.write(`\nOpening: ${URL_STANDARD}\n\n`);
       openBrowser(URL_STANDARD);
       continue;
     }
-    if (effectiveSelection === '3') {
+    const isTeamTyped = effectiveSelection === '3';
+    if (isTeamTyped) {
       process.stdout.write(`\nOpening: ${URL_MASTER}\n\n`);
       openBrowser(URL_MASTER);
       continue;
     }
-    if (effectiveSelection === '4') {
+    const isLicenseTyped = effectiveSelection === '4';
+    if (isLicenseTyped) {
       if (onScaffold) await onScaffold();
       break;
     }
-    if (effectiveSelection === '5') {
+    const isLearnTyped = effectiveSelection === '5';
+    if (isLearnTyped) {
       process.stdout.write(`\nOpening: ${URL_LEARN}\n\n`);
       openBrowser(URL_LEARN);
       continue;

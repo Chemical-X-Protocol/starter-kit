@@ -44,7 +44,8 @@ export const resolveHotspotTierText = (lineCount) => resolveMarkdownMonolithText
 
 export const resolvePillarProgressionBadge = (isImproved, beforeStatus, afterStatus) => {
   if (isImproved) return '🟢 **RESOLVED**';
-  if (beforeStatus === afterStatus) return '⚪ **UNCHANGED**';
+  const isSameStatus = beforeStatus === afterStatus;
+  if (isSameStatus) return '⚪ **UNCHANGED**';
   return '🔴 **DEGRADED**';
 };
 
@@ -53,7 +54,8 @@ const isSevereMonolith = hasSizeClass('severe');
 const isWarningMonolith = hasSizeClass('warning');
 
 export const formatWebUrl = (url) => {
-  if (!url || typeof url !== 'string') return '';
+  const isInvalidUrl = !url || typeof url !== 'string';
+  if (isInvalidUrl) return '';
   const trimmed = url.trim();
   if (!trimmed) return '';
   const href = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
@@ -61,20 +63,23 @@ export const formatWebUrl = (url) => {
 };
 
 export const resolveExcessCostPerPass = (tokensObj, fallbackCostPerMillion = 3.0) => {
-  if (tokensObj?.excessCostPerPass !== undefined) return tokensObj.excessCostPerPass;
+  const hasExcessCost = tokensObj?.excessCostPerPass !== undefined;
+  if (hasExcessCost) return tokensObj.excessCostPerPass;
   const costPerMillion = tokensObj?.costPerMillion || fallbackCostPerMillion;
   const excess = tokensObj?.estimatedExcessTokens || 0;
   return Number(((excess / 1000000) * costPerMillion).toFixed(3));
 };
 
 export const resolveMonthlyWastePerDev = (tokensObj, fallbackCostPerMillion = 3.0) => {
-  if (tokensObj?.monthlyWastePerDev !== undefined) return tokensObj.monthlyWastePerDev;
+  const hasMonthlyWaste = tokensObj?.monthlyWastePerDev !== undefined;
+  if (hasMonthlyWaste) return tokensObj.monthlyWastePerDev;
   const pass = resolveExcessCostPerPass(tokensObj, fallbackCostPerMillion);
   return Number((pass * 20 * 5 * 4).toFixed(2));
 };
 
 export const resolveWeeklyWastePerDev = (tokensObj, fallbackCostPerMillion = 3.0) => {
-  if (tokensObj?.weeklyWastePerDev !== undefined) return tokensObj.weeklyWastePerDev;
+  const hasWeeklyWaste = tokensObj?.weeklyWastePerDev !== undefined;
+  if (hasWeeklyWaste) return tokensObj.weeklyWastePerDev;
   const pass = resolveExcessCostPerPass(tokensObj, fallbackCostPerMillion);
   return Number((pass * 20 * 5).toFixed(2));
 };
@@ -136,14 +141,18 @@ export const generateDiscussionContent = (report, username, projectName = 'Codeb
   lines.push('| :--- | :---: | :---: |');
 
   const resolveStatusDisplay = (status) => {
-    if (status === 'PASSED') return '🟢 **PASSED**';
-    if (status === 'WARN') return '🟡 **WARN**';
+    const isPassed = status === 'PASSED';
+    if (isPassed) return '🟢 **PASSED**';
+    const isWarn = status === 'WARN';
+    if (isWarn) return '🟡 **WARN**';
     return '🔴 **FAILED**';
   };
 
   const resolveHazardsDisplay = (count, status) => {
-    if (count === 0) return '🟢 0';
-    if (status === 'FAILED') return `🔴 **${count}**`;
+    const isZero = count === 0;
+    if (isZero) return '🟢 0';
+    const isFailed = status === 'FAILED';
+    if (isFailed) return `🔴 **${count}**`;
     return `🟡 **${count}**`;
   };
 
@@ -166,7 +175,8 @@ export const generateDiscussionContent = (report, username, projectName = 'Codeb
   lines.push('## 2. Monolith & Architectural Hazard Summary');
   lines.push('');
   lines.push(`* **Monolith Files (${SIZE_LABELS.warning} lines of code)**: **${totalMonoliths} files**`);
-  if (totalMonoliths > 0) {
+  const hasMonoliths = totalMonoliths > 0;
+  if (hasMonoliths) {
     lines.push(`  * Warning Tier (${SIZE_LABELS.warningRange} lines of code): ${warningMonoliths} files`);
     lines.push(`  * Severe Tier (${SIZE_LABELS.severeRange} lines of code): ${severeMonoliths} files`);
     lines.push(`  * Extreme Monoliths (${SIZE_LABELS.extreme} lines of code): ${extremeMonoliths} files`);
@@ -216,7 +226,8 @@ export const generateTransformationDiscussionContent = (
   const title = `[Transformation] ${projectName} : ${beforeSnapshot.health.grade} (${scoreBefore}) -> ${afterSnapshot.health.grade} (${scoreAfter})`;
 
   const formatDelta = (val, invertGood = false) => {
-    if (val === 0) return '0 (No change)';
+    const isUnchanged = val === 0;
+    if (isUnchanged) return '0 (No change)';
     const isGood = invertGood ? val < 0 : val > 0;
     const sign = val > 0 ? `+${val}` : `${val}`;
     return isGood ? `🟢 **${sign}**` : `🔴 **${sign}**`;
@@ -231,14 +242,16 @@ export const generateTransformationDiscussionContent = (
   const monthlyTaxDelta = Number((monthlyTaxAfter - monthlyTaxBefore).toFixed(2));
 
   const formatCostPassDelta = (val) => {
-    if (val === 0) return '0 (No change)';
+    const isUnchanged = val === 0;
+    if (isUnchanged) return '0 (No change)';
     const isGood = val < 0;
     const sign = val > 0 ? `+$${val.toFixed(3)}` : `-$${Math.abs(val).toFixed(3)}`;
     return isGood ? `🟢 **${sign}**` : `🔴 **${sign}**`;
   };
 
   const formatMonthlyTaxDelta = (val) => {
-    if (val === 0) return '0 (No change)';
+    const isUnchanged = val === 0;
+    if (isUnchanged) return '0 (No change)';
     const isGood = val < 0;
     const sign = val > 0 ? `+$${val.toFixed(2)}/mo` : `-$${Math.abs(val).toFixed(2)}/mo`;
     return isGood ? `🟢 **${sign}**` : `🔴 **${sign}**`;

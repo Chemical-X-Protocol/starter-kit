@@ -42,7 +42,8 @@ export const publishDiscussionViaHttp = async (token, repo, title, body, categor
   if (!token) return { success: false, url: null, id: null, number: null, error: 'No GitHub token provided' };
 
   const [owner, name] = repo.split('/');
-  if (!owner || !name) return { success: false, url: null, id: null, number: null, error: `Invalid repository format: ${repo}` };
+  const isValidRepo = Boolean(owner && name);
+  if (!isValidRepo) return { success: false, url: null, id: null, number: null, error: `Invalid repository format: ${repo}` };
 
   try {
     const metaQuery = `
@@ -72,14 +73,17 @@ export const publishDiscussionViaHttp = async (token, repo, title, body, categor
     });
 
     const metaJson = await metaRes.json();
-    if (metaJson.errors) {
+    const hasMetaErrors = Boolean(metaJson.errors);
+    if (hasMetaErrors) {
       return { success: false, url: null, id: null, number: null, error: metaJson.errors[0]?.message || 'GraphQL error fetching categories' };
     }
 
-    const repositoryId = metaJson.data?.repository?.id;
-    const categories = metaJson.data?.repository?.discussionCategories?.nodes || [];
+    const repository = metaJson.data?.repository;
+    const repositoryId = repository?.id;
+    const categories = repository?.discussionCategories?.nodes || [];
 
-    if (!repositoryId || categories.length === 0) {
+    const hasDiscussions = Boolean(repositoryId && categories.length > 0);
+    if (!hasDiscussions) {
       return { success: false, url: null, id: null, number: null, error: `Repository ${repo} has no discussions enabled` };
     }
 
@@ -111,7 +115,8 @@ export const publishDiscussionViaHttp = async (token, repo, title, body, categor
     });
 
     const postJson = await postRes.json();
-    if (postJson.errors) {
+    const hasPostErrors = Boolean(postJson.errors);
+    if (hasPostErrors) {
       return { success: false, url: null, id: null, number: null, error: postJson.errors[0]?.message || 'Failed creating discussion' };
     }
 
@@ -131,7 +136,8 @@ export const publishDiscussionViaHttp = async (token, repo, title, body, categor
 
 export const viewDiscussionViaHttp = async (token, repo, discussionNumber) => {
   const [owner, name] = repo.split('/');
-  if (!owner || !name) return null;
+  const isValidRepo = Boolean(owner && name);
+  if (!isValidRepo) return null;
 
   try {
     const query = `
@@ -185,7 +191,8 @@ export const postDiscussionCommentViaHttp = async (token, discussionId, commentB
       body: JSON.stringify({ query: mutation, variables: { discussionId, body: commentBody } })
     });
     const json = await res.json();
-    return Boolean(json.data?.addDiscussionComment?.comment?.id);
+    const addedComment = json.data?.addDiscussionComment;
+    return Boolean(addedComment?.comment?.id);
   } catch {
     return false;
   }
@@ -215,7 +222,8 @@ export const editDiscussionViaHttp = async (token, discussionId, title, body) =>
       body: JSON.stringify({ query: mutation, variables: { discussionId, title, body } })
     });
     const json = await res.json();
-    return Boolean(json.data?.updateDiscussion?.discussion?.id);
+    const updated = json.data?.updateDiscussion;
+    return Boolean(updated?.discussion?.id);
   } catch {
     return false;
   }

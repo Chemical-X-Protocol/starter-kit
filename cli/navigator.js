@@ -1,5 +1,4 @@
 import fs from "node:fs";
-import path from "node:path";
 import {
   hasGum,
   gumChoose,
@@ -8,7 +7,7 @@ import {
   confirmAction
 } from "./terminal.js";
 import { runAudit, saveAuditSnapshot, groupViolationsBySeverity } from "./audit.js";
-import { areGuardrailsInstalled } from "./installer.js";
+import { areGuardrailsInstalled, isQueryMachineInstalled } from "./installer.js";
 import { renderDashboardBanner } from "./navigator-banner.js";
 import {
   formatButtonTag,
@@ -20,6 +19,7 @@ import {
   buildActiveGrades,
   buildDashboardActionGroups
 } from "./navigator-actions.js";
+import { planNavigatorSections } from "./navigator-sections.js";
 import { handleShareToDiscussions } from "./navigator-share.js";
 
 export {
@@ -41,6 +41,9 @@ export { showConversionMenu } from "./navigator-conversion.js";
 export { handleShareToDiscussions } from "./navigator-share.js";
 export { formatButtonTag, buildNavigatorMenu } from "./navigator-menu.js";
 export { renderDashboardBanner } from "./navigator-banner.js";
+export { planNavigatorSections } from "./navigator-sections.js";
+
+const toSectionItems = (section) => section.items;
 
 export const runInteractiveAuditNavigator = async (initialReport, onScaffold = null, onReAudit = null) => {
   let report = initialReport;
@@ -84,11 +87,12 @@ export const runInteractiveAuditNavigator = async (initialReport, onScaffold = n
 
   renderDashboardBanner(health, metrics, violations, critical, highMediumCount, low, contextAnalysis, aiSlop, { interactive: true });
 
+  // Defaults to Skip: one Enter press must never post the project publicly.
   const shouldPublish = await confirmAction(
     "Publish audit report and promote your project to our GitHub Discussions Audits Forum?",
     "Publish Report",
     "Skip to Menu",
-    true
+    false
   );
 
   if (shouldPublish) {
@@ -98,45 +102,13 @@ export const runInteractiveAuditNavigator = async (initialReport, onScaffold = n
   while (true) {
     renderDashboardBanner(health, metrics, violations, critical, highMediumCount, low, contextAnalysis, aiSlop, { interactive: true, clear: true });
 
-    const guardrailsInstalled = areGuardrailsInstalled(process.cwd());
-    const hasQueryScript = (() => {
-      try {
-        const pkgPath = path.resolve(process.cwd(), 'package.json');
-        if (!fs.existsSync(pkgPath)) return false;
-        const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
-        return Boolean(pkg?.scripts?.q);
-      } catch {
-        return false;
-      }
-    })();
-
-    const topActions = [];
-    topActions.push(actions.guideAction);
-    if (!guardrailsInstalled) {
-      topActions.push(actions.installAction);
-    }
-    if (!hasQueryScript) {
-      topActions.push(actions.installSearchAction);
-    }
-    topActions.push(actions.roadmapAction, actions.upgradeAction, actions.reportAction, actions.rerunAction);
-
-    const midActions = [];
-    if (actions.hasHotspots) {
-      midActions.push(actions.hotspotsAction);
-    }
-    midActions.push(actions.shareAction, actions.progressAction, actions.exportAction, actions.badgeAction);
-    const bottomActions = [];
-    if (actions.shouldShowPromptAction) {
-      bottomActions.push(actions.copyPromptAction);
-    }
-    bottomActions.push(actions.exitAction);
-
-    const { menuItems, menuOptions } = buildNavigatorMenu(
-      topActions,
-      activeGrades,
-      midActions,
-      bottomActions
-    );
+    const sections = planNavigatorSections({
+      actions,
+      grades: activeGrades,
+      guardrailsInstalled: areGuardrailsInstalled(process.cwd()),
+      queryIndexInstalled: isQueryMachineInstalled(process.cwd())
+    });
+    const { menuItems, menuOptions } = buildNavigatorMenu(...sections.map(toSectionItems));
 
     if (hasGum()) {
       const choice = gumChoose(menuOptions, "Select an audit section or grade to inspect:");

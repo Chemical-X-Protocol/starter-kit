@@ -10,7 +10,8 @@ const safeSpawnSync = (command, args, options = {}) => {
       ...options
     };
     const res = spawnSync(command, args, optsWithDefaults);
-    if (res.error) {
+    const hasSpawnError = Boolean(res.error);
+    if (hasSpawnError) {
       return [null, res.error];
     }
     return [res, null];
@@ -22,7 +23,8 @@ const safeSpawnSync = (command, args, options = {}) => {
 
 const safeReadJson = (filePath) => {
   try {
-    if (!fs.existsSync(filePath)) {
+    const isMissingFile = !fs.existsSync(filePath);
+    if (isMissingFile) {
       return [null, new Error(`File not found: ${filePath}`)];
     }
     const raw = fs.readFileSync(filePath, 'utf-8');
@@ -34,7 +36,8 @@ const safeReadJson = (filePath) => {
 };
 
 export const parseGitRemoteUrl = (url) => {
-  if (!url || typeof url !== 'string') return null;
+  const isInvalidUrl = !url || typeof url !== 'string';
+  if (isInvalidUrl) return null;
   const clean = url.trim().replace(/^git\+/, '').replace(/\.git$/, '');
 
   // Match HTTPS / SSH: https://github.com/owner/repo or ssh://git@github.com/owner/repo
@@ -72,7 +75,8 @@ export const detectGitRepoInfo = (cwd = process.cwd()) => {
     encoding: 'utf-8',
     stdio: ['ignore', 'pipe', 'ignore']
   });
-  if (res1?.status === 0 && res1.stdout) {
+  const hasOriginUrl = Boolean(res1?.status === 0 && res1.stdout);
+  if (hasOriginUrl) {
     const parsed = parseGitRemoteUrl(res1.stdout);
     if (parsed) return parsed;
   }
@@ -82,7 +86,8 @@ export const detectGitRepoInfo = (cwd = process.cwd()) => {
     encoding: 'utf-8',
     stdio: ['ignore', 'pipe', 'ignore']
   });
-  if (res2?.status === 0 && res2.stdout) {
+  const hasConfigUrl = Boolean(res2?.status === 0 && res2.stdout);
+  if (hasConfigUrl) {
     const parsed = parseGitRemoteUrl(res2.stdout);
     if (parsed) return parsed;
   }
@@ -92,7 +97,8 @@ export const detectGitRepoInfo = (cwd = process.cwd()) => {
     encoding: 'utf-8',
     stdio: ['ignore', 'pipe', 'ignore']
   });
-  if (remotesRes?.status === 0 && remotesRes.stdout) {
+  const hasRemotes = Boolean(remotesRes?.status === 0 && remotesRes.stdout);
+  if (hasRemotes) {
     const firstRemote = (remotesRes.stdout.trim().split(/\s+/)[0] || '').trim();
     if (firstRemote) {
       const [urlRes] = safeSpawnSync('git', ['remote', 'get-url', firstRemote], {
@@ -100,7 +106,8 @@ export const detectGitRepoInfo = (cwd = process.cwd()) => {
         encoding: 'utf-8',
         stdio: ['ignore', 'pipe', 'ignore']
       });
-      if (urlRes?.status === 0 && urlRes.stdout) {
+      const hasRemoteUrl = Boolean(urlRes?.status === 0 && urlRes.stdout);
+      if (hasRemoteUrl) {
         const parsed = parseGitRemoteUrl(urlRes.stdout);
         if (parsed) return parsed;
       }
@@ -115,8 +122,10 @@ export const detectGitRepoInfo = (cwd = process.cwd()) => {
       const parsed = parseGitRemoteUrl(repoUrl);
       if (parsed) return parsed;
     }
-    if (pkg.name) {
-      if (pkg.name.startsWith('@') && pkg.name.includes('/')) {
+    const hasPkgName = Boolean(pkg.name);
+    if (hasPkgName) {
+      const isScopedPkgName = pkg.name.startsWith('@') && pkg.name.includes('/');
+      if (isScopedPkgName) {
         const [scope, pkgRepo] = pkg.name.slice(1).split('/');
         return {
           owner: scope,
@@ -139,7 +148,8 @@ export const detectGitRepoInfo = (cwd = process.cwd()) => {
     encoding: 'utf-8',
     stdio: ['ignore', 'pipe', 'ignore']
   });
-  if (topRes?.status === 0 && topRes.stdout) {
+  const hasTopLevel = Boolean(topRes?.status === 0 && topRes.stdout);
+  if (hasTopLevel) {
     const topDir = topRes.stdout.trim();
     const repoName = path.basename(topDir);
     if (repoName) {
@@ -162,44 +172,56 @@ export const detectGitRepoInfo = (cwd = process.cwd()) => {
 };
 
 export const detectGitHubUser = (preferredUser) => {
-  if (preferredUser && typeof preferredUser === 'string') {
+  const hasPreferredUser = Boolean(preferredUser && typeof preferredUser === 'string');
+  if (hasPreferredUser) {
     const trimmed = preferredUser.trim();
-    if (trimmed && trimmed !== 'Architect') return trimmed;
+    const isUsablePreferred = Boolean(trimmed && trimmed !== 'Architect');
+    if (isUsablePreferred) return trimmed;
   }
 
   const [res] = safeSpawnSync('gh', ['api', 'user', '-q', '.login'], { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] });
-  if (res?.status === 0) {
+  const isGhApiOk = Boolean(res?.status === 0);
+  if (isGhApiOk) {
     const user = (res.stdout || '').trim();
-    if (user && /^[a-zA-Z0-9_\-]+$/.test(user)) return user;
+    const isValidLogin = Boolean(user && /^[a-zA-Z0-9_\-]+$/.test(user));
+    if (isValidLogin) return user;
   }
 
   const [statusRes] = safeSpawnSync('gh', ['auth', 'status'], { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] });
-  if (statusRes) {
+  const hasStatusRes = Boolean(statusRes);
+  if (hasStatusRes) {
     const output = `${statusRes.stdout || ''} ${statusRes.stderr || ''}`.trim();
     const match = output.match(/account\s+([a-zA-Z0-9_\-]+)/i) || output.match(/Logged in to [^\s]+ account ([a-zA-Z0-9_\-]+)/i);
-    if (match && match[1]) {
+    const hasAccountMatch = Boolean(match && match[1]);
+    if (hasAccountMatch) {
       const user = match[1].trim();
-      if (user && user !== 'default') return user;
+      const isRealAccount = Boolean(user && user !== 'default');
+      if (isRealAccount) return user;
     }
   }
 
   const [ghUser] = safeSpawnSync('git', ['config', 'github.user'], { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] });
-  if (ghUser?.stdout) {
+  const hasGhUserConfig = Boolean(ghUser?.stdout);
+  if (hasGhUserConfig) {
     const u = ghUser.stdout.trim();
-    if (u && /^[a-zA-Z0-9_\-]+$/.test(u)) return u;
+    const isValidConfigUser = Boolean(u && /^[a-zA-Z0-9_\-]+$/.test(u));
+    if (isValidConfigUser) return u;
   }
 
   const [gitRes] = safeSpawnSync('git', ['config', 'user.name'], { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] });
-  if (gitRes?.stdout) {
+  const hasGitUserName = Boolean(gitRes?.stdout);
+  if (hasGitUserName) {
     const name = gitRes.stdout.trim();
-    if (name && /^[a-zA-Z0-9_\-]+$/.test(name)) return name;
+    const isValidGitName = Boolean(name && /^[a-zA-Z0-9_\-]+$/.test(name));
+    if (isValidGitName) return name;
   }
 
   return 'Architect';
 };
 
 export const copyViaOsc52 = (text) => {
-  if (typeof text !== 'string' || !text) return false;
+  const isEmptyText = typeof text !== 'string' || !text;
+  if (isEmptyText) return false;
   try {
     const base64 = Buffer.from(text, 'utf-8').toString('base64');
     const isTmux = Boolean(process.env.TMUX);
@@ -234,19 +256,25 @@ export const copyViaOsc52 = (text) => {
 };
 
 export const copyToClipboard = (text, options = {}) => {
-  if (typeof text !== 'string' || !text) return false;
-  if (options.dryRun || process.env.NODE_ENV === 'test' || process.env.CHEMX_TEST === '1' || process.env.VITEST) {
+  const isEmptyText = typeof text !== 'string' || !text;
+  if (isEmptyText) return false;
+  const isTestRun = Boolean(options.dryRun || process.env.NODE_ENV === 'test' || process.env.CHEMX_TEST === '1' || process.env.VITEST);
+  if (isTestRun) {
     return true;
   }
 
   let copied = false;
 
-  if (process.platform === 'darwin') {
+  const isDarwin = process.platform === 'darwin';
+  const isWindows = process.platform === 'win32';
+  if (isDarwin) {
     const [res] = safeSpawnSync('pbcopy', [], { input: text, stdio: ['pipe', 'ignore', 'ignore'], timeout: 1000 });
-    if (res?.status === 0) copied = true;
-  } else if (process.platform === 'win32') {
+    const didCopy = res?.status === 0;
+    if (didCopy) copied = true;
+  } else if (isWindows) {
     const [res] = safeSpawnSync('clip', [], { input: text, stdio: ['pipe', 'ignore', 'ignore'], timeout: 1000 });
-    if (res?.status === 0) copied = true;
+    const didCopy = res?.status === 0;
+    if (didCopy) copied = true;
   } else {
     // Linux / BSD / Unix environments
     const isWsl = Boolean(process.env.WSL_DISTRO_NAME || process.env.WSL_INTEROP);
@@ -254,31 +282,41 @@ export const copyToClipboard = (text, options = {}) => {
 
     if (isWsl) {
       const [wslRes] = safeSpawnSync('clip.exe', [], { input: text, stdio: ['pipe', 'ignore', 'ignore'], timeout: 1000 });
-      if (wslRes?.status === 0) copied = true;
+      const didWslCopy = wslRes?.status === 0;
+      if (didWslCopy) copied = true;
     }
 
     // wl-copy hangs in Sommelier / ChromeOS containers due to lack of unfocused data-control support
-    if (!copied && !isSommelier) {
+    const shouldTryWlCopy = !copied && !isSommelier;
+    if (shouldTryWlCopy) {
       const [wlWhich] = safeSpawnSync('which', ['wl-copy'], { stdio: 'ignore', timeout: 500 });
-      if (wlWhich?.status === 0) {
+      const hasWlCopy = wlWhich?.status === 0;
+      if (hasWlCopy) {
         const [res] = safeSpawnSync('wl-copy', [], { input: text, stdio: ['pipe', 'ignore', 'ignore'], timeout: 800 });
-        if (res?.status === 0) copied = true;
+        const didCopy = res?.status === 0;
+        if (didCopy) copied = true;
       }
     }
 
-    if (!copied) {
+    const shouldTryXclip = !copied;
+    if (shouldTryXclip) {
       const [xcWhich] = safeSpawnSync('which', ['xclip'], { stdio: 'ignore', timeout: 500 });
-      if (xcWhich?.status === 0) {
+      const hasXclip = xcWhich?.status === 0;
+      if (hasXclip) {
         const [res] = safeSpawnSync('xclip', ['-selection', 'clipboard'], { input: text, stdio: ['pipe', 'ignore', 'ignore'], timeout: 800 });
-        if (res?.status === 0) copied = true;
+        const didCopy = res?.status === 0;
+        if (didCopy) copied = true;
       }
     }
 
-    if (!copied) {
+    const shouldTryXsel = !copied;
+    if (shouldTryXsel) {
       const [xsWhich] = safeSpawnSync('which', ['xsel'], { stdio: 'ignore', timeout: 500 });
-      if (xsWhich?.status === 0) {
+      const hasXsel = xsWhich?.status === 0;
+      if (hasXsel) {
         const [res] = safeSpawnSync('xsel', ['--clipboard', '--input'], { input: text, stdio: ['pipe', 'ignore', 'ignore'], timeout: 800 });
-        if (res?.status === 0) copied = true;
+        const didCopy = res?.status === 0;
+        if (didCopy) copied = true;
       }
     }
   }

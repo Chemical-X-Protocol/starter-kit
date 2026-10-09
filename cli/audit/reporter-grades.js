@@ -43,16 +43,19 @@ export const formatGradeFSection = (report, options = {}) => {
   lines.push(`${RED}----------------------------------------------------------------------${RESET}`);
 
   const totalGradeFItems = critical.length + extremeMonoliths.length + failedPillars.length;
-  if (totalGradeFItems === 0) {
+  const hasNoGradeFItems = totalGradeFItems === 0;
+  if (hasNoGradeFItems) {
     lines.push(`\n   ${GREEN}✔ Outstanding! Zero Grade F hazards detected.${RESET}`);
     lines.push(`   ${DIM}Codebase is free of extreme monoliths (${SIZE_LABELS.extreme} lines of code) and critical violations.${RESET}`);
   } else {
-    if (critical.length > 0) {
+    const hasCritical = critical.length > 0;
+    if (hasCritical) {
       lines.push(`\n   ${BOLD}${RED}🚨 CRITICAL AST VIOLATIONS (${critical.length}):${RESET}\n`);
       lines.push(renderGroupedViolationsTerminal(critical));
     }
 
-    if (extremeMonoliths.length > 0) {
+    const hasExtremeMonoliths = extremeMonoliths.length > 0;
+    if (hasExtremeMonoliths) {
       lines.push(`   ${BOLD}${RED}💣 EXTREME MONOLITHS (${SIZE_LABELS.extreme} LINES):${RESET}`);
       lines.push(`   ${DIM}Massive token burn files causing severe context rot and agent hallucination.${RESET}`);
       extremeMonoliths.forEach((h, idx) => {
@@ -61,7 +64,8 @@ export const formatGradeFSection = (report, options = {}) => {
       lines.push('');
     }
 
-    if (failedPillars.length > 0) {
+    const hasFailedPillars = failedPillars.length > 0;
+    if (hasFailedPillars) {
       lines.push(`   ${BOLD}${RED}🏛️  FAILED PILLARS (CRITICAL INFECTIONS):${RESET}`);
       for (const [name, p] of failedPillars) {
         lines.push(`   ✕ ${YELLOW}${name}${RESET}: ${p.violations} violations (${p.critical} Critical, ${p.high} High, ${p.medium} Med)`);
@@ -103,16 +107,19 @@ export const formatGradeDSection = (report, options = {}) => {
   lines.push(`${ORANGE}----------------------------------------------------------------------${RESET}`);
 
   const totalGradeDItems = high.length + severeMonoliths.length + warnPillars.length;
-  if (totalGradeDItems === 0) {
+  const hasNoGradeDItems = totalGradeDItems === 0;
+  if (hasNoGradeDItems) {
     lines.push(`\n   ${GREEN}✔ Zero Grade D debts detected.${RESET}`);
     lines.push(`   ${DIM}No severe monoliths (${SIZE_LABELS.severeRange} lines of code) or saturated hook anti-patterns.${RESET}`);
   } else {
-    if (high.length > 0) {
+    const hasHigh = high.length > 0;
+    if (hasHigh) {
       lines.push(`\n   ${BOLD}${ORANGE}⚠️  HIGH SEVERITY VIOLATIONS (${high.length}):${RESET}\n`);
       lines.push(renderGroupedViolationsTerminal(high));
     }
 
-    if (severeMonoliths.length > 0) {
+    const hasSevereMonoliths = severeMonoliths.length > 0;
+    if (hasSevereMonoliths) {
       lines.push(`   ${BOLD}${ORANGE}🔥 SEVERE MONOLITHS (${SIZE_LABELS.severeRange} LINES):${RESET}`);
       severeMonoliths.forEach((h, idx) => {
         lines.push(`   [#${idx + 1}] ${YELLOW}${h.filePath}${RESET} (${h.lineCount} lines, ${h.violationCount} hazards) ${ORANGE}[SEVERE MONOLITH]${RESET}`);
@@ -120,7 +127,8 @@ export const formatGradeDSection = (report, options = {}) => {
       lines.push('');
     }
 
-    if (warnPillars.length > 0) {
+    const hasWarnPillars = warnPillars.length > 0;
+    if (hasWarnPillars) {
       lines.push(`   ${BOLD}${ORANGE}🏛️  DEGRADED PILLARS (MULTIPLE HIGH/MED DEBTS):${RESET}`);
       for (const [name, p] of warnPillars) {
         lines.push(`   ⚠ ${YELLOW}${name}${RESET}: ${p.violations} violations (${p.high} High, ${p.medium} Med)`);
@@ -160,16 +168,19 @@ export const formatGradeCSection = (report, options = {}) => {
   lines.push(`${CYAN}----------------------------------------------------------------------${RESET}`);
 
   const totalGradeCItems = medium.length + warningMonoliths.length;
-  if (totalGradeCItems === 0) {
+  const hasNoGradeCItems = totalGradeCItems === 0;
+  if (hasNoGradeCItems) {
     lines.push(`\n   ${GREEN}✔ Zero Grade C debts detected.${RESET}`);
     lines.push(`   ${DIM}All files remain at most ${SIZE_LABELS.warnLimit} lines with clean styling and handlers.${RESET}`);
   } else {
-    if (medium.length > 0) {
+    const hasMedium = medium.length > 0;
+    if (hasMedium) {
       lines.push(`\n   ${BOLD}${CYAN}⚡ MEDIUM SEVERITY VIOLATIONS (${medium.length}):${RESET}\n`);
       lines.push(renderGroupedViolationsTerminal(medium));
     }
 
-    if (warningMonoliths.length > 0) {
+    const hasWarningMonoliths = warningMonoliths.length > 0;
+    if (hasWarningMonoliths) {
       lines.push(`   ${BOLD}${CYAN}⚠️  WARNING MONOLITHS (${SIZE_LABELS.warningRange} LINES):${RESET}`);
       warningMonoliths.forEach((h, idx) => {
         lines.push(`   [#${idx + 1}] ${YELLOW}${h.filePath}${RESET} (${h.lineCount} lines, ${h.violationCount} hazards) ${DIM}[MONOLITH WARNING]${RESET}`);
@@ -206,7 +217,8 @@ export const formatGradeBSection = (report, options = {}) => {
   lines.push(`   Low Hygiene Issues:   ${low.length > 0 ? `${YELLOW}${BOLD}${low.length}${RESET}` : `${GREEN}0${RESET}`}`);
   lines.push(`${YELLOW}----------------------------------------------------------------------${RESET}`);
 
-  if (low.length === 0) {
+  const hasNoLowIssues = low.length === 0;
+  if (hasNoLowIssues) {
     lines.push(`\n   ${GREEN}✔ Outstanding hygiene! Zero Grade B issues detected.${RESET}`);
     lines.push(`   ${DIM}Zero em dashes and zero unguarded console statements found.${RESET}`);
   } else {
@@ -245,7 +257,8 @@ export const formatGradeASection = (report) => {
   lines.push(`${GREEN}----------------------------------------------------------------------${RESET}`);
 
   lines.push(`\n   ${BOLD}${GREEN}✔ COMPLIANT PILLARS (${passedPillars.length} / ${Object.keys(pillars).length}):${RESET}`);
-  if (passedPillars.length === 0) {
+  const hasNoPassedPillars = passedPillars.length === 0;
+  if (hasNoPassedPillars) {
     lines.push(`   ${YELLOW}No pillars are currently 100% compliant.${RESET}\n`);
   } else {
     for (const [name] of passedPillars) {
@@ -255,7 +268,8 @@ export const formatGradeASection = (report) => {
   }
 
   lines.push(`   ${BOLD}${CYAN}STANDARDS MET & CLEAN CODEBASE ASSETS:${RESET}`);
-  if (metrics.moleculeCompliantPct === 100) {
+  const isFullyMoleculeCompliant = metrics.moleculeCompliantPct === 100;
+  if (isFullyMoleculeCompliant) {
     lines.push(`   ${GREEN}✔${RESET} 100% Molecule Capsule Limit (<= ${moleculeLimit} lines per molecule)`);
   }
   const hasExtremeMonolith = hotspots.some(hasSizeClass('extreme'));
@@ -266,7 +280,8 @@ export const formatGradeASection = (report) => {
   if (!hasSevereMonolith) {
     lines.push(`   ${GREEN}✔${RESET} Zero Severe Monoliths (0 files ${SIZE_LABELS.severe} lines of code)`);
   }
-  if (contextAnalysis.riskLevel === 'LOW') {
+  const hasLowContextRisk = contextAnalysis.riskLevel === 'LOW';
+  if (hasLowContextRisk) {
     lines.push(`   ${GREEN}✔${RESET} Low Context Hazard & Token Burn Risk`);
   }
 

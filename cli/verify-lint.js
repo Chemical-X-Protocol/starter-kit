@@ -8,7 +8,8 @@ import { workspaceAt, emitWorkspace, allPackagesOrRefuse } from './workspace-run
 import { STATUS } from './result-status.js';
 
 export const detectLintCommand = (customCmd, cwd = process.cwd(), isFix = false, targetPath = null) => {
-  if (customCmd && customCmd.trim().length > 0) return customCmd.trim();
+  const hasCustomCommand = Boolean(customCmd && customCmd.trim().length > 0);
+  if (hasCustomCommand) return customCmd.trim();
   const pkg = loadLocalPackageJson(cwd);
   const scripts = (pkg && pkg.scripts) || {};
   const pm = resolvePackageManager(cwd);
@@ -20,12 +21,15 @@ export const detectLintCommand = (customCmd, cwd = process.cwd(), isFix = false,
   }
 
   if (isFix) {
-    if (scripts['lint:fix']) return `${pm} run lint:fix`;
-    if (scripts.lint) return `${pm} run lint -- --fix`;
+    const hasLintFixScript = Boolean(scripts['lint:fix']);
+    if (hasLintFixScript) return `${pm} run lint:fix`;
+    const hasLintScriptForFix = Boolean(scripts.lint);
+    if (hasLintScriptForFix) return `${pm} run lint -- --fix`;
     return 'npx eslint --fix .';
   }
 
-  if (scripts.lint) return `${pm} run lint`;
+  const hasLintScript = Boolean(scripts.lint);
+  if (hasLintScript) return `${pm} run lint`;
   return 'npx eslint .';
 };
 
@@ -57,7 +61,8 @@ export const parseLintOutput = (stdout = '', stderr = '') => {
     }
 
     const fileMatch = clean.match(fileHeaderRegex);
-    if (fileMatch && !clean.includes('✖') && !clean.includes('✔') && !clean.includes('problems')) {
+    const isFileHeader = Boolean(fileMatch && !clean.includes('✖') && !clean.includes('✔') && !clean.includes('problems'));
+    if (isFileHeader) {
       currentFile = fileMatch[1].trim();
       continue;
     }
@@ -73,7 +78,8 @@ export const parseLintOutput = (stdout = '', stderr = '') => {
         ruleId: issueMatch[5].trim()
       };
 
-      if (issue.severity === 'error') {
+      const isError = issue.severity === 'error';
+      if (isError) {
         errors.push(issue);
       } else {
         warnings.push(issue);
@@ -91,7 +97,8 @@ export const parseLintOutput = (stdout = '', stderr = '') => {
 };
 
 export const runLintAudit = async (rawArgs = [], isCli = false, options = {}) => {
-  if (rawArgs.includes('--help') || rawArgs.includes('-h') || rawArgs.includes('help')) {
+  const wantsHelp = rawArgs.includes('--help') || rawArgs.includes('-h') || rawArgs.includes('help');
+  if (wantsHelp) {
     const isJson = rawArgs.includes('--json');
     if (isJson) {
       process.stdout.write(JSON.stringify({ help: true, success: true }) + '\n');
@@ -140,6 +147,7 @@ export const runLintAudit = async (rawArgs = [], isCli = false, options = {}) =>
     return emitWorkspace(await allPackagesOrRefuse(workspace, 'lint', allPackages, 'pass a path inside a package', runInPackage), output, formatOne);
   }
 
+  const shouldPrint = options.print !== false;
   const nmStatus = checkNodeModules(cwd);
   if (nmStatus) {
     const friendlyMsg = nmStatus.msg('linting');
@@ -165,13 +173,13 @@ export const runLintAudit = async (rawArgs = [], isCli = false, options = {}) =>
       warnings: []
     };
     if (isJson) {
-      if (options.print !== false) {
+      if (shouldPrint) {
         process.stdout.write(formatAgentJson(report) + '\n');
       }
       if (isCli) process.exit(1);
       return report;
     }
-    if (options.print !== false) {
+    if (shouldPrint) {
       process.stdout.write(`\n  ${ANSI.RED}✖${ANSI.RESET} ${ANSI.BOLD}${friendlyMsg}${ANSI.RESET}\n\n`);
     }
     if (isCli) process.exit(1);
@@ -184,7 +192,8 @@ export const runLintAudit = async (rawArgs = [], isCli = false, options = {}) =>
 
   // If exitCode is non-zero but regex didn't parse items (e.g. fatal syntax error), capture raw error
   let executionError = null;
-  if (execution.exitCode !== 0 && parsed.errors.length === 0) {
+  const hasUnparsedFailure = execution.exitCode !== 0 && parsed.errors.length === 0;
+  if (hasUnparsedFailure) {
     const rawLines = `${execution.stderr}\n${execution.stdout}`.split('\n').map((l) => l.trim()).filter(Boolean);
     executionError = rawLines.find((l) => /error|not found|failed/i.test(l)) || rawLines[0] || `Command exited with code ${execution.exitCode}`;
   }
@@ -205,30 +214,38 @@ export const runLintAudit = async (rawArgs = [], isCli = false, options = {}) =>
   };
 
   if (isJson) {
-    if (options.print !== false) {
+    if (shouldPrint) {
       process.stdout.write(formatAgentJson(report) + '\n');
     }
     if (isCli) process.exit(report.success ? 0 : 1);
     return report;
   }
 
-  if (options.print !== false) {
-    if (report.success) {
-      const warnInfo = report.warningCount > 0 ? ` with ${report.warningCount} warning(s)` : '';
+  if (shouldPrint) {
+    const didPass = report.success;
+    if (didPass) {
+      const hasWarnings = report.warningCount > 0;
+      const warnInfo = hasWarnings ? ` with ${report.warningCount} warning(s)` : '';
       process.stdout.write(`  ${ANSI.LIME}✔${ANSI.RESET} ${ANSI.BOLD}Linter passed${warnInfo}${ANSI.RESET} ${ANSI.DIM}(in ${report.durationMs}ms)${ANSI.RESET}\n`);
     } else {
-      if (report.executionError) {
+      const hasExecutionError = Boolean(report.executionError);
+      if (hasExecutionError) {
         process.stdout.write(`\n  ${ANSI.RED}✖${ANSI.RESET} ${ANSI.BOLD}Lint Execution Error:${ANSI.RESET} ${report.executionError}\n\n`);
       } else {
-        process.stdout.write(`\n  ${ANSI.RED}✖${ANSI.RESET} ${ANSI.BOLD}Lint Failures (${report.errorCount} error${report.errorCount === 1 ? '' : 's'}${report.warningCount > 0 ? `, ${report.warningCount} warning(s)` : ''})${ANSI.RESET}\n`);
+        const hasWarningsInFailure = report.warningCount > 0;
+        const warningSuffix = hasWarningsInFailure ? `, ${report.warningCount} warning(s)` : '';
+        const hasSingleError = report.errorCount === 1;
+        process.stdout.write(`\n  ${ANSI.RED}✖${ANSI.RESET} ${ANSI.BOLD}Lint Failures (${report.errorCount} error${hasSingleError ? '' : 's'}${warningSuffix})${ANSI.RESET}\n`);
         const displayLimit = 10;
         for (const err of report.errors.slice(0, displayLimit)) {
           process.stdout.write(`    ${ANSI.RED}✖${ANSI.RESET} ${ANSI.BOLD}${err.file}:${err.line}:${err.column}${ANSI.RESET} ${err.message} ${ANSI.DIM}(${err.ruleId})${ANSI.RESET}\n`);
         }
-        if (report.errors.length > displayLimit) {
+        const hasHiddenErrors = report.errors.length > displayLimit;
+        if (hasHiddenErrors) {
           process.stdout.write(`    ${ANSI.DIM}...and ${report.errors.length - displayLimit} more error(s)${ANSI.RESET}\n`);
         }
-        if (report.fixableCount > 0) {
+        const hasFixable = report.fixableCount > 0;
+        if (hasFixable) {
           process.stdout.write(`\n  ${ANSI.CYAN}💡 ${report.fixableCount} issue(s) potentially fixable with 'chemx lint --fix'${ANSI.RESET}\n`);
         }
         process.stdout.write('\n');

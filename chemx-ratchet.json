@@ -6,13 +6,7 @@
       "ruleset": 4,
       "allRules": true,
       "rules": {
-        "AI_SLOP_REDUNDANT_PASSTHROUGH": 2,
-        "CONTROL_FLOW_INLINE_BOOLEAN": 1169,
-        "CONTROL_FLOW_NESTED_TERNARY": 1,
-        "DATA_FLOW_OPTIONAL_CHAINING_CHURN": 11,
-        "ERROR_SWALLOWED_EXCEPTION": 5,
-        "TIMER_DISCIPLINE": 1,
-        "TYPOGRAPHY_EM_DASH": 1
+        "CONTROL_FLOW_INLINE_BOOLEAN": 804
       },
       "revisions": {
         "A11Y_CLICKABLE_NON_SEMANTIC": 3,
