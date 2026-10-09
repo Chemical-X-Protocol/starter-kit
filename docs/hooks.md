@@ -33,14 +33,24 @@ A blocked call is denied before it runs. The denial names the exact chemx call, 
 | `npm run build`, `vite build` | `chemx build -- <command>` |
 | `git diff`, `git log` | `chemx d`, `chemx log` |
 | `git show <rev>` | `chemx show <rev>`; `git show <rev>:<path>` becomes `chemx read <rev>:<path>` |
-| `cat`, `head`, `tail`, `less`, `sed -n` on a repo source file | `chemx read <file> --outline`, `--symbol=<name>` or `--start=N --end=M` |
-| `grep -r`, `rg`, `ag`, `ack`; `grep` or `awk` on a repo source file | `chemx q -g "<text>"`; `chemx q -g "<text>" --dir=<file>`; `chemx read <file> --start=N --end=M` |
+| `cat`, `head`, `tail`, `less`, `sed` (any script, not `-i`) on a repo source file, also as `cmd < file`; `wc`, `nl`, `sort`, `cut`, `diff` and similar readers with `< file` | `chemx read <file> --outline`, `--symbol=<name>` or `--start=N --end=M` |
+| `git cat-file -p <rev>:<path>` | `chemx read <rev>:<path>` |
+| `xargs cat < list` (a repo file feeding the file list) | `chemx do "read <file> --outline" ...` |
+| `git grep`; `grep -r`, `rg`, `ag`, `ack`; `grep` or `awk` on a repo source file | `chemx q -g "<text>"`; `chemx q -g "<text>" --dir=<file>`; `chemx read <file> --start=N --end=M` |
 | `find` in the repo (plain tests only) | `chemx f "<name part>"` |
-| `sed -i`, `perl -i` on a repo file | `chemx patch <file> <<'EOF'` with SEARCH/REPLACE blocks (a simple `s/a/b/` is filled in) |
+| `sed -i`, `perl -i`, `awk -i inplace` on a repo file | `chemx patch <file> <<'EOF'` with SEARCH/REPLACE blocks (a simple `s/a/b/` is filled in) |
 | `>`, `>>`, a heredoc or `tee` into a repo file | `chemx write <file> - <<'EOF'` or `chemx write <file> --append - <<'EOF'` |
 | built-in `Read`, `Edit`, `MultiEdit`, `NotebookEdit`, `Write`, `Glob`, `Grep` on a repo file | `chemx read`, `chemx patch`, `chemx write`, `chemx f`, `chemx q -g` |
 
 The native-tool rows apply when `nativeFileTools` is `block` (environment `CHEMX_NATIVE_FILE_TOOLS`, then `.chemxrc`). The default is `warn`: the call runs and the model is shown the chemx replacement. Search rules are on unless `CHEMX_GUARD_SEARCH=0`.
+
+### Shell write coverage
+
+Covered writers: `>`, `>>`, `>|`, `&>` redirects (heredocs included), `tee`, `sed -i`, `perl -i` and `awk -i inplace`. Not covered, and allowed even on repo files: `cp`, `mv`, `install`, `patch`, `git apply`, `git checkout -- <file>`, `dd`, `truncate`, editors, scripts that write on their own, and any target whose path is an unresolved variable. The guard is a nudge toward chemx's logged edits, not a sandbox.
+
+### Working directory tracking
+
+Relative paths are resolved against the directory the command runs in, not only the payload cwd. The guard follows literal `cd` and `pushd` targets (including `cd -P`, `cd -L` and `cd --`), `cd` with no argument (home), and `( cd x && ... )` subshells, whose change ends at the closing parenthesis. A `cd` inside a pipeline stage or a background job does not change the directory. Substitutions (`$(...)`) start in the directory of the command that holds them. When the directory cannot be known, the guard fails open for the rest of that scope: the target is a variable or substitution (`cd "$DIR"`, `cd $(mktemp -d)`), `cd -`, `popd`, or a `cd` after `||`. Relative paths there are not routed; absolute paths still are.
 
 "Repo file" for shell writes means a source, markdown, JSON, YAML, TOML, HTML or CSS file inside the project. For native tools it means any text file inside a git repository: the session's project or another repo.
 
@@ -76,7 +86,8 @@ Rule ids: `nudge-git-status`, `nudge-git-add`, `nudge-git-commit`, `nudge-wait`,
 ## What is never touched
 
 - Anything outside every git repo: `/tmp`, scratch directories, the scratchpad directory Claude Code names in the payload.
-- The user's `~/.claude` tree (memory, jobs, projects), `.claude/` inside the project, `node_modules/`, `.git/`, `dist/`, `.chemx/`, and `tmp/`, `scratch/` or `.scratch/` directories below the project root.
+- The user's `~/.claude` tree (memory, jobs, projects), `.claude/` inside the project, `node_modules/`, `.git/`, `dist/`, `.chemx/`, and `tmp/`, `scratch/` or `.scratch/` directories below the root of the repo that holds them. Shell rules and native tools share this one list, so `Read` of `scratch/a.ts` or `.git/config` is free too.
+- `Glob` and `Grep` are judged by the directory they search (the `path`, or the absolute prefix of the pattern), so searching another git repo is blocked exactly like reading its files.
 - File types chemx cannot serve: images, PDFs, fonts, audio, video, archives, databases.
 - `grep`, `awk`, `head` and `tail` with no file operand (pipe filters on stdin), and `grep`, `awk`, `cat` on files that are not repo source.
 - Every `chemx ...` invocation itself, including `node .../cli/index.js`.
@@ -96,4 +107,4 @@ If chemx truly cannot do the job, file it: `chemx team task add "Friction: <what
 
 ## Where the code lives
 
-`cli/hooks/claude-pre-tool.js` (decision), `guard-rules.js`, `guard-rules-shell.js`, `guard-rules-nudge.js` (rules), `guard-paths.js`, `repo-membership.js`, `native-tool-policy.js` (scope), `guard-config.js` (nudge promotion), `bypass-log.js`, `install-hooks-*.js` and `cli/doctor/check-host.js`. Specs sit beside them: `guard-rewrites.spec.js`, `guard-native-bypass.spec.js`, `install-hooks-project.spec.js`, `cli/doctor/doctor-hooks.spec.js`.
+`cli/hooks/claude-pre-tool.js` (decision), `guard-rules.js`, `guard-rules-shell.js`, `guard-rules-reads.js`, `guard-rules-nudge.js` (rules), `guard-paths.js`, `repo-membership.js`, `native-tool-policy.js` (scope), `guard-config.js` (nudge promotion), `bypass-log.js`, `install-hooks-*.js` and `cli/doctor/check-host.js`. Specs sit beside them: `guard-rewrites.spec.js`, `guard-native-bypass.spec.js`, `install-hooks-project.spec.js`, `cli/doctor/doctor-hooks.spec.js`.

@@ -98,6 +98,35 @@ test('a relative Glob pattern resolves against path or cwd, so leaving the root 
   assert.equal(nativeToolTarget('Glob', { pattern: '**/*.js' }), '.');
 });
 
+const otherRepo = () => {
+  const dir = tempRoot();
+  fs.mkdirSync(path.join(dir, '.git'));
+  return dir;
+};
+
+test('Glob and Grep resolve their directory through repo membership like Read does (#2490)', () => {
+  const other = otherRepo();
+  assert.equal(decide('Read', { file_path: `${other}/a.js` }, 'block').decision, 'deny');
+  assert.equal(decide('Glob', { pattern: '*.js', path: other }, 'block').decision, 'deny');
+  assert.equal(decide('Glob', { pattern: `${other}/**/*.js` }, 'block').decision, 'deny');
+  assert.equal(decide('Grep', { pattern: 'x', path: other }, 'block').decision, 'deny');
+  assert.equal(decide('Glob', { pattern: '*.js', path: os.tmpdir() }, 'block').decision, 'allow');
+});
+
+test('scratch/, .git/, dist/ and tmp/ stay free inside a repo, as they do for shell rules (#2490)', () => {
+  const other = otherRepo();
+  const free = [
+    ['Read', { file_path: '/repo/scratch/a.ts' }], ['Write', { file_path: '/repo/.git/config' }], ['Read', { file_path: '/repo/dist/a.js' }],
+    ['Read', { file_path: '/repo/tmp/a.ts' }], ['Read', { file_path: '/repo/.chemx/last.json' }], ['Glob', { pattern: '**/*.js', path: '/repo/scratch' }],
+    ['Read', { file_path: `${other}/scratch/a.ts` }], ['Read', { file_path: `${other}/.git/config` }], ['Glob', { pattern: '*.js', path: `${other}/dist` }],
+  ];
+  for (const [tool, input] of free) {
+    const result = decide(tool, input, 'block');
+    assert.deepEqual([result.decision, result.inScope], ['allow', false], `${tool} ${JSON.stringify(input)}`);
+  }
+  assert.equal(decide('Read', { file_path: '/repo/src/scratchy.ts' }, 'block').decision, 'deny');
+});
+
 test('non-file tools are not this policy\'s concern', () => {
   assert.deepEqual(decide('Bash', { command: 'ls' }, 'block'), { decision: 'allow', rule: null, inScope: false });
 });

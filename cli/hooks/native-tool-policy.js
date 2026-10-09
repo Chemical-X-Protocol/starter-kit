@@ -6,8 +6,8 @@
 // Every pointer names the exact chemx equivalent.
 
 import path from 'node:path';
-import { isInsideDirectory } from './guard-paths.js';
-import { isInOtherRepo } from './repo-membership.js';
+import { isInsideDirectory, isFreeLocation } from './guard-paths.js';
+import { isInOtherRepo, findRepoRoot } from './repo-membership.js';
 import { findAndLoadConfigFile, readExistingProjectConfig } from '../config/loader.js';
 
 export const NATIVE_FILE_TOOLS = new Set(['Read', 'Edit', 'Write', 'MultiEdit', 'NotebookEdit', 'Grep', 'Glob']);
@@ -114,7 +114,17 @@ const HINTS = {
 
 export const nativeToolHint = (tool, file, input = {}) => HINTS[tool](file, input);
 
-const FREE_NOTE = 'Native tools stay free outside any git repo, under .claude/ and node_modules/, in the scratchpad, and for binary files.';
+const FREE_NOTE = 'Native tools stay free outside any git repo, under .claude/, node_modules/, .git/, .chemx/, dist/, tmp/ and scratch/, in the scratchpad, and for binary files.';
+
+// Grep and Glob target a directory; findRepoRoot starts at the parent of its argument, so probe a child.
+const membershipProbe = (tool, absolute) => (tool === 'Grep' || tool === 'Glob' ? path.join(absolute, '_') : absolute);
+
+// The same free directories the shell rules use (guard-paths FREE_SEGMENTS), measured from the repo that holds the path.
+const isFreeInRepo = (absolute, root, scratchDir) => {
+  const isInRoot = isInsideDirectory(absolute, root);
+  const repoRoot = isInRoot ? root : findRepoRoot(path.join(absolute, '_')) ?? root;
+  return isFreeLocation(absolute, { root: repoRoot, scratchDir });
+};
 
 /**
  * Pure decision for one native file tool call.
@@ -125,8 +135,8 @@ export const decideNativeTool = ({ tool, input = {}, root, cwd, mode, scratchDir
   if (!isNativeTool) return { decision: 'allow', rule: null, inScope: false };
   const absolute = path.resolve(cwd || root, nativeToolTarget(tool, input));
   const isScratch = Boolean(scratchDir) && isInsideDirectory(absolute, scratchDir);
-  const isRepoFile = isPolicyScopedPath(absolute, root) || isInOtherRepo(absolute, root);
-  const inScope = isRepoFile && !isScratch;
+  const isRepoFile = isPolicyScopedPath(absolute, root) || isInOtherRepo(membershipProbe(tool, absolute), root);
+  const inScope = isRepoFile && !isScratch && !isFreeInRepo(absolute, root, scratchDir);
   const effectiveMode = normalizeMode(mode) ?? DEFAULT_POLICY_MODE;
   const isEnforced = inScope && effectiveMode !== 'allow';
   if (!isEnforced) return { decision: 'allow', rule: null, inScope };
