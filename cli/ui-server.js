@@ -94,7 +94,6 @@ export const startUiServer = async (options = {}) => {
       if (options.isCli) {
         if (!isLoopbackHost(host)) warnPublicBind(host);
         process.stdout.write(`\x1b[32m✔ Chemical X Live Swarm Web UI listening on ${host}:${actualPort}:\x1b[0m \x1b[36m${url}\x1b[0m\n`);
-        const isDevMode = Boolean(options.dev);
         if (isDevMode) process.stdout.write(`\x1b[35m🔥 Dev Hot Reload: ENABLED (watching UI files for instant updates)\x1b[0m\n`);
       }
       resolve({ server, port: actualPort, url, db, token: auth.token, fetch: createUiFetch(auth.token) });
