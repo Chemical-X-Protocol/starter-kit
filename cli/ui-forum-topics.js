@@ -31,7 +31,8 @@ export const getForumTopics = (db, categoryId = null) => {
 };
 
 export const getTopicPosts = (db, topicId) => {
-  if (!db || !topicId) return [];
+  const isMissingInput = !db || !topicId;
+  if (isMissingInput) return [];
   const rows = db.prepare('SELECT * FROM agent_feed WHERE thread_id = ? ORDER BY id ASC').all(topicId) || [];
   return rows.map((f) => ({
     id: f.id,
@@ -47,7 +48,8 @@ export const getTopicPosts = (db, topicId) => {
 
 export const createForumTopic = (db, payload = {}) => {
   const { categoryId = 'general', title, featureTag = 'feature', authorId = '@user', message = '' } = payload;
-  if (!db || !title?.trim()) return null;
+  const isInvalidPayload = !db || !title?.trim();
+  if (isInvalidPayload) return null;
   const now = Date.now();
   const res = db.prepare(`
     INSERT INTO forum_topics (category_id, title, feature_tag, author_id, created_at, updated_at, pinned)
@@ -55,7 +57,8 @@ export const createForumTopic = (db, payload = {}) => {
   `).run(categoryId, title.trim(), featureTag.trim(), authorId, now, now);
   const topicId = Number(res.lastInsertRowid);
 
-  if (message && message.trim()) {
+  const hasMessage = Boolean(message && message.trim());
+  if (hasMessage) {
     db.prepare(`
       INSERT INTO agent_feed (timestamp, author_id, event_type, message, thread_id, metadata)
       VALUES (?, ?, 'broadcast', ?, ?, '{}')
