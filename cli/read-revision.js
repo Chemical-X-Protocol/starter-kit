@@ -24,7 +24,8 @@ export const isCommitish = (rev, cwd) => isSafeRevision(rev) && git(cwd, ['rev-p
 /** "HEAD~1:src/a.ts" -> { rev, spec: 'src/a.ts' } when the left side is a revision, not a file. */
 export const splitRevSpec = (spec, cwd) => {
   const idx = typeof spec === 'string' ? spec.indexOf(':') : -1;
-  if (idx <= 0) return null;
+  const hasSeparator = idx > 0;
+  if (!hasSeparator) return null;
   const rev = spec.slice(0, idx);
   const rest = spec.slice(idx + 1);
   const isWorkingFile = fs.existsSync(path.resolve(cwd, rev));
@@ -39,7 +40,8 @@ export const readAtRevision = (rev, filePath, cwd) => {
   if (!isSafeRevision(rev)) throw new Error(`Refusing revision ${JSON.stringify(rev)}: use a ref, sha, or ref~N / ref^ form.`);
   const rel = path.relative(cwd, resolveSafePath(filePath, cwd)).split(path.sep).join('/');
   const res = git(cwd, ['show', `${rev}:./${rel}`]);
-  if (res.status !== 0) {
+  const isReadFailed = res.status !== 0;
+  if (isReadFailed) {
     const detail = (res.stderr || '').trim().split('\n')[0];
     throw new Error(`Cannot read ${rel} at revision ${rev}${detail ? `: ${detail}` : ''}`);
   }
