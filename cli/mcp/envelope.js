@@ -6,7 +6,8 @@ import { LOADED_VERSION } from './server-info.js';
 const textItem = (text) => ({ type: 'text', text });
 
 const stripDeep = (value) => {
-  if (typeof value === 'string') return stripAnsi(value);
+  const isString = typeof value === 'string';
+  if (isString) return stripAnsi(value);
   if (Array.isArray(value)) return value.map(stripDeep);
   const isPlainObject = value !== null && typeof value === 'object';
   if (!isPlainObject) return value;
@@ -39,7 +40,8 @@ export const isFailedResult = (output) => {
 
 // One handler result to { content, isError }.
 export const toEnvelope = (output) => {
-  if (typeof output === 'string') return { content: [textItem(stripAnsi(output))], isError: false };
+  const isTextOutput = typeof output === 'string';
+  if (isTextOutput) return { content: [textItem(stripAnsi(output))], isError: false };
   if (isContentEnvelope(output)) {
     const content = output.content.map((c) => (c.type === 'text' ? textItem(stripAnsi(c.text)) : c));
     return { content, isError: Boolean(output.isError) };
