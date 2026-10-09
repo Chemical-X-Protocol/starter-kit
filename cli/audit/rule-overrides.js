@@ -19,7 +19,8 @@ const isSlopRule = (rule) => typeof rule === 'string' && rule.startsWith('AI_SLO
 
 const normalizeSetting = (value) => {
   const lowered = String(value).toLowerCase();
-  if (lowered === OFF || value === false) return OFF;
+  const isOff = lowered === OFF || value === false;
+  if (isOff) return OFF;
   return SEVERITIES.get(lowered) ?? null;
 };
 
@@ -53,7 +54,8 @@ export const resolveRuleSettings = (relativePath, config = {}) => {
 const applySlopPolicy = (violation, policy) => {
   const isSlop = isSlopRule(violation.rule) || violation.isAiSlop;
   if (!isSlop) return violation;
-  if (policy === OFF) return null;
+  const isDisabled = policy === OFF;
+  if (isDisabled) return null;
   const isCapped = policy === 'medium' && SEVERITY_RANK[violation.severity] > SEVERITY_RANK.MEDIUM;
   return isCapped ? { ...violation, severity: 'MEDIUM' } : violation;
 };
