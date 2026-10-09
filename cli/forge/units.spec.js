@@ -121,8 +121,20 @@ test('the A4 inside-check is one expr unit with equal fp1 in guard-paths.js and 
   const scope = unitsOf('cli/path-scope.js', PATH_SCOPE).filter((unit) => unit.kind === 'expr');
   const shared = guard.filter((unit) => scope.some((other) => other.fp1 === unit.fp1));
   assert.equal(shared.length, 1);
-  assert.deepEqual(shared[0].anchors, ['call:isAbsolute', 'call:startsWith', 'import:path', 'str:".."']);
+  assert.deepEqual(shared[0].anchors, ['call:isAbsolute', 'call:startsWith', 'import:path#default', 'str:".."']);
   assert.equal(shared[0].start, 4);
+});
+
+test('an import anchor names its module and export, never just the local name', () => {
+  const callOf = (header, name = 'get') => unitsOf('src/ui/use-get.js', `${header}\nexport const read = (x) => ${name}(x, 'items', []).map((item) => item.id);`)
+    .find((unit) => unit.kind === 'fn');
+  const lodash = callOf("import { get } from 'lodash';");
+  const local = callOf("import { get } from './api';");
+  const aliased = callOf("import { get as pick } from 'lodash';", 'pick');
+  assert.ok(lodash.anchors.includes('import:lodash#get'));
+  assert.ok(local.anchors.includes('import:src/ui/api#get'), 'a relative source resolves from the file');
+  assert.notEqual(lodash.fp1, local.fp1);
+  assert.equal(aliased.fp1, lodash.fp1, 'the local alias name never matters');
 });
 
 test('fn units name arrows from their declarator and keep params aside', () => {

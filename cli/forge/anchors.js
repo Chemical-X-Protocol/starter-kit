@@ -1,5 +1,5 @@
 // Anchor weights, ubiquity and evidence (engine doc section 4). Anchors are strings '<kind>:<text>':
-//   import:<local name>  imported binding           2
+//   import:<src>#<name>  imported binding (module, then default, * or the exported name)  2
 //   global:<name>        non-trivial global          2
 //   call:<name>          member-call (method) name   1
 //   str:<json value>     L1 string literal           1

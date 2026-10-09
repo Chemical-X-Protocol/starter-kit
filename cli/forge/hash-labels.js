@@ -1,6 +1,7 @@
 // Per-node labels for the three Merkle levels (engine doc section 3) and the anchor each node carries.
-//   L1: unit-local binders #k, outer file bindings @k (numbered by the caller), imports and globals by
-//       name; literals, member names and keys kept.
+//   L1: unit-local binders #k, outer file bindings @k (numbered by the caller), imports by module and
+//       imported name (import:<source>#<imported>, never the local alias), globals by name; literals,
+//       member names and keys kept.
 //   L2: L1 plus literals -> STR/NUM/REGEX/TPL(n)/BOOL; null, undefined, {} and [] -> VAL; non-call member
 //       names on non-anchor receivers and object keys -> KEY. Callee method names stay.
 //   L3: L2 plus erasure of maximal anchor-free expressions (done by the walker in hash.js).
@@ -53,7 +54,10 @@ const describeIdentifier = (node, ctx) => {
   if (isUndefined) return same('Identifier', node.label, VALUE);
   const isAnchor = kind === 'anchor';
   if (!isAnchor) return same('Identifier', node.label);
-  return same('Identifier', node.label, { anchor: `${node.ident.origin}:${node.label}`, isL3Anchor: true });
+  const importRef = node.ident.origin === 'import' ? node.ident.importRef : null;
+  const anchor = importRef ? `import:${importRef}` : `${node.ident.origin}:${node.label}`;
+  const label = importRef ? anchor : node.label;
+  return same('Identifier', label, { anchor, isL3Anchor: true });
 };
 
 const describePropName = (node, ctx) => {

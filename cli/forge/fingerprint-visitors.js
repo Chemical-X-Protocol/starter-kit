@@ -63,6 +63,6 @@ export const createFileFingerprint = (relativePath, { ubiquitous } = {}) => {
 /** Visitor set merged into the audit traverse: one binding-index entry per Identifier. */
 export const createFingerprintVisitors = (fingerprint) => ({
   Identifier(path) {
-    fingerprint.bindings.set(path.node, describeIdentifier(path, fingerprint.ids));
+    fingerprint.bindings.set(path.node, describeIdentifier(path, fingerprint.ids, fingerprint.relativePath));
   }
 });

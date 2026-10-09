@@ -17,9 +17,12 @@ export const canonicalize = (node, { bindings }) => {
   return normalizeLogic(inlineAliases(converted));
 };
 
-/** Parses a module source and canonicalizes its Program. Returns { ast, bindings, program }. */
-export const canonicalizeSource = (code) => {
+/**
+ * Parses a module source and canonicalizes its Program. Returns { ast, bindings, program }.
+ * filePath (project-relative) resolves relative import sources in import anchors.
+ */
+export const canonicalizeSource = (code, { filePath = null } = {}) => {
   const ast = parse(code, PARSE_OPTIONS);
-  const bindings = buildBindingIndex(ast);
+  const bindings = buildBindingIndex(ast, { filePath });
   return { ast, bindings, program: canonicalize(ast.program, { bindings }) };
 };
