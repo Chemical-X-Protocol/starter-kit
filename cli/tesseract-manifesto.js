@@ -4,9 +4,10 @@
  */
 
 import { ANSI } from './theme.js';
+import { describeLineBudgetPolicy } from './config/profiles.js';
 
 export const DIRECTIVES = [
-  { id: '1. MOLECULAR BUDGET', desc: '100 lines is an outer bound per capsule file. Never write monoliths.' },
+  { id: '1. MOLECULAR BUDGET', desc: `${describeLineBudgetPolicy()} Never write monoliths.` },
   { id: '2. ZERO-RAW-DOM RULE', desc: 'Raw HTML tags belong exclusively in Atoms (a-*). Molecules compose Atoms.' },
   { id: '3. TABLE-OF-CONTENTS', desc: 'Page views must be 10-20 line declarative templates assembling slots.' },
   { id: '4. TWO-STAGE BOOLEANS', desc: 'Deconstruct complex multi-clause checks into named atomic booleans.' },

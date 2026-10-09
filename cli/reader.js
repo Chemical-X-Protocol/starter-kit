@@ -77,7 +77,7 @@ export const generateAstOutline = (code, filePath) => {
 
     if (companionFound) {
       const relCompanion = path.relative(process.cwd(), companionFound);
-      companionAnnotation = `// Companion controller detected: ${relCompanion} (Run cx read ${relCompanion} --outline to inspect logic)`;
+      companionAnnotation = `// Companion controller detected: ${relCompanion} (Run chemx read ${relCompanion} --outline to inspect logic)`;
     } else if (externalSrc) {
       companionAnnotation = `// External script reference detected: ${externalSrc}`;
     } else if (!scriptContent.trim()) {
@@ -189,7 +189,7 @@ export const generateAstOutline = (code, filePath) => {
     });
 
     if (omittedFunctionCount > 0) {
-      lines.push(`// [Notice: ${omittedFunctionCount} internal/unexported function(s) omitted. Use cx read --symbol=<name> to inspect]`);
+      lines.push(`// [Notice: ${omittedFunctionCount} internal/unexported function(s) omitted. Use chemx read --symbol=<name> to inspect]`);
     }
   } catch (err) {
     // Regex fallback for non-parseable files
@@ -381,11 +381,18 @@ export const readTokenOptimized = (targetPath, options = {}) => {
   // outline to protect context. A tool budget, not an architecture rule (AGENTS.md owns those).
   if (!hasLineRange && totalLines > autoThreshold) {
     const outlineText = generateAstOutline(rawContent, rawPath);
+    const isCliHint = options.hintSyntax === 'cli';
+    const symbolHint = isCliHint
+      ? `chemx read ${rawPath} --symbol=<name>`
+      : `chemx({ action: 'read', params: { path: '${rawPath}', symbol: '<name>' } })`;
+    const rangeHint = isCliHint
+      ? `chemx read ${rawPath}:1-50`
+      : `chemx({ action: 'read', params: { path: '${rawPath}', startLine: 1, endLine: 50 } })`;
     const notice = [
       `// [chemx read window] File has ${totalLines} lines (over the ${autoThreshold}-line read window).`,
       `// Auto-rendered AST outline to conserve context tokens and prevent host buffer spillover.`,
-      `// To read a specific block, request symbol: chemx({ action: 'read', params: { path: '${rawPath}', symbol: '<name>' } })`,
-      `// Or specify a line range: chemx({ action: 'read', params: { path: '${rawPath}', startLine: 1, endLine: 50 } })\n`
+      `// To read a specific block, request symbol: ${symbolHint}`,
+      `// Or specify a line range: ${rangeHint}\n`
     ].join('\n');
     const enriched = options.enrich ? enrichOutline(rawContent, rawPath, options) : null;
     return {

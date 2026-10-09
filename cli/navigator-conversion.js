@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import { describeLineBudgetPolicy } from './config/profiles.js';
 import {
   hasGum,
   gumChoose,
@@ -17,7 +18,7 @@ export const showConversionMenu = async (onScaffold = null) => {
     if (hasGum()) {
       spawnSync('gum', [
         'style', '--border=rounded', '--border-foreground=81', '--padding=0 1', '--bold',
-        'Chemical X: The Secret Sauce to Vibe Coding\nStop letting AI agents scour 2,000-line monoliths and hallucinate.\n25+ Years XP | Codified by Principal Systems Architect Xopher Pollard\nTarget File Budget: Max 500 lines/file (<100 lines/molecule) | 85% Token Burn Cut'
+        'Chemical X: The Secret Sauce to Vibe Coding\nStop letting AI agents scour 2,000-line monoliths and hallucinate.\n25+ Years XP | Codified by Principal Systems Architect Xopher Pollard\n' + describeLineBudgetPolicy() + ''
       ], { stdio: 'inherit' });
 
       const choice = gumChoose([
@@ -60,7 +61,7 @@ export const showConversionMenu = async (onScaffold = null) => {
       '\n\x1b[1m\x1b[38;2;98;201;255mChemical X: The Secret Sauce to Vibe Coding\x1b[0m\n' +
       'Stop letting AI agents scour 2,000-line monoliths and hallucinate breaking changes.\n' +
       '25+ Years XP | Codified by Principal Systems Architect Xopher Pollard\n' +
-      'Target File Budget: Max 500 lines/file (<100 lines per molecule capsule).\n\n'
+      `${describeLineBudgetPolicy()}\n\n`
     );
     process.stdout.write(`  [1] Sponsor on GitHub ($9/mo Solo / $49/mo Team Unlimited) - ${URL_SPONSOR}\n      Includes: Instant GitHub org access to private starter-kit, continuous model prompt updates\n`);
     process.stdout.write(`  [2] Buy Standard Vault: Single Dev License ($27) - ${URL_STANDARD}\n      Includes: Kindle/Print PDF eBook, 7 Molecular Architecture Chapters, Universal AGENTS.md\n`);

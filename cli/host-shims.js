@@ -30,10 +30,10 @@ const buildClaudeMd = (pillarLine) => [
   '## Invocation',
   "- Checks go through the `chemx` MCP tool (server `chemical-x`): `chemx({ action: 'verify' })`, `'test'`, `'typecheck'`. Never run raw `npm test` or `tsc --noEmit`.",
   "- Mutating calls (`write`, `patch`, `autofix`, `generate`, team claims and posts) need `params.projectRoot` set to the absolute repo path.",
-  "- Fast token-bounded wrappers: `cx d` (diff), `cx log` (oneline), `cx p` (package.json), `cx j` (json schema), `cx do` (batch).",
-  "- Search before reading: `chemx({ action: 'q', params: { query } })` (AST) or `cx q -g <pattern>` (literal search).",
+  "- Fast token-bounded wrappers: `chemx d` (diff), `chemx log` (oneline), `chemx p` (package.json), `chemx j` (json schema), `chemx do` (batch).",
+  "- Search before reading: `chemx({ action: 'q', params: { query } })` (AST) or `chemx q -g <pattern>` (literal search).",
   "- Read narrowly: `chemx({ action: 'read', params: { path, symbol } })` or `outline: true`. Use `enrich: true` on component capsules only; procedural modules gain little from it.",
-  '- Without MCP: `cx verify`, `cx read <path> --outline`, `cx d`.'
+  '- Without MCP: `chemx verify`, `chemx read <path> --outline`, `chemx d`.'
 ].join('\n') + '\n';
 
 const buildCursorRules = (pillarLine) => [
@@ -41,11 +41,11 @@ const buildCursorRules = (pillarLine) => [
   '# Cursor: Chemical X',
   CANONICAL_NOTE,
   pillarLine,
-  "Run checks through the chemx MCP tool (chemx({ action: 'verify' })) or `cx verify`; never raw `npm test` or `tsc --noEmit`.",
-  "Fast token-bounded wrappers: `cx d` (diff), `cx log` (oneline), `cx p` (package.json), `cx j` (json schema), `cx do` (batch).",
-  "Search: `cx q <query>` (AST) or `cx q -g <pattern>` (literal search).",
+  "Run checks through the chemx MCP tool (chemx({ action: 'verify' })) or `chemx verify`; never raw `npm test` or `tsc --noEmit`.",
+  "Fast token-bounded wrappers: `chemx d` (diff), `chemx log` (oneline), `chemx p` (package.json), `chemx j` (json schema), `chemx do` (batch).",
+  "Search: `chemx q <query>` (AST) or `chemx q -g <pattern>` (literal search).",
   'Pass params.projectRoot (absolute repo path) on mutating chemx MCP calls.',
-  'Read with `cx read <path> --outline` or `--symbol=<name>`; reserve `--enrich` for component capsules.'
+  'Read with `chemx read <path> --outline` or `--symbol=<name>`; reserve `--enrich` for component capsules.'
 ].join('\n') + '\n';
 
 const buildLlmsTxt = (pillarLine, projectName) => [
@@ -62,7 +62,7 @@ const buildLlmsTxt = (pillarLine, projectName) => [
   '',
   '## Invocation',
   "- MCP: one tool, `chemx({ action, params })`. Mutating actions need `params.projectRoot`.",
-  '- CLI: `cx verify`, `cx audit --json`, `cx q "<query>"` (AST), `cx q -g "<pattern>"` (literal), `cx d` (diff), `cx read <path> --outline`.',
+  '- CLI: `chemx verify`, `chemx audit --json`, `chemx q "<query>"` (AST), `chemx q -g "<pattern>"` (literal), `chemx d` (diff), `chemx read <path> --outline`.',
   '',
   GENERATED_MARKERS.md
 ].join('\n') + '\n';

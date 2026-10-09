@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { hasGum, gumChoose, gumInput, promptQuestion, isStdinTty } from './terminal.js';
 import { renderBanner } from './banner.js';
+import { describeLineBudgetPolicy } from './config/profiles.js';
 import { checkOrPromptEvaluation } from './license.js';
 import {
   toPascalCase,
@@ -40,7 +41,7 @@ export { createJigFiles, JIG_KINDS } from './generator-jig.js';
 export { handleJigCli } from './generator-jig-cli.js';
 
 const TIERS = [
-  { prefix: 'm-', tier: 'molecule', label: '1. m- Molecule (Self-contained feature block < 100 lines - Recommended)' },
+  { prefix: 'm-', tier: 'molecule', label: '1. m- Molecule (Self-contained feature block - Recommended)' },
   { prefix: 'a-', tier: 'atom', label: '2. a- Atom (Single foundational UI element)' },
   { prefix: 'o-', tier: 'organism', label: '3. o- Organism (Complex module combining molecules)' },
   { prefix: 't-', tier: 'template', label: '4. t- Template (Structural layout blueprint)' },
@@ -467,7 +468,7 @@ export const runGenerateWizard = async (rawArgs = []) => {
   for (const f of result.filesCreated) {
     process.stdout.write(`  \x1b[32m✔\x1b[0m ${f}\n`);
   }
-  process.stdout.write('\n\x1b[2mChemical X Standards verified: < 100 lines per file, granular domain types, co-located spec tests.\x1b[0m\n\n');
+  process.stdout.write(`\n\x1b[2mCapsule written with granular domain types and co-located spec tests. ${describeLineBudgetPolicy()}\x1b[0m\n\n`);
   return result;
 };
 

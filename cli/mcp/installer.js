@@ -180,7 +180,7 @@ export const installAntigravityMcpConfig = (targetDir = '.', options = {}) => {
     const merged = mergeMcpServerConfig(existing, serverDef);
     fs.writeFileSync(configFile, merged, 'utf-8');
 
-    // Synchronize full 14-tool schemas and instructions.md for Antigravity agents
+    // Synchronize the chemx tool schema and instructions.md for Antigravity agents
     syncAntigravityMcpSchemas(null, { silent: isSilent });
 
     if (!isSilent) {

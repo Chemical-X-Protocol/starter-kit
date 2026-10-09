@@ -228,7 +228,7 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
     case '-v':
     case '--version':
     case 'version':
-      process.stdout.write(`create-chemx v${getPackageVersion()}\n`);
+      process.stdout.write(`chemx v${getPackageVersion()}\n`);
       break;
     case 'verify':
     case 'check:all': {

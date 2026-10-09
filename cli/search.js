@@ -426,7 +426,7 @@ export const runSearch = async (rawArgs = [], isCli = true) => {
       tier,
       count: results.length,
       durationMs,
-      suggestion: results.length === 0 ? `cx q -g "${cleanQuery}"` : undefined,
+      suggestion: results.length === 0 ? `chemx q -g "${cleanQuery}"` : undefined,
       results
     };
     process.stdout.write(JSON.stringify(payload) + '\n');
@@ -439,7 +439,7 @@ export const runSearch = async (rawArgs = [], isCli = true) => {
 
   if (results.length === 0) {
     process.stdout.write(`  ${ANSI.DIM}No matching capsules, symbols, or files found for "${cleanQuery}".${ANSI.RESET}\n`);
-    process.stdout.write(`  ${ANSI.CYAN}💡 Try literal search: cx q -g "${cleanQuery}"${ANSI.RESET}\n\n`);
+    process.stdout.write(`  ${ANSI.CYAN}💡 Try literal search: chemx q -g "${cleanQuery}"${ANSI.RESET}\n\n`);
     if (isCli) process.exit(0);
     return results;
   }

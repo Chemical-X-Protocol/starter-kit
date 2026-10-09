@@ -122,6 +122,7 @@ export const runReaderCli = (args, isCli = false) => {
       symbol,
       startLine,
       endLine,
+      hintSyntax: 'cli',
     });
 
     if (isJson) {

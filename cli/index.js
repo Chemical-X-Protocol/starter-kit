@@ -102,7 +102,7 @@ const main = async () => {
 
   const isVersionRequested = VERSION_FLAGS.has(firstArg);
   if (isVersionRequested) {
-    process.stdout.write(`create-chemx v${getPackageVersion()}\n`);
+    process.stdout.write(`chemx v${getPackageVersion()}\n`);
     return;
   }
 
