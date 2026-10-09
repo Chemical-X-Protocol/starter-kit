@@ -1,12 +1,9 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import { generateEmbedding, serializeVector, VECTOR_DIMENSIONS } from './embeddings/vectorizer.js';
-import { buildFtsTokens } from './search-tokenizer.js';
 
 export {
   isSqliteAvailable,
   resolveIndexDbPath,
   openIndexDb,
+  getIndexDbState,
   warmIndexDb,
   clearDbCache
 } from './search-schema.js';
@@ -28,6 +25,8 @@ export {
   queryFilesByHealth
 } from './search-queries.js';
 
+import { debugNote } from './search-debug.js';
+
 export const getAllIndexedFiles = (db) => {
   if (!db) return new Map();
   const rows = db.prepare('SELECT path, mtime, size FROM files').all();
@@ -38,183 +37,8 @@ export const getAllIndexedFiles = (db) => {
   return fileMap;
 };
 
-export const removeDeletedFiles = (db, currentFilePaths, cwd = process.cwd(), { includeInternal = false } = {}) => {
-  if (!db) return 0;
-  const indexed = getAllIndexedFiles(db);
-  let removedCount = 0;
-
-  const deleteStmt = db.prepare('DELETE FROM files WHERE path = ?');
-  const deleteFtsStmt = db.prepare('DELETE FROM fts_index WHERE file_path = ?');
-  const deleteImportsStmt = db.prepare('DELETE FROM imports WHERE importer_path = ?');
-
-  const currentSet = new Set(currentFilePaths);
-
-  for (const [filePath] of indexed.entries()) {
-    const fullPath = path.isAbsolute(filePath) ? filePath : path.resolve(cwd, filePath);
-    const isFileMissing = !fs.existsSync(fullPath);
-    const isIgnored = (!includeInternal && filePath.startsWith('cli/')) ||
-      filePath.startsWith('.chemx/') ||
-      filePath.startsWith('blueprints/') ||
-      filePath.startsWith('scratch/') ||
-      filePath.startsWith('benchmarks/');
-    const isNotCurrent = currentFilePaths.length > 0 && !currentSet.has(filePath) && (!includeInternal && filePath.startsWith('cli/'));
-
-    if (isFileMissing || isIgnored || isNotCurrent) {
-      deleteStmt.run(filePath);
-      deleteFtsStmt.run(filePath);
-      deleteImportsStmt.run(filePath);
-      removedCount += 1;
-    }
-  }
-
-  return removedCount;
-};
-
-export const resolveModulePath = (importerPath, sourceModule, cwd = process.cwd()) => {
-  if (!sourceModule || typeof sourceModule !== 'string') return '';
-  const isRelative = sourceModule.startsWith('.') || sourceModule.startsWith('/');
-  const isAliased = sourceModule.startsWith('@/');
-  if (!isRelative && !isAliased) return '';
-
-  let basePath;
-  if (isAliased) {
-    basePath = path.resolve(cwd, 'src', sourceModule.slice(2));
-  } else {
-    basePath = path.resolve(cwd, path.dirname(importerPath), sourceModule);
-  }
-
-  const extensions = ['', '.ts', '.js', '.vue', '.tsx', '.jsx', '.d.ts'];
-  for (const ext of extensions) {
-    const candidate = basePath + ext;
-    if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
-      return path.relative(cwd, candidate);
-    }
-  }
-
-  for (const ext of ['.ts', '.js', '.vue', '.tsx', '.jsx', '.d.ts']) {
-    const indexCandidate = path.join(basePath, `index${ext}`);
-    if (fs.existsSync(indexCandidate) && fs.statSync(indexCandidate).isFile()) {
-      return path.relative(cwd, indexCandidate);
-    }
-  }
-
-  // Fallback path normalization for virtual/mock files
-  if (isAliased) {
-    return path.normalize(path.join('src', sourceModule.slice(2)));
-  }
-  return path.normalize(path.join(path.dirname(importerPath), sourceModule));
-};
-
-export const upsertFileIndex = (db, record) => {
-  if (!db) return;
-  const {
-    path: filePath,
-    mtime,
-    size,
-    tier,
-    lines,
-    chars,
-    symbols = [],
-    props = [],
-    hooks = [],
-    imports = []
-  } = record;
-
-  // Clean old entries for this file
-  db.prepare('DELETE FROM files WHERE path = ?').run(filePath);
-  db.prepare('DELETE FROM fts_index WHERE file_path = ?').run(filePath);
-  db.prepare('DELETE FROM imports WHERE importer_path = ?').run(filePath);
-  db.prepare('DELETE FROM embeddings WHERE file_path = ?').run(filePath);
-
-  // Insert file record
-  const insertFileStmt = db.prepare(`
-    INSERT INTO files (path, mtime, size, tier, lines, chars)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `);
-  insertFileStmt.run(filePath, mtime, size, tier, lines, chars);
-
-  // Insert symbols with line locations and signature
-  if (symbols.length > 0) {
-    const insertSymbolStmt = db.prepare(`
-      INSERT INTO symbols (file_path, name, kind, is_export, start_line, end_line, signature)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `);
-    for (const sym of symbols) {
-      insertSymbolStmt.run(
-        filePath,
-        sym.name,
-        sym.kind,
-        sym.isExport ? 1 : 0,
-        sym.startLine || 1,
-        sym.endLine || sym.startLine || 1,
-        sym.signature || ''
-      );
-    }
-  }
-
-  // Insert props
-  if (props.length > 0) {
-    const insertPropStmt = db.prepare(`
-      INSERT INTO props (file_path, name, prop_type)
-      VALUES (?, ?, ?)
-    `);
-    for (const p of props) {
-      insertPropStmt.run(filePath, p.name, p.type || '');
-    }
-  }
-
-  // Insert hooks
-  if (hooks.length > 0) {
-    const insertHookStmt = db.prepare(`
-      INSERT INTO hooks (file_path, name)
-      VALUES (?, ?)
-    `);
-    for (const h of hooks) {
-      insertHookStmt.run(filePath, h);
-    }
-  }
-
-  // Insert imports with resolved relative paths
-  if (imports.length > 0) {
-    const insertImportStmt = db.prepare(`
-      INSERT INTO imports (importer_path, imported_symbol, source_module, resolved_path, line)
-      VALUES (?, ?, ?, ?, ?)
-    `);
-    for (const imp of imports) {
-      const resolved = resolveModulePath(filePath, imp.sourceModule);
-      insertImportStmt.run(filePath, imp.importedSymbol, imp.sourceModule, resolved, imp.line || 1);
-    }
-  }
-
-  // Insert into FTS index
-  const tokensText = buildFtsTokens({ symbols, props, hooks, imports, filePath });
-  const mainName = symbols.find((s) => s.isExport)?.name || path.basename(filePath);
-
-  db.prepare(`
-    INSERT INTO fts_index (file_path, name, kind, tier, tokens)
-    VALUES (?, ?, ?, ?, ?)
-  `).run(filePath, mainName, tier, tier, tokensText);
-
-  // Insert vector embeddings
-  try {
-    const insertEmbeddingStmt = db.prepare(`
-      INSERT INTO embeddings (file_path, target_type, target_name, vector, dimensions, model, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `);
-    const fileVec = generateEmbedding(`${mainName} ${tier} ${tokensText}`);
-    insertEmbeddingStmt.run(filePath, 'capsule', mainName, serializeVector(fileVec), VECTOR_DIMENSIONS, 'fast-subword', Date.now());
-
-    for (const s of symbols) {
-      if (s.isExport) {
-        const symText = `${s.name} ${s.kind} ${s.signature || ''}`;
-        const symVec = generateEmbedding(symText);
-        insertEmbeddingStmt.run(filePath, 'symbol', s.name, serializeVector(symVec), VECTOR_DIMENSIONS, 'fast-subword', Date.now());
-      }
-    }
-  } catch {
-    // Graceful degradation if vector generation fails
-  }
-};
+export { resolveModulePath, moduleKeysFor } from './search-resolve.js';
+export { upsertFileIndex, upsertFileIndexBatch, deleteFileIndexRows, withIndexTransaction } from './search-index-write.js';
 
 export const queryIndex = (db, { query = '', tier = null, kind = null, limit = 50 } = {}) => {
   if (!db) return [];
@@ -284,8 +108,8 @@ export const queryIndex = (db, { query = '', tier = null, kind = null, limit = 5
         return ftsFiles.map((f) => populateFileDetails(db, f));
       }
     }
-  } catch {
-    // Non-blocking FTS fallback
+  } catch (err) {
+    debugNote.warn('fts fallback', err);
   }
 
   return [];

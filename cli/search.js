@@ -1,11 +1,5 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import { isSourceFile as isPolyglotSourceFile } from './languages.js';
 import {
   openIndexDb,
-  getAllIndexedFiles,
-  removeDeletedFiles,
-  upsertFileIndex,
   queryIndex,
   inspectIndexedFile,
   getIndexStats,
@@ -17,7 +11,6 @@ import {
   syncViolationsIndex,
   queryViolations
 } from './search-db.js';
-import { resolveArchitectureTier, extractAstMetadata } from './search-ast.js';
 import {
   handleDefCommand,
   handleRefsCommand,
@@ -56,147 +49,9 @@ export {
   handleLiteralSearchCommand
 } from './search-commands.js';
 
-const IGNORED_DIRS = new Set([
-  'node_modules', 'dist', 'build', 'vendor', '.git',
-  '.next', '.turbo', '.output', '.nuxt', '.cache', 'out',
-  '.chemx', 'blueprints', 'scratch', 'benchmarks', '.gemini', '.claude', '.cursor', 'temp', 'coverage'
-]);
+import { syncSearchIndex, syncSingleFileIndex } from './search-sync.js';
 
-const EXCLUDED_NAME_PATTERNS = ['.test.', '.spec.', '.min.'];
-
-const isSourceFile = (name) => isPolyglotSourceFile(name);
-
-const scanFilesRecursively = (dir, baseDir, fileList = []) => {
-  if (!fs.existsSync(dir)) return fileList;
-  const entries = fs.readdirSync(dir, { withFileTypes: true });
-  for (const entry of entries) {
-    const fullPath = path.join(dir, entry.name);
-    const relPath = path.relative(baseDir, fullPath);
-
-    if (entry.isDirectory()) {
-      if (!IGNORED_DIRS.has(entry.name)) {
-        scanFilesRecursively(fullPath, baseDir, fileList);
-      }
-    } else if (isSourceFile(entry.name)) {
-      fileList.push({ fullPath, relPath });
-    }
-  }
-  return fileList;
-};
-
-export const syncSearchIndex = (targetDir = 'src', cwd = process.cwd(), options = {}) => {
-  const db = openIndexDb(cwd);
-  if (!db) return null;
-
-  const isWritable = () => { try { fs.accessSync(path.join(cwd, '.chemx'), fs.constants.W_OK); return true; } catch { return false; } };
-  const shouldSkipSync = !isWritable() && !options.reindex;
-  if (shouldSkipSync) return { db, updatedCount: 0 };
-
-  const targetDirs = Array.isArray(targetDir) ? targetDir : [targetDir];
-  if (options.includeInternal && fs.existsSync(path.resolve(cwd, 'cli'))) {
-    targetDirs.push('cli');
-  }
-
-  const scanned = targetDirs.flatMap((d) => {
-    const abs = path.resolve(cwd, d);
-    return fs.existsSync(abs) ? scanFilesRecursively(abs, cwd) : [];
-  });
-  const currentPaths = scanned.map((s) => s.relPath);
-
-  const indexedMap = options.reindex ? new Map() : getAllIndexedFiles(db);
-  let updatedCount = 0;
-
-  for (const { fullPath, relPath } of scanned) {
-    try {
-      const stat = fs.statSync(fullPath);
-      const mtime = Math.floor(stat.mtimeMs);
-      const size = stat.size;
-
-      const cached = indexedMap.get(relPath);
-      const isUnchanged = cached && cached.mtime === mtime && cached.size === size;
-
-      if (isUnchanged && !options.reindex) {
-        continue;
-      }
-
-      const content = fs.readFileSync(fullPath, 'utf-8');
-      const lines = content.split('\n').length;
-      const chars = content.length;
-      const tier = resolveArchitectureTier(relPath);
-      const { symbols, props, hooks, imports } = extractAstMetadata(content, fullPath);
-
-      upsertFileIndex(db, {
-        path: relPath,
-        mtime,
-        size,
-        tier,
-        lines,
-        chars,
-        symbols,
-        props,
-        hooks,
-        imports
-      });
-      updatedCount += 1;
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error(String(err));
-      if (process.env.CHEMX_DEBUG) {
-        process.stderr.write(`[search-index] Skipped ${relPath}: ${error.message}\n`);
-      }
-    }
-  }
-
-  removeDeletedFiles(db, currentPaths, cwd, { includeInternal: options.includeInternal });
-  return { db, updatedCount, totalFiles: scanned.length };
-};
-
-export const syncSingleFileIndex = (targetPath, cwd = process.cwd()) => {
-  const db = openIndexDb(cwd);
-  if (!db) return null;
-
-  const fullPath = path.isAbsolute(targetPath) ? targetPath : path.resolve(cwd, targetPath);
-  const relPath = path.relative(cwd, fullPath);
-
-  if (!fs.existsSync(fullPath)) {
-    db.prepare('DELETE FROM files WHERE path = ?').run(relPath);
-    db.prepare('DELETE FROM fts_index WHERE file_path = ?').run(relPath);
-    db.prepare('DELETE FROM imports WHERE importer_path = ?').run(relPath);
-    return { db, status: 'deleted', path: relPath };
-  }
-
-  const stat = fs.statSync(fullPath);
-  const mtime = Math.floor(stat.mtimeMs);
-  const size = stat.size;
-  const content = fs.readFileSync(fullPath, 'utf-8');
-  const lines = content.split('\n').length;
-  const chars = content.length;
-  const tier = resolveArchitectureTier(relPath);
-  const { symbols, props, hooks, imports } = extractAstMetadata(content, fullPath);
-
-  upsertFileIndex(db, {
-    path: relPath,
-    mtime,
-    size,
-    tier,
-    lines,
-    chars,
-    symbols,
-    props,
-    hooks,
-    imports
-  });
-
-  return {
-    db,
-    status: 'indexed',
-    path: relPath,
-    tier,
-    lines,
-    symbolsCount: symbols.length,
-    propsCount: props.length,
-    hooksCount: hooks.length
-  };
-};
+export { syncSearchIndex, syncSingleFileIndex };
 
 const formatTierBadge = (tier) => {
   const map = {

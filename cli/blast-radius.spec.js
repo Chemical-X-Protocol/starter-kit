@@ -5,7 +5,7 @@ import { upsertFileIndex } from "./search-db.js";
 import { calculateBlastRadius } from "./search-queries.js";
 
 test("calculateBlastRadius: traverses downstream multi-tier dependencies", () => {
-  const db = openIndexDb();
+  const db = openIndexDb(':memory:');
   if (!db) return;
 
   // Set up mock components in DB:
@@ -80,7 +80,7 @@ test("calculateBlastRadius: traverses downstream multi-tier dependencies", () =>
 });
 
 test("calculateBlastRadius: safely terminates on circular dependency cycles", () => {
-  const db = openIndexDb();
+  const db = openIndexDb(':memory:');
   if (!db) return;
 
   // Cycle: circ-a -> circ-b -> circ-a
