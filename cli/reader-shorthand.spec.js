@@ -12,7 +12,8 @@ describe('Reader Shorthand Syntax', () => {
   it('caps a slice at the configured read window, the same one the auto-outline uses', () => {
     const res = readTokenOptimized('AGENTS.md', { startLine: 1, endLine: 60, autoOutlineThreshold: 20 });
     assert.equal(res.endLine, 20);
-    assert.match(res.content, /Truncated at the 20-line chemx read window/);
+    assert.match(res.trailer, /Truncated at the 20-line chemx read window/);
+    assert.equal(res.lineCount, 20, "the truncation notice is not counted as a content line");
   });
 
   it('supports path:start-end line range in readTokenOptimized', () => {

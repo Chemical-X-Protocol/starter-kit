@@ -39,3 +39,21 @@ export const extractScriptBlocks = (content) => {
   }
   return blocks;
 };
+
+/**
+ * Blanks everything outside <script> bodies (newlines kept), giving one parseable source whose
+ * positions equal the original file's.
+ *
+ * @param {string} content Full SFC source.
+ * @returns {string}
+ */
+export const blankOutsideScripts = (content) => {
+  const blocks = extractScriptBlocks(content);
+  let out = '';
+  let cursor = 0;
+  for (const block of blocks) {
+    out += blankPrefix(content.slice(cursor, block.start)) + content.slice(block.start, block.end);
+    cursor = block.end;
+  }
+  return out + blankPrefix(content.slice(cursor));
+};

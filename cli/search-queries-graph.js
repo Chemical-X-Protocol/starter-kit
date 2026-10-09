@@ -12,7 +12,8 @@ const loadBabel = () => {
     _parse = _require('@babel/parser').parse;
     const t = _require('@babel/traverse');
     _traverse = t.default?.default || t.default || t;
-  } catch {
+  } catch (err) {
+    if (process.env.CHEMX_DEBUG) process.stderr.write(`[graph] babel unavailable: ${err.message}\n`);
     _parse = null;
     _traverse = null;
   }
@@ -25,7 +26,8 @@ const isSpecOrTest = (filePath) => {
 };
 
 export const calculateBlastRadius = (db, targetPathOrSymbol, options = {}) => {
-  if (!db || !targetPathOrSymbol) {
+  const hasInputs = Boolean(db) && Boolean(targetPathOrSymbol);
+  if (!hasInputs) {
     return {
       target: targetPathOrSymbol || '',
       seedPath: '',
@@ -138,7 +140,8 @@ export const extractCalleesFromCode = (code) => {
   const callees = new Set();
   const { parse, traverse } = loadBabel();
   try {
-    if (!parse || !traverse) throw new Error('babel unavailable');
+    const hasBabel = Boolean(parse) && Boolean(traverse);
+    if (!hasBabel) throw new Error('babel unavailable');
     const ast = parse(code, {
       sourceType: 'module',
       plugins: ['typescript', 'jsx', 'decorators-legacy', 'topLevelAwait'],
@@ -168,7 +171,8 @@ export const extractCalleesFromCode = (code) => {
         }
       }
     });
-  } catch {
+  } catch (err) {
+    if (process.env.CHEMX_DEBUG) process.stderr.write(`[graph] callee parse fell back to regex: ${err.message}\n`);
     const matches = code.matchAll(/\b([A-Za-z0-9_$]+)\s*\(/g);
     for (const m of matches) {
       if (!['if', 'for', 'while', 'switch', 'catch', 'function'].includes(m[1])) {
@@ -188,7 +192,8 @@ export const extractCalleesFromCode = (code) => {
  * @returns {object} Call trace tree payload.
  */
 export const calculateCallTrace = (db, targetSymbolOrPath, options = {}) => {
-  if (!db || !targetSymbolOrPath) {
+  const hasInputs = Boolean(db) && Boolean(targetSymbolOrPath);
+  if (!hasInputs) {
     return { target: targetSymbolOrPath || '', totalCallees: 0, depth: 0, callees: [] };
   }
 
@@ -219,7 +224,7 @@ export const calculateCallTrace = (db, targetSymbolOrPath, options = {}) => {
     const absPath = path.isAbsolute(filePath) ? filePath : path.resolve(process.cwd(), filePath);
     if (fs.existsSync(absPath)) {
       fullText = fs.readFileSync(absPath, 'utf-8');
-      const block = extractSymbolBlock(fullText, symbol);
+      const block = extractSymbolBlock(fullText, symbol, absPath);
       if (block) {
         codeSlice = block.code;
       } else {
@@ -322,7 +327,8 @@ export const calculateCallTrace = (db, targetSymbolOrPath, options = {}) => {
  * @returns {object} Backtrace causal path payload.
  */
 export const calculateBacktrace = (db, targetSymbolOrPath, options = {}) => {
-  if (!db || !targetSymbolOrPath) {
+  const hasInputs = Boolean(db) && Boolean(targetSymbolOrPath);
+  if (!hasInputs) {
     return { target: targetSymbolOrPath || '', totalCallers: 0, depth: 0, chains: [], callers: [] };
   }
 
