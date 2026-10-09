@@ -200,6 +200,12 @@ export const parseFlags = (args = []) => {
     const isDuplicateOfEquals = arg.startsWith('--duplicate-of=');
     if (isDuplicateOfEquals) flags.duplicateOf = valueAfterEquals;
 
+    // Bare --ignore-deps parses to true so runClaim can refuse it: a reason is required (#4428).
+    const isIgnoreDepsEquals = arg.startsWith('--ignore-deps=');
+    if (isIgnoreDepsEquals) flags.ignoreDeps = valueAfterEquals;
+    const isIgnoreDepsBare = arg === '--ignore-deps';
+    if (isIgnoreDepsBare) flags.ignoreDeps = true;
+
     const isCancelEquals = arg.startsWith('--cancel=');
     if (isCancelEquals) flags.cancel = valueAfterEquals;
 
