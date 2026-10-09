@@ -26,9 +26,9 @@ export const handleError = async (err, options = {}) => {
   const command = sanitizeText(rawCmd) || 'chemx';
 
   const report = {
-    message: errorObj.message,
+    message: sanitizeText(errorObj.message),
     name: errorObj.name,
-    stack: errorObj.stack || '',
+    stack: sanitizeText(errorObj.stack || ''),
     command,
     cwd,
     exitCode: options.exitCode ?? 1,
@@ -50,7 +50,8 @@ export const handleError = async (err, options = {}) => {
   const isOffline = isOfflineMode();
 
   if (shouldAutoPost) {
-    if (!options.silent && !isOffline) previewPost(targetRepo, issue, savedPath);
+    // The preview goes to stderr even when silent (--json/--silent keep stdout clean); only the MCP tool opts out with preview: false.
+    if (options.preview !== false && !isOffline) previewPost(targetRepo, issue, savedPath);
     publishResult = await publishIssue(targetRepo, issue.title, issue.body, issue.labels);
     // With options.silent the outcome is only in the returned publishResult.
     if (!options.silent && publishResult.success) {

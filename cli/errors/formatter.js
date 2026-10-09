@@ -1,4 +1,4 @@
-import { sanitizeText, sanitizeStackTrace } from './sanitizer.js';
+import { sanitizeText, sanitizeStackTrace, sanitizeValue } from './sanitizer.js';
 
 export const buildIssueTitle = (report) => {
   const cmd = report.command ? sanitizeText(report.command).split(' ')[0] : 'chemx';
@@ -53,7 +53,7 @@ export const buildIssueBody = (report) => {
     lines.push('');
     lines.push('#### 🔍 Additional Metadata');
     lines.push('```json');
-    lines.push(JSON.stringify(report.context, null, 2));
+    lines.push(JSON.stringify(sanitizeValue(report.context), null, 2));
     lines.push('```');
   }
 

@@ -2,9 +2,10 @@
 import { copyToClipboard } from '../audit/social-git.js';
 import { publishIssue } from './publisher.js';
 import { openBrowser, confirmAction } from '../terminal.js';
+import { sanitizeText } from './sanitizer.js';
 
 export const printFailureSummary = (report, issue, savedPath, postError = null) => {
-  process.stderr.write(`\n\x1b[31m✕ Command Failed: ${report.message}\x1b[0m\n`);
+  process.stderr.write(`\n\x1b[31m✕ Command Failed: ${sanitizeText(report.message)}\x1b[0m\n`);
   if (postError) {
     process.stderr.write(`  \x1b[33m• Issue not posted:\x1b[0m ${postError}\n`);
   }

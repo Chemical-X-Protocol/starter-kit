@@ -52,6 +52,26 @@ export const sanitizeText = (text) => {
   return normalizeHomePath(masked);
 };
 
+// Structured caller data (report.context): mask every string, and the whole value of a secret-named key.
+const SECRET_KEY_NAME = /api[_-]?key|license|secret|token|password|passwd|credential|authorization/i;
+
+export const sanitizeValue = (value, seen = new WeakSet()) => {
+  if (typeof value === 'string') return sanitizeText(value);
+  if (!value || typeof value !== 'object') return value;
+  if (seen.has(value)) return '[Circular]';
+  seen.add(value); // ancestors only, so a shared (non-circular) reference is still rendered
+  try {
+    if (Array.isArray(value)) return value.map((item) => sanitizeValue(item, seen));
+    const entries = Object.entries(value).map(([key, item]) => {
+      const isSecretKey = SECRET_KEY_NAME.test(key) && item !== null && typeof item !== 'object' && typeof item !== 'boolean';
+      return [sanitizeText(key), isSecretKey ? '[REDACTED_SECRET]' : sanitizeValue(item, seen)];
+    });
+    return Object.fromEntries(entries);
+  } finally {
+    seen.delete(value);
+  }
+};
+
 export const sanitizeStackTrace = (stack) => {
   const hasStack = Boolean(stack && typeof stack === 'string');
   if (!hasStack) return '';
