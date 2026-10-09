@@ -37,7 +37,8 @@ const pass = (text) => ({ isError: false, text: `${GREEN}✔${RESET} ${text}` })
 export const describeCompletion = (res, taskId, lead) => {
   const hasResult = Boolean(res);
   if (!hasResult) return fail(`Task #${taskId} not found`);
-  if (res.refused) {
+  const isRefused = Boolean(res.refused);
+  if (isRefused) {
     const hasOwnMessage = Boolean(res.noTarget || res.ownership);
     const hazardText = `Cannot complete task #${taskId}: ${res.hazardCount} hazard(s) remain in ${res.targetPath}. Fix the hazards or pass --force to complete anyway.`;
     return fail(hasOwnMessage ? res.message : hazardText);
@@ -47,10 +48,12 @@ export const describeCompletion = (res, taskId, lead) => {
   const target = res.target_path || 'target';
   const isUnverified = payload.verificationApplicable === false;
   if (isUnverified) return warn(`${lead} (Unverified: no target_path specified; completed with --no-target-confirm)`);
-  if (payload.forced) return warn(`${lead} with --force ${YELLOW}(Note: ${remaining} hazard(s) still remain in ${target})${RESET}`);
+  const isForced = Boolean(payload.forced);
+  if (isForced) return warn(`${lead} with --force ${YELLOW}(Note: ${remaining} hazard(s) still remain in ${target})${RESET}`);
   const isVerifiedClean = Boolean(payload.verified) && remaining === 0;
   if (isVerifiedClean) return pass(`${lead} (Verified clean: 0 hazards in ${target})`);
-  if (payload.verified) return pass(`${lead} (Verified passing: ${remaining} non-blocking warning(s) remain in ${target})`);
+  const isVerified = Boolean(payload.verified);
+  if (isVerified) return pass(`${lead} (Verified passing: ${remaining} non-blocking warning(s) remain in ${target})`);
   const hasRemaining = remaining > 0;
   if (hasRemaining) return pass(`${lead} ${YELLOW}(Note: ${remaining} hazard(s) still remain in ${target})${RESET}`);
   return pass(lead);
