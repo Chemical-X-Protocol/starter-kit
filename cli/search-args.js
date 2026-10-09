@@ -44,7 +44,8 @@ export const parseSearchArgs = (rawArgs = []) => {
       parsed.positionals.push(token);
       continue;
     }
-    if (token === '--') {
+    const isOptionsTerminator = token === '--';
+    if (isOptionsTerminator) {
       isOptionsEnded = true;
       continue;
     }
@@ -60,7 +61,8 @@ export const parseSearchArgs = (rawArgs = []) => {
       const value = hasInlineValue ? rest.join('=') : readSeparateValue(rawArgs[i + 1]);
       const hasValue = value !== undefined;
       if (!hasValue) parsed.missingValues.push(name);
-      if (!hasInlineValue && hasValue) i += 1;
+      const shouldConsumeSeparateValue = !hasInlineValue && hasValue;
+      if (shouldConsumeSeparateValue) i += 1;
       if (hasValue) parsed.values[valueKey] = String(value);
       const isBadInteger = hasValue && INTEGER_KEYS.has(valueKey) && !isPositiveInteger(String(value));
       if (isBadInteger) parsed.invalidValues.push(`${name} ${value} (expected a positive integer)`);
