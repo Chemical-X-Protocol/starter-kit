@@ -170,6 +170,12 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
         runStagedDeltaCommand(rawArgs.slice(1));
         break;
       }
+      const isFeed = rawArgs.some((arg) => arg === '--feed' || arg.startsWith('--feed='));
+      if (isFeed) {
+        const { runAuditFeedCommand } = await import('./cmd-audit-feed.js');
+        setExitCodeFrom(runAuditFeedCommand(rawArgs.slice(1)));
+        break;
+      }
       const posDir = (rawArgs[1] && !rawArgs[1].startsWith('-')) ? rawArgs[1] : null;
       const { refuseMonorepoRootAudit } = await import('../workspace-run.js');
       if (refuseMonorepoRootAudit(posDir, rawArgs)) break;
