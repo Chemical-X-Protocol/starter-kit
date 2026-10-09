@@ -5,7 +5,8 @@ const STOP_WORDS = new Set([
 ]);
 
 export const splitIdentifierToSubwords = (ident) => {
-  if (!ident || typeof ident !== 'string') return [];
+  const isInvalidIdent = !ident || typeof ident !== 'string';
+  if (isInvalidIdent) return [];
   return ident
     .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
     .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
@@ -35,13 +36,16 @@ export const buildFtsTokens = ({ symbols = [], props = [], hooks = [], imports =
 };
 
 export const formatFtsQuery = (queryText = '') => {
-  if (!queryText || typeof queryText !== 'string') return null;
+  const isInvalidQuery = !queryText || typeof queryText !== 'string';
+  if (isInvalidQuery) return null;
 
   const rawTerms = splitIdentifierToSubwords(queryText);
   const terms = rawTerms.filter((w) => !STOP_WORDS.has(w) && w.length > 1);
 
-  if (terms.length === 0) {
-    if (rawTerms.length > 0) return `"${rawTerms.join(' ')}"`;
+  const hasNoTerms = terms.length === 0;
+  if (hasNoTerms) {
+    const hasRawTerms = rawTerms.length > 0;
+    if (hasRawTerms) return `"${rawTerms.join(' ')}"`;
     return null;
   }
 
