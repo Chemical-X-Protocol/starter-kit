@@ -6,6 +6,7 @@ import { ANSI } from './theme.js';
 import { queryViolations } from './search-queries.js';
 import { STATUS, combineStatuses, toExitCode } from './result-status.js';
 import { withIndex } from './search-output.js';
+import { readIndexMeta } from './search-index-meta.js';
 
 const formatAge = (ms) => {
   const minutes = Math.round(ms / 60000);
@@ -15,28 +16,33 @@ const formatAge = (ms) => {
   return hours < 48 ? `${hours}h` : `${Math.round(hours / 24)}d`;
 };
 
+// Latest of: an audit_snapshots row, or the last time an audit wrote violations.
 const latestAuditTimestamp = (db) => {
   const row = db.prepare('SELECT MAX(timestamp) AS ts FROM audit_snapshots').get();
   const hasSnapshot = row && row.ts !== null && row.ts !== undefined;
-  return hasSnapshot ? Number(row.ts) : null;
+  const violationsAt = Number(readIndexMeta(db).violationsSyncedAt);
+  const stamps = [hasSnapshot ? Number(row.ts) : NaN, violationsAt].filter(Number.isFinite);
+  return stamps.length > 0 ? Math.max(...stamps) : null;
 };
 
-const countFilesChangedSince = (db, timestamp, filePath, root) => {
+// A file argument is relative to where chemx was started, falling back to the project root.
+const resolveTargetFile = (filePath, cwd, root) => [path.resolve(cwd, filePath), path.resolve(root, filePath)].find((abs) => fs.existsSync(abs)) || null;
+
+const countFilesChangedSince = (db, timestamp, filePath, root, cwd) => {
   const hasFileTarget = Boolean(filePath);
   if (hasFileTarget) {
-    const abs = path.resolve(root, filePath);
-    const isPresent = fs.existsSync(abs);
-    return isPresent && fs.statSync(abs).mtimeMs > timestamp ? 1 : 0;
+    const abs = resolveTargetFile(filePath, cwd, root);
+    return abs && fs.statSync(abs).mtimeMs > timestamp ? 1 : 0;
   }
   return Number(db.prepare('SELECT COUNT(*) AS c FROM files WHERE mtime > ?').get(timestamp)?.c || 0);
 };
 
-export const assessAuditFreshness = (db, { filePath = null, root = process.cwd(), now = Date.now() } = {}) => {
+export const assessAuditFreshness = (db, { filePath = null, root = process.cwd(), cwd = process.cwd(), now = Date.now() } = {}) => {
   const lastAuditAt = latestAuditTimestamp(db);
   const hasNoAudit = lastAuditAt === null;
   if (hasNoAudit) return { status: STATUS.INCONCLUSIVE, reason: 'no audit data (run chemx audit)', lastAuditAt: null, auditAge: null };
   const auditAge = formatAge(now - lastAuditAt);
-  const changedCount = countFilesChangedSince(db, lastAuditAt, filePath, root);
+  const changedCount = countFilesChangedSince(db, lastAuditAt, filePath, root, cwd);
   const isStale = changedCount > 0;
   const reason = isStale ? `${changedCount} file(s) changed after the last audit (${auditAge} ago); run chemx audit` : null;
   return { status: isStale ? STATUS.INCONCLUSIVE : STATUS.PASS, reason, lastAuditAt, auditAge };

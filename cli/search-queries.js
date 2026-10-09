@@ -1,5 +1,6 @@
 import { resolveGraphSeed } from './search-graph-edges.js';
 import { moduleKeysFor } from './search-resolve.js';
+import { writeIndexMeta } from './search-index-meta.js';
 
 export const findSymbolDefinition = (db, symbolName) => {
   const hasInput = Boolean(db) && Boolean(symbolName);
@@ -96,9 +97,12 @@ export const findFileDependents = (db, filePath) => {
   }));
 };
 
+// Stamps violationsSyncedAt so `q hazards` knows audit data exists even when the audit
+// (a directory or CLI audit) recorded no audit_snapshots row.
 export const syncViolationsIndex = (db, violations = []) => {
   if (!db) return 0;
   db.exec('DELETE FROM violations;');
+  writeIndexMeta(db, { violationsSyncedAt: Date.now() });
   if (!Array.isArray(violations) || violations.length === 0) return 0;
 
   const insertStmt = db.prepare(`
