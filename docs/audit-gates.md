@@ -4,7 +4,7 @@ Chemical X has several places that decide whether a change is acceptable. They s
 
 > A change fails when, for any file, the number of violations of any rule is higher after the change than before it. Severity does not matter: LOW counts the same as CRITICAL.
 
-This is the rule the audit ratchet (`chemx-ratchet.json`) applies repo-wide, where the baseline is 0 for every rule. The gates apply it to a change instead of to the whole repo.
+This is the rule the audit ratchet (`chemx-ratchet.json`) applies repo-wide, where each rule's baseline is whatever `chemx-ratchet.json` records (0 in this repo). Without a ratchet file, `chemx verify` falls back to a severity gate that fails CRITICAL/HIGH only. The gates apply it to a change instead of to the whole repo.
 
 | Gate | Compares | Fails on | Parity proof |
 | :--- | :--- | :--- | :--- |
@@ -15,13 +15,13 @@ This is the rule the audit ratchet (`chemx-ratchet.json`) applies repo-wide, whe
 
 ## What is guaranteed
 
-- A commit the hook accepts adds no violation of any rule in the staged source files. It therefore cannot raise the repo-wide count of any rule, which is what the ratchet step of `chemx verify` checks.
+- A commit the hook accepts adds no violation of any rule in the staged source files, so it cannot raise the repo-wide count of any rule.
 - A legacy file that already has hazards is not blocked by them, only by new ones.
 - On failure the hook prints one `RULE@file:line [SEVERITY]` entry per new hazard.
 
 ## What is not guaranteed
 
-- `CHEMX_SKIP_PRECOMMIT=1 git commit` skips only the hook. `chemx verify` still applies the same rule and fails on the hazards afterward.
+- `CHEMX_SKIP_PRECOMMIT=1 git commit` skips only the hook. Afterward `chemx verify` fails on those hazards only when a `chemx-ratchet.json` baseline exists and the rule is above it; without a ratchet it fails CRITICAL/HIGH only, so LOW and MEDIUM hazards pass.
 - The comparison is per rule, so fixing one hazard does not offset a new hazard of a different rule: the rising rule fails.
 - Rules adopted at a newer revision are recorded as baseline by the ratchet instead of failing. The hook compares HEAD and staged content under the current rules, so it is neutral on them as well.
 - `introducedViolations` covers the one file an edit touched, not the repo; it does not include the line-budget warning, which is reported separately as `lineBudget`.

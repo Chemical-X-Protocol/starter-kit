@@ -6,7 +6,7 @@ const formatIncrease = (i) => `    [${i.severity}] ${i.rule}: ${i.before} -> ${i
 
 const GUIDANCE = [
   'Rule: a commit may not raise any rule\'s violation count in a staged file, at any severity (same rule as the audit ratchet).',
-  'Fix the sites above, or bypass once with CHEMX_SKIP_PRECOMMIT=1 (skips only this hook; chemx verify still fails on the same hazards).'
+  'Fix the sites above, or bypass once with CHEMX_SKIP_PRECOMMIT=1 (skips only this hook; chemx verify fails on them only when a chemx-ratchet.json baseline exists and the rule is above it, otherwise it gates CRITICAL/HIGH only).'
 ];
 
 export const runStagedDeltaCommand = (rawArgs = [], cwd = process.cwd()) => {

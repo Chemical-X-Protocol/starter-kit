@@ -99,9 +99,9 @@ if [ -n "$AUDIT_BIN" ]; then
   fi
   
   # Default gate: any rule whose violation count rises in a staged file vs HEAD, at any
-  # severity (#1716, #2546). This is the rule the audit ratchet applies, so a commit this
-  # hook accepts cannot turn chemx verify red on the ratchet step. The failure output
-  # lists each new hazard as RULE@file:line.
+  # severity (#1716, #2546). This is the rule the audit ratchet applies. Whether chemx
+  # verify later fails depends on chemx-ratchet.json (see docs/audit-gates.md). The delta
+  # gate's failure output lists each new hazard as RULE@file:line.
   # CHEMX_PRECOMMIT_GATE=grade restores the absolute grade gate on changed files.
   if [ "$CHEMX_PRECOMMIT_GATE" = "grade" ]; then
     AUDIT_CMD="$AUDIT_BIN audit --git --min-grade=$MIN_GRADE --min-score=$MIN_SCORE --non-interactive"
@@ -117,14 +117,14 @@ if [ -n "$AUDIT_BIN" ]; then
     printf "%s╰──────────────────────────────────────────────────────────────────────────╯%s\n" "$C_CYAN" "$C_RESET"
     printf "Please fix the Chemical X architectural hazards reported above in staged files.\n\n"
     printf "Refactor Directives:\n"
-    printf "1. Surgically resolve each new hazard listed above (RULE@file:line), at any severity.\n"
+    printf "1. Surgically resolve each hazard reported above, at any severity.\n"
     printf "2. Decompose monoliths into single-purpose crystalline capsules.\n"
     printf "3. Preserve all existing symbols, exports, and test contracts.\n"
     printf "4. Verify with 'chemx audit' after making changes.\n"
     printf "%s────────────────────────────────────────────────────────────────────────────%s\n\n" "$C_CYAN" "$C_RESET"
     printf "%s💡 Tip: Run 'chemx audit' locally to inspect details or run autofixes.%s\n" "$C_CYAN" "$C_RESET"
     printf "   To bypass this check temporarily: CHEMX_SKIP_PRECOMMIT=1 git commit\n"
-    printf "   That skips only this hook; chemx verify applies the same rule repo-wide and will fail on these hazards.\n\n"
+    printf "   That skips only this hook. chemx verify fails on these only when a chemx-ratchet.json baseline exists and the rule is above it; without a ratchet, verify gates CRITICAL/HIGH only.\n\n"
     exit 1
   fi
 fi

@@ -56,7 +56,7 @@ const toChange = (cwd, { file, basePath, isRename }, config) => {
 export const hazardsAddedSinceHead = (cwd, relPath, currentViolations, config = loadProjectConfig(cwd)) => {
   const hasHead = gitText(cwd, ['rev-parse', '--verify', 'HEAD']) !== null;
   if (!hasHead) return [];
-  const base = gitText(cwd, ['show', `HEAD:${relPath}`]) ?? '';
+  const base = gitText(cwd, ['show', `HEAD:./${relPath}`]) ?? '';
   const before = auditCode(base, path.join(cwd, relPath), relPath, { config });
   return evaluateChanges([{ file: relPath, before, after: currentViolations }]).files;
 };

@@ -12,6 +12,8 @@ import { DatabaseSync } from 'node:sqlite';
 import { initTeamSchema } from './team-schema.js';
 import { createTask, claimTask } from './team-db-tasks.js';
 import { completeTaskWithAudit } from './team-triage.js';
+import { hazardsAddedSinceHead } from '../audit/staged-delta.js';
+import { auditCode } from '../audit/rules.js';
 
 const TARGET = 'src/a.js';
 const CLEAN = 'export const a = 1;\n';
@@ -59,6 +61,25 @@ test('a LOW hazard added over HEAD refuses task done', () => {
     assert.equal(refusal.refused, true);
     assert.equal(refusal.violations[0].rule, 'TYPOGRAPHY_EM_DASH');
   });
+});
+
+test('a hazard already at HEAD is not added when the project root is a git subdirectory', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-done-subdir-'));
+  try {
+    git(root, 'init', '-q');
+    git(root, 'config', 'user.email', HANDLE);
+    git(root, 'config', 'user.name', 'spec-a');
+    const pkg = path.join(root, 'pkg');
+    fs.mkdirSync(path.join(pkg, 'src'), { recursive: true });
+    fs.writeFileSync(path.join(pkg, TARGET), LOW_HAZARD);
+    git(root, 'add', '-A');
+    git(root, 'commit', '-q', '-m', 'base');
+    const current = auditCode(LOW_HAZARD, path.join(pkg, TARGET), TARGET, { config: {} });
+    assert.ok(current.length > 0, 'fixture must hold a hazard');
+    assert.deepEqual(hazardsAddedSinceHead(pkg, TARGET, current, {}), []);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('a LOW hazard already at HEAD does not refuse task done', () => {
