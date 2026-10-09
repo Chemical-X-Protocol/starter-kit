@@ -86,3 +86,58 @@ test('explode: refuses .vue files until SFC support lands', () => {
     assert.equal(fs.existsSync(path.join(dir, 'm-card')), false);
   });
 });
+
+const RESOLVE_SUFFIXES = ['', '.ts', '.tsx', '.d.ts', '.js', '/index.ts'];
+const SPECIFIER_REGEX = /(?:from\s+|import\s*\(\s*|import\s+)'(\.{1,2}(?:\/[^']*)?)'/g;
+
+const unresolvedImports = (root) => fs.readdirSync(root, { recursive: true })
+  .filter((f) => /\.(tsx?|jsx?)$/.test(f) && fs.statSync(path.join(root, f)).isFile())
+  .flatMap((f) => [...fs.readFileSync(path.join(root, f), 'utf-8').matchAll(SPECIFIER_REGEX)]
+    .map((m) => ({ file: f, spec: m[1], target: path.resolve(root, path.dirname(f), m[1]) }))
+    .filter(({ target }) => !RESOLVE_SUFFIXES.some((s) => fs.existsSync(`${target}${s}`) && fs.statSync(`${target}${s}`).isFile()))
+    .map(({ file, spec }) => `${file}: ${spec}`));
+
+const NESTED = `import { fmt } from './format';
+import type { Theme } from '../theme';
+import './card.css';
+
+export interface CardProps {
+  readonly theme: Theme;
+}
+
+const Lazy = () => import('./lazy');
+
+export function Card({ theme }: CardProps) {
+  return <div title={fmt(theme.name)} onClick={() => Lazy()} />;
+}
+
+export default Card;
+`;
+
+test('explode: relative imports are rewritten for the new depth and the default export stays importable', () => {
+  withDir((dir) => {
+    fs.mkdirSync(path.join(dir, 'src'));
+    fs.writeFileSync(path.join(dir, 'theme.ts'), 'export interface Theme { name: string }\n');
+    fs.writeFileSync(path.join(dir, 'src', 'format.ts'), 'export const fmt = (s: string) => s;\n');
+    fs.writeFileSync(path.join(dir, 'src', 'lazy.ts'), 'export default 1;\n');
+    fs.writeFileSync(path.join(dir, 'src', 'card.css'), '.card {}\n');
+    fs.writeFileSync(path.join(dir, 'src', 'use.tsx'), "import Card, { Card as Named } from './card';\nexport const a = [Card, Named];\n");
+    fs.writeFileSync(path.join(dir, 'src', 'card.tsx'), NESTED);
+    explodeCapsule(path.join(dir, 'src', 'card.tsx'), { cwd: dir });
+    assert.deepEqual(unresolvedImports(dir), [], 'every relative import still resolves');
+    const index = fs.readFileSync(path.join(dir, 'src', 'card', 'index.ts'), 'utf-8');
+    assert.match(index, /export \{ default \} from '\.\/card';/);
+    assert.match(index, /export \* from '\.\/card';/);
+    const props = fs.readFileSync(path.join(dir, 'src', 'card', 'types', 'props.d.ts'), 'utf-8');
+    assert.match(props, /from '\.\.\/\.\.\/\.\.\/theme'/);
+  });
+});
+
+test('explode verification: a specifier left at the old depth is reported as broken', async () => {
+  const { brokenSpecifiers } = await import('./explode-relocate.js');
+  const { parseSource } = await import('./source-parse.js');
+  const programs = parseSource("import { fmt } from './format';\nexport const a = fmt;\n", 'card.ts').programs;
+  assert.deepEqual(brokenSpecifiers({ 'card/card.ts': programs }, ['./format']), ["card/card.ts: './format'"]);
+  const fixed = parseSource("import { fmt } from '../format';\nexport const a = fmt;\n", 'card.ts').programs;
+  assert.deepEqual(brokenSpecifiers({ 'card/card.ts': fixed }, ['./format']), []);
+});

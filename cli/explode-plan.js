@@ -9,6 +9,7 @@
  * buckets the source does not have.
  */
 import { parseBabel, langForPath, declaredNames } from './source-parse.js';
+import { relativeSpecifiers, relocateText } from './explode-relocate.js';
 
 const IDENTIFIER_REGEX = /[A-Za-z_$][\w$]*/g;
 const isTypeNode = (decl) => decl?.type === 'TSInterfaceDeclaration' || decl?.type === 'TSTypeAliasDeclaration';
@@ -23,6 +24,7 @@ const describeStatements = (content, program) => {
     return {
       node,
       segment,
+      relSpecs: relativeSpecifiers(node),
       text: content.slice(node.start, node.end),
       names: declaredNames(node),
       isImport: node.type === 'ImportDeclaration',
@@ -33,10 +35,24 @@ const describeStatements = (content, program) => {
   });
 };
 
+/**
+ * A statement's text and segment with relative specifiers rewritten for a file in `sub`
+ * (a directory relative to the original file's directory; '' means unmoved).
+ *
+ * @param {object} s Statement from planExplode.
+ * @param {string} sub Destination directory.
+ * @returns {{ text: string, segment: string }}
+ */
+export const relocated = (s, sub) => {
+  const lead = s.segment.slice(0, s.segment.length - s.text.length);
+  const text = relocateText(s.text, s.node.start, s.relSpecs, sub);
+  return { text, segment: lead + text };
+};
+
 const localImports = (statements) => {
   const map = new Map();
   for (const s of statements.filter((st) => st.isImport)) {
-    for (const spec of s.node.specifiers) map.set(spec.local.name, s.text);
+    for (const spec of s.node.specifiers) map.set(spec.local.name, s);
   }
   return map;
 };
@@ -60,7 +76,7 @@ const isControllerName = (name) => Boolean(name) && name.startsWith('use') && na
 /**
  * @param {string} content Source of the compact capsule.
  * @param {string} filePath Its path (decides the parser).
- * @returns {{ statements: object[], buckets: Record<string, object[]>, imports: Map<string,string>, movedTypes: Set<string>, controllerName: string|null, declarations: string[] }}
+ * @returns {{ statements: object[], buckets: Record<string, object[]>, imports: Map<string,object>, movedTypes: Set<string>, controllerName: string|null, declarations: string[] }}
  */
 export const planExplode = (content, filePath) => {
   const lang = langForPath(filePath);
@@ -104,13 +120,15 @@ export const planExplode = (content, filePath) => {
  * @param {object[]} bucket Statements in the file.
  * @param {object} plan planExplode result.
  * @param {(name: string) => string|null} typeHome Module specifier for a moved type, or null when local.
+ * @param {string} [sub] Directory of the file relative to the original, for relative specifiers.
  * @returns {string}
  */
-export const importHeader = (bucket, plan, typeHome) => {
+export const importHeader = (bucket, plan, typeHome, sub = '') => {
   const refs = new Set(bucket.flatMap((s) => [...identifiersIn(s.text)]));
   const own = new Set(bucket.flatMap((s) => s.names));
-  const present = new Set(bucket.map((s) => s.text));
-  const copied = new Set([...refs].filter((id) => plan.imports.has(id) && !own.has(id)).map((id) => plan.imports.get(id)).filter((text) => !present.has(text)));
+  const present = new Set(bucket);
+  const copiedStatements = new Set([...refs].filter((id) => plan.imports.has(id) && !own.has(id)).map((id) => plan.imports.get(id)).filter((st) => !present.has(st)));
+  const copied = [...copiedStatements].map((st) => relocated(st, sub).text);
   const byModule = new Map();
   for (const id of [...refs].filter((r) => plan.movedTypes.has(r) && !own.has(r))) {
     const from = typeHome(id);

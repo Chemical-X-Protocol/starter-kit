@@ -15,9 +15,10 @@ import { detectTestRunner } from './project-detector.js';
 import { resolveSafePath } from './path-scope.js';
 import { applyEdits } from './apply-edits.js';
 import { parseSource } from './source-parse.js';
-import { planExplode, importHeader } from './explode-plan.js';
+import { planExplode, importHeader, relocated } from './explode-plan.js';
+import { brokenSpecifiers } from './explode-relocate.js';
 
-const joinSegments = (bucket) => bucket.map((s) => s.segment).join('\n').replace(/^\n+/, '');
+const joinSegments = (bucket, sub = '') => bucket.map((s) => relocated(s, sub).segment).join('\n').replace(/^\n+/, '');
 
 /**
  * Compatibility view of the plan (sections as text).
@@ -38,17 +39,20 @@ export const parseCompactFile = (content, ext = 'tsx') => {
 
 const buildCapsuleFiles = (plan, names) => {
   const { capsuleName, pascalName, ext } = names;
+  const typesSub = `${capsuleName}/types`;
   const isReact = ext === 'tsx' || ext === 'jsx';
   const typeHomeFor = (fileKey) => (id) => {
     const isProps = plan.buckets.props.some((s) => s.typeName === id);
     const home = isProps ? 'props' : 'state';
-    if (fileKey === 'types') return null;
-    return fileKey === home ? null : './types';
+    const isTypesFile = fileKey === 'types';
+    if (isTypesFile) return null;
+    const isSameFile = fileKey === home;
+    return isSameFile ? null : './types';
   };
   const typesFile = (bucket, key, stub) => {
     const other = key === 'props' ? 'state' : 'props';
-    const header = importHeader(bucket, plan, (id) => (plan.buckets[other].some((s) => s.typeName === id) ? `./${other}` : null));
-    return bucket.length ? `${header}${joinSegments(bucket)}\n` : stub;
+    const header = importHeader(bucket, plan, (id) => (plan.buckets[other].some((s) => s.typeName === id) ? `./${other}` : null), typesSub);
+    return bucket.length ? `${header}${joinSegments(bucket, typesSub)}\n` : stub;
   };
 
   const files = {
@@ -60,7 +64,7 @@ const buildCapsuleFiles = (plan, names) => {
 
   const controllerName = plan.controllerName || (isReact ? `use${pascalName}Controller` : null);
   if (plan.controllerName) {
-    files[`${capsuleName}.controller.ts`] = `${importHeader(plan.buckets.controller, plan, typeHomeFor('controller'))}${joinSegments(plan.buckets.controller)}\n`;
+    files[`${capsuleName}.controller.ts`] = `${importHeader(plan.buckets.controller, plan, typeHomeFor('controller'), capsuleName)}${joinSegments(plan.buckets.controller, capsuleName)}\n`;
   } else if (isReact) {
     files[`${capsuleName}.controller.ts`] = `import { useState } from 'react';\n\nexport const ${controllerName} = () => {\n  const [isActive] = useState<boolean>(false);\n  return { isActive };\n};\n`;
   }
@@ -70,31 +74,57 @@ const buildCapsuleFiles = (plan, names) => {
   const controllerImport = usesController ? `import { ${plan.controllerName} } from './${capsuleName}.controller';\n` : '';
   const hasBody = body.some((s) => !s.isImport);
   const stubBody = isReact ? `export const ${pascalName} = ({ className = '' }: ${pascalName}Props) => {\n  return <div className={className} />;\n};\n` : '';
-  const header = importHeader(body, plan, typeHomeFor('component'));
+  const header = importHeader(body, plan, typeHomeFor('component'), capsuleName);
   files[`${capsuleName}.${ext}`] = hasBody
-    ? `${controllerImport}${header}${joinSegments(body)}\n`
+    ? `${controllerImport}${header}${joinSegments(body, capsuleName)}\n`
     : `import type { ${pascalName}Props } from './types';\n${stubBody}`;
   return { files, controllerName };
 };
 
+const isDefaultSpecifier = (sp) => (sp.exported?.name ?? sp.exported?.value) === 'default';
+const isDefaultExport = (n) => n.type === 'ExportDefaultDeclaration' || (n.type === 'ExportNamedDeclaration' && (n.specifiers || []).some(isDefaultSpecifier));
+const isNamedExport = (n) => n.type === 'ExportAllDeclaration' || n.type === 'ExportNamedDeclaration';
+
+/**
+ * The barrel re-exports everything the original module exported, the default export included,
+ * so `import X from './card'` and `import { Y } from './card'` keep resolving.
+ */
 const buildIndexFile = (files, names, controllerName) => {
-  const compParse = parseSource(files[`${names.capsuleName}.${names.ext}`], `x.${names.ext}`);
-  const exported = compParse.programs.flatMap((p) => p.body)
-    .filter((n) => n.type === 'ExportNamedDeclaration' && n.declaration && n.declaration.type !== 'TSInterfaceDeclaration' && n.declaration.type !== 'TSTypeAliasDeclaration')
-    .flatMap((n) => (n.declaration.declarations || [n.declaration]).map((d) => d.id?.name).filter(Boolean));
-  const lines = exported.length ? [`export { ${exported.join(', ')} } from './${names.capsuleName}';`] : [];
-  if (controllerName && files[`${names.capsuleName}.controller.ts`]) lines.push(`export { ${controllerName} } from './${names.capsuleName}.controller';`);
+  const compFile = `${names.capsuleName}.${names.ext}`;
+  const body = parseSource(files[compFile], compFile).programs.flatMap((p) => p.body);
+  const lines = [];
+  const hasNamedExports = body.some(isNamedExport);
+  const hasDefaultExport = body.some(isDefaultExport);
+  if (hasNamedExports) lines.push(`export * from './${names.capsuleName}';`);
+  if (hasDefaultExport) lines.push(`export { default } from './${names.capsuleName}';`);
+  const hasControllerFile = Boolean(controllerName) && Boolean(files[`${names.capsuleName}.controller.ts`]);
+  if (hasControllerFile) lines.push(`export { ${controllerName} } from './${names.capsuleName}.controller';`);
   lines.push("export type * from './types';");
   return `${lines.join('\n')}\n`;
 };
 
-const verifyLossless = (plan, files) => {
-  const generated = Object.values(files).join('\n');
-  const lost = plan.statements.filter((s) => !generated.includes(s.text)).map((s) => s.names[0] || s.text.split('\n')[0]);
-  const declared = new Set(Object.entries(files).flatMap(([name, text]) => parseSource(text, name).declarations));
+const verifyLossless = (plan, files, names) => {
+  const typesSub = `${names.capsuleName}/types`;
+  const subFor = { props: typesSub, state: typesSub, controller: names.capsuleName, component: names.capsuleName };
+  const lost = Object.entries(plan.buckets).flatMap(([bucket, list]) => {
+    const target = files[bucketFile(bucket, names)] || '';
+    return list.filter((s) => !target.includes(relocated(s, subFor[bucket]).text)).map((s) => s.names[0] || s.text.split('\n')[0]);
+  });
+  const parsed = Object.entries(files).map(([name, text]) => [name, parseSource(text, name)]);
+  const unparsed = parsed.filter(([, res]) => !res.ok).map(([name, res]) => `${name}: ${res.error}`);
+  const declared = new Set(parsed.flatMap(([, res]) => res.declarations));
   const missing = plan.declarations.filter((name) => !declared.has(name));
-  const problems = [...lost.map((l) => `statement not carried over: ${l}`), ...missing.map((m) => `declaration missing: ${m}`)];
-  if (problems.length > 0) throw new Error(`Explode refused (would lose code): ${problems.join('; ')}`);
+  const programsByFile = Object.fromEntries(parsed.map(([name, res]) => [`${names.capsuleName}/${name}`, res.programs]));
+  const originalSpecifiers = plan.statements.flatMap((s) => s.relSpecs.map((r) => r.value));
+  const broken = brokenSpecifiers(programsByFile, originalSpecifiers);
+  const problems = [
+    ...lost.map((l) => `statement not carried over: ${l}`),
+    ...unparsed.map((u) => `generated file does not parse: ${u}`),
+    ...missing.map((m) => `declaration missing: ${m}`),
+    ...broken.map((b) => `relative import would no longer resolve: ${b}`)
+  ];
+  const isLossy = problems.length > 0;
+  if (isLossy) throw new Error(`Explode refused (would lose or break code): ${problems.join('; ')}. Nothing was changed.`);
 };
 
 export const explodeCapsule = (targetFilePath, options = {}) => {
@@ -123,7 +153,7 @@ export const explodeCapsule = (targetFilePath, options = {}) => {
   files['index.ts'] = buildIndexFile(files, names, controllerName);
   const specController = controllerName === `use${names.pascalName}Controller` && Boolean(files[`${capsuleName}.controller.ts`]);
   files[`${capsuleName}.spec.ts`] = buildComponentSpec(capsuleName, names.pascalName, specController, detectTestRunner(path.dirname(absPath)));
-  verifyLossless(plan, files);
+  verifyLossless(plan, files, names);
 
   const edits = [
     ...Object.entries(files).map(([rel, text]) => ({ path: path.join(targetDir, rel), content: text })),
