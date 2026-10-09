@@ -91,7 +91,7 @@ export const formatTestReport = (report) => {
   if (isFailure) {
     for (const failure of report.failures.slice(0, 5)) {
       out.push(`    ${ANSI.RED}✖ ${failure.name}${ANSI.RESET}`);
-      for (const line of (failure.details || []).slice(0, 3)) out.push(`      ${ANSI.DIM}${line}${ANSI.RESET}`);
+      for (const line of (failure.details || []).slice(0, 6)) out.push(`      ${ANSI.DIM}${line}${ANSI.RESET}`);
     }
     const hiddenCount = report.failures.length - 5;
     const hasHidden = hiddenCount > 0;

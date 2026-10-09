@@ -63,17 +63,19 @@ const toFailure = (block, mode) => {
 export const extractAssertionFailures = (lines) => {
   const mode = pickHeaderMode(lines);
   if (!mode) return [];
-  const seen = new Set();
-  const failures = [];
+  // A spec-reporter run lists a failing test twice: a bare line in the tree, then again under
+  // "failing tests:" with the error body. Keep the first position but the fullest block.
+  const byName = new Map();
   for (const block of collectBlocks(lines, mode)) {
-    const isDuplicate = seen.has(block.name) || /^failing tests:?$/i.test(block.name);
+    const isSummaryHeader = /^failing tests:?$/i.test(block.name);
     const isRollup = mode.name === 'tap' && isSuiteRollup(block.body);
-    const shouldSkip = isDuplicate || isRollup;
+    const shouldSkip = isSummaryHeader || isRollup;
     if (shouldSkip) continue;
-    seen.add(block.name);
-    failures.push(toFailure(block, mode));
+    const previous = byName.get(block.name);
+    const isFuller = !previous || block.body.length > previous.body.length;
+    if (isFuller) byName.set(block.name, block);
   }
-  return failures;
+  return [...byName.values()].map((block) => toFailure(block, mode));
 };
 
 // Vitest prints unhandled errors in their own section; tests can all pass while the run fails.

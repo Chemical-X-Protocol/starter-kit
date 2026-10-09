@@ -9,6 +9,30 @@ import { STATUS } from './result-status.js';
 const fixtureDir = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'runner-output');
 const fixture = (name) => fs.readFileSync(path.join(fixtureDir, name), 'utf8');
 
+test('test-output: node spec reporter keeps the diff lines of a deepEqual failure listed twice', () => {
+  const out = [
+    '✖ my deep test (3ms)',
+    'ℹ tests 1',
+    'ℹ pass 0',
+    'ℹ fail 1',
+    '',
+    '✖ failing tests:',
+    '',
+    'test at a.spec.js:1:1',
+    '✖ my deep test (3ms)',
+    '  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:',
+    '  + actual - expected',
+    '  ',
+    '  + [',
+    "  +   'offender'",
+    '  + ]',
+    '  - []'
+  ].join('\n');
+  const [failure] = parseTestOutput(out, '', 1).failures;
+  assert.ok(failure.name.startsWith('my deep test'));
+  assert.ok(failure.details.some((l) => l.includes("'offender'")));
+});
+
 test('test-output: vitest failure keeps the test name, assertion message and location (real ANSI output)', () => {
   const parsed = parseTestOutput(fixture('vt-fail.txt'), '', 1);
   assert.equal(parsed.status, STATUS.FAIL);
