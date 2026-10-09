@@ -120,10 +120,12 @@ export const buildCompactCapsule = ({
   atomsPackage = null
 }) => {
   const fw = (framework || 'react').toLowerCase();
-  if (fw === 'vue') {
+  const isVue = fw === 'vue';
+  if (isVue) {
     return buildCompactVue(capsuleName, pascalName, archetype);
   }
-  if (fw === 'svelte') {
+  const isSvelte = fw === 'svelte';
+  if (isSvelte) {
     return buildCompactSvelte(capsuleName, pascalName, archetype);
   }
   return buildCompactReact(capsuleName, pascalName, archetype, { atomsPackage });
