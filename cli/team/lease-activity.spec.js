@@ -21,10 +21,18 @@ const CLI = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'index
 const FIVE_MINUTES = 5 * 60 * 1000;
 
 const makeProject = (t) => {
+  delete process.env.CHEMX_PROJECT_ROOT;
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-lease-activity-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   return { root, db: openIndexDb(root, { fresh: true }) };
 };
+
+test('every router alias of a long command keeps leases alive', () => {
+  const router = fs.readFileSync(path.join(path.dirname(CLI), 'commands', 'cmd-router.js'), 'utf-8');
+  const groups = [['test', 'tests', 'check:test'], ['lint', 'check:lint', 'eslint']];
+  const missing = groups.flat().filter((alias) => !router.includes(`case '${alias}':`) || !LONG_RUNNING_COMMANDS.has(alias));
+  assert.deepEqual(missing, []);
+});
 
 const expiryOf = (db, file) => Number(db.prepare('SELECT expires_at FROM file_leases WHERE file_path = ?').get(file).expires_at);
 test('renewHolderLeases extends every live lease of the holder and nobody else\'s', (t) => {

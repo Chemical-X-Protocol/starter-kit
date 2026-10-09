@@ -95,6 +95,7 @@ export const ALLOWED_COMMANDS = new Set([
 
 const HELP_FLAGS = new Set(['help', '--help', '-h']);
 const VERSION_FLAGS = new Set(['version', '--version', '-v']);
+const MCP_SERVER_COMMANDS = new Set(['mcp', 'mcp-server', 'server']);
 
 // Any command run as a lease holder keeps that holder's leases alive; long ones keep renewing while
 // they run. Fails open: a renewal problem must never stop the command (cli/team/lease-activity.js).
@@ -133,7 +134,9 @@ const main = async () => {
     process.exit(1);
   }
 
-  await trackLeaseActivity(firstArg);
+  // The MCP server renews per tool call (executeMcpTool); importing the team stack here would slow its initialize reply.
+  const isMcpServer = MCP_SERVER_COMMANDS.has(firstArg);
+  if (!isMcpServer) await trackLeaseActivity(firstArg);
   const { dispatchCommand } = await import('./commands/cmd-router.js');
   await dispatchCommand(firstArg, rawArgs, runAudit, getPackageVersion, isCapsulePrefix);
 };

@@ -19,6 +19,7 @@ const KIT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const CLI = path.join(KIT, 'cli', 'index.js');
 
 const makeProject = (t) => {
+  delete process.env.CHEMX_PROJECT_ROOT;
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-staged-leases-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   return { root, db: openIndexDb(root, { fresh: true }) };

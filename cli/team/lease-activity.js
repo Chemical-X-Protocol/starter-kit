@@ -20,7 +20,10 @@ import { DEFAULT_TTL_MS } from './team-db-lock-promotion.js';
 import { resolveAgentIdentity } from './agent-identity.js';
 
 // Commands that can outlast a lease TTL, with their CLI aliases.
-export const LONG_RUNNING_COMMANDS = new Set(['test', 'verify', 'check:all', 'typecheck', 'check:types', 'tsc', 'build', 'run', 'wrap', 'audit']);
+export const LONG_RUNNING_COMMANDS = new Set([
+  'test', 'tests', 'check:test', 'lint', 'check:lint', 'eslint',
+  'verify', 'check:all', 'typecheck', 'check:types', 'tsc', 'build', 'run', 'wrap', 'audit'
+]);
 
 /** The explicit handle in CLI args: --as=@x or --as @x. */
 export const agentFromArgs = (args = []) => {

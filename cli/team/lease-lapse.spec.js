@@ -17,6 +17,7 @@ import { patchFile, writeFile } from '../patcher.js';
 const CLOCK = '\\d\\d:\\d\\d:\\d\\d';
 
 const makeProject = (t) => {
+  delete process.env.CHEMX_PROJECT_ROOT;
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-lease-lapse-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   fs.mkdirSync(path.join(root, 'src'));
