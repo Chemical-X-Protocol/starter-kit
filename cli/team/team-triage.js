@@ -11,6 +11,7 @@ import { postFeedEvent } from './team-db-feed.js';
 import { registerAgent } from './team-db-agents.js';
 import { ingestTaskTelemetry } from './team-telemetry.js';
 import { runAudit as executeAstAudit, auditFile } from '../audit.js';
+import { calculateMolecularHealthScore, SCORE_MODEL } from '../audit/metrics.js';
 import { syncSearchIndex, syncViolationsIndex, recordAuditSnapshot } from '../search.js';
 
 import { queryUnassignedHazards } from './team-db-task-helpers.js';
@@ -327,7 +328,7 @@ export const completeTaskWithAudit = (db, taskId, agentId, options = {}) => {
         const auditRes = auditFile(fullPath, task.target_path, { cwd });
         const remainingHazards = Array.isArray(auditRes) ? auditRes : (auditRes?.fileViolations || auditRes?.violations || []);
         hazardCount = remainingHazards.length;
-        healthScore = Math.max(0, 100 - hazardCount * 15);
+        healthScore = calculateMolecularHealthScore(remainingHazards, 1).score;
         const isStrict = Boolean(options.strict);
         const isBlocking = (v) => {
           if (isStrict) return true;
@@ -343,6 +344,7 @@ export const completeTaskWithAudit = (db, taskId, agentId, options = {}) => {
         resultPayload.hazardCountAfter = hazardCount;
         resultPayload.blockingHazardCountAfter = blockingCount;
         resultPayload.healthAfter = healthScore;
+        resultPayload.healthModel = SCORE_MODEL;
         resultPayload.remainingViolations = remainingHazards.map((v) => v.hazard || v.rule);
 
         if (blockingCount > 0 && options.force !== true) {
