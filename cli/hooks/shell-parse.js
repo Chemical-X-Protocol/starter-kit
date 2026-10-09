@@ -3,6 +3,7 @@
 // ever see real command positions, never prose inside quotes or heredoc bodies.
 
 import { lexShell } from './shell-lexer.js';
+import { ruleTree } from '../rules.js';
 
 const SKIPPED_KEYWORDS = new Set(['if', 'then', 'else', 'elif', 'fi', 'do', 'done', 'while', 'until', '{', '}', '!', 'esac', 'time', '[[', 'function']);
 // Words after these keywords are a list or subject, not a command; skipping ends at the terminator word.
@@ -31,21 +32,35 @@ const nestedScripts = (argv) => {
 };
 
 // Classify one word token against the command being built: keyword, list word, assignment or argv.
-const placeWord = (token, current, parser) => {
-  if (parser.skippingList) {
+const classifyWord = (token, current, parser) => {
+  const isCommandPosition = () => current.argv.length === 0;
+  const isBareCommandWord = () => isCommandPosition() && !token.quoted;
+  return ruleTree({
+    word: {
+      inList: Boolean(parser.skippingList),
+      keyword: () => isBareCommandWord() && SKIPPED_KEYWORDS.has(token.value),
+      listKeyword: () => isBareCommandWord() && Object.hasOwn(LIST_TERMINATORS, token.value),
+      assignment: () => isCommandPosition() && isAssignmentWord(token)
+    }
+  }, { failFast: true });
+};
+
+const WORD_HANDLERS = {
+  'word.inList': (token, current, parser) => {
     const isTerminator = !token.quoted && token.value === parser.skippingList;
     if (isTerminator) parser.skippingList = null;
-    return;
-  }
-  const isCommandPosition = current.argv.length === 0;
-  const isBareCommandWord = isCommandPosition && !token.quoted;
-  const isKeyword = isBareCommandWord && SKIPPED_KEYWORDS.has(token.value);
-  if (isKeyword) return;
-  const isListKeyword = isBareCommandWord && Object.hasOwn(LIST_TERMINATORS, token.value);
-  if (isListKeyword) { parser.skippingList = LIST_TERMINATORS[token.value]; return; }
-  const isAssignment = isCommandPosition && isAssignmentWord(token);
-  if (isAssignment) { current.assigns.push(token.value); return; }
-  current.argv.push(token.value);
+  },
+  'word.keyword': () => {},
+  'word.listKeyword': (token, current, parser) => { parser.skippingList = LIST_TERMINATORS[token.value]; },
+  'word.assignment': (token, current) => { current.assigns.push(token.value); }
+};
+
+const pushArgv = (token, current) => { current.argv.push(token.value); };
+
+const placeWord = (token, current, parser) => {
+  const gate = classifyWord(token, current, parser);
+  const handler = WORD_HANDLERS[gate.first] ?? pushArgv;
+  handler(token, current, parser);
 };
 
 const groupTokens = (tokens) => {
@@ -64,9 +79,12 @@ const groupTokens = (tokens) => {
   };
 
   for (const token of tokens) {
-    if (token.type === 'comment') { comments.push(token.value); continue; }
-    if (token.type === 'op') { parser.pendingRedirect = null; parser.skippingList = null; finish(token.value); continue; }
-    if (token.type === 'redir') {
+    const isComment = token.type === 'comment';
+    if (isComment) { comments.push(token.value); continue; }
+    const isOperator = token.type === 'op';
+    if (isOperator) { parser.pendingRedirect = null; parser.skippingList = null; finish(token.value); continue; }
+    const isRedirect = token.type === 'redir';
+    if (isRedirect) {
       parser.pendingRedirect = { op: token.op, fd: token.fd, target: '', body: null, token };
       current.redirects.push(parser.pendingRedirect);
       continue;
