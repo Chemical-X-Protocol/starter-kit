@@ -48,7 +48,8 @@ const formatTextAnswer = (lines, page, index) => {
   const header = [];
   const isInconclusive = index.status === STATUS.INCONCLUSIVE;
   if (isInconclusive) header.push(`INCONCLUSIVE: ${index.reason}`);
-  if (page.truncated) header.push(`showing ${page.results.length} of ${page.total} (raise limit for more)`);
+  const isTruncated = Boolean(page.truncated);
+  if (isTruncated) header.push(`showing ${page.results.length} of ${page.total} (raise limit for more)`);
   return [...header, ...lines, `# ${formatIndexLine(index)}`].join('\n');
 };
 
@@ -67,13 +68,19 @@ export const handleChemxQ = (args = {}, cwd = process.cwd()) => {
   const session = syncIndexForQuery(targetCwd, args);
   const { db, index } = session;
 
-  if (args.blastRadius || args.impact) return attachIndex(executeBlastRadiusQuery(db, query, args), index);
-  if (args.semantic) return attachIndex(executeSemanticQuery(db, query, args), index);
-  if (args.trace) return attachIndex(calculateCallTrace(db, query, { maxDepth: args.maxDepth || 3, root: session.root }), index);
-  if (args.backtrace) return attachIndex(calculateBacktrace(db, query, { maxDepth: args.maxDepth || 5 }), index);
-  if (args.hybrid) return attachIndex(executeHybridQuery(db, query, args), index);
+  const isBlastRadiusQuery = Boolean(args.blastRadius || args.impact);
+  if (isBlastRadiusQuery) return attachIndex(executeBlastRadiusQuery(db, query, args), index);
+  const isSemanticQuery = Boolean(args.semantic);
+  if (isSemanticQuery) return attachIndex(executeSemanticQuery(db, query, args), index);
+  const isTraceQuery = Boolean(args.trace);
+  if (isTraceQuery) return attachIndex(calculateCallTrace(db, query, { maxDepth: args.maxDepth || 3, root: session.root }), index);
+  const isBacktraceQuery = Boolean(args.backtrace);
+  if (isBacktraceQuery) return attachIndex(calculateBacktrace(db, query, { maxDepth: args.maxDepth || 5 }), index);
+  const isHybridQuery = Boolean(args.hybrid);
+  if (isHybridQuery) return attachIndex(executeHybridQuery(db, query, args), index);
 
-  if (args.connections || args.symbol) {
+  const wantsConnections = Boolean(args.connections || args.symbol);
+  if (wantsConnections) {
     const conn = executeConnectionsQuery(db, query);
     if (conn) return attachIndex(conn, index);
   }
@@ -82,7 +89,8 @@ export const handleChemxQ = (args = {}, cwd = process.cwd()) => {
   const page = queryIndexPage(db, { query, tier: args.tier || null, limit, scopeDirs: index.scopeDirs });
   const { results } = page;
 
-  if (args.columnar) {
+  const isColumnar = Boolean(args.columnar);
+  if (isColumnar) {
     const columnar = toColumnar(results, ['path', 'line', 'match', 'name', 'tier', 'lines'], {
       line: (r) => r.match?.line ?? null,
       match: (r) => r.match?.type ?? null,
@@ -91,7 +99,8 @@ export const handleChemxQ = (args = {}, cwd = process.cwd()) => {
     return attachIndex({ ...columnar, total: page.total, truncated: page.truncated }, index);
   }
 
-  if (args.inspect) {
+  const isInspect = Boolean(args.inspect);
+  if (isInspect) {
     const inspected = results.map((r) => ({
       path: r.path, tier: r.tier, lines: r.lines, match: r.match,
       symbols: (r.symbols || []).map((s) => s.name),
