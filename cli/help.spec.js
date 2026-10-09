@@ -32,16 +32,19 @@ test('help: printHelp renders without throwing', () => {
 test('cli: unknown command exits immediately with code 1 and error message', () => {
   const cliPath = path.resolve('cli/index.js');
   const bogusInputs = ['config', 'foo', '--bogus'];
+  // The bound catches a hang (an interactive prompt or a heavy import), not cold-start speed:
+  // under the parallel full suite a bare node start alone can pass 2s.
+  const hangLimitMs = 10000;
 
   for (const input of bogusInputs) {
     const startTime = Date.now();
     const res = spawnSync(process.execPath, [cliPath, input], {
       encoding: 'utf8',
-      timeout: 2000
+      timeout: hangLimitMs
     });
     const elapsed = Date.now() - startTime;
 
-    assert.ok(elapsed < 2000, `Command chemx ${input} took ${elapsed}ms, expected < 2000ms`);
+    assert.ok(elapsed < hangLimitMs, `Command chemx ${input} took ${elapsed}ms, expected < ${hangLimitMs}ms`);
     assert.strictEqual(res.status, 1, `chemx ${input} should exit with code 1`);
     assert.ok(
       res.stderr.includes(`Unknown command "${input}"`),
