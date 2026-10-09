@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "chemical-x": {
+      "command": "node",
+      "args": [
+        "/home/xopher/www/x/Xophz-COMPASS/apps/chemical-x/starter-kit/cli/index.js",
+        "mcp"
+      ],
+      "env": {
+        "CHEMX_PROJECT_ROOT": "/home/xopher/www/x/Xophz-COMPASS/apps/chemical-x/starter-kit",
+        "NO_COLOR": "1"
+      }
+    }
+  }
+}
