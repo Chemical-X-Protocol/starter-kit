@@ -47,7 +47,7 @@ export const formatTypecheckStep = (section) => {
   return `${section.errorCount} error(s)`;
 };
 
-const isEmptyAllowed = (section) => isPass(section.status) && section.reason === 'EMPTY_ALLOWED';
+export const isEmptyAllowed = (section) => isPass(section.status) && section.reason === 'EMPTY_ALLOWED';
 
 // An empty run that --allow-empty accepted passes the gate but proves nothing, so no green check.
 export const testStepIcon = (section) => (isEmptyAllowed(section) ? SKIPPED : section.status);
@@ -70,11 +70,16 @@ export const formatBuildStep = (section) => {
 };
 
 // On an interactive terminal, shows a transient "running" line that the step result replaces.
+// On a pipe there is no transient line, so a step that blocks the event loop (the synchronous AST
+// audit) asks for `announceOnPipe`: a lasting line, so the log never shows only the banner.
 export const createProgress = (shouldPrint) => {
   const isLive = shouldPrint && isInteractive();
+  const runningLine = (label) => `  ${ANSI.DIM}… ${pad(label)}running${ANSI.RESET}`;
   return {
-    start: (label) => {
-      if (isLive) process.stdout.write(`  ${ANSI.DIM}… ${pad(label)}running${ANSI.RESET}`);
+    start: (label, { announceOnPipe = false } = {}) => {
+      const shouldAnnounce = shouldPrint && !isLive && announceOnPipe;
+      if (isLive) process.stdout.write(runningLine(label));
+      if (shouldAnnounce) process.stdout.write(`${runningLine(label)}\n`);
     },
     finish: (line) => {
       if (isLive) process.stdout.write('\r\x1b[K');
@@ -83,7 +88,11 @@ export const createProgress = (shouldPrint) => {
   };
 };
 
-export const formatVerdict = (status, warning) => {
+// options.testsRanNothing: the gate passed only because --allow-empty accepted a run with zero
+// tests, so the headline must not claim that everything was verified.
+export const formatVerdict = (status, warning, options = {}) => {
+  const isEmptyPass = isPass(status) && Boolean(options.testsRanNothing);
+  if (isEmptyPass) return `\n  ${ANSI.YELLOW}${ANSI.BOLD}Verification passed, but no tests ran (accepted by --allow-empty).${ANSI.RESET}\n\n`;
   if (isPass(status)) return `\n  ${ANSI.LIME}${ANSI.BOLD}All verification checks passed with zero context burn!${ANSI.RESET}\n\n`;
   const headline = isInconclusive(status)
     ? `${ANSI.YELLOW}${ANSI.BOLD}Verification inconclusive: a step could not prove its result.${ANSI.RESET}`

@@ -16,7 +16,7 @@ import {
   combineStepStatuses, architecturalWarningFor
 } from './verify-steps.js';
 import {
-  VERIFY_HELP, stepLine, formatTypecheckStep, formatTestStep, testStepIcon, formatBuildStep, createProgress, formatVerdict
+  VERIFY_HELP, stepLine, formatTypecheckStep, formatTestStep, testStepIcon, formatBuildStep, createProgress, formatVerdict, isEmptyAllowed
 } from './verify-report.js';
 
 export {
@@ -113,7 +113,7 @@ export const runProjectVerify = async (rawArgs = [], isCli = false, options = {}
   if (isText) process.stdout.write(`\n  ${ANSI.BOLD}${ANSI.CYAN}⚡ Chemical X: Token-Conserving Project Verification${ANSI.RESET}\n\n`);
   const progress = createProgress(isText);
 
-  progress.start('AST Architecture');
+  progress.start('AST Architecture', { announceOnPipe: true });
   const projectConfig = options.config || loadProjectConfig(cwd, rawArgs);
   const auditReport = executeAstAudit(scope.dir, { cwd, config: projectConfig });
   const gate = computeGateVerdict({ projectRoot: cwd, scope: scope.relDir, violations: auditReport.violations });
@@ -163,6 +163,6 @@ export const runProjectVerify = async (rawArgs = [], isCli = false, options = {}
 
   const shouldPrintJson = isJson && shouldPrint;
   if (shouldPrintJson) process.stdout.write(JSON.stringify(summary, null, 2) + '\n');
-  if (isText) process.stdout.write(formatVerdict(status, architecturalWarning));
+  if (isText) process.stdout.write(formatVerdict(status, architecturalWarning, { testsRanNothing: isEmptyAllowed(tests) }));
   return finish(summary, status, { isCli });
 };
