@@ -1,8 +1,8 @@
 import { sanitizeText, sanitizeStackTrace } from './sanitizer.js';
 
 export const buildIssueTitle = (report) => {
-  const cmd = report.command ? report.command.split(' ')[0] : 'chemx';
-  const rawMsg = report.message || 'Unknown error occurred';
+  const cmd = report.command ? sanitizeText(report.command).split(' ')[0] : 'chemx';
+  const rawMsg = sanitizeText(report.message || 'Unknown error occurred');
   const cleanMsg = rawMsg.split('\n')[0].replace(/[\r\n\t]+/g, ' ').trim();
   const truncatedMsg = cleanMsg.length > 70 ? `${cleanMsg.slice(0, 67)}...` : cleanMsg;
   return `[ChemX Failure] ${cmd}: ${truncatedMsg}`;

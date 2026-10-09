@@ -5,14 +5,24 @@ const TOKEN_PATTERNS = [
   /github_pat_[a-zA-Z0-9_]{20,}/g,
   /npm_[a-zA-Z0-9]{20,}/g,
   /bearer\s+[a-zA-Z0-9_\-\.]{15,}/gi,
-  /(?:api[_-]?key|secret|token|password)[=:]\s*["']?([a-zA-Z0-9_\-\.]{8,})["']?/gi
+  /(?:api[_-]?key|license[_-]?key|secret|token|password)[=:]\s*["']?([a-zA-Z0-9_\-\.]{8,})["']?/gi
 ];
+
+// License keys: the value after --license (any format, unless it is the next flag) and bare CX-XXXX-XXXX-XXXX keys.
+const LICENSE_FLAG_PATTERN = /(--license(?:=|\s+))(?!-)["']?[^\s"']+["']?/g;
+const LICENSE_KEY_PATTERN = /\bCX(?:-[A-Z0-9]{4}){3,}\b/gi;
+
+export const maskLicenseKeys = (text) => {
+  const isInputString = typeof text === 'string';
+  if (!isInputString) return '';
+  return text.replace(LICENSE_FLAG_PATTERN, '$1[REDACTED_LICENSE]').replace(LICENSE_KEY_PATTERN, '[REDACTED_LICENSE]');
+};
 
 export const maskSensitiveTokens = (text) => {
   const isInputString = typeof text === 'string';
   if (!isInputString) return '';
 
-  let sanitized = text;
+  let sanitized = maskLicenseKeys(text);
   for (const pattern of TOKEN_PATTERNS) {
     sanitized = sanitized.replace(pattern, (match) => {
       const isBearer = match.toLowerCase().startsWith('bearer');
