@@ -17,7 +17,8 @@ const countBySeverity = (violations = []) => {
   const counts = { critical: 0, high: 0, medium: 0, low: 0 };
   for (const v of violations) {
     const key = String(v.severity || 'LOW').toLowerCase();
-    if (key in counts) counts[key] += 1;
+    const isKnownSeverity = key in counts;
+    if (isKnownSeverity) counts[key] += 1;
   }
   return counts;
 };
