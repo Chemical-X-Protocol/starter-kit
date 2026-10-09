@@ -4,6 +4,7 @@
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { createGtSandbox } from './gt-sandbox.js';
 import { readLedger, buildForgeGroups } from './forge-groups.js';
@@ -11,7 +12,11 @@ import { openIndexDb } from '../search-schema.js';
 
 delete process.env.CHEMX_PROJECT_ROOT;
 
-const cleanups = [];
+// Isolate cwd in a temp project too, so nothing here can resolve the real repo's db.
+const originalCwd = process.cwd();
+process.chdir(fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-group-determinism-')));
+
+const cleanups = [() => process.chdir(originalCwd)];
 const state = {};
 before(() => {
   const sandbox = createGtSandbox({ after: (cleanup) => cleanups.push(cleanup) });
