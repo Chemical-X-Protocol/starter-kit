@@ -86,7 +86,8 @@ export const updateProjectSession = (db, id, updates = {}) => {
     fields.push(`${k} = ?`);
     vals.push(v);
   }
-  if (!fields.length) return getProjectSession(db, id);
+  const isEmpty = fields.length === 0;
+  if (isEmpty) return getProjectSession(db, id);
   fields.push('updated_at = ?');
   vals.push(Date.now(), id);
   db.prepare(`UPDATE project_sessions SET ${fields.join(', ')} WHERE id = ?`).run(...vals);
