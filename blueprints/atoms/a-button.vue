@@ -22,7 +22,8 @@ const emit = defineEmits<{
 }>();
 
 const handleClick = (event: MouseEvent) => {
-  if (props.disabled) return;
+  const isDisabled = Boolean(props.disabled);
+  if (isDisabled) return;
   emit('click', event);
 };
 </script>
