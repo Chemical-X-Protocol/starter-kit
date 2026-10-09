@@ -15,7 +15,8 @@ const timeoutArgs = (args) => {
 const changeArgs = (args) => ({
   changed: Boolean(args.changed),
   base: args.base || null,
-  related: Array.isArray(args.related) && args.related.length > 0 ? args.related.map(String) : undefined
+  related: Array.isArray(args.related) && args.related.length > 0 ? args.related.map(String) : undefined,
+  allPackages: Boolean(args.allPackages)
 });
 
 const targetDirOf = (args, cwd) => {
@@ -35,6 +36,7 @@ export const handleChemxTypecheck = async (args = {}, cwd = process.cwd()) => {
   return runTypecheckAudit(timeoutArgs(args), false, {
     json: true,
     command: args.command,
+    allPackages: Boolean(args.allPackages),
     print: false,
     cwd: targetDirOf(args, cwd),
     timeoutMs: DEFAULT_STEP_TIMEOUT_MS
@@ -64,6 +66,7 @@ export const handleChemxVerify = async (args = {}, cwd = process.cwd()) => {
     allowEmpty: Boolean(args.allowEmpty),
     changed: Boolean(args.changed),
     base: args.base || null,
+    allPackages: Boolean(args.allPackages),
     print: false,
     cwd: baseCwd
   });
