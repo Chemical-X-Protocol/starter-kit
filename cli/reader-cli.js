@@ -102,8 +102,8 @@ export const runReaderCli = (args, isCli = false) => {
         const val = sFlag.split('=')[1];
         const isNumericValue = /^\d+$/.test(val);
         if (isNumericValue) {
-          const isStartLineMissing = startLine === undefined;
-          if (isStartLineMissing) startLine = parseInt(val, 10);
+          const needsStartFromValue = startLine === undefined;
+          if (needsStartFromValue) startLine = parseInt(val, 10);
         } else {
           symbol = val;
         }
