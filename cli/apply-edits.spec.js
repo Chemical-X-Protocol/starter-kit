@@ -57,6 +57,20 @@ test('applyEdits: editing an already-broken file is allowed and flagged; JSON is
   });
 });
 
+test('applyEdits: an early error Babel accepts but V8 rejects (invalid regex) is refused and the file stays unchanged', () => {
+  withDir((dir) => {
+    const original = 'export const source = 1;\n';
+    fs.writeFileSync(path.join(dir, 'm.js'), original);
+    assert.throws(
+      () => applyEdits([{ path: 'm.js', content: 'export const source = /a{2,1}/;\n' }], { cwd: dir }),
+      (err) => err instanceof EditRefusedError && /V8 rejects/.test(err.message) && /Invalid regular expression/.test(err.message)
+    );
+    assert.equal(fs.readFileSync(path.join(dir, 'm.js'), 'utf-8'), original);
+    const ok = applyEdits([{ path: 'm.js', content: 'export const source = 2;\n' }], { cwd: dir });
+    assert.equal(ok.files[0].parse.ok, true);
+  });
+});
+
 test('buildUnifiedDiff: hunks with context, new files and deletions', () => {
   const before = Array.from({ length: 12 }, (_, i) => `l${i + 1}`).join('\n') + '\n';
   const after = before.replace('l2\n', 'L2\n').replace('l11\n', 'L11\n');

@@ -10,7 +10,9 @@
  * A real run writes each file atomically with a backup and rolls back the batch on failure.
  */
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { resolveSafePath } from './path-scope.js';
 import { parseSource } from './source-parse.js';
 import { buildUnifiedDiff } from './edit-diff.js';
@@ -43,6 +45,41 @@ const declarationDelta = (beforeParse, afterParse, allowRemoved) => {
   const allowed = new Set(Array.isArray(allowRemoved) ? allowRemoved : []);
   const unallowed = isAllAllowed ? [] : removed.filter((name) => !allowed.has(name));
   return { removed, added, blocked: unallowed };
+};
+
+const V8_CHECKED_EXTENSIONS = new Set(['.js', '.mjs', '.cjs']);
+
+/**
+ * V8's own syntax check (node --check on a temp copy). Babel's parse does not report every
+ * early error V8 raises at import (redeclarations, duplicate exports, bad regex flags).
+ * Returns the first SyntaxError line, or null when V8 accepts the text or the check could not run
+ * (a failure to spawn node is not treated as a syntax error).
+ */
+const v8SyntaxError = (text, absPath, parse) => {
+  const ext = path.extname(absPath);
+  const isCheckedExtension = V8_CHECKED_EXTENSIONS.has(ext);
+  if (!isCheckedExtension) return null;
+  let dir = null;
+  try {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-v8check-'));
+    // node --check on a .js file holding module syntax skips regex early errors, so the copy
+    // gets the extension that matches how Babel read the text.
+    const isModule = ext === '.mjs' || parse.programs?.[0]?.sourceType === 'module';
+    const isCommonJs = ext === '.cjs' || !isModule;
+    const checkExt = isCommonJs ? '.cjs' : '.mjs';
+    const tmp = path.join(dir, `check${checkExt}`);
+    fs.writeFileSync(tmp, text);
+    const res = spawnSync(process.execPath, ['--check', tmp], { encoding: 'utf-8', timeout: 15000 });
+    const isAccepted = Boolean(res.error) || res.status === 0;
+    if (isAccepted) return null;
+    const lines = String(res.stderr).split('\n');
+    const found = lines.find((l) => /^\w*Error: /.test(l));
+    return found || lines.find((l) => l.trim()) || 'unknown syntax error';
+  } catch {
+    return null;
+  } finally {
+    if (dir) fs.rmSync(dir, { recursive: true, force: true });
+  }
 };
 
 const lapsedIssue = (file, lease) => {
@@ -84,6 +121,9 @@ const planEdit = (edit, root, options) => {
   const wasBroken = Boolean(beforeParse) && !beforeParse.ok;
   const isNewlyBroken = !afterParse.ok && !wasBroken;
   if (isNewlyBroken) return { ...plan, after, issue: `result does not parse (${afterParse.error}); nothing was written` };
+
+  const v8Error = wasBroken ? null : v8SyntaxError(after, absPath, afterParse);
+  if (v8Error) return { ...plan, after, issue: `V8 rejects the result (${v8Error}); nothing was written` };
 
   const delta = beforeParse ? declarationDelta(beforeParse, afterParse, edit.allowRemoved) : { removed: [], added: [], blocked: [] };
   const hasBlockedRemovals = delta.blocked.length > 0;
