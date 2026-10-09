@@ -176,6 +176,12 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
         setExitCodeFrom(runAuditFeedCommand(rawArgs.slice(1)));
         break;
       }
+      const isEach = rawArgs.some((arg) => arg === '--each' || arg.startsWith('--each='));
+      if (isEach) {
+        const { runAuditEachCommand } = await import('./cmd-audit-each.js');
+        setExitCodeFrom(await runAuditEachCommand(rawArgs.slice(1)));
+        break;
+      }
       const posDir = (rawArgs[1] && !rawArgs[1].startsWith('-')) ? rawArgs[1] : null;
       const { refuseMonorepoRootAudit } = await import('../workspace-run.js');
       if (refuseMonorepoRootAudit(posDir, rawArgs)) break;
