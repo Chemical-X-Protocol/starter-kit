@@ -17,7 +17,8 @@ const STATUS_LETTERS = { D: 'D', A: 'A' };
 const resolveBaseRev = (root, base) => {
   if (!base) return { ok: true, rev: 'HEAD', label: 'HEAD' };
   const mergeBase = git(root, ['merge-base', base, 'HEAD']);
-  if (mergeBase.ok) return { ok: true, rev: mergeBase.out.trim(), label: base };
+  const hasMergeBase = mergeBase.ok;
+  if (hasMergeBase) return { ok: true, rev: mergeBase.out.trim(), label: base };
   const exists = git(root, ['rev-parse', '--verify', '--quiet', `${base}^{commit}`]);
   return exists.ok ? { ok: true, rev: base, label: base } : { ok: false, error: `unknown base revision "${base}"` };
 };
@@ -26,11 +27,14 @@ const resolveBaseRev = (root, base) => {
 // or { ok: false, error }.
 export const listChangedFiles = (root, { base = null } = {}) => {
   const top = git(root, ['rev-parse', '--show-toplevel']);
-  if (!top.ok) return { ok: false, error: `not a git repository (${top.err || 'git rev-parse failed'})` };
+  const hasTopLevel = top.ok;
+  if (!hasTopLevel) return { ok: false, error: `not a git repository (${top.err || 'git rev-parse failed'})` };
   const baseRev = resolveBaseRev(root, base);
-  if (!baseRev.ok) return { ok: false, error: baseRev.error };
+  const hasBaseRev = baseRev.ok;
+  if (!hasBaseRev) return { ok: false, error: baseRev.error };
   const diff = git(root, ['diff', '--name-status', '--no-renames', baseRev.rev, '--']);
-  if (!diff.ok) return { ok: false, error: `git diff ${baseRev.label} failed: ${diff.err}` };
+  const hasDiff = diff.ok;
+  if (!hasDiff) return { ok: false, error: `git diff ${baseRev.label} failed: ${diff.err}` };
   const untracked = git(root, ['ls-files', '--others', '--exclude-standard', '--full-name']);
   const topDir = top.out.trim();
   const entries = [
