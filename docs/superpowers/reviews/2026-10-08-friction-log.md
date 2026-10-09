@@ -11,3 +11,5 @@
 - CLI cold start ~1.1s user CPU per call (`chemx p build`), MCP warm call 12ms: big gap for bursts of small queries.
 - chemx test (CLI) picked vitest instead of the kit's own node --test script and also globbed .claude/worktrees/* copies; needed bypass to run cli/search.spec.js
 - guard matched inside quoted strings and heredoc bodies; fixed with literal stripping (keep as a spec case for chemx hook claude-pre-tool)
+- guard blocks multi-file `cat a b c` for reading several small modules; chemx read takes one file per call, so 4 files cost 4 calls (used Read tool instead)
+- pre-commit gate (grade B on staged files) blocks any commit touching cli/mcp/server.js because of a pre-existing swallowed-catch that already carries a chemx-allow comment; also flags a cleared setTimeout (TIMER_DISCIPLINE) and a handled writeSync fallback catch as CRITICAL. Used CHEMX_SKIP_PRECOMMIT=1 for G3 commits; verify ratchet is the real gate

@@ -1,10 +1,10 @@
-import readline from 'node:readline';
-import fs from 'node:fs';
 import { MCP_TOOLS, executeMcpTool } from './tools.js';
 import { MCP_RESOURCES, readMcpResource } from './resources.js';
 import { MCP_PROMPTS, getMcpPrompt } from './prompts.js';
 import { warmIndexDb } from '../search-db.js';
 import { resolveCallScope, extractCallTarget, hasProjectMarker } from './call-scope.js';
+
+export { startStdioServer } from './stdio.js';
 
 export const SERVER_INFO = {
   name: 'chemical-x-mcp',
@@ -15,7 +15,7 @@ export const PROTOCOL_VERSION = '2024-11-05';
 
 export const createMcpHandler = (options = {}) => {
   let declaredRoot = options.cwd || null;
-  const startDir = process.cwd();
+  const startDir = options.bootDir || process.cwd();
   const bootRoot = hasProjectMarker(startDir) ? startDir : null;
   const subscriptions = new Set();
   let isInitialized = false;
@@ -77,7 +77,12 @@ export const createMcpHandler = (options = {}) => {
 
     if (method === 'tools/call') {
       const toolName = params?.name;
-      const toolArgs = params?.arguments || {};
+      const toolArgs = params?.arguments ?? {};
+      const hasToolName = typeof toolName === 'string' && toolName.length > 0;
+      const hasObjectArgs = toolArgs !== null && typeof toolArgs === 'object' && !Array.isArray(toolArgs);
+      if (!hasToolName || !hasObjectArgs) {
+        return { jsonrpc: '2.0', id, error: { code: -32602, message: 'Invalid params: tools/call needs params.name (string) and params.arguments (object).' } };
+      }
       const scope = resolveCallScope({ target: extractCallTarget(toolName, toolArgs), declaredRoot, bootRoot });
       if (!scope.ok) {
         return {
@@ -242,72 +247,4 @@ export const createMcpHandler = (options = {}) => {
       return null;
     }
   };
-};
-
-export const startStdioServer = (options = {}) => {
-  const input = options.input || process.stdin;
-  const output = options.output || process.stdout;
-  const rawStdoutWrite = process.stdout.write.bind(process.stdout);
-  const handler = createMcpHandler(options);
-
-  const writeJsonRpc = (jsonObj) => {
-    const payload = JSON.stringify(jsonObj) + '\n';
-    if (output === process.stdout) {
-      try {
-        fs.writeSync(1, payload);
-      } catch {
-        rawStdoutWrite(payload);
-      }
-    } else {
-      output.write(payload);
-    }
-  };
-
-  // Stdio isolation: guard process.stdout so any non-JSON-RPC writes are routed to stderr
-  if (output === process.stdout) {
-    process.stdout.write = (chunk, encoding, callback) => {
-      return process.stderr.write(chunk, encoding, callback);
-    };
-  }
-
-  const notifyResourceUpdated = (uri) => {
-    const notification = handler.notifyResourceUpdated(uri);
-    if (notification) {
-      writeJsonRpc(notification);
-    }
-  };
-
-  input.on('error', (err) => {
-    process.stderr.write(`[mcp:stdio] stdin error: ${err?.message || err}\n`);
-  });
-
-  const rl = readline.createInterface({
-    input,
-    terminal: false
-  });
-
-  rl.on('line', async (line) => {
-    const trimmed = line.trim();
-    if (!trimmed) return;
-
-    try {
-      const parsed = JSON.parse(trimmed);
-      const response = await handler.handleRequest(parsed);
-      if (response) {
-        writeJsonRpc(response);
-      }
-    } catch (parseErr) {
-      const parseErrorResponse = {
-        jsonrpc: '2.0',
-        id: null,
-        error: {
-          code: -32700,
-          message: `Parse error: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`
-        }
-      };
-      writeJsonRpc(parseErrorResponse);
-    }
-  });
-
-  return { rl, handler, notifyResourceUpdated };
 };
