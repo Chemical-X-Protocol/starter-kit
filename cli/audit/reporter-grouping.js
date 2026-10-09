@@ -151,9 +151,12 @@ export const groupViolationsByRule = (violations = []) => {
 };
 
 const resolveSeverityColor = (severity) => {
-  if (severity === 'CRITICAL') return RED;
-  if (severity === 'HIGH') return ORANGE;
-  if (severity === 'MEDIUM') return YELLOW;
+  const isCritical = severity === 'CRITICAL';
+  if (isCritical) return RED;
+  const isHigh = severity === 'HIGH';
+  if (isHigh) return ORANGE;
+  const isMedium = severity === 'MEDIUM';
+  if (isMedium) return YELLOW;
   return DIM;
 };
 
@@ -169,13 +172,15 @@ export const buildPathTree = (violations = []) => {
     let current = root;
     for (const seg of segments) {
       const segName = seg.endsWith('/') ? seg : `${seg}/`;
-      if (!current.dirs.has(segName)) {
+      const hasDir = current.dirs.has(segName);
+      if (!hasDir) {
         current.dirs.set(segName, { dirs: new Map(), files: new Map() });
       }
       current = current.dirs.get(segName);
     }
 
-    if (!current.files.has(fileName)) {
+    const hasFile = current.files.has(fileName);
+    if (!hasFile) {
       current.files.set(fileName, []);
     }
     const loc = v.column ? `${v.line}:${v.column}` : `${v.line}`;
