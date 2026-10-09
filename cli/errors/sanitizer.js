@@ -72,9 +72,12 @@ const isMaskablePrimitive = (value) => value !== null && value !== undefined && 
 export const sanitizeValue = (value, seen = new WeakSet(), isUnderSecret = false) => {
   const isSecretValue = isUnderSecret && isMaskablePrimitive(value);
   if (isSecretValue) return '[REDACTED_SECRET]';
-  if (typeof value === 'string') return sanitizeText(value);
-  if (!value || typeof value !== 'object') return value;
-  if (seen.has(value)) return '[Circular]';
+  const isStringValue = typeof value === 'string';
+  if (isStringValue) return sanitizeText(value);
+  const isNonObjectValue = !value || typeof value !== 'object';
+  if (isNonObjectValue) return value;
+  const isCircular = Boolean(seen.has(value));
+  if (isCircular) return '[Circular]';
   seen.add(value); // ancestors only, so a shared (non-circular) reference is still rendered
   try {
     if (Array.isArray(value)) return value.map((item) => sanitizeValue(item, seen, isUnderSecret));
