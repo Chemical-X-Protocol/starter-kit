@@ -12,6 +12,7 @@ import {
   publishIssue
 } from './errors/index.js';
 import { printHelp } from './help.js';
+import { ROUTABLE_COMMAND_TOKENS } from './commands-schema.js';
 
 sanitizeOutputStreams();
 installGlobalErrorCatcher();
@@ -78,39 +79,7 @@ export { handleError, withErrorCatcher, publishIssue };
 // ---------------------------------------------------------------------------
 
 export const ALLOWED_COMMANDS = new Set([
-  'search', 'q', 'query', 'find',
-  'd', 'diff',
-  'log',
-  'p', 'pkg',
-  'f', 'ls',
-  'j', 'json',
-  'do', 'batch',
-  'trace', 'backtrace',
-  'read', 'view', 'r',
-  'patch', 'edit',
-  'write',
-  'generate', 'g', 'gen', 'capsule', 'add', 'jig',
-  'explode', 'unpack',
-  'audit',
-  'trend', 'trends',
-  'verify', 'check:all',
-  'team', 'swarm', 'feed', 'tokens', 'telemetry',
-  'project', 'coordinator',
-  'benchmark', 'ablation', 'memory',
-  'pillars', 'rules', 'config:pillars',
-  'mcp', 'mcp-server', 'server', 'install-mcp', 'setup-mcp',
-  'build', 'run', 'wrap',
-  'typecheck', 'check:types', 'tsc',
-  'lint', 'check:lint', 'eslint',
-  'test', 'tests', 'check:test',
-  'check',
-  'badge', 'badges',
-  'ui', 'preview', 'dashboard',
-  'create', 'scaffold',
-  'init',
-  'hook', 'hooks', 'install-hooks', 'setup-ci',
-  'add:prop', 'add:state', 'add:action', 'fix',
-  'tesseract', 'cube', 'matrix',
+  ...ROUTABLE_COMMAND_TOKENS,
   'help', '--help', '-h',
   'version', '--version', '-v'
 ]);
@@ -127,7 +96,7 @@ const main = async () => {
 
   const isHelpRequested = !firstArg || HELP_FLAGS.has(firstArg);
   if (isHelpRequested) {
-    printHelp();
+    await printHelp(rawArgs.slice(1));
     return;
   }
 

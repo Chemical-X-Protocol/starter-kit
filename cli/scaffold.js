@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { hasGum, gumInput, promptQuestion, renderBanner, isStdinTty, isStdoutTty } from './terminal.js';
+import { hasGum, gumInput, promptQuestion, isStdinTty, isStdoutTty } from './terminal.js';
+import { renderBanner } from './banner.js';
 import { obtainLicenseKey, fetchStarterKitFiles, loadLocalBlueprintFiles } from './license.js';
 import { runPillarsWizard } from './pillars-wizard.js';
 import { resolvePackageManager } from './build/detector.js';

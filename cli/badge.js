@@ -4,9 +4,9 @@ import {
   hasGum,
   gumChoose,
   gumInput,
-  promptQuestion,
-  renderBanner
+  promptQuestion
 } from './terminal.js';
+import { renderBanner } from './banner.js';
 import { copyToClipboard } from './audit/social-git.js';
 import { getAuditHistory, getAuditBaseline } from './audit/history.js';
 import { getStoredDiscussion } from './audit/discussion-store.js';

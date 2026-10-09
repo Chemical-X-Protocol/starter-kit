@@ -3,8 +3,76 @@ import assert from 'node:assert';
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { COMMANDS_SCHEMA } from './commands-schema.js';
-import { printHelp, printInitHelp, printScaffoldHelp } from './help.js';
+import os from 'node:os';
+import { spawn } from 'node:child_process';
+import { COMMANDS_SCHEMA, ROUTABLE_COMMAND_TOKENS, findCommandSchema } from './commands-schema.js';
+import { printHelp, printInitHelp, printScaffoldHelp, formatTopLevelHelp, resolveCommandHelpTopic } from './help.js';
+
+const CLI = path.resolve(path.dirname(new URL(import.meta.url).pathname), 'index.js');
+
+const runPiped = (args, cwd) => new Promise((resolve) => {
+  const env = { ...process.env };
+  delete env.FORCE_COLOR;
+  const child = spawn(process.execPath, [CLI, ...args], { cwd, env, stdio: ['ignore', 'pipe', 'pipe'] });
+  let stdout = '';
+  let stderr = '';
+  const timer = setTimeout(() => child.kill('SIGKILL'), 15000);
+  child.stdout.on('data', (d) => { stdout += d; });
+  child.stderr.on('data', (d) => { stderr += d; });
+  child.on('close', (status, signal) => { clearTimeout(timer); resolve({ args, status, signal, stdout, stderr }); });
+});
+
+const runAllPiped = async (argLists, cwd, parallel = 8) => {
+  const results = [];
+  const queue = [...argLists];
+  const worker = async () => {
+    while (queue.length > 0) results.push(await runPiped(queue.shift(), cwd));
+  };
+  await Promise.all(Array.from({ length: parallel }, worker));
+  return results;
+};
+
+test('help: top-level help is generated from the schema and stays under 1,500 bytes', () => {
+  const text = formatTopLevelHelp();
+  assert.ok(Buffer.byteLength(text) < 1500, `top-level help is ${Buffer.byteLength(text)} bytes`);
+  for (const entry of COMMANDS_SCHEMA) {
+    assert.ok(text.includes(entry.brief), `top-level help must list ${entry.name}`);
+  }
+  assert.doesNotMatch(text, /\x1b\[/);
+});
+
+test('help: every routable token resolves to a schema entry and to its own --help', () => {
+  for (const token of ROUTABLE_COMMAND_TOKENS) {
+    assert.ok(findCommandSchema(token), `${token} has a schema entry`);
+    assert.strictEqual(resolveCommandHelpTopic(token, [token, '--help']), token);
+  }
+  assert.strictEqual(resolveCommandHelpTopic('q', ['q', 'needle']), null);
+  assert.strictEqual(resolveCommandHelpTopic('build', ['build', '--', 'tool', '--help']), null);
+  assert.strictEqual(resolveCommandHelpTopic('team', ['team', 'task', '--help']), null, 'team owns subcommand help');
+});
+
+test('help: command matrix: every `<command> --help` prints usage, exits 0, runs nothing', async () => {
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-help-matrix-'));
+  fs.writeFileSync(path.join(sandbox, 'package.json'), JSON.stringify({ name: 'fx', scripts: { build: 'node -e "require(\'fs\').writeFileSync(\'BUILD_RAN\',\'1\')"' } }));
+  const argLists = [...ROUTABLE_COMMAND_TOKENS.map((token) => [token, '--help']), ['m-card', '-h'], ['help', 'read']];
+  const results = await runAllPiped(argLists, sandbox);
+  const entries = fs.readdirSync(sandbox);
+  fs.rmSync(sandbox, { recursive: true, force: true });
+
+  for (const r of results) {
+    const label = `chemx ${r.args.join(' ')}`;
+    assert.strictEqual(r.status, 0, `${label} exited ${r.status} (${r.signal ?? ''}): ${r.stderr.slice(0, 200)}`);
+    assert.match(r.stdout, /^USAGE\n {2}\S/, `${label} prints usage first`);
+    assert.doesNotMatch(r.stdout + r.stderr, /\x1b\[/, `${label} is ANSI-free when piped`);
+  }
+  assert.deepStrictEqual(entries, ['package.json'], 'no command may act or write files when asked for --help');
+});
+
+test('help: `chemx help <unknown>` fails with a pointer to the command list', async () => {
+  const [r] = await runAllPiped([['help', 'definitely-not-a-command']], os.tmpdir(), 1);
+  assert.strictEqual(r.status, 1);
+  assert.match(r.stderr, /Unknown command "definitely-not-a-command"/);
+});
 
 test('commands-schema: contains all 9 core chemical-x CLI commands', () => {
   const expected = ['search', 'read', 'patch', 'mcp', 'build', 'audit', 'generate', 'team', 'verify'];

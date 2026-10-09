@@ -6,7 +6,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { renderBanner, hasGum, gumChoose, promptQuestion, isStdinTty } from './terminal.js';
+import { hasGum, gumChoose, promptQuestion, isStdinTty } from './terminal.js';
+import { renderBanner } from './banner.js';
 import { PILLARS, PILLAR_PRESETS } from './pillars-schema.js';
 import { planFileWrite, applyFileWrites } from './pillars-write-guard.js';
 import { buildHostShims } from './host-shims.js';

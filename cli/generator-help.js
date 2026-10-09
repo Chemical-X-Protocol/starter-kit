@@ -1,4 +1,4 @@
-import { renderBanner } from './terminal.js';
+import { renderBanner } from './banner.js';
 
 export const printGenerateHelp = () => {
   renderBanner('Chemical X: Capsule Generator Usage');

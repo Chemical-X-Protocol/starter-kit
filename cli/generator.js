@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { hasGum, gumChoose, gumInput, promptQuestion, renderBanner, isStdinTty } from './terminal.js';
+import { hasGum, gumChoose, gumInput, promptQuestion, isStdinTty } from './terminal.js';
+import { renderBanner } from './banner.js';
 import { checkOrPromptEvaluation } from './license.js';
 import {
   toPascalCase,

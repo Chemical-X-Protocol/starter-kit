@@ -6,7 +6,6 @@
 
 import path from 'node:path';
 import { isStdinTty, isStdoutTty } from '../terminal.js';
-import { printHelp } from '../help.js';
 
 /**
  * @param {string|null} customDir
