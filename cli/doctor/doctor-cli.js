@@ -36,7 +36,8 @@ const renderText = (report) => {
   for (const check of report.checks) lines.push(`  ${MARKS[check.status] ?? check.status} ${check.id.padEnd(11)} ${check.summary}`);
   const fixHint = report.checks.some((check) => check.status === STATUS.FAIL && check.fixable) && !report.fix;
   if (fixHint) lines.push('  Run chemx doctor --fix to repair hooks and the MCP launch (backups in .chemx/backups).');
-  if (report.fix) lines.push(`  fix: install-hooks ${report.fix.status}; ${report.fix.actions.map((action) => `${action.label} ${action.status}`).join(', ')}`);
+  const hasFixReport = Boolean(report.fix);
+  if (hasFixReport) lines.push(`  fix: install-hooks ${report.fix.status}; ${report.fix.actions.map((action) => `${action.label} ${action.status}`).join(', ')}`);
   return `${lines.join('\n')}\n`;
 };
 
