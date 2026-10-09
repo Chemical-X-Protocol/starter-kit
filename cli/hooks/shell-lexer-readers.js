@@ -25,11 +25,16 @@ export const readBalanced = (source, open) => {
   let index = open;
   while (index < source.length) {
     const char = source[index];
-    if (char === '\\') { index += 2; continue; }
-    if (char === "'") { index = readSingleQuoted(source, index).end; continue; }
-    if (char === '"') { index = readDoubleQuoted(source, index).end; continue; }
-    if (char === '(') depth += 1;
-    if (char === ')') depth -= 1;
+    const isBackslash = char === '\\';
+    if (isBackslash) { index += 2; continue; }
+    const isSingleQuote = char === "'";
+    if (isSingleQuote) { index = readSingleQuoted(source, index).end; continue; }
+    const isDoubleQuote = char === '"';
+    if (isDoubleQuote) { index = readDoubleQuoted(source, index).end; continue; }
+    const isOpenParen = char === '(';
+    if (isOpenParen) depth += 1;
+    const isCloseParen = char === ')';
+    if (isCloseParen) depth -= 1;
     index += 1;
     const isClosed = depth === 0;
     if (isClosed) break;
@@ -55,7 +60,8 @@ export const readDoubleQuoted = (source, start) => {
       index = read.end;
       continue;
     }
-    if (char === '`') {
+    const isBacktick = char === '`';
+    if (isBacktick) {
       const read = readBacktick(source, index);
       subs.push(read.inner);
       value += read.raw;
