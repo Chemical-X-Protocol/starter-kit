@@ -157,23 +157,30 @@ test('ranking: score = (instances - 1) * mass * (1 - holeRatio) * levelWeight, r
   assert.equal(ranked.filter((group) => group.isSurfaced).length, Math.min(TOP_SURFACED, ranked.length));
 });
 
-test('maximality: a group inside a higher-scored group is folded into it (the savings-modal siblings into A24)', () => {
+test('maximality: folded groups point at a surfacing root that lists them (the savings-modal siblings into A24)', () => {
   const byId = new Map(state.result.groups.map((group) => [group.id, group]));
   const folded = state.result.groups.filter((group) => group.foldedInto);
   assert.ok(folded.length > 0);
+  const FOLD_REASONS = new Set(['inside', 'overlap', 'block', 'wrapper', 'variant', 'fragment']);
   for (const group of folded) {
     const host = byId.get(group.foldedInto);
-    assert.ok(host.score >= group.score);
-    assert.ok(group.instances.every((instance) => host.instances.some((candidate) => contains(candidate, instance))));
+    assert.equal(host.foldedInto, null);
+    assert.ok(host.rank !== null && group.rank === null);
+    assert.ok(FOLD_REASONS.has(group.foldReason));
+    assert.ok(host.folded.some((member) => member.id === group.id && member.reason === group.foldReason));
+    const family = [host, ...host.folded.map((member) => byId.get(member.id))];
+    const isInsideFamily = group.instances.every((instance) => family.some((other) => other !== group && other.instances.some((candidate) => contains(candidate, instance))));
+    assert.ok(group.foldReason !== 'inside' || isInsideFamily);
   }
   const tiles = state.result.groups.find((group) => group.path === 'T' && anchorsCovered(group, 'A24') > 0);
   assert.ok(folded.some((group) => group.path === 'W' && group.kind === 'tmpl' && group.foldedInto === tiles.id));
 });
 
+// On the sandbox every sub-piece is now folded (it has at most one site outside its host), so no link
+// forms here; fold.spec.js pins a link on a piece that stands elsewhere.
 test('dependsOn links a group to a lower-scored piece found inside every one of its instances', () => {
   const byId = new Map(state.result.groups.map((group) => [group.id, group]));
   const linked = state.result.groups.filter((group) => (group.dependsOn ?? []).length > 0);
-  assert.ok(linked.length > 0);
   for (const group of linked) {
     for (const piece of group.dependsOn.map((id) => byId.get(id))) {
       assert.ok(piece.score < group.score);

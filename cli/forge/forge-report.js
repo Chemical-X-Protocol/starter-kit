@@ -1,7 +1,8 @@
 // Text for `chemx patterns --forge` (design doc, Surfaces: one line per group, then one rejected-summary
 // line by reason code). Naming, placement and blueprints are P5, so a line names the group by its id,
 // path and kind, and points at its first site:
-//   1. 3f2a9c0d1b4e5f60 W window | 13 sites/1 file | E68 mass35 holes 4 | cli/team/team-flags.js:43 | drift 1, dependsOn 1
+//   1. 3f2a9c0d1b4e5f60 W window | 13 sites/1 file | E68 mass35 holes 4 | cli/team/team-flags.js:43 | drift 1, dependsOn 1, folds 3
+// A slot stands for its shape: `folds N` counts the groups rank.js folded into it (--explain lists them).
 // --rejected lists the turned-away groups the same way with their reason codes; --explain=<id> prints a
 // group's holes, captures, members by role and its codes.
 import { REJECT_CODES } from './rejects.js';
@@ -15,7 +16,8 @@ const evidenceText = (group) => `E${Math.round(group.evidence * 10) / 10} mass${
 const notesOf = (group) => [
   [group.drift?.length, 'drift'],
   [group.dependsOn?.length, 'dependsOn'],
-  [group.evicted?.length, 'evicted']
+  [group.evicted?.length, 'evicted'],
+  [group.folded?.length, 'folds']
 ].filter(([count]) => count > 0).map(([count, label]) => `${label} ${count}`).join(', ');
 
 const sitesText = (group) => `${plural(group.memberCount, 'site')}/${plural(group.fileCount, 'file')}`;
@@ -64,6 +66,8 @@ export const explainLines = (group) => {
     ...group.instances.map((instance) => spanLine('member')({ ...instance, reason: null })),
     ...(group.drift ?? []).map(spanLine('drift')),
     ...(group.evicted ?? []).map(spanLine('evicted')),
-    ...((group.dependsOn ?? []).length > 0 ? [`dependsOn: ${group.dependsOn.join(', ')}`] : [])
+    ...((group.dependsOn ?? []).length > 0 ? [`dependsOn: ${group.dependsOn.join(', ')}`] : []),
+    ...(group.foldedInto ? [`folded into ${group.foldedInto} (${group.foldReason})`] : []),
+    ...(group.folded ?? []).map((member) => `  folds ${member.id} (${member.reason})`)
   ];
 };

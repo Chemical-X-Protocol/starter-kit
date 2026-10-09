@@ -79,6 +79,13 @@ const countBy = (items, keyOf) => {
   return Object.fromEntries(Object.entries(counts).sort(([a], [b]) => byCodePoint(a, b)));
 };
 
+// A group's skeleton for variant folding (fold.js): the fp3 sequence its instances share, or null when
+// they differ.
+const skeletonReader = (rowsById) => (group) => {
+  const sequences = new Set(group.instances.map((instance) => instance.unitIds.map((id) => rowsById.get(id)?.fp3 ?? '?').join(',')));
+  return sequences.size === 1 ? [...sequences][0] : null;
+};
+
 const reasonCodeOf = (reason) => (reason.startsWith(REFINE_PREFIX) ? 'refine' : reason.split('.')[0]);
 
 // Accepted groups a `chemx patterns reject` suppressed: status suppressed, never surfaced.
@@ -121,7 +128,7 @@ export const buildForgeGroups = (ledger, { readFile = () => null, unify, include
   const kept = applySuppressions(dedupeById(judged.accepted.sort(byPathThenLocation)), suppressions);
   const suppressed = kept.filter((group) => group.status === 'suppressed');
   const accepted = kept.filter((group) => group.status !== 'suppressed');
-  rankGroups(accepted.filter((group) => group.status === 'candidate'));
+  rankGroups(accepted.filter((group) => group.status === 'candidate'), { skeletonOf: skeletonReader(rowsById) });
   const idioms = accepted.filter((group) => group.status === 'idiom');
   const groups = includeIdioms ? accepted : accepted.filter((group) => group.status !== 'idiom');
   const refined = rejected.filter((group) => group.rejectReason.startsWith(REFINE_PREFIX)).sort(byPathThenLocation);
