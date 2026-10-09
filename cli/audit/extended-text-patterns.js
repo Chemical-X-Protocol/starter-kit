@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { RULE_REGISTRY } from './rules-registry.js';
+import { ruleTree } from '../rules.js';
 import { toResultSync } from './rules-helpers.js';
 import {
   isComponentExtension,
@@ -32,35 +33,50 @@ const JAVASCRIPT_URL_TEMPLATE_PATTERN = /\b(?:href|src|action|formaction)\s*=\s*
 /**
  * Pillar 10: Check for co-located test files for molecule capsules.
  */
-export const checkMoleculeCoLocatedTest = (filePath, relativePath, violations, config = {}) => {
+const isMissingColocatedTest = (filePath, relativePath, config) => {
   const enforceColocated = config.enforceColocatedTests ?? (config.profile === 'atomic-strict');
-  if (!enforceColocated) return;
-
   const baseName = path.basename(filePath);
   const ext = path.extname(filePath);
+  const state = { siblings: [] };
 
-  // Stage 1: Atomic Concept Declarations
-  const isMoleculePath = relativePath.includes('molecules') || baseName.startsWith('m-');
-  const isComponentExt = isComponentExtension(ext);
-  const isTestOrSpecFile = baseName.includes('.spec.') || baseName.includes('.test.');
+  const isNotMoleculeComponent = () => {
+    const isMoleculePath = relativePath.includes('molecules') || baseName.startsWith('m-');
+    const isComponentExt = isComponentExtension(ext);
+    const isTestOrSpecFile = baseName.includes('.spec.') || baseName.includes('.test.');
+    const isCandidateComponent = isMoleculePath && isComponentExt;
+    const isMoleculeComponent = isCandidateComponent && !isTestOrSpecFile;
+    return !isMoleculeComponent;
+  };
 
-  // Stage 2: Unified Decision Variable & Early Guard Clause
-  const isCandidateComponent = isMoleculePath && isComponentExt;
-  const isMoleculeComponent = isCandidateComponent && !isTestOrSpecFile;
-  if (!isMoleculeComponent) return;
+  const cannotInspectSiblings = () => {
+    const dir = path.dirname(filePath);
+    const [siblings, dirError] = toResultSync(() => (fs.existsSync(dir) ? fs.readdirSync(dir) : []));
+    state.siblings = siblings;
+    const hasDirError = Boolean(dirError);
+    const hasSiblings = Boolean(siblings);
+    const canInspectSiblings = !hasDirError && hasSiblings;
+    return !canInspectSiblings;
+  };
 
-  const dir = path.dirname(filePath);
-  const [siblings, dirError] = toResultSync(() => (fs.existsSync(dir) ? fs.readdirSync(dir) : []));
+  const hasCoLocatedTest = () => {
+    const isTestSibling = (fileName) => /\.(test|spec)\.[jt]sx?$/.test(fileName);
+    return state.siblings.some(isTestSibling);
+  };
 
-  // Stage 1: Atomic Guard Check
-  const hasDirError = Boolean(dirError);
-  const hasSiblings = Boolean(siblings);
-  const canInspectSiblings = !hasDirError && hasSiblings;
-  if (!canInspectSiblings) return;
+  const gate = ruleTree({
+    skip: {
+      notEnforced: !enforceColocated,
+      notMoleculeComponent: isNotMoleculeComponent,
+      cannotInspectSiblings,
+      hasCoLocatedTest
+    }
+  }, { failFast: true });
+  return gate.ok;
+};
 
-  const isTestSibling = (fileName) => /\.(test|spec)\.[jt]sx?$/.test(fileName);
-  const hasCoLocatedTest = siblings.some(isTestSibling);
-  if (hasCoLocatedTest) return;
+export const checkMoleculeCoLocatedTest = (filePath, relativePath, violations, config = {}) => {
+  const isMissingTest = isMissingColocatedTest(filePath, relativePath, config);
+  if (!isMissingTest) return;
 
   const meta = RULE_REGISTRY.TEST_MISSING_COLOCATED;
   violations.push({
@@ -79,47 +95,70 @@ export const checkMoleculeCoLocatedTest = (filePath, relativePath, violations, c
  * Pillar 3: Return-shape diff check to ensure view only references identifiers
  * present in the co-located controller's return object.
  */
-export const checkControllerViewContract = (filePath, relativePath, content, violations) => {
+const locateControllerReturn = (filePath, relativePath, content) => {
   const baseName = path.basename(filePath);
   const ext = path.extname(filePath);
+  const state = { controllerRel: '', controllerContent: '', openIdx: -1 };
 
-  const isMoleculePath = relativePath.includes('molecules') || baseName.startsWith('m-') || baseName.startsWith('o-');
-  const isComponentExt = isComponentExtension(ext);
-  const isTestOrSpecFile = baseName.includes('.spec.') || baseName.includes('.test.');
+  const isNotComponent = () => {
+    const isMoleculePath = relativePath.includes('molecules') || baseName.startsWith('m-') || baseName.startsWith('o-');
+    const isComponentExt = isComponentExtension(ext);
+    const isTestOrSpecFile = baseName.includes('.spec.') || baseName.includes('.test.');
+    const isComponent = isMoleculePath && isComponentExt && !isTestOrSpecFile;
+    return !isComponent;
+  };
 
-  const isComponent = isMoleculePath && isComponentExt && !isTestOrSpecFile;
-  if (!isComponent) return;
+  const hasNoControllerImport = () => {
+    const controllerImportMatch = content.match(/from\s+['"]\.\/([a-zA-Z0-9_-]+\.controller)(?:\.ts)?['"]/);
+    if (controllerImportMatch) state.controllerRel = controllerImportMatch[1];
+    return !controllerImportMatch;
+  };
 
-  const controllerImportMatch = content.match(/from\s+['"]\.\/([a-zA-Z0-9_-]+\.controller)(?:\.ts)?['"]/);
-  if (!controllerImportMatch) return;
-
-  const controllerRel = controllerImportMatch[1];
-  const dir = path.dirname(filePath);
-  const controllerFullPath = path.join(dir, `${controllerRel}.ts`);
-
-  const [controllerContent, readErr] = toResultSync(() => {
-    const hasController = fs.existsSync(controllerFullPath);
-    if (hasController) {
-      return fs.readFileSync(controllerFullPath, 'utf-8');
-    }
-    return null;
-  });
-
-  const isControllerUnreadable = Boolean(readErr || !controllerContent);
-  if (isControllerUnreadable) return;
+  const isControllerUnreadable = () => {
+    const dir = path.dirname(filePath);
+    const controllerFullPath = path.join(dir, `${state.controllerRel}.ts`);
+    const [controllerContent, readErr] = toResultSync(() => {
+      const hasController = fs.existsSync(controllerFullPath);
+      if (hasController) {
+        return fs.readFileSync(controllerFullPath, 'utf-8');
+      }
+      return null;
+    });
+    state.controllerContent = controllerContent;
+    return Boolean(readErr || !controllerContent);
+  };
 
   // Locate the last `return {` in the controller (handles early-return guards).
+  const hasNoReturnObject = () => state.controllerContent.lastIndexOf('return {') === -1;
+
+  const hasNoOpenBrace = () => {
+    const returnStartIdx = state.controllerContent.lastIndexOf('return {');
+    state.openIdx = state.controllerContent.indexOf('{', returnStartIdx);
+    return state.openIdx === -1;
+  };
+
+  const gate = ruleTree({
+    skip: {
+      isNotComponent,
+      hasNoControllerImport,
+      isControllerUnreadable,
+      hasNoReturnObject,
+      hasNoOpenBrace
+    }
+  }, { failFast: true });
+  return { ok: gate.ok, controllerRel: state.controllerRel, controllerContent: state.controllerContent, openIdx: state.openIdx };
+};
+
+export const checkControllerViewContract = (filePath, relativePath, content, violations) => {
+  const located = locateControllerReturn(filePath, relativePath, content);
+  const isLocated = located.ok;
+  if (!isLocated) return;
+
   // Use a brace-depth-aware scan to find the matching closing brace so that
   // nested object literals (e.g. `filter: { current, set }`) do not truncate
   // the extraction prematurely: the non-greedy `[\s\S]*?` regex stops at the
   // first `}` it sees, which is wrong for controllers with nested return props.
-  const returnStartIdx = controllerContent.lastIndexOf('return {');
-  const hasReturnObject = returnStartIdx !== -1;
-  if (!hasReturnObject) return;
-
-  const openIdx = controllerContent.indexOf('{', returnStartIdx);
-  const hasOpenBrace = openIdx !== -1;
-  if (!hasOpenBrace) return;
+  const { controllerRel, controllerContent, openIdx } = located;
 
   let depth = 0;
   let closeIdx = -1;
