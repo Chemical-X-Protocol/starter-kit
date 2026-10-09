@@ -33,7 +33,8 @@ export const startUiDevWatcher = (cwd = process.cwd(), onReload) => {
     cancelTimer();
     activeTimer = setTimeout(() => {
       process.stdout.write(`\x1b[35m⚡ [Chemical X Dev]\x1b[0m Hot-reloading due to: ${filename || target}\n`);
-      if (typeof onReload === 'function') onReload(filename);
+      const isReloadHandler = typeof onReload === 'function';
+      if (isReloadHandler) onReload(filename);
       activeTimer = null;
     }, 50);
     return () => cancelTimer();
