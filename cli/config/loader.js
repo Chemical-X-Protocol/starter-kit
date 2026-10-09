@@ -111,7 +111,8 @@ export const findAndLoadConfigFile = (cwd = process.cwd()) => {
   ];
 
   for (const filePath of candidates) {
-    if (fs.existsSync(filePath)) {
+    const isPresent = fs.existsSync(filePath);
+    if (isPresent) {
       const content = fs.readFileSync(filePath, 'utf-8');
       const parsed = parseJsonSafe(content);
       const isObject = parsed !== null && typeof parsed === 'object';
@@ -130,7 +131,8 @@ export const findAndLoadConfigFile = (cwd = process.cwd()) => {
   }
 
   const pkgPath = path.resolve(cwd, 'package.json');
-  if (fs.existsSync(pkgPath)) {
+  const hasPackageJson = fs.existsSync(pkgPath);
+  if (hasPackageJson) {
     const rawPkg = fs.readFileSync(pkgPath, 'utf-8');
     const pkg = parseJsonSafe(rawPkg);
     const hasChemxField = Boolean(pkg?.chemx);
