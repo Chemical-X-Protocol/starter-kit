@@ -34,14 +34,17 @@ export const runShow = async (rawArgs = [], isCli = true, cwd = process.cwd()) =
   if (isOutsideRepo) return emitWrapperResult({ output: '', code: NOT_A_REPO_CODE, error: `not a git repository: ${cwd}` }, isCli);
   const { rev, wantsPatch, isFull, tail } = parseShowArgs(subArgs);
   const header = runGit(['show', '-s', '--no-color', '--date=iso', `--format=${HEADER_FORMAT}`, rev], cwd);
-  if (header.code !== 0) return emitWrapperResult({ output: '', code: header.code, error: header.error }, isCli);
+  const isHeaderFailed = header.code !== 0;
+  if (isHeaderFailed) return emitWrapperResult({ output: '', code: header.code, error: header.error }, isCli);
   const stat = runGit(['show', '--stat', '--format=', '--no-color', rev, ...tail], cwd);
-  if (stat.code !== 0) return emitWrapperResult({ output: '', code: stat.code, error: stat.error }, isCli);
+  const isStatFailed = stat.code !== 0;
+  if (isStatFailed) return emitWrapperResult({ output: '', code: stat.code, error: stat.error }, isCli);
   const headerText = header.stdout.split('\n').map((line) => line.trimEnd()).join('\n').trimEnd();
   const parts = [headerText, '', stat.stdout.replace(/^\n+/, '').trimEnd()];
   if (wantsPatch) {
     const patch = runGit(['show', '-U0', '--format=', '--no-color', rev, ...tail], cwd);
-    if (patch.code !== 0) return emitWrapperResult({ output: '', code: patch.code, error: patch.error }, isCli);
+    const isPatchFailed = patch.code !== 0;
+    if (isPatchFailed) return emitWrapperResult({ output: '', code: patch.code, error: patch.error }, isCli);
     parts.push('', compactPatch(patch.stdout.replace(/^\n+/, '').trimEnd(), rev, isFull).trimEnd());
   }
   return emitWrapperResult({ output: `${parts.join('\n')}\n`, code: 0 }, isCli);
