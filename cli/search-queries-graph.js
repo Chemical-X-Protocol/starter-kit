@@ -3,7 +3,7 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { extractSymbolBlock } from './reader.js';
 import { debugNote } from './search-debug.js';
-import { resolveGraphSeed, walkConsumers, findUnresolvedImporters } from './search-graph-edges.js';
+import { resolveGraphSeed, walkConsumers, findUnresolvedImporters, findSymbolRow, findCalleeDefinition } from './search-graph-edges.js';
 import { moduleKeysFor } from './search-resolve.js';
 
 const _require = createRequire(import.meta.url);
@@ -125,17 +125,6 @@ export const extractCalleesFromCode = (code) => {
   return Array.from(callees);
 };
 
-// One definition per name, chosen deterministically: the current file's own definition first,
-// then an exported one, then by path. Never whichever row SQLite happens to return first.
-const SYMBOL_ROW_SQL = `
-  SELECT s.name, s.kind, s.start_line, s.end_line, s.file_path, f.tier
-  FROM symbols s
-  JOIN files f ON s.file_path = f.path
-  WHERE s.name = ?1
-  ORDER BY (s.file_path = ?2) DESC, s.is_export DESC, s.file_path, s.start_line
-  LIMIT 1
-`;
-
 /**
  * Calculates forward call trace: downstream functions invoked by target symbol.
  *
@@ -153,7 +142,7 @@ export const calculateCallTrace = (db, targetSymbolOrPath, options = {}) => {
   const cleanTarget = targetSymbolOrPath.trim();
   const maxDepth = typeof options.maxDepth === 'number' ? options.maxDepth : 3;
 
-  const symRow = db.prepare(SYMBOL_ROW_SQL).get(cleanTarget, '');
+  const symRow = findSymbolRow(db, cleanTarget, '');
 
   let targetPath = symRow ? symRow.file_path : cleanTarget;
   let symbolName = symRow ? symRow.name : cleanTarget;
@@ -191,7 +180,7 @@ export const calculateCallTrace = (db, targetSymbolOrPath, options = {}) => {
       if (visited.has(c)) continue;
       visited.add(c);
 
-      const calleeSym = db.prepare(SYMBOL_ROW_SQL).get(c, filePath);
+      const calleeSym = findCalleeDefinition(db, c, filePath);
 
       if (calleeSym) {
         const subCallees = traceCallees(calleeSym.name, calleeSym.file_path, currentDepth + 1);

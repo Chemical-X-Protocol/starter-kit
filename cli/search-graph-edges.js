@@ -74,3 +74,39 @@ export const findUnresolvedImporters = (db, symbol) => {
   return db.prepare("SELECT DISTINCT importer_path, source_module, line FROM imports WHERE imported_symbol = ? AND resolved_path = '' ORDER BY importer_path")
     .all(symbol).map((r) => ({ path: r.importer_path, sourceModule: r.source_module, line: Number(r.line || 1) }));
 };
+
+// One definition per name, chosen deterministically: the preferred file's own definition first,
+// then an exported one, then by path. Never whichever row SQLite happens to return first.
+const SYMBOL_ROW_SQL = `
+  SELECT s.name, s.kind, s.start_line, s.end_line, s.file_path, f.tier
+  FROM symbols s JOIN files f ON s.file_path = f.path
+  WHERE s.name = ?1
+  ORDER BY (s.file_path = ?2) DESC, s.is_export DESC, s.file_path, s.start_line
+  LIMIT 1
+`;
+
+const IMPORT_EDGE_SQL = `
+  SELECT i.resolved_path, s.name, s.kind, s.start_line, s.end_line, s.file_path, f.tier
+  FROM imports i
+  LEFT JOIN symbols s ON s.file_path = i.resolved_path AND s.name = ?2
+  LEFT JOIN files f ON s.file_path = f.path
+  WHERE i.importer_path = ?1 AND i.imported_symbol = ?2
+  ORDER BY (s.name IS NULL), s.is_export DESC, i.line
+  LIMIT 1
+`;
+
+export const findSymbolRow = (db, name, preferredPath = '') => db.prepare(SYMBOL_ROW_SQL).get(name, preferredPath);
+
+// A callee named in filePath resolves to filePath's own definition, else to the module filePath
+// imports it from (null when that import is a package or unindexed: the caller marks it
+// external), and only for names filePath never imports to the deterministic by-name row.
+export const findCalleeDefinition = (db, name, filePath) => {
+  const byName = findSymbolRow(db, name, filePath);
+  const isOwnDefinition = Boolean(byName) && byName.file_path === filePath;
+  if (isOwnDefinition) return byName;
+  const edge = db.prepare(IMPORT_EDGE_SQL).get(filePath, name);
+  const isImported = Boolean(edge);
+  if (!isImported) return byName || null;
+  const hasIndexedTarget = Boolean(edge.file_path);
+  return hasIndexedTarget ? edge : null;
+};

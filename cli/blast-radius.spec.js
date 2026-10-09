@@ -186,3 +186,31 @@ test('calculateCallTrace: external callees come from the traced file only, never
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('calculateCallTrace: a callee resolves through the import edge, not the first path with that name', async () => {
+  const fs = await import('node:fs');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const { calculateCallTrace } = await import('./search-queries.js');
+  const { syncSearchIndex } = await import('./search-sync.js');
+  const { clearDbCache } = await import('./search-db.js');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-trace-edge-'));
+  try {
+    fs.mkdirSync(path.join(root, '.chemx'));
+    fs.mkdirSync(path.join(root, 'src'));
+    fs.writeFileSync(path.join(root, 'src/a.ts'), 'export const aOnly = () => 1;\nexport const fmt = () => aOnly();\n');
+    fs.writeFileSync(path.join(root, 'src/b.ts'), 'export const bOnly = () => 2;\nexport const fmt = () => bOnly();\n');
+    fs.writeFileSync(path.join(root, 'src/c.ts'), 'import { fmt } from "./b";\nexport const runIt = () => fmt();\n');
+    fs.writeFileSync(path.join(root, 'src/d.ts'), 'import { fmt } from "some-pkg";\nexport const runExt = () => fmt();\n');
+    const { db } = syncSearchIndex('src', root);
+    const trace = calculateCallTrace(db, 'runIt', { root });
+    const fmt = trace.callees.find((c) => c.symbol === 'fmt');
+    assert.equal(fmt.file, 'src/b.ts');
+    assert.deepEqual(fmt.callees.map((c) => c.symbol), ['bOnly']);
+    const ext = calculateCallTrace(db, 'runExt', { root }).callees.find((c) => c.symbol === 'fmt');
+    assert.equal(ext.isExternal, true, 'an import from a package is external, not some indexed fmt');
+  } finally {
+    clearDbCache();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
