@@ -296,15 +296,30 @@ WS-D items 1-9.
 - [ ] Criterion 6: the `cli` scope ratchet reaches green.
 - [ ] **Claims spec.** Re-measure every published number in README, llms.txt and benchmarks against honest baselines (targeted reads, not whole files). Replace the synthetic benchmark sample. Add the `--enrich` budget: omit enriched output past 40% of the raw size.
 
-## Decisions (blocking only where noted)
+## Decisions (resolved 2026-10-08)
 
-1. **New dependencies.** B wants `@vue/compiler-sfc` for the shared SFC parser. G6 may use system `rg`, with a JS fallback and no new dependency. Blocks B only.
-2. **Telemetry and publishing disclosure.**
-   - `license.js` sends a persistent `device_id` plus the license key to two domains.
-   - `navigator-share` posts audit reports, including the repo URL, to public GitHub Discussions.
-   - Choose: (a) keep both with explicit disclosure and opt-out; (b) make both opt-in; or (c) remove them.
-   - Blocks the G4 license/share item only.
-3. **CalVer as a semver prerelease.** `npm update` never upgrades. Choose: switch to `YY.M.D-N`-free versions like `26.1008.344`, or keep it and document pinning. Blocks nothing in Phase 1.
+1. **`@vue/compiler-sfc`: approved** as a core runtime dependency for B's shared SFC parse layer. G6 uses system `rg` when present, with a JS fallback and no new dependency.
+2. **License and network hygiene: "what scales best and sticks close to standards."**
+   - Clarification on what the code actually does: keys are not exposed publicly. They go over HTTPS, only during license-gated flows, to the vendor's own servers.
+   - The gaps are storage and disclosure. They become Phase 2 group **L**.
+3. **CalVer prerelease scheme: deferred.** Not in this plan.
+
+### L License and network hygiene (Phase 2; starter-kit)
+Files: `cli/license.js`, `cli/navigator-share.js`, `cli/navigator-conversion.js`, `cli/scaffold.js`, `cli/generator.js` (gate call only), README.
+- [ ] **Config location.** Use the XDG config dir (`$XDG_CONFIG_HOME/chemx`, default `~/.config/chemx`).
+  - File mode `0600`, dir mode `0700`.
+  - One-time migration from `~/.chemical-x` that tightens permissions and removes the old copy.
+- [ ] **CI key.** `CHEMX_LICENSE_KEY` env var for CI, never persisted to disk.
+- [ ] **API overrides** (`CHEMICAL_X_API_URL`, `COMPASS_GATEKEEPER_URL`):
+  - accept `https:` only, plus `http://localhost` and `127.0.0.1`;
+  - print the overriding host on use.
+- [ ] **Device ID** comes from `crypto.randomUUID()`. Existing IDs are kept.
+- [ ] **Offline switch.** `CHEMX_OFFLINE=1` and `DO_NOT_TRACK=1` disable every network call, and the gated flows say so clearly.
+  - Network happens only inside explicit license, download and share commands. Add a spec asserting no `fetch` on any other command.
+- [ ] **Share.** Print the exact title and body that will be posted, plus the target repo, then ask for an explicit `y` (default no).
+  - Non-interactive share refuses unless `--yes`.
+- [ ] **No `process.exit` in library code.** Return results; only the CLI entry decides exit codes.
+- [ ] **README "Privacy & network" section:** what is sent, when, to which host, where it is stored, and how to turn it off.
 
 ## Finding coverage
 
