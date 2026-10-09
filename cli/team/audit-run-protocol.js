@@ -133,7 +133,7 @@ export const unclosedClaims = (invs, statuses = new Map()) => {
 
 const taskTokens = (taskText) => {
   const ids = [...String(taskText).matchAll(/#(\d{2,})/g)].map((m) => `#${m[1]}`);
-  const files = [...String(taskText).matchAll(/(?:^|\n)\s*(?:File|Target|Files?)\s*:\s*(\S+)/gi)].map((m) => m[1]);
+  const files = [...String(taskText).matchAll(/(?:^|\n)\s*(?:Target\s+)?(?:File|Files)\s*:\s*(\S+)/gi)].map((m) => m[1].replace(/[,;]$/, ''));
   const handle = /You are[^@\n]{0,40}(@[\w-]+)/.exec(taskText)?.[1];
   return [...new Set([...ids, ...files, ...(handle ? [handle] : [])])].slice(0, 12);
 };
@@ -147,7 +147,9 @@ export const hijackSignals = ({ taskText, finalOutput, finalText, workCalls, cos
   const tokens = taskTokens(taskText);
   const signals = [];
   const noResult = result.trim() === '';
-  const offTask = !noResult && tokens.length > 0 && !tokens.some((t) => result.includes(t));
+  const names = tokens.map((t) => (t.includes('/') ? t.split('/').pop() : t));
+  const isMentioned = [...tokens, ...names].some((t) => result.includes(t));
+  const offTask = !noResult && tokens.length > 0 && !isMentioned;
   const zeroSteps = workCalls === 0;
   const nearZeroCost = medianCost > 0 && cost < medianCost * NEAR_ZERO_SHARE;
   if (noResult) signals.push('no-final-result');
