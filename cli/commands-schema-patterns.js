@@ -25,5 +25,20 @@ export const PATTERNS_COMMANDS = [
       { flag: '--idioms', desc: 'Keep idiom groups (--groups, --forge)' }
     ],
     examples: ['chemx patterns', 'chemx patterns src --min=3', 'chemx patterns --forge', 'chemx patterns --forge --limit=20 --json', 'chemx patterns --forge --explain=3f2a9c0d', 'chemx patterns reject 3f2a9c0d --reason="house shape" --as=@me']
+  },
+  {
+    name: 'blueprint',
+    aliases: [],
+    group: 'verify',
+    brief: 'Plan the extraction of one repeated-code group',
+    usage: 'chemx blueprint <group-id|bp-id> [--json] | chemx blueprint --item=<A7> [--json] | chemx blueprint holes <target> | chemx blueprint fill <target> <hole>=<value> --as=@handle',
+    summary: 'Build, show and fill the blueprint of a Forge group: kind, piece name and module, call sites, rejected members, drift, holes and the work tier.',
+    description: 'Refreshes the fingerprint ledger, builds the blueprint of the group (an id from `chemx patterns --forge`, or a ground-truth item with --item), stores it by its content-derived bp_ id and prints it. The same group in the same state always prints the same bytes. `holes` lists the judgment holes with their defaults and constraints; `fill` validates a value (a name must be a free identifier, a wording at most 120 characters with no em dash, a decision one of its candidates) and records it for the heal. It plans only: nothing is edited.',
+    flags: [
+      { flag: '--json', desc: 'Print the canonical JSON (chemx.blueprint/1) instead of the summary' },
+      { flag: '--item=<id>', desc: 'Name the group by a ground-truth item (the surfaced group touching most of its anchors)' },
+      { flag: '--as=<@handle>', desc: 'With fill: who filled the hole' }
+    ],
+    examples: ['chemx blueprint 01c90f0e', 'chemx blueprint --item=A7 --json', 'chemx blueprint holes bp_aeabff52315c', 'chemx blueprint fill bp_aeabff52315c name=readJson --as=@me']
   }
 ];

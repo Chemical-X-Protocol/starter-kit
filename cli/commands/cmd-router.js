@@ -396,6 +396,11 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
       runPatternsCli(rawArgs.slice(1));
       break;
     }
+    case 'blueprint': {
+      const { runBlueprintCli } = await import('../forge/blueprint-cli.js');
+      setExitCodeFrom(runBlueprintCli(rawArgs.slice(1)));
+      break;
+    }
     case 'help':
     case '--help':
     case '-h':
