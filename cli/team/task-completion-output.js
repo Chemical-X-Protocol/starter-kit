@@ -62,9 +62,12 @@ export const describeStatusUpdate = (res, taskId) => {
   return pass(`Updated task #${taskId} status to "${res.status}"`);
 };
 
-// Returns whether anything was written (only CLI calls print).
+// Returns whether anything was written (only CLI calls print). A refusal or a missing
+// task sets a non-zero exit code so scripts can tell it from a completion.
 export const writeTaskResult = (res, flags, isCli, describe) => {
   if (!isCli) return false;
+  const isFailure = !res || res.refused === true;
+  if (isFailure) process.exitCode = 1;
   const outcome = flags.isJson ? { isError: false, text: JSON.stringify(res, null, 2) } : describe();
   const stream = outcome.isError ? process.stderr : process.stdout;
   stream.write(`${outcome.text}\n`);

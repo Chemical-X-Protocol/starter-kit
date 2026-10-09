@@ -61,3 +61,12 @@ export const buildOwnershipRefusal = (task, ownership) => ({
   status: task.status,
   message: ownership.message
 });
+
+// Runs inside the completion write transaction on the locked row: a claim that raced
+// the audit is caught here. onAllowed runs only when the completion will be written.
+export const buildCompletionGuard = (agentId, options, onAllowed) => (lockedTask) => {
+  const recheck = checkCompletionOwnership(lockedTask, agentId, options);
+  if (!recheck.allowed) return buildOwnershipRefusal(lockedTask, recheck);
+  onAllowed();
+  return null;
+};
