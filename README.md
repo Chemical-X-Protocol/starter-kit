@@ -232,13 +232,27 @@ chemx read src/components/m-card.vue --symbol=useCardController
 chemx read src/components/m-card.vue --outline
 chemx read src/components/m-card.vue --start=10 --end=40
 
-# Surgical file patching without full-file rewrites (literal replace, atomic write, backup)
+# Surgical file patching without full-file rewrites (literal replace, atomic write, backup).
+# Multi-line edits: SEARCH/REPLACE blocks in a quoted heredoc ($, quotes and backticks stay literal).
+# Repeat the block for several edits; they apply in order and all-or-nothing. To edit text that
+# itself contains these markers, use 8 or more characters on all three marker lines.
+chemx patch <file> [--dry-run] <<'PATCH'
+<<<<<<< SEARCH
+const total = items.length;
+=======
+const total = items.filter(Boolean).length;
+>>>>>>> REPLACE
+PATCH
+# One-pair form
 chemx patch <file> --target="oldCode" --replacement="newCode" --dry-run   # preview the unified diff
 chemx patch <file> --target="oldCode" --replacement="newCode"
 # Removing a top-level declaration (renames included) is refused unless named
 chemx patch <file> --target="oldName" --replacement="newName" --allow-remove=oldName
 
 # write creates files; replacing an existing one needs --overwrite. Unknown flags refuse.
+chemx write <file> - [--overwrite] [--dry-run] <<'EOF'
+export const a = 1;
+EOF
 chemx write <file> --content="export const a = 1;" [--overwrite] [--dry-run]
 ```
 

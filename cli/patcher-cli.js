@@ -7,10 +7,21 @@ import fs from 'node:fs';
 import { ANSI } from './theme.js';
 import { parseValueFlags, hasFlag, splitList, hasPreviewFlag, findUnknownFlags, unknownFlagsMessage } from './cli-args.js';
 import { patchFile, writeFile } from './patcher.js';
+import { parseSearchReplaceBlocks } from './search-replace-blocks.js';
 
 const PATCH_HELP = [
   'USAGE',
+  "  chemx patch <file> [options] <<'EOF'",
+  '  <<<<<<< SEARCH',
+  '  exact old text (any number of lines; quotes, $ and backticks are literal)',
+  '  =======',
+  '  new text (empty deletes the SEARCH lines)',
+  '  >>>>>>> REPLACE',
+  '  EOF',
   '  chemx patch <file> --target="text" --replacement="new" [options]',
+  '',
+  '  Markers sit at column 0 inside the heredoc; repeat the block for more edits. Blocks apply',
+  '  in order and all-or-nothing: one unmatched block fails the call and writes nothing.',
   '',
   'OPTIONS',
   '  --target=<text>          Exact text to replace (literal; never empty)',
@@ -28,12 +39,15 @@ const PATCH_HELP = [
 
 const WRITE_HELP = [
   'USAGE',
+  "  chemx write <file> - [options] <<'EOF'",
+  '  whole file content',
+  '  EOF',
   '  chemx write <file> --content="text" [options]',
   '',
   'OPTIONS',
+  '  -, --stdin               Read content from stdin (heredoc)',
   '  --content=<text>         File content (also: --content <text>)',
   '  --content-file=<path>    Read content from a file',
-  '  --stdin                  Read content from stdin',
   '  --overwrite              Allow replacing an existing file',
   '  --allow-remove=<a,b>     Top-level declarations an overwrite may remove',
   '  --as=<agent>             Agent id for team lock checks',
@@ -88,7 +102,9 @@ const printOutcome = (res, verb, isJson) => {
     printParseNote(res);
     return;
   }
-  const where = res.changedLines ? `:L${res.changedLines.start}-${res.changedLines.end}` : '';
+  const range = res.changedLines ? `L${res.changedLines.start}-${res.changedLines.end}` : '';
+  const isMultiBlock = res.blocks > 1;
+  const where = isMultiBlock ? ` (${res.blocks} blocks, first at ${range})` : (range && `:${range}`);
   const writeVerb = res.created ? 'Created' : 'Updated';
   const doneVerb = verb === 'patch' ? 'Patched' : writeVerb;
   process.stdout.write(`${ANSI.GREEN}✔ ${doneVerb} ${res.file}${where}${res.backup ? ` (backup: ${res.backup})` : ''}${ANSI.RESET}\n`);
@@ -121,6 +137,17 @@ const PATCH_FLAGS = {
   allowRemove: ['--allow-remove'], as: ['--as']
 };
 const PATCH_SWITCHES = ['--multiple', '--allow-multiple'];
+const NO_PATCH_INPUT = `chemx patch needs SEARCH/REPLACE blocks on stdin (chemx patch <file> <<'EOF' ... EOF) or --target/--replacement. Nothing was changed.`;
+
+// An interactive terminal never counts as input: refusing beats blocking on, or writing, nothing.
+const readStdin = () => (process.stdin.isTTY ? null : fs.readFileSync(0, 'utf-8'));
+
+const readStdinBlocks = () => {
+  const text = readStdin() ?? '';
+  const isEmpty = text.trim() === '';
+  if (isEmpty) throw new Error(NO_PATCH_INPUT);
+  return parseSearchReplaceBlocks(text);
+};
 
 export const runPatcherCli = (args, isCli = false) => {
   if (isHelpRequest(args)) return showHelp(args, PATCH_HELP, isCli);
@@ -132,7 +159,9 @@ export const runPatcherCli = (args, isCli = false) => {
   const hasFilePath = Boolean(filePath);
   if (!hasFilePath) return fail('Missing file path. Usage: chemx patch <file> --target="text" --replacement="new" [--json]', isCli);
 
+  const hasInlineTarget = values.target !== undefined || values.targetFile !== undefined;
   return runGuarded(() => patchFile(filePath, {
+    blocks: hasInlineTarget ? undefined : readStdinBlocks(),
     targetContent: fromFileOr(values.target ?? null, values.targetFile),
     replacementContent: fromFileOr(values.replacement ?? null, values.replacementFile),
     allowMultiple: hasFlag(args, PATCH_SWITCHES),
@@ -147,8 +176,8 @@ const WRITE_SWITCHES = ['--stdin', '--overwrite'];
 const MISSING_CONTENT = 'chemx write needs --content=<text>, --content-file=<path> or --stdin (a value starting with "-" needs the --content=<text> form). Refusing to write.';
 
 const readWriteContent = (args, values) => {
-  const isStdin = args.includes('--stdin');
-  const content = isStdin ? fs.readFileSync(0, 'utf-8') : fromFileOr(values.content, values.contentFile);
+  const isStdin = args.includes('--stdin') || args.includes('-');
+  const content = isStdin ? readStdin() : fromFileOr(values.content, values.contentFile);
   const isMissingContent = typeof content !== 'string';
   if (isMissingContent) throw new Error(MISSING_CONTENT);
   return content;

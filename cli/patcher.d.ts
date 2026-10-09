@@ -10,9 +10,17 @@ export interface MutationSafetyOptions {
   readonly agentId?: string;
 }
 
+export interface SearchReplaceBlock {
+  readonly search: string;
+  readonly replace: string;
+}
+
 export interface PatchOptions extends MutationSafetyOptions {
-  readonly targetContent: string;
-  readonly replacementContent: string;
+  /** Required unless blocks is given. */
+  readonly targetContent?: string;
+  readonly replacementContent?: string;
+  /** Applied in order to one copy; any unmatched block fails the call and writes nothing. */
+  readonly blocks?: readonly SearchReplaceBlock[];
   readonly allowMultiple?: boolean;
 }
 
@@ -42,6 +50,8 @@ export interface PatchResult extends GuardrailResult {
   readonly status: 'ok';
   readonly dryRun: boolean;
   readonly replaced: number;
+  /** Number of SEARCH/REPLACE blocks applied (only for a blocks patch). */
+  readonly blocks?: number;
   readonly matchLines: readonly number[];
   readonly changedLines: { readonly start: number; readonly end: number };
   readonly eol: 'as-is' | 'crlf-normalized';
