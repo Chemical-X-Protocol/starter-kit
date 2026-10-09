@@ -15,7 +15,8 @@ const groupByPackage = (workspace, files, cwd) => {
   for (const file of files) {
     const abs = path.resolve(cwd, file);
     const pkg = owningPackage(workspace.packages, abs) || ROOT_PACKAGE(workspace.root);
-    if (!groups.has(pkg.dir)) groups.set(pkg.dir, { pkg, files: [] });
+    const hasGroup = groups.has(pkg.dir);
+    if (!hasGroup) groups.set(pkg.dir, { pkg, files: [] });
     groups.get(pkg.dir).files.push(toPosix(path.relative(pkg.dir, abs)) || '.');
   }
   return [...groups.values()].sort((a, b) => a.pkg.dir.localeCompare(b.pkg.dir));
@@ -29,24 +30,29 @@ const noChangesReport = (detail) => ({ status: STATUS.INCONCLUSIVE, success: fal
 // resolves to that package's own test report.
 export const planWorkspaceTest = async (workspace, scope, runInPackage, cwd) => {
   const extraFlags = [...filterArgs(scope.filter), ...(scope.allowEmpty ? ['--allow-empty'] : [])];
-  if (scope.changed) {
+  const isChangedScope = Boolean(scope.changed);
+  if (isChangedScope) {
     const changes = changedPackages(workspace, scope.base);
-    if (!changes.ok) return { ...noChangesReport(`cannot list changed files: ${changes.error}`), status: STATUS.INCONCLUSIVE };
+    const hasChangeError = Boolean(!changes.ok);
+    if (hasChangeError) return { ...noChangesReport(`cannot list changed files: ${changes.error}`), status: STATUS.INCONCLUSIVE };
     const baseArgs = ['--changed', ...(scope.base ? [`--base=${scope.base}`] : []), ...extraFlags];
     const units = changes.packages.map((pkg) => ({ pkg, args: baseArgs }));
     const notes = changeNotes(changes);
     const extraStatuses = changes.rootManifests.length > 0 ? [STATUS.INCONCLUSIVE] : [];
-    if (units.length === 0) return { ...noChangesReport(`no changed files in any workspace package vs ${changes.base}`), notes, dependents: [] };
+    const hasNoUnits = units.length === 0;
+    if (hasNoUnits) return { ...noChangesReport(`no changed files in any workspace package vs ${changes.base}`), notes, dependents: [] };
     return runPerPackage(units, (unit) => runInPackage(unit.args, unit.pkg.dir), { base: changes.base, dependents: changes.dependents, rootFiles: changes.rootFiles, notes, extraStatuses });
   }
   const paths = scope.related.length > 0 ? scope.related : scope.targets;
-  if (paths.length > 0) {
+  const hasPaths = paths.length > 0;
+  if (hasPaths) {
     const mode = scope.related.length > 0 ? ['--related'] : [];
     const groups = groupByPackage(workspace, paths, cwd);
     const units = groups.map(({ pkg, files }) => ({ pkg, args: [...mode, ...files, ...extraFlags] }));
     return runPerPackage(units, (unit) => runInPackage(unit.args, unit.pkg.dir));
   }
-  if (scope.allPackages) {
+  const isAllPackages = Boolean(scope.allPackages);
+  if (isAllPackages) {
     const units = workspace.packages.map((pkg) => ({ pkg, args: extraFlags }));
     const notes = ['the root test script was not run (it would cover the whole monorepo); target root files explicitly'];
     return runPerPackage(units, (unit) => runInPackage(unit.args, unit.pkg.dir), { notes });
