@@ -48,7 +48,8 @@ export const runFrictionCli = async (args, { stdout = process.stdout, cwd = proc
   const [action = 'summary', ...rest] = positionals(args);
   const root = resolveRoot(args, cwd);
   const isJson = args.includes('--json');
-  if (action === 'add') {
+  const isAddAction = action === 'add';
+  if (isAddAction) {
     const note = rest.join(' ').trim();
     if (!note) { write(USAGE); return toExitCode(STATUS.FAIL); }
     const appended = appendFriction(root, { kind: 'note', note }, env);
@@ -56,7 +57,8 @@ export const runFrictionCli = async (args, { stdout = process.stdout, cwd = proc
     return toExitCode(appended.ok ? STATUS.PASS : STATUS.FAIL);
   }
   const { file, entries, malformed } = readFriction(root, env);
-  if (action === 'export') {
+  const isExportAction = action === 'export';
+  if (isExportAction) {
     const target = flagValue(args, 'to');
     if (!target) { write(USAGE); return toExitCode(STATUS.FAIL); }
     const exported = exportFriction({ root, entries, target: path.resolve(cwd, target), dryRun: args.includes('--dry-run') });
