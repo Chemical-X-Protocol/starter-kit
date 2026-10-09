@@ -78,7 +78,8 @@ export const querySemanticIndex = (db, queryText, options = {}) => {
   for (const row of allEmbeddings) {
     const rowVec = deserializeVector(row.vector);
     const sim = cosineSimilarity(queryVec, rowVec);
-    if (sim >= minSimilarity) {
+    const isAboveThreshold = sim >= minSimilarity;
+    if (isAboveThreshold) {
       scored.push({
         filePath: row.file_path,
         targetType: row.target_type,
@@ -115,7 +116,8 @@ export const queryHybridIndex = (db, queryText, options = {}) => {
     }
   }
 
-  if (ftsRows.length === 0) {
+  const hasNoFtsRows = ftsRows.length === 0;
+  if (hasNoFtsRows) {
     try {
       const sanitized = cleanQuery.replace(/[^a-zA-Z0-9]/g, ' ').trim();
       if (sanitized) {
@@ -156,7 +158,8 @@ export const queryHybridIndex = (db, queryText, options = {}) => {
   semanticByFile.forEach((r, idx) => {
     const key = r.filePath;
     const rrfScore = 1.0 / (RRF_CONSTANT + (idx + 1));
-    if (combined.has(key)) {
+    const isCombined = combined.has(key);
+    if (isCombined) {
       const entry = combined.get(key);
       entry.vecRank = idx + 1;
       entry.similarity = r.similarity;
