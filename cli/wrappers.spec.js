@@ -104,3 +104,17 @@ test('cli: do runs every item and fails when any item fails or exits', () => {
   const green = runCli(repo, 'do', 'p -s', 'p vue');
   assert.strictEqual(green.status, 0);
 });
+
+test('help schema: wrapper entries advertise only flags their implementation reads', async () => {
+  const schemaModule = await import('./commands-schema.js');
+  const entries = Object.values(schemaModule).find(Array.isArray);
+  const sources = { ls: 'cmd-wrappers-files.js', json: 'cmd-wrappers-json.js', batch: 'cmd-batch.js' };
+  for (const [name, file] of Object.entries(sources)) {
+    const entry = entries.find((e) => e.name === name);
+    const source = fs.readFileSync(path.join(path.dirname(CLI), 'commands', file), 'utf-8');
+    for (const { flag } of entry.flags) {
+      const token = flag.split(/[=\s,<]/)[0];
+      assert.ok(source.includes(token), `${name} advertises ${token} but ${file} never reads it`);
+    }
+  }
+});

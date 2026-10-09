@@ -372,11 +372,9 @@ export const COMMANDS_SCHEMA = [
     name: 'ls',
     aliases: ['f'],
     usage: 'cx f [pattern]',
-    summary: 'Gitignore-aware fast path finder.',
-    description: 'Finds files matching pattern respecting .gitignore and ignored directories.',
-    flags: [
-      { flag: '--json', desc: 'Output matched paths as JSON array' }
-    ],
+    summary: 'Gitignore-aware path finder, submodules included.',
+    description: 'Lists tracked and untracked-but-not-ignored files (git ls-files --recurse-submodules). A pattern with * or ? is a glob (basename unless it contains /, ** spans directories); otherwise a case-insensitive substring. No match exits 1 with a message.',
+    flags: [],
     examples: [
       'cx f "*.vue"',
       'cx f "controller"'
@@ -386,11 +384,9 @@ export const COMMANDS_SCHEMA = [
     name: 'json',
     aliases: ['j'],
     usage: 'cx j <file.json> [options]',
-    summary: 'Structural JSON schema shape peeker.',
-    description: 'Infers type structure, array element types, and keys from JSON files without dumping raw payload bytes into context.',
-    flags: [
-      { flag: '--depth=<N>', desc: 'Max object traversal depth (default: 3)' }
-    ],
+    summary: 'JSON peeker: small files verbatim, large ones as shape with values.',
+    description: 'Files up to 2 KB are printed verbatim. Larger files print their key structure with scalar values kept (long strings truncated) and containers summarised past depth 3. Missing or invalid files exit 1.',
+    flags: [],
     examples: [
       'cx j package.json',
       'cx j tsconfig.json'
@@ -401,10 +397,8 @@ export const COMMANDS_SCHEMA = [
     aliases: ['do'],
     usage: 'cx do "<cmd1>" "<cmd2>" ...',
     summary: 'Sequential multi-command runner inside a single warm Node process.',
-    description: 'Runs multiple Chemical X CLI commands sequentially in one process invocation, avoiding repeated process startup overhead.',
-    flags: [
-      { flag: '--stop-on-error', desc: 'Halt execution if any command fails (default: true)' }
-    ],
+    description: 'Runs multiple Chemical X CLI commands sequentially in one process. Every item runs even if an earlier one fails or calls exit; the batch exits with the worst item status (fail 1 > inconclusive 3 > pass 0) and prints a summary line.',
+    flags: [],
     examples: [
       'cx do "d" "p -s" "verify"',
       'cx do "q -g theme" "d"'
