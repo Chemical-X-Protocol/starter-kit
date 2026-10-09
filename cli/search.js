@@ -140,7 +140,18 @@ export const runSearch = async (rawArgs = [], isCli = true) => {
   const second = parsed.positionals[1] || '';
   const cwd = process.cwd();
 
-  const passthrough = isLiteral ? { handled: false } : runPassthroughCommand(parsed, rawArgs, first, second, isJson, isCli);
+  if (isLiteral) {
+    return handleLiteralSearchCommand(null, parsed.pattern ?? first, {
+      isCaseInsensitive: hasAnyFlag(parsed, ['-i', '--ignore-case']),
+      isLineOnly: hasAnyFlag(parsed, ['-l', '--lines']),
+      isRegex: parsed.flags.has('--regex'),
+      isHidden: parsed.flags.has('--hidden'),
+      limit: readIntValue(parsed, 'limit', 20), isJson, isCli, cwd,
+      dir: parsed.values.dir ?? null
+    });
+  }
+
+  const passthrough = runPassthroughCommand(parsed, rawArgs, first, second, isJson, isCli);
   if (passthrough.handled) return passthrough.value;
 
   const startTime = Date.now();
@@ -153,15 +164,6 @@ export const runSearch = async (rawArgs = [], isCli = true) => {
   const db = syncRes.db;
   const index = { ...describeIndexFromSync(syncRes), argProblems: argProblems.length > 0 ? argProblems : undefined };
   applyExitStatus(indexStatusOf(index), isCli);
-
-  if (isLiteral) {
-    const query = parsed.pattern ?? first;
-    return handleLiteralSearchCommand(db, query, {
-      isCaseInsensitive: hasAnyFlag(parsed, ['-i', '--ignore-case']),
-      isLineOnly: hasAnyFlag(parsed, ['-l', '--lines']),
-      limit: readIntValue(parsed, 'limit', 20), isJson, isCli, cwd
-    });
-  }
 
   const { mode, isSubcommand } = resolveMode(parsed, first);
   const limit = readIntValue(parsed, 'limit', mode === 'query' ? 50 : 20);

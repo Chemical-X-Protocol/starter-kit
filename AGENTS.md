@@ -8,7 +8,7 @@
 ## ⚡ Quick Agent Reflex Table (Token-Bounded Commands)
 | Standard Reflex | Chemical X (`cx`) Equivalent | Token & Architecture Advantage |
 | :--- | :--- | :--- |
-| `grep -rn "pattern" .` | `cx q -g "pattern"` or `cx q -g "pattern" -l` | Auto-ignores build/vendor; clamps lines to 60 chars or line-only (-l). |
+| `grep -rn "pattern" .` | `cx q -g "pattern"` or `cx q -g "pattern" -l` | Fixed-string search of every text file `.gitignore` allows (submodules, docs, styles, JSON, PHP); full `path:line:text` lines or line-only (-l); `--regex` opts into regex; `-- <pattern>` for a pattern starting with `-`. Uses `rg` when installed, a JS walker otherwise; the header states files searched and the engine. |
 | `git diff` | `cx d` | Zero-context (`-U0`), auto-collapses to `--stat` if > 80 lines, micro-syncs index. |
 | `git log` | `cx log -n 5` | Single-line compact commit history (~8 tokens/commit). |
 | `find . -name "*.vue"` | `cx f "*.vue"` | Strictly filters by `.gitignore` and ignored dirs. |
@@ -77,7 +77,7 @@ Use same-name shorthand across all languages; eliminate redundant `key: key` dup
   - When repeated elements accumulate behavioral logic, accessibility handling, or styling variants across 3+ places (Rule of Three), extract into a canonical capsule (`m-tab-button`).
 
 ### H. AI Agent Codebase Query Machine Protocol
-- **AST & Literal Search First Rule**: AI agents should invoke `cx q "<query>"` for AST symbols or `cx q -g "<pattern>"` for literal text before running broad unthrottled grep. If AST search returns 0 results, check the suggested `cx q -g` fallback before escalating to raw ripgrep.
+- **AST & Literal Search First Rule**: AI agents should invoke `cx q "<query>"` for AST symbols or `cx q -g "<pattern>"` for literal text before running broad unthrottled grep. AST answers cover only the index scope they print (`index: scope src (...)`); widen with `--dir=<path>` or use `cx q -g`, which searches the whole repo. An answer with `status: inconclusive` (exit 3) is not a negative result.
 - **AST Architecture Intelligence**: Always leverage `pnpm chemx q` to inspect component tiers, exported symbols, props, and hooks with minimal token burn.
 - **Mandatory Blast Radius Pre-Refactor Check**: Prior to modifying any foundational atom (`a-*`), shared molecule, or central composable (`use*`), agents MUST calculate the transitive blast radius (`pnpm chemx q <target> --blast-radius --json` or `chemx({ action: 'q', params: { query: '<target>', blastRadius: true } })`). Never perform blind refactors without mapping direct consumers, transitive dependents, and impacted tiers.
 - **Hybrid RRF Discovery Protocol**: When discovering components, controllers, or state machines without an exact symbol name, agents MUST use hybrid search (`pnpm chemx q "<concept>" --hybrid --json` or `chemx({ action: 'q', params: { query: '<concept>', hybrid: true } })`). This blends BM25 keyword matching and vector cosine similarity via Reciprocal Rank Fusion (RRF), eliminating keyword misses and semantic hallucinations.

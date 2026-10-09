@@ -35,3 +35,24 @@ test('MCP chemx_q sees files created and deleted outside chemx (no ghost results
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('MCP chemx_q literal mode searches the repo without writing to stdout', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-mcp-lit-'));
+  fs.mkdirSync(path.join(root, '.chemx'));
+  fs.writeFileSync(path.join(root, 'notes.md'), 'remember --x-glass tokens\n');
+  const handler = createMcpHandler();
+  const originalWrite = process.stdout.write;
+  let leaked = '';
+  process.stdout.write = (chunk, ...rest) => { leaked += String(chunk); return true; };
+  try {
+    const text = await callQ(handler, { query: '--x-glass', literal: true, cwd: root });
+    process.stdout.write = originalWrite;
+    const payload = JSON.parse(text);
+    assert.equal(payload.totalMatches, 1);
+    assert.equal(payload.matches[0].path, 'notes.md');
+    assert.equal(leaked, '', 'nothing is written to the JSON-RPC stdout channel');
+  } finally {
+    process.stdout.write = originalWrite;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});

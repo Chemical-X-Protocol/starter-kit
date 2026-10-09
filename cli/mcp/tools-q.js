@@ -2,6 +2,7 @@ import { queryIndexPage } from '../search-db.js';
 import { toColumnar } from '../columnar.js';
 import { formatIndexLine } from '../search-output.js';
 import { openSyncedIndex } from '../search-session.js';
+import { handleLiteralSearchCommand } from '../search-commands-literal.js';
 import { STATUS } from '../result-status.js';
 import { resolveTargetCwd } from './tools-search-util.js';
 import {
@@ -43,6 +44,14 @@ export const handleChemxQ = (args = {}, cwd = process.cwd()) => {
   const targetCwd = resolveTargetCwd(args.cwd || cwd);
   const query = args.query || args.symbol;
   if (!query) throw new Error('chemx_q requires "query" or "symbol" argument.');
+  const isLiteral = Boolean(args.literal);
+  if (isLiteral) {
+    return handleLiteralSearchCommand(null, query, {
+      isJson: false, isCli: false, cwd: targetCwd, dir: args.dir || null,
+      isRegex: Boolean(args.regex), isCaseInsensitive: Boolean(args.ignoreCase), isLineOnly: Boolean(args.linesOnly),
+      isHidden: Boolean(args.hidden), limit: typeof args.limit === 'number' ? args.limit : 50, isQuiet: true
+    });
+  }
   const { db, index } = syncIndexForQuery(targetCwd, args);
 
   if (args.blastRadius || args.impact) return attachIndex(executeBlastRadiusQuery(db, query, args), index);

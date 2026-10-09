@@ -23,7 +23,9 @@ export const COMMANDS_SCHEMA = [
       { flag: '--hybrid', desc: 'Blended BM25 keyword + Vector RRF ranking' },
       { flag: '--hazards', desc: 'Query architectural rule violations directly (flags: --rule=<id>, --critical)' },
       { flag: '--pack', desc: 'Assemble token-packed context bundle for target symbol or file' },
-      { flag: '-g, --literal', desc: 'Literal substring ripgrep search with 60-character line clamping' },
+      { flag: '-g, --literal', desc: 'Repo-wide fixed-string search (.gitignore honoured, submodules, docs), full path:line:text; --regex, --hidden, -- <pattern>' },
+      { flag: '-n, --limit <N>', desc: 'Max results (q default 50, -g default 20); truncation is always stated' },
+      { flag: '--dir=<path>', desc: 'Scope to search (default: the project default, src/ or .)' },
       { flag: '-l, --lines', desc: 'Line-only output (path:line) consuming ~1 token per match' },
       { flag: '--reindex', desc: 'Force re-index before running query' }
     ],

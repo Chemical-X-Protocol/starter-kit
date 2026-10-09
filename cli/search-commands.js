@@ -366,102 +366,6 @@ export const handleCheckCommand = (targetFile, { index = null, isJson = false, i
   return payload;
 };
 
-export const handleLiteralSearchCommand = (db, query, {
-  index = null,
-  isCaseInsensitive = false,
-  isLineOnly = false,
-  limit = 20,
-  isJson = false,
-  isCli = true,
-  cwd = process.cwd()
-} = {}) => {
-  if (!query) {
-    if (isCli) process.stderr.write('Missing search query for literal search.\n');
-    return [];
-  }
-
-  const indexed = db ? db.prepare('SELECT path FROM files ORDER BY path ASC').all() : [];
-  let filePaths = indexed.map((r) => r.path);
-
-  const matches = [];
-  let totalMatches = 0;
-  const flags = isCaseInsensitive ? 'i' : '';
-  let regex;
-  try {
-    regex = new RegExp(query, flags);
-  } catch {
-    const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    regex = new RegExp(escaped, flags);
-  }
-
-  for (const relPath of filePaths) {
-    const fullPath = path.resolve(cwd, relPath);
-    if (!fs.existsSync(fullPath)) continue;
-
-    let content;
-    try {
-      content = fs.readFileSync(fullPath, 'utf-8');
-    } catch {
-      continue;
-    }
-
-    const lines = content.split('\n');
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      if (regex.test(line)) {
-        totalMatches++;
-        if (matches.length < limit) {
-          const trimmed = line.trim();
-          const clamped = trimmed.length > 60 ? trimmed.slice(0, 57) + '...' : trimmed;
-          matches.push({
-            path: relPath,
-            line: i + 1,
-            snippet: clamped
-          });
-        }
-      }
-    }
-  }
-
-  if (isJson) {
-    const payload = {
-      query,
-      isCaseInsensitive,
-      isLineOnly,
-      count: matches.length,
-      totalMatches,
-      matches: isLineOnly ? matches.map((m) => ({ path: m.path, line: m.line })) : matches
-    };
-    process.stdout.write(JSON.stringify(withIndex(payload, index)) + '\n');
-    if (isCli) process.exit();
-    return payload;
-  }
-
-  if (matches.length === 0) {
-    process.stdout.write(`  ${ANSI.DIM}No literal matches found for "${query}".${ANSI.RESET}\n\n`);
-    if (isCli) process.exit();
-    return [];
-  }
-
-  process.stdout.write(`\n${ANSI.BOLD}${ANSI.CYAN}Chemical X Literal Search:${ANSI.RESET} ${ANSI.DIM}"${query}" (${totalMatches} total match${totalMatches === 1 ? '' : 'es'})${ANSI.RESET}\n`);
-
-  for (const m of matches) {
-    if (isLineOnly) {
-      process.stdout.write(`  ${ANSI.BOLD}${m.path}${ANSI.RESET}:${ANSI.GOLD}${m.line}${ANSI.RESET}\n`);
-    } else {
-      process.stdout.write(`  ${ANSI.BOLD}${m.path}${ANSI.RESET}:${ANSI.GOLD}${m.line}${ANSI.RESET}: ${m.snippet}\n`);
-    }
-  }
-
-  if (totalMatches > limit) {
-    process.stdout.write(`\n  ${ANSI.DIM}// [Showing ${limit} of ${totalMatches} matches. Use -n <num> to expand, or -l for line-only]${ANSI.RESET}\n`);
-  }
-  process.stdout.write('\n');
-
-  if (isCli) process.exit();
-  return matches;
-};
-
 export {
   handleBlastRadiusCommand,
   handleCallTraceCommand,
@@ -471,6 +375,7 @@ export {
 } from './search-commands-graph.js';
 export { handleSemanticCommand, handleHybridCommand } from './search-commands-semantic.js';
 export { handleHazardsCommand } from './search-commands-hazards.js';
+export { handleLiteralSearchCommand } from './search-commands-literal.js';
 
 
 
