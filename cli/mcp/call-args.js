@@ -2,6 +2,8 @@
 // detectTestCommand pastes target and filter into a shell string; git diff/log take raw options.
 
 const SAFE_TEST_TARGET = /^[\w@%+=:,./*?[\]{}-]+$/;
+// A target that starts with '-' is a runner option (`--import=data:...` runs code in every test process).
+const isSafeTarget = (t) => typeof t === 'string' && SAFE_TEST_TARGET.test(t) && !t.startsWith('-');
 // The filter is pasted inside double quotes: refuse the characters that still expand there.
 const UNSAFE_IN_DOUBLE_QUOTES = /[$`"\\\n\r\0]/;
 // git options that write a file or read one from outside the repository.
@@ -13,9 +15,9 @@ const refuse = (error) => ({ ok: false, error });
 
 const checkTestArgs = (params) => {
   const targets = [params.testTarget, params.target].filter((t) => t !== undefined && t !== null);
-  const badTarget = targets.find((t) => typeof t !== 'string' || !SAFE_TEST_TARGET.test(t));
+  const badTarget = targets.find((t) => !isSafeTarget(t));
   const hasBadTarget = badTarget !== undefined;
-  if (hasBadTarget) return refuse(`Refusing test target ${JSON.stringify(badTarget)}: use one path or glob without spaces or shell syntax.`);
+  if (hasBadTarget) return refuse(`Refusing test target ${JSON.stringify(badTarget)}: use one path or glob without spaces, shell syntax or a leading '-'.`);
   const hasFilter = params.filter !== undefined && params.filter !== null;
   const isBadFilter = hasFilter && (typeof params.filter !== 'string' || UNSAFE_IN_DOUBLE_QUOTES.test(params.filter));
   if (isBadFilter) return refuse(`Refusing test filter ${JSON.stringify(params.filter)}: it may not contain $, backticks, quotes, backslashes or newlines.`);
