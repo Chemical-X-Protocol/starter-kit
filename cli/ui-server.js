@@ -26,8 +26,7 @@ export const createUiServer = (cwd = process.cwd(), options = {}) => {
     const url = new URL(req.url || '/', 'http://chemx-ui.invalid');
     const { pathname } = url;
     const isGet = req.method === 'GET', isPost = req.method === 'POST';
-    const isApi = pathname.startsWith('/api/'), isFavicon = pathname === '/favicon.ico';
-    const isFaviconRequest = isGet && isFavicon;
+    const isApi = pathname.startsWith('/api/'), isFaviconRequest = isGet && pathname === '/favicon.ico';
     if (isFaviconRequest) return res.writeHead(204).end();
 
     const gate = checkUiRequest(req, auth, url);
