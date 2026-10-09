@@ -125,24 +125,42 @@ const pass1Host = (group, context) => {
   return family ? { family, reason } : null;
 };
 
+// The family member a pass-1 member actually relates to (most of its instances by the reason's relation),
+// or null when that is the family root itself or the reason (variant) is not a span relation.
+const RELATION_OF_REASON = Object.freeze({ inside: 'inside', overlap: 'crossing', block: 'meetsW', wrapper: 'wraps' });
+
+const viaOf = (group, family, reason) => {
+  const relation = RELATION_OF_REASON[reason];
+  if (!relation) return null;
+  const holds = (member) => group.instances.filter((instance) => member.instances.some((held) => RELATIONS[relation]({ instance: held, path: member.path, mass: member.mass }, instance, group))).length;
+  const scored = [...family.members.keys()].filter((member) => member !== group).map((member) => ({ member, hits: holds(member) }));
+  const best = scored.reduce((top, row) => (row.hits > top.hits ? row : top), { member: family.root, hits: -1 });
+  return best.member === family.root ? null : best.member.id;
+};
+
 const finalOf = (family) => {
   let current = family;
   while (current.into) current = current.into;
   return current;
 };
 
-// Pass 2: a root's family joins the family that strictly holds all of its instances but the slack.
+// Pass 2: a root's family joins the family that strictly holds all of its instances but the slack. Folds
+// never chain: a host is a family that is itself a slot (not folded yet), and a family that already took
+// a fragment or holds a member of its own is a host, so it stays a slot. Otherwise a group held by the host would end up under the
+// host's own host, which need not hold any of its sites.
 const fragmentHost = (group, own, index) => {
   const size = group.instances.length;
-  const rows = tally(group, index, own).filter((row) => finalOf(row.family) !== own);
+  const isHost = own.isHost || own.members.size > 1;
+  if (isHost) return null;
+  const rows = tally(group, index, own).filter((row) => row.family.into === null && finalOf(row.family) !== own);
   return bestFamily(rows, (row) => row.strict >= 2 && size - row.strict <= slackOf(group), (row) => row.strict);
 };
 
 /**
- * Folds ranked groups (sorted by score, highest first) in place: foldedInto and foldReason on folded
- * groups, folded ([{ id, reason }], by score) on every root. options: { skeletonOf(group) => string |
- * null, anchorsOf(group) => anchors (default: the anchors every instance shares) }. Returns the roots in
- * score order.
+ * Folds ranked groups (sorted by score, highest first) in place: foldedInto, foldedVia (the family
+ * root the group hit, when that is not the slot) and foldReason on folded groups, folded ([{ id, reason }],
+ * by score) on every root. options: { skeletonOf(group) => string | null, anchorsOf(group) => anchors
+ * (default: the anchors every instance shares) }. Returns the roots in score order.
  */
 export const foldGroups = (ranked, { skeletonOf = NO_SKELETON, anchorsOf = (group) => sharedAnchors(group.instances) } = {}) => {
   const context = { index: createIndex(), bySkeleton: new Map(), skeletonOf, anchorsOf };
@@ -161,6 +179,8 @@ export const foldGroups = (ranked, { skeletonOf = NO_SKELETON, anchorsOf = (grou
   roots.forEach((group) => {
     const own = familyOf.get(group);
     own.into = fragmentHost(group, own, context.index);
+    const hasHost = own.into !== null;
+    if (hasHost) own.into.isHost = true;
   });
   const folded = new Map();
   for (const group of ranked) {
@@ -169,10 +189,11 @@ export const foldGroups = (ranked, { skeletonOf = NO_SKELETON, anchorsOf = (grou
     const reason = own.root === group ? 'fragment' : own.members.get(group);
     const isSurfacing = target.root === group;
     if (isSurfacing) continue;
-    Object.assign(group, { foldedInto: target.root.id, foldReason: reason });
+    const via = own.root === group ? null : viaOf(group, own, reason);
+    Object.assign(group, { foldedInto: target.root.id, foldedVia: via, foldReason: reason });
     pushTo(folded, target.root.id, { id: group.id, reason });
   }
   const surfacing = roots.filter((group) => finalOf(familyOf.get(group)).root === group);
-  surfacing.forEach((group) => Object.assign(group, { foldedInto: null, foldReason: null, folded: folded.get(group.id) ?? [] }));
+  surfacing.forEach((group) => Object.assign(group, { foldedInto: null, foldedVia: null, foldReason: null, folded: folded.get(group.id) ?? [] }));
   return surfacing;
 };

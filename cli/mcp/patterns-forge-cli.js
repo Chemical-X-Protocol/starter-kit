@@ -68,7 +68,7 @@ const explaining = (result, id) => {
 const asJson = (result, limit = null) => ({
   status: 'ok',
   stats: result.stats,
-  groups: toScorerGroups(result.groups).map((group, index) => ({ ...group, rank: result.groups[index].rank, score: result.groups[index].score, holes: result.groups[index].lgg?.holes ?? [], drift: result.groups[index].drift, dependsOn: result.groups[index].dependsOn, evicted: result.groups[index].evicted, foldedInto: result.groups[index].foldedInto ?? null, foldReason: result.groups[index].foldReason ?? null, folded: result.groups[index].folded ?? [] })).sort(byRank).slice(0, limit ?? undefined),
+  groups: toScorerGroups(result.groups).map((group, index) => ({ ...group, rank: result.groups[index].rank, score: result.groups[index].score, holes: result.groups[index].lgg?.holes ?? [], drift: result.groups[index].drift, dependsOn: result.groups[index].dependsOn, evicted: result.groups[index].evicted, foldedInto: result.groups[index].foldedInto ?? null, foldedVia: result.groups[index].foldedVia ?? null, foldReason: result.groups[index].foldReason ?? null, folded: result.groups[index].folded ?? [] })).sort(byRank).slice(0, limit ?? undefined),
   rejected: toScorerGroups([...result.rejected, ...result.suppressed, ...result.refined])
 });
 

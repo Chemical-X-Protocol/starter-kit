@@ -93,13 +93,37 @@ test('rankGroups: a window depends on a piece that stands elsewhere, and a folde
   assert.deepEqual(window.dependsOn, []);
 });
 
-test('folding is a function of the groups, not of the order equal-scored groups arrive in', () => {
+test('rankGroups: equal-scored groups fold the same way whatever order they arrive in', () => {
   const make = () => [
-    group('w1', 50, [span('a.js', 0, 60), span('b.js', 0, 60)], { path: 'N2', kind: 'window' }),
-    group('w2', 50, [span('a.js', 40, 90), span('b.js', 40, 90)], { path: 'N2', kind: 'window' })
+    group('w1', 0, [span('a.js', 0, 60), span('b.js', 0, 60)], { path: 'N2', kind: 'window', memberCount: 2 }),
+    group('w2', 0, [span('a.js', 40, 90), span('b.js', 40, 90)], { path: 'N2', kind: 'window', memberCount: 2 })
   ];
-  const ordered = (groups) => groups.sort((a, b) => b.score - a.score || (a.id < b.id ? -1 : 1));
-  const first = foldGroups(ordered(make())).map((root) => root.id);
-  const second = foldGroups(ordered(make().reverse())).map((root) => root.id);
+  const rootsOf = (groups) => rankGroups(groups).filter((entry) => entry.foldedInto === null).map((entry) => entry.id);
+  const first = rootsOf(make());
+  const second = rootsOf(make().reverse());
+  assert.equal(first.length, 1);
   assert.deepEqual(first, second);
+});
+
+test('fragment: folds do not chain, so a group keeps its slot when the host it sits in is folded elsewhere', () => {
+  const window = (score) => group('C', score, [span('a.js', 0, 100), span('b.js', 0, 100)], { path: 'N2', kind: 'window', mass: 60 });
+  const host = (score) => group('B', score, [span('a.js', 10, 90), span('b.js', 10, 90), span('z.js', 0, 1000)], { kind: 'fn' });
+  const held = (score) => group('A', score, [span('z.js', 100, 200), span('z.js', 300, 400), span('z.js', 500, 600)]);
+  for (const [scoreA, scoreB] of [[60, 80], [500, 80]]) {
+    const { roots, byId } = fold([window(100), host(scoreB), held(scoreA)]);
+    assert.ok(roots.includes('C'));
+    assert.notEqual(byId.get('A').foldedInto, 'C', `A is not hidden under C at score ${scoreA}`);
+    assert.notEqual(byId.get('A').foldedVia, 'B', 'a group is never reported through a host that was itself folded');
+  }
+});
+
+test('foldedVia names the family root a member hit when it is not the slot', () => {
+  const slot = group('slot', 100, [span('a.js', 0, 100), span('b.js', 0, 100)], { path: 'N2', kind: 'window', mass: 60 });
+  const shifted = group('shifted', 90, [span('a.js', 50, 150), span('b.js', 50, 150)], { path: 'N2', kind: 'window', mass: 60 });
+  const piece = group('piece', 50, [span('a.js', 110, 120), span('b.js', 110, 120)], { kind: 'expr', mass: 9 });
+  const { byId } = fold([slot, shifted, piece]);
+  assert.equal(byId.get('shifted').foldedInto, 'slot');
+  assert.equal(byId.get('shifted').foldedVia, null);
+  assert.equal(byId.get('piece').foldedInto, 'slot');
+  assert.equal(byId.get('piece').foldedVia, 'shifted');
 });

@@ -67,7 +67,7 @@ export const explainLines = (group) => {
     ...(group.drift ?? []).map(spanLine('drift')),
     ...(group.evicted ?? []).map(spanLine('evicted')),
     ...((group.dependsOn ?? []).length > 0 ? [`dependsOn: ${group.dependsOn.join(', ')}`] : []),
-    ...(group.foldedInto ? [`folded into ${group.foldedInto} (${group.foldReason})`] : []),
+    ...(group.foldedInto ? [`folded into ${group.foldedInto}${group.foldedVia ? ` via ${group.foldedVia}` : ''} (${group.foldReason})`] : []),
     ...(group.folded ?? []).map((member) => `  folds ${member.id} (${member.reason})`)
   ];
 };

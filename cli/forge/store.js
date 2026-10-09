@@ -11,7 +11,9 @@ import { isInlineRequested, INLINE_VERSION_OFFSET } from './inline-mode.js';
 // whose row carries another version is fingerprinted again.
 // 5: alias inlining off by default (#2595). Opting in (CHEMX_FORGE_INLINE=1) adds INLINE_VERSION_OFFSET so
 // the two modes never share ledger rows.
-const EXTRACTOR_BASE = 5;
+// 6: a ledger measured on the kit held a version-5 row whose unit_count differed from a fresh sync of the
+// same content (45 against 46 for one file; cause not established), and a sync never repairs such a row.
+const EXTRACTOR_BASE = 6;
 export const FORGE_EXTRACTOR_VERSION = EXTRACTOR_BASE + (isInlineRequested() ? INLINE_VERSION_OFFSET : 0);
 
 const SQL = {
