@@ -51,6 +51,7 @@ describe('Surgical CLI Mutators Suite', () => {
 
   afterEach(() => {
     fs.rmSync(TEST_DIR, { recursive: true, force: true });
+    fs.rmSync(path.join(process.cwd(), '.chemx', 'backups', path.relative(process.cwd(), TEST_DIR)), { recursive: true, force: true });
   });
 
   it('resolves capsule directory and constituent files correctly', () => {
@@ -140,7 +141,7 @@ describe('Surgical CLI Mutators Suite', () => {
     assert.equal(dup.alreadyExists, true);
   });
 
-  it('autoFixes mechanical hazards like em dashes and zero-delay setTimeout', () => {
+  it('autoFixes comment em dashes and only suggests the zero-delay setTimeout rewrite', () => {
     const testFile = path.join(TEST_DIR, 'dirty-file.ts');
     const dirtyContent = [
       '// Clean title \u2014 with em dash',
@@ -153,12 +154,12 @@ describe('Surgical CLI Mutators Suite', () => {
 
     const result = autoFixFile(testFile);
     assert.equal(result.fixed, true);
-    assert.equal(result.replacementsCount, 2);
+    assert.equal(result.replacementsCount, 1);
+    assert.equal(result.suggestions.length, 1);
 
     const cleanContent = fs.readFileSync(testFile, 'utf-8');
     assert.ok(!cleanContent.includes('\u2014'));
-    assert.ok(!cleanContent.includes('setTimeout'));
-    assert.ok(cleanContent.includes('queueMicrotask'));
+    assert.ok(cleanContent.includes('setTimeout'), 'timer rewrite is a suggestion, never applied');
 
     // Idempotent check
     const cleanResult = autoFixFile(testFile);
@@ -172,5 +173,34 @@ describe('Surgical CLI Mutators Suite', () => {
 
     assert.equal(res.success, true);
     assert.equal(res.propName, 'imageUrl');
+  });
+});
+
+describe('Mutator safety', () => {
+  const SAFETY_DIR = path.resolve(process.cwd(), 'scratch', 'test-mutators-safety');
+  beforeEach(() => {
+    fs.rmSync(SAFETY_DIR, { recursive: true, force: true });
+    fs.mkdirSync(path.join(SAFETY_DIR, 'm-card', 'types'), { recursive: true });
+  });
+  afterEach(() => {
+    fs.rmSync(SAFETY_DIR, { recursive: true, force: true });
+    fs.rmSync(path.join(process.cwd(), '.chemx', 'backups', path.relative(process.cwd(), SAFETY_DIR)), { recursive: true, force: true });
+  });
+
+  it('refuses (instead of reporting success) when the props block cannot be found', () => {
+    const propsFile = path.join(SAFETY_DIR, 'm-card', 'types', 'props.d.ts');
+    fs.writeFileSync(propsFile, 'export const notProps = 1;\n');
+    assert.throws(() => addPropToCapsule(path.join(SAFETY_DIR, 'm-card'), 'title:string'), /nothing was changed/);
+    assert.equal(fs.readFileSync(propsFile, 'utf-8'), 'export const notProps = 1;\n');
+  });
+
+  it('supports `type XProps = {}`, inserts `$` literally, and dry-runs with a diff', () => {
+    const propsFile = path.join(SAFETY_DIR, 'm-card', 'types', 'props.d.ts');
+    fs.writeFileSync(propsFile, 'export type CardProps = {\n  readonly a?: string;\n};\n');
+    const dry = addPropToCapsule(path.join(SAFETY_DIR, 'm-card'), "price:Record<'$&', number>", { dryRun: true });
+    assert.match(dry.diff, /\+ {2}readonly price\?: Record<'\$&', number>;/);
+    assert.equal(fs.readFileSync(propsFile, 'utf-8'), 'export type CardProps = {\n  readonly a?: string;\n};\n');
+    addPropToCapsule(path.join(SAFETY_DIR, 'm-card'), "price:Record<'$&', number>");
+    assert.ok(fs.readFileSync(propsFile, 'utf-8').includes("readonly price?: Record<'$&', number>;"));
   });
 });

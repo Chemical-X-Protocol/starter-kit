@@ -20,8 +20,8 @@ test('patchFile: surgically replaces unique target chunk and updates line counts
     });
 
     assert.strictEqual(result.status, 'ok');
-    assert.strictEqual(result.originalLines, 3);
-    assert.strictEqual(result.newLines, 4);
+    assert.strictEqual(result.originalLines, 2);
+    assert.strictEqual(result.newLines, 3);
     assert.strictEqual(result.lineDelta, 1);
     assert.strictEqual(result.replaced, 1);
 
@@ -86,6 +86,7 @@ test('patchFile: micro-indexes file into SQLite immediately upon write', () => {
     const patchResult = patchFile(testFile, {
       targetContent: 'export const initialSymbol = () => true;',
       replacementContent: 'export const liveIndexedSymbol = () => 42;',
+      allowRemoved: ['initialSymbol'],
       cwd: tmpDir
     });
 
@@ -114,6 +115,7 @@ test('patchFile: evaluates Directive 1.A line limits and warns when molecule exc
     const result = patchFile(moleculeFile, {
       targetContent: 'export const isSample = true;',
       replacementContent: bigContent,
+      allowRemoved: ['isSample'],
       cwd: tmpDir
     });
 
@@ -175,6 +177,7 @@ test('patchFile: dryRun previews changes without writing to disk', () => {
     const result = patchFile(testFile, {
       targetContent: 'export const initial = 1;',
       replacementContent: 'export const updated = 2;',
+      allowRemoved: ['initial'],
       cwd: tmpDir,
       dryRun: true
     });

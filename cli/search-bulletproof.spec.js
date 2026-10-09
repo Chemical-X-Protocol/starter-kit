@@ -45,30 +45,34 @@ test('bulletproof: handleChemxWrite and handleChemxPatch auto-sync index', () =>
   const cwd = makeProjectRoot();
   const testFile = path.resolve(cwd, 'src/test-auto-sync.ts');
   fs.mkdirSync(path.dirname(testFile), { recursive: true });
+  fs.rmSync(testFile, { force: true });
 
-  // Write new file via MCP
-  handleChemxWrite({
-    path: 'src/test-auto-sync.ts',
-    content: 'export const autoSyncInitial = () => 42;\n'
-  }, cwd);
+  try {
+    handleChemxWrite({
+      path: 'src/test-auto-sync.ts',
+      content: 'export const autoSyncInitial = () => 42;\n'
+    }, cwd);
 
-  const db = openIndexDb(cwd);
-  const sym1 = db.prepare('SELECT * FROM symbols WHERE name = ?').get('autoSyncInitial');
-  assert.ok(sym1, 'handleChemxWrite should auto-sync symbol into database');
+    const db = openIndexDb(cwd);
+    const sym1 = db.prepare('SELECT * FROM symbols WHERE name = ?').get('autoSyncInitial');
+    assert.ok(sym1, 'handleChemxWrite should auto-sync symbol into database');
 
-  // Patch file via MCP
-  handleChemxPatch({
-    path: 'src/test-auto-sync.ts',
-    targetContent: 'autoSyncInitial',
-    replacementContent: 'autoSyncPatched'
-  }, cwd);
+    const patched = handleChemxPatch({
+      path: 'src/test-auto-sync.ts',
+      targetContent: 'autoSyncInitial',
+      replacementContent: 'autoSyncPatched',
+      allowRemoved: ['autoSyncInitial']
+    }, cwd);
+    assert.equal(patched.status, 'ok');
+    assert.equal(patched.indexed, true);
 
-  const sym2 = db.prepare('SELECT * FROM symbols WHERE name = ?').get('autoSyncPatched');
-  assert.ok(sym2, 'handleChemxPatch should auto-sync patched symbol into database');
-
-  // Cleanup
-  fs.unlinkSync(testFile);
-  syncSingleFileIndex(testFile, cwd);
+    const sym2 = db.prepare('SELECT * FROM symbols WHERE name = ?').get('autoSyncPatched');
+    assert.ok(sym2, 'handleChemxPatch should auto-sync patched symbol into database');
+  } finally {
+    fs.rmSync(testFile, { force: true });
+    fs.rmSync(path.join(cwd, '.chemx', 'backups', 'src', 'test-auto-sync.ts.chemx-backup'), { force: true });
+    syncSingleFileIndex(testFile, cwd);
+  }
 });
 
 test('bulletproof: queryIndex and handleChemxQ fallback to FTS5 on symbol misses', () => {

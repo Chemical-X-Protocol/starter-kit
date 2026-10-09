@@ -11,6 +11,7 @@ import { renderTtyBanner } from './tty-banner.js';
 import { PILLARS, PILLAR_PRESETS } from './pillars-schema.js';
 import { planFileWrite, applyFileWrites } from './pillars-write-guard.js';
 import { buildHostShims } from './host-shims.js';
+import { hasPreviewFlag } from './cli-args.js';
 
 const AGENTS_TEMPLATE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'AGENTS.md');
 
@@ -26,7 +27,7 @@ export const runPillarsWizard = async (rawArgs = [], cwd = process.cwd()) => {
   const isYes = rawArgs.includes('-y') || rawArgs.includes('--yes') || !isStdinTty();
   const isWrite = rawArgs.includes('--write');
   const isForce = rawArgs.includes('--force');
-  const isDryRun = !isWrite || rawArgs.includes('--dry-run') || rawArgs.includes('-n');
+  const isDryRun = !isWrite || hasPreviewFlag(rawArgs);
 
   if (!isJson) {
     await renderTtyBanner('Chemical X: Architectural Pillars Wizard');

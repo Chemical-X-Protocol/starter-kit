@@ -47,19 +47,22 @@ export const MASTER_MCP_TOOL = {
           logic: { type: 'boolean', description: 'Extract AST logic skeleton preserving control flow, guards, and mutations (for read)' },
           template: { type: 'boolean', description: 'Extract declarative template markup only (Vue/Svelte/JSX) (for read)' },
           enrich: { type: 'boolean', description: 'Append compacted logic skeleton after outline block. Composable overlay: use with outline:true or symbol. Returns outline + logic in one token-compact response without boilerplate penalty. (for read)' },
-          traceSymbol: { type: 'string', description: 'Symbol name: appends forward call trace card inline when enrich:true (for read)' },
-          backtraceSymbol: { type: 'string', description: 'Symbol name: appends reverse caller chain card inline when enrich:true (for read)' },
+          traceSymbol: { type: 'string', description: 'Symbol name: appends a forward call trace card (for read; needs the search index)' },
+          backtraceSymbol: { type: 'string', description: 'Symbol name: appends a reverse caller chain card (for read; needs the search index)' },
           startLine: { type: 'number', description: 'Starting line number (1-indexed) (for read)' },
           endLine: { type: 'number', description: 'Ending line number (1-indexed) (for read)' },
-          stripComments: { type: 'boolean', description: 'Remove comments to minimize tokens (for read)' },
-          compact: { type: 'boolean', description: 'Collapse empty lines and whitespace (for read)' },
+          stripComments: { type: 'boolean', description: 'Opt-in: blank out comments (AST based, line numbers kept) (for read)' },
+          compact: { type: 'boolean', description: 'Opt-in: drop repeated blank lines; original line numbers are still printed (for read)' },
           target: { type: 'string', description: 'patch: exact text block to replace. test: alias of testTarget.' },
           search: { type: 'string', description: 'Alias for target text block to replace (for patch)' },
           replacement: { type: 'string', description: 'New replacement content (for patch)' },
           replace: { type: 'string', description: 'Alias for replacement content (for patch)' },
           multiple: { type: 'boolean', description: 'Allow replacing multiple occurrences (for patch)' },
-          dryRun: { type: 'boolean', description: 'Preview change without writing to disk (for patch, generate)' },
+          dryRun: { type: 'boolean', description: 'Preview change without writing to disk; returns a unified diff (for patch, write, autofix, generate)' },
+          allowRemoved: { type: 'array', items: { type: 'string' }, description: 'Top-level declarations a patch/write may remove. Any removal not named here is refused, renames included (removing A while adding B)' },
+          agentId: { type: 'string', description: 'Caller agent id for team lock checks on patch/write (default @agent)' },
           content: { type: 'string', description: 'File content to write (for write)' },
+          overwrite: { type: 'boolean', description: 'Required to replace an existing file (for write); without it write refuses' },
           dir: { type: 'string', description: 'Target directory (for audit, test, build, patterns)' },
           command: { type: 'string', description: 'Command for build/test/typecheck. Runs only when it equals a package.json script (or `npm run <script>`), unless the server has CHEMX_MCP_ALLOW_SHELL=1.' },
           testTarget: { type: 'string', description: 'Target test file or spec path (for test)' },
@@ -311,7 +314,10 @@ export const SUB_TOOLS = [
         replacement: { type: 'string', description: 'Alias for replacement content' },
         replace: { type: 'string', description: 'Alias for replacement content' },
         allowMultiple: { type: 'boolean', description: 'Allow multiple replacements' },
-        multiple: { type: 'boolean', description: 'Alias for allowMultiple' }
+        multiple: { type: 'boolean', description: 'Alias for allowMultiple' },
+        dryRun: { type: 'boolean', description: 'Preview only: return the unified diff and write nothing' },
+        allowRemoved: { type: 'array', items: { type: 'string' }, description: 'Top-level declarations this patch may remove; any other removal (renames included) is refused' },
+        agentId: { type: 'string', description: 'Caller agent id for team lock checks (default @agent)' }
       },
       required: ['path']
     }
@@ -329,12 +335,16 @@ export const SUB_TOOLS = [
   },
   {
     name: 'chemx_write',
-    description: 'Create or overwrite a file with automatic SQLite AST micro-indexing and architectural boundary verification. NOTE: Prefer master tool chemx({ action: "write", params: ... }) for single-permission execution.',
+    description: 'Create a file (or replace one when overwrite is true) with automatic SQLite AST micro-indexing and architectural boundary verification. An existing file is refused without overwrite. NOTE: Prefer master tool chemx({ action: "write", params: ... }) for single-permission execution.',
     inputSchema: {
       type: 'object',
       properties: {
         path: { type: 'string', description: 'Target file path to write' },
-        content: { type: 'string', description: 'Code content to write' }
+        content: { type: 'string', description: 'Code content to write' },
+        overwrite: { type: 'boolean', description: 'Required to replace an existing file; without it write refuses' },
+        dryRun: { type: 'boolean', description: 'Preview only: return the unified diff and write nothing' },
+        allowRemoved: { type: 'array', items: { type: 'string' }, description: 'Top-level declarations an overwrite may remove; any other removal is refused' },
+        agentId: { type: 'string', description: 'Caller agent id for team lock checks (default @agent)' }
       },
       required: ['path', 'content']
     }

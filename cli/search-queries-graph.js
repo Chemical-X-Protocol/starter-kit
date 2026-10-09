@@ -160,7 +160,7 @@ export const calculateCallTrace = (db, targetSymbolOrPath, options = {}) => {
     const absPath = path.isAbsolute(filePath) ? filePath : path.resolve(options.root || process.cwd(), filePath);
     if (fs.existsSync(absPath)) {
       fullText = fs.readFileSync(absPath, 'utf-8');
-      const block = extractSymbolBlock(fullText, symbol);
+      const block = extractSymbolBlock(fullText, symbol, absPath);
       if (block) {
         codeSlice = block.code;
       } else {

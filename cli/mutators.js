@@ -2,7 +2,23 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { toPascalCase } from './generator-templates.js';
 import { ANSI } from './theme.js';
+import { STATUS, toExitCode } from './result-status.js';
 import { runAutofix } from './audit/autofix.js';
+import { applyEdits } from './apply-edits.js';
+import { hasPreviewFlag, findUnknownFlags, unknownFlagsMessage } from './cli-args.js';
+
+const relToCwd = (absPath) => path.relative(process.cwd(), absPath);
+
+/**
+ * Commits computed capsule edits through applyEdits and lists only files that really changed.
+ */
+const commitCapsuleEdits = (edits, opts) => {
+  const applied = applyEdits(edits, { cwd: opts.cwd || process.cwd(), dryRun: opts.isDryRun, agentId: opts.agentId });
+  return {
+    updatedFiles: applied.files.filter((f) => f.changed).map((f) => relToCwd(f.absPath)),
+    diff: applied.diff
+  };
+};
 
 export const resolveCapsuleFiles = (targetPath, cwd = process.cwd()) => {
   const abs = path.resolve(cwd, targetPath);
@@ -62,23 +78,29 @@ export const addPropToCapsule = (targetPath, propDefinition, options = {}) => {
   const isDryRun = Boolean(opts.dryRun || opts['dry-run']);
   const files = resolveCapsuleFiles(targetPath, opts.cwd || process.cwd());
   const updatedFiles = [];
+  const edits = [];
 
-  if (!files.typesPropsFile || !fs.existsSync(files.typesPropsFile)) {
+  const hasTarget = Boolean(files.typesPropsFile) && fs.existsSync(files.typesPropsFile);
+  if (!hasTarget) {
     throw new Error(`No props type file found in capsule at ${targetPath}.`);
   }
 
   let typesContent = fs.readFileSync(files.typesPropsFile, 'utf-8');
-  const regexExists = new RegExp(`\\b${propName}\\??\\s*:`);
+  const isValidName = /^[A-Za-z_$][\w$]*$/.test(propName);
+  if (!isValidName) throw new Error(`Invalid prop name "${propName}".`);
+  const regexExists = new RegExp(`\\b${propName.replace(/\$/g, '\\$')}\\??\\s*:`);
   if (regexExists.test(typesContent)) {
     return { success: true, alreadyExists: true, propName, propType, updatedFiles };
   }
 
   const propDeclaration = `  readonly ${propName}${isOptional ? '?' : ''}: ${propType};\n`;
-  typesContent = typesContent.replace(/(interface\s+\w+Props\s*\{[\s\S]*?)(\n\s*\})/, `$1\n${propDeclaration}$2`);
-  if (!isDryRun) {
-    fs.writeFileSync(files.typesPropsFile, typesContent, 'utf-8');
+  const propsBlock = /((?:interface\s+\w+Props|type\s+\w+Props\s*=)\s*\{[\s\S]*?)(\n\s*\})/;
+  const hasPropsBlock = propsBlock.test(typesContent);
+  if (!hasPropsBlock) {
+    throw new Error(`No "interface <Name>Props {" or "type <Name>Props = {" block found in ${relToCwd(files.typesPropsFile)}; nothing was changed.`);
   }
-  updatedFiles.push(path.relative(process.cwd(), files.typesPropsFile));
+  typesContent = typesContent.replace(propsBlock, (_m, head, tail) => `${head}\n${propDeclaration}${tail}`);
+  edits.push({ path: files.typesPropsFile, content: typesContent });
 
   if (files.compPath && fs.existsSync(files.compPath)) {
     let compContent = fs.readFileSync(files.compPath, 'utf-8');
@@ -87,26 +109,23 @@ export const addPropToCapsule = (targetPath, propDefinition, options = {}) => {
     if (files.compExt === 'tsx' && !compContent.includes(propName)) {
       const fcMatch = compContent.match(/(\(\{\s*\n\s*)([a-zA-Z0-9_]+)/);
       if (fcMatch) {
-        compContent = compContent.replace(fcMatch[0], `${fcMatch[1]}${propName},\n  ${fcMatch[2]}`);
+        compContent = compContent.replace(fcMatch[0], () => `${fcMatch[1]}${propName},\n  ${fcMatch[2]}`);
         compModified = true;
       }
     } else if (files.compExt === 'svelte' && !compContent.includes(propName)) {
       const svelteMatch = compContent.match(/(const\s*\{\s*\n\s*)([a-zA-Z0-9_]+)/);
       if (svelteMatch) {
-        compContent = compContent.replace(svelteMatch[0], `${svelteMatch[1]}${propName},\n  ${svelteMatch[2]}`);
+        compContent = compContent.replace(svelteMatch[0], () => `${svelteMatch[1]}${propName},\n  ${svelteMatch[2]}`);
         compModified = true;
       }
     }
 
-    if (compModified) {
-      if (!isDryRun) {
-        fs.writeFileSync(files.compPath, compContent, 'utf-8');
-      }
-      updatedFiles.push(path.relative(process.cwd(), files.compPath));
-    }
+    if (compModified) edits.push({ path: files.compPath, content: compContent });
   }
 
-  return { success: true, dryRun: isDryRun, propName, propType, updatedFiles };
+  const committed = commitCapsuleEdits(edits, { ...opts, isDryRun });
+  updatedFiles.push(...committed.updatedFiles);
+  return { success: true, dryRun: isDryRun, propName, propType, updatedFiles, diff: committed.diff };
 };
 
 export const addStateToCapsule = (targetPath, statusName, payload = '', options = {}) => {
@@ -116,7 +135,8 @@ export const addStateToCapsule = (targetPath, statusName, payload = '', options 
   const files = resolveCapsuleFiles(targetPath, opts.cwd || process.cwd());
   const updatedFiles = [];
 
-  if (!files.typesStateFile || !fs.existsSync(files.typesStateFile)) {
+  const hasTarget = Boolean(files.typesStateFile) && fs.existsSync(files.typesStateFile);
+  if (!hasTarget) {
     throw new Error(`No state type file found in capsule at ${targetPath}.`);
   }
 
@@ -134,13 +154,16 @@ export const addStateToCapsule = (targetPath, statusName, payload = '', options 
   const payloadStr = resolvePayloadString(cleanPayload);
   const newMember = `  | { readonly status: '${cleanStatus}'${payloadStr} }`;
 
-  stateContent = stateContent.replace(/(export\s+type\s+\w+State\s*=[\s\S]*?)(\s*;)/, `$1\n${newMember}$2`);
-  if (!isDryRun) {
-    fs.writeFileSync(files.typesStateFile, stateContent, 'utf-8');
+  const stateUnion = /(export\s+type\s+\w+State\s*=[\s\S]*?)(\s*;)/;
+  const hasStateUnion = stateUnion.test(stateContent);
+  if (!hasStateUnion) {
+    throw new Error(`No "export type <Name>State = ...;" union found in ${relToCwd(files.typesStateFile)}; nothing was changed.`);
   }
-  updatedFiles.push(path.relative(process.cwd(), files.typesStateFile));
+  stateContent = stateContent.replace(stateUnion, (_m, head, tail) => `${head}\n${newMember}${tail}`);
+  const committed = commitCapsuleEdits([{ path: files.typesStateFile, content: stateContent }], { ...opts, isDryRun });
+  updatedFiles.push(...committed.updatedFiles);
 
-  return { success: true, dryRun: isDryRun, statusName: cleanStatus, updatedFiles };
+  return { success: true, dryRun: isDryRun, statusName: cleanStatus, updatedFiles, diff: committed.diff };
 };
 
 export const addActionToController = (targetPath, actionName, options = {}) => {
@@ -152,7 +175,8 @@ export const addActionToController = (targetPath, actionName, options = {}) => {
   const updatedFiles = [];
   const isDryRun = Boolean(options.dryRun || options['dry-run']);
 
-  if (!files.controllerPath || !fs.existsSync(files.controllerPath)) {
+  const hasTarget = Boolean(files.controllerPath) && fs.existsSync(files.controllerPath);
+  if (!hasTarget) {
     throw new Error(`No controller file found in capsule at ${targetPath}.`);
   }
 
@@ -164,13 +188,18 @@ export const addActionToController = (targetPath, actionName, options = {}) => {
   if (controllerContent.includes('ControllerOptions') && !controllerContent.includes(`on${pascalAction}?:`)) {
     controllerContent = controllerContent.replace(
       /(interface\s+ControllerOptions\s*\{[\s\S]*?)(\n\s*\})/,
-      `$1\n  readonly on${pascalAction}?: () => void;$2`
+      (_m, head, tail) => `${head}\n  readonly on${pascalAction}?: () => void;${tail}`
     );
   }
 
   const handlerCode = `  const ${handlerName} = () => {\n    if (!canProceed) return;\n    options.on${pascalAction}?.();\n  };\n\n`;
 
-  controllerContent = controllerContent.replace(/(\n\s*return\s*\{)/, `\n${handlerCode}$1`);
+  const returnBlock = /(\n\s*return\s*\{)/;
+  const hasReturnBlock = returnBlock.test(controllerContent);
+  if (!hasReturnBlock) {
+    throw new Error(`No "return {" block found in ${relToCwd(files.controllerPath)}; nothing was changed.`);
+  }
+  controllerContent = controllerContent.replace(returnBlock, (_m, head) => `\n${handlerCode}${head}`);
 
   controllerContent = controllerContent.replace(
     /(return\s*\{[\s\S]*?)(\s*\};)/,
@@ -181,12 +210,10 @@ export const addActionToController = (targetPath, actionName, options = {}) => {
     }
   );
 
-  if (!isDryRun) {
-    fs.writeFileSync(files.controllerPath, controllerContent, 'utf-8');
-  }
-  updatedFiles.push(path.relative(process.cwd(), files.controllerPath));
+  const committed = commitCapsuleEdits([{ path: files.controllerPath, content: controllerContent }], { ...options, isDryRun });
+  updatedFiles.push(...committed.updatedFiles);
 
-  return { success: true, dryRun: isDryRun, handlerName, updatedFiles };
+  return { success: true, dryRun: isDryRun, handlerName, updatedFiles, diff: committed.diff };
 };
 
 export const autoFixFile = (targetFile, options = {}) => {
@@ -202,16 +229,45 @@ export const autoFixFile = (targetFile, options = {}) => {
 
   const result = runAutofix(absPath, options);
   return {
+    status: result.status,
+    ...(result.reason ? { reason: result.reason } : {}),
     file: path.relative(process.cwd(), absPath),
+    dryRun: result.dryRun,
+    filesScanned: result.filesScanned,
     fixed: result.filesChanged > 0,
     replacementsCount: result.totalFixes,
-    fixes: result.fixes
+    fixes: result.fixes,
+    suggestions: result.suggestions,
+    skipped: result.skipped,
+    ...(result.diff ? { diff: result.diff } : {})
   };
+};
+
+const changedFileCount = (result) => {
+  const hasUpdatedFiles = Array.isArray(result.updatedFiles);
+  if (hasUpdatedFiles) return result.updatedFiles.length;
+  const isDirectoryResult = result.filesChanged !== undefined;
+  if (isDirectoryResult) return result.filesChanged;
+  return result.fixed ? 1 : 0;
+};
+
+const printNothingChecked = (result) => {
+  process.stdout.write(`\n${ANSI.BOLD}${ANSI.GOLD}Inconclusive: no fixable file was checked (${result.reason}).${ANSI.RESET}\n`);
+  for (const s of result.skipped || []) process.stdout.write(`  ${ANSI.GOLD}•${ANSI.RESET} Skipped ${s.file}: ${s.reason}\n`);
+  process.stdout.write('\n');
+};
+
+const printDirectorySummary = (result) => {
+  const files = [...new Set((result.fixes || []).map((f) => f.file))];
+  for (const f of files) process.stdout.write(`  ${ANSI.CYAN}•${ANSI.RESET} Updated ${f}\n`);
+  const summary = `Fixed ${result.totalFixes} mechanical hazard(s) in ${result.filesChanged} of ${result.filesScanned} file(s) checked`;
+  process.stdout.write(`  ${ANSI.MINT}•${ANSI.RESET} ${summary}\n`);
 };
 
 export const runMutatorCli = async (rawArgs = [], isCli = true) => {
   const isJson = rawArgs.includes('--json');
-  const isDryRun = rawArgs.includes('--dry-run') || rawArgs.includes('-n');
+  const isDryRun = hasPreviewFlag(rawArgs);
+  const unknown = findUnknownFlags(rawArgs, []);
   const nonFlags = rawArgs.filter((a) => !a.startsWith('-'));
   const first = nonFlags[0] || '';
   const second = nonFlags[1] || '';
@@ -230,19 +286,24 @@ export const runMutatorCli = async (rawArgs = [], isCli = true) => {
 
   try {
     let result = null;
+    const hasUnknownFlags = unknown.length > 0;
+    if (hasUnknownFlags) throw new Error(unknownFlagsMessage(command, unknown));
 
     if (command === 'add:prop') {
-      if (!target || !value) {
+      const hasArgs = Boolean(target) && Boolean(value);
+      if (!hasArgs) {
         throw new Error('Usage: chemx add:prop <capsule-path> <name>:<type>');
       }
       result = addPropToCapsule(target, value, { dryRun: isDryRun });
     } else if (command === 'add:state') {
-      if (!target || !value) {
+      const hasArgs = Boolean(target) && Boolean(value);
+      if (!hasArgs) {
         throw new Error('Usage: chemx add:state <capsule-path> <statusName> [payload]');
       }
       result = addStateToCapsule(target, value, extra, { dryRun: isDryRun });
     } else if (command === 'add:action') {
-      if (!target || !value) {
+      const hasArgs = Boolean(target) && Boolean(value);
+      if (!hasArgs) {
         throw new Error('Usage: chemx add:action <capsule-path> <actionName>');
       }
       result = addActionToController(target, value, { dryRun: isDryRun });
@@ -253,32 +314,52 @@ export const runMutatorCli = async (rawArgs = [], isCli = true) => {
       throw new Error(`Unknown mutator command "${command}". Available: add:prop, add:state, add:action, fix`);
     }
 
+    const isInconclusive = result.status === STATUS.INCONCLUSIVE;
     if (isJson) {
-      process.stdout.write(JSON.stringify({ success: true, command, ...result }) + '\n');
-      if (isCli) process.exit(0);
+      process.stdout.write(JSON.stringify({ success: !isInconclusive, command, ...result }) + '\n');
+      if (isCli) process.exit(toExitCode(result.status || STATUS.PASS));
+      return result;
+    }
+    if (isInconclusive) {
+      printNothingChecked(result);
+      if (isCli) process.exit(toExitCode(result.status));
       return result;
     }
 
     if (result.dryRun) {
-      process.stdout.write(`\n\x1b[1m\x1b[33m[DRY RUN]\x1b[0m Would update ${result.updatedFiles?.length || 0} file(s):\n`);
-      for (const f of result.updatedFiles || []) {
+      const wouldUpdate = result.updatedFiles || [...new Set((result.fixes || []).map((f) => f.file))];
+      process.stdout.write(`\n\x1b[1m\x1b[33m[DRY RUN]\x1b[0m Would update ${wouldUpdate.length} file(s):\n`);
+      for (const f of wouldUpdate) {
         process.stdout.write(`  \x1b[33m•\x1b[0m ${f}\n`);
+      }
+      if (result.diff) process.stdout.write(`\n${result.diff}\n`);
+      for (const s of result.suggestions || []) {
+        process.stdout.write(`  suggestion ${s.file || ''}:${s.line} ${s.rule}: ${s.suggestion}\n`);
       }
       process.stdout.write('\n\x1b[2mDry run complete. No files were written to disk.\x1b[0m\n\n');
       if (isCli) process.exit(0);
       return result;
     }
 
-    process.stdout.write(`\n${ANSI.BOLD}${ANSI.LIME}✔ Chemical X Surgical Mutation Applied:${ANSI.RESET}\n`);
+    const isNothingApplied = changedFileCount(result) === 0;
+    const heading = isNothingApplied ? `${ANSI.BOLD}${ANSI.GOLD}No changes written:` : `${ANSI.BOLD}${ANSI.LIME}✔ Chemical X Surgical Mutation Applied:`;
+    process.stdout.write(`\n${heading}${ANSI.RESET}\n`);
     if (result.updatedFiles) {
       for (const f of result.updatedFiles) {
         process.stdout.write(`  ${ANSI.CYAN}•${ANSI.RESET} Updated ${f}\n`);
       }
     }
-    if (result.fixed !== undefined) {
+    const skippedEntries = result.skipped || [];
+    for (const s of skippedEntries) {
+      process.stdout.write(`  ${ANSI.GOLD}•${ANSI.RESET} Skipped ${s.file}: ${s.reason}\n`);
+    }
+    const isReportedFile = result.fixed !== undefined && skippedEntries.length === 0;
+    if (isReportedFile) {
       const msg = result.fixed ? `Fixed ${result.replacementsCount} mechanical hazard(s)` : 'File was already clean';
       process.stdout.write(`  ${ANSI.MINT}•${ANSI.RESET} ${msg} in ${result.file}\n`);
     }
+    const isDirectoryResult = result.filesChanged !== undefined;
+    if (isDirectoryResult) printDirectorySummary(result);
     process.stdout.write('\n');
 
     if (isCli) process.exit(0);

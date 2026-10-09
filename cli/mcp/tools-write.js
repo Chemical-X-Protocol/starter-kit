@@ -1,31 +1,25 @@
-import path from 'node:path';
-import { syncSingleFileIndex } from '../search.js';
 import { writeFile } from '../patcher.js';
-import { formatPatchWarnings } from './tools-patch.js';
+import { formatPatchWarnings, isDryRunRequested } from './tools-patch.js';
 import { resolveSafePath } from '../path-scope.js';
 
 export const handleChemxWrite = (args = {}, cwd = process.cwd()) => {
   const hasPath = Boolean(args.path);
-  const hasContent = args.content !== undefined;
+  const hasContent = typeof args.content === 'string';
   const hasRequiredArgs = hasPath && hasContent;
 
   if (!hasRequiredArgs) {
-    throw new Error('chemx_write requires "path" and "content" arguments.');
+    throw new Error('chemx_write requires "path" and string "content" arguments.');
   }
 
   const targetPath = resolveSafePath(args.path, cwd);
   const result = writeFile(targetPath, {
     content: args.content,
+    overwrite: Boolean(args.overwrite),
+    dryRun: isDryRunRequested(args),
+    allowRemoved: args.allowRemoved ?? args.allowRemove,
+    agentId: args.agentId ?? args.as,
     cwd
   });
-
-  try {
-    syncSingleFileIndex(targetPath, cwd);
-  } catch (err) {
-    if (process.env.CHEMX_DEBUG) {
-      process.stderr.write(`[write-sync] Auto-index skipped for ${targetPath}: ${err.message}\n`);
-    }
-  }
 
   return {
     ...result,

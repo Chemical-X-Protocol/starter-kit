@@ -145,6 +145,9 @@ const HANG_LIMIT_MS = 15000;
 
 test('cli: unknown command exits immediately with code 1 and error message', () => {
   const bogusInputs = ['config', 'foo', '--bogus'];
+  // The bound catches a hang (an interactive prompt or a heavy import), not cold-start speed:
+  // under the parallel full suite a bare node start alone can pass 2s.
+  const hangLimitMs = 10000;
 
   // "Immediately" is measured in user CPU, not wall clock: wall time on a loaded machine
   // flakes, while a hang or an eager import of the heavy stack shows up as CPU or a kill.

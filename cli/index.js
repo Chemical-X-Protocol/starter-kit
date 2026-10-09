@@ -62,7 +62,11 @@ export const syncSearchIndex = async (...a) => (await import('./search.js')).syn
 export const runMcpServer    = async (...a) => (await import('./mcp/index.js')).runMcpServer(...a);
 export const startMcpServer  = runMcpServer;
 export const runMcpInstaller = async (...a) => (await import('./mcp/index.js')).runMcpInstaller(...a);
-export const runReaderCli    = async (...a) => (await import('./reader.js')).runReaderCli(...a);
+export const runReaderCli    = async (...a) => {
+  const readerCards = await import('./reader-cards-gate.js');
+  if (readerCards.argsWantReadCards(a[0] || [])) await readerCards.loadReadCards();
+  return (await import('./reader.js')).runReaderCli(...a);
+};
 export const readTokenOptimized = async (...a) => (await import('./reader.js')).readTokenOptimized(...a);
 export const runPatcherCli   = async (...a) => (await import('./patcher.js')).runPatcherCli(...a);
 export const patchFile       = async (...a) => (await import('./patcher.js')).patchFile(...a);

@@ -1,5 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { resolveSafePath } from '../path-scope.js';
+import { applyEdits } from '../apply-edits.js';
+import { autofixContent } from './autofix-content.js';
+import { STATUS, inconclusive } from '../result-status.js';
+
+export { autofixContent } from './autofix-content.js';
 
 const IGNORED_DIRS = new Set([
   'node_modules',
@@ -9,183 +15,92 @@ const IGNORED_DIRS = new Set([
   '.git',
   '.next',
   '.turbo',
-  '.cache'
+  '.cache',
+  '.chemx',
+  '.claude'
 ]);
 
-const FIXABLE_EXTENSIONS = new Set(['.tsx', '.ts', '.jsx', '.js', '.vue', '.md', '.scss', '.css']);
+// Markdown is deliberately absent: fences and prose are content there, not AI residue.
+export const FIXABLE_EXTENSIONS = new Set(['.tsx', '.ts', '.jsx', '.js', '.mjs', '.cjs', '.vue', '.svelte', '.scss', '.css']);
 
-const RESIDUE_PATTERNS = [
-  ['hope this', 'helps'].join(' '),
-  ['feel free', 'to tweak'].join(' '),
-  ['let me know', 'if you need'].join(' '),
-  ['as an ai', 'language model'].join(' ')
-];
+const isFixable = (filePath) => FIXABLE_EXTENSIONS.has(path.extname(filePath).toLowerCase());
 
-const RESIDUE_REGEX = new RegExp(`\\b(?:${RESIDUE_PATTERNS.join('|')})\\b`, 'i');
-const PREAMBLE_REGEX = /\b(?:here(?:'s| is) the (?:complete|updated|refactored|full) (?:code|implementation|file|component|version))\b/i;
-const TRUNCATION_REGEX = /^\s*\/\/\s*\.\.\.\s*(?:existing|rest of|remaining)\s+(?:code|implementation|logic|imports)/i;
-const MARKDOWN_FENCE_REGEX = /^\s*```(?:typescript|javascript|tsx|jsx|vue|js|ts|html|css|scss)?\s*$/;
-
-export const autofixContent = (content, options = {}) => {
-  const allowedRules = options.rules ? new Set(options.rules) : null;
-  const shouldFix = (rule) => !allowedRules || allowedRules.has(rule);
-
-  const lines = content.split('\n');
-  const fixes = [];
-  const resultLines = [];
-
-  for (let i = 0; i < lines.length; i++) {
-    let line = lines[i];
-    const lineNumber = i + 1;
-    let shouldDropLine = false;
-
-    // 1. Leaked markdown fence removal
-    if (shouldFix('AI_SLOP_CONVERSATIONAL_ARTIFACT') && MARKDOWN_FENCE_REGEX.test(line)) {
-      fixes.push({
-        line: lineNumber,
-        rule: 'AI_SLOP_CONVERSATIONAL_ARTIFACT',
-        action: 'Removed leaked markdown code fence'
-      });
-      shouldDropLine = true;
-    }
-
-    // 2. Pure conversational preamble or residue comment removal
-    if (!shouldDropLine && shouldFix('AI_SLOP_CONVERSATIONAL_ARTIFACT')) {
-      const isComment = /^\s*(?:\/\/|\/\*|<!--)/.test(line);
-      if (isComment && (PREAMBLE_REGEX.test(line) || RESIDUE_REGEX.test(line))) {
-        fixes.push({
-          line: lineNumber,
-          rule: 'AI_SLOP_CONVERSATIONAL_ARTIFACT',
-          action: 'Removed AI conversational residue comment'
-        });
-        shouldDropLine = true;
-      }
-    }
-
-    // 3. AI lazy placeholder comment removal
-    const hasLazyTruncation = TRUNCATION_REGEX.test(line);
-    const isLazyTruncationEligible = !shouldDropLine && shouldFix('AI_SLOP_LAZY_PLACEHOLDER');
-    if (isLazyTruncationEligible && hasLazyTruncation) {
-      fixes.push({
-        line: lineNumber,
-        rule: 'AI_SLOP_LAZY_PLACEHOLDER',
-        action: 'Removed lazy AI truncation placeholder comment'
-      });
-      shouldDropLine = true;
-    }
-
-    const hasEmDash = line.includes('\u2014');
-    const isEmDashEligible = !shouldDropLine && shouldFix('TYPOGRAPHY_EM_DASH');
-    if (isEmDashEligible && hasEmDash) {
-      line = line.replace(/\u2014/g, '-');
-      fixes.push({
-        line: lineNumber,
-        rule: 'TYPOGRAPHY_EM_DASH',
-        action: 'Replaced em dash with standard hyphen'
-      });
-    }
-
-    const hasTimeoutMacro = /setTimeout\([^,]+,\s*0\)/.test(line);
-    const isTimeoutEligible = !shouldDropLine && shouldFix('MACRO_TASK_OVER_MICRO_TASK');
-    if (isTimeoutEligible && hasTimeoutMacro) {
-      line = line.replace(/setTimeout\(([^,]+),\s*0\)/g, 'queueMicrotask($1)');
-      fixes.push({
-        line: lineNumber,
-        rule: 'MACRO_TASK_OVER_MICRO_TASK',
-        action: 'Replaced setTimeout(fn, 0) with queueMicrotask(fn)'
-      });
-    }
-
-    if (!shouldDropLine) {
-      resultLines.push(line);
-    }
-  }
-
-  return {
-    fixedContent: resultLines.join('\n'),
-    fixes
-  };
-};
-
-const collectFiles = (targetPath, baseDir) => {
-  const stat = fs.statSync(targetPath);
-  if (stat.isFile()) {
-    return [targetPath];
-  }
+const collectFiles = (targetPath) => {
+  const isFile = fs.statSync(targetPath).isFile();
+  if (isFile) return isFixable(targetPath) ? [targetPath] : [];
 
   let files = [];
-  const entries = fs.readdirSync(targetPath, { withFileTypes: true });
-  for (const entry of entries) {
-    if (IGNORED_DIRS.has(entry.name)) continue;
+  for (const entry of fs.readdirSync(targetPath, { withFileTypes: true })) {
+    const isIgnored = IGNORED_DIRS.has(entry.name);
+    if (isIgnored) continue;
     const fullPath = path.join(targetPath, entry.name);
-    if (entry.isDirectory()) {
-      files = files.concat(collectFiles(fullPath, baseDir));
-    } else if (FIXABLE_EXTENSIONS.has(path.extname(entry.name))) {
-      files.push(fullPath);
-    }
+    const isDirectory = entry.isDirectory();
+    const isFixableFile = !isDirectory && isFixable(entry.name);
+    if (isDirectory) files = files.concat(collectFiles(fullPath));
+    else if (isFixableFile) files.push(fullPath);
   }
   return files;
 };
 
+// No fixable file was looked at: that proves nothing, so it is inconclusive (exit 3), never a green check.
+const NOTHING_CHECKED = inconclusive('NO_FILES_CHECKED');
+
+const excludedReason = (filePath) => {
+  const ext = path.extname(filePath).toLowerCase() || 'extensionless';
+  return `${ext} files are not autofix targets (fixable: ${[...FIXABLE_EXTENSIONS].join(' ')}); nothing was checked`;
+};
+
+/**
+ * Applies token-aware mechanical fixes to a file or directory, through applyEdits
+ * (parse check, declaration-loss check, team locks, atomic writes, one rollback-able batch).
+ *
+ * @param {string} targetPath File or directory (default 'src').
+ * @param {object} [options] { cwd, dryRun, rules, agentId }
+ * @returns {object} status (pass, or inconclusive when no fixable file was checked), the uncapped
+ *   fix list, suggestions, skipped files, and the diff on a dry run.
+ */
 export const runAutofix = (targetPath, options = {}) => {
   const cwd = options.cwd || process.cwd();
-  const resolvedTarget = path.resolve(cwd, targetPath || 'src');
+  const target = targetPath || 'src';
   const dryRun = Boolean(options.dryRun);
+  const resolvedTarget = resolveSafePath(target, cwd);
+  const root = fs.realpathSync(cwd);
+  const empty = { ...NOTHING_CHECKED, target, dryRun, filesScanned: 0, filesChanged: 0, totalFixes: 0, fixes: [], suggestions: [], skipped: [] };
+  const isMissing = !fs.existsSync(resolvedTarget);
+  if (isMissing) return { ...empty, skipped: [{ file: target, reason: 'target does not exist; nothing was checked' }] };
+  const isExcludedFile = fs.statSync(resolvedTarget).isFile() && !isFixable(resolvedTarget);
+  if (isExcludedFile) return { ...empty, skipped: [{ file: path.relative(root, resolvedTarget), reason: excludedReason(resolvedTarget) }] };
 
-  if (!fs.existsSync(resolvedTarget)) {
-    return {
-      target: targetPath || 'src',
-      dryRun,
-      filesScanned: 0,
-      filesChanged: 0,
-      totalFixes: 0,
-      fixes: []
-    };
-  }
-
-  const files = collectFiles(resolvedTarget, cwd);
-  const allFixes = [];
-  let filesChanged = 0;
-
+  const files = collectFiles(resolvedTarget);
+  const fixes = [];
+  const suggestions = [];
+  const skipped = [];
+  const edits = [];
   for (const filePath of files) {
-    const relPath = path.relative(cwd, filePath);
-    const originalContent = fs.readFileSync(filePath, 'utf-8');
-    const { fixedContent, fixes } = autofixContent(originalContent, options);
-
-    if (fixes.length > 0) {
-      filesChanged += 1;
-      for (const fix of fixes) {
-        allFixes.push({
-          file: relPath,
-          line: fix.line,
-          rule: fix.rule,
-          action: fix.action
-        });
-      }
-
-      if (!dryRun) {
-        fs.writeFileSync(filePath, fixedContent, 'utf-8');
-      }
-    }
+    const file = path.relative(root, filePath);
+    const original = fs.readFileSync(filePath, 'utf-8');
+    const result = autofixContent(original, { ...options, filePath });
+    const isSkipped = Boolean(result.skipped);
+    if (isSkipped) skipped.push({ file, reason: result.skipped });
+    result.suggestions.forEach((s) => suggestions.push({ file, ...s }));
+    const isChanged = result.fixes.length > 0 && result.fixedContent !== original;
+    if (!isChanged) continue;
+    result.fixes.forEach((f) => fixes.push({ file, line: f.line, rule: f.rule, action: f.action }));
+    edits.push({ path: filePath, content: result.fixedContent });
   }
 
-  // Token optimization: cap fixes list to top 15 samples if very large
-  const MAX_REPORTED_FIXES = 15;
-  const isCapped = allFixes.length > MAX_REPORTED_FIXES;
-  const reportedFixes = isCapped ? allFixes.slice(0, MAX_REPORTED_FIXES) : allFixes;
-
-  const result = {
-    target: targetPath || 'src',
+  const applied = edits.length > 0 ? applyEdits(edits, { cwd, dryRun, agentId: options.agentId }) : null;
+  const isNothingChecked = files.length === 0;
+  return {
+    ...(isNothingChecked ? NOTHING_CHECKED : { status: STATUS.PASS }),
+    target,
     dryRun,
     filesScanned: files.length,
-    filesChanged,
-    totalFixes: allFixes.length,
-    fixes: reportedFixes
+    filesChanged: edits.length,
+    totalFixes: fixes.length,
+    fixes,
+    suggestions,
+    skipped,
+    ...(dryRun && applied ? { diff: applied.diff } : {})
   };
-
-  if (isCapped) {
-    result.omittedFixesCount = allFixes.length - MAX_REPORTED_FIXES;
-  }
-
-  return result;
 };

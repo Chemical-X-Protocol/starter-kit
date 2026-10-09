@@ -47,7 +47,8 @@ test('schema: the action enum is the live dispatcher, help works, dead params ar
   const master = MCP_TOOLS[0].inputSchema.properties;
   assert.deepStrictEqual(master.action.enum, ACTION_NAMES);
   for (const dead of ['trace', 'backtrace', 'do', 'batch']) assert.ok(!master.action.enum.includes(dead), dead);
-  assert.strictEqual(master.params.properties.overwrite, undefined);
+  // overwrite is live since G2: write refuses an existing file without it.
+  assert.ok(master.params.properties.overwrite);
   assert.ok(master.params.properties.testTarget);
   const handler = createMcpHandler({ bootDir: KIT_ROOT, staleness: false });
   const help = await call(handler, { action: 'help' });

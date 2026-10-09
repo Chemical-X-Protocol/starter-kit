@@ -3,6 +3,10 @@
 // instead of being silently dropped. `--` ends option parsing and the rest is a command.
 import { shellQuote } from './test-paths.js';
 
+// Mutating commands (patch, write, explode, fix, add:*) read their flags with the helpers in
+// mutation-args.js; they are re-exported so every caller imports argv helpers from one place.
+export * from './mutation-args.js';
+
 // Words the shell already split are re-quoted one by one to reach `sh -c` unchanged. The first
 // word stays verbatim when it is the only word or contains whitespace: that is a whole shell
 // command the user quoted (`chemx build "vite build"`, `-- "npm run build" --mode=x`).

@@ -144,8 +144,14 @@ Use same-name shorthand across all languages; eliminate redundant `key: key` dup
   chemx({ action: 'read', params: { path: 'src/...', outline: true, enrich: true, backtraceSymbol: 'handleCheckout' } });
 
   // Surgical Modification & Rules Check
+  // Preview first: dryRun returns the unified diff and writes nothing (CLI: --dry-run or -n)
+  chemx({ action: 'patch', params: { path: 'src/...', target: 'oldCode', replacement: 'newCode', dryRun: true } });
   chemx({ action: 'patch', params: { path: 'src/...', target: 'oldCode', replacement: 'newCode' } });
+  // Removing a top-level declaration (renames included) is refused unless named (CLI: --allow-remove=oldName)
+  chemx({ action: 'patch', params: { path: 'src/...', target: 'oldName', replacement: 'newName', allowRemoved: ['oldName'] } });
+  // write creates; replacing an existing file needs overwrite (CLI: --overwrite)
   chemx({ action: 'write', params: { path: 'src/...', content: '...' } });
+  chemx({ action: 'write', params: { path: 'src/...', content: '...', overwrite: true } });
   chemx({ action: 'check', params: { path: 'src/...' } });
 
   // Deterministic Parameterized Scaffolding (Universal Jig - 90%+ Token Reduction)

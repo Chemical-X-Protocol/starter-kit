@@ -64,6 +64,9 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
     case 'read':
     case 'view':
     case 'r': {
+      const readerCards = await import('../reader-cards-gate.js');
+      const wantsCards = readerCards.argsWantReadCards(rawArgs.slice(1));
+      if (wantsCards) await readerCards.loadReadCards();
       const { runReaderCli } = await import('../reader.js');
       runReaderCli(rawArgs.slice(1), true);
       break;

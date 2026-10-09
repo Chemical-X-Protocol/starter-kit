@@ -227,13 +227,19 @@ chemx q "a-button" --blast-radius --json
 # Inspect component props, hooks, and types without reading entire files
 chemx q "m-task-list" --inspect
 
-# Surgical token-optimized file reader (AST outlines, stripped comments, specific symbols)
+# Surgical token-optimized file reader (AST outlines, specific symbols, N| line numbers; verbatim unless --strip-comments)
 chemx read src/components/m-card.vue --symbol=useCardController
 chemx read src/components/m-card.vue --outline
 chemx read src/components/m-card.vue --start=10 --end=40
 
-# Surgical file patching without full-file rewrites
+# Surgical file patching without full-file rewrites (literal replace, atomic write, backup)
+chemx patch <file> --target="oldCode" --replacement="newCode" --dry-run   # preview the unified diff
 chemx patch <file> --target="oldCode" --replacement="newCode"
+# Removing a top-level declaration (renames included) is refused unless named
+chemx patch <file> --target="oldName" --replacement="newName" --allow-remove=oldName
+
+# write creates files; replacing an existing one needs --overwrite. Unknown flags refuse.
+chemx write <file> --content="export const a = 1;" [--overwrite] [--dry-run]
 ```
 
 ### 3. Crystalline Capsule Generator
