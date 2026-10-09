@@ -9,11 +9,13 @@ export const buildVueComponent = (name, pascalName, options = {}) => {
     ? `import { use${pascalName}Controller } from './${name}.controller';\n`
     : '';
 
-  if (archetype && archetype.id !== 'state-boundary' && hasController && typeof archetype.buildReactBody === 'function') {
+  const isReactBodyArchetype = Boolean(archetype && archetype.id !== 'state-boundary' && hasController && typeof archetype.buildReactBody === 'function');
+  if (isReactBodyArchetype) {
     const destructureProps = archetype.destructure || 'state, canProceed, descriptor, handleAction';
 
     let bodyContent = '';
-    if (archetype.id === 'task-list') {
+    const isTaskList = archetype.id === 'task-list';
+    if (isTaskList) {
       const btnTag = atomsPackage ? 'a-button' : 'button';
       bodyContent = `    <form
       class="${name}__form"
