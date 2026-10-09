@@ -17,7 +17,8 @@ const makeProject = () => {
   return dir;
 };
 
-// `chemx tesseract` is not listed: its HUD and manifesto text is the command's product (MCP returns it too).
+// Plain `chemx tesseract` is not listed: its HUD and manifesto text is the command's product (MCP returns it too).
+// `tesseract --json` is the core payload and must stay off the HUD.
 const SEAM_RUNS = [
   ['help'],
   ['q', 'add'],
@@ -34,7 +35,8 @@ const SEAM_RUNS = [
   ['generate', 'atom', 'zed', '--dry-run'],
   ['jig', 'util', 'fmt', '--dry-run'],
   ['create', 'newproj'],
-  ['init']
+  ['init'],
+  ['tesseract', '--json']
 ];
 
 test('seam: piped and --json runs never import presentation modules', async () => {

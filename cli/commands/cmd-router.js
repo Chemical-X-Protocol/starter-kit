@@ -280,6 +280,12 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
     case 'tesseract':
     case 'cube':
     case 'matrix': {
+      const isJsonPayload = rawArgs.includes('--json');
+      if (isJsonPayload) {
+        const { runLatticeJson } = await import('../lattice-payload.js');
+        runLatticeJson(true);
+        break;
+      }
       const { runTesseract } = await import('../tesseract.js');
       await runTesseract(rawArgs.slice(1), true);
       break;

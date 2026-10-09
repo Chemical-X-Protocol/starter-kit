@@ -1,5 +1,5 @@
 /**
- * tesseract-state.js: Codebase and swarm cognitive state snapshot.
+ * lattice-state.js: Codebase and swarm cognitive state snapshot (core, no presentation).
  * Single responsibility: Extract AST topology, tiers, hazards, and swarm data.
  */
 

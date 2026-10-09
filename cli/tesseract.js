@@ -5,8 +5,8 @@
 
 import { ANSI } from './theme.js';
 import { renderHudHeader, renderMetricPill } from './tesseract-hud.js';
-import { getTesseractState } from './tesseract-state.js';
-import { DIRECTIVES, JARVIS_OPERATIONS, renderManifesto } from './tesseract-manifesto.js';
+import { renderManifesto } from './tesseract-manifesto.js';
+import { buildLatticePayload, runLatticeJson } from './lattice-payload.js';
 
 const formatTierSummary = (tiers) => {
   const tierEntries = Object.entries(tiers);
@@ -50,26 +50,11 @@ const formatHudTelemetry = (state) => {
 
 export const runTesseract = async (args = [], isCli = false, cwd = process.cwd()) => {
   const isJson = args.includes('--json');
-  const state = getTesseractState(cwd);
+  if (isJson) return runLatticeJson(isCli, cwd);
 
-  const payload = {
-    protocol: 'Chemical X Tesseract',
-    version: '26.9.24',
-    timestamp: new Date().toISOString(),
-    philosophy: 'Human-AI Symbiosis Medium & Universal Molecular Program',
-    state,
-    directives: DIRECTIVES,
-    jarvisOperations: JARVIS_OPERATIONS
-  };
-
-  if (isJson) {
-    const jsonOutput = JSON.stringify(payload, null, 2);
-    if (isCli) process.stdout.write(`${jsonOutput}\n`);
-    return payload;
-  }
-
+  const payload = buildLatticePayload(cwd);
   const hud = renderHudHeader();
-  const telemetry = formatHudTelemetry(state);
+  const telemetry = formatHudTelemetry(payload.state);
   const manifesto = renderManifesto();
   const fullOutput = [hud, telemetry, manifesto, ''].join('\n');
 
