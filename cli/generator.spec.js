@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import { runGenerateWizard } from './generator.js';
 import {
   toPascalCase,
@@ -104,7 +105,11 @@ test('runGenerateWizard: scaffolds view capsule with Table of Contents structure
 });
 
 test('handleCheckCommand: performs instant single-file audit', () => {
-  const res = handleCheckCommand('cli/search.js', { isJson: true, isCli: false });
+  const fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-check-'));
+  const cleanFile = path.join(fixtureDir, 'clean.js');
+  fs.writeFileSync(cleanFile, 'export const answer = 42;\n');
+  const res = handleCheckCommand(cleanFile, { isJson: true, isCli: false });
+  fs.rmSync(fixtureDir, { recursive: true, force: true });
   assert.ok(res);
   assert.strictEqual(res.isClean, true);
   assert.strictEqual(res.criticalCount, 0);

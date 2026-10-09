@@ -22,10 +22,16 @@ import { createPatternVisitors, recordTemplatePatterns } from './pattern-detecto
 import { createHookShapeRegistry } from './hook-shape-validator.js';
 import { isBabelParsable, getLanguageForFile } from '../languages.js';
 import { analyzeCSharpCode } from './csharp-analyzer.js';
+import { applyAuditPostFilters } from './suppressions.js';
 
 export { PILLARS, RULE_REGISTRY, createHookShapeRegistry };
 
 export const auditCode = (content, filePath, relativePath, options = {}) => {
+  const rawViolations = collectRawViolations(content, filePath, relativePath, options);
+  return applyAuditPostFilters(rawViolations, content.split('\n'));
+};
+
+const collectRawViolations = (content, filePath, relativePath, options = {}) => {
   const violations = [];
   const lines = content.split('\n');
   const lineCount = lines.length;

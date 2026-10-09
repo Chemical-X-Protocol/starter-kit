@@ -362,8 +362,8 @@ test("Audit Reporter: includes explicit architectural health notice distinguishi
 test("Audit Rules: flags silent guard aborts in mutating handlers and async functions", () => {
   const handlerCode = `
 export const handleCheckout = () => {
-  const hasFunds = balance > 0;
-  if (!hasFunds) return;
+  const isPaymentValid = validatePayment(card);
+  if (!isPaymentValid) return;
   chargeCustomer();
 };
 `;

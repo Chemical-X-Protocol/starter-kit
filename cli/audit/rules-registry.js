@@ -118,7 +118,7 @@ export const RULE_REGISTRY = {
   },
   ERROR_SWALLOWED_EXCEPTION: {
     pillar: PILLARS.PILLAR_2,
-    severity: 'CRITICAL',
+    severity: 'MEDIUM',
     directive: 'Do not swallow caught exceptions silently; log with error context or return explicit ResultTuple error (Directive 3.B)'
   },
   COMBINATOR_RAW_BOOLEAN: {
@@ -218,7 +218,7 @@ export const RULE_REGISTRY = {
   },
   AI_SLOP_SHALLOW_CATCH: {
     pillar: 'AI Slop & Code Authenticity',
-    severity: 'HIGH',
+    severity: 'MEDIUM',
     directive: 'Replace shallow catch paranoia wrappers with intentional error propagation or ResultTuple'
   },
   AI_SLOP_UTILITY_REINVENTION: {

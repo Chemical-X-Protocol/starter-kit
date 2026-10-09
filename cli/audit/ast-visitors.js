@@ -1,22 +1,32 @@
 import * as t from '@babel/types';
 import { RULE_REGISTRY } from './rules-registry.js';
-import { countLogicalOperators } from './rules-helpers.js';
 import {
   isCustomHookFunction,
   resolveStartLine,
   isZeroDelayTimeout,
   isUnguardedConsoleCall,
   isSilentGuardClause,
-  isSwallowedCatch,
   countOptionalChainingDepth,
   isCombinatorCall,
   isRawBooleanArg
 } from './rules-predicates.js';
+import { isSwallowedCatch, resolveSwallowedCatchSeverity } from './catch-predicates.js';
+import { isNamedCondition, countJunctionOperators, resolveIfChainLength } from './lexicon-predicates.js';
+import { collectTeardowns, classifyTimerDisposal, isListenerDisposed } from './lifecycle-predicates.js';
 import { validateHookReturnShape } from './hook-shape-validator.js';
 import { evaluateComponentStructuralWeight } from './structural-weight-evaluator.js';
 
+const LOOKUP_CHAIN_MIN_BRANCHES = 3;
+const MAX_TEMPLATE_JUNCTIONS = 2;
+const TIMER_SEVERITY_BY_KIND = { setInterval: 'CRITICAL', setTimeout: 'LOW' };
+
 export const createAstVisitors = ({ relativePath, violations, hookRegistry, config }) => {
+  let teardowns = { clearedHandles: new Set(), removedListeners: [] };
   return {
+    Program(programPath) {
+      teardowns = collectTeardowns(programPath);
+    },
+
     Function(astPath) {
       evaluateComponentStructuralWeight({
         funcPath: astPath,
@@ -83,8 +93,8 @@ export const createAstVisitors = ({ relativePath, violations, hookRegistry, conf
     JSXExpressionContainer(astPath) {
       const expr = astPath.node.expression;
       if (t.isLogicalExpression(expr) || t.isUnaryExpression(expr)) {
-        const opCount = countLogicalOperators(expr);
-        if (opCount > 2) {
+        const opCount = countJunctionOperators(expr);
+        if (opCount > MAX_TEMPLATE_JUNCTIONS) {
           const line = resolveStartLine(expr, astPath.node, 1);
           const meta = RULE_REGISTRY.CONTROL_FLOW_INLINE_BOOLEAN;
           violations.push({
@@ -103,24 +113,21 @@ export const createAstVisitors = ({ relativePath, violations, hookRegistry, conf
 
     IfStatement(astPath) {
       const expr = astPath.node.test;
-      if (t.isLogicalExpression(expr)) {
-        const opCount = countLogicalOperators(expr);
-        const hasBinaryClauses = (t.isBinaryExpression(expr.left) || t.isLogicalExpression(expr.left)) &&
-                                 (t.isBinaryExpression(expr.right) || t.isLogicalExpression(expr.right));
-        if (opCount > 2 || (opCount >= 2 && hasBinaryClauses)) {
-          const line = resolveStartLine(expr, astPath.node, 1);
-          const meta = RULE_REGISTRY.CONTROL_FLOW_INLINE_BOOLEAN;
-          violations.push({
-            filePath: relativePath,
-            line,
-            column: expr.loc?.start.column || 1,
-            hazard: `Inline multi-clause boolean comparison in if statement (${opCount} operators). Decompose into 2-stage booleans per Directive 3.A.`,
-            rule: 'CONTROL_FLOW_INLINE_BOOLEAN',
-            severity: meta.severity,
-            pillar: meta.pillar,
-            directive: meta.directive
-          });
-        }
+      const isLookupChain = resolveIfChainLength(astPath) >= LOOKUP_CHAIN_MIN_BRANCHES;
+      const isUnnamedTest = !isNamedCondition(expr);
+      if (isUnnamedTest && !isLookupChain) {
+        const line = resolveStartLine(expr, astPath.node, 1);
+        const meta = RULE_REGISTRY.CONTROL_FLOW_INLINE_BOOLEAN;
+        violations.push({
+          filePath: relativePath,
+          line,
+          column: expr.loc?.start.column || 1,
+          hazard: 'The if asks instead of reading a named condition. Name the question first (Directive 3.A).',
+          rule: 'CONTROL_FLOW_INLINE_BOOLEAN',
+          severity: countJunctionOperators(expr) > 0 ? meta.severity : 'LOW',
+          pillar: meta.pillar,
+          directive: meta.directive
+        });
       }
 
       const silentGuard = isSilentGuardClause(astPath, t);
@@ -277,28 +284,19 @@ export const createAstVisitors = ({ relativePath, violations, hookRegistry, conf
           });
         }
 
-        const fnParent = astPath.getFunctionParent();
-        let hasCleanup = false;
-        if (fnParent) {
-          fnParent.traverse({
-            ReturnStatement(retPath) {
-              if (retPath.node.argument) {
-                hasCleanup = true;
-              }
-            }
-          });
-        }
-
-        if (!hasCleanup) {
+        const disposal = classifyTimerDisposal(astPath, teardowns);
+        const isUndisposed = disposal === 'held' || disposal === 'unheld';
+        if (isUndisposed) {
           const line = astPath.node.loc?.start.line || 1;
           const meta = RULE_REGISTRY.TIMER_DISCIPLINE;
+          const clearName = callee.name === 'setInterval' ? 'clearInterval' : 'clearTimeout';
           violations.push({
             filePath: relativePath,
             line,
             column: astPath.node.loc?.start.column || 1,
-            hazard: `Raw ${callee.name} lacking lifecycle scope disposal`,
+            hazard: `Raw ${callee.name} with no ${clearName} for its handle anywhere in this module (Directive 6.C)`,
             rule: 'TIMER_DISCIPLINE',
-            severity: meta.severity,
+            severity: TIMER_SEVERITY_BY_KIND[callee.name] || meta.severity,
             pillar: meta.pillar,
             directive: meta.directive
           });
@@ -323,23 +321,7 @@ export const createAstVisitors = ({ relativePath, violations, hookRegistry, conf
 
       // Pillar 6: Orphaned Event Listener
       if (t.isMemberExpression(callee) && t.isIdentifier(callee.property, { name: 'addEventListener' })) {
-        const fnParent = astPath.getFunctionParent();
-        let hasCleanup = false;
-        if (fnParent) {
-          const fnName = fnParent.node.id?.name || '';
-          if (fnName === 'listen') {
-            hasCleanup = true;
-          } else {
-            fnParent.traverse({
-              CallExpression(innerCall) {
-                const innerCallee = innerCall.node.callee;
-                if (t.isMemberExpression(innerCallee) && t.isIdentifier(innerCallee.property, { name: 'removeEventListener' })) {
-                  hasCleanup = true;
-                }
-              }
-            });
-          }
-        }
+        const hasCleanup = isListenerDisposed(astPath, teardowns);
         if (!hasCleanup) {
           const line = astPath.node.loc?.start.line || 1;
           const meta = RULE_REGISTRY.LIFECYCLE_ORPHANED_LISTENER;
@@ -378,16 +360,17 @@ export const createAstVisitors = ({ relativePath, violations, hookRegistry, conf
 
     // Pillar 2: Swallowed Exceptions
     CatchClause(astPath) {
-      if (isSwallowedCatch(astPath, t)) {
+      if (isSwallowedCatch(astPath)) {
         const line = astPath.node.loc?.start.line || 1;
         const meta = RULE_REGISTRY.ERROR_SWALLOWED_EXCEPTION;
         violations.push({
           filePath: relativePath,
           line,
+          endLine: astPath.node.loc?.end.line || line,
           column: astPath.node.loc?.start.column || 1,
-          hazard: 'Swallowed exception in catch block without active handling, logging, or ResultTuple',
+          hazard: 'Swallowed exception in catch block without active handling, logging, or ResultTuple. Annotate intentional cases with // chemx-allow: best-effort <reason>',
           rule: 'ERROR_SWALLOWED_EXCEPTION',
-          severity: meta.severity,
+          severity: resolveSwallowedCatchSeverity(astPath.node) || meta.severity,
           pillar: meta.pillar,
           directive: meta.directive
         });

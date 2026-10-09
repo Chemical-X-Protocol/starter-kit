@@ -3,7 +3,6 @@ import { RULE_REGISTRY } from './rules-registry.js';
 import {
   countBranchingDecisions,
   countHookCalls,
-  findNestedTernary,
   countDestructuredProps
 } from './structural-weight.js';
 
@@ -96,21 +95,6 @@ export const evaluateComponentStructuralWeight = ({
       column,
       hazard: `Prop surface area bloat (${propCount} props > ${maxProps} threshold)`,
       rule: 'PROP_SURFACE_BLOAT',
-      severity: meta.severity,
-      pillar: meta.pillar,
-      directive: meta.directive
-    });
-  }
-
-  const nestedTernary = findNestedTernary(funcPath);
-  if (nestedTernary) {
-    const meta = RULE_REGISTRY.CONTROL_FLOW_NESTED_TERNARY;
-    violations.push({
-      filePath: relativePath,
-      line: nestedTernary.loc?.start.line || line,
-      column: nestedTernary.loc?.start.column || column,
-      hazard: 'Nested ternary expression detected in component logic',
-      rule: 'CONTROL_FLOW_NESTED_TERNARY',
       severity: meta.severity,
       pillar: meta.pillar,
       directive: meta.directive
