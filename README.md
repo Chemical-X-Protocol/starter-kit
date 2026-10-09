@@ -8,142 +8,130 @@
 [![Parent Repo](https://img.shields.io/badge/Repository-awesome--secret--sauce-8b5cf6?style=for-the-badge)](https://github.com/Chemical-X-Protocol/awesome-secret-sauce)
 [![Benchmarks](https://img.shields.io/badge/Benchmarks-Agent%20Evaluations-10b981?style=for-the-badge)](https://github.com/Chemical-X-Protocol/benchmarks)
 
-Modular architecture blueprints, production hooks, and drop-in crystalline component capsule generators for high-velocity AI coding.
+`chemx` is a command line tool and MCP server that sits between AI coding agents and a codebase. It gives agents an indexed way to read and edit code, short results instead of raw tool output, quality gates that run the same rule everywhere, and a SQLite coordination layer so several agents can work in one checkout without stepping on each other. This package also ships the molecular architecture blueprints and capsule generators the audit is built around. Everything below says what is guaranteed and what is not; reference pages are in [docs/INDEX.md](docs/INDEX.md) and release notes are in [docs/CHANGELOG.md](docs/CHANGELOG.md).
+
+## What it does: four pillars
+
+1. **Index, read, patch, write.** `chemx q`, `read`, `patch` and `write` answer from an AST index of the project (`.chemx/index.db`). Every index-backed answer ends with a freshness stamp saying how many files were synced. `patch` and `write` check that the result parses, report new audit violations (`introducedViolations`) and re-index the file. See [index freshness](#index-freshness-what-an-index-backed-answer-guarantees) and [docs/index-freshness.md](docs/index-freshness.md).
+2. **Quality gates.** The audit ratchet fails a change when any rule's violation count rises in a file. One gate rule is shared by the pre-commit hook, `chemx verify`, `chemx team task done` and `patch`/`write`, so a commit one accepts cannot turn another red. See [docs/audit-gates.md](docs/audit-gates.md).
+3. **Multi-agent coordination.** One coordination db at the monorepo root, with the repo recorded per task ([docs/coordination-db.md](docs/coordination-db.md)). File locks are leases that renew on chemx activity and stop renewing after a cap when others are waiting ([docs/team-locks.md](docs/team-locks.md)). Tasks can be handed off. `chemx commit` makes path-limited commits that check leases and task ids ([docs/commit.md](docs/commit.md)), `chemx status` shows who holds what, `chemx wait` blocks on a lock or task. Claude Code guard hooks send raw shell tools to chemx and can hard-block the native file tools ([docs/hooks.md](docs/hooks.md)).
+4. **Swarm orchestration.** `chemx team route` picks a model and effort per task tier. `chemx team dispatch --workflow` renders a Claude Code Workflow script that runs each task through build, review, repair and a gate ([docs/team-dispatch.md](docs/team-dispatch.md)). `chemx team audit-run` checks a finished run, `chemx report savings` prices it, and `chemx team tokens` totals token use ([docs/team-audit-run.md](docs/team-audit-run.md)). chemx renders and checks; the host (Claude Code) runs the agents.
+
+**Forge** (duplicate-pattern detection, `chemx patterns --forge`) is in development. Its measured recall is 65% on the labeled set, below its target, and blueprints and heal are still landing. See [Limitations](#limitations) and [docs/forge-patterns.md](docs/forge-patterns.md).
 
 ---
 
-## Live Interactive Portal
+## Quickstart
 
-Access the interactive book, prompt generator, and asset vault at [https://chemicalx.xophz.com](https://chemicalx.xophz.com).
+```bash
+# 1. Install (package.json engines: Node 22.13.0 or later)
+npm install -g chemx          # or: npx chemx <command>
+
+# 2. Check the install in your project
+chemx doctor                  # read-only; reports stale index rows, hooks and coverage
+
+# 3. Wire Claude Code to chemx (writes .claude/settings.json; --dry-run shows the change first)
+chemx install-hooks --host=claude --dry-run
+chemx install-hooks --host=claude
+
+# 4. Find, read, edit
+chemx q "useCardController"                       # symbol search from the index
+chemx read src/card.ts --outline                  # shape of a file, not the whole file
+chemx patch src/card.ts --target="oldCode" --replacement="newCode" --dry-run
+
+# 5. Verify
+chemx verify                                      # audit + typecheck + tests, one short card
+
+# 6. Team basics
+chemx team status
+chemx team task add "Fix card total" --needs=light --as=@you
+chemx team task claim <id> --as=@you
+chemx team lock acquire src/card.ts --as=@you --purpose="#<id>"
+chemx commit src/card.ts -m "fix(card): total (#<id>)" --release
+```
+
+`chemx install-hooks` takes effect in the next Claude Code session, and Claude Code may ask you to review the hooks with `/hooks` first.
+
+### A swarm in five commands
+
+```bash
+# 1. Queue a task with a model tier and a target file
+chemx team task add "Rename helper" --needs=light --as=@you
+chemx team task set-target <id> src/helpers.ts
+
+# 2. See which model and effort chemx would use
+chemx team route <id>
+
+# 3. Render the Workflow script (chemx writes it; it starts no agents)
+chemx team dispatch --workflow=dispatch.js --tasks=<id> --run-name=demo --as=@you
+
+# 4. Run dispatch.js in Claude Code with the Workflow tool (scriptPath), then store the run id:
+chemx team dispatch --record-run=demo --workflow-run=<wf id>
+
+# 5. Check and price the finished run
+chemx team audit-run --run=<wf id>
+chemx report savings --run=<wf id>
+```
+
+Selection, routing, the build/review/repair/gate stages and what is not guaranteed are in [docs/team-dispatch.md](docs/team-dispatch.md).
 
 ---
 
-## Quickstart: Scaffolding a New Project
+## Measured results
 
-Create a brand new molecular architecture project in seconds using your preferred package manager:
+Each figure comes from one recorded run or measurement, not from a benchmark suite, and none predicts your project. "Feed #N" is a post in the coordination db: `chemx team feed` prints recent posts.
 
-```bash
-# npm (interactive or pass project directory)
-npm create chemx my-molecular-app
+| Result | Date | Method | n | Source and how to reproduce |
+| :--- | :--- | :--- | :--- | :--- |
+| Dispatch run `wf_afacbbe8-24c` (validation-1): 11 tasks, 29 agents, $5.65, 15 min. `audit-run`: 0 lease lapses, 0 unleased edits, 0 commits without a task id, 1 native Read (a read-only reviewer) | 2026-10-09 | `chemx team dispatch --workflow` rendered the prompts; `chemx team audit-run` checked the transcripts | 1 run | Feed #7240 and #7241. Re-run `chemx team audit-run --run=wf_afacbbe8-24c` on a machine that has the run's transcripts |
+| Routing price of that run: $5.65 actual against $8.51 priced at Opus (1.5x cheaper) | 2026-10-09 | Same tokens (14,949,327 over 29 agents, counted once per message id) priced per model used against Opus list prices | 29 agents | `chemx report savings --run=wf_afacbbe8-24c` printed this line when re-run for this README |
+| Tooling savings on that run: test summaries 18,937 tokens against 359,682 for the native counterfactual (49 runs), reads 34,106 against 111,604 (54 reads), 80 `check` calls avoided, 385,324 tokens saved net | 2026-10-09 | Counterfactual sizes chemx recorded when each call ran, summed per agent | 49 test runs, 54 reads, 80 checks | Net figure and the 19x and 3.3x ratios are in feed #7241; the four raw counts are in the brief of task #4444. A re-run of `chemx report savings` on 2026-10-09 attributed 0 tooling calls to the run, so it did not reproduce them |
+| Haiku hazard swarm (run #2507): 171 of 172 files fixed. Runs #2451 and #2507 together cost $3.48, against $77.84 priced at Opus (22.4x, model routing on the same tokens) | 2026-10-09 | `chemx team tokens --run=<id>`, field-wise max of repeated usage entries | 2 runs | Feed #6190 (cost) and #7499 (171 of 172). Run `chemx team tokens --run=<id>` |
+| Adoption: 85.8% of tool calls in the validation-1 run went through chemx | 2026-10-09 | `audit-run` adoption count; stdin pipe filters such as `chemx ... \| grep` are plumbing, not natives | 1 run | Task #2597. `chemx team audit-run --run=wf_afacbbe8-24c` |
+| Reading as an outline or one symbol instead of the whole file saved 26% to 97% per target, 77% in aggregate | 2026-10-09 | `pnpm bench`, tokens estimated as characters / 3.8 | 10 targets in this kit | [benchmarks/README.md](benchmarks/README.md) |
+| Index sync timings (cold, warm, file at hand, after edits) | 2026-10-09 | Stamp-only and wall-clock figures, with run counts and load | see page | [docs/index-freshness.md](docs/index-freshness.md) |
+| Test lanes: what `chemx test`, `--slow`, `--all`, `--changed` and `--profile` run | 2026-10-09 | `chemx test --profile` times each spec file | see page | [docs/test-lanes.md](docs/test-lanes.md). A full-suite run took 135 s under load (feed #7241) |
 
-# Choose framework (react, vue, or svelte)
-npm create chemx my-molecular-app -- --framework=react
-
-# Auto-install dependencies upon scaffolding
-npm create chemx my-molecular-app -- --framework=react --install
-
-# Automated / Agent / Headless mode (skips prompts, scaffolds Community Edition immediately)
-npm create chemx my-molecular-app -- --yes
-
-# npx
-npx create-chemx my-molecular-app --framework=react --install --yes
-
-# pnpm / yarn / bun
-pnpm create chemx my-molecular-app --framework=vue
-yarn create chemx my-molecular-app --framework=svelte
-bun create chemx my-molecular-app
-```
-
-### Framework & Installation Flags
-* `--framework=<react|vue|svelte>` (or `-f <name>`): Selects target framework. Scaffolds strictly matching components, file templates, and dependencies from the matching framework's templates. `pnpm check:frameworks` generates capsules for React, Vue and Svelte and type-checks them; it does not scan for cross-framework leakage.
-* `--install`: Runs package manager install immediately after project creation.
-* `--skip-install` (or `--no-install`): Explicitly skips automatic dependency installation (default).
-* `--yes` (or `-y`): Automatically confirms prompts with standard molecular presets.
-
-### Headless & Autonomous Agent Mode
-When running in unattended environments (CI/CD pipelines, Cursor Agent, Windsurf, Claude Code, Antigravity), pass `--yes` (or `-y`, `--ci`, `--headless`) to bypass interactive terminal menus and immediately scaffold the free Community Edition with recommended architectural pillars:
-
-```bash
-npx create-chemx my-molecular-app --framework=react --install --yes
-```
-
-### Package Architecture: Scaffolder vs Command Engine
-Chemical X provides two coordinated packages:
-- **`create-chemx`**: Dedicated zero-configuration project scaffolder (`npm create chemx`). Directly provisions project templates, test suites, and architectural configurations.
-- **`chemx`**: The full Molecular Architecture CLI & AST Query Engine. Manages audits, verifications, AST query lookups, code patching, and multi-agent swarm task coordination.
-
-```bash
-# Install chemx CLI globally or in your project:
-npm install -g chemx
-# or run on-demand:
-npx chemx --help
-```
+Not measured: the output size of `test`, `typecheck`, `build` and `verify` against their raw equivalents. The older side-by-side tables (143 tests, a 45-token `verify` card, 99.7% savings) came from a much smaller kit and were removed. The benchmark's verification row uses a sample log written in the script, so it is an illustration.
 
 ---
 
-## Structure
+## Limitations
 
-```
-starter-kit/
-├── blueprints/
-│   ├── view-template.tsx       # < 20 line Table-of-Contents view blueprint
-│   ├── molecule-capsule/       # Isolated crystalline molecule blueprint
-│   └── composable-template.ts  # Standardized 3-to-5 return state composable
-├── hooks/
-│   ├── useAsyncData.ts         # 3-state async pipeline with toResult
-│   ├── useSelfCleaningTimer.ts # Unmount-safe timer and RAF hook
-│   ├── useTwoStageDecision.ts  # Concept to Decision composition
-│   └── rules.ts                # Lazy Rule Tree & diagnostic validation
-└── cli/
-    ├── index.js                # CLI router & capsule generator
-    ├── verify.js               # Verification engine (audit, typecheck, tests)
-    ├── audit.js                # 7-Pillar static AST audit
-    └── mcp/                    # Model Context Protocol stdio server
-```
+- **Forge is not finished.** Recall on the labeled ground truth is 17 of 26 (65%) against a 70% target, and it surfaced 0 of 11 in set B and 0 of 7 in set C (feed #7332, measured 2026-10-09). Blueprints and heal are still landing. The Forge warm run was measured at 5.7 to 6.7 s, so its 1 s target is not met.
+- **MCP reconnect after an upgrade.** A running MCP server keeps the code it loaded. After you upgrade chemx it reports `stale chemx MCP server` and runs each call in a fresh, slower process until you reconnect once with `/mcp`.
+- **Short flags are not validated.** `chemx report savings --help` says so: a mistyped `-x` is not caught.
+- **npm lags main.** CI publishing is blocked (task #1948), so the `chemx` on npm can be behind this repository. Installed behavior may differ from these docs; `chemx --version` tells you which build you have.
+- **Package databases still hold their code index.** The coordination rows live in the monorepo root db, but a package's own `.chemx/index.db` keeps its code index until it is rebuilt, and a package db keeps serving team rows until `chemx team migrate` merges it ([docs/coordination-db.md](docs/coordination-db.md)).
+- **Hooks are advice with limits.** The guard reads command text; it does not sandbox a script that writes files itself ([docs/hooks.md](docs/hooks.md)).
+- **Dispatch proves little by itself.** chemx renders the script and checks the run afterwards; it cannot show that an agent did its task.
 
 ---
 
-## Compact Verification Output
-
-Raw `npm test`, `tsc --noEmit` and build tools print every passing test, compiler banner and bundle asset table into an agent's context window. `chemx test`, `typecheck`, `build` and `verify` print a summary when everything passes and the failing lines when something fails, through the CLI and the MCP tool.
-
-### What is measured, and what is not
-
-- **Measured, 2026-10-09** (`pnpm bench`, token estimate = characters / 3.8, not a tokenizer): reading a file as an outline or a single symbol instead of the whole file saved 26% to 97% per target across ten targets in this kit, 77% in aggregate. See [benchmarks/README.md](benchmarks/README.md) for every row.
-- **Not measured:** the output size of `test`, `typecheck`, `build` and `verify` against their raw equivalents. The older side-by-side tables (143 tests, a 45-token `verify` card, 99.7% savings) came from a much smaller kit and have been removed. The benchmark's own verification row uses a sample log written in the script, so it is an illustration, not a measurement.
-- **What you can rely on:** a passing run prints a short summary, not one line per test; a failing run prints the failing tests, diagnostics or errors. Output size varies with the project and with how much fails.
-
-#### Examples of the output shape
-
-```
-# Raw npm test prints one line per passing test:
-✔ resolveTargetDir: returns custom directory if provided as first argument (1.64ms)
-✔ search-db: indexes symbols with line ranges and finds definition (56.65ms)
-✔ Verify: parseTestOutput strips passing checkmarks and extracts only failing tests (1.01ms)
-... [940 MORE LINES OF PASSING CHECKMARKS & TIMINGS] ...
-ℹ tests 143 | pass 143 | fail 0 | duration_ms 3002.57ms
-
-# chemx test: a summary line when green
-$ npx chemx test
-  ✔ All tests passed (143 tests in 3500ms)
-```
+## Scaffolding a new project
 
 ```bash
-# chemx typecheck: a status line when clean
-$ npx chemx typecheck
-  ✔ TypeScript typecheck clean (1820ms)
+npm create chemx my-molecular-app                                      # interactive
+npm create chemx my-molecular-app -- --framework=react --install --yes # headless, Community Edition
+pnpm create chemx my-molecular-app --framework=vue                     # also yarn, bun, npx create-chemx
+```
 
-# Machine-readable output for AI agents
-# (one minified line; `errors` is always an array of "file:line:col CODE message" rows)
-$ npx chemx typecheck --json
-{"success":true,"exitCode":0,"command":"npm run typecheck","durationMs":1820,"errorCount":0,"errors":[]}
-$ npx chemx typecheck --json   # with a type error
+* `--framework=<react|vue|svelte>` (or `-f <name>`) picks the templates. `pnpm check:frameworks` generates capsules for React, Vue and Svelte and type-checks them; it does not scan for cross-framework leakage.
+* `--install` installs dependencies; `--skip-install` (the default) does not. `--yes` (`-y`, `--ci`, `--headless`) skips prompts for CI, Cursor Agent, Windsurf, Claude Code and Antigravity.
+* Two packages: **`create-chemx`** scaffolds a project; **`chemx`** is the CLI, query engine and MCP server described here. They publish together.
+
+The kit itself holds `blueprints/` (view, molecule and composable templates), `hooks/` (async data, timer and decision hooks) and `cli/` (router, `verify.js`, `audit.js`, `mcp/`).
+
+---
+
+## Compact verification output
+
+`chemx test`, `typecheck`, `build` and `verify` print a summary when everything passes and the failing lines when something fails, through the CLI and the MCP tool. You can rely on that shape; output size varies with the project and with how much fails.
+
+```
+$ npx chemx typecheck --json   # one minified line; `errors` is an array of "file:line:col CODE message"
 {"success":false,"exitCode":2,"command":"npm run typecheck","durationMs":1009,"errorCount":1,"errors":["src/a.ts:1:7 TS2322 Type 'string' is not assignable to type 'number'."]}
-```
 
-`chemx build` prints a status line on success and groups failures into TypeScript, Rollup and style-budget diagnostics; `--silent` prints nothing on success (the exit code still reports the result).
-
-```bash
-$ npx chemx build
-Auditing build: npx tsc --noEmit
-✔ Build Succeeded (5.20s)
-```
-
-#### Full pipeline: `chemx verify`
-
-`chemx verify` runs the AST audit, the typecheck and the tests, and prints one card. The card below is the shape of a green run; its size was not measured against the raw commands.
-
-```
 $ npx chemx verify --dir=blueprints
 
   ⚡ Chemical X: Token-Conserving Project Verification
@@ -155,11 +143,11 @@ $ npx chemx verify --dir=blueprints
   All verification checks passed.
 ```
 
+`chemx build` groups failures into TypeScript, Rollup and style-budget diagnostics; `--silent` prints nothing on success (the exit code still reports the result).
+
 ---
 
-## CLI Command Reference & Workflow
-
-The `chemx` command suite is built to keep terminal output short: summaries when green, failing lines when red.
+## CLI command reference
 
 ### 1. Verification & Quality
 ```bash
@@ -195,13 +183,7 @@ The pre-commit hook (`chemx audit --staged-delta`), the ratchet step of `chemx v
 
 #### Interactive audit navigator
 
-Run `chemx audit` in a terminal and it opens a menu after the scorecard. It first asks whether to publish the report to GitHub Discussions; the default is **Skip to Menu**, so pressing Enter never posts anything. The menu is grouped, with a divider between groups and rows numbered from 1:
-
-- **Fix**: Self-Healing Roadmap, Copy AI Prompt (when there is a prompt to copy), Hotspots (when monolith files exist), Full Report.
-- **Grades**: one row per pillar, clean ones included, riskiest first.
-- **Setup**: only what is not installed yet. *Guardrails* installs the pre-commit hook and GitHub CI workflow. *Query Index* adds a `"chemx": "chemx"` package script and builds `.chemx/index.db` so agents can run `chemx q`. A row disappears once its install is detected, and the group disappears when nothing is missing.
-- **Track**: Progress, Export, Badge, Share.
-- Guide, Upgrade, Re-Run, Exit.
+`chemx audit` in a terminal opens a menu after the scorecard (fix, grades, setup, track). It asks first whether to publish the report to GitHub Discussions; the default is **Skip to Menu**, so pressing Enter never posts anything.
 
 ### 2. AST Query Engine & Surgical Inspection
 ```bash
@@ -261,7 +243,7 @@ Every reader of `.chemx/index.db` (q in every index mode; `q -g` reads files, no
 - **Row check.** A row is trusted on mtime + size only when its file's mtime is more than 2s older than the row's sync time. Otherwise the row is racy (git's racily-clean rule) and its stored sha1 decides, so a same-size rewrite inside the same clock tick is caught. Deleted and renamed files lose their rows.
 - **Stamp.** The answer's index line ends with `synced N files, k re-indexed, r removed, Tms` (JSON: `index.freshness`). When the db is read-only, another process holds the write lock past `busy_timeout` (5s), or a scope dir is missing, the answer is `inconclusive` (exit 3) and says why: it came from the rows as they were.
 - **Not covered.** Files outside the scope, files the parsers do not handle, and edits made after the stamp was printed. `chemx doctor` reports stale rows (on stat, every row) and coverage (scope files with no row) without changing anything.
-- **Cost.** Two sets of figures exist and they measure different quantities. Stamp-only sync time (the `Tms` in the stamp, no process start), measured on this kit with 971 git-scoped files: warm no-change sync 32ms, one file at hand 1ms, cold build about 3s. Wall-clock time of the whole `chemx` process (node start included), measured on a loaded machine over a 1151-file non-git copy: medians of 1450ms warm, 1052ms file at hand and 10251ms cold. The wall-clock method, run counts and maxima are in [docs/index-freshness.md](docs/index-freshness.md). Neither set predicts other machines or loads.
+- **Cost.** Stamp-only sync time on this kit (971 git-scoped files): warm no-change sync 32ms, one file at hand 1ms, cold build about 3s. Whole-process wall-clock medians on a loaded machine over a 1151-file non-git copy: 1450ms warm, 1052ms file at hand, 10251ms cold. Method, run counts and maxima: [docs/index-freshness.md](docs/index-freshness.md). Neither set predicts other machines or loads.
 
 ### 3. Crystalline Capsule Generator
 Scaffold production-ready component capsules matching strict zero-raw-DOM standards:
@@ -321,24 +303,9 @@ chemx team task list --all-repos
 
 All reference pages: [docs/INDEX.md](docs/INDEX.md).
 
-### 5. Live Swarm Web UI & Direct Task Routing
-Launch the Chemical X Swarm Control Panel backed by SQLite (`.chemx/index.db`) with full SPA routing and deep linking:
-```bash
-# Launch Live Swarm Web UI (binds 127.0.0.1:4173 and prints a tokened URL)
-npx chemx ui
+### 5. Swarm web UI
 
-# Launch on a custom port
-npx chemx ui --port=8080
-```
-
-* **Access token:** every launch generates a random token. Open the printed `http://127.0.0.1:4173/?token=...` URL; the page then keeps the token in a same-site cookie. API clients send it as the `X-Chemx-Token` header. Requests from other origins, non-JSON POSTs and unknown `Host` headers are refused.
-* **Bind address:** the UI listens on `127.0.0.1` by default. `--host=0.0.0.0` must be passed explicitly and prints a warning.
-* **Read-only SQL console:** the Database Studio console runs on a read-only connection and accepts one `SELECT`/`WITH`/`VALUES`/`EXPLAIN` or read-only `PRAGMA` statement per request.
-
-* **Direct Task Routing:** Link straight to any task in the Kanban board: `http://localhost:4173/tasks/:id` (e.g. `http://localhost:4173/tasks/42`)
-* **Auto-Focus & Highlighting:** Opening a task route automatically switches to the **📋 Tasks & Kanban** view, smoothly centers the card, and illuminates it with a cyan highlight glow.
-* **One-Click Share:** Click the `🔗` icon on any Kanban card to copy its direct URL straight to your clipboard.
-* **Single-Task API:** Fetch individual task state and verification diff receipts directly via `GET /api/tasks/:id`.
+`npx chemx ui` serves a local control panel (Kanban board, task pages at `/tasks/:id`, a read-only SQL console) on `127.0.0.1:4173`. Every launch prints a tokened URL; requests without the token, from other origins, non-JSON POSTs and unknown `Host` headers are refused. `--host=0.0.0.0` must be passed explicitly and prints a warning. `--port=<n>` changes the port.
 
 ---
 
@@ -374,15 +341,7 @@ Chemical X audits more than one language. The table below lists the extensions i
 
 ## The 7 Molecular Architecture Pillars
 
-Chemical X enforces seven core architectural directives configured via `chemx pillars`:
-
-1. **Molecular Line Budgets**: Single-purpose files, measured by structural weight first. Line budget: soft warning at 250 lines when complexity is high (default profile); --profile=atomic-strict caps capsules at 100 lines. Smaller files mean less irrelevant code loaded per task; the audit flags files over the budget.
-2. **Strict Component Tiers & Zero-Raw-DOM**: Raw HTML elements (`<button>`, `<input>`, `<div>`) are strictly isolated inside foundational **Atoms** (`a-*`). Molecules, Organisms, Templates, and Views assemble atoms and never contain raw tags.
-3. **Table-of-Contents Views**: Top-level page views are clean, 10–20 line declarative blueprints assembling self-contained molecules and organisms via named slots (`#header`, `#default`, `#modals`).
-4. **Molecular Composable Contracts**: Composables return plain destructurable objects with a strict 3-to-5 property limit (State + Status + Actions). Domain types use discriminated unions (zero impossible states).
-5. **Silent Verification Pipeline**: Verification tools suppress passing checkmarks and compiler banners, returning short summaries when green and the failing lines when red (output size not benchmarked; see Compact Verification Output).
-6. **AST Codebase Query Engine**: In-band AST symbol graph lookups, blast radius calculations, and outline extraction let an agent read a file's shape before deciding to read the file (savings measured in benchmarks/README.md).
-7. **Database-First Swarm Coordination**: Task backlogs, file locks, and agent communications live in local SQLite (`.chemx/index.db`) rather than monolithic markdown specifications.
+Configured via `chemx pillars`; the full directives are in AGENTS.md. In short: (1) single-purpose files under a line budget; (2) raw HTML only inside atoms (`a-*`); (3) top-level views are 10 to 20 line tables of contents; (4) composables return plain objects of 3 to 5 properties; (5) verification prints short summaries when green; (6) an AST query engine lets an agent read a file's shape before reading the file; (7) task backlogs, locks and messages live in SQLite (`.chemx/index.db`), not in markdown plans.
 
 ---
 
@@ -467,27 +426,9 @@ Contract:
 
 ---
 
-## Release Versioning: Minute-Precision CalVer
+## Release versioning
 
-This package adheres to **Minute-Precision Calendar Versioning** (`YY.MM.DD-MMMM`):
-- `YY.MM.DD`: Release date (e.g. `26.9.17` for Sept 17, 2026).
-- `MMMM`: Minute of the day (0 to 1439).
-
-Check installed version at any time:
-```bash
-npx chemx --version
-# create-chemx v26.9.17-606
-```
-
-### Package Pairing & npm Registry Propagation
-
-- **Package Pairing**: `@chemx/create-chemx` and `chemx` publish together under synchronized minute-precision CalVer timestamps (`YY.M.D-minute`). For consistent behavior, install or pin the matching release versions.
-- **npm Registry Propagation Note**: Newly published releases on npm can take 2–5 minutes to propagate across all edge CDN mirrors after `npm view` lists them. If `npm install` intermittently fails with a 404 on an exact newly published version, wait a few minutes and retry.
-
-Because autonomous coding agent models update frequently, this package is continuously integrated and deployed via automated CI whenever new agent directives, AST checks, or framework rules are tuned. Rapid version iterations reflect active, daily alignment rather than breaking SemVer shifts.
-
-> [!NOTE]
-> Download statistics on npm reflect continuous automated test matrix verification and test runner execution across automated environments.
+Minute-precision CalVer (`YY.MM.DD-MMMM`, the minute of the day from 0 to 1439), checked with `npx chemx --version`. `create-chemx` and `chemx` publish together; pin matching versions. A new version can take a few minutes to reach every npm mirror, so an exact-version install may 404 briefly. npm can also lag this repository (see Limitations).
 
 ---
 
@@ -544,3 +485,4 @@ To remove stored data, delete `~/.config/chemx/` and the project's `.chemx/discu
 Core CLI tools and capsule generators are distributed under the **MIT License**.  
 Private production monorepos and extended starter suites are unlocked for verified GitHub Sponsors.  
 Explore sponsorship details at [https://chemicalx.xophz.com](https://chemicalx.xophz.com).
+
