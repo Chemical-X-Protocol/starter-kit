@@ -4,7 +4,8 @@ import type { BadgeTone } from '../../atoms/a-badge/types';
 
 export const formatShortPath = (fullPath: string = ''): string => {
   const parts = fullPath.split('/');
-  if (parts.length <= 2) return fullPath;
+  const isShortPath = parts.length <= 2;
+  if (isShortPath) return fullPath;
   return parts.slice(-2).join('/');
 };
 
