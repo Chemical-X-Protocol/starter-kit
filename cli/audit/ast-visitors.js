@@ -10,7 +10,8 @@ import {
   isCombinatorCall,
   isRawBooleanArg
 } from './rules-predicates.js';
-import { isSwallowedCatch, resolveSwallowedCatchSeverity } from './catch-predicates.js';
+import { isSwallowedCatch } from './catch-predicates.js';
+import { resolveCatchEscalation, resolveCatchSpan } from './shallow-catch-escalation.js';
 import { isNamedCondition, countJunctionOperators, resolveIfChainLength } from './lexicon-predicates.js';
 import { collectTeardowns, classifyTimerDisposal, isListenerDisposed } from './lifecycle-predicates.js';
 import { validateHookReturnShape } from './hook-shape-validator.js';
@@ -363,16 +364,17 @@ export const createAstVisitors = ({ relativePath, violations, hookRegistry, conf
     // Pillar 2: Swallowed Exceptions
     CatchClause(astPath) {
       if (isSwallowedCatch(astPath)) {
-        const line = astPath.node.loc?.start.line || 1;
         const meta = RULE_REGISTRY.ERROR_SWALLOWED_EXCEPTION;
+        const { severity, binding } = resolveCatchEscalation(astPath);
+        const finding = binding
+          ? `Swallowed exception leaves "${binding}" unset; it is read after the try (silent undefined propagation)`
+          : 'Swallowed exception in catch block without active handling, logging, or ResultTuple';
         violations.push({
           filePath: relativePath,
-          line,
-          endLine: astPath.node.loc?.end.line || line,
-          column: astPath.node.loc?.start.column || 1,
-          hazard: 'Swallowed exception in catch block without active handling, logging, or ResultTuple. Annotate intentional cases with // chemx-allow: best-effort <reason>',
+          ...resolveCatchSpan(astPath),
+          hazard: `${finding}. Annotate intentional cases with // chemx-allow: best-effort <reason>`,
           rule: 'ERROR_SWALLOWED_EXCEPTION',
-          severity: resolveSwallowedCatchSeverity(astPath.node) || meta.severity,
+          severity,
           pillar: meta.pillar,
           directive: meta.directive
         });

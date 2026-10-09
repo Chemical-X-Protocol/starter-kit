@@ -1,13 +1,13 @@
 {
   "version": 2,
-  "ruleset": 3,
+  "ruleset": 4,
   "scopes": {
     "cli": {
-      "ruleset": 3,
+      "ruleset": 4,
       "allRules": true,
       "rules": {
         "AI_SLOP_REDUNDANT_PASSTHROUGH": 2,
-        "AI_SLOP_SHALLOW_CATCH": 30,
+        "AI_SLOP_SHALLOW_CATCH": 0,
         "CONTROL_FLOW_INLINE_BOOLEAN": 1349,
         "CONTROL_FLOW_NESTED_TERNARY": 6,
         "DATA_FLOW_OPTIONAL_CHAINING_CHURN": 11,
@@ -23,7 +23,7 @@
         "AI_SLOP_LAZY_ANY": 1,
         "AI_SLOP_LAZY_PLACEHOLDER": 1,
         "AI_SLOP_REDUNDANT_PASSTHROUGH": 1,
-        "AI_SLOP_SHALLOW_CATCH": 1,
+        "AI_SLOP_SHALLOW_CATCH": 4,
         "AI_SLOP_UTILITY_REINVENTION": 1,
         "COMBINATOR_RAW_BOOLEAN": 2,
         "COMPLEXITY_CYCLOMATIC_HIGH": 1,
@@ -34,7 +34,7 @@
         "CONTROLLER_VIEW_MISMATCH": 1,
         "COUPLING_EXCESSIVE_INJECTION": 1,
         "DATA_FLOW_OPTIONAL_CHAINING_CHURN": 2,
-        "ERROR_SWALLOWED_EXCEPTION": 3,
+        "ERROR_SWALLOWED_EXCEPTION": 4,
         "HOOK_RETURN_OVERLOAD": 1,
         "HOOK_SATURATION": 1,
         "HOOK_SHAPE_CONTRACT": 1,

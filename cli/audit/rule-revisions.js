@@ -12,14 +12,13 @@
  * a rule without a bump fails the suite. At runtime a baseline also records every
  * registered rule's revision, so a rule it never saw is adopted, not a regression.
  */
-export const RULESET_VERSION = 3;
+export const RULESET_VERSION = 4;
 
 export const RULE_REVISIONS = Object.freeze({
   // Ruleset 2: the 40-year canon rules (a3a1ac9, 9461ed2).
   DATA_FLOW_OPTIONAL_CHAINING_CHURN: 2,
   COMBINATOR_RAW_BOOLEAN: 2,
   // Ruleset 3: B precision passes and SFC template coverage.
-  ERROR_SWALLOWED_EXCEPTION: 3,
   CONTROL_FLOW_SILENT_GUARD: 3,
   CONTROL_FLOW_INLINE_BOOLEAN: 3,
   CONTROL_FLOW_NESTED_TERNARY: 3,
@@ -31,7 +30,11 @@ export const RULE_REVISIONS = Object.freeze({
   VIEW_MONOLITH: 3,
   SYNTAX_PARSE_ERROR: 3,
   RENDER_TREE_DEPTH_EXCEEDED: 3,
-  A11Y_CLICKABLE_NON_SEMANTIC: 3
+  A11Y_CLICKABLE_NON_SEMANTIC: 3,
+  // Ruleset 4: catch family per truth spec 4.2 (binding-read escalation), annotations count
+  // only inside comments and need a real reason, Stroustrup try-brace annotations.
+  ERROR_SWALLOWED_EXCEPTION: 4,
+  AI_SLOP_SHALLOW_CATCH: 4
 });
 
 export const resolveRuleRevision = (rule) => RULE_REVISIONS[rule] ?? 1;

@@ -24,7 +24,7 @@ const writeV1 = (root, scope, rules) => {
 
 test('a rule newer than a v1 baseline is adopted, not reported as a regression', () => {
   withRoot((root) => {
-    writeV1(root, 'cli', { AI_SLOP_SHALLOW_CATCH: 30 });
+    writeV1(root, 'cli', { AI_SLOP_LAZY_ANY: 30 });
     assert.ok(resolveRuleRevision('ERROR_SWALLOWED_EXCEPTION') > 1);
     const result = evaluateRatchet(readRatchet(root), { scope: 'cli', violations: violations({ ERROR_SWALLOWED_EXCEPTION: 33 }) });
     assert.equal(result.status, 'pass');
@@ -35,7 +35,7 @@ test('a rule newer than a v1 baseline is adopted, not reported as a regression',
 
 test('a stable rule absent from a v1 baseline still regresses from 0', () => {
   withRoot((root) => {
-    writeV1(root, 'cli', { AI_SLOP_SHALLOW_CATCH: 30 });
+    writeV1(root, 'cli', { AI_SLOP_LAZY_ANY: 30 });
     const result = evaluateRatchet(readRatchet(root), { scope: 'cli', violations: violations({ SECURITY_HARDCODED_SECRET: 1 }) });
     assert.equal(result.status, 'fail');
     assert.deepEqual(result.regressions, [{ rule: 'SECURITY_HARDCODED_SECRET', baseline: 0, current: 1 }]);
@@ -44,7 +44,7 @@ test('a stable rule absent from a v1 baseline still regresses from 0', () => {
 
 test('the full-scan gate records adopted rules so the next increase is gated', () => {
   withRoot((root) => {
-    writeV1(root, 'cli', { AI_SLOP_SHALLOW_CATCH: 30 });
+    writeV1(root, 'cli', { AI_SLOP_LAZY_ANY: 30 });
     const first = computeGateVerdict({ projectRoot: root, scope: 'cli', violations: violations({ ERROR_SWALLOWED_EXCEPTION: 5 }) });
     assert.equal(first.isPassing, true);
     assert.deepEqual(first.adopted.map((a) => a.rule), ['ERROR_SWALLOWED_EXCEPTION']);
@@ -52,7 +52,7 @@ test('the full-scan gate records adopted rules so the next increase is gated', (
     const stored = JSON.parse(fs.readFileSync(path.join(root, RATCHET_FILE), 'utf-8'));
     assert.equal(stored.version, 2);
     assert.equal(stored.scopes.cli.rules.ERROR_SWALLOWED_EXCEPTION, 5);
-    assert.equal(stored.scopes.cli.rules.AI_SLOP_SHALLOW_CATCH, 30);
+    assert.equal(stored.scopes.cli.rules.AI_SLOP_LAZY_ANY, 30);
     assert.equal(stored.scopes.cli.revisions.ERROR_SWALLOWED_EXCEPTION, resolveRuleRevision('ERROR_SWALLOWED_EXCEPTION'));
 
     const second = computeGateVerdict({ projectRoot: root, scope: 'cli', violations: violations({ ERROR_SWALLOWED_EXCEPTION: 6 }) });
