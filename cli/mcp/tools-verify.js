@@ -26,7 +26,8 @@ const targetDirOf = (args, cwd) => {
 
 export const handleAuditBuild = async (args = {}, cwd = process.cwd()) => {
   const rawArgs = ['--json', ...timeoutArgs(args)];
-  if (args.command) {
+  const hasCommand = Boolean(args.command);
+  if (hasCommand) {
     rawArgs.push('--', args.command);
   }
   return runBuildAudit(rawArgs, false, { print: false, cwd: targetDirOf(args, cwd), timeoutMs: DEFAULT_STEP_TIMEOUT_MS });
