@@ -2,7 +2,8 @@ import path from 'node:path';
 import { deserializeVector, cosineSimilarity } from '../embeddings/vectorizer.js';
 
 const isSpecOrTest = (filePath) => {
-  if (!filePath || typeof filePath !== 'string') return false;
+  const isInvalidPath = !filePath || typeof filePath !== 'string';
+  if (isInvalidPath) return false;
   return filePath.includes('.spec.') || filePath.includes('.test.') || filePath.includes('__tests__');
 };
 
@@ -10,7 +11,8 @@ export const detectSemanticClones = (db, options = {}) => {
   const isValidDb = Boolean(db);
   if (!isValidDb) return { count: 0, threshold: 0.85, pairs: [] };
 
-  const threshold = typeof options.threshold === 'number' ? options.threshold : 0.85;
+  const hasNumericThreshold = typeof options.threshold === 'number';
+  const threshold = hasNumericThreshold ? options.threshold : 0.85;
   const limit = options.limit || 50;
 
   const rows = db.prepare(
