@@ -25,6 +25,8 @@ import { findChemxDir } from '../audit/chemx-dir.js';
 import { liveLeases, taskStatus } from '../lease-view.js';
 import { findForeignLease } from '../edit-locks.js';
 import { findLedgerDbPath } from '../telemetry/call-ledger.js';
+import { createUiServer } from '../ui-server.js';
+import { checkStagedLeases } from './staged-leases.js';
 
 delete process.env.CHEMX_PROJECT_ROOT;
 
@@ -145,6 +147,54 @@ test('status and wait read the dbs the resolver names: the package db and the co
   assert.ok(forFile.includes(path.join(repo.pkgA, 'src', 'x.js')), 'wait --lock-free passes the file dir');
   assert.equal(taskStatus(repo.pkgA, 7), 'in_progress', 'a task in the unmerged package db');
   assert.equal(taskStatus(repo.root, 7), null, 'the root board has no task 7');
+}));
+
+test('after a migrate, the edit and commit guards read the board only: a release there frees the file', () => withSilo((repo) => {
+  const file = path.join(repo.pkgA, 'src', 'x.js');
+  assert.equal(runTeamCli(['lock', 'acquire', 'src/x.js', '--as=@spec-sub'], false, repo.pkgA).granted, true);
+  const source = path.join(repo.pkgA, '.chemx', 'index.db');
+  const merged = runTeamCli(['migrate', '--from', source, '--source-repo=pkg-a', '--json'], false, repo.root);
+  assert.ok(merged, 'the migrate ran');
+  assert.ok(!teamDbRootsFor(repo.pkgA).includes(repo.pkgA), 'the merged package db is not listed');
+  runTeamCli(['lock', 'release', 'packages/a/src/x.js', '--as=@spec-sub'], false, repo.root);
+  assert.equal(findForeignLease(repo.pkgA, file, '@spec-other'), null, 'the frozen package row is not read');
+  assert.equal(checkStagedLeases(['src/x.js'], '@spec-other', { root: repo.pkgA }).ok, true);
+}));
+
+// The OS temp dir is pointed elsewhere while the fixture stays where it was, so the fixture counts as a real project.
+const withRealLookingRoot = async (fn) => {
+  const repo = buildMonorepo('chemx-real-');
+  const elsewhere = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-elsewhere-')));
+  const saved = process.env.TMPDIR;
+  try {
+    process.env.TMPDIR = elsewhere;
+    assert.match(resolveTeamDbTarget(repo.root).refused, /spec process refused/);
+    return await fn(repo);
+  } finally {
+    const wasUnset = saved === undefined;
+    if (wasUnset) delete process.env.TMPDIR;
+    else process.env.TMPDIR = saved;
+    fs.rmSync(elsewhere, { recursive: true, force: true });
+    repo.cleanup();
+  }
+};
+
+test('the studio UI keeps no team handle when the coordination resolver refuses', () => withRealLookingRoot((repo) => {
+  const ui = createUiServer(repo.root);
+  assert.equal(ui.db, null);
+  ui.indexDb?.close?.();
+}));
+
+test('team migrate --into refuses a db in a root the resolver refuses', () => withRealLookingRoot((repo) => {
+  const into = path.join(repo.root, '.chemx', 'index.db');
+  const before = fs.existsSync(into);
+  const source = makeTempDir('chemx-migrate-src-');
+  seedTeamDb(source);
+  const result = runTeamCli(['migrate', '--from', path.join(source, '.chemx', 'index.db'), `--into=${into}`, '--source-repo=x', '--json'], false, repo.root);
+  assert.notEqual(result?.ok, true);
+  assert.equal(fs.existsSync(path.join(repo.root, '.chemx', 'backups', 'team-migrate')), false, 'no backup was written');
+  assert.equal(fs.existsSync(into), before);
+  fs.rmSync(source, { recursive: true, force: true });
 }));
 
 test('a spec process never opens a real db through the read-only openers', () => {

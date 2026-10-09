@@ -12,14 +12,14 @@ import { teamDbRootsFor } from './coordination-target.js';
 /** Every team db root that can hold a lease for startDir (inclusive), nearest first. */
 export const ancestorLockRoots = (startDir) => teamDbRootsFor(startDir);
 
-/** The caller's root plus every team db root that can hold a lease on the file (same rule as edit-locks.js). */
+/**
+ * Every team db root that can hold a lease on the file (same rule as edit-locks.js). The caller's root
+ * comes first only when the resolver lists it: a merged source db is never read, and a refused caller gets none.
+ */
 export const lockRoots = (root, absPath) => {
-  const roots = [root];
-  for (const dir of teamDbRootsFor(path.dirname(absPath))) {
-    const isNewRoot = !roots.includes(dir);
-    if (isNewRoot) roots.push(dir);
-  }
-  return roots;
+  const listed = teamDbRootsFor(path.dirname(absPath));
+  const isOwnListed = listed.includes(root);
+  return isOwnListed ? [root, ...listed.filter((dir) => dir !== root)] : listed;
 };
 
 /** Keys a lease on absPath can carry in lockRoot's db: root-relative, and the legacy cwd-relative key. */

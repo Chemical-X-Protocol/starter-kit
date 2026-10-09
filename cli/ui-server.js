@@ -1,6 +1,6 @@
 import http from 'node:http';
 import { openIndexDb } from './search-db.js';
-import { openTeamDb } from './team/coordination-db.js';
+import { openTeamContext, describeTeamDbFailure } from './team/coordination-db.js';
 import { handleSwarmStatus } from './ui-handlers.js';
 import { generateSwarmHtml } from './ui-html.js';
 import { routeGet, routePost, parseJsonBody } from './ui-server-routes.js';
@@ -21,7 +21,8 @@ const runRoute = (handler) => {
 
 export const createUiServer = (cwd = process.cwd(), options = {}) => {
   const indexDb = openIndexDb(cwd);
-  const db = openTeamDb(cwd) || indexDb; // team rows: coordination db (#2581); code index, studio, console: indexDb
+  const teamContext = openTeamContext(cwd);
+  const db = teamContext.db; // team rows: coordination db only (#2581), null when refused; code index, studio, console: indexDb
   const auth = options.auth || createUiAuth();
   const consoleDb = openConsoleDb(cwd);
   const server = http.createServer(async (req, res) => {
@@ -35,6 +36,8 @@ export const createUiServer = (cwd = process.cwd(), options = {}) => {
     if (isDenied) return sendJson(res, gate.status, { success: false, error: gate.error });
     const hasSetCookie = Boolean(gate.setCookie);
     const cookieHeaders = hasSetCookie ? { 'Set-Cookie': gate.setCookie } : {};
+    const isTeamUnavailable = !db;
+    if (isTeamUnavailable) return sendJson(res, 503, { success: false, error: describeTeamDbFailure(teamContext) }, cookieHeaders);
     const shouldServeHtml = isGet && !isApi;
     if (shouldServeHtml) {
       return res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', ...cookieHeaders }).end(generateSwarmHtml(handleSwarmStatus(db, cwd, indexDb)));

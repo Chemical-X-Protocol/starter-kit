@@ -12,6 +12,7 @@ import path from 'node:path';
 import { migrateTeamDb, backupBeforeMerge, hasWorkToMerge } from './team-migrate.js';
 import { openTeamContext, resolveTeamDbTarget, teamDbPathFor } from './coordination-db.js';
 import { initTeamSchema } from './team-schema.js';
+import { teamDbRefusal } from './coordination-root.js';
 import { closeQuietly } from './team-db-readonly.js';
 import { formatMigrateReport } from './team-migrate-report.js';
 
@@ -62,11 +63,21 @@ const openEmptyBoard = () => {
 };
 
 // Where the merge lands, without opening anything: the coordination db for cwd, or --into.
+// The project root a db file belongs to: the parent of its .chemx dir, else the file's own dir.
+const rootOfDbFile = (dbPath) => {
+  const dir = path.dirname(dbPath);
+  return path.basename(dir) === '.chemx' ? path.dirname(dir) : dir;
+};
+
 const locateTarget = (cwd, flags) => {
   const target = resolveTeamDbTarget(cwd);
   const hasInto = Boolean(flags.into);
   if (hasInto) {
     const intoPath = path.resolve(cwd, flags.into);
+    const intoRefusal = teamDbRefusal(rootOfDbFile(intoPath));
+    if (intoRefusal) return { error: intoRefusal };
+    const fromRefusal = flags.from ? teamDbRefusal(rootOfDbFile(path.resolve(cwd, flags.from))) : null;
+    if (fromRefusal) return { error: fromRefusal };
     const exists = fs.existsSync(intoPath);
     return exists ? { path: intoPath, root: target.coordinationRoot, isInto: true } : { error: `No db at ${intoPath} (--into must name an existing db file).` };
   }
