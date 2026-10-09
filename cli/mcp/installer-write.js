@@ -110,7 +110,8 @@ export const writeFileSafely = (file, content, options = {}) => {
 export const installServerEntry = (file, entry, options = {}) => {
   const existing = fs.existsSync(file) ? fs.readFileSync(file, 'utf-8') : '';
   const plan = planMcpConfigMerge(existing, entry, options);
-  if (!plan.ok) return { file, status: 'refused', reason: plan.reason };
+  const isPlanRefused = !plan.ok;
+  if (isPlanRefused) return { file, status: 'refused', reason: plan.reason };
   const { status, backupPath } = writeFileSafely(file, plan.content, { backup: !plan.hadEntry });
   return { file, status, backupPath };
 };
