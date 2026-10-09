@@ -240,6 +240,7 @@ export const formatTaskHelpCard = () => {
     '    \x1b[32mshow\x1b[0m <taskId>                Display full details and activity stream for a task',
     '    \x1b[32madd\x1b[0m "<title>"                Create a new task in the queue',
     '    \x1b[32mclaim\x1b[0m <taskId>              Claim an unassigned task for an agent',
+    '    \x1b[32mhandoff\x1b[0m <taskId> <@to>      Pass a task to another agent (assignee or creator only)',
     '    \x1b[32mdone\x1b[0m <taskId>               Complete a task with automatic verification audit',
     '    \x1b[32mupdate\x1b[0m <taskId> [status]    Update task status (in_progress, blocked, done)',
     '    \x1b[32mcomment\x1b[0m <taskId> <msg>       Post a comment or status update to a task',

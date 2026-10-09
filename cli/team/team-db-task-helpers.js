@@ -1,4 +1,5 @@
 import { parseNeedsInput } from './team-needs.js';
+import { buildHandoffHint } from './team-handoff-hint.js';
 
 export const normalizeAgentId = (id) => {
   if (!id) return null;
@@ -43,7 +44,8 @@ export const evaluateClaim = (task, cleanId, isDepsMet) => {
   if (!task) return { allowed: false, reason: 'task_not_found' };
   const isClaimedByOther = task.status === 'in_progress' && Boolean(task.assigned_agent_id) && task.assigned_agent_id !== cleanId;
   if (isClaimedByOther) {
-    return { allowed: false, reason: 'already_claimed', claimedBy: task.assigned_agent_id };
+    const message = `Task #${task.id} is already claimed by ${task.assigned_agent_id}; ${buildHandoffHint(task.id, task.assigned_agent_id, cleanId)}`;
+    return { allowed: false, reason: 'already_claimed', claimedBy: task.assigned_agent_id, message };
   }
   if (!isDepsMet) {
     return { allowed: false, reason: 'dependencies_unmet', dependencies: task.dependencies };

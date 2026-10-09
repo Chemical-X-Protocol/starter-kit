@@ -5,6 +5,7 @@
  */
 
 import { normalizeAgentId } from './team-db-task-helpers.js';
+import { buildHandoffHint } from './team-handoff-hint.js';
 
 const COMPLETABLE_STATUSES = new Set(['in_progress', 'review']);
 
@@ -23,7 +24,7 @@ const describeRefusal = (task, cleanId) => {
   if (isOtherAgent) {
     return {
       reason: 'not_assignee',
-      message: `Refusing to complete task #${taskId}: it is assigned to ${task.assigned_agent_id}, not ${cleanId}. Pass --as=${task.assigned_agent_id} if that is you, or --force to override (recorded in the receipt).`
+      message: `Refusing to complete task #${taskId}: it is assigned to ${task.assigned_agent_id}, not ${cleanId}; ${buildHandoffHint(taskId, task.assigned_agent_id, cleanId)}`
     };
   }
   return { reason: 'not_in_progress', message: `Refusing to complete task #${taskId}: its status is ${task.status}; ${claimHint}` };

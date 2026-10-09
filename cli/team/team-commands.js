@@ -23,6 +23,7 @@ import { getSwarmTokenBreakdown, formatTokenBreakdownCard } from './team-tokens.
 import { runAblationComparison, formatAblationCard } from './team-memory.js';
 import { parseFlags } from './team-flags.js';
 import { resolveListOptions, selectTaskPage, buildTaskListView } from './task-list-view.js';
+import { handleTaskHandoffCommand } from './team-task-handoff.js';
 import { handleTaskSlotCommand, handleTaskTraceCommand, handleTrainCommand } from './team-commands-vds.js';
 import { handleLockCommand, handleUnlockCommand, resolveCliAgent } from './team-commands-lock.js';
 import { resolveTaskTier } from './task-tier.js';
@@ -143,7 +144,7 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
     const isTaskHelp = flags.help || nonFlagPositional[0] === 'help';
     if (isTaskHelp) {
       if (isCli) process.stdout.write(formatTaskHelpCard());
-      return { help: true, actions: ['list', 'show', 'add', 'claim', 'done', 'update', 'comment', 'triage', 'reconcile', 'set-target', 'vds-slot', 'trace'] };
+      return { help: true, actions: ['list', 'show', 'add', 'claim', 'handoff', 'done', 'update', 'comment', 'triage', 'reconcile', 'set-target', 'vds-slot', 'trace'] };
     }
     const taskAction = nonFlagPositional[0] || 'list';
     const unknownTask = refuseUnknownTask(db, taskAction, nonFlagPositional[1], { isCli, cwd });
@@ -254,11 +255,13 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
         else {
           const didClaim = Boolean(res.success);
           if (didClaim) process.stdout.write(`\x1b[32m✔\x1b[0m Claimed task #${taskId}\n`);
-          else process.stderr.write(`\x1b[31m✕ Claim failed: ${res.reason}\x1b[0m\n`);
+          else process.stderr.write(`\x1b[31m✕ Claim failed: ${res.message || res.reason}\x1b[0m\n`);
         }
       }
       return res;
     }
+    const isHandoffAction = taskAction === 'handoff';
+    if (isHandoffAction) return handleTaskHandoffCommand(db, nonFlagPositional, flags, isCli);
     const isDoneAction = taskAction === 'done' || taskAction === 'complete';
     if (isDoneAction) {
       const taskId = nonFlagPositional[1];
