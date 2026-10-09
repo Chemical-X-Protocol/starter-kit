@@ -11,7 +11,8 @@ import { describeVueMacro, describeComponentOptions, describeStore } from './vue
 
 const sliceSource = (code, nodes) => {
   const list = nodes.filter(Boolean);
-  if (list.length === 0) return '';
+  const isEmpty = list.length === 0;
+  if (isEmpty) return '';
   return code.slice(list[0].start, list[list.length - 1].end).replace(/\s+/g, ' ');
 };
 
@@ -30,7 +31,8 @@ const isFunctionInit = (init) => t.isArrowFunctionExpression(init) || t.isFuncti
 const describeVariable = (code, declarator, prefix) => {
   const init = declarator.init;
   const isSimpleName = t.isIdentifier(declarator.id);
-  if (isSimpleName && isFunctionInit(init)) return [`${prefix}function ${declarator.id.name}${signatureOf(code, init)}`];
+  const isNamedFunctionInit = isSimpleName && isFunctionInit(init);
+  if (isNamedFunctionInit) return [`${prefix}function ${declarator.id.name}${signatureOf(code, init)}`];
   const macro = describeVueMacro(code, init);
   if (macro) return [isSimpleName ? `${prefix}const ${declarator.id.name} = ${macro}` : macro];
   const store = describeStore(code, init);
@@ -52,7 +54,8 @@ const describeClass = (code, cls, prefix) => {
 };
 
 const describeDeclaration = (code, decl, prefix) => {
-  if (t.isFunctionDeclaration(decl) && decl.id) return [`${prefix}function ${decl.id.name}${signatureOf(code, decl)}`];
+  const isNamedFunction = Boolean(t.isFunctionDeclaration(decl) && decl.id);
+  if (isNamedFunction) return [`${prefix}function ${decl.id.name}${signatureOf(code, decl)}`];
   if (t.isClassDeclaration(decl)) return describeClass(code, decl, prefix);
   if (t.isVariableDeclaration(decl)) return decl.declarations.flatMap((d) => describeVariable(code, d, prefix));
   if (t.isTSTypeAliasDeclaration(decl)) return [`${prefix}type ${decl.id.name}`];
@@ -63,7 +66,8 @@ const describeDeclaration = (code, decl, prefix) => {
 
 const describeStatement = (code, node) => {
   if (t.isExportNamedDeclaration(node)) {
-    if (node.declaration) return describeDeclaration(code, node.declaration, 'export ');
+    const hasDeclaration = Boolean(node.declaration);
+    if (hasDeclaration) return describeDeclaration(code, node.declaration, 'export ');
     const typePrefix = node.exportKind === 'type' ? 'type ' : '';
     const from = node.source ? ` from '${node.source.value}'` : '';
     return [`export ${typePrefix}{ ${sliceSource(code, node.specifiers)} }${from}`];
@@ -86,12 +90,14 @@ const describeStatement = (code, node) => {
 const countOmittedFunctions = (program) => {
   let count = 0;
   const visit = (node, parent) => {
-    if (!node || typeof node.type !== 'string') return;
+    const isVisitableNode = Boolean(node) && typeof node.type === 'string';
+    if (!isVisitableNode) return;
     const isNestedFunction = (t.isFunctionDeclaration(node) && !t.isProgram(parent) && !t.isExportNamedDeclaration(parent)) ||
       ((t.isArrowFunctionExpression(node) || t.isFunctionExpression(node)) && !t.isVariableDeclarator(parent));
     if (isNestedFunction) count += 1;
     for (const [key, value] of Object.entries(node)) {
-      if (key === 'loc' || key.endsWith('Comments')) continue;
+      const isSkippedKey = key === 'loc' || key.endsWith('Comments');
+      if (isSkippedKey) continue;
       for (const child of Array.isArray(value) ? value : [value]) visit(child, node);
     }
   };
@@ -108,6 +114,7 @@ export const outlineModuleAst = (ast, code) => {
   const annotate = (node) => describeStatement(code, node).map((line) => (isMemberLine(line) ? line : `${at(node)}${line}`));
   const lines = ast.program.body.flatMap(annotate);
   const omitted = countOmittedFunctions(ast.program);
-  if (omitted > 0) lines.push(`// [Notice: ${omitted} internal/unexported function(s) omitted. Use chemx read --symbol=<name> to inspect]`);
+  const hasOmitted = omitted > 0;
+  if (hasOmitted) lines.push(`// [Notice: ${omitted} internal/unexported function(s) omitted. Use chemx read --symbol=<name> to inspect]`);
   return lines;
 };
