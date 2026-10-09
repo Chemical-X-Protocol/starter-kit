@@ -52,13 +52,38 @@ test('help: every routable token resolves to a schema entry and to its own --hel
   assert.strictEqual(resolveCommandHelpTopic('team', ['team', 'task', '--help']), null, 'team owns subcommand help');
 });
 
-test('help: a lone "help" is data for lookup commands, a help request for writers and flag-only commands', () => {
-  for (const token of ['f', 'ls', 'p', 'j', 'read', 'q', 'trace', 'backtrace', 'check', 'lint', 'test', 'audit', 'd', 'log']) {
+test('help: a lone "help" is data for pattern lookups, a help request everywhere else', () => {
+  for (const token of ['f', 'ls', 'p', 'q', 'trace', 'backtrace']) {
     assert.strictEqual(resolveCommandHelpTopic(token, [token, 'help']), null, `chemx ${token} help looks up "help"`);
   }
-  for (const token of ['init', 'create', 'generate', 'write', 'patch', 'explode', 'hook', 'verify', 'typecheck', 'build', 'team']) {
+  for (const token of ['read', 'j', 'check', 'd', 'log', 'do', 'test', 'lint', 'audit', 'init', 'create', 'generate', 'write', 'patch', 'explode', 'hook', 'verify', 'typecheck', 'build', 'team']) {
     assert.strictEqual(resolveCommandHelpTopic(token, [token, 'help']), token, `chemx ${token} help prints usage`);
   }
+});
+
+// End to end: the router is the only help authority, so a handler never re-reads
+// `help` or `-h` from argv after the router decided they are data.
+test('help: lookup data and help requests behave the same end to end', async () => {
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-help-data-'));
+  fs.mkdirSync(path.join(sandbox, 'src'));
+  fs.writeFileSync(path.join(sandbox, 'package.json'), JSON.stringify({ name: 'fx', version: '1.0.0', type: 'module' }));
+  fs.writeFileSync(path.join(sandbox, 'src', 'help.js'), "export const help = () => '-h';\n");
+  const dataRuns = [['q', 'help'], ['q', '-g', '-h'], ['q', '--literal', '-h'], ['q', '-s', '-h'], ['f', 'help'], ['read', 'src/help.js', '-s', '-h']];
+  const helpRuns = [['read', 'help'], ['j', 'help'], ['d', 'help'], ['log', 'help'], ['test', 'help'], ['lint', 'help'], ['audit', 'help']];
+  const results = await runAllPiped([...dataRuns, ...helpRuns], sandbox, 4);
+  const hasIssueDir = fs.existsSync(path.join(sandbox, '.chemx', 'issues'));
+  fs.rmSync(sandbox, { recursive: true, force: true });
+
+  for (const r of results) {
+    const label = `chemx ${r.args.join(' ')}`;
+    const isDataRun = dataRuns.includes(r.args);
+    assert.strictEqual(r.signal, null, `${label} was killed`);
+    assert.doesNotMatch(r.stderr, /Command Failed|is not defined/, `${label} crashed: ${r.stderr.slice(0, 200)}`);
+    if (isDataRun) assert.doesNotMatch(r.stdout, /^USAGE/, `${label} must treat help/-h as data`);
+    if (!isDataRun) assert.match(r.stdout, /^USAGE\n/, `${label} must print usage`);
+    if (!isDataRun) assert.strictEqual(r.status, 0, `${label} exited ${r.status}`);
+  }
+  assert.strictEqual(hasIssueDir, false, 'no run may file a crash issue into the project');
 });
 
 test('help: -h that is the value of a pattern or count flag is data, not a help request', () => {

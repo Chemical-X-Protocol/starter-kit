@@ -1,5 +1,6 @@
 import { ANSI } from './theme.js';
 import { readTokenOptimized } from './reader.js';
+import { hasHelpFlag } from './help-args.js';
 
 /**
  * CLI command runner for chemx read / chemx view.
@@ -8,7 +9,9 @@ import { readTokenOptimized } from './reader.js';
  * @param {boolean} isCli Whether invoked directly from CLI.
  */
 export const runReaderCli = (args, isCli = false) => {
-  if (args.includes('--help') || args.includes('-h') || args.includes('help')) {
+  const isLoneHelpWord = args.length === 1 && args[0] === 'help';
+  const isHelpRequest = hasHelpFlag(args) || isLoneHelpWord;
+  if (isHelpRequest) {
     const isJson = args.includes('--json');
     if (isJson) {
       process.stdout.write(JSON.stringify({ help: true, success: true }) + '\n');

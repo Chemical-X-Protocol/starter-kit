@@ -212,16 +212,9 @@ const formatTierBadge = (tier) => {
 export { resolveTargetDir };
 export { printSearchHelp } from './help.js';
 
+// Help requests never reach runSearch: the CLI router (help.js) owns them, so `help`
+// and `-h` here are query data (`chemx q help`, `chemx q -g -h`).
 export const runSearch = async (rawArgs = [], isCli = true) => {
-  const hasHelpFlag = rawArgs.includes('--help') || rawArgs.includes('-h');
-  const isHelpAlias = rawArgs[0] === 'help';
-  const isHelpRequested = hasHelpFlag || isHelpAlias;
-  if (isHelpRequested) {
-    printSearchHelp();
-    if (isCli) process.exit(0);
-    return [];
-  }
-
   const isRawJson = rawArgs.includes('--raw-json') || rawArgs.includes('--no-columnar');
   const isExplicitColumnar = rawArgs.includes('--columnar');
   const isJson = rawArgs.includes('--json') || isExplicitColumnar;
