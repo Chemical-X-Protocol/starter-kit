@@ -34,6 +34,7 @@ import { indexGeneratedFiles } from './generator-indexer.js';
 import { printGenerateHelp } from './generator-help.js';
 import { createJigFiles, JIG_KINDS } from './generator-jig.js';
 import { handleJigCli } from './generator-jig-cli.js';
+import { hasPreviewFlag } from './cli-args.js';
 export { printGenerateHelp } from './generator-help.js';
 export { createJigFiles, JIG_KINDS } from './generator-jig.js';
 export { handleJigCli } from './generator-jig-cli.js';
@@ -324,7 +325,7 @@ export const runGenerateWizard = async (rawArgs = []) => {
   const isLean = rawArgs.includes('--lean');
   const descArg = (rawArgs.find((a) => a.startsWith('--desc=') || a.startsWith('--description=') || a.startsWith('--prompt=')) || '')
     .replace(/^--(desc|description|prompt)=/, '');
-  const isDryRun = rawArgs.includes('--dry-run') || rawArgs.includes('-n');
+  const isDryRun = hasPreviewFlag(rawArgs);
 
   const isBareOrMinimal = rawArgs.includes('--bare') || rawArgs.includes('--minimal');
   const templateFlagMatch = (rawArgs.find((a) => a.startsWith('--template=')) || '').split('=')[1];

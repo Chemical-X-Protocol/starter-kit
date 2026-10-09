@@ -61,6 +61,22 @@ test('CLI write: --content <value> (space form) writes the value; existing files
   }
 });
 
+test('CLI write: a missing --content-file is a clean refusal, not a crash', () => {
+  const dir = makeProject();
+  const cwd = process.cwd();
+  try {
+    process.chdir(dir);
+    const { result, text } = captureStderr(() => runWriterCli(['src/new9.ts', '--content-file=nope.txt'], false));
+    assert.equal(result, null);
+    assert.match(text, /ENOENT|nope\.txt/);
+    assert.equal(fs.existsSync(path.join(dir, 'src/new9.ts')), false);
+    assert.equal(fs.existsSync(path.join(dir, '.chemx')), false);
+  } finally {
+    process.chdir(cwd);
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('write: unparseable content is refused', () => {
   const dir = makeProject();
   try {

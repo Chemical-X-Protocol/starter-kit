@@ -17,6 +17,7 @@ import { applyEdits } from './apply-edits.js';
 import { parseSource } from './source-parse.js';
 import { planExplode, importHeader, relocated } from './explode-plan.js';
 import { brokenSpecifiers } from './explode-relocate.js';
+import { hasPreviewFlag, findUnknownFlags, unknownFlagsMessage } from './cli-args.js';
 
 const joinSegments = (bucket, sub = '') => bucket.map((s) => relocated(s, sub).segment).join('\n').replace(/^\n+/, '');
 
@@ -185,17 +186,21 @@ const bucketFile = (bucket, names) => ({
 
 export const runExplodeCli = async (rawArgs = [], isCli = true) => {
   const isJson = rawArgs.includes('--json');
-  const isDryRun = rawArgs.includes('--dry-run') || rawArgs.includes('-n');
+  const isDryRun = hasPreviewFlag(rawArgs);
   const target = rawArgs.find((a) => !a.startsWith('-'));
+  const unknown = findUnknownFlags(rawArgs, []);
+  const hasUnknownFlags = unknown.length > 0;
+  const hasTarget = Boolean(target);
 
-  if (!target) {
-    const msg = 'Usage: npx chemx explode <file-path> [--dry-run] [--json]';
+  if (hasUnknownFlags || !hasTarget) {
+    const msg = hasUnknownFlags ? unknownFlagsMessage('explode', unknown) : 'Usage: npx chemx explode <file-path> [--dry-run] [--json]';
     if (isJson) {
       process.stdout.write(JSON.stringify({ error: msg, success: false }) + '\n');
     } else {
       process.stderr.write(`\x1b[31m✕ Error: ${msg}\x1b[0m\n`);
     }
     if (isCli) process.exit(1);
+    if (hasUnknownFlags) throw new Error(msg);
     return { error: msg, success: false };
   }
 

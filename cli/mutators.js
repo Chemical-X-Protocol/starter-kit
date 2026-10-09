@@ -4,6 +4,7 @@ import { toPascalCase } from './generator-templates.js';
 import { ANSI } from './theme.js';
 import { runAutofix } from './audit/autofix.js';
 import { applyEdits } from './apply-edits.js';
+import { hasPreviewFlag, findUnknownFlags, unknownFlagsMessage } from './cli-args.js';
 
 const relToCwd = (absPath) => path.relative(process.cwd(), absPath);
 
@@ -240,7 +241,8 @@ export const autoFixFile = (targetFile, options = {}) => {
 
 export const runMutatorCli = async (rawArgs = [], isCli = true) => {
   const isJson = rawArgs.includes('--json');
-  const isDryRun = rawArgs.includes('--dry-run') || rawArgs.includes('-n');
+  const isDryRun = hasPreviewFlag(rawArgs);
+  const unknown = findUnknownFlags(rawArgs, []);
   const nonFlags = rawArgs.filter((a) => !a.startsWith('-'));
   const first = nonFlags[0] || '';
   const second = nonFlags[1] || '';
@@ -259,6 +261,8 @@ export const runMutatorCli = async (rawArgs = [], isCli = true) => {
 
   try {
     let result = null;
+    const hasUnknownFlags = unknown.length > 0;
+    if (hasUnknownFlags) throw new Error(unknownFlagsMessage(command, unknown));
 
     if (command === 'add:prop') {
       const hasArgs = Boolean(target) && Boolean(value);

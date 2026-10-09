@@ -1,10 +1,11 @@
 /**
  * CLI runners for `chemx patch` and `chemx write`. Both preview with --dry-run (printing the
- * full unified diff) and refuse rather than guess: a missing --content never becomes ''.
+ * full unified diff) and refuse rather than guess: a missing --content never becomes '' and an
+ * unknown flag refuses instead of being ignored.
  */
 import fs from 'node:fs';
 import { ANSI } from './theme.js';
-import { parseValueFlags, hasFlag, splitList } from './cli-args.js';
+import { parseValueFlags, hasFlag, splitList, hasPreviewFlag, findUnknownFlags, unknownFlagsMessage } from './cli-args.js';
 import { patchFile, writeFile } from './patcher.js';
 
 const PATCH_HELP = [
@@ -19,7 +20,7 @@ const PATCH_HELP = [
   '  --multiple               Replace every occurrence',
   '  --allow-remove=<a,b>     Top-level declarations the patch may remove',
   '  --as=<agent>             Agent id for team lock checks (default $CHEMX_AGENT_ID or @agent)',
-  '  -n, --dry-run            Print the unified diff without writing',
+  '  -n, --dry-run            Print the unified diff without writing (--dryRun, --dry-run=<any> too)',
   '  --json                   Output result as JSON',
   '  -h, --help               Show this help message',
   ''
@@ -36,7 +37,7 @@ const WRITE_HELP = [
   '  --overwrite              Allow replacing an existing file',
   '  --allow-remove=<a,b>     Top-level declarations an overwrite may remove',
   '  --as=<agent>             Agent id for team lock checks',
-  '  -n, --dry-run            Print the unified diff without writing',
+  '  -n, --dry-run            Print the unified diff without writing (--dryRun, --dry-run=<any> too)',
   '  --json                   Output result as JSON',
   '  -h, --help               Show this help message',
   ''
@@ -103,45 +104,57 @@ const runGuarded = (action, verb, isJson, isCli) => {
   }
 };
 
+const PATCH_FLAGS = {
+  target: ['--target'], replacement: ['--replacement', '--replace'],
+  targetFile: ['--target-file'], replacementFile: ['--replacement-file'],
+  allowRemove: ['--allow-remove'], as: ['--as']
+};
+const PATCH_SWITCHES = ['--multiple', '--allow-multiple'];
+
 export const runPatcherCli = (args, isCli = false) => {
   if (isHelpRequest(args)) return showHelp(args, PATCH_HELP, isCli);
-  const { values, positionals } = parseValueFlags(args, {
-    target: ['--target'], replacement: ['--replacement', '--replace'],
-    targetFile: ['--target-file'], replacementFile: ['--replacement-file'],
-    allowRemove: ['--allow-remove'], as: ['--as']
-  });
+  const unknown = findUnknownFlags(args, [...Object.values(PATCH_FLAGS).flat(), ...PATCH_SWITCHES]);
+  const hasUnknownFlags = unknown.length > 0;
+  if (hasUnknownFlags) return fail(unknownFlagsMessage('patch', unknown), isCli);
+  const { values, positionals } = parseValueFlags(args, PATCH_FLAGS);
   const filePath = positionals[0];
   if (!filePath) return fail('Missing file path. Usage: chemx patch <file> --target="text" --replacement="new" [--json]', isCli);
 
   return runGuarded(() => patchFile(filePath, {
     targetContent: fromFileOr(values.target ?? null, values.targetFile),
     replacementContent: fromFileOr(values.replacement ?? null, values.replacementFile),
-    allowMultiple: hasFlag(args, ['--multiple', '--allow-multiple']),
-    dryRun: hasFlag(args, ['--dry-run', '-n']),
+    allowMultiple: hasFlag(args, PATCH_SWITCHES),
+    dryRun: hasPreviewFlag(args),
     allowRemoved: splitList(values.allowRemove),
     agentId: values.as
   }), 'patch', args.includes('--json'), isCli);
 };
 
-export const runWriterCli = (args, isCli = false) => {
-  if (isHelpRequest(args)) return showHelp(args, WRITE_HELP, isCli);
-  const { values, positionals } = parseValueFlags(args, {
-    content: ['--content'], contentFile: ['--content-file'], allowRemove: ['--allow-remove'], as: ['--as']
-  });
-  const filePath = positionals[0];
-  if (!filePath) return fail('Missing file path. Usage: chemx write <file> --content="text" [--json]', isCli);
+const WRITE_FLAGS = { content: ['--content'], contentFile: ['--content-file'], allowRemove: ['--allow-remove'], as: ['--as'] };
+const WRITE_SWITCHES = ['--stdin', '--overwrite'];
+const MISSING_CONTENT = 'chemx write needs --content=<text>, --content-file=<path> or --stdin (a value starting with "-" needs the --content=<text> form). Refusing to write.';
 
+const readWriteContent = (args, values) => {
   const isStdin = args.includes('--stdin');
   const content = isStdin ? fs.readFileSync(0, 'utf-8') : fromFileOr(values.content, values.contentFile);
   const isMissingContent = typeof content !== 'string';
-  if (isMissingContent) {
-    return fail('chemx write needs --content=<text>, --content-file=<path> or --stdin (a value starting with "-" needs the --content=<text> form). Refusing to write.', isCli);
-  }
+  if (isMissingContent) throw new Error(MISSING_CONTENT);
+  return content;
+};
+
+export const runWriterCli = (args, isCli = false) => {
+  if (isHelpRequest(args)) return showHelp(args, WRITE_HELP, isCli);
+  const unknown = findUnknownFlags(args, [...Object.values(WRITE_FLAGS).flat(), ...WRITE_SWITCHES]);
+  const hasUnknownFlags = unknown.length > 0;
+  if (hasUnknownFlags) return fail(unknownFlagsMessage('write', unknown), isCli);
+  const { values, positionals } = parseValueFlags(args, WRITE_FLAGS);
+  const filePath = positionals[0];
+  if (!filePath) return fail('Missing file path. Usage: chemx write <file> --content="text" [--json]', isCli);
 
   return runGuarded(() => writeFile(filePath, {
-    content,
+    content: readWriteContent(args, values),
     overwrite: args.includes('--overwrite'),
-    dryRun: hasFlag(args, ['--dry-run', '-n']),
+    dryRun: hasPreviewFlag(args),
     allowRemoved: splitList(values.allowRemove),
     agentId: values.as
   }), 'write', args.includes('--json'), isCli);

@@ -52,4 +52,45 @@ export const parseValueFlags = (args, spec) => {
 
 export const hasFlag = (args, names) => names.some((n) => args.includes(n));
 
+const PREVIEW_FLAG_REGEX = /^(?:-n|--?dry[-_]?run(?:=.*)?)$/i;
+
+/**
+ * One rule for "preview" across every mutating CLI command and the MCP command string:
+ * `-n` or any dry-run spelling (`--dry-run`, `--dryRun`, `--dry_run`, `--dryrun`), with any value.
+ * `--dry-run=false` also previews: to write, leave the flag out.
+ *
+ * @param {string} arg One argv token.
+ * @returns {boolean}
+ */
+export const isPreviewFlag = (arg) => typeof arg === 'string' && PREVIEW_FLAG_REGEX.test(arg);
+
+export const hasPreviewFlag = (args) => args.some(isPreviewFlag);
+
+const GLOBAL_FLAGS = ['--json', '--help', '-h', '--yes', '-y', '--ci', '--headless', '--non-interactive', '--no-interactive', '--dev', '--no-color'];
+
+/**
+ * Flags a mutating command does not understand. A typo such as `--preview` must refuse, not write.
+ *
+ * @param {string[]} args argv slice.
+ * @param {string[]} known Flag names the command reads (without `=value`).
+ * @returns {string[]} The unknown flag tokens, as given.
+ */
+export const findUnknownFlags = (args, known) => {
+  const allowed = new Set([...GLOBAL_FLAGS, ...known]);
+  const isUnknown = (arg) => {
+    const isFlag = FLAG_LIKE_REGEX.test(arg);
+    const isAllowed = isPreviewFlag(arg) || allowed.has(arg.split('=')[0]);
+    return isFlag && !isAllowed;
+  };
+  return args.filter(isUnknown);
+};
+
+/**
+ * @param {string} command Command name for the message.
+ * @param {string[]} unknown Result of findUnknownFlags.
+ * @returns {string}
+ */
+export const unknownFlagsMessage = (command, unknown) =>
+  `Unknown flag(s) for chemx ${command}: ${unknown.join(', ')}. Nothing was changed (preview with --dry-run; see chemx ${command} --help).`;
+
 export const splitList = (value) => (value ? String(value).split(',').map((s) => s.trim()).filter(Boolean) : undefined);

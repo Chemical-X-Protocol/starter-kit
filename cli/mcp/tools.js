@@ -6,6 +6,7 @@ import { handleGenerateCapsule, handleChemxTrend } from './tools-generate.js';
 import { handleChemxQ, handleChemxRead, handleChemxPatch, handleChemxCheck, handleChemxWrite } from './tools-search.js';
 import { handleChemxTeam, handleChemxTeamStatus, handleChemxTeamFeed, handleChemxTeamPost, handleChemxTeamTask, handleChemxTeamLock, handleChemxTeamInbox, handleChemxTeamDm, handleChemxReportIssue } from './tools-team.js';
 import { handleChemxProject } from './tools-project.js';
+import { hasPreviewFlag } from '../cli-args.js';
 
 export {
   MCP_TOOLS, ALL_MCP_TOOLS, handleChemxQ, handleChemxRead, handleChemxPatch, handleChemxCheck, handleChemxWrite,
@@ -22,17 +23,17 @@ const parseListFlags = (parts) => {
   return flags;
 };
 
-const DRY_RUN_FLAG_REGEX = /(^|\s)(--dry-run|-n)(\s|$)/;
 const MUTATING_ACTIONS = new Set(['write', 'patch', 'autofix', 'explode', 'generate']);
 
 /**
- * Parses a command string. A `--dry-run`/`-n` in the command string of a mutating action always
- * means preview, whatever the params say, so the string form and the params form agree.
+ * Parses a command string. Any preview spelling the CLI accepts (isPreviewFlag: `-n`, `--dry-run`,
+ * `--dryRun`, `--dry-run=<any>`) in the command string of a mutating action means preview,
+ * whatever the params say, so the string form, the params form and the CLI agree.
  */
 export const parseCommand = (command, params) => {
   const parsed = parseCommandParts(command, params);
   const isMutating = MUTATING_ACTIONS.has(parsed.action) || String(parsed.action).startsWith('add');
-  const isPreview = isMutating && DRY_RUN_FLAG_REGEX.test(command);
+  const isPreview = isMutating && hasPreviewFlag(command.trim().split(/\s+/));
   return isPreview ? { ...parsed, params: { ...parsed.params, dryRun: true } } : parsed;
 };
 
