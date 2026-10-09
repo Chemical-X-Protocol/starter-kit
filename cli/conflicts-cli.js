@@ -15,7 +15,8 @@ const isHelp = (args) => args.slice(1).some((a) => HELP_FLAGS.has(a));
 export const wantsEarlyConflictCommand = (args = []) => {
   const [cmd] = args;
   if (isHelp(args)) return null;
-  if (cmd === 'conflicts') return 'conflicts';
+  const isConflictsCommand = cmd === 'conflicts';
+  if (isConflictsCommand) return 'conflicts';
   const isDiff = cmd === 'd' || cmd === 'diff';
   return isDiff && args.includes('--conflicts') ? 'diff' : null;
 };
@@ -48,7 +49,8 @@ export const runConflictsCli = (args = [], cwd = process.cwd()) => {
     process.stderr.write(`not a git repository: ${cwd}\n`);
     return 128;
   }
-  if (report.unmerged.length === 0) {
+  const hasNoUnmerged = report.unmerged.length === 0;
+  if (hasNoUnmerged) {
     process.stdout.write('No unmerged paths.\n');
     return 0;
   }
@@ -73,7 +75,8 @@ export const conflictDiff = (args = [], cwd = process.cwd()) => {
 /** @returns {number} exit code */
 export const runConflictDiff = (args = [], cwd = process.cwd()) => {
   const res = conflictDiff(args, cwd);
-  if (res.error) process.stderr.write(`${res.error}\n`);
+  const hasError = Boolean(res.error);
+  if (hasError) process.stderr.write(`${res.error}\n`);
   process.stdout.write(res.output);
   return res.code;
 };
@@ -82,12 +85,17 @@ const SOURCE_EXT = /\.(?:[cm]?js|json)$/;
 
 const scanDir = (dir, found = []) => {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    if (entry.name === 'node_modules' || entry.name.startsWith('.')) continue;
+    const isSkipped = entry.name === 'node_modules' || entry.name.startsWith('.');
+    if (isSkipped) continue;
     const abs = path.join(dir, entry.name);
     if (entry.isDirectory()) scanDir(abs, found);
-    else if (SOURCE_EXT.test(entry.name)) {
-      const hunks = fileConflictHunks(abs);
-      if (hunks.length > 0) found.push({ abs, line: hunks[0].start });
+    else {
+      const isSourceFile = SOURCE_EXT.test(entry.name);
+      if (isSourceFile) {
+        const hunks = fileConflictHunks(abs);
+        const hasHunks = hunks.length > 0;
+        if (hasHunks) found.push({ abs, line: hunks[0].start });
+      }
     }
   }
   return found;
@@ -103,7 +111,8 @@ export const explainLoadFailure = (cliDir) => {
   const kitRoot = path.dirname(cliDir);
   let found = [];
   try { found = scanDir(cliDir); } catch { return null; }
-  if (found.length === 0) return null;
+  const isEmpty = found.length === 0;
+  if (isEmpty) return null;
   const list = found.map((f) => `${path.relative(kitRoot, f.abs)}:${f.line}`).join(', ');
   return `chemx cannot load: its own source has unmerged conflict markers: ${list}. Resolve them first; chemx conflicts and chemx d --conflicts still work.`;
 };
