@@ -4,6 +4,10 @@
 //   attr    { kind: 'static' | 'bind' | 'event' | 'struct' | 'slot' | 'dir', name, value? , exp? }
 //   child   element | { type: 'Text', text, loc } | { type: 'Interp', exp, loc }
 // class, style, key, ref and id (and JSX className) are passthrough and dropped. Comments are dropped.
+// Text keeps what renders (#2586): JSX text goes through the script canonicaliser's jsxTextValue, and Vue
+// text is the compiler's own condensed content (raw inside <pre>, &nbsp; kept as U+00A0). Expression
+// text keeps string and template literal contents verbatim; only whitespace between tokens collapses.
+import { jsxTextValue } from './canon-nodes.js';
 
 const PASSTHROUGH = new Set(['class', 'style', 'key', 'ref', 'id', 'className']);
 const STRUCTURAL = { if: 'IF', 'else-if': 'ELSE_IF', else: 'ELSE', for: 'FOR', show: 'SHOW' };
@@ -11,7 +15,46 @@ const VUE_NODE = { ELEMENT: 1, TEXT: 2, INTERPOLATION: 5 };
 const VUE_PROP = { ATTRIBUTE: 6, DIRECTIVE: 7 };
 const JSX_EVENT = /^on[A-Z]/;
 
-const squash = (text) => String(text ?? '').replace(/\s+/g, ' ').trim();
+const QUOTES = new Set(["'", '"', '`']);
+
+/** End index (exclusive) of the quoted literal that opens at `start`. */
+const literalEnd = (text, start) => {
+  const quote = text[start];
+  let index = start + 1;
+  while (index < text.length && text[index] !== quote) index += text[index] === '\\' ? 2 : 1;
+  return Math.min(index + 1, text.length);
+};
+
+/** The whitespace run starting at `index` ('' when there is none). */
+const runAt = (text, index) => {
+  const pattern = /\s+/y;
+  pattern.lastIndex = index;
+  return pattern.exec(text)?.[0] ?? '';
+};
+
+/**
+ * Expression source with whitespace between tokens collapsed to one space. Quoted and template literal
+ * text is kept verbatim. A same-line run is kept as is when the text has a `/` (it may be a regex), and
+ * text with a backtick is kept whole (a template can nest quotes this scanner does not track).
+ */
+const squashCode = (raw) => {
+  const text = String(raw ?? '');
+  const hasTemplate = text.includes('`');
+  if (hasTemplate) return text.trim();
+  const mayHoldRegex = text.includes('/');
+  let out = '';
+  let index = 0;
+  while (index < text.length) {
+    const isQuote = QUOTES.has(text[index]);
+    const run = isQuote ? '' : runAt(text, index);
+    const end = isQuote ? literalEnd(text, index) : index + Math.max(run.length, 1);
+    const keepsRun = mayHoldRegex && !/[\r\n]/.test(run);
+    const isCollapsible = run.length > 0 && !keepsRun;
+    out += isCollapsible ? ' ' : text.slice(index, end);
+    index = end;
+  }
+  return out.trim();
+};
 
 const capitalize = (part) => part.charAt(0).toUpperCase() + part.slice(1);
 
@@ -23,12 +66,12 @@ const vueLoc = (node) => ({ start: node.loc.start.line, end: node.loc.end.line }
 const vueArgName = (prop) => {
   const arg = prop.arg;
   if (!arg) return null;
-  return arg.isStatic ? arg.content : `[${squash(arg.content)}]`;
+  return arg.isStatic ? arg.content : `[${squashCode(arg.content)}]`;
 };
 
 const vueDirective = (prop) => {
   const name = vueArgName(prop);
-  const exp = squash(prop.exp?.content);
+  const exp = squashCode(prop.exp?.content);
   const structural = STRUCTURAL[prop.name];
   const isBind = prop.name === 'bind';
   const isPassthroughBind = isBind && PASSTHROUGH.has(name);
@@ -56,8 +99,8 @@ const vueChild = (node) => {
   const isElement = node.type === VUE_NODE.ELEMENT;
   if (isElement) return normalizeVueElement(node);
   const isInterp = node.type === VUE_NODE.INTERPOLATION;
-  if (isInterp) return { type: 'Interp', exp: squash(node.content?.content), loc: vueLoc(node) };
-  const text = node.type === VUE_NODE.TEXT ? squash(node.content) : '';
+  if (isInterp) return { type: 'Interp', exp: squashCode(node.content?.content), loc: vueLoc(node) };
+  const text = node.type === VUE_NODE.TEXT ? String(node.content ?? '') : '';
   return text ? { type: 'Text', text, loc: vueLoc(node) } : null;
 };
 
@@ -75,7 +118,7 @@ export const vueRootElements = (templateAst) =>
   (templateAst?.children ?? []).filter((node) => node.type === VUE_NODE.ELEMENT).map(normalizeVueElement);
 
 const jsxLoc = (node) => ({ start: node.loc.start.line, end: node.loc.end.line });
-const sourceOf = (node, source) => squash(source.slice(node.start, node.end));
+const sourceOf = (node, source) => squashCode(source.slice(node.start, node.end));
 
 const jsxName = (name) => {
   const isMember = name.type === 'JSXMemberExpression';
@@ -103,7 +146,7 @@ const jsxChild = (node, source) => {
   if (isElement) return normalizeJsxElement(node, source);
   const isContainer = node.type === 'JSXExpressionContainer' && node.expression.type !== 'JSXEmptyExpression';
   if (isContainer) return { type: 'Interp', exp: sourceOf(node.expression, source), loc: jsxLoc(node) };
-  const text = node.type === 'JSXText' ? squash(node.value) : '';
+  const text = node.type === 'JSXText' ? jsxTextValue(node.value) : '';
   return text ? { type: 'Text', text, loc: jsxLoc(node) } : null;
 };
 

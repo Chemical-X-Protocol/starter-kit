@@ -1,7 +1,10 @@
 // Script units of one canonical Program (engine doc section 1):
-//   fn    bodies of function declarations/expressions, arrows, class and object methods; params are kept
-//         aside (paramNames) and count as unit-local binders; decl_name comes from the id, the
-//         VariableDeclarator, the property or method key, or an assignment target.
+//   fn    bodies of function declarations/expressions, arrows, class and object methods, hashed together
+//         with a signature node (#2586): arrow or function, async, generator, accessor kind and every
+//         param's canonical pattern (defaults, destructuring, rest), so param binders are numbered
+//         first and `(a, b)` never equals `(b, a)`. paramNames and signature { kind, fp1 } are kept as
+//         meta; decl_name comes from the id, the VariableDeclarator, the property or method key, or an
+//         assignment target.
 //   stmt  every canonical statement of every BlockStatement, with blockId and ordinal (a try is one
 //         unit). Program-level statements are not stmt units, and neither is the `{ return e }` made
 //         from an expression-bodied arrow (it is exactly the arrow's fn unit).
@@ -65,6 +68,27 @@ const paramNameOf = (param) => {
   return isRest ? `...${name}` : name;
 };
 
+const ACCESSOR_KINDS = new Set(['kind:get', 'kind:set', 'kind:constructor']);
+
+/** 'arrow' or 'function', then async, generator and an accessor kind when present. */
+const signatureKind = (fn) => {
+  const flags = new Set(fn.label.split(' '));
+  const accessor = [...flags].find((flag) => ACCESSOR_KINDS.has(flag)) ?? null;
+  const base = fn.type === 'ArrowFunctionExpression' ? 'arrow' : 'function';
+  const modifiers = ['async', 'generator'].filter((flag) => flags.has(flag));
+  return [base, ...modifiers, accessor].filter(Boolean).join(' ');
+};
+
+const signatureNode = (fn) => ({
+  type: 'FnSignature',
+  label: signatureKind(fn),
+  kids: { params: fn.kids.params ?? [] },
+  isExpr: false,
+  loc: null,
+  ident: null,
+  lit: null
+});
+
 const spanOf = (node) => ({
   start: node.loc?.start ?? null,
   end: node.loc?.end ?? null,
@@ -119,8 +143,11 @@ export const collectScriptUnits = (program, { ubiquitous = new Set() } = {}) => 
   const addFn = (node, parent, key) => {
     const body = node.kids.body;
     const params = node.kids.params ?? [];
-    const hashed = hashUnit(body, { declScope: node });
-    units.push({ kind: 'fn', ...spanOf(node), declName: declNameOf(node, parent, key), paramNames: params.map(paramNameOf), ...hashed });
+    const signature = signatureNode(node);
+    const hashed = hashUnit([signature, body], { declScope: node });
+    const signatureMeta = { kind: signature.label, fp1: hashUnit(signature, { declScope: node }).fp1 };
+    const named = { declName: declNameOf(node, parent, key), paramNames: params.map(paramNameOf), signature: signatureMeta };
+    units.push({ kind: 'fn', ...spanOf(node), ...named, ...hashed });
   };
 
   const addBlock = (node) => {

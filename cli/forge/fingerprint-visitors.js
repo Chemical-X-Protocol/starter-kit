@@ -3,7 +3,7 @@
 // traverse the audit already does; after it, addScriptAst canonicalizes the Program and collects the
 // script units, and addVueTemplate reads the template AST the SFC parse already built.
 // The result equals collectFileUnits(relativePath, content) for the same file (fingerprint-visitors.spec).
-import { describeIdentifier } from './bindings.js';
+import { createBindingVisitors } from './bindings.js';
 import { canonicalize } from './canonicalize.js';
 import { collectScriptUnits } from './units.js';
 import { collectJsxTemplateUnits, collectVueTemplateUnits } from './template-units.js';
@@ -60,9 +60,6 @@ export const createFileFingerprint = (relativePath, { ubiquitous } = {}) => {
   };
 };
 
-/** Visitor set merged into the audit traverse: one binding-index entry per Identifier. */
-export const createFingerprintVisitors = (fingerprint) => ({
-  Identifier(path) {
-    fingerprint.bindings.set(path.node, describeIdentifier(path, fingerprint.ids, fingerprint.relativePath));
-  }
-});
+/** Visitor set merged into the audit traverse: the same binding index buildBindingIndex builds. */
+export const createFingerprintVisitors = (fingerprint) =>
+  createBindingVisitors(fingerprint.bindings, fingerprint.ids, fingerprint.relativePath);

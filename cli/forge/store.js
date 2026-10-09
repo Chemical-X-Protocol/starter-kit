@@ -42,7 +42,7 @@ const statementsFor = (db) => {
 
 // Kind-specific extras that have no column of their own.
 const META_OF = {
-  fn: (unit) => ({ paramNames: unit.paramNames ?? [] }),
+  fn: (unit) => ({ paramNames: unit.paramNames ?? [], signature: unit.signature ?? null }),
   tmpl: (unit) => ({ tag: unit.tag, nodeId: unit.nodeId }),
   stmt: () => null,
   expr: () => null

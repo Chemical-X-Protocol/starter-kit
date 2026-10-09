@@ -131,7 +131,8 @@ test('a side-effecting initializer is inlined only into the first-evaluated posi
   assert.equal(statementsOf('const k = f(); if (k && a) g();').length, 1);
   assert.equal(statementsOf('const k = f(); if (a && k) g();').length, 2);
   assert.equal(statementsOf('const k = f(); if (a) g(k);').length, 2);
-  assert.equal(statementsOf('const k = a.b; if (c && k) g();').length, 1, 'a pure initializer may move');
+  assert.equal(statementsOf('const k = a.b; if (c && k) g();').length, 2, 'a member read can throw: it stays out of the guard');
+  assert.equal(statementsOf('const k = a === b; if (c && k) g();').length, 1, 'an inert initializer may move');
 });
 
 test('inlining never crosses into a nested function or loop, nor rebinds this', () => {

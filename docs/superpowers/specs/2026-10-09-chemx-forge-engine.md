@@ -26,10 +26,14 @@ Exclusions:
   - it has exactly one reference;
   - that reference is in the immediately next statement;
   - there is no write in between;
-  - either the reference is the first-evaluated operand of that statement, or e is pure (identifiers, member reads, literals, operators, typeof).
+  - either the reference is the first-evaluated operand of that statement, or e is inert and nothing that could run code completes before the reference. Inert means it cannot throw and runs no user code: literals, non-global identifiers, undefined/NaN/Infinity, and `!`, `typeof`, `void`, `===`, `&&`, `||`, `??`, `?:` over inert operands. Member reads are not inert, because a getter can run or `null.x` can throw (`const n = u.name; return u && n` must keep n). Arithmetic, `==`, templates and spreads are not inert either, because valueOf, toString and iterators run code (#2586);
+  - the reference is not inside a nested function, a class field value, a loop body or test, or a destructuring pattern;
+  - e is not the global `eval`, the file has no direct eval or `with`, and the const is not declared in a switch case, since its scope is the whole switch.
   This undoes the CONTROL_FLOW_INLINE_BOOLEAN and NAMING_BARE_BOOLEAN forms:
   - `const isAsFlag = arg === '--as'; const shouldReadAsNext = isAsFlag && hasNextArg; if (shouldReadAsNext) flags.as = nextArg` becomes `if (arg === '--as' && hasNextArg) flags.as = nextArg`.
   - useSwarmTasks.ts:10-11 and useSwarmFeed.ts:11-12 then hash the same.
+- A fn unit hashes a signature node ahead of its body: arrow or function, async, generator, accessor kind, and each param's canonical pattern, so `(a, b)` never equals `(b, a)` (#2586).
+- A JSX component name (`<Foo>`, the root of `<foo.Bar>`) resolves through bindings like any identifier. A dynamic `import('x')` or global `require('x')` source becomes the `import:<src>#*` anchor. TS enums, namespaces, `import =` and `export =` are runtime code and are kept, and `declare`, `abstract` and `const` are labels.
 - `if (c) s` becomes `if (c) { s }`.
 - An expressionless template literal becomes a string.
 - `Boolean(x)` in test position becomes `x`.

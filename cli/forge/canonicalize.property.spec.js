@@ -65,7 +65,14 @@ const TEMPLATES = [
   { body: (e) => `const k = a; return [a = ${e[0]}, k].join('|');`, inlines: false },
   { body: () => `const k = b; const r = [c, b = 7, k]; return r.join('|');`, inlines: false },
   { body: (e) => `const k = c; return [${e[0]}, k].join('|');`, inlines: null },
-  { body: () => `const k = a; return [b, k].join('|');`, inlines: true }
+  { body: () => `const k = a; return [b, k].join('|');`, inlines: true },
+  // #2586: a destructuring default runs after the init and only on undefined; a member read can throw,
+  // so it never moves into a guarded slot, while an inert alias may.
+  { body: (e) => `const k = c; const { x = k } = { x: f(1) }; return [x, ${e[0]}].join('|');`, inlines: false },
+  { body: () => `let x; const k = c; ({ x = k } = { x: f(2) }); return x;`, inlines: false },
+  { body: (e) => `const k = a.length; return ${e[0]} && k;`, inlines: false },
+  { body: (e) => `const k = b; return ${e[0]} && k;`, inlines: null },
+  { body: () => `const k = b; return (typeof a === 'string') && k;`, inlines: true }
 ];
 
 const canonicalBody = (body) => {
@@ -132,7 +139,7 @@ test('side-effecting initializers are never inlined out of first-evaluated posit
     const initializer = expression(random, 2);
     const body = `const k = ${initializer}; if (a || k) return 1; return 2;`;
     const canonical = checkCase(body, random);
-    const isImpure = /f\(|Boolean\(/.test(initializer);
+    const isImpure = /f\(|Boolean\(|\.length| [!=]= /.test(initializer);
     assert.equal(hasAlias(canonical), isImpure, `wrong inlining decision: ${body}`);
     keptCount += Number(isImpure);
   }

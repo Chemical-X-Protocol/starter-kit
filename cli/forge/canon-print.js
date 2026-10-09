@@ -97,6 +97,9 @@ const PRINTERS = {
   ArrayExpression: (node) => `[${joinWith(node.kids.elements, ', ')}]`,
   ObjectExpression: (node) => `({ ${joinWith(node.kids.properties, ', ')} })`,
   ObjectProperty: printProperty,
+  ObjectPattern: (node) => `{ ${joinWith(node.kids.properties, ', ')} }`,
+  ArrayPattern: (node) => `[${joinWith(node.kids.elements, ', ')}]`,
+  AssignmentPattern: (node) => `${printCanonical(node.kids.left)} = ${printCanonical(node.kids.right)}`,
   AwaitExpression: (node) => `(await ${printCanonical(node.kids.argument)})`,
   SequenceExpression: (node) => `(${joinWith(node.kids.expressions, ', ')})`
 };

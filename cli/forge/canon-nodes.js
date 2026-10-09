@@ -6,6 +6,10 @@
 // Literal text keeps what the runtime sees: a tagged template's quasis are labelled by their raw text
 // (the tag can read `strings.raw`), and JSXText collapses whitespace exactly the way JSX does (only
 // runs that contain a line break are dropped, so `<b> x</b>` keeps its leading space).
+// A JSX component name (`<Foo>`, the root of `<foo.Bar>`) is an Identifier resolved through the binding
+// index like any other reference, and a dynamic import()/require() source becomes an import anchor
+// (bindings.js marks both). TS nodes are type-only and dropped, except enums, namespaces, `import =`
+// and `export =`, which emit runtime code (#2586).
 //
 // Canonical node: { type, label, kids, isExpr, loc, ident, lit }
 //   kids   insertion-ordered { [visitorKey]: node | null | node[] } (Babel VISITOR_KEYS order)
@@ -22,7 +26,14 @@ const TRANSPARENT_WRAPPERS = new Set([
   'ParenthesizedExpression', 'TSAsExpression', 'TSSatisfiesExpression', 'TSNonNullExpression',
   'TSTypeAssertion', 'TSInstantiationExpression'
 ]);
-const LABEL_FLAGS = ['operator', 'kind', 'computed', 'async', 'generator', 'static', 'optional', 'prefix', 'delegate', 'await'];
+const LABEL_FLAGS = [
+  'operator', 'kind', 'computed', 'async', 'generator', 'static', 'optional', 'prefix', 'delegate', 'await',
+  'declare', 'abstract', 'const'
+];
+const RUNTIME_TS_TYPES = new Set([
+  'TSEnumDeclaration', 'TSEnumBody', 'TSEnumMember', 'TSModuleDeclaration', 'TSModuleBlock',
+  'TSImportEqualsDeclaration', 'TSExternalModuleReference', 'TSQualifiedName', 'TSExportAssignment'
+]);
 const MEMBER_TYPES = new Set(['MemberExpression', 'OptionalMemberExpression']);
 const KEYED_TYPES = new Set(['ObjectProperty', 'ObjectMethod', 'ClassMethod', 'ClassProperty', 'ClassAccessorProperty']);
 const BLOCK_SLOTS = {
@@ -46,7 +57,7 @@ const LITERAL_LABELS = {
 };
 
 /** JSX text as the JSX transform emits it: per line, trim the sides that touch a line break. */
-const jsxTextValue = (value) => {
+export const jsxTextValue = (value) => {
   const lines = value.replace(/\t/g, ' ').split(/\r\n|\n|\r/);
   const lastIndex = lines.length - 1;
   const kept = lines.map((line, index) => {
@@ -129,14 +140,24 @@ const convertGeneric = (node, ctx) => {
   return makeNode(node.type, textLabel ?? flagLabel(node), kids, node);
 };
 
-const convertLiteral = (node) => {
+const convertIdentifier = (node, ctx) => {
+  const ident = ctx.bindings.get(node) ?? UNKNOWN_IDENTIFIER;
+  return makeNode('Identifier', node.name, {}, node, { ident, isExpr: true });
+};
+
+/** A dynamic import()/require() source is an import anchor, the same one a static import gets. */
+const convertLiteral = (node, ctx) => {
+  const ident = ctx?.bindings.get(node);
+  const isModuleSource = ident?.origin === 'import';
+  if (isModuleSource) return makeNode('Identifier', `${ident.importRef}`, {}, node, { ident, isExpr: true });
   const [lit, label] = LITERAL_LABELS[node.type](node);
   return makeNode(node.type, label, {}, node, { lit });
 };
 
-const convertIdentifier = (node, ctx) => {
-  const ident = ctx.bindings.get(node) ?? UNKNOWN_IDENTIFIER;
-  return makeNode('Identifier', node.name, {}, node, { ident, isExpr: true });
+/** A JSX name the binding index resolved (a component reference) is an Identifier; others stay text. */
+const convertJsxIdentifier = (node, ctx) => {
+  const isReference = ctx.bindings.has(node);
+  return isReference ? convertIdentifier(node, ctx) : convertGeneric(node, ctx);
 };
 
 const convertTemplate = (node, ctx) => {
@@ -180,13 +201,15 @@ const SPECIAL = {
   TaggedTemplateExpression: convertTaggedTemplate,
   BinaryExpression: convertBinary,
   ArrowFunctionExpression: convertArrow,
+  JSXIdentifier: convertJsxIdentifier,
   TSParameterProperty: (node, ctx) => convertNode(node.parameter, ctx),
   ...Object.fromEntries(Object.keys(LITERAL_LABELS).map((type) => [type, convertLiteral]))
 };
 
 /**
  * Converts one Babel node (and its subtree). ctx = { bindings: Map<IdentifierNode, entry> }.
- * Returns null for type-only TS nodes, which disappear from blocks and lists.
+ * Returns null for type-only TS nodes, which disappear from blocks and lists (enums, namespaces,
+ * `import =` and `export =` are runtime code and are kept).
  */
 export const convertNode = (node, ctx) => {
   if (!node) return null;
@@ -194,7 +217,7 @@ export const convertNode = (node, ctx) => {
   if (isWrapper) return convertNode(node.expression, ctx);
   const special = SPECIAL[node.type];
   if (special) return special(node, ctx);
-  const isTypeOnly = node.type.startsWith('TS');
+  const isTypeOnly = node.type.startsWith('TS') && !RUNTIME_TS_TYPES.has(node.type);
   if (isTypeOnly) return null;
   return convertGeneric(node, ctx);
 };
