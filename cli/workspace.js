@@ -30,7 +30,10 @@ const parsePnpmPackages = (text) => {
     }
     const item = isInPackages ? line.match(/^\s+-\s*(.+?)\s*$/) : null;
     if (item) globs.push(unquote(item[1]));
-    else if (/^\S/.test(line)) isInPackages = false;
+    else {
+      const isTopLevelKey = /^\S/.test(line);
+      if (isTopLevelKey) isInPackages = false;
+    }
   }
   return globs;
 };
@@ -38,7 +41,8 @@ const parsePnpmPackages = (text) => {
 // Package globs declared by `dir` itself, or null when dir is not a workspace root.
 export const readWorkspaceGlobs = (dir) => {
   const pnpmFile = path.join(dir, 'pnpm-workspace.yaml');
-  if (fs.existsSync(pnpmFile)) return parsePnpmPackages(fs.readFileSync(pnpmFile, 'utf8'));
+  const hasPnpmFile = fs.existsSync(pnpmFile);
+  if (hasPnpmFile) return parsePnpmPackages(fs.readFileSync(pnpmFile, 'utf8'));
   const [pkg] = readJson(path.join(dir, 'package.json'));
   const workspaces = Array.isArray(pkg?.workspaces) ? pkg.workspaces : pkg?.workspaces?.packages;
   return Array.isArray(workspaces) ? workspaces.map(String) : null;
@@ -63,7 +67,8 @@ const expandGlob = (root, glob) => {
         next.push(path.join(dir, segment));
         continue;
       }
-      if (segment === '**') {
+      const isGlobstar = segment === '**';
+      if (isGlobstar) {
         next.push(...descendantDirs(dir));
         continue;
       }
@@ -125,7 +130,8 @@ const memberCache = new Map();
 // keeps its own .chemx index instead of sharing the monorepo root's.
 export const isWorkspacePackageDir = (dir) => {
   const key = path.resolve(dir);
-  if (memberCache.has(key)) return memberCache.get(key);
+  const isCached = memberCache.has(key);
+  if (isCached) return memberCache.get(key);
   let isMember = false;
   const hasManifest = fs.existsSync(path.join(key, 'package.json'));
   for (let current = path.dirname(key); hasManifest && current !== path.dirname(current); current = path.dirname(current)) {
