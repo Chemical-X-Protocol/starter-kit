@@ -12,7 +12,8 @@ const props = withDefaults(defineProps<MSampleCardProps>(), {
 const isHighValue = computed(() => props.value > 1000);
 
 const badge = computed((): SampleCardBadgeDescriptor => {
-  if (props.status !== 'active') {
+  const isArchived = props.status !== 'active';
+  if (isArchived) {
     return {
       text: props.status,
       className: 'm-sample-card__badge m-sample-card__badge--archived'
@@ -31,7 +32,8 @@ const badge = computed((): SampleCardBadgeDescriptor => {
 });
 
 const handleActionClick = () => {
-  if (props.onAction) props.onAction();
+  const onActionHandler = props.onAction;
+  if (onActionHandler) onActionHandler();
 };
 </script>
 
