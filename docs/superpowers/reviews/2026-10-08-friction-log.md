@@ -11,3 +11,12 @@
 - CLI cold start ~1.1s user CPU per call (`chemx p build`), MCP warm call 12ms: big gap for bursts of small queries.
 - chemx test (CLI) picked vitest instead of the kit's own node --test script and also globbed .claude/worktrees/* copies; needed bypass to run cli/search.spec.js
 - guard matched inside quoted strings and heredoc bodies; fixed with literal stripping (keep as a spec case for chemx hook claude-pre-tool)
+- [G2] guard denied `cat cli/team/team-db-locks.js` and a single-line `sed -n "${l}p"` print of six audit-flagged lines; `chemx read` has no "print these N scattered lines" mode, so the sed form needed a bypass comment.
+- [G2] `chemx read --start=60 --end=185` silently caps at 100 lines (window) even when the caller asked for 125; fine as a budget, but the cap is not stated in the header (only in a trailer line).
+- [G2] before the G2 read fix, `chemx read --symbol=auditFile` printed `(396 lines, ~64 tokens)` (file length, no range) and range reads had no line numbers; G2 now prints `file:Lstart-end of total` and `N|` numbers.
+- [G2] polyglot outline metadata (extractAstMetadata regex fallback) reports startLine 1 for nested Python methods, so G2 does not prefix polyglot outline entries with L-ranges (needs the G6/languages owner).
+- [G2] pre-commit hook audits whole staged files: a one-line edit in cli/search-queries-graph.js failed the commit on that file's pre-existing hazards (grade F 48/100), forcing unrelated cleanup to land the fix.
+- [G2] pre-commit hook on a commit touching cli/mcp/server.spec.js ran >120s (Bash timeout), no progress output.
+- [G2] `chemx verify --json` ratchet reports regressions that already exist on the base branch (ERROR_SWALLOWED_EXCEPTION baseline 0, base has 65); comparing against the base needed a custom scanTree script (no `chemx audit --compare=<ref>`).
+- [G2] git diff/log blocked by the guard; `chemx log` works, but stash-based fail-before checks (`git stash push <file>` + node --test + `git stash pop`) are the only way to prove a spec fails before a fix, with no chemx helper.
+- [G2] full kit suite: 6 pre-existing failures on the base branch (create.js scaffolding x2, generator-framework, unknown-command timing, Fix 1 index isolation, concurrency stress latency); they are timing/env dependent and not G2-related.
