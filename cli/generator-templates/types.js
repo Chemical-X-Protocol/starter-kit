@@ -2,9 +2,11 @@ import { resolveArchetype } from './archetypes/index.js';
 
 export const buildPropsType = (name, pascalName, options = {}) => {
   const archetype = resolveArchetype(name, options.description || options.desc, options.template || options.archetype);
-  if (archetype && typeof archetype.buildProps === 'function') {
+  const hasBuildProps = Boolean(archetype && typeof archetype.buildProps === 'function');
+  if (hasBuildProps) {
     const rawProps = archetype.buildProps(name, pascalName);
-    if (!rawProps.includes(`${pascalName}Emits`)) {
+    const hasEmitsDeclaration = rawProps.includes(`${pascalName}Emits`);
+    if (!hasEmitsDeclaration) {
       return `${rawProps}
 export interface ${pascalName}Emits {
   (e: 'action', payload?: unknown): void;
@@ -29,7 +31,8 @@ export interface ${pascalName}Emits {
 
 export const buildStateType = (name, pascalName, options = {}) => {
   const archetype = resolveArchetype(name, options.description || options.desc, options.template || options.archetype);
-  if (archetype && typeof archetype.buildState === 'function') {
+  const hasBuildState = Boolean(archetype && typeof archetype.buildState === 'function');
+  if (hasBuildState) {
     return archetype.buildState(name, pascalName);
   }
   return `export type ${pascalName}State =
