@@ -1,42 +1,17 @@
 /**
  * Chemical X Protocol: Write lock guard.
- * chemx write/patch consult file leases so a lock actually excludes other agents.
- * A project without an index db has no leases, so the guard never creates one.
+ * chemx write/patch refuse up front (CHEMX_FILE_LOCKED) on a file another agent leases.
+ * The decision itself is edit-locks.js's findForeignLease, the same one applyEdits uses,
+ * so patch/write and autofix/explode/mutators can never disagree about a lease.
  */
 
-import fs from 'node:fs';
-import path from 'node:path';
-import { findChemxDir } from '../audit/history.js';
-import { openIndexDb } from '../search-schema.js';
-import { describeLease } from './team-db-lock-promotion.js';
-import { resolveAgentId } from './agent-identity.js';
-import { resolveLeaseScope, toLeaseKey } from './lease-key.js';
-
-const readLeaseRows = (db, keys) => {
-  try {
-    const placeholders = keys.map(() => '?').join(', ');
-    return db.prepare(`SELECT * FROM file_leases WHERE file_path IN (${placeholders})`).all(...keys);
-  } catch (err) {
-    const isNoSuchTable = String(err?.message).includes('no such table');
-    if (isNoSuchTable) return [];
-    throw err;
-  }
-};
+import { findForeignLease } from '../edit-locks.js';
 
 export const findBlockingLease = (resolvedPath, cwd = process.cwd(), agentId) => {
-  const chemxDir = findChemxDir(cwd);
-  const hasIndexDb = fs.existsSync(path.join(chemxDir, 'index.db'));
-  if (!hasIndexDb) return null;
-  const db = openIndexDb(cwd);
-  if (!db) return null;
-
-  // Lease keys are project-root relative; the cwd-relative key also catches rows written before that.
-  const projectKey = toLeaseKey(resolvedPath, resolveLeaseScope(db, { cwd }));
-  const keys = [...new Set([projectKey, path.relative(cwd, resolvedPath)].filter(Boolean))];
-  const writerId = resolveAgentId(agentId);
-  const isHeldByOther = (lease) => lease.active && lease.locked_by !== writerId;
-  const blocking = readLeaseRows(db, keys).map((row) => describeLease(row)).find(isHeldByOther);
-  return blocking || null;
+  const lease = findForeignLease(cwd, resolvedPath, agentId);
+  const isClear = !lease;
+  if (isClear) return null;
+  return { file_path: lease.file, locked_by: lease.lockedBy, expires_at: lease.expiresAt, purpose: lease.purpose, active: true };
 };
 
 export const assertWriteLockClear = (resolvedPath, cwd = process.cwd(), agentId) => {
