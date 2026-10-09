@@ -145,7 +145,8 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
   const isPartialAudit = Boolean(fileList) || isFast;
   report.gate = computeGateVerdict({ projectRoot: process.cwd(), scope: auditRelDir, violations: report.violations, isPartialScan: isPartialAudit });
   report.scope = auditRelDir;
-  saveAuditSnapshot(report, process.cwd(), { scope: auditRelDir, isPartial: isPartialAudit });
+  const historyScope = { scope: auditRelDir, isPartial: isPartialAudit };
+  saveAuditSnapshot(report, process.cwd(), historyScope);
   const hasSkippedConflicts = report.skippedConflicts?.length > 0;
   if (hasSkippedConflicts) {
     const { describeSkipped } = await import('../conflicts.js');
