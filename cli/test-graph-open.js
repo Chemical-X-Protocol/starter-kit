@@ -21,28 +21,38 @@ const OPEN_EXPR = '${';
 export const isProseAt = (text, index) => {
   const lineStart = text.lastIndexOf('\n', index - 1) + 1;
   const line = text.slice(lineStart, index);
-  if (COMMENT_LINE.test(line)) return true;
+  const isCommentLine = COMMENT_LINE.test(line);
+  if (isCommentLine) return true;
   const stack = [];
   for (let i = 0; i < line.length; i++) {
     const ch = line[i];
     const top = stack.at(-1);
     const isInString = Boolean(top) && top !== '{';
-    if (isInString && ch === '\\') {
+    const isEscape = isInString && ch === '\\';
+    if (isEscape) {
       i++;
       continue;
     }
-    if (top === '`' && line.startsWith(OPEN_EXPR, i)) {
+    const opensExpr = top === '`' && line.startsWith(OPEN_EXPR, i);
+    if (opensExpr) {
       stack.push('{');
       i++;
       continue;
     }
-    if (top === '{' && ch === '}') {
+    const closesExpr = top === '{' && ch === '}';
+    if (closesExpr) {
       stack.pop();
       continue;
     }
-    if (!isInString && ch === '/' && line[i + 1] === '/') return true;
-    if (!isInString && QUOTES.has(ch)) stack.push(ch);
-    else if (isInString && ch === top) stack.pop();
+    const isLineComment = !isInString && ch === '/' && line[i + 1] === '/';
+    if (isLineComment) return true;
+    const opensQuote = !isInString && QUOTES.has(ch);
+    if (opensQuote) {
+      stack.push(ch);
+    } else {
+      const closesQuote = isInString && ch === top;
+      if (closesQuote) stack.pop();
+    }
   }
   const top = stack.at(-1);
   return Boolean(top) && top !== '{';
@@ -89,7 +99,8 @@ const isInstalled = (root, name) => {
   for (let dir = path.resolve(root); ; dir = path.dirname(dir)) {
     const hasEntry = Boolean(fs.lstatSync(path.join(dir, 'node_modules', name), { throwIfNoEntry: false }));
     if (hasEntry) return true;
-    if (dir === path.dirname(dir)) return false;
+    const isRoot = dir === path.dirname(dir);
+    if (isRoot) return false;
   }
 };
 
@@ -104,7 +115,8 @@ export const externalSpecifierCheck = (root) => {
     if (isNotAnImport) return true;
     const name = packageName(specifier);
     if (!name) return false;
-    if (!cache.has(name)) cache.set(name, BUILTINS.has(name) || declared.has(name) || isInstalled(root, name));
+    const isCached = cache.has(name);
+    if (!isCached) cache.set(name, BUILTINS.has(name) || declared.has(name) || isInstalled(root, name));
     return cache.get(name);
   };
 };
@@ -125,7 +137,10 @@ export const findOpenFiles = ({ root, texts, bare, index, indexNote }) => {
     const isOpen = open.has(file) || !looksLikeModuleId(specifier) || isExternal(specifier);
     if (!isOpen) open.set(file, `cannot resolve '${specifier}' (${unresolvedBy})`);
   };
-  for (const entry of index?.unresolved || []) if (texts.has(entry.file)) mark(entry.file, entry.specifier);
+  for (const entry of index?.unresolved || []) {
+    const isScanned = texts.has(entry.file);
+    if (isScanned) mark(entry.file, entry.specifier);
+  }
   for (const { file, specifier, isCall, at } of bare) {
     const isIndexAuthority = Boolean(index) && index.indexed.has(file) && !isCall;
     const isSkipped = isIndexAuthority || index?.resolved.has(`${file}\0${specifier}`) || isProseAt(texts.get(file), at);
