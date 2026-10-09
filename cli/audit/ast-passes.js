@@ -32,7 +32,8 @@ const tryParse = (code) => {
 /** Returns { asts, error }: one AST normally, one per script block on fallback. */
 export const parseScriptAsts = (code, sfc, content) => {
   const combined = tryParse(code);
-  if (combined.ast) return { asts: [combined.ast], error: null };
+  const hasCombinedAst = Boolean(combined.ast);
+  if (hasCombinedAst) return { asts: [combined.ast], error: null };
   const inlineScripts = sfc ? sfc.scripts.filter((s) => !s.src) : [];
   const canSplit = inlineScripts.length > 1;
   if (!canSplit) return { asts: [], error: combined.error };
