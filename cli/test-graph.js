@@ -29,7 +29,8 @@ const resolveSpecifier = (fromFile, specifier, files) => {
   const isRelative = specifier.startsWith('./') || specifier.startsWith('../');
   if (!isRelative) return [];
   const templateAt = specifier.indexOf('${');
-  if (templateAt >= 0) {
+  const hasTemplate = templateAt >= 0;
+  if (hasTemplate) {
     const prefix = path.posix.join(path.posix.dirname(fromFile), specifier.slice(0, templateAt));
     const dirPrefix = specifier.slice(0, templateAt).endsWith('/') ? `${prefix}/` : prefix;
     return [...files].filter((file) => file.startsWith(dirPrefix));
@@ -42,7 +43,8 @@ const resolveSpecifier = (fromFile, specifier, files) => {
 const addEdge = (importers, from, to) => {
   const isSelfEdge = from === to;
   if (isSelfEdge) return false;
-  if (!importers.has(to)) importers.set(to, new Set());
+  const hasImporters = importers.has(to);
+  if (!hasImporters) importers.set(to, new Set());
   importers.get(to).add(from);
   return true;
 };
@@ -60,7 +62,8 @@ const byBasename = (files) => {
   const map = new Map();
   for (const file of files) {
     const name = path.posix.basename(file);
-    if (!map.has(name)) map.set(name, []);
+    const hasEntry = map.has(name);
+    if (!hasEntry) map.set(name, []);
     map.get(name).push(file);
   }
   return map;
@@ -98,7 +101,8 @@ const spawnedTargets = (fromFile, literal, sameName) => {
   const isPlainPath = literal.includes('/') && !literal.includes('${');
   const fromDir = path.posix.dirname(fromFile);
   const exact = isPlainPath ? sameName.filter((f) => f === path.posix.join(fromDir, literal) || f === path.posix.normalize(literal)) : [];
-  if (exact.length > 0) return exact;
+  const hasExact = exact.length > 0;
+  if (hasExact) return exact;
   const nearby = sameName.filter((f) => isAncestorDir(path.posix.dirname(f), fromFile));
   return nearby.length > 0 ? nearby : sameName;
 };
@@ -108,7 +112,12 @@ const spawnedTargets = (fromFile, literal, sameName) => {
 // the open-file check (test-graph-open.js).
 const mergeIndexEdges = (db, files, importers, index) => {
   const keyToFile = new Map();
-  for (const file of files) for (const key of moduleKeysFor(file)) if (!keyToFile.has(key)) keyToFile.set(key, file);
+  for (const file of files) {
+    for (const key of moduleKeysFor(file)) {
+      const isUnclaimed = !keyToFile.has(key);
+      if (isUnclaimed) keyToFile.set(key, file);
+    }
+  }
   for (const row of db.prepare('SELECT path FROM files').all()) index.indexed.add(row.path);
   for (const row of db.prepare('SELECT DISTINCT importer_path, source_module, resolved_path FROM imports').all()) {
     const isUnresolved = row.resolved_path === '';
@@ -129,7 +138,8 @@ const readIndex = (root, files, importers, index) => {
   try {
     const sync = syncSearchIndex('.', root, {});
     if (!sync) return 'no index database';
-    if (sync.status !== 'fresh') return `index ${sync.status}: ${sync.staleReason}`;
+    const isStale = sync.status !== 'fresh';
+    if (isStale) return `index ${sync.status}: ${sync.staleReason}`;
     mergeIndexEdges(sync.db, files, importers, index);
     return null;
   } catch (error) {
@@ -164,7 +174,8 @@ export const walkDependents = (graph, seed) => {
     const next = [];
     for (const node of frontier) {
       for (const importer of graph.importers.get(node) || []) {
-        if (chains.has(importer)) continue;
+        const isChained = chains.has(importer);
+        if (isChained) continue;
         chains.set(importer, `${chains.get(node)} <- ${importer}`);
         next.push(importer);
       }
