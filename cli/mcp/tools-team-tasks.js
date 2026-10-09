@@ -1,13 +1,14 @@
 import { openIndexDb } from '../search-db.js';
 import {
   listTasks, getTask, queryFeed, createTask,
-  claimTask, updateTaskStatus, registerAgent, postFeedEvent
+  updateTaskStatus, registerAgent, postFeedEvent
 } from '../team/team-db.js';
 import { completeTaskWithAudit, autoGenerateTasksFromAudit, reconcileAuditTasks } from '../team/team-triage.js';
 import { formatTaskListCard, formatTaskDetailCard } from '../team/team-format.js';
 import { enforceSingleSlot, verifyTraceability, generateTaskPermalink } from '../team/team-vds.js';
 import { freezeReleaseTrain } from '../team/team-release-train.js';
 import { resolveListOptions, selectTaskPage, buildTaskListView } from '../team/task-list-view.js';
+import { claimWithIgnoreDeps } from '../team/claim-ignore-deps.js';
 import { resolveAgentId } from '../team/agent-identity.js';
 import { resolveTaskTier } from '../team/task-tier.js';
 import { resolveDependencyStates } from '../team/task-detail-sections.js';
@@ -156,7 +157,7 @@ export const handleChemxTeamTask = async (rawArgs = {}, cwd = process.cwd()) => 
   if (isClaimAction) {
     const agentHandle = resolveAgentId(args.agentId || args.as);
     registerAgent(db, { id: agentHandle, role: 'executor' });
-    return claimTask(db, args.taskId, agentHandle, { ignoreDeps: args.ignoreDeps });
+    return claimWithIgnoreDeps(db, args.taskId, agentHandle, args.ignoreDeps);
   }
   const isDoneAction = action === 'done' || action === 'complete';
   if (isDoneAction) {

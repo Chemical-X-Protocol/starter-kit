@@ -5,7 +5,7 @@
  */
 import path from 'node:path';
 import { openIndexDb } from '../search-db.js';
-import { listTasks, getTask, createTask, claimTask, updateTaskStatus, registerAgent, postFeedEvent, queryFeed } from './team-db.js';
+import { listTasks, getTask, createTask, updateTaskStatus, registerAgent, postFeedEvent, queryFeed } from './team-db.js';
 import { completeTaskWithAudit, reconcileAuditTasks } from './team-triage.js';
 import { formatTaskListCard, formatTaskDetailCard, formatTaskHelpCard } from './team-format.js';
 import { resolveListOptions, selectTaskPage, buildTaskListView } from './task-list-view.js';
@@ -22,6 +22,7 @@ import { resolveListRepo, prepareTaskTarget, describeBoardScope } from './team-c
 import { runTriage } from './team-commands-triage.js';
 import { repoDir } from './coordination-repos.js';
 import { loadModelRouting } from './team-dispatch.js';
+import { claimWithIgnoreDeps } from './claim-ignore-deps.js';
 import { buildLabelFor } from './team-route.js';
 
 export const TASK_ACTIONS = ['list', 'show', 'add', 'claim', 'handoff', 'close', 'done', 'update', 'comment', 'triage', 'reconcile', 'set-target', 'set-files', 'vds-slot', 'trace'];
@@ -88,15 +89,11 @@ const runComment = (ctx, positionals, flags, isCli) => {
 };
 
 const runClaim = (ctx, taskId, flags, isCli) => {
-  const hasIgnoreFlag = flags.ignoreDeps !== undefined;
-  const reason = typeof flags.ignoreDeps === 'string' ? flags.ignoreDeps.trim() : '';
-  const isReasonMissing = hasIgnoreFlag && !reason;
-  if (isReasonMissing) return fail(isCli, 'A reason is required: chemx team task claim <id> --ignore-deps=<reason>', { error: 'ignore-deps reason required' });
   const agentHandle = resolveCliAgent(flags, isCli);
   registerAgent(ctx.db, { id: agentHandle, role: 'executor' });
-  const res = claimTask(ctx.db, taskId, agentHandle, hasIgnoreFlag ? { ignoreDeps: reason } : undefined);
-  const isOverrideClaim = hasIgnoreFlag && Boolean(res.success);
-  if (isOverrideClaim) postFeedEvent(ctx.db, { author_id: agentHandle, task_id: Number(taskId), event_type: 'status_update', message: `Claimed #${taskId} ignoring unmet dependencies: ${reason}` });
+  const res = claimWithIgnoreDeps(ctx.db, taskId, agentHandle, flags.ignoreDeps);
+  const isReasonMissing = Boolean(res.error);
+  if (isReasonMissing) return fail(isCli, 'A reason is required: chemx team task claim <id> --ignore-deps=<reason>', { error: 'ignore-deps reason required' });
   if (!isCli) return res;
   const didClaim = Boolean(res.success);
   if (flags.isJson) process.stdout.write(`${JSON.stringify(res, null, 2)}\n`);

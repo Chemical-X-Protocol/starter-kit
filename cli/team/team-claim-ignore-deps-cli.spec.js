@@ -10,6 +10,7 @@ import { openIndexDb } from '../search-schema.js';
 import { getTask } from './team-db-tasks.js';
 import { queryFeed } from './team-db-feed.js';
 import { runTeamCli } from './team-commands.js';
+import { handleChemxTeamTask } from '../mcp/tools-team-tasks.js';
 
 delete process.env.CHEMX_PROJECT_ROOT;
 
@@ -41,6 +42,37 @@ test('claim: a bare or blank --ignore-deps is refused and the task stays unclaim
   const { root, child } = makeBoard(t);
   for (const flag of ['--ignore-deps', '--ignore-deps=  ']) {
     const res = claim(root, child, flag);
+    assert.match(res.error, /reason required/);
+  }
+  assert.notEqual(getTask(openIndexDb(root), child).status, 'in_progress');
+});
+
+test('claim: --ignore-deps on a task whose dependencies are met posts no override event', (t) => {
+  const { root } = makeBoard(t);
+  const solo = runTeamCli(['task', 'add', 'solo', '--as=@orch'], false, root);
+  const res = claim(root, solo.id, '--ignore-deps=not needed');
+  assert.equal(res.success, true);
+  const db = openIndexDb(root);
+  assert.equal(getTask(db, solo.id).result_payload.deps_override, undefined);
+  assert.ok(!queryFeed(db, { task_id: solo.id }).some((e) => e.message.includes('ignoring unmet')));
+});
+
+const mcpClaim = (root, id, ignoreDeps) => handleChemxTeamTask({ action: 'claim', taskId: id, agentId: '@w2', ignoreDeps }, root);
+
+test('mcp claim: ignoreDeps with a reason claims and records it in the task and the feed', async (t) => {
+  const { root, child } = makeBoard(t);
+  const res = await mcpClaim(root, child, 'landed first');
+  assert.equal(res.success, true);
+  const db = openIndexDb(root);
+  assert.equal(getTask(db, child).result_payload.deps_override.reason, 'landed first');
+  assert.ok(queryFeed(db, { task_id: child }).some((e) => e.message.includes('landed first')));
+});
+
+test('mcp claim: a blank or non-string ignoreDeps is refused with a reason-required error', async (t) => {
+  const { root, child } = makeBoard(t);
+  for (const bad of ['  ', true, 5]) {
+    const res = await mcpClaim(root, child, bad);
+    assert.equal(res.success, false);
     assert.match(res.error, /reason required/);
   }
   assert.notEqual(getTask(openIndexDb(root), child).status, 'in_progress');
