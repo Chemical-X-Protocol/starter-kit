@@ -16,7 +16,8 @@ export const resolveLatestAuditInfo = (cwd = process.cwd()) => {
   const discussionUrl = stored?.url || null;
 
   const history = getAuditHistory(cwd);
-  if (history.length > 0) {
+  const hasAuditHistory = history.length > 0;
+  if (hasAuditHistory) {
     const latest = history[history.length - 1];
     return {
       grade: latest.health?.grade || 'A+',
@@ -242,7 +243,8 @@ export const runBadgeCommand = async (rawArgs = []) => {
     svg: generateSvgBadgeSnippet(label, grade)
   };
 
-  if (chosenFormat === 'all') {
+  const isAllFormats = chosenFormat === 'all';
+  if (isAllFormats) {
     for (const [key, content] of Object.entries(snippets)) {
       process.stdout.write(`\x1b[1m\x1b[36m--- ${key.toUpperCase()} ---\x1b[0m\n${content}\n\n`);
     }
@@ -253,7 +255,8 @@ export const runBadgeCommand = async (rawArgs = []) => {
   process.stdout.write(`\n\x1b[1m\x1b[32m✔ Chemical X Footer Badge (${chosenFormat.toUpperCase()}):\x1b[0m\n\n`);
   process.stdout.write(outputSnippet + '\n\n');
 
-  if (chosenFormat === 'svg') {
+  const isSvgFormat = chosenFormat === 'svg';
+  if (isSvgFormat) {
     const saveSvg = path.resolve(process.cwd(), 'chemx-badge.svg');
     fs.writeFileSync(saveSvg, outputSnippet, 'utf-8');
     process.stdout.write(`\x1b[32m✔ Saved SVG badge asset to:\x1b[0m ${saveSvg}\n\n`);
