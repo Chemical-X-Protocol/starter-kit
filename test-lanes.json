@@ -1,0 +1,40 @@
+{
+  "slow": [
+    {"glob":"cli/agent-json.spec.js","why":"spawns the CLI or an MCP server; wall time >= 8s in the 2026-10-09 profile (6 workers, load ~16)"},
+    {"glob":"cli/audit/audit-summary.spec.js","why":"spawns the CLI or an MCP server; wall time >= 8s in the 2026-10-09 profile (6 workers, load ~16)"},
+    {"glob":"cli/audit/gate-parity.spec.js","why":"spawns the CLI or an MCP server; wall time >= 8s in the 2026-10-09 profile (6 workers, load ~16)"},
+    {"glob":"cli/audit/precommit-hook.spec.js","why":"spawns the CLI or an MCP server; wall time >= 8s in the 2026-10-09 profile (6 workers, load ~16)"},
+    {"glob":"cli/create.spec.js","why":"spawns the CLI or an MCP server; wall time >= 8s in the 2026-10-09 profile (6 workers, load ~16)"},
+    {"glob":"cli/gate-coherence.spec.js","why":"runs the verify and audit gates end to end; wall time >= 8s in the 2026-10-09 profile (6 workers, load ~16)"},
+    {"glob":"cli/generator.spec.js","why":"spawns the CLI or an MCP server; wall time >= 8s in the 2026-10-09 profile (6 workers, load ~16)"},
+    {"glob":"cli/help.spec.js","why":"asserts a 1000ms user-CPU budget per CLI invocation and spawns the CLI repeatedly"},
+    {"glob":"cli/index-freshness.spec.js","why":"spawns the CLI or an MCP server; wall time >= 8s in the 2026-10-09 profile (6 workers, load ~16)"},
+    {"glob":"cli/mcp/server-process.spec.js","why":"spawns the CLI or an MCP server; wall time >= 8s in the 2026-10-09 profile (6 workers, load ~16)"},
+    {"glob":"cli/mcp/server.spec.js","why":"spawns the CLI or an MCP server; wall time >= 8s in the 2026-10-09 profile (6 workers, load ~16)"},
+    {"glob":"cli/network-isolation.spec.js","why":"spawns the CLI or an MCP server; wall time >= 8s in the 2026-10-09 profile (6 workers, load ~16)"},
+    {"glob":"cli/patch-stdin-blocks.spec.js","why":"spawns the CLI or an MCP server; wall time >= 8s in the 2026-10-09 profile (6 workers, load ~16)"},
+    {"glob":"cli/piped-output.spec.js","why":"spawns the CLI or an MCP server; wall time >= 8s in the 2026-10-09 profile (6 workers, load ~16)"},
+    {"glob":"cli/read-at-rev.spec.js","why":"spawns the CLI or an MCP server; wall time >= 8s in the 2026-10-09 profile (6 workers, load ~16)"},
+    {"glob":"cli/search-bulletproof.spec.js","why":"asserts a 1500ms wall-clock budget for a single-file index sync"},
+    {"glob":"cli/search-cli.spec.js","why":"spawns the CLI or an MCP server; wall time >= 8s in the 2026-10-09 profile (6 workers, load ~16)"},
+    {"glob":"cli/search-held-scope.spec.js","why":"spawns the CLI or an MCP server; wall time >= 8s in the 2026-10-09 profile (6 workers, load ~16)"},
+    {"glob":"cli/search-scope.spec.js","why":"spawns the CLI or an MCP server; wall time >= 8s in the 2026-10-09 profile (6 workers, load ~16)"},
+    {"glob":"cli/team/lease-activity.spec.js","why":"spawns the CLI or an MCP server; wall time >= 8s in the 2026-10-09 profile (6 workers, load ~16)"},
+    {"glob":"cli/team/staged-leases.spec.js","why":"spawns the CLI or an MCP server; wall time >= 8s in the 2026-10-09 profile (6 workers, load ~16)"},
+    {"glob":"cli/team/team-concurrency-stress.spec.js","why":"stress spec asserting median and p95 latency under 50ms wall clock"},
+    {"glob":"cli/test-select.spec.js","why":"spawns the CLI or an MCP server; wall time >= 8s in the 2026-10-09 profile (6 workers, load ~16)"},
+    {"glob":"cli/typecheck-sandbox.spec.js","why":"runs a real typecheck in a sandbox; wall time >= 8s in the 2026-10-09 profile (6 workers, load ~16)"},
+    {"glob":"cli/verify.spec.js","why":"runs the verify pipeline end to end; wall time >= 8s in the 2026-10-09 profile (6 workers, load ~16)"},
+    {"glob":"cli/workspace.spec.js","why":"spawns the CLI or an MCP server; wall time >= 8s in the 2026-10-09 profile (6 workers, load ~16)"},
+    {"glob":"cli/wrappers-startup.spec.js","why":"asserts a 200ms user-CPU startup budget (flaked under swarm load); a perf budget belongs in the perf lane"},
+    {"glob":"**/*.slow.spec.js","why":"naming convention: a new spec named *.slow.spec.js joins the slow lane without editing this file","convention":true},
+    {"glob":"**/*.perf.spec.js","why":"naming convention: wall-clock or CPU budget specs are named *.perf.spec.js","convention":true},
+    {"glob":"**/*.e2e.spec.js","why":"naming convention: end-to-end specs that start the UI or MCP server","convention":true}
+  ],
+  "excluded": [
+    {"glob":"app/**/*.spec.ts","why":"vitest specs for the studio UI; the kit has no vitest runner configured"},
+    {"glob":"blueprints/**/*.spec.ts","why":"vitest specs shipped as generator blueprints, not kit tests"},
+    {"glob":"scratch/**","why":"scratch experiments; verify_ui_adversarial.spec.js currently fails 2 of 5"},
+    {"glob":"src/ui/**/*.spec.ts","why":"TypeScript node:test specs; the test script has no .ts glob (they pass under node 22 type stripping, adding them needs user OK)"}
+  ]
+}

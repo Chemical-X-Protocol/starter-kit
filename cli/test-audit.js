@@ -6,6 +6,9 @@ import { parseCliArgs, describeArgErrors, parseTimeoutSeconds } from './cli-args
 import { planTestCommand } from './test-command.js';
 import { runWithinBudget } from './test-run.js';
 import { resolveChangeScope } from './test-scope.js';
+import { applyLane, laneSpecs, planLanes, requestedLane } from './test-lanes.js';
+import { profileSpecs } from './test-profile.js';
+import { limitDepth, parseDepth } from './test-depth.js';
 import { planWorkspaceTest } from './test-workspace.js';
 import { workspaceAt, emitWorkspace } from './workspace-run.js';
 import { parseTestOutput, REASONS } from './test-output.js';
@@ -14,8 +17,8 @@ import { checkNodeModules } from './verify-helpers.js';
 import { formatAgentJson } from './agent-json.js';
 
 const TEST_ARGS = {
-  booleans: { '--json': 'json', '--raw': 'raw', '--allow-empty': 'allowEmpty', '--changed': 'changed', '--related': 'related', '--all-packages': 'allPackages', '--help': 'help', '-h': 'help' },
-  values: { '--target': 'target', '--filter': 'filter', '-t': 'filter', '--test-name-pattern': 'filter', '--timeout': 'timeout', '--base': 'base' }
+  booleans: { '--json': 'json', '--raw': 'raw', '--allow-empty': 'allowEmpty', '--changed': 'changed', '--related': 'related', '--all-packages': 'allPackages', '--all': 'all', '--slow': 'slow', '--profile': 'profile', '--help': 'help', '-h': 'help' },
+  values: { '--top': 'top', '--depth': 'depth', '--target': 'target', '--filter': 'filter', '-t': 'filter', '--test-name-pattern': 'filter', '--timeout': 'timeout', '--base': 'base' }
 };
 
 const emptyCounts = { totalTests: 0, passed: 0, failed: 0, skipped: 0, errors: 0 };
@@ -70,8 +73,28 @@ const resolveScope = (parsed, options, root) => {
   return { targets, filter, selection: null };
 };
 
+const PROFILE_NEEDS = 'needs a plain `node --test <globs>` test script and a test-lanes.json manifest';
+
+// --profile: per-spec wall time for the requested lane (default lane unless --all / --slow).
+const runProfileCommand = async (parsed, options, cwd, output) => {
+  const plan = planLanes(cwd);
+  const lane = requestedLane(parsed.flags);
+  const specs = plan ? laneSpecs(plan, lane) : [];
+  const hasNoSpecs = specs.length === 0;
+  if (hasNoSpecs) return emit(earlyReport(STATUS.INCONCLUSIVE, 'test --profile', { reason: REASONS.NO_TESTS_RAN, detail: `no specs to profile in the ${lane} lane (${PROFILE_NEEDS})`, exitCode: 0 }), output);
+  const timeoutMs = parseTimeoutSeconds(parsed.values.timeout) ?? options.timeoutMs ?? null;
+  const profile = await profileSpecs(specs, cwd, { timeoutMs, env: options.env, onWait: options.onWait });
+  const status = profile.failedSpecs > 0 ? STATUS.FAIL : STATUS.PASS;
+  const top = Number(parsed.values.top) > 0 ? Number(parsed.values.top) : undefined;
+  const counts = { totalTests: profile.testCount, passed: profile.testCount, failed: profile.failedSpecs };
+  return emit(earlyReport(status, `test --profile (${lane} lane)`, { exitCode: status === STATUS.PASS ? 0 : 1, durationMs: profile.elapsedMs, ...counts, profile, top }), output);
+};
+
+// `--related=<file>` is the same as `--related <file>` (--related takes the files that follow it).
+const expandRelated = (args) => args.flatMap((arg) => (String(arg).startsWith('--related=') ? ['--related', String(arg).slice('--related='.length)] : [arg]));
+
 export const runTestAudit = async (rawArgs = [], isCli = false, options = {}) => {
-  const parsed = parseCliArgs(rawArgs, TEST_ARGS);
+  const parsed = parseCliArgs(expandRelated(rawArgs), TEST_ARGS);
   const isJson = Boolean(parsed.flags.json) || options.json === true;
   const output = { isJson, isCli, shouldPrint: options.print !== false };
   const isHelp = Boolean(parsed.flags.help);
@@ -98,8 +121,15 @@ export const runTestAudit = async (rawArgs = [], isCli = false, options = {}) =>
     return emit(earlyReport(STATUS.FAIL, customCmd || 'test', { failed: 1, executionError: friendlyMsg, failures: [{ name: 'dependencies', details: [friendlyMsg] }] }), output);
   }
 
+  const isProfile = Boolean(parsed.flags.profile);
+  if (isProfile) return runProfileCommand(parsed, options, cwd, output);
   const allowEmpty = Boolean(parsed.flags.allowEmpty || options.allowEmpty);
-  const { targets, filter, selection, emptyDetail } = resolveScope(parsed, options, cwd);
+  const lane = requestedLane({ all: parsed.flags.all || options.all, slow: parsed.flags.slow || options.slow });
+  const depth = parseDepth(parsed.values.depth ?? options.depth);
+  const scope = applyLane(cwd, limitDepth(resolveScope(parsed, options, cwd), depth), lane);
+  const hasLaneError = Boolean(scope.laneError);
+  if (hasLaneError) return emit(earlyReport(STATUS.FAIL, customCmd || 'test', { reason: 'USAGE', executionError: scope.laneError }), output);
+  const { targets, filter, selection, emptyDetail } = scope;
   const selectionField = selection ? { selection } : {};
   if (emptyDetail) {
     const status = allowEmpty ? STATUS.PASS : STATUS.INCONCLUSIVE;

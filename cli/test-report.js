@@ -1,6 +1,7 @@
 // Text rendering for `chemx test`. One headline per verdict, so the counts never contradict it.
 import { ANSI } from './theme.js';
 import { STATUS, isPass, isInconclusive } from './result-status.js';
+import { formatProfile } from './test-profile.js';
 
 export const TEST_HELP = [
   `${ANSI.BOLD}USAGE${ANSI.RESET}`,
@@ -16,6 +17,12 @@ export const TEST_HELP = [
   '  --changed                Run only the specs affected by files changed vs HEAD (staged,',
   '                           unstaged, untracked); --base=<rev> compares from merge-base',
   '  --related <files...>     Run only the specs affected by these files (specs or sources)',
+  '  --depth=<n>              With --changed/--related: keep only specs within n import hops of the',
+  '                           change (fast inner loop; deeper specs are listed as NOT run)',
+  '  --all                    Run both lanes (fast + slow): everything the test script runs',
+  '  --slow                   Run only the slow lane (specs that spawn the CLI/MCP server,',
+  '                           stress and timing specs), as declared in test-lanes.json',
+  '  --profile [--top=<n>]    Wall time per spec file, slowest first (lane: default, --all, --slow)',
   '  --allow-empty            Treat a run that collects zero tests as a pass',
   '  --timeout=<seconds>      Stop the run after this long (result: inconclusive)',
   '  --json                   Output the test summary as JSON',
@@ -66,10 +73,17 @@ export const describeSelection = (selection) => {
   const graph = selection.graph ? `, ${selection.graph} graph${selection.graphNote ? ` (${selection.graphNote})` : ''}` : '';
   const unpinned = selection.specs.filter((s) => s.reasons.every((r) => r.startsWith('may load any changed file'))).length;
   const unpinnedNote = unpinned > 0 ? `, ${unpinned} only because they load modules the graph cannot pin` : '';
-  return `Affected specs: ${selection.specs.length} of ${selection.suiteSize ?? '?'} for ${changedCount} changed file(s)${graph}${unpinnedNote}`;
+  const beyondCount = (selection.beyondDepth || []).length;
+  const hasDepth = selection.depth !== undefined;
+  const depthNote = hasDepth ? `; --depth=${selection.depth}: ${beyondCount} deeper spec(s) NOT run, so this is not proof (rerun without --depth before merging)` : '';
+  const deferredCount = (selection.deferred || []).length;
+  const deferredNote = deferredCount > 0 ? `; ${deferredCount} affected slow-lane spec(s) NOT run (add --all or use --slow)` : '';
+  return `Affected specs: ${selection.specs.length} of ${selection.suiteSize ?? '?'} for ${changedCount} changed file(s)${graph}${unpinnedNote}${depthNote}${deferredNote}`;
 };
 
 export const formatTestReport = (report) => {
+  const isProfile = Boolean(report.profile);
+  if (isProfile) return formatProfile(report.profile, report.top);
   const selectionLine = describeSelection(report.selection);
   const out = selectionLine ? [`  ${ANSI.DIM}${selectionLine}${ANSI.RESET}`] : [];
   out.push(`  ${formatTestHeadline(report)}`);
