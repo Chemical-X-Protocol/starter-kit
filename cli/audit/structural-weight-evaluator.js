@@ -16,8 +16,10 @@ const isComponentOrHook = (funcPath, relativePath = '') => {
   if (isComponentFile) return true;
 
   const id = funcPath.node.id;
-  if (id && t.isIdentifier(id)) {
-    if (/^[A-Z]/.test(id.name) || /^use[A-Z0-9]/.test(id.name)) {
+  const hasIdentifierName = Boolean(id && t.isIdentifier(id));
+  if (hasIdentifierName) {
+    const isComponentName = /^[A-Z]/.test(id.name) || /^use[A-Z0-9]/.test(id.name);
+    if (isComponentName) {
       return true;
     }
   }
@@ -25,9 +27,11 @@ const isComponentOrHook = (funcPath, relativePath = '') => {
   let returnsJsx = false;
   funcPath.traverse({
     ReturnStatement(ret) {
-      if (ret.getFunctionParent() === funcPath) {
+      const isOwnReturn = ret.getFunctionParent() === funcPath;
+      if (isOwnReturn) {
         const arg = ret.node.argument;
-        if (t.isJSXElement(arg) || t.isJSXFragment(arg)) {
+        const isJsxReturn = Boolean(t.isJSXElement(arg) || t.isJSXFragment(arg));
+        if (isJsxReturn) {
           returnsJsx = true;
         }
       }
@@ -56,7 +60,8 @@ export const evaluateComponentStructuralWeight = ({
   const line = startLoc?.line || 1;
   const column = startLoc?.column || 1;
 
-  if (complexity > maxComplexity) {
+  const hasHighComplexity = complexity > maxComplexity;
+  if (hasHighComplexity) {
     const meta = RULE_REGISTRY.COMPLEXITY_CYCLOMATIC_HIGH;
     violations.push({
       filePath: relativePath,
@@ -70,7 +75,8 @@ export const evaluateComponentStructuralWeight = ({
     });
   }
 
-  if (hooks > maxHooks) {
+  const hasHighHookDensity = hooks > maxHooks;
+  if (hasHighHookDensity) {
     const meta = RULE_REGISTRY.HOOK_STATE_SATURATION;
     violations.push({
       filePath: relativePath,
@@ -84,7 +90,8 @@ export const evaluateComponentStructuralWeight = ({
     });
   }
 
-  if (propCount > maxProps) {
+  const hasPropBloat = propCount > maxProps;
+  if (hasPropBloat) {
     const meta = RULE_REGISTRY.PROP_SURFACE_BLOAT;
     violations.push({
       filePath: relativePath,
