@@ -38,7 +38,8 @@ export const handleCompleteTask = (db, body = {}, cwd = process.cwd()) => {
   // The studio is the human operator's console: completing someone else's task is allowed and recorded as an operator override.
   const result = completeTaskWithAudit(db, taskId, agentId, { cwd, force, noTargetConfirm, overrideOwnership: true });
   if (!result) return { success: false, error: 'Task not found' };
-  if (result.refused) {
+  const isRefused = Boolean(result.refused);
+  if (isRefused) {
     return { success: false, refused: true, ...result };
   }
   return { success: true, result };
