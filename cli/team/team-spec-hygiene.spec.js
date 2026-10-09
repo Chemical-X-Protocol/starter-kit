@@ -37,6 +37,13 @@ test('spec hygiene: child-process imports resolve from the spec file, not proces
   assert.deepEqual(offenders, []);
 });
 
+test('spec hygiene: source-tree scans resolve from the spec file, not process.cwd()', () => {
+  const offenders = findOffenders(SWARM_SPECS, [
+    { test: (line) => /path\.resolve\(process\.cwd\(\), ['"](cli|src)/.test(line), why: 'cwd-relative source dir; resolve from import.meta.url' }
+  ]);
+  assert.deepEqual(offenders, []);
+});
+
 test('spec hygiene: swarm specs use a temp project, never the cwd project db', () => {
   const offenders = findOffenders(SWARM_SPECS, [
     { test: (line) => line.includes('openIndexDb(process.cwd())'), why: 'opens the cwd project db' },

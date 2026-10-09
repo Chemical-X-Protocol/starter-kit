@@ -3,6 +3,7 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { startUiServer } from './ui-server.js';
 import { openIndexDb } from './search-db.js';
 
@@ -197,7 +198,7 @@ test('E2E: GET /api/db/tables, /api/db/browse, and POST /api/prompts/generate re
 });
 
 test('Molecular Compliance: all cli/ui-*.js non-spec files strictly under 100 lines', () => {
-  const cliDir = path.resolve(process.cwd(), 'cli');
+  const cliDir = fileURLToPath(new URL('.', import.meta.url)); // resolve from this spec, not the cwd
   const files = fs.readdirSync(cliDir);
   const STYLE_ASSETS = new Set(['ui-styles.js']);
   const isUiFile = (f) => (f.startsWith('ui-') || f === 'ui.js') && f.endsWith('.js') && !f.endsWith('.spec.js') && !STYLE_ASSETS.has(f);

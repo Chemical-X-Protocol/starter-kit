@@ -4,11 +4,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 import http from 'node:http';
 import os from 'node:os';
+import { fileURLToPath } from 'node:url';
 
 import { openIndexDb } from './search-db.js';
 import { handleSwarmStatus, handlePostFeed, getAggregatedTelemetry } from './ui-handlers.js';
 import { generateSwarmHtml } from './ui-html.js';
 import { createUiServer, startUiServer } from './ui-server.js';
+
+// Source-tree scans resolve from this spec, so the suite runs from any cwd.
+const KIT_ROOT = fileURLToPath(new URL('..', import.meta.url));
 
 // Swarm UI specs run against a throwaway project so they never write into a real .chemx/index.db.
 const makeUiProject = (t) => {
@@ -231,7 +235,7 @@ test('ui-server: creates HTTP server and handles GET / and API routes', async (t
 });
 
 test('molecular architecture: all files in src/ui are strictly under 100 lines (Directive 1.A)', () => {
-  const uiDir = path.resolve(process.cwd(), 'src/ui');
+  const uiDir = path.resolve(KIT_ROOT, 'src/ui');
   const EXCLUDED_EXTS = new Set(['.html']);
   const getAllFiles = (dir) => {
     let results = [];
@@ -254,14 +258,14 @@ test('molecular architecture: all files in src/ui are strictly under 100 lines (
   for (const file of files) {
     const content = fs.readFileSync(file, 'utf-8');
     const lines = content.split('\n').length;
-    const rel = path.relative(process.cwd(), file);
+    const rel = path.relative(KIT_ROOT, file);
     assert.ok(lines < 100, `File ${rel} exceeds 100 lines (actual: ${lines})`);
   }
 });
 
 
 test('molecular architecture: molecules and organisms templates have ZERO raw DOM (Directive 1.G)', () => {
-  const uiDir = path.resolve(process.cwd(), 'src/ui');
+  const uiDir = path.resolve(KIT_ROOT, 'src/ui');
   const getAllVueFiles = (dir) => {
     let results = [];
     const list = fs.readdirSync(dir);
@@ -289,13 +293,13 @@ test('molecular architecture: molecules and organisms templates have ZERO raw DO
     assert.ok(match, `Missing template in ${file}`);
     const templateContent = match[1];
     const tagMatch = templateContent.match(rawDomTagRegex);
-    const rel = path.relative(process.cwd(), file);
+    const rel = path.relative(KIT_ROOT, file);
     assert.strictEqual(tagMatch, null, `Forbidden raw DOM element <${tagMatch ? tagMatch[1] : ''}> found in ${rel}`);
   }
 });
 
 test('molecular architecture: all views in src/ui/views/ are strictly 10 to 20 lines (Directive 1.B)', () => {
-  const viewsDir = path.resolve(process.cwd(), 'src/ui/views');
+  const viewsDir = path.resolve(KIT_ROOT, 'src/ui/views');
   const viewFiles = fs.readdirSync(viewsDir).filter((f) => f.endsWith('.vue'));
   assert.ok(viewFiles.length >= 5, `Expected at least 5 view files, found ${viewFiles.length}`);
   for (const file of viewFiles) {
@@ -307,7 +311,7 @@ test('molecular architecture: all views in src/ui/views/ are strictly 10 to 20 l
 });
 
 test('molecular architecture: zero setInterval in business and component logic (Directive 6.A)', () => {
-  const uiDir = path.resolve(process.cwd(), 'src/ui');
+  const uiDir = path.resolve(KIT_ROOT, 'src/ui');
   const tsFiles = fs.readdirSync(path.join(uiDir, 'composables')).filter((f) => f.endsWith('.ts'));
   for (const f of tsFiles) {
     const content = fs.readFileSync(path.join(uiDir, 'composables', f), 'utf-8');
