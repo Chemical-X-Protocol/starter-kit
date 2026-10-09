@@ -12,7 +12,7 @@ const read = (rel) => fs.readFileSync(path.join(KIT_ROOT, rel), 'utf8');
 
 // Everything a person or agent reads as guidance: docs, shims, help, footers and hints.
 const GUIDANCE_FILES = [
-  'README.md', 'AGENTS.md', 'STANDARDS.md', 'llms.txt', 'CLAUDE.md',
+  'README.md', 'AGENTS.md', 'STANDARDS.md', 'llms.txt', 'CLAUDE.md', '.cursorrules', '.github/copilot-instructions.md',
   'cli/commands-schema-search.js', 'cli/commands-schema-edit.js', 'cli/commands-schema-verify.js',
   'cli/commands-schema-wrappers.js', 'cli/commands-schema-ops.js',
   'cli/help.js', 'cli/host-shims.js', 'cli/generator-help.js', 'cli/generator.js',
