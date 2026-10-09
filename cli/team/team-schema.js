@@ -6,6 +6,7 @@
 import { initMemorySchema } from './team-schema-memory.js';
 import { initProjectsSchema } from './team-schema-projects.js';
 import { initVdsSchema } from './team-schema-vds.js';
+import { initUsageSchema } from './team-schema-usage.js';
 
 const migrateCols = (db, tbl, cols) => {
   const existing = new Set((db.prepare(`PRAGMA table_info(${tbl})`).all() || []).map((c) => c.name));
@@ -109,4 +110,5 @@ export const initTeamSchema = (db) => {
   initMemorySchema(db);
   initProjectsSchema(db);
   initVdsSchema(db);
+  initUsageSchema(db);
 };
