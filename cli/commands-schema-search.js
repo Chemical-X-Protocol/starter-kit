@@ -104,7 +104,11 @@ export const SEARCH_COMMANDS = [
     usage: 'chemx check <file> [options]',
     summary: 'Verify a single file or capsule against the architectural rules.',
     description: 'Runs the AST rules on one file and reports its hazards.',
-    flags: [{ flag: '--json', desc: 'Output hazards as JSON' }],
-    examples: ['chemx check src/components/m-card/m-card.vue']
+    flags: [
+      { flag: '--profile=<name>', desc: 'Audit profile to apply (e.g. atomic-strict)' },
+      { flag: '--json', desc: 'Output hazards as JSON' },
+      { flag: '--compact', desc: 'With --json: [rule,line,severity] rows and one rules map' }
+    ],
+    examples: ['chemx check src/components/m-card/m-card.vue', 'chemx check <file> --profile=atomic-strict']
   },
 ];
