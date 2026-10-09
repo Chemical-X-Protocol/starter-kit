@@ -21,18 +21,36 @@ export const isInsideDirectory = (target, directory) => {
   return !isOutside;
 };
 
-const isFreeLocation = (absolute, { root, scratchDir }) => {
+export const isFreeLocation = (absolute, { root, scratchDir }) => {
   const relative = `/${path.relative(root, absolute)}/`;
   const isFreeSegment = FREE_SEGMENTS.some((segment) => relative.includes(segment));
   const isScratch = Boolean(scratchDir) && isInsideDirectory(absolute, scratchDir);
   return isFreeSegment || isScratch;
 };
 
+// The context a command runs in: the payload cwd moved by the literal `cd` words that preceded it
+// (shell-parse records them as command.dir). A cd target that is a variable, substitution or `cd -`
+// makes the directory unknown; `cwdUnknown` then lets every relative path fail open.
+export const contextForCommand = (context, dir) => {
+  const steps = dir?.steps ?? [];
+  let cwd = context.cwd;
+  let cwdUnknown = Boolean(dir?.unknown) || Boolean(context.cwdUnknown);
+  for (const step of steps) {
+    const isUnresolved = UNRESOLVED_VARIABLE.test(step) || step.includes('`');
+    if (isUnresolved) { cwdUnknown = true; break; }
+    cwd = path.resolve(cwd, expandKnownVariables(step, { cwd, root: context.root }));
+  }
+  return { ...context, cwd, cwdUnknown };
+};
+
 // Absolute path of a shell word inside the project and outside free locations, else null.
 const repoPathOf = (word, context) => {
   const hasUnknownVariable = UNRESOLVED_VARIABLE.test(word);
   if (hasUnknownVariable) return null;
-  const absolute = path.resolve(context.cwd, expandKnownVariables(word, context));
+  const expanded = expandKnownVariables(word, context);
+  const isRelativeToUnknown = context.cwdUnknown && (!path.isAbsolute(expanded) || /\$\{?PWD/.test(word));
+  if (isRelativeToUnknown) return null;
+  const absolute = path.resolve(context.cwd, expanded);
   const isRouted = isInsideDirectory(absolute, context.root) && !isFreeLocation(absolute, context);
   return isRouted ? absolute : null;
 };

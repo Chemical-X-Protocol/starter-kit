@@ -13,6 +13,30 @@ const SHELL_NAMES = new Set(['bash', 'sh', 'zsh', 'dash']);
 const MAX_DEPTH = 4;
 
 const PIPE_OPS = new Set(['|', '|&']);
+// Operators after which a `cd` runs in a forked subshell (its effect is lost) or only maybe runs.
+const SUBSHELL_OPS = new Set(['|', '|&', '&']);
+const CD_NAMES = new Set(['cd', 'pushd']);
+const CD_FLAGS = new Set(['-P', '-L', '-e', '-@', '--']);
+
+// Where a command runs: literal cd words applied in order from the payload cwd, or unknown.
+// The words stay raw; guard-paths resolves them because only it knows $HOME, $PWD and the root.
+export const ROOT_DIR = Object.freeze({ steps: Object.freeze([]), unknown: false });
+const UNKNOWN_DIR = Object.freeze({ steps: Object.freeze([]), unknown: true });
+
+const cdTarget = (argv) => {
+  const flagCount = argv.slice(1).findIndex((arg) => !CD_FLAGS.has(arg));
+  const args = flagCount === -1 ? [] : argv.slice(1 + flagCount);
+  const isBareCd = args.length === 0 && argv[0] === 'cd';
+  const isUnresolvable = args.length === 0 || args[0] === '-';
+  if (isBareCd) return '~';
+  return isUnresolvable ? null : args[0];
+};
+
+const afterCd = (dir, argv) => {
+  const target = cdTarget(argv);
+  const isUnknown = dir.unknown || target === null;
+  return isUnknown ? UNKNOWN_DIR : Object.freeze({ steps: Object.freeze([...dir.steps, target]), unknown: false });
+};
 
 const newCommand = (pipeline = 0) => ({ argv: [], assigns: [], redirects: [], subs: [], pipeline });
 
@@ -63,26 +87,54 @@ const placeWord = (token, current, parser) => {
   handler(token, current, parser);
 };
 
-const groupTokens = (tokens) => {
+// Directory effect of a finished command: `cd`/`pushd` change it when they run in the current shell
+// (not in a pipeline stage or background job); a `cd` after `||` or `popd` makes it unknown.
+const nextDir = (parser, command, endOperator) => {
+  const name = command.argv[0];
+  const isPopd = name === 'popd';
+  if (isPopd) return UNKNOWN_DIR;
+  const isCd = CD_NAMES.has(name);
+  if (!isCd) return parser.dir;
+  const isForked = SUBSHELL_OPS.has(endOperator) || SUBSHELL_OPS.has(parser.previousOperator);
+  if (isForked) return parser.dir;
+  return parser.previousOperator === '||' ? UNKNOWN_DIR : afterCd(parser.dir, command.argv);
+};
+
+const groupTokens = (tokens, initialDir = ROOT_DIR) => {
   const commands = [];
   const comments = [];
-  const parser = { skippingList: null, pendingRedirect: null, pipeline: 0 };
+  const parser = { skippingList: null, pendingRedirect: null, pipeline: 0, dir: initialDir, previousOperator: null, subshells: [] };
   let current = newCommand();
+
+  const recordCommand = (command, operator) => {
+    command.dir = parser.dir;
+    commands.push(command);
+    parser.dir = nextDir(parser, command, operator);
+  };
 
   // Commands joined by | or |& share a pipeline number; any other operator starts a new pipeline.
   const finish = (operator = null) => {
     const hasContent = current.argv.length + current.assigns.length + current.redirects.length + current.subs.length > 0;
-    if (hasContent) commands.push(current);
+    if (hasContent) recordCommand(current, operator);
+    parser.previousOperator = operator;
     const isPipe = PIPE_OPS.has(operator);
     if (!isPipe) parser.pipeline += 1;
     current = newCommand(parser.pipeline);
+  };
+
+  // `( ... )` runs in a subshell: directory changes inside it are gone at the closing paren.
+  const trackSubshell = (operator) => {
+    const isOpen = operator === '(';
+    if (isOpen) parser.subshells.push(parser.dir);
+    const isClose = operator === ')' && parser.subshells.length > 0;
+    if (isClose) parser.dir = parser.subshells.pop();
   };
 
   for (const token of tokens) {
     const isComment = token.type === 'comment';
     if (isComment) { comments.push(token.value); continue; }
     const isOperator = token.type === 'op';
-    if (isOperator) { parser.pendingRedirect = null; parser.skippingList = null; finish(token.value); continue; }
+    if (isOperator) { parser.pendingRedirect = null; parser.skippingList = null; finish(token.value); trackSubshell(token.value); continue; }
     const isRedirect = token.type === 'redir';
     if (isRedirect) {
       parser.pendingRedirect = { op: token.op, fd: token.fd, target: '', body: null, token };
@@ -105,8 +157,8 @@ const attachBodies = (commands) => {
   }
 };
 
-export const parseShell = (source, depth = 0) => {
-  const { commands, comments } = groupTokens(lexShell(String(source ?? '')));
+export const parseShell = (source, depth = 0, initialDir = ROOT_DIR) => {
+  const { commands, comments } = groupTokens(lexShell(String(source ?? '')), initialDir);
   attachBodies(commands);
   for (const command of commands) command.depth = depth;
   const isTooDeep = depth >= MAX_DEPTH;
@@ -114,7 +166,7 @@ export const parseShell = (source, depth = 0) => {
   const nested = [];
   for (const command of commands) {
     const scripts = [...command.subs, ...nestedScripts(command.argv)];
-    for (const script of scripts) nested.push(...parseShell(script, depth + 1).commands);
+    for (const script of scripts) nested.push(...parseShell(script, depth + 1, command.dir).commands);
   }
   return { commands: [...commands, ...nested], comments };
 };

@@ -1,8 +1,11 @@
 // `chemx hook claude-pre-tool`: the one Claude Code PreToolUse guard (the bootstrap
 // .claude/hooks/chemx-guard.mjs delegates here). It denies raw runners, repo-source reads and
-// searches, shell writes into repo files (redirects, tee, sed -i, perl -i), node --test, git
-// diff/log/show and find, each with the exact chemx call to use. Nudge rules (git status/add/commit,
-// hand-rolled waits, ls of repo dirs) allow the call and attach advice; guardNudges: "block" in
+// searches, shell writes into repo files, node --test, git diff/log/show and find, each with the exact
+// chemx call to use. Covered writers: > >> redirects, tee, sed -i, perl -i, awk -i inplace. NOT covered:
+// cp, mv, install, patch, git apply, git checkout -- <file>, dd, truncate, editors, and any target
+// that is an unresolved variable or follows an unresolvable `cd` (the guard fails open there).
+// Each command is judged from the directory it runs in: cd, pushd and ( ) subshells are tracked.
+// Nudge rules (git status/add/commit, hand-rolled waits, ls of repo dirs) allow the call and attach advice; guardNudges: "block" in
 // .chemxrc promotes them. Native Read/Edit/Write/MultiEdit/NotebookEdit/Glob/Grep follow the
 // `nativeFileTools` policy (native-tool-policy.js), and native edits are denied while another
 // handle holds a live chemx lock (native-edit-lock.js). Search rules are on unless
@@ -12,6 +15,7 @@
 import { parseShell } from './shell-parse.js';
 import { resolveInvocation, isChemxInvocation } from './guard-invocation.js';
 import { activeRules } from './guard-rules.js';
+import { contextForCommand } from './guard-paths.js';
 import { isPromotedNudge, resolveNudgePromotion } from './guard-config.js';
 import { NATIVE_FILE_TOOLS, decideNativeTool, resolveNativeToolMode } from './native-tool-policy.js';
 import { decideEditLock, resolveHookAgentId } from './native-edit-lock.js';
@@ -45,8 +49,9 @@ const collectHits = (parsedCommands, context) => {
     const invocation = resolveInvocation(parsed.argv);
     const isOwnedByChemx = isChemxInvocation(invocation);
     if (isOwnedByChemx) continue;
-    const rule = rules.find((candidate) => candidate.matches(invocation, parsed, context));
-    if (rule) hits.push({ rule, segment: segmentOf(parsed), use: useOf(rule, invocation, parsed, context) });
+    const commandContext = contextForCommand(context, parsed.dir);
+    const rule = rules.find((candidate) => candidate.matches(invocation, parsed, commandContext));
+    if (rule) hits.push({ rule, segment: segmentOf(parsed), use: useOf(rule, invocation, parsed, commandContext) });
   }
   return hits;
 };

@@ -64,4 +64,31 @@ export const STRUCTURE_CASES = [
   ['less src/a.svelte', 'deny'],
 ];
 
-export const ALL_BASH_CASES = [...PORTED_CASES, ...CHEMX_OWNED_CASES, ...NON_SOURCE_READ_CASES, ...STRUCTURE_CASES];
+// #2490: the effective directory follows cd, pushd and ( ) subshells; an unresolvable target fails open.
+export const CD_TRACKING_CASES = [
+  ['cd /tmp/rv/repo && printf x > .mcp.json', 'allow'],
+  ['cd /tmp/rv/repo; printf x > pkg.json', 'allow'],
+  ['cd -P /tmp/rv/repo && printf x > pkg.json', 'allow'],
+  ['cd -- /tmp/rv/repo && printf x > pkg.json', 'allow'],
+  ['pushd /tmp/rv/repo && printf x > pkg.json', 'allow'],
+  ['( cd /tmp/rv/repo && printf x > pkg.json )', 'allow'],
+  ['{ cd /tmp/rv/repo; printf x > pkg.json; }', 'allow'],
+  ['cd /tmp/rv/repo\nprintf x > pkg.json', 'allow'],
+  ['cd /tmp/rv/repo && cat src/a.ts', 'allow'],
+  ['echo $(cd /tmp/rv/repo && printf x > pkg.json)', 'allow'],
+  ['(cd /tmp/rv/repo); printf x > pkg.json', 'deny'],
+  ['cd /tmp/rv/repo && cd /repo && printf x > pkg.json', 'deny'],
+  ['cd /tmp/rv/repo | printf x > pkg.json', 'deny'],
+  ['printf x > pkg.json; cd /tmp/rv/repo', 'deny'],
+  ['cd apps/x && cat src/a.ts', 'deny'],
+  ['cd /tmp/rv/repo && cd .. && cd /repo/src && cat a.ts', 'deny'],
+  // Unresolvable targets: relative paths after them fail open, absolute repo paths still count.
+  ['cd $DIR && printf x > pkg.json', 'allow'],
+  ['cd "$(mktemp -d)" && printf x > pkg.json', 'allow'],
+  ['cd - && printf x > pkg.json', 'allow'],
+  ['false || cd /tmp/rv/repo; printf x > pkg.json', 'allow'],
+  ['cd $DIR; cat /repo/src/a.ts', 'deny'],
+  ['(cd $DIR); printf x > pkg.json', 'deny'],
+];
+
+export const ALL_BASH_CASES = [...PORTED_CASES, ...CHEMX_OWNED_CASES, ...NON_SOURCE_READ_CASES, ...STRUCTURE_CASES, ...CD_TRACKING_CASES];
