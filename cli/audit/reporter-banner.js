@@ -31,7 +31,8 @@ export const getChemicalXAsciiBanner = (gradeOrReport = null) => {
     let out = '';
     for (let i = 0; i < line.length; i++) {
       const ch = line[i];
-      if (ch === ' ') {
+      const isSpace = ch === ' ';
+      if (isSpace) {
         out += ' ';
         continue;
       }
@@ -40,7 +41,8 @@ export const getChemicalXAsciiBanner = (gradeOrReport = null) => {
       out += `${ansi}${ANSI.BOLD}${ch}${ANSI.RESET}`;
     }
 
-    if (isSideBySide && gradeLines.length > lineIdx) {
+    const shouldShowGradeLine = isSideBySide && gradeLines.length > lineIdx;
+    if (shouldShowGradeLine) {
       out += `   ${gradeLines[lineIdx]}`;
     }
 
@@ -51,7 +53,8 @@ export const getChemicalXAsciiBanner = (gradeOrReport = null) => {
   const pad = ' '.repeat(Math.max(0, Math.floor((MAX_BANNER_LEN - subtitle.length) / 2)));
   lines.push(`${pad}\x1b[2m${subtitle}\x1b[0m\n`);
 
-  if (!isSideBySide && gradeLines.length > 0) {
+  const shouldStackGrade = !isSideBySide && gradeLines.length > 0;
+  if (shouldStackGrade) {
     for (const gl of gradeLines) {
       lines.push(`   ${gl}`);
     }
