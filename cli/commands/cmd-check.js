@@ -34,10 +34,40 @@ const checkMany = (targets, { isJson, config }) => {
   return { success: failed.length === 0, isClean, files };
 };
 
+/**
+ * Compact JSON (--json --compact): per file only [rule, line, severity] rows, and each rule's
+ * hazard/directive/pillar text once under `rules`. Rule text is whatever the first hit carried.
+ */
+const toCompact = (files) => {
+  const rules = {};
+  const out = files.map((f) => {
+    const hasError = Boolean(f.error);
+    if (hasError) return { error: f.error };
+    const hazards = (f.violations ?? []).map((v) => {
+      rules[v.rule] ??= { hazard: v.hazard, directive: v.directive, pillar: v.pillar };
+      return [v.rule, v.line, v.severity];
+    });
+    return { file: f.file, isClean: f.isClean, hazards };
+  });
+  return { files: out, rules };
+};
+
+const checkCompact = (targets, config) => {
+  const files = targets.map((t) => handleCheckCommand(t, { isJson: true, isCli: false, config }));
+  const isClean = files.length > 0 && files.every((f) => f.isClean === true);
+  const result = { success: files.every((f) => !f.error), isClean, ...toCompact(files) };
+  process.stdout.write(JSON.stringify(result) + '\n');
+  process.exitCode = isClean ? 0 : 1;
+  return result;
+};
+
 export const runCheckCommand = (args = [], cwd = process.cwd()) => {
   const isJson = args.includes('--json');
   const config = loadProjectConfig(cwd, normalizeProfileArgs(args));
   const targets = collectTargets(args);
+  const isCompact = isJson && args.includes('--compact');
+  const shouldCompact = isCompact;
+  if (shouldCompact) return checkCompact(targets, config);
   const isSingleTarget = targets.length <= 1;
   if (isSingleTarget) return handleCheckCommand(targets[0], { isJson, isCli: true, config });
   return checkMany(targets, { isJson, config });
