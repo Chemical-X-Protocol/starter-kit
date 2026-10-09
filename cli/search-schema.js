@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { ensureChemxDir } from './audit/history.js';
 import { initTeamSchema } from './team/team-schema.js';
+import { guardProjectStamp } from './db-project-stamp.js';
 
 let DatabaseSync = null;
 try {
@@ -103,6 +104,7 @@ export const openIndexDb = (cwd = process.cwd(), options = {}) => {
         // Ignored if already registered
       }
     }
+    if (isExistingDb) guardProjectStamp(db, dbPath, { readOnly: true });
     DB_CACHE.set(dbPath, db);
     return db;
   }
@@ -268,6 +270,7 @@ export const openIndexDb = (cwd = process.cwd(), options = {}) => {
   `);
 
   initTeamSchema(db);
+  guardProjectStamp(db, dbPath);
 
   DB_CACHE.set(dbPath, db);
   return db;
