@@ -4,7 +4,8 @@
  *   commits without a task id   a chemx commit or git commit whose text has no #<id>
  *   edits without a lease       a chemx patch/write(--overwrite|--append)/autofix of a file the agent had no
  *                               `team lock acquire` for (command or feed) before the edit; a plain write of a
- *                               new file is not counted (it has nothing to lease)
+ *                               new file is not counted (it has nothing to lease), nor is a later edit of
+ *                               a file the same agent created that way
  *   claims never closed         `team task claim <id>` with no done/blocked/cancelled update for that id, unless
  *                               the db says the task is no longer in_progress
  *   hijack signals              the final result does not mention the task, together with zero steps or a
@@ -39,8 +40,9 @@ const isCommit = (inv) => {
   return isChemxCommit || isGitCommit;
 };
 
+// A commit inside a scratch repo (a command that touches /tmp, mktemp or ~/.claude) is test scaffolding, not a task commit.
 export const commitsWithoutTask = (invs) => invs
-  .filter((inv) => isCommit(inv) && !/#\d+/.test(inv.raw))
+  .filter((inv) => isCommit(inv) && !inv.isScratch && !/#\d+/.test(inv.raw))
   .map((inv) => ({ at: inv.at, via: inv.via, command: clip(inv.raw) }));
 
 const teamTask = (inv, verb) => inv.kind === 'chemx' && inv.argv[0] === 'team' && inv.argv[1] === 'task' && inv.argv[2] === verb;
@@ -53,6 +55,14 @@ const editOf = (inv) => {
   const [file] = nonFlags(inv.argv.slice(1));
   const isCounted = Boolean(file) && !isNewFileWrite;
   return isCounted ? { at: inv.at, file: keyOf(inv, file), verb, via: inv.via } : null;
+};
+
+// A file the agent created itself with a plain write: it had nothing to lease, and later edits of it need none either.
+const createdOf = (inv) => {
+  const isWrite = inv.kind === 'chemx' && inv.argv[0] === 'write';
+  const isNew = isWrite && !inv.argv.includes('--overwrite') && !inv.argv.includes('--append');
+  const [file] = isNew ? nonFlags(inv.argv.slice(1)) : [];
+  return file ? keyOf(inv, file) : null;
 };
 
 const acquireOf = (inv) => {
@@ -69,9 +79,11 @@ export const editsWithoutLease = (invs, taken = []) => {
   const acquires = [...invs.map(acquireOf).filter(Boolean), ...taken];
   const isBefore = (lease, edit) => lease.at === null || edit.at === null || lease.at <= edit.at + LEASE_SLACK_MS;
   const seen = new Set();
+  const created = new Set(invs.map(createdOf).filter(Boolean));
   const result = [];
   for (const edit of invs.map(editOf).filter(Boolean)) {
-    const isLeased = acquires.some((lease) => lease.file === edit.file && isBefore(lease, edit));
+    const isOwnFile = created.has(edit.file);
+    const isLeased = isOwnFile || acquires.some((lease) => lease.file === edit.file && isBefore(lease, edit));
     const key = `${edit.file}\u0000${edit.verb}`;
     const isNew = !seen.has(key);
     seen.add(key);

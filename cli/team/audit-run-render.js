@@ -8,6 +8,8 @@ const SHOWN = 8;
 const money = (n) => `$${Number(n).toFixed(2)}`;
 const pct = (share) => (share === null ? 'n/a' : `${(share * 100).toFixed(1)}%`);
 const at = (ms) => (Number.isFinite(ms) ? clockTime(ms) : '--:--:--');
+const FILE_WIDTH = 80;
+const short = (file) => (String(file).length > FILE_WIDTH ? `${String(file).slice(0, FILE_WIDTH)}...` : file);
 const who = (row) => `${row.label || row.agentId} ${row.handle || ''}`.trim();
 
 const list = (rows, line) => {
@@ -23,9 +25,9 @@ const leaseLines = (leases) => {
   return [
     head,
     `  lapsed under an active holder: ${leases.lapsed.length}`,
-    ...list(leases.lapsed, (l) => `${at(l.expiresAt)} ${l.file} held by ${l.handle} (${l.label || l.agentId})${l.editedAfterLapse ? ' [edited after the lapse]' : ''}`),
+    ...list(leases.lapsed, (l) => `${at(l.expiresAt)} ${short(l.file)} held by ${l.handle} (${l.label || l.agentId})${l.editedAfterLapse ? ' [edited after the lapse]' : ''}`),
     `  abandoned (expired after the holder finished): ${leases.abandoned.length}`,
-    ...list(leases.abandoned, (l) => `${at(l.expiresAt)} ${l.file} held by ${l.handle}`),
+    ...list(leases.abandoned, (l) => `${at(l.expiresAt)} ${short(l.file)} held by ${l.handle}`),
     `  waiters: ${leases.waiters.total}, starved or never granted: ${leases.waiters.starved.length}`,
     ...list(leases.waiters.starved, (w) => `${at(w.requestedAt)} ${w.waiter} waited ${Math.round(w.waitedMs / 60000)}m for ${w.file}${w.holder ? ` held by ${w.holder}` : ''}${w.granted ? '' : ' (not granted)'}`),
     `  note: ${leases.note}`

@@ -77,6 +77,9 @@ const dirtyAgent = (repo) => ({
     bash(BASE + 16000, repo, 'sed -i s/a/b/ "$(mktemp)"'),
     bash(BASE + 17000, repo, 'echo done 2>&1 >/dev/null'),
     mcp(BASE + 18000, repo, { action: 'patch', params: { path: 'cli/d.js' } }),
+    mcp(BASE + 18200, repo, { action: 'write', params: { path: 'cli/e.js' } }),
+    mcp(BASE + 18400, repo, { action: 'patch', params: { path: 'cli/e.js' } }),
+    bash(BASE + 18600, repo, 'cd /tmp && git init -q x && git -C x commit -q --allow-empty -m scaffold'),
     bash(BASE + 19000, repo, 'git status'),
     bash(BASE + 20000, repo, 'grep -rn foo cli'),
     bash(BASE + 21000, repo, "node -e 'console.log(1)'"),
@@ -135,8 +138,8 @@ test('protocol: unleased edits, commits without a task id, unclosed claims', (t)
   const env = makeEnv(t);
   writeRun(env, 'wf_dirty', [cleanAgent(env.repo), dirtyAgent(env.repo), hijackAgent(env.repo)]);
   const { protocol } = audit(env, 'wf_dirty');
-  assert.deepEqual(protocol.unleasedEdits.map((e) => `${e.handle} ${e.file}`), ['@dirty-two cli/d.js']);
-  assert.deepEqual(protocol.uncommitted.map((c) => c.handle), ['@dirty-two']);
+  assert.deepEqual(protocol.unleasedEdits.map((e) => `${e.handle} ${e.file}`), ['@dirty-two cli/d.js'], 'cli/e.js was created by the agent itself');
+  assert.deepEqual(protocol.uncommitted.map((c) => c.handle), ['@dirty-two'], 'a commit in a /tmp scratch repo is not a task commit');
   assert.deepEqual(protocol.unclosedClaims.map((c) => `${c.handle} #${c.task}`), ['@dirty-two #22']);
 });
 
