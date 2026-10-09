@@ -109,6 +109,15 @@ const trackLeaseActivity = async (command) => {
   }
 };
 
+// One tool_calls row per command: sizes and counts only, fails open (cli/telemetry/call-ledger.js, #2498).
+const loadCallLedger = async () => {
+  try {
+    return await import('./telemetry/call-ledger.js');
+  } catch {
+    return null;
+  }
+};
+
 const main = async () => {
   const firstArg = rawArgs[0];
 
@@ -138,7 +147,9 @@ const main = async () => {
   const isMcpServer = MCP_SERVER_COMMANDS.has(firstArg);
   if (!isMcpServer) await trackLeaseActivity(firstArg);
   const { dispatchCommand } = await import('./commands/cmd-router.js');
-  await dispatchCommand(firstArg, rawArgs, runAudit, getPackageVersion, isCapsulePrefix);
+  const run = () => dispatchCommand(firstArg, rawArgs, runAudit, getPackageVersion, isCapsulePrefix);
+  const ledger = await loadCallLedger();
+  await (ledger ? ledger.runLoggedCli({ command: firstArg, rawArgs, cwd: process.cwd(), run }) : run());
 };
 
 /** Runs the CLI for process.argv; cli/index.js calls it after the conflict-safe boot. */

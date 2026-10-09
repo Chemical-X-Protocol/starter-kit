@@ -9,8 +9,15 @@ import { evaluateGuardrails } from './edit-guardrails.js';
 import { assertWriteLockClear } from './team/write-lock-guard.js';
 import { fingerprintFile } from './forge/fingerprint-file.js';
 import { introducedViolationsOf } from './audit/gate-delta.js';
+import { noteCounterfactual } from './telemetry/call-ledger.js';
 
 export { runPatcherCli, runWriterCli } from './patcher-cli.js';
+
+// The result carries guardrail validation, so a separate `check` call is not needed (call telemetry, #2498).
+const noteValidation = (skipCheck) => {
+  const isValidated = !skipCheck;
+  if (isValidated) noteCounterfactual('validation-call', { calls: 1 });
+};
 
 // The written file is the file at hand: ensureFresh re-parses it (or drops its rows when it is
 // gone). `indexed` is true only when its rows now match the file; a file the index does not
@@ -102,6 +109,7 @@ export const patchFile = (targetPath, params = {}) => {
   const indexed = shouldIndex ? syncIndex(resolvedPath, cwd) : false;
 
   const guardrails = evaluateGuardrails({ absPath: resolvedPath, relPath: fileResult.file, content: replaced.content, skipCheck, cwd });
+  noteValidation(skipCheck);
   const introducedViolations = introducedViolationsOf(beforeGuardrails.violations, guardrails.violations);
   const preExistingViolations = guardrails.violations.filter((v) => !introducedViolations.includes(v));
 
@@ -170,6 +178,7 @@ export const writeFile = (targetPath, params = {}) => {
   const indexed = shouldIndex ? syncIndex(resolvedPath, cwd) : false;
 
   const guardrails = evaluateGuardrails({ absPath: resolvedPath, relPath: fileResult.file, content, skipCheck, cwd });
+  noteValidation(skipCheck);
   const introducedViolations = introducedViolationsOf(beforeGuardrails.violations, guardrails.violations);
   const preExistingViolations = guardrails.violations.filter((v) => !introducedViolations.includes(v));
 

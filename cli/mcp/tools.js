@@ -344,10 +344,26 @@ export const executeMcpTool = async (name, args = {}, cwd = process.cwd()) => {
   const effectiveCwd = args.projectRoot || args?.params?.projectRoot || args?.params?.cwd || cwd;
   const stopKeepalive = await trackActivity(toolName, args, effectiveCwd);
   try {
-    return await handle(args, effectiveCwd);
+    return await runLogged(toolName, args, effectiveCwd, () => handle(args, effectiveCwd));
   } finally {
     stopKeepalive();
   }
+};
+
+// One tool_calls row per call: sizes and counts only, fails open (cli/telemetry/call-ledger.js, #2498).
+// Loaded on first call so `initialize` stays fast.
+const loadLedger = async () => {
+  try {
+    return await import('../telemetry/call-ledger.js');
+  } catch {
+    return null;
+  }
+};
+
+// The handler runs exactly once: a ledger that fails to load only means the call is not logged.
+const runLogged = async (toolName, args, cwd, run) => {
+  const ledger = await loadLedger();
+  return ledger ? ledger.runLoggedMcp({ toolName, args, cwd, run }) : run();
 };
 
 // Any call made as a lease holder keeps that holder's leases alive, and a long one (test, verify,

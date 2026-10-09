@@ -14,6 +14,7 @@ import { outlineModuleAst } from './outline/ast-outline.js';
 import { isStylesheetFile, outlineStylesheet } from './outline/style-outline.js';
 import { conflictHunksOf, describeConflicts } from './conflicts.js';
 import { resolveRevisionRead } from './read-revision.js';
+import { noteCounterfactual } from './telemetry/call-ledger.js';
 
 const assertReadableFile = (resolvedPath, rawPath, targetPath) => {
   const isMissingFile = !fs.existsSync(resolvedPath);
@@ -236,6 +237,7 @@ export const readTokenOptimized = (targetPath, options = {}) => {
   const rawContent = hasSourceContent ? options.sourceContent : fs.readFileSync(resolvedPath, 'utf-8');
   const rawLines = splitFileLines(rawContent);
   const totalLines = rawLines.length;
+  noteCounterfactual('file-whole', { chars: rawContent.length });
 
   // An unmerged file is not parseable: AST modes would print a wrong outline or "symbol not
   // found". Show the numbered lines (what a merge needs) with a one-line note instead.

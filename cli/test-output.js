@@ -3,6 +3,7 @@
 // a filter that matched nothing, or a timeout is INCONCLUSIVE (exit 3), never a green check.
 import { stripAnsi } from './terminal.js';
 import { STATUS } from './result-status.js';
+import { noteCounterfactual } from './telemetry/call-ledger.js';
 import {
   extractAssertionFailures,
   extractUnhandledErrors,
@@ -125,6 +126,7 @@ const classify = ({ counts, failures, fatalLine, noTestsLine, exitCode, options,
 };
 
 export const parseTestOutput = (stdout = '', stderr = '', exitCode = 0, options = {}) => {
+  noteCounterfactual('raw-output', { chars: String(stdout).length + String(stderr).length });
   const lines = `${stdout}\n${stderr}`.split(/\r?\n/).map((l) => stripAnsi(l));
   const cleanLines = lines.map((l) => l.trim()).filter(Boolean);
   const counts = parseCounts(cleanLines);

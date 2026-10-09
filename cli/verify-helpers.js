@@ -3,6 +3,7 @@ import path from 'node:path';
 import { matchTypeScriptError } from './build/parser-matchers.js';
 import { resolvePackageManager } from './build/detector.js';
 import { joinCommandWords } from './cli-args.js';
+import { noteCounterfactual } from './telemetry/call-ledger.js';
 
 export { detectTypecheckCommand } from './typecheck-command.js';
 export { detectTestCommand } from './test-command.js';
@@ -17,6 +18,7 @@ export const parseCommandFromArgs = (args = []) => {
 };
 
 export const parseTypecheckOutput = (stdout = '', stderr = '') => {
+  noteCounterfactual('raw-output', { chars: String(stdout).length + String(stderr).length });
   const lines = `${stdout}\n${stderr}`.split(/\r?\n/);
   const errors = [];
   const seen = new Set();

@@ -1,0 +1,158 @@
+/**
+ * Chemical X Protocol: per-call ledger for `chemx report savings` (#2498).
+ * Every MCP call (runLoggedMcp) and every CLI command (runLoggedCli) inserts one tool_calls row:
+ * handle, time, action, result size in characters. Nothing else about the call is stored (see
+ * call-schema.js). Where chemx knows what the native alternative would have returned, the code that
+ * produced the result calls noteCounterfactual(kind, { chars | calls }) with a number. Only a fixed list
+ * of kinds is accepted and only numbers are kept, so no content can reach the table.
+ * Fails open: any problem opening or writing the db is swallowed and the call proceeds untouched.
+ * Off in spec processes and with CHEMX_CALL_LOG=0.
+ */
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { initCallSchema, COUNTERFACTUAL_KINDS } from './call-schema.js';
+
+export const CHARS_PER_TOKEN = 4;
+/** Token estimate used everywhere in the report: characters / 4, rounded up. An estimate, not a tokenizer count. */
+export const estimateTokens = (chars) => Math.ceil((Number(chars) || 0) / CHARS_PER_TOKEN);
+
+const scope = new AsyncLocalStorage();
+
+const CLI_SKIPPED = new Set(['mcp', 'mcp-server', 'server', 'report', 'help', '--help', '-h']);
+const ACTION_ALIASES = { r: 'read', view: 'read', search: 'q', query: 'q', find: 'q', diff: 'd', edit: 'patch', pkg: 'p', ls: 'f', json: 'j' };
+const NO_COUNTERFACTUAL = { kind: null, chars: 0, calls: 0 };
+
+export const isLoggingOn = (env = process.env) => {
+  const isOptedOut = env.CHEMX_CALL_LOG === '0';
+  const isSpec = Boolean(env.VITEST) || Boolean(env.NODE_TEST_CONTEXT);
+  return !isOptedOut && !isSpec;
+};
+
+export const normalizeAction = (name) => {
+  const text = String(name || 'unknown');
+  return ACTION_ALIASES[text] || text;
+};
+
+const toCount = (value) => (Number.isFinite(value) && value > 0 ? Math.round(value) : 0);
+
+/**
+ * Called by chemx code that knows a counterfactual size. The first note of a kind in a call wins (the
+ * call's own target is read before any helper reads). Outside a logged call it does nothing.
+ */
+export const noteCounterfactual = (kind, { chars = 0, calls = 0 } = {}) => {
+  const store = scope.getStore();
+  const isKnownKind = COUNTERFACTUAL_KINDS.includes(kind);
+  const canNote = Boolean(store) && isKnownKind && !store.notes.has(kind);
+  if (canNote) store.notes.set(kind, { chars: toCount(chars), calls: toCount(calls) });
+};
+
+/** Size of a result in characters, as chemx serialised it. */
+export const measureChars = (output) => {
+  const isText = typeof output === 'string';
+  const isEmpty = output === undefined || output === null;
+  if (isText) return output.length;
+  if (isEmpty) return 0;
+  try {
+    return JSON.stringify(output)?.length ?? 0;
+  } catch {
+    return 0;
+  }
+};
+
+/** One counterfactual per call, and only when it is unambiguous: a single noted kind in a non-batch call. */
+export const pickCounterfactual = (notes, isBatch = false) => {
+  const kinds = [...notes.keys()];
+  const isUnambiguous = kinds.length === 1 && !isBatch;
+  return isUnambiguous ? { kind: kinds[0], ...notes.get(kinds[0]) } : NO_COUNTERFACTUAL;
+};
+
+const INSERT_SQL = `INSERT INTO tool_calls (ts, agent, surface, action, ok, result_chars, cf_kind, cf_chars, cf_calls)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+
+/** Insert one row. Returns false (never throws) when the db is missing or the write fails. */
+export const recordCall = (db, row) => {
+  try {
+    initCallSchema(db);
+    const cf = row.cf || NO_COUNTERFACTUAL;
+    db.prepare(INSERT_SQL).run(row.ts, row.agent || null, row.surface, normalizeAction(row.action), row.ok ? 1 : 0, toCount(row.resultChars), cf.kind, cf.chars, cf.calls);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const openLedgerDb = async (cwd) => {
+  try {
+    const { openIndexDb } = await import('../search-schema.js');
+    return openIndexDb(cwd) || null;
+  } catch {
+    return null;
+  }
+};
+
+const asFromWords = (words) => {
+  const hit = words.find((word) => word.startsWith('--as='));
+  return hit ? hit.slice('--as='.length) : undefined;
+};
+
+const handleOfMcp = (args) => {
+  const params = args?.params ?? {};
+  const words = typeof args?.command === 'string' ? args.command.split(' ') : [];
+  return params.agentId ?? params.as ?? args?.agentId ?? args?.as ?? asFromWords(words);
+};
+
+const isBatchArgs = (args) => Array.isArray(args?.commands) || Array.isArray(args?.batch);
+
+const actionOfMcp = (toolName, args) => {
+  const words = typeof args?.command === 'string' ? args.command.trim().split(' ') : [];
+  return isBatchArgs(args) ? 'batch' : (args?.action ?? words[0] ?? toolName);
+};
+
+/** Run one MCP tool call and log it. The call's result and errors pass through unchanged. */
+export const runLoggedMcp = async ({ toolName, args, cwd, run, openDb = openLedgerDb, now = Date.now, env = process.env }) => {
+  if (!isLoggingOn(env)) return run();
+  const store = { notes: new Map() };
+  let output;
+  let isOk = true;
+  try {
+    output = await scope.run(store, run);
+    return output;
+  } catch (err) {
+    isOk = false;
+    throw err;
+  } finally {
+    const db = await openDb(cwd);
+    const cf = pickCounterfactual(store.notes, isBatchArgs(args));
+    recordCall(db, { ts: now(), agent: handleOfMcp(args), surface: 'mcp', action: actionOfMcp(toolName, args), ok: isOk, resultChars: measureChars(output), cf });
+  }
+};
+
+const meterOutput = () => {
+  let chars = 0;
+  for (const stream of [process.stdout, process.stderr]) {
+    const write = stream.write.bind(stream);
+    stream.write = (chunk, ...rest) => {
+      chars += typeof chunk === 'string' ? chunk.length : (chunk?.byteLength ?? 0);
+      return write(chunk, ...rest);
+    };
+  }
+  return () => chars;
+};
+
+/**
+ * Run one CLI command and log it when the process exits (commands may call process.exit). The result
+ * size is what the command wrote to stdout and stderr, counted as it was written.
+ */
+export const runLoggedCli = async ({ command, rawArgs, cwd, run, openDb = openLedgerDb, now = Date.now, env = process.env }) => {
+  const isSkipped = !isLoggingOn(env) || CLI_SKIPPED.has(command);
+  if (isSkipped) return run();
+  const db = await openDb(cwd);
+  if (!db) return run();
+  const store = { notes: new Map() };
+  const written = meterOutput();
+  const agent = asFromWords(rawArgs) ?? env.CHEMX_AGENT_ID;
+  process.once('exit', (code) => {
+    const cf = pickCounterfactual(store.notes);
+    recordCall(db, { ts: now(), agent, surface: 'cli', action: command, ok: code === 0, resultChars: written(), cf });
+  });
+  return scope.run(store, run);
+};
