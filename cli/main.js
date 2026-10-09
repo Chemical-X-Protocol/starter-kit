@@ -1,0 +1,140 @@
+// The CLI proper and the public API, loaded by the conflict-safe boot shim in cli/index.js.
+import './silence-warnings.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import { sanitizeOutputStreams, exitQuietlyOnClosedPipe } from './terminal.js';
+import {
+  handleError,
+  installGlobalErrorCatcher,
+  withErrorCatcher,
+  publishIssue
+} from './errors/index.js';
+import { printHelp } from './help.js';
+import { ROUTABLE_COMMAND_TOKENS } from './commands-schema.js';
+
+sanitizeOutputStreams();
+exitQuietlyOnClosedPipe();
+installGlobalErrorCatcher();
+
+// ---------------------------------------------------------------------------
+// Shared lightweight utilities (no heavy module load at boot)
+// ---------------------------------------------------------------------------
+
+const getPackageVersion = () => {
+  try {
+    const pkgPath = new URL('../package.json', import.meta.url);
+    const pkgContent = fs.readFileSync(pkgPath, 'utf-8');
+    return JSON.parse(pkgContent).version || 'unknown';
+  } catch {
+    return 'unknown';
+  }
+};
+
+const rawArgs = process.argv.slice(2);
+const CAPSULE_PREFIXES = ['m-', 'a-', 'o-', 't-', 'use-', 'v-'];
+const isCapsulePrefix = (arg) => CAPSULE_PREFIXES.some((p) => arg.startsWith(p));
+
+const loadProjectConfig = () => {
+  const cfgPath = path.resolve(process.cwd(), '.chemx', 'config.json');
+  if (!fs.existsSync(cfgPath)) return {};
+  try {
+    return JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
+  } catch {
+    return {};
+  }
+};
+
+// ---------------------------------------------------------------------------
+// Public API: lazy proxy exports (zero startup cost for consumers)
+// ---------------------------------------------------------------------------
+
+export const runAudit = async (customDir = null, isCli = false) => {
+  const { runAudit: run } = await import('./commands/cmd-audit.js');
+  return run(customDir, isCli, rawArgs, loadProjectConfig);
+};
+
+export const auditFile       = async (...a) => (await import('./audit.js')).auditFile(...a);
+export const runBuildAudit   = async (...a) => (await import('./build.js')).runBuildAudit(...a);
+export const runSearch       = async (...a) => (await import('./search.js')).runSearch(...a);
+export const syncSearchIndex = async (...a) => (await import('./search.js')).syncSearchIndex(...a);
+export const runMcpServer    = async (...a) => (await import('./mcp/index.js')).runMcpServer(...a);
+export const startMcpServer  = runMcpServer;
+export const runMcpInstaller = async (...a) => (await import('./mcp/index.js')).runMcpInstaller(...a);
+export const runReaderCli    = async (...a) => {
+  const readerCards = await import('./reader-cards-gate.js');
+  if (readerCards.argsWantReadCards(a[0] || [])) await readerCards.loadReadCards();
+  return (await import('./reader.js')).runReaderCli(...a);
+};
+export const readTokenOptimized = async (...a) => (await import('./reader.js')).readTokenOptimized(...a);
+export const runPatcherCli   = async (...a) => (await import('./patcher.js')).runPatcherCli(...a);
+export const patchFile       = async (...a) => (await import('./patcher.js')).patchFile(...a);
+export const runWriterCli    = async (...a) => (await import('./patcher.js')).runWriterCli(...a);
+export const writeFile       = async (...a) => (await import('./patcher.js')).writeFile(...a);
+export const runTeamCli      = async (...a) => (await import('./team/index.js')).runTeamCli(...a);
+export const runTrend        = async (...a) => (await import('./trend.js')).runTrend(...a);
+export const runLintAudit    = async (...a) => (await import('./verify-lint.js')).runLintAudit(...a);
+export const runPillarsWizard = async (...a) => (await import('./pillars-wizard.js')).runPillarsWizard(...a);
+export const runTesseract    = async (...a) => (await import('./tesseract.js')).runTesseract(...a);
+export { handleError, withErrorCatcher, publishIssue };
+
+// ---------------------------------------------------------------------------
+// Allowed commands guard (exits early before any heavy import)
+// ---------------------------------------------------------------------------
+
+export const ALLOWED_COMMANDS = new Set([
+  ...ROUTABLE_COMMAND_TOKENS,
+  'help', '--help', '-h',
+  'version', '--version', '-v'
+]);
+
+// ---------------------------------------------------------------------------
+// main: thin orchestrator; real dispatch lives in cmd-router.js
+// ---------------------------------------------------------------------------
+
+const HELP_FLAGS = new Set(['help', '--help', '-h']);
+const VERSION_FLAGS = new Set(['version', '--version', '-v']);
+
+const main = async () => {
+  const firstArg = rawArgs[0];
+
+  const isHelpRequested = !firstArg || HELP_FLAGS.has(firstArg);
+  if (isHelpRequested) {
+    await printHelp(rawArgs.slice(1));
+    return;
+  }
+
+  const isVersionRequested = VERSION_FLAGS.has(firstArg);
+  if (isVersionRequested) {
+    process.stdout.write(`chemx v${getPackageVersion()}\n`);
+    return;
+  }
+
+  const isAllowedCommand = ALLOWED_COMMANDS.has(firstArg);
+  const isCapsuleCmd = isCapsulePrefix(firstArg);
+  const isCommandValid = isAllowedCommand || isCapsuleCmd;
+  if (!isCommandValid) {
+    process.stderr.write(`Unknown command "${firstArg}". Run --help for usage.\n`);
+    const { recordWrongCall } = await import('./friction/wrong-call.js');
+    recordWrongCall(process.cwd(), firstArg, rawArgs);
+    process.exit(1);
+  }
+
+  const { dispatchCommand } = await import('./commands/cmd-router.js');
+  await dispatchCommand(firstArg, rawArgs, runAudit, getPackageVersion, isCapsulePrefix);
+};
+
+/** Runs the CLI for process.argv; cli/index.js calls it after the conflict-safe boot. */
+export const runMain = () => main().catch(async (err) => {
+  // An expected, user-actionable refusal is not a chemx failure: print it, no issue report.
+  const isRefusal = err?.isRefusal === true;
+  if (isRefusal) {
+    process.stderr.write(`✕ ${err.message}\n`);
+    process.exit(1);
+  }
+  await handleError(err, {
+    command: process.argv.slice(2).join(' '),
+    cwd: process.cwd(),
+    exitCode: 1
+  });
+  process.exit(1);
+});

@@ -5,10 +5,22 @@ import { resolveArchitectureTier, extractAstMetadata } from './search-ast.js';
 import { INDEX_VERSION } from './search-index-meta.js';
 import { isPathInScope, isScopeCovered } from './search-root.js';
 import { debugNote } from './search-debug.js';
+import { conflictHunksOf, describeConflicts } from './conflicts.js';
+
+// An unmerged file would index garbage symbols (both sides, or a parse failure): skip it.
+const refuseConflicted = (content, relPath) => {
+  const hunks = conflictHunksOf(content);
+  const isConflicted = hunks.length > 0;
+  if (!isConflicted) return;
+  const err = new Error(describeConflicts(relPath, hunks));
+  err.conflictLine = hunks[0].start;
+  throw err;
+};
 
 export const parseIndexRecord = (fullPath, relPath, root) => {
   const stat = fs.statSync(fullPath);
   const content = fs.readFileSync(fullPath, 'utf-8');
+  refuseConflicted(content, relPath);
   const { symbols, props, hooks, imports } = extractAstMetadata(content, fullPath);
   return {
     path: relPath, root, mtime: Math.floor(stat.mtimeMs), size: stat.size,
@@ -34,7 +46,8 @@ export const collectRecords = (entries, indexedMap, root, options) => {
       if (isFresh) continue;
       records.push(parseIndexRecord(fullPath, relPath, root));
     } catch (err) {
-      skippedFiles.push({ path: relPath, reason: err?.message || String(err) });
+      const conflict = err?.conflictLine ? { conflictLine: err.conflictLine } : {};
+      skippedFiles.push({ path: relPath, reason: err?.message || String(err), ...conflict });
       debugNote.warn(`skipped ${relPath}`, err);
     }
   }

@@ -29,7 +29,7 @@ export const runAudit = (targetDir = 'src', options = {}) => {
   const config = options.config || loadProjectConfig(cwd);
   const includeTests = Boolean(options.includeTests);
   const coverageCollector = createCoverageCollector();
-  const { violations, fileStats, totalHooks } = scanTree(absoluteTarget, cwd, {
+  const { violations, fileStats, totalHooks, skippedConflicts = [] } = scanTree(absoluteTarget, cwd, {
     patternRegistry,
     hookRegistry,
     fast: Boolean(options.fast),
@@ -104,7 +104,8 @@ export const runAudit = (targetDir = 'src', options = {}) => {
     hotspots,
     patterns,
     roadmap,
-    violations
+    violations,
+    skippedConflicts
   };
 
   if (options.outputFile) {

@@ -146,6 +146,11 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
   report.gate = computeGateVerdict({ projectRoot: process.cwd(), scope: auditRelDir, violations: report.violations, isPartialScan: isPartialAudit });
   report.scope = auditRelDir;
   saveAuditSnapshot(report, process.cwd(), { scope: auditRelDir, isPartial: isPartialAudit });
+  const hasSkippedConflicts = report.skippedConflicts?.length > 0;
+  if (hasSkippedConflicts) {
+    const { describeSkipped } = await import('../conflicts.js');
+    process.stderr.write(`⚠ audit ${describeSkipped(report.skippedConflicts)}\n`);
+  }
   try {
     // Pre-commit runs skip the full index sync (tens of seconds); the audit itself needs no index.
     const shouldSyncIndex = !rawArgs.includes('--no-index') && !isStagedScope;

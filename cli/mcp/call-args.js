@@ -9,7 +9,7 @@ const isSafeTarget = (t) => typeof t === 'string' && SAFE_TEST_TARGET.test(t) &&
 const UNSAFE_IN_DOUBLE_QUOTES = /[$`"\\\n\r\0]/;
 // git options that write a file or read one from outside the repository.
 const GIT_FILE_OPTIONS = ['--output', '--no-index', '--ext-diff'];
-const GIT_ACTIONS = new Set(['d', 'log']);
+const GIT_ACTIONS = new Set(['d', 'log', 'show']);
 const MIN_ABBREVIATION = 3;
 
 const refuse = (error) => ({ ok: false, error });

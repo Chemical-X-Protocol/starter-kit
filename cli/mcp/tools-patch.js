@@ -1,4 +1,5 @@
 import { patchFile } from '../patcher.js';
+import { parseSearchReplaceBlocks } from '../search-replace-blocks.js';
 import { handleCheckCommand } from '../search-commands.js';
 import { resolveSafePath } from '../path-scope.js';
 
@@ -30,21 +31,40 @@ export const formatPatchWarnings = (result) => {
   return warnings.length > 0 ? warnings : undefined;
 };
 
+/**
+ * MCP `blocks`: an array of { search, replace } (target/replacement spellings too), or one
+ * string in the same SEARCH/REPLACE heredoc format the CLI reads from stdin.
+ */
+const normalizeBlocks = (raw) => {
+  if (typeof raw === 'string') return parseSearchReplaceBlocks(raw);
+  if (!Array.isArray(raw)) return [];
+  return raw.map((b, i) => {
+    const search = b?.search ?? b?.target ?? b?.targetContent;
+    const replace = b?.replace ?? b?.replacement ?? b?.replacementContent;
+    const isComplete = typeof search === 'string' && typeof replace === 'string';
+    if (!isComplete) throw new Error(`blocks[${i}] needs string "search" and "replace". Nothing was changed.`);
+    return { search, replace };
+  });
+};
+
 export const handleChemxPatch = (args = {}, cwd = process.cwd()) => {
   const targetContent = args.targetContent ?? args.target ?? args.search;
   const replacementContent = args.replacementContent ?? args.replacement ?? args.replace;
   const hasPath = Boolean(args.path);
   const hasTargetContent = targetContent !== undefined;
   const hasReplacementContent = replacementContent !== undefined;
-  const hasRequiredArgs = hasPath && hasTargetContent && hasReplacementContent;
+  const blocks = normalizeBlocks(args.blocks);
+  const hasBlocks = blocks.length > 0;
+  const hasRequiredArgs = hasPath && (hasBlocks || (hasTargetContent && hasReplacementContent));
 
   if (!hasRequiredArgs) {
-    throw new Error('chemx_patch requires "path", target content ("targetContent", "target", or "search"), and replacement content ("replacementContent", "replacement", or "replace").');
+    throw new Error('chemx_patch requires "path" plus either "blocks" ([{ search, replace }], applied in order, all-or-nothing) or target content ("targetContent", "target", or "search") and replacement content ("replacementContent", "replacement", or "replace").');
   }
 
   const targetPath = resolveSafePath(args.path, cwd);
   const isDryRun = isDryRunRequested(args);
   const result = patchFile(targetPath, {
+    blocks: hasBlocks ? blocks : undefined,
     targetContent,
     replacementContent,
     allowMultiple: Boolean(args.allowMultiple || args.multiple),

@@ -49,8 +49,8 @@ export const emitWrapperResult = (result, isCli) => {
   return result;
 };
 
-const DIFF_LINE_BUDGET = 80;
-const NOT_A_REPO_CODE = 128;
+export const DIFF_LINE_BUDGET = 80;
+export const NOT_A_REPO_CODE = 128;
 // Output formats that are already summaries: never "compact" them to --stat.
 const SUMMARY_FORMAT_FLAGS = new Set(['--stat', '--shortstat', '--numstat', '--dirstat', '--name-only', '--name-status', '--summary', '--compact-summary', '--raw', '--no-patch']);
 // `-U<n>` implies --patch in git, so -U0 is only added when the caller wants a patch.
@@ -63,10 +63,15 @@ const isSummaryOnlyRequest = (gitArgs) => {
 };
 
 // Outside a work tree git diff silently becomes --no-index and prints ~100 lines of usage.
-const isInsideWorkTree = (cwd) => runGit(['rev-parse', '--is-inside-work-tree'], cwd).stdout.trim() === 'true';
+export const isInsideWorkTree = (cwd) => runGit(['rev-parse', '--is-inside-work-tree'], cwd).stdout.trim() === 'true';
 
 export const runDiff = async (rawArgs = [], isCli = true, cwd = process.cwd()) => {
   const subArgs = rawArgs.filter((a) => a !== 'd' && a !== 'diff');
+  const wantsConflicts = subArgs.includes('--conflicts');
+  if (wantsConflicts) {
+    const { conflictDiff } = await import('../conflicts-cli.js');
+    return emitWrapperResult(conflictDiff(subArgs, cwd), isCli);
+  }
   const isFull = subArgs.includes('--full');
   const gitArgs = subArgs.filter((a) => a !== '--full');
   const isExplicitNoIndex = gitArgs.includes('--no-index');

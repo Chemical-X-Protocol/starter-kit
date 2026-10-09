@@ -10,9 +10,35 @@ export const WRAPPER_COMMANDS = [
     description: 'Runs git diff -U0 --no-color. Micro-syncs dirty files to an existing .chemx/index.db.',
     flags: [
       { flag: '--stat', desc: 'Show the diff stat only' },
-      { flag: '--full', desc: 'Never collapse to --stat' }
+      { flag: '--full', desc: 'Never collapse to --stat' },
+      { flag: '--conflicts', desc: 'Combined diff of unmerged files only (works mid-merge, even of chemx itself)' }
     ],
-    examples: ['chemx d', 'chemx d --stat', 'chemx d HEAD~1 --full']
+    examples: ['chemx d', 'chemx d --stat', 'chemx d HEAD~1 --full', 'chemx d --conflicts']
+  },
+  {
+    name: 'show',
+    aliases: [],
+    group: 'wrappers',
+    brief: 'One commit: header, stat, patch',
+    usage: 'chemx show [rev] [--patch] [--full] [-- <path>...]',
+    summary: 'Subject, author, date, body and stat of one commit (default HEAD).',
+    description: 'Runs git show. --patch adds a -U0 patch that collapses past 80 lines unless --full. To read a file at a revision: chemx read <rev>:<path>.',
+    flags: [
+      { flag: '--patch, -p', desc: 'Append the -U0 patch' },
+      { flag: '--full', desc: 'Never collapse the patch' }
+    ],
+    examples: ['chemx show HEAD~1', 'chemx show a1b2c3d --patch', 'chemx show HEAD --patch -- cli/index.js', 'chemx read HEAD~1:cli/index.js --outline']
+  },
+  {
+    name: 'conflicts',
+    aliases: [],
+    group: 'wrappers',
+    brief: 'Unmerged paths, both sides',
+    usage: 'chemx conflicts [--json]',
+    summary: 'Lists unmerged paths mid-merge or rebase with both sides of every conflict hunk.',
+    description: 'Reads git ls-files -u and the working files; ours/base/theirs lines per hunk. Loads before the rest of chemx, so it works while chemx itself is mid-merge.',
+    flags: [{ flag: '--json', desc: 'Output { isRepo, unmerged: [{ path, stages, hunks }] }' }],
+    examples: ['chemx conflicts', 'chemx conflicts --json', 'chemx d --conflicts']
   },
   {
     name: 'log',

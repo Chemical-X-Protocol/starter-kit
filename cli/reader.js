@@ -12,6 +12,18 @@ import { stripCommentsKeepingLines } from './comment-ranges.js';
 import { parseSfc } from './sfc/sfc-parse.js';
 import { outlineModuleAst } from './outline/ast-outline.js';
 import { isStylesheetFile, outlineStylesheet } from './outline/style-outline.js';
+import { conflictHunksOf, describeConflicts } from './conflicts.js';
+import { resolveRevisionRead } from './read-revision.js';
+
+const assertReadableFile = (resolvedPath, rawPath, targetPath) => {
+  if (!fs.existsSync(resolvedPath)) {
+    throw new Error(`File not found: ${rawPath}`);
+  }
+  const stat = fs.statSync(resolvedPath);
+  if (stat.isDirectory()) {
+    throw new Error(`Path is a directory, not a file: ${targetPath}`);
+  }
+};
 
 import {
   stripCodeComments,
@@ -189,6 +201,13 @@ const enrichOutline = (rawContent, filePath, options) => {
  * @returns {object} Token-minified file payload.
  */
 export const readTokenOptimized = (targetPath, options = {}) => {
+  const atRevision = resolveRevisionRead(targetPath, options);
+  if (atRevision) {
+    const { rev, path: revPath, content, startLine: revStart, endLine: revEnd } = atRevision;
+    const res = readTokenOptimized(revPath, { ...options, rev: undefined, sourceContent: content, startLine: revStart, endLine: revEnd });
+    const label = path.isAbsolute(revPath) ? path.relative(options.cwd || process.cwd(), revPath) : revPath;
+    return { ...res, file: `${rev}:${label}`, rev };
+  }
   let rawPath = targetPath;
   let startLine = options.startLine;
   let endLine = options.endLine;
@@ -202,19 +221,18 @@ export const readTokenOptimized = (targetPath, options = {}) => {
 
   const cwd = options.cwd || process.cwd();
   const resolvedPath = resolveSafePath(rawPath, cwd);
+  const hasSourceContent = typeof options.sourceContent === 'string';
+  if (!hasSourceContent) assertReadableFile(resolvedPath, rawPath, targetPath);
 
-  if (!fs.existsSync(resolvedPath)) {
-    throw new Error(`File not found: ${rawPath}`);
-  }
-
-  const stat = fs.statSync(resolvedPath);
-  if (stat.isDirectory()) {
-    throw new Error(`Path is a directory, not a file: ${targetPath}`);
-  }
-
-  const rawContent = fs.readFileSync(resolvedPath, 'utf-8');
+  const rawContent = hasSourceContent ? options.sourceContent : fs.readFileSync(resolvedPath, 'utf-8');
   const rawLines = splitFileLines(rawContent);
   const totalLines = rawLines.length;
+
+  // An unmerged file is not parseable: AST modes would print a wrong outline or "symbol not
+  // found". Show the numbered lines (what a merge needs) with a one-line note instead.
+  const conflictHunks = conflictHunksOf(rawContent);
+  const conflictNote = conflictHunks.length > 0 ? describeConflicts(rawPath, conflictHunks) : null;
+  if (conflictNote) options = { ...options, template: false, logic: false, outline: false, symbol: undefined, enrich: false };
 
   if (options.template) {
     const templateText = extractTemplateContent(rawContent, targetPath);
@@ -292,7 +310,9 @@ export const readTokenOptimized = (targetPath, options = {}) => {
 
   // Read window: files longer than autoThreshold read without a symbol or slice return an AST
   // outline to protect context. A tool budget, not an architecture rule (AGENTS.md owns those).
-  if (!hasLineRange && totalLines > autoThreshold) {
+  const isOverWindow = !hasLineRange && totalLines > autoThreshold;
+  const shouldAutoOutline = isOverWindow && !conflictNote;
+  if (shouldAutoOutline) {
     const outlineText = generateAstOutline(rawContent, rawPath);
     const isCliHint = options.hintSyntax === 'cli';
     const symbolHint = isCliHint
@@ -354,6 +374,7 @@ export const readTokenOptimized = (targetPath, options = {}) => {
     ...(slice.lineNumbers ? { lineNumbers: slice.lineNumbers } : {}),
     ...(slice.notes.length > 0 ? { notes: slice.notes } : {}),
     ...(trailer ? { trailer } : {}),
+    ...(conflictNote ? { conflict: conflictNote } : {}),
   };
 };
 

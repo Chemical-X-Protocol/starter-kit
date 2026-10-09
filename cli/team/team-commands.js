@@ -28,6 +28,7 @@ import { handleLockCommand, handleUnlockCommand, resolveCliAgent } from './team-
 import { resolveTaskTier } from './task-tier.js';
 import { resolveDependencyStates } from './task-detail-sections.js';
 import { buildCompletionOptions, describeCompletion, describeStatusUpdate, writeTaskResult } from './task-completion-output.js';
+import { refuseUnknownTask } from './team-task-guard.js';
 
 const ARG_VAL_FLAGS = ['--target', '--as', '--to', '--agent', '--since', '--limit', '--thread', '--task', '--parent', '--rule', '--priority', '--prio', '--moscow', '--url', '--pid'];
 
@@ -136,6 +137,8 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
       return { help: true, actions: ['list', 'show', 'add', 'claim', 'done', 'update', 'comment', 'triage', 'reconcile', 'set-target', 'vds-slot', 'trace'] };
     }
     const taskAction = nonFlagPositional[0] || 'list';
+    const unknownTask = refuseUnknownTask(db, taskAction, nonFlagPositional[1], { isCli, cwd });
+    if (unknownTask) return unknownTask;
     if (taskAction === 'list') {
       const listOptions = resolveListOptions({ status: flags.status, all: flags.all, limit: flags.limit });
       const tasks = listTasks(db, {

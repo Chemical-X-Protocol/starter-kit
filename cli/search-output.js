@@ -3,6 +3,7 @@
 import { STATUS, toExitCode, combineStatuses } from './result-status.js';
 import { INDEX_VERSION } from './search-index-meta.js';
 import { scopeSqlFilter } from './search-root.js';
+import { describeSkipped } from './conflicts.js';
 
 export const describeIndexFromSync = (syncRes) => {
   const hasSync = Boolean(syncRes);
@@ -22,8 +23,15 @@ export const describeIndexFromSync = (syncRes) => {
     status: isStale ? STATUS.INCONCLUSIVE : STATUS.PASS,
     reason: isStale ? syncRes.staleReason : null,
     notice: syncRes.versionNotice || null,
-    skipped: (syncRes.skippedFiles || []).length
+    skipped: (syncRes.skippedFiles || []).length,
+    conflicts: (syncRes.skippedFiles || []).filter((f) => f.conflictLine).map((f) => ({ path: f.path, line: f.conflictLine }))
   };
+};
+
+const formatConflictNote = (index) => {
+  const conflicts = index.conflicts || [];
+  if (conflicts.length === 0) return '';
+  return `; ${describeSkipped(conflicts.map((c) => ({ path: c.path, hunks: [{ start: c.line }] })))}`;
 };
 
 export const withIndex = (payload, index) => {
@@ -50,7 +58,7 @@ export const formatIndexLine = (index) => {
   const notice = index.notice ? `; ${index.notice}` : '';
   const isInconclusive = index.status === STATUS.INCONCLUSIVE;
   const verdict = isInconclusive ? `; INCONCLUSIVE: ${index.reason}` : '';
-  return `${base}${notice}${verdict}`;
+  return `${base}${notice}${formatConflictNote(index)}${verdict}`;
 };
 
 // Text answers other than the default query page print the index line first, since their

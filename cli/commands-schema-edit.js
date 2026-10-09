@@ -7,10 +7,11 @@ export const EDIT_COMMANDS = [
     aliases: ['edit'],
     group: 'edit',
     brief: 'Exact search/replace edit',
-    usage: 'chemx patch <file> --target="<old>" --replacement="<new>" [options]',
+    usage: "chemx patch <file> [options] <<'EOF' (SEARCH/REPLACE blocks on stdin)",
     summary: 'Surgically patch a target file using exact search and replacement blocks.',
-    description: 'Replaces targeted text blocks, then re-indexes and audits the file.',
+    description: 'Reads one or more SEARCH/REPLACE blocks from a heredoc (all-or-nothing), or one --target/--replacement pair; then re-indexes and audits the file.',
     flags: [
+      { flag: '<<\'EOF\' ... EOF', desc: 'Blocks: "<<<<<<< SEARCH", old lines, "=======", new lines, ">>>>>>> REPLACE"' },
       { flag: '--target="<old>"', desc: 'Exact text block to replace' },
       { flag: '--replacement="<new>"', desc: 'New replacement content' },
       { flag: '--multiple', desc: 'Allow replacing multiple occurrences' },
@@ -18,6 +19,7 @@ export const EDIT_COMMANDS = [
       { flag: '--json', desc: 'Output result as minified JSON' }
     ],
     examples: [
+      "chemx patch src/api.ts <<'EOF'\n<<<<<<< SEARCH\nconst v = 1;\n=======\nconst v = 2;\n>>>>>>> REPLACE\nEOF",
       'chemx patch src/api.ts --target="v1" --replacement="v2"',
       'chemx patch src/App.tsx --target="oldCode" --replacement="newCode" --dry-run'
     ]
@@ -27,14 +29,16 @@ export const EDIT_COMMANDS = [
     aliases: [],
     group: 'edit',
     brief: 'Write a whole file',
-    usage: 'chemx write <file> --content="<text>" [options]',
+    usage: "chemx write <file> - [options] <<'EOF' (content on stdin)",
     summary: 'Write a file, then re-index and audit it.',
-    description: 'Creates or replaces one file inside the project root.',
+    description: 'Creates (or with --overwrite replaces) one file inside the project root.',
     flags: [
+      { flag: '-, --stdin', desc: 'Read the whole content from stdin (heredoc)' },
       { flag: '--content="<text>"', desc: 'File content to write' },
+      { flag: '--overwrite', desc: 'Allow replacing an existing file' },
       { flag: '--json', desc: 'Output result as minified JSON' }
     ],
-    examples: ['chemx write src/keep.ts --content="export const keep = true;\\n"']
+    examples: ["chemx write src/keep.ts - <<'EOF'\nexport const keep = true;\nEOF", 'chemx write src/keep.ts --content="export const keep = true;\\n"']
   },
   {
     name: 'add',
