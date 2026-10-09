@@ -1,3 +1,8 @@
+/**
+ * Audit *categories* used to group findings in reports. They are not the product
+ * pillars: those are the 7 in cli/pillars-schema.js, and rule-pillars.js maps the
+ * rules that enforce them. The export keeps its historical name for report code.
+ */
 export const PILLARS = {
   PILLAR_1: 'Line Budgets & Monolith Decomposition',
   PILLAR_2: 'Control Flow & Boolean Logic',
@@ -11,6 +16,8 @@ export const PILLARS = {
   PILLAR_10: 'Testing Discipline',
   PILLAR_11: 'Naming Conventions'
 };
+
+export const AUDIT_CATEGORIES = PILLARS;
 
 export const RULE_REGISTRY = {
   // Pillar 8: Accessibility & Semantic Integrity
@@ -119,7 +126,7 @@ export const RULE_REGISTRY = {
   ERROR_SWALLOWED_EXCEPTION: {
     pillar: PILLARS.PILLAR_2,
     severity: 'MEDIUM',
-    directive: 'Do not swallow caught exceptions silently; log with error context or return explicit ResultTuple error (Directive 3.B)'
+    directive: 'Do not swallow caught exceptions silently; propagate, report, record error state, or annotate chemx-allow: best-effort <reason> (Directive 2.H)'
   },
   COMBINATOR_RAW_BOOLEAN: {
     pillar: PILLARS.PILLAR_2,
@@ -159,7 +166,7 @@ export const RULE_REGISTRY = {
   LIFECYCLE_ORPHANED_LISTENER: {
     pillar: PILLARS.PILLAR_6,
     severity: 'HIGH',
-    directive: 'Wrap event listeners in self-cleaning disposers or register pairing removeEventListener (Directive 3.F)'
+    directive: 'Pair every addEventListener with removeEventListener, an AbortController signal, or once: true (Directive 6.D)'
   },
   TYPE_COLOCATION: {
     pillar: PILLARS.PILLAR_4,
@@ -174,7 +181,7 @@ export const RULE_REGISTRY = {
   DATA_FLOW_OPTIONAL_CHAINING_CHURN: {
     pillar: PILLARS.PILLAR_4,
     severity: 'LOW',
-    directive: 'Level incoming data shapes line 1 using sentinels or normalizeArray instead of deep optional chaining churn (Directive 4.D)'
+    directive: 'Level incoming data shapes at the boundary using sentinels or normalizeArray instead of deep optional chaining churn (Directive 2.I)'
   },
   RAW_INLINE_STYLE: {
     pillar: PILLARS.PILLAR_5,

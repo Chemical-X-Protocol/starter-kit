@@ -1,5 +1,19 @@
 import { PROFILES, DEFAULT_PROFILE, getProfileDefaults } from './profiles.js';
+import fs from 'node:fs';
+import path from 'node:path';
 import { findAndLoadConfigFile } from './loader.js';
+
+/** The product pillar selection written by `chemx pillars` (null when never chosen). */
+const readPillarSelection = (cwd, fileConfig) => {
+  const inline = fileConfig.raw?.pillars;
+  if (inline && typeof inline === 'object') return inline;
+  try {
+    const stored = JSON.parse(fs.readFileSync(path.join(cwd, '.chemx', 'config.json'), 'utf-8'));
+    return stored?.pillars && typeof stored.pillars === 'object' ? stored.pillars : null;
+  } catch {
+    return null;
+  }
+};
 
 const RULE_ID_SHAPE = /^[A-Z][A-Z0-9_]+$/;
 
@@ -34,6 +48,7 @@ export const loadProjectConfig = (cwd = process.cwd(), rawArgs = []) => {
     profile: selectedProfile,
     rules: effectiveRules,
     overrides: fileConfig.overrides || [],
+    pillars: readPillarSelection(cwd, fileConfig),
     raw: fileConfig.raw || {},
     stage: fileConfig.raw?.stage || 'strict'
   };

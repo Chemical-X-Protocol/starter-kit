@@ -228,6 +228,13 @@ Use same-name shorthand across all languages; eliminate redundant `key: key` dup
 - **Bidirectional Schema Validation**: Domain types and boundary interfaces must be validated against the active schema or OpenAPI contract rather than treated as independently authoritative.
 - **Drift Prevention**: Never hand-craft unvalidated entity definitions. Mismatches in nullability, default values, or field mutations must fail compile-time checks or contract test suites before ingestion.
 
+### H. Swallowed Exceptions (No Silent Catch)
+- A `catch` must propagate (`throw`), return a value (`return [null, error]`), report (a logger, notifier or handler call), or record the failure in state that outlives the catch (`state.error = err`, a fallback assigned to an outer binding). An empty catch is HIGH; a body that still discards the error is MEDIUM (`ERROR_SWALLOWED_EXCEPTION`).
+- An intentional best-effort catch says so on the catch line, inside the block, or on the line above, with a mandatory reason: `catch { // chemx-allow: best-effort cache warmup is optional }`. The same annotation with a rule id (`// chemx-allow: RULE_ID <reason>`) suppresses that one rule on that line.
+
+### I. Data Leveling (No Optional-Chaining Churn)
+- Level an incoming payload once at the boundary (2.F) with sentinels or `normalizeArray`, instead of chaining three or more `?.` through every consumer (`DATA_FLOW_OPTIONAL_CHAINING_CHURN`).
+
 ---
 
 ## 3. Control Flow & Self-Documenting Logic
@@ -386,6 +393,9 @@ Raw inline `style="..."` attributes are strictly prohibited. Visual styling flow
 
 ### C. Self-Cleaning Timer Composables
 - Timers for real-world delays must be managed through self-cleaning composables (`useTimeoutFn`, `useDebounceFn`) that cancel automatically on component unmount via `onScopeDispose` or effect teardown.
+
+### D. Listener Disposal
+- Every `addEventListener` has a matching teardown in the same module: `removeEventListener` with the same event and handler (for example in `onBeforeUnmount`, `onUnmounted`, `onScopeDispose` or an effect cleanup), an `AbortController` `{ signal }`, or `{ once: true }` (`LIFECYCLE_ORPHANED_LISTENER`).
 
 ---
 

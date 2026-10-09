@@ -4,9 +4,11 @@
  *   rules: { "RULE_ID": "off" | "low" | "medium" | "high" | "critical" }
  *   overrides: [{ files: "glob" | ["globs"], rules: { "RULE_ID": "off" | <severity> } }]
  *   ai-slop-detection: "off" drops AI_SLOP_* rules, "medium" caps them at MEDIUM.
+ *   pillars (from .chemx/config.json): a disabled product pillar drops its rules.
  * Later overrides win over earlier ones, and every override wins over `rules`.
  */
 import { globToRegExp } from './line-budgets.js';
+import { resolvePillarDisabledRules } from './rule-pillars.js';
 
 const SEVERITIES = new Map([['low', 'LOW'], ['medium', 'MEDIUM'], ['high', 'HIGH'], ['critical', 'CRITICAL']]);
 const SEVERITY_RANK = { LOW: 0, MEDIUM: 1, HIGH: 2, CRITICAL: 3 };
@@ -59,11 +61,13 @@ const applySlopPolicy = (violation, policy) => {
 /** Applies `rules`, `overrides` and `ai-slop-detection` to one file's violations. */
 export const applyRuleOverrides = (violations, relativePath, config = {}) => {
   const settings = resolveRuleSettings(relativePath, config);
+  const pillarDisabled = resolvePillarDisabledRules(config.pillars);
   const slopPolicy = String(config.rules?.aiSlopDetection ?? config.rules?.['ai-slop-detection'] ?? 'critical').toLowerCase();
   const result = [];
   for (const violation of violations) {
     const setting = settings[violation.rule];
-    if (setting === OFF) continue;
+    const isOff = setting === OFF || (!setting && pillarDisabled.has(violation.rule));
+    if (isOff) continue;
     const withSeverity = setting ? { ...violation, severity: setting } : violation;
     const afterSlop = setting ? withSeverity : applySlopPolicy(withSeverity, slopPolicy);
     if (afterSlop) result.push(afterSlop);
