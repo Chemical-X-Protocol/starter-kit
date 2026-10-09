@@ -45,7 +45,8 @@ export const getMcpPrompt = async (name, args = {}, cwd = process.cwd()) => {
       const relPath = path.relative(cwd, resolvedPath);
       const diagnosticLines = [];
 
-      if (fs.existsSync(resolvedPath) && fs.statSync(resolvedPath).isFile()) {
+      const isRegularFile = Boolean(fs.existsSync(resolvedPath) && fs.statSync(resolvedPath).isFile());
+      if (isRegularFile) {
         const fileContent = fs.readFileSync(resolvedPath, 'utf-8');
         const lineCount = fileContent.split(/\r?\n/).length;
         const { auditFile } = await import('../audit.js');
@@ -57,7 +58,8 @@ export const getMcpPrompt = async (name, args = {}, cwd = process.cwd()) => {
           `- Total Lines: ${lineCount}L (${describeLineBudgetPolicy()})`,
           `- Active Violations: ${violations.length}`
         );
-        if (violations.length > 0) {
+        const hasViolations = violations.length > 0;
+        if (hasViolations) {
           diagnosticLines.push('Critical & High Hazards:');
           for (const v of violations.slice(0, 10)) {
             diagnosticLines.push(`  * Line ${v.line}: [${v.ruleId}] ${v.message} (${v.severity})`);
