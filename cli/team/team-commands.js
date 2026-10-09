@@ -14,15 +14,16 @@ import { runCheckStagedArgs } from './team-commands-lock-staged.js';
 import { handleProfileCommand, handleHandoffCommand } from './team-commands-profile.js';
 import { handleDispatchCommand } from './team-commands-dispatch.js';
 import { handleRunTokens, parseRunArgs } from './team-commands-tokens.js';
+import { runAuditRunCli } from './audit-run.js';
 import { isBoardCommand, runBoardCommand } from './team-commands-board.js';
 import { runTaskCommand } from './team-commands-task.js';
 import { runTriage } from './team-commands-triage.js';
 import { handleMigrateCommand } from './team-commands-migrate.js';
 import { parseRepoFlags, resolveTaskIdArgs, REPO_VALUE_FLAGS } from './team-commands-repo.js';
 
-const ARG_VAL_FLAGS = ['--target', '--as', '--to', '--agent', '--since', '--limit', '--thread', '--task', '--parent', '--rule', '--priority', '--prio', '--moscow', '--needs', '--url', '--pid', ...REPO_VALUE_FLAGS];
+const ARG_VAL_FLAGS = ['--target', '--as', '--to', '--agent', '--since', '--limit', '--thread', '--task', '--parent', '--rule', '--priority', '--prio', '--moscow', '--needs', '--url', '--pid', '--run', '--projects', ...REPO_VALUE_FLAGS];
 
-const TEAM_COMMANDS = ['status', 'task', 'lock', 'unlock', 'feed', 'post', 'inbox', 'dm', 'tokens', 'triage', 'benchmark', 'train', 'migrate'];
+const TEAM_COMMANDS = ['status', 'task', 'lock', 'unlock', 'feed', 'post', 'inbox', 'dm', 'tokens', 'audit-run', 'triage', 'benchmark', 'train', 'migrate'];
 
 const splitPositionals = (restArgs) => {
   const positionals = [];
@@ -69,7 +70,7 @@ const runSubCommand = (ctx, args, isCli, cwd) => {
   const isKnown = Object.hasOwn(SUB_COMMANDS, subCommand);
   if (isKnown) return SUB_COMMANDS[subCommand](ctx, args, isCli, cwd);
   if (isCli) {
-    process.stderr.write(`\x1b[31m✕ Unknown team command: "${subCommand}". Available commands: status, task, feed, post, lock, unlock, triage, inbox, dm, profile, handoff, dispatch, benchmark, migrate\x1b[0m\n`);
+    process.stderr.write(`\x1b[31m✕ Unknown team command: "${subCommand}". Available commands: status, task, feed, post, lock, unlock, triage, inbox, dm, profile, handoff, dispatch, benchmark, migrate, tokens, audit-run\x1b[0m\n`);
   }
   return { error: `Unknown team command: ${subCommand}` };
 };
@@ -87,6 +88,9 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
   // migrate opens its own target (the coordination db, or --into) and never the cwd's silo.
   const isMigrate = args.subCommand === 'migrate';
   if (isMigrate) return handleMigrateCommand(args.flags, isCli, cwd);
+  // audit-run reads transcripts and uses the db only when one opens; it never needs the cwd's silo.
+  const isAuditRun = args.subCommand === 'audit-run';
+  if (isAuditRun) return runAuditRunCli(args.restArgs, args.flags, isCli, cwd);
   const ctx = openTeamContext(cwd);
   const isUnavailable = !ctx.db;
   if (isUnavailable) {
