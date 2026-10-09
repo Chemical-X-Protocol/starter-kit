@@ -55,7 +55,8 @@ export const generateMarkdownReport = (report) => {
   lines.push(`| **Largest File** | \`${metrics.largestFile.filePath || 'None'}\` | ${metrics.largestFile.lineCount} lines |`);
   lines.push(`| **Context Token Overhead** | ~${contextAnalysis.estimatedTokens.toLocaleString()} tokens | Est. Bloat: ~${contextAnalysis.estimatedExcessTokens.toLocaleString()} tokens |`);
   lines.push(`| **Token Reduction Target** | **${contextAnalysis.potentialSavingsPct}%** | Risk Level: **${contextAnalysis.riskLevel}** |`);
-  if (contextAnalysis.excessCostPerPass !== undefined) {
+  const hasExcessCostPerPass = contextAnalysis.excessCostPerPass !== undefined;
+  if (hasExcessCostPerPass) {
     lines.push(`| **Monolith Cost per Turn** | **$${contextAnalysis.excessCostPerPass.toFixed(3)}** | Model: ${contextAnalysis.pricingModel} |`);
     lines.push(`| **Projected Dev Context Tax** | **$${contextAnalysis.monthlyWastePerDev.toFixed(2)} / mo** | Est. $${contextAnalysis.weeklyWastePerDev.toFixed(2)} / week per engineer |`);
   }
@@ -80,7 +81,8 @@ export const generateMarkdownReport = (report) => {
   lines.push('');
   lines.push('## 3. Top Refactoring Hotspots');
   lines.push('');
-  if (hotspots.length === 0) {
+  const hasNoHotspots = hotspots.length === 0;
+  if (hasNoHotspots) {
     lines.push('No hotspot files identified. All analyzed files remain within architectural line budgets.');
   } else {
     lines.push('| Priority | File Path | Line Count | Violations | Monolith Hazard |');
@@ -98,30 +100,35 @@ export const generateMarkdownReport = (report) => {
   lines.push('## 4. Architectural Hazard Inventory (Grouped by Directory & Severity)');
   lines.push('');
 
-  if (violations.length === 0) {
+  const hasNoViolations = violations.length === 0;
+  if (hasNoViolations) {
     lines.push('Zero context hazard violations detected across all line budgets, hooks, and AST rules.');
   } else {
     lines.push(formatDirectoryRollupMarkdown(violations));
 
-    if (critical.length > 0) {
+    const hasCritical = critical.length > 0;
+    if (hasCritical) {
       lines.push('### Grade F: Critical Hazards & Extreme Monoliths (Immediate Action Required)');
       lines.push('');
       lines.push(renderGroupedViolationsMarkdown(critical, { showSeverity: false }));
     }
 
-    if (high.length > 0) {
+    const hasHigh = high.length > 0;
+    if (hasHigh) {
       lines.push('### Grade D: High Severity Debts & Severe Monoliths');
       lines.push('');
       lines.push(renderGroupedViolationsMarkdown(high, { showSeverity: false }));
     }
 
-    if (medium.length > 0) {
+    const hasMedium = medium.length > 0;
+    if (hasMedium) {
       lines.push('### Grade C: Medium Severity Debts & Monolithic Drift');
       lines.push('');
       lines.push(renderGroupedViolationsMarkdown(medium, { showSeverity: false }));
     }
 
-    if (low.length > 0) {
+    const hasLow = low.length > 0;
+    if (hasLow) {
       lines.push('### Grade B: Low Severity Hygiene & Minor Debts');
       lines.push('');
       lines.push(renderGroupedViolationsMarkdown(low, { showSeverity: false }));
@@ -137,7 +144,8 @@ export const generateMarkdownReport = (report) => {
   lines.push(`* **Slop Hazards Flagged**: **${slopViolations.length}**`);
   lines.push('');
 
-  if (slopViolations.length === 0) {
+  const hasNoSlopViolations = slopViolations.length === 0;
+  if (hasNoSlopViolations) {
     lines.push('🟢 Zero AI slop detected. Codebase demonstrates pure artisanal craftsmanship with no LLM conversational residue or echo comments.');
   } else {
     lines.push(renderGroupedViolationsMarkdown(slopViolations, { showSeverity: true }));
