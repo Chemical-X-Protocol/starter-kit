@@ -9,8 +9,10 @@
 // context: as group.js, plus roleKeyOf(row) (createRoleReader).
 import { admitted } from './group.js';
 import { byCodePoint, instanceOfRow, pushTo, spansFiles } from './group-shape.js';
+import { INSTANCE_RULES } from './gates.js';
 
 const T_SPEC = Object.freeze({ path: 'T', level: 3, kind: 'tmpl', needsLgg: true });
+const MIN_TEMPLATE_INSTANCES = INSTANCE_RULES.minTemplateInstances;
 
 /** Partitions of one bucket by structural role key, in code-point order of the keys. */
 export const partitionByRoles = (rows, roleKeyOf) => {
@@ -19,7 +21,10 @@ export const partitionByRoles = (rows, roleKeyOf) => {
   return [...partitions.keys()].sort(byCodePoint).map((key) => ({ roleKey: key, rows: partitions.get(key) }));
 };
 
+// Refinement re-parses member files, so a bucket too small for the rule of 3 is gated as it is.
 const bucketGroups = (rows, context) => {
+  const isTooSmall = rows.length < MIN_TEMPLATE_INSTANCES;
+  if (isTooSmall) return [admitted({ ...T_SPEC, facetKey: rows[0].facet_key }, rows, context, { toInstance: instanceOfRow })].filter(Boolean);
   const partitions = partitionByRoles(rows, context.roleKeyOf);
   const reasonPrefix = partitions.length > 1 ? 'refine.' : '';
   const spec = { ...T_SPEC, facetKey: rows[0].facet_key };

@@ -1,7 +1,9 @@
-// W (within-block siblings) on ground-truth item A1 (phases doc, P3 acceptance). The fixture
-// fixtures/team-flags.js.txt is a verbatim copy of cli/team/team-flags.js at commit 35c7798; it is
-// written back to cli/team/team-flags.js in a temp project, fingerprinted, and the W groups are scored
-// against the A1 labels (13 two-form flag pairs, interleaved at :69-73, :100-104 and :123-124).
+// W (within-block siblings) on ground-truth items A1 and A19 (phases doc, P3 acceptance). Fixtures are
+// verbatim copies: fixtures/team-flags.js.txt of cli/team/team-flags.js at commit 35c7798 and
+// fixtures/social-gh.js.txt of cli/audit/social-gh.js at commit ffa231e. Each is written back to its repo
+// path in a temp project, fingerprinted, and the W groups are scored against the labels: A1 is 13
+// two-form flag pairs interleaved at :69-73, :100-104 and :123-124; A19 is four `gh discussion create`
+// retries, three of them in sibling `if` blocks.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -20,20 +22,24 @@ delete process.env.CHEMX_PROJECT_ROOT;
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const FLAGS_FILE = 'cli/team/team-flags.js';
+const SOCIAL_FILE = 'cli/audit/social-gh.js';
 const A1 = gtItems().find((item) => item.id === 'A1');
+const A19 = gtItems().find((item) => item.id === 'A19');
 
-const flagsLedger = (t) => {
+const fixtureLedger = (t, fixture, repoPath) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-forge-w-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   fs.mkdirSync(path.join(dir, '.chemx'));
-  fs.mkdirSync(path.join(dir, 'cli', 'team'), { recursive: true });
-  const text = fs.readFileSync(path.join(HERE, 'fixtures', 'team-flags.js.txt'), 'utf-8');
-  fs.writeFileSync(path.join(dir, FLAGS_FILE), text);
+  fs.mkdirSync(path.join(dir, path.dirname(repoPath)), { recursive: true });
+  fs.writeFileSync(path.join(dir, repoPath), fs.readFileSync(path.join(HERE, 'fixtures', fixture), 'utf-8'));
   syncFingerprints(dir, { targetDir: dir, log: () => {} });
   return { ledger: readLedger(openIndexDb(dir)), readFile: (file) => fs.readFileSync(path.join(dir, file), 'utf-8') };
 };
 
-const coveredPairs = (group) => A1.anchors.filter((anchor) => group.instances.some((instance) => instance.startLine <= anchor.endLine && instance.endLine >= anchor.startLine)).length;
+const flagsLedger = (t) => fixtureLedger(t, 'team-flags.js.txt', FLAGS_FILE);
+
+const coveredAnchors = (item, group) => item.anchors.filter((anchor) => group.instances.some((instance) => instance.startLine <= anchor.endLine && instance.endLine >= anchor.startLine)).length;
+const coveredPairs = (group) => coveredAnchors(A1, group);
 
 const bestW = (groups, kind = 'window') => groups.filter((group) => group.path === 'W' && group.kind === kind).sort((a, b) => coveredPairs(b) - coveredPairs(a))[0];
 
@@ -73,6 +79,25 @@ test('a unify step that accepts the parseInt transform merges W buckets to cover
   assert.ok(coveredPairs(best) >= 10, `covers ${coveredPairs(best)} of 13 A1 pairs`);
   assert.equal(best.needsLgg, true);
   assert.equal(scoreGroups([A1], toScorerGroups([best])).perItem[0].credit, 1);
+});
+
+// Test double for the LGG: forms unify when, string literals aside, one side has a single extra imported
+// binding (a ref hole: DISCUSSION_CATEGORY_SLUG where the other retries pass a string).
+const unifySingleRef = (a, b) => {
+  const [left, right] = [nonStringAnchors(a), nonStringAnchors(b)];
+  const difference = [...left].filter((anchor) => !right.has(anchor)).concat([...right].filter((anchor) => !left.has(anchor)));
+  return difference.length === 1 && difference[0].startsWith('import:');
+};
+
+test('W over sibling blocks reaches the A19 retries once the ref hole unifies them', (t) => {
+  const { ledger, readFile } = fixtureLedger(t, 'social-gh.js.txt', SOCIAL_FILE);
+  const plain = buildForgeGroups(ledger, { readFile }).groups;
+  assert.equal(scoreGroups([A19], toScorerGroups(plain)).perItem[0].credit, 0);
+  const { groups } = buildForgeGroups(ledger, { readFile, unify: unifySingleRef });
+  const retries = groups.filter((group) => group.path === 'W' && coveredAnchors(A19, group) >= 3);
+  assert.ok(retries.length > 0);
+  assert.ok(retries.every((group) => new Set(group.instances.map((instance) => instance.blockId)).size >= 2 || group.kind === 'stmt'));
+  assert.equal(scoreGroups([A19], toScorerGroups(groups)).perItem[0].credit, 1);
 });
 
 test('the W floor needs 3 instances of mass >= 8 totalling >= 36', (t) => {

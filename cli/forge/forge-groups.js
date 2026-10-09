@@ -16,6 +16,7 @@ import { groupSiblings, groupTemplateSiblings } from './siblings.js';
 import { groupTemplates } from './templates.js';
 import { createRoleReader } from './template-roles.js';
 import { createReturnReader } from './exits.js';
+import { blocksOf } from './windows.js';
 
 export const PATH_ORDER = Object.freeze(['N1-fp1', 'N1-fp2', 'N1-fp3', 'N2', 'N3', 'W', 'T']);
 
@@ -53,13 +54,8 @@ const createTextReader = (readFile) => {
 
 // isBlockEnd(row): the stmt row is the last stored statement of its block.
 const createBlockEnds = (rows) => {
-  const lastOrdinal = new Map();
-  for (const row of rows) {
-    const isStmt = row.kind === 'stmt';
-    const key = `${row.file_path}#${row.block_id}`;
-    if (isStmt) lastOrdinal.set(key, Math.max(lastOrdinal.get(key) ?? 0, row.ordinal ?? 0));
-  }
-  return (row) => (row.ordinal ?? 0) >= (lastOrdinal.get(`${row.file_path}#${row.block_id}`) ?? 0);
+  const lastIds = new Set([...blocksOf(rows, 'stmt').values()].map((blockRows) => blockRows.at(-1).id));
+  return (row) => lastIds.has(row.id);
 };
 
 const pathRank = (group) => PATH_ORDER.indexOf(group.path);
@@ -93,7 +89,7 @@ export const buildForgeGroups = (ledger, { readFile = () => null, unify = null, 
   const context = {
     contentHashes: ledger.contentHashes,
     ubiquitousOf: createUbiquityIndex(ledger.rows),
-    returnsAt: createReturnReader(textOf),
+    ...createReturnReader(textOf),
     isBlockEnd: createBlockEnds(ledger.rows),
     roleKeyOf: createRoleReader(readFile).roleKeyOf,
     reject: (draft, reason, finish) => rejected.push(reason.startsWith(REFINE_PREFIX) ? { ...finish(), status: 'rejected', rejectReason: reason } : { path: draft.path, rejectReason: reason })

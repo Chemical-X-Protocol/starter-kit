@@ -10,8 +10,22 @@ const byStart = (a, b) => (a.start ?? 0) - (b.start ?? 0) || a.ordinal - b.ordin
 
 const blockKeyOf = (row) => `${row.file_path}#${row.block_id}`;
 
-/** Map of `${file}#${blockId}` to that block's rows of one kind, in source order; keys in code-point order. */
+// N2, W, sibling families and block ends all read the same blocks: computed once per rows array and kind.
+const BLOCK_CACHE = new WeakMap();
+
+/**
+ * Map of `${file}#${blockId}` to that block's rows of one kind, in source order; keys in code-point order.
+ * Memoized per rows array, so callers must not mutate the result.
+ */
 export const blocksOf = (rows, kind = 'stmt') => {
+  const cached = BLOCK_CACHE.get(rows) ?? new Map();
+  BLOCK_CACHE.set(rows, cached);
+  const isKnown = cached.has(kind);
+  if (!isKnown) cached.set(kind, collectBlocks(rows, kind));
+  return cached.get(kind);
+};
+
+const collectBlocks = (rows, kind) => {
   const blocks = new Map();
   for (const row of rows) {
     const isKind = row.kind === kind && row.block_id !== null;

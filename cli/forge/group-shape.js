@@ -64,6 +64,7 @@ export const instanceOfRows = (rows) => {
     file: first.file_path,
     unitIds: rows.map((row) => row.id),
     kind: 'window',
+    blockId: first.block_id,
     start: first.start,
     end: last.end,
     startLine: first.start_line,

@@ -9,10 +9,14 @@
 //       LGG then allows one variant hole (needsLgg).
 // A statement instance (N1) or window (N2) that returns from its function must end its block (exits.js);
 // one that returns from the middle cannot be cut out as a piece and is dropped before the gates.
-// context: { contentHashes, ubiquitousOf, returnsAt(file, start, end), isBlockEnd(row), reject(draft, reason, finish) };
-// reject hears every group that failed its gate or instance rules; finish() builds it in full.
-import { draftGroup, finishGroup, instanceOfRow, instanceOfRows, pushTo, spansFiles } from './group-shape.js';
-import { admitGroup, labelIdiom } from './gates.js';
+// Parsing a span for its returns is the costly step, so a bucket is first gated on the members that
+// surely stay (no `return` word, or at the end of their block): metrics only rise as members drop, so
+// when even those fail the gate, the filtered group fails it too and nothing is parsed.
+// context: { contentHashes, ubiquitousOf, mayReturnAt and returnsAt(file, start, end), isBlockEnd(row),
+// reject(draft, reason, finish) }; reject hears every group that failed its gate or instance rules and
+// finish() builds it in full.
+import { draftGroup, finishGroup, instanceOfRow, instanceOfRows, metricsOf, pushTo, spansFiles } from './group-shape.js';
+import { admitGroup, checkGate, labelIdiom, GATE_OF_PATH } from './gates.js';
 import { blocksOf, runsOf, windowsOfRuns, windowKeyOf, nonOverlapping, dropDominated } from './windows.js';
 
 export const N1_LEVELS = Object.freeze([
@@ -68,40 +72,49 @@ const exactBuckets = (rows, spec) => {
   return [...buckets].filter(([, members]) => spansFiles(members)).map(([key, members]) => ({ kind: key.slice(0, key.indexOf('|')), rows: members }));
 };
 
-const isStrandedRow = (kind, row, context) => {
-  const isMidBlockStmt = kind === 'stmt' && !context.isBlockEnd(row);
-  return isMidBlockStmt && context.returnsAt(row.file_path, row.start, row.end);
+// A span that may return from the middle of its block: (first, last) are its first and last stmt rows.
+const mayStrand = (first, last, context) => !context.isBlockEnd(last) && context.mayReturnAt(first.file_path, first.start, last.end);
+
+const strands = (first, last, context) => mayStrand(first, last, context) && context.returnsAt(first.file_path, first.start, last.end);
+
+const failsGateEarly = (spec, sureMembers, context) => {
+  const hasSure = sureMembers.length > 0;
+  return hasSure && !checkGate(GATE_OF_PATH[spec.path], metricsOf(sureMembers, context.ubiquitousOf(spec.facetKey))).ok;
 };
 
 const exactGroup = (spec, bucket, context) => {
   const { kind } = bucket;
-  const kept = bucket.rows.filter((row) => !isStrandedRow(kind, row, context));
+  const groupSpec = { ...spec, kind, facetKey: bucket.rows[0].facet_key };
+  const toInstance = (row) => ({ ...instanceOfRow(row), kind });
+  const isStmt = kind === 'stmt';
+  const sure = isStmt ? bucket.rows.filter((row) => !mayStrand(row, row, context)) : bucket.rows;
+  const isHopeless = failsGateEarly(groupSpec, sure, context);
+  if (isHopeless) return admitted(groupSpec, bucket.rows, context, { toInstance });
+  const kept = isStmt ? bucket.rows.filter((row) => !strands(row, row, context)) : bucket.rows;
   const isStillCrossFile = spansFiles(kept);
   if (!isStillCrossFile) return null;
-  const toInstance = (row) => ({ ...instanceOfRow(row), kind });
-  return admitted({ ...spec, kind, facetKey: kept[0].facet_key }, kept, context, { toInstance });
+  return admitted(groupSpec, kept, context, { toInstance });
 };
 
 /** N1: exact fp buckets at fp1, fp2 and fp3, in that order. */
 export const groupExact = (rows, context) =>
   N1_LEVELS.flatMap((spec) => exactBuckets(rows, spec).map((entries) => exactGroup(spec, entries, context)).filter(Boolean));
 
-const hasStrandedReturn = (window, context) => {
-  const isInner = !context.isBlockEnd(window.rows.at(-1));
-  const first = window.rows[0];
-  return isInner && context.returnsAt(first.file_path, first.start, window.rows.at(-1).end);
-};
-
 const blockOfWindow = (window) => `${window.rows[0].file_path}#${window.rows[0].block_id}`;
 
-// One bucket's windows: the return rule, then non-overlapping per block.
-const windowInstances = (windows, context) => {
+const nonOverlappingInstances = (windows) => {
   const byBlock = new Map();
-  for (const window of windows) {
-    const isKept = !hasStrandedReturn(window, context);
-    if (isKept) pushTo(byBlock, blockOfWindow(window), window);
-  }
+  for (const window of windows) pushTo(byBlock, blockOfWindow(window), window);
   return [...byBlock.values()].flatMap((blockWindows) => nonOverlapping(blockWindows)).map((window) => instanceOfRows(window.rows));
+};
+
+// One bucket's windows: the return rule, then non-overlapping per block (none when the bucket is hopeless).
+const windowInstances = (windows, context) => {
+  const sure = windows.filter((window) => !mayStrand(window.rows[0], window.rows.at(-1), context));
+  const spec = { ...N2_SPEC, facetKey: windows[0].rows[0].facet_key };
+  const isHopeless = failsGateEarly(spec, nonOverlappingInstances(sure), context);
+  if (isHopeless) return [];
+  return nonOverlappingInstances(windows.filter((window) => !strands(window.rows[0], window.rows.at(-1), context)));
 };
 
 // A statement whose fp2 occurs in only one file of its facet can be in no cross-file window.

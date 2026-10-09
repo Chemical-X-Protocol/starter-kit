@@ -10,10 +10,14 @@
 //     fp3 is not required: the int and string flag forms of A1 differ at fp3 (parseInt is an anchor) and
 //     merge only through a transform hole. Without unify nothing merges, since no fp level alone tells a
 //     transform hole from shapes whose LGG fails R1/R2.
+//   - Sibling blocks (sibling-blocks.js: the bodies of statements that share a parent block) are bucketed
+//     the same way across the blocks of one family; a bucket counts there only when its instances span at
+//     least 2 blocks (one block alone is the per-block pass). This is how A19 (four retries) is reached.
 //   - Template siblings under one parent are handled the same way at tmpl fp2 (k = 1), and also need G4.
 import { instanceOfRow, instanceOfRows, makeGroup, pushTo } from './group-shape.js';
 import { checkGate, labelIdiom } from './gates.js';
 import { blocksOf, runsOf, windowsOfRuns, windowKeyOf, nonOverlapping, dropDominated } from './windows.js';
+import { siblingBlockFamilies } from './sibling-blocks.js';
 
 export const W_FLOOR = Object.freeze({ minInstances: 3, minInstanceMass: 8, minTotalMass: 36, maxK: 6 });
 
@@ -32,16 +36,18 @@ export const passesWFloor = (instances) => {
 };
 
 // Without unify a bucket holds one fp2 sequence, so a statement whose fp2 occurs fewer than 3 times in
-// its block is in no kept window. With unify, buckets of different fp2 may merge, so every row counts.
-const eligibilityOf = (blockRows, unify) => {
+// its scope is in no kept window. With unify, buckets of different fp2 may merge, so every row counts.
+const eligibilityOf = (blocks, unify) => {
   const counts = new Map();
-  for (const row of blockRows) counts.set(row.fp2, (counts.get(row.fp2) ?? 0) + 1);
+  for (const row of blocks.flat()) counts.set(row.fp2, (counts.get(row.fp2) ?? 0) + 1);
   return unify ? () => true : (row) => counts.get(row.fp2) >= W_FLOOR.minInstances;
 };
 
-const bucketBlock = (blockRows, unify) => {
+// Buckets the windows of a scope (one block, or a family of sibling blocks) by fp2 sequence.
+const bucketScope = (blocks, unify) => {
   const buckets = new Map();
-  const runs = runsOf(blockRows, eligibilityOf(blockRows, unify));
+  const isEligible = eligibilityOf(blocks, unify);
+  const runs = blocks.flatMap((blockRows) => runsOf(blockRows, isEligible));
   for (const window of windowsOfRuns(runs, { minK: 1, maxK: W_FLOOR.maxK })) {
     pushTo(buckets, `${window.k}|${windowKeyOf(window.rows, 2)}`, window);
   }
@@ -90,16 +96,25 @@ const toGroup = (bucket, facetKey, context, extra = {}) => {
   return labelIdiom(makeGroup(spec, bucket.instances, context));
 };
 
-const statementGroups = (blockRows, context, unify) => {
-  const facetKey = blockRows[0].facet_key;
-  const buckets = bucketBlock(blockRows, unify).map((bucket) => ({ ...bucket, kind: 'stmt' }));
-  const kept = dropDominated(mergeByUnify(buckets, unify).filter((bucket) => passesWFloor(bucket.instances)));
+const spansBlocks = (bucket) => new Set(bucket.instances.map((instance) => instance.blockId)).size >= 2;
+
+const ANY_BUCKET = () => true;
+
+const statementGroups = (blocks, context, unify, isInScope = ANY_BUCKET) => {
+  const facetKey = blocks[0][0].facet_key;
+  const buckets = bucketScope(blocks, unify).map((bucket) => ({ ...bucket, kind: 'stmt' }));
+  const kept = dropDominated(mergeByUnify(buckets, unify).filter((bucket) => passesWFloor(bucket.instances) && isInScope(bucket)));
   return kept.map((bucket) => toGroup(bucket, facetKey, context));
 };
 
-/** W over statement blocks. options.unify(instanceA, instanceB) => boolean merges same-block buckets. */
-export const groupSiblings = (rows, context, { unify = null } = {}) =>
-  [...blocksOf(rows, 'stmt').values()].flatMap((blockRows) => statementGroups(blockRows, context, unify));
+/**
+ * W over statement blocks, then over families of sibling blocks. options.unify(instanceA, instanceB)
+ * => boolean merges buckets of one scope.
+ */
+export const groupSiblings = (rows, context, { unify = null } = {}) => [
+  ...[...blocksOf(rows, 'stmt').values()].flatMap((blockRows) => statementGroups([blockRows], context, unify)),
+  ...siblingBlockFamilies(rows).flatMap((family) => statementGroups(family, context, unify, spansBlocks))
+];
 
 const templateGroups = (siblings, context) => {
   const facetKey = siblings[0].facet_key;

@@ -42,13 +42,18 @@ const parsedReturns = (text) => {
 /** True when the statements in text return from their own (enclosing) function. */
 export const hasOwnReturn = (text) => RETURN_WORD.test(text) && parsedReturns(text);
 
-/** Memoized hasOwnReturn over (file, start, end) spans; textOf(file, start, end) reads the span. */
+/**
+ * Span readers over textOf(file, start, end): mayReturnAt is the cheap word test (false means the span
+ * surely has no own return), returnsAt the memoized parse.
+ */
 export const createReturnReader = (textOf) => {
   const cache = new Map();
-  return (file, start, end) => {
+  const mayReturnAt = (file, start, end) => RETURN_WORD.test(textOf(file, start, end));
+  const returnsAt = (file, start, end) => {
     const key = `${file}:${start}:${end}`;
     const isKnown = cache.has(key);
     if (!isKnown) cache.set(key, hasOwnReturn(textOf(file, start, end)));
     return cache.get(key);
   };
+  return { mayReturnAt, returnsAt };
 };
