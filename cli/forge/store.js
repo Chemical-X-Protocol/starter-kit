@@ -8,7 +8,7 @@ import { anchorWeight } from './anchors.js';
 
 // Bump when units, canonicalization, hashing, facets or the store floor change meaning: every file
 // whose row carries another version is fingerprinted again.
-export const FORGE_EXTRACTOR_VERSION = 2;
+export const FORGE_EXTRACTOR_VERSION = 3;
 
 const SQL = {
   stamps: 'SELECT path, content_hash, mtime_ms, size, extractor_version, facet_key FROM pattern_files',

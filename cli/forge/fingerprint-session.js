@@ -97,7 +97,7 @@ export const createForgeSession = (db, { root, log = writeStderr, batchSize = 10
   };
 
   const record = (relPath, entry, collected) => {
-    const selected = selectStoredUnits(collected.units);
+    const selected = selectStoredUnits(collected.units, { isSpec: entry.facet.spec });
     const isCapped = selected.capDropped > 0;
     if (isCapped) log(`forge: ${relPath} kept ${selected.units.length} units, ${selected.capDropped} over the ${STORE_FLOOR.maxUnitsPerFile}-row cap dropped`);
     stats.capped += isCapped ? 1 : 0;

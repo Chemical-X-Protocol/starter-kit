@@ -5,6 +5,8 @@
 //         The stmt fp wraps the expression in ExpressionStatement, so it alone could not join the
 //         same expression used as a return argument, initializer or call argument elsewhere; N1
 //         matches expr fps against both fp* and inner_fp*, so no cross-context bucket is lost.
+//   expr  every expr unit of a spec facet: spec code groups by fn bodies and stmt windows (setup
+//         blocks such as ground-truth A16); assertion expressions alone were 5.2k rows of noise
 //   fn    a body below both gates that apply alone (G1 mass >= 8, G2 E >= 30)
 //   stmt  the only statement of its block below both gates: no window (N2 k >= 2, W >= 3 instances)
 //         can include it, so it could only ever group on its own
@@ -31,10 +33,10 @@ const blockSizesOf = (units) => {
   return sizes;
 };
 
-const createFloorTest = (units, stmtStarts) => {
+const createFloorTest = (units, stmtStarts, isSpec) => {
   const blockSizes = blockSizesOf(units);
   return {
-    expr: (unit) => stmtStarts.has(unit.startOffset),
+    expr: (unit) => isSpec || stmtStarts.has(unit.startOffset),
     fn: (unit) => isBelowSoloGates(unit),
     stmt: (unit) => blockSizes.get(unit.blockId) === 1 && isBelowSoloGates(unit),
     tmpl: () => false
@@ -55,12 +57,12 @@ const withInnerFps = (unit, folded) => {
 const byPriority = (a, b) => KIND_PRIORITY[a.unit.kind] - KIND_PRIORITY[b.unit.kind] || a.index - b.index;
 
 /**
- * Applies the floor, then the per-file cap. Returns { units, floorDropped, capDropped } with units
- * in their original (source) order.
+ * Applies the floor, then the per-file cap. options.isSpec: the file is in a spec facet. Returns
+ * { units, floorDropped, capDropped } with units in their original (source) order.
  */
-export const selectStoredUnits = (units, { maxUnits = STORE_FLOOR.maxUnitsPerFile } = {}) => {
+export const selectStoredUnits = (units, { maxUnits = STORE_FLOOR.maxUnitsPerFile, isSpec = false } = {}) => {
   const stmtStarts = new Set(units.filter((unit) => unit.kind === 'stmt').map((unit) => unit.startOffset));
-  const isFloored = createFloorTest(units, stmtStarts);
+  const isFloored = createFloorTest(units, stmtStarts, isSpec);
   const folded = foldedExprsOf(units, stmtStarts);
   const floored = units.filter((unit) => !isFloored[unit.kind](unit)).map((unit) => withInnerFps(unit, folded));
   const isOverCap = floored.length > maxUnits;

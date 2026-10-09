@@ -129,6 +129,16 @@ test('a floored expression statement keeps its expression fps for cross-context 
   assert.equal(row.inner_fp1, exprA.fp1, 'the ledger row carries inner_fp1');
 });
 
+test('a spec facet stores no expr rows but keeps its fn and stmt rows', () => {
+  const content = fs.readFileSync(path.join(KIT_ROOT, SOURCE), 'utf-8');
+  const { units } = collectFileUnits(SOURCE, content);
+  const asSource = selectStoredUnits(units).units;
+  const asSpec = selectStoredUnits(units, { isSpec: true }).units;
+  assert.ok(asSource.some((unit) => unit.kind === 'expr'), 'the source facet keeps expr rows');
+  assert.equal(asSpec.some((unit) => unit.kind === 'expr'), false);
+  assert.deepEqual(asSpec.map((unit) => unit.startOffset), asSource.filter((unit) => unit.kind !== 'expr').map((unit) => unit.startOffset));
+});
+
 test('the per-file cap keeps fn units first and reports what it dropped', () => {
   const content = fs.readFileSync(path.join(KIT_ROOT, SOURCE), 'utf-8');
   const { units } = collectFileUnits(SOURCE, content);
