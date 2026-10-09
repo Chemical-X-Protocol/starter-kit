@@ -49,7 +49,8 @@ export const createToolCaller = ({ scopeInputs, staleness = null }) => {
     const isBatch = MASTER_TOOL_NAMES.has(toolName) && isBatchCall(toolArgs);
     if (isBatch) return callBatch(toolName, toolArgs);
     const scope = await scopeFor(toolName, toolArgs);
-    if (!scope.ok) return decorate(errorEnvelope(`Error executing tool "${toolName}": ${scope.error}`), scope);
+    const isScopeRefused = !Boolean(scope.ok);
+    if (isScopeRefused) return decorate(errorEnvelope(`Error executing tool "${toolName}": ${scope.error}`), scope);
     try {
       const output = await executeMcpTool(toolName, bindToRoot(toolName, toolArgs, scope.root), scope.root);
       return decorate(toEnvelope(output), scope);
