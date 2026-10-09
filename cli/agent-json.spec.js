@@ -74,3 +74,12 @@ test('agent json: typecheck and test --json are never larger than the raw tool o
   assert.deepStrictEqual(typecheck.errors['src/routes/router.ts'], ["5:1 TS1005 ';' expected.", "77:30 TS2345 Argument of type 'number' is not assignable to parameter of type 'string'."]);
   fs.rmSync(dir, { recursive: true, force: true });
 });
+
+test('agent json: colored "pretty" tsc output still parses into diagnostics', async () => {
+  const { parseTypecheckOutput } = await import('./verify-helpers.js');
+  const pretty = `${ESC}[96msrc/a.ts${ESC}[0m:${ESC}[93m1${ESC}[0m:${ESC}[93m5${ESC}[0m - ${ESC}[91merror${ESC}[0m${ESC}[90m TS2322: ${ESC}[0mType 'string' is not assignable to type 'number'.\n`;
+  const [diagnostic] = parseTypecheckOutput(pretty, '');
+  assert.ok(diagnostic, 'the colored diagnostic is recognized');
+  assert.strictEqual(diagnostic.file, 'src/a.ts');
+  assert.strictEqual(diagnostic.code, 'TS2322');
+});
