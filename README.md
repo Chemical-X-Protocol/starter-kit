@@ -446,8 +446,8 @@ Contract:
 - **Writes** (`write`, `patch`, `autofix`, `generate`, team writes, `issue` with `autoPost`, `audit` with `triage`, `check RESTART_MCP`) are refused when the root was only guessed from the start directory.
 - **Shell.** `build`/`test`/`typecheck` with `params.command` run only when the command is a `package.json` script of the project (its body, or `npm run <name>`), unless the server runs with `CHEMX_MCP_ALLOW_SHELL=1`. Children get no stdin and a timeout (`CHEMX_CHILD_TIMEOUT_MS`, default 15 min).
 - **Batch.** Every item is scope-checked before any item runs; the batch status is the worst item status (`fail` > `inconclusive` > `pass`).
-- **Results.** Plain text without ANSI. Every result ends with `chemx root: <root> (<source>) v<version>`. When the code on disk differs from the running server you also get `stale chemx MCP server (loaded X, disk Y): reconnect via /mcp`.
-- **Protocol.** `serverInfo.version` is the package version. Long calls honour `_meta.progressToken` (progress notifications) and `notifications/cancelled`.
+- **Results.** Plain text without ANSI. Every result ends with `chemx root: <root> (<source>) v<version>`. When the code on disk differs from the running server you also get `stale chemx MCP server (loaded X, disk Y): reconnect via /mcp`, and each call then runs in a fresh process that loads the code on disk (slower), with a notice on its own first line. If the code on disk does not import, mutating calls are refused (the call never started) and read-only calls run on the old loaded code under a WARNING. If the fresh process imports the code but dies without a result, the call fails with outcome unknown (it may have partly run): check the targeted files before retrying. A timeout kills the fresh process and also leaves the outcome unknown.
+- **Protocol.** `serverInfo.version` is `<package version>+cli.<fingerprint of cli/ sources>`, so it changes when the code on disk changes. Long calls honour `_meta.progressToken` (progress notifications) and `notifications/cancelled`.
 
 ### Living Resources & Prompts
 
