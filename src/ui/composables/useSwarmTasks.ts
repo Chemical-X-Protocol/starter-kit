@@ -7,13 +7,16 @@ export function useSwarmTasks() {
   const error = ref<Error | null>(null);
 
   const fetchTasks = async () => {
-    if (typeof fetch !== 'function') return;
+    const hasFetch = typeof fetch === 'function';
+    if (!hasFetch) return;
     try {
       isLoading.value = true;
       const res = await fetch('/api/swarm/status');
-      if (res.ok) {
+      const isResponseOk = Boolean(res.ok);
+      if (isResponseOk) {
         const data = await res.json();
-        if (data.tasks) tasks.value = data.tasks;
+        const hasTasks = Boolean(data.tasks);
+        if (hasTasks) tasks.value = data.tasks;
       }
     } catch (err) {
       error.value = err instanceof Error ? err : new Error(String(err));
@@ -23,7 +26,8 @@ export function useSwarmTasks() {
   };
 
   const createTask = async (title: string) => {
-    if (typeof fetch !== 'function') return;
+    const hasFetch = typeof fetch === 'function';
+    if (!hasFetch) return;
     try {
       await fetch('/api/swarm/tasks', {
         method: 'POST',
@@ -37,7 +41,8 @@ export function useSwarmTasks() {
   };
 
   const claimTask = async (taskId: string, agentId = '@coordinator') => {
-    if (typeof fetch !== 'function') return;
+    const hasFetch = typeof fetch === 'function';
+    if (!hasFetch) return;
     try {
       await fetch('/api/swarm/tasks/claim', {
         method: 'POST',
@@ -51,7 +56,8 @@ export function useSwarmTasks() {
   };
 
   const completeTask = async (taskId: string) => {
-    if (typeof fetch !== 'function') return;
+    const hasFetch = typeof fetch === 'function';
+    if (!hasFetch) return;
     try {
       await fetch('/api/swarm/tasks/done', {
         method: 'POST',
