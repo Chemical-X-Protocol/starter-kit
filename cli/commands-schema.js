@@ -3,6 +3,8 @@
  * Single source of truth for CLI commands, aliases, flags, descriptions, and examples.
  */
 
+import { HOST_COMMANDS } from './commands-schema-host.js';
+
 export const COMMANDS_SCHEMA = [
   {
     name: 'search',
@@ -410,70 +412,5 @@ export const COMMANDS_SCHEMA = [
       'cx do "q -g theme" "d"'
     ]
   },
-  {
-    name: 'hook',
-    aliases: [],
-    usage: 'chemx hook <claude-pre-tool|claude-post-edit|session-start|statusline>',
-    summary: 'Claude Code hook handlers: read the hook JSON on stdin, fail open.',
-    description: 'claude-pre-tool routes raw runners, git diff/log and repo source reads through chemx using a real shell tokenizer; a `# chemx-bypass: <reason>` comment allows the call and logs friction. Installed hooks call node <kit>/cli/hooks/entry.js <hook> to skip CLI boot.',
-    flags: [],
-    examples: [
-      'echo \'{"tool_name":"Bash","tool_input":{"command":"git log"}}\' | chemx hook claude-pre-tool'
-    ]
-  },
-  {
-    name: 'install-hooks',
-    aliases: [],
-    usage: 'chemx install-hooks --host=claude [--scope=local|project] [--dry-run] [--json]',
-    summary: 'Install chemx hooks, statusline and the .mcp.json launch for a host, idempotently.',
-    description: 'Merges into .claude/settings(.local).json, backing up to .chemx/backups first. Replaces only chemx-owned entries (including the bootstrap chemx-guard.mjs), never foreign ones. Re-pins an existing chemx pre-commit hook and CI workflow to the same chemx. Without --host it runs the guardrail wizard.',
-    flags: [
-      { flag: '--host=claude', desc: 'Target host (required for this mode)' },
-      { flag: '--scope=local|project', desc: 'settings.local.json (default) or the shared settings.json' },
-      { flag: '--dry-run', desc: 'Print the plan; write nothing' },
-      { flag: '--no-mcp', desc: 'Leave .mcp.json alone' },
-      { flag: '--no-statusline', desc: 'Leave statusLine alone' },
-      { flag: '--git-hook', desc: 'Also create the pinned git pre-commit hook when missing' },
-      { flag: '--ci', desc: 'Also create the pinned CI workflow when missing' },
-      { flag: '--json', desc: 'Machine-readable report' }
-    ],
-    examples: [
-      'chemx install-hooks --host=claude --dry-run',
-      'chemx install-hooks --host=claude --scope=project'
-    ]
-  },
-  {
-    name: 'doctor',
-    aliases: [],
-    usage: 'chemx doctor [--fix] [--json] [--root=<dir>]',
-    summary: 'Diagnose how this machine runs chemx: PATH bins, MCP launch and running servers, index, hooks, shims, node.',
-    description: 'Reports each check as ok, FAIL or ?? (inconclusive). Running MCP servers are read from /proc with their version, root and whether the kit code changed after they started. --fix repairs only hooks and the .mcp.json launch (idempotent, backed up); it never edits shims and never kills processes.',
-    flags: [
-      { flag: '--fix', desc: 'Repair hooks and the MCP launch via install-hooks' },
-      { flag: '--json', desc: 'Machine-readable report' },
-      { flag: '--root=<dir>', desc: 'Project root (default: git toplevel)' }
-    ],
-    examples: [
-      'chemx doctor',
-      'chemx doctor --fix'
-    ]
-  },
-  {
-    name: 'friction',
-    aliases: [],
-    usage: 'chemx friction [summary | add "<note>" | export --to=<file.md>] | --usage <transcript dir>',
-    summary: 'Read back guard denials, bypasses and wrong calls; measure chemx adoption from agent transcripts.',
-    description: 'Hooks append denials and `# chemx-bypass:` reasons to .chemx/friction.jsonl automatically; unknown chemx commands are captured too. export appends new entries (cursor-tracked) to a Markdown log. --usage reads Claude Code JSONL transcripts and counts chemx vs raw calls, bypass reasons, grep -r vs q, piped chemx output, MCP calls and guard denials.',
-    flags: [
-      { flag: '--usage', desc: 'Usage report from transcript files or directories' },
-      { flag: '--to=<file.md>', desc: 'export target' },
-      { flag: '--dry-run', desc: 'export: show what would be appended' },
-      { flag: '--json', desc: 'Machine-readable output' }
-    ],
-    examples: [
-      'chemx friction',
-      'chemx friction export --to=docs/friction-log.md',
-      'chemx friction --usage ~/.claude/projects/<project>/<session>/subagents'
-    ]
-  }
+  ...HOST_COMMANDS
 ];
