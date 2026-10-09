@@ -46,7 +46,8 @@ export const readFriction = (root, env = process.env) => {
     const isBlank = line.trim() === '';
     if (isBlank) continue;
     const parsed = parseLine(line);
-    if (parsed.ok) entries.push(parsed.value);
+    const isParsed = Boolean(parsed.ok);
+    if (isParsed) entries.push(parsed.value);
     else malformed += 1;
   }
   return { file, entries, malformed };
