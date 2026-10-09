@@ -10,7 +10,8 @@ import { changedPackages, runPerPackage, changeNotes, allPackagesOrRefuse } from
 // Returns { ok, base, files } (root-relative source files that still exist) or { ok: false, error }.
 export const resolveVerifyChanges = (root, base = null) => {
   const listing = listChangedFiles(root, { base });
-  if (!listing.ok) return { ok: false, error: listing.error };
+  const isListingFailed = !listing.ok;
+  if (isListingFailed) return { ok: false, error: listing.error };
   const files = listing.files.filter((f) => f.status !== 'D' && isSourceFilePath(f.path)).map((f) => f.path);
   return { ok: true, base: listing.base, files };
 };
@@ -25,7 +26,8 @@ export const testArgsFor = (changes, base) => (changes ? ['--changed', ...(base 
 export const verifyWorkspace = async (workspace, { changed, base, allPackages }, runInPackage) => {
   if (!changed) return allPackagesOrRefuse(workspace, 'verify', allPackages, 'use --dir=<package>, use --changed', (pkg) => runInPackage(pkg, []));
   const changes = changedPackages(workspace, base);
-  if (!changes.ok) return { status: STATUS.INCONCLUSIVE, success: false, reason: 'NO_CHANGES', error: `cannot list changed files: ${changes.error}`, packages: [] };
+  const isChangesFailed = !changes.ok;
+  if (isChangesFailed) return { status: STATUS.INCONCLUSIVE, success: false, reason: 'NO_CHANGES', error: `cannot list changed files: ${changes.error}`, packages: [] };
   const args = testArgsFor(changes, base);
   const extraStatuses = changes.rootManifests.length > 0 || changes.packages.length === 0 ? [STATUS.INCONCLUSIVE] : [];
   const units = changes.packages.map((pkg) => ({ pkg, args }));
