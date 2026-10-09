@@ -33,7 +33,8 @@ const recordToolUse = (report, block) => {
   const call = classifyBashCall(String(block.input?.command ?? ''));
   bump(report.bash, call.category);
   for (const sub of call.chemx) bump(report.chemx, sub);
-  if (call.bypass) bump(report.bypass, call.bypass);
+  const hasBypass = Boolean(call.bypass);
+  if (hasBypass) bump(report.bypass, call.bypass);
   for (const rule of call.raw) bump(report.raw, rule);
   report.search['grep -r / rg'] += call.search.length;
   report.search['chemx q'] += call.chemx.filter((sub) => sub === 'q' || sub === 'search').length;
@@ -57,7 +58,8 @@ export const buildUsageReport = (targets) => {
       const hasBlocks = Array.isArray(content);
       if (!hasBlocks) continue;
       for (const block of content) {
-        if (block.type === 'tool_use') recordToolUse(report, block);
+        const isToolUse = block.type === 'tool_use';
+        if (isToolUse) recordToolUse(report, block);
         const isDenial = block.type === 'tool_result' && resultText(block).includes(GUARD_DENIAL);
         if (isDenial) report.guardDenials += 1;
       }
