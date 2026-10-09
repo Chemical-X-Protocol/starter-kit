@@ -24,7 +24,7 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
     evaluateAuditFailure,
     isNonInteractiveSession
   } = await import('../audit/rules-predicates.js');
-  const { resolveGitAuditScope } = await import('../audit-preflight-git.js');
+  const { resolveGitAuditScope, resolveStagedAuditScope } = await import('../audit-preflight-git.js');
   const { syncSearchIndex, syncViolationsIndex } = await import('../search.js');
   const { resolveAuditScope, toRelDir } = await import('../audit-scope.js');
   const { computeGateVerdict } = await import('../audit/gate-verdict.js');
@@ -82,7 +82,8 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
   const customDirValue = isCustomDirFlag ? customDir.split('=')[1] : customDir;
   const explicitDir = customDirValue || (dirFlag ? dirFlag.split('=')[1] : null);
   const resolvedScope = resolveAuditScope({ projectRoot: process.cwd(), explicitDir });
-  const hasGitFlag = rawArgs.includes('--git') || rawArgs.includes('--changed');
+  const isStagedScope = rawArgs.includes('--staged');
+  const hasGitFlag = rawArgs.includes('--git') || rawArgs.includes('--changed') || isStagedScope;
   const isGitScopedAmbiguity = hasGitFlag && resolvedScope.reason === 'ambiguous';
   const scope = isGitScopedAmbiguity ? { ok: true, dir: process.cwd(), relDir: '.', source: 'git' } : resolvedScope;
   if (!scope.ok) {
@@ -96,8 +97,15 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
   let fileList = null;
 
   if (hasGitFlag) {
-    const gitScope = resolveGitAuditScope(process.cwd());
-    if (gitScope.ok) fileList = gitScope.files;
+    const gitScope = isStagedScope ? resolveStagedAuditScope(process.cwd()) : resolveGitAuditScope(process.cwd());
+    if (gitScope.ok || isStagedScope) fileList = gitScope.files;
+  }
+  // An empty staged list is a vacuous pass for a commit gate, never a silent whole-project scan.
+  const hasNothingStaged = isStagedScope && fileList.length === 0;
+  if (hasNothingStaged) {
+    const empty = { files: 0, scope: 'staged', gate: { passing: true, basis: 'staged', note: 'No staged source files to audit.' } };
+    process.stdout.write(isJson ? `${JSON.stringify(empty)}\n` : `${empty.gate.note}\n`);
+    return empty;
   }
 
   const isRebaseline = rawArgs.includes('--rebaseline');
@@ -110,7 +118,7 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
     return { success: false, error: message };
   }
 
-  const shouldRunPreflight = isCli && isInteractive && !isJson && !isMarkdown && !isShare;
+  const shouldRunPreflight = isCli && isInteractive && !isJson && !isMarkdown && !isShare && !isStagedScope;
   if (shouldRunPreflight) {
     const { runAuditPreflight } = await import('../audit-preflight.js');
     const preflight = await runAuditPreflight(rawArgs, {
@@ -139,7 +147,9 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
   report.scope = auditRelDir;
   saveAuditSnapshot(report, process.cwd(), { scope: auditRelDir, isPartial: isPartialAudit });
   try {
-    const syncRes = syncSearchIndex(targetDir, process.cwd());
+    // Pre-commit runs skip the full index sync (tens of seconds); the audit itself needs no index.
+    const shouldSyncIndex = !rawArgs.includes('--no-index') && !isStagedScope;
+    const syncRes = shouldSyncIndex ? syncSearchIndex(targetDir, process.cwd()) : null;
 
     if (syncRes?.db) {
       // A --fast or --git audit checks only part of the scope, so it vouches for no file.

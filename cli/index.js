@@ -116,6 +116,8 @@ const main = async () => {
   const isCommandValid = isAllowedCommand || isCapsuleCmd;
   if (!isCommandValid) {
     process.stderr.write(`Unknown command "${firstArg}". Run --help for usage.\n`);
+    const { recordWrongCall } = await import('./friction/wrong-call.js');
+    recordWrongCall(process.cwd(), firstArg, rawArgs);
     process.exit(1);
   }
 

@@ -1,0 +1,17 @@
+{
+  "name": "chemx",
+  "description": "Chemical X for Claude Code: a shell-aware guard that routes raw runners, git diff/log and source reads through chemx, a post-edit hazard check with x-atoms hints, a session status card, the chemical-x MCP server and a short usage skill.",
+  "author": {
+    "name": "Chemical X Protocol"
+  },
+  "homepage": "https://chemicalx.xophz.com",
+  "repository": "https://github.com/Chemical-X-Protocol/starter-kit",
+  "license": "MIT",
+  "keywords": [
+    "chemx",
+    "architecture",
+    "audit",
+    "hooks",
+    "mcp"
+  ]
+}

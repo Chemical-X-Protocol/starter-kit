@@ -1,6 +1,10 @@
-export const buildPreCommitHookScript = (minGrade = 'B', minScore = 80) => `#!/bin/sh
+import { defaultTemplateLauncher } from './hooks/launcher.js';
+
+// launcher pins the chemx this hook and the CI workflow run (GAP-4): { version, cliPath, ciBin }.
+export const buildPreCommitHookScript = (minGrade = 'B', minScore = 80, launcher = defaultTemplateLauncher()) => `#!/bin/sh
 # Chemical X Protocol: Pre-Commit Architecture Gatekeeper
 # Free architectural guardrail preventing context bloat and monolith sprawl.
+# chemx-pin: ${launcher.version}
 
 REPO_ROOT="\$(git rev-parse --show-toplevel 2>/dev/null)"
 [ -z "\$REPO_ROOT" ] && exit 0
@@ -10,6 +14,12 @@ cd "\$REPO_ROOT" || exit 1
 if [ "\$CHEMX_FORCE_COMMIT" = "1" ] || [ "\$CHEMX_SKIP_PRECOMMIT" = "1" ]; then
   exit 0
 fi
+# Pinned launcher: the same chemx the MCP server and Claude hooks run. CHEMX_BIN overrides it.
+PINNED_CLI='${launcher.cliPath ?? ''}'
+if [ -z "\$CHEMX_BIN" ] && [ -n "\$PINNED_CLI" ] && [ -f "\$PINNED_CLI" ]; then
+  CHEMX_BIN="node \\"\$PINNED_CLI\\""
+fi
+export CHEMX_BIN
 
 # Delegate to version-controlled script if present
 if [ -f "\$REPO_ROOT/scripts/pre-commit.sh" ]; then
@@ -54,15 +64,17 @@ MIN_SCORE="\${CHEMX_MIN_SCORE:-\${CONF_MIN_SCORE:-${minScore}}}"
 # Nothing added, copied, modified or renamed: nothing to gate.
 git diff --cached --quiet -M --diff-filter=ACMR && exit 0
 
-AUDIT_BIN=""
-if [ -f "./cli/index.js" ]; then
+AUDIT_BIN="\$CHEMX_BIN"
+if [ -n "\$AUDIT_BIN" ]; then
+  :
+elif [ -f "./cli/index.js" ]; then
   AUDIT_BIN="node ./cli/index.js"
 elif [ -x "./node_modules/.bin/chemx" ]; then
   AUDIT_BIN="./node_modules/.bin/chemx"
 elif command -v chemx >/dev/null 2>&1; then
   AUDIT_BIN="chemx"
 elif command -v npx >/dev/null 2>&1; then
-  AUDIT_BIN="npx chemx"
+  AUDIT_BIN="npx --yes chemx@${launcher.version}"
 fi
 
 if [ -n "\$AUDIT_BIN" ]; then
@@ -96,7 +108,8 @@ fi
 exit 0
 `;
 
-export const buildGitHubWorkflowScript = (minGrade = 'B', minScore = 80) => `name: Chemical X Architectural Gatekeeper
+export const buildGitHubWorkflowScript = (minGrade = 'B', minScore = 80, launcher = defaultTemplateLauncher()) => `name: Chemical X Architectural Gatekeeper
+# chemx-pin: ${launcher.version}
 
 on:
   push:
@@ -129,7 +142,7 @@ jobs:
           fi
 
       - name: Run Chemical X Architectural Audit
-        run: npx --yes chemx audit --min-grade=\${{ vars.CHEMX_MIN_GRADE || '${minGrade}' }} --min-score=\${{ vars.CHEMX_MIN_SCORE || ${minScore} }} --markdown --output=AUDIT_REPORT.md
+        run: ${launcher.ciBin} audit --min-grade=\${{ vars.CHEMX_MIN_GRADE || '${minGrade}' }} --min-score=\${{ vars.CHEMX_MIN_SCORE || ${minScore} }} --markdown --output=AUDIT_REPORT.md
       - name: Upload Audit Scorecard Artifact
         if: always()
         uses: actions/upload-artifact@v4

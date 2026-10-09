@@ -187,8 +187,21 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
     case 'hooks':
     case 'install-hooks':
     case 'setup-ci': {
+      const { routeHookCommand } = await import('../hooks/hook-commands.js');
+      const isHandled = await routeHookCommand(firstArg, rawArgs.slice(1));
+      if (isHandled) break;
       const { runInstallWizard } = await import('../installer.js');
       await runInstallWizard(rawArgs[1] || process.cwd());
+      break;
+    }
+    case 'doctor': {
+      const { runDoctorCli } = await import('../doctor/doctor-cli.js');
+      process.exitCode = await runDoctorCli(rawArgs.slice(1));
+      break;
+    }
+    case 'friction': {
+      const { runFrictionCli } = await import('../friction/friction-cli.js');
+      process.exitCode = await runFrictionCli(rawArgs.slice(1));
       break;
     }
     case 'pillars':

@@ -10,10 +10,11 @@ import { EDIT_COMMANDS } from './commands-schema-edit.js';
 import { VERIFY_COMMANDS } from './commands-schema-verify.js';
 import { WRAPPER_COMMANDS } from './commands-schema-wrappers.js';
 import { OPS_COMMANDS } from './commands-schema-ops.js';
+import { HOST_COMMANDS } from './commands-schema-host.js';
 
 export const COMMAND_GROUPS = ['search', 'edit', 'verify', 'wrappers', 'agents', 'setup'];
 
-export const COMMANDS_SCHEMA = [...SEARCH_COMMANDS, ...EDIT_COMMANDS, ...VERIFY_COMMANDS, ...WRAPPER_COMMANDS, ...OPS_COMMANDS];
+export const COMMANDS_SCHEMA = [...SEARCH_COMMANDS, ...EDIT_COMMANDS, ...VERIFY_COMMANDS, ...WRAPPER_COMMANDS, ...OPS_COMMANDS, ...HOST_COMMANDS];
 
 const COMMAND_INDEX = new Map(
   COMMANDS_SCHEMA.flatMap((entry) => [entry.name, ...entry.aliases].map((token) => [token, entry]))
