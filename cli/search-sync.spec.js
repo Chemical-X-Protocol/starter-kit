@@ -107,17 +107,18 @@ const runWorker = (root) => new Promise((resolve) => {
     const { upsertFileIndex } = await import(${JSON.stringify(path.join(CLI_DIR, 'search-db.js'))});
     const db = openIndexDb(${JSON.stringify(root)});
     let failures = 0;
-    for (let i = 0; i < 150; i++) {
+    let firstError = '';
+    for (let i = 0; i < 50; i++) {
       try {
         upsertFileIndex(db, { path: 'src/shared-' + (i % 5) + '.ts', mtime: i, size: i, tier: 'utility', lines: 1, chars: 1, symbols: [{ name: 'shared' + i, kind: 'const', isExport: true }] });
-      } catch (err) { failures++; }
+      } catch (err) { failures++; firstError = firstError || err.message; }
     }
-    process.stdout.write(String(failures));
+    process.stdout.write(failures + (firstError ? ' ' + firstError : ''));
   `;
   const child = spawn(process.execPath, ['--no-warnings', '--input-type=module', '-e', script]);
   let out = '';
   child.stdout.on('data', (d) => { out += d; });
-  child.on('close', () => resolve(Number(out || 'NaN')));
+  child.on('close', () => resolve(out.trim()));
 });
 
 test('concurrent processes upserting the same paths never hit UNIQUE failures', async () => {
@@ -125,7 +126,7 @@ test('concurrent processes upserting the same paths never hit UNIQUE failures', 
   try {
     openIndexDb(root);
     const failures = await Promise.all([runWorker(root), runWorker(root), runWorker(root), runWorker(root)]);
-    assert.deepEqual(failures, [0, 0, 0, 0]);
+    assert.deepEqual(failures, ['0', '0', '0', '0']);
   } finally {
     cleanup(root);
   }

@@ -96,6 +96,27 @@ const openReadOnlyDb = (dbPath) => {
   }
 };
 
+const isBusyError = (err) => /busy|locked/i.test(String(err?.message || err?.code || ''));
+
+// Schema init takes a write lock; a concurrent writer can outlast busy_timeout under load.
+// Retry busy errors instead of silently degrading to a read-only (stale) handle.
+const openWritableDb = (dbPath, attempts = 4) => {
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    let db = null;
+    try {
+      db = new DatabaseSync(dbPath);
+      applyConnectionPragmas(db);
+      return initWritableDb(db);
+    } catch (err) {
+      try { db?.close(); } catch (closeErr) { debugNote.warn('close after failed open', closeErr); }
+      const canRetry = isBusyError(err) && attempt < attempts;
+      debugNote.warn(`writable open attempt ${attempt}`, err);
+      if (!canRetry) return null;
+    }
+  }
+  return null;
+};
+
 export const openIndexDb = (cwd = process.cwd(), options = {}) => {
   if (!DatabaseSync) return null;
   const isMemoryTarget = isSqliteMemoryTarget(cwd);
@@ -108,16 +129,7 @@ export const openIndexDb = (cwd = process.cwd(), options = {}) => {
 
   let db = null;
   const canWrite = isPathWritable(dbPath);
-  if (canWrite) {
-    try {
-      db = new DatabaseSync(dbPath);
-      applyConnectionPragmas(db);
-      initWritableDb(db);
-    } catch (err) {
-      db = null;
-      debugNote.warn('writable open', err);
-    }
-  }
+  if (canWrite) db = openWritableDb(dbPath);
 
   if (!db) {
     db = openReadOnlyDb(dbPath);
