@@ -10,6 +10,9 @@ import { resolveInvocation } from './resolve.js';
 const SKIPPED_DIRS = new Set(['node_modules', '.git', '.chemx']);
 const DEFAULT_TARGETS = ['README.md', 'AGENTS.md', 'CLAUDE.md', 'STANDARDS.md', 'docs'];
 const MARKDOWN_FILE = /\.md$/i;
+// Dated design history quotes commands as they were when written, including commands not built yet.
+// Skipped only when no paths are given; naming a path checks it.
+export const DEFAULT_EXCLUDES = ['docs/superpowers/plans/', 'docs/superpowers/reviews/', 'docs/superpowers/specs/'];
 
 const walkMarkdown = (target) => {
   const stat = fs.statSync(target);
@@ -25,6 +28,9 @@ export const collectMarkdownFiles = (targets, cwd, excludes = []) => {
   const isExcluded = (file) => excludes.some((fragment) => file.split(path.sep).join('/').includes(fragment));
   return [...new Set(files)].filter((file) => !isExcluded(file)).sort();
 };
+
+/** Explicit targets that do not exist; a typo must fail, not pass on zero files. */
+export const findMissingTargets = (targets, cwd) => targets.filter((t) => !fs.existsSync(path.resolve(cwd, t)));
 
 /** @returns {{files:number, checked:number, failures:Array<{file:string,line:number,text:string,reason:string}>}} */
 export const checkMarkdownFiles = (files, cwd) => {
@@ -63,7 +69,19 @@ export const runDocsCli = (args, cwd = process.cwd()) => {
     return { code: 1 };
   }
   const { excludes, targets, isJson } = parseDocsArgs(rest);
-  const files = collectMarkdownFiles(targets.length > 0 ? targets : DEFAULT_TARGETS, cwd, excludes);
+  const isDefault = targets.length === 0;
+  const missing = findMissingTargets(targets, cwd);
+  for (const target of missing) process.stderr.write(`no such path: ${target}\n`);
+  const hasMissing = missing.length > 0;
+  if (hasMissing) return { code: 1 };
+  const scanTargets = isDefault ? DEFAULT_TARGETS : targets;
+  const scanExcludes = isDefault ? [...DEFAULT_EXCLUDES, ...excludes] : excludes;
+  const files = collectMarkdownFiles(scanTargets, cwd, scanExcludes);
+  const isEmpty = files.length === 0;
+  if (isEmpty) {
+    process.stderr.write('docs check: no markdown files found, so nothing was checked. Pass a file or directory that has .md files.\n');
+    return { code: 1 };
+  }
   const result = checkMarkdownFiles(files, cwd);
   process.stdout.write(isJson ? `${JSON.stringify(result)}\n` : formatDocsReport(result));
   return { code: result.failures.length === 0 ? 0 : 1 };

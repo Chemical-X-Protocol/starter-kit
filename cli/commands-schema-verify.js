@@ -123,7 +123,7 @@ export const VERIFY_COMMANDS = [
     brief: 'Check chemx commands named in docs',
     usage: 'chemx docs check [files/dirs...] [--exclude=<path fragment>] [--json]',
     summary: 'Verify that every chemx command a markdown file names exists.',
-    description: 'Reads code spans and fenced blocks, never runs anything. Checks command, team subcommand, team task action, team lock action and MCP action names only; flags and arguments are not checked. Exits 1 and prints file:line for each failure. With no paths it reads README.md, AGENTS.md, CLAUDE.md, STANDARDS.md and docs/ under the current directory.',
+    description: 'Reads code spans and fenced blocks, never runs anything. Checks command, team subcommand, team task action and MCP action names only; flags and arguments are not checked, and a misspelled `team lock` action is not detected because any other word there is read as a file path. Exits 1 and prints file:line for each failure, and exits 1 when a named path does not exist or no markdown file was found. With no paths it reads README.md, AGENTS.md, CLAUDE.md, STANDARDS.md and docs/ under the current directory, skipping dated design history in docs/superpowers/{plans,reviews,specs}/; name a path to check it.',
     flags: [
       { flag: '--exclude=<fragment>', desc: 'Skip files whose path contains this text (repeatable)' },
       { flag: '--json', desc: 'Print { files, checked, failures } as JSON' }

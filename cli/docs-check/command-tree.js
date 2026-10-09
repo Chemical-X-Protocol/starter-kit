@@ -1,7 +1,7 @@
 /**
  * Docs check command tree: the names `chemx team ...` accepts below the schema level.
  * runTeamCli is a switch, not a table, so these lists mirror its literals;
- * command-tree.spec.js reads team-commands.js and fails when either side drifts.
+ * resolve.spec.js reads team-commands.js and fails when either side drifts.
  */
 
 export const TEAM_SUBCOMMANDS = [
