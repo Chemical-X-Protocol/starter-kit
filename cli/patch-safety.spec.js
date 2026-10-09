@@ -102,8 +102,13 @@ test('patch: refuses a result that does not parse, and a silent top-level declar
       () => patchFile('src/p.ts', { targetContent: 'export function keep() { return a; }\n', replacementContent: '', cwd: dir, skipIndex: true }),
       /would remove top-level declaration\(s\) keep/
     );
-    const renamed = patchFile('src/p.ts', { targetContent: 'export const a = 1;', replacementContent: 'export const b = 1;', dryRun: true, cwd: dir, skipIndex: true });
-    assert.deepEqual(renamed.declarations, { removed: ['a'], added: ['b'] }, 'a 1-for-1 rename is allowed and reported');
+    assert.throws(
+      () => patchFile('src/p.ts', { targetContent: 'export const a = 1;', replacementContent: 'export const b = 1;', dryRun: true, cwd: dir, skipIndex: true }),
+      /would remove top-level declaration\(s\) a \(and would add b\)/,
+      'removing A while adding an unrelated B is refused unless A is named'
+    );
+    const renamed = patchFile('src/p.ts', { targetContent: 'export const a = 1;', replacementContent: 'export const b = 1;', allowRemoved: ['a'], dryRun: true, cwd: dir, skipIndex: true });
+    assert.deepEqual(renamed.declarations, { removed: ['a'], added: ['b'] }, 'a named rename is allowed and reported');
     assert.throws(
       () => writeFileOver(dir),
       /would remove top-level declaration\(s\) a, keep/
@@ -150,6 +155,44 @@ test('MCP patch: dryRun:true (and command-string --dry-run) never writes', () =>
     const res2 = handleChemxPatch(parsed.params, dir);
     assert.equal(res2.dryRun, true);
     assert.equal(read(dir, 'src/x.ts'), 'export const a = 1\n');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('CLI patch: text output names removed and added declarations', async () => {
+  const { runPatcherCli } = await import('./patcher-cli.js');
+  const dir = makeProject({ 'src/r.ts': 'export const a = 1;\n' });
+  const cwd = process.cwd();
+  const write = process.stdout.write;
+  let printed = '';
+  try {
+    process.chdir(dir);
+    process.stdout.write = (chunk) => { printed += chunk; return true; };
+    runPatcherCli(['src/r.ts', '--target=export const a = 1;', '--replacement=export const b = 1;', '--allow-remove=a', '--dry-run'], false);
+  } finally {
+    process.stdout.write = write;
+    process.chdir(cwd);
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+  assert.match(printed, /Declarations: removed \[a\], added \[b\]/);
+});
+
+test('patch from a subdirectory still honors a lease taken at the project root', async () => {
+  const { DatabaseSync } = await import('node:sqlite');
+  const { initTeamSchema } = await import('./team/team-schema.js');
+  const dir = makeProject({ 'src/l.ts': 'export const l = 1;\n' });
+  try {
+    fs.mkdirSync(path.join(dir, '.chemx'));
+    const db = new DatabaseSync(path.join(dir, '.chemx', 'index.db'));
+    initTeamSchema(db);
+    db.prepare('INSERT INTO file_leases (file_path, locked_by, acquired_at, expires_at, purpose) VALUES (?, ?, ?, ?, ?)').run('src/l.ts', '@alice', Date.now(), Date.now() + 60000, 'refactor');
+    db.close();
+    assert.throws(
+      () => patchFile('l.ts', { targetContent: 'l = 1', replacementContent: 'l = 2', cwd: path.join(dir, 'src'), skipIndex: true }),
+      (err) => /locked by @alice/.test(err.message) && !/holder's agent id/.test(err.message)
+    );
+    assert.equal(read(dir, 'src/l.ts'), 'export const l = 1;\n');
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

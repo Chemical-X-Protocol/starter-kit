@@ -36,30 +36,31 @@ test('bulletproof: handleChemxWrite and handleChemxPatch auto-sync index', () =>
   const cwd = process.cwd();
   const testFile = path.resolve(cwd, 'scratch/test-auto-sync.ts');
   fs.mkdirSync(path.dirname(testFile), { recursive: true });
+  fs.rmSync(testFile, { force: true });
 
-  // Write new file via MCP
-  handleChemxWrite({
-    path: 'scratch/test-auto-sync.ts',
-    content: 'export const autoSyncInitial = () => 42;\n'
-  }, cwd);
+  try {
+    handleChemxWrite({
+      path: 'scratch/test-auto-sync.ts',
+      content: 'export const autoSyncInitial = () => 42;\n'
+    }, cwd);
 
-  const db = openIndexDb(cwd);
-  const sym1 = db.prepare('SELECT * FROM symbols WHERE name = ?').get('autoSyncInitial');
-  assert.ok(sym1, 'handleChemxWrite should auto-sync symbol into database');
+    const db = openIndexDb(cwd);
+    const sym1 = db.prepare('SELECT * FROM symbols WHERE name = ?').get('autoSyncInitial');
+    assert.ok(sym1, 'handleChemxWrite should auto-sync symbol into database');
 
-  // Patch file via MCP
-  handleChemxPatch({
-    path: 'scratch/test-auto-sync.ts',
-    targetContent: 'autoSyncInitial',
-    replacementContent: 'autoSyncPatched'
-  }, cwd);
+    handleChemxPatch({
+      path: 'scratch/test-auto-sync.ts',
+      targetContent: 'autoSyncInitial',
+      replacementContent: 'autoSyncPatched',
+      allowRemoved: ['autoSyncInitial']
+    }, cwd);
 
-  const sym2 = db.prepare('SELECT * FROM symbols WHERE name = ?').get('autoSyncPatched');
-  assert.ok(sym2, 'handleChemxPatch should auto-sync patched symbol into database');
-
-  // Cleanup
-  fs.unlinkSync(testFile);
-  syncSingleFileIndex(testFile, cwd);
+    const sym2 = db.prepare('SELECT * FROM symbols WHERE name = ?').get('autoSyncPatched');
+    assert.ok(sym2, 'handleChemxPatch should auto-sync patched symbol into database');
+  } finally {
+    fs.rmSync(testFile, { force: true });
+    syncSingleFileIndex(testFile, cwd);
+  }
 });
 
 test('bulletproof: queryIndex and handleChemxQ fallback to FTS5 on symbol misses', () => {

@@ -26,8 +26,9 @@ export class EditRefusedError extends Error {
 }
 
 /**
- * Declaration delta between two parses. A 1-for-1 swap (a rename) is allowed; a net loss of
- * top-level declarations is not, unless every lost name is listed in allowRemoved.
+ * Declaration delta between two parses. Every top-level declaration that disappears must be
+ * named in allowRemoved (or allowRemoved === true), renames included: a patch that removes A
+ * and adds an unrelated B is exactly the wrong-block replace this gate exists to catch.
  */
 const declarationDelta = (beforeParse, afterParse, allowRemoved) => {
   const isComparable = beforeParse.ok && afterParse.ok && beforeParse.kind === 'babel';
@@ -39,8 +40,7 @@ const declarationDelta = (beforeParse, afterParse, allowRemoved) => {
   const isAllAllowed = allowRemoved === true;
   const allowed = new Set(Array.isArray(allowRemoved) ? allowRemoved : []);
   const unallowed = isAllAllowed ? [] : removed.filter((name) => !allowed.has(name));
-  const isNetLoss = unallowed.length > added.length;
-  return { removed, added, blocked: isNetLoss ? unallowed : [] };
+  return { removed, added, blocked: unallowed };
 };
 
 const planEdit = (edit, root, options) => {
@@ -59,7 +59,7 @@ const planEdit = (edit, root, options) => {
 
   const after = isDelete ? '' : edit.content;
   const lease = findForeignLease(root, absPath, options.agentId);
-  if (lease) return { ...plan, issue: `locked by ${lease.lockedBy}${lease.purpose ? ` (${lease.purpose})` : ''}; wait for release or pass the holder's agent id` };
+  if (lease) return { ...plan, issue: `locked by ${lease.lockedBy}${lease.purpose ? ` (${lease.purpose})` : ''}; wait until ${lease.lockedBy} releases it or the lease expires (check: chemx team lock list)` };
   if (isDelete) return { ...plan, after, parse: { kind: 'n/a', ok: true }, declarations: { removed: [], added: [] } };
 
   const afterParse = parseSource(after, absPath);
@@ -71,7 +71,8 @@ const planEdit = (edit, root, options) => {
   const delta = beforeParse ? declarationDelta(beforeParse, afterParse, edit.allowRemoved) : { removed: [], added: [], blocked: [] };
   const hasBlockedRemovals = delta.blocked.length > 0;
   if (hasBlockedRemovals) {
-    const addedNote = delta.added.length > 0 ? ` (added only ${delta.added.join(', ')})` : '';
+    const hasAdded = delta.added.length > 0;
+    const addedNote = hasAdded ? ` (and would add ${delta.added.join(', ')})` : '';
     return { ...plan, after, issue: `would remove top-level declaration(s) ${delta.blocked.join(', ')}${addedNote}; name them in allowRemoved (CLI: --allow-remove=${delta.blocked.join(',')}) if intended` };
   }
 

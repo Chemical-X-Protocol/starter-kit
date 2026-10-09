@@ -59,6 +59,15 @@ const fail = (message, isCli) => {
 
 const fromFileOr = (inline, filePath) => (filePath ? fs.readFileSync(filePath, 'utf-8') : inline);
 
+const printDeclarations = (res) => {
+  const removed = res.declarations?.removed || [];
+  const added = res.declarations?.added || [];
+  const hasDeclarationChange = removed.length > 0 || added.length > 0;
+  if (hasDeclarationChange) {
+    process.stdout.write(`  Declarations: removed [${removed.join(', ')}], added [${added.join(', ')}]\n`);
+  }
+};
+
 const printOutcome = (res, verb, isJson) => {
   if (isJson) {
     process.stdout.write(`${JSON.stringify(res, null, 2)}\n`);
@@ -67,6 +76,7 @@ const printOutcome = (res, verb, isJson) => {
   if (res.dryRun) {
     process.stdout.write(`${ANSI.GOLD}[DRY RUN] Would ${verb} ${res.file}. No changes were written to disk.${ANSI.RESET}\n`);
     process.stdout.write(`${res.diff || '(no change)'}\n`);
+    printDeclarations(res);
     return;
   }
   const where = res.changedLines ? `:L${res.changedLines.start}-${res.changedLines.end}` : '';
@@ -76,6 +86,7 @@ const printOutcome = (res, verb, isJson) => {
   if (res.lineBudget && !res.lineBudget.passed) {
     process.stdout.write(`  ${ANSI.RED}⚠ Line Budget: ${res.lineBudget.lines}L exceeds ${res.lineBudget.limit}L limit (Directive 1.A)${ANSI.RESET}\n`);
   }
+  printDeclarations(res);
   if (res.violationsCount > 0) {
     process.stdout.write(`  ${ANSI.GOLD}⚠ ${res.violationsCount} architecture hazard(s) detected (Run chemx check ${res.file})${ANSI.RESET}\n`);
   }
