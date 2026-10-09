@@ -54,3 +54,13 @@ test('boundary: client MCP roots bound projectRoot the same way', () => {
   assert.strictEqual(resolveContext({ projectRoot: rootA, mcpRoots: [rootA], env: {} }).ok, true);
   assert.strictEqual(resolveContext({ projectRoot: other, env: {} }).ok, true, 'no declared roots: unchanged');
 });
+
+test('boundary: a batch refused before scoping still names the resolved root', async () => {
+  const project = makeFixtureProject({ 'package.json': '{"name":"decl"}' });
+  const handler = createMcpHandler({ cwd: project, bootDir: project, env: {}, ...NO_STALE });
+  const nested = await call(handler, { commands: [{ commands: [{ action: 'q', params: { query: 'x' } }] }] });
+  assert.strictEqual(nested.result.isError, true);
+  assert.match(textOf(nested), new RegExp(`chemx root: ${project} \\(declared\\)`));
+  const invalid = await call(handler, { batch: [42] });
+  assert.match(textOf(invalid), new RegExp(`chemx root: ${project} \\(declared\\)`));
+});

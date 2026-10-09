@@ -36,10 +36,11 @@ export const createToolCaller = ({ scopeInputs, staleness = null }) => {
     }
     const refusals = scoped.filter((item) => !item.scope.ok).map((item) => `item ${item.index + 1} (${item.label}): ${item.scope.error}`);
     const isRefused = refusals.length > 0;
-    const knownScope = scoped.find((item) => item.scope.root)?.scope ?? null;
-    if (isRefused) return decorate(errorEnvelope(`Refusing batch; no item ran.\n${refusals.join('\n')}`), knownScope);
+    // An item refused before scoping (nested batch, non-object) still reports the batch-level root.
+    const batchScope = async () => scoped.find((item) => item.scope.root)?.scope ?? await scopeFor('chemx', { projectRoot: toolArgs.projectRoot });
+    if (isRefused) return decorate(errorEnvelope(`Refusing batch; no item ran.\n${refusals.join('\n')}`), await batchScope());
     const isEmpty = scoped.length === 0;
-    if (isEmpty) return decorate(errorEnvelope('Empty batch: nothing ran.'), null);
+    if (isEmpty) return decorate(errorEnvelope('Empty batch: nothing ran.'), await batchScope());
     const outcome = await runBatchItems(scoped, (item) => executeMcpTool(toolName, bindToRoot('chemx', item.args, item.scope.root), item.scope.root));
     return decorate(batchEnvelope(outcome), scoped[0].scope);
   };
