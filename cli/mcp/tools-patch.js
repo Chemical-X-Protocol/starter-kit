@@ -1,5 +1,3 @@
-import path from 'node:path';
-import { syncSingleFileIndex } from '../search.js';
 import { patchFile } from '../patcher.js';
 import { handleCheckCommand } from '../search-commands.js';
 import { resolveSafePath } from '../path-scope.js';
@@ -45,22 +43,25 @@ export const handleChemxPatch = (args = {}, cwd = process.cwd()) => {
     targetContent,
     replacementContent,
     allowMultiple: Boolean(args.allowMultiple || args.multiple),
+    dryRun: isDryRunRequested(args),
+    allowRemoved: args.allowRemoved ?? args.allowRemove,
+    agentId: args.agentId ?? args.as,
     cwd
   });
-
-  try {
-    syncSingleFileIndex(targetPath, cwd);
-  } catch (err) {
-    if (process.env.CHEMX_DEBUG) {
-      process.stderr.write(`[patch-sync] Auto-index skipped for ${targetPath}: ${err.message}\n`);
-    }
-  }
 
   return {
     ...result,
     warnings: formatPatchWarnings(result)
   };
 };
+
+/**
+ * MCP callers spell the preview flag several ways; all of them mean "do not write".
+ *
+ * @param {object} args Tool params.
+ * @returns {boolean}
+ */
+export const isDryRunRequested = (args = {}) => Boolean(args.dryRun ?? args['dry-run'] ?? args.dry_run ?? args.n);
 
 export const handleChemxCheck = (args = {}, cwd = process.cwd()) => {
   if (args.path === 'RESTART_MCP') {

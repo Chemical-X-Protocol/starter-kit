@@ -1,0 +1,135 @@
+/**
+ * CLI runners for `chemx patch` and `chemx write`. Both preview with --dry-run (printing the
+ * full unified diff) and refuse rather than guess: a missing --content never becomes ''.
+ */
+import fs from 'node:fs';
+import { ANSI } from './theme.js';
+import { parseValueFlags, hasFlag, splitList } from './cli-args.js';
+import { patchFile, writeFile } from './patcher.js';
+
+const PATCH_HELP = [
+  'USAGE',
+  '  chemx patch <file> --target="text" --replacement="new" [options]',
+  '',
+  'OPTIONS',
+  '  --target=<text>          Exact text to replace (literal; never empty)',
+  '  --replacement=<new>      Replacement text (literal; `$` is not special)',
+  '  --target-file=<path>     Read the target from a file',
+  '  --replacement-file=<p>   Read the replacement from a file',
+  '  --multiple               Replace every occurrence',
+  '  --allow-remove=<a,b>     Top-level declarations the patch may remove',
+  '  --as=<agent>             Agent id for team lock checks (default $CHEMX_AGENT_ID or @agent)',
+  '  -n, --dry-run            Print the unified diff without writing',
+  '  --json                   Output result as JSON',
+  '  -h, --help               Show this help message',
+  ''
+];
+
+const WRITE_HELP = [
+  'USAGE',
+  '  chemx write <file> --content="text" [options]',
+  '',
+  'OPTIONS',
+  '  --content=<text>         File content (also: --content <text>)',
+  '  --content-file=<path>    Read content from a file',
+  '  --stdin                  Read content from stdin',
+  '  --overwrite              Allow replacing an existing file',
+  '  --allow-remove=<a,b>     Top-level declarations an overwrite may remove',
+  '  --as=<agent>             Agent id for team lock checks',
+  '  -n, --dry-run            Print the unified diff without writing',
+  '  --json                   Output result as JSON',
+  '  -h, --help               Show this help message',
+  ''
+];
+
+const isHelpRequest = (args) => hasFlag(args, ['--help', '-h', 'help']);
+
+const showHelp = (args, lines, isCli) => {
+  const isJson = args.includes('--json');
+  process.stdout.write(isJson ? `${JSON.stringify({ help: true, success: true })}\n` : lines.join('\n'));
+  if (isCli) process.exit(0);
+  return { help: true, success: true };
+};
+
+const fail = (message, isCli) => {
+  process.stderr.write(`${ANSI.RED}✕ ${message}${ANSI.RESET}\n`);
+  if (isCli) process.exit(1);
+  return null;
+};
+
+const fromFileOr = (inline, filePath) => (filePath ? fs.readFileSync(filePath, 'utf-8') : inline);
+
+const printOutcome = (res, verb, isJson) => {
+  if (isJson) {
+    process.stdout.write(`${JSON.stringify(res, null, 2)}\n`);
+    return;
+  }
+  if (res.dryRun) {
+    process.stdout.write(`${ANSI.GOLD}[DRY RUN] Would ${verb} ${res.file}. No changes were written to disk.${ANSI.RESET}\n`);
+    process.stdout.write(`${res.diff || '(no change)'}\n`);
+    return;
+  }
+  const where = res.changedLines ? `:L${res.changedLines.start}-${res.changedLines.end}` : '';
+  process.stdout.write(`${ANSI.GREEN}✔ ${verb === 'patch' ? 'Patched' : (res.created ? 'Created' : 'Updated')} ${res.file}${where}${res.backup ? ` (backup: ${res.backup})` : ''}${ANSI.RESET}\n`);
+  if (res.lineBudget && !res.lineBudget.passed) {
+    process.stdout.write(`  ${ANSI.RED}⚠ Line Budget: ${res.lineBudget.lines}L exceeds ${res.lineBudget.limit}L limit (Directive 1.A)${ANSI.RESET}\n`);
+  }
+  if (res.violationsCount > 0) {
+    process.stdout.write(`  ${ANSI.GOLD}⚠ ${res.violationsCount} architecture hazard(s) detected (Run chemx check ${res.file})${ANSI.RESET}\n`);
+  }
+};
+
+const runGuarded = (action, verb, isJson, isCli) => {
+  try {
+    const res = action();
+    printOutcome(res, verb, isJson);
+    if (isCli) process.exit(0);
+    return res;
+  } catch (err) {
+    return fail(err instanceof Error ? err.message : String(err), isCli);
+  }
+};
+
+export const runPatcherCli = (args, isCli = false) => {
+  if (isHelpRequest(args)) return showHelp(args, PATCH_HELP, isCli);
+  const { values, positionals } = parseValueFlags(args, {
+    target: ['--target'], replacement: ['--replacement', '--replace'],
+    targetFile: ['--target-file'], replacementFile: ['--replacement-file'],
+    allowRemove: ['--allow-remove'], as: ['--as']
+  });
+  const filePath = positionals[0];
+  if (!filePath) return fail('Missing file path. Usage: chemx patch <file> --target="text" --replacement="new" [--json]', isCli);
+
+  return runGuarded(() => patchFile(filePath, {
+    targetContent: fromFileOr(values.target ?? null, values.targetFile),
+    replacementContent: fromFileOr(values.replacement ?? null, values.replacementFile),
+    allowMultiple: hasFlag(args, ['--multiple', '--allow-multiple']),
+    dryRun: hasFlag(args, ['--dry-run', '-n']),
+    allowRemoved: splitList(values.allowRemove),
+    agentId: values.as
+  }), 'patch', args.includes('--json'), isCli);
+};
+
+export const runWriterCli = (args, isCli = false) => {
+  if (isHelpRequest(args)) return showHelp(args, WRITE_HELP, isCli);
+  const { values, positionals } = parseValueFlags(args, {
+    content: ['--content'], contentFile: ['--content-file'], allowRemove: ['--allow-remove'], as: ['--as']
+  });
+  const filePath = positionals[0];
+  if (!filePath) return fail('Missing file path. Usage: chemx write <file> --content="text" [--json]', isCli);
+
+  const isStdin = args.includes('--stdin');
+  const content = isStdin ? fs.readFileSync(0, 'utf-8') : fromFileOr(values.content, values.contentFile);
+  const isMissingContent = typeof content !== 'string';
+  if (isMissingContent) {
+    return fail('chemx write needs --content=<text>, --content-file=<path> or --stdin. Refusing to write an empty file.', isCli);
+  }
+
+  return runGuarded(() => writeFile(filePath, {
+    content,
+    overwrite: args.includes('--overwrite'),
+    dryRun: hasFlag(args, ['--dry-run', '-n']),
+    allowRemoved: splitList(values.allowRemove),
+    agentId: values.as
+  }), 'write', args.includes('--json'), isCli);
+};

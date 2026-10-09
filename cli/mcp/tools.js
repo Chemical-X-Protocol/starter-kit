@@ -94,6 +94,7 @@ export const parseCommand = (command, params) => {
         path: parts[1] || params?.path,
         target: params?.target || params?.targetContent || params?.search,
         replacement: params?.replacement || params?.replacementContent || params?.replace,
+        dryRun: /(^|\s)(--dry-run|-n)(\s|$)/.test(command) || undefined,
         ...params
       }
     };
