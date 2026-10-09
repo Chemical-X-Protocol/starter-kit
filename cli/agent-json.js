@@ -21,7 +21,8 @@ export const formatDiagnosticRow = (row) => {
 };
 
 const compactValue = (value) => {
-  if (typeof value === 'string') return stripAnsi(value);
+  const isString = typeof value === 'string';
+  if (isString) return stripAnsi(value);
   if (isDiagnosticList(value)) return value.map(formatDiagnosticRow);
   if (Array.isArray(value)) return value.map(compactValue);
   const isPlainObject = Boolean(value) && typeof value === 'object';
