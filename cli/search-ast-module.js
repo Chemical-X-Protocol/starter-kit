@@ -45,14 +45,16 @@ const importRowsOf = (node, line) => {
 
 const declarationSymbols = (decl, lineInfo) => {
   const kind = DECLARATION_KINDS[decl.type];
-  if (kind && decl.id) return [{ name: decl.id.name, kind, ...lineInfo(decl) }];
+  const hasNamedDeclaration = Boolean(kind && decl.id);
+  if (hasNamedDeclaration) return [{ name: decl.id.name, kind, ...lineInfo(decl) }];
   if (!t.isVariableDeclaration(decl)) return [];
   return decl.declarations.flatMap((v) => bindingNames(v.id).map((name) => ({ name, kind: 'const', ...lineInfo(v) })));
 };
 
 const collectExportNamed = (node, lineInfo, out) => {
   const line = node.loc?.start.line || 1;
-  if (node.declaration) {
+  const hasDeclaration = Boolean(node.declaration);
+  if (hasDeclaration) {
     out.symbols.push(...declarationSymbols(node.declaration, lineInfo).map((s) => ({ ...s, isExport: true })));
     out.props.push(...propsFromInterface(node.declaration));
     return;
