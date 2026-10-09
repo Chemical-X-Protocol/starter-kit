@@ -58,7 +58,8 @@ const resolveScope = (parsed, options, root) => {
   const filter = options.filter || parsed.values.filter || null;
   const changed = Boolean(parsed.flags.changed || options.changed);
   const hasRelated = Boolean(parsed.flags.related || options.related);
-  if (changed || hasRelated) {
+  const isScoped = changed || hasRelated;
+  if (isScoped) {
     const related = Array.isArray(options.related) ? options.related : parsed.positionals;
     const base = parsed.values.base || options.base || null;
     return { ...resolveChangeScope(root, { changed, base, related, cwd: options.cwd || process.cwd() }), filter };
@@ -73,7 +74,8 @@ export const runTestAudit = async (rawArgs = [], isCli = false, options = {}) =>
   const parsed = parseCliArgs(rawArgs, TEST_ARGS);
   const isJson = Boolean(parsed.flags.json) || options.json === true;
   const output = { isJson, isCli, shouldPrint: options.print !== false };
-  if (parsed.flags.help) {
+  const isHelp = Boolean(parsed.flags.help);
+  if (isHelp) {
     if (output.shouldPrint) process.stdout.write(isJson ? `${JSON.stringify({ help: true, success: true })}\n` : TEST_HELP);
     if (isCli) process.exit(0);
     return { help: true, success: true };
