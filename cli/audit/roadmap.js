@@ -156,7 +156,8 @@ export const formatRoadmapSection = (report, themeColor = null) => {
       lines.push(`     ${idx + 1}. ${BOLD}${item.title}${RESET}`);
       lines.push(`        Target: ${CYAN}${item.target}${RESET}`);
       lines.push(`        Action: ${item.action}`);
-      if (item.locations.length > 0) {
+      const hasLocations = item.locations.length > 0;
+      if (hasLocations) {
         lines.push(`        Locations: ${DIM}${item.locations.join(', ')}${RESET}`);
       }
     });
@@ -181,7 +182,8 @@ export const formatRoadmapMarkdown = (report) => {
       lines.push(`- [ ] **${item.title}**`);
       lines.push(`  - **Target**: \`${item.target}\``);
       lines.push(`  - **Action**: ${item.action}`);
-      if (item.locations.length > 0) {
+      const hasLocations = item.locations.length > 0;
+      if (hasLocations) {
         lines.push(`  - **Locations**: \`${item.locations.join('`, `')}\``);
       }
     });
@@ -210,11 +212,13 @@ export const buildSelfHealingRoadmapPrompt = (report) => {
       lines.push(`${idx + 1}. Task: ${item.title}`);
       lines.push(`   Target: ${item.target}`);
       lines.push(`   Execution: ${item.action}`);
-      if (item.locations.length > 0) {
+      const hasLocations = item.locations.length > 0;
+      if (hasLocations) {
         lines.push(`   Files: ${item.locations.join(', ')}`);
       }
       const rawTarget = item.target.split(' ')[0].replace(/->.*/, '').trim();
-      if (rawTarget && !rawTarget.includes('*')) {
+      const isPlainTarget = Boolean(rawTarget && !rawTarget.includes('*'));
+      if (isPlainTarget) {
         lines.push(`   Command: chemx q "${rawTarget}" --inspect`);
       }
     });
