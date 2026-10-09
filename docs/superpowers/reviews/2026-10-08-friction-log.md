@@ -26,3 +26,8 @@
 - [G2 r2] `chemx read cli/search-db.js --symbol=recordAuditSnapshot` says "not found" for a name the module re-exports from search-queries.js; it does not point at the defining file.
 - [G2 r2] the reader header/patch line counts were off by one for files ending in a newline (`of 410` for 409 lines); fixed in G2 via cli/line-count.js. The index (search.js syncSearchIndex `lines`) still counts split('\n').length and is left to the index owner.
 - [G2 r2] `--content --overwrite` shape: before the fix, a forgotten flag value was silently swallowed by readFlagValue (any `--name value` flag). Now a flag-like next argv is never taken as a value; values that start with '-' need `--name=value`.
+- [G2 r3] chemx guard hook blocks `head`/`cat` on spec files and on throwaway fixture files under /tmp, so fixture contents had to be checked with md5sum; `chemx read` has no multi-file or outside-repo quick-dump mode.
+- [G2 r3] `chemx audit cli --json` gate has no `--against=<ref>` comparison; checking "no new regressions vs the previous tip" needed a `git archive` of the old tip plus a second audit run.
+- [G2 r3] the full kit suite (`node --test` over the package.json glob) runs longer than the 120s default Bash timeout and had to be backgrounded; `chemx test` would be the place for progress output (G1).
+- [G2 r3] before the fix, every mutating CLI command recognized only the exact tokens `--dry-run`/`-n`: `--dry-run=true` or `--dryRun` silently wrote. Now one isPreviewFlag rule (cli/cli-args.js) is shared by CLI and MCP command strings, and unknown flags on patch/write/explode/fix/add:* refuse.
+- [G2 r3] MCP command strings still ignore unknown flags (only preview spellings are honored); refusing them belongs to the G3 command-string contract.
