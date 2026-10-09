@@ -4,7 +4,10 @@
  * they become root-relative. Task targets become repo-relative and the task's repo becomes the
  * target's owning package, so a kit task aimed at ../x-atoms/src/a.js lands as repo
  * apps/chemical-x/x-atoms, target src/a.js. A path that leaves the coordination root is kept as
- * written and counted as escaping; it is never invented.
+ * written and counted as escaping; it is never invented. Each escaping target is listed with its
+ * id, stored text and kind: 'relative' (a ../ path) or 'absolute' (an absolute path outside the
+ * root, e.g. into another checkout; in a rehearsal on copies, absolute paths into the live checkout
+ * land here too because the copy's root is elsewhere) (#2581).
  */
 import path from 'node:path';
 import { owningRepo, toRepoPath, repoDir } from './coordination-repos.js';
@@ -14,7 +17,7 @@ const toPosix = (p) => p.split(path.sep).join('/');
 
 export const createAttribution = (targetRoot, sourceRepo) => {
   const sourceDir = repoDir(targetRoot, sourceRepo);
-  const stats = { normalized: 0, escapingTargets: [], escapingPaths: 0, byRepo: {} };
+  const stats = { normalized: 0, escapingTargets: [], escapingDetails: [], escapingPaths: 0, byRepo: {} };
 
   const rekeyPath = (stored) => {
     const absolute = path.resolve(sourceDir, stored);
@@ -34,6 +37,7 @@ export const createAttribution = (targetRoot, sourceRepo) => {
     const split = hasTarget ? toRepoPath(targetRoot, path.resolve(rowDir, row.target_path)) : null;
     const isEscaping = Boolean(split?.error);
     if (isEscaping) stats.escapingTargets.push(row.id);
+    if (isEscaping) stats.escapingDetails.push({ id: row.id, target: row.target_path, kind: path.isAbsolute(row.target_path) ? 'absolute' : 'relative' });
     const isUsable = Boolean(split) && !isEscaping && split.path !== '';
     const attributed = isUsable ? { repo: split.repo, target_path: split.path } : { repo: baseRepo, target_path: row.target_path ?? null };
     const isChanged = isUsable && (split.repo !== baseRepo || split.path !== row.target_path);
@@ -42,5 +46,5 @@ export const createAttribution = (targetRoot, sourceRepo) => {
     return attributed;
   };
 
-  return { rekeyPath, attributeTask, stats: () => ({ ...stats, escapingTargets: [...stats.escapingTargets] }) };
+  return { rekeyPath, attributeTask, stats: () => ({ ...stats, escapingTargets: [...stats.escapingTargets], escapingDetails: [...stats.escapingDetails] }) };
 };

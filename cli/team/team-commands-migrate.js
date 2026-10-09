@@ -1,15 +1,21 @@
 /**
- * Chemical X Protocol: `chemx team migrate --from <db> [--dry-run] [--json]` (#2488).
+ * Chemical X Protocol: `chemx team migrate --from <db> [--dry-run] [--json]` (#2488, #2581).
  * The target is the coordination db of the cwd (never an unmerged package silo), or --into=<db>
  * for a rehearsal on copies. Paths are attributed against the cwd's coordination root either way.
+ * A real run plans against the target opened read-only first. With nothing to merge it stops there:
+ * no backup, nothing opened for writing. Otherwise it copies both dbs (VACUUM INTO, read-only
+ * handles) and only then opens the target for writing, so the copy predates any schema change.
  */
 import '../silence-warnings.js';
 import fs from 'node:fs';
 import path from 'node:path';
-import { migrateTeamDb } from './team-migrate.js';
+import { migrateTeamDb, backupBeforeMerge, hasWorkToMerge } from './team-migrate.js';
 import { openTeamContext, resolveTeamDbTarget, teamDbPathFor } from './coordination-db.js';
 import { initTeamSchema } from './team-schema.js';
-import { closeQuietly, openTeamDbReadOnly } from './team-db-readonly.js';
+import { closeQuietly } from './team-db-readonly.js';
+import { formatMigrateReport } from './team-migrate-report.js';
+
+export { formatMigrateReport };
 
 const loadSqlite = async () => {
   try {
@@ -26,89 +32,99 @@ export const MIGRATE_USAGE = [
   '  Merges a package db\'s team rows (tasks, comments, feed, DMs, agents, leases, lock queue,',
   '  projects, usage) into the coordination db. --dry-run merges nothing: it opens the coordination db',
   '  read-only, refuses when that db does not exist yet, and prints the plan. (The cwd\'s own tool-call',
-  '  telemetry may still add a row to a db it runs in.) A real run applies the team schema to the',
-  '  coordination db (creating it if missing), then backs up both dbs (VACUUM INTO) before any merged',
-  '  row is written, and prints the paths. A row that collides with an existing board row is kept as the',
-  '  board has it and reported as a conflict; the report says so and lists counts, not keys.',
-  '  Re-running adds only rows written',
-  '  after the previous merge. --keep-ids=source keeps the source\'s task ids on its first merge and',
-  '  renumbers colliding board tasks instead (each renumbered id keeps an alias).',
-  '  Not rewritten: free text (#ids in titles and messages) and task ids stored inside feed metadata',
-  '  JSON (triage taskIds, resolvedTaskIds); after a renumber those arrays name the board\'s tasks.',
-  '  task show resolves old ids by alias.'
+  '  telemetry may still add a row to a db it runs in.) A real run plans read-only first; when nothing',
+  '  is new it writes nothing and takes no backup, and says so. Otherwise it copies both dbs (VACUUM INTO)',
+  '  before it opens the coordination db for writing (so before any schema change), prints the paths,',
+  '  then merges in one transaction. A keyed row (a lease on the same file) that the board already has is',
+  '  kept as the board has it and listed by key; an agent handle on both sides is merged into the board',
+  '  row (token and cost totals summed, latest heartbeat, both roles in metadata.roles). Re-running adds',
+  '  only rows written after the previous merge; rows changed since are counted, not re-synced.',
+  '  --keep-ids=source keeps the source\'s task ids on its first merge and renumbers colliding board',
+  '  tasks instead (each renumbered id keeps an alias). Task ids in structured fields and in feed',
+  '  metadata JSON (taskIds, resolvedTaskIds, duplicate_of, queueId) are remapped. Not rewritten: free',
+  '  text (#ids in titles, messages, task_url); task show resolves old ids by alias.',
+  '  Runbook: docs/coordination-db.md.'
 ].join('\n');
 
-// An explicit copy for rehearsals: team schema applied, no project stamp (it lives elsewhere).
-const openIntoDb = (dbPath) => {
-  const exists = fs.existsSync(dbPath);
-  if (!exists) return { error: `No db at ${dbPath} (--into must name an existing db file).` };
-  const db = new DatabaseSync(dbPath);
+const EMPTY_APPLIED = Object.freeze({ tables: {}, aliasesCreated: 0, boardRenumbered: 0, boardMetadataRemapped: 0 });
+
+const openReadOnly = (dbPath) => {
+  const db = new DatabaseSync(dbPath, { readOnly: true });
   db.exec('PRAGMA busy_timeout = 5000;');
-  initTeamSchema(db);
-  return { db, isOwned: true };
+  return db;
 };
 
-// Read-only: resolves the coordination root without opening (so creating) any db.
-const openDryTarget = (cwd) => {
+// An empty board to plan against when the coordination db does not exist yet.
+const openEmptyBoard = () => {
+  const db = new DatabaseSync(':memory:');
+  initTeamSchema(db);
+  return db;
+};
+
+// Where the merge lands, without opening anything: the coordination db for cwd, or --into.
+const locateTarget = (cwd, flags) => {
   const target = resolveTeamDbTarget(cwd);
+  const hasInto = Boolean(flags.into);
+  if (hasInto) {
+    const intoPath = path.resolve(cwd, flags.into);
+    const exists = fs.existsSync(intoPath);
+    return exists ? { path: intoPath, root: target.coordinationRoot, isInto: true } : { error: `No db at ${intoPath} (--into must name an existing db file).` };
+  }
   const isRefused = Boolean(target.refused);
   if (isRefused) return { error: target.refused };
-  const dbPath = teamDbPathFor(target.coordinationRoot);
-  const db = openTeamDbReadOnly(target.coordinationRoot);
-  const isMissing = !db;
-  if (isMissing) return { error: `No coordination db at ${dbPath}; a dry run opens it read-only and does not create one.` };
-  return { db, path: dbPath, root: target.coordinationRoot, isOwned: true };
+  return { path: teamDbPathFor(target.coordinationRoot), root: target.coordinationRoot, isInto: false };
 };
 
-const openTarget = (cwd, flags) => {
-  const hasInto = Boolean(flags.into);
-  if (hasInto) return { ...openIntoDb(path.resolve(cwd, flags.into)), path: path.resolve(cwd, flags.into), root: resolveTeamDbTarget(cwd).coordinationRoot };
-  const isDry = Boolean(flags.dryRun);
-  if (isDry) return openDryTarget(cwd);
-  const coordination = openTeamContext(openTeamContext(cwd).coordinationRoot);
+// The writable target, opened only after the backup: --into gets the team schema and no project stamp.
+const openWritable = (located) => {
+  const isInto = Boolean(located.isInto);
+  if (isInto) {
+    const db = new DatabaseSync(located.path);
+    db.exec('PRAGMA busy_timeout = 5000;');
+    initTeamSchema(db);
+    return { db, isOwned: true };
+  }
+  const coordination = openTeamContext(located.root);
   const isUnavailable = !coordination.db;
-  if (isUnavailable) return { error: coordination.refused || 'SQLite database unavailable.' };
-  return { db: coordination.db, path: coordination.dbPath, root: coordination.root, isOwned: false };
+  return isUnavailable ? { error: coordination.refused || 'SQLite database unavailable.' } : { db: coordination.db, isOwned: false };
 };
 
-const describeTables = (tables) => Object.entries(tables)
-  .filter(([, counts]) => counts.pending + counts.alreadyMerged + counts.junk > 0)
-  .map(([table, counts]) => `  ${table}: ${counts.pending} to merge, ${counts.alreadyMerged} already merged, ${counts.renumbered} renumbered, ${counts.junk} junk candidates`);
+const migrateOptions = (cwd, flags, located) => ({
+  from: flags.from ? path.resolve(cwd, flags.from) : null,
+  targetRoot: located.root,
+  targetPath: located.path,
+  keepIds: flags.keepIds,
+  dropJunk: flags.dropJunk,
+  sourceRepo: flags.sourceRepo
+});
 
-// What the insert really did, per table. A conflict is a source row the board already had a row for:
-// the board row stays, the source row is not inserted, and it is not retried on a re-run.
-const describeApplied = (applied) => {
-  const rows = Object.entries(applied?.tables ?? {}).filter(([, counts]) => counts.inserted + counts.conflicts + counts.dangling > 0);
-  const lines = rows.map(([table, counts]) => `  applied ${table}: inserted ${counts.inserted}, kept board row instead ${counts.conflicts}, dangling refs dropped ${counts.dangling}`);
-  const conflicted = rows.filter(([, counts]) => counts.conflicts > 0).map(([table]) => table);
-  const hasConflicts = conflicted.length > 0;
-  const warning = hasConflicts ? [`  WARNING: source rows were not inserted in ${conflicted.join(', ')} (an existing board row has the same key, e.g. a lease on the same file). They are not retried on a re-run; check them by hand.`] : [];
-  return [...lines, ...warning];
+const withDb = (opened, fn) => {
+  try {
+    return fn(opened.db);
+  } finally {
+    if (opened.isOwned) closeQuietly(opened.db);
+  }
 };
 
-const describeTargets = (targets) => {
-  const repos = Object.entries(targets.byRepo).map(([repo, count]) => `${repo}: ${count}`).join(', ') || 'none';
-  const escaping = targets.escapingTargets.length > 0 ? `; kept as written because they leave the root: #${targets.escapingTargets.join(', #')}` : '';
-  return `  task repos after the merge: ${repos}; ${targets.normalized} target(s) re-based to their owning package${escaping}`;
+const runDry = (located, options) => {
+  const exists = fs.existsSync(located.path);
+  if (!exists) return { ok: false, error: `No coordination db at ${located.path}; a dry run opens it read-only and does not create one.` };
+  return withDb({ db: openReadOnly(located.path), isOwned: true }, (db) => migrateTeamDb(db, { ...options, dryRun: true }));
 };
 
-export const formatMigrateReport = (report) => {
-  const mode = report.dryRun ? 'dry run, nothing written' : 'merged';
-  const junkLine = report.junk.length > 0
-    ? `  junk candidates: ${report.junk.length} (${report.junkDropped ? 'dropped' : 'kept; --drop-junk drops them'}): ${report.junk.slice(0, 10).map((j) => `${j.table}:${j.key} (${j.reason})`).join(', ')}${report.junk.length > 10 ? ', ...' : ''}`
-    : '  junk candidates: 0';
-  const lines = [
-    `Team merge (${mode}): ${report.source.path} (repo ${report.source.repo}) -> ${report.target.path}`,
-    `  keep ids: ${report.keepIds}; first merge of this source: ${report.isFirstRun ? 'yes' : 'no'}; board tasks renumbered: ${report.boardRenumbered}`,
-    ...describeTables(report.tables),
-    ...describeApplied(report.applied),
-    describeTargets(report.targets),
-    junkLine,
-    `  source tasks changed after the previous merge (not re-synced): ${report.changedAfterMerge}`,
-    `  backups: ${report.backups.length > 0 ? report.backups.join(', ') : 'none (dry run)'}`,
-    '  not rewritten: free text (#ids in titles, messages, task_url) and task ids inside feed metadata JSON (taskIds, resolvedTaskIds); task show resolves old ids through task_aliases.'
-  ];
-  return `${lines.join('\n')}\n`;
+const runReal = (located, options) => {
+  const exists = fs.existsSync(located.path);
+  const planDb = exists ? openReadOnly(located.path) : openEmptyBoard();
+  const plan = withDb({ db: planDb, isOwned: true }, (db) => migrateTeamDb(db, { ...options, dryRun: true }));
+  const isPlanFailed = !plan.ok;
+  if (isPlanFailed) return plan;
+  const isNothingToMerge = !hasWorkToMerge(plan);
+  if (isNothingToMerge) return { ...plan, dryRun: false, nothingToMerge: true, backups: [], applied: EMPTY_APPLIED };
+  const backups = backupBeforeMerge({ sourcePath: plan.source.path, targetPath: located.path, sourceRepo: plan.source.repo });
+  const writable = openWritable(located);
+  const isUnavailable = Boolean(writable.error);
+  if (isUnavailable) return { ok: false, error: writable.error, backups };
+  return withDb(writable, (db) => migrateTeamDb(db, { ...options, backups }));
 };
 
 const writeReport = (report, isJson) => {
@@ -125,29 +141,20 @@ export const handleMigrateCommand = (flags, isCli, cwd = process.cwd()) => {
     if (isCli) process.stdout.write(`${MIGRATE_USAGE}\n`);
     return { usage: MIGRATE_USAGE };
   }
-  const target = openTarget(cwd, flags);
-  const isTargetMissing = Boolean(target.error);
+  const located = locateTarget(cwd, flags);
+  const isTargetMissing = Boolean(located.error);
   if (isTargetMissing) {
-    if (isCli) process.stderr.write(`\x1b[31m✕ ${target.error}\x1b[0m\n`);
-    return { ok: false, error: target.error };
+    if (isCli) process.stderr.write(`\x1b[31m✕ ${located.error}\x1b[0m\n`);
+    return { ok: false, error: located.error };
   }
   try {
-    const report = migrateTeamDb(target.db, {
-      from: flags.from ? path.resolve(cwd, flags.from) : null,
-      targetRoot: target.root,
-      targetPath: target.path,
-      keepIds: flags.keepIds,
-      dryRun: flags.dryRun,
-      dropJunk: flags.dropJunk,
-      sourceRepo: flags.sourceRepo
-    });
+    const options = migrateOptions(cwd, flags, located);
+    const report = flags.dryRun ? runDry(located, options) : runReal(located, options);
     if (isCli) writeReport(report, flags.isJson);
     return report;
   } catch (err) {
     const failure = { ok: false, error: `Migration stopped: ${err instanceof Error ? err.message : String(err)}` };
     if (isCli) writeReport(failure, flags.isJson);
     return failure;
-  } finally {
-    if (target.isOwned) closeQuietly(target.db);
   }
 };

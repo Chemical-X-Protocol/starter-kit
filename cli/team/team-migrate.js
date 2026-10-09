@@ -2,13 +2,19 @@
  * Chemical X Protocol: `chemx team migrate` merges a per-package db into the coordination db (#2488).
  * Guarantees:
  *   - the source db is opened read-only and never written;
- *   - before any write both dbs are copied with VACUUM INTO and the paths are returned;
+ *   - a run with nothing to merge (an empty source, or a re-run with no late rows) writes nothing and
+ *     takes no backup, and says so;
+ *   - otherwise, before any write both dbs are copied with VACUUM INTO and the paths are returned
+ *     (`chemx team migrate` copies them before it opens the coordination db for writing, so before
+ *     any schema change: backupBeforeMerge);
  *   - the merge is one IMMEDIATE transaction: it lands whole or not at all;
  *   - a re-run of the same source adds only rows the ledger has not seen (rows written after the
  *     previous merge); rows changed in the source after their merge are counted, not re-synced;
- *   - renumbered task ids get task_aliases rows; structured references are remapped; free text is not.
- * Not guaranteed: agents and leases that already exist on the board keep the board's row (counted
- * as conflicts); junk candidates are only dropped with --drop-junk.
+ *   - renumbered task ids get task_aliases rows; structured references, including the ids inside feed
+ *     metadata JSON, are remapped; free text is not.
+ * Not guaranteed: leases (and other keyed rows) that already exist on the board keep the board's row
+ * (counted as conflicts and listed by key); an agent handle on both sides is merged into the board
+ * row (team-migrate-agents.js); junk candidates are only dropped with --drop-junk.
  */
 import '../silence-warnings.js';
 import fs from 'node:fs';
@@ -78,8 +84,17 @@ const backupBoth = (source, target, paths) => {
   return [paths.source, paths.target];
 };
 
+// A read-only board that predates the merge schema has no team_merge_runs: it reads as never merged.
+const safeGet = (db, sql, params) => {
+  try {
+    return db.prepare(sql).get(...params);
+  } catch {
+    return undefined; // chemx-allow: best-effort a board without the merge tables has no runs
+  }
+};
+
 const changedAfterMerge = (db, sourceDb, sourceRows) => {
-  const lastRun = db.prepare('SELECT MAX(started_at) AS at FROM team_merge_runs WHERE source_db = ?').get(sourceDb)?.at;
+  const lastRun = safeGet(db, 'SELECT MAX(started_at) AS at FROM team_merge_runs WHERE source_db = ?', [sourceDb])?.at;
   const hasRun = Boolean(lastRun);
   if (!hasRun) return 0;
   return (sourceRows.get(TASKS) ?? []).filter((row) => Number(row.updated_at) > Number(lastRun) && Number(row.created_at) <= Number(lastRun)).length;
@@ -95,7 +110,8 @@ const summarize = (plan, context) => {
   // A throwaway attribution over the pending tasks, so a dry run reports the same target moves.
   const preview = createAttribution(context.targetRoot, context.sourceRepo);
   for (const row of plan.tables.get(TASKS).pending) preview.attributeTask(row);
-  return { tables, boardRenumbered: plan.rekey.size, junk, junkDropped: context.dropJunk, targets: preview.stats() };
+  const pendingTotal = Object.values(tables).reduce((total, counts) => total + counts.pending, 0);
+  return { tables, pendingTotal, boardRenumbered: plan.rekey.size, junk, junkDropped: context.dropJunk, targets: preview.stats() };
 };
 
 const recordRun = (db, context, backups, counts) => db.prepare(
@@ -106,7 +122,7 @@ const buildContext = (targetDb, source, valid, options) => {
   const sourceDb = valid.sourcePath;
   const sourceRows = new Map(TABLE_SPECS.map((spec) => [spec.table, readRows(source, spec.table)]));
   const createdByJunk = junkCreatedTaskIds(sourceRows.get('agent_feed') ?? []);
-  const isFirstRun = !targetDb.prepare('SELECT 1 FROM team_merge_runs WHERE source_db = ?').get(sourceDb);
+  const isFirstRun = !safeGet(targetDb, 'SELECT 1 FROM team_merge_runs WHERE source_db = ?', [sourceDb]);
   const attribution = createAttribution(options.targetRoot, valid.sourceRepo);
   return {
     sourceDb, sourceRepo: valid.sourceRepo, targetRoot: options.targetRoot, keepIds: valid.keepIds, now: options.now ?? Date.now(),
@@ -118,9 +134,38 @@ const buildContext = (targetDb, source, valid, options) => {
 };
 
 /**
- * @param {object} targetDb the coordination db handle (team schema applied)
+ * VACUUM INTO copies of the source db and, when it exists, the coordination db, from read-only
+ * handles: `chemx team migrate` calls this before anything opens the coordination db for writing,
+ * so the copy predates any schema change. Returns the paths written.
+ */
+export const backupBeforeMerge = ({ sourcePath, targetPath, sourceRepo, now = Date.now() }) => {
+  const paths = backupPaths(targetPath, sourceRepo, now);
+  fs.mkdirSync(paths.dir, { recursive: true });
+  const copies = [[sourcePath, paths.source], [targetPath, paths.target]].filter(([from]) => fs.existsSync(from));
+  for (const [from, to] of copies) {
+    const db = new DatabaseSync(from, { readOnly: true });
+    try {
+      db.exec(`VACUUM INTO ${quoteSql(to)}`);
+    } finally {
+      db.close();
+    }
+  }
+  return copies.map(([, to]) => to);
+};
+
+/** True when a plan writes anything: pending rows, or junk rows that --drop-junk records as dropped. */
+export const hasWorkToMerge = (summary) => {
+  const hasJunkToDrop = Boolean(summary.junkDropped) && summary.junk.length > 0;
+  return summary.pendingTotal > 0 || hasJunkToDrop;
+};
+
+const EMPTY_APPLIED = Object.freeze({ tables: {}, aliasesCreated: 0, boardRenumbered: 0, boardMetadataRemapped: 0 });
+
+/**
+ * @param {object} targetDb the coordination db handle (team schema applied; read-only for a dry run)
  * @param {{ from: string, targetRoot: string, targetPath: string, keepIds?: string, dryRun?: boolean,
- *   dropJunk?: boolean, sourceRepo?: string, now?: number }} options
+ *   dropJunk?: boolean, sourceRepo?: string, now?: number, backups?: string[] }} options
+ *   backups: copies the caller already took (backupBeforeMerge); without it this takes them itself.
  */
 export const migrateTeamDb = (targetDb, options) => {
   const valid = validateMigration(options);
@@ -133,7 +178,9 @@ export const migrateTeamDb = (targetDb, options) => {
     const summary = { source: { path: context.sourceDb, repo: context.sourceRepo }, target: { path: options.targetPath, root: options.targetRoot }, keepIds: context.keepIds, isFirstRun: context.isFirstRun, changedAfterMerge: changedAfterMerge(targetDb, context.sourceDb, context.sourceRows), ...summarize(plan, context) };
     const isDryRun = Boolean(options.dryRun);
     if (isDryRun) return { ok: true, dryRun: true, backups: [], ...summary };
-    const backups = backupBoth(source, targetDb, backupPaths(options.targetPath, context.sourceRepo, context.now));
+    const hasNothingToMerge = !hasWorkToMerge(summary);
+    if (hasNothingToMerge) return { ok: true, dryRun: false, nothingToMerge: true, backups: options.backups ?? [], ...summary, applied: EMPTY_APPLIED };
+    const backups = options.backups ?? backupBoth(source, targetDb, backupPaths(options.targetPath, context.sourceRepo, context.now));
     const applied = withImmediateTransaction(targetDb, () => {
       const result = applyMerge(targetDb, plan, context);
       recordRun(targetDb, context, backups, result.tables);

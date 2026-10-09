@@ -3,11 +3,17 @@
  * Runs inside the caller's IMMEDIATE transaction. Order: renumber colliding board tasks (keepIds
  * 'source' only), insert the source rows with remapped ids and references, then record aliases
  * and ledger rows. Every structured reference is remapped (parent_id, dependencies, feed task_id
- * and thread_id, current_task_id, memory/usage task_id, project_id); a reference whose row was
- * dropped or never existed becomes NULL and is counted. Free text is left as written.
+ * and thread_id, current_task_id, memory/usage task_id, project_id, and the ids inside feed metadata
+ * JSON: taskIds, resolvedTaskIds, duplicate_of, queueId); a reference whose row was dropped or never
+ * existed becomes NULL (or leaves its metadata array) and is counted. Free text is left as written.
+ * A source agent whose handle the board has is merged into the board row (team-migrate-agents.js).
+ * Every row the board kept instead, every junk row dropped and every dangling reference is listed
+ * by key in the result, so the report can name them (#2581).
  */
-import { TASKS, TASK_REF_COLUMNS, tableColumns, rowKey } from './team-migrate-tables.js';
+import { TABLE_SPECS, TASKS, TASK_REF_COLUMNS, tableColumns, rowKey } from './team-migrate-tables.js';
 import { mapRef, DROPPED } from './team-migrate-plan.js';
+import { remapMetadataJson, metadataColumns, rekeyBoardMetadata } from './team-migrate-metadata.js';
+import { mergeAgentRow } from './team-migrate-agents.js';
 
 const parseList = (text) => {
   try {
@@ -51,6 +57,21 @@ export const rekeyBoardTasks = (db, rekey, now) => {
     if (needsAlias) db.prepare('INSERT OR IGNORE INTO task_aliases (source_repo, old_id, new_id, source_db, created_at) VALUES (?, ?, ?, ?, ?)').run(repo, oldId, newId, 'renumbered-on-merge', now);
   }
   remapBoardDependencies(db, rekey);
+  const hasRekey = rekey.size > 0;
+  if (!hasRekey) return 0;
+  return TABLE_SPECS.filter((spec) => spec.metadataRefs).reduce((total, spec) => total + rekeyBoardMetadata(db, spec, rekey, TASKS), 0);
+};
+
+const remapMetadata = (out, spec, plan) => {
+  let dangling = 0;
+  for (const [column, refs] of metadataColumns(spec)) {
+    const hasColumn = typeof out[column] === 'string';
+    if (!hasColumn) continue;
+    const result = remapMetadataJson(out[column], refs, (table, value) => mapRef(plan, table, value));
+    out[column] = result.text;
+    dangling += result.dangling;
+  }
+  return dangling;
 };
 
 const transformRow = (row, spec, plan, context) => {
@@ -58,19 +79,28 @@ const transformRow = (row, spec, plan, context) => {
   const hasAutoId = Boolean(spec.autoId);
   if (hasAutoId) out.id = Number(plan.tables.get(spec.table).map.get(String(row.id)));
   let dangling = 0;
+  const danglingColumns = [];
   for (const [column, refTable] of Object.entries(spec.refs ?? {})) {
     const hasValue = out[column] !== null && out[column] !== undefined;
     if (!hasValue) continue;
     out[column] = mapRef(plan, refTable, row[column]);
     const isDangling = out[column] === null;
     if (isDangling) dangling++;
+    if (isDangling) danglingColumns.push(column);
   }
+  const metadataDangling = remapMetadata(out, spec, plan);
+  dangling += metadataDangling;
+  const hasMetadataDangling = metadataDangling > 0;
+  if (hasMetadataDangling) danglingColumns.push('metadata');
   for (const [column, refTable] of Object.entries(spec.jsonRefs ?? {})) {
     const hasColumn = column in out;
     if (!hasColumn) continue;
     const deps = parseList(row[column]);
     const mapped = deps.map((dep) => mapRef(plan, refTable, dep));
-    dangling += mapped.filter((dep) => dep === null).length;
+    const lost = mapped.filter((dep) => dep === null).length;
+    dangling += lost;
+    const hasLost = lost > 0;
+    if (hasLost) danglingColumns.push(column);
     out[column] = JSON.stringify(mapped.filter((dep) => dep !== null));
   }
   for (const column of spec.pathCols ?? []) {
@@ -79,7 +109,7 @@ const transformRow = (row, spec, plan, context) => {
   }
   const isTask = spec.table === TASKS;
   if (isTask) Object.assign(out, context.attributeTask(row));
-  return { out, dangling };
+  return { out, dangling, danglingColumns };
 };
 
 const insertStatement = (db, table, columns) => db.prepare(
@@ -90,18 +120,30 @@ const recordLedger = (db, context, table, key, newKey) => db.prepare(
   'INSERT OR REPLACE INTO team_merge_ledger (source_db, source_table, source_id, new_id, merged_at) VALUES (?, ?, ?, ?, ?)'
 ).run(context.sourceDb, table, key, String(newKey), context.now);
 
+// A row the INSERT OR IGNORE skipped: an agent merges into the board row, anything else stays a conflict.
+const settleSkipped = (db, spec, out, columns, counts, key) => {
+  const isAgent = spec.table === 'agents';
+  const isMerged = isAgent && mergeAgentRow(db, out, columns);
+  const bucket = isMerged ? 'merged' : 'conflicts';
+  counts[bucket] += 1;
+  counts[`${bucket}Keys`].push(key);
+};
+
 const insertTable = (db, entry, plan, context) => {
   const { spec, pending } = entry;
-  const counts = { inserted: 0, conflicts: 0, remapped: 0, dangling: 0 };
+  const counts = { inserted: 0, conflicts: 0, merged: 0, remapped: 0, dangling: 0, conflictsKeys: [], mergedKeys: [], danglingRefs: [], droppedKeys: [] };
   const targetColumns = new Set(tableColumns(db, spec.table));
   for (const row of pending) {
-    const { out, dangling } = transformRow(row, spec, plan, context);
+    const { out, dangling, danglingColumns } = transformRow(row, spec, plan, context);
     const columns = Object.keys(out).filter((column) => targetColumns.has(column));
     const changes = insertStatement(db, spec.table, columns).run(...columns.map((column) => out[column])).changes;
     const isInserted = changes === 1;
     counts.inserted += isInserted ? 1 : 0;
-    counts.conflicts += isInserted ? 0 : 1;
+    const isSkipped = !isInserted;
+    if (isSkipped) settleSkipped(db, spec, out, [...targetColumns], counts, rowKey(spec, row));
     counts.dangling += dangling;
+    const hasDangling = dangling > 0;
+    if (hasDangling) counts.danglingRefs.push({ key: rowKey(spec, row), columns: danglingColumns });
     const isRenumbered = spec.autoId && Number(out.id) !== Number(row.id);
     counts.remapped += isRenumbered ? 1 : 0;
     recordLedger(db, context, spec.table, rowKey(spec, row), plan.tables.get(spec.table).map.get(rowKey(spec, row)));
@@ -109,6 +151,7 @@ const insertTable = (db, entry, plan, context) => {
   for (const { row } of entry.junk) {
     const isDropped = plan.tables.get(spec.table).map.get(rowKey(spec, row)) === DROPPED;
     if (isDropped) recordLedger(db, context, spec.table, rowKey(spec, row), DROPPED);
+    if (isDropped) counts.droppedKeys.push(rowKey(spec, row));
   }
   return counts;
 };
@@ -127,9 +170,9 @@ const recordSourceAliases = (db, plan, context) => {
 
 /** Applies the plan; returns per-table counts plus alias and renumber totals. */
 export const applyMerge = (db, plan, context) => {
-  rekeyBoardTasks(db, plan.rekey, context.now);
+  const boardMetadataRemapped = rekeyBoardTasks(db, plan.rekey, context.now);
   const tables = {};
   for (const [table, entry] of plan.tables) tables[table] = insertTable(db, entry, plan, context);
   const aliasesCreated = recordSourceAliases(db, plan, context) + plan.rekey.size;
-  return { tables, aliasesCreated, boardRenumbered: plan.rekey.size };
+  return { tables, aliasesCreated, boardRenumbered: plan.rekey.size, boardMetadataRemapped };
 };
