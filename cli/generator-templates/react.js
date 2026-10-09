@@ -10,7 +10,8 @@ export const buildReactComponent = (name, pascalName, options = {}) => {
     ? `import { use${pascalName}Controller } from './${name}.controller';\n`
     : '';
 
-  if (archetype && archetype.id !== 'state-boundary' && typeof archetype.buildReactBody === 'function') {
+  const hasReactBuilder = Boolean(archetype && archetype.id !== 'state-boundary' && typeof archetype.buildReactBody === 'function');
+  if (hasReactBuilder) {
     let bodyContent = archetype.buildReactBody(name, pascalName);
     if (atomsPackage) {
       bodyContent = bodyContent
