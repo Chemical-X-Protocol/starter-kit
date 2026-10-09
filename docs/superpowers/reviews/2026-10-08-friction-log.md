@@ -14,3 +14,7 @@
 - (e-hooks) `chemx read cli/search.js --symbol=handleCheckCommand` says "not found": the symbol is re-exported from search-commands.js and read does not follow re-exports; needed grep to locate it.
 - (e-hooks) `chemx team task show <id>` text mode omits the task description; only `--json` shows it, so every claim needed a JSON pipe through node to read the acceptance criteria.
 - (e-hooks) The COMPASS guard denied `cat` of `.claude/hooks/chemx-guard.mjs` and the review cases file outside src; correct per rule, but the Read tool was the only path (chemx read on .mjs worked after). Ported guard keeps this (in-repo source).
+- (e-hooks) The bootstrap guard denied `git diff --cached --name-only` and `git log --oneline -1` inside commit scripts; the ported guard allows scripting forms (--name-only, --format). Also any denial kills the whole compound command, so a commit chained with `git log` silently did not run.
+- (e-hooks) Kit suite in a worktree reads the parent checkout's .chemx/index.db (findChemxDir walk-up); spot-check Fix 1 flaked until the worktree got its own .chemx (task filed under G6). Timing specs (clipboard <1000ms, help <2000ms, lock p95 <50ms) fail at load average ~60.
+- (e-hooks) The pre-commit audit spent 40 of 42 CPU seconds syncing the search index (#1742 fixed with audit --staged --no-index; index cost filed under G6).
+- (e-hooks) `team task done --target=<missing path>` completed silently without verification (filed under T).
