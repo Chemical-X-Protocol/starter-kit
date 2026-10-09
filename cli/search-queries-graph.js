@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { extractSymbolBlock } from './reader.js';
+import { computeImportCoverage } from './sfc/import-coverage.js';
 
 const _require = createRequire(import.meta.url);
 let _parse = null;
@@ -118,6 +119,7 @@ export const calculateBlastRadius = (db, targetPathOrSymbol, options = {}) => {
     target: cleanTarget,
     seedPath,
     totalImpactCount: consumers.length,
+    coverage: computeImportCoverage(db),
     depth: maxReachedDepth,
     directConsumers,
     transitiveConsumers,

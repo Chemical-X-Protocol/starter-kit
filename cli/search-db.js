@@ -1,5 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { resolveAliasBase } from './sfc/module-aliases.js';
+import { isComponentSpecifier, resolveComponentSpecifier } from './sfc/component-resolver.js';
 import { generateEmbedding, serializeVector, VECTOR_DIMENSIONS } from './embeddings/vectorizer.js';
 import { buildFtsTokens } from './search-tokenizer.js';
 
@@ -72,16 +74,12 @@ export const removeDeletedFiles = (db, currentFilePaths, cwd = process.cwd(), { 
 
 export const resolveModulePath = (importerPath, sourceModule, cwd = process.cwd()) => {
   if (!sourceModule || typeof sourceModule !== 'string') return '';
+  if (isComponentSpecifier(sourceModule)) return resolveComponentSpecifier(sourceModule, cwd);
   const isRelative = sourceModule.startsWith('.') || sourceModule.startsWith('/');
-  const isAliased = sourceModule.startsWith('@/');
-  if (!isRelative && !isAliased) return '';
+  const aliasBase = isRelative ? null : resolveAliasBase(sourceModule, cwd);
+  if (!isRelative && !aliasBase) return '';
 
-  let basePath;
-  if (isAliased) {
-    basePath = path.resolve(cwd, 'src', sourceModule.slice(2));
-  } else {
-    basePath = path.resolve(cwd, path.dirname(importerPath), sourceModule);
-  }
+  const basePath = aliasBase || path.resolve(cwd, path.dirname(importerPath), sourceModule);
 
   const extensions = ['', '.ts', '.js', '.vue', '.tsx', '.jsx', '.d.ts'];
   for (const ext of extensions) {
@@ -99,9 +97,7 @@ export const resolveModulePath = (importerPath, sourceModule, cwd = process.cwd(
   }
 
   // Fallback path normalization for virtual/mock files
-  if (isAliased) {
-    return path.normalize(path.join('src', sourceModule.slice(2)));
-  }
+  if (aliasBase) return path.relative(cwd, aliasBase);
   return path.normalize(path.join(path.dirname(importerPath), sourceModule));
 };
 

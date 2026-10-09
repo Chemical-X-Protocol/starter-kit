@@ -7,6 +7,9 @@ import { resolveSafePath } from './path-scope.js';
 import { isBabelParsable } from './languages.js';
 import { extractAstMetadata } from './search-ast.js';
 import { isMarkdownFile, generateMarkdownOutline } from './reader-markdown.js';
+import { parseSfc } from './sfc/sfc-parse.js';
+import { outlineModuleAst } from './outline/ast-outline.js';
+import { isStylesheetFile, outlineStylesheet } from './outline/style-outline.js';
 
 import {
   stripCodeComments,
@@ -43,62 +46,50 @@ const OUTLINE_KIND_LABELS = {
   symbol: 'symbol'
 };
 
+const resolveSfcScript = (code, filePath) => {
+  const isVue = filePath.endsWith('.vue');
+  if (isVue) {
+    const sfc = parseSfc(code, filePath);
+    return { scriptContent: sfc.scriptOverlay, externalSrc: sfc.scripts.find((s) => s.src)?.src ?? null };
+  }
+  const blocks = [...code.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)].map((m) => m[1]);
+  const scriptSrcMatch = code.match(/<script[^>]+src=["']([^"']+)["']/i);
+  return { scriptContent: blocks.join('\n'), externalSrc: scriptSrcMatch ? scriptSrcMatch[1] : null };
+};
+
+const findCompanionController = (filePath) => {
+  const dir = path.dirname(filePath);
+  const base = path.basename(filePath, path.extname(filePath));
+  const candidates = ['ts', 'js', 'tsx', 'jsx'].map((ext) => path.join(dir, `${base}.controller.${ext}`));
+  return candidates.find((c) => fs.existsSync(c)) ?? null;
+};
+
+const describeCompanion = (filePath, scriptContent, externalSrc) => {
+  const companionFound = findCompanionController(filePath);
+  if (companionFound) {
+    const relCompanion = path.relative(process.cwd(), companionFound);
+    return `// Companion controller detected: ${relCompanion} (Run cx read ${relCompanion} --outline to inspect logic)`;
+  }
+  if (externalSrc) return `// External script reference detected: ${externalSrc}`;
+  const isTemplateOnly = !scriptContent.trim();
+  return isTemplateOnly ? '// Template-only component (no <script> block detected)' : null;
+};
+
 export const generateAstOutline = (code, filePath) => {
   if (isMarkdownFile(filePath)) return generateMarkdownOutline(code, filePath);
-  const isVue = filePath.endsWith('.vue');
-  const isSvelte = filePath.endsWith('.svelte');
-  let scriptContent = code;
-  let companionAnnotation = null;
+  if (isStylesheetFile(filePath)) return [`// Outline: ${filePath}`, ...outlineStylesheet(code)].join('\n');
+  const isComponentFile = filePath.endsWith('.vue') || filePath.endsWith('.svelte');
+  const sfcScript = isComponentFile ? resolveSfcScript(code, filePath) : { scriptContent: code, externalSrc: null };
+  const { scriptContent } = sfcScript;
+  const companionAnnotation = isComponentFile ? describeCompanion(filePath, scriptContent, sfcScript.externalSrc) : null;
 
-  if (isVue || isSvelte) {
-    const scriptMatch = code.match(/<script[\s\S]*?>([\s\S]*?)<\/script>/i);
-    scriptContent = scriptMatch ? scriptMatch[1] : '';
-
-    const dir = path.dirname(filePath);
-    const ext = path.extname(filePath);
-    const base = path.basename(filePath, ext);
-    const controllerCandidates = [
-      path.join(dir, `${base}.controller.ts`),
-      path.join(dir, `${base}.controller.js`),
-      path.join(dir, `${base}.controller.tsx`),
-      path.join(dir, `${base}.controller.jsx`)
-    ];
-
-    let companionFound = null;
-    for (const c of controllerCandidates) {
-      if (fs.existsSync(c)) {
-        companionFound = c;
-        break;
-      }
-    }
-
-    const scriptSrcMatch = code.match(/<script[^>]+src=["']([^"']+)["']/i);
-    const externalSrc = scriptSrcMatch ? scriptSrcMatch[1] : null;
-
-    if (companionFound) {
-      const relCompanion = path.relative(process.cwd(), companionFound);
-      companionAnnotation = `// Companion controller detected: ${relCompanion} (Run cx read ${relCompanion} --outline to inspect logic)`;
-    } else if (externalSrc) {
-      companionAnnotation = `// External script reference detected: ${externalSrc}`;
-    } else if (!scriptContent.trim()) {
-      companionAnnotation = `// Template-only component (no <script> block detected)`;
-    }
-  }
-
-  const lines = [];
-  lines.push(`// Outline: ${filePath}`);
-  if (companionAnnotation) {
-    lines.push(companionAnnotation);
-  }
-
-  if (!scriptContent.trim()) {
-    return lines.join('\n');
-  }
+  const lines = [`// Outline: ${filePath}`];
+  if (companionAnnotation) lines.push(companionAnnotation);
+  if (!scriptContent.trim()) return lines.join('\n');
 
   // Babel cannot parse C/C++, Python, Go, Rust, Java, C# or Kotlin. It also does not
-  // throw on them, because errorRecovery swallows the failure and yields an empty AST,
-  // so the catch-block fallback below never fires for these files. Route them to the
-  // polyglot extractor instead.
+  // throw on them, because errorRecovery swallows the failure and yields an empty AST.
+  // Route them to the polyglot extractor instead.
   if (!isBabelParsable(filePath)) {
     const meta = extractAstMetadata(scriptContent, filePath);
     const seen = new Set();
@@ -110,88 +101,14 @@ export const generateAstOutline = (code, filePath) => {
     return lines.join('\n');
   }
 
-  let omittedFunctionCount = 0;
-
   try {
     const ast = parse(scriptContent, {
       sourceType: 'module',
       plugins: ['typescript', 'jsx', 'decorators-legacy', 'topLevelAwait'],
-      errorRecovery: true,
+      errorRecovery: true
     });
-
-    traverse(ast, {
-      ExportNamedDeclaration(nodePath) {
-        const decl = nodePath.node.declaration;
-        if (!decl) return;
-
-        if (decl.type === 'FunctionDeclaration' && decl.id) {
-          const params = decl.params.map((p) => p.name || p.type).join(', ');
-          lines.push(`export function ${decl.id.name}(${params})`);
-        } else if (decl.type === 'VariableDeclaration') {
-          decl.declarations.forEach((d) => {
-            const name = d.id?.name;
-            if (name) {
-              const kind = resolveDeclarationKind(d);
-              lines.push(`export ${kind} ${name}`);
-            }
-          });
-        } else if (decl.type === 'TSTypeAliasDeclaration' && decl.id) {
-          lines.push(`export type ${decl.id.name}`);
-        } else if (decl.type === 'TSInterfaceDeclaration' && decl.id) {
-          lines.push(`export interface ${decl.id.name}`);
-        }
-      },
-      ExportDefaultDeclaration(nodePath) {
-        lines.push(`export default`);
-      },
-      TSTypeAliasDeclaration(nodePath) {
-        if (nodePath.parent.type !== 'ExportNamedDeclaration') {
-          lines.push(`type ${nodePath.node.id.name}`);
-        }
-      },
-      TSInterfaceDeclaration(nodePath) {
-        if (nodePath.parent.type !== 'ExportNamedDeclaration') {
-          lines.push(`interface ${nodePath.node.id.name}`);
-        }
-      },
-      VariableDeclaration(nodePath) {
-        if (nodePath.parent.type !== 'Program') return;
-        if (nodePath.parentPath?.parent?.type === 'ExportNamedDeclaration') return;
-        nodePath.node.declarations.forEach((d) => {
-          const name = d.id?.name;
-          if (name) {
-            const kind = resolveDeclarationKind(d);
-            lines.push(`${kind} ${name}`);
-          }
-        });
-      },
-      FunctionDeclaration(nodePath) {
-        if (nodePath.parent.type !== 'Program') {
-          omittedFunctionCount++;
-          return;
-        }
-        if (nodePath.parentPath?.parent?.type === 'ExportNamedDeclaration') return;
-        if (nodePath.node.id) {
-          const params = nodePath.node.params.map((p) => p.name || p.type).join(', ');
-          lines.push(`function ${nodePath.node.id.name}(${params})`);
-        }
-      },
-      ArrowFunctionExpression(nodePath) {
-        if (nodePath.parent.type !== 'VariableDeclarator') {
-          omittedFunctionCount++;
-        }
-      },
-      FunctionExpression(nodePath) {
-        if (nodePath.parent.type !== 'VariableDeclarator') {
-          omittedFunctionCount++;
-        }
-      }
-    });
-
-    if (omittedFunctionCount > 0) {
-      lines.push(`// [Notice: ${omittedFunctionCount} internal/unexported function(s) omitted. Use cx read --symbol=<name> to inspect]`);
-    }
-  } catch (err) {
+    lines.push(...outlineModuleAst(ast, scriptContent));
+  } catch {
     // Regex fallback for non-parseable files
     const typeMatches = scriptContent.match(/export\s+(type|interface|const|function|class)\s+([a-zA-Z0-9_$]+)/g) || [];
     typeMatches.forEach((m) => lines.push(m.trim()));

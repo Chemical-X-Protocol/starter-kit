@@ -1,4 +1,5 @@
 import { parse } from '@babel/parser';
+import { parseSfc } from './sfc/sfc-parse.js';
 import traverseModule from '@babel/traverse';
 
 const traverse = traverseModule.default || traverseModule;
@@ -72,8 +73,7 @@ export const summarizeTemplate = (code, filePath = '') => {
   let tpl = '';
 
   if (isVue) {
-    const match = code.match(/<template[\s\S]*?>([\s\S]*?)<\/template>/i);
-    if (match) tpl = match[1];
+    tpl = parseSfc(code, filePath).template?.content ?? '';
   } else if (isSvelte) {
     tpl = code
       .replace(/<script[\s\S]*?<\/script>/gi, '')
@@ -122,8 +122,8 @@ export const extractTemplateContent = (code, filePath = '') => {
   const isSvelte = filePath.endsWith('.svelte');
 
   if (isVue) {
-    const match = code.match(/<template[\s\S]*?>([\s\S]*?)<\/template>/i);
-    return match ? match[0].trim() : '// No <template> block found in Vue file.';
+    const template = parseSfc(code, filePath).template;
+    return template ? `<template>${template.content}</template>`.trim() : '// No <template> block found in Vue file.';
   }
 
   if (isSvelte) {
@@ -157,8 +157,7 @@ export const generateAstLogicSkeleton = (code, filePath, options = {}) => {
   let scriptContent = code;
 
   if (isVue) {
-    const scriptMatch = code.match(/<script[\s\S]*?>([\s\S]*?)<\/script>/i);
-    scriptContent = scriptMatch ? scriptMatch[1] : '';
+    scriptContent = parseSfc(code, filePath).scriptOverlay;
   } else if (isSvelte) {
     const scriptMatch = code.match(/<script[\s\S]*?>([\s\S]*?)<\/script>/i);
     scriptContent = scriptMatch ? scriptMatch[1] : '';
