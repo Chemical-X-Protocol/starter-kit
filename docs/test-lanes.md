@@ -47,7 +47,7 @@ Method:
 - Copy the kit working tree (no `.git`, no `.chemx`) to a directory outside the repo, `git init` and commit it there, and link its `node_modules` to the kit's. The shared checkout was never edited. A copy under `/tmp` is not a valid place: forge specs returned zero units for it, so use a directory outside `/tmp`.
 - For each file: append one comment line, run `node cli/index.js test --changed --depth=<n>` from the copy, revert the file, repeat. Three runs per cell. Time is wall clock of the whole command, including node startup, selection and the run.
 - Changed file per area: `cli/team/agent-identity.js`, `cli/audit/ast-passes.js`, `cli/forge/anchors.js`.
-- "Specs" is the affected count minus the "deeper spec(s) NOT run" count the command reports (320 spec files in total). Slow-lane specs among them are not run.
+- "Specs" is the affected count minus the "deeper spec(s) NOT run" count the command reports (320 spec files in the snapshot copy; the live checkout reported 327 on 2026-10-09 because peers add specs, so the count drifts). Slow-lane specs among them are not run.
 - The copy was a snapshot of a working tree other agents were editing, so it carried failing specs before any change (for example `cli/audit/rule-fixtures.spec.js` fails 8 of 102 with no change applied). A run with failures still shows how long the selection takes, but it is not a green-gate time.
 
 | Change in | Depth | Specs | Runs (s) | Median (s) | Max (s) | Result |
@@ -67,7 +67,7 @@ Whole lanes, one run each, same copy and same busy machine:
 | `chemx test --all` | 920.7 s | 92 of 2477 tests failed |
 
 Reading it:
-- Every affected-spec cell above stayed under 60 s, worst case 22.7 s, including with the machine loaded. Within the limits above this meets the rooftop line for `--depth=1` and `--depth=2` with these three changes.
+- Every affected-spec cell above finished in under 60 s, worst case 22.7 s, including with the machine loaded. Two of the six rows (cli/audit depth 2, cli/forge depth 2) come from runs that had failing tests, so they time the run, not a green gate. Within the limits above this meets the rooftop line for `--depth=1` and `--depth=2` with these three changes.
 - `--depth` is not proof: it leaves hundreds of affected specs unrun (163 to 201 at depth 2). Rerun without `--depth` before merging, which this table does not time.
 - Not measured: `--changed` without `--depth`, other directories, an idle machine, and any change that falls back to the full suite.
 - The failures come from the snapshot being a moving working tree and were not investigated, so the pass or fail column is evidence about that snapshot only.
