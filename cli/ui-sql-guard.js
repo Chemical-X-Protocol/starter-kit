@@ -2,14 +2,15 @@
  * Chemical X UI SQL console guard.
  * The DB Studio console is read-only: one SELECT/WITH/VALUES/EXPLAIN statement
  * or a read-only PRAGMA. Everything else (ATTACH, DDL, DML, PRAGMA writes) is refused.
- * The server also runs console SQL on a readOnly connection as a second wall.
+ * The server also runs console SQL on a readOnly, query_only connection as a second wall.
  */
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
 import { resolveIndexDbPath } from './search-schema.js';
+import { maskSqlLiteralsAndComments } from './ui-sql-mask.js';
 
 const READ_STATEMENT_START = /^(SELECT|WITH|VALUES|EXPLAIN|PRAGMA)\b/i;
-const WRITE_KEYWORDS = /\b(ATTACH|DETACH|INSERT|UPDATE|DELETE|CREATE|DROP|ALTER)\b|\bREPLACE\s+INTO\b/i;
+const WRITE_KEYWORDS = /\b(ATTACH|DETACH|INSERT|UPDATE|DELETE|CREATE|DROP|ALTER|VACUUM|REINDEX|ANALYZE)\b|\bREPLACE\s+INTO\b/i;
 const INTROSPECTION_PRAGMAS = new Set([
   'table_info', 'table_xinfo', 'index_list', 'index_info', 'index_xinfo',
   'foreign_key_list', 'foreign_key_check', 'integrity_check', 'quick_check'
@@ -24,14 +25,6 @@ const PRAGMA_SHAPE = /^PRAGMA\s+(?:\w+\.)?(\w+)\s*(\(\s*[\w"'.]+\s*\))?\s*$/i;
 
 export const CONSOLE_READ_ONLY_ERROR =
   'Only SELECT, WITH, VALUES, EXPLAIN or read-only PRAGMA statements are permitted, one per request: the SQL console is read-only.';
-
-const stripLiteralsAndComments = (sql) => sql
-  .replace(/--[^\n]*/g, ' ')
-  .replace(/\/\*[\s\S]*?\*\//g, ' ')
-  .replace(/'(?:[^']|'')*'/g, "''")
-  .replace(/"(?:[^"]|"")*"/g, '""')
-  .replace(/`[^`]*`/g, '``')
-  .replace(/\[[^\]]*\]/g, '[]');
 
 const isSingleStatement = (code) => {
   const withoutTrailing = code.trim().replace(/;\s*$/, '');
@@ -49,7 +42,9 @@ const isReadOnlyPragma = (code) => {
 
 /** Returns { allowed, reason } for a console statement. */
 export const classifyConsoleSql = (sql = '') => {
-  const code = stripLiteralsAndComments(String(sql)).trim();
+  const masked = maskSqlLiteralsAndComments(sql);
+  const code = masked.code.trim();
+  if (!masked.isWellFormed) return { allowed: false, reason: CONSOLE_READ_ONLY_ERROR };
   if (!code) return { allowed: false, reason: 'Empty SQL statement' };
   const startsAsRead = READ_STATEMENT_START.test(code);
   const isPragma = /^PRAGMA\b/i.test(code);
@@ -58,15 +53,24 @@ export const classifyConsoleSql = (sql = '') => {
   return isAllowed ? { allowed: true } : { allowed: false, reason: CONSOLE_READ_ONLY_ERROR };
 };
 
+export const CONSOLE_UNAVAILABLE_ERROR =
+  'SQL console unavailable: the read-only index connection could not be opened.';
+
 const loadDatabaseSync = () => {
   try { return createRequire(import.meta.url)('node:sqlite').DatabaseSync; } catch { return null; }
 };
 
-/** Opens a readOnly connection to the project index for the SQL console, or null. */
+const openReadOnly = (DatabaseSync, dbPath) => {
+  const connection = new DatabaseSync(dbPath, { readOnly: true });
+  connection.exec('PRAGMA query_only = 1');
+  return connection;
+};
+
+/** Opens a readOnly, query_only connection to the project index for the SQL console, or null. */
 export const openConsoleDb = (cwd = process.cwd()) => {
   const DatabaseSync = loadDatabaseSync();
   const dbPath = resolveIndexDbPath(cwd);
   const hasIndex = Boolean(DatabaseSync) && fs.existsSync(dbPath);
   if (!hasIndex) return null;
-  try { return new DatabaseSync(dbPath, { readOnly: true }); } catch { return null; }
+  try { return openReadOnly(DatabaseSync, dbPath); } catch { return null; }
 };

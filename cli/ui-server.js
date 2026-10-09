@@ -48,7 +48,7 @@ export const createUiServer = (cwd = process.cwd(), options = {}) => {
     if (isPost) {
       const [body, parseError] = await parseJsonBody(req).then((value) => [value, null], (err) => [null, err]);
       if (parseError) return sendJson(res, 400, { error: 'Invalid JSON payload' });
-      const [result, routeError] = runRoute(() => routePost(req.url, db, body, cwd, { consoleDb: consoleDb || db }));
+      const [result, routeError] = runRoute(() => routePost(req.url, db, body, cwd, { consoleDb }));
       if (routeError) return sendJson(res, 500, { success: false, error: routeError.message });
       if (result) return sendJson(res, 200, result, {}, () => broadcastSseUpdate(db));
     }

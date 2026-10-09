@@ -112,11 +112,40 @@ test('ui security: SQL console refuses ATTACH, DDL, DML and PRAGMA writes over H
   });
 });
 
+test('ui security: comment and quote smuggling cannot reach VACUUM INTO over HTTP', async () => {
+  await withServer(async (running, cwd) => {
+    const base = `http://127.0.0.1:${running.port}`;
+    const copies = [];
+    for (const route of ['/api/database/query', '/api/db/query']) {
+      const copy = path.join(cwd, `vac-${copies.length}.db`);
+      copies.push(copy);
+      const res = await running.fetch(`${base}${route}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: `/* -- */ VACUUM INTO '${copy}';\n*/ SELECT 1` })
+      });
+      const result = await res.json();
+      assert.strictEqual(result.success, false, `${route} must refuse the smuggled VACUUM`);
+    }
+    for (const copy of copies) assert.strictEqual(fs.existsSync(copy), false, `${copy} must not be created`);
+  });
+});
+
 test('ui security: SSE feed does not send wildcard CORS', async () => {
   await withServer(async (running) => {
     const res = await running.fetch(`http://127.0.0.1:${running.port}/api/swarm/events`);
     assert.strictEqual(res.status, 200);
     assert.strictEqual(res.headers.get('access-control-allow-origin'), null);
     await res.body.cancel();
+  });
+});
+
+test('ui security: malformed JSON bodies get 400 and metrics still count rows', async () => {
+  await withServer(async (running) => {
+    const base = `http://127.0.0.1:${running.port}`;
+    const bad = await running.fetch(`${base}/api/tasks`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{nope' });
+    assert.strictEqual(bad.status, 400);
+    const metrics = await (await running.fetch(`${base}/api/database/metrics`)).json();
+    assert.strictEqual(metrics.success, true);
+    assert.ok(metrics.tables.some((t) => t.name === 'agent_tasks' && t.rowCount === 0 && !t.error));
   });
 });

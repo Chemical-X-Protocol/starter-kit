@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { runAudit } from './audit.js';
-import { classifyConsoleSql } from './ui-sql-guard.js';
+import { classifyConsoleSql, CONSOLE_UNAVAILABLE_ERROR } from './ui-sql-guard.js';
 import {
   buildMasterPrompt,
   buildGradeFPrompt,
@@ -78,7 +78,7 @@ export const handleDbStructure = (db, queryParams = {}) => {
 };
 
 export const handleDbQuery = (db, body = {}) => {
-  if (!db) return { success: false, error: 'Database unavailable' };
+  if (!db) return { success: false, error: CONSOLE_UNAVAILABLE_ERROR };
   const sql = (body.sql || body.query || '').trim();
   if (!sql) return { success: false, error: 'Empty SQL query' };
   const verdict = classifyConsoleSql(sql);

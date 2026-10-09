@@ -53,7 +53,7 @@ export const routeGet = (pathname, db, cwd = process.cwd(), queryParams = {}) =>
   return null;
 };
 
-export const routePost = (pathname, db, body, cwd = process.cwd(), { consoleDb = db } = {}) => {
+export const routePost = (pathname, db, body, cwd = process.cwd(), { consoleDb = null } = {}) => {
   const [cleanPath] = (pathname || '').split('?');
   const postFeedHandler = handleCreateFeedPost || handlePostFeed;
   const normPath = cleanPath.replace(/^\/api\/swarm\//, '/api/');
@@ -88,11 +88,7 @@ export const parseJsonBody = (req) => {
     let raw = '';
     req.on('data', (chunk) => { raw += chunk; });
     req.on('end', () => {
-      try {
-        resolve(JSON.parse(raw || '{}'));
-      } catch (err) {
-        reject(err);
-      }
+      Promise.resolve(raw || '{}').then(JSON.parse).then(resolve, reject);
     });
     req.on('error', reject);
   });

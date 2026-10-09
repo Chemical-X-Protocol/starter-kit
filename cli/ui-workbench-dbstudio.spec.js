@@ -120,7 +120,7 @@ test('Routes: routeGet and routePost resolve Studio endpoints', () => {
   assert.strictEqual(genPrompt.success, true);
   assert.ok(genPrompt.prompt.includes('Grade F'));
 
-  const sqlRes = routePost('/api/db/query', db, { query: 'SELECT 1 as num' });
+  const sqlRes = routePost('/api/db/query', db, { query: 'SELECT 1 as num' }, undefined, { consoleDb: db });
   assert.strictEqual(sqlRes.success, true);
   assert.strictEqual(sqlRes.rows[0].num, 1);
 });

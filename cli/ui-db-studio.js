@@ -1,16 +1,21 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
-import { classifyConsoleSql } from './ui-sql-guard.js';
+import { classifyConsoleSql, CONSOLE_UNAVAILABLE_ERROR } from './ui-sql-guard.js';
+
+const countTableRows = (db, name) => {
+  const quoted = `"${String(name).replace(/"/g, '""')}"`;
+  try {
+    return { name, rowCount: db.prepare(`SELECT COUNT(*) as c FROM ${quoted}`).get()?.c || 0 };
+  } catch (err) {
+    return { name, rowCount: 0, error: err.message };
+  }
+};
 
 export const getDatabaseMetrics = (db, cwd = process.cwd()) => {
   if (!db) return { success: false, error: 'Database unavailable' };
   const dbPath = path.join(cwd, '.chemx', 'index.db');
-  let fileSize = 0;
-  try {
-    const stat = fs.statSync(dbPath);
-    fileSize = stat.size;
-  } catch {}
+  const fileSize = fs.statSync(dbPath, { throwIfNoEntry: false })?.size ?? 0;
 
   const pageSize = db.prepare('PRAGMA page_size').get()?.page_size || 4096;
   const pageCount = db.prepare('PRAGMA page_count').get()?.page_count || 0;
@@ -22,13 +27,7 @@ export const getDatabaseMetrics = (db, cwd = process.cwd()) => {
     "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
   ).all();
 
-  const tables = rawTables.map((t) => {
-    let rowCount = 0;
-    try {
-      rowCount = db.prepare(`SELECT COUNT(*) as c FROM ${t.name}`).get()?.c || 0;
-    } catch {}
-    return { name: t.name, rowCount };
-  });
+  const tables = rawTables.map((t) => countTableRows(db, t.name));
 
   const totalRows = tables.reduce((acc, t) => acc + t.rowCount, 0);
 
@@ -49,7 +48,7 @@ export const getDatabaseMetrics = (db, cwd = process.cwd()) => {
 };
 
 export const executeSqlQuery = (db, sql = '', maxRows = 100) => {
-  if (!db) return { success: false, error: 'Database unavailable' };
+  if (!db) return { success: false, error: CONSOLE_UNAVAILABLE_ERROR };
   const trimmed = sql.trim();
   if (!trimmed) return { success: false, error: 'Empty SQL statement' };
 
