@@ -30,7 +30,7 @@ export const MASTER_MCP_TOOL = {
         type: 'object',
         description: 'Parameter payload for the specific action (e.g., { path, symbol, outline, logic, template, connections } for read; { query, blastRadius, trace, backtrace, semantic, hybrid } for q; { path, search, replace } for patch; { dir, command } for test/build).',
         properties: {
-          query: { type: 'string', description: 'Search term, symbol name, or conceptual query (for q/search)' },
+          query: { type: 'string', description: 'Search term or symbol name (for q/search); semantic mode ranks by feature-hash name similarity' },
           literal: { type: 'boolean', description: 'Repo-wide fixed-string search for q (-g): every text file .gitignore allows, full path:line:text' },
           regex: { type: 'boolean', description: 'Treat the literal query as a regular expression (for q literal)' },
           lines: { type: 'boolean', description: 'Line-only output path:line for q (-l)' },

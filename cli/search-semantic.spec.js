@@ -53,3 +53,9 @@ test('hybrid RRF counts each file once per ranker (multi-symbol files are not in
   const maxPerFile = 2 / 61;
   assert.ok(ranked.every((r) => r.score <= maxPerFile + 1e-9), 'no file scores above first place in both rankers');
 });
+
+test('the MCP manifest describes the q query without claiming conceptual search', async () => {
+  const fs = await import('node:fs');
+  const source = fs.readFileSync(new URL('./mcp/manifests.js', import.meta.url), 'utf-8');
+  assert.doesNotMatch(source, /conceptual|synonym|meaning/i);
+});
