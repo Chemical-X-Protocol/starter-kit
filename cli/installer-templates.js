@@ -6,6 +6,11 @@ REPO_ROOT="\$(git rev-parse --show-toplevel 2>/dev/null)"
 [ -z "\$REPO_ROOT" ] && exit 0
 cd "\$REPO_ROOT" || exit 1
 
+# Documented bypass (also honoured by scripts/pre-commit.sh)
+if [ "\$CHEMX_FORCE_COMMIT" = "1" ] || [ "\$CHEMX_SKIP_PRECOMMIT" = "1" ]; then
+  exit 0
+fi
+
 # Delegate to version-controlled script if present
 if [ -f "\$REPO_ROOT/scripts/pre-commit.sh" ]; then
   exec "\$REPO_ROOT/scripts/pre-commit.sh" "\$@"
