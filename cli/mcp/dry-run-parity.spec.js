@@ -49,3 +49,16 @@ test('MCP autofix honors the dry-run spellings patch and write accept', async ()
     }
   });
 });
+
+test('MCP schemas: standalone patch and write declare the preview and safety params; docs name the CLI flags', async () => {
+  const { ALL_MCP_TOOLS } = await import('./manifests.js');
+  const schemaOf = (name) => ALL_MCP_TOOLS.find((t) => t.name === name).inputSchema.properties;
+  for (const name of ['chemx_patch', 'chemx_write']) {
+    for (const key of ['dryRun', 'allowRemoved', 'agentId']) assert.ok(schemaOf(name)[key], `${name}.${key}`);
+  }
+  assert.ok(schemaOf('chemx_write').overwrite);
+  assert.doesNotMatch(schemaOf('chemx').params.properties.allowRemoved.description, /net loss/);
+  const kitRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..', '..');
+  const docs = ['README.md', 'AGENTS.md'].map((f) => fs.readFileSync(path.join(kitRoot, f), 'utf-8')).join('\n');
+  for (const flag of ['--allow-remove', '--overwrite', '--dry-run']) assert.ok(docs.includes(flag), flag);
+});
