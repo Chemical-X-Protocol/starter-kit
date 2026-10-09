@@ -34,8 +34,10 @@ const resolveFileSeverity = (lineCount, budget) => {
 };
 
 const resolveMoleculeSeverity = (lineCount, limit) => {
-  if (lineCount >= limit * 5) return 'CRITICAL';
-  if (lineCount >= limit * 2.5) return 'HIGH';
+  const isCriticalMolecule = lineCount >= limit * 5;
+  if (isCriticalMolecule) return 'CRITICAL';
+  const isHighMolecule = lineCount >= limit * 2.5;
+  if (isHighMolecule) return 'HIGH';
   return 'MEDIUM';
 };
 
@@ -62,7 +64,8 @@ export const checkLineBudgets = ({ content, relativePath, config = {}, sfc = nul
 
   const isOverMoleculeBudget = tier === 'molecule' && lineCount > budgets.molecule;
   const isMoleculeEnforced = budgets.isMoleculeHardCap || hasHighComplexity;
-  if (isOverMoleculeBudget && isMoleculeEnforced) {
+  const isMoleculeViolation = Boolean(isOverMoleculeBudget && isMoleculeEnforced);
+  if (isMoleculeViolation) {
     const severity = resolveMoleculeSeverity(lineCount, budgets.molecule);
     return [fileViolation(relativePath, 'LINE_BUDGET_MOLECULE', severity, `Molecule capsule over budget (${lineCount} > ${budgets.molecule} lines, ${budgets.profile})`,
       'Split molecule into focused sub-molecules or extract state to a composable (Directive 1.C)')];
