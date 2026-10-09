@@ -2,6 +2,7 @@
 // refinement, drift, ranking and the pattern_groups store) over the gt sandbox, every P1 fixture excerpt
 // written back to its labeled file and lines (gt-sandbox.js), scored with the P1 scorer (gt-score.js).
 // The library is P4, so this is the harvest-only (--no-library) recall.
+import './inline-on.setup.js';
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createGtSandbox, gtItems } from './gt-sandbox.js';
@@ -15,8 +16,6 @@ import { readLedger } from './forge-groups.js';
 import { runPatternsReject } from '../mcp/patterns-forge-cli.js';
 
 // Pins the opt-in inlining pass (off by default, #2595); the default-off mode is inline-mode.spec.js.
-process.env.CHEMX_FORGE_INLINE = '1';
-
 delete process.env.CHEMX_PROJECT_ROOT;
 
 const ITEMS = gtItems();

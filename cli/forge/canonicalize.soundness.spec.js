@@ -1,12 +1,12 @@
 // Forge P2 soundness follow-up (#2586): pairs a deep review found hashing equal while they behave
 // differently. Each pair must differ at fp1 (and so at every finer reading). The comments give the
 // observable difference the reviewer measured; the snippets are fixtures, never executed here.
+import './inline-on.setup.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { collectFileUnits } from './file-units.js';
 
-// These pairs cover the opt-in inlining pass (off by default, #2595); canonicalize reads the switch per call.
-process.env.CHEMX_FORGE_INLINE = '1';
+// These pairs cover the opt-in inlining pass (off by default, #2595); inline-on.setup.js turns it on before any other import.
 
 const fnUnit = (code, file = 'src/p/a.tsx') => {
   const { units, error } = collectFileUnits(file, code);

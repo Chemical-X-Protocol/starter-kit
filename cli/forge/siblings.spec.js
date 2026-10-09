@@ -4,6 +4,7 @@
 // path in a temp project, fingerprinted, and the W groups are scored against the labels: A1 is 13
 // two-form flag pairs interleaved at :69-73, :100-104 and :123-124; A19 is four `gh discussion create`
 // retries, three of them in sibling `if` blocks.
+import './inline-on.setup.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -19,8 +20,6 @@ import { gtItems } from './gt-sandbox.js';
 import { scoreGroups } from '../patterns/gt-score.js';
 
 // Pins the opt-in inlining pass (off by default, #2595); the default-off mode is inline-mode.spec.js.
-process.env.CHEMX_FORGE_INLINE = '1';
-
 delete process.env.CHEMX_PROJECT_ROOT;
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));

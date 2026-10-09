@@ -1,6 +1,7 @@
 // n-ary LGG, reject codes, refinement and conventions (engine doc section 6) on real code: the P1
 // ground-truth excerpts written back to their labeled files and lines (gt-sandbox.js), fingerprinted, and
 // read back as unit trees. Every member below is named by its labeled file and line.
+import './inline-on.setup.js';
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
@@ -14,8 +15,6 @@ import { refineMembers } from './refine.js';
 import { conventionOf } from './conventions.js';
 
 // Pins the opt-in inlining pass (off by default, #2595); the default-off mode is inline-mode.spec.js.
-process.env.CHEMX_FORGE_INLINE = '1';
-
 delete process.env.CHEMX_PROJECT_ROOT;
 
 const cleanups = [];

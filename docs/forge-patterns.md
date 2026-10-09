@@ -58,6 +58,8 @@ A later run reuses a stored verdict when its grouping finds the same member set 
 
 ## Proof and limits
 
+- Alias inlining (folding a single-use `const` into its one use before hashing) is off by default. Set `CHEMX_FORGE_INLINE=1` in the environment of the process to opt in; the mode is part of the extractor version, so switching it re-fingerprints the ledger. On the real kit in one run per mode, inlining off gave 1125 groups against 964 with it on, and 16 against 17 of 26 A items credited; more of the top 20 were fragments of one flag shape with it off (6 against 3). The engine spec (section 2, "Inlining: measured trade-off") has the method and the caveats.
+
 - `cli/forge/forge-groundtruth.spec.js` runs the whole run over the ground-truth sandbox. It shows: harvest-only recall of at least 0.70, no B group and no C group surfaced, A1 and A19 through W, the A21 and A22 holes, A24 at exactly 11 members, A7 as one 4-member group that no B8 reader reaches, an A4 group of at least 7 members with typecheck-command.js as drift, the store, warm reuse, a suppression round trip, and `patterns reject` refusing a row without a key. The P3 targets for A4 and A7 were amended in #2600 (phases doc, P3 acceptance).
 - `cli/forge/forge-soundness.spec.js` checks three soundness rules on real kit code: a hole that reads a callback param is R3 (cli/audit/autofix.js:85 and :88), a changed member file is stale, and a conditional return that ends a loop body strands its span (cli/edit-locks.js `findForeignLease`).
 - `cli/forge/lgg.spec.js` pins the hole kinds and every code on real excerpts. Examples: the B8 readers evicted from A7 (workspace.js R3, check-mcp.js and cmd-wrappers-json.js R4), and B6 and B7 matching their conventions.

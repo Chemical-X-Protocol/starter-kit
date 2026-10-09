@@ -1,6 +1,7 @@
 // Forge P2 canonicalization equivalences (phases doc, P2 acceptance). Excerpts are verbatim repo code
 // with file:line provenance; each is wrapped in a host function whose params declare the outer
 // bindings the excerpt reads, so those stay outer (capture) bindings exactly as in the real file.
+import './inline-on.setup.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { canonicalizeSource } from './canonicalize.js';
@@ -8,8 +9,6 @@ import { printCanonical } from './canon-print.js';
 import { hashUnit } from './hash.js';
 
 // Pins the opt-in inlining pass (off by default, #2595); the default-off mode is inline-mode.spec.js.
-process.env.CHEMX_FORGE_INLINE = '1';
-
 // src/ui/composables/useSwarmTasks.ts:10-11
 const SWARM_TASKS_10_11 = `    const hasFetch = typeof fetch === 'function';
     if (!hasFetch) return;`;

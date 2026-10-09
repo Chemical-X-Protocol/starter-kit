@@ -3,14 +3,14 @@
 // same side-effect calls in the same order, on generated inputs. Generation is seeded, so every run
 // checks the same cases. f(n) is the side-effect probe: it logs n and returns an input value.
 // Bodies are compiled with vm.compileFunction: generated test code only, never project input.
+import './inline-on.setup.js';
 import vm from 'node:vm';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { canonicalizeSource } from './canonicalize.js';
 import { printCanonical } from './canon-print.js';
 
-// These cases cover the opt-in inlining pass (off by default, #2595); canonicalize reads the switch per call.
-process.env.CHEMX_FORGE_INLINE = '1';
+// These cases cover the opt-in inlining pass (off by default, #2595); inline-on.setup.js turns it on before any other import.
 
 const PARAMS = ['a', 'b', 'c', 'd', 'f'];
 const CASES_PER_TEMPLATE = 40;

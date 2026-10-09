@@ -1,13 +1,12 @@
 // Forge P2 unit behaviour (phases doc, P2 acceptance): fn/stmt/expr units, decl names, the expr gate,
 // and exclusions. Excerpts are verbatim repo code with file:line provenance, joined in file order.
+import './inline-on.setup.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { collectFileUnits } from './file-units.js';
 import { isForgeExcluded } from './exclusions.js';
 
 // Pins the opt-in inlining pass (off by default, #2595); the default-off mode is inline-mode.spec.js.
-process.env.CHEMX_FORGE_INLINE = '1';
-
 // cli/doctor/check-host.js:4 and :15-21
 const CHECK_HOST = [
   "import fs from 'node:fs';",
