@@ -7,7 +7,7 @@ import { checkStagedLeases } from '../team/staged-leases.js';
 import { activityHolder } from '../team/lease-activity.js';
 import { findAndLoadConfigFile } from '../config/loader.js';
 import { resolveTaskId } from './commit-message.js';
-import { openCommitDb, taskExists } from './commit-record.js';
+import { openCommitDb, repoOf, boardTaskId } from './commit-record.js';
 import { stagedPaths, isKnownFile } from './commit-git.js';
 
 const isOutside = (rel) => rel.startsWith('..') || path.isAbsolute(rel);
@@ -22,8 +22,10 @@ const taskFacts = (parsed, cwd) => {
   const needsDb = Boolean(taskId) || parsed.noTask !== null;
   const db = needsDb ? openCommitDb(cwd) : null;
   const isTaskChecked = Boolean(taskId) && Boolean(db);
-  const taskFound = isTaskChecked && taskExists(db, taskId);
-  return { taskId, db, isTaskChecked, taskFound };
+  // The number typed is read in the caller's repo (aliases first); the event is recorded on the board id.
+  const resolvedId = isTaskChecked ? boardTaskId(db, taskId, repoOf(cwd)) : null;
+  const taskFound = resolvedId !== null;
+  return { taskId, boardTaskId: resolvedId ?? taskId, db, isTaskChecked, taskFound };
 };
 
 /**

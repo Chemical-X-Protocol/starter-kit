@@ -52,8 +52,8 @@ const commitArgsFor = (message, rel) => [
 // Everything that happens after git accepted the commit.
 const afterCommit = (root, cwd, facts, message, hasHook) => {
   const sha = shortSha(root);
-  const { db, committer, taskId, rel, parsed } = facts;
-  const recorded = recordCommit(db, { committer, taskId, noTask: parsed.noTask, sha, subject: message.subject, files: rel });
+  const { db, committer, taskId, boardTaskId, rel, parsed } = facts;
+  const recorded = recordCommit(db, { committer, taskId: boardTaskId, noTask: parsed.noTask, sha, subject: message.subject, files: rel });
   const released = parsed.release ? releaseLeases(db, committer, parsed.files, cwd) : [];
   const gate = hasHook ? 'pre-commit hook passed' : 'no pre-commit hook is installed in this repository';
   return { sha, subject: message.subject, files: rel, gate, task: taskId ? `#${taskId}` : `none (${parsed.noTask})`, recorded, released, warnings: facts.leaseWarnings };

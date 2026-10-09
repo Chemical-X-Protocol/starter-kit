@@ -1,41 +1,39 @@
 /**
  * Chemical X Protocol: what `chemx commit` records in the team db (#2564).
- * Goes through the team db API (openIndexDb, postFeedEvent, releaseFileLock), so it follows the
- * shared-db resolution. Recording is best effort: a commit that already landed is never undone
+ * The db is the one the coordination resolver picks for cwd (openTeamContext), the same db the
+ * `chemx team` commands use, so a commit never writes team rows into a package db the resolver
+ * would not read. Recording is best effort: a commit that already landed is never undone
  * because the db was unavailable; the result says whether the event was recorded.
  */
 import fs from 'node:fs';
-import path from 'node:path';
-import { openIndexDb } from '../search-db.js';
+import { openTeamContext, resolveTeamDbTarget } from '../team/coordination-db.js';
 import { getTask, postFeedEvent, registerAgent } from '../team/team-db.js';
 import { releaseFileLock } from '../team/team-db-locks.js';
+import { resolveTaskRef } from '../team/task-ref.js';
 
-// The nearest directory at or above cwd that has a .chemx/index.db, never looking above the repository's own top directory.
-const dbDirOf = (cwd) => {
-  let dir = path.resolve(cwd);
-  let found = null;
-  let isAtRepoTop = false;
-  while (!found && !isAtRepoTop) {
-    const hasDb = fs.existsSync(path.join(dir, '.chemx', 'index.db'));
-    found = hasDb ? dir : null;
-    isAtRepoTop = fs.existsSync(path.join(dir, '.git')) || dir === path.dirname(dir);
-    dir = path.dirname(dir);
-  }
-  return found;
-};
+const hasResolvedDb = (target) => !target.refused && fs.existsSync(target.dbPath);
 
-/** The team db for cwd, or null when sqlite is unavailable or no .chemx/index.db exists (never creates one). */
+/** The team db for cwd, or null when sqlite is unavailable, the call is refused (spec process) or the resolved db file does not exist (never creates one). */
 export const openCommitDb = (cwd) => {
-  const dbDir = dbDirOf(cwd);
-  if (!dbDir) return null;
+  const target = resolveTeamDbTarget(cwd);
+  if (!hasResolvedDb(target)) return null;
   try {
-    return openIndexDb(dbDir);
+    return openTeamContext(cwd).db;
   } catch {
     return null;
   }
 };
 
-export const taskExists = (db, taskId) => Boolean(getTask(db, taskId));
+/** The repo ('.' = the coordination root) cwd belongs to, for resolving task ids. */
+export const repoOf = (cwd) => resolveTeamDbTarget(cwd).repo;
+
+/** The board task id that a typed #N means in repo (aliases first), or null when the board has no such task. */
+export const boardTaskId = (db, taskId, repo) => {
+  const resolved = resolveTaskRef(db, taskId, { repo });
+  return getTask(db, resolved.id) ? resolved.id : null;
+};
+
+export const taskExists = (db, taskId, repo = '.') => boardTaskId(db, taskId, repo) !== null;
 
 const eventAuthor = (committer) => committer || '@system';
 

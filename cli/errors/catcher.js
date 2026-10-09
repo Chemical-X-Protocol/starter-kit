@@ -83,9 +83,10 @@ export const handleError = async (err, options = {}) => {
 
   if (canRegisterTask) {
     try {
-      const { openIndexDb } = await import('../search-db.js');
+      const { openTeamContext } = await import('../team/coordination-db.js');
       const { createTask } = await import('../team/team-db-tasks.js');
-      const db = openIndexDb(cwd);
+      const context = openTeamContext(cwd);
+      const db = context.db;
       if (db) {
         const taskTitle = `Resolve issue: ${report.message.slice(0, 70)}`;
         const taskDesc = `Automated GitHub Issue: ${publishResult.url}\n\nCommand: ${report.command}\n\n${report.stack || report.message}`;
@@ -95,7 +96,8 @@ export const handleError = async (err, options = {}) => {
           origin_type: 'github_issue',
           task_url: publishResult.url,
           status: 'queued',
-          priority: 1
+          priority: 1,
+          repo: context.repo
         });
         const shouldLogTask = Boolean(created && !options.silent);
         if (shouldLogTask) {

@@ -2,8 +2,8 @@
 // bypasses per handle. Cheap and fail open: it only appends to a db file that already exists (never
 // creates or migrates one), waits at most BUSY_TIMEOUT_MS for a writer, and swallows every error
 // (no sqlite, no db, no feed table, locked db). The db is touched only for a bypass that actually
-// overrode a rule. It looks where the code index lives (resolveIndexDbPath); when the coordination
-// db moves elsewhere (#2488) this is the one place to repoint.
+// overrode a rule. It writes to the db the coordination resolver picks for root (teamRootFor), the
+// same db the team commands read; a spec process is refused and logs nothing.
 
 import fs from 'node:fs';
 
@@ -27,9 +27,10 @@ const appendBypass = async (file, fields) => {
 
 export const logBypassToDb = async ({ root, handle, reason, rule, command, session }) => {
   try {
-    const { resolveIndexDbPath } = await import('../search-db.js');
-    const file = resolveIndexDbPath(root);
-    const hasDb = fs.existsSync(file);
+    const { resolveTeamDbTarget } = await import('../team/coordination-target.js');
+    const target = resolveTeamDbTarget(root);
+    const file = target.dbPath;
+    const hasDb = !target.refused && fs.existsSync(file);
     if (!hasDb) return false;
     return await appendBypass(file, {
       author_id: handle ?? '@claude',
