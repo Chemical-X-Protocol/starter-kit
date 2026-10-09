@@ -163,8 +163,15 @@ export const runPillarsWizard = async (rawArgs = [], cwd = process.cwd()) => {
     return result;
   }
 
-  const heading = isDryRun ? '\x1b[1m\x1b[33m[PREVIEW]\x1b[0m Planned' : '\x1b[1m\x1b[32m✔\x1b[0m Applied';
-  process.stdout.write(`\n${heading} architectural pillars configuration (${selectedPresetKey ?? 'protocol only'}):\n`);
+  const headings = {
+    preview: '\x1b[1m\x1b[33m[PREVIEW]\x1b[0m Planned',
+    applied: '\x1b[1m\x1b[32m✔\x1b[0m Applied',
+    refused: '\x1b[1m\x1b[31m✘\x1b[0m Not applied (refused, nothing written)'
+  };
+  const isBatchAborted = hasRefusals && !isDryRun;
+  const headingKeys = { dry: 'preview', aborted: 'refused', done: 'applied' };
+  const outcome = [isDryRun && 'dry', isBatchAborted && 'aborted'].find(Boolean) ?? 'done';
+  process.stdout.write(`\n${headings[headingKeys[outcome]]} architectural pillars configuration (${selectedPresetKey ?? 'protocol only'}):\n`);
   const listedPillars = isProtocolOnly ? [] : PILLARS;
   for (const p of listedPillars) {
     const isEnabled = selectedPillarIds.includes(p.id);
@@ -174,7 +181,9 @@ export const runPillarsWizard = async (rawArgs = [], cwd = process.cwd()) => {
   process.stdout.write('\nFiles:\n');
   for (const plan of planned) {
     const backupNote = plan.backupPath ? ` (backup: ${plan.backupPath})` : '';
-    process.stdout.write(`  ${plan.action.padEnd(9)} ${plan.file}${backupNote}\n`);
+    const isSkipped = isBatchAborted && plan.action !== 'refused';
+    const label = isSkipped ? 'skipped' : plan.action;
+    process.stdout.write(`  ${label.padEnd(9)} ${plan.file}${backupNote}\n`);
   }
   for (const file of refused) {
     const reason = file === unparsableConfig ? UNPARSABLE_CONFIG_REASON : HAND_AUTHORED_REASON;

@@ -67,6 +67,35 @@ const runQuiet = async (args, cwd) => {
   }
 };
 
+const runCaptured = async (args, cwd) => {
+  const originalWrite = process.stdout.write;
+  let output = '';
+  process.stdout.write = (chunk) => {
+    output += String(chunk);
+    return true;
+  };
+  try {
+    await runPillarsWizard(args, cwd);
+  } finally {
+    process.stdout.write = originalWrite;
+  }
+  return output;
+};
+
+test('pillars --protocol-only --write: a refused file prints a not-applied header and skips the other rows', async () => {
+  await withTmp('chemx-protocol-refuse-out-', async (tmpDir) => {
+    writeRel(tmpDir, 'AGENTS.md', '# Hand authored\n');
+    writeRel(tmpDir, 'GEMINI.md', '# mine\n');
+    const output = await runCaptured(['--protocol-only', '--write'], tmpDir);
+    assert.strictEqual(output.includes(' Applied '), false);
+    assert.ok(output.includes('Not applied'));
+    assert.ok(/skipped\s+AGENTS\.md/.test(output));
+    assert.ok(/refused\s+GEMINI\.md/.test(output));
+    assert.strictEqual(exists(tmpDir, '.agent'), false);
+    assert.strictEqual(readRel(tmpDir, 'AGENTS.md'), '# Hand authored\n');
+  });
+});
+
 for (const phrase of PINNED_PHRASES) {
   test(`host-protocol: block, GEMINI.md and the Antigravity rule all carry "${phrase}"`, () => {
     const texts = [buildProtocolBlock(), ...Object.values(buildProtocolHostFiles())];
