@@ -7,9 +7,12 @@ export const countLogicalOperators = (node) => {
     count += 1;
     count += countLogicalOperators(node.left);
     count += countLogicalOperators(node.right);
-  } else if (t.isUnaryExpression(node) && node.operator === '!') {
-    count += 1;
-    count += countLogicalOperators(node.argument);
+  } else {
+    const isLogicalNot = t.isUnaryExpression(node) && node.operator === '!';
+    if (isLogicalNot) {
+      count += 1;
+      count += countLogicalOperators(node.argument);
+    }
   }
   return count;
 };
@@ -17,9 +20,11 @@ export const countLogicalOperators = (node) => {
 export { extractParseableCode } from './parseable-code.js';
 
 export const checkTypographyEmDash = (content, lines, relativePath, violations) => {
-  if (!content.includes('\u2014')) return;
+  const hasEmDashInContent = content.includes('\u2014');
+  if (!hasEmDashInContent) return;
   lines.forEach((lineText, idx) => {
-    if (lineText.includes('\u2014')) {
+    const hasEmDashInLine = lineText.includes('\u2014');
+    if (hasEmDashInLine) {
       const ruleMeta = RULE_REGISTRY.TYPOGRAPHY_EM_DASH;
       violations.push({
         filePath: relativePath,
@@ -42,7 +47,8 @@ export const checkMockDataPatterns = (content, lines, relativePath, violations) 
   lines.forEach((lineText, idx) => {
     const hasMockEmail = mockEmailRegex.test(lineText);
     const hasMockPhone = mockPhoneRegex.test(lineText);
-    if (hasMockEmail || hasMockPhone) {
+    const hasMockPattern = hasMockEmail || hasMockPhone;
+    if (hasMockPattern) {
       const ruleMeta = RULE_REGISTRY.SYNTHETIC_MOCK_DATA;
       violations.push({
         filePath: relativePath,
