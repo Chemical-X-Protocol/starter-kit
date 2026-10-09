@@ -5,7 +5,8 @@
 //   N1 fp1 groups are L1-equal, so their LGG can only hold capture-name refs: they are judged on facet
 //   and convention without parsing. Template groups have no script tree: they are judged on facet and
 //   convention too (structural refinement already ran in templates.js and siblings.js).
-// A member whose file changed since the ledger was written has no tree; it is evicted as `stale`.
+// A member whose file changed since the ledger was written (its sha1 differs from the stored content_hash)
+// has no tree; it is evicted as `stale`.
 // options.cache: { verdicts, unify, shapes } from group-store.js; a verdict hit skips the trees and the
 // LGG, since a group id is content-derived (content_hash:start:end of every member). Drift is always
 // searched again (it reads other files), over cached row shapes.
@@ -37,7 +38,7 @@ const readmit = (group) => (group.path === 'W' ? { ok: passesWFloor(group.instan
  * { unify(instanceA, instanceB), unifyDecisions, shapeDecisions, judgeGroups(groups) => { accepted, rejected } }.
  */
 export const createLggStage = ({ rows, readFile, ubiquitousOf, contentHashes, cache = EMPTY_CACHE }) => {
-  const reader = createTreeReader(readFile, rows);
+  const reader = createTreeReader(readFile, rows, { contentHashes });
   const rowsById = new Map(rows.map((row) => [row.id, row]));
   const shapes = createShapeReader(reader, rowsById, { contentHashes, cache: cache.shapes ?? new Map() });
   const driftIndex = createDriftIndex(rows);

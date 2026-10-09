@@ -7,13 +7,14 @@
  *   chemx patterns --forge --rejected    lists the rejected and suppressed groups with their codes
  *   chemx patterns --forge --explain=<id>  a group's holes, captures, members by role and codes
  *   chemx patterns reject <id> --reason="..." --as=@handle
- *     suppresses a stored group (pattern_suppressions) and posts the decision to the team feed
+ *     suppresses a stored group (pattern_suppressions), then posts the decision to the team feed (only
+ *     once the suppression is written) and links the post to it
  */
 import { syncFingerprints } from '../forge/fingerprint-sync.js';
 import { runForgeGroups } from '../forge/forge-groups.js';
 import { explainLines, groupLine, rejectedLine, rejectedSummary } from '../forge/forge-report.js';
 import { toScorerGroups } from '../forge/group-shape.js';
-import { findStoredGroup, suppressGroup } from '../forge/group-store.js';
+import { attachDecisionPost, findStoredGroup, suppressGroup } from '../forge/group-store.js';
 import { TOP_SURFACED } from '../forge/rank.js';
 import { openIndexDb } from '../search-schema.js';
 import { openCommitDb } from '../commit/commit-record.js';
@@ -104,13 +105,15 @@ export const runPatternsReject = (args, cwd = process.cwd()) => {
   const isComplete = reason.trim().length > 0 && agent.startsWith('@');
   const db = isComplete ? openIndexDb(cwd) : null;
   const found = db ? findStoredGroup(db, id) : { error: isComplete ? 'no index db here' : 'usage: chemx patterns reject <id> --reason="..." --as=@handle' };
-  const hasGroup = Boolean(found.group);
-  if (!hasGroup) {
-    write([`patterns reject: ${found.error}`]);
-    return { ok: false, error: found.error };
+  const suppression = found.group ? suppressGroup(db, { group: found.group, reason, agent }) : { error: found.error };
+  const isRefused = Boolean(suppression.error);
+  if (isRefused) {
+    write([`patterns reject: ${suppression.error}`]);
+    return { ok: false, error: suppression.error };
   }
   const decisionPostId = postDecision(cwd, { agent, group: found.group, reason });
-  const suppression = suppressGroup(db, { group: found.group, reason, agent, decisionPostId });
+  const isPosted = decisionPostId !== null;
+  if (isPosted) attachDecisionPost(db, suppression, decisionPostId);
   write([`suppressed ${found.group.id} (${found.group.path} ${found.group.kind}); decision post ${decisionPostId ?? 'not recorded (no team db)'}`]);
   return { ok: true, ...suppression, decisionPostId };
 };

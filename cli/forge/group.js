@@ -7,14 +7,15 @@
 //       gated by G2.
 //   N3  fn units with the same declared name and equal fp3; gated by G1 (the name is the extra evidence),
 //       LGG then allows one variant hole (needsLgg).
-// A statement instance (N1) or window (N2) that returns from its function must end its block (exits.js);
-// one that returns from the middle cannot be cut out as a piece and is dropped before the gates.
+// A statement instance (N1) or window (N2) with an own return must end its function's body, or end in an
+// unconditional `return` (exits.js, body-ends.js); ending a loop or `if` body is not enough. Any other
+// such span cannot be cut out as a piece and is dropped before the gates.
 // Parsing a span for its returns is the costly step, so a bucket is first gated on the members that
-// surely stay (no `return` word, or at the end of their block): metrics only rise as members drop, so
-// when even those fail the gate, the filtered group fails it too and nothing is parsed.
-// context: { contentHashes, ubiquitousOf, mayReturnAt and returnsAt(file, start, end), isBlockEnd(row),
-// reject(draft, reason, finish) }; reject hears every group that failed its gate or instance rules and
-// finish() builds it in full.
+// surely stay (no `return` word): metrics only rise as members drop, so when even those fail the gate,
+// the filtered group fails it too and nothing is parsed.
+// context: { contentHashes, ubiquitousOf, mayReturnAt and strandsAt(file, start, end),
+// endsFunctionBody(row), reject(draft, reason, finish) }; reject hears every group that failed its gate
+// or instance rules and finish() builds it in full.
 import { draftGroup, finishGroup, instanceOfRow, instanceOfRows, metricsOf, pushTo, spansFiles } from './group-shape.js';
 import { admitGroup, checkGate, labelIdiom, GATE_OF_PATH } from './gates.js';
 import { blocksOf, runsOf, windowsOfRuns, windowKeyOf, nonOverlapping, dropDominated } from './windows.js';
@@ -72,10 +73,11 @@ const exactBuckets = (rows, spec) => {
   return [...buckets].filter(([, members]) => spansFiles(members)).map(([key, members]) => ({ kind: key.slice(0, key.indexOf('|')), rows: members }));
 };
 
-// A span that may return from the middle of its block: (first, last) are its first and last stmt rows.
-const mayStrand = (first, last, context) => !context.isBlockEnd(last) && context.mayReturnAt(first.file_path, first.start, last.end);
+// A span that may hold an own return (the word test): (first, last) are its first and last stmt rows.
+const mayStrand = (first, last, context) => context.mayReturnAt(first.file_path, first.start, last.end);
 
-const strands = (first, last, context) => mayStrand(first, last, context) && context.returnsAt(first.file_path, first.start, last.end);
+// The span returns from its function and is not the end of that function's body.
+const strands = (first, last, context) => mayStrand(first, last, context) && !context.endsFunctionBody(last) && context.strandsAt(first.file_path, first.start, last.end);
 
 const failsGateEarly = (spec, sureMembers, context) => {
   const hasSure = sureMembers.length > 0;

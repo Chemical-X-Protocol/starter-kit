@@ -6,11 +6,14 @@
 //   stmt  the statement of a block body
 //   expr  the outermost expression node with those offsets
 // A window instance is the list of its statement rows. Template rows have no script tree (null), and so
-// has a row whose file changed or no longer parses: the LGG then treats the group as unresolved.
+// has a row whose file changed or no longer parses: the LGG then treats the group as unresolved. A file
+// changed since the ledger was written is found by its sha1 against the stored content_hash (the hash
+// the sync writes), not by offsets, since an edit can keep them.
 import { isSfcFile, parseSfc } from '../sfc/sfc-parse.js';
 import { parseScriptAsts } from '../sfc/script-asts.js';
 import { buildBindingIndex } from './bindings.js';
 import { canonicalize } from './canonicalize.js';
+import { contentHashOf } from './fingerprint-session.js';
 
 const FUNCTION_TYPES = new Set(['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression', 'ObjectMethod', 'ClassMethod', 'ClassPrivateMethod']);
 
@@ -76,31 +79,37 @@ const declaredIds = (nodes) => {
   return ids;
 };
 
-// Params of every function in the unit (the unit's own fn included): a hole may read them, since a piece
-// cut from a function body takes its params as its own (R3 names catch params, loop vars and locals).
-const functionParamIds = (nodes) => {
-  const ids = new Set();
-  const visit = (node) => {
-    const isFunction = FUNCTION_TYPES.has(node.type);
-    if (isFunction) declaredIds(node.kids.params ?? []).forEach((id) => ids.add(id));
-    for (const value of Object.values(node.kids)) {
-      for (const child of childList(value)) child && visit(child);
-    }
-  };
-  nodes.forEach(visit);
-  return ids;
-};
+// Binders a hole may read: only a fn unit's own params, since a piece cut from a function body takes
+// them as its own. Params of a nested callback are unit locals like any other (R3): a value param cannot
+// read a name bound only inside the piece, unless the hole side declares it itself (hole-kinds.js).
+const NO_PARAMS = Object.freeze(new Set());
 
 // One instance tree: { root, declScope, paramIds, kind }. root is a node, or an array for a window.
-const fnTree = (node) => ({ root: node.kids.body, declScope: node, paramIds: functionParamIds([node]), kind: 'fn' });
-const plainTree = (kind) => (node) => ({ root: node, declScope: null, paramIds: functionParamIds([node]), kind });
+const fnTree = (node) => ({ root: node.kids.body, declScope: node, paramIds: declaredIds(node.kids.params ?? []), kind: 'fn' });
+const plainTree = (kind) => (node) => ({ root: node, declScope: null, paramIds: NO_PARAMS, kind });
 const TREE_OF_KIND = { fn: fnTree, stmt: plainTree('stmt'), expr: plainTree('expr') };
+
+const safeIndexOf = (relativePath, content) => {
+  try {
+    return indexFile(relativePath, content);
+  } catch {
+    return emptyIndex();
+  }
+};
+
+// A file is current when the ledger has no hash for it (a caller without one) or the hashes agree.
+const isCurrent = (contentHashes, relativePath, content) => {
+  const stored = contentHashes?.get(relativePath) ?? null;
+  return stored === null || stored === contentHashOf(content);
+};
 
 /**
  * Tree reader over readFile(relativePath) => text | null and the ledger rows (for window members).
- * treeOf(instance) returns { root, declScope, paramIds, kind } or null when a member cannot be found.
+ * options.contentHashes (the ledger's path -> content_hash): a file whose text no longer hashes to it
+ * has no trees, so its members are stale. treeOf(instance) returns { root, declScope, paramIds, kind }
+ * or null when a member cannot be found.
  */
-export const createTreeReader = (readFile, rows) => {
+export const createTreeReader = (readFile, rows, { contentHashes = null } = {}) => {
   const indexes = new Map();
   const rowsById = new Map(rows.map((row) => [row.id, row]));
 
@@ -108,12 +117,8 @@ export const createTreeReader = (readFile, rows) => {
     const isCached = indexes.has(relativePath);
     if (isCached) return indexes.get(relativePath);
     const content = readFile(relativePath);
-    let index = emptyIndex();
-    try {
-      index = content === null ? index : indexFile(relativePath, content);
-    } catch {
-      index = emptyIndex();
-    }
+    const isUsable = content !== null && isCurrent(contentHashes, relativePath, content);
+    const index = isUsable ? safeIndexOf(relativePath, content) : emptyIndex();
     indexes.set(relativePath, index);
     return index;
   };
@@ -123,7 +128,7 @@ export const createTreeReader = (readFile, rows) => {
   const windowTree = (instance) => {
     const nodes = instance.unitIds.map((id) => nodeOf(rowsById.get(id)));
     const isComplete = nodes.every(Boolean);
-    return isComplete ? { root: nodes, declScope: null, paramIds: functionParamIds(nodes), kind: 'window' } : null;
+    return isComplete ? { root: nodes, declScope: null, paramIds: NO_PARAMS, kind: 'window' } : null;
   };
 
   const readTree = (instance) => {

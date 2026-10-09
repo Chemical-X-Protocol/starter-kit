@@ -1,8 +1,8 @@
 // One Forge grouping run (engine doc section 5): ledger rows -> N1 (fp1, fp2, fp3), N2, N3, W (statements
 // and template siblings) and T -> gated groups, deduplicated by content-derived id (the first path in
 // PATH_ORDER keeps a member set that several paths found). Reads only index.db and, for the return rule
-// and template refinement, the member files; it never runs rules or the audit. Rows are read ORDER BY
-// file_path, start, so the result never depends on insertion order.
+// (exits.js, body-ends.js) and template refinement, the member files; it never runs rules or the audit.
+// Rows are read ORDER BY file_path, start, so the result never depends on insertion order.
 // Then the LGG stage (lgg-stage.js): every group's n-ary LGG, R1-R8 with member refinement, drift, and
 // ranking (rank.js); the same LGG is W's unify step unless options.unify replaces it (null: no merging).
 // Persistence (pattern_groups) is group-store.js; options.cache feeds stored verdicts back in.
@@ -17,10 +17,10 @@ import { groupSiblings, groupTemplateSiblings } from './siblings.js';
 import { groupTemplates } from './templates.js';
 import { createRoleReader } from './template-roles.js';
 import { createReturnReader } from './exits.js';
-import { blocksOf } from './windows.js';
+import { createBodyEndReader } from './body-ends.js';
 import { createLggStage } from './lgg-stage.js';
 import { rankGroups } from './rank.js';
-import { readGroupCache, readSuppressions, writeGroupRun } from './group-store.js';
+import { readGroupCache, readSuppressions, writeGroupRun, suppressionKeyOf } from './group-store.js';
 
 export const PATH_ORDER = Object.freeze(['N1-fp1', 'N1-fp2', 'N1-fp3', 'N2', 'N3', 'W', 'T']);
 
@@ -56,11 +56,9 @@ const createTextReader = (readFile) => {
   };
 };
 
-// isBlockEnd(row): the stmt row is the last stored statement of its block.
-const createBlockEnds = (rows) => {
-  const lastIds = new Set([...blocksOf(rows, 'stmt').values()].map((blockRows) => blockRows.at(-1).id));
-  return (row) => lastIds.has(row.id);
-};
+// A T partition refinement turned away, kept in full with its suppression key so `patterns reject` can
+// act on it like any stored group.
+const refineRejection = (group, reason, rowsById) => ({ ...group, status: 'rejected', rejectReason: reason, suppressionKey: suppressionKeyOf(group, rowsById) });
 
 const pathRank = (group) => PATH_ORDER.indexOf(group.path);
 
@@ -102,13 +100,14 @@ const applySuppressions = (groups, suppressions) => groups.map((group) => {
 export const buildForgeGroups = (ledger, { readFile = () => null, unify, includeIdioms = false, judge = true, cache, suppressions = new Map() } = {}) => {
   const rejected = [];
   const textOf = createTextReader(readFile);
+  const rowsById = new Map(ledger.rows.map((row) => [row.id, row]));
   const context = {
     contentHashes: ledger.contentHashes,
     ubiquitousOf: createUbiquityIndex(ledger.rows),
     ...createReturnReader(textOf),
-    isBlockEnd: createBlockEnds(ledger.rows),
+    ...createBodyEndReader(readFile),
     roleKeyOf: createRoleReader(readFile).roleKeyOf,
-    reject: (draft, reason, finish) => rejected.push(reason.startsWith(REFINE_PREFIX) ? { ...finish(), status: 'rejected', rejectReason: reason } : { path: draft.path, rejectReason: reason })
+    reject: (draft, reason, finish) => rejected.push(reason.startsWith(REFINE_PREFIX) ? refineRejection(finish(), reason, rowsById) : { path: draft.path, rejectReason: reason })
   };
   const { rows } = ledger;
   const stage = createLggStage({ rows, readFile, ubiquitousOf: context.ubiquitousOf, contentHashes: ledger.contentHashes, cache });

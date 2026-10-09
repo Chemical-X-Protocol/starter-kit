@@ -30,10 +30,11 @@ const SQL = {
   insertUnify: 'INSERT OR REPLACE INTO pattern_unify_cache (pair_key, ok) VALUES (?, ?)',
   suppress: `INSERT OR REPLACE INTO pattern_suppressions (key_hash, path, reason, by_agent, decision_post_id, created_at)
     VALUES (?, ?, ?, ?, ?, ?)`,
+  attachPost: 'UPDATE pattern_suppressions SET decision_post_id = ? WHERE key_hash = ? AND path = ?',
   groupsByPrefix: 'SELECT * FROM pattern_groups WHERE id LIKE ? ORDER BY id LIMIT 2'
 };
 
-export const LGG_STAGE_VERSION = 2;
+export const LGG_STAGE_VERSION = 3;
 
 const sha = (text, length) => crypto.createHash('sha1').update(text).digest('hex').slice(0, length);
 
@@ -142,8 +143,18 @@ export const findStoredGroup = (db, idOrPrefix) => {
   return { error: rows.length === 0 ? `no stored group ${idOrPrefix}` : `group id ${idOrPrefix} is ambiguous` };
 };
 
-/** Records a suppression of one stored group (its suppression key under its path). */
+/**
+ * Records a suppression of one stored group (its suppression key under its path). A row stored without a
+ * suppression key cannot be suppressed: { error } and nothing is written.
+ */
 export const suppressGroup = (db, { group, reason, agent, decisionPostId = null }) => {
+  const hasKey = Boolean(group.suppression_key);
+  if (!hasKey) return { error: `group ${group.id} has no suppression key (run \`chemx patterns --forge\` again to restore it)` };
   db.prepare(SQL.suppress).run(group.suppression_key, group.path, reason, agent, decisionPostId, Date.now());
   return { keyHash: group.suppression_key, path: group.path };
+};
+
+/** Links a recorded suppression to the team-feed decision post that announced it. */
+export const attachDecisionPost = (db, { keyHash, path }, decisionPostId) => {
+  db.prepare(SQL.attachPost).run(decisionPostId, keyHash, path);
 };

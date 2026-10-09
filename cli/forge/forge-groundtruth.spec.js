@@ -11,6 +11,8 @@ import { REJECT_CODES } from './rejects.js';
 import { scoreGroups } from '../patterns/gt-score.js';
 import { LEVEL_WEIGHTS, TOP_SURFACED } from './rank.js';
 import { findStoredGroup, suppressGroup } from './group-store.js';
+import { readLedger } from './forge-groups.js';
+import { runPatternsReject } from '../mcp/patterns-forge-cli.js';
 
 delete process.env.CHEMX_PROJECT_ROOT;
 
@@ -85,17 +87,40 @@ test('A24: one T group of exactly 11 stat tiles', () => {
   assert.equal(creditOf('A24'), 1);
 });
 
+const rowsIn = (file) => readLedger(state.sandbox.openDb()).rows.filter((row) => row.file_path === file);
+const everyGroup = () => [...state.result.groups, ...state.result.rejected, ...state.result.refined, ...state.result.suppressed];
+const A7_TRY_FILES = ['cli/doctor/check-host.js', 'cli/doctor/kit-locate.js', 'cli/hooks/project-status.js', 'cli/project-detector.js'];
+
 test('A7 and A12 are found in full', () => {
   assert.equal(creditOf('A7'), 1);
   assert.equal(creditOf('A12'), 1);
 });
 
-test('A4: the path check is found, and typecheck-command.js is drift of the resolve-then-check window', () => {
+// Phases doc P3, A7 as amended by #2600: 4 members at run level; the B8 evictions are lgg.spec's.
+test('A7: the try readers are one 4-member N1 fp2 group, and no B8 reader reaches any group', () => {
+  const readers = bestFor('A7', (group) => group.path === 'N1-fp2' && group.kind === 'stmt');
+  assert.deepEqual(readers.instances.map((instance) => instance.file).sort(), A7_TRY_FILES);
+  assert.deepEqual(everyGroup().filter((group) => anchorsCovered(group, 'B8') > 0).map((group) => group.id), []);
+  const memberIds = new Set(readers.instances.flatMap((instance) => instance.unitIds));
+  const tryFp3 = new Set(A7_TRY_FILES.flatMap((file) => rowsIn(file)).filter((row) => memberIds.has(row.id)).map((row) => row.fp3));
+  assert.equal(tryFp3.size, 1, 'the four A7 try statements share one fp3');
+  for (const file of ['cli/workspace.js', 'cli/doctor/check-mcp.js', 'cli/commands/cmd-wrappers-json.js']) {
+    assert.equal(rowsIn(file).some((row) => tryFp3.has(row.fp3)), false, `${file} shares no fp3 with the A7 try`);
+  }
+  assert.deepEqual(rowsIn('cli/audit/ratchet.js'), [], 'the B8.1 excerpt (:37-48) stops before its closing `};` and does not parse');
+});
+
+// Phases doc P3, A4 as amended by #2600: team-dispatch-batches.js:38 is not drift at P3.
+test('A4: an at-least-7-member path check group, and typecheck-command.js is drift of the resolve-then-check window', () => {
   assert.ok(creditOf('A4') >= 0.5);
+  const largest = bestFor('A4', (group) => group.memberCount >= 7);
+  assert.ok(anchorsCovered(largest, 'A4') >= 5, `${largest.memberCount} members cover ${anchorsCovered(largest, 'A4')} A4 anchors`);
   const typecheck = itemById('A4').anchors.find((anchor) => anchor.file === 'cli/typecheck-command.js');
   const drifted = state.result.groups.filter((group) => (group.drift ?? []).some((span) => touches(span, typecheck)));
   assert.ok(drifted.length > 0, 'a group lists typecheck-command.js:42 as drift');
   assert.ok(drifted.every((group) => group.status === 'candidate'));
+  const folded = rowsIn('cli/team/team-dispatch-batches.js').find((row) => row.kind === 'stmt' && row.start_line === 38);
+  assert.equal(folded.end_line, 40, 'the P2 inliner folds isOutsideRoot (:38) into the return at :40, so :38 is no unit of its own');
 });
 
 test('every rejected group carries its reason code and every failing code', () => {
@@ -173,4 +198,18 @@ test('a suppression (patterns reject) holds over the next run: the group is supp
   assert.equal(suppressed.status, 'suppressed');
   assert.equal(suppressed.suppression.reason, 'ground-truth spec: suppression round trip');
   assert.equal(next.stats.rejectedByCode.suppressed, 1);
+});
+
+test('patterns reject: refine-rejected T rows carry a suppression key; a row without one is refused and nothing is written', () => {
+  const db = state.sandbox.openDb();
+  const refined = db.prepare("SELECT id, suppression_key FROM pattern_groups WHERE reject_reason LIKE 'refine.%' ORDER BY id").all();
+  assert.ok(refined.length > 0);
+  assert.ok(refined.every((row) => Boolean(row.suppression_key)), JSON.stringify(refined));
+  const target = refined[0];
+  db.prepare('UPDATE pattern_groups SET suppression_key = NULL WHERE id = ?').run(target.id);
+  const suppressionsBefore = db.prepare('SELECT COUNT(*) AS n FROM pattern_suppressions').get().n;
+  const outcome = runPatternsReject(['reject', target.id, '--reason=ground-truth spec: a stored row without a key', '--as=@forge-p3b'], state.sandbox.dir);
+  assert.equal(outcome.ok, false);
+  assert.match(outcome.error, /no suppression key/);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM pattern_suppressions').get().n, suppressionsBefore);
 });
