@@ -1,6 +1,6 @@
 /**
  * Chemical X Protocol: task screening and lanes for `chemx team dispatch --workflow` (#2494, #2429).
- * A task's file is its target_path only; text in the description never assigns ownership (#2429).
+ * A task's files are its target_path plus its extra_files list (#4426); description text never assigns ownership (#2429).
  * Screening, in order: target outside the root, no target (needs scoping), claimed by another handle,
  * unmet dependencies, target leased by another live handle, uncommitted changes the dispatcher does
  * not own. Ready tasks are grouped so tasks sharing a file land in one lane (run one after another),
@@ -85,10 +85,19 @@ export const readDirtyFiles = (root) => {
 
 const MECHANICAL = /\bmechanical\b/i;
 
+/** Extra files a task may edit beyond its target (extra_files column: a JSON array or an array), deduped, target excluded. */
+export const parseExtraFiles = (raw, root, target = '') => {
+  const parsed = Array.isArray(raw) ? raw : parseJson(String(raw || '[]'), []);
+  const list = Array.isArray(parsed) ? parsed : [];
+  const files = list.map((file) => normalizeTaskFile(file, root)).filter((file) => file !== '' && file !== target);
+  return [...new Set(files)];
+};
+
 const toEntry = (task, options) => {
   const target = task.target_path ? normalizeTaskFile(task.target_path, options.root) : '';
   const snapshot = parseSnapshot(task.violation_snapshot);
   const hasTarget = target !== '';
+  const extraFiles = hasTarget ? parseExtraFiles(task.extra_files, options.root, target) : [];
   return {
     id: Number(task.id),
     title: String(task.title || ''),
@@ -104,7 +113,8 @@ const toEntry = (task, options) => {
     mechanical: MECHANICAL.test(`${task.title || ''}\n${task.description || ''}`),
     snapshot,
     target,
-    files: hasTarget ? [target] : []
+    extraFiles,
+    files: hasTarget ? [target, ...extraFiles] : []
   };
 };
 
@@ -137,15 +147,15 @@ const SCREENS = [
     return unmet.length > 0 ? skip(entry, 'dependencies_unmet', { dependencies: unmet }) : null;
   },
   (entry, ctx) => {
-    const lease = safeCall(ctx.leaseCheck, entry.target, null);
+    const leasedFile = entry.files.find((file) => safeCall(ctx.leaseCheck, file, null));
+    const lease = leasedFile ? safeCall(ctx.leaseCheck, leasedFile, null) : null;
     const lockedBy = lease ? String(lease.lockedBy || lease.locked_by || '') : '';
-    return lease ? skip(entry, 'locked', { lease: { file: entry.target, lockedBy, purpose: String(lease.purpose || '') } }) : null;
+    return lease ? skip(entry, 'locked', { lease: { file: leasedFile, lockedBy, purpose: String(lease.purpose || '') } }) : null;
   },
   (entry, ctx) => {
     const dirty = ctx.dirtyFiles;
-    const isDirty = Boolean(dirty) && dirty.has(entry.target);
-    const isOwned = isDirty && safeCall(ctx.ownsFile, entry.target, false) === true;
-    const isForeignEdit = isDirty && !isOwned;
+    const foreign = entry.files.filter((file) => Boolean(dirty) && dirty.has(file) && safeCall(ctx.ownsFile, file, false) !== true);
+    const isForeignEdit = foreign.length > 0;
     return isForeignEdit ? skip(entry, 'uncommitted_changes') : null;
   }
 ];
