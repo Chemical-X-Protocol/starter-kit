@@ -30,6 +30,36 @@ export const WRAPPER_COMMANDS = [
     examples: ['chemx show HEAD~1', 'chemx show a1b2c3d --patch', 'chemx show HEAD --patch -- cli/index.js', 'chemx read HEAD~1:cli/index.js --outline']
   },
   {
+    name: 'status',
+    aliases: [],
+    group: 'wrappers',
+    brief: 'git status with live leases',
+    usage: 'chemx status [path] [--json] [--as=@you]',
+    summary: 'Changed files (git status --porcelain) with each file\'s live lease: holder, purpose, task, minutes left.',
+    description: 'Flags a changed file with no live lease (someone may be mid-edit, or the edit is finished) and one leased by a different handle (needs --as or CHEMX_AGENT_ID). Reads only; ends with one line of counts. Matches leases by root-relative key, so a legacy cwd-relative lease in a nested db is not shown.',
+    flags: [
+      { flag: '--json', desc: 'Output { rows, summary }' },
+      { flag: '--as=@you', desc: 'Your handle, to tell your leases from others' }
+    ],
+    examples: ['chemx status', 'chemx status cli --json --as=@me']
+  },
+  {
+    name: 'wait',
+    aliases: [],
+    group: 'wrappers',
+    brief: 'Wait for a task, lock or idle verify',
+    usage: 'chemx wait --task=<id> [--status=done] | --lock-free=<file> | --verify-idle [--timeout=30m]',
+    summary: 'Polls every 3 seconds until the condition holds. Exit 0 when met, 2 on timeout, 1 on bad arguments.',
+    description: 'The condition is true as of the last poll; it can change right after. --verify-idle reads the process table for chemx verify/test (on Linux only those running inside this project). A task id no db knows keeps waiting until the timeout.',
+    flags: [
+      { flag: '--task=<id>', desc: 'Until the task reaches --status (default done)' },
+      { flag: '--lock-free=<file>', desc: 'Until no unexpired lease exists on the file' },
+      { flag: '--verify-idle', desc: 'Until no chemx verify/test process runs for this project' },
+      { flag: '--timeout=<dur>', desc: '30s, 5m, 2h or plain seconds; default 30m' }
+    ],
+    examples: ['chemx wait --task=2565', 'chemx wait --lock-free=cli/main.js --timeout=10m', 'chemx wait --verify-idle']
+  },
+  {
     name: 'conflicts',
     aliases: [],
     group: 'wrappers',

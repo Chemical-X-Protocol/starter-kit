@@ -86,6 +86,16 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
       await runCommitCli(rawArgs.slice(1));
       break;
     }
+    case 'status': {
+      const { runStatus } = await import('../status-command.js');
+      setExitCodeFrom(runStatus(rawArgs.slice(1), true));
+      break;
+    }
+    case 'wait': {
+      const { runWaitCli } = await import('../wait-command.js');
+      process.exitCode = await runWaitCli(rawArgs.slice(1));
+      break;
+    }
     case 'conflicts': {
       // Normally answered by the boot shim in cli/index.js before this router loads.
       const { runConflictsCli } = await import('../conflicts-cli.js');
