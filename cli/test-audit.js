@@ -91,7 +91,8 @@ const runProfileCommand = async (parsed, options, cwd, output) => {
 };
 
 // `--related=<file>` is the same as `--related <file>` (--related takes the files that follow it).
-const expandRelated = (args) => args.flatMap((arg) => (String(arg).startsWith('--related=') ? ['--related', String(arg).slice('--related='.length)] : [arg]));
+// A comma list (`--related=a,b,c`) is split into one file per entry; paths containing commas are not supported.
+const expandRelated = (args) => args.flatMap((arg) => (String(arg).startsWith('--related=') ? ['--related', ...String(arg).slice('--related='.length).split(',').filter(Boolean)] : [arg]));
 
 export const runTestAudit = async (rawArgs = [], isCli = false, options = {}) => {
   const parsed = parseCliArgs(expandRelated(rawArgs), TEST_ARGS);
