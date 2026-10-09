@@ -57,4 +57,8 @@ test('isGuardDenial recognises only chemx guard and policy denials', () => {
   assert.equal(isGuardDenial(POLICY), true);
   assert.equal(isGuardDenial('some other hook error: file missing'), false);
   assert.equal(isGuardDenial(''), false);
+  assert.equal(isGuardDenial('chemx guard status: on, 3 rules'), false);
+  assert.equal(isGuardDenial('chemx policy show output'), false);
+  assert.equal(isGuardDenial('echo hi > x\nPreToolUse:Bash hook error: chemx guard: nope'), false);
+  assert.equal(isGuardDenial(`  \n${GUARD}`), true);
 });

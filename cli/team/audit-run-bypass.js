@@ -15,7 +15,7 @@ import path from 'node:path';
 import { findRepoRoot } from '../hooks/repo-membership.js';
 const WRITE_OPS = new Set(['>', '>>', '>|', '&>', '&>>']);
 // The words a chemx PreToolUse hook denial carries (the command guard and the nativeFileTools policy).
-const GUARD_DENIAL = /(?:PreToolUse:[\w-]+ hook error:\s*)?chemx (?:guard|policy)\b/i;
+const GUARD_DENIAL = /^PreToolUse:[\w-]+ hook error:\s*chemx (?:guard|policy)\b/i;
 
 /**
  * True when a tool result text is a chemx guard or policy denial: the call was blocked, so it did not run.
