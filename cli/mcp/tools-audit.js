@@ -37,7 +37,8 @@ export const handleAudit = (args = {}, cwd = process.cwd()) => {
   }
 
   const scope = resolveAuditScope({ projectRoot: baseCwd, explicitDir: explicitTarget });
-  if (!scope.ok) return { type: 'refusal', success: false, error: scope.message, candidates: scope.candidates };
+  const isScopeInvalid = !scope.ok;
+  if (isScopeInvalid) return { type: 'refusal', success: false, error: scope.message, candidates: scope.candidates };
   const resolvedTarget = scope.dir;
   const rawTarget = scope.relDir;
 
@@ -52,7 +53,8 @@ export const handleAudit = (args = {}, cwd = process.cwd()) => {
 
   try {
     const syncRes = syncSearchIndex(resolvedTarget, baseCwd);
-    if (syncRes?.db) {
+    const hasSearchDb = Boolean(syncRes?.db);
+    if (hasSearchDb) {
       syncViolationsIndex(syncRes.db, report.violations, { scope: syncRes.scope });
       recordAuditSnapshot(syncRes.db, report);
       const shouldTriage = args.triage === true;
@@ -87,7 +89,8 @@ export const handleAudit = (args = {}, cwd = process.cwd()) => {
 
 export const handleGetRefactorPrompt = (args = {}, cwd = process.cwd()) => {
   const auditScope = resolveAuditScope({ projectRoot: resolveTargetCwd(cwd), explicitDir: args.dir || null });
-  if (!auditScope.ok) return { success: false, error: auditScope.message, candidates: auditScope.candidates };
+  const isAuditScopeInvalid = !auditScope.ok;
+  if (isAuditScopeInvalid) return { success: false, error: auditScope.message, candidates: auditScope.candidates };
   const targetDir = auditScope.relDir;
   const scope = args.scope || 'master';
   const report = executeAstAudit(auditScope.dir, { cwd: resolveTargetCwd(cwd) });
