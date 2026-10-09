@@ -11,3 +11,5 @@
 - CLI cold start ~1.1s user CPU per call (`chemx p build`), MCP warm call 12ms: big gap for bursts of small queries.
 - chemx test (CLI) picked vitest instead of the kit's own node --test script and also globbed .claude/worktrees/* copies; needed bypass to run cli/search.spec.js
 - guard matched inside quoted strings and heredoc bodies; fixed with literal stripping (keep as a spec case for chemx hook claude-pre-tool)
+- [B] `git stash` is shared by every worktree (refs/stash lives in the common git dir): a `stash push`/`pop` pair used to prove a spec fails before a fix popped another group's concurrent stash (it touched cli/typecheck-command.js). Recovered by hand; B now proves fails-before via `git archive HEAD` into /tmp. Agents need a stash-free way to run a spec against HEAD (e.g. `chemx test --at=HEAD`).
+- [B] The pre-commit hook (scripts/pre-commit.sh audit of staged files) takes over 2 minutes for a ~30-file commit in a worktree, so `git commit` hits the 120s tool timeout; B ran commits in the background.

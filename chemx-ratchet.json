@@ -1,11 +1,26 @@
 {
-  "version": 1,
-  "scope": "cli",
-  "rules": {
-    "AI_SLOP_REDUNDANT_PASSTHROUGH": 2,
-    "AI_SLOP_SHALLOW_CATCH": 30,
-    "CONTROL_FLOW_INLINE_BOOLEAN": 87,
-    "CONTROL_FLOW_NESTED_TERNARY": 5,
-    "TYPOGRAPHY_EM_DASH": 1
+  "version": 2,
+  "ruleset": 3,
+  "scopes": {
+    "cli": {
+      "ruleset": 1,
+      "rules": {
+        "AI_SLOP_REDUNDANT_PASSTHROUGH": 2,
+        "AI_SLOP_SHALLOW_CATCH": 30,
+        "CONTROL_FLOW_INLINE_BOOLEAN": 1349,
+        "CONTROL_FLOW_NESTED_TERNARY": 6,
+        "DATA_FLOW_OPTIONAL_CHAINING_CHURN": 11,
+        "ERROR_SWALLOWED_EXCEPTION": 33,
+        "TIMER_DISCIPLINE": 1,
+        "TYPOGRAPHY_EM_DASH": 1
+      },
+      "revisions": {
+        "CONTROL_FLOW_INLINE_BOOLEAN": 3,
+        "CONTROL_FLOW_NESTED_TERNARY": 3,
+        "DATA_FLOW_OPTIONAL_CHAINING_CHURN": 2,
+        "ERROR_SWALLOWED_EXCEPTION": 3,
+        "TIMER_DISCIPLINE": 3
+      }
+    }
   }
 }
