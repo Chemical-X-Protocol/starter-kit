@@ -59,7 +59,8 @@ export const runHookCli = async (args, { stdin = process.stdin, stdout = process
   const name = args[0];
   const raw = await readStdin(stdin);
   const result = await runHook(name, raw, env);
-  if (result.debug) stderr.write(`${result.debug}\n`);
+  const hasDebugMessage = Boolean(result.debug);
+  if (hasDebugMessage) stderr.write(`${result.debug}\n`);
   const hasOutput = result.output !== null && result.output !== undefined;
   const stream = result.isError ? stderr : stdout;
   if (hasOutput) stream.write(typeof result.output === 'string' ? `${result.output}\n` : JSON.stringify(result.output));
