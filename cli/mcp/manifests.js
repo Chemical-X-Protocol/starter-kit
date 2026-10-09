@@ -64,6 +64,9 @@ export const MASTER_MCP_TOOL = {
           command: { type: 'string', description: 'Command for build/test/typecheck. Runs only when it equals a package.json script (or `npm run <script>`), unless the server has CHEMX_MCP_ALLOW_SHELL=1.' },
           testTarget: { type: 'string', description: 'Target test file or spec path (for test)' },
           filter: { type: 'string', description: 'Filter test names by regex or string pattern (for test)' },
+          allowEmpty: { type: 'boolean', description: 'Accept a test run that collects zero tests (for test, verify)' },
+          timeout: { type: 'number', description: 'Seconds before a test, typecheck, build or verify step stops as inconclusive (default 600)' },
+          includeBuild: { type: 'boolean', description: 'Also run the production build step (for verify)' },
           subAction: { type: 'string', description: 'Sub-action for team operations (e.g. list, claim, done, triage, acquire, release)' },
           taskId: { type: 'number', description: 'Target task ID (for team task claim/done)' },
           agentId: { type: 'string', description: 'Agent handle (e.g. @antigravity, @coder)' },
@@ -253,7 +256,8 @@ export const SUB_TOOLS = [
         dir: {
           type: 'string',
           description: 'Target workspace directory to build (e.g. "apps/my-card-vault"). Defaults to current working directory.'
-        }
+        },
+        timeout: { type: 'number', description: 'Stop the run after this many seconds; a timed-out run is inconclusive (default 600)' }
       }
     }
   },
@@ -342,7 +346,8 @@ export const SUB_TOOLS = [
       type: 'object',
       properties: {
         command: { type: 'string', description: 'Optional custom typecheck command (e.g. "pnpm run typecheck" or "npx tsc --noEmit")' },
-        dir: { type: 'string', description: 'Target workspace directory (defaults to current working directory)' }
+        dir: { type: 'string', description: 'Target workspace directory (defaults to current working directory)' },
+        timeout: { type: 'number', description: 'Stop the run after this many seconds; a timed-out run is inconclusive (default 600)' }
       }
     }
   },
@@ -353,7 +358,11 @@ export const SUB_TOOLS = [
       type: 'object',
       properties: {
         command: { type: 'string', description: 'Optional custom test command (e.g. "pnpm test" or "npx vitest run")' },
-        dir: { type: 'string', description: 'Target workspace directory (defaults to current working directory)' }
+        dir: { type: 'string', description: 'Target workspace directory (defaults to current working directory)' },
+        target: { type: 'string', description: 'Test file or directory to run' },
+        filter: { type: 'string', description: 'Test name filter' },
+        allowEmpty: { type: 'boolean', description: 'Accept a test run that collects zero tests (default false: zero tests is inconclusive)' },
+        timeout: { type: 'number', description: 'Stop the run after this many seconds; a timed-out run is inconclusive (default 600)' }
       }
     }
   },
@@ -364,7 +373,9 @@ export const SUB_TOOLS = [
       type: 'object',
       properties: {
         dir: { type: 'string', description: 'Target directory for architectural audit (defaults to "src" or "blueprints")' },
-        includeBuild: { type: 'boolean', description: 'Whether to also run production build verification (defaults to false)' }
+        includeBuild: { type: 'boolean', description: 'Whether to also run production build verification (defaults to false)' },
+        allowEmpty: { type: 'boolean', description: 'Accept a test run that collects zero tests (default false: zero tests is inconclusive)' },
+        timeout: { type: 'number', description: 'Per-step timeout for typecheck, tests and build: stop a step after this many seconds; a timed-out run is inconclusive (default 600)' }
       }
     }
   },

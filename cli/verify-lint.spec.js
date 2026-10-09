@@ -42,3 +42,11 @@ test('VerifyLint: parseLintOutput extracts errors, warnings, and fixable count',
   assert.strictEqual(parsed.errors[0].ruleId, 'no-unused-vars');
   assert.strictEqual(parsed.warnings[0].ruleId, 'no-console');
 });
+
+test('verify-helpers: parseCommandFromArgs re-quotes the words after --, like every other command', async () => {
+  const { parseCommandFromArgs } = await import('./verify-helpers.js');
+  assert.equal(parseCommandFromArgs(['--json', '--', 'eslint', '--rule', 'no-console: off']), 'eslint --rule "no-console: off"');
+  assert.equal(parseCommandFromArgs(['--', 'npm run lint']), 'npm run lint');
+  assert.equal(parseCommandFromArgs(['--']), null);
+  assert.equal(parseCommandFromArgs(['--json']), null);
+});

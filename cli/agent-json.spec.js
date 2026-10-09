@@ -43,8 +43,11 @@ const makeProject = (errorLines = TSC_ERRORS) => {
   return dir;
 };
 
+// Raw output as a user sees it: outside this spec's node:test harness (NODE_TEST_CONTEXT would
+// make a nested `node --test` report to the parent and print almost nothing), like chemx's child.
 const rawBytes = (dir, command) => {
-  const res = spawnSync(command, { cwd: dir, shell: true, encoding: 'utf8', env: { ...process.env, FORCE_COLOR: '0' } });
+  const { NODE_TEST_CONTEXT, ...userEnv } = process.env;
+  const res = spawnSync(command, { cwd: dir, shell: true, encoding: 'utf8', env: { ...userEnv, FORCE_COLOR: '0' } });
   return Buffer.byteLength(`${res.stdout}${res.stderr}`);
 };
 

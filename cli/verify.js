@@ -1,6 +1,4 @@
-import fs from 'node:fs';
 import path from 'node:path';
-import { executeBuild } from './build/executor.js';
 import { loadProjectConfig } from './config/index.js';
 import { runAudit as executeAstAudit } from './audit-engine.js';
 import { runBuildAudit } from './build.js';
@@ -8,15 +6,19 @@ import { findProjectRoot } from './build/detector.js';
 import { resolveAuditScope } from './audit-scope.js';
 import { computeGateVerdict } from './audit/gate-verdict.js';
 import { ANSI } from './theme.js';
-import { formatAgentJson } from './agent-json.js';
+import { STATUS, toExitCode } from './result-status.js';
+import { parseCliArgs, describeArgErrors, parseTimeoutSeconds } from './cli-args.js';
+import { checkNodeModules } from './verify-helpers.js';
+import { runTypecheckAudit } from './typecheck-audit.js';
+import { runTestAudit } from './test-audit.js';
 import {
-  parseCommandFromArgs,
-  detectTypecheckCommand,
-  detectTestCommand,
-  parseTypecheckOutput,
-  parseTestOutput,
-  checkNodeModules
-} from './verify-helpers.js';
+  DEFAULT_STEP_TIMEOUT_MS, SKIPPED, typecheckSection, testsSection, buildSection,
+  combineStepStatuses, architecturalWarningFor
+} from './verify-steps.js';
+import {
+  VERIFY_HELP, stepLine, formatTypecheckStep, formatTestStep, testStepIcon, formatBuildStep, createProgress, formatVerdict, isEmptyAllowed
+} from './verify-report.js';
+import { formatAgentJson } from './agent-json.js';
 
 export {
   parseCommandFromArgs,
@@ -26,264 +28,50 @@ export {
   parseTestOutput
 } from './verify-helpers.js';
 export { runLintAudit } from './verify-lint.js';
+export { runTypecheckAudit } from './typecheck-audit.js';
+export { runTestAudit } from './test-audit.js';
 
-export const runTypecheckAudit = async (rawArgs = [], isCli = false, options = {}) => {
-  if (rawArgs.includes('--help') || rawArgs.includes('-h') || rawArgs.includes('help')) {
-    const isJson = rawArgs.includes('--json');
-    if (isJson) {
-      process.stdout.write(JSON.stringify({ help: true, success: true }) + '\n');
-    } else {
-      process.stdout.write([
-        `${ANSI.BOLD}USAGE${ANSI.RESET}`,
-        `  chemx typecheck [options] [-- <command>]`,
-        '',
-        `${ANSI.BOLD}OPTIONS${ANSI.RESET}`,
-        `  --json                   Output structured diagnostics as JSON`,
-        `  --raw                    Do not capture or format output`,
-        `  -h, --help               Show this help message`,
-        ''
-      ].join('\n'));
-    }
-    if (isCli) process.exit(0);
-    return { help: true, success: true };
-  }
-
-  const isJson = rawArgs.includes('--json') || options.json === true;
-  const isRaw = rawArgs.includes('--raw') || options.raw === true;
-  const customCmd = parseCommandFromArgs(rawArgs) || options.command;
-  const cwd = findProjectRoot(options.cwd || process.cwd());
-
-  const nmStatus = checkNodeModules(cwd);
-  if (nmStatus) {
-    const friendlyMsg = nmStatus.msg('typechecking');
-    const report = {
-      success: false,
-      exitCode: 1,
-      command: customCmd || 'typecheck',
-      durationMs: 0,
-      errorCount: 1,
-      executionError: friendlyMsg,
-      errors: [
-        {
-          file: 'package.json',
-          line: 1,
-          column: 1,
-          code: 'MISSING_NODE_MODULES',
-          message: friendlyMsg
-        }
-      ]
-    };
-    if (isJson) {
-      if (options.print !== false) {
-        process.stdout.write(formatAgentJson(report) + '\n');
-      }
-      if (isCli) process.exit(1);
-      return report;
-    }
-    if (options.print !== false) {
-      process.stdout.write(`\n  ${ANSI.RED}✖${ANSI.RESET} ${ANSI.BOLD}${friendlyMsg}${ANSI.RESET}\n\n`);
-    }
-    if (isCli) process.exit(1);
-    return report;
-  }
-
-  const command = detectTypecheckCommand(customCmd, cwd);
-  const execution = await executeBuild(command, cwd, { raw: isRaw });
-  const errors = parseTypecheckOutput(execution.stdout, execution.stderr);
-  const isSuccess = execution.exitCode === 0 && errors.length === 0;
-
-  let executionError = null;
-  if (execution.exitCode !== 0 && errors.length === 0) {
-    const rawLines = `${execution.stderr}\n${execution.stdout}`.split('\n').map((l) => l.trim()).filter(Boolean);
-    executionError = rawLines.find((l) => /error|not found|cannot find/i.test(l)) || rawLines[0] || `Command exited with code ${execution.exitCode}`;
-  }
-
-  const report = {
-    success: isSuccess,
-    exitCode: execution.exitCode,
-    command,
-    durationMs: execution.durationMs,
-    errorCount: errors.length,
-    executionError,
-    errors
-  };
-
-  if (isJson) {
-    if (options.print !== false) {
-      process.stdout.write(formatAgentJson(report) + '\n');
-    }
-    if (isCli) process.exit(report.success ? 0 : 1);
-    return report;
-  }
-
-  if (options.print !== false) {
-    if (report.success) {
-      process.stdout.write(`  ${ANSI.LIME}✔${ANSI.RESET} ${ANSI.BOLD}TypeScript typecheck clean${ANSI.RESET} ${ANSI.DIM}(${report.durationMs}ms)${ANSI.RESET}\n`);
-    } else {
-      if (report.executionError) {
-        process.stdout.write(`\n  ${ANSI.RED}✖${ANSI.RESET} ${ANSI.BOLD}TypeScript Execution Error:${ANSI.RESET} ${report.executionError}\n\n`);
-      } else {
-        process.stdout.write(`\n  ${ANSI.RED}✖${ANSI.RESET} ${ANSI.BOLD}TypeScript Errors (${report.errorCount} found)${ANSI.RESET}\n`);
-        for (const err of report.errors.slice(0, 10)) {
-          process.stdout.write(`    ${ANSI.CYAN}${err.file}:${err.line}:${err.column}${ANSI.RESET} [${err.code}] ${err.message}\n`);
-        }
-        if (report.errors.length > 10) {
-          process.stdout.write(`    ${ANSI.DIM}...and ${report.errors.length - 10} more diagnostics${ANSI.RESET}\n`);
-        }
-        process.stdout.write('\n');
-      }
-    }
-  }
-
-  if (isCli) process.exit(report.success ? 0 : 1);
-  return report;
+const VERIFY_ARGS = {
+  booleans: { '--json': 'json', '--build': 'build', '--allow-empty': 'allowEmpty', '--help': 'help', '-h': 'help' },
+  values: { '--dir': 'dir', '--timeout': 'timeout', '--profile': 'profile' }
 };
 
-export const runTestAudit = async (rawArgs = [], isCli = false, options = {}) => {
-  if (rawArgs.includes('--help') || rawArgs.includes('-h') || rawArgs.includes('help')) {
-    const isJson = rawArgs.includes('--json');
-    if (isJson) {
-      process.stdout.write(JSON.stringify({ help: true, success: true }) + '\n');
-    } else {
-      process.stdout.write([
-        `${ANSI.BOLD}USAGE${ANSI.RESET}`,
-        `  chemx test [options] [-- <command>]`,
-        '',
-        `${ANSI.BOLD}OPTIONS${ANSI.RESET}`,
-        `  --json                   Output test summary as minified JSON`,
-        `  --raw                    Do not suppress passing test output`,
-        `  -h, --help               Show this help message`,
-        ''
-      ].join('\n'));
-    }
-    if (isCli) process.exit(0);
-    return { help: true, success: true };
-  }
+// verify takes no positional arguments; `chemx verify src` must not silently verify everything.
+const VERIFY_STRAY_HINT = 'use --dir=<path> to pick a directory';
 
-  const isJson = rawArgs.includes('--json') || options.json === true;
-  const isRaw = rawArgs.includes('--raw') || options.raw === true;
-  const customCmd = parseCommandFromArgs(rawArgs) || options.command;
-  const cwd = findProjectRoot(options.cwd || process.cwd());
+const finish = (summary, status, { isCli }) => {
+  if (isCli) process.exit(toExitCode(status));
+  return summary;
+};
 
-  const targetFlag = (rawArgs.find((a) => a.startsWith('--target=')) || '').replace(/^--target=/, '');
-  const filterFlag = (rawArgs.find((a) => a.startsWith('--filter=') || a.startsWith('-t=')) || '').replace(/^--(filter|t)=/, '');
-  const positionalTarget = rawArgs.find((a) => !a.startsWith('-') && !['test', 'tests', 'check:test'].includes(a) && (a.endsWith('.js') || a.endsWith('.ts') || a.includes('/')));
-  const target = options.target || targetFlag || positionalTarget || null;
-  const filter = options.filter || filterFlag || null;
-
-  const nmStatus = checkNodeModules(cwd);
-  if (nmStatus) {
-    const friendlyMsg = nmStatus.msg('testing');
-    const report = {
-      success: false,
-      exitCode: 1,
-      command: customCmd || 'test',
-      durationMs: 0,
-      totalTests: 0,
-      passed: 0,
-      failed: 1,
-      skipped: 0,
-      executionError: friendlyMsg,
-      failures: [{ name: 'dependencies', details: [friendlyMsg] }]
-    };
-    if (isJson) {
-      if (options.print !== false) {
-        process.stdout.write(formatAgentJson(report) + '\n');
-      }
-      if (isCli) process.exit(1);
-      return report;
-    }
-    if (options.print !== false) {
-      process.stdout.write(`\n  ${ANSI.RED}✖${ANSI.RESET} ${ANSI.BOLD}${friendlyMsg}${ANSI.RESET}\n\n`);
-    }
-    if (isCli) process.exit(1);
-    return report;
-  }
-
-  const command = detectTestCommand(customCmd, cwd, { target, filter });
-  const execution = await executeBuild(command, cwd, { raw: isRaw });
-  const parsed = parseTestOutput(execution.stdout, execution.stderr, execution.exitCode);
-
-  const hasFailedExitCode = execution.exitCode !== 0;
-  const hasNoTestFailures = parsed.failed === 0 && parsed.failures.length === 0;
-  const isExecutionFault = hasFailedExitCode && hasNoTestFailures;
-
-  let executionError = null;
-  if (isExecutionFault) {
-    const rawLines = `${execution.stderr}\n${execution.stdout}`.split('\n').map((l) => l.trim()).filter(Boolean);
-    executionError = rawLines.find((l) => /error|not found|failed/i.test(l)) || rawLines[0] || `Command exited with code ${execution.exitCode}`;
-  }
-
-  const report = {
-    success: parsed.success,
-    exitCode: execution.exitCode,
-    command,
-    durationMs: execution.durationMs,
-    totalTests: parsed.totalTests,
-    passed: parsed.passed,
-    failed: parsed.failed,
-    skipped: parsed.skipped,
-    executionError,
-    failures: parsed.failures
-  };
-
-  if (isJson) {
-    if (options.print !== false) {
-      process.stdout.write(formatAgentJson(report) + '\n');
-    }
-    if (isCli) process.exit(report.success ? 0 : 1);
-    return report;
-  }
-
-  if (options.print !== false) {
-    if (report.success) {
-      process.stdout.write(`  ${ANSI.LIME}✔${ANSI.RESET} ${ANSI.BOLD}All tests passed${ANSI.RESET} ${ANSI.DIM}(${report.passed} tests in ${report.durationMs}ms)${ANSI.RESET}\n`);
-    } else {
-      if (report.executionError) {
-        process.stdout.write(`\n  ${ANSI.RED}✖${ANSI.RESET} ${ANSI.BOLD}Test Execution Error:${ANSI.RESET} ${report.executionError}\n\n`);
-      } else {
-        process.stdout.write(`\n  ${ANSI.RED}✖${ANSI.RESET} ${ANSI.BOLD}Test Failures (${report.failed} failed out of ${report.totalTests})${ANSI.RESET}\n`);
-        for (const fail of report.failures.slice(0, 5)) {
-          process.stdout.write(`    ${ANSI.RED}✖ ${fail.name}${ANSI.RESET}\n`);
-          for (const line of (fail.details || []).slice(0, 3)) {
-            process.stdout.write(`      ${ANSI.DIM}${line}${ANSI.RESET}\n`);
-          }
-        }
-        process.stdout.write('\n');
-      }
-    }
-  }
-
-  if (isCli) process.exit(report.success ? 0 : 1);
-  return report;
+const printEarly = (summary, isJson, shouldPrint) => {
+  if (!shouldPrint) return;
+  const text = isJson ? formatAgentJson(summary) : `\n  ${ANSI.RED}✖${ANSI.RESET} ${ANSI.BOLD}${summary.error}${ANSI.RESET}\n`;
+  process.stdout.write(text + '\n');
 };
 
 export const runProjectVerify = async (rawArgs = [], isCli = false, options = {}) => {
-  if (rawArgs.includes('--help') || rawArgs.includes('-h') || rawArgs.includes('help')) {
-    const isJson = rawArgs.includes('--json');
-    if (isJson) {
-      process.stdout.write(JSON.stringify({ help: true, success: true }) + '\n');
-    } else {
-      process.stdout.write([
-        `${ANSI.BOLD}USAGE${ANSI.RESET}`,
-        `  chemx verify [options]`,
-        '',
-        `${ANSI.BOLD}OPTIONS${ANSI.RESET}`,
-        `  --dir=<path>             Target directory to verify (default: .chemxrc "scope", else project root)`,
-        `  --build                  Include production build audit step`,
-        `  --json                   Output summary status card as JSON`,
-        `  -h, --help               Show this help message`,
-        ''
-      ].join('\n'));
-    }
+  const parsed = parseCliArgs(rawArgs, VERIFY_ARGS);
+  const isJson = Boolean(parsed.flags.json) || options.json === true;
+  const shouldPrint = options.print !== false;
+  const wantsHelp = Boolean(parsed.flags.help) || parsed.positionals[0] === 'help';
+  if (wantsHelp) {
+    if (shouldPrint) process.stdout.write(isJson ? `${JSON.stringify({ help: true, success: true })}\n` : VERIFY_HELP);
     if (isCli) process.exit(0);
     return { help: true, success: true };
   }
 
-  const isJson = rawArgs.includes('--json') || options.json === true;
-  const includeBuild = rawArgs.includes('--build') || options.includeBuild === true;
-  const dirFlag = rawArgs.find((a) => a.startsWith('--dir='));
-  const explicitDir = dirFlag ? dirFlag.split('=')[1] : options.targetDir;
+  const argError = describeArgErrors(parsed, 'verify', { strayHint: VERIFY_STRAY_HINT });
+  if (argError) {
+    const summary = { status: STATUS.FAIL, success: false, error: argError };
+    printEarly(summary, isJson, shouldPrint);
+    return finish(summary, STATUS.FAIL, { isCli });
+  }
+
+  const includeBuild = Boolean(parsed.flags.build) || options.includeBuild === true;
+  const allowEmpty = Boolean(parsed.flags.allowEmpty) || options.allowEmpty === true;
+  const timeoutMs = parseTimeoutSeconds(parsed.values.timeout) ?? options.timeoutMs ?? DEFAULT_STEP_TIMEOUT_MS;
+  const explicitDir = parsed.values.dir || options.targetDir;
   const baseDir = options.cwd || process.cwd();
   const explicitAbsDir = explicitDir ? path.resolve(baseDir, explicitDir) : null;
   const cwd = findProjectRoot(explicitAbsDir ?? baseDir);
@@ -293,6 +81,7 @@ export const runProjectVerify = async (rawArgs = [], isCli = false, options = {}
   if (nmStatus) {
     const friendlyMsg = nmStatus.msg('verifying');
     const summary = {
+      status: STATUS.FAIL,
       success: false,
       error: friendlyMsg,
       audit: { score: 0, grade: 'F', violationsCount: 0, criticalCount: 0 },
@@ -311,59 +100,54 @@ export const runProjectVerify = async (rawArgs = [], isCli = false, options = {}
         failures: [{ name: 'dependencies', details: [friendlyMsg] }]
       }
     };
-    if (isJson) {
-      if (options.print !== false) {
-        process.stdout.write(formatAgentJson(summary) + '\n');
-      }
-      if (isCli) process.exit(1);
-      return summary;
-    }
-    if (options.print !== false) {
-      process.stdout.write(`\n  ${ANSI.RED}✖${ANSI.RESET} ${ANSI.BOLD}${friendlyMsg}${ANSI.RESET}\n\n`);
-    }
-    if (isCli) process.exit(1);
-    return summary;
+    printEarly(summary, isJson, shouldPrint);
+    return finish(summary, STATUS.FAIL, { isCli });
   }
 
   if (!scope.ok) {
-    const summary = { success: false, error: scope.message, scope: { reason: scope.reason, candidates: scope.candidates } };
-    const shouldPrint = options.print !== false;
-    if (shouldPrint) {
-      const output = isJson ? formatAgentJson(summary) : `\n  ${ANSI.RED}✖${ANSI.RESET} ${ANSI.BOLD}${scope.message}${ANSI.RESET}\n`;
-      process.stdout.write(output + '\n');
-    }
-    if (isCli) process.exit(1);
-    return summary;
+    const summary = { status: STATUS.FAIL, success: false, error: scope.message, scope: { reason: scope.reason, candidates: scope.candidates } };
+    printEarly(summary, isJson, shouldPrint);
+    return finish(summary, STATUS.FAIL, { isCli });
   }
 
-  if (!isJson && options.print !== false) {
-    process.stdout.write(`\n  ${ANSI.BOLD}${ANSI.CYAN}⚡ Chemical X: Token-Conserving Project Verification${ANSI.RESET}\n\n`);
-  }
+  const isText = !isJson && shouldPrint;
+  if (isText) process.stdout.write(`\n  ${ANSI.BOLD}${ANSI.CYAN}⚡ Chemical X: Token-Conserving Project Verification${ANSI.RESET}\n\n`);
+  const progress = createProgress(isText);
 
+  progress.start('AST Architecture', { announceOnPipe: true });
   const projectConfig = options.config || loadProjectConfig(cwd, rawArgs);
   const auditReport = executeAstAudit(scope.dir, { cwd, config: projectConfig });
   const gate = computeGateVerdict({ projectRoot: cwd, scope: scope.relDir, violations: auditReport.violations });
-  const isAuditPassing = gate.isPassing;
+  const auditStatus = gate.isPassing ? STATUS.PASS : STATUS.FAIL;
+  const auditText = `${auditReport.health.grade} (${auditReport.health.score}/100, ${auditReport.totalViolations} violations)`;
+  progress.finish(stepLine(auditStatus, 'AST Architecture', auditText, `${scope.relDir}/, ${gate.basis} gate`));
 
-  const typeReport = await runTypecheckAudit([], false, { print: false, cwd });
-  const testReport = await runTestAudit([], false, { print: false, cwd });
+  // Only the audit is scoped; typecheck, tests and build run project-wide, so each line names its command.
+  progress.start('TypeScript');
+  const typecheck = typecheckSection(await runTypecheckAudit([], false, { print: false, cwd, timeoutMs }));
+  progress.finish(stepLine(typecheck.status, 'TypeScript', formatTypecheckStep(typecheck), typecheck.status === SKIPPED ? '' : typecheck.command));
 
-  let buildReport = null;
+  progress.start('Test Suite');
+  const tests = testsSection(await runTestAudit([], false, { print: false, cwd, timeoutMs, allowEmpty }));
+  progress.finish(stepLine(testStepIcon(tests), 'Test Suite', formatTestStep(tests), tests.command));
+
+  let build = null;
   if (includeBuild) {
-    buildReport = await runBuildAudit(['--json'], false, { print: false, cwd });
+    progress.start('Production Build');
+    build = buildSection(await runBuildAudit(['--json'], false, { print: false, cwd, timeoutMs }));
+    progress.finish(stepLine(build.status, 'Production Build', formatBuildStep(build), build.command));
   }
 
-  const hasBuildOrTestFailure = !typeReport.success || !testReport.success || (buildReport && !buildReport.isPassing);
-  const isArchitecturePassingOnly = isAuditPassing && hasBuildOrTestFailure;
-  const isAllPassed = isAuditPassing && typeReport.success && testReport.success && (!buildReport || buildReport.isPassing);
-
+  const stepStatuses = { audit: auditStatus, typecheck: typecheck.status, tests: tests.status, build: build?.status };
+  const status = combineStepStatuses(stepStatuses);
+  const architecturalWarning = architecturalWarningFor(stepStatuses);
   const summary = {
-    success: isAllPassed,
+    status,
+    success: status === STATUS.PASS,
     scope: { dir: scope.relDir, source: scope.source },
-    architecturalWarning: isArchitecturePassingOnly
-      ? 'AST compliance does not guarantee functional correctness. Fix typecheck or test errors before deployment.'
-      : null,
+    architecturalWarning,
     audit: {
+      status: auditStatus,
       score: auditReport.health.score,
       grade: auditReport.health.grade,
       violationsCount: auditReport.totalViolations,
@@ -373,79 +157,13 @@ export const runProjectVerify = async (rawArgs = [], isCli = false, options = {}
       regressions: gate.regressions.slice(0, 10),
       note: gate.note
     },
-    typecheck: {
-      success: typeReport.success,
-      command: typeReport.command,
-      errorCount: typeReport.errorCount,
-      executionError: typeReport.executionError || null,
-      errors: typeReport.errors.slice(0, 5)
-    },
-    tests: {
-      success: testReport.success,
-      command: testReport.command,
-      total: testReport.totalTests,
-      passed: testReport.passed,
-      failed: testReport.failed,
-      executionError: testReport.executionError || null,
-      failures: testReport.failures.slice(0, 3)
-    }
+    typecheck,
+    tests,
+    ...(build ? { build } : {})
   };
 
-  if (buildReport) {
-    summary.build = {
-      success: buildReport.isPassing,
-      totalDiagnostics: buildReport.totalDiagnostics
-    };
-  }
-
-  if (isJson) {
-    if (options.print !== false) {
-      process.stdout.write(formatAgentJson(summary) + '\n');
-    }
-    if (isCli) process.exit(isAllPassed ? 0 : 1);
-    return summary;
-  }
-
-  if (options.print !== false) {
-    const auditIcon = isAuditPassing ? `${ANSI.LIME}✔${ANSI.RESET}` : `${ANSI.RED}✖${ANSI.RESET}`;
-    const typeIcon = typeReport.success ? `${ANSI.LIME}✔${ANSI.RESET}` : `${ANSI.RED}✖${ANSI.RESET}`;
-    const testIcon = testReport.success ? `${ANSI.LIME}✔${ANSI.RESET}` : `${ANSI.RED}✖${ANSI.RESET}`;
-
-    const formatTypeStatus = () => {
-      if (typeReport.success) return 'Clean (0 errors)';
-      if (typeReport.executionError) return `Command Failed (${typeReport.executionError})`;
-      return `${typeReport.errorCount} error(s)`;
-    };
-    const formatTestStatus = () => {
-      if (testReport.success) return `Passed (${testReport.passed}/${testReport.totalTests})`;
-      if (testReport.executionError) return `Command Failed (${testReport.executionError})`;
-      return `${testReport.failed} failed`;
-    };
-
-    const typeStatus = formatTypeStatus();
-    const testStatus = formatTestStatus();
-
-    // Only the audit is scoped; typecheck and tests run project-wide, so each line names what it covered.
-    process.stdout.write(`  ${auditIcon} AST Architecture:  ${auditReport.health.grade} (${auditReport.health.score}/100, ${auditReport.totalViolations} violations) ${ANSI.DIM}[${scope.relDir}/, ${gate.basis} gate]${ANSI.RESET}\n`);
-    process.stdout.write(`  ${typeIcon} TypeScript:        ${typeStatus} ${ANSI.DIM}[${typeReport.command}]${ANSI.RESET}\n`);
-    process.stdout.write(`  ${testIcon} Test Suite:        ${testStatus} ${ANSI.DIM}[${testReport.command}]${ANSI.RESET}\n`);
-    if (buildReport) {
-      const buildIcon = buildReport.isPassing ? `${ANSI.LIME}✔${ANSI.RESET}` : `${ANSI.RED}✖${ANSI.RESET}`;
-      process.stdout.write(`  ${buildIcon} Production Build:  ${buildReport.isPassing ? 'Success' : 'Failed'}\n`);
-    }
-
-    process.stdout.write('\n');
-    if (isAllPassed) {
-      process.stdout.write(`  ${ANSI.LIME}${ANSI.BOLD}All verification checks passed with zero context burn!${ANSI.RESET}\n\n`);
-    } else {
-      process.stdout.write(`  ${ANSI.RED}${ANSI.BOLD}Verification failed. Actionable issues cataloged above.${ANSI.RESET}\n`);
-      if (isArchitecturePassingOnly) {
-        process.stdout.write(`  ${ANSI.YELLOW}⚠ Notice: Architectural compliance (${auditReport.health.grade}) does not guarantee functional correctness. Code cannot be considered production ready while typecheck or test errors persist.${ANSI.RESET}\n`);
-      }
-      process.stdout.write('\n');
-    }
-  }
-
-  if (isCli) process.exit(isAllPassed ? 0 : 1);
-  return summary;
+  const shouldPrintJson = isJson && shouldPrint;
+  if (shouldPrintJson) process.stdout.write(formatAgentJson(summary) + '\n');
+  if (isText) process.stdout.write(formatVerdict(status, architecturalWarning, { testsRanNothing: isEmptyAllowed(tests) }));
+  return finish(summary, status, { isCli });
 };

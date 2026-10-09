@@ -21,7 +21,7 @@ test('executor: a timeout kills the whole process tree and reports timedOut', as
   const dir = makeFixtureProject({ 'package.json': PKG });
   const result = await executeBuild('sleep 30 & echo $! > child.pid; wait', dir, { timeoutMs: 300 });
   assert.strictEqual(result.timedOut, true);
-  assert.strictEqual(result.exitCode, 124);
+  assert.strictEqual(result.exitCode, null, 'a timed-out run carries no exit verdict');
   assert.ok(result.durationMs < 5000);
   const grandchild = Number(fs.readFileSync(path.join(dir, 'child.pid'), 'utf-8'));
   await new Promise((r) => setTimeout(r, 200));
