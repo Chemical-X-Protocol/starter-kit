@@ -31,7 +31,8 @@ export const getGitChangedFiles = (cwd = process.cwd()) => {
   try {
     const result = spawnSync('git', ['status', '--porcelain', '-u'], { cwd, encoding: 'utf-8' });
     const isSuccess = result.status === 0;
-    if (!isSuccess || !result.stdout) return [];
+    const isUnusable = !isSuccess || !result.stdout;
+    if (isUnusable) return [];
     return parseGitStatusOutput(result.stdout);
   } catch {
     return [];
