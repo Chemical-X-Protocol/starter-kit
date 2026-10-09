@@ -151,7 +151,8 @@ Assets built: 24 chunks (1.8MB total)
 
   results.push({
     category: '4. Verification Gate',
-    target: 'Test + Typecheck Suite (230+ tests)',
+    target: 'Test + Typecheck Suite (simulated raw log, not measured)',
+    simulated: true,
     traditionalMethod: 'Raw `npm test` + `tsc` stdout',
     chemxMethod: '`chemx verify --json`',
     traditionalTokens: rawVerifyTokens,
@@ -172,12 +173,13 @@ export const formatMarkdownTable = (results) => {
     lines.push(`| **${r.category}** | \`${r.target}\` | ~${r.traditionalTokens.toLocaleString()} | ~${r.chemxTokens.toLocaleString()} | ~${r.savingsTokens.toLocaleString()} | **${r.savingsPct}%** |`);
   }
 
-  const totalTrad = results.reduce((acc, r) => acc + r.traditionalTokens, 0);
-  const totalChemx = results.reduce((acc, r) => acc + r.chemxTokens, 0);
+  const measured = results.filter((r) => !r.simulated);
+  const totalTrad = measured.reduce((acc, r) => acc + r.traditionalTokens, 0);
+  const totalChemx = measured.reduce((acc, r) => acc + r.chemxTokens, 0);
   const avgReduction = Math.round(((totalTrad - totalChemx) / totalTrad) * 100);
 
   lines.push('| :--- | :--- | :---: | :---: | :---: | :---: |');
-  lines.push(`| **TOTAL / AVERAGE** | **11 Tasks Across 4 Categories** | **~${totalTrad.toLocaleString()}** | **~${totalChemx.toLocaleString()}** | **~${(totalTrad - totalChemx).toLocaleString()}** | **${avgReduction}%** |`);
+  lines.push(`| **TOTAL (measured rows only)** | **${measured.length} Tasks Across 3 Categories** | **~${totalTrad.toLocaleString()}** | **~${totalChemx.toLocaleString()}** | **~${(totalTrad - totalChemx).toLocaleString()}** | **${avgReduction}%** |`);
 
   return lines.join('\n');
 };
@@ -185,15 +187,17 @@ export const formatMarkdownTable = (results) => {
 const results = runBenchmarks();
 const table = formatMarkdownTable(results);
 
-const totalTrad = results.reduce((acc, r) => acc + r.traditionalTokens, 0);
-const totalChemx = results.reduce((acc, r) => acc + r.chemxTokens, 0);
+const measuredRows = results.filter((r) => !r.simulated);
+const totalTrad = measuredRows.reduce((acc, r) => acc + r.traditionalTokens, 0);
+const totalChemx = measuredRows.reduce((acc, r) => acc + r.chemxTokens, 0);
 const avgReduction = Math.round(((totalTrad - totalChemx) / totalTrad) * 100);
+const runDate = new Date().toISOString().slice(0, 10);
 
 const readmeContent = `# Chemical X Protocol: Empirical Token Reduction Benchmark
 
 > *"Small, single-purpose files aren't just cleaner - they're cheaper to work with. Every file opened loads its full contents into context; a smaller file means less scanning, less irrelevant code loaded per task, and lower token cost per edit, compounding across a session."* - Directive 1.A
 
-This benchmark suite empirically validates the **70%–92% token reduction** delivered by Chemical X AST-guided navigation, surgical readers, and compact verification cards.
+This script measures how many tokens a chemx outline or symbol read saves against reading the whole file, for ten fixed targets in this kit. Last run: ${runDate}. Token counts are an estimate (characters / 3.8), not a tokenizer count. Savings differ a lot by task, so read the table rather than one headline number: the total below is the aggregate over the measured rows. The verification row compares against a hard-coded sample log, so it is an illustration and is left out of the total.
 
 ---
 
@@ -206,15 +210,14 @@ ${table}
 ## 2. Methodology & Architectural Principles
 
 ### A. Surgical AST Outlines vs. Monolithic File Dumps
-When an AI agent needs to understand a module's shape, conventional tools dump the entire source file (often 300–600 lines), burning 1,000–2,500 tokens per file read. 
-Chemical X's \`readTokenOptimized(path, { outline: true })\` extracts only exported function declarations, component contracts, and type signatures in ~40–80 tokens (**88%–93% reduction**).
+When an AI agent needs to understand a module's shape, conventional tools dump the entire source file into context.
+Chemical X's \`readTokenOptimized(path, { outline: true })\` extracts only function declarations, component contracts, and type signatures. The table above shows what that saved on each target.
 
 ### B. Targeted Symbol Blocks vs. Full File Dumps
-Rather than reading 500 lines to inspect a single helper function, \`chemx read --symbol=<name>\` isolates only the requested AST node and its direct declaration range (**80%–88% reduction**).
+Rather than reading 500 lines to inspect a single helper function, \`chemx read --symbol=<name>\` isolates only the requested AST node and its direct declaration range. Savings depend on how large the symbol is relative to its file (see the Symbol Search rows).
 
-### C. Zero-Token-Burn Verification Pipeline
-Conventional AI workflows run \`npm test\` or \`vitest\` in a bash subshell, flooding the LLM context window with hundreds of lines of passing checkmarks, bundle asset tables, and build outputs (burning 1,500–3,500 tokens).
-\`chemx verify --json\` suppresses all passing compiler and test noise, returning a single structured ~45–60 token status card (**96% reduction**).
+### C. Compact Verification Pipeline
+Raw \`npm test\` or \`vitest\` output lists every passing test. \`chemx verify --json\` prints a short status card instead. The verification row is computed from a sample log written in this script, not from a real run, so treat it as an illustration of the card's size only.
 
 ---
 

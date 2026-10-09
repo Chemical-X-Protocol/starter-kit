@@ -45,7 +45,7 @@ bun create chemx my-molecular-app
 ```
 
 ### Framework & Installation Flags
-* `--framework=<react|vue|svelte>` (or `-f <name>`): Selects target framework. Scaffolds strictly matching components, file templates, and dependencies with zero cross-framework leakage.
+* `--framework=<react|vue|svelte>` (or `-f <name>`): Selects target framework. Scaffolds strictly matching components, file templates, and dependencies from the matching framework's templates. `pnpm check:frameworks` generates capsules for React, Vue and Svelte and type-checks them; it does not scan for cross-framework leakage.
 * `--install`: Runs package manager install immediately after project creation.
 * `--skip-install` (or `--no-install`): Explicitly skips automatic dependency installation (default).
 * `--yes` (or `-y`): Automatically confirms prompts with standard molecular presets.
@@ -93,50 +93,33 @@ starter-kit/
 
 ---
 
-## Zero-Token-Burn Verification Pipeline
+## Compact Verification Output
 
-Running raw, unthrottled `npm test`, `tsc --noEmit`, or build tools dumps thousands of lines of passing checkmarks, compiler noise, and bundle asset tables into an AI agent's context window. This burns tokens prematurely and degrades context quality.
+Raw `npm test`, `tsc --noEmit` and build tools print every passing test, compiler banner and bundle asset table into an agent's context window. `chemx test`, `typecheck`, `build` and `verify` print a summary when everything passes and the failing lines when something fails, through the CLI and the MCP tool.
 
-Chemical X wraps tests, typechecks, and builds into silent, failure-focused verification tools available via CLI and native MCP tools:
+### What is measured, and what is not
 
-### Side-by-Side Benchmark Reports
+- **Measured, 2026-10-09** (`pnpm bench`, token estimate = characters / 3.8, not a tokenizer): reading a file as an outline or a single symbol instead of the whole file saved 26% to 97% per target across ten targets in this kit, 77% in aggregate. See [benchmarks/README.md](benchmarks/README.md) for every row.
+- **Not measured:** the output size of `test`, `typecheck`, `build` and `verify` against their raw equivalents. The older side-by-side tables (143 tests, a 45-token `verify` card, 99.7% savings) came from a much smaller kit and have been removed. The benchmark's own verification row uses a sample log written in the script, so it is an illustration, not a measurement.
+- **What you can rely on:** a passing run prints a short summary, not one line per test; a failing run prints the failing tests, diagnostics or errors. Output size varies with the project and with how much fails.
 
-#### 1. Test Suite: `npm test` vs `chemx test`
-
-Ran across the starter-kit test suite (143 test cases across 8 spec suites):
-
-| Metric | Raw `npm test` | Chemical X `chemx test` | Improvement |
-| :--- | :--- | :--- | :--- |
-| **Execution Time** | **~3.1s - 7.5s** | **~3.5s - 3.7s** | Identical underlying test speed |
-| **Output Lines** | **957 lines** | **1 line** | **99.9% line reduction** |
-| **Characters Streamed** | **49,246 characters** | **44 characters** | **99.9% character reduction** |
-| **Agent Token Cost** | **~12,960 tokens** | **~12 tokens** | **12,948 tokens saved (99.9%)** |
+#### Examples of the output shape
 
 ```
-# Raw npm test: Floods context with ~13,000 tokens of passing checkmarks
+# Raw npm test prints one line per passing test:
 ✔ resolveTargetDir: returns custom directory if provided as first argument (1.64ms)
 ✔ search-db: indexes symbols with line ranges and finds definition (56.65ms)
 ✔ Verify: parseTestOutput strips passing checkmarks and extracts only failing tests (1.01ms)
 ... [940 MORE LINES OF PASSING CHECKMARKS & TIMINGS] ...
 ℹ tests 143 | pass 143 | fail 0 | duration_ms 3002.57ms
 
-# Chemical X: Pinpoint single-line summary
+# chemx test: a summary line when green
 $ npx chemx test
   ✔ All tests passed (143 tests in 3500ms)
 ```
 
-#### 2. TypeScript Typecheck: `npm run typecheck` vs `chemx typecheck`
-
-| Metric | Raw `npm run typecheck` | Chemical X `chemx typecheck` | Difference |
-| :--- | :--- | :--- | :--- |
-| **Execution Time** | **1.85s** | **2.06s** | **+0.21s** (lightweight wrapper) |
-| **Output Characters** | 54 characters | **40 characters** | **26% reduction** |
-| **Context Token Cost** | ~14 tokens | **~10 tokens** | **~28% reduction** |
-| **Clean Output** | npm script banner noise | Single clean status line | Zero CLI banner noise |
-| **JSON Mode (`--json`)** | Not supported | **~30 tokens** structured JSON | Direct agent ingestion |
-
 ```bash
-# Clean, banner-free terminal verification
+# chemx typecheck: a status line when clean
 $ npx chemx typecheck
   ✔ TypeScript typecheck clean (1820ms)
 
@@ -148,13 +131,7 @@ $ npx chemx typecheck --json   # with a type error
 {"success":false,"exitCode":2,"command":"npm run typecheck","durationMs":1009,"errorCount":1,"errors":["src/a.ts:1:7 TS2322 Type 'string' is not assignable to type 'number'."]}
 ```
 
-#### 3. Production Build: Raw Build vs `chemx build`
-
-| Metric | Raw Production Build | Chemical X `chemx build` | Chemical X `--silent` |
-| :--- | :--- | :--- | :--- |
-| **Terminal Output** | Multi-page asset size tables & chunks | Single status line | **0 lines (completely silent)** |
-| **Token Cost (Success)** | **~2,000 - 8,000 tokens** | **~15 tokens** | **0 tokens** |
-| **Failure Diagnosis** | Scatted across hundreds of lines | Categorized diagnostic buckets | Exact failure lines only |
+`chemx build` prints a status line on success and groups failures into TypeScript, Rollup and style-budget diagnostics; `--silent` prints nothing on success (the exit code still reports the result).
 
 ```bash
 $ npx chemx build
@@ -162,17 +139,9 @@ Auditing build: npx tsc --noEmit
 ✔ Build Succeeded (5.20s)
 ```
 
-#### 4. Full Pipeline: `chemx verify` Grand Total
+#### Full pipeline: `chemx verify`
 
-When an AI agent runs a complete pre-commit or post-refactor verification pass:
-
-| Verification Stage | Raw Unthrottled Shell Commands | Chemical X `chemx verify` |
-| :--- | :--- | :--- |
-| **7-Pillar AST Audit** | ~4,000 tokens | Included |
-| **TypeScript Compilation** | ~14 tokens | Included |
-| **Project Test Suite** | ~12,960 tokens | Included |
-| **Total Context Burn** | **~17,000+ tokens** | **~45 tokens** |
-| **Context Savings** | Baseline | **99.7% Token Reduction** |
+`chemx verify` runs the AST audit, the typecheck and the tests, and prints one card. The card below is the shape of a green run; its size was not measured against the raw commands.
 
 ```
 $ npx chemx verify --dir=blueprints
@@ -183,18 +152,18 @@ $ npx chemx verify --dir=blueprints
   ✔ TypeScript:        Clean (0 errors)
   ✔ Test Suite:        Passed (143/143)
 
-  All verification checks passed with zero context burn!
+  All verification checks passed.
 ```
 
 ---
 
 ## CLI Command Reference & Workflow
 
-The `chemx` command suite is specifically tailored for token conservation, instant feedback, and zero terminal clutter:
+The `chemx` command suite is built to keep terminal output short: summaries when green, failing lines when red.
 
 ### 1. Verification & Quality
 ```bash
-# Full verification pipeline (AST Audit + Typecheck + Tests) -> ~45 token status card
+# Full verification pipeline (AST Audit + Typecheck + Tests) -> one short status card
 chemx verify
 chemx verify --json
 
@@ -250,7 +219,7 @@ chemx read src/components/m-card.vue --symbol=useCardController
 chemx read src/components/m-card.vue --outline
 chemx read src/components/m-card.vue --start=10 --end=40
 
-# Surgical file patching without full-file rewrites (literal replace, atomic write, backup).
+# Surgical file patching without full-file rewrites (literal replace, written through a temp file and rename, backup kept).
 # Multi-line edits: SEARCH/REPLACE blocks in a quoted heredoc ($, quotes and backticks stay literal).
 # Repeat the block for several edits; they apply in order and all-or-nothing. To edit text that
 # itself contains these markers, use 8 or more characters on all three marker lines.
@@ -272,6 +241,16 @@ chemx write <file> - [--overwrite] [--dry-run] <<'EOF'
 export const a = 1;
 EOF
 chemx write <file> --content="export const a = 1;" [--overwrite] [--dry-run]
+# --append adds to the end of the file (created if missing) with the same parse check, audit, index sync
+# and lock checks. It inserts no newline for you and is refused together with --overwrite.
+chemx write <file> --content=$'\nexport const b = 2;\n' --append
+
+# Literal text search; add paths to scope it. A missing path is an error, not an empty result.
+chemx q -g "useCardController" src/components docs
+
+# Check that every chemx command named in your markdown exists (names only: flags and arguments are
+# not checked, and nothing is run). Exits 1 with file:line for each failure.
+chemx docs check README.md docs
 ```
 
 #### Index freshness: what an index-backed answer guarantees
@@ -315,8 +294,13 @@ chemx team task list --agent=@agent-alpha
 # Claim an open task
 chemx team task claim 1 --as=@agent-alpha
 
-# Mark task complete with inline AST verification gate
-# Re-audits target file on disk to guarantee zero blocking hazards before completion:
+# Pass a task to another agent (assignee or task creator only). The task stays in_progress and the
+# feed records from, to and by. It does not move file locks: the old holder releases, the new one acquires.
+chemx team task handoff 1 @agent-beta --as=@agent-alpha
+
+# Mark task complete with inline AST verification gate.
+# Re-audits the target file on disk: refused on any CRITICAL/HIGH hazard, or when any rule's
+# count is higher than at HEAD (see docs/audit-gates.md):
 chemx team task done 1 --as=@agent-alpha --target=src/components/m-card.vue
 
 # Emergency override / escape hatch: complete task despite non-blocking warnings:
@@ -324,10 +308,15 @@ chemx team task done 1 --as=@agent-alpha --target=src/components/m-card.vue --fo
 
 # Inspect multi-agent swarm status and lock queues
 chemx team status
+
+# File locks are 5-minute leases that any chemx command run as the holder extends; they lapse after
+# 5 minutes without activity, and the commit hook refuses staged files another handle holds live.
+# Exact renewal, lapse and commit-guard behavior: docs/team-locks.md
+chemx team lock acquire src/components/m-card.vue --as=@agent-alpha --purpose="#1"
 ```
 
 ### 5. Live Swarm Web UI & Direct Task Routing
-Launch the real-time Chemical X Swarm Control Panel backed by SQLite (`.chemx/index.db`) with full SPA routing and deep linking:
+Launch the Chemical X Swarm Control Panel backed by SQLite (`.chemx/index.db`) with full SPA routing and deep linking:
 ```bash
 # Launch Live Swarm Web UI (binds 127.0.0.1:4173 and prints a tokened URL)
 npx chemx ui
@@ -349,7 +338,7 @@ npx chemx ui --port=8080
 
 ## Language-Agnostic Polyglot Architecture
 
-Chemical X is **language-agnostic**. The core physics of AI agent code generation—**Zero Context Rot, Monolith Slicing, and Verified Anti-Hallucination Gating**—apply universally across backend, frontend, and systems stacks.
+Chemical X audits more than one language. The table below lists the extensions it parses and the checks each gets; any other file type is not audited. Depth differs by language: TypeScript, JavaScript, Vue and Svelte use a real parser, and C#, Python, Go and Rust use structural patterns, so they get fewer checks.
 
 ### Supported Language Ecosystems
 
@@ -370,7 +359,7 @@ Chemical X is **language-agnostic**. The core physics of AI agent code generatio
    * **Security & Secret Guards:** Scans for high-entropy API keys, JWTs, AWS credentials, and unmanaged sensitive logging.
    * **Polyglot Fake Green Tests:** Catches tautological assertions in C# (`Assert.True(true)`), Python (`assert True`), and Go (`assert.True(t, true)`).
 2. **Tier 2: Deep Language-Specific Analyzers**
-   * **Babel Engine:** Deep AST inspection for JS/TS/Vue/Svelte (zero false-positive syntax errors on non-JS code).
+   * **Babel Engine:** Deep AST inspection for JS/TS/Vue/Svelte (runs on JS, TS, Vue and Svelte files only).
    * **Control Flow & Guard Disciplines (`CONTROL_FLOW_CASCADE_GUARDS`, `CONTROL_FLOW_SILENT_GUARD`):** Flags silent bare returns in side-effecting code, and detects cascading early-return clusters (>= 3 guards), recommending extraction into `ruleTree` with 1-line callback aborts (Directive 3.H).
    * **C# / Clean Architecture Analyzer:** Flags empty `catch (Exception) {}` blocks, simulated delays (`Task.Delay`), and monolithic controllers.
    * **Swallowed catches (`ERROR_SWALLOWED_EXCEPTION`, `AI_SLOP_SHALLOW_CATCH`):** Each swallowing catch site reports once, as `ERROR_SWALLOWED_EXCEPTION` when the error is discarded or `AI_SLOP_SHALLOW_CATCH` when it is only logged to the console. Both are MEDIUM by default. A JS/TS catch escalates to HIGH when a `let` or `var` assigned in the try is read after it with no default or check first (silent `undefined` propagation); C# findings stay MEDIUM. Mark an intentional swallow with a `chemx-allow: best-effort <reason>` comment on the line above the catch, on the catch line, inside its body, or after the try block's closing brace when `catch` starts the next line. Only comments count (never string literals), and the reason is mandatory: an annotation without one is still flagged and its hazard says so.
@@ -381,12 +370,12 @@ Chemical X is **language-agnostic**. The core physics of AI agent code generatio
 
 Chemical X enforces seven core architectural directives configured via `chemx pillars`:
 
-1. **Molecular Line Budgets**: Single-purpose files, measured by structural weight first. Line budget: soft warning at 250 lines when complexity is high (default profile); --profile=atomic-strict caps capsules at 100 lines. Eliminates context rot and cuts token ingestion costs.
+1. **Molecular Line Budgets**: Single-purpose files, measured by structural weight first. Line budget: soft warning at 250 lines when complexity is high (default profile); --profile=atomic-strict caps capsules at 100 lines. Smaller files mean less irrelevant code loaded per task; the audit flags files over the budget.
 2. **Strict Component Tiers & Zero-Raw-DOM**: Raw HTML elements (`<button>`, `<input>`, `<div>`) are strictly isolated inside foundational **Atoms** (`a-*`). Molecules, Organisms, Templates, and Views assemble atoms and never contain raw tags.
 3. **Table-of-Contents Views**: Top-level page views are clean, 10–20 line declarative blueprints assembling self-contained molecules and organisms via named slots (`#header`, `#default`, `#modals`).
 4. **Molecular Composable Contracts**: Composables return plain destructurable objects with a strict 3-to-5 property limit (State + Status + Actions). Domain types use discriminated unions (zero impossible states).
-5. **Silent Verification Pipeline**: Verification tools suppress passing checkmarks and compiler banners, returning token-compact summaries (~45 tokens) to protect AI agent context windows.
-6. **AST Codebase Query Engine**: In-band AST symbol graph lookups, blast radius calculations, and outline extraction eliminate blind full-file context dumps.
+5. **Silent Verification Pipeline**: Verification tools suppress passing checkmarks and compiler banners, returning short summaries when green and the failing lines when red (output size not benchmarked; see Compact Verification Output).
+6. **AST Codebase Query Engine**: In-band AST symbol graph lookups, blast radius calculations, and outline extraction let an agent read a file's shape before deciding to read the file (savings measured in benchmarks/README.md).
 7. **Database-First Swarm Coordination**: Task backlogs, file locks, and agent communications live in local SQLite (`.chemx/index.db`) rather than monolithic markdown specifications.
 
 ---
@@ -433,7 +422,7 @@ The server exposes one tool, `chemx({ action, params })`. `commands: [...]` runs
 | Actions | Scope | Purpose |
 | :--- | :--- | :--- |
 | `verify`, `typecheck`, `test`, `build` | Verification | Audit + typecheck + tests as one compact card; silent typecheck and test runners; build diagnostics grouped by category. |
-| `audit`, `check`, `autofix`, `patterns` | Quality | Architectural AST audit, single-file check, deterministic safe fixes, duplicated-pattern detection. |
+| `audit`, `check`, `autofix`, `patterns` | Quality | Architectural AST audit, single-file check, safe fixes that apply fixed rewrites, duplicated-pattern detection. |
 | `q`, `search`, `trace`, `backtrace` | Discovery | AST index queries, forward call traces and upstream caller chains. |
 | `read`, `patch`, `write` | Reading and editing | Outline, symbol or line-range reads; exact search/replace patches; whole-file writes with re-indexing. |
 | `d`, `diff`, `log`, `p`, `pkg`, `f`, `ls`, `j`, `json`, `do`, `batch` | Wrappers | Token-bounded git diff/log, package.json, file finder, JSON shape and batched commands. |
