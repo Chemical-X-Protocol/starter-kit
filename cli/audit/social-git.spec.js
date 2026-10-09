@@ -48,7 +48,10 @@ test('copyToClipboard: executes without hanging and respects timeout boundaries'
   const res = copyToClipboard('Test refactoring prompt content');
   const elapsed = Date.now() - startTime;
 
-  assert.ok(elapsed < 1000, `Expected elapsed time < 1000ms, got ${elapsed}ms`);
+  // Guards against a hang, not speed: the tool probes (which, wl-copy, xclip, xsel) carry their own
+  // 500-1000ms timeouts that add up to about 4s in the worst case, and a loaded machine stretches
+  // each of them. 10s still fails on an unbounded wait.
+  assert.ok(elapsed < 10_000, `Expected elapsed time < 10000ms, got ${elapsed}ms`);
   assert.strictEqual(typeof res, 'boolean');
 });
 
