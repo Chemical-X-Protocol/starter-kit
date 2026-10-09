@@ -1,14 +1,12 @@
 import { onScopeDispose, getCurrentScope } from 'vue';
 
 export function useSelfCleaningTimeout(fn: () => void | Promise<void>, delayMs: number) {
-  let timerId: ReturnType<typeof setTimeout> | null = null;
+  let timerId: ReturnType<typeof setTimeout> | undefined;
   let isRunning = false;
 
   const stop = () => {
-    if (timerId !== null) {
-      clearTimeout(timerId);
-      timerId = null;
-    }
+    clearTimeout(timerId);
+    timerId = undefined;
     isRunning = false;
   };
 
@@ -16,7 +14,7 @@ export function useSelfCleaningTimeout(fn: () => void | Promise<void>, delayMs: 
     stop();
     isRunning = true;
     timerId = setTimeout(async () => {
-      timerId = null;
+      timerId = undefined;
       if (isRunning) {
         await fn();
       }
@@ -24,7 +22,8 @@ export function useSelfCleaningTimeout(fn: () => void | Promise<void>, delayMs: 
     return stop;
   };
 
-  if (getCurrentScope()) {
+  const hasActiveScope = Boolean(getCurrentScope());
+  if (hasActiveScope) {
     onScopeDispose(() => {
       stop();
     });
