@@ -73,7 +73,8 @@ export const resolveCallScope = ({ target, declaredRoot = null, bootRoot = null,
   const hasRootError = Boolean(target.rootError);
   if (hasRootError) return { ok: false, error: target.rootError };
   const context = resolveContext({ cwd: bootRoot, projectRoot: target.projectRoot, mcpRoots, serverRoot: declaredRoot, env });
-  if (!context.ok) return context;
+  const isContextFailed = !context.ok;
+  if (isContextFailed) return context;
   const scope = { ...context, source: context.rootSource };
   const isBootMutation = scope.rootSource === 'boot' && isMutatingCall(target);
   if (isBootMutation) return refuseIn(scope, refuseBootMutation(target, scope.root));
@@ -82,10 +83,12 @@ export const resolveCallScope = ({ target, declaredRoot = null, bootRoot = null,
   const hasEscape = Boolean(escape);
   if (hasEscape) return refuseIn(scope, { error: `Path "${escape.requested}" resolves to "${escape.resolved}", outside project root "${scope.root}".` });
   const args = checkCallArgs(target, scope.root);
-  if (!args.ok) return refuseIn(scope, args);
+  const isArgsInvalid = !args.ok;
+  if (isArgsInvalid) return refuseIn(scope, args);
   const isShellCall = classifyEffects(target).has(EFFECTS.SHELL);
   const shell = isShellCall ? checkShellCommand({ command: target.params.command, root: scope.root, dir: target.params.dir, env }) : { ok: true };
-  if (!shell.ok) return refuseIn(scope, shell);
+  const isShellBlocked = !shell.ok;
+  if (isShellBlocked) return refuseIn(scope, shell);
   return scope;
 };
 
