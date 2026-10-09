@@ -222,7 +222,7 @@ chemx build --json
 
 ### 2. AST Query Engine & Surgical Inspection
 ```bash
-# Hybrid search (BM25 keyword + cosine vector similarity via Reciprocal Rank Fusion)
+# Hybrid search (BM25 keyword + feature-hash name similarity via Reciprocal Rank Fusion; lexical, not a learned embedding)
 chemx q "useAttentionCardController" --hybrid --json
 
 # Transitive blast radius analysis before refactoring foundational capsules

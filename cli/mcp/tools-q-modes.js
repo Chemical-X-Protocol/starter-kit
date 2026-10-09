@@ -13,13 +13,13 @@ export const executeBlastRadiusQuery = (activeDb, query, args = {}) => {
 export const executeSemanticQuery = (activeDb, query, args = {}) => {
   const results = querySemanticIndex(activeDb, query, { limit: args.limit || 20, tier: args.tier });
   const col = toColumnar(results, ['filePath', 'targetType', 'targetName', 'tier', 'similarity']);
-  return { query, mode: 'semantic', count: results.length, format: 'columnar', cols: col.cols, rows: col.rows };
+  return { query, mode: 'feature-hash similarity', model: 'feature-hash-128 (not a learned embedding)', count: results.length, format: 'columnar', cols: col.cols, rows: col.rows };
 };
 
 export const executeHybridQuery = (activeDb, query, args = {}) => {
   const results = queryHybridIndex(activeDb, query, { limit: args.limit || 20 });
   const col = toColumnar(results, ['filePath', 'name', 'tier', 'score', 'ftsRank', 'vecRank']);
-  return { query, mode: 'hybrid (BM25 + Vector RRF)', count: results.length, format: 'columnar', cols: col.cols, rows: col.rows };
+  return { query, mode: 'hybrid (BM25 + feature-hash RRF)', model: 'feature-hash-128 (not a learned embedding)', count: results.length, format: 'columnar', cols: col.cols, rows: col.rows };
 };
 
 export const executeConnectionsQuery = (activeDb, query) => {

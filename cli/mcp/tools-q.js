@@ -1,4 +1,4 @@
-import { queryIndexPage } from '../search-db.js';
+import { queryIndexPage, calculateCallTrace, calculateBacktrace } from '../search-db.js';
 import { toColumnar } from '../columnar.js';
 import { formatIndexLine } from '../search-output.js';
 import { openSyncedIndex } from '../search-session.js';
@@ -48,14 +48,17 @@ export const handleChemxQ = (args = {}, cwd = process.cwd()) => {
   if (isLiteral) {
     return handleLiteralSearchCommand(null, query, {
       isJson: false, isCli: false, cwd: targetCwd, dir: args.dir || null,
-      isRegex: Boolean(args.regex), isCaseInsensitive: Boolean(args.ignoreCase), isLineOnly: Boolean(args.linesOnly),
+      isRegex: Boolean(args.regex), isCaseInsensitive: Boolean(args.ignoreCase), isLineOnly: Boolean(args.lines || args.linesOnly),
       isHidden: Boolean(args.hidden), limit: typeof args.limit === 'number' ? args.limit : 50, isQuiet: true
     });
   }
-  const { db, index } = syncIndexForQuery(targetCwd, args);
+  const session = syncIndexForQuery(targetCwd, args);
+  const { db, index } = session;
 
   if (args.blastRadius || args.impact) return attachIndex(executeBlastRadiusQuery(db, query, args), index);
   if (args.semantic) return attachIndex(executeSemanticQuery(db, query, args), index);
+  if (args.trace) return attachIndex(calculateCallTrace(db, query, { maxDepth: args.maxDepth || 3, root: session.root }), index);
+  if (args.backtrace) return attachIndex(calculateBacktrace(db, query, { maxDepth: args.maxDepth || 5 }), index);
   if (args.hybrid) return attachIndex(executeHybridQuery(db, query, args), index);
 
   if (args.connections || args.symbol) {

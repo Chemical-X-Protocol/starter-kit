@@ -2,6 +2,11 @@ import { ANSI } from './theme.js';
 import { withIndex } from './search-output.js';
 import { toColumnar } from './columnar.js';
 import { querySemanticIndex, queryHybridIndex } from './search-db.js';
+import { EMBEDDING_MODEL } from './search-index-write.js';
+
+const SEMANTIC_MODE = 'feature-hash similarity';
+const HYBRID_MODE = 'hybrid (BM25 + feature-hash RRF)';
+const MODEL_NOTE = `${EMBEDDING_MODEL}: hashed names and trigrams, not a learned embedding; misses synonyms`;
 
 export const handleSemanticCommand = (db, query, { index = null, isJson = false, isCli = true, isColumnar = false, limit = 20, tier = null } = {}) => {
   const results = querySemanticIndex(db, query, { limit, tier });
@@ -11,7 +16,8 @@ export const handleSemanticCommand = (db, query, { index = null, isJson = false,
       const colData = toColumnar(results, ['filePath', 'targetType', 'targetName', 'tier', 'similarity']);
       const payload = {
         query,
-        mode: 'semantic',
+        mode: SEMANTIC_MODE,
+        model: MODEL_NOTE,
         count: results.length,
         format: 'columnar',
         cols: colData.cols,
@@ -24,7 +30,8 @@ export const handleSemanticCommand = (db, query, { index = null, isJson = false,
 
     const payload = {
       query,
-      mode: 'semantic',
+      mode: SEMANTIC_MODE,
+        model: MODEL_NOTE,
       count: results.length,
       results
     };
@@ -33,9 +40,9 @@ export const handleSemanticCommand = (db, query, { index = null, isJson = false,
     return payload;
   }
 
-  process.stdout.write(`\n${ANSI.BOLD}${ANSI.CYAN}Semantic Search Results for "${query}":${ANSI.RESET} ${ANSI.DIM}(${results.length} matches)${ANSI.RESET}\n`);
+  process.stdout.write(`\n${ANSI.BOLD}${ANSI.CYAN}Feature-hash similarity for "${query}":${ANSI.RESET} ${ANSI.DIM}(${results.length} matches)${ANSI.RESET}\n`);
   if (results.length === 0) {
-    process.stdout.write(`  ${ANSI.DIM}No semantically matching components found.${ANSI.RESET}\n\n`);
+    process.stdout.write(`  ${ANSI.DIM}No similar names found (feature-hash similarity is lexical; try q -g or hybrid).${ANSI.RESET}\n\n`);
     if (isCli) process.exit();
     return results;
   }
@@ -58,7 +65,8 @@ export const handleHybridCommand = (db, query, { index = null, isJson = false, i
       const colData = toColumnar(results, ['filePath', 'name', 'tier', 'score', 'ftsRank', 'vecRank']);
       const payload = {
         query,
-        mode: 'hybrid (BM25 + Vector RRF)',
+        mode: HYBRID_MODE,
+        model: MODEL_NOTE,
         count: results.length,
         format: 'columnar',
         cols: colData.cols,
@@ -71,7 +79,8 @@ export const handleHybridCommand = (db, query, { index = null, isJson = false, i
 
     const payload = {
       query,
-      mode: 'hybrid (BM25 + Vector RRF)',
+      mode: HYBRID_MODE,
+        model: MODEL_NOTE,
       count: results.length,
       results
     };
@@ -80,7 +89,7 @@ export const handleHybridCommand = (db, query, { index = null, isJson = false, i
     return payload;
   }
 
-  process.stdout.write(`\n${ANSI.BOLD}${ANSI.CYAN}Hybrid Search Results for "${query}":${ANSI.RESET} ${ANSI.DIM}(${results.length} ranked)${ANSI.RESET}\n`);
+  process.stdout.write(`\n${ANSI.BOLD}${ANSI.CYAN}Hybrid (BM25 + feature-hash) results for "${query}":${ANSI.RESET} ${ANSI.DIM}(${results.length} ranked)${ANSI.RESET}\n`);
   if (results.length === 0) {
     process.stdout.write(`  ${ANSI.DIM}No hybrid matches found.${ANSI.RESET}\n\n`);
     if (isCli) process.exit();

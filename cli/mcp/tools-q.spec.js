@@ -56,3 +56,23 @@ test('MCP chemx_q literal mode searches the repo without writing to stdout', asy
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('MCP chemx_q honours the advertised trace and backtrace params', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-mcp-trace-'));
+  fs.mkdirSync(path.join(root, '.chemx'));
+  fs.mkdirSync(path.join(root, 'src'));
+  fs.writeFileSync(path.join(root, 'src', 'base.ts'), 'export const useBase = () => helper();\nconst helper = () => 1;\n');
+  fs.writeFileSync(path.join(root, 'src', 'page.ts'), "import { useBase } from './base';\nexport const usePage = () => useBase();\n");
+  const handler = createMcpHandler();
+  try {
+    const back = JSON.parse(await callQ(handler, { query: 'useBase', backtrace: true, cwd: root }));
+    assert.deepEqual(back.callers.map((c) => c.path), ['src/page.ts']);
+    assert.ok(back.index, 'backtrace answer carries the index envelope');
+    const trace = JSON.parse(await callQ(handler, { query: 'usePage', trace: true, cwd: root }));
+    assert.equal(trace.target, 'usePage');
+    assert.ok(Array.isArray(trace.callees));
+  } finally {
+    clearDbCache();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
