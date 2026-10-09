@@ -168,6 +168,9 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
     case 'hooks':
     case 'install-hooks':
     case 'setup-ci': {
+      const { routeHookCommand } = await import('../hooks/hook-commands.js');
+      const isHandled = await routeHookCommand(firstArg, rawArgs.slice(1));
+      if (isHandled) break;
       const { runInstallWizard } = await import('../installer.js');
       await runInstallWizard(rawArgs[1] || process.cwd());
       break;

@@ -50,7 +50,7 @@
     "ui": "node cli/index.js ui",
     "dev:ui": "node cli/index.js ui --dev",
     "dev:ui:watch": "node --watch --watch-path=cli cli/index.js ui --dev",
-    "test": "node --test cli/audit/*.spec.js cli/mcp/*.spec.js cli/build/*.spec.js cli/team/*.spec.js cli/errors/*.spec.js cli/*.spec.js",
+    "test": "node --test cli/audit/*.spec.js cli/mcp/*.spec.js cli/build/*.spec.js cli/team/*.spec.js cli/errors/*.spec.js cli/hooks/*.spec.js cli/*.spec.js",
     "check:frameworks": "node scripts/check-framework-generation.mjs",
     "prepublishOnly": "node scripts/check-framework-generation.mjs",
     "typecheck": "tsc --noEmit",

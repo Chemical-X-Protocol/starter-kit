@@ -11,3 +11,6 @@
 - CLI cold start ~1.1s user CPU per call (`chemx p build`), MCP warm call 12ms: big gap for bursts of small queries.
 - chemx test (CLI) picked vitest instead of the kit's own node --test script and also globbed .claude/worktrees/* copies; needed bypass to run cli/search.spec.js
 - guard matched inside quoted strings and heredoc bodies; fixed with literal stripping (keep as a spec case for chemx hook claude-pre-tool)
+- (e-hooks) `chemx read cli/search.js --symbol=handleCheckCommand` says "not found": the symbol is re-exported from search-commands.js and read does not follow re-exports; needed grep to locate it.
+- (e-hooks) `chemx team task show <id>` text mode omits the task description; only `--json` shows it, so every claim needed a JSON pipe through node to read the acceptance criteria.
+- (e-hooks) The COMPASS guard denied `cat` of `.claude/hooks/chemx-guard.mjs` and the review cases file outside src; correct per rule, but the Read tool was the only path (chemx read on .mjs worked after). Ported guard keeps this (in-repo source).
