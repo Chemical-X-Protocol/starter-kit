@@ -54,7 +54,8 @@ export const handleDbBrowse = (db, queryParams = {}) => {
   if (!db) return { success: false, error: 'Database unavailable' };
   const tableNames = getTableNames(db);
   const table = queryParams.table || tableNames[0] || 'agent_tasks';
-  if (!tableNames.includes(table)) return { success: false, error: `Invalid table: ${table}` };
+  const isKnownTable = tableNames.includes(table);
+  if (!isKnownTable) return { success: false, error: `Invalid table: ${table}` };
 
   const page = Math.max(1, parseInt(queryParams.page || '1', 10));
   const pageSize = Math.min(100, Math.max(1, parseInt(queryParams.pageSize || queryParams.limit || '25', 10)));
@@ -70,7 +71,8 @@ export const handleDbStructure = (db, queryParams = {}) => {
   if (!db) return { success: false, error: 'Database unavailable' };
   const tableNames = getTableNames(db);
   const table = queryParams.table || tableNames[0] || 'agent_tasks';
-  if (!tableNames.includes(table)) return { success: false, error: `Invalid table: ${table}` };
+  const isKnownTable = tableNames.includes(table);
+  if (!isKnownTable) return { success: false, error: `Invalid table: ${table}` };
 
   const columns = db.prepare(`PRAGMA table_info(${table})`).all();
   const indexes = db.prepare(`PRAGMA index_list(${table})`).all();
@@ -82,7 +84,8 @@ export const handleDbQuery = (db, body = {}) => {
   const sql = (body.sql || body.query || '').trim();
   if (!sql) return { success: false, error: 'Empty SQL query' };
   const verdict = classifyConsoleSql(sql);
-  if (!verdict.allowed) return { success: false, error: verdict.reason, query: sql };
+  const isAllowed = Boolean(verdict.allowed);
+  if (!isAllowed) return { success: false, error: verdict.reason, query: sql };
   const start = performance.now();
   let rows;
   try { rows = db.prepare(sql).all().slice(0, 100); } catch (err) { return { success: false, error: err.message, query: sql }; }
