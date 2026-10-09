@@ -182,8 +182,8 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
       break;
     }
     case 'check': {
-      const { handleCheckCommand } = await import('../search.js');
-      handleCheckCommand(rawArgs[1], { isJson: rawArgs.includes('--json'), isCli: true });
+      const { runCheckCommand } = await import('./cmd-check.js');
+      runCheckCommand(rawArgs.slice(1));
       break;
     }
     case 'add:prop':

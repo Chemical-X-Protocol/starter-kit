@@ -310,7 +310,8 @@ export const handleHealthFilterCommand = (db, status, { isJson = false, isCli = 
   return payload;
 };
 
-export const handleCheckCommand = (targetFile, { isJson = false, isCli = true } = {}) => {
+/** options.config: a loaded project config (e.g. with --profile applied); defaults to the cwd's config. */
+export const handleCheckCommand = (targetFile, { isJson = false, isCli = true, config = null } = {}) => {
   const startTime = Date.now();
   if (!targetFile) {
     const errorMsg = 'Please specify a target file to check. Example: chemx check src/components/m-card.vue';
@@ -336,7 +337,7 @@ export const handleCheckCommand = (targetFile, { isJson = false, isCli = true } 
   }
 
   const relPath = path.relative(process.cwd(), absPath);
-  const violations = auditFile(absPath, relPath);
+  const violations = auditFile(absPath, relPath, config ? { config } : {});
   const durationMs = Date.now() - startTime;
 
   const criticalCount = violations.filter((v) => v.severity === 'CRITICAL').length;
