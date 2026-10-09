@@ -18,8 +18,10 @@ const finish = (status, isCli) => {
 
 const failWith = (message, { isJson, isCli, isQuiet }) => {
   const isPrinted = !isQuiet;
-  if (isPrinted && isJson) process.stdout.write(JSON.stringify({ status: STATUS.FAIL, error: message }) + '\n');
-  if (isPrinted && !isJson) process.stderr.write(`chemx q -g: ${message}\n`);
+  const shouldPrintJson = isPrinted && isJson;
+  if (shouldPrintJson) process.stdout.write(JSON.stringify({ status: STATUS.FAIL, error: message }) + '\n');
+  const shouldPrintText = isPrinted && !isJson;
+  if (shouldPrintText) process.stderr.write(`chemx q -g: ${message}\n`);
   finish(STATUS.FAIL, isCli);
   return { status: STATUS.FAIL, error: message, matches: [] };
 };
@@ -77,7 +79,8 @@ export const handleLiteralSearchCommand = (_db, query, {
     const location = `${ANSI.BOLD}${m.path}${ANSI.RESET}:${ANSI.GOLD}${m.line}${ANSI.RESET}`;
     process.stdout.write(isLineOnly ? `${location}\n` : `${location}:${m.text}\n`);
   }
-  if (res.truncated) process.stdout.write(`\n  ${ANSI.GOLD}Showing ${res.matches.length} of ${res.totalMatches} matches. Use -n <num> to see more, -l for path:line only.${ANSI.RESET}\n`);
+  const isTruncated = Boolean(res.truncated);
+  if (isTruncated) process.stdout.write(`\n  ${ANSI.GOLD}Showing ${res.matches.length} of ${res.totalMatches} matches. Use -n <num> to see more, -l for path:line only.${ANSI.RESET}\n`);
   process.stdout.write('\n');
   finish(status, isCli);
   return payload;
