@@ -94,13 +94,15 @@ export const OPS_COMMANDS = [
     brief: 'Configure architecture pillars and shims',
     usage: 'chemx pillars [options]',
     summary: 'Configure architectural pillars and agent steering shims.',
-    description: 'Writes host shims (CLAUDE.md, .cursorrules, llms.txt) that point at AGENTS.md. Seeds AGENTS.md if absent; never modifies it.',
+    description: 'Writes host shims (CLAUDE.md, .cursorrules, llms.txt) that point at AGENTS.md. Seeds AGENTS.md if absent; otherwise leaves it alone. With --protocol or --protocol-only it also writes coordination-protocol rules for hosts without Claude Code hooks: GEMINI.md, .agent/rules/chemx-protocol.md, and a marked block in AGENTS.md and .cursorrules. Those hosts are told the steps; nothing blocks them if they ignore them.',
     flags: [
       { flag: '--preset=<recommended|strict|minimal|none>', desc: 'Apply a predefined pillar preset' },
       { flag: '--write', desc: 'Write the files (default is a dry run)' },
+      { flag: '--protocol', desc: 'Also write the coordination protocol files, between chemx:protocol markers in AGENTS.md and .cursorrules' },
+      { flag: '--protocol-only', desc: 'Write only the protocol files; config, CLAUDE.md and llms.txt are not touched' },
       { flag: '--json', desc: 'Output configuration as JSON' }
     ],
-    examples: ['chemx pillars', 'chemx pillars --preset=recommended --write']
+    examples: ['chemx pillars', 'chemx pillars --preset=recommended --write', 'chemx pillars --protocol-only --write']
   },
   {
     name: 'ui',

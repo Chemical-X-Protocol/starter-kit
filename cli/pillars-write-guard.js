@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import path from 'node:path';
 
 export const GENERATED_MARKERS = {
   md: '<!-- chemx:generated pillars -->',
@@ -44,6 +45,7 @@ export const applyFileWrites = (plans) => {
   for (const plan of plans) {
     const isWritable = plan.action === 'create' || plan.action === 'overwrite';
     if (!isWritable) continue;
+    fs.mkdirSync(path.dirname(plan.file), { recursive: true });
     const hasBackupPath = Boolean(plan.backupPath);
     if (hasBackupPath) fs.copyFileSync(plan.file, plan.backupPath);
     fs.writeFileSync(plan.file, plan.content, 'utf-8');

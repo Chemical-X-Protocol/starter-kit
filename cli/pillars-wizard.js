@@ -13,6 +13,7 @@ import { planFileWrite, applyFileWrites } from './pillars-write-guard.js';
 import { buildHostShims } from './host-shims.js';
 import { hasPreviewFlag } from './cli-args.js';
 import { readExistingProjectConfig } from './config/loader.js';
+import { protocolTargets, upsertProtocolBlock } from './host-protocol.js';
 
 const AGENTS_TEMPLATE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'AGENTS.md');
 
@@ -32,6 +33,9 @@ export const runPillarsWizard = async (rawArgs = [], cwd = process.cwd()) => {
   const isWrite = rawArgs.includes('--write');
   const isForce = rawArgs.includes('--force');
   const isDryRun = !isWrite || hasPreviewFlag(rawArgs);
+  // --protocol adds the coordination protocol files; --protocol-only writes just those, leaving config and shims alone.
+  const isProtocolOnly = rawArgs.includes('--protocol-only');
+  const isProtocolRequested = isProtocolOnly || rawArgs.includes('--protocol');
 
   if (!isJson) {
     await renderTtyBanner('Chemical X: Architectural Pillars Wizard');
@@ -44,7 +48,9 @@ export const runPillarsWizard = async (rawArgs = [], cwd = process.cwd()) => {
   const useGum = hasGum();
 
   const isKnownPreset = Boolean(selectedPresetKey && PILLAR_PRESETS[selectedPresetKey]);
-  if (isKnownPreset) {
+  if (isProtocolOnly) {
+    selectedPresetKey = null;
+  } else if (isKnownPreset) {
     selectedPillarIds = [...PILLAR_PRESETS[selectedPresetKey].pillars];
   } else if (isYes) {
     selectedPresetKey = 'recommended';
@@ -97,25 +103,32 @@ export const runPillarsWizard = async (rawArgs = [], cwd = process.cwd()) => {
   // Read like the installer does, so comments are stripped and a broken file is never replaced.
   const configFile = path.resolve(cwd, '.chemx', 'config.json');
   const existingConfig = readExistingProjectConfig(cwd);
-  const isConfigUnparsable = existingConfig === null;
+  const isConfigUnparsable = !isProtocolOnly && existingConfig === null;
 
   const updatedConfig = {
     ...existingConfig,
     pillars: pillarsConfig
   };
 
-  const targets = [
+  const configTargets = [
     { file: configFile, content: JSON.stringify(updatedConfig, null, 2) + '\n', isGuarded: false, isLocked: isConfigUnparsable }
   ];
+  const targets = isProtocolOnly ? [] : configTargets;
 
   const hasSelectedPillars = selectedPillarIds.length > 0;
   if (hasSelectedPillars) {
     const projectName = path.basename(path.resolve(cwd));
     const shims = Object.entries(buildHostShims(selectedPillarIds, { projectName }));
+    const withProtocol = (rel, content) => (isProtocolRequested && rel === '.cursorrules' ? upsertProtocolBlock(content) : content);
+    // With the protocol requested, protocolTargets seeds AGENTS.md itself (template plus block).
+    const seedTargets = isProtocolRequested ? [] : agentsSeedTarget(cwd);
     targets.push(
-      ...agentsSeedTarget(cwd),
-      ...shims.map(([rel, content]) => ({ file: path.resolve(cwd, rel), content, isGuarded: true }))
+      ...seedTargets,
+      ...shims.map(([rel, content]) => ({ file: path.resolve(cwd, rel), content: withProtocol(rel, content), isGuarded: true }))
     );
+  }
+  if (isProtocolRequested) {
+    targets.push(...protocolTargets(cwd, { agentsTemplate: AGENTS_TEMPLATE, includeCursor: !hasSelectedPillars }));
   }
 
   const toRelative = (file) => path.relative(cwd, file);
@@ -151,8 +164,9 @@ export const runPillarsWizard = async (rawArgs = [], cwd = process.cwd()) => {
   }
 
   const heading = isDryRun ? '\x1b[1m\x1b[33m[PREVIEW]\x1b[0m Planned' : '\x1b[1m\x1b[32m✔\x1b[0m Applied';
-  process.stdout.write(`\n${heading} architectural pillars configuration (${selectedPresetKey}):\n`);
-  for (const p of PILLARS) {
+  process.stdout.write(`\n${heading} architectural pillars configuration (${selectedPresetKey ?? 'protocol only'}):\n`);
+  const listedPillars = isProtocolOnly ? [] : PILLARS;
+  for (const p of listedPillars) {
     const isEnabled = selectedPillarIds.includes(p.id);
     const icon = isEnabled ? '\x1b[32m✔\x1b[0m' : '\x1b[2m○\x1b[0m';
     process.stdout.write(`  ${icon} ${p.title}\n`);
