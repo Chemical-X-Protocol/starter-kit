@@ -14,7 +14,8 @@ export function useAttentionCardController(props: AttentionCardProps, emit: Atte
   });
 
   const formattedTime = computed(() => {
-    if (!props.item.timestamp) return '';
+    const isMissingTimestamp = !props.item.timestamp;
+    if (isMissingTimestamp) return '';
     const date = new Date(props.item.timestamp);
     return Number.isNaN(date.getTime()) ? '' : date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   });
