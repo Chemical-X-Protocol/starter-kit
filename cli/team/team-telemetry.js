@@ -55,10 +55,12 @@ export const findTranscriptLog = (options = {}) => {
 };
 
 const parseTokensFromEntry = (entry) => {
-  if (entry.tokens) {
+  const hasExplicitTokens = Boolean(entry.tokens);
+  if (hasExplicitTokens) {
     return [Number(entry.tokens.prompt ?? entry.tokens.prompt_tokens ?? 0), Number(entry.tokens.completion ?? entry.tokens.completion_tokens ?? 0), Number(entry.tokens.cached ?? entry.tokens.cached_tokens ?? 0)];
   }
-  if (entry.usage) {
+  const hasUsage = Boolean(entry.usage);
+  if (hasUsage) {
     return [Number(entry.usage.prompt_tokens ?? entry.usage.input_tokens ?? 0), Number(entry.usage.completion_tokens ?? entry.usage.output_tokens ?? 0), Number(entry.usage.cached_tokens ?? 0)];
   }
   const textLen = (entry.content || '').length;
@@ -74,7 +76,8 @@ export const parseTranscriptFile = (filePath, options = {}) => {
   if (!fileExists) return { promptTokens: 0, completionTokens: 0, cachedTokens: 0, totalTokens: 0, costUsd: 0 };
   let detectedModel = options.model || options.modelId || null;
   for (const line of fs.readFileSync(filePath, 'utf8').split('\n')) {
-    if (!line.trim()) continue;
+    const isBlankLine = !line.trim();
+    if (isBlankLine) continue;
     const [parsed, parseErr] = toResultSync(() => JSON.parse(line));
     const isValid = Boolean(parsed) && !parseErr;
     if (!isValid) continue;
