@@ -355,11 +355,14 @@ Run the interactive installer in your workspace root:
 npx chemx install-mcp
 ```
 
-This automatically registers the Chemical X server in:
-- `.cursor/mcp.json` (Cursor IDE)
-- `.vscode/mcp.json` (VS Code)
-- `~/.gemini/config/mcp_config.json` (Antigravity)
+This registers the Chemical X server in:
+- `.cursor/mcp.json` (Cursor IDE, `mcpServers` key)
+- `.vscode/mcp.json` (VS Code, `servers` key with `type: "stdio"`)
+- `~/.gemini/config/mcp_config.json` (Antigravity) only with `npx chemx install-mcp --global`
 - Injects `chemx:mcp`, `chemx:verify`, `chemx:test`, and `chemx:typecheck` into your `package.json` scripts
+
+Installing the npm package never edits any config: `postinstall` only prints a one-line hint (silent in CI or with `CHEMX_SKIP_POSTINSTALL=1`).
+Existing configs are merged, not replaced: other servers and keys are kept, the previous file is saved as `<file>.bak`, and a file that is not valid JSON, or that has comments a rewrite would drop, is left untouched with the entry to add by hand.
 
 ### Manual MCP Server Configuration
 

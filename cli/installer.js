@@ -156,7 +156,7 @@ export const runInstallWizard = async (targetDir = '.') => {
 
   const isMcpOnly = targetChoice.includes('MCP Server only') || targetChoice === '2';
   if (isMcpOnly) {
-    installAllMcpConfigs(targetDir, { silent: false });
+    installAllMcpConfigs(targetDir, { silent: false, includeHome: true });
     return;
   }
 
@@ -193,7 +193,7 @@ export const runInstallWizard = async (targetDir = '.') => {
     }
   }
   if (shouldWf) installGitHubWorkflow(targetDir, opts);
-  if (shouldMcp) installAllMcpConfigs(targetDir, { silent: false });
+  if (shouldMcp) installAllMcpConfigs(targetDir, { silent: false, includeHome: true });
   if (shouldQuery) await installAgentSearchConfig(targetDir);
 
   saveProjectConfig(targetDir, { minGrade: opts.minGrade, minScore: opts.minScore, maxLineCount: 500, maxMoleculeLineCount: 100 });

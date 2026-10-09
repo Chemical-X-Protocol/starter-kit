@@ -31,8 +31,9 @@ export const resolveServerOptions = (rawArgs = []) => {
 };
 
 export const runMcpInstaller = async (rawArgs = []) => {
-  const targetDir = rawArgs[0] || process.cwd();
-  return installAllMcpConfigs(targetDir, { silent: false });
+  const targetDir = rawArgs.find((a) => !a.startsWith('-')) || process.cwd();
+  const includeHome = rawArgs.includes('--global') || rawArgs.includes('--antigravity');
+  return installAllMcpConfigs(targetDir, { silent: false, includeHome });
 };
 
 export {
