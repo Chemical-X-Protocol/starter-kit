@@ -11,7 +11,8 @@ installGlobalErrorCatcher();
 
 const rawArgs = process.argv.slice(2);
 
-if (rawArgs.includes('--help') || rawArgs.includes('-h')) {
+const isHelpRequested = rawArgs.includes('--help') || rawArgs.includes('-h');
+if (isHelpRequested) {
   process.stdout.write(`
 Chemical X Protocol: Project Scaffolder
 
@@ -39,7 +40,8 @@ DOCUMENTATION
   process.exit(0);
 }
 
-if (rawArgs.includes('--version') || rawArgs.includes('-v')) {
+const isVersionRequested = rawArgs.includes('--version') || rawArgs.includes('-v');
+if (isVersionRequested) {
   try {
     const pkgPath = new URL('../package.json', import.meta.url);
     const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
@@ -73,7 +75,8 @@ for (const arg of rawArgs) {
   const isPresetFlag = arg.startsWith('--preset=');
   const isValidOption = isKnownFlag || isFrameworkFlag || isPresetFlag;
 
-  if (isFlag && !isValidOption) {
+  const isUnknownFlag = isFlag && !isValidOption;
+  if (isUnknownFlag) {
     process.stderr.write(`Unknown option "${arg}". Run --help for usage.\n`);
     process.exit(1);
   }
