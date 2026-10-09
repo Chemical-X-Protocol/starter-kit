@@ -27,6 +27,9 @@ const syncIndex = (absPath, cwd) => {
   return isIndexed;
 };
 
+// Sentences about leases the edit re-acquired after a lapse (cli/team/lease-renew.js); absent when none.
+const leaseNotesOf = (applied) => (applied.leaseNotes ? { leaseNotes: applied.leaseNotes } : {});
+
 const validatePatchParams = (params, targetContent, replacementContent) => {
   const hasBlocks = Array.isArray(params.blocks) && params.blocks.length > 0;
   const isMissingTarget = targetContent === undefined || targetContent === null;
@@ -113,6 +116,7 @@ export const patchFile = (targetPath, params = {}) => {
     parse: fileResult.parse,
     declarations: fileResult.declarations,
     diff: fileResult.diff,
+    ...leaseNotesOf(applied),
     ...guardrails,
     introducedViolations,
     preExistingViolations
@@ -174,6 +178,7 @@ export const writeFile = (targetPath, params = {}) => {
     parse: fileResult.parse,
     declarations: fileResult.declarations,
     diff: fileResult.diff,
+    ...leaseNotesOf(applied),
     ...guardrails,
     introducedViolations,
     preExistingViolations

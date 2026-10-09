@@ -12,6 +12,7 @@ import { requestFileLock, releaseFileLock, cleanExpiredLeases } from './team-db-
 import { handleLockCommand, handleUnlockCommand } from './team-commands-lock.js';
 import { applyEdits, EditRefusedError } from '../apply-edits.js';
 import { clockTime } from './lease-lapse.js';
+import { patchFile, writeFile } from '../patcher.js';
 
 const CLOCK = '\\d\\d:\\d\\d:\\d\\d';
 
@@ -168,6 +169,24 @@ test('an edit on a lapsed lease someone else took is refused, never re-acquired'
     EditRefusedError
   );
   assert.equal(db.prepare('SELECT locked_by FROM file_leases WHERE file_path = ?').get('src/a.js').locked_by, '@spec-b');
+});
+
+test('patchFile and writeFile results carry the lease note for a re-acquired lease', (t) => {
+  const { root, db } = makeProject(t);
+  requestFileLock(db, 'src/a.js', '@spec-a', { cwd: root });
+  lapse(db, 'src/a.js');
+  const options = { cwd: root, agentId: '@spec-a', skipIndex: true, skipCheck: true };
+
+  const patched = patchFile('src/a.js', { ...options, targetContent: 'a = 1', replacementContent: 'a = 2' });
+  assert.equal(patched.leaseNotes.length, 1);
+  assert.match(patched.leaseNotes[0], /nobody had taken it, so this edit re-acquired it until /);
+
+  lapse(db, 'src/a.js');
+  const written = writeFile('src/a.js', { ...options, content: 'export const a = 3;\n', overwrite: true });
+  assert.equal(written.leaseNotes.length, 1);
+
+  const live = patchFile('src/a.js', { ...options, targetContent: 'a = 3', replacementContent: 'a = 4' });
+  assert.equal(live.leaseNotes, undefined, 'a live lease needs no note');
 });
 
 test('an edit by a handle that never held the file adds no lease note', (t) => {
