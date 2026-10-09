@@ -33,7 +33,8 @@ export const handleUpdateTaskTraceability = (db, body = {}) => {
 
   const url = body.url || body.task_url || generateTaskPermalink(taskId);
   const check = verifyTraceability(url);
-  if (!check.valid) return { success: false, error: check.error };
+  const isValid = Boolean(check.valid);
+  if (!isValid) return { success: false, error: check.error };
 
   db.prepare('UPDATE agent_tasks SET task_url = ?, updated_at = ? WHERE id = ?').run(check.permalink, Date.now(), taskId);
   postFeedEvent(db, {
