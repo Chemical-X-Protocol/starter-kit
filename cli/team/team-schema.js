@@ -10,11 +10,13 @@ import { initVdsSchema } from './team-schema-vds.js';
 const migrateCols = (db, tbl, cols) => {
   const existing = new Set((db.prepare(`PRAGMA table_info(${tbl})`).all() || []).map((c) => c.name));
   for (const [col, def] of cols) {
-    if (!existing.has(col)) {
+    const isMissingColumn = Boolean(!existing.has(col));
+    if (isMissingColumn) {
       try {
         db.exec(`ALTER TABLE ${tbl} ADD COLUMN ${col} ${def};`);
       } catch (err) {
-        if (!err.message?.includes('duplicate column')) throw err;
+        const isDuplicateColumn = Boolean(err.message?.includes('duplicate column'));
+        if (!isDuplicateColumn) throw err;
       }
     }
   }
@@ -23,7 +25,8 @@ const migrateCols = (db, tbl, cols) => {
 // telemetry_source: 'tokens' | 'log' | 'legacy'; NULL means unknown (never measured), not zero.
 const migrateTelemetrySource = (db) => {
   const existing = new Set(db.prepare('PRAGMA table_info(agent_tasks)').all().map((c) => c.name));
-  if (existing.has('telemetry_source')) return;
+  const hasTelemetrySource = Boolean(existing.has('telemetry_source'));
+  if (hasTelemetrySource) return;
   migrateCols(db, 'agent_tasks', [['telemetry_source', 'TEXT']]);
   db.exec("UPDATE agent_tasks SET telemetry_source = 'legacy' WHERE total_tokens > 0 OR cost_usd > 0;");
 };
