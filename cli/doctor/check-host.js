@@ -36,9 +36,12 @@ export const checkHooks = ({ projectRoot }) => {
   const legacy = allOwned.filter((command) => /chemx-guard\.mjs/.test(command));
   const dangling = allOwned.map((command) => entryPathOf(command, projectRoot)).filter((entry) => entry && !fs.existsSync(entry));
   const problems = [];
-  if (missing.length > 0) problems.push(`missing: ${missing.join(', ')}`);
-  if (legacy.length > 0) problems.push('bootstrap chemx-guard.mjs still installed');
-  if (dangling.length > 0) problems.push(`entry not found: ${dangling[0]}`);
+  const hasMissing = missing.length > 0;
+  if (hasMissing) problems.push(`missing: ${missing.join(', ')}`);
+  const hasLegacy = legacy.length > 0;
+  if (hasLegacy) problems.push('bootstrap chemx-guard.mjs still installed');
+  const hasDangling = dangling.length > 0;
+  if (hasDangling) problems.push(`entry not found: ${dangling[0]}`);
   const isHealthy = problems.length === 0;
   return { id: 'hooks', status: isHealthy ? STATUS.PASS : STATUS.FAIL, summary: isHealthy ? 'chemx hooks installed for PreToolUse, PostToolUse, SessionStart' : problems.join('; '), fixable: !isHealthy };
 };
