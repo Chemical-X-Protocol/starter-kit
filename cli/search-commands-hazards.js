@@ -7,6 +7,7 @@ import { queryViolations } from './search-queries.js';
 import { STATUS, combineStatuses, toExitCode } from './result-status.js';
 import { withIndex } from './search-output.js';
 import { readIndexMeta } from './search-index-meta.js';
+import { isPathInScope, parseScopeKey, toRootRelative } from './search-root.js';
 
 const formatAge = (ms) => {
   const minutes = Math.round(ms / 60000);
@@ -28,31 +29,51 @@ const latestAuditTimestamp = (db) => {
 // A file argument is relative to where chemx was started, falling back to the project root.
 const resolveTargetFile = (filePath, cwd, root) => [path.resolve(cwd, filePath), path.resolve(root, filePath)].find((abs) => fs.existsSync(abs)) || null;
 
-const countFilesChangedSince = (db, timestamp, filePath, root, cwd) => {
-  const hasFileTarget = Boolean(filePath);
-  if (hasFileTarget) {
-    const abs = resolveTargetFile(filePath, cwd, root);
-    return abs && fs.statSync(abs).mtimeMs > timestamp ? 1 : 0;
-  }
+// A file answer is only as good as the audit that covered it: the file must exist and sit
+// inside the scope the last audit recorded. Returns { relPath, reason } (reason null when covered).
+const checkFileCoverage = (filePath, auditScope, root, cwd) => {
+  const abs = resolveTargetFile(filePath, cwd, root);
+  const isMissing = abs === null;
+  if (isMissing) return { abs: null, relPath: null, reason: `file not found: ${filePath}` };
+  const relPath = toRootRelative(abs, root);
+  const hasKnownScope = Boolean(auditScope);
+  if (!hasKnownScope) return { abs, relPath, reason: 'the last audit was partial or did not record its scope; run chemx audit' };
+  const isAudited = isPathInScope(relPath, parseScopeKey(auditScope));
+  const reason = isAudited ? null : `${relPath} is outside the last audit scope (${auditScope}); run chemx audit on it`;
+  return { abs, relPath, reason };
+};
+
+const countFilesChangedSince = (db, timestamp, abs) => {
+  const hasFileTarget = Boolean(abs);
+  if (hasFileTarget) return fs.statSync(abs).mtimeMs > timestamp ? 1 : 0;
   return Number(db.prepare('SELECT COUNT(*) AS c FROM files WHERE mtime > ?').get(timestamp)?.c || 0);
 };
 
 export const assessAuditFreshness = (db, { filePath = null, root = process.cwd(), cwd = process.cwd(), now = Date.now() } = {}) => {
   const lastAuditAt = latestAuditTimestamp(db);
+  const auditScope = readIndexMeta(db).violationsScope || null;
+  const base = { lastAuditAt, auditScope, auditAge: null, relPath: null };
   const hasNoAudit = lastAuditAt === null;
-  if (hasNoAudit) return { status: STATUS.INCONCLUSIVE, reason: 'no audit data (run chemx audit)', lastAuditAt: null, auditAge: null };
+  if (hasNoAudit) return { ...base, status: STATUS.INCONCLUSIVE, reason: 'no audit data (run chemx audit)' };
   const auditAge = formatAge(now - lastAuditAt);
-  const changedCount = countFilesChangedSince(db, lastAuditAt, filePath, root, cwd);
+  const hasFileTarget = Boolean(filePath);
+  const coverage = hasFileTarget ? checkFileCoverage(filePath, auditScope, root, cwd) : { abs: null, relPath: null, reason: null };
+  const isUncovered = Boolean(coverage.reason);
+  if (isUncovered) return { ...base, auditAge, relPath: coverage.relPath, status: STATUS.INCONCLUSIVE, reason: coverage.reason };
+  const changedCount = countFilesChangedSince(db, lastAuditAt, coverage.abs);
   const isStale = changedCount > 0;
   const reason = isStale ? `${changedCount} file(s) changed after the last audit (${auditAge} ago); run chemx audit` : null;
-  return { status: isStale ? STATUS.INCONCLUSIVE : STATUS.PASS, reason, lastAuditAt, auditAge };
+  return { ...base, auditAge, relPath: coverage.relPath, status: isStale ? STATUS.INCONCLUSIVE : STATUS.PASS, reason };
 };
 
 export const handleHazardsCommand = (db, options = {}, { index = null, isJson = false, isCli = true, root = process.cwd() } = {}) => {
-  const hazards = queryViolations(db, options);
   const freshness = assessAuditFreshness(db, { filePath: options.filePath, root: options.root || root });
+  const hazards = queryViolations(db, { ...options, filePath: freshness.relPath || options.filePath });
   const status = combineStatuses([freshness.status, index ? index.status : STATUS.PASS]);
-  const payload = { status, reason: freshness.reason, lastAuditAt: freshness.lastAuditAt, auditAge: freshness.auditAge, count: hazards.length, hazards };
+  const payload = {
+    status, reason: freshness.reason, lastAuditAt: freshness.lastAuditAt, auditAge: freshness.auditAge,
+    auditScope: freshness.auditScope, count: hazards.length, hazards
+  };
   if (isCli) process.exitCode = toExitCode(status);
 
   if (isJson) {
@@ -66,7 +87,7 @@ export const handleHazardsCommand = (db, options = {}, { index = null, isJson = 
   if (isInconclusive) process.stdout.write(`  ${ANSI.GOLD}? Inconclusive: ${freshness.reason}${ANSI.RESET}\n`);
   const hasNoHazards = hazards.length === 0;
   if (hasNoHazards) {
-    const message = isInconclusive ? 'No hazards recorded, but the audit data cannot vouch for the current code.' : `Zero hazards recorded by the audit ${freshness.auditAge} ago.`;
+    const message = isInconclusive ? 'No hazards recorded, but the audit data cannot vouch for the current code.' : `Zero hazards recorded by the audit of ${freshness.auditScope || 'an unrecorded scope'} ${freshness.auditAge} ago.`;
     process.stdout.write(`  ${ANSI.DIM}${message}${ANSI.RESET}\n\n`);
     if (isCli) process.exit();
     return payload;

@@ -97,12 +97,12 @@ export const findFileDependents = (db, filePath) => {
   }));
 };
 
-// Stamps violationsSyncedAt so `q hazards` knows audit data exists even when the audit
-// (a directory or CLI audit) recorded no audit_snapshots row.
-export const syncViolationsIndex = (db, violations = []) => {
+// Stamps violationsSyncedAt and violationsScope (the root-relative scope key the audit
+// covered, '' when unknown or partial) so `q hazards` can tell "audited, clean" from "never audited".
+export const syncViolationsIndex = (db, violations = [], { scope = null } = {}) => {
   if (!db) return 0;
   db.exec('DELETE FROM violations;');
-  writeIndexMeta(db, { violationsSyncedAt: Date.now() });
+  writeIndexMeta(db, { violationsSyncedAt: Date.now(), violationsScope: scope || '' });
   if (!Array.isArray(violations) || violations.length === 0) return 0;
 
   const insertStmt = db.prepare(`

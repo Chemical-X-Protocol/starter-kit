@@ -144,7 +144,8 @@ export declare function findFileDependents(
 
 export declare function syncViolationsIndex(
   db: any,
-  violations?: readonly any[]
+  violations?: readonly any[],
+  options?: { scope?: string | null }
 ): number;
 
 export declare function queryViolations(
