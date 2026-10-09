@@ -1,7 +1,9 @@
 {
   "profile": "pragmatic",
   "scope": ".",
-  "commit": { "skipCi": true },
+  "commit": {
+    "skipCi": true
+  },
   "rules": {
     "component-max-complexity": 12,
     "max-hook-density": 4,
@@ -11,5 +13,6 @@
     "enforce-file-length": false,
     "rule-of-three-abstractions": true,
     "ai-slop-detection": "critical"
-  }
+  },
+  "nativeFileTools": "block"
 }

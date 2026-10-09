@@ -2,7 +2,7 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash|Grep|Read|Edit|Write|MultiEdit|NotebookEdit|Glob",
+        "matcher": "Bash|Grep|Read|Edit|Write|MultiEdit|NotebookEdit|Glob|Agent|Workflow",
         "hooks": [
           {
             "type": "command",
