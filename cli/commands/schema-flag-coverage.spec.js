@@ -23,7 +23,8 @@ test('handler flags are all listed in the schema entry', () => {
     const known = knownLongFlags(entry);
     const used = fs.readFileSync(path.join(dir, file), 'utf8').match(/['"`](--[a-z][a-z0-9-]*)/g) ?? [];
     for (const raw of new Set(used.map((s) => s.slice(1)))) {
-      if (!known.has(raw) && !GLOBAL.has(raw)) gaps.push(`${entry.name} ${raw}`);
+      const isListed = known.has(raw) || GLOBAL.has(raw);
+      if (!isListed) gaps.push(`${entry.name} ${raw}`);
     }
   }
   assert.deepEqual(gaps, []);
