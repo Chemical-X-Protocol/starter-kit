@@ -3,7 +3,8 @@
  * Single responsibility: Extract AST topology, tiers, hazards, and swarm data.
  */
 
-import { openIndexDb, getIndexStats, queryViolations } from './search-db.js';
+import { getIndexStats, queryViolations } from './search-db.js';
+import { ensureFresh } from './index-freshness.js';
 import { getSwarmStatus } from './team/team-db.js';
 
 const getTierDistribution = (db) => {
@@ -27,7 +28,9 @@ const getRecentCriticalHazards = (db) => {
 
 export const getTesseractState = (cwd = process.cwd()) => {
   try {
-    const db = openIndexDb(cwd);
+    // File and tier counts come from index rows: sync the project scope first (#2552).
+    const session = ensureFresh(cwd);
+    const db = session.db;
     const hasDb = Boolean(db);
 
     const stats = hasDb ? getIndexStats(db) : {
@@ -44,7 +47,8 @@ export const getTesseractState = (cwd = process.cwd()) => {
       stats,
       tiers,
       hazards,
-      swarm
+      swarm,
+      index: session.index
     };
   } catch {
     return {

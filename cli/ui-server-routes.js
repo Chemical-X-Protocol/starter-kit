@@ -17,6 +17,7 @@ import {
 } from './ui-actions.js';
 import { getDatabaseMetrics, executeSqlQuery } from './ui-db-studio.js';
 import { scanAttentionItems, confirmAttentionItem } from './ui-attention.js';
+import { withFreshIndex } from './ui-fresh-index.js';
 
 export const routeGet = (pathname, db, cwd = process.cwd(), queryParams = {}) => {
   const [cleanPath, search] = (pathname || '').split('?');
@@ -29,9 +30,9 @@ export const routeGet = (pathname, db, cwd = process.cwd(), queryParams = {}) =>
     '/api/tasks': () => ({ success: true, tasks: listTasks(db, parsedParams) }),
     '/api/categories': () => ({ success: true, categories: getForumCategories(db) }),
     '/api/agents': () => ({ success: true, agents: handleSwarmStatus(db, cwd).agents }),
-    '/api/codebase': () => handleCodebaseIndex(db, cwd),
-    '/api/codebase/tree': () => handleCodebaseTree(db, cwd),
-    '/api/codebase/file': () => handleCodebaseFile(db, parsedParams.path, cwd),
+    '/api/codebase': () => withFreshIndex(cwd, {}, () => handleCodebaseIndex(db, cwd)),
+    '/api/codebase/tree': () => withFreshIndex(cwd, {}, () => handleCodebaseTree(db, cwd)),
+    '/api/codebase/file': () => withFreshIndex(cwd, { paths: [parsedParams.path], scope: false }, () => handleCodebaseFile(db, parsedParams.path, cwd)),
     '/api/database/metrics': () => getDatabaseMetrics(db, cwd),
     '/api/topics': () => handleGetTopics(db, parsedParams.category),
     '/api/topics/posts': () => handleGetTopicPosts(db, parsedParams.topicId || parsedParams.topic_id),

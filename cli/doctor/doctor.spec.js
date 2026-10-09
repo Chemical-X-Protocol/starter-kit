@@ -87,7 +87,7 @@ test('hooks: bootstrap guard and missing events fail; generated shims drift is d
   assert.match(checkShims({ projectRoot: root }).summary, /drift in CLAUDE\.md/);
 });
 
-test('index: missing is inconclusive; fingerprint and stale sample from a real db', async () => {
+test('index: missing is inconclusive; fingerprint, every-row staleness and coverage from a real db', async () => {
   const root = tempDir('chemx-doctor-index-');
   assert.equal((await checkIndex({ projectRoot: root })).status, 'inconclusive');
   fs.writeFileSync(path.join(root, 'a.js'), 'x');
@@ -99,9 +99,13 @@ test('index: missing is inconclusive; fingerprint and stale sample from a real d
   db.close();
   const current = await checkIndex({ projectRoot: root });
   assert.equal(current.status, 'pass');
-  assert.match(current.summary, /1 files, fingerprint [0-9a-f]{12}, 0\/1 sampled entries stale/);
+  assert.match(current.summary, /1 files, fingerprint [0-9a-f]{12}; 0\/1 rows stale on stat, 1 racy .*; coverage 1\/1 files of scope \./);
+  fs.writeFileSync(path.join(root, 'b.js'), 'y');
+  const uncovered = await checkIndex({ projectRoot: root });
+  assert.equal(uncovered.status, 'inconclusive');
+  assert.match(uncovered.summary, /coverage 1\/2 files of scope \. \(missing b\.js\)/);
   fs.rmSync(path.join(root, 'a.js'));
-  assert.match((await checkIndex({ projectRoot: root })).summary, /1\/1 sampled entries stale/);
+  assert.match((await checkIndex({ projectRoot: root })).summary, /1\/1 rows stale on stat/);
 });
 
 test('doctor --fix repairs hooks and the MCP launch with backups, and is a no-op the second time', async () => {

@@ -7,6 +7,7 @@ import { ANSI } from './theme.js';
 import { renderHudHeader, renderMetricPill } from './tesseract-hud.js';
 import { renderManifesto } from './tesseract-manifesto.js';
 import { buildLatticePayload, runLatticeJson } from './lattice-payload.js';
+import { formatIndexLine } from './search-output.js';
 
 const formatTierSummary = (tiers) => {
   const tierEntries = Object.entries(tiers);
@@ -56,7 +57,8 @@ export const runTesseract = async (args = [], isCli = false, cwd = process.cwd()
   const hud = renderHudHeader();
   const telemetry = formatHudTelemetry(payload.state);
   const manifesto = renderManifesto();
-  const fullOutput = [hud, telemetry, manifesto, ''].join('\n');
+  const indexLine = payload.state?.index ? `# ${formatIndexLine(payload.state.index)}` : '';
+  const fullOutput = [hud, telemetry, manifesto, indexLine, ''].join('\n');
 
   if (isCli) {
     process.stdout.write(fullOutput);
