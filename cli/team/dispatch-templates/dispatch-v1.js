@@ -49,7 +49,7 @@ export const BUILDER = [
   'TASK #{{taskId}}: {{title}}',
   '{{description}}',
   'Acceptance: {{acceptance}}',
-  'Target files: {{files}}',
+  'Target files: {{files}}{{extraFilesNote}}',
   '',
   'Do the task. Do not run chemx team task done: a reviewer checks your commits first, and the task is closed after review.',
   'Return the structured result: commits (sha and subject of each), specs (what you ran and the result), deliverables (each item, met or not, with evidence: a command you ran and its output), openIssues.',

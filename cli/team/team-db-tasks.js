@@ -29,8 +29,8 @@ export const createTask = (db, taskData) => {
   const sql = `INSERT INTO agent_tasks (
     title, description, tier, target_path, target_symbol, status, priority, assigned_agent_id,
     blocked_reason, parent_id, dependencies, created_at, updated_at, result_payload, origin_type,
-    rule_id, violation_snapshot, diff_receipt, moscow, vds_priority, vds_phase, vds_status, task_url, sprint_tag, needs, repo
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+    rule_id, violation_snapshot, diff_receipt, moscow, vds_priority, vds_phase, vds_status, task_url, sprint_tag, needs, repo, extra_files
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
   const info = db.prepare(sql).run(
     taskData.title, taskData.description || '', taskData.tier || '',
     taskData.target_path || null, taskData.target_symbol || '', taskData.status || 'queued',
@@ -43,7 +43,8 @@ export const createTask = (db, taskData) => {
     JSON.stringify(taskData.diff_receipt || {}),
     taskData.moscow || 'must', taskData.vds_priority || 'medium',
     taskData.vds_phase || 'planning', taskData.vds_status || 'ready',
-    taskData.task_url || '', taskData.sprint_tag || '', needs, taskData.repo || '.'
+    taskData.task_url || '', taskData.sprint_tag || '', needs, taskData.repo || '.',
+    JSON.stringify(Array.isArray(taskData.extra_files) ? taskData.extra_files : [])
   );
   const createdId = info.lastInsertRowid;
   const isTaskUrlMissing = !taskData.task_url;

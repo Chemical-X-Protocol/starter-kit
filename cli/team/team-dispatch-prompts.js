@@ -81,6 +81,12 @@ const peersFor = (plan, task) => fillTemplate(PEERS, {
 
 const protocolFor = (plan, task, handle, claimStep) => fillTemplate(PROTOCOL, { root: plan.root, handle, taskId: task.id, claimStep });
 
+// Empty without extras, so a task with only a target renders the same text as before (#4426).
+const extraFilesNote = (task) => {
+  const extras = Array.isArray(task.extraFiles) ? task.extraFiles : [];
+  return extras.length > 0 ? `\nYou may also edit: ${extras.join(', ')} (lock each before its first edit).` : '';
+};
+
 /** { build, review, repair } prompts for one task of the plan. */
 export const renderTaskPrompts = (task, plan) => {
   const authority = authorityFor(plan, `task #${task.id}`);
@@ -94,6 +100,7 @@ export const renderTaskPrompts = (task, plan) => {
       ...shared,
       handle: task.handle,
       needs: task.needs,
+      extraFilesNote: extraFilesNote(task),
       protocol: protocolFor(plan, task, task.handle, claimStep),
       peers,
       description

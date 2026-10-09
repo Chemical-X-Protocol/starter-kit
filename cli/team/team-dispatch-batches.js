@@ -73,11 +73,28 @@ const descriptionFiles = (task, options) => {
   return resolved.filter(Boolean);
 };
 
-/** A task's files: its target_path plus any locations named in its description. */
+const readList = (raw) => {
+  if (Array.isArray(raw)) return raw;
+  try {
+    const parsed = JSON.parse(String(raw || '[]'));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+/** Extra files a task may edit beyond its target (extra_files: a JSON array or an array), deduped, target excluded (#4426). */
+export const parseExtraFiles = (raw, root, target = '') => {
+  const files = readList(raw).map((file) => normalizeTaskFile(file, root)).filter((file) => file !== '' && file !== target);
+  return [...new Set(files)];
+};
+
+/** A task's files: its target_path, its extra_files list (#4426), and any locations named in its description. */
 export const taskFiles = (task, options = {}) => {
   const hasTarget = Boolean(task?.target_path);
   const fromTarget = hasTarget ? [normalizeTaskFile(task.target_path, options.root)] : [];
-  const files = [...fromTarget, ...descriptionFiles(task, options)].filter(Boolean);
+  const extras = parseExtraFiles(task?.extra_files, options.root);
+  const files = [...fromTarget, ...extras, ...descriptionFiles(task, options)].filter(Boolean);
   return [...new Set(files)].sort();
 };
 

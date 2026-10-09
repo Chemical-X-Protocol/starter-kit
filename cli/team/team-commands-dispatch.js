@@ -23,7 +23,7 @@ const DISPATCH_USAGE = [
   '  Files are relative to the team db root; a task whose target leaves that root is skipped (target_outside_root).',
   `  Capacity: --max-agents=<n> (default ${DEFAULT_MAX_AGENTS}) --per-agent=<n> tasks per agent (default ${DEFAULT_MAX_TASKS_PER_AGENT}; batch plan only)`,
   '  Output:   summary (default), --json plan, --headless claude -p commands',
-  '  --workflow renders a Claude Code Workflow script: one builder per task (target_path only; untargeted tasks are',
+  '  --workflow renders a Claude Code Workflow script: one builder per task (target_path plus its extra_files; untargeted tasks are',
   '    skipped as needs_scoping), a reviewer on the same tier, a light repair when the review finds issues, and a light',
   '    gate that closes reviewed tasks and runs chemx team audit-run. Tasks that share a file run one after another in',
   '    one lane; --max-agents caps the lanes running at once. chemx renders the script; the host runs it (Workflow tool',

@@ -3,6 +3,7 @@
  * Every handler receives the team context (db, root, repo, mode) and positionals whose task id
  * was already resolved through task_aliases (team-commands-repo.js).
  */
+import path from 'node:path';
 import { openIndexDb } from '../search-db.js';
 import { listTasks, getTask, createTask, claimTask, updateTaskStatus, registerAgent, postFeedEvent, queryFeed } from './team-db.js';
 import { completeTaskWithAudit, reconcileAuditTasks } from './team-triage.js';
@@ -23,7 +24,7 @@ import { repoDir } from './coordination-repos.js';
 import { loadModelRouting } from './team-dispatch.js';
 import { buildLabelFor } from './team-route.js';
 
-export const TASK_ACTIONS = ['list', 'show', 'add', 'claim', 'handoff', 'close', 'done', 'update', 'comment', 'triage', 'reconcile', 'set-target', 'vds-slot', 'trace'];
+export const TASK_ACTIONS = ['list', 'show', 'add', 'claim', 'handoff', 'close', 'done', 'update', 'comment', 'triage', 'reconcile', 'set-target', 'set-files', 'vds-slot', 'trace'];
 
 const fail = (isCli, message, result = { error: message }) => {
   if (isCli) process.stderr.write(`\x1b[31m✕ ${message}\x1b[0m\n`);
@@ -203,6 +204,9 @@ const runCreate = (ctx, positionals, flags, titleWords, isCli, cwd) => {
   const isRefused = Boolean(placed.error);
   if (isRefused) return fail(isCli, placed.error, { error: placed.error, refused: true });
   const title = flags.title || [...positionals.slice(1), ...titleWords].join(' ') || 'Untitled Task';
+  const extras = prepareExtraFiles(ctx, cwd, flags.files);
+  const hasExtraError = Boolean(extras.error);
+  if (hasExtraError) return fail(isCli, extras.error, { error: extras.error, refused: true });
   const authorHandle = flags.as || '@agent';
   registerAgent(ctx.db, { id: authorHandle, role: 'contributor' });
   const hasAssignee = Boolean(flags.agent);
@@ -211,7 +215,8 @@ const runCreate = (ctx, positionals, flags, titleWords, isCli, cwd) => {
     title, description: flags.description || '', tier: resolveTaskTier(flags.tier, placed.target_path),
     target_path: placed.target_path, repo: placed.repo, priority: flags.priority || 2,
     assigned_agent_id: flags.agent || null, parent_id: flags.parent ?? null, dependencies: flags.dependencies || [],
-    sprint_tag: flags.sprint || '', moscow: flags.moscow, needs: createNeeds.needs, rule_id: flags.rule || ''
+    sprint_tag: flags.sprint || '', moscow: flags.moscow, needs: createNeeds.needs, rule_id: flags.rule || '',
+    extra_files: extras.files
   });
   if (task) postFeedEvent(ctx.db, { author_id: authorHandle, task_id: task.id, event_type: 'task_created', message: `Created task #${task.id}: ${task.title}` });
   return writeJsonOr(task, flags, isCli, `\x1b[32m✔\x1b[0m Created task #${task.id}: ${task.title} (repo ${task.repo})\n`);
@@ -236,6 +241,32 @@ const runSetTarget = (ctx, positionals, flags, isCli, cwd) => {
   return writeJsonOr(updated, flags, isCli, `\x1b[32m✔\x1b[0m Updated task #${taskId} target to ${placed.target_path} (repo ${placed.repo})\n`);
 };
 
+// Extra files are stored root-relative (the dispatcher compares them with lease and git paths), de-duplicated, never absolute-outside the root.
+const prepareExtraFiles = (ctx, cwd, raw) => {
+  const words = (Array.isArray(raw) ? raw : String(raw || '').split(',')).map((word) => String(word).trim()).filter(Boolean);
+  const files = [];
+  for (const word of words) {
+    const relative = path.relative(ctx.root, path.resolve(cwd, word)).split(path.sep).join('/');
+    const isOutside = relative === '' || relative.startsWith('..') || path.isAbsolute(relative);
+    const isNew = !files.includes(relative);
+    if (isOutside) return { error: `Extra file "${word}" is outside the project root or names the root itself.` };
+    files.push(...(isNew ? [relative] : []));
+  }
+  return { files };
+};
+
+const runSetFiles = (ctx, positionals, flags, isCli, cwd) => {
+  const taskId = positionals[1];
+  const hasTaskId = Boolean(taskId);
+  if (!hasTaskId) return fail(isCli, 'Usage: chemx team task set-files <taskId> [<file...>] (no files clears the list)');
+  const prepared = prepareExtraFiles(ctx, cwd, [...positionals.slice(2), ...(flags.files ? String(flags.files).split(',') : [])]);
+  const isRefused = Boolean(prepared.error);
+  if (isRefused) return fail(isCli, prepared.error, { error: prepared.error, refused: true });
+  ctx.db.prepare('UPDATE agent_tasks SET extra_files = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(prepared.files), Date.now(), Number(taskId));
+  const updated = getTask(ctx.db, taskId);
+  return writeJsonOr(updated, flags, isCli, `\x1b[32m✔\x1b[0m Task #${taskId} extra files: ${prepared.files.join(', ') || '(none)'}\n`);
+};
+
 const ACTIONS = {
   list: (ctx, p, flags, words, isCli) => runList(ctx, flags, isCli),
   show: (ctx, p, flags, words, isCli) => runShow(ctx, p[1], flags, isCli),
@@ -250,7 +281,8 @@ const ACTIONS = {
   add: (ctx, p, flags, words, isCli, cwd) => runCreate(ctx, p, flags, words, isCli, cwd),
   triage: (ctx, p, flags, words, isCli, cwd) => runTriage(ctx, flags, isCli, cwd),
   reconcile: (ctx, p, flags, words, isCli, cwd) => runReconcile(ctx, flags, isCli, cwd),
-  'set-target': (ctx, p, flags, words, isCli, cwd) => runSetTarget(ctx, p, flags, isCli, cwd)
+  'set-target': (ctx, p, flags, words, isCli, cwd) => runSetTarget(ctx, p, flags, isCli, cwd),
+  'set-files': (ctx, p, flags, words, isCli, cwd) => runSetFiles(ctx, p, flags, isCli, cwd)
 };
 
 const ACTION_ALIASES = { view: 'show', info: 'show', post: 'comment', slot: 'vds-slot', complete: 'done', create: 'add', new: 'add', prune: 'reconcile', target: 'set-target' };

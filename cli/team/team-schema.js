@@ -42,6 +42,7 @@ export const migrateTelemetryColumns = (db) => {
     ['cost_usd', 'REAL NOT NULL DEFAULT 0.0'], ['origin_type', "TEXT NOT NULL DEFAULT 'manual'"],
     ['rule_id', "TEXT NOT NULL DEFAULT ''"], ['violation_snapshot', "TEXT NOT NULL DEFAULT '{}'"], ['diff_receipt', "TEXT NOT NULL DEFAULT '{}'"]
   ]);
+  migrateCols(db, 'agent_tasks', [['extra_files', "TEXT NOT NULL DEFAULT '[]'"]]);
   migrateCols(db, 'agents', [
     ['total_prompt_tokens', 'INTEGER NOT NULL DEFAULT 0'], ['total_completion_tokens', 'INTEGER NOT NULL DEFAULT 0'],
     ['total_tokens', 'INTEGER NOT NULL DEFAULT 0'], ['total_cost_usd', 'REAL NOT NULL DEFAULT 0.0']

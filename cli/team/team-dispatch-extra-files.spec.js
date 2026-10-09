@@ -4,6 +4,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseExtraFiles, planLanes, screenTasks } from './team-dispatch-select.js';
+import { planDispatchBatches, taskFiles } from './team-dispatch-batches.js';
+import { renderTaskPrompts } from './team-dispatch-prompts.js';
 
 const task = (id, target, extra) => ({ id, title: `t${id}`, target_path: target, extra_files: extra, priority: 2 });
 const ctx = (over = {}) => ({ root: '/r', dispatcher: '@d', limit: 10, ...over });
@@ -39,4 +41,23 @@ test('a lease on an extra file skips the task', () => {
 test('a foreign uncommitted edit on an extra file skips the task', () => {
   const { skipped } = screenTasks([task(1, 't.js', '["e.js"]')], ctx({ dirtyFiles: new Set(['e.js']), ownsFile: () => false }));
   assert.equal(skipped[0].reason, 'uncommitted_changes');
+});
+
+test('taskFiles includes extra_files, so the batch plan puts tasks sharing one in a single batch', () => {
+  assert.deepEqual(taskFiles(task(1, 'a.js', '["s.js"]'), { root: '/r', useDescription: false }), ['a.js', 's.js']);
+  const { batches } = planDispatchBatches([task(1, 'a.js', '["s.js"]'), task(2, 'b.js', '["s.js"]'), task(3, 'c.js')], { root: '/r', useDescription: false });
+  const batchOf = (id) => batches.findIndex((batch) => batch.tasks.some((t) => t.id === id));
+  assert.equal(batchOf(1), batchOf(2));
+  assert.notEqual(batchOf(3), batchOf(1));
+});
+
+test('the builder prompt names the extra files it may edit, and says nothing without extras', () => {
+  const plan = (extraFiles) => ({
+    run: 'r', root: '/r', dispatcher: '@d', goal: '', peers: [], lanes: [[1]],
+    tasks: [{ id: 1, title: 't', description: 'd', needs: 'light', handle: '@r-1', reviewer: '@r-1-review', repairer: '@r-1-repair', target: 'a.js', files: ['a.js', ...extraFiles], extraFiles, snapshot: {} }]
+  });
+  const withExtras = plan(['e.js']);
+  assert.match(renderTaskPrompts(withExtras.tasks[0], withExtras).build, /You may also edit: e\.js/);
+  const without = plan([]);
+  assert.doesNotMatch(renderTaskPrompts(without.tasks[0], without).build, /may also edit/);
 });
