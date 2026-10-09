@@ -50,6 +50,8 @@ const who = (agent) => ({ agentId: agent.agentId, handle: agent.handle, label: a
 const bypassesOf = (invs, agent, roots, home) => {
   const found = [];
   for (const inv of invs) {
+    const isBlocked = inv.isDenied === true;
+    if (isBlocked) continue;
     const shell = shellWritesOf(inv, roots, home).map((w) => ({ ...who(agent), type: 'shell-write', how: w.how, target: w.target }));
     const native = nativeBypassOf(inv, roots, home);
     const nativeItem = native ? [{ ...who(agent), type: 'native-tool', how: native.how, target: native.target }] : [];
@@ -58,11 +60,22 @@ const bypassesOf = (invs, agent, roots, home) => {
   return found;
 };
 
+// Would-be bypasses a chemx guard or policy hook denied: reported with the command, never counted as a bypass.
+const blockedOf = (invs, agent, roots, home) => {
+  const blocked = [];
+  for (const inv of invs.filter((i) => i.isDenied)) {
+    const shell = shellWritesOf(inv, roots, home).map((w) => ({ how: w.how, target: w.target }));
+    const native = nativeBypassOf(inv, roots, home);
+    for (const item of native ? [...shell, native] : shell) blocked.push({ ...who(agent), ...item, at: inv.at, command: inv.raw.replace(/\s+/g, ' ').slice(0, 200) });
+  }
+  return blocked;
+};
+
 const claimedIds = (invs) => invs.filter((i) => i.kind === 'chemx' && i.argv[0] === 'team' && i.argv[2] === 'claim').map((i) => Number(i.argv[3])).filter(Number.isFinite);
 
 const auditAgent = (run, agent, row, ctx) => {
   const parsed = readAgentCalls(run, agent);
-  const invs = parsed.calls.flatMap(invocationsOf);
+  const invs = parsed.calls.flatMap((call) => invocationsOf(call).map((inv) => ({ ...inv, isDenied: call.isDenied === true })));
   const classified = invs.map(classifyInvocation);
   const steps = parsed.calls.filter((c) => !isOverheadTool(c.name)).length;
   const statuses = ctx.db ? taskStatuses(ctx.db, claimedIds(invs)) : new Map();
@@ -71,6 +84,7 @@ const auditAgent = (run, agent, row, ctx) => {
     agent: { ...who(agent), steps, cost: row.cost, tokens: row.total, wallMs: row.wallMs, startedAt: row.startedAt, endedAt: row.endedAt },
     classified,
     bypasses: bypassesOf(invs, agent, ctx.roots, ctx.home),
+    blocked: blockedOf(invs, agent, ctx.roots, ctx.home),
     commits: commitsWithoutTask(invs).map((c) => ({ ...who(agent), ...c })),
     unleased: editsWithoutLease(invs, taken).map((e) => ({ ...who(agent), ...e })),
     unclosed: unclosedClaims(invs, statuses).map((id) => ({ ...who(agent), task: id })),
@@ -117,7 +131,7 @@ export const auditRun = (run, ctx = {}) => {
   const report = {
     runId: run.runId, dir: run.dir, agents: audits.length, missingTranscripts: run.missingTranscripts,
     leases: leaseSection(full.db, priced.rows, ctx.starveMs),
-    bypasses: { shell: audits.flatMap((a) => a.bypasses.filter((b) => b.type === 'shell-write')), native: audits.flatMap((a) => a.bypasses.filter((b) => b.type === 'native-tool')), guard: full.db ? guardBypasses(full.db, priced.rows) : [], crashes: full.db ? guardCrashes(full.db, priced.rows) : [] },
+    bypasses: { shell: audits.flatMap((a) => a.bypasses.filter((b) => b.type === 'shell-write')), native: audits.flatMap((a) => a.bypasses.filter((b) => b.type === 'native-tool')), blocked: audits.flatMap((a) => a.blocked), guard: full.db ? guardBypasses(full.db, priced.rows) : [], crashes: full.db ? guardCrashes(full.db, priced.rows) : [] },
     adoption: summarizeAdoption(audits.flatMap((a) => a.classified)),
     protocol: { uncommitted: audits.flatMap((a) => a.commits), unleasedEdits: audits.flatMap((a) => a.unleased), unclosedClaims: audits.flatMap((a) => a.unclosed) },
     hijacks: hijacksOf(audits, isLargeEnough ? medianCost : 0),

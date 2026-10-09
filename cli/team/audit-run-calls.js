@@ -7,6 +7,8 @@
  * a call here, and a tool_use with no result entry is counted as made.
  */
 
+import { isGuardDenial } from './audit-run-bypass.js';
+
 export const CHEMX_MCP_TOOL = 'mcp__chemical-x__chemx';
 const FILE_TOOLS = new Set(['Read', 'Edit', 'MultiEdit', 'Write', 'NotebookEdit', 'Glob', 'Grep']);
 const OVERHEAD_TOOLS = new Set(['ToolSearch', 'StructuredOutput', 'TodoWrite', 'TaskCreate', 'TaskUpdate', 'TaskList', 'TaskGet', 'Monitor']);
@@ -43,6 +45,19 @@ const stampOf = (entry) => {
 export const isOverheadTool = (name) => OVERHEAD_TOOLS.has(name);
 export const isFileTool = (name) => FILE_TOOLS.has(name);
 
+// Ids of tool_use calls whose paired tool_result is a chemx guard or policy denial (they never ran).
+const deniedIdsOf = (entries) => {
+  const ids = new Set();
+  for (const entry of entries.filter((e) => e.type === 'user')) {
+    for (const block of blocksOf(entry.message?.content)) {
+      const isResult = block?.type === 'tool_result';
+      const isDenial = isResult && isGuardDenial(textOf(block.content));
+      if (isDenial) ids.add(block.tool_use_id);
+    }
+  }
+  return ids;
+};
+
 // The task text: the user turn the harness computed (falls back to the first user turns).
 const taskTextOf = (entries) => {
   const users = entries.filter((e) => e.type === 'user').slice(0, 4).map((e) => textOf(e.message?.content));
@@ -57,6 +72,7 @@ const taskTextOf = (entries) => {
 export const readTranscriptCalls = (text) => {
   const entries = parseLines(text);
   const calls = [];
+  const denied = deniedIdsOf(entries);
   let finalOutput = null;
   let finalText = '';
   for (const entry of entries) {
@@ -71,7 +87,7 @@ export const readTranscriptCalls = (text) => {
       const input = block.input && typeof block.input === 'object' ? block.input : {};
       const isFinal = block.name === 'StructuredOutput';
       if (isFinal) finalOutput = input;
-      calls.push({ at: stampOf(entry), cwd: entry.cwd || '', name: block.name, input });
+      calls.push({ at: stampOf(entry), cwd: entry.cwd || '', name: block.name, input, isDenied: denied.has(block.id) });
     }
   }
   return { calls, taskText: taskTextOf(entries), finalOutput, finalText };

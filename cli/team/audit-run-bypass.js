@@ -14,6 +14,14 @@ import os from 'node:os';
 import path from 'node:path';
 import { findRepoRoot } from '../hooks/repo-membership.js';
 const WRITE_OPS = new Set(['>', '>>', '>|', '&>', '&>>']);
+// The words a chemx PreToolUse hook denial carries (the command guard and the nativeFileTools policy).
+const GUARD_DENIAL = /(?:PreToolUse:[\w-]+ hook error:\s*)?chemx (?:guard|policy)\b/i;
+
+/**
+ * True when a tool result text is a chemx guard or policy denial: the call was blocked, so it did not run.
+ * Limit: judged on the start of the result text only; a denial worded differently is not recognised and stays a finding.
+ */
+export const isGuardDenial = (text) => GUARD_DENIAL.test(String(text ?? '').trimStart().slice(0, 400));
 const SCRIPT_FLAGS = new Set(['-e', '-f', '-E']);
 const UNRESOLVED = /[$`*?{]/;
 const VARIABLE_WORD = /[$`]/;

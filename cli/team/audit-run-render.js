@@ -42,6 +42,8 @@ const bypassLines = (b) => [
   ...list(b.shell, (x) => `${at(x.at)} ${who(x)} ${x.how} -> ${x.target}`),
   `  native tools on repo files: ${b.native.length}`,
   ...list(b.native, (x) => `${at(x.at)} ${who(x)} ${x.how} ${x.target}`),
+  `  blocked by guard (denied, did not run; not counted as bypasses): ${b.blocked?.length ?? 0}`,
+  ...list(b.blocked ?? [], (x) => `${at(x.at)} ${who(x)} ${x.how} ${x.target}: ${x.command}`),
   `  guard-bypass events: ${b.guard.length}`,
   ...list(b.guard, (x) => `${at(x.at)} ${x.handle} [${x.rule ?? 'rule?'}] ${x.reason}`),
   `  guard-crash windows (enforcement gaps; count is a floor, posts are rate limited): ${b.crashes.length}`,
