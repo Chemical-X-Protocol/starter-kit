@@ -240,3 +240,20 @@ test('team lock: handleChemxTeamLock MCP handler rejects path traversal', async 
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });
+
+test('path-scope: a symlinked parent directory with a non-existent leaf cannot escape', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-symlink-dir-root-'));
+  const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-symlink-dir-outside-'));
+  try {
+    fs.symlinkSync(outsideDir, path.join(tmpDir, 'escape'));
+    assert.throws(() => resolveSafePath('escape/pwned.ts', tmpDir), /Path traversal rejected/);
+    assert.throws(() => resolveSafePath('escape/deep/new/a.ts', tmpDir), /Path traversal rejected/);
+    fs.symlinkSync(path.join(outsideDir, 'missing'), path.join(tmpDir, 'dangling'));
+    assert.throws(() => resolveSafePath('dangling/a.ts', tmpDir), /Path traversal rejected/);
+    const inside = resolveSafePath('src/new/file.ts', tmpDir);
+    assert.strictEqual(inside, path.join(fs.realpathSync(tmpDir), 'src', 'new', 'file.ts'));
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(outsideDir, { recursive: true, force: true });
+  }
+});

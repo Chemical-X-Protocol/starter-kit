@@ -4,6 +4,7 @@ import { formatIssueContent } from './formatter.js';
 import { publishIssue } from './publisher.js';
 import { openBrowser, confirmAction } from '../terminal.js';
 import { resolveTargetIssuesRepo, saveIssueArtifact } from './storage.js';
+import { resolveCatcherPolicy } from './policy.js';
 
 export { resolveTargetIssuesRepo, saveIssueArtifact };
 
@@ -14,6 +15,18 @@ export const resolveChemxVersion = () => {
   } catch {
     return 'unknown';
   }
+};
+
+const formatFailureNotice = (message, savedPath, issueUrl, useColor) => {
+  if (!useColor) {
+    const reportNote = savedPath ? ` (report: ${savedPath})` : '';
+    const issueNote = issueUrl ? `\nPrepped issue: ${issueUrl}` : '';
+    return `chemx failed: ${message}${reportNote}${issueNote}\n`;
+  }
+  const lines = [`\n\x1b[31m✕ Command Failed: ${message}\x1b[0m`];
+  if (issueUrl) lines.push(`  \x1b[33m• Prepped Issue:\x1b[0m ${issueUrl}`);
+  if (savedPath) lines.push(`  \x1b[33m• Local Report:\x1b[0m ${savedPath}`);
+  return lines.join('\n') + '\n';
 };
 
 const promptUserToPublish = async (targetRepo, issue) => {
@@ -57,34 +70,19 @@ export const handleError = async (err, options = {}) => {
   };
 
   const issue = formatIssueContent(report, targetRepo, options.labels);
-  const savedPath = saveIssueArtifact(cwd, issue, options);
-
-  const hasToken = Boolean(process.env.GH_TOKEN || process.env.GITHUB_TOKEN);
-  const isCiEnv = Boolean(process.env.CI || process.env.GITHUB_ACTIONS);
-  const isExplicitAutoPost = Boolean(options.autoPost || process.env.CHEMX_AUTO_POST_ISSUES === 'true');
-  const isCiAutoPost = isCiEnv && hasToken && options.autoPost !== false;
-  const shouldAutoPost = isExplicitAutoPost || isCiAutoPost;
+  const policy = resolveCatcherPolicy(options);
+  const savedPath = policy.shouldSaveReport ? saveIssueArtifact(cwd, issue, options) : null;
 
   let publishResult = { success: false, url: null, issueNumber: null, error: null };
 
-  if (shouldAutoPost) {
+  if (policy.shouldAutoPost) {
     publishResult = await publishIssue(targetRepo, issue.title, issue.body, issue.labels);
     if (publishResult.success && !options.silent) {
       process.stdout.write(`\n\x1b[32m✔ Issue automatically created: ${publishResult.url}\x1b[0m\n`);
     }
   } else if (!options.silent) {
-    const isTty = Boolean(process.stdin.isTTY && process.stdout.isTTY);
-    const isAgentEnv = Boolean(process.env.AGENT || process.env.ANTIGRAVITY || process.env.CURSOR || process.env.NON_INTERACTIVE);
-    const isExplicitPrompt = Boolean(options.promptIssue || process.env.CHEMX_PROMPT_ISSUES === 'true');
-    const canPromptUser = isTty && !isCiEnv && !isAgentEnv && isExplicitPrompt;
-
-    process.stderr.write(`\n\x1b[31m✕ Command Failed: ${report.message}\x1b[0m\n`);
-    process.stderr.write(`  \x1b[33m• Prepped Issue:\x1b[0m ${issue.webUrl}\n`);
-    if (savedPath) {
-      process.stderr.write(`  \x1b[33m• Local Report:\x1b[0m ${savedPath}\n`);
-    }
-
-    if (canPromptUser) {
+    process.stderr.write(formatFailureNotice(report.message, savedPath, policy.shouldShowIssueUrl ? issue.webUrl : null, policy.useColor));
+    if (policy.canPromptUser) {
       publishResult = await promptUserToPublish(targetRepo, issue);
     }
   }

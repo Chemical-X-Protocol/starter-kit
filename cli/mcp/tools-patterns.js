@@ -3,6 +3,7 @@ import path from 'node:path';
 import { runAudit as executeAstAudit } from '../audit.js';
 import { runAutofix } from '../audit/autofix.js';
 import { resolveTargetCwd } from './tools-search.js';
+import { isDryRunRequested } from './tools-patch.js';
 
 export const handleQueryPatterns = (args = {}, cwd = process.cwd()) => {
   const baseCwd = resolveTargetCwd(cwd);
@@ -64,7 +65,7 @@ export const handleAutofix = (args = {}, cwd = process.cwd()) => {
   const rawTarget = args.path || args.dir || (fs.existsSync(path.resolve(baseCwd, 'src')) ? 'src' : '.');
   const targetDir = path.isAbsolute(rawTarget) ? rawTarget : path.resolve(baseCwd, rawTarget);
   return runAutofix(targetDir, {
-    dryRun: Boolean(args.dryRun),
+    dryRun: isDryRunRequested(args),
     rules: args.rules,
     cwd: baseCwd
   });

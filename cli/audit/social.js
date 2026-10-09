@@ -1,4 +1,4 @@
-import { groupViolationsBySeverity } from './reporter.js';
+import { groupViolationsBySeverity } from './reporter-utils.js';
 import {
   PILLAR_EMOJIS,
   formatPillarReactionBadgesMarkdown,

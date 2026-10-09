@@ -52,7 +52,7 @@ export const handleAudit = (args = {}, cwd = process.cwd()) => {
   try {
     const syncRes = syncSearchIndex(resolvedTarget, baseCwd);
     if (syncRes?.db) {
-      syncViolationsIndex(syncRes.db, report.violations);
+      syncViolationsIndex(syncRes.db, report.violations, { scope: syncRes.scope });
       recordAuditSnapshot(syncRes.db, report);
       const shouldTriage = args.triage === true;
       if (shouldTriage) autoGenerateTasksFromAudit(syncRes.db, { cwd: baseCwd, targetDir: resolvedTarget });

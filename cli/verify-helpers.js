@@ -1,111 +1,33 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { matchTypeScriptError } from './build/parser-matchers.js';
-import { resolvePackageManager, loadLocalPackageJson } from './build/detector.js';
+import { resolvePackageManager } from './build/detector.js';
+import { joinCommandWords } from './cli-args.js';
 
+export { detectTypecheckCommand } from './typecheck-command.js';
+export { detectTestCommand } from './test-command.js';
+export { parseTestOutput } from './test-output.js';
+
+// The command after `--` (verify-lint), joined the same way as test/typecheck/build commands.
 export const parseCommandFromArgs = (args = []) => {
   const dashDashIndex = args.indexOf('--');
-  if (dashDashIndex !== -1) {
-    const afterDash = args.slice(dashDashIndex + 1).join(' ').trim();
-    if (afterDash.length > 0) return afterDash;
-  }
-  return null;
-};
-
-export const detectTypecheckCommand = (customCmd, cwd = process.cwd()) => {
-  if (customCmd && customCmd.trim().length > 0) return customCmd.trim();
-  const pkg = loadLocalPackageJson(cwd);
-  const scripts = (pkg && pkg.scripts) || {};
-  const pm = resolvePackageManager(cwd);
-
-  if (scripts.typecheck) return `${pm} run typecheck`;
-  if (scripts['type-check']) return `${pm} run type-check`;
-  if (scripts['check-types']) return `${pm} run check-types`;
-  if (scripts.tsc) return `${pm} run tsc`;
-
-  if (fs.existsSync(path.join(cwd, 'tsconfig.json'))) {
-    return 'npx tsc --noEmit';
-  }
-
-  return `${pm} run typecheck`;
-};
-
-export const detectTestCommand = (customCmd, cwd = process.cwd(), options = {}) => {
-  const target = options.target ? String(options.target).trim() : null;
-  const filter = options.filter ? String(options.filter).trim() : null;
-
-  if (customCmd && customCmd.trim().length > 0) {
-    let cmd = customCmd.trim();
-    if (target && !cmd.includes(target)) cmd += ` ${target}`;
-    if (filter && !cmd.includes(filter)) cmd += ` -t "${filter}"`;
-    return cmd;
-  }
-
-  const pkg = loadLocalPackageJson(cwd);
-  const scripts = (pkg && pkg.scripts) || {};
-  const deps = { ...(pkg?.dependencies || {}), ...(pkg?.devDependencies || {}) };
-  const pm = resolvePackageManager(cwd);
-
-  const hasVitest = Boolean(
-    deps.vitest ||
-    (scripts.test && scripts.test.includes('vitest')) ||
-    fs.existsSync(path.join(cwd, 'vitest.config.ts')) ||
-    fs.existsSync(path.join(cwd, 'vitest.config.js'))
-  );
-
-  const hasNodeTest = Boolean(
-    scripts.test && (scripts.test.includes('node --test') || scripts.test.includes('node:test'))
-  );
-
-  if (target || filter) {
-    if (hasVitest) {
-      let vitestCmd = 'npx vitest run';
-      if (target) vitestCmd += ` ${target}`;
-      if (filter) vitestCmd += ` -t "${filter}"`;
-      return vitestCmd;
-    }
-
-    if (hasNodeTest || target?.endsWith('.spec.js') || target?.endsWith('.test.js')) {
-      let nodeCmd = 'node --test';
-      if (target) nodeCmd += ` ${target}`;
-      if (filter) nodeCmd += ` --test-name-pattern="${filter}"`;
-      return nodeCmd;
-    }
-
-    const baseTest = pm === 'yarn' ? 'yarn test' : `${pm} test`;
-    let args = '';
-    if (target) args += ` ${target}`;
-    if (filter) args += ` -t "${filter}"`;
-    return `${baseTest} --${args}`;
-  }
-
-  const isLegitTest = scripts.test && !scripts.test.includes('no test specified');
-  if (isLegitTest) return pm === 'yarn' ? 'yarn test' : `${pm} run test`;
-
-  if (hasVitest) {
-    return 'npx vitest run';
-  }
-
-  return pm === 'yarn' ? 'yarn test' : `${pm} run test`;
+  const hasSeparator = dashDashIndex !== -1;
+  const command = hasSeparator ? joinCommandWords(args.slice(dashDashIndex + 1)) : '';
+  return command.length > 0 ? command : null;
 };
 
 export const parseTypecheckOutput = (stdout = '', stderr = '') => {
-  const combined = `${stdout}\n${stderr}`;
-  const lines = combined.split(/\r?\n/);
+  const lines = `${stdout}\n${stderr}`.split(/\r?\n/);
   const errors = [];
   const seen = new Set();
 
   for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-    const match = matchTypeScriptError(trimmed);
-    if (match) {
-      const key = `${match.file}:${match.line}:${match.column}:${match.code}`;
-      if (!seen.has(key)) {
-        seen.add(key);
-        errors.push(match);
-      }
-    }
+    const match = matchTypeScriptError(stripAnsi(line).trim());
+    const key = match ? `${match.file}:${match.line}:${match.column}:${match.code}` : null;
+    const isNewDiagnostic = key !== null && !seen.has(key);
+    if (!isNewDiagnostic) continue;
+    seen.add(key);
+    errors.push(match);
   }
 
   return errors;
@@ -114,122 +36,12 @@ export const parseTypecheckOutput = (stdout = '', stderr = '') => {
 export const stripAnsi = (str = '') => String(str).replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
 
 export const checkNodeModules = (cwd) => {
-  const nmPath = path.join(cwd, 'node_modules');
-  if (fs.existsSync(nmPath)) return null;
+  const hasNodeModules = fs.existsSync(path.join(cwd, 'node_modules'));
+  if (hasNodeModules) return null;
   const pm = resolvePackageManager(cwd);
   return {
     missing: true,
     pm,
     msg: (action) => `Missing node_modules. Please run '${pm} install' before ${action}.`
-  };
-};
-
-export const parseTestOutput = (stdout = '', stderr = '', exitCode = 0) => {
-  const combined = `${stdout}\n${stderr}`;
-  const lines = combined.split(/\r?\n/);
-
-  let totalTests = 0;
-  let passed = 0;
-  let failed = 0;
-  let skipped = 0;
-  let checkmarkPasses = 0;
-  let crossmarkFails = 0;
-  let hasRunnerSummary = false;
-
-  for (const line of lines) {
-    const clean = stripAnsi(line).trim();
-    if (!clean) continue;
-
-    if (clean.startsWith('✔') || clean.startsWith('✓')) checkmarkPasses++;
-    if (clean.startsWith('✖') || clean.startsWith('FAIL ')) crossmarkFails++;
-
-    const isRunnerSummary = /^Tests:?\s+/i.test(clean);
-    if (isRunnerSummary) {
-      const passM = clean.match(/(\d+)\s+passed/i);
-      const failM = clean.match(/(\d+)\s+failed/i);
-      const skipM = clean.match(/(\d+)\s+(?:skipped|todo|pending)/i);
-      const totalParenM = clean.match(/\((\d+)\)/);
-      const totalWordM = clean.match(/(\d+)\s+total/i);
-
-      if (passM) passed = parseInt(passM[1], 10);
-      if (failM) failed = parseInt(failM[1], 10);
-      if (skipM) skipped = parseInt(skipM[1], 10);
-
-      if (totalParenM) totalTests = parseInt(totalParenM[1], 10);
-      else if (totalWordM) totalTests = parseInt(totalWordM[1], 10);
-      else totalTests = passed + failed + skipped;
-
-      hasRunnerSummary = true;
-      continue;
-    }
-
-    if (!hasRunnerSummary) {
-      const nodeTests = clean.match(/^(?:[ℹ#]\s+)?tests\s+(\d+)$/i);
-      if (nodeTests) totalTests = parseInt(nodeTests[1], 10);
-
-      const nodePass = clean.match(/^(?:[ℹ#]\s+)?pass\s+(\d+)$/i);
-      if (nodePass) passed = parseInt(nodePass[1], 10);
-
-      const nodeFail = clean.match(/^(?:[ℹ#]\s+)?fail\s+(\d+)$/i);
-      if (nodeFail) failed = parseInt(nodeFail[1], 10);
-
-      const nodeSkip = clean.match(/^(?:[ℹ#]\s+)?(?:skipped|todo)\s+(\d+)$/i);
-      if (nodeSkip) skipped += parseInt(nodeSkip[1], 10);
-    }
-  }
-
-  if (passed === 0 && checkmarkPasses > 0) passed = checkmarkPasses;
-  if (failed === 0 && crossmarkFails > 0) failed = crossmarkFails;
-  if (totalTests === 0) totalTests = passed + failed + skipped;
-  const isCleanExit = exitCode === 0 && failed === 0;
-  const isTestCountUnderflow = isCleanExit && totalTests < passed;
-  if (isTestCountUnderflow) totalTests = passed;
-
-  const failures = [];
-  if (exitCode !== 0 || failed > 0) {
-    let currentFailure = null;
-
-    for (const line of lines) {
-      const isFailHeader = line.includes('✖') || line.startsWith('FAIL ') || /^\s*not ok\b/.test(line);
-      if (isFailHeader) {
-        if (currentFailure) failures.push(currentFailure);
-        currentFailure = {
-          name: line.replace(/[✖]/g, '').trim(),
-          details: []
-        };
-      } else if (currentFailure) {
-        const isCleanLine = !line.includes('✔') && !line.includes('ℹ') && !line.includes('ExperimentalWarning');
-        if (isCleanLine && line.trim().length > 0) {
-          currentFailure.details.push(line.trim());
-          if (currentFailure.details.length >= 6) {
-            failures.push(currentFailure);
-            currentFailure = null;
-          }
-        }
-      }
-    }
-
-    if (currentFailure) failures.push(currentFailure);
-
-    if (failures.length === 0 && exitCode !== 0) {
-      const errorLines = lines
-        .map((l) => l.trim())
-        .filter((l) => l.length > 0 && !l.includes('✔') && !l.includes('ExperimentalWarning'))
-        .slice(-10);
-
-      failures.push({
-        name: 'Test command failed',
-        details: errorLines
-      });
-    }
-  }
-
-  return {
-    success: exitCode === 0 && failed === 0,
-    totalTests,
-    passed,
-    failed,
-    skipped,
-    failures
   };
 };

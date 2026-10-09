@@ -1,345 +1,111 @@
-import readline from 'node:readline';
-import fs from 'node:fs';
-import { MCP_TOOLS, executeMcpTool } from './tools.js';
+import { MCP_TOOLS } from './tools.js';
 import { MCP_RESOURCES, readMcpResource } from './resources.js';
 import { MCP_PROMPTS, getMcpPrompt } from './prompts.js';
-import { warmIndexDb } from '../search-db.js';
-import { resolveCallScope, extractCallTarget, hasProjectMarker } from './call-scope.js';
+import { hasProjectMarker } from './call-scope.js';
+import { resolveContext } from './context.js';
+import { createRootsTracker } from './roots.js';
+import { createToolCaller } from './tool-call.js';
+import { createStalenessProbe } from './staleness.js';
+import { SERVER_INFO } from './server-info.js';
+import { SERVER_INSTRUCTIONS } from './help.js';
+import { createInflight } from './inflight.js';
 
-const PACKAGE_JSON_URL = new URL('../../package.json', import.meta.url);
-
-const readPackageVersion = () => {
-  try {
-    return JSON.parse(fs.readFileSync(PACKAGE_JSON_URL, 'utf-8')).version || 'unknown';
-  } catch {
-    return 'unknown';
-  }
-};
-
-export const SERVER_INFO = {
-  name: 'chemical-x-mcp',
-  version: readPackageVersion()
-};
+export { startStdioServer } from './stdio.js';
+export { SERVER_INFO };
 
 export const PROTOCOL_VERSION = '2024-11-05';
 
+const reply = (id, result) => ({ jsonrpc: '2.0', id, result });
+const replyError = (id, code, message) => ({ jsonrpc: '2.0', id, error: { code, message } });
+const describeError = (err) => (err instanceof Error ? err.message : String(err));
+
+const INVALID_TOOL_CALL = 'Invalid params: tools/call needs params.name (string) and params.arguments (object).';
+
+const isValidToolCall = (params) => {
+  const hasToolName = typeof params?.name === 'string' && params.name.length > 0;
+  const toolArgs = params?.arguments ?? {};
+  const hasObjectArgs = toolArgs !== null && typeof toolArgs === 'object' && !Array.isArray(toolArgs);
+  return hasToolName && hasObjectArgs;
+};
+
+// Best-effort index warmup runs after the initialize reply, so the handshake
+// never waits on the index and parser stack (startup-latency-eager-imports).
+const warmIndex = (root) => {
+  setImmediate(async () => {
+    try {
+      const { warmIndexDb } = await import('../search-db.js');
+      warmIndexDb(root);
+    } catch (err) {
+      process.stderr.write(`[mcp] index warmup skipped for ${root}: ${describeError(err)}\n`);
+    }
+  });
+};
+
 export const createMcpHandler = (options = {}) => {
-  let declaredRoot = options.cwd || null;
-  const startDir = process.cwd();
+  const declaredRoot = options.cwd || null;
+  const startDir = options.bootDir || process.cwd();
   const bootRoot = hasProjectMarker(startDir) ? startDir : null;
-  const subscriptions = new Set();
+  const env = options.env || process.env;
+  const roots = createRootsTracker({ sendRequest: options.sendRequest });
+  const staleness = options.staleness === false ? null : createStalenessProbe(options.staleness || {});
+  const scopeInputs = async () => ({ declaredRoot, bootRoot, mcpRoots: await roots.settled(), env });
+  const callTool = createToolCaller({ scopeInputs, staleness });
+  const inflight = createInflight({ notify: options.notify, progressIntervalMs: options.progressIntervalMs });
+  // Resources and prompts resolve like tools/call: same order, same refusal, root echoed in _meta.
+  const resourceScope = async () => resolveContext({ cwd: bootRoot, mcpRoots: await roots.settled(), serverRoot: declaredRoot, env });
+  const withScope = async (id, label, produce) => {
+    const scope = await resourceScope();
+    if (!scope.ok) return replyError(id, -32602, `${label} failed: ${scope.error}`);
+    try {
+      const result = await produce(scope.root);
+      return reply(id, { ...result, _meta: { root: scope.root, rootSource: scope.rootSource, version: scope.version } });
+    } catch (err) {
+      return replyError(id, -32602, `${label} failed: ${describeError(err)}`);
+    }
+  };
   let isInitialized = false;
+
+  const initialize = (id, params) => {
+    isInitialized = true;
+    roots.initialize(params);
+    const warmRoot = roots.current()[0] ?? declaredRoot;
+    if (warmRoot) warmIndex(warmRoot);
+    const capabilities = { tools: {}, resources: { subscribe: false }, prompts: {} };
+    return reply(id, { protocolVersion: PROTOCOL_VERSION, capabilities, serverInfo: SERVER_INFO, instructions: SERVER_INSTRUCTIONS });
+  };
+
+  const NOTIFICATIONS = {
+    'notifications/initialized': () => roots.refresh(),
+    'notifications/roots/list_changed': () => roots.refresh(),
+    'notifications/cancelled': (params) => inflight.cancel(params?.requestId)
+  };
+
+  const METHODS = {
+    ping: (id) => reply(id, {}),
+    'tools/list': (id) => reply(id, { tools: MCP_TOOLS }),
+    'tools/call': async (id, params) => {
+      if (!isValidToolCall(params)) return replyError(id, -32602, INVALID_TOOL_CALL);
+      const { cancelled, value } = await inflight.run(id, params, () => callTool(params.name, params.arguments ?? {}));
+      return cancelled ? null : reply(id, value);
+    },
+    'resources/list': (id) => reply(id, { resources: MCP_RESOURCES }),
+    'resources/read': (id, params) => withScope(id, 'Resource read', async (root) => ({ contents: [await readMcpResource(params?.uri, root)] })),
+    'prompts/list': (id) => reply(id, { prompts: MCP_PROMPTS }),
+    'prompts/get': (id, params) => withScope(id, 'Prompt retrieval', (root) => getMcpPrompt(params?.name, params?.arguments || {}, root))
+  };
 
   const handleRequest = async (request) => {
     const { id, method, params } = request;
-
-    if (method === 'initialize') {
-      isInitialized = true;
-      if (params?.rootPath) {
-        declaredRoot = params.rootPath;
-      } else if (params?.rootUri && typeof params.rootUri === 'string' && params.rootUri.startsWith('file://')) {
-        declaredRoot = new URL(params.rootUri).pathname;
-      } else if (Array.isArray(params?.workspaceFolders) && params.workspaceFolders[0]?.uri?.startsWith('file://')) {
-        declaredRoot = new URL(params.workspaceFolders[0].uri).pathname;
-      }
-      if (declaredRoot) {
-        try { warmIndexDb(declaredRoot); } catch { /* chemx-allow: best-effort index warmup */ }
-      }
-      return {
-        jsonrpc: '2.0',
-        id,
-        result: {
-          protocolVersion: PROTOCOL_VERSION,
-          capabilities: {
-            tools: {},
-            resources: {
-              subscribe: true
-            },
-            prompts: {}
-          },
-          serverInfo: SERVER_INFO
-        }
-      };
-    }
-
-    // Notifications (no id): MUST NOT reply per JSON-RPC 2.0 specification
-    if (typeof id === 'undefined' || id === null) {
+    if (method === 'initialize') return initialize(id, params);
+    const isNotification = typeof id === 'undefined' || id === null;
+    if (isNotification) {
+      await NOTIFICATIONS[method]?.(params);
       return null;
     }
-
-    if (method === 'ping') {
-      return {
-        jsonrpc: '2.0',
-        id,
-        result: {}
-      };
-    }
-
-    if (method === 'tools/list') {
-      return {
-        jsonrpc: '2.0',
-        id,
-        result: {
-          tools: MCP_TOOLS
-        }
-      };
-    }
-
-    if (method === 'tools/call') {
-      const toolName = params?.name;
-      const toolArgs = params?.arguments || {};
-      const scope = resolveCallScope({ target: extractCallTarget(toolName, toolArgs), declaredRoot, bootRoot });
-      if (!scope.ok) {
-        return {
-          jsonrpc: '2.0',
-          id,
-          result: { content: [{ type: 'text', text: `Error executing tool "${toolName}": ${scope.error}` }], isError: true }
-        };
-      }
-      const isBootFallback = scope.source === 'boot';
-      const scopeNotice = isBootFallback
-        ? [{ type: 'text', text: `chemx: resolved against server start directory ${scope.root}. Pass projectRoot to target another project.` }]
-        : [];
-
-      try {
-        const toolOutput = await executeMcpTool(toolName, toolArgs, scope.root);
-        const serialized = typeof toolOutput === 'string' ? toolOutput : JSON.stringify(toolOutput);
-        return {
-          jsonrpc: '2.0',
-          id,
-          result: {
-            content: [
-              {
-                type: 'text',
-                text: serialized
-              },
-              ...scopeNotice
-            ],
-            isError: false
-          }
-        };
-      } catch (err) {
-        const errorMsg = err instanceof Error ? err.message : String(err);
-        return {
-          jsonrpc: '2.0',
-          id,
-          result: {
-            content: [
-              {
-                type: 'text',
-                text: `Error executing tool "${toolName}": ${errorMsg}`
-              }
-            ],
-            isError: true
-          }
-        };
-      }
-    }
-
-    if (method === 'resources/list') {
-      return {
-        jsonrpc: '2.0',
-        id,
-        result: {
-          resources: MCP_RESOURCES
-        }
-      };
-    }
-
-    if (method === 'resources/read') {
-      const uri = params?.uri;
-      try {
-        const resourceContent = await readMcpResource(uri, declaredRoot ?? bootRoot ?? startDir);
-        return {
-          jsonrpc: '2.0',
-          id,
-          result: {
-            contents: [resourceContent]
-          }
-        };
-      } catch (err) {
-        const errorMsg = err instanceof Error ? err.message : String(err);
-        return {
-          jsonrpc: '2.0',
-          id,
-          error: {
-            code: -32602,
-            message: `Resource read failed: ${errorMsg}`
-          }
-        };
-      }
-    }
-
-    if (method === 'resources/subscribe') {
-      const uri = params?.uri;
-      if (uri) {
-        subscriptions.add(uri);
-      }
-      return {
-        jsonrpc: '2.0',
-        id,
-        result: {}
-      };
-    }
-
-    if (method === 'resources/unsubscribe') {
-      const uri = params?.uri;
-      if (uri) {
-        subscriptions.delete(uri);
-      }
-      return {
-        jsonrpc: '2.0',
-        id,
-        result: {}
-      };
-    }
-
-    if (method === 'prompts/list') {
-      return {
-        jsonrpc: '2.0',
-        id,
-        result: {
-          prompts: MCP_PROMPTS
-        }
-      };
-    }
-
-    if (method === 'prompts/get') {
-      const promptName = params?.name;
-      const promptArgs = params?.arguments || {};
-      try {
-        const promptResult = await getMcpPrompt(promptName, promptArgs);
-        return {
-          jsonrpc: '2.0',
-          id,
-          result: promptResult
-        };
-      } catch (err) {
-        const errorMsg = err instanceof Error ? err.message : String(err);
-        return {
-          jsonrpc: '2.0',
-          id,
-          error: {
-            code: -32602,
-            message: `Prompt retrieval failed: ${errorMsg}`
-          }
-        };
-      }
-    }
-
-    return {
-      jsonrpc: '2.0',
-      id,
-      error: {
-        code: -32601,
-        message: `Method not found: ${method}`
-      }
-    };
+    const handler = Object.hasOwn(METHODS, method) ? METHODS[method] : null;
+    if (!handler) return replyError(id, -32601, `Method not found: ${method}`);
+    return handler(id, params);
   };
 
-  return {
-    handleRequest,
-    isInitialized: () => isInitialized,
-    getSubscriptions: () => Array.from(subscriptions),
-    notifyResourceUpdated: (uri) => {
-      if (subscriptions.has(uri)) {
-        return {
-          jsonrpc: '2.0',
-          method: 'notifications/resources/updated',
-          params: { uri }
-        };
-      }
-      return null;
-    }
-  };
-};
-
-export const startStdioServer = (options = {}) => {
-  const input = options.input || process.stdin;
-  const output = options.output || process.stdout;
-  const rawStdoutWrite = process.stdout.write.bind(process.stdout);
-  const handler = createMcpHandler(options);
-
-  const writeJsonRpc = (jsonObj) => {
-    const payload = JSON.stringify(jsonObj) + '\n';
-    if (output === process.stdout) {
-      try {
-        fs.writeSync(1, payload);
-      } catch {
-        rawStdoutWrite(payload);
-      }
-    } else {
-      output.write(payload);
-    }
-  };
-
-  // Stdio isolation: guard process.stdout so any non-JSON-RPC writes are routed to stderr
-  if (output === process.stdout) {
-    process.stdout.write = (chunk, encoding, callback) => {
-      return process.stderr.write(chunk, encoding, callback);
-    };
-  }
-
-  const notifyResourceUpdated = (uri) => {
-    const notification = handler.notifyResourceUpdated(uri);
-    if (notification) {
-      writeJsonRpc(notification);
-    }
-  };
-
-  input.on('error', (err) => {
-    process.stderr.write(`[mcp:stdio] stdin error: ${err?.message || err}\n`);
-  });
-
-  let rl;
-  const isRealStdio = !options.input;
-  const shutdown = () => {
-    if (isRealStdio) process.exit(0);
-  };
-
-  if (isRealStdio) {
-    process.on('SIGINT', shutdown);
-    process.on('SIGTERM', shutdown);
-    process.on('SIGHUP', shutdown);
-
-    const initialParentPid = process.ppid;
-    const watchParent = setInterval(() => {
-      const isParentGone = process.ppid !== initialParentPid;
-      if (isParentGone) shutdown();
-    }, 5000);
-    watchParent.unref();
-  }
-
-  rl = readline.createInterface({
-    input,
-    terminal: false
-  });
-
-  rl.on('close', shutdown);
-  input.on('end', shutdown);
-
-  rl.on('line', async (line) => {
-    const trimmed = line.trim();
-    if (!trimmed) return;
-
-    try {
-      const parsed = JSON.parse(trimmed);
-      const response = await handler.handleRequest(parsed);
-      if (response) {
-        writeJsonRpc(response);
-      }
-    } catch (parseErr) {
-      const parseErrorResponse = {
-        jsonrpc: '2.0',
-        id: null,
-        error: {
-          code: -32700,
-          message: `Parse error: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`
-        }
-      };
-      writeJsonRpc(parseErrorResponse);
-    }
-  });
-
-  return { rl, handler, notifyResourceUpdated };
+  return { handleRequest, isInitialized: () => isInitialized, roots: () => roots.current() };
 };

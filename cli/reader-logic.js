@@ -1,19 +1,17 @@
-import { parse } from '@babel/parser';
-import traverseModule from '@babel/traverse';
-
-const traverse = traverseModule.default || traverseModule;
+import { parse } from './babel-lazy.js';
+import { blankOutsideScripts } from './sfc-scripts.js';
+import { stripCommentsKeepingLines } from './comment-ranges.js';
 
 /**
- * Strips JavaScript/TypeScript comments while preserving line boundaries where possible.
+ * Removes comments using real token ranges (strings, regexes and URLs are safe) and keeps
+ * every newline, so line numbers do not move. Returns the code unchanged when the file type
+ * has no tokenizer or does not parse.
  *
  * @param {string} code Source code.
+ * @param {string} [filePath='file.tsx'] Path deciding the tokenizer.
  * @returns {string} Code without comments.
  */
-export const stripCodeComments = (code) => {
-  return code
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/(^|[^\:])\/\/.*$/gm, '$1');
-};
+export const stripCodeComments = (code, filePath = 'file.tsx') => stripCommentsKeepingLines(code, filePath) ?? code;
 
 /**
  * Collapses consecutive blank lines and trims trailing spaces.
@@ -142,251 +140,123 @@ export const extractTemplateContent = (code, filePath = '') => {
   return `// File ${filePath} is a script/module without declarative template syntax.`;
 };
 
+export const SKELETON_LABEL = 'skeleton: not verbatim, not a patch target';
+
+const isFunctionInit = (init) => Boolean(init) && (init.type === 'ArrowFunctionExpression' || init.type === 'FunctionExpression');
+
+const isLogicStatement = (stmt) => {
+  if (!stmt) return false;
+  switch (stmt.type) {
+    case 'IfStatement':
+    case 'ReturnStatement':
+    case 'ThrowStatement':
+    case 'SwitchStatement':
+    case 'TryStatement':
+    case 'WhileStatement':
+    case 'ForStatement':
+    case 'ForOfStatement':
+    case 'ForInStatement':
+      return true;
+    case 'ExpressionStatement': {
+      const expr = stmt.expression;
+      const isCall = expr.type === 'CallExpression' || expr.type === 'OptionalCallExpression';
+      const isConsoleCall = isCall && expr.callee.type === 'MemberExpression' && expr.callee.object?.name === 'console';
+      return expr.type === 'AssignmentExpression' || expr.type === 'AwaitExpression' || (isCall && !isConsoleCall);
+    }
+    case 'VariableDeclaration':
+      return stmt.declarations.some((d) => ['CallExpression', 'OptionalCallExpression', 'AwaitExpression', 'LogicalExpression', 'BinaryExpression'].includes(d.init?.type));
+    default:
+      return false;
+  }
+};
+
 /**
  * Extracts an AST logic skeleton of a file (control flow, state, guards, side-effects, mutations).
- * Preserves 100% of execution semantics while stripping decorative syntax and boilerplate.
+ * Every emitted declaration header and statement is sliced verbatim from the source by character
+ * range (keywords, export/async forms and TS annotations kept), but bodies are filtered, so the
+ * result is labeled as a skeleton and each block names its source lines.
  *
  * @param {string} code Source code.
  * @param {string} filePath File path for parser context.
- * @param {object} options Additional options.
- * @returns {string} Compressed logic skeleton.
+ * @returns {string} Labeled logic skeleton.
  */
-export const generateAstLogicSkeleton = (code, filePath, options = {}) => {
-  const isVue = filePath.endsWith('.vue');
-  const isSvelte = filePath.endsWith('.svelte');
-  let scriptContent = code;
+export const generateAstLogicSkeleton = (code, filePath) => {
+  const isSfc = filePath.endsWith('.vue') || filePath.endsWith('.svelte');
+  const scriptContent = isSfc ? blankOutsideScripts(code) : code;
+  const lines = [`// Logic Skeleton: ${filePath} (${SKELETON_LABEL})`];
+  const src = (node) => scriptContent.slice(node.start, node.end).trim();
+  const origin = (node) => `  // L${node.loc.start.line}-${node.loc.end.line}`;
 
-  if (isVue) {
-    const scriptMatch = code.match(/<script[\s\S]*?>([\s\S]*?)<\/script>/i);
-    scriptContent = scriptMatch ? scriptMatch[1] : '';
-  } else if (isSvelte) {
-    const scriptMatch = code.match(/<script[\s\S]*?>([\s\S]*?)<\/script>/i);
-    scriptContent = scriptMatch ? scriptMatch[1] : '';
-  }
-
-  const scriptLines = scriptContent.split('\n');
-  const lines = [];
-  lines.push(`// Logic Skeleton: ${filePath}`);
-
+  let ast;
   try {
-    const ast = parse(scriptContent, {
+    ast = parse(scriptContent, {
       sourceType: 'module',
       plugins: ['typescript', 'jsx', 'decorators-legacy', 'topLevelAwait'],
       errorRecovery: true,
     });
-
-    const importsSummary = [];
-    const stateDeclarations = [];
-    const logicBlocks = [];
-
-    const isLogicStatement = (stmt) => {
-      if (!stmt) return false;
-      switch (stmt.type) {
-        case 'IfStatement':
-        case 'ReturnStatement':
-        case 'ThrowStatement':
-        case 'SwitchStatement':
-        case 'TryStatement':
-        case 'WhileStatement':
-        case 'ForStatement':
-        case 'ForOfStatement':
-        case 'ForInStatement':
-          return true;
-        case 'ExpressionStatement': {
-          const expr = stmt.expression;
-          if (expr.type === 'AssignmentExpression') return true;
-          if (expr.type === 'AwaitExpression') return true;
-          if (expr.type === 'CallExpression' || expr.type === 'OptionalCallExpression') {
-            const callee = expr.callee;
-            if (callee.type === 'MemberExpression' && callee.object?.name === 'console') {
-              return false;
-            }
-            return true;
-          }
-          return false;
-        }
-        case 'VariableDeclaration': {
-          return stmt.declarations.some((d) => {
-            const init = d.init;
-            if (!init) return false;
-            return (
-              init.type === 'CallExpression' ||
-              init.type === 'OptionalCallExpression' ||
-              init.type === 'AwaitExpression' ||
-              init.type === 'LogicalExpression' ||
-              init.type === 'BinaryExpression'
-            );
-          });
-        }
-        default:
-          return false;
-      }
-    };
-
-    const sliceNodeLines = (node) => {
-      if (!node.loc) return '';
-      const start = Math.max(0, node.loc.start.line - 1);
-      const end = Math.min(scriptLines.length, node.loc.end.line);
-      return scriptLines.slice(start, end).join('\n');
-    };
-
-    const processFunctionLogic = (fnName, fnNode, isExport) => {
-      const params = (fnNode.params || []).map((p) => {
-        if (p.type === 'AssignmentPattern' && p.left?.name) {
-          return `${p.left.name} = ...`;
-        }
-        return p.name || p.type;
-      }).join(', ');
-
-      const exportPrefix = isExport ? 'export ' : '';
-      const isAsync = Boolean(fnNode.async);
-      const asyncPrefix = isAsync ? 'async ' : '';
-
-      const fnLines = [];
-      fnLines.push(`${exportPrefix}const ${fnName} = ${asyncPrefix}(${params}) => {`);
-
-      const body = fnNode.body;
-      if (body && body.type === 'BlockStatement') {
-        const stmts = body.body || [];
-        for (const stmt of stmts) {
-          if (stmt.type === 'VariableDeclaration') {
-            const hasArrowOrFn = stmt.declarations.some(
-              (d) => d.init && (d.init.type === 'ArrowFunctionExpression' || d.init.type === 'FunctionExpression')
-            );
-
-            if (hasArrowOrFn) {
-              stmt.declarations.forEach((d) => {
-                const dName = d.id?.name;
-                const dInit = d.init;
-                if (dInit && (dInit.type === 'ArrowFunctionExpression' || dInit.type === 'FunctionExpression')) {
-                  const innerStmts = (dInit.body?.body || []).filter(isLogicStatement);
-                  if (innerStmts.length > 0) {
-                    const innerAsync = dInit.async ? 'async ' : '';
-                    const innerParams = (dInit.params || []).map((p) => p.name || 'arg').join(', ');
-                    fnLines.push(`  const ${dName} = ${innerAsync}(${innerParams}) => {`);
-                    innerStmts.forEach((is) => {
-                      const sliced = sliceNodeLines(is);
-                      if (sliced) fnLines.push(`    ${sliced.trim()}`);
-                    });
-                    fnLines.push(`  };`);
-                  } else {
-                    fnLines.push(`  const ${dName} = () => { /* no-op */ };`);
-                  }
-                }
-              });
-            } else if (isLogicStatement(stmt)) {
-              const sliced = sliceNodeLines(stmt);
-              if (sliced) fnLines.push(`  ${sliced.trim()}`);
-            }
-          } else if (isLogicStatement(stmt)) {
-            if (stmt.type === 'ReturnStatement' && (stmt.argument?.type === 'JSXElement' || stmt.argument?.type === 'JSXFragment')) {
-              fnLines.push(`  return <JSX: Template Rendered>;`);
-            } else {
-              const sliced = sliceNodeLines(stmt);
-              if (sliced) fnLines.push(`  ${sliced.trim()}`);
-            }
-          }
-        }
-      } else if (body) {
-        const sliced = sliceNodeLines(body);
-        if (sliced) fnLines.push(`  return ${sliced.trim()};`);
-      }
-
-      fnLines.push(`};`);
-      logicBlocks.push(fnLines.join('\n'));
-    };
-
-    traverse(ast, {
-      ImportDeclaration(nodePath) {
-        if (nodePath.node.importKind === 'type') return;
-        const source = nodePath.node.source?.value;
-        const specifiers = nodePath.node.specifiers
-          .filter((s) => s.importKind !== 'type')
-          .map((s) => s.local?.name || s.imported?.name)
-          .filter(Boolean);
-        if (specifiers.length > 0 && source) {
-          importsSummary.push(`// Imports: [${specifiers.join(', ')}] from '${source}'`);
-        }
-      },
-
-      ExportNamedDeclaration(nodePath) {
-        const decl = nodePath.node.declaration;
-        if (!decl) return;
-
-        if (decl.type === 'VariableDeclaration') {
-          decl.declarations.forEach((d) => {
-            const name = d.id?.name;
-            const init = d.init;
-            if (!name || !init) return;
-
-            if (init.type === 'ArrowFunctionExpression' || init.type === 'FunctionExpression') {
-              processFunctionLogic(name, init, true);
-            } else {
-              const kind = resolveDeclarationKind(d);
-              if (kind === 'ref' || kind === 'computed' || kind === 'hook') {
-                const nodeStr = sliceNodeLines(d);
-                stateDeclarations.push(`export const ${nodeStr}`);
-              }
-            }
-          });
-        } else if (decl.type === 'FunctionDeclaration' && decl.id) {
-          processFunctionLogic(decl.id.name, decl, true);
-        }
-      },
-
-      VariableDeclaration(nodePath) {
-        if (nodePath.parent.type !== 'Program') return;
-        if (nodePath.parentPath?.parent?.type === 'ExportNamedDeclaration') return;
-
-        nodePath.node.declarations.forEach((d) => {
-          const name = d.id?.name;
-          const init = d.init;
-          if (!name || !init) return;
-
-          if (init.type === 'ArrowFunctionExpression' || init.type === 'FunctionExpression') {
-            processFunctionLogic(name, init, false);
-          } else {
-            const kind = resolveDeclarationKind(d);
-            if (kind === 'ref' || kind === 'computed' || kind === 'hook') {
-              const nodeStr = sliceNodeLines(d);
-              stateDeclarations.push(`const ${nodeStr}`);
-            }
-          }
-        });
-      },
-
-      FunctionDeclaration(nodePath) {
-        if (nodePath.parent.type !== 'Program') return;
-        if (nodePath.parentPath?.parent?.type === 'ExportNamedDeclaration') return;
-        if (nodePath.node.id) {
-          processFunctionLogic(nodePath.node.id.name, nodePath.node, false);
-        }
-      }
-    });
-
-    if (importsSummary.length > 0) {
-      lines.push(...importsSummary);
-      lines.push('');
-    }
-
-    if (stateDeclarations.length > 0) {
-      lines.push(...stateDeclarations);
-      lines.push('');
-    }
-
-    if (logicBlocks.length > 0) {
-      lines.push(logicBlocks.join('\n\n'));
-    }
-
-    const tplSummary = summarizeTemplate(code, filePath);
-    if (tplSummary) {
-      lines.push('');
-      lines.push(tplSummary);
-    }
   } catch (err) {
-    lines.push(`// [AST Parsing Note: ${err.message}]`);
-    lines.push(compactCode(stripCodeComments(scriptContent)));
+    lines.push(`// [AST parsing failed: ${err.message}. No skeleton available; read a line range instead.]`);
+    return lines.join('\n');
   }
 
+  const importsSummary = [];
+  const stateDeclarations = [];
+  const logicBlocks = [];
+
+  const emitBody = (fnNode, indent) => {
+    const out = [];
+    for (const stmt of fnNode.body.body || []) {
+      const innerFns = stmt.type === 'VariableDeclaration' ? stmt.declarations.filter((d) => isFunctionInit(d.init)) : [];
+      const hasInnerFunctions = innerFns.length > 0;
+      if (hasInnerFunctions) {
+        innerFns.forEach((d) => out.push(...emitFunction(d.init, stmt, `${stmt.kind} ${scriptContent.slice(d.start, d.init.body.start).trim()}`, indent)));
+      } else if (isLogicStatement(stmt)) {
+        const isJsxReturn = stmt.type === 'ReturnStatement' && ['JSXElement', 'JSXFragment'].includes(stmt.argument?.type);
+        out.push(`${indent}${isJsxReturn ? 'return (/* JSX template */);' : src(stmt)}`);
+      }
+    }
+    return out;
+  };
+
+  function emitFunction(fnNode, declNode, header, indent = '') {
+    const hasBlockBody = fnNode.body?.type === 'BlockStatement';
+    if (!hasBlockBody) return [`${indent}${src(declNode)}${origin(declNode)}`];
+    return [`${indent}${header} {${origin(declNode)}`, ...emitBody(fnNode, `${indent}  `), `${indent}}`];
+  }
+
+  const headerOf = (declNode, fnNode) => scriptContent.slice(declNode.start, fnNode.body.start).trim();
+  const isStateKind = (d) => ['ref', 'computed', 'hook'].includes(resolveDeclarationKind(d));
+
+  for (const node of ast.program.body) {
+    const decl = node.type === 'ExportNamedDeclaration' || node.type === 'ExportDefaultDeclaration' ? node.declaration : node;
+    const hasDeclaration = Boolean(decl);
+    if (!hasDeclaration) continue;
+    const isImport = node.type === 'ImportDeclaration';
+    const isFunctionDeclaration = decl.type === 'FunctionDeclaration';
+    const isVariableDeclaration = decl.type === 'VariableDeclaration';
+    if (isImport) {
+      const specifiers = node.importKind === 'type' ? [] : node.specifiers.filter((sp) => sp.importKind !== 'type').map((sp) => sp.local?.name).filter(Boolean);
+      const hasValueImports = specifiers.length > 0;
+      if (hasValueImports) importsSummary.push(`// Imports: [${specifiers.join(', ')}] from '${node.source.value}'`);
+    } else if (isFunctionDeclaration) {
+      logicBlocks.push(emitFunction(decl, node, headerOf(node, decl)).join('\n'));
+    } else if (isVariableDeclaration) {
+      const fnDecls = decl.declarations.filter((d) => isFunctionInit(d.init));
+      fnDecls.forEach((d) => logicBlocks.push(emitFunction(d.init, node, headerOf(node, d.init), '').join('\n')));
+      const hasState = fnDecls.length === 0 && decl.declarations.some(isStateKind);
+      if (hasState) stateDeclarations.push(`${src(node)}${origin(node)}`);
+    }
+  }
+
+  const hasImports = importsSummary.length > 0;
+  const hasState = stateDeclarations.length > 0;
+  const hasLogic = logicBlocks.length > 0;
+  if (hasImports) lines.push(...importsSummary, '');
+  if (hasState) lines.push(...stateDeclarations, '');
+  if (hasLogic) lines.push(logicBlocks.join('\n\n'));
+
+  const tplSummary = summarizeTemplate(code, filePath);
+  const hasTemplateSummary = Boolean(tplSummary);
+  if (hasTemplateSummary) lines.push('', tplSummary);
   return lines.join('\n');
 };

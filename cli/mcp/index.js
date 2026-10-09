@@ -10,6 +10,7 @@ import {
   installAllMcpConfigs
 } from './installer.js';
 import { syncAntigravityMcpSchemas } from './antigravity.js';
+import { describeServerOrigin } from './server-info.js';
 
 export const runMcpServer = async (rawArgs = []) => {
   if (rawArgs.includes('--sync')) {
@@ -21,7 +22,7 @@ export const runMcpServer = async (rawArgs = []) => {
   }
   // Stdio server must keep stdout strictly reserved for JSON-RPC messages.
   // Informative logs go to stderr.
-  process.stderr.write('⚡ Chemical X Protocol MCP Server active (stdio transport)\n');
+  process.stderr.write(`Chemical X MCP server active (stdio): ${describeServerOrigin()}\n`);
   startStdioServer(resolveServerOptions(rawArgs));
 };
 
@@ -31,8 +32,9 @@ export const resolveServerOptions = (rawArgs = []) => {
 };
 
 export const runMcpInstaller = async (rawArgs = []) => {
-  const targetDir = rawArgs[0] || process.cwd();
-  return installAllMcpConfigs(targetDir, { silent: false });
+  const targetDir = rawArgs.find((a) => !a.startsWith('-')) || process.cwd();
+  const includeHome = rawArgs.includes('--global') || rawArgs.includes('--antigravity');
+  return installAllMcpConfigs(targetDir, { silent: false, includeHome });
 };
 
 export {

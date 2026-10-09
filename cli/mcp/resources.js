@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { runAudit as executeAstAudit } from '../audit.js';
+import { computeScorecard } from './scorecard.js';
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 const starterKitRoot = path.resolve(currentDir, '..', '..');
@@ -181,39 +181,11 @@ export const Resources = {
     };
   },
 
-  'chemx://scorecard': (uri, cwd) => {
-    const targetDir = fs.existsSync(path.resolve(cwd, 'src')) ? 'src' : '.';
-    const report = executeAstAudit(targetDir, {});
-    const severityRollup = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 };
-    for (const v of report.violations || []) {
-      if (severityRollup[v.severity] !== undefined) {
-        severityRollup[v.severity]++;
-      }
-    }
-    const topHotspots = (report.hotspots || []).slice(0, 3).map((h) => ({
-      file: h.filePath,
-      lines: h.lineCount,
-      violations: h.violationsCount
-    }));
-
-    const scorecard = {
-      grade: report.health?.grade || 'N/A',
-      score: report.health?.score ?? 100,
-      status: report.health?.isPassing ? 'PASS' : 'FAIL',
-      scannedFiles: report.metrics?.scannedFiles || 0,
-      totalLoc: report.metrics?.totalLoc || 0,
-      moleculeCompliantPct: report.metrics?.moleculeCompliantPct ?? 100,
-      severityRollup,
-      totalViolations: report.totalViolations || 0,
-      topHotspots,
-      patternCandidatesCount: (report.patterns || []).length
-    };
-    return {
-      uri,
-      mimeType: 'application/json',
-      text: JSON.stringify(scorecard, null, 2)
-    };
-  }
+  'chemx://scorecard': async (uri, cwd) => ({
+    uri,
+    mimeType: 'application/json',
+    text: JSON.stringify(await computeScorecard(cwd), null, 2)
+  })
 };
 
 export const readMcpResource = async (uri, cwd = process.cwd()) => {

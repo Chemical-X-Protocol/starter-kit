@@ -30,17 +30,54 @@ export const resolveSafePath = (targetPath, baseDir = process.cwd()) => {
     throw new Error(`Path traversal rejected: "${targetPath}" resolves to "${resolvedTarget}", outside allowed workspace root "${realBase}".`);
   }
 
-  if (fs.existsSync(resolvedTarget)) {
-    const realTarget = fs.realpathSync(resolvedTarget);
-    const relReal = path.relative(realBase, realTarget);
-    const isSymlinkEscape = relReal.startsWith('..') || path.isAbsolute(relReal);
-    if (isSymlinkEscape) {
-      throw new Error(`Path traversal rejected: "${targetPath}" resolves outside allowed workspace root via symlink.`);
-    }
-    return realTarget;
+  const { existing, rest } = splitAtNearestExisting(resolvedTarget);
+  const relExistingLexical = path.relative(realBase, existing);
+  const isAncestorAboveBase = relExistingLexical.startsWith('..') || path.isAbsolute(relExistingLexical);
+  if (isAncestorAboveBase) {
+    return resolvedTarget;
   }
 
-  return resolvedTarget;
+  let realExisting;
+  try {
+    realExisting = fs.realpathSync(existing);
+  } catch {
+    throw new Error(`Path traversal rejected: "${targetPath}" passes through a dangling symlink.`);
+  }
+  const relReal = path.relative(realBase, realExisting);
+  const isSymlinkEscape = relReal.startsWith('..') || path.isAbsolute(relReal);
+  if (isSymlinkEscape) {
+    throw new Error(`Path traversal rejected: "${targetPath}" resolves outside allowed workspace root via symlink.`);
+  }
+
+  return rest.length > 0 ? path.join(realExisting, ...rest) : realExisting;
+};
+
+/**
+ * Walks up from a path to its nearest existing ancestor (the path itself when it exists).
+ * A dangling symlink counts as existing, so realpath on it fails closed.
+ *
+ * @param {string} absPath Absolute path.
+ * @returns {{ existing: string, rest: string[] }} Existing ancestor and the missing segments below it.
+ */
+const splitAtNearestExisting = (absPath) => {
+  const rest = [];
+  let current = absPath;
+  const pathExists = (p) => {
+    try {
+      fs.lstatSync(p);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  while (!pathExists(current)) {
+    const parent = path.dirname(current);
+    const isFilesystemRoot = parent === current;
+    if (isFilesystemRoot) break;
+    rest.unshift(path.basename(current));
+    current = parent;
+  }
+  return { existing: current, rest };
 };
 
 /**

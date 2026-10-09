@@ -22,4 +22,15 @@ export declare function areGuardrailsInstalled(targetDir?: string): boolean;
 export declare function ensurePackageScripts(targetDir?: string): boolean;
 export declare function installAgentSearchConfig(targetDir?: string): Promise<boolean>;
 export declare function runInstallWizard(targetDir?: string): Promise<void>;
+export declare function isChemxHook(text?: string): boolean;
+
+export interface WizardTargets {
+  isMcpOnly: boolean;
+  includeHome: boolean;
+  shouldHook: boolean;
+  shouldWf: boolean;
+  shouldMcp: boolean;
+  shouldQuery: boolean;
+}
+export declare function planWizardTargets(targetChoice?: string): WizardTargets;
 

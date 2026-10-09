@@ -6,9 +6,10 @@ import os from 'node:os';
 import { PassThrough } from 'node:stream';
 import { createMcpHandler, startStdioServer } from './server.js';
 import { MCP_TOOLS, ALL_MCP_TOOLS, Tools, executeMcpTool } from './tools.js';
+import { KIT_ROOT } from './spec-harness.js';
 
 test('MCP Server: initialize handshake', async () => {
-  const handler = createMcpHandler();
+  const handler = createMcpHandler({ bootDir: KIT_ROOT });
   const res = await handler.handleRequest({
     jsonrpc: '2.0',
     id: 1,
@@ -30,7 +31,7 @@ test('MCP Server: initialize handshake', async () => {
 });
 
 test('MCP Server: ping returns empty result', async () => {
-  const handler = createMcpHandler();
+  const handler = createMcpHandler({ bootDir: KIT_ROOT });
   const res = await handler.handleRequest({
     jsonrpc: '2.0',
     id: 2,
@@ -43,7 +44,7 @@ test('MCP Server: ping returns empty result', async () => {
 });
 
 test('MCP Server: tools/list enumerates master Chemical X gateway tool', async () => {
-  const handler = createMcpHandler();
+  const handler = createMcpHandler({ bootDir: KIT_ROOT });
   const res = await handler.handleRequest({
     jsonrpc: '2.0',
     id: 3,
@@ -58,7 +59,7 @@ test('MCP Server: tools/list enumerates master Chemical X gateway tool', async (
 });
 
 test('MCP Server: tools/call chemx_query_patterns executes AST discovery', async () => {
-  const handler = createMcpHandler();
+  const handler = createMcpHandler({ bootDir: KIT_ROOT });
   const res = await handler.handleRequest({
     jsonrpc: '2.0',
     id: 4,
@@ -81,7 +82,7 @@ test('MCP Server: tools/call chemx_query_patterns executes AST discovery', async
 });
 
 test('MCP Server: tools/call chemx_audit audits codebase', async () => {
-  const handler = createMcpHandler();
+  const handler = createMcpHandler({ bootDir: KIT_ROOT });
   const res = await handler.handleRequest({
     jsonrpc: '2.0',
     id: 5,
@@ -140,7 +141,7 @@ test('MCP Server: tools/call chemx_generate_capsule generates crystalline capsul
 });
 
 test('MCP Server: tools/call chemx_get_refactor_prompt returns prompt', async () => {
-  const handler = createMcpHandler();
+  const handler = createMcpHandler({ bootDir: KIT_ROOT });
   const res = await handler.handleRequest({
     jsonrpc: '2.0',
     id: 7,
@@ -160,7 +161,7 @@ test('MCP Server: tools/call chemx_get_refactor_prompt returns prompt', async ()
 });
 
 test('MCP Server: resources/list and resources/read', async () => {
-  const handler = createMcpHandler();
+  const handler = createMcpHandler({ bootDir: KIT_ROOT });
   const listRes = await handler.handleRequest({
     jsonrpc: '2.0',
     id: 8,
@@ -217,7 +218,7 @@ test('MCP Server: resources/list and resources/read', async () => {
 });
 
 test('MCP Server: prompts/list and prompts/get', async () => {
-  const handler = createMcpHandler();
+  const handler = createMcpHandler({ bootDir: KIT_ROOT });
   const listRes = await handler.handleRequest({
     jsonrpc: '2.0',
     id: 10,
@@ -241,7 +242,7 @@ test('MCP Server: prompts/list and prompts/get', async () => {
 });
 
 test('MCP Server: tools/call chemx_autofix performs deterministic cleanup', async () => {
-  const handler = createMcpHandler();
+  const handler = createMcpHandler({ bootDir: KIT_ROOT });
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-mcp-autofix-'));
   fs.mkdirSync(path.join(tempDir, '.chemx'));
   const testFile = path.join(tempDir, 'sample.ts');
@@ -254,15 +255,16 @@ test('MCP Server: tools/call chemx_autofix performs deterministic cleanup', asyn
     method: 'tools/call',
     params: {
       name: 'chemx_autofix',
-      arguments: { path: testFile, dryRun: true }
+      arguments: { path: testFile, dryRun: true, projectRoot: tempDir }
     }
   });
 
   assert.strictEqual(dryRes.result.isError, false);
   const dryData = JSON.parse(dryRes.result.content[0].text);
   assert.strictEqual(dryData.dryRun, true);
-  assert.strictEqual(dryData.totalFixes, 2);
+  assert.strictEqual(dryData.totalFixes, 1, 'the em dash is inside a string literal and stays');
   assert.strictEqual(dryData.filesChanged, 1);
+  assert.match(dryData.diff, /-\/\/ hope this helps/);
 
   // Live run
   const liveRes = await handler.handleRequest({
@@ -271,21 +273,21 @@ test('MCP Server: tools/call chemx_autofix performs deterministic cleanup', asyn
     method: 'tools/call',
     params: {
       name: 'chemx_autofix',
-      arguments: { path: testFile, dryRun: false }
+      arguments: { path: testFile, dryRun: false, projectRoot: tempDir }
     }
   });
 
   assert.strictEqual(liveRes.result.isError, false);
   const liveData = JSON.parse(liveRes.result.content[0].text);
   assert.strictEqual(liveData.dryRun, false);
-  assert.strictEqual(liveData.totalFixes, 2);
-  assert.strictEqual(fs.readFileSync(testFile, 'utf-8'), 'const title = "Dashboard - Analytics";');
+  assert.strictEqual(liveData.totalFixes, 1);
+  assert.strictEqual(fs.readFileSync(testFile, 'utf-8'), 'const title = "Dashboard — Analytics";');
 
   fs.rmSync(tempDir, { recursive: true, force: true });
 });
 
 test('MCP Server: tools/call chemx_query_patterns supports compact mode', async () => {
-  const handler = createMcpHandler();
+  const handler = createMcpHandler({ bootDir: KIT_ROOT });
   const res = await handler.handleRequest({
     jsonrpc: '2.0',
     id: 17,
@@ -311,36 +313,16 @@ test('MCP Server: tools/call chemx_query_patterns supports compact mode', async 
   }
 });
 
-test('MCP Server: resources/subscribe and resources/unsubscribe', async () => {
-  const handler = createMcpHandler();
-
-  const subRes = await handler.handleRequest({
-    jsonrpc: '2.0',
-    id: 18,
-    method: 'resources/subscribe',
-    params: { uri: 'chemx://scorecard' }
-  });
-  assert.strictEqual(subRes.jsonrpc, '2.0');
-  assert.deepStrictEqual(subRes.result, {});
-  assert.ok(handler.getSubscriptions().includes('chemx://scorecard'));
-
-  const notification = handler.notifyResourceUpdated('chemx://scorecard');
-  assert.strictEqual(notification.method, 'notifications/resources/updated');
-  assert.strictEqual(notification.params.uri, 'chemx://scorecard');
-
-  const unsubRes = await handler.handleRequest({
-    jsonrpc: '2.0',
-    id: 19,
-    method: 'resources/unsubscribe',
-    params: { uri: 'chemx://scorecard' }
-  });
-  assert.strictEqual(unsubRes.jsonrpc, '2.0');
-  assert.deepStrictEqual(unsubRes.result, {});
-  assert.ok(!handler.getSubscriptions().includes('chemx://scorecard'));
+test('MCP Server: resources/subscribe is not advertised because nothing would ever fire', async () => {
+  const handler = createMcpHandler({ bootDir: KIT_ROOT });
+  const init = await handler.handleRequest({ jsonrpc: '2.0', id: 17, method: 'initialize', params: {} });
+  assert.strictEqual(init.result.capabilities.resources.subscribe, false);
+  const subRes = await handler.handleRequest({ jsonrpc: '2.0', id: 18, method: 'resources/subscribe', params: { uri: 'chemx://scorecard' } });
+  assert.strictEqual(subRes.error.code, -32601);
 });
 
 test('MCP Server: resources/read chemx://scorecard returns streamlined summary', async () => {
-  const handler = createMcpHandler();
+  const handler = createMcpHandler({ bootDir: KIT_ROOT });
   const readRes = await handler.handleRequest({
     jsonrpc: '2.0',
     id: 20,
@@ -358,7 +340,7 @@ test('MCP Server: resources/read chemx://scorecard returns streamlined summary',
 });
 
 test('MCP Server: handles unknown method with -32601', async () => {
-  const handler = createMcpHandler();
+  const handler = createMcpHandler({ bootDir: KIT_ROOT });
   const res = await handler.handleRequest({
     jsonrpc: '2.0',
     id: 12,
@@ -369,7 +351,7 @@ test('MCP Server: handles unknown method with -32601', async () => {
 });
 
 test('MCP Server: handles unknown tool call with isError: true', async () => {
-  const handler = createMcpHandler();
+  const handler = createMcpHandler({ bootDir: KIT_ROOT });
   const res = await handler.handleRequest({
     jsonrpc: '2.0',
     id: 13,
@@ -403,7 +385,7 @@ test('MCP Server: stdio streaming handles line-buffered JSON-RPC', async () => {
 });
 
 test('MCP Server: tools/call chemx_q searches symbols and capsules', async () => {
-  const handler = createMcpHandler();
+  const handler = createMcpHandler({ bootDir: KIT_ROOT });
   const res = await handler.handleRequest({
     jsonrpc: '2.0',
     id: 101,
@@ -420,12 +402,13 @@ test('MCP Server: tools/call chemx_q searches symbols and capsules', async () =>
 
   assert.strictEqual(res.jsonrpc, '2.0');
   assert.strictEqual(res.result.isError, false);
-  const results = JSON.parse(res.result.content[0].text);
-  assert.ok(Array.isArray(results));
+  const payload = JSON.parse(res.result.content[0].text);
+  assert.ok(Array.isArray(payload.results));
+  assert.ok(payload.index && payload.index.scope, 'answer states the index scope it searched');
 });
 
 test('MCP Server: tools/call chemx_read extracts outline without full file dump', async () => {
-  const handler = createMcpHandler();
+  const handler = createMcpHandler({ bootDir: KIT_ROOT });
   const res = await handler.handleRequest({
     jsonrpc: '2.0',
     id: 102,
@@ -452,7 +435,7 @@ test('MCP Server: tools/call chemx_patch surgically modifies target content', as
   const testFile = path.join(tmpDir, 'sample.ts');
   fs.writeFileSync(testFile, 'const greeting = "hello world";\n', 'utf-8');
 
-  const handler = createMcpHandler();
+  const handler = createMcpHandler({ bootDir: KIT_ROOT });
   const res = await handler.handleRequest({
     jsonrpc: '2.0',
     id: 103,
@@ -460,6 +443,7 @@ test('MCP Server: tools/call chemx_patch surgically modifies target content', as
     params: {
       name: 'chemx_patch',
       arguments: {
+        projectRoot: tmpDir,
         path: testFile,
         targetContent: 'hello world',
         replacementContent: 'hello chemical-x'
@@ -478,7 +462,7 @@ test('MCP Server: tools/call chemx_write creates and indexes file', async () => 
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-mcp-write-'));
   fs.mkdirSync(path.join(tmpDir, '.chemx'));
   const testFile = path.join(tmpDir, 'sample-written.ts');
-  const handler = createMcpHandler();
+  const handler = createMcpHandler({ bootDir: KIT_ROOT });
 
   const res = await handler.handleRequest({
     jsonrpc: '2.0',
@@ -487,6 +471,7 @@ test('MCP Server: tools/call chemx_write creates and indexes file', async () => 
     params: {
       name: 'chemx_write',
       arguments: {
+        projectRoot: tmpDir,
         path: testFile,
         content: 'export const writtenConstant = 123;\n'
       }
@@ -501,7 +486,7 @@ test('MCP Server: tools/call chemx_write creates and indexes file', async () => 
 });
 
 test('MCP Server: tools/call chemx_q supports columnar format', async () => {
-  const handler = createMcpHandler();
+  const handler = createMcpHandler({ bootDir: KIT_ROOT });
   const res = await handler.handleRequest({
     jsonrpc: '2.0',
     id: 1032,
@@ -525,7 +510,7 @@ test('MCP Server: tools/call chemx_q supports columnar format', async () => {
 });
 
 test('MCP Server: tools/call chemx_check verifies single file boundary rules', async () => {
-  const handler = createMcpHandler();
+  const handler = createMcpHandler({ bootDir: KIT_ROOT });
   const res = await handler.handleRequest({
     jsonrpc: '2.0',
     id: 104,
@@ -547,7 +532,7 @@ test('MCP Server: tools/call chemx_check verifies single file boundary rules', a
 });
 
 test('MCP Server: resources/read chemx://blueprints/molecule enforces Zero Raw DOM', async () => {
-  const handler = createMcpHandler();
+  const handler = createMcpHandler({ bootDir: KIT_ROOT });
   const res = await handler.handleRequest({
     jsonrpc: '2.0',
     id: 105,
@@ -563,7 +548,7 @@ test('MCP Server: resources/read chemx://blueprints/molecule enforces Zero Raw D
 });
 
 test('MCP Server: prompts/get chemx_remediate_hotspot dynamically hydrates diagnostics', async () => {
-  const handler = createMcpHandler();
+  const handler = createMcpHandler({ bootDir: KIT_ROOT });
   const res = await handler.handleRequest({
     jsonrpc: '2.0',
     id: 106,
@@ -591,9 +576,10 @@ test('MCP Tools: keyed Tools map contains all handlers and executes mapped metho
     assert.strictEqual(typeof Tools[tool.name], 'function', `Tools.${tool.name} must be a function`);
   }
 
-  // Direct keyed execution: const handle = Tools[n]; handle(args, cwd)
+  // Direct keyed execution: const handle = Tools[n]; await handle(args, cwd).
+  // Handlers load lazily, so every Tools entry returns a promise.
   const handle = Tools['chemx_q'];
-  const res = handle({ query: 'badge', columnar: true });
+  const res = await handle({ query: 'badge', columnar: true });
   assert.ok(res);
   assert.ok(Array.isArray(res.cols));
   assert.ok(Array.isArray(res.rows));
@@ -606,7 +592,7 @@ test('MCP Tools: keyed Tools map contains all handlers and executes mapped metho
 });
 
 test('MCP Server: master tool chemx communicates strictly in-band with zero disk output', async () => {
-  const handler = createMcpHandler();
+  const handler = createMcpHandler({ bootDir: KIT_ROOT });
   const testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-mcp-test-'));
   fs.writeFileSync(path.join(testDir, 'package.json'), JSON.stringify({ name: 'mcp-test' }), 'utf-8');
 
@@ -643,8 +629,9 @@ test('MCP Server: master tool chemx communicates strictly in-band with zero disk
 });
 
 test('MCP Server: master tool chemx handles action: "read" with auto-outlining on files > 100 lines', async () => {
-  const handler = createMcpHandler();
+  const handler = createMcpHandler({ bootDir: KIT_ROOT });
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-read-mcp-'));
+  fs.writeFileSync(path.join(tmpDir, 'package.json'), '{}');
   const largeFilePath = path.join(tmpDir, 'MonolithComponent.vue');
 
   // Create a 150-line file
@@ -668,6 +655,7 @@ test('MCP Server: master tool chemx handles action: "read" with auto-outlining o
         name: 'chemx',
         arguments: {
           action: 'read',
+          projectRoot: tmpDir,
           params: {
             path: largeFilePath
           }
@@ -694,6 +682,7 @@ test('MCP Server: master tool chemx handles action: "read" with auto-outlining o
         name: 'chemx',
         arguments: {
           action: 'read',
+          projectRoot: tmpDir,
           params: {
             path: largeFilePath,
             symbol: 'increment'
@@ -717,7 +706,7 @@ test('MCP Server: master chemx read honors projectRoot over boot directory', asy
   fs.mkdirSync(path.join(tmp, '.chemx'));
   fs.writeFileSync(path.join(tmp, 'a.js'), 'export const scopeMarker = 1;\n');
   try {
-    const handler = createMcpHandler();
+    const handler = createMcpHandler({ bootDir: KIT_ROOT });
     const res = await handler.handleRequest({
       jsonrpc: '2.0',
       id: 2001,
@@ -732,8 +721,8 @@ test('MCP Server: master chemx read honors projectRoot over boot directory', asy
 });
 
 test('MCP Server: relative master write without declared root is refused', async () => {
-  const probe = path.join(process.cwd(), 'zz-scope-probe.js');
-  const handler = createMcpHandler();
+  const probe = path.join(KIT_ROOT, 'zz-scope-probe.js');
+  const handler = createMcpHandler({ bootDir: KIT_ROOT });
   const res = await handler.handleRequest({
     jsonrpc: '2.0',
     id: 2002,

@@ -1,6 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { hasGum, gumChoose, gumInput, promptQuestion, renderBanner } from './terminal.js';
+import { hasGum, gumChoose, gumInput, promptQuestion, isStdinTty, isStderrTty } from './terminal.js';
+import { renderTtyBanner } from './tty-banner.js';
+import { describeLineBudgetPolicy } from './config/profiles.js';
 import { checkOrPromptEvaluation } from './license.js';
 import {
   toPascalCase,
@@ -34,12 +36,13 @@ import { indexGeneratedFiles } from './generator-indexer.js';
 import { printGenerateHelp } from './generator-help.js';
 import { createJigFiles, JIG_KINDS } from './generator-jig.js';
 import { handleJigCli } from './generator-jig-cli.js';
+import { hasPreviewFlag } from './cli-args.js';
 export { printGenerateHelp } from './generator-help.js';
 export { createJigFiles, JIG_KINDS } from './generator-jig.js';
 export { handleJigCli } from './generator-jig-cli.js';
 
 const TIERS = [
-  { prefix: 'm-', tier: 'molecule', label: '1. m- Molecule (Self-contained feature block < 100 lines - Recommended)' },
+  { prefix: 'm-', tier: 'molecule', label: '1. m- Molecule (Self-contained feature block - Recommended)' },
   { prefix: 'a-', tier: 'atom', label: '2. a- Atom (Single foundational UI element)' },
   { prefix: 'o-', tier: 'organism', label: '3. o- Organism (Complex module combining molecules)' },
   { prefix: 't-', tier: 'template', label: '4. t- Template (Structural layout blueprint)' },
@@ -291,14 +294,14 @@ export const runGenerateWizard = async (rawArgs = []) => {
     if (rawArgs.includes('--json')) {
       process.stdout.write(JSON.stringify({ help: true, success: true }) + '\n');
     } else {
-      printGenerateHelp();
+      await printGenerateHelp();
     }
     return { success: true, help: true };
   }
 
   const isJson = rawArgs.includes('--json');
-  const isYes = rawArgs.includes('-y') || rawArgs.includes('--yes') || isJson || !process.stdin.isTTY;
-  if (!isJson) renderBanner('Chemical X: Molecular Capsule Wizard');
+  const isYes = rawArgs.includes('-y') || rawArgs.includes('--yes') || isJson || !isStdinTty();
+  if (!isJson) await renderTtyBanner('Chemical X: Molecular Capsule Wizard');
   await checkOrPromptEvaluation('generate capsule', { isYes });
 
   const useGum = hasGum();
@@ -324,7 +327,7 @@ export const runGenerateWizard = async (rawArgs = []) => {
   const isLean = rawArgs.includes('--lean');
   const descArg = (rawArgs.find((a) => a.startsWith('--desc=') || a.startsWith('--description=') || a.startsWith('--prompt=')) || '')
     .replace(/^--(desc|description|prompt)=/, '');
-  const isDryRun = rawArgs.includes('--dry-run') || rawArgs.includes('-n');
+  const isDryRun = hasPreviewFlag(rawArgs);
 
   const isBareOrMinimal = rawArgs.includes('--bare') || rawArgs.includes('--minimal');
   const templateFlagMatch = (rawArgs.find((a) => a.startsWith('--template=')) || '').split('=')[1];
@@ -361,16 +364,15 @@ export const runGenerateWizard = async (rawArgs = []) => {
       ? gumInput('Capsule feature name (e.g. user-avatar, spark-kpi, auth-status):', 'user-avatar')
       : await promptQuestion('Capsule feature name [user-avatar]: ');
   } else if (!rawName && isYes) {
-    const hasExplicitFlags = rawArgs.some((a) => a.startsWith('-'));
-    if (hasExplicitFlags) {
-      const err = new Error('Missing capsule name. Usage: npx chemx generate <name> [options]');
-      if (isJson) {
-        process.stdout.write(JSON.stringify({ error: err.message, success: false }) + '\n');
-        process.exit(1);
-      }
-      process.stderr.write(`\x1b[31m✕ Error: ${err.message}\x1b[0m\n`);
+    // Non-interactive (piped, --json or -y): never invent a default capsule name.
+    const message = 'Missing capsule name. Usage: chemx generate <name> [options]';
+    if (isJson) {
+      process.stdout.write(JSON.stringify({ error: message, success: false }) + '\n');
       process.exit(1);
     }
+    const errorLine = `✕ Error: ${message}`;
+    process.stderr.write(isStderrTty() ? `\x1b[31m${errorLine}\x1b[0m\n` : `${errorLine}\n`);
+    process.exit(1);
   }
   const cleanName = (rawName || 'user-avatar').trim().toLowerCase();
   const selectedTier = resolveSelectedTier(explicitTier, cleanName);
@@ -466,7 +468,7 @@ export const runGenerateWizard = async (rawArgs = []) => {
   for (const f of result.filesCreated) {
     process.stdout.write(`  \x1b[32m✔\x1b[0m ${f}\n`);
   }
-  process.stdout.write('\n\x1b[2mChemical X Standards verified: < 100 lines per file, granular domain types, co-located spec tests.\x1b[0m\n\n');
+  process.stdout.write(`\n\x1b[2mCapsule written with granular domain types and co-located spec tests. ${describeLineBudgetPolicy()}\x1b[0m\n\n`);
   return result;
 };
 

@@ -1,3 +1,4 @@
+import { describeLineBudgetPolicy } from '../config/profiles.js';
 import { groupViolationsByRule, buildPathTree } from './reporter-grouping.js';
 import {
   CYAN,
@@ -91,7 +92,7 @@ export const buildGradeFPrompt = (report, options = {}) => {
 
   if (extremeMonoliths.length > 0) {
     lines.push('### EXTREME MONOLITHS (>= 2,000 lines of code) : MONOLITH DECOMPOSITION');
-    lines.push('Action: Decompose into crystalline single-responsibility capsules (< 100 lines per molecule). Convert top-level view into a declarative Table-of-Contents view.\n');
+    lines.push('Action: Decompose into crystalline single-responsibility capsules (within the AGENTS.md line budget). Convert top-level view into a declarative Table-of-Contents view.\n');
     extremeMonoliths.forEach((h, i) => {
       lines.push(`${i + 1}. File: \`${h.filePath}\` (${h.lineCount} lines)`);
     });
@@ -105,7 +106,7 @@ export const buildGradeFPrompt = (report, options = {}) => {
 
   lines.push('### STRICT EXECUTION RULES:');
   lines.push('1. Pre-Split Pattern Discovery: Survey cross-file patterns before slicing; extract canonical shared capsules first to avoid proliferating duplicate one-off patterns.');
-  lines.push('2. Every new molecule component must stay under 100 lines.');
+  lines.push(`2. Every new molecule component stays within the line budget. ${describeLineBudgetPolicy()}`);
   lines.push('3. Top-level page views must be 10-20 line declarative Table-of-Contents templates assembling components via named slots.');
   lines.push('4. Zero synthetic or mock data: return live data or explicit empty states.');
   lines.push('5. Zero render-hack setTimeout: replace with await nextTick() or flush: post.');
@@ -138,7 +139,7 @@ export const buildGradeDPrompt = (report, options = {}) => {
 
   if (severeMonoliths.length > 0) {
     lines.push('### SEVERE MONOLITHS (1,000 - 1,999 lines of code)');
-    lines.push('Action: Extract sub-features into isolated molecule capsules (< 100 lines of code) and domain composables.\n');
+    lines.push('Action: Extract sub-features into isolated molecule capsules (within the AGENTS.md line budget) and domain composables.\n');
     severeMonoliths.forEach((h, i) => {
       lines.push(`${i + 1}. File: \`${h.filePath}\` (${h.lineCount} lines)`);
     });
@@ -197,7 +198,7 @@ export const buildGradeCPrompt = (report, options = {}) => {
   lines.push('### STRICT EXECUTION RULES:');
   lines.push('1. Zero raw inline styles: Replace style={{...}} with atom props, SCSS mixins (@include glass), or scoped BEM classes.');
   lines.push('2. Extract anonymous inline callbacks into named functions before passing as props.');
-  lines.push('3. Co-locate granular types (*.d.ts) inside feature capsules (< 100 lines of code). Avoid type monoliths.');
+  lines.push('3. Co-locate granular types (*.d.ts) inside feature capsules. Avoid type monoliths.');
   if (!isSubSection) {
     lines.push('');
     lines.push(buildAgentCommandsSection());
@@ -287,7 +288,7 @@ export const buildHotspotsPrompt = (report, options = {}) => {
 
   if (monolithHotspots.length > 0) {
     lines.push('### MONOLITHIC REFACTORING HOTSPOTS');
-    lines.push('Action: Decompose into single-responsibility crystalline molecule capsules (< 100 lines) and dedicated domain composables.\n');
+    lines.push('Action: Decompose into single-responsibility crystalline molecule capsules (within the AGENTS.md line budget) and dedicated domain composables.\n');
     monolithHotspots.forEach((h, i) => {
       const tier = h.monolithTier ? `[${h.monolithTier} MONOLITH]` : '[MONOLITH]';
       lines.push(`${i + 1}. File: \`${h.filePath}\` (${h.lineCount} lines, ${h.violationCount} hazards) ${tier}`);
@@ -297,10 +298,10 @@ export const buildHotspotsPrompt = (report, options = {}) => {
 
   lines.push('### STRICT EXECUTION RULES:');
   lines.push('1. Pre-Split Pattern Discovery: Audit recurring UI layouts, state machines, and predicates across monoliths first; extract canonical shared capsules before slicing to prevent bespoke pattern duplication.');
-  lines.push('2. Molecular Limits: Molecule capsules must strictly remain under 100 lines per file.');
+  lines.push(`2. Molecular Limits: ${describeLineBudgetPolicy()}`);
   lines.push('3. Table-of-Contents Views: Top-level page views must be 10 to 20 line declarative Table of Contents assembling molecules via named slots.');
   lines.push('4. Composable Return Contracts: Custom hooks/composables must classify returns into flat State, Status, and verb-prefixed Actions buckets (Directive 4.A).');
-  lines.push('5. Type Co-location: Co-locate granular types/*.d.ts files inside each feature capsule (< 100 lines per type file) instead of creating type monoliths.');
+  lines.push('5. Type Co-location: Co-locate granular types/*.d.ts files inside each feature capsule instead of creating type monoliths.');
   lines.push('6. Zero breaking changes to external component APIs, route exports, or existing props.');
   if (!isSubSection) {
     lines.push('');
@@ -329,7 +330,7 @@ export const buildPillarPrompt = (report, pillarName, options = {}) => {
 
   if (relevantHotspots.length > 0) {
     lines.push('### MONOLITHIC REFACTORING HOTSPOTS');
-    lines.push('Action: Decompose into crystalline molecule capsules (< 100 lines) and declarative Table-of-Contents views.\n');
+    lines.push('Action: Decompose into crystalline molecule capsules (within the AGENTS.md line budget) and declarative Table-of-Contents views.\n');
     relevantHotspots.forEach((h, i) => {
       lines.push(`${i + 1}. File: \`${h.filePath}\` (${h.lineCount} lines, ${h.violationCount} hazards)`);
     });
@@ -343,7 +344,7 @@ export const buildPillarPrompt = (report, pillarName, options = {}) => {
 
   lines.push('### STRICT EXECUTION RULES:');
   lines.push('1. Pre-Split Pattern Discovery: Survey cross-file patterns before slicing; extract canonical shared capsules first.');
-  lines.push('2. Molecular Capsule Limit: Maximum 100 lines per molecule capsule file.');
+  lines.push(`2. Molecular Capsule Limit: ${describeLineBudgetPolicy()}`);
   lines.push('3. Table-of-Contents Views: Top-level page views must be 10 to 20 line declarative templates assembling components via named slots.');
   lines.push('4. Zero breaking changes to external component APIs, route exports, or existing props.');
   if (!isSubSection) {

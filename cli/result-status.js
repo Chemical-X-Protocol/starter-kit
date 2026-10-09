@@ -8,6 +8,7 @@ export const EXIT_CODES = Object.freeze({ pass: 0, fail: 1, inconclusive: 3 });
 export const toExitCode = (status) => EXIT_CODES[status] ?? EXIT_CODES.fail;
 
 export const isPass = (status) => status === STATUS.PASS;
+export const isInconclusive = (status) => status === STATUS.INCONCLUSIVE;
 
 // Worst status wins: fail > inconclusive > pass. An empty list proves nothing.
 export const combineStatuses = (statuses) => {

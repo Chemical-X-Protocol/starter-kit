@@ -7,7 +7,9 @@ import {
   gumChoose,
   gumInput,
   promptQuestion,
-  openBrowser
+  openBrowser,
+  isStdinTty,
+  isStdoutTty
 } from './terminal.js';
 import { toResultSync } from './audit/rules-helpers.js';
 
@@ -117,8 +119,8 @@ export const obtainLicenseKey = async (rawArgs = [], onRunAudit = null) => {
     rawArgs.includes('--non-interactive') ||
     rawArgs.includes('--no-interactive') ||
     Boolean(process.env.CI) ||
-    !process.stdout?.isTTY ||
-    !process.stdin?.isTTY ||
+    !isStdoutTty() ||
+    !isStdinTty() ||
     process.env.TERM === 'dumb' ||
     Boolean(process.argv?.some((arg) => arg === '--headless' || arg === '--ci' || arg === '--yes' || arg === '-y' || arg === '--non-interactive'));
 
@@ -231,8 +233,8 @@ export const checkOrPromptEvaluation = async (actionLabel = 'generate capsule', 
   const isNonInteractive =
     options.isYes ||
     Boolean(process.env.CI) ||
-    process.stdin?.isTTY === false ||
-    process.stdout?.isTTY === false ||
+    !isStdinTty() ||
+    !isStdoutTty() ||
     Boolean(process.argv?.some((arg) => arg === '--headless' || arg === '--yes' || arg === '-y' || arg === '--ci' || arg === '--non-interactive'));
   if (isNonInteractive) {
     return { licensed: false, proceed: true };

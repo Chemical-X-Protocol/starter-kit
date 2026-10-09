@@ -158,14 +158,14 @@ test('template & styles: UI template contains required classes and metadata elem
 test('ui-server: HTTP integration serves /api/codebase/tree and /api/codebase/file', async () => {
   const running = await startUiServer({ port: 0, cwd: process.cwd() });
   try {
-    const resTree = await fetch(`http://localhost:${running.port}/api/codebase/tree`);
+    const resTree = await running.fetch(`http://localhost:${running.port}/api/codebase/tree`);
     assert.strictEqual(resTree.status, 200);
     const jsonTree = await resTree.json();
     assert.strictEqual(jsonTree.success, true);
     assert.ok(Array.isArray(jsonTree.tree));
     assert.ok(Array.isArray(jsonTree.files));
 
-    const resFile = await fetch(`http://localhost:${running.port}/api/codebase/file?path=cli/ui-template.js`);
+    const resFile = await running.fetch(`http://localhost:${running.port}/api/codebase/file?path=cli/ui-template.js`);
     assert.strictEqual(resFile.status, 200);
     const jsonFile = await resFile.json();
     assert.ok(typeof jsonFile === 'object');

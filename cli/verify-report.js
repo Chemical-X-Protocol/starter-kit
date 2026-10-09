@@ -1,0 +1,102 @@
+// Text lines for `chemx verify`. Each step line is printed as soon as that step finishes,
+// so a slow step never leaves the terminal showing only the banner.
+import { ANSI } from './theme.js';
+import { STATUS, isPass, isInconclusive } from './result-status.js';
+import { isInteractive } from './terminal.js';
+import { SKIPPED } from './verify-steps.js';
+
+export const VERIFY_HELP = [
+  `${ANSI.BOLD}USAGE${ANSI.RESET}`,
+  '  chemx verify [options]',
+  '',
+  `${ANSI.BOLD}OPTIONS${ANSI.RESET}`,
+  '  --dir=<path>             Target directory to verify (default: .chemxrc "scope", else project root)',
+  '  --build                  Include production build audit step',
+  '  --timeout=<seconds>      Per-step timeout for typecheck, tests and build (default 600)',
+  '  --allow-empty            Accept a test run that collects zero tests',
+  '  --profile=<name>         Rule profile for the AST audit',
+  '  --json                   Output summary status card as JSON',
+  '  -h, --help               Show this help message',
+  '',
+  `${ANSI.BOLD}EXIT CODES${ANSI.RESET}`,
+  '  0 pass, 1 fail, 3 inconclusive (no tests ran, missing checker, step timeout)',
+  ''
+].join('\n');
+
+const ICONS = {
+  [STATUS.PASS]: `${ANSI.LIME}✔${ANSI.RESET}`,
+  [STATUS.FAIL]: `${ANSI.RED}✖${ANSI.RESET}`,
+  [STATUS.INCONCLUSIVE]: `${ANSI.YELLOW}?${ANSI.RESET}`,
+  [SKIPPED]: `${ANSI.DIM}-${ANSI.RESET}`
+};
+
+const pad = (label) => `${label}:`.padEnd(19);
+
+export const stepLine = (status, label, text, dimNote = '') => {
+  const note = dimNote ? ` ${ANSI.DIM}[${dimNote}]${ANSI.RESET}` : '';
+  return `  ${ICONS[status] || ICONS[STATUS.FAIL]} ${pad(label)}${text}${note}\n`;
+};
+
+export const formatTypecheckStep = (section) => {
+  const isSkipped = section.status === SKIPPED;
+  if (isSkipped) return 'Skipped (no typecheck script or tsconfig.json)';
+  if (isPass(section.status)) return 'Clean (0 errors)';
+  if (isInconclusive(section.status)) return `Inconclusive (${section.executionError || section.reason})`;
+  const hasNoDiagnostics = section.errorCount === 0;
+  if (hasNoDiagnostics) return `Command Failed (${section.executionError})`;
+  return `${section.errorCount} error(s)`;
+};
+
+export const isEmptyAllowed = (section) => isPass(section.status) && section.reason === 'EMPTY_ALLOWED';
+
+// An empty run that --allow-empty accepted passes the gate but proves nothing, so no green check.
+export const testStepIcon = (section) => (isEmptyAllowed(section) ? SKIPPED : section.status);
+
+export const formatTestStep = (section) => {
+  if (isEmptyAllowed(section)) return 'No tests ran (allowed by --allow-empty)';
+  const skippedNote = section.skipped > 0 ? `, ${section.skipped} skipped` : '';
+  if (isPass(section.status)) return `Passed (${section.passed}/${section.total}${skippedNote})`;
+  if (isInconclusive(section.status)) return `Inconclusive: ${section.reason} (${section.passed} ran${skippedNote})`;
+  const isBareFailure = section.failed === 0 && section.errors === 0 && section.executionError;
+  if (isBareFailure) return `Command Failed (${section.executionError})`;
+  const errorNote = section.errors > 0 ? `, ${section.errors} unhandled error(s)` : '';
+  return `${section.failed} failed${errorNote}`;
+};
+
+export const formatBuildStep = (section) => {
+  if (isPass(section.status)) return `Success (${section.totalDiagnostics} diagnostics)`;
+  if (isInconclusive(section.status)) return `Inconclusive (${section.executionError || 'timed out'})`;
+  return `Failed (exit ${section.exitCode}, ${section.errors} error(s))`;
+};
+
+// On an interactive terminal, shows a transient "running" line that the step result replaces.
+// On a pipe there is no transient line, so a step that blocks the event loop (the synchronous AST
+// audit) asks for `announceOnPipe`: a lasting line, so the log never shows only the banner.
+export const createProgress = (shouldPrint) => {
+  const isLive = shouldPrint && isInteractive();
+  const runningLine = (label) => `  ${ANSI.DIM}… ${pad(label)}running${ANSI.RESET}`;
+  return {
+    start: (label, { announceOnPipe = false } = {}) => {
+      const shouldAnnounce = shouldPrint && !isLive && announceOnPipe;
+      if (isLive) process.stdout.write(runningLine(label));
+      if (shouldAnnounce) process.stdout.write(`${runningLine(label)}\n`);
+    },
+    finish: (line) => {
+      if (isLive) process.stdout.write('\r\x1b[K');
+      if (shouldPrint) process.stdout.write(line);
+    }
+  };
+};
+
+// options.testsRanNothing: the gate passed only because --allow-empty accepted a run with zero
+// tests, so the headline must not claim that everything was verified.
+export const formatVerdict = (status, warning, options = {}) => {
+  const isEmptyPass = isPass(status) && Boolean(options.testsRanNothing);
+  if (isEmptyPass) return `\n  ${ANSI.YELLOW}${ANSI.BOLD}Verification passed, but no tests ran (accepted by --allow-empty).${ANSI.RESET}\n\n`;
+  if (isPass(status)) return `\n  ${ANSI.LIME}${ANSI.BOLD}All verification checks passed with zero context burn!${ANSI.RESET}\n\n`;
+  const headline = isInconclusive(status)
+    ? `${ANSI.YELLOW}${ANSI.BOLD}Verification inconclusive: a step could not prove its result.${ANSI.RESET}`
+    : `${ANSI.RED}${ANSI.BOLD}Verification failed. Actionable issues cataloged above.${ANSI.RESET}`;
+  const notice = warning ? `\n  ${ANSI.YELLOW}⚠ Notice: ${warning}${ANSI.RESET}` : '';
+  return `\n  ${headline}${notice}\n\n`;
+};

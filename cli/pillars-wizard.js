@@ -6,10 +6,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { renderBanner, hasGum, gumChoose, promptQuestion } from './terminal.js';
+import { hasGum, gumChoose, promptQuestion, isStdinTty } from './terminal.js';
+import { renderTtyBanner } from './tty-banner.js';
 import { PILLARS, PILLAR_PRESETS } from './pillars-schema.js';
 import { planFileWrite, applyFileWrites } from './pillars-write-guard.js';
 import { buildHostShims } from './host-shims.js';
+import { hasPreviewFlag } from './cli-args.js';
 
 const AGENTS_TEMPLATE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'AGENTS.md');
 
@@ -22,13 +24,13 @@ const agentsSeedTarget = (cwd) => {
 
 export const runPillarsWizard = async (rawArgs = [], cwd = process.cwd()) => {
   const isJson = rawArgs.includes('--json');
-  const isYes = rawArgs.includes('-y') || rawArgs.includes('--yes') || !process.stdin.isTTY;
+  const isYes = rawArgs.includes('-y') || rawArgs.includes('--yes') || !isStdinTty();
   const isWrite = rawArgs.includes('--write');
   const isForce = rawArgs.includes('--force');
-  const isDryRun = !isWrite || rawArgs.includes('--dry-run') || rawArgs.includes('-n');
+  const isDryRun = !isWrite || hasPreviewFlag(rawArgs);
 
   if (!isJson) {
-    renderBanner('Chemical X: Architectural Pillars Wizard');
+    await renderTtyBanner('Chemical X: Architectural Pillars Wizard');
   }
 
   const presetFlag = (rawArgs.find((a) => a.startsWith('--preset=')) || '').split('=')[1];

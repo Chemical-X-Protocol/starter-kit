@@ -1,4 +1,5 @@
 import { ANSI } from './theme.js';
+import { describeLineBudgetPolicy } from './config/profiles.js';
 
 export const formatSystemGuide = () => {
   const CYAN = '\x1b[36m';
@@ -23,9 +24,9 @@ export const formatSystemGuide = () => {
     `  triggers hallucinated imports, costs thousands of wasted context tokens per edit, and`,
     `  leads to fragile, tangled state.`,
     '',
-    `  Chemical X enforces ${BOLD}Crystalline Molecular Capsules (< 100 lines)${RESET}:`,
+    `  Chemical X enforces ${BOLD}Crystalline Molecular Capsules${RESET} (${describeLineBudgetPolicy()}):`,
     `    • ${LIME}Atom [a-]${RESET}      Single, raw HTML foundation (only tier allowed raw DOM like <button>)`,
-    `    • ${CYAN}Molecule [m-]${RESET}  Composed blocks (< 100 lines, mixin-only styles, zero raw DOM tags)`,
+    `    • ${CYAN}Molecule [m-]${RESET}  Composed blocks (mixin-only styles, zero raw DOM tags)`,
     `    • ${PINK}Organism [o-]${RESET}  Feature-level domain orchestration assembled from molecules`,
     `    • ${GOLD}View [v-]${RESET}      10-to-20 line declarative Table of Contents assembling components`,
     '',
@@ -37,7 +38,7 @@ export const formatSystemGuide = () => {
     '',
     `  ${BOLD}${SKY}🧠 Codebase SQLite Index Database (.chemx/index.db)${RESET}`,
     `     Powered by SQLite WAL mode and FTS5 token search. Indexes every symbol, prop, hook,`,
-    `     and architecture tier. Agents query with ${CYAN}pnpm q <symbol>${RESET} in < 5ms without scanning.`,
+    `     and architecture tier. Agents query with ${CYAN}chemx q <symbol>${RESET} in < 5ms without scanning.`,
     '',
     `  ${BOLD}${PINK}🛡️ 25-Year Senior Coding Guardrails${RESET}`,
     `     Catches production traps ordinary linters completely overlook:`,
@@ -45,7 +46,7 @@ export const formatSystemGuide = () => {
     `     • ${BOLD}Timers${RESET}: Render-hack setTimeout(0) race conditions and unscoped setInterval leaks`,
     `     • ${BOLD}Control Flow${RESET}: Nested ternaries in templates and multi-clause boolean soup`,
     `     • ${BOLD}Integrity${RESET}: Synthetic mock data (john@gmail.com) and fake green test assertions`,
-    `     • ${BOLD}Architecture${RESET}: Raw DOM in molecules and files exceeding the 100-line budget`,
+    `     • ${BOLD}Architecture${RESET}: Raw DOM in molecules and files over the profile line budget`,
     '',
     `  ${BOLD}${CYAN}🎯 Surgical Micro-Patcher & Continuous Re-Indexing${RESET}`,
     `     Exact hunk-based patching (chemx_patch) eliminates line drift. Automatically`,

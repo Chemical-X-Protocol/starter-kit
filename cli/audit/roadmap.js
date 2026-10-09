@@ -67,7 +67,7 @@ export const buildRemediationRoadmap = (report) => {
           {
             title: 'Domain Type Co-location',
             target: 'types/*.d.ts',
-            action: 'Ensure molecule capsules own co-located type declarations (< 100 lines each) with zero root type dumping.',
+            action: 'Ensure molecule capsules own co-located type declarations with zero root type dumping.',
             locations: []
           }
         ]
@@ -83,7 +83,7 @@ export const buildRemediationRoadmap = (report) => {
     items: topMonoliths.map((m) => ({
       title: `${m.filePath} (${m.lineCount} lines, ${m.violationCount} hazards)`,
       target: m.filePath,
-      action: 'Decompose into crystalline single-responsibility capsules (< 100 lines per molecule) reusing Phase 1 components.',
+      action: 'Decompose into crystalline single-responsibility capsules within the AGENTS.md line budget, reusing Phase 1 components.',
       locations: [`${m.filePath}:1`]
     }))
   });
@@ -223,7 +223,7 @@ export const buildSelfHealingRoadmapPrompt = (report) => {
   lines.push('### EXECUTION DISCIPLINE:');
   lines.push('1. Complete Step 1 (Pattern Harvesting) completely before touching any monolithic file in Step 3.');
   lines.push('2. Spliced views in Step 3 must directly import and bind to the canonical capsules created in Step 1.');
-  lines.push('3. Every new molecule component must stay under 100 lines.');
+  lines.push('3. Every new molecule component must stay within the AGENTS.md line budget.');
   lines.push('4. Top-level page views must be 10-20 line declarative Table-of-Contents templates assembling molecules via named slots.');
   lines.push('5. Zero synthetic or mock data; zero em dashes (use hyphens or colons).');
 

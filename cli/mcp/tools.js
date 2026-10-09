@@ -1,14 +1,20 @@
-import { MCP_TOOLS, ALL_MCP_TOOLS } from './manifests.js';
-import { handleAudit, handleGetRefactorPrompt } from './tools-audit.js';
-import { handleQueryPatterns, handleAutofix } from './tools-patterns.js';
-import { handleAuditBuild, handleChemxTypecheck, handleChemxTest, handleChemxVerify } from './tools-verify.js';
-import { handleGenerateCapsule, handleChemxTrend } from './tools-generate.js';
-import { handleChemxQ, handleChemxRead, handleChemxPatch, handleChemxCheck, handleChemxWrite } from './tools-search.js';
-import { handleChemxTeam, handleChemxTeamStatus, handleChemxTeamFeed, handleChemxTeamPost, handleChemxTeamTask, handleChemxTeamLock, handleChemxTeamInbox, handleChemxTeamDm, handleChemxReportIssue } from './tools-team.js';
-import { handleChemxProject } from './tools-project.js';
+import { MCP_TOOLS as BASE_MCP_TOOLS, ALL_MCP_TOOLS as BASE_ALL_MCP_TOOLS, withActionEnum } from './manifests.js';
+import { renderActionHelp } from './help.js';
+import { isBatchCall, expandBatchItems, runBatchItems } from './batch.js';
+import { shouldOffload, runActionInWorker } from './offload.js';
+// Handlers load lazily (tools-lazy.js): `initialize` must not wait on the tool stack.
+import {
+  handleAudit, handleGetRefactorPrompt, handleQueryPatterns, handleAutofix,
+  handleAuditBuild, handleChemxTypecheck, handleChemxTest, handleChemxVerify,
+  handleGenerateCapsule, handleChemxTrend,
+  handleChemxQ, handleChemxRead, handleChemxPatch, handleChemxCheck, handleChemxWrite,
+  handleChemxTeam, handleChemxTeamStatus, handleChemxTeamFeed, handleChemxTeamPost, handleChemxTeamTask,
+  handleChemxTeamLock, handleChemxTeamInbox, handleChemxTeamDm, handleChemxReportIssue, handleChemxProject
+} from './tools-lazy.js';
+import { hasPreviewFlag } from '../cli-args.js';
 
 export {
-  MCP_TOOLS, ALL_MCP_TOOLS, handleChemxQ, handleChemxRead, handleChemxPatch, handleChemxCheck, handleChemxWrite,
+  handleChemxQ, handleChemxRead, handleChemxPatch, handleChemxCheck, handleChemxWrite,
   handleChemxTeamStatus, handleChemxTeamFeed, handleChemxTeamPost, handleChemxTeamTask, handleChemxTeamLock, handleChemxReportIssue, handleChemxProject, handleChemxTesseract
 };
 
@@ -22,7 +28,21 @@ const parseListFlags = (parts) => {
   return flags;
 };
 
+const MUTATING_ACTIONS = new Set(['write', 'patch', 'autofix', 'explode', 'generate']);
+
+/**
+ * Parses a command string. Any preview spelling the CLI accepts (isPreviewFlag: `-n`, `--dry-run`,
+ * `--dryRun`, `--dry-run=<any>`) in the command string of a mutating action means preview,
+ * whatever the params say, so the string form, the params form and the CLI agree.
+ */
 export const parseCommand = (command, params) => {
+  const parsed = parseCommandParts(command, params);
+  const isMutating = MUTATING_ACTIONS.has(parsed.action) || String(parsed.action).startsWith('add');
+  const isPreview = isMutating && hasPreviewFlag(command.trim().split(/\s+/));
+  return isPreview ? { ...parsed, params: { ...parsed.params, dryRun: true } } : parsed;
+};
+
+const parseCommandParts = (command, params) => {
   const parts = command.trim().split(/\s+/);
   const subCmd = parts[0];
   if (subCmd === 'audit') return { action: subCmd, params: { path: parts[1], ...params } };
@@ -98,6 +118,11 @@ export const parseCommand = (command, params) => {
       }
     };
   }
+  if (subCmd === 'write') {
+    const positional = parts.slice(1).find((p) => !p.startsWith('-'));
+    const hasOverwrite = /(^|\s)--overwrite(\s|$)/.test(command);
+    return { action: 'write', params: { path: positional, overwrite: hasOverwrite || undefined, ...params } };
+  }
   if (subCmd === 'q' || subCmd === 'search') return { action: 'q', params: { query: parts.slice(1).join(' '), ...params } };
   if (subCmd === 'team') {
     const TEAM_ACTIONS = { status: 'team_status', feed: 'team_feed', task: 'team_task', lock: 'team_lock', inbox: 'team_inbox', dm: 'team_dm' };
@@ -153,13 +178,22 @@ export const parseCommand = (command, params) => {
 };
 
 const handleChemxTesseract = async (params = {}, cwd = process.cwd()) => {
+  const args = params.args || [];
+  const isJson = args.includes('--json');
+  if (isJson) {
+    const { runLatticeJson } = await import('../lattice-payload.js');
+    const { formatAgentJson } = await import('../agent-json.js');
+    return { content: [{ type: 'text', text: formatAgentJson(runLatticeJson(false, cwd)) }] };
+  }
   const { runTesseract } = await import('../tesseract.js');
-  const result = await runTesseract(params.args || [], false, cwd);
-  const textOutput = result.text || JSON.stringify(result.payload, null, 2);
+  const result = await runTesseract(args, false, cwd);
+  const textOutput = result.text;
   return {
     content: [{ type: 'text', text: textOutput }]
   };
 };
+
+const runWrapper = async (name, args, cwd) => (await import('../commands/cmd-wrappers.js'))[name](args, false, cwd);
 
 const DISPATCHER = {
   audit: handleAudit, trend: handleChemxTrend, build: handleAuditBuild, verify: handleChemxVerify,
@@ -171,32 +205,46 @@ const DISPATCHER = {
   autofix: handleAutofix, generate: handleGenerateCapsule, patterns: handleQueryPatterns,
   issue: handleChemxReportIssue, project: handleChemxProject, coordinator: handleChemxProject,
   tesseract: handleChemxTesseract, cube: handleChemxTesseract, matrix: handleChemxTesseract,
-  d: async (p, cwd) => (await import('../commands/cmd-wrappers.js')).runDiff(p.args || [], false),
-  diff: async (p, cwd) => (await import('../commands/cmd-wrappers.js')).runDiff(p.args || [], false),
-  log: async (p, cwd) => (await import('../commands/cmd-wrappers.js')).runLog(p.args || [], false),
-  p: async (p, cwd) => (await import('../commands/cmd-wrappers.js')).runPkg([p.query].filter(Boolean), false),
-  pkg: async (p, cwd) => (await import('../commands/cmd-wrappers.js')).runPkg([p.query].filter(Boolean), false),
-  f: async (p, cwd) => (await import('../commands/cmd-wrappers.js')).runFiles([p.filter].filter(Boolean), false),
-  ls: async (p, cwd) => (await import('../commands/cmd-wrappers.js')).runFiles([p.filter].filter(Boolean), false),
-  j: async (p, cwd) => (await import('../commands/cmd-wrappers.js')).runJsonShape([p.path].filter(Boolean), false),
-  json: async (p, cwd) => (await import('../commands/cmd-wrappers.js')).runJsonShape([p.path].filter(Boolean), false)
+  d: (p, cwd) => runWrapper('runDiff', p.args || [], cwd),
+  diff: (p, cwd) => runWrapper('runDiff', p.args || [], cwd),
+  log: (p, cwd) => runWrapper('runLog', p.args || [], cwd),
+  p: (p, cwd) => runWrapper('runPkg', [p.query].filter(Boolean), cwd),
+  pkg: (p, cwd) => runWrapper('runPkg', [p.query].filter(Boolean), cwd),
+  f: (p, cwd) => runWrapper('runFiles', [p.filter].filter(Boolean), cwd),
+  ls: (p, cwd) => runWrapper('runFiles', [p.filter].filter(Boolean), cwd),
+  j: (p, cwd) => runWrapper('runJsonShape', [p.path].filter(Boolean), cwd),
+  json: (p, cwd) => runWrapper('runJsonShape', [p.path].filter(Boolean), cwd),
+  help: (p) => renderActionHelp(ACTION_NAMES, p.action || p.query || null)
 };
 
+export const ACTION_NAMES = Object.keys(DISPATCHER);
+
+// One canonical name per handler, so scoping and dispatch classify the same action.
+// Legacy tool names (chemx_<name>) map here too; nothing reaches a handler around this table.
+const ACTION_ALIASES = {
+  r: 'read', search: 'q', diff: 'd', pkg: 'p', ls: 'f', json: 'j', coordinator: 'project',
+  cube: 'tesseract', matrix: 'tesseract', audit_build: 'build', report_issue: 'issue',
+  generate_capsule: 'generate', query_patterns: 'patterns'
+};
+
+export const canonicalAction = (action) => {
+  const isAlias = typeof action === 'string' && Object.hasOwn(ACTION_ALIASES, action);
+  return isAlias ? ACTION_ALIASES[action] : action;
+};
+
+export const MCP_TOOLS = withActionEnum(BASE_MCP_TOOLS, ACTION_NAMES);
+
+export const ALL_MCP_TOOLS = withActionEnum(BASE_ALL_MCP_TOOLS, ACTION_NAMES);
+
+const runDirectBatch = async (args, cwd) => runBatchItems(
+  expandBatchItems(args).filter((item) => !item.invalid),
+  (item) => handleChemx(item.args, item.args.projectRoot || cwd)
+);
+
+// The caller (the MCP server) has already scoped this call: cwd is the resolved root.
+// params.cwd and per-item cwd never widen it.
 export const handleChemx = async (args = {}, cwd = process.cwd()) => {
-  if (Array.isArray(args.commands) || Array.isArray(args.batch)) {
-    const list = args.commands || args.batch;
-    const results = [];
-    for (const item of list) {
-      if (typeof item === 'string') {
-        const itemResult = await handleChemx({ command: item, projectRoot: args.projectRoot }, cwd);
-        results.push(itemResult);
-      } else if (item && typeof item === 'object') {
-        const itemResult = await handleChemx({ ...item, projectRoot: args.projectRoot || item.projectRoot }, cwd);
-        results.push(itemResult);
-      }
-    }
-    return results;
-  }
+  if (isBatchCall(args)) return runDirectBatch(args, cwd);
 
   let { action, params = {} } = args;
   const hasCommand = Boolean(args.command && typeof args.command === 'string');
@@ -205,12 +253,14 @@ export const handleChemx = async (args = {}, cwd = process.cwd()) => {
     action = parsed.action;
     params = parsed.params;
   }
-  const effectiveCwd = args.projectRoot || params?.projectRoot || args.cwd || params?.cwd || process.env.CHEMX_PROJECT_ROOT || cwd;
-  const mergedParams = { projectRoot: effectiveCwd, cwd: effectiveCwd, ...params };
+  const effectiveCwd = args.projectRoot || params?.projectRoot || cwd;
+  const mergedParams = { ...params, projectRoot: effectiveCwd, cwd: effectiveCwd };
 
-  const handler = Object.hasOwn(DISPATCHER, action) ? DISPATCHER[action] : Tools[`chemx_${action}`];
+  const canonical = canonicalAction(action);
+  const handler = Object.hasOwn(DISPATCHER, canonical) ? DISPATCHER[canonical] : null;
+  if (handler && shouldOffload(canonical)) return runActionInWorker(canonical, mergedParams, effectiveCwd);
   if (!handler) {
-    throw new Error(`Unknown Chemical X action: "${action}". Valid actions: ${Object.keys(DISPATCHER).join(', ')}`);
+    throw new Error(`Unknown Chemical X action: "${action}". Valid actions: ${ACTION_NAMES.join(', ')}`);
   }
   return handler(mergedParams, effectiveCwd);
 };
@@ -243,6 +293,6 @@ export const executeMcpTool = async (name, args = {}, cwd = process.cwd()) => {
   const toolName = name === 'chemx_master' ? 'chemx' : name;
   const handle = resolveToolHandler(toolName);
   if (!handle) throw new Error(`Unknown tool: ${name}`);
-  const effectiveCwd = args.projectRoot || args?.params?.projectRoot || args.cwd || args?.params?.cwd || process.env.CHEMX_PROJECT_ROOT || cwd;
+  const effectiveCwd = args.projectRoot || args?.params?.projectRoot || cwd;
   return handle(args, effectiveCwd);
 };

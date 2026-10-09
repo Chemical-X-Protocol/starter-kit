@@ -5,7 +5,7 @@ import path from 'node:path';
 import { generateAstOutline } from './reader.js';
 import { handleLiteralSearchCommand } from './search-commands.js';
 import { runPkg, runFiles } from './commands/cmd-wrappers.js';
-import { openIndexDb, upsertFileIndex } from './search-db.js';
+import { openIndexDb, upsertFileIndex, queryIndexPage } from './search-db.js';
 import { syncSearchIndex } from './search.js';
 
 test('Fix 1: Index isolation excludes cli/ from project search by default', () => {
@@ -16,12 +16,14 @@ test('Fix 1: Index isolation excludes cli/ from project search by default', () =
   const syncRes = syncSearchIndex('src', cwd, { reindex: false, includeInternal: false });
   assert.ok(syncRes, 'Sync should complete');
 
-  // Verify no cli/ files are indexed in project mode
-  const cliFiles = db.prepare("SELECT path FROM files WHERE path LIKE 'cli/%'").all();
-  assert.equal(cliFiles.length, 0, 'Project index must not contain internal cli/ files');
+  // The index may hold cli/ rows from an earlier --include-internal or --dir . sync; a default
+  // (src) answer must never serve them.
+  const listing = queryIndexPage(db, { query: '', scopeDirs: syncRes.scopeDirs, limit: 100000 });
+  const cliFiles = listing.results.filter((r) => r.path.startsWith('cli/'));
+  assert.equal(cliFiles.length, 0, 'Project answers must not contain internal cli/ files');
 });
 
-test('Fix 2: Literal search matches exact strings with line numbers and clamping', () => {
+test('Fix 2: Literal search matches exact strings with line numbers and full lines', () => {
   const cwd = process.cwd();
   const db = openIndexDb(cwd);
 
@@ -39,7 +41,8 @@ test('Fix 2: Literal search matches exact strings with line numbers and clamping
   const first = res.matches[0];
   assert.ok(first.path, 'Match should have path');
   assert.ok(typeof first.line === 'number', 'Match should have line number');
-  assert.ok(first.snippet.length <= 60, 'Snippet must be clamped to 60 characters');
+  assert.equal(typeof first.text, 'string', 'Match carries the full matched line');
+  assert.ok(first.text.includes('import'), 'The line contains the literal pattern');
 });
 
 test('Fix 3: Literal search supports line-only mode (-l)', () => {
@@ -59,7 +62,7 @@ test('Fix 3: Literal search supports line-only mode (-l)', () => {
   const first = res.matches[0];
   assert.ok(first.path, 'Match should have path');
   assert.ok(first.line, 'Match should have line');
-  assert.equal(first.snippet, undefined, 'Snippet must be omitted in line-only mode');
+  assert.equal(first.text, undefined, 'Line text must be omitted in line-only mode');
 });
 
 test('Fix 4: Vue SFC outline detects template-only components', () => {
@@ -86,7 +89,7 @@ const helperTwo = () => {
   const outline = generateAstOutline(codeWithHelpers, 'src/api/service.ts');
 
   assert.match(outline, /export function publicApi/);
-  assert.match(outline, /\/\/ \[Notice: \d+ internal\/unexported function\(s\) omitted\. Use cx read --symbol=<name> to inspect\]/);
+  assert.match(outline, /\/\/ \[Notice: \d+ internal\/unexported function\(s\) omitted\. Use chemx read --symbol=<name> to inspect\]/);
 });
 
 test('Fix 6: Vue SFC outline detects companion controller if present', () => {
@@ -124,12 +127,12 @@ test('Fix 8: File finder cx f respects ignore rules', async () => {
   assert.ok(!res.output.includes('.chemx/'), 'Files list must not include .chemx internal dir');
 });
 
-test('Fix 9: JSON shape peeker cx j infers structural types without dumping raw data', async () => {
+test('Fix 9: JSON peeker cx j summarises large files as shape with scalar values', async () => {
   const { runJsonShape } = await import('./commands/cmd-wrappers.js');
   const res = await runJsonShape(['j', 'package.json'], false);
   assert.equal(res.code, 0);
-  assert.match(res.output, /\/\/ JSON Shape: package\.json/);
-  assert.match(res.output, /name: string/);
+  assert.match(res.output, /\/\/ JSON: package\.json \(\d+ bytes.*shape with values/);
+  assert.match(res.output, /name: "/);
   assert.match(res.output, /scripts: {/);
 });
 

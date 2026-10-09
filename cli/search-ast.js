@@ -1,6 +1,6 @@
 import path from 'node:path';
-import { parse } from '@babel/parser';
-import { extractParseableCode } from './audit/rules-helpers.js';
+import { parse } from './babel-lazy.js';
+import { extractParseableCode } from './audit/parseable-code.js';
 import { isBabelParsable } from './languages.js';
 
 const TIER_PATTERNS = [

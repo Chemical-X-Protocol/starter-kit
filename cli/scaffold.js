@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { hasGum, gumInput, promptQuestion, renderBanner } from './terminal.js';
+import { hasGum, gumInput, promptQuestion, isStdinTty, isStdoutTty } from './terminal.js';
+import { renderTtyBanner } from './tty-banner.js';
 import { obtainLicenseKey, fetchStarterKitFiles, loadLocalBlueprintFiles } from './license.js';
 import { runPillarsWizard } from './pillars-wizard.js';
 import { resolvePackageManager } from './build/detector.js';
@@ -19,8 +20,8 @@ const extractTargetName = (projectName, rawArgs) => {
     rawArgs.includes('--non-interactive') ||
     rawArgs.includes('--no-interactive') ||
     Boolean(process.env.CI) ||
-    process.stdout?.isTTY === false ||
-    process.stdin?.isTTY === false;
+    !isStdoutTty() ||
+    !isStdinTty();
 
   return isHeadless ? 'my-molecular-app' : null;
 };
@@ -39,7 +40,7 @@ export const runScaffold = async (projectName, rawArgs = [], onRunAudit = null) 
     return;
   }
 
-  renderBanner('Chemical X: Molecular Architecture Scaffolder (npm create chemx)');
+  await renderTtyBanner('Chemical X: Molecular Architecture Scaffolder (npm create chemx)');
 
   const fwArg = (rawArgs.find((a) => a.startsWith('--framework=')) || '').split('=')[1]
     || (rawArgs.includes('--framework') ? rawArgs[rawArgs.indexOf('--framework') + 1] : null);
@@ -102,7 +103,7 @@ export const runScaffold = async (projectName, rawArgs = [], onRunAudit = null) 
     process.stdout.write(`  \x1b[32m✔\x1b[0m ${targetRel}\n`);
   }
 
-  const isYes = rawArgs.includes('-y') || rawArgs.includes('--yes') || !process.stdin.isTTY;
+  const isYes = rawArgs.includes('-y') || rawArgs.includes('--yes') || !isStdinTty();
   await runPillarsWizard(isYes ? ['--preset=recommended', '-y', '--write'] : ['--write'], targetDir);
 
   const pm = resolvePackageManager(targetDir);
@@ -148,7 +149,7 @@ export const runInit = async (targetSubDir = 'src/chemical-x', rawArgs = [], onR
     ? targetSubDir
     : (rawArgs.slice(1).find((arg) => !arg.startsWith('-')) || 'src/chemical-x');
 
-  renderBanner('Chemical X: In-Repo Capsule Drop-in');
+  await renderTtyBanner('Chemical X: In-Repo Capsule Drop-in');
 
   const targetDir = path.resolve(process.cwd(), safeTargetSubDir);
   const licenseKey = await obtainLicenseKey(rawArgs, onRunAudit);

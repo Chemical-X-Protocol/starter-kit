@@ -2,7 +2,8 @@ import {
   hasGum,
   gumChoose,
   promptQuestion,
-  stripAnsi
+  stripAnsi,
+  isStdoutTty
 } from './terminal.js';
 import { copyToClipboard } from './audit.js';
 
@@ -38,7 +39,7 @@ export const extractPromptFromContent = (content) => {
 };
 
 export const showPagedContent = async (content, promptText = null) => {
-  if (process.stdout.isTTY) console.clear();
+  if (isStdoutTty()) console.clear();
   process.stdout.write(content + '\n\n');
 
   const effectivePrompt = (promptText && promptText.trim().length > 0)

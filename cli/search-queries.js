@@ -1,7 +1,10 @@
-import path from 'node:path';
+import { resolveGraphSeed } from './search-graph-edges.js';
+import { moduleKeysFor } from './search-resolve.js';
+import { writeIndexMeta } from './search-index-meta.js';
 
 export const findSymbolDefinition = (db, symbolName) => {
-  if (!db || !symbolName) return null;
+  const hasInput = Boolean(db) && Boolean(symbolName);
+  if (!hasInput) return null;
   const cleanName = symbolName.trim();
   const row = db.prepare(`
     SELECT s.name, s.kind, s.is_export, s.start_line, s.end_line, s.signature, s.file_path, f.tier, f.lines
@@ -27,7 +30,8 @@ export const findSymbolDefinition = (db, symbolName) => {
 };
 
 export const findSymbolReferences = (db, symbolName) => {
-  if (!db || !symbolName) return [];
+  const hasInput = Boolean(db) && Boolean(symbolName);
+  if (!hasInput) return [];
   const cleanName = symbolName.trim();
   const rows = db.prepare(`
     SELECT i.importer_path, i.imported_symbol, i.source_module, i.line, f.tier
@@ -46,33 +50,43 @@ export const findSymbolReferences = (db, symbolName) => {
   }));
 };
 
+const resolveFileTarget = (db, filePath) => resolveGraphSeed(db, filePath).seedPath;
+
 export const findFileDependencies = (db, filePath) => {
-  if (!db || !filePath) return [];
+  const hasInput = Boolean(db) && Boolean(filePath);
+  if (!hasInput) return [];
+  const seedPath = resolveFileTarget(db, filePath);
+  if (!seedPath) return [];
   const rows = db.prepare(`
-    SELECT importer_path, imported_symbol, source_module, line
+    SELECT importer_path, imported_symbol, source_module, resolved_path, line
     FROM imports
-    WHERE importer_path = ? OR importer_path LIKE ?
+    WHERE importer_path = ?
     ORDER BY line ASC
-  `).all(filePath, `%${filePath}%`);
+  `).all(seedPath);
 
   return rows.map((r) => ({
     importerPath: r.importer_path,
     importedSymbol: r.imported_symbol,
     sourceModule: r.source_module,
+    resolvedPath: r.resolved_path || '',
     line: Number(r.line || 1)
   }));
 };
 
+// Consumers by exact module resolution of the target file (no basename substring matching).
 export const findFileDependents = (db, filePath) => {
-  if (!db || !filePath) return [];
-  const baseName = path.basename(filePath).replace(/\.[^.]+$/, '');
+  const hasInput = Boolean(db) && Boolean(filePath);
+  if (!hasInput) return [];
+  const seedPath = resolveFileTarget(db, filePath);
+  if (!seedPath) return [];
+  const keys = moduleKeysFor(seedPath);
   const rows = db.prepare(`
     SELECT DISTINCT i.importer_path, i.imported_symbol, i.source_module, i.line, f.tier
     FROM imports i
     LEFT JOIN files f ON i.importer_path = f.path
-    WHERE i.source_module LIKE ? OR i.source_module LIKE ?
-    ORDER BY i.importer_path ASC
-  `).all(`%/${baseName}%`, `%${baseName}%`);
+    WHERE i.resolved_path IN (${keys.map(() => '?').join(', ')})
+    ORDER BY i.importer_path ASC, i.line ASC
+  `).all(...keys);
 
   return rows.map((r) => ({
     importerPath: r.importer_path,
@@ -83,9 +97,12 @@ export const findFileDependents = (db, filePath) => {
   }));
 };
 
-export const syncViolationsIndex = (db, violations = []) => {
+// Stamps violationsSyncedAt and violationsScope (the root-relative scope key the audit
+// covered, '' when unknown or partial) so `q hazards` can tell "audited, clean" from "never audited".
+export const syncViolationsIndex = (db, violations = [], { scope = null } = {}) => {
   if (!db) return 0;
   db.exec('DELETE FROM violations;');
+  writeIndexMeta(db, { violationsSyncedAt: Date.now(), violationsScope: scope || '' });
   if (!Array.isArray(violations) || violations.length === 0) return 0;
 
   const insertStmt = db.prepare(`
@@ -144,7 +161,8 @@ export const queryViolations = (db, options = {}) => {
 };
 
 export const recordAuditSnapshot = (db, report) => {
-  if (!db || !report) return null;
+  const hasInput = Boolean(db) && Boolean(report);
+  if (!hasInput) return null;
   const timestamp = Date.now();
   const score = Number(report.health?.score || 0);
   const grade = report.health?.grade || 'F';

@@ -146,3 +146,27 @@ test('Jig: detectJigBaseDir resolves presets correctly', () => {
 
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
+
+test('Jig CLI: footer claims no unverified line cap, and an invalid --schema is reported, not swallowed', async () => {
+  const { handleJigCli } = await import('./generator-jig-cli.js');
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-jig-cli-'));
+  const captured = { out: '', err: '' };
+  const realOut = process.stdout.write.bind(process.stdout);
+  const realErr = process.stderr.write.bind(process.stderr);
+  const realCwd = process.cwd();
+  process.stdout.write = (chunk) => { captured.out += chunk; return true; };
+  process.stderr.write = (chunk) => { captured.err += chunk; return true; };
+  try {
+    process.chdir(tmpDir);
+    const rawArgs = ['generate', 'service', 'billing', '--schema={bad'];
+    handleJigCli({ rawArgs, positional: ['service', 'billing'], rawName: 'billing', dirArg: tmpDir, descArg: '', isDryRun: false, isJson: false });
+  } finally {
+    process.stdout.write = realOut;
+    process.stderr.write = realErr;
+    process.chdir(realCwd);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+  assert.match(captured.err, /Ignoring --schema: not valid JSON/);
+  assert.doesNotMatch(captured.out, /100 lines|Standards verified/);
+  assert.match(captured.out, /generated programmatic jig \(service\)/);
+});

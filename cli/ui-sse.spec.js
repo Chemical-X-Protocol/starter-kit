@@ -19,7 +19,7 @@ describe('UI Server-Sent Events (SSE) Stream', () => {
   it('serves text/event-stream headers and initial state snapshot', async () => {
     const running = await startUiServer({ port: 0 });
     try {
-      const res = await fetch(`http://localhost:${running.port}/api/swarm/events`);
+      const res = await running.fetch(`http://localhost:${running.port}/api/swarm/events`);
       assert.strictEqual(res.status, 200);
       assert.ok(res.headers.get('content-type')?.includes('text/event-stream'));
       assert.strictEqual(res.headers.get('cache-control'), 'no-cache, no-transform');
@@ -40,7 +40,7 @@ describe('UI Server-Sent Events (SSE) Stream', () => {
     const running = await startUiServer({ port: 0 });
     let taskId = null;
     try {
-      const res = await fetch(`http://localhost:${running.port}/api/swarm/events`);
+      const res = await running.fetch(`http://localhost:${running.port}/api/swarm/events`);
       const reader = res.body?.getReader();
       assert.ok(reader);
 
@@ -48,7 +48,7 @@ describe('UI Server-Sent Events (SSE) Stream', () => {
       await readNextSseEvent(reader);
 
       // Trigger a POST mutation
-      const createRes = await fetch(`http://localhost:${running.port}/api/tasks`, {
+      const createRes = await running.fetch(`http://localhost:${running.port}/api/tasks`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title: 'SSE Test Task', tier: 'atom' })
@@ -75,7 +75,7 @@ describe('UI Server-Sent Events (SSE) Stream', () => {
   it('broadcasts reload event on broadcastSseReload', async () => {
     const running = await startUiServer({ port: 0 });
     try {
-      const res = await fetch(`http://localhost:${running.port}/api/swarm/events`);
+      const res = await running.fetch(`http://localhost:${running.port}/api/swarm/events`);
       const reader = res.body?.getReader();
       assert.ok(reader);
       await readNextSseEvent(reader);

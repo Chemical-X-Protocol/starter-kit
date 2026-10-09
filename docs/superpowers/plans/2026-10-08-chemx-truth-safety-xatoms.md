@@ -162,6 +162,7 @@ Files: `cli/index.js`, `cli/commands/cmd-router.js` (lazy imports), `cli/help.js
   - Fix the README MCP tool table.
 - #1447 Startup budget: lazy-load Babel, audit and generators. The `p`/`f`/`j`/`d`/`log` wrappers stay under 200ms of user CPU, asserted by a spec with headroom.
 - #1448 JSON payloads are never larger than the raw tool output they summarize: a byte-ratio spec on test and typecheck fixtures.
+  - Amended in G5 review: a fixed envelope (success, exitCode, command, durationMs, errorCount) cannot be smaller than a one-line raw failure, so the bound is: each diagnostic row is shorter than its raw line, the 7-error fixture is no larger than raw, and a 1-error report is at most raw plus 120 bytes. `errors` is always an array.
 - #1449 The `chemx d` "compacted" footer only appears when compaction actually happened.
 
 ### G6 Search and index truth (task #1450)

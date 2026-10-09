@@ -1,5 +1,9 @@
 import { ANSI } from './theme.js';
+import path from 'node:path';
 import { readTokenOptimized } from './reader.js';
+import { hasHelpFlag } from './help-args.js';
+import { buildRequestedReadCards } from './reader-cards-gate.js';
+import { formatReadHeader, formatReadBody } from './reader-format.js';
 
 /**
  * CLI command runner for chemx read / chemx view.
@@ -8,7 +12,9 @@ import { readTokenOptimized } from './reader.js';
  * @param {boolean} isCli Whether invoked directly from CLI.
  */
 export const runReaderCli = (args, isCli = false) => {
-  if (args.includes('--help') || args.includes('-h') || args.includes('help')) {
+  const isLoneHelpWord = args.length === 1 && args[0] === 'help';
+  const isHelpRequest = hasHelpFlag(args) || isLoneHelpWord;
+  if (isHelpRequest) {
     const isJson = args.includes('--json');
     if (isJson) {
       process.stdout.write(JSON.stringify({ help: true, success: true }) + '\n');
@@ -21,14 +27,15 @@ export const runReaderCli = (args, isCli = false) => {
         `  --outline                AST structure outline only (80%+ token savings)`,
         `  --logic, -l              AST logic skeleton (control flow, state, mutations)`,
         `  --template, -t           Extract template markup only (Vue/Svelte/JSX)`,
-        `  --enrich                 Append compacted logic skeleton after outline (free-lunch overlay)`,
-        `  --trace=<name>           Forward call trace card appended inline (requires --enrich)`,
-        `  --backtrace=<name>       Reverse caller chain card appended inline (requires --enrich)`,
-        `  --symbol=<name>          Extract specific function/hook/interface declaration`,
+        `  --enrich                 Append a logic skeleton (not verbatim source) after the outline`,
+        `  --trace=<name>           Forward call trace card (uses the .chemx index)`,
+        `  --backtrace=<name>       Reverse caller chain card (uses the .chemx index)`,
+        `  --connections            References and blast radius card for the file or --symbol`,
+        `  --symbol=<name>          Declaration by AST range (also Class.method, store.action)`,
         `  --start=<N>              Start line number (1-indexed)`,
         `  --end=<N>                End line number (1-indexed)`,
-        `  --strip-comments         Remove comments to minimize tokens`,
-        `  --compact                Collapse empty whitespace lines`,
+        `  --strip-comments         Blank out comments (token based; line numbers stay true)`,
+        `  --compact                Drop repeated blank lines (original numbers still shown)`,
         `  --json                   Output result as minified JSON`,
         `  -h, --help               Show this help message`,
         '',
@@ -84,7 +91,9 @@ export const runReaderCli = (args, isCli = false) => {
     symbol = symEqFlag.split('=')[1];
   } else {
     const sIndex = args.findIndex((a) => a === '-s' || a === '--symbol');
-    if (sIndex !== -1 && args[sIndex + 1] && !args[sIndex + 1].startsWith('-')) {
+    const spacedValue = sIndex === -1 ? undefined : args[sIndex + 1];
+    const hasSpacedSymbol = Boolean(spacedValue) && !spacedValue.startsWith('-');
+    if (hasSpacedSymbol) {
       symbol = args[sIndex + 1];
     } else {
       const sFlag = args.find((a) => a.startsWith('-s='));
@@ -122,17 +131,27 @@ export const runReaderCli = (args, isCli = false) => {
       symbol,
       startLine,
       endLine,
+      hintSyntax: 'cli',
     });
+
+    const cards = buildRequestedReadCards(process.cwd(), path.resolve(filePath), {
+      symbol,
+      connections: args.includes('--connections'),
+      traceSymbol,
+      backtraceSymbol
+    });
+    const cardText = [cards.connection, cards.trace, cards.backtrace].filter(Boolean).join('');
+    if (cardText) res.cards = cardText.trim();
 
     if (isJson) {
       process.stdout.write(JSON.stringify(res, null, 2) + '\n');
     } else {
-      const enrichSuffix = res.tokensEnriched > 0 ? ` +${res.tokensEnriched} enriched` : '';
-      process.stdout.write(`${ANSI.BOLD}${ANSI.CYAN}--- ${res.file} (${res.lineCount || res.totalLines} lines, ~${res.tokensEst} tokens${enrichSuffix}) ---${ANSI.RESET}\n`);
-      process.stdout.write(res.content + '\n');
+      process.stdout.write(`${ANSI.BOLD}${ANSI.CYAN}--- ${formatReadHeader(res)} ---${ANSI.RESET}\n`);
+      process.stdout.write(formatReadBody(res) + '\n');
       if (res.enriched) {
         process.stdout.write(res.enriched + '\n');
       }
+      if (cardText) process.stdout.write(`${cardText.trim()}\n`);
     }
 
     if (isCli) process.exit(0);

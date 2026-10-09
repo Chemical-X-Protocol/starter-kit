@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { runFrameworkPrePublishGate } from './check-framework-generation.mjs';
+import { computePublishExitCode, formatPublishSummary } from './publish-summary.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -99,14 +100,16 @@ try {
     });
 
     results.push({ name: target.name, success: proc.status === 0 });
+    if (proc.error) console.error(`\x1b[31m✕ ${target.name}: ${proc.error.message}\x1b[0m`);
   }
 } finally {
   fs.writeFileSync(PKG_JSON, originalContent, 'utf-8');
 }
 
 console.log('\n\x1b[1m\x1b[36m--- starter-kit Publish Summary ---\x1b[0m');
-for (const res of results) {
-  const icon = res.success ? '\x1b[32m✔\x1b[0m' : '\x1b[31m✕\x1b[0m';
-  console.log(`  ${icon} ${res.name.padEnd(25)} ${res.success ? 'Published' : 'Failed'}`);
-}
+for (const line of formatPublishSummary(results)) console.log(line);
 console.log('\x1b[1m\x1b[36m-----------------------------------\x1b[0m\n');
+
+process.exitCode = computePublishExitCode(results, TARGETS.length);
+const hasFailedPublish = process.exitCode !== 0;
+if (hasFailedPublish) console.error('\x1b[31m✕ One or more publishes failed.\x1b[0m');

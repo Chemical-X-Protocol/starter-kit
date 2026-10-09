@@ -1,235 +1,222 @@
 /**
  * Chemical X Capsule Exploder
- * Atomically unpacks a "liquid" single-file compact capsule into a standard crystalline multi-file directory capsule.
- * Transactional: Uses .temp.bak and rolls back if post-unpack verification fails.
+ * Unpacks a single-file compact capsule into a directory capsule, losslessly or not at all:
+ * the source is partitioned statement by statement (explode-plan.js), every generated file must
+ * parse, every original statement and declaration must reappear, and only then is the batch
+ * committed through applyEdits (atomic writes, original kept in .chemx/backups).
  */
 
 import fs from 'node:fs';
 import path from 'node:path';
-import * as babelParser from '@babel/parser';
 import { toPascalCase } from './generator-templates/naming.js';
-import { buildComponentSpec, buildIndex } from './generator-templates/specs.js';
+import { buildComponentSpec } from './generator-templates/specs.js';
 import { buildTypesIndex } from './generator-templates/types.js';
 import { detectTestRunner } from './project-detector.js';
+import { resolveSafePath } from './path-scope.js';
+import { applyEdits } from './apply-edits.js';
+import { parseSource } from './source-parse.js';
+import { planExplode, importHeader, relocated } from './explode-plan.js';
+import { brokenSpecifiers } from './explode-relocate.js';
+import { hasPreviewFlag, findUnknownFlags, unknownFlagsMessage } from './cli-args.js';
+import { relocatePrologue } from './explode-prologue.js';
+import { assertImportersSurvive } from './explode-importers.js';
 
+const joinSegments = (bucket, sub = '') => bucket.map((s) => relocated(s, sub).segment).join('\n').replace(/^\n+/, '');
+
+/**
+ * Compatibility view of the plan (sections as text).
+ */
 export const parseCompactFile = (content, ext = 'tsx') => {
-  const isTsx = ext === 'tsx' || ext === 'jsx';
-  const plugins = ['typescript'];
-  if (isTsx) plugins.push('jsx');
+  const plan = planExplode(content, `capsule.${ext}`);
+  const reactImports = plan.statements
+    .filter((s) => s.isImport && s.node.source.value === 'react')
+    .flatMap((s) => s.node.specifiers.map((sp) => sp.imported?.name).filter(Boolean));
+  return {
+    typesProps: joinSegments(plan.buckets.props),
+    typesState: joinSegments(plan.buckets.state),
+    controllerHookCode: plan.buckets.controller.length ? joinSegments(plan.buckets.controller) : null,
+    componentCode: joinSegments(plan.buckets.component.filter((s) => !s.isImport)) || null,
+    reactImports
+  };
+};
 
-  const ast = babelParser.parse(content, {
-    sourceType: 'module',
-    plugins
-  });
+const componentPrologue = (plan, capsuleName) => {
+  const text = relocatePrologue(plan.prologue, capsuleName).replace(/\s+$/, '');
+  return text ? `${text}\n\n` : '';
+};
 
-  const lines = content.split('\n');
-  const getSlice = (node) => {
-    return lines.slice(node.loc.start.line - 1, node.loc.end.line).join('\n');
+const buildCapsuleFiles = (plan, names) => {
+  const { capsuleName, pascalName, ext } = names;
+  const typesSub = `${capsuleName}/types`;
+  const isReact = ext === 'tsx' || ext === 'jsx';
+  const typeHomeFor = (fileKey) => (id) => {
+    const isProps = plan.buckets.props.some((s) => s.typeName === id);
+    const home = isProps ? 'props' : 'state';
+    const isTypesFile = fileKey === 'types';
+    if (isTypesFile) return null;
+    const isSameFile = fileKey === home;
+    return isSameFile ? null : './types';
+  };
+  const typesFile = (bucket, key, stub) => {
+    const other = key === 'props' ? 'state' : 'props';
+    const header = importHeader(bucket, plan, (id) => (plan.buckets[other].some((s) => s.typeName === id) ? `./${other}` : null), typesSub);
+    return bucket.length ? `${header}${joinSegments(bucket, typesSub)}\n` : stub;
   };
 
-  const typesProps = [];
-  const typesState = [];
-  let controllerHookCode = null;
-  let componentCode = null;
-  const reactImports = new Set();
+  const files = {
+    'types/props.d.ts': typesFile(plan.buckets.props, 'props', `export interface ${pascalName}Props {\n  readonly className?: string;\n}\n`),
+    'types/state.d.ts': typesFile(plan.buckets.state, 'state', `export interface ${pascalName}State {\n  readonly isActive: boolean;\n}\n`),
+    'types/index.ts': buildTypesIndex(['props', 'state']),
+    'types.d.ts': "export * from './types/index';\n"
+  };
 
-  for (const node of ast.program.body) {
-    if (node.type === 'ImportDeclaration') {
-      if (node.source.value === 'react') {
-        for (const spec of node.specifiers) {
-          if (spec.imported?.name) reactImports.add(spec.imported.name);
-        }
-      }
-      continue;
-    }
-
-    // Capture TypeScript interfaces and type aliases
-    const isExportedType = node.type === 'ExportNamedDeclaration' &&
-      (node.declaration?.type === 'TSInterfaceDeclaration' || node.declaration?.type === 'TSTypeAliasDeclaration');
-
-    if (isExportedType) {
-      const typeName = node.declaration.id?.name || '';
-      const slice = getSlice(node);
-      const isPropsOrEmits = typeName.includes('Props') || typeName.includes('Emits');
-      if (isPropsOrEmits) {
-        typesProps.push(slice);
-      } else {
-        typesState.push(slice);
-      }
-      continue;
-    }
-
-    // Capture Controller Hook
-    const isExportedVar = node.type === 'ExportNamedDeclaration' && node.declaration?.type === 'VariableDeclaration';
-    if (isExportedVar) {
-      const decl = node.declaration.declarations[0];
-      const varName = decl?.id?.name || '';
-      const isControllerHook = varName.startsWith('use') && varName.endsWith('Controller');
-      if (isControllerHook) {
-        controllerHookCode = getSlice(node);
-        continue;
-      }
-      if (varName && !varName.startsWith('use')) {
-        componentCode = getSlice(node);
-        continue;
-      }
-    }
-
-    if (node.type === 'ExportDefaultDeclaration') {
-      continue;
-    }
+  const controllerName = plan.controllerName || (isReact ? `use${pascalName}Controller` : null);
+  const hasController = Boolean(plan.controllerName);
+  if (hasController) {
+    files[`${capsuleName}.controller.ts`] = `${importHeader(plan.buckets.controller, plan, typeHomeFor('controller'), capsuleName)}${joinSegments(plan.buckets.controller, capsuleName)}\n`;
+  } else if (isReact) {
+    files[`${capsuleName}.controller.ts`] = `import { useState } from 'react';\n\nexport const ${controllerName} = () => {\n  const [isActive] = useState<boolean>(false);\n  return { isActive };\n};\n`;
   }
 
-  return {
-    typesProps: typesProps.join('\n\n'),
-    typesState: typesState.join('\n\n'),
-    controllerHookCode,
-    componentCode,
-    reactImports: Array.from(reactImports)
-  };
+  const body = plan.buckets.component;
+  const usesController = Boolean(plan.controllerName) && body.some((s) => s.text.includes(plan.controllerName));
+  const controllerImport = usesController ? `import { ${plan.controllerName} } from './${capsuleName}.controller';\n` : '';
+  const hasBody = body.some((s) => !s.isImport);
+  const stubBody = isReact ? `export const ${pascalName} = ({ className = '' }: ${pascalName}Props) => {\n  return <div className={className} />;\n};\n` : '';
+  const header = importHeader(body, plan, typeHomeFor('component'), capsuleName);
+  const prologue = componentPrologue(plan, capsuleName);
+  files[`${capsuleName}.${ext}`] = hasBody
+    ? `${prologue}${controllerImport}${header}${joinSegments(body, capsuleName)}\n`
+    : `${prologue}import type { ${pascalName}Props } from './types';\n${stubBody}`;
+  return { files, controllerName };
+};
+
+const isDefaultSpecifier = (sp) => (sp.exported?.name ?? sp.exported?.value) === 'default';
+const isDefaultExport = (n) => n.type === 'ExportDefaultDeclaration' || (n.type === 'ExportNamedDeclaration' && (n.specifiers || []).some(isDefaultSpecifier));
+const isNamedExport = (n) => n.type === 'ExportAllDeclaration' || n.type === 'ExportNamedDeclaration';
+
+/**
+ * The barrel re-exports everything the original module exported, the default export included,
+ * so `import X from './card'` and `import { Y } from './card'` keep resolving.
+ */
+const buildIndexFile = (files, names, controllerName) => {
+  const compFile = `${names.capsuleName}.${names.ext}`;
+  const body = parseSource(files[compFile], compFile).programs.flatMap((p) => p.body);
+  const lines = [];
+  const hasNamedExports = body.some(isNamedExport);
+  const hasDefaultExport = body.some(isDefaultExport);
+  if (hasNamedExports) lines.push(`export * from './${names.capsuleName}';`);
+  if (hasDefaultExport) lines.push(`export { default } from './${names.capsuleName}';`);
+  const hasControllerFile = Boolean(controllerName) && Boolean(files[`${names.capsuleName}.controller.ts`]);
+  if (hasControllerFile) lines.push(`export { ${controllerName} } from './${names.capsuleName}.controller';`);
+  lines.push("export type * from './types';");
+  return `${lines.join('\n')}\n`;
+};
+
+const verifyLossless = (plan, files, names) => {
+  const typesSub = `${names.capsuleName}/types`;
+  const subFor = { props: typesSub, state: typesSub, controller: names.capsuleName, component: names.capsuleName };
+  const lost = Object.entries(plan.buckets).flatMap(([bucket, list]) => {
+    const target = files[bucketFile(bucket, names)] || '';
+    return list.filter((s) => !target.includes(relocated(s, subFor[bucket]).text)).map((s) => s.names[0] || s.text.split('\n')[0]);
+  });
+  const parsed = Object.entries(files).map(([name, text]) => [name, parseSource(text, name)]);
+  const unparsed = parsed.filter(([, res]) => !res.ok).map(([name, res]) => `${name}: ${res.error}`);
+  const declared = new Set(parsed.flatMap(([, res]) => res.declarations));
+  const missing = plan.declarations.filter((name) => !declared.has(name));
+  const programsByFile = Object.fromEntries(parsed.map(([name, res]) => [`${names.capsuleName}/${name}`, res.programs]));
+  const originalSpecifiers = plan.statements.flatMap((s) => s.relSpecs.map((r) => r.value));
+  const broken = brokenSpecifiers(programsByFile, originalSpecifiers);
+  const componentFile = bucketFile('component', names);
+  const componentPrograms = programsByFile[`${names.capsuleName}/${componentFile}`] || [];
+  const keptDirectives = componentPrograms.flatMap((p) => (p.directives || []).map((d) => d.value.value));
+  const isPrologueKept = files[componentFile].startsWith(componentPrologue(plan, names.capsuleName)) && plan.directives.every((d) => keptDirectives.includes(d));
+  const problems = [
+    ...plan.unrelocatable.map((u) => `computed relative path cannot be rewritten: ${u}`),
+    ...(isPrologueKept ? [] : ['file prologue (directives, triple-slash lines, pragmas) would not stay first']),
+    ...lost.map((l) => `statement not carried over: ${l}`),
+    ...unparsed.map((u) => `generated file does not parse: ${u}`),
+    ...missing.map((m) => `declaration missing: ${m}`),
+    ...broken.map((b) => `relative import would no longer resolve: ${b}`)
+  ];
+  const isLossy = problems.length > 0;
+  if (isLossy) throw new Error(`Explode refused (would lose or break code): ${problems.join('; ')}. Nothing was changed.`);
 };
 
 export const explodeCapsule = (targetFilePath, options = {}) => {
   const cwd = options.cwd || process.cwd();
-  const absPath = path.resolve(cwd, targetFilePath);
+  const absPath = resolveSafePath(targetFilePath, cwd);
+  const isMissing = !fs.existsSync(absPath);
+  if (isMissing) throw new Error(`Target file not found at ${absPath}`);
+  const isDirectory = fs.statSync(absPath).isDirectory();
+  if (isDirectory) throw new Error(`Target ${targetFilePath} is already a directory capsule.`);
 
-  if (!fs.existsSync(absPath)) {
-    throw new Error(`Target file not found at ${absPath}`);
-  }
-
-  const stat = fs.statSync(absPath);
-  if (stat.isDirectory()) {
-    throw new Error(`Target ${targetFilePath} is already a directory capsule.`);
-  }
-
-  const fileName = path.basename(absPath);
   const ext = path.extname(absPath).replace('.', '');
-  const capsuleName = fileName.replace(/\.[^.]+$/, '');
-  const parentDir = path.dirname(absPath);
-  const targetDir = path.join(parentDir, capsuleName);
-  const bakPath = `${absPath}.temp.bak`;
+  const isSfc = ext === 'vue' || ext === 'svelte';
+  if (isSfc) throw new Error(`Explode refused: .${ext} files are not supported until SFC parsing lands (plan B). Nothing was changed.`);
+  assertImportersSurvive(fs.realpathSync(absPath), fs.realpathSync(cwd));
 
-  if (fs.existsSync(targetDir)) {
-    throw new Error(`Destination directory ${capsuleName} already exists.`);
-  }
+  const capsuleName = path.basename(absPath).replace(/\.[^.]+$/, '');
+  const targetDir = path.join(path.dirname(absPath), capsuleName);
+  const isTaken = fs.existsSync(targetDir);
+  if (isTaken) throw new Error(`Destination directory ${capsuleName} already exists.`);
 
   const content = fs.readFileSync(absPath, 'utf-8');
-  const baseSlug = capsuleName.replace(/^[a-z]+-/, '');
-  const pascalName = toPascalCase(baseSlug);
-
-  if (options.dryRun) {
-    parseCompactFile(content, ext);
-    return {
-      success: true,
-      dryRun: true,
-      capsuleName,
-      targetDir: path.relative(cwd, targetDir),
-      files: [
-        `${capsuleName}.${ext}`,
-        `${capsuleName}.controller.ts`,
-        `${capsuleName}.spec.ts`,
-        'index.ts',
-        'types/props.d.ts',
-        'types/state.d.ts',
-        'types/index.ts',
-        'types.d.ts'
-      ]
-    };
-  }
-
-  // 1. Transactional Backup Snapshot
-  fs.copyFileSync(absPath, bakPath);
-
+  const names = { capsuleName, pascalName: toPascalCase(capsuleName.replace(/^[a-z]+-/, '')), ext };
+  let plan;
   try {
-    const parsed = parseCompactFile(content, ext);
-
-    // 2. Create Directory Capsule Structure
-    fs.mkdirSync(targetDir, { recursive: true });
-    const typesDir = path.join(targetDir, 'types');
-    fs.mkdirSync(typesDir, { recursive: true });
-
-    // 3. Types Files
-    let propsContent = parsed.typesProps || `export interface ${pascalName}Props {\n  readonly className?: string;\n}\n`;
-    const usesReactNode = propsContent.includes('ReactNode') && !propsContent.includes("from 'react'");
-    if (usesReactNode) {
-      propsContent = `import type { ReactNode } from 'react';\n\n${propsContent}`;
-    }
-    const stateContent = parsed.typesState || `export interface ${pascalName}State {\n  readonly isActive: boolean;\n}\n`;
-
-    fs.writeFileSync(path.join(typesDir, 'props.d.ts'), `${propsContent}\n`, 'utf-8');
-    fs.writeFileSync(path.join(typesDir, 'state.d.ts'), `${stateContent}\n`, 'utf-8');
-    fs.writeFileSync(path.join(typesDir, 'index.ts'), buildTypesIndex(['props', 'state']), 'utf-8');
-    fs.writeFileSync(path.join(targetDir, 'types.d.ts'), "export * from './types/index';\n", 'utf-8');
-
-    // 4. Controller File
-    const hookCode = parsed.controllerHookCode ||
-      `export const use${pascalName}Controller = () => {\n  const [isActive, setIsActive] = useState<boolean>(false);\n  return { isActive };\n};`;
-    const controllerImports = "import { useState, useMemo } from 'react';\n";
-    fs.writeFileSync(path.join(targetDir, `${capsuleName}.controller.ts`), `${controllerImports}\n${hookCode}\n`, 'utf-8');
-
-    // 5. Component File
-    const compImports = `import type { ${pascalName}Props } from './types';\nimport { use${pascalName}Controller } from './${capsuleName}.controller';\n\n`;
-    const compBody = parsed.componentCode || `export const ${pascalName} = ({ className = '' }: ${pascalName}Props) => {\n  return <div className="${capsuleName}" />;\n};`;
-    const compContent = `${compImports}${compBody}\n\nexport default ${pascalName};\n`;
-    fs.writeFileSync(path.join(targetDir, `${capsuleName}.${ext}`), compContent, 'utf-8');
-
-    // 6. Index & Spec
-    const hasController = Boolean(parsed.controllerHookCode);
-    const runner = detectTestRunner(targetDir);
-    fs.writeFileSync(path.join(targetDir, 'index.ts'), buildIndex(capsuleName, pascalName, ext, hasController), 'utf-8');
-    fs.writeFileSync(path.join(targetDir, `${capsuleName}.spec.ts`), buildComponentSpec(capsuleName, pascalName, hasController, runner), 'utf-8');
-
-    // 7. Verify Unpacked Directory (Syntactic AST Parse Verification)
-    babelParser.parse(fs.readFileSync(path.join(targetDir, `${capsuleName}.${ext}`), 'utf-8'), {
-      sourceType: 'module',
-      plugins: ['typescript', 'jsx']
-    });
-
-    // 8. Success: Delete source file and backup
-    fs.unlinkSync(absPath);
-    if (fs.existsSync(bakPath)) fs.unlinkSync(bakPath);
-
-    return {
-      success: true,
-      capsuleName,
-      targetDir: path.relative(cwd, targetDir),
-      files: [
-        `${capsuleName}.${ext}`,
-        `${capsuleName}.controller.ts`,
-        `${capsuleName}.spec.ts`,
-        'index.ts',
-        'types/props.d.ts',
-        'types/state.d.ts',
-        'types/index.ts',
-        'types.d.ts'
-      ]
-    };
+    plan = planExplode(content, absPath);
   } catch (err) {
-    // Transactional Rollback
-    if (fs.existsSync(targetDir)) {
-      fs.rmSync(targetDir, { recursive: true, force: true });
-    }
-    if (fs.existsSync(bakPath)) {
-      fs.copyFileSync(bakPath, absPath);
-      fs.unlinkSync(bakPath);
-    }
-    throw new Error(`Explode transaction aborted and rolled back: ${err.message}`);
+    throw new Error(`Explode refused: the source does not parse (${err.message}). Nothing was changed.`);
   }
+  const { files, controllerName } = buildCapsuleFiles(plan, names);
+  files['index.ts'] = buildIndexFile(files, names, controllerName);
+  const specController = controllerName === `use${names.pascalName}Controller` && Boolean(files[`${capsuleName}.controller.ts`]);
+  files[`${capsuleName}.spec.ts`] = buildComponentSpec(capsuleName, names.pascalName, specController, detectTestRunner(path.dirname(absPath)));
+  verifyLossless(plan, files, names);
+
+  const edits = [
+    ...Object.entries(files).map(([rel, text]) => ({ path: path.join(targetDir, rel), content: text })),
+    { path: absPath, delete: true }
+  ];
+  const applied = applyEdits(edits, { cwd, dryRun: Boolean(options.dryRun), agentId: options.agentId });
+  const placement = Object.fromEntries(Object.entries(plan.buckets).flatMap(([bucket, list]) => list.flatMap((s) => s.names.map((n) => [n, bucketFile(bucket, names)]))));
+  const original = applied.files.find((f) => f.deleted);
+  return {
+    success: true,
+    ...(options.dryRun ? { dryRun: true, diff: applied.diff } : {}),
+    capsuleName,
+    targetDir: path.relative(fs.realpathSync(cwd), targetDir),
+    files: Object.keys(files),
+    placement,
+    backup: original?.backup || null
+  };
 };
+
+const bucketFile = (bucket, names) => ({
+  props: 'types/props.d.ts',
+  state: 'types/state.d.ts',
+  controller: `${names.capsuleName}.controller.ts`,
+  component: `${names.capsuleName}.${names.ext}`
+}[bucket]);
 
 export const runExplodeCli = async (rawArgs = [], isCli = true) => {
   const isJson = rawArgs.includes('--json');
-  const isDryRun = rawArgs.includes('--dry-run') || rawArgs.includes('-n');
+  const isDryRun = hasPreviewFlag(rawArgs);
   const target = rawArgs.find((a) => !a.startsWith('-'));
+  const unknown = findUnknownFlags(rawArgs, []);
+  const hasUnknownFlags = unknown.length > 0;
+  const hasTarget = Boolean(target);
 
-  if (!target) {
-    const msg = 'Usage: npx chemx explode <file-path> [--dry-run] [--json]';
+  if (hasUnknownFlags || !hasTarget) {
+    const msg = hasUnknownFlags ? unknownFlagsMessage('explode', unknown) : 'Usage: npx chemx explode <file-path> [--dry-run] [--json]';
     if (isJson) {
       process.stdout.write(JSON.stringify({ error: msg, success: false }) + '\n');
     } else {
       process.stderr.write(`\x1b[31m✕ Error: ${msg}\x1b[0m\n`);
     }
     if (isCli) process.exit(1);
+    if (hasUnknownFlags) throw new Error(msg);
     return { error: msg, success: false };
   }
 
@@ -238,10 +225,14 @@ export const runExplodeCli = async (rawArgs = [], isCli = true) => {
     if (isJson) {
       process.stdout.write(JSON.stringify(result) + '\n');
     } else {
-      process.stdout.write(`\n\x1b[1m\x1b[32m✔ Successfully exploded capsule:\x1b[0m \x1b[36m${result.targetDir}/\x1b[0m\n`);
-      for (const f of result.files) {
-        process.stdout.write(`  \x1b[32m✔\x1b[0m ${f}\n`);
+      const verb = result.dryRun ? '[DRY RUN] Would explode capsule' : '✔ Exploded capsule';
+      process.stdout.write(`\n${verb}: ${result.targetDir}/\n`);
+      for (const [name, file] of Object.entries(result.placement)) {
+        process.stdout.write(`  ${name} -> ${file}\n`);
       }
+      const hasBackup = Boolean(result.backup);
+      if (hasBackup) process.stdout.write(`  original kept at ${result.backup}\n`);
+      if (isDryRun) process.stdout.write(`\n${result.diff}\n`);
       process.stdout.write('\n');
     }
     if (isCli) process.exit(0);

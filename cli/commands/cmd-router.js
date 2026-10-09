@@ -4,7 +4,21 @@
  * Extracted from cli/index.js per Directive 1.A (Monolith Decomposition).
  */
 
-import { printHelp } from '../help.js';
+import { printHelp, printCommandHelp, resolveCommandHelpTopic } from '../help.js';
+
+// Wrappers return { code }; a non-zero code must reach the process exit status.
+const setExitCodeFrom = (result) => {
+  const isFailureCode = typeof result?.code === 'number' && result.code !== 0;
+  if (isFailureCode) process.exitCode = result.code;
+};
+
+/** `install-mcp`, `setup-mcp` and `mcp --install` share one path, so they share one exit code. */
+const runInstallMcpCommand = async (args) => {
+  const { runMcpInstaller } = await import('../mcp/index.js');
+  const { toExitCode } = await import('../result-status.js');
+  const installResult = await runMcpInstaller(args);
+  process.exitCode = toExitCode(installResult.status);
+};
 
 /**
  * Dispatch the resolved CLI command to its handler module.
@@ -15,6 +29,12 @@ import { printHelp } from '../help.js';
  * @param {(arg: string) => boolean} isCapsulePrefix
  */
 export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVersion, isCapsulePrefix) => {
+  // `<command> --help` never reaches the handler: some handlers act on unknown flags.
+  const helpTopic = resolveCommandHelpTopic(firstArg, rawArgs);
+  if (helpTopic) {
+    const isCapsuleTopic = isCapsulePrefix(helpTopic);
+    return printCommandHelp(isCapsuleTopic ? 'generate' : helpTopic);
+  }
   switch (firstArg) {
     case 'team':
     case 'swarm':
@@ -45,6 +65,8 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
     case 'mcp':
     case 'mcp-server':
     case 'server': {
+      const isInstallRun = rawArgs.includes('--install');
+      if (isInstallRun) { await runInstallMcpCommand(rawArgs.slice(1)); break; }
       const { runMcpServer } = await import('../mcp/index.js');
       await runMcpServer(rawArgs.slice(1));
       break;
@@ -52,6 +74,9 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
     case 'read':
     case 'view':
     case 'r': {
+      const readerCards = await import('../reader-cards-gate.js');
+      const wantsCards = readerCards.argsWantReadCards(rawArgs.slice(1));
+      if (wantsCards) await readerCards.loadReadCards();
       const { runReaderCli } = await import('../reader.js');
       runReaderCli(rawArgs.slice(1), true);
       break;
@@ -78,36 +103,36 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
     case 'd':
     case 'diff': {
       const { runDiff } = await import('./cmd-wrappers.js');
-      await runDiff(rawArgs, true);
+      setExitCodeFrom(await runDiff(rawArgs, true));
       break;
     }
     case 'log': {
       const { runLog } = await import('./cmd-wrappers.js');
-      await runLog(rawArgs, true);
+      setExitCodeFrom(await runLog(rawArgs, true));
       break;
     }
     case 'p':
     case 'pkg': {
       const { runPkg } = await import('./cmd-wrappers.js');
-      await runPkg(rawArgs, true);
+      setExitCodeFrom(await runPkg(rawArgs, true));
       break;
     }
     case 'f':
     case 'ls': {
       const { runFiles } = await import('./cmd-wrappers.js');
-      await runFiles(rawArgs, true);
+      setExitCodeFrom(await runFiles(rawArgs, true));
       break;
     }
     case 'j':
     case 'json': {
       const { runJsonShape } = await import('./cmd-wrappers.js');
-      await runJsonShape(rawArgs, true);
+      setExitCodeFrom(await runJsonShape(rawArgs, true));
       break;
     }
     case 'do':
     case 'batch': {
       const { runBatch } = await import('./cmd-wrappers.js');
-      await runBatch(rawArgs, true, (cmd, args) => dispatchCommand(cmd, args, runAudit, getPackageVersion, isCapsulePrefix));
+      setExitCodeFrom(await runBatch(rawArgs, true, (cmd, args) => dispatchCommand(cmd, args, runAudit, getPackageVersion, isCapsulePrefix)));
       break;
     }
     case 'trace': {
@@ -139,12 +164,6 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
       break;
     }
     case 'init': {
-      const isHelpRequested = rawArgs.includes('--help') || rawArgs.includes('-h') || rawArgs[1] === 'help';
-      if (isHelpRequested) {
-        const { printInitHelp } = await import('../help.js');
-        printInitHelp();
-        break;
-      }
       const nonFlagArgs = rawArgs.slice(1).filter((arg) => !arg.startsWith('-'));
       const targetSubDir = nonFlagArgs[0] || 'src/chemical-x';
       const { runInit } = await import('../scaffold.js');
@@ -153,12 +172,6 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
     }
     case 'create':
     case 'scaffold': {
-      const isHelpRequested = rawArgs.includes('--help') || rawArgs.includes('-h') || rawArgs[1] === 'help';
-      if (isHelpRequested) {
-        const { printScaffoldHelp } = await import('../help.js');
-        printScaffoldHelp();
-        break;
-      }
       const { runScaffold } = await import('../scaffold.js');
       const nonFlagArgs = rawArgs.slice(1).filter((arg) => !arg.startsWith('-'));
       await runScaffold(nonFlagArgs[0], rawArgs, runAudit);
@@ -227,14 +240,13 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
     }
     case 'install-mcp':
     case 'setup-mcp': {
-      const { runMcpInstaller } = await import('../mcp/index.js');
-      await runMcpInstaller(rawArgs.slice(1));
+      await runInstallMcpCommand(rawArgs.slice(1));
       break;
     }
     case '-v':
     case '--version':
     case 'version':
-      process.stdout.write(`create-chemx v${getPackageVersion()}\n`);
+      process.stdout.write(`chemx v${getPackageVersion()}\n`);
       break;
     case 'verify':
     case 'check:all': {
@@ -270,9 +282,10 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
       const portArg = rawArgs.find((a) => a.startsWith('--port='));
       const port = portArg ? parseInt(portArg.split('=')[1], 10) : 4173;
       const hostArg = rawArgs.find((a) => a.startsWith('--host='));
-      const host = hostArg ? hostArg.split('=')[1] : '0.0.0.0';
+      const host = hostArg ? hostArg.split('=')[1] : undefined;
       const isDev = rawArgs.includes('--dev') || rawArgs.includes('-d') || process.env.CHEMX_UI_DEV === '1';
-      const { server } = await startUiServer({ port, host, dev: isDev, isCli: true, cwd: process.cwd() });
+      const allowHosts = rawArgs.filter((a) => a.startsWith('--allow-host=')).flatMap((a) => a.slice('--allow-host='.length).split(',')).filter(Boolean);
+      const { server } = await startUiServer({ port, host, allowHosts, dev: isDev, isCli: true, cwd: process.cwd() });
       await new Promise((resolve) => {
         const shutdown = () => {
           server.close(() => resolve());
@@ -286,6 +299,12 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
     case 'tesseract':
     case 'cube':
     case 'matrix': {
+      const isJsonPayload = rawArgs.includes('--json');
+      if (isJsonPayload) {
+        const { runLatticeJson } = await import('../lattice-payload.js');
+        runLatticeJson(true);
+        break;
+      }
       const { runTesseract } = await import('../tesseract.js');
       await runTesseract(rawArgs.slice(1), true);
       break;
@@ -293,7 +312,7 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
     case 'help':
     case '--help':
     case '-h':
-      printHelp();
+      await printHelp(rawArgs.slice(1));
       break;
     default: {
       if (isCapsulePrefix(firstArg)) {

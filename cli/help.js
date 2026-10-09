@@ -1,161 +1,97 @@
-import { renderBanner } from './terminal.js';
-import { COMMANDS_SCHEMA } from './commands-schema.js';
+import { COMMANDS_SCHEMA, COMMAND_GROUPS, findCommandSchema } from './commands-schema.js';
+import { renderTtyBanner } from './tty-banner.js';
+import { optionsBeforeSeparator, isHelpFlagAt, hasHelpFlag } from './help-args.js';
 
-export const printHelp = () => {
-  renderBanner('Chemical X Protocol: CLI Usage & Reference');
+// Help text is generated from commands-schema.js. Top-level help stays under 1,500 bytes
+// (help.spec.js); detail lives in `chemx help <command>` and `chemx <command> --help`.
 
-  const BOLD = '\x1b[1m';
-  const CYAN = '\x1b[36m';
-  const DIM = '\x1b[2m';
-  const YELLOW = '\x1b[33m';
-  const GREEN = '\x1b[32m';
-  const RESET = '\x1b[0m';
+const GROUP_TITLES = {
+  search: 'Search and read',
+  edit: 'Edit',
+  verify: 'Verify',
+  wrappers: 'Shell wrappers',
+  agents: 'Agents',
+  setup: 'Setup'
+};
+const HELP_TOKENS = new Set(['help', '--help', '-h']);
+const SUBCOMMAND_HELP_OWNERS = new Set(['team', 'swarm', 'feed', 'tokens', 'telemetry', 'benchmark', 'ablation', 'memory']);
+// Commands whose positional is a search pattern or lookup key: `chemx f help` lists
+// paths containing "help". Every other command reads a lone `help` as a help request,
+// so readers, wrappers and writers never act on a path or revision named "help".
+const LOOKUP_POSITIONAL_COMMANDS = new Set(['search', 'ls', 'pkg', 'trace', 'backtrace']);
+const NAME_COLUMN = 13;
 
-  const lines = [
-    `${BOLD}USAGE${RESET}`,
-    `  ${CYAN}npx chemx${RESET} <command> [options]`,
-    `  ${CYAN}npm create chemx${RESET} [directory]`,
-    '',
-    `${BOLD}COMMANDS${RESET}`
-  ];
+const displayName = (entry) => {
+  const usageToken = entry.usage.split(' ')[1] ?? entry.name;
+  const isChemxUsage = entry.usage.startsWith('chemx ');
+  const isPlainToken = /^[a-z:-]+$/.test(usageToken);
+  return isChemxUsage && isPlainToken ? usageToken : entry.name;
+};
 
-  for (const cmd of COMMANDS_SCHEMA) {
-    const aliasStr = cmd.aliases && cmd.aliases.length > 0
-      ? `  ${DIM}(aliases: ${cmd.aliases.join(', ')})${RESET}`
-      : '';
-    const argsUsage = cmd.usage.replace(/^npx chemx \w+/, '').trim();
-    lines.push(`  ${CYAN}${cmd.name}${RESET}${argsUsage ? ' ' + argsUsage : ''}${aliasStr}`);
-    lines.push(`      ${cmd.summary}`);
-    if (cmd.description && cmd.description !== cmd.summary) {
-      lines.push(`      ${cmd.description}`);
+export const formatTopLevelHelp = () => {
+  const lines = ['chemx <command> [options]', 'chemx help <command>   flags and examples'];
+  for (const group of COMMAND_GROUPS) {
+    lines.push('', GROUP_TITLES[group]);
+    for (const entry of COMMANDS_SCHEMA.filter((e) => e.group === group)) {
+      lines.push(`  ${displayName(entry).padEnd(NAME_COLUMN)}${entry.brief}`);
     }
-    if (cmd.flags && cmd.flags.length > 0) {
-      const flagStr = cmd.flags.map((f) => `${CYAN}${f.flag}${RESET} (${f.desc})`).join(', ');
-      lines.push(`      Flags: ${flagStr}`);
-    }
-    if (cmd.examples && cmd.examples.length > 0) {
-      const egStr = cmd.examples.map((eg) => `${CYAN}${eg}${RESET}`).join(' or ');
-      lines.push(`      Examples: ${egStr}`);
-    }
-    lines.push('');
   }
-
-  lines.push(
-    `${BOLD}REACTIVE COMPOSABLE RULES${RESET}`,
-    `  ${YELLOW}1.${RESET} Return plain objects with individual ref/computed. Never raw reactive().`,
-    `  ${YELLOW}2.${RESET} Structure returns into flat State, Status, and verb Actions (HOOK_SHAPE_CONTRACT).`,
-    `  ${YELLOW}3.${RESET} Clean up side-effects automatically onScopeDispose().`,
-    '',
-    `${BOLD}COMMUNITY & SUPPORT${RESET}`,
-    `  Documentation:  ${CYAN}https://github.com/Chemical-X-Protocol/chemical-x${RESET}`,
-    `  Sponsor & Pro:  ${GREEN}https://github.com/sponsors/Chemical-X-Protocol${RESET}`,
-    ''
-  );
-
-  process.stdout.write(lines.join('\n'));
+  return `${lines.join('\n')}\n`;
 };
 
-export const printInitHelp = () => {
-  renderBanner('Chemical X: In-Repo Capsule Drop-in (chemx init)');
-
-  const BOLD = '\x1b[1m';
-  const CYAN = '\x1b[36m';
-  const RESET = '\x1b[0m';
-
-  const lines = [
-    `${BOLD}USAGE${RESET}`,
-    `  ${CYAN}npx chemx init${RESET} [directory] [options]`,
-    '',
-    `${BOLD}DESCRIPTION${RESET}`,
-    '  Unpack Chemical X blueprints and molecular architecture drop-in files',
-    '  into an existing codebase (defaults to src/chemical-x).',
-    '',
-    `${BOLD}OPTIONS${RESET}`,
-    `  ${CYAN}-h, --help${RESET}           Show this help message`,
-    `  ${CYAN}--license=<key>${RESET}     Provide commercial license key for enterprise starter kit assets`,
-    '',
-    `${BOLD}EXAMPLES${RESET}`,
-    `  ${CYAN}npx chemx init${RESET}`,
-    `  ${CYAN}npx chemx init src/chemical-x${RESET}`,
-    `  ${CYAN}npx chemx init packages/ui/src/modules${RESET}`,
-    ''
-  ];
-
-  process.stdout.write(lines.join('\n'));
+const formatFlagRows = (flags) => {
+  const width = Math.min(26, Math.max(...flags.map((f) => f.flag.length)) + 2);
+  return flags.map((f) => `  ${f.flag.padEnd(width)}${f.desc}`);
 };
 
-export const printScaffoldHelp = () => {
-  renderBanner('Chemical X: Project Scaffolder (npm create chemx)');
-
-  const BOLD = '\x1b[1m';
-  const CYAN = '\x1b[36m';
-  const RESET = '\x1b[0m';
-
-  const lines = [
-    `${BOLD}USAGE${RESET}`,
-    `  ${CYAN}npm create chemx${RESET} [directory] [options]`,
-    `  ${CYAN}npx create-chemx${RESET} [directory] [options]`,
-    `  ${CYAN}npx chemx create${RESET} [directory] [options]`,
-    '',
-    `${BOLD}DESCRIPTION${RESET}`,
-    '  Scaffold a complete new Chemical X Molecular Architecture application.',
-    '',
-    `${BOLD}OPTIONS${RESET}`,
-    `  ${CYAN}--framework=<id>${RESET}   Framework flavor: react (default), vue, svelte`,
-    `  ${CYAN}--install${RESET}          Auto-install dependencies after scaffolding`,
-    `  ${CYAN}--skip-install${RESET}     Skip installing dependencies`,
-    `  ${CYAN}--yes, -y${RESET}          Skip interactive prompts and scaffold Community Edition immediately`,
-    `  ${CYAN}--headless${RESET}         Run in headless mode for CI/CD and AI agent automation`,
-    `  ${CYAN}-h, --help${RESET}         Show this help message`,
-    `  ${CYAN}-v, --version${RESET}      Show version number`,
-    '',
-    `${BOLD}EXAMPLES${RESET}`,
-    `  ${CYAN}npm create chemx my-molecular-app --framework=react${RESET}`,
-    `  ${CYAN}npx create-chemx my-vue-app --framework=vue --yes${RESET}`,
-    `  ${CYAN}npx chemx create my-app --framework=svelte --install${RESET}`,
-    ''
-  ];
-
-  process.stdout.write(lines.join('\n'));
+export const formatCommandHelp = (entry) => {
+  const otherNames = [entry.name, ...entry.aliases].filter((token) => token !== displayName(entry));
+  const lines = ['USAGE', `  ${entry.usage}`];
+  if (otherNames.length > 0) lines.push(`  aliases: ${otherNames.join(', ')}`);
+  lines.push('', entry.summary);
+  if (entry.description) lines.push(entry.description);
+  if (entry.flags.length > 0) lines.push('', 'FLAGS', ...formatFlagRows(entry.flags));
+  if (entry.examples.length > 0) lines.push('', 'EXAMPLES', ...entry.examples.map((eg) => `  ${eg}`));
+  return `${lines.join('\n')}\n`;
 };
 
-export const printSearchHelp = () => {
-  const BOLD = '\x1b[1m';
-  const CYAN = '\x1b[36m';
-  const DIM = '\x1b[2m';
-  const RESET = '\x1b[0m';
-
-  const help = [
-    `\n${BOLD}${CYAN}Chemical X Query Machine: Codebase & AST Search${RESET}`,
-    `Architecture-aware AST indexer powered by SQLite (.chemx/index.db).\n`,
-    `${BOLD}USAGE${RESET}`,
-    `  ${CYAN}npx chemx q${RESET} <query|symbol|file> [options]`,
-    `  ${CYAN}pnpm chemx search${RESET} <query> [options]\n`,
-    `${BOLD}DISCOVERY & IMPACT MODES${RESET}`,
-    `  ${CYAN}--blast-radius, --blast, --impact${RESET}`,
-    `      Calculate direct and transitive dependent blast radius across architectural tiers.`,
-    `      Optional: ${CYAN}--max-depth=<N>${RESET} (traversal depth, default: 5)`,
-    `      Example: ${DIM}pnpm chemx q a-button --blast-radius --json${RESET}\n`,
-    `  ${CYAN}--semantic${RESET}`,
-    `      Concept search via vector cosine similarity.`,
-    `      Example: ${DIM}pnpm chemx q "button click handler state" --semantic --json${RESET}\n`,
-    `  ${CYAN}--hybrid${RESET}`,
-    `      Blended keyword (BM25) and vector cosine ranking via Reciprocal Rank Fusion (RRF).`,
-    `      Example: ${DIM}pnpm chemx q "useAttentionCardController" --hybrid --json${RESET}\n`,
-    `  ${CYAN}refs <symbol>${RESET} / ${CYAN}deps <symbol|file>${RESET}`,
-    `      Inspect caller references or imported dependencies for a given symbol or file.\n`,
-    `  ${CYAN}--hazards${RESET}`,
-    `      Query unresolved architectural rule violations.`,
-    `      Optional: ${CYAN}--rule=<id>${RESET}, ${CYAN}--critical${RESET}\n`,
-    `  ${CYAN}--pack, context <target>${RESET}`,
-    `      Bundle token-optimized context payload for target capsule and consumers.\n`,
-    `${BOLD}OUTPUT & FILTER FLAGS${RESET}`,
-    `  ${CYAN}--json${RESET}                 Structured JSON output for AI agent workflows`,
-    `  ${CYAN}--columnar${RESET}             Token-compact columnar format (cols/rows)`,
-    `  ${CYAN}-i, --inspect${RESET}          Inspect props, exported symbols, and hooks breakdown`,
-    `  ${CYAN}--tier=<tier>${RESET}          Filter by tier (atom, molecule, organism, view, hook)`,
-    `  ${CYAN}--reindex${RESET}              Force re-index before executing query`,
-    `  ${CYAN}--failing, --clean${RESET}     Filter capsules by architectural health status\n`
-  ];
-  process.stdout.write(help.join('\n'));
+export const printCommandHelp = async (token) => {
+  const entry = findCommandSchema(token);
+  if (!entry) {
+    process.stderr.write(`Unknown command "${token}". Run chemx help for the command list.\n`);
+    process.exitCode = 1;
+    return false;
+  }
+  await renderTtyBanner(`chemx ${displayName(entry)}`);
+  process.stdout.write(formatCommandHelp(entry));
+  return true;
 };
+
+export const printHelp = async (topicArgs = []) => {
+  const topic = topicArgs.find((arg) => !HELP_TOKENS.has(arg));
+  if (topic) return printCommandHelp(topic);
+  await renderTtyBanner('Chemical X Protocol: CLI Usage & Reference');
+  process.stdout.write(formatTopLevelHelp());
+  return true;
+};
+
+/**
+ * Decide whether `chemx <command> ...args` asks for that command's help.
+ * Only options before `--` count, and -h right after a value-taking flag is that flag's value.
+ * A lone `help` asks for help unless the command looks it up as data.
+ * Commands that own subcommand help (team family) keep it unless the help flag directly follows the command.
+ */
+export const resolveCommandHelpTopic = (command, rawArgs) => {
+  const options = optionsBeforeSeparator(rawArgs.slice(1));
+  const isLookupCommand = LOOKUP_POSITIONAL_COMMANDS.has(findCommandSchema(command)?.name);
+  const isBareHelpWord = options.length === 1 && options[0] === 'help' && !isLookupCommand;
+  const hasLeadingHelp = isHelpFlagAt(options, 0) || isBareHelpWord;
+  const ownsSubcommandHelp = SUBCOMMAND_HELP_OWNERS.has(command);
+  if (ownsSubcommandHelp) return hasLeadingHelp ? command : null;
+  const hasHelpAnywhere = hasHelpFlag(options) || isBareHelpWord;
+  return hasHelpAnywhere ? command : null;
+};
+
+export const printInitHelp = () => printCommandHelp('init');
+export const printScaffoldHelp = () => printCommandHelp('create');
+export const printSearchHelp = () => printCommandHelp('search');

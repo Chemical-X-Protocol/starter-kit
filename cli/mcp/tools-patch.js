@@ -1,5 +1,3 @@
-import path from 'node:path';
-import { syncSingleFileIndex } from '../search.js';
 import { patchFile } from '../patcher.js';
 import { handleCheckCommand } from '../search-commands.js';
 import { resolveSafePath } from '../path-scope.js';
@@ -17,6 +15,10 @@ export const formatPatchWarnings = (result) => {
   if (isBudgetExceeded) {
     warnings.push(`[Directive 1.A] ${result.lineBudget.warning}`);
   }
+
+  const parseNote = result.parse?.note;
+  const hasParseNote = Boolean(parseNote);
+  if (hasParseNote) warnings.push(`[Parse] ${parseNote}`);
 
   const violations = result.violations || [];
   for (const v of violations) {
@@ -41,26 +43,34 @@ export const handleChemxPatch = (args = {}, cwd = process.cwd()) => {
   }
 
   const targetPath = resolveSafePath(args.path, cwd);
+  const isDryRun = isDryRunRequested(args);
   const result = patchFile(targetPath, {
     targetContent,
     replacementContent,
     allowMultiple: Boolean(args.allowMultiple || args.multiple),
+    dryRun: isDryRun,
+    allowRemoved: args.allowRemoved ?? args.allowRemove,
+    agentId: args.agentId ?? args.as,
     cwd
   });
-
-  try {
-    syncSingleFileIndex(targetPath, cwd);
-  } catch (err) {
-    if (process.env.CHEMX_DEBUG) {
-      process.stderr.write(`[patch-sync] Auto-index skipped for ${targetPath}: ${err.message}\n`);
-    }
-  }
+  if (isDryRun) return { ...result, dryRun: true, warnings: formatPatchWarnings(result) };
 
   return {
     ...result,
     warnings: formatPatchWarnings(result)
   };
 };
+
+const DRY_RUN_KEYS = ['dryRun', 'dry-run', 'dry_run', 'n'];
+
+/**
+ * MCP callers spell the preview flag several ways; all of them mean "do not write". When the
+ * spellings disagree, the preview wins: a truthy value under any of them blocks the write.
+ *
+ * @param {object} args Tool params.
+ * @returns {boolean}
+ */
+export const isDryRunRequested = (args = {}) => DRY_RUN_KEYS.some((key) => Boolean(args?.[key]));
 
 export const handleChemxCheck = (args = {}, cwd = process.cwd()) => {
   if (args.path === 'RESTART_MCP') {

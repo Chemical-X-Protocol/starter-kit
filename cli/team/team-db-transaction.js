@@ -10,6 +10,24 @@ export const isPidAlive = (pid) => {
   }
 };
 
+const SQLITE_BUSY = 5;
+const SQLITE_LOCKED = 6;
+const BUSY_CODES = new Set(['SQLITE_BUSY', 'SQLITE_LOCKED']);
+
+// node:sqlite reports contention as { code: 'ERR_SQLITE_ERROR', errcode: 5, message: 'database is locked' };
+// errcode may be an extended code (517 BUSY_SNAPSHOT, 261 BUSY_RECOVERY), so compare the primary byte.
+export const isSqliteBusyError = (err) => {
+  const hasError = Boolean(err);
+  if (!hasError) return false;
+  const primaryCode = typeof err.errcode === 'number' ? err.errcode & 0xff : null;
+  const isBusyCode = primaryCode === SQLITE_BUSY || primaryCode === SQLITE_LOCKED || BUSY_CODES.has(err.code);
+  return isBusyCode || /database is locked|database is busy|SQLITE_BUSY/i.test(String(err.message || ''));
+};
+
+const sleepSync = (ms) => {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+};
+
 export const withImmediateTransaction = (db, callback, maxRetries = 5) => {
   const hasDb = Boolean(db);
   const isFunction = typeof callback === 'function';
@@ -36,14 +54,11 @@ export const withImmediateTransaction = (db, callback, maxRetries = 5) => {
           process.stderr.write(`[SWARM] Transaction rollback failed: ${rollbackNotice}\n`);
         }
       }
-      const isSqliteBusy = err && (err.code === 'SQLITE_BUSY' || String(err.message).includes('busy'));
       const hasRetriesLeft = attempts < maxRetries;
-      const canRetry = isSqliteBusy && hasRetriesLeft;
+      const canRetry = isSqliteBusyError(err) && hasRetriesLeft;
 
       if (canRetry) {
-        const sleepMs = Math.floor(10 + Math.random() * 20);
-        const start = Date.now();
-        while (Date.now() - start < sleepMs) {}
+        sleepSync(Math.floor(10 * attempts + Math.random() * 20 * attempts));
         continue;
       }
       throw err;

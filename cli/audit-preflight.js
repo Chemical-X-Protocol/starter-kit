@@ -1,4 +1,4 @@
-import { hasGum, gumChoose, promptQuestion } from './terminal.js';
+import { hasGum, gumChoose, promptQuestion, isStdinTty, isStdoutTty } from './terminal.js';
 import { promptAuditScope } from './audit-preflight-scope.js';
 import { isNonInteractiveSession } from './audit/rules-predicates.js';
 import { resolveGitAuditScope } from './audit-preflight-git.js';
@@ -38,7 +38,7 @@ export const runAuditPreflight = async (rawArgs, options = {}) => {
   const { customDir = null, defaultDir = 'src', cwd = process.cwd() } = options;
 
   const isNonInteractive = isNonInteractiveSession(rawArgs);
-  const hasTty = Boolean(process.stdin.isTTY && process.stdout.isTTY);
+  const hasTty = isStdinTty() && isStdoutTty();
   const hasYesFlag = rawArgs.includes('-y') || rawArgs.includes('--yes');
   const isInteractive = !isNonInteractive && hasTty && !hasYesFlag;
 

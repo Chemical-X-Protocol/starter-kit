@@ -27,6 +27,7 @@
   "files": [
     "cli",
     "!cli/**/*.spec.js",
+    "!cli/fixtures/**",
     "blueprints",
     "scripts",
     "README.md",
@@ -43,6 +44,9 @@
     "./reader": "./cli/reader.js",
     "./patcher": "./cli/patcher.js",
     "./errors": "./cli/errors/index.js"
+  },
+  "engines": {
+    "node": ">=22.13.0"
   },
   "scripts": {
     "chemx": "node cli/index.js",

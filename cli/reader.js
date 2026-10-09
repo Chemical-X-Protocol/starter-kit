@@ -1,12 +1,15 @@
 import fs from 'node:fs';
+import { splitFileLines } from './line-count.js';
 import path from 'node:path';
-import { parse } from '@babel/parser';
-import traverseModule from '@babel/traverse';
+import { parse, traverse } from './babel-lazy.js';
 import { ANSI } from './theme.js';
 import { resolveSafePath } from './path-scope.js';
 import { isBabelParsable } from './languages.js';
 import { extractAstMetadata } from './search-ast.js';
 import { isMarkdownFile, generateMarkdownOutline } from './reader-markdown.js';
+import { locateSymbols } from './symbol-locator.js';
+import { blankOutsideScripts } from './sfc-scripts.js';
+import { stripCommentsKeepingLines } from './comment-ranges.js';
 
 import {
   stripCodeComments,
@@ -14,7 +17,8 @@ import {
   resolveDeclarationKind,
   summarizeTemplate,
   extractTemplateContent,
-  generateAstLogicSkeleton
+  generateAstLogicSkeleton,
+  SKELETON_LABEL
 } from './reader-logic.js';
 import { runReaderCli } from './reader-cli.js';
 
@@ -28,7 +32,6 @@ export {
 } from './reader-logic.js';
 export { runReaderCli } from './reader-cli.js';
 
-const traverse = traverseModule.default || traverseModule;
 
 /**
  * Extracts an AST structural outline of a file (types, exports, props, signatures).
@@ -43,6 +46,8 @@ const OUTLINE_KIND_LABELS = {
   symbol: 'symbol'
 };
 
+const at = (node) => (node?.loc ? `L${node.loc.start.line}-${node.loc.end.line}  ` : '');
+
 export const generateAstOutline = (code, filePath) => {
   if (isMarkdownFile(filePath)) return generateMarkdownOutline(code, filePath);
   const isVue = filePath.endsWith('.vue');
@@ -51,8 +56,7 @@ export const generateAstOutline = (code, filePath) => {
   let companionAnnotation = null;
 
   if (isVue || isSvelte) {
-    const scriptMatch = code.match(/<script[\s\S]*?>([\s\S]*?)<\/script>/i);
-    scriptContent = scriptMatch ? scriptMatch[1] : '';
+    scriptContent = blankOutsideScripts(code);
 
     const dir = path.dirname(filePath);
     const ext = path.extname(filePath);
@@ -77,7 +81,7 @@ export const generateAstOutline = (code, filePath) => {
 
     if (companionFound) {
       const relCompanion = path.relative(process.cwd(), companionFound);
-      companionAnnotation = `// Companion controller detected: ${relCompanion} (Run cx read ${relCompanion} --outline to inspect logic)`;
+      companionAnnotation = `// Companion controller detected: ${relCompanion} (Run chemx read ${relCompanion} --outline to inspect logic)`;
     } else if (externalSrc) {
       companionAnnotation = `// External script reference detected: ${externalSrc}`;
     } else if (!scriptContent.trim()) {
@@ -126,32 +130,32 @@ export const generateAstOutline = (code, filePath) => {
 
         if (decl.type === 'FunctionDeclaration' && decl.id) {
           const params = decl.params.map((p) => p.name || p.type).join(', ');
-          lines.push(`export function ${decl.id.name}(${params})`);
+          lines.push(`${at(nodePath.node)}export function ${decl.id.name}(${params})`);
         } else if (decl.type === 'VariableDeclaration') {
           decl.declarations.forEach((d) => {
             const name = d.id?.name;
             if (name) {
               const kind = resolveDeclarationKind(d);
-              lines.push(`export ${kind} ${name}`);
+              lines.push(`${at(nodePath.node)}export ${kind} ${name}`);
             }
           });
         } else if (decl.type === 'TSTypeAliasDeclaration' && decl.id) {
-          lines.push(`export type ${decl.id.name}`);
+          lines.push(`${at(nodePath.node)}export type ${decl.id.name}`);
         } else if (decl.type === 'TSInterfaceDeclaration' && decl.id) {
-          lines.push(`export interface ${decl.id.name}`);
+          lines.push(`${at(nodePath.node)}export interface ${decl.id.name}`);
         }
       },
       ExportDefaultDeclaration(nodePath) {
-        lines.push(`export default`);
+        lines.push(`${at(nodePath.node)}export default`);
       },
       TSTypeAliasDeclaration(nodePath) {
         if (nodePath.parent.type !== 'ExportNamedDeclaration') {
-          lines.push(`type ${nodePath.node.id.name}`);
+          lines.push(`${at(nodePath.node)}type ${nodePath.node.id.name}`);
         }
       },
       TSInterfaceDeclaration(nodePath) {
         if (nodePath.parent.type !== 'ExportNamedDeclaration') {
-          lines.push(`interface ${nodePath.node.id.name}`);
+          lines.push(`${at(nodePath.node)}interface ${nodePath.node.id.name}`);
         }
       },
       VariableDeclaration(nodePath) {
@@ -161,7 +165,7 @@ export const generateAstOutline = (code, filePath) => {
           const name = d.id?.name;
           if (name) {
             const kind = resolveDeclarationKind(d);
-            lines.push(`${kind} ${name}`);
+            lines.push(`${at(nodePath.node)}${kind} ${name}`);
           }
         });
       },
@@ -173,7 +177,7 @@ export const generateAstOutline = (code, filePath) => {
         if (nodePath.parentPath?.parent?.type === 'ExportNamedDeclaration') return;
         if (nodePath.node.id) {
           const params = nodePath.node.params.map((p) => p.name || p.type).join(', ');
-          lines.push(`function ${nodePath.node.id.name}(${params})`);
+          lines.push(`${at(nodePath.node)}function ${nodePath.node.id.name}(${params})`);
         }
       },
       ArrowFunctionExpression(nodePath) {
@@ -189,10 +193,11 @@ export const generateAstOutline = (code, filePath) => {
     });
 
     if (omittedFunctionCount > 0) {
-      lines.push(`// [Notice: ${omittedFunctionCount} internal/unexported function(s) omitted. Use cx read --symbol=<name> to inspect]`);
+      lines.push(`// [Notice: ${omittedFunctionCount} internal/unexported function(s) omitted. Use chemx read --symbol=<name> to inspect]`);
     }
   } catch (err) {
     // Regex fallback for non-parseable files
+    if (process.env.CHEMX_DEBUG) process.stderr.write(`[outline] parse failed, using regex fallback: ${err.message}\n`);
     const typeMatches = scriptContent.match(/export\s+(type|interface|const|function|class)\s+([a-zA-Z0-9_$]+)/g) || [];
     typeMatches.forEach((m) => lines.push(m.trim()));
   }
@@ -200,61 +205,52 @@ export const generateAstOutline = (code, filePath) => {
   return lines.join('\n');
 };
 
+const escapeRegExp = (text) => String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 /**
- * Extracts a single symbol declaration and body from source code.
- *
- * @param {string} code Source code.
- * @param {string} symbol Target symbol name.
- * @returns {{ code: string, startLine: number, endLine: number } | null}
+ * Line-oriented fallback for languages Babel cannot parse (C-like brace languages).
+ * The name is escaped; comment lines are skipped.
  */
-export const extractSymbolBlock = (code, symbol) => {
+const extractSymbolBlockByText = (code, symbol) => {
   const lines = code.split('\n');
-  const targetRegex = new RegExp(`(^|\\s)(const|function|class|type|interface|let|var)\\s+${symbol}\\b`);
-
-  let targetIndex = -1;
-  for (let i = 0; i < lines.length; i++) {
-    if (targetRegex.test(lines[i])) {
-      targetIndex = i;
-      break;
-    }
-  }
-
-  if (targetIndex === -1) {
-    return null;
-  }
+  const targetRegex = new RegExp(`(^|\\s)(const|function|class|type|interface|let|var|def|fn|func|struct|enum)\\s+${escapeRegExp(symbol)}\\b`);
+  const isCommentLine = (line) => /^\s*(\/\/|#|\*|\/\*)/.test(line);
+  const targetIndex = lines.findIndex((line) => !isCommentLine(line) && targetRegex.test(line));
+  const isMissing = targetIndex === -1;
+  if (isMissing) return null;
 
   let depth = 0;
   let hasBrace = false;
   let endIndex = targetIndex;
-
   for (let i = targetIndex; i < lines.length; i++) {
-    const line = lines[i];
-    for (const char of line) {
-      if (char === '{' || char === '(') {
-        depth++;
-        hasBrace = true;
-      } else if (char === '}' || char === ')') {
-        depth--;
-      }
+    for (const char of lines[i]) {
+      if (char === '{') { depth++; hasBrace = true; }
+      if (char === '}') depth--;
     }
-
-    if (hasBrace && depth <= 0) {
-      endIndex = i;
-      break;
-    }
-
-    if (!hasBrace && line.includes(';')) {
-      endIndex = i;
-      break;
-    }
+    const isClosed = hasBrace && depth <= 0;
+    const isOneLiner = !hasBrace && (lines[i].includes(';') || i + 1 >= lines.length || lines[i + 1].trim() === '');
+    if (isClosed || isOneLiner) { endIndex = i; break; }
   }
-
   const slice = lines.slice(targetIndex, endIndex + 1).join('\n');
-  return {
-    code: slice,
-    startLine: targetIndex + 1,
-    endLine: endIndex + 1,
-  };
+  const match = { name: symbol, kind: 'text', startLine: targetIndex + 1, endLine: endIndex + 1, code: slice };
+  return { ...match, matches: [match] };
+};
+
+/**
+ * Extracts a symbol declaration (AST ranges for JS/TS/Vue/Svelte, text fallback otherwise).
+ *
+ * @param {string} code Source code.
+ * @param {string} symbol Symbol name, optionally qualified (Class.method, store.action).
+ * @param {string} [filePath] File path; decides the parser.
+ * @returns {{ code: string, startLine: number, endLine: number, name: string, matches: object[] } | null}
+ */
+export const extractSymbolBlock = (code, symbol, filePath = '') => {
+  const matches = locateSymbols(code, filePath, symbol);
+  const isUnsupported = matches === null;
+  if (isUnsupported) return extractSymbolBlockByText(code, symbol);
+  const hasMatch = matches.length > 0;
+  if (!hasMatch) return null;
+  return { ...matches[0], matches: matches.map(({ code: _code, ...range }) => range) };
 };
 
 /**
@@ -267,9 +263,11 @@ export const extractSymbolBlock = (code, symbol) => {
  * @returns {{ text: string, tokensEst: number }} Enriched section text and token estimate.
  */
 const enrichOutline = (rawContent, filePath, options) => {
+  const hasJsAst = isBabelParsable(filePath);
+  if (!hasJsAst) return null;
   const skeleton = generateAstLogicSkeleton(rawContent, filePath, options);
   const compacted = compactCode(skeleton);
-  const text = `\n// --- Logic Skeleton ---\n${compacted}`;
+  const text = `\n// --- Logic Skeleton --- (${SKELETON_LABEL})\n${compacted}`;
   return { text, tokensEst: Math.round(text.length / 3.8) };
 };
 
@@ -305,15 +303,19 @@ export const readTokenOptimized = (targetPath, options = {}) => {
   }
 
   const rawContent = fs.readFileSync(resolvedPath, 'utf-8');
-  const rawLines = rawContent.split('\n');
+  const rawLines = splitFileLines(rawContent);
   const totalLines = rawLines.length;
 
   if (options.template) {
     const templateText = extractTemplateContent(rawContent, targetPath);
+    const templateIndex = rawContent.indexOf(templateText);
+    const isVerbatimSlice = templateIndex !== -1 && templateText.length > 0;
+    const templateStart = isVerbatimSlice ? rawContent.slice(0, templateIndex).split('\n').length : undefined;
     return {
       file: targetPath,
       totalLines,
-      mode: 'template',
+      mode: isVerbatimSlice ? 'template' : 'template-note',
+      ...(isVerbatimSlice ? { startLine: templateStart, endLine: templateStart + templateText.split('\n').length - 1 } : {}),
       tokensEst: Math.round(templateText.length / 3.8),
       content: templateText,
     };
@@ -322,13 +324,13 @@ export const readTokenOptimized = (targetPath, options = {}) => {
   if (options.logic) {
     let logicSource = rawContent;
     if (options.symbol) {
-      const block = extractSymbolBlock(rawContent, options.symbol);
+      const block = extractSymbolBlock(rawContent, options.symbol, resolvedPath);
       if (!block) {
         throw new Error(`Symbol "${options.symbol}" not found in ${targetPath}`);
       }
       logicSource = block.code;
     }
-    let logicText = generateAstLogicSkeleton(logicSource, targetPath, options);
+    let logicText = generateAstLogicSkeleton(logicSource, path.relative(cwd, resolvedPath) || targetPath, options);
     if (options.compact !== false) {
       logicText = compactCode(logicText);
     }
@@ -358,7 +360,7 @@ export const readTokenOptimized = (targetPath, options = {}) => {
   }
 
   if (options.symbol) {
-    const block = extractSymbolBlock(rawContent, options.symbol);
+    const block = extractSymbolBlock(rawContent, options.symbol, resolvedPath);
     if (!block) {
       throw new Error(`Symbol "${options.symbol}" not found in ${targetPath}`);
     }
@@ -369,6 +371,7 @@ export const readTokenOptimized = (targetPath, options = {}) => {
       symbol: options.symbol,
       startLine: block.startLine,
       endLine: block.endLine,
+      matches: block.matches,
       tokensEst: Math.round(block.code.length / 3.8),
       content: block.code,
     };
@@ -381,11 +384,18 @@ export const readTokenOptimized = (targetPath, options = {}) => {
   // outline to protect context. A tool budget, not an architecture rule (AGENTS.md owns those).
   if (!hasLineRange && totalLines > autoThreshold) {
     const outlineText = generateAstOutline(rawContent, rawPath);
+    const isCliHint = options.hintSyntax === 'cli';
+    const symbolHint = isCliHint
+      ? `chemx read ${rawPath} --symbol=<name>`
+      : `chemx({ action: 'read', params: { path: '${rawPath}', symbol: '<name>' } })`;
+    const rangeHint = isCliHint
+      ? `chemx read ${rawPath}:1-50`
+      : `chemx({ action: 'read', params: { path: '${rawPath}', startLine: 1, endLine: 50 } })`;
     const notice = [
       `// [chemx read window] File has ${totalLines} lines (over the ${autoThreshold}-line read window).`,
       `// Auto-rendered AST outline to conserve context tokens and prevent host buffer spillover.`,
-      `// To read a specific block, request symbol: chemx({ action: 'read', params: { path: '${rawPath}', symbol: '<name>' } })`,
-      `// Or specify a line range: chemx({ action: 'read', params: { path: '${rawPath}', startLine: 1, endLine: 50 } })\n`
+      `// To read a specific block, request symbol: ${symbolHint}`,
+      `// Or specify a line range: ${rangeHint}\n`
     ].join('\n');
     const enriched = options.enrich ? enrichOutline(rawContent, rawPath, options) : null;
     return {
@@ -417,31 +427,52 @@ export const readTokenOptimized = (targetPath, options = {}) => {
     endIdx = startIdx + maxLines;
   }
 
-  let processedLines = rawLines.slice(startIdx, endIdx);
-  let processedContent = processedLines.join('\n');
-
-  if (options.stripComments) {
-    processedContent = stripCodeComments(processedContent);
-  }
-
-  if (options.compact) {
-    processedContent = compactCode(processedContent);
-  }
-
-  if (isCapped) {
-    processedContent += `\n// [Truncated at the ${maxLines}-line chemx read window. Use startLine=${endIdx + 1} to inspect subsequent lines]`;
-  }
-
-  const lineCount = processedContent.split('\n').length;
-  const tokensEst = Math.round(processedContent.length / 3.8);
+  const slice = sliceWithTransforms(rawContent, resolvedPath, startIdx, endIdx, options);
+  const trailer = isCapped
+    ? `// [Truncated at the ${maxLines}-line chemx read window. Use startLine=${endIdx + 1} to inspect subsequent lines]`
+    : null;
 
   return {
     file: rawPath,
     totalLines,
+    mode: 'range',
     startLine: startIdx + 1,
     endLine: endIdx,
-    lineCount,
-    tokensEst,
-    content: processedContent,
+    lineCount: slice.lines.length,
+    tokensEst: Math.round(slice.content.length / 3.8),
+    content: slice.content,
+    ...(slice.lineNumbers ? { lineNumbers: slice.lineNumbers } : {}),
+    ...(slice.notes.length > 0 ? { notes: slice.notes } : {}),
+    ...(trailer ? { trailer } : {}),
+  };
+};
+
+/**
+ * Slices lines [startIdx, endIdx) and applies opt-in stripComments/compact without ever
+ * shifting line numbers: comments are blanked by token range, and compacted lines keep
+ * their original numbers (returned in lineNumbers).
+ */
+const sliceWithTransforms = (rawContent, filePath, startIdx, endIdx, options) => {
+  const notes = [];
+  let sourceLines = rawContent.split('\n');
+  if (options.stripComments) {
+    const stripped = stripCommentsKeepingLines(rawContent, filePath);
+    const isStripped = stripped !== null;
+    if (isStripped) sourceLines = stripped.split('\n');
+    notes.push(isStripped ? 'comments stripped' : 'strip-comments unsupported for this file; shown verbatim');
+  }
+  let entries = sourceLines.slice(startIdx, endIdx).map((text, i) => ({ n: startIdx + i + 1, text }));
+  if (options.compact) {
+    const before = entries.length;
+    entries = entries.filter((entry, i) => !(entry.text.trim() === '' && i > 0 && entries[i - 1].text.trim() === ''));
+    const removed = before - entries.length;
+    if (removed > 0) notes.push(`${removed} blank line(s) removed; numbers are original`);
+  }
+  const isContiguous = entries.every((entry, i) => entry.n === startIdx + i + 1);
+  return {
+    lines: entries,
+    content: entries.map((e) => e.text).join('\n'),
+    lineNumbers: isContiguous ? null : entries.map((e) => e.n),
+    notes
   };
 };

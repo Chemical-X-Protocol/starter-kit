@@ -286,3 +286,19 @@ test('runGenerateWizard: generated capsule files are automatically indexed in .c
 
 
 
+
+test('generate: a non-interactive run without a name refuses instead of writing a default capsule', async () => {
+  const { runCliAsync } = await import('./spec-support/run-cli.js');
+  const { tmpdir } = await import('node:os');
+  const sandbox = fs.mkdtempSync(path.join(tmpdir(), 'chemx-gen-noname-'));
+  fs.writeFileSync(path.join(sandbox, 'package.json'), '{"name":"fx","version":"1.0.0"}');
+  const runs = await Promise.all([['generate'], ['generate', 'atom'], ['g', '--json']].map((args) => runCliAsync(args, { cwd: sandbox })));
+  const entries = fs.readdirSync(sandbox).filter((name) => name !== '.chemx');
+  fs.rmSync(sandbox, { recursive: true, force: true });
+  for (const run of runs) {
+    const label = `chemx ${run.args.join(' ')}`;
+    assert.strictEqual(run.status, 1, `${label} exited ${run.status}: ${run.stdout}${run.stderr}`);
+    assert.match(run.stdout + run.stderr, /Missing capsule name/, label);
+  }
+  assert.deepStrictEqual(entries, ['package.json'], 'no capsule may be written without a name');
+});

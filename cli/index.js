@@ -4,7 +4,7 @@ import './silence-warnings.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { sanitizeOutputStreams } from './terminal.js';
+import { sanitizeOutputStreams, exitQuietlyOnClosedPipe } from './terminal.js';
 import {
   handleError,
   installGlobalErrorCatcher,
@@ -12,8 +12,10 @@ import {
   publishIssue
 } from './errors/index.js';
 import { printHelp } from './help.js';
+import { ROUTABLE_COMMAND_TOKENS } from './commands-schema.js';
 
 sanitizeOutputStreams();
+exitQuietlyOnClosedPipe();
 installGlobalErrorCatcher();
 
 // ---------------------------------------------------------------------------
@@ -60,7 +62,11 @@ export const syncSearchIndex = async (...a) => (await import('./search.js')).syn
 export const runMcpServer    = async (...a) => (await import('./mcp/index.js')).runMcpServer(...a);
 export const startMcpServer  = runMcpServer;
 export const runMcpInstaller = async (...a) => (await import('./mcp/index.js')).runMcpInstaller(...a);
-export const runReaderCli    = async (...a) => (await import('./reader.js')).runReaderCli(...a);
+export const runReaderCli    = async (...a) => {
+  const readerCards = await import('./reader-cards-gate.js');
+  if (readerCards.argsWantReadCards(a[0] || [])) await readerCards.loadReadCards();
+  return (await import('./reader.js')).runReaderCli(...a);
+};
 export const readTokenOptimized = async (...a) => (await import('./reader.js')).readTokenOptimized(...a);
 export const runPatcherCli   = async (...a) => (await import('./patcher.js')).runPatcherCli(...a);
 export const patchFile       = async (...a) => (await import('./patcher.js')).patchFile(...a);
@@ -78,39 +84,7 @@ export { handleError, withErrorCatcher, publishIssue };
 // ---------------------------------------------------------------------------
 
 export const ALLOWED_COMMANDS = new Set([
-  'search', 'q', 'query', 'find',
-  'd', 'diff',
-  'log',
-  'p', 'pkg',
-  'f', 'ls',
-  'j', 'json',
-  'do', 'batch',
-  'trace', 'backtrace',
-  'read', 'view', 'r',
-  'patch', 'edit',
-  'write',
-  'generate', 'g', 'gen', 'capsule', 'add', 'jig',
-  'explode', 'unpack',
-  'audit',
-  'trend', 'trends',
-  'verify', 'check:all',
-  'team', 'swarm', 'feed', 'tokens', 'telemetry',
-  'project', 'coordinator',
-  'benchmark', 'ablation', 'memory',
-  'pillars', 'rules', 'config:pillars',
-  'mcp', 'mcp-server', 'server', 'install-mcp', 'setup-mcp',
-  'build', 'run', 'wrap',
-  'typecheck', 'check:types', 'tsc',
-  'lint', 'check:lint', 'eslint',
-  'test', 'tests', 'check:test',
-  'check',
-  'badge', 'badges',
-  'ui', 'preview', 'dashboard',
-  'create', 'scaffold',
-  'init',
-  'hook', 'hooks', 'install-hooks', 'setup-ci',
-  'add:prop', 'add:state', 'add:action', 'fix',
-  'tesseract', 'cube', 'matrix',
+  ...ROUTABLE_COMMAND_TOKENS,
   'help', '--help', '-h',
   'version', '--version', '-v'
 ]);
@@ -127,13 +101,13 @@ const main = async () => {
 
   const isHelpRequested = !firstArg || HELP_FLAGS.has(firstArg);
   if (isHelpRequested) {
-    printHelp();
+    await printHelp(rawArgs.slice(1));
     return;
   }
 
   const isVersionRequested = VERSION_FLAGS.has(firstArg);
   if (isVersionRequested) {
-    process.stdout.write(`create-chemx v${getPackageVersion()}\n`);
+    process.stdout.write(`chemx v${getPackageVersion()}\n`);
     return;
   }
 

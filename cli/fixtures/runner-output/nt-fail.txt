@@ -1,0 +1,42 @@
+TAP version 13
+# Subtest: adds
+ok 1 - adds
+  ---
+  duration_ms: 3.249565
+  type: 'test'
+  ...
+# Subtest: breaks
+not ok 2 - breaks
+  ---
+  duration_ms: 3.273887
+  type: 'test'
+  location: '/fixture/nt/src/a.spec.js:4:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    math is broken
+    
+    4 !== 5
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 5
+  actual: 4
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///fixture/nt/src/a.spec.js:4:31)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
+  ...
+1..2
+# tests 2
+# suites 0
+# pass 1
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 268.582145

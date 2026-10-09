@@ -1,4 +1,4 @@
-import test from 'node:test';
+import test, { after } from 'node:test';
 import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -27,6 +27,9 @@ import {
   handleProgressionCommand,
   handleHealthFilterCommand
 } from './search-commands.js';
+
+// One isolated in-memory index shared by the search-db specs below (they build on each other).
+const SHARED_DB = openIndexDb(':memory:');
 
 test('resolveTargetDir: returns custom directory if provided as first argument', () => {
   const result = resolveTargetDir('packages/core', '--dir=other/path');
@@ -70,7 +73,7 @@ test('resolveTargetDir: defaults to . when .sln or csproj exists at repo root', 
 });
 
 test('search-db: indexes symbols with line ranges and finds definition', () => {
-  const db = openIndexDb();
+  const db = SHARED_DB;
   if (!db) return;
 
   upsertFileIndex(db, {
@@ -103,7 +106,7 @@ test('search-db: indexes symbols with line ranges and finds definition', () => {
 });
 
 test('search-db: tracks imports and references accurately', () => {
-  const db = openIndexDb();
+  const db = SHARED_DB;
   if (!db) return;
 
   upsertFileIndex(db, {
@@ -134,7 +137,7 @@ test('search-db: tracks imports and references accurately', () => {
 });
 
 test('search-db: syncs and queries violations index', () => {
-  const db = openIndexDb();
+  const db = SHARED_DB;
   if (!db) return;
 
   const testViolations = [
@@ -172,7 +175,7 @@ test('search-db: syncs and queries violations index', () => {
 });
 
 test('search-commands: def, refs, deps, hazards, pack return valid payloads in JSON mode', () => {
-  const db = openIndexDb();
+  const db = SHARED_DB;
   if (!db) return;
 
   const defRes = handleDefCommand(db, 'sampleFunction', { isJson: true, isCli: false });
@@ -195,7 +198,7 @@ test('search-commands: def, refs, deps, hazards, pack return valid payloads in J
 });
 
 test('search-db: records snapshots, progression, and stamps file health', () => {
-  const db = openIndexDb();
+  const db = SHARED_DB;
   if (!db) return;
 
   const mockReport = {
@@ -272,20 +275,13 @@ test('hybrid search: natural language "toggle a task item" ranks useTaskListCont
   const targetIndex = results.findIndex((r) => r.name === 'useTaskListController');
   assert.ok(targetIndex >= 0 && targetIndex < 3, `Expected target in top 3, found at index ${targetIndex}`);
 
-  try {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  } catch {}
+  fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
 
 test('runSearch: resolveTargetDir is bound in module scope, not only re-exported', async () => {
   const { runSearch } = await import('./search.js');
-  let caught = null;
-  try {
-    await runSearch(['__chemx_nonexistent_symbol__'], false);
-  } catch (err) {
-    caught = err;
-  }
+  const caught = await runSearch(['__chemx_nonexistent_symbol__'], false).then(() => null, (err) => err);
   assert.equal(
     caught instanceof ReferenceError,
     false,
@@ -296,12 +292,7 @@ test('runSearch: resolveTargetDir is bound in module scope, not only re-exported
 test('runSearch: graph and vector modes do not throw ReferenceError', async () => {
   const { runSearch } = await import('./search.js');
   for (const flag of ['--blast-radius', '--semantic', '--hybrid']) {
-    let caught = null;
-    try {
-      await runSearch(['__chemx_nonexistent_symbol__', flag], false);
-    } catch (err) {
-      caught = err;
-    }
+    const caught = await runSearch(['__chemx_nonexistent_symbol__', flag], false).then(() => null, (err) => err);
     assert.equal(
       caught instanceof ReferenceError,
       false,

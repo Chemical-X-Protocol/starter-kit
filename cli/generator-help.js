@@ -1,11 +1,14 @@
-import { renderBanner } from './terminal.js';
+import { describeLineBudgetPolicy } from './config/profiles.js';
+import { isStdoutTty } from './terminal.js';
+import { renderTtyBanner } from './tty-banner.js';
 
-export const printGenerateHelp = () => {
-  renderBanner('Chemical X: Capsule Generator Usage');
-  const BOLD = '\x1b[1m';
-  const CYAN = '\x1b[36m';
-  const DIM = '\x1b[2m';
-  const RESET = '\x1b[0m';
+const TTY_STYLES = { BOLD: '\x1b[1m', CYAN: '\x1b[36m', DIM: '\x1b[2m', RESET: '\x1b[0m' };
+const PLAIN_STYLES = { BOLD: '', CYAN: '', DIM: '', RESET: '' };
+
+// The banner and colors exist only for a human terminal (plan 5.4 seam).
+export const printGenerateHelp = async () => {
+  await renderTtyBanner('Chemical X: Capsule Generator Usage');
+  const { BOLD, CYAN, DIM, RESET } = isStdoutTty() ? TTY_STYLES : PLAIN_STYLES;
 
   const out = [
     `${BOLD}USAGE${RESET}`,
@@ -53,13 +56,11 @@ export const printGenerateHelp = () => {
     `  ${DIM}Thesis:        Passing a 30-50 token parameter payload to chemx generate / jig replaces${RESET}`,
     `  ${DIM}               1,000-2,500 output tokens of repetitive TypeScript, SCSS, and spec boilerplate.${RESET}`,
     `  ${DIM}Reduction:     90%+ fewer LLM output tokens consumed per component, service, or route.${RESET}`,
-    `  ${DIM}Invariants:    Guarantees <100 LOC limits, Result tuples, 2-stage booleans, zero synthetic data,${RESET}`,
+    `  ${DIM}Invariants:    Result tuples, 2-stage booleans, zero synthetic data,${RESET}`,
     `  ${DIM}               and co-located unit test specs without LLM syntax drift or hallucination.${RESET}`,
     '',
     `${BOLD}LINE LIMITS${RESET}`,
-    `  ${DIM}Molecule capsule template:  < 100 lines (outer bound)${RESET}`,
-    `  ${DIM}Co-located controller hook: < 100 lines (pure reactive state)${RESET}`,
-    `  ${DIM}Domain service / repo:      < 100 lines (stateless or cohesive atomic class)${RESET}`,
+    `  ${DIM}${describeLineBudgetPolicy()}${RESET}`,
     `  ${DIM}Table of Contents view:     10-20 lines (declarative slot assembly)${RESET}`,
     ''
   ];

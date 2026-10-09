@@ -5,7 +5,7 @@
 
 export const MASTER_MCP_TOOL = {
   name: 'chemx',
-  description: "Provides all Chemical X operations (search, generate, patch, audit, verify, team) through a single tool. This avoids requiring separate approval for each sub-operation in MCP clients that gate tool access per-tool. Pass the desired operation via the action parameter; see action: 'help' for the full list.",
+  description: "All Chemical X operations (search, read, patch, audit, verify, team) behind one tool. Pass the operation via action; action: 'help' lists every action and its params. Writes need a declared project root, and caller-supplied shell commands are refused unless they match a package.json script.",
   inputSchema: {
     type: 'object',
     properties: {
@@ -15,29 +15,22 @@ export const MASTER_MCP_TOOL = {
       },
       action: {
         type: 'string',
-        enum: [
-          'test', 'build', 'verify', 'typecheck', 'audit',
-          'read', 'patch', 'write', 'check',
-          'q', 'search',
-          'd', 'diff', 'log', 'p', 'pkg', 'f', 'ls', 'j', 'json', 'do', 'batch',
-          'team', 'team_status', 'team_feed', 'team_post', 'team_task', 'team_lock',
-          'autofix', 'generate', 'patterns', 'issue', 'project', 'tesseract',
-          'trace', 'backtrace'
-        ],
-        description: 'The Chemical X subsystem action to execute.'
+        enum: [],
+        description: "The Chemical X action to execute. action: 'help' returns the per-action parameter table."
       },
       params: {
         type: 'object',
         description: 'Parameter payload for the specific action (e.g., { path, symbol, outline, logic, template, connections } for read; { query, blastRadius, trace, backtrace, semantic, hybrid } for q; { path, search, replace } for patch; { dir, command } for test/build).',
         properties: {
-          query: { type: 'string', description: 'Search term, symbol name, or conceptual query (for q/search)' },
-          literal: { type: 'boolean', description: 'Literal substring search mode for q (-g)' },
+          query: { type: 'string', description: 'Search term or symbol name (for q/search); semantic mode ranks by feature-hash name similarity' },
+          literal: { type: 'boolean', description: 'Repo-wide fixed-string search for q (-g): every text file .gitignore allows, full path:line:text' },
+          regex: { type: 'boolean', description: 'Treat the literal query as a regular expression (for q literal)' },
           lines: { type: 'boolean', description: 'Line-only output path:line for q (-l)' },
           blastRadius: { type: 'boolean', description: 'Map direct consumers, transitive dependents & impacted tiers (for q)' },
           trace: { type: 'boolean', description: 'Compute forward call trace of downstream invocations (for q/search)' },
           backtrace: { type: 'boolean', description: 'Compute reverse backtrace causal caller path (for q/search)' },
-          semantic: { type: 'boolean', description: 'Search conceptually related components via vector cosine similarity (for q)' },
-          hybrid: { type: 'boolean', description: 'Blend BM25 keyword matching + Vector RRF ranking (for q)' },
+          semantic: { type: 'boolean', description: 'Feature-hash name similarity (lexical fuzz, not a learned embedding) (for q)' },
+          hybrid: { type: 'boolean', description: 'BM25 keyword ranking fused with feature-hash similarity via RRF (for q)' },
           connections: { type: 'boolean', description: 'Include caller graph and dependent references (for q, read)' },
           tier: { type: 'string', enum: ['atom', 'molecule', 'organism', 'hook', 'view'], description: 'Filter by architectural tier (for q, generate)' },
           inspect: { type: 'boolean', description: 'Inspect props, exported symbols, and hooks breakdown (for q)' },
@@ -54,24 +47,29 @@ export const MASTER_MCP_TOOL = {
           logic: { type: 'boolean', description: 'Extract AST logic skeleton preserving control flow, guards, and mutations (for read)' },
           template: { type: 'boolean', description: 'Extract declarative template markup only (Vue/Svelte/JSX) (for read)' },
           enrich: { type: 'boolean', description: 'Append compacted logic skeleton after outline block. Composable overlay: use with outline:true or symbol. Returns outline + logic in one token-compact response without boilerplate penalty. (for read)' },
-          traceSymbol: { type: 'string', description: 'Symbol name: appends forward call trace card inline when enrich:true (for read)' },
-          backtraceSymbol: { type: 'string', description: 'Symbol name: appends reverse caller chain card inline when enrich:true (for read)' },
+          traceSymbol: { type: 'string', description: 'Symbol name: appends a forward call trace card (for read; needs the search index)' },
+          backtraceSymbol: { type: 'string', description: 'Symbol name: appends a reverse caller chain card (for read; needs the search index)' },
           startLine: { type: 'number', description: 'Starting line number (1-indexed) (for read)' },
           endLine: { type: 'number', description: 'Ending line number (1-indexed) (for read)' },
-          stripComments: { type: 'boolean', description: 'Remove comments to minimize tokens (for read)' },
-          compact: { type: 'boolean', description: 'Collapse empty lines and whitespace (for read)' },
-          target: { type: 'string', description: 'Exact text block to replace (for patch)' },
+          stripComments: { type: 'boolean', description: 'Opt-in: blank out comments (AST based, line numbers kept) (for read)' },
+          compact: { type: 'boolean', description: 'Opt-in: drop repeated blank lines; original line numbers are still printed (for read)' },
+          target: { type: 'string', description: 'patch: exact text block to replace. test: alias of testTarget.' },
           search: { type: 'string', description: 'Alias for target text block to replace (for patch)' },
           replacement: { type: 'string', description: 'New replacement content (for patch)' },
           replace: { type: 'string', description: 'Alias for replacement content (for patch)' },
           multiple: { type: 'boolean', description: 'Allow replacing multiple occurrences (for patch)' },
-          dryRun: { type: 'boolean', description: 'Preview change without writing to disk (for patch, generate)' },
+          dryRun: { type: 'boolean', description: 'Preview change without writing to disk; returns a unified diff (for patch, write, autofix, generate)' },
+          allowRemoved: { type: 'array', items: { type: 'string' }, description: 'Top-level declarations a patch/write may remove. Any removal not named here is refused, renames included (removing A while adding B)' },
+          agentId: { type: 'string', description: 'Caller agent id for team lock checks on patch/write (default @agent)' },
           content: { type: 'string', description: 'File content to write (for write)' },
-          overwrite: { type: 'boolean', description: 'Allow overwriting existing file (for write)' },
+          overwrite: { type: 'boolean', description: 'Required to replace an existing file (for write); without it write refuses' },
           dir: { type: 'string', description: 'Target directory (for audit, test, build, patterns)' },
-          command: { type: 'string', description: 'Explicit execution command (for build, test)' },
-          target: { type: 'string', description: 'Target test file or spec path (for test)' },
+          command: { type: 'string', description: 'Command for build/test/typecheck. Runs only when it equals a package.json script (or `npm run <script>`), unless the server has CHEMX_MCP_ALLOW_SHELL=1.' },
+          testTarget: { type: 'string', description: 'Target test file or spec path (for test)' },
           filter: { type: 'string', description: 'Filter test names by regex or string pattern (for test)' },
+          allowEmpty: { type: 'boolean', description: 'Accept a test run that collects zero tests (for test, verify)' },
+          timeout: { type: 'number', description: 'Seconds before a test, typecheck, build or verify step stops as inconclusive (default 600)' },
+          includeBuild: { type: 'boolean', description: 'Also run the production build step (for verify)' },
           subAction: { type: 'string', description: 'Sub-action for team operations (e.g. list, claim, done, triage, acquire, release)' },
           taskId: { type: 'number', description: 'Target task ID (for team task claim/done)' },
           agentId: { type: 'string', description: 'Agent handle (e.g. @antigravity, @coder)' },
@@ -105,12 +103,12 @@ export const MASTER_MCP_TOOL = {
       commands: {
         type: 'array',
         items: { type: 'string' },
-        description: 'Batch execution array of CLI commands run sequentially in a single turn (e.g. ["d", "p -s", "verify"]).'
+        description: 'Batch of CLI command strings run in order (e.g. ["d", "p -s", "verify"]). Every item is scope-checked before any runs; the batch status is the worst item status.'
       },
       batch: {
         type: 'array',
         items: { type: 'object' },
-        description: 'Batch execution array of action objects run sequentially in a single turn.'
+        description: 'Batch of { action, params } objects run in order, with the same scope check and combined status as commands. Item-level cwd is ignored.'
       }
     }
   }
@@ -216,7 +214,7 @@ export const SUB_TOOLS = [
         tier: {
           type: 'string',
           enum: ['m', 'a', 'o', 't'],
-          description: 'Architectural tier: m (molecule < 100 lines), a (atom), o (organism), t (template).'
+          description: 'Architectural tier: m (molecule), a (atom), o (organism), t (template).'
         },
         targetDir: {
           type: 'string',
@@ -261,7 +259,8 @@ export const SUB_TOOLS = [
         dir: {
           type: 'string',
           description: 'Target workspace directory to build (e.g. "apps/my-card-vault"). Defaults to current working directory.'
-        }
+        },
+        timeout: { type: 'number', description: 'Stop the run after this many seconds; a timed-out run is inconclusive (default 600)' }
       }
     }
   },
@@ -315,7 +314,10 @@ export const SUB_TOOLS = [
         replacement: { type: 'string', description: 'Alias for replacement content' },
         replace: { type: 'string', description: 'Alias for replacement content' },
         allowMultiple: { type: 'boolean', description: 'Allow multiple replacements' },
-        multiple: { type: 'boolean', description: 'Alias for allowMultiple' }
+        multiple: { type: 'boolean', description: 'Alias for allowMultiple' },
+        dryRun: { type: 'boolean', description: 'Preview only: return the unified diff and write nothing' },
+        allowRemoved: { type: 'array', items: { type: 'string' }, description: 'Top-level declarations this patch may remove; any other removal (renames included) is refused' },
+        agentId: { type: 'string', description: 'Caller agent id for team lock checks (default @agent)' }
       },
       required: ['path']
     }
@@ -333,12 +335,16 @@ export const SUB_TOOLS = [
   },
   {
     name: 'chemx_write',
-    description: 'Create or overwrite a file with automatic SQLite AST micro-indexing and architectural boundary verification. NOTE: Prefer master tool chemx({ action: "write", params: ... }) for single-permission execution.',
+    description: 'Create a file (or replace one when overwrite is true) with automatic SQLite AST micro-indexing and architectural boundary verification. An existing file is refused without overwrite. NOTE: Prefer master tool chemx({ action: "write", params: ... }) for single-permission execution.',
     inputSchema: {
       type: 'object',
       properties: {
         path: { type: 'string', description: 'Target file path to write' },
-        content: { type: 'string', description: 'Code content to write' }
+        content: { type: 'string', description: 'Code content to write' },
+        overwrite: { type: 'boolean', description: 'Required to replace an existing file; without it write refuses' },
+        dryRun: { type: 'boolean', description: 'Preview only: return the unified diff and write nothing' },
+        allowRemoved: { type: 'array', items: { type: 'string' }, description: 'Top-level declarations an overwrite may remove; any other removal is refused' },
+        agentId: { type: 'string', description: 'Caller agent id for team lock checks (default @agent)' }
       },
       required: ['path', 'content']
     }
@@ -350,7 +356,8 @@ export const SUB_TOOLS = [
       type: 'object',
       properties: {
         command: { type: 'string', description: 'Optional custom typecheck command (e.g. "pnpm run typecheck" or "npx tsc --noEmit")' },
-        dir: { type: 'string', description: 'Target workspace directory (defaults to current working directory)' }
+        dir: { type: 'string', description: 'Target workspace directory (defaults to current working directory)' },
+        timeout: { type: 'number', description: 'Stop the run after this many seconds; a timed-out run is inconclusive (default 600)' }
       }
     }
   },
@@ -361,7 +368,11 @@ export const SUB_TOOLS = [
       type: 'object',
       properties: {
         command: { type: 'string', description: 'Optional custom test command (e.g. "pnpm test" or "npx vitest run")' },
-        dir: { type: 'string', description: 'Target workspace directory (defaults to current working directory)' }
+        dir: { type: 'string', description: 'Target workspace directory (defaults to current working directory)' },
+        target: { type: 'string', description: 'Test file or directory to run' },
+        filter: { type: 'string', description: 'Test name filter' },
+        allowEmpty: { type: 'boolean', description: 'Accept a test run that collects zero tests (default false: zero tests is inconclusive)' },
+        timeout: { type: 'number', description: 'Stop the run after this many seconds; a timed-out run is inconclusive (default 600)' }
       }
     }
   },
@@ -372,7 +383,9 @@ export const SUB_TOOLS = [
       type: 'object',
       properties: {
         dir: { type: 'string', description: 'Target directory for architectural audit (defaults to "src" or "blueprints")' },
-        includeBuild: { type: 'boolean', description: 'Whether to also run production build verification (defaults to false)' }
+        includeBuild: { type: 'boolean', description: 'Whether to also run production build verification (defaults to false)' },
+        allowEmpty: { type: 'boolean', description: 'Accept a test run that collects zero tests (default false: zero tests is inconclusive)' },
+        timeout: { type: 'number', description: 'Per-step timeout for typecheck, tests and build: stop a step after this many seconds; a timed-out run is inconclusive (default 600)' }
       }
     }
   },
@@ -473,4 +486,13 @@ export const SUB_TOOLS = [
 // Master tool is primary: exposed as the sole gateway tool to AI host integrations to enforce single-permission dispatch
 export const MCP_TOOLS = [MASTER_MCP_TOOL];
 export const ALL_MCP_TOOLS = [MASTER_MCP_TOOL, ...SUB_TOOLS];
+
+// The action enum is generated from the live DISPATCHER so the schema never advertises dead actions.
+export const withActionEnum = (tools, actionNames) => tools.map((tool) => {
+  const actionSchema = tool.inputSchema.properties.action;
+  const hasActionEnum = Boolean(actionSchema) && Array.isArray(actionSchema.enum);
+  if (!hasActionEnum) return tool;
+  const properties = { ...tool.inputSchema.properties, action: { ...actionSchema, enum: [...actionNames] } };
+  return { ...tool, inputSchema: { ...tool.inputSchema, properties } };
+});
 

@@ -55,9 +55,16 @@ const normalizeMethods = (rawMethods) => {
   return [];
 };
 
+// Accepts an array or a comma-separated string; anything else is an empty list.
+const toEntryList = (raw) => {
+  if (Array.isArray(raw)) return raw;
+  const isCommaList = typeof raw === 'string';
+  return isCommaList ? raw.split(',') : [];
+};
+
 const normalizeState = (rawState) => {
   if (!rawState) return [];
-  const list = Array.isArray(rawState) ? rawState : (typeof rawState === 'string' ? rawState.split(',') : []);
+  const list = toEntryList(rawState);
   return list.map((item) => {
     if (typeof item === 'object' && item !== null && item.name) {
       return { name: item.name, type: item.type || 'string', default: item.default ?? 'null' };
@@ -69,7 +76,7 @@ const normalizeState = (rawState) => {
 
 const normalizeRoutes = (rawRoutes) => {
   if (!rawRoutes) return [];
-  const list = Array.isArray(rawRoutes) ? rawRoutes : (typeof rawRoutes === 'string' ? rawRoutes.split(',') : []);
+  const list = toEntryList(rawRoutes);
   return list.map((r) => {
     if (typeof r === 'object' && r !== null && r.method) {
       return { method: r.method.toUpperCase(), path: r.path || '/' };
@@ -81,7 +88,7 @@ const normalizeRoutes = (rawRoutes) => {
 };
 
 // ---------------------------------------------------------------------------
-// Builders for Code, Types, and Specs (<100 LOC per file guarantee)
+// Builders for Code, Types, and Specs (one small, single-purpose file each)
 // ---------------------------------------------------------------------------
 
 const buildServiceFiles = ({ name, pascalName, camelName, methods, desc, runner }) => {

@@ -10,7 +10,7 @@ import { releaseFileLock } from './team-db-locks.js';
 import { postFeedEvent } from './team-db-feed.js';
 import { registerAgent } from './team-db-agents.js';
 import { ingestTaskTelemetry } from './team-telemetry.js';
-import { runAudit as executeAstAudit, auditFile } from '../audit.js';
+import { runAudit as executeAstAudit, auditFile } from '../audit-engine.js';
 import { syncSearchIndex, syncViolationsIndex, recordAuditSnapshot } from '../search.js';
 
 import { queryUnassignedHazards } from './team-db-task-helpers.js';
@@ -121,8 +121,8 @@ export const autoGenerateTasksFromAudit = (db, options = {}) => {
       const targetDir = options.targetDir || (fs.existsSync(path.resolve(cwd, 'src')) ? 'src' : '.');
       const report = executeAstAudit(targetDir, { cwd });
       if (report?.violations) {
-        syncSearchIndex(targetDir, cwd);
-        syncViolationsIndex(db, report.violations);
+        const syncRes = syncSearchIndex(targetDir, cwd);
+        syncViolationsIndex(db, report.violations, { scope: syncRes?.scope || null });
         recordAuditSnapshot(db, report);
       }
     }

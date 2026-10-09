@@ -6,17 +6,17 @@
 ---
 
 ## ⚡ Quick Agent Reflex Table (Token-Bounded Commands)
-| Standard Reflex | Chemical X (`cx`) Equivalent | Token & Architecture Advantage |
+| Standard Reflex | `chemx` Equivalent | Token & Architecture Advantage |
 | :--- | :--- | :--- |
-| `grep -rn "pattern" .` | `cx q -g "pattern"` or `cx q -g "pattern" -l` | Auto-ignores build/vendor; clamps lines to 60 chars or line-only (-l). |
-| `git diff` | `cx d` | Zero-context (`-U0`), auto-collapses to `--stat` if > 80 lines, micro-syncs index. |
-| `git log` | `cx log -n 5` | Single-line compact commit history (~8 tokens/commit). |
-| `find . -name "*.vue"` | `cx f "*.vue"` | Strictly filters by `.gitignore` and ignored dirs. |
-| `cat package.json` | `cx p -s` / `cx p <script>` | Instant single script or dep extraction (~3 tokens vs 300 lines). |
-| `cat <data.json>` | `cx j <file.json>` | Structural schema shape only; collapses repeating arrays. |
-| `cat <file>` / `head <file>` | `cx read <file> --outline` | AST signatures only (~50 tokens vs thousands). |
-| `npm test` / `tsc` | `cx test` / `cx verify` | Silent on success; returns only failing diffs. |
-| Multiple CLI actions | `cx do "<cmd1>" "<cmd2>"` | Executes sequentially in a single warm Node process. |
+| `grep -rn "pattern" .` | `chemx q -g "pattern"` or `chemx q -g "pattern" -l` | Fixed-string search of every text file `.gitignore` allows (submodules, docs, styles, JSON, PHP); full `path:line:text` lines or line-only (-l); `--regex` opts into regex; `-- <pattern>` for a pattern starting with `-`. Uses `rg` when installed, a JS walker otherwise; the header states files searched and the engine. |
+| `git diff` | `chemx d` | Zero-context (`-U0`), auto-collapses to `--stat` if > 80 lines, micro-syncs index. |
+| `git log` | `chemx log -n 5` | Single-line compact commit history (~8 tokens/commit). |
+| `find . -name "*.vue"` | `chemx f "*.vue"` | Strictly filters by `.gitignore` and ignored dirs. |
+| `cat package.json` | `chemx p -s` / `chemx p <script>` | Instant single script or dep extraction (~3 tokens vs 300 lines). |
+| `cat <data.json>` | `chemx j <file.json>` | Structural schema shape only; collapses repeating arrays. |
+| `cat <file>` / `head <file>` | `chemx read <file> --outline` | AST signatures only (~50 tokens vs thousands). |
+| `npm test` / `tsc` | `chemx test` / `chemx verify` | Silent on success; returns only failing diffs. |
+| Multiple CLI actions | `chemx do "<cmd1>" "<cmd2>"` | Executes sequentially in a single warm Node process. |
 | Multiple MCP tool calls | `chemx({ commands: [...] })` | Executes multiple sub-operations in a single agent turn. |
 
 ---
@@ -42,7 +42,7 @@
 - Every molecule and organism lives in an isolated, self-contained directory capsule:
   ```
   m-<feature>-card/
-  ├── m-<feature>-card.<ext>          (< 100 lines: declarative layout & bindings)
+  ├── m-<feature>-card.<ext>          (declarative layout & bindings; line budget per 1.A)
   ├── m-<feature>-card.controller.ts  (pure reactive state & 2-stage booleans)
   ├── _m-<feature>-card.scss          (mixin-only glass styling)
   ├── types.d.ts                      (pure Props & Emits declarations)
@@ -77,11 +77,11 @@ Use same-name shorthand across all languages; eliminate redundant `key: key` dup
   - When repeated elements accumulate behavioral logic, accessibility handling, or styling variants across 3+ places (Rule of Three), extract into a canonical capsule (`m-tab-button`).
 
 ### H. AI Agent Codebase Query Machine Protocol
-- **AST & Literal Search First Rule**: AI agents should invoke `cx q "<query>"` for AST symbols or `cx q -g "<pattern>"` for literal text before running broad unthrottled grep. If AST search returns 0 results, check the suggested `cx q -g` fallback before escalating to raw ripgrep.
+- **AST & Literal Search First Rule**: AI agents should invoke `chemx q "<query>"` for AST symbols or `chemx q -g "<pattern>"` for literal text before running broad unthrottled grep. AST answers cover only the index scope they print (`index: scope src (...)`); widen with `--dir=<path>` or use `chemx q -g`, which searches the whole repo. An answer with `status: inconclusive` (exit 3) is not a negative result.
 - **AST Architecture Intelligence**: Always leverage `pnpm chemx q` to inspect component tiers, exported symbols, props, and hooks with minimal token burn.
 - **Mandatory Blast Radius Pre-Refactor Check**: Prior to modifying any foundational atom (`a-*`), shared molecule, or central composable (`use*`), agents MUST calculate the transitive blast radius (`pnpm chemx q <target> --blast-radius --json` or `chemx({ action: 'q', params: { query: '<target>', blastRadius: true } })`). Never perform blind refactors without mapping direct consumers, transitive dependents, and impacted tiers.
-- **Hybrid RRF Discovery Protocol**: When discovering components, controllers, or state machines without an exact symbol name, agents MUST use hybrid search (`pnpm chemx q "<concept>" --hybrid --json` or `chemx({ action: 'q', params: { query: '<concept>', hybrid: true } })`). This blends BM25 keyword matching and vector cosine similarity via Reciprocal Rank Fusion (RRF), eliminating keyword misses and semantic hallucinations.
-- **Semantic Vector Discovery**: Use `pnpm chemx q "<query>" --semantic --json` for purely conceptual lookups.
+- **Hybrid Discovery**: When looking for components, controllers, or state machines without an exact symbol name, try hybrid search (`pnpm chemx q "<words>" --hybrid --json` or `chemx({ action: 'q', params: { query: '<words>', hybrid: true } })`). It fuses BM25 keyword ranking with feature-hash similarity via Reciprocal Rank Fusion (RRF). Both halves are lexical: they match names, tokens and trigrams, not meaning, so a miss is not proof of absence. Follow up with `chemx q -g` for the words you expect in the code.
+- **Feature-hash similarity (`--semantic`)**: `pnpm chemx q "<words>" --semantic --json` ranks exported names by 128-dim hashed name/trigram vectors. It is fuzzy lexical matching (useful for spelling variants such as `useTabs`/`useTabBar`), not a learned embedding: it will not connect `login` to `authentication`.
 - **Inspect Mode**: Use `pnpm chemx q "<capsule-name>" --inspect` to examine props and hooks without reading entire source files into context.
 - **JSON & Columnar Mode**: Use `pnpm chemx q "<query>" --json` for zero-overhead, machine-readable agent lookups in token-compact columnar format (`cols` and `rows`).
 - **Tier Filtering**: Use `pnpm chemx q "<query>" --tier=molecule` (or `atom`, `organism`, `hook`) to narrow scope instantly.
@@ -126,11 +126,11 @@ Use same-name shorthand across all languages; eliminate redundant `key: key` dup
   chemx({ action: 'log', params: { limit: 5 } }); // Compact single-line commit history
   chemx({ action: 'p', params: { command: '-s' } }); // Read scripts from package.json
   chemx({ action: 'j', params: { path: 'data.json' } }); // Structural JSON schema shape
-  chemx({ action: 'q', params: { query: 'theme', literal: true } }); // Literal ripgrep (-g)
+  chemx({ action: 'q', params: { query: 'theme', literal: true } }); // Repo-wide fixed-string search (-g)
 
   // Discovery & Impact Analysis
   chemx({ action: 'q', params: { query: 'a-button', blastRadius: true } });
-  chemx({ action: 'q', params: { query: 'button state', semantic: true } });
+  chemx({ action: 'q', params: { query: 'button state', semantic: true } }); // feature-hash name similarity
   chemx({ action: 'q', params: { query: 'useAttentionCardController', hybrid: true } });
 
   // Surgical AST Reading & Connections
@@ -144,8 +144,14 @@ Use same-name shorthand across all languages; eliminate redundant `key: key` dup
   chemx({ action: 'read', params: { path: 'src/...', outline: true, enrich: true, backtraceSymbol: 'handleCheckout' } });
 
   // Surgical Modification & Rules Check
+  // Preview first: dryRun returns the unified diff and writes nothing (CLI: --dry-run or -n)
+  chemx({ action: 'patch', params: { path: 'src/...', target: 'oldCode', replacement: 'newCode', dryRun: true } });
   chemx({ action: 'patch', params: { path: 'src/...', target: 'oldCode', replacement: 'newCode' } });
+  // Removing a top-level declaration (renames included) is refused unless named (CLI: --allow-remove=oldName)
+  chemx({ action: 'patch', params: { path: 'src/...', target: 'oldName', replacement: 'newName', allowRemoved: ['oldName'] } });
+  // write creates; replacing an existing file needs overwrite (CLI: --overwrite)
   chemx({ action: 'write', params: { path: 'src/...', content: '...' } });
+  chemx({ action: 'write', params: { path: 'src/...', content: '...', overwrite: true } });
   chemx({ action: 'check', params: { path: 'src/...' } });
 
   // Deterministic Parameterized Scaffolding (Universal Jig - 90%+ Token Reduction)
@@ -169,7 +175,7 @@ Use same-name shorthand across all languages; eliminate redundant `key: key` dup
 - **Read Window Auto-Outline**: Files longer than the chemx read window (100 lines by default), read without a target symbol or slice, automatically render an AST outline to prevent token exhaustion and host buffer spillovers (such as IDE `output.txt` dumps). The read window is a tool budget, not an architecture rule; file size is governed by 1.A.
 - **Enrich Mode (Component Capsules Only)**: When an agent needs both exported signatures AND logic flow for a component capsule, use `enrich: true` with `outline: true`: one response card holds the outline and a compacted logic skeleton, optionally with a forward trace or reverse caller chain (`traceSymbol`, `backtraceSymbol`). The skeleton generator is tuned for components; on procedural modules (services, CLI code, utilities) enrich saves only a few percent over reading the whole file, so use plain `outline: true` or `symbol: '<name>'` there.
 - **Symbol Connection Graph Over Multi-File Dumps**: Rather than reading multiple files to understand imports and consumers, agents MUST request symbol connections: `chemx({ action: 'read', params: { path, symbol: '<name>', connections: true } })` or `chemx({ action: 'q', params: { query, connections: true } })`. This instantly returns the definition, imported dependencies, and caller references in ~45 tokens.
-- **Token-First File Inspection & Native Fallback**: AI agents should prioritize Chemical X AST readers (`cx read --outline` or `cx read --symbol`) to conserve tokens. Dumping raw files burns thousands of tokens and causes premature context exhaustion. If an agent requires exact raw verification or unformatted bytes, native tools (`view_file`, `grep`, `cat`) are permitted as an intentional fallback.
+- **Token-First File Inspection & Native Fallback**: AI agents should prioritize Chemical X AST readers (`chemx read --outline` or `chemx read --symbol`) to conserve tokens. Dumping raw files burns thousands of tokens and causes premature context exhaustion. If an agent requires exact raw verification or unformatted bytes, native tools (`view_file`, `grep`, `cat`) are permitted as an intentional fallback.
 
 ### O. Universal Programmatic File Jig & Closed-Loop Execution Protocol
 - **Deterministic Parameterized Synthesis**: When creating non-UI files (services, API route handlers, state stores, database repositories, utilities, or test specs), AI agents MUST NOT emit hundreds of lines of mechanical boilerplate via raw file writing tools. Agents MUST invoke `chemx generate --jig=<kind>` or `chemx({ action: 'generate', params: { jig: true, kind, name, ... } })`.
@@ -260,7 +266,7 @@ Use same-name shorthand across all languages; eliminate redundant `key: key` dup
   1. **Structural primitives** (`lib/is/`: `value`, `collection`, `text`, `fs`, `type`): subject-agnostic and finite (`isAbsent`, `hasItems`, `isNonEmptyString`, `pathExists`). They import nothing, and the set does not grow. Every primitive is a TypeScript type predicate (`(x: unknown): x is string`), never a plain `boolean`, or callers lose narrowing.
   2. **Domain vocabulary** (`<subsystem>/<domain>-predicates.<ext>`, colocated with the subsystem it describes): built from Layer 1. A condition earns a domain predicate at its 2nd use; a threshold duplicated across files (`score >= 90`) silently disagrees the day one copy changes, so name it once (`isGradeA`). Promote threshold literals in predicate bodies to named constants (`score >= GRADE_A_THRESHOLD`).
   3. **Decisions**: single-use composites declared at the call site per 3.A. Never extract them: extracting every condition is *indirection masquerading as modularity* (1.A).
-- Before naming a new predicate, search for an existing one (`chemx({ action: 'q', params: { query: '<concept>', semantic: true } })`). A synonym beside an existing predicate (`hasNoItems` beside `isEmpty`) is lexicon rot.
+- Before naming a new predicate, search for an existing one: `chemx q -g "<likely words>"` for the literal names, plus `chemx({ action: 'q', params: { query: '<concept>', hybrid: true } })` for spelling variants. Neither finds pure synonyms (`hasNoItems` vs `isEmpty`), so also scan the predicates module of the domain. A synonym beside an existing predicate is lexicon rot.
 - Repeated filter conditions are Layer 2 candidates: extract the predicate, compose a named higher-order filter, and keep derivations declarative:
   ```typescript
   // ❌ Bad: inlined multi-clause predicate, repeated per derivation

@@ -1,11 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { auditFile } from '../audit.js';
+import { describeLineBudgetPolicy } from '../config/profiles.js';
 
 export const MCP_PROMPTS = [
   {
     name: 'chemx_remediate_hotspot',
-    description: 'Generate surgical instructions to decompose a monolithic hotspot file into crystalline capsules (< 100 lines) and a declarative Table-of-Contents view.',
+    description: 'Generate surgical instructions to decompose a monolithic hotspot file into crystalline capsules within the AGENTS.md line budget and a declarative Table-of-Contents view.',
     arguments: [
       {
         name: 'filePath',
@@ -32,7 +32,7 @@ export const MCP_PROMPTS = [
   }
 ];
 
-export const getMcpPrompt = async (name, args = {}) => {
+export const getMcpPrompt = async (name, args = {}, cwd = process.cwd()) => {
   switch (name) {
     case 'chemx_remediate_hotspot': {
       const filePath = args.filePath;
@@ -41,19 +41,20 @@ export const getMcpPrompt = async (name, args = {}) => {
       }
       const framework = args.targetFramework || 'React/Vue';
 
-      const resolvedPath = path.isAbsolute(filePath) ? filePath : path.resolve(process.cwd(), filePath);
-      const relPath = path.relative(process.cwd(), resolvedPath);
+      const resolvedPath = path.isAbsolute(filePath) ? filePath : path.resolve(cwd, filePath);
+      const relPath = path.relative(cwd, resolvedPath);
       const diagnosticLines = [];
 
       if (fs.existsSync(resolvedPath) && fs.statSync(resolvedPath).isFile()) {
         const fileContent = fs.readFileSync(resolvedPath, 'utf-8');
         const lineCount = fileContent.split(/\r?\n/).length;
+        const { auditFile } = await import('../audit.js');
         const violations = auditFile(resolvedPath, relPath);
         diagnosticLines.push(
           '',
           '### LIVE AST DIAGNOSTICS:',
           `- Target File: \`${relPath}\``,
-          `- Total Lines: ${lineCount}L (Molecular limit: 100L)`,
+          `- Total Lines: ${lineCount}L (${describeLineBudgetPolicy()})`,
           `- Active Violations: ${violations.length}`
         );
         if (violations.length > 0) {
@@ -69,11 +70,11 @@ export const getMcpPrompt = async (name, args = {}) => {
         '',
         '### EXECUTION DIRECTIVES:',
         '1. Pre-Split Pattern Discovery: Survey cross-file patterns before slicing; extract canonical shared capsules first.',
-        '2. Molecular Capsule Limit: Maximum 100 lines per molecule capsule file.',
+        `2. Molecular Capsule Limit: ${describeLineBudgetPolicy()}`,
         '3. Table-of-Contents Views: Top-level page views must be 10-20 line declarative templates assembling components via named slots.',
         '4. Two-Stage Atomic Booleans: Break complex multi-clause conditionals into atomic single-concept booleans.',
         '5. Composable Return Contracts: Classify hook/composable returns into flat State, Status, and verb-prefixed Actions buckets (HOOK_SHAPE_CONTRACT).',
-        '6. Co-located Types: Co-locate granular types/*.d.ts inside each capsule (< 100 lines). Avoid type monoliths.',
+        '6. Co-located Types: Co-locate granular types/*.d.ts inside each capsule. Avoid type monoliths.',
         '7. Zero synthetic or mock data: Return live data or explicit empty states.',
         `8. Framework: Calibrate bindings for ${framework}.`,
         ...diagnosticLines,
