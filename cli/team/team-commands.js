@@ -34,6 +34,7 @@ import { refuseUnknownTask } from './team-task-guard.js';
 import { checkNeedsInput } from './team-needs.js';
 import { handleProfileCommand, handleHandoffCommand } from './team-commands-profile.js';
 import { handleDispatchCommand } from './team-commands-dispatch.js';
+import { handleRunTokens, parseRunArgs } from './team-commands-tokens.js';
 
 const ARG_VAL_FLAGS = ['--target', '--as', '--to', '--agent', '--since', '--limit', '--thread', '--task', '--parent', '--rule', '--priority', '--prio', '--moscow', '--needs', '--url', '--pid'];
 
@@ -95,6 +96,10 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
   }
 
   const isTokens = subCommand === 'tokens' || subCommand === 'telemetry';
+  const runOptions = isTokens ? parseRunArgs(restArgs) : null;
+  if (runOptions) {
+    return handleRunTokens(db, runOptions, flags.isJson, isCli, cwd);
+  }
   if (isTokens) {
     const breakdown = getSwarmTokenBreakdown(db);
     if (flags.isJson) {
