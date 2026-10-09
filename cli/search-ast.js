@@ -18,7 +18,8 @@ const TIER_PATTERNS = [
 export const resolveArchitectureTier = (relativePath) => {
   const baseName = path.basename(relativePath);
   for (const { tier, test } of TIER_PATTERNS) {
-    if (test(relativePath, baseName)) return tier;
+    const isMatch = Boolean(test(relativePath, baseName));
+    if (isMatch) return tier;
   }
   return 'utility';
 };
@@ -68,7 +69,8 @@ const extractRegexFallback = (content, filePath = '') => {
 
   const cppTypeMatches = polyglotSource.matchAll(/\b(?:class|struct|union|enum(?:\s+class)?)\s+([A-Za-z_][A-Za-z0-9_]*)/g);
   for (const m of cppTypeMatches) {
-    if (!RESERVED_SYMBOL_NAMES.has(m[1])) {
+    const isReservedName = RESERVED_SYMBOL_NAMES.has(m[1]);
+    if (!isReservedName) {
       symbols.push({ name: m[1], kind: 'class', isExport: true, startLine: 1, endLine: 1, signature: '' });
     }
   }
@@ -80,21 +82,24 @@ const extractRegexFallback = (content, filePath = '') => {
 
   const cppDeclMatches = polyglotSource.matchAll(/^[ \t]*(?:[A-Za-z_][A-Za-z0-9_:<>,*& \t]*?)\s+\*?([A-Za-z_][A-Za-z0-9_]*)\s*\([^)]*\)\s*(?:const\s*)?[;{]/gm);
   for (const m of cppDeclMatches) {
-    if (!CPP_NON_DECLARATION_KEYWORDS.has(m[1])) {
+    const isNonDeclarationKeyword = CPP_NON_DECLARATION_KEYWORDS.has(m[1]);
+    if (!isNonDeclarationKeyword) {
       symbols.push({ name: m[1], kind: 'function', isExport: true, startLine: 1, endLine: 1, signature: '' });
     }
   }
 
   const rustMatches = polyglotSource.matchAll(/\b(?:pub\s+)?(?:struct|enum|trait|impl|mod|fn)\s+([A-Za-z_][A-Za-z0-9_]*)/g);
   for (const m of rustMatches) {
-    if (!RESERVED_SYMBOL_NAMES.has(m[1])) {
+    const isReservedName = RESERVED_SYMBOL_NAMES.has(m[1]);
+    if (!isReservedName) {
       symbols.push({ name: m[1], kind: 'symbol', isExport: true, startLine: 1, endLine: 1, signature: '' });
     }
   }
 
   const kotlinMatches = polyglotSource.matchAll(/\b(?:data\s+|sealed\s+|open\s+|abstract\s+|inner\s+)?(?:class|object|interface|fun)\s+([A-Za-z_][A-Za-z0-9_]*)/g);
   for (const m of kotlinMatches) {
-    if (!RESERVED_SYMBOL_NAMES.has(m[1])) {
+    const isReservedName = RESERVED_SYMBOL_NAMES.has(m[1]);
+    if (!isReservedName) {
       symbols.push({ name: m[1], kind: 'symbol', isExport: true, startLine: 1, endLine: 1, signature: '' });
     }
   }
@@ -127,7 +132,10 @@ const extractRegexFallback = (content, filePath = '') => {
 
   const propMatches = content.matchAll(/(?:readonly\s+)?([A-Za-z0-9_$]+)\s*\??\s*:\s*([^;,\n]+)[;,]/g);
   for (const p of propMatches) {
-    if (props.length < 20 && !['string', 'number', 'boolean', 'void'].includes(p[1])) {
+    const hasPropRoom = props.length < 20;
+    const isNamedProp = !['string', 'number', 'boolean', 'void'].includes(p[1]);
+    const shouldAddProp = hasPropRoom && isNamedProp;
+    if (shouldAddProp) {
       props.push({ name: p[1], type: p[2].trim() });
     }
   }
@@ -135,7 +143,8 @@ const extractRegexFallback = (content, filePath = '') => {
   const importMatches = content.matchAll(/import\s+(?:\{([^}]+)\}|([A-Za-z0-9_$]+)|\*\s+as\s+([A-Za-z0-9_$]+))\s+from\s+['"]([^'"]+)['"]/g);
   for (const m of importMatches) {
     const sourceModule = m[4];
-    if (m[1]) {
+    const hasNamedImports = Boolean(m[1]);
+    if (hasNamedImports) {
       for (const s of m[1].split(',')) {
         const trimmed = s.trim().split(/\s+as\s+/)[0].trim();
         if (trimmed) imports.push({ importedSymbol: trimmed, sourceModule, line: 1 });
