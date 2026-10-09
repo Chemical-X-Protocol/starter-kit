@@ -30,7 +30,8 @@ export const describeIndexFromSync = (syncRes) => {
 
 const formatConflictNote = (index) => {
   const conflicts = index.conflicts || [];
-  if (conflicts.length === 0) return '';
+  const hasNoConflicts = conflicts.length === 0;
+  if (hasNoConflicts) return '';
   return `; ${describeSkipped(conflicts.map((c) => ({ path: c.path, hunks: [{ start: c.line }] })))}`;
 };
 
