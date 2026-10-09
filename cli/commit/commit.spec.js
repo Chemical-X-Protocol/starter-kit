@@ -227,8 +227,21 @@ test('index.lock: a lock that stays held fails after bounded retries and says so
   const result = await run(root, ['a.txt', '-m', `add a (#${taskId})`], { sleep: async (ms) => { delays.push(ms); }, delaysMs: [1, 2, 3] });
   assert.equal(result.ok, false);
   assert.deepEqual(delays, [1, 2, 3]);
-  assert.match(result.lines.join('\n'), /Refused: git add failed/);
+  assert.match(result.lines.join('\n'), /Failed: \.git\/index\.lock stayed held after 4 attempt\(s\)/);
+  assert.equal(result.lines.length, 1);
+  assert.equal(result.attempts, 4);
   assert.equal(commitCount(root), 1);
+});
+
+test('a repo without .chemx/index.db is left untouched: no .chemx, no .gitignore', async (t) => {
+  const { root } = makeRepo(t);
+  fs.rmSync(path.join(root, '.chemx'), { recursive: true, force: true });
+  fs.rmSync(path.join(root, '.gitignore'), { force: true });
+  write(root, 'a.txt', 'a\n');
+  const result = await run(root, ['a.txt', '-m', 'add a', '--no-task=spec']);
+  assert.equal(result.ok, true, result.lines.join('\n'));
+  assert.equal(fs.existsSync(path.join(root, '.chemx')), false);
+  assert.equal(fs.existsSync(path.join(root, '.gitignore')), false);
 });
 
 test('index.lock at commit time reports the attempts and the holder when it is unknown', async (t) => {

@@ -34,12 +34,15 @@ const gateFailureLines = (outcome) => [
 const failureLines = (outcome) => (outcome.lockedOut ? lockedOutLines(outcome) : gateFailureLines(outcome));
 
 // Stages the listed files; returns the reasons it cannot (empty when staged and something changed).
+const addFailureLines = (added) => (added.lockedOut ? lockedOutLines(added) : ['Failed: git add did not complete. Nothing was committed. Findings:', ...compactFailure(added.output)]);
+
 const stageFiles = async (root, rel, retry) => {
   const added = await gitWithRetry(root, ['add', '--', ...rel], retry);
-  const addReasons = added.status === 0 ? [] : [`Refused: git add failed: ${added.output.trim()}`];
+  const isAddFailed = added.status !== 0;
+  if (isAddFailed) return { reasons: addFailureLines(added), isFailure: true, added };
   const hasChanges = stagedAmong(root, rel).length > 0;
-  const emptyReasons = hasChanges || addReasons.length > 0 ? [] : ['Refused: nothing to commit in the listed files (no changes).'];
-  return [...addReasons, ...emptyReasons];
+  const reasons = hasChanges ? [] : ['Refused: nothing to commit in the listed files (no changes).'];
+  return { reasons, isFailure: false, added };
 };
 
 const commitArgsFor = (message, rel) => [
@@ -78,8 +81,9 @@ export const runCommit = async (args, options = {}) => {
   // The hook runs as the committer, so its lease check sees the same handle as this command.
   const gitEnv = facts?.committer ? { ...env, CHEMX_AGENT_ID: facts.committer } : env;
   const retry = { sleep: options.sleep, delaysMs: options.delaysMs, env: gitEnv };
-  const staging = preflight.length === 0 ? await stageFiles(root, facts.rel, retry) : [];
-  const reasons = [...preflight, ...staging];
+  const staging = preflight.length === 0 ? await stageFiles(root, facts.rel, retry) : { reasons: [], isFailure: false };
+  if (staging.isFailure) return failed(staging.reasons, parsed, { attempts: staging.added.attempts, lockHolder: staging.added.lockHolder });
+  const reasons = [...preflight, ...staging.reasons];
   const isRefused = reasons.length > 0;
   if (isRefused) return refused(reasons, parsed);
   const message = buildCommitMessage({ messages: parsed.messages, taskId: facts.taskId, noTask: parsed.noTask, config: facts.config, env });
