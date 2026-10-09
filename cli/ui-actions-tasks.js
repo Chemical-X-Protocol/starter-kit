@@ -28,7 +28,8 @@ export const handleUpdateTaskStatus = (db, body = {}) => {
     const noTargetConfirm = body.noTargetConfirm !== undefined ? Boolean(body.noTargetConfirm) : !hasTarget;
     const auditRes = completeTaskWithAudit(db, taskId, agentId, { cwd: body.cwd || process.cwd(), force: Boolean(body.force), noTargetConfirm, overrideOwnership: true });
     if (!auditRes) return { success: false, error: 'Task not found' };
-    if (auditRes.refused) return { success: false, refused: true, ...auditRes };
+    const isRefused = Boolean(auditRes.refused);
+    if (isRefused) return { success: false, refused: true, ...auditRes };
     return { success: true, task: auditRes };
   }
 
