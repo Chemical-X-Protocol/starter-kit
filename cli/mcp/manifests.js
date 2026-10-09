@@ -178,6 +178,8 @@ const FILE_SUB_TOOLS = [
         allowMultiple: { type: 'boolean', description: 'Allow multiple replacements' },
         multiple: { type: 'boolean', description: 'Alias for allowMultiple' },
         dryRun: { type: 'boolean', description: 'Preview only: return the unified diff and write nothing' },
+        full: { type: 'boolean', description: 'Keep the original result shape with full rule text in every violation list; default prints each rule text once, then rule@line lists' },
+        compact: { type: 'boolean', description: 'compact:false is the same as full:true; the default is compact' },
         allowRemoved: { type: 'array', items: { type: 'string' }, description: 'Top-level declarations this patch may remove; any other removal (renames included) is refused' },
         agentId: { type: 'string', description: 'Caller agent id for team lock checks (default @agent)' }
       },
@@ -206,6 +208,8 @@ const FILE_SUB_TOOLS = [
         overwrite: { type: 'boolean', description: 'Required to replace an existing file; without it write refuses' },
         append: { type: 'boolean', description: 'Add content to the end of the file (created if missing); refused together with overwrite' },
         dryRun: { type: 'boolean', description: 'Preview only: return the unified diff and write nothing' },
+        full: { type: 'boolean', description: 'Keep the original result shape with full rule text in every violation list; default prints each rule text once, then rule@line lists' },
+        compact: { type: 'boolean', description: 'compact:false is the same as full:true; the default is compact' },
         allowRemoved: { type: 'array', items: { type: 'string' }, description: 'Top-level declarations an overwrite may remove; any other removal is refused' },
         agentId: { type: 'string', description: 'Caller agent id for team lock checks (default @agent)' }
       },
