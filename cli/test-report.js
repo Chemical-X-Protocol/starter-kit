@@ -60,7 +60,8 @@ export const formatTestHeadline = (report) => {
 // One line naming what --changed / --related selected, or why the whole suite ran.
 export const describeSelection = (selection) => {
   if (!selection) return null;
-  if (selection.mode === 'full') return `Full suite: ${selection.reason}`;
+  const isFullSuite = selection.mode === 'full';
+  if (isFullSuite) return `Full suite: ${selection.reason}`;
   const changedCount = (selection.changed || []).length;
   const graph = selection.graph ? `, ${selection.graph} graph${selection.graphNote ? ` (${selection.graphNote})` : ''}` : '';
   const unpinned = selection.specs.filter((s) => s.reasons.every((r) => r.startsWith('may load any changed file'))).length;
