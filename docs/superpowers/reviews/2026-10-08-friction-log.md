@@ -30,3 +30,6 @@
 - [G5 r3] Pre-commit audit of a 2-file commit (cmd-wrappers.js + spec) ran past the 120s tool timeout and had to be backgrounded.
 - [G5 r3] `chemx q -g -h` prints 'Missing search query for literal search.' and exits 0: the literal parser skips any dash token after -g (G6 argv parsing). `chemx read a.js -s -h` prints the whole file instead of 'symbol -h not found' (reader argv parsing). `chemx f help` lists every top-level entry instead of filtering by 'help'.
 - [G5 r3] TIMER_DISCIPLINE flags `await new Promise((r) => setTimeout(r, 50))` in specs as CRITICAL; the rule has no notion of awaited one-shot delays.
+- [G5 r3] Full suite flakes under load and shared state: `spot-check-fixes.spec.js` Fix 1 saw 2 cli/ rows in the shared kit `.chemx/index.db` while other spec files wrote to it in parallel (passed on rerun; G6 index scope), and a 2,000 ms wall-clock startup bound failed at 2,206 ms (now a user-CPU bound).
+- [G5 r3] My own `chemx audit --json | head -c 0` raised an uncaught EPIPE and the error catcher wrote `.chemx/issues/issue-*.md` into the worktree; fixed in this round (exitQuietlyOnClosedPipe).
+- [G5 r3] Bypassed with a raw `git diff --name-only <base>...HEAD` inside a node -e script; `chemx d --name-only <base>...HEAD` does the same job and should have been used.
