@@ -1,3 +1,5 @@
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { requestFileLock, releaseFileLock } from './team-db.js';
 import { formatLockHelpCard } from './team-format.js';
 import { isPathTraversal } from '../path-scope.js';
@@ -24,6 +26,17 @@ const rejectTraversal = (file, isCli, cwd) => {
   if (!isTraversal) return null;
   if (isCli) process.stderr.write('\x1b[31m✕ Path traversal rejected: file path must be within workspace\x1b[0m\n');
   return { error: 'path_traversal' };
+};
+
+// A path with whitespace that does not exist is most likely an unsplit list of files (#2559).
+// Guarantee: only that case is refused; other nonexistent paths (files about to be created) still lock.
+const rejectPathList = (file, isCli, cwd) => {
+  const hasSpace = /\s/.test(file);
+  if (!hasSpace) return null;
+  const isPresent = existsSync(resolve(cwd, file));
+  if (isPresent) return null;
+  if (isCli) process.stderr.write('\x1b[31m✕ Not locked: the path contains spaces and does not exist, so it looks like several files joined together. Pass one path per lock acquire.\x1b[0m\n');
+  return { error: 'path_list' };
 };
 
 const runFileAction = (db, action, file, flags, isCli, cwd) => {
@@ -95,6 +108,10 @@ export const handleLockCommand = (db, nonFlagPositional, flags, isCli, cwd = pro
 
   const isAcquire = action === 'acquire';
   if (!isAcquire) return runFileAction(db, action, file, flags, isCli, cwd);
+
+  const listLike = rejectPathList(file, isCli, cwd);
+  const isListLike = Boolean(listLike);
+  if (isListLike) return listLike;
 
   const identity = resolveAgentIdentity(flags.as);
   writeIdentityHint(identity, isCli, flags.isJson);
