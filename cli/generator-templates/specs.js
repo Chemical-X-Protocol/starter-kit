@@ -1,5 +1,6 @@
 export const buildComponentSpec = (name, pascalName, hasController = true, runner = 'node:test') => {
-  if (runner === 'vitest') {
+  const isVitest = runner === 'vitest';
+  if (isVitest) {
     if (hasController) {
       return `import { describe, it, expect } from 'vitest';
 import { use${pascalName}Controller } from './${name}.controller';
@@ -22,7 +23,8 @@ describe('${pascalName} Atom Foundation', () => {
 `;
   }
 
-  if (runner === 'jest') {
+  const isJest = runner === 'jest';
+  if (isJest) {
     if (hasController) {
       return `import { describe, it, expect } from '@jest/globals';
 import { use${pascalName}Controller } from './${name}.controller';
