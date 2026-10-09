@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { isStdoutTty } from '../terminal.js';
 
 export const executeBuild = (command, cwd = process.cwd(), options = {}) => {
   return new Promise((resolve) => {
@@ -12,7 +13,8 @@ export const executeBuild = (command, cwd = process.cwd(), options = {}) => {
       shell: true,
       cwd,
       stdio: ['inherit', 'pipe', 'pipe'],
-      env: { ...process.env, FORCE_COLOR: '1' }
+      // Color only when the child streams straight to a human terminal; captured output is parsed.
+      env: { ...process.env, FORCE_COLOR: isRawStream && isStdoutTty() ? '1' : '0' }
     });
 
     child.stdout.on('data', (chunk) => {
