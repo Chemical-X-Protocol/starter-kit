@@ -7,8 +7,10 @@ import { withIndex } from './search-output.js';
 import { STATUS, combineStatuses, toExitCode } from './result-status.js';
 
 const describeBlastStatus = (result) => {
-  if (result.ambiguous) return { status: STATUS.INCONCLUSIVE, reason: `ambiguous target "${result.target}": ${result.candidates.length} candidates; pass a full path` };
-  if (result.notFound) return { status: STATUS.INCONCLUSIVE, reason: `target "${result.target}" is not a file or symbol in the index scope` };
+  const isAmbiguous = Boolean(result.ambiguous);
+  if (isAmbiguous) return { status: STATUS.INCONCLUSIVE, reason: `ambiguous target "${result.target}": ${result.candidates.length} candidates; pass a full path` };
+  const isNotFound = Boolean(result.notFound);
+  if (isNotFound) return { status: STATUS.INCONCLUSIVE, reason: `target "${result.target}" is not a file or symbol in the index scope` };
   return { status: STATUS.PASS, reason: null };
 };
 
@@ -53,7 +55,9 @@ export const handleBlastRadiusCommand = (db, target, { index = null, isJson = fa
   const hasReason = Boolean(payload.reason);
   if (hasReason) process.stdout.write(`  ${ANSI.GOLD}? Inconclusive: ${payload.reason}${ANSI.RESET}\n`);
   printList('Candidates', ANSI.GOLD, payload.candidates, (c) => c);
-  if (result.seedPath) process.stdout.write(`  ${ANSI.DIM}Seed:${ANSI.RESET} ${result.seedPath}${result.symbol ? ` (symbol ${result.symbol})` : ''}\n`);
+  const hasSeedPath = Boolean(result.seedPath);
+  const hasSymbol = Boolean(result.symbol);
+  if (hasSeedPath) process.stdout.write(`  ${ANSI.DIM}Seed:${ANSI.RESET} ${result.seedPath}${hasSymbol ? ` (symbol ${result.symbol})` : ''}\n`);
   const isResolved = Boolean(result.seedPath);
   if (isResolved) process.stdout.write(`  ${ANSI.MINT}Impact:${ANSI.RESET} ${result.totalImpactCount} files across ${result.depth} hops (exact import resolution)\n`);
   printList('Direct consumers (depth 1)', ANSI.GOLD, result.directConsumers, (c) => `${c.path} ${ANSI.DIM}[${c.tier}]${ANSI.RESET}`);
