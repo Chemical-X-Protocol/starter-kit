@@ -20,9 +20,11 @@ const getArchetypeVectors = () => {
 };
 
 export const matchArchetypeByVector = (descriptionText, minSimilarity = 0.25) => {
-  if (!descriptionText || typeof descriptionText !== 'string') return null;
+  const isMissingDescription = !descriptionText || typeof descriptionText !== 'string';
+  if (isMissingDescription) return null;
   const cleanDesc = descriptionText.trim();
-  if (cleanDesc.length === 0) return null;
+  const isBlankDescription = cleanDesc.length === 0;
+  if (isBlankDescription) return null;
 
   const descVector = generateEmbedding(cleanDesc);
   const archetypeVectors = getArchetypeVectors();
@@ -32,14 +34,16 @@ export const matchArchetypeByVector = (descriptionText, minSimilarity = 0.25) =>
 
   for (const item of archetypeVectors) {
     const sim = cosineSimilarity(descVector, item.vector);
-    if (sim > highestSim) {
+    const isBetterMatch = sim > highestSim;
+    if (isBetterMatch) {
       highestSim = sim;
       bestMatch = item.archetype;
     }
   }
 
   const isSimilaritySufficient = highestSim >= minSimilarity;
-  if (isSimilaritySufficient && bestMatch) {
+  const isMatchAccepted = Boolean(isSimilaritySufficient && bestMatch);
+  if (isMatchAccepted) {
     return {
       archetype: bestMatch,
       similarity: Number(highestSim.toFixed(4))
