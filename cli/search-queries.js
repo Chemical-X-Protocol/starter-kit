@@ -103,7 +103,8 @@ export const syncViolationsIndex = (db, violations = [], { scope = null } = {}) 
   if (!db) return 0;
   db.exec('DELETE FROM violations;');
   writeIndexMeta(db, { violationsSyncedAt: Date.now(), violationsScope: scope || '' });
-  if (!Array.isArray(violations) || violations.length === 0) return 0;
+  const isEmptyViolations = !Array.isArray(violations) || violations.length === 0;
+  if (isEmptyViolations) return 0;
 
   const insertStmt = db.prepare(`
     INSERT INTO violations (file_path, rule, severity, pillar, line, hazard, directive)
@@ -191,7 +192,8 @@ export const recordAuditSnapshot = (db, report) => {
   // Stamp file health in files table
   const hazardCountsByFile = new Map();
   for (const v of report.violations || []) {
-    if (v.filePath) {
+    const hasFilePath = Boolean(v.filePath);
+    if (hasFilePath) {
       const current = hazardCountsByFile.get(v.filePath) || 0;
       hazardCountsByFile.set(v.filePath, current + 1);
     }
@@ -238,12 +240,16 @@ export const getAuditProgression = (db, limit = 10) => {
 export const queryFilesByHealth = (db, { status = 'all', limit = 50 } = {}) => {
   if (!db) return [];
   let sql = 'SELECT path, tier, lines, chars, health_score, hazard_count FROM files';
-  if (status === 'failing' || status === 'degraded') {
+  const isDegraded = status === 'failing' || status === 'degraded';
+  if (isDegraded) {
     sql += ' WHERE hazard_count > 0 ORDER BY health_score ASC, hazard_count DESC, lines DESC';
-  } else if (status === 'crystalline' || status === 'clean') {
-    sql += ' WHERE hazard_count = 0 ORDER BY lines ASC';
   } else {
-    sql += ' ORDER BY path ASC';
+    const isClean = status === 'crystalline' || status === 'clean';
+    if (isClean) {
+      sql += ' WHERE hazard_count = 0 ORDER BY lines ASC';
+    } else {
+      sql += ' ORDER BY path ASC';
+    }
   }
   sql += ' LIMIT ?';
 
