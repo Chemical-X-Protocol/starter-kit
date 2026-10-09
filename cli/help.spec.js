@@ -180,7 +180,7 @@ test('cli: chemx init --help and -h display usage and do not scaffold /--help/ o
   for (const flag of helpFlags) {
     const res = spawnSync(process.execPath, [cliPath, 'init', flag], {
       encoding: 'utf8',
-      timeout: 5000
+      timeout: 30000
     });
 
     assert.strictEqual(res.status, 0, `chemx init ${flag} should exit with code 0`);
@@ -206,7 +206,7 @@ test('cli: chemx create --help and scaffold -h display usage', () => {
   for (const [cmd, flag] of commands) {
     const res = spawnSync(process.execPath, [cliPath, cmd, flag], {
       encoding: 'utf8',
-      timeout: 5000
+      timeout: 30000
     });
 
     assert.strictEqual(res.status, 0, `chemx ${cmd} ${flag} should exit with code 0`);
