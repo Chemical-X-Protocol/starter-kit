@@ -32,10 +32,12 @@ export const buildIssueBody = (report) => {
     `| **Working Dir** | \`${sanitizedCwd}\` |`
   ];
 
-  if (report.gitBranch) {
+  const hasGitBranch = Boolean(report.gitBranch);
+  if (hasGitBranch) {
     lines.push(`| **Git Branch** | \`${sanitizeText(String(report.gitBranch))}\` |`);
   }
-  if (report.gitCommit) {
+  const hasGitCommit = Boolean(report.gitCommit);
+  if (hasGitCommit) {
     lines.push(`| **Git Commit** | \`${sanitizeText(String(report.gitCommit))}\` |`);
   }
 
@@ -49,7 +51,8 @@ export const buildIssueBody = (report) => {
   lines.push('```');
   lines.push('</details>');
 
-  if (report.context && Object.keys(report.context).length > 0) {
+  const hasContext = Boolean(report.context && Object.keys(report.context).length > 0);
+  if (hasContext) {
     lines.push('');
     lines.push('#### 🔍 Additional Metadata');
     lines.push('```json');
@@ -71,7 +74,8 @@ export const buildIssueWebUrl = (repo, title, body, labels = []) => {
   const params = new URLSearchParams();
   params.set('title', title);
   params.set('body', body);
-  if (labels && labels.length > 0) {
+  const hasLabels = Boolean(labels && labels.length > 0);
+  if (hasLabels) {
     params.set('labels', labels.join(','));
   }
   return `${base}?${params.toString()}`;
