@@ -50,20 +50,29 @@ export const handleError = async (err, options = {}) => {
 
   if (policy.shouldAutoPost) {
     // The preview goes to stderr even when silent (--json/--silent keep stdout clean); only the MCP tool opts out with preview: false.
-    if (options.preview !== false && !isOffline) previewPost(targetRepo, issue, savedPath);
+    const isPreviewEnabled = options.preview !== false && !isOffline;
+    if (isPreviewEnabled) previewPost(targetRepo, issue, savedPath);
     publishResult = await publishIssue(targetRepo, issue.title, issue.body, issue.labels);
     // With options.silent the outcome is only in the returned publishResult.
-    if (!options.silent && publishResult.success) {
+    const shouldLogUrl = !options.silent && publishResult.success;
+    const shouldLogFailure = !options.silent && !publishResult.success;
+    if (shouldLogUrl) {
       process.stdout.write(`\n\x1b[32m✔ Issue automatically created: ${publishResult.url}\x1b[0m\n`);
-    } else if (!options.silent) {
+    } else if (shouldLogFailure) {
       printFailureSummary(report, issue, savedPath, publishResult.error || 'unknown error');
     }
-  } else if (!options.silent) {
-    const offlineNote = policy.canPromptUser && isOffline ? describeOffline('Posting a GitHub issue') : null;
-    const issueUrl = policy.shouldShowIssueUrl ? issue.webUrl : null;
-    process.stderr.write(formatFailureNotice(report.message, savedPath, issueUrl, policy.useColor, offlineNote));
-    if (policy.canPromptUser && !isOffline) {
-      publishResult = await promptUserToPublish(targetRepo, issue, savedPath);
+  } else {
+    const shouldShowFailureNotice = !options.silent;
+    if (shouldShowFailureNotice) {
+      const isOfflineNoteNeeded = policy.canPromptUser && isOffline;
+      const offlineNote = isOfflineNoteNeeded ? describeOffline('Posting a GitHub issue') : null;
+      const shouldShowIssueUrl = Boolean(policy.shouldShowIssueUrl);
+      const issueUrl = shouldShowIssueUrl ? issue.webUrl : null;
+      process.stderr.write(formatFailureNotice(report.message, savedPath, issueUrl, policy.useColor, offlineNote));
+      const canPromptToPublish = policy.canPromptUser && !isOffline;
+      if (canPromptToPublish) {
+        publishResult = await promptUserToPublish(targetRepo, issue, savedPath);
+      }
     }
   }
 
@@ -88,14 +97,16 @@ export const handleError = async (err, options = {}) => {
           status: 'queued',
           priority: 1
         });
-        if (created && !options.silent) {
+        const shouldLogTask = Boolean(created && !options.silent);
+        if (shouldLogTask) {
           process.stdout.write(`  \x1b[36m• Swarm Task:\x1b[0m #${created.id} queued to track issue resolution\n`);
         }
       }
     } catch (err) {
       // Non-blocking: the issue is already published; only the task record failed.
       const reason = err instanceof Error ? err.message : String(err);
-      if (!options.silent) process.stderr.write(`  • Swarm task not recorded: ${reason}\n`);
+      const shouldLogError = !options.silent;
+      if (shouldLogError) process.stderr.write(`  • Swarm task not recorded: ${reason}\n`);
     }
   }
 
