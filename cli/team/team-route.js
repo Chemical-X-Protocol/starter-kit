@@ -7,7 +7,7 @@
  */
 import { routeStages, routeGate } from './team-dispatch-v2.js';
 import { loadModelRouting, DEFAULT_MODEL_ROUTING } from './team-dispatch.js';
-import { isValidNeeds } from './team-needs.js';
+import { isValidNeeds, needsForRules } from './team-needs.js';
 import { safeAll } from './team-db-readonly.js';
 
 const MAX_IDS = 50;
@@ -30,32 +30,42 @@ export const readRouteTasks = (db, ids) => {
   const hasNothingToRead = wanted.length === 0 || !db;
   if (hasNothingToRead) return new Map();
   const marks = wanted.map(() => '?').join(', ');
-  const rows = safeAll(db, `SELECT id, title, description, needs FROM agent_tasks WHERE id IN (${marks})`, wanted);
+  const rows = safeAll(db, `SELECT id, title, description, needs, rule_id FROM agent_tasks WHERE id IN (${marks})`, wanted);
   return new Map(rows.map((row) => [Number(row.id), row]));
 };
 
-const whyText = (needs, isMechanical, hasConfig) => {
+const whyText = (needs, isMechanical, hasConfig, tierSource = 'task') => {
   const source = hasConfig ? 'modelRouting in .chemx/config.json' : 'the built-in defaults (no modelRouting configured)';
   const buildNote = isMechanical ? ' The title or description says "mechanical", so the build uses the mechanical route.' : '';
-  return `needs=${needs}: build and review use the ${needs} entry from ${source}; repair uses the light entry.${buildNote}`;
+  const origin = tierSource === 'rule' ? ' (from the task\'s audit rule, not set on the task)' : '';
+  return `needs=${needs}${origin}: build and review use the ${needs} entry from ${source}; repair uses the light entry.${buildNote}`;
+};
+
+/** { needs, source } from the task's own tier, else its rule's tier (as dispatch does); needs null when neither. */
+export const tierOf = (row) => {
+  if (isValidNeeds(row?.needs)) return { needs: row.needs, source: 'task' };
+  const ruleNeeds = needsForRules(row?.rule_id);
+  return isValidNeeds(ruleNeeds) ? { needs: ruleNeeds, source: 'rule' } : { needs: null, source: null };
 };
 
 /** One task's routing. A task with no valid needs tier is reported as such and shown at the standard default. */
 export const routeTask = (row, routing = null) => {
-  const hasNeeds = isValidNeeds(row?.needs);
-  const needs = hasNeeds ? row.needs : 'standard';
-  const isMechanical = row?.needs === 'light' && MECHANICAL.test(`${row.title || ''}\n${row.description || ''}`);
+  const tier = tierOf(row);
+  const hasNeeds = tier.needs !== null;
+  const needs = hasNeeds ? tier.needs : 'standard';
+  const isMechanical = needs === 'light' && hasNeeds && MECHANICAL.test(`${row.title || ''}\n${row.description || ''}`);
   const stages = routeStages({ needs, mechanical: isMechanical }, routing);
   const hasConfig = Boolean(routing);
   return {
     task: Number(row.id),
     title: String(row.title || ''),
-    needs: hasNeeds ? row.needs : null,
+    needs: tier.needs,
+    needsSource: tier.source,
     build: stages.build,
     review: stages.review,
     repair: stages.repair,
     why: hasNeeds
-      ? whyText(needs, isMechanical, hasConfig)
+      ? whyText(needs, isMechanical, hasConfig, tier.source)
       : 'This task has no needs tier. Until it has one, build and review would route as standard.'
   };
 };
@@ -76,7 +86,7 @@ export const buildRoutes = (db, ids, { routing = null } = {}) => {
 
 /** "sonnet/medium" for a task's build stage, or null when it has no valid needs tier. */
 export const buildLabelFor = (task, routing = null) => {
-  const hasNeeds = isValidNeeds(task?.needs);
+  const hasNeeds = tierOf(task).needs !== null;
   if (!hasNeeds) return null;
   return labelOf(routeTask(task, routing).build);
 };

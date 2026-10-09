@@ -89,3 +89,14 @@ test('brief: a claim with a needs tier lists its routed build model', (t) => {
   assert.match(line, new RegExp(`#${deep.id} opus/high`));
   assert.match(line, new RegExp(`#${plain.id}(,|\\))`));
 });
+
+test('route: a task with no needs takes its audit rule tier, as dispatch does', () => {
+  const db = makeFixtureDb();
+  db.prepare("UPDATE agent_tasks SET needs = NULL, rule_id = 'VIEW_MONOLITH' WHERE id = 3").run();
+  const { routes } = buildRoutes(db, [3]);
+  assert.equal(routes[0].needs, 'deep');
+  assert.equal(routes[0].needsSource, 'rule');
+  assert.equal(label(routes[0].build), 'opus/high');
+  assert.match(routes[0].why, /audit rule/);
+  assert.equal(buildLabelFor({ id: 3, needs: null, rule_id: 'VIEW_MONOLITH' }), 'opus/high');
+});

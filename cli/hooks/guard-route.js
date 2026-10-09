@@ -13,7 +13,7 @@ import { findAndLoadConfigFile } from '../config/loader.js';
 import { openTeamDbReadOnly } from '../team/team-db-readonly.js';
 import { teamRootFor } from '../team/coordination-target.js';
 import { loadModelRouting } from '../team/team-dispatch.js';
-import { readRouteTasks, routeTask } from '../team/team-route.js';
+import { readRouteTasks, routeTask, tierOf } from '../team/team-route.js';
 
 export const ROUTE_GUARD_TOOLS = new Set(['Agent', 'Workflow']);
 export const ROUTE_GUARD_KEY = 'routeGuard';
@@ -153,7 +153,7 @@ const defaultLookup = (root) => (ids) => {
   }
 };
 
-const hasTier = (row) => Boolean(row) && ['light', 'standard', 'deep'].includes(row.needs);
+const hasTier = (row) => Boolean(row) && tierOf(row).needs !== null;
 
 const collectFindings = (launches, rows, routing) => {
   const findings = [];
