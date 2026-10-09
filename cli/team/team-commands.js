@@ -25,6 +25,7 @@ import { parseFlags } from './team-flags.js';
 import { resolveListOptions, selectTaskPage, buildTaskListView } from './task-list-view.js';
 import { handleTaskSlotCommand, handleTaskTraceCommand, handleTrainCommand } from './team-commands-vds.js';
 import { handleLockCommand, handleUnlockCommand } from './team-commands-lock.js';
+import { refuseUnknownTask } from './team-task-guard.js';
 
 const ARG_VAL_FLAGS = ['--target', '--as', '--to', '--agent', '--since', '--limit', '--thread', '--task', '--parent', '--rule', '--priority', '--prio', '--moscow', '--url', '--pid'];
 
@@ -128,6 +129,8 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
       return { help: true, actions: ['list', 'show', 'add', 'claim', 'done', 'update', 'comment', 'triage', 'reconcile', 'set-target', 'vds-slot', 'trace'] };
     }
     const taskAction = nonFlagPositional[0] || 'list';
+    const unknownTask = refuseUnknownTask(db, taskAction, nonFlagPositional[1], { isCli, cwd });
+    if (unknownTask) return unknownTask;
     if (taskAction === 'list') {
       const listOptions = resolveListOptions({ status: flags.status, all: flags.all, limit: flags.limit });
       const tasks = listTasks(db, {
