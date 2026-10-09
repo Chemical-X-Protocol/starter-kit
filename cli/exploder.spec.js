@@ -85,7 +85,7 @@ test('exploder: rolls back and restores from .temp.bak on failure', () => {
 
   assert.throws(() => {
     explodeCapsule(targetFile, { cwd: tmpDir });
-  }, /Explode transaction aborted/);
+  }, /Explode refused/);
 
   // Original file must be restored
   assert.ok(fs.existsSync(targetFile), 'Original file must be restored on failure');
