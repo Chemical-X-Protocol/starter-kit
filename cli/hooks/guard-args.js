@@ -33,6 +33,13 @@ export const stdoutWrites = (command) => command.redirects
   })
   .map((redirect) => ({ op: redirect.op, target: redirect.target, isAppend: APPEND_REDIRECT_OPS.has(redirect.op) }));
 
+// Files fed to a command's stdin with `< file` (fd 0 only; heredocs and herestrings carry text, not files).
+export const inputRedirectTargets = (command) => command.redirects
+  .filter((redirect) => redirect.op === '<' && (redirect.fd === null || redirect.fd === '0'))
+  .map((redirect) => redirect.target);
+
+export const hasInPlaceFlag = (args) => args.some((arg) => /^-(?![MmIeE])[a-zA-Z]*i(?:\.[\w~]+)?$/.test(arg) || arg === '--in-place' || arg.startsWith('--in-place='));
+
 // Strip glob stars from a find/glob pattern so it can be used as a `chemx f` substring.
 export const globToSubstring = (pattern) => String(pattern).replace(/^\*+/, '').replace(/\*+$/, '');
 

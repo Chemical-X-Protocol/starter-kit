@@ -4,7 +4,8 @@
 // severity?: 'deny' (default) | 'nudge' }. Nudges live in guard-rules-nudge.js.
 
 import { isRepoSourcePath } from './guard-paths.js';
-import { fileOperands, gitSubcommand, optionValue, stdoutWrites } from './guard-args.js';
+import { fileOperands, gitSubcommand, hasInPlaceFlag, inputRedirectTargets, optionValue, stdoutWrites } from './guard-args.js';
+import { READ_GAP_RULES, GIT_GREP_RULE } from './guard-rules-reads.js';
 import { SHELL_REWRITE_RULES } from './guard-rules-shell.js';
 import { NUDGE_RULES } from './guard-rules-nudge.js';
 import { findCommandSchema } from '../commands-schema.js';
@@ -22,8 +23,12 @@ const isScript = (name, base) => name === base || name.startsWith(`${base}:`);
 const readsRepoSource = (operands, command, context) => {
   const isCopy = stdoutWrites(command).length > 0;
   if (isCopy) return false;
-  return operands.some((operand) => isRepoSourcePath(operand, context));
+  const files = [...operands, ...inputRedirectTargets(command)];
+  return files.some((file) => isRepoSourcePath(file, context));
 };
+
+// File operands plus `< file` stdin sources.
+const withStdin = (files, command) => [...files, ...inputRedirectTargets(command)];
 
 // `sed -n 1,5p file`: the first operand is the script unless it came from -e.
 const sedFileOperands = (args) => {
@@ -65,28 +70,30 @@ export const RUNNER_RULES = [
   {
     id: 'raw-source-read',
     matches: ({ tool, args }, command, context) => READ_TOOLS.has(tool) && readsRepoSource(fileOperands(args, READ_VALUE_FLAGS), command, context),
-    use: ({ args }, command, context) => `chemx read ${firstRepoSource(fileOperands(args, READ_VALUE_FLAGS), context)} --outline | --symbol=<name> | --start=N --end=M`,
+    use: ({ args }, command, context) => `chemx read ${firstRepoSource(withStdin(fileOperands(args, READ_VALUE_FLAGS), command), context)} --outline | --symbol=<name> | --start=N --end=M`,
   },
   {
     id: 'raw-source-sed',
-    matches: ({ tool, args }, command, context) => tool === 'sed' && args.includes('-n') && readsRepoSource(sedFileOperands(args), command, context),
-    use: ({ args }, command, context) => `chemx read ${firstRepoSource(sedFileOperands(args), context)} --start=N --end=M`,
+    matches: ({ tool, args }, command, context) => tool === 'sed' && !hasInPlaceFlag(args) && readsRepoSource(sedFileOperands(args), command, context),
+    use: ({ args }, command, context) => `chemx read ${firstRepoSource(withStdin(sedFileOperands(args), command), context)} --start=N --end=M`,
   },
+  ...READ_GAP_RULES,
   ...SHELL_REWRITE_RULES,
 ];
 
 export const SEARCH_RULES = [
   { id: 'raw-recursive-grep', use: 'chemx q -g "<text>" [-l]  (symbols: chemx q "<name>")', matches: (invocation) => isRecursiveGrep(invocation) },
+  GIT_GREP_RULE,
   { id: 'raw-search-tool', use: 'chemx q -g "<text>" [-l]', matches: ({ tool }) => tool === 'rg' || tool === 'ag' || tool === 'ack' },
   {
     id: 'raw-grep-source',
-    matches: (invocation, command, context) => GREP_TOOLS.has(invocation.tool) && firstRepoSource(grepParts(invocation).files, context) !== undefined,
-    use: (invocation, command, context) => `chemx q -g "${grepParts(invocation).pattern}" --dir=${firstRepoSource(grepParts(invocation).files, context)}  (line ranges: chemx read <file> --start=N --end=M)`,
+    matches: (invocation, command, context) => GREP_TOOLS.has(invocation.tool) && firstRepoSource(withStdin(grepParts(invocation).files, command), context) !== undefined,
+    use: (invocation, command, context) => `chemx q -g "${grepParts(invocation).pattern}" --dir=${firstRepoSource(withStdin(grepParts(invocation).files, command), context)}  (line ranges: chemx read <file> --start=N --end=M)`,
   },
   {
     id: 'raw-awk-source',
-    matches: (invocation, command, context) => invocation.tool === 'awk' && firstRepoSource(awkParts(invocation), context) !== undefined,
-    use: (invocation, command, context) => `chemx read ${firstRepoSource(awkParts(invocation), context)} --start=N --end=M`,
+    matches: (invocation, command, context) => invocation.tool === 'awk' && firstRepoSource(withStdin(awkParts(invocation), command), context) !== undefined,
+    use: (invocation, command, context) => `chemx read ${firstRepoSource(withStdin(awkParts(invocation), command), context)} --start=N --end=M`,
   },
 ];
 

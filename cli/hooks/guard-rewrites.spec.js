@@ -37,6 +37,18 @@ const DENY_CASES = [
   ['sed -n 1,5p src/a.ts', /chemx read src\/a\.ts --start=N --end=M/],
   ['git diff', /chemx d/],
   ['pnpm vitest run', /chemx test/],
+  // #2490: reads and searches that skipped the cat/grep rules.
+  ['cat < src/a.js', /chemx read src\/a\.js --outline/],
+  ['wc -l < src/a.js', /chemx read src\/a\.js --outline/],
+  ['sed s/a/b/ src/a.js', /chemx read src\/a\.js --start=N --end=M/],
+  ['sed -n 1,3p < src/a.js', /chemx read src\/a\.js --start=N --end=M/],
+  ['grep foo < src/a.js', /chemx q -g "foo" --dir=src\/a\.js/],
+  ['git grep foo', /chemx q -g "foo"/],
+  ['git grep -n -e foo -- src', /chemx q -g "foo"/],
+  ['git cat-file -p HEAD:src/a.js', /chemx read HEAD:src\/a\.js/],
+  ["awk -i inplace '{ sub(/a/, \"b\") } 1' src/a.js", /chemx patch src\/a\.js/],
+  ['xargs cat < list', /chemx do "read <file>/],
+  ['git ls-files | xargs -n1 cat < list.txt', /chemx do/],
 ];
 
 for (const [command, expectedUse] of DENY_CASES) {
@@ -51,7 +63,7 @@ for (const [command, expectedUse] of DENY_CASES) {
 const ALLOW_CASES = [
   'echo hi > /tmp/x.md', 'echo hi >> $UNKNOWN_DIR/x.md', 'echo hi > build.log', 'echo hi > .chemx/state.json',
   'echo hi > node_modules/pkg/index.js', 'echo hi > tmp/x.md', 'echo hi > scratch/x.ts', 'echo hi > /dev/null',
-  "sed -i 's/a/b/' /tmp/x.ts", "sed -i 's/a/b/' build.log", "sed 's/a/b/' src/a.ts", "sed -n '1,5p' /tmp/x.ts",
+  "sed -i 's/a/b/' /tmp/x.ts", "sed -i 's/a/b/' build.log", "sed 's/a/b/' /tmp/x.ts", "sed 's/a/b/' build.log", 'wc -l < build.log', 'wc -l < /tmp/a.js', 'wc -l src/a.js', 'git -C /tmp/rv/other grep foo', 'cd /tmp/rv/other && git grep foo', 'git -C /tmp/rv/other cat-file -p HEAD:src/a.js', 'git cat-file -e HEAD:src/a.js', 'git cat-file -t HEAD', 'xargs cat < /tmp/list', 'echo a | xargs cat', 'cat < /tmp/a.js', "awk -i inplace '1' /tmp/a.js", "sed -n '1,5p' /tmp/x.ts",
   'perl -e "print 1"', 'perl -Mstrict -e 1 src/a.js',
   'printf x | tee /tmp/x.ts', 'printf x | tee',
   'node scripts/run.mjs', 'node -e "console.log(1)"',

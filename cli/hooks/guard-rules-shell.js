@@ -55,6 +55,14 @@ const inPlaceTargets = (parts, args, context) => {
   return isInPlace ? parts.files.filter((file) => isRepoWritePath(file, context)) : [];
 };
 
+// gawk `-i inplace` rewrites its file operands; the program is the first operand unless -f names it.
+const awkInPlaceFiles = ({ args }, context) => {
+  const isInPlace = args.some((arg, index) => (arg === '-i' && args[index + 1] === 'inplace') || arg === '-iinplace' || arg === '--include=inplace');
+  const operands = fileOperands(args, new Set(['-F', '-v', '-f', '-i']));
+  const files = args.includes('-f') ? operands : operands.slice(1);
+  return isInPlace ? files.filter((file) => isRepoWritePath(file, context)) : [];
+};
+
 const nodeTestParts = ({ args }) => {
   const files = fileOperands(args, TEST_VALUE_FLAGS);
   return { files, name: optionValue(args, ['--test-name-pattern']) };
@@ -103,6 +111,11 @@ export const SHELL_REWRITE_RULES = [
     id: 'shell-perl-in-place',
     matches: ({ tool, args }, command, context) => tool === 'perl' && inPlaceTargets(perlParts({ args }), args, context).length > 0,
     use: ({ args }, command, context) => patchHint(inPlaceTargets(perlParts({ args }), args, context)[0], perlParts({ args }).script),
+  },
+  {
+    id: 'shell-awk-in-place',
+    matches: (invocation, command, context) => invocation.tool === 'awk' && awkInPlaceFiles(invocation, context).length > 0,
+    use: (invocation, command, context) => patchHint(awkInPlaceFiles(invocation, context)[0], null),
   },
   {
     id: 'raw-node-test',
