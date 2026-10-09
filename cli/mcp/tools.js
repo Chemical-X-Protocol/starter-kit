@@ -1,6 +1,7 @@
 import { MCP_TOOLS as BASE_MCP_TOOLS, ALL_MCP_TOOLS as BASE_ALL_MCP_TOOLS, withActionEnum } from './manifests.js';
 import { renderActionHelp } from './help.js';
 import { isBatchCall, expandBatchItems, runBatchItems } from './batch.js';
+import { shouldOffload, runActionInWorker } from './offload.js';
 import { handleAudit, handleGetRefactorPrompt } from './tools-audit.js';
 import { handleQueryPatterns, handleAutofix } from './tools-patterns.js';
 import { handleAuditBuild, handleChemxTypecheck, handleChemxTest, handleChemxVerify } from './tools-verify.js';
@@ -214,6 +215,7 @@ export const handleChemx = async (args = {}, cwd = process.cwd()) => {
   const mergedParams = { ...params, projectRoot: effectiveCwd, cwd: effectiveCwd };
 
   const handler = Object.hasOwn(DISPATCHER, action) ? DISPATCHER[action] : Tools[`chemx_${action}`];
+  if (handler && shouldOffload(action)) return runActionInWorker(action, mergedParams, effectiveCwd);
   if (!handler) {
     throw new Error(`Unknown Chemical X action: "${action}". Valid actions: ${ACTION_NAMES.join(', ')}`);
   }

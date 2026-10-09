@@ -84,3 +84,16 @@ test('scorecard: the audit runs off the event loop and keeps hotspot violation c
   for (const hotspot of card.topHotspots) assert.strictEqual(typeof hotspot.violations, 'number');
   pipe.close();
 });
+
+test('offload: a directory audit runs off the event loop so ping is answered first', async () => {
+  const pipe = startPipeServer({ bootDir: KIT_ROOT, staleness: false });
+  pipe.send({ jsonrpc: '2.0', id: 'audit', method: 'tools/call', params: { name: 'chemx', arguments: { action: 'audit', projectRoot: KIT_ROOT, params: { dir: 'cli' } } } });
+  await new Promise((r) => setTimeout(r, 400));
+  pipe.send({ jsonrpc: '2.0', id: 'ping2', method: 'ping' });
+  await pipe.next(byId('ping2'));
+  const isPingFirst = !pipe.frames.some(byId('audit'));
+  const audit = await pipe.next(byId('audit'), 120000);
+  assert.strictEqual(isPingFirst, true);
+  assert.strictEqual(audit.result.isError, false, audit.result.content[0].text);
+  pipe.close();
+});
