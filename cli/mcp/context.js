@@ -4,6 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { LOADED_VERSION } from './server-info.js';
+import { findChemxDir } from '../audit/history.js';
 
 const CHEMX_MARKERS = ['.chemxrc', '.chemxrc.json', '.chemx'];
 const PROJECT_MARKERS = [...CHEMX_MARKERS, 'package.json', '.git'];
@@ -72,5 +73,6 @@ export const resolveContext = ({ cwd = null, projectRoot = null, mcpRoots = [], 
   const isPinned = allowedRoots.length > 0;
   const isAllowed = !isPinned || allowedRoots.some((allowed) => isInsideDir(allowed, located.root));
   if (!isAllowed) return { ok: false, error: `Root "${located.root}" is outside CHEMX_MCP_ALLOWED_ROOTS.` };
-  return { ...located, dbPath: path.join(located.root, '.chemx', 'index.db'), version: LOADED_VERSION };
+  // dbPath reports where the index layer will really open the db (it walks up to an existing .chemx).
+  return { ...located, dbPath: path.join(findChemxDir(located.root), 'index.db'), version: LOADED_VERSION };
 };

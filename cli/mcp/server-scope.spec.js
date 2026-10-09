@@ -91,3 +91,15 @@ test('identity: a server whose disk version moved on says so on every call', asy
   const res = await call(handler, { action: 'help' });
   assert.match(textOf(res), /stale chemx MCP server \(loaded 1\.0\.0, disk 2\.0\.0\): reconnect via \/mcp/);
 });
+
+test('context: dbPath names the index the db layer will actually open', async () => {
+  const { resolveContext } = await import('./context.js');
+  const outer = makeFixtureProject({ 'package.json': PKG });
+  fs.mkdirSync(path.join(outer, '.chemx'));
+  const inner = path.join(outer, 'nested');
+  fs.mkdirSync(inner);
+  fs.writeFileSync(path.join(inner, 'package.json'), PKG);
+  const context = resolveContext({ projectRoot: inner, env: {} });
+  assert.strictEqual(context.rootSource, 'projectRoot');
+  assert.strictEqual(context.dbPath, path.join(outer, '.chemx', 'index.db'));
+});

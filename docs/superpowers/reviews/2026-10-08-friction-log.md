@@ -14,3 +14,5 @@
 - guard blocks multi-file `cat a b c` for reading several small modules; chemx read takes one file per call, so 4 files cost 4 calls (used Read tool instead)
 - pre-commit gate (grade B on staged files) blocks any commit touching cli/mcp/server.js because of a pre-existing swallowed-catch that already carries a chemx-allow comment; also flags a cleared setTimeout (TIMER_DISCIPLINE) and a handled writeSync fallback catch as CRITICAL. Used CHEMX_SKIP_PRECOMMIT=1 for G3 commits; verify ratchet is the real gate
 - `chemx d --stat` prints the full -U0 patch plus the stat, because the wrapper always passes -U0 and git treats -U as implying -p; a stat-only view needs raw git
+- `chemx audit cli --json` lists ratchet regressions by rule but no file:line; finding the one offending file needed `--full` plus a JSON filter (verify --json has no per-violation locations either)
+- specs run inside a .claude/worktrees/<group> checkout open the MAIN checkout's .chemx/index.db (findChemxDir walks up to the first existing .chemx), so spot-check 'Fix 1: Index isolation' fails only in worktrees and spec runs pollute the main index

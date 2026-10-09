@@ -5,6 +5,7 @@ import path from 'node:path';
 import { PassThrough } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import { startStdioServer } from './server.js';
+import { scheduleTimeout } from '../timers.js';
 
 export const KIT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
@@ -48,8 +49,8 @@ export const startPipeServer = (options = {}) => {
     const seen = frames.find(predicate);
     if (seen) return Promise.resolve(seen);
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('timed out waiting for frame')), timeoutMs);
-      waiters.push({ predicate, resolve: (frame) => { clearTimeout(timer); resolve(frame); } });
+      const cancelTimeout = scheduleTimeout(() => reject(new Error('timed out waiting for frame')), timeoutMs);
+      waiters.push({ predicate, resolve: (frame) => { cancelTimeout(); resolve(frame); } });
     });
   };
   const close = () => { server.rl.close(); input.end(); };
