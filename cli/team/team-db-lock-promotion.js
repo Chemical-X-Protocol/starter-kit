@@ -125,7 +125,8 @@ export const cleanExpiredLeases = (db, now = Date.now()) => {
     const cleaned = [];
     for (const lease of candidates) {
       const state = describeLease(lease, now);
-      if (state.active) continue;
+      const isActive = Boolean(state.active);
+      if (isActive) continue;
       const removal = removeExactLease.run(lease.file_path, lease.locked_by, lease.acquired_at, lease.expires_at);
       const isRemovedHere = removal.changes === 1;
       if (!isRemovedHere) continue; // a concurrent writer replaced this lease; it is not ours to delete
