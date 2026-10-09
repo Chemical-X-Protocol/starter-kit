@@ -5,7 +5,7 @@
 // The result equals collectFileUnits(relativePath, content) for the same file (fingerprint-visitors.spec).
 import { createBindingVisitors } from './bindings.js';
 import { canonicalize } from './canonicalize.js';
-import { collectScriptUnits } from './units.js';
+import { collectScriptUnits, isSloppyProgram } from './units.js';
 import { collectJsxTemplateUnits, collectVueTemplateUnits } from './template-units.js';
 
 const JSX_EXTENSIONS = /\.(jsx|tsx)$/;
@@ -32,7 +32,8 @@ export const createFileFingerprint = (relativePath, { ubiquitous } = {}) => {
 
   const collectAst = (ast, code) => {
     const program = canonicalize(ast.program, { bindings });
-    const collected = collectScriptUnits(program, options);
+    const isSloppy = isSloppyProgram(program, relativePath);
+    const collected = collectScriptUnits(program, { ...options, isSloppy });
     const offset = maxBlockId(scriptUnits);
     for (const unit of collected.units) scriptUnits.push(unit.blockId ? { ...unit, blockId: unit.blockId + offset } : unit);
     isExprCapped = isExprCapped || collected.isExprCapped;

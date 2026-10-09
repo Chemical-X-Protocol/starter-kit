@@ -22,19 +22,27 @@ export const TMPL_MIN_MASS = 8;
 const JSX_ROOT_PARENTS = new Set(['JSXElement', 'JSXFragment']);
 const byName = (a, b) => Number(a.name > b.name) - Number(a.name < b.name);
 
+// #2594: a valueless JSX attribute (true) is NAME=TRUE, never the empty string; Vue modifiers join the
+// name at every level (`.enter`, `.prevent`, `.number`, `.prop` change behaviour); a slot's props
+// expression is part of SLOT at L1; elements hash their tagKey (element vs component, see normalize).
 const staticLabels = (attr) => {
+  const isFlag = attr.isFlag === true;
+  if (isFlag) return [`${attr.name}=TRUE`, `${attr.name}=TRUE`, `ATTR(${attr.name})`];
   const isRole = ROLE_PATTERN.test(attr.value);
   const l1 = isRole ? `${attr.name}=ROLE(${attr.value})` : `${attr.name}=${JSON.stringify(attr.value)}`;
   return [l1, isRole ? l1 : `${attr.name}=STR`, `ATTR(${attr.name})`];
 };
 
+const fullName = (attr) => (attr.mods ? `${attr.name}.${attr.mods}` : attr.name);
+const slotL1 = (attr) => (attr.exp === undefined ? `SLOT(${attr.name})` : `SLOT(${attr.name})=${attr.exp}`);
+
 const LABELS = {
   static: staticLabels,
-  bind: (attr) => [`BIND(${attr.name})=${attr.exp}`, `BIND(${attr.name})`, `ATTR(${attr.name})`],
-  event: (attr) => [`EVENT(${attr.name})=${attr.exp}`, `EVENT(${attr.name})`, `EVENT(${attr.name})`],
+  bind: (attr) => [`BIND(${fullName(attr)})=${attr.exp}`, `BIND(${fullName(attr)})`, `ATTR(${fullName(attr)})`],
+  event: (attr) => [`EVENT(${fullName(attr)})=${attr.exp}`, `EVENT(${fullName(attr)})`, `EVENT(${fullName(attr)})`],
   struct: (attr) => [`${attr.name}=${attr.exp}`, attr.name, attr.name],
-  slot: (attr) => [`SLOT(${attr.name})`, `SLOT(${attr.name})`, `SLOT(${attr.name})`],
-  dir: (attr) => [`DIR(${attr.name})=${attr.exp}`, `DIR(${attr.name})`, `DIR(${attr.name})`]
+  slot: (attr) => [slotL1(attr), `SLOT(${attr.name})`, `SLOT(${attr.name})`],
+  dir: (attr) => [`DIR(${fullName(attr)})=${attr.exp}`, `DIR(${fullName(attr)})`, `DIR(${fullName(attr)})`]
 };
 
 const SPREAD_NAMES = new Set(['spread:', 'bind:']);
@@ -53,7 +61,8 @@ const hasDynamicName = (attr) => attr.kind !== 'static' && attr.kind !== 'event'
 /** Barrier test for one element: spreads, dynamic names and writes to a static attribute's name. */
 const barrierOf = (attrs) => {
   const staticNames = new Set(attrs.filter((attr) => attr.kind === 'static').map((attr) => attr.name));
-  return (attr) => isSpreadAttr(attr) || hasDynamicName(attr) || staticNames.has(writtenName(attr));
+  const isModified = (attr) => attr.kind !== 'event' && Boolean(attr.mods);
+  return (attr) => isSpreadAttr(attr) || hasDynamicName(attr) || isModified(attr) || staticNames.has(writtenName(attr));
 };
 
 const orderedRun = (attrs, level) => {
@@ -95,7 +104,7 @@ export const hashTemplate = (element) => {
     return [0, 1, 2].map((level) => {
       const attrs = orderedAttrs(node.attrs, level).map((attr) => LABELS[attr.kind](attr)[level]);
       const kids = children.map((hashes) => hashes[level]);
-      return hash64(`El|${node.tag}|${attrs.join(';')}|${kids.join(',')}`);
+      return hash64(`El|${node.tagKey ?? node.tag}|${attrs.join(';')}|${kids.join(',')}`);
     });
   };
   const [fp1, fp2, fp3] = walk(element);

@@ -76,22 +76,32 @@ const isDeferredSlot = (node, key) => {
   return isFunction || isFieldValue;
 };
 
+/** A static block runs after every computed key of its class, so a reference there never moves (#2594). */
 const entersBoundary = (node, key) => {
   const isRepeatedLoopSlot = LOOP_TYPES.has(node.type) && LOOP_ONCE_SLOTS[node.type] !== key;
-  return isDeferredSlot(node, key) || isRepeatedLoopSlot || PATTERN_TYPES.has(node.type);
+  const isStaticBlock = node.type === 'StaticBlock';
+  return isDeferredSlot(node, key) || isRepeatedLoopSlot || PATTERN_TYPES.has(node.type) || isStaticBlock;
 };
 
 const isDelete = (node) => node.type === 'UnaryExpression' && node.label.startsWith('operator:delete');
 const isLiteral = (node) => node.lit !== null && node.lit !== undefined;
 
-/** An identifier read that cannot throw or run code: a file binding, or undefined/NaN/Infinity. */
+/**
+ * An identifier read that cannot throw or run code: undefined/NaN/Infinity, or a local binding that is
+ * certainly initialised here (bindings.js isInitialized: no TDZ). Imports can be in their TDZ (#2594).
+ */
 const isInertIdentifier = (node) => {
   const isGlobal = node.ident.origin === 'global';
-  return !isGlobal || INERT_GLOBALS.has(node.label);
+  if (isGlobal) return INERT_GLOBALS.has(node.label);
+  return node.ident.origin === 'local' && node.ident.isInitialized === true;
 };
 
-/** True when evaluating this node itself (not its operands) can run user code or write state. */
-const mayRunCode = (node) => {
+/**
+ * True when evaluating this node itself (not its operands) can run user code or write state. A var
+ * declarator with an init writes a binding that may already exist (a redeclaration or a param), so it
+ * counts; a let/const declarator only creates a fresh one (#2594).
+ */
+const mayRunCode = (node, parent = null) => {
   const isValue = isLiteral(node);
   if (isValue) return false;
   const isIdentifier = node.type === 'Identifier';
@@ -99,29 +109,78 @@ const mayRunCode = (node) => {
   const isInertUnary = node.type === 'UnaryExpression' && INERT_UNARY.has(node.label);
   const isStrictEquality = node.type === 'BinaryExpression' && node.label === 'operator:===';
   const isPlainProperty = node.type === 'ObjectProperty' && !node.label.includes('computed');
-  const isPlainDeclarator = node.type === 'VariableDeclarator' && node.kids.id?.type === 'Identifier';
+  const isVarWrite = parent?.label?.includes('kind:var') && Boolean(node.kids.init);
+  const isPlainDeclarator = node.type === 'VariableDeclarator' && node.kids.id?.type === 'Identifier' && !isVarWrite;
   const isSafe = SAFE_TYPES.has(node.type) || isInertUnary || isStrictEquality || isPlainProperty || isPlainDeclarator;
   return !isSafe;
+};
+
+const isStaticField = (node) => CLASS_FIELD_TYPES.has(node.type) && node.label.split(' ').includes('static');
+
+/**
+ * Slots hasEffectBefore skips: code that runs after the statement. A method's computed key and a static
+ * field's value run while the class or object is defined, so they count (#2594).
+ */
+const skipsForEffects = (node, key) => {
+  const isMethodKey = FUNCTION_TYPES.has(node.type) && key === 'key';
+  const isStaticValue = isStaticField(node) && key === 'value';
+  return isDeferredSlot(node, key) && !isMethodKey && !isStaticValue;
+};
+
+/**
+ * An operand whose parent converts it right after evaluating it (ToString on a template substitution,
+ * ToPropertyKey on a computed key) can run user code before later siblings, unless it is a constant.
+ */
+const convertsOperand = (node, key) => {
+  const isSubstitution = node.type === 'TemplateLiteral' && key === 'expressions';
+  const isComputedKey = key === 'key' && node.label.split(' ').includes('computed');
+  return isSubstitution || isComputedKey;
+};
+
+/**
+ * Child visits in evaluation order. A switch evaluates case tests (past a default too) before any body
+ * runs, so every test is visited before every consequent (an over-approximation, never an under one).
+ */
+const evaluationOrder = (node) => {
+  const isSwitch = node.type === 'SwitchStatement';
+  if (!isSwitch) return Object.entries(node.kids).flatMap(([key, value]) => childList(value).map((child) => [key, child]));
+  const cases = node.kids.cases ?? [];
+  const tests = cases.map((item) => ['test', item.kids.test, item]);
+  const bodies = cases.map((item) => ['consequent', item, item]);
+  return [['discriminant', node.kids.discriminant], ...tests, ...bodies];
 };
 
 /**
  * True when anything that could run code completes before `target` reaches `refNode`. Post-order walk in
  * evaluation order: a node's own effect (a call, a write, a getter) is recorded only after its operands,
- * so ancestors of the reference never count, while earlier siblings (`a = b` in `a = b, b = t`) do.
- * Deferred code is skipped. Patterns are boundaries for the reference, so id-before-init order in a
- * declarator never hides an effect.
+ * so ancestors of the reference never count, while earlier siblings (`a = b` in `a = b, b = t`) do, and
+ * so do operands an ancestor converts (convertsOperand). Deferred code is skipped. Patterns are
+ * boundaries for the reference, so id-before-init order in a declarator never hides an effect.
  */
 export const hasEffectBefore = (target, refNode) => {
   let seenEffect = false;
-  const visit = (node) => {
+  const visitCaseBody = (item) => {
+    const reached = (item.kids.consequent ?? []).some((child) => child && visit(child, item));
+    seenEffect = seenEffect || (!reached && mayRunCode(item));
+    return reached;
+  };
+  const visitChild = (node, key, child) => {
+    const isCaseBody = node.type === 'SwitchStatement' && key === 'consequent';
+    if (isCaseBody) return visitCaseBody(child);
+    const reached = visit(child, node);
+    const isConverted = !reached && convertsOperand(node, key) && !isConstant(child);
+    seenEffect = seenEffect || isConverted;
+    return reached;
+  };
+  const visit = (node, parent = null) => {
     const isReference = node === refNode;
     if (isReference) return true;
-    for (const [key, value] of Object.entries(node.kids)) {
-      const isSkipped = isDeferredSlot(node, key);
-      const reached = !isSkipped && childList(value).some((child) => child && visit(child));
+    for (const [key, child] of evaluationOrder(node)) {
+      const isVisited = Boolean(child) && !skipsForEffects(node, key);
+      const reached = isVisited && visitChild(node, key, child);
       if (reached) return true;
     }
-    seenEffect = seenEffect || mayRunCode(node);
+    seenEffect = seenEffect || mayRunCode(node, parent);
     return false;
   };
   visit(target);

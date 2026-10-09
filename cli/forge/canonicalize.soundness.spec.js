@@ -141,3 +141,79 @@ test('a static attribute never sorts across a bind that can write its name', () 
   assert.notEqual(vue(' :[k]="v" title="s"'), vue(' title="s" :[k]="v"'));
   assert.equal(vue(' title="s" :alt="b" role="x"'), vue(' role="x" :alt="b" title="s"'), 'unrelated statics still sort');
 });
+
+// Round 3 (#2594). Each pair was measured to behave differently (node 22, React 18, Vue 3.5 in jsdom).
+test('an alias of a binding that may be in its TDZ never moves into a guarded or try slot', () => {
+  // A throws a ReferenceError (x, b, cfg still in TDZ); B short-circuits, catches or reads after init.
+  assertFnDiffer(fnBody('const k = x; return c && k; let x = 1;', 'c'), fnBody('return c && x; let x = 1;', 'c'));
+  assertFnDiffer(fnBody("const v = x; try { return v; } catch { return 'caught'; } let x = 1;", ''), fnBody("try { return x; } catch { return 'caught'; } let x = 1;", ''));
+  assertFnDiffer(fnBody('const k = b; let b = 1, c = k; return c;', ''), fnBody('let b = 1, c = b; return c;', ''));
+  assertFnDiffer(`${fnBody('const k = cfg; return c && k;', 'c')} let cfg = 1;`, `${fnBody('return c && cfg;', 'c')} let cfg = 1;`);
+  const initialised = fnUnit(fnBody('let x = 1; const k = x; return c && k;', 'c'));
+  assert.equal(initialised.fp1, fnUnit(fnBody('let x = 1; return c && x;', 'c')).fp1, 'a let read after its declaration still inlines');
+});
+
+test('a var declarator with an init is a write before the reference', () => {
+  // A returns 1, B returns 2: the var redeclaration (or the var named like the param) writes a.
+  assertFnDiffer(fnBody('var a = 1; const k = a; var a = 2, b = k; return b;', ''), fnBody('var a = 1; var a = 2, b = a; return b;', ''));
+  assertFnDiffer(fnBody('const k = a; var a = 2, b = k; return b;', 'a'), fnBody('var a = 2, b = a; return b;', 'a'));
+});
+
+test('switch tests, class keys and implicit conversions are effects in evaluation order', () => {
+  // Each A sees a === 1, each B a === 2 (or the converted b runs a = 2 first).
+  assertFnDiffer(fnBody("let a = 1; const k = a; switch (d) { default: return k; case (a = 2): return 'two'; }", 'd'), fnBody("let a = 1; switch (d) { default: return a; case (a = 2): return 'two'; }", 'd'));
+  assertFnDiffer(fnBody('let a = 1; let out; const k = a; class C { static { out = k; } [(a = 2)]() {} } return out;', ''), fnBody('let a = 1; let out; class C { static { out = a; } [(a = 2)]() {} } return out;', ''));
+  assertFnDiffer(fnBody('let a = 1; const k = a; return [class { [(a = 2)]() {} }, k];', ''), fnBody('let a = 1; return [class { [(a = 2)]() {} }, a];', ''));
+  assertFnDiffer(fnBody('let a = 1; const k = a; return [class { static x = (a = 2); }, k];', ''), fnBody('let a = 1; return [class { static x = (a = 2); }, a];', ''));
+  const setup = "let a = 1; const b = { toString() { a = 2; return 'b'; } };";
+  assertFnDiffer(fnBody(`${setup} const k = a; return \`\${b}\${k}\`;`, ''), fnBody(`${setup} return \`\${b}\${a}\`;`, ''));
+  assertFnDiffer(fnBody(`${setup} const k = a; return { [b]: k };`, ''), fnBody(`${setup} return { [b]: a };`, ''));
+});
+
+test('a file-relative path string names a file, whatever reads it', () => {
+  // Run from src/p and src/q, each A/B returns or loads the file next to it.
+  const pairs = [
+    "import { createRequire } from 'node:module'; const require = createRequire(import.meta.url); export function host() { return require('./v.cjs'); }",
+    'export async function host() { return (await import(`./v.mjs`)).default; }',
+    "export function host() { return require.resolve('./v.cjs'); }",
+    "export function host() { return import.meta.resolve('./v.mjs'); }",
+    "export function host() { return new URL('./v.json', import.meta.url).href; }",
+    "export function host() { return vi.mock('./x'); }"
+  ];
+  for (const code of pairs) assertFnDiffer(code, code, ['src/p/a.js', 'src/q/a.js']);
+  const bare = "export function host() { return f('v'); }";
+  assert.equal(fnUnit(bare, 'src/p/a.js').fp1, fnUnit(bare, 'src/q/a.js').fp1, 'a non-relative string is plain text');
+});
+
+test('{ __proto__ } is an own key, { __proto__: v } sets the prototype', () => {
+  assertFnDiffer(fnBody('return { __proto__ };', '__proto__'), fnBody('return { __proto__: __proto__ };', '__proto__'));
+});
+
+test('a method is not a constructible function, and sloppy script code is not module code', () => {
+  // new o.host() throws for the method; this is globalThis in the .cjs host and undefined in the .mjs one.
+  assertFnDiffer('export const o = { host() { return 1; } };', 'export const o = { host: function () { return 1; } };');
+  assertFnDiffer('export class C { host() { return this; } }', 'export const o = { host: function () { return this; } };');
+  const body = 'function host() { return this === undefined; }';
+  assertFnDiffer(body, `export ${body}`, ['src/p/a.cjs', 'src/p/a.mjs']);
+  assertFnDiffer(`${body} module.exports = host;`, `export ${body}`, ['src/p/a.js', 'src/p/b.js']);
+  assert.equal(fnUnit(`'use strict'; ${body}`, 'src/p/a.cjs').fp1, fnUnit(`export ${body}`, 'src/p/a.mjs').fp1, "'use strict' makes a script strict");
+});
+
+test('tags, modifiers, slot props, flag attributes and event case keep what renders', () => {
+  const jsx = (item, attrs = '', tag = 'li') => tmplUnit(jsxList(item, attrs).replace(`<li${attrs}>${item}</li>`, `<${tag}${attrs}>${item}</${tag}>`), 'src/a.jsx').fp1;
+  assert.notEqual(jsx('a', '', 'div'), jsx('a', '', 'Div'), '<div> is an element, <Div> a component');
+  assert.notEqual(jsx('a', '', 'my-el'), jsx('a', '', 'MyEl'), 'a JSX custom element is not a component');
+  assert.notEqual(jsx('a', ' disabled', 'button'), jsx('a', ' disabled=""', 'button'), 'a valueless attribute is true');
+  assert.notEqual(jsx('a', ' onChange={p.f}', 'Item'), jsx('a', ' onCHANGE={p.f}', 'Item'));
+  assert.notEqual(jsx('a', ' onKeyDown={p.f}'), jsx('a', ' onKeydown={p.f}'));
+  const vue = (inner) => tmplUnit(vueList('a').replace('<li>a</li>', inner), 'src/a.vue').fp1;
+  assert.notEqual(vue('<button>a</button>'), vue('<Button>a</Button>'));
+  assert.notEqual(vue('<my_el>a</my_el>'), vue('<my-el>a</my-el>'));
+  assert.equal(vue('<my-el>a</my-el>'), vue('<MyEl>a</MyEl>'), 'Vue resolves a kebab tag to its PascalCase component');
+  assert.notEqual(vue('<input @keyup.enter="f">'), vue('<input @keyup="f">'));
+  assert.notEqual(vue('<a href="#" @click.prevent="f">x</a>'), vue('<a href="#" @click="f">x</a>'));
+  assert.notEqual(vue('<input v-model.number="n">'), vue('<input v-model="n">'));
+  assert.notEqual(vue('<i :foo.prop="n"></i>'), vue('<i :foo="n"></i>'));
+  const slot = (props) => tmplUnit(`<template>\n  <Comp>\n    <template #item="${props}"><li>{{ a }}</li><li>b</li><li>c</li><li>d</li></template>\n  </Comp>\n</template>`, 'src/a.vue', 'Comp').fp1;
+  assert.notEqual(slot('{ a }'), slot('{ b: a }'), 'slot props are part of the slot');
+});

@@ -132,12 +132,21 @@ const convertSlot = (node, key, ctx) => {
   return convertNode(value, ctx);
 };
 
+/** `{ __proto__: v }` (or a '__proto__' string key) sets the prototype; `{ __proto__ }` is an own key (#2594). */
+const isProtoSetter = (node) => {
+  const isPlainProperty = node.type === 'ObjectProperty' && !node.computed && !node.shorthand;
+  const keyName = node.key?.name ?? node.key?.value;
+  return isPlainProperty && keyName === '__proto__';
+};
+
 const convertGeneric = (node, ctx) => {
   const kids = {};
   const keys = (t.VISITOR_KEYS[node.type] ?? []).filter((key) => !SKIPPED_KEYS.has(key));
   for (const key of keys) kids[key] = convertSlot(node, key, ctx);
   const textLabel = TEXT_LABELS[node.type]?.(node);
-  return makeNode(node.type, textLabel ?? flagLabel(node), kids, node);
+  const protoFlag = isProtoSetter(node) ? 'protoSetter' : '';
+  const label = [textLabel ?? flagLabel(node), protoFlag].filter(Boolean).join(' ');
+  return makeNode(node.type, label, kids, node);
 };
 
 const convertIdentifier = (node, ctx) => {
@@ -163,6 +172,8 @@ const convertJsxIdentifier = (node, ctx) => {
 const convertTemplate = (node, ctx) => {
   const hasExpressions = node.expressions.length > 0;
   if (hasExpressions) return convertGeneric(node, ctx);
+  const isPathAnchor = ctx?.bindings.get(node)?.origin === 'import';
+  if (isPathAnchor) return convertLiteral(node, ctx);
   const quasi = node.quasis[0];
   const value = quasi?.value.cooked ?? quasi?.value.raw ?? '';
   return makeNode('StringLiteral', JSON.stringify(value), {}, node, { lit: 'string' });

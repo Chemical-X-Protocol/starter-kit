@@ -58,8 +58,31 @@ const squashCode = (raw) => {
 
 const capitalize = (part) => part.charAt(0).toUpperCase() + part.slice(1);
 
-/** 'a-card' -> 'ACard', 'div' -> 'Div', 'ACard' stays. */
-export const pascalTag = (tag) => tag.split(/[-_]/).filter(Boolean).map(capitalize).join('');
+/** 'a-card' -> 'ACard', 'div' -> 'Div', 'ACard' stays. Only '-' splits ('_' is part of the name). */
+export const pascalTag = (tag) => tag.split('-').filter(Boolean).map(capitalize).join('');
+
+const isLowerInitial = (tag) => /^[a-z]/.test(tag);
+
+/**
+ * The tag identity that is hashed (#2594); `tag` stays the PascalCase display name. A lowercase tag is an
+ * element (native or custom) and keeps its text; a capitalised one is a component. Vue resolves a kebab
+ * tag to the same component as its PascalCase name, so only a Vue tag with '-' folds; a JSX tag with '-'
+ * is a custom element. A JSX member name (`<foo.Bar>`) is always a component.
+ */
+const vueTagKey = (tag) => {
+  const isKebab = tag.includes('-');
+  if (isKebab) return pascalTag(tag);
+  return isLowerInitial(tag) ? `<${tag}>` : tag;
+};
+
+const jsxTagKey = (name) => {
+  const isMember = name.includes('.');
+  const isElement = !isMember && (isLowerInitial(name) || name.includes('-') || name.includes(':'));
+  return isElement ? `<${name}>` : name;
+};
+
+/** Vue modifiers, in written order (guard order matters): 3.5 gives nodes, older releases strings. */
+const vueModifiers = (prop) => (prop.modifiers ?? []).map((modifier) => modifier?.content ?? String(modifier)).join('.');
 
 const vueLoc = (node) => ({ start: node.loc.start.line, end: node.loc.end.line });
 
@@ -69,23 +92,28 @@ const vueArgName = (prop) => {
   return arg.isStatic ? arg.content : `[${squashCode(arg.content)}]`;
 };
 
+/** Adds `mods` only when the directive has modifiers, so unmodified attributes keep their shape. */
+const withModifiers = (attr, mods) => (mods ? { ...attr, mods } : attr);
+
 const vueDirective = (prop) => {
   const name = vueArgName(prop);
   const exp = squashCode(prop.exp?.content);
+  const mods = vueModifiers(prop);
   const structural = STRUCTURAL[prop.name];
   const isBind = prop.name === 'bind';
   const isPassthroughBind = isBind && PASSTHROUGH.has(name);
   const isSpreadBind = isBind && !name;
+  const slotExp = prop.exp ? { exp } : {};
   const byName = {
     bind: () => ({ kind: 'bind', name, exp }),
     on: () => ({ kind: 'event', name: name ?? '', exp }),
-    slot: () => ({ kind: 'slot', name: name ?? 'default' })
+    slot: () => ({ kind: 'slot', name: name ?? 'default', ...slotExp })
   };
   if (isPassthroughBind) return null;
   if (structural) return { kind: 'struct', name: structural, exp };
   const isPlainDirective = isSpreadBind || !byName[prop.name];
-  if (isPlainDirective) return { kind: 'dir', name: `${prop.name}:${name ?? ''}`, exp };
-  return byName[prop.name]();
+  if (isPlainDirective) return withModifiers({ kind: 'dir', name: `${prop.name}:${name ?? ''}`, exp }, mods);
+  return withModifiers(byName[prop.name](), mods);
 };
 
 const vueProp = (prop) => {
@@ -108,6 +136,7 @@ const vueChild = (node) => {
 export const normalizeVueElement = (node) => ({
   type: 'El',
   tag: pascalTag(node.tag),
+  tagKey: vueTagKey(node.tag),
   attrs: (node.props ?? []).map(vueProp).filter(Boolean),
   children: (node.children ?? []).map(vueChild).filter(Boolean),
   loc: vueLoc(node)
@@ -127,18 +156,23 @@ const jsxName = (name) => {
   return isNamespaced ? `${name.namespace.name}:${name.name.name}` : name.name;
 };
 
+/** onClick -> click, onKeyDown -> keyDown: only the first letter folds (React keeps the rest). */
+const jsxEventName = (name) => name.charAt(2).toLowerCase() + name.slice(3);
+
 const jsxAttr = (attr, source) => {
   const isSpread = attr.type === 'JSXSpreadAttribute';
   if (isSpread) return { kind: 'dir', name: 'spread:', exp: sourceOf(attr.argument, source) };
   const name = jsxName(attr.name);
   const value = attr.value;
   const isPassthrough = PASSTHROUGH.has(name);
-  const isStatic = !value || value.type === 'StringLiteral';
+  const isFlag = !value;
+  const isStatic = value?.type === 'StringLiteral';
   if (isPassthrough) return null;
-  if (isStatic) return { kind: 'static', name, value: value?.value ?? '' };
+  if (isFlag) return { kind: 'static', name, value: '', isFlag: true };
+  if (isStatic) return { kind: 'static', name, value: value.value };
   const exp = sourceOf(value.expression ?? value, source);
   const isEvent = JSX_EVENT.test(name);
-  return isEvent ? { kind: 'event', name: name.slice(2).toLowerCase(), exp } : { kind: 'bind', name, exp };
+  return isEvent ? { kind: 'event', name: jsxEventName(name), exp } : { kind: 'bind', name, exp };
 };
 
 const jsxChild = (node, source) => {
@@ -154,9 +188,11 @@ const jsxChild = (node, source) => {
 export const normalizeJsxElement = (node, source) => {
   const isFragment = node.type === 'JSXFragment';
   const opening = isFragment ? null : node.openingElement;
+  const name = isFragment ? null : jsxName(opening.name);
   return {
     type: 'El',
-    tag: isFragment ? 'Fragment' : pascalTag(jsxName(opening.name)),
+    tag: isFragment ? 'Fragment' : pascalTag(name),
+    tagKey: isFragment ? '<>' : jsxTagKey(name),
     attrs: isFragment ? [] : opening.attributes.map((attr) => jsxAttr(attr, source)).filter(Boolean),
     children: node.children.map((child) => jsxChild(child, source)).filter(Boolean),
     loc: jsxLoc(node)

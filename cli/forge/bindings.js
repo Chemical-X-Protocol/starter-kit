@@ -27,6 +27,10 @@ const IMPORTED_NAME = {
   ImportSpecifier: (specifier) => specifier.imported.name ?? specifier.imported.value
 };
 const importRefCache = new WeakMap();
+const ALWAYS_INITIALIZED = new Set(['var', 'param', 'hoisted']);
+const LEXICAL_KINDS = new Set(['let', 'const']);
+const RELATIVE_PATH = /^\.\.?\//;
+const MODULE_SOURCE_PARENTS = new Set(['ImportDeclaration', 'ExportNamedDeclaration', 'ExportAllDeclaration']);
 
 /** Module identity of an import source as seen from filePath (null: unknown file, kept verbatim). */
 export const normalizeImportSource = (source, filePath = null) => {
@@ -70,8 +74,29 @@ const idFor = (binding, ids) => {
 };
 
 /**
+ * True when a read of the binding here can never hit its TDZ (#2594): a var, param or function binding,
+ * or a let/const/class declared earlier in the same function, outside a switch case (a case can be
+ * jumped over). Imports, class-expression names and reads from a nested function are never certain.
+ */
+const isInitializedAt = (binding, nodePath) => {
+  const kind = binding?.kind;
+  const isAlwaysInitialized = ALWAYS_INITIALIZED.has(kind);
+  if (isAlwaysInitialized) return true;
+  const isLexical = LEXICAL_KINDS.has(kind);
+  if (!isLexical) return false;
+  const declaration = binding.path;
+  const end = declaration.node?.end;
+  const endsBefore = typeof end === 'number' && typeof nodePath.node.start === 'number' && end <= nodePath.node.start;
+  const isSameFunction = binding.scope.getFunctionParent() === nodePath.scope.getFunctionParent();
+  const statement = declaration.isVariableDeclarator() ? declaration.parentPath : declaration;
+  const isInCase = Boolean(statement?.parentPath?.isSwitchCase());
+  return endsBefore && isSameFunction && !isInCase;
+};
+
+/**
  * Describes one Identifier path. `ids` maps Babel binding objects to small per-file integers;
- * filePath (project-relative) resolves relative import sources.
+ * filePath (project-relative) resolves relative import sources. isInitialized (references only) says the
+ * read cannot throw a TDZ ReferenceError (alias inlining relies on it).
  */
 export const describeIdentifier = (nodePath, ids, filePath = null) => {
   // Babel reports some references (the operand of `!`) as binding identifiers too: a reference wins.
@@ -82,7 +107,8 @@ export const describeIdentifier = (nodePath, ids, filePath = null) => {
   const binding = nodePath.scope.getBinding(nodePath.node.name);
   const origin = originOf(binding);
   const importRef = origin === 'import' ? importRefOf(binding, filePath) : null;
-  return { origin, bindingId: idFor(binding, ids), isDecl, importRef };
+  const isInitialized = isRef && isInitializedAt(binding, nodePath);
+  return { origin, bindingId: idFor(binding, ids), isDecl, importRef, isInitialized };
 };
 
 /** Entry for a JSX element name that names a value (component or member root), else null. */
@@ -119,6 +145,21 @@ const indexDynamicSource = (nodePath, index, filePath) => {
 };
 
 /**
+ * Any './' or '../' string (or expression-free template) is a file-relative path anchor (#2594):
+ * createRequire's require, require.resolve, import.meta.resolve/glob, new URL(rel, import.meta.url) and
+ * vi.mock all resolve it against the file, so the same text in two directories names two files.
+ * Static import/export sources are left to their bindings.
+ */
+const indexRelativeString = (nodePath, value, index, filePath) => {
+  const isRelative = Boolean(filePath) && typeof value === 'string' && RELATIVE_PATH.test(value);
+  const isModuleSource = MODULE_SOURCE_PARENTS.has(nodePath.parent?.type) && nodePath.parent.source === nodePath.node;
+  const isAnchor = isRelative && !isModuleSource && !index.has(nodePath.node);
+  if (!isAnchor) return;
+  const importRef = `${normalizeImportSource(value, filePath)}#*`;
+  index.set(nodePath.node, { origin: 'import', bindingId: null, isDecl: false, importRef });
+};
+
+/**
  * Babel visitors that fill `index` (Map<node, entry>); `ids` numbers bindings per file. Shared by
  * buildBindingIndex and the audit's merged traverse, so both build the same index.
  */
@@ -133,7 +174,14 @@ export const createBindingVisitors = (index, ids, filePath = null) => {
       if (entry) index.set(nodePath.node, entry);
     },
     CallExpression: onCall,
-    ImportExpression: onCall
+    ImportExpression: onCall,
+    StringLiteral(nodePath) {
+      indexRelativeString(nodePath, nodePath.node.value, index, filePath);
+    },
+    TemplateLiteral(nodePath) {
+      const isPlain = nodePath.node.expressions.length === 0 && nodePath.parent?.type !== 'TaggedTemplateExpression';
+      if (isPlain) indexRelativeString(nodePath, nodePath.node.quasis[0]?.value.cooked, index, filePath);
+    }
   };
 };
 

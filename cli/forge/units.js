@@ -69,19 +69,28 @@ const paramNameOf = (param) => {
 };
 
 const ACCESSOR_KINDS = new Set(['kind:get', 'kind:set', 'kind:constructor']);
+const METHOD_TYPES = new Set(['ObjectMethod', 'ClassMethod', 'ClassPrivateMethod']);
+const BASE_KINDS = { ArrowFunctionExpression: 'arrow' };
 
-/** 'arrow' or 'function', then async, generator and an accessor kind when present. */
-const signatureKind = (fn) => {
+/**
+ * 'arrow', 'method' (no [[Construct]], no .prototype) or 'function', then async, generator, an accessor
+ * kind when present, and 'sloppy' for code of a non-strict script (#2594: `this`, arguments and
+ * undeclared writes behave differently there).
+ */
+const signatureKind = (fn, isSloppy = false) => {
   const flags = new Set(fn.label.split(' '));
   const accessor = [...flags].find((flag) => ACCESSOR_KINDS.has(flag)) ?? null;
-  const base = fn.type === 'ArrowFunctionExpression' ? 'arrow' : 'function';
+  const base = BASE_KINDS[fn.type] ?? (METHOD_TYPES.has(fn.type) ? 'method' : 'function');
   const modifiers = ['async', 'generator'].filter((flag) => flags.has(flag));
-  return [base, ...modifiers, accessor].filter(Boolean).join(' ');
+  return [base, ...modifiers, accessor, isSloppy ? 'sloppy' : null].filter(Boolean).join(' ');
 };
 
-const signatureNode = (fn) => ({
+/** Leaf hashed ahead of stmt and expr units of a sloppy script, so they never meet strict code. */
+const SLOPPY_MARK = Object.freeze({ type: 'SloppyScript', label: '', kids: {}, isExpr: false, loc: null, ident: null, lit: null });
+
+const signatureNode = (fn, isSloppy) => ({
   type: 'FnSignature',
-  label: signatureKind(fn),
+  label: signatureKind(fn, isSloppy),
   kids: { params: fn.kids.params ?? [] },
   isExpr: false,
   loc: null,
@@ -131,11 +140,13 @@ const passesExprGate = (hashed, ubiquitous) => {
 
 /**
  * Collects fn, stmt and expr units from a canonical Program (canonicalize.js).
- * options.ubiquitous: Set of facet-ubiquitous anchors (weight 0) for the expr gate.
+ * options.ubiquitous: Set of facet-ubiquitous anchors (weight 0) for the expr gate. options.isSloppy:
+ * the program is a non-strict script (see isSloppyProgram).
  * Returns { units, isExprCapped }; units are in preorder, which is source order.
  */
-export const collectScriptUnits = (program, { ubiquitous = new Set() } = {}) => {
+export const collectScriptUnits = (program, { ubiquitous = new Set(), isSloppy = false } = {}) => {
   const units = [];
+  const hashCode = (node) => hashUnit(isSloppy ? [SLOPPY_MARK, node] : node);
   let blockCount = 0;
   let exprCount = 0;
   let isExprCapped = false;
@@ -143,7 +154,7 @@ export const collectScriptUnits = (program, { ubiquitous = new Set() } = {}) => 
   const addFn = (node, parent, key) => {
     const body = node.kids.body;
     const params = node.kids.params ?? [];
-    const signature = signatureNode(node);
+    const signature = signatureNode(node, isSloppy);
     const hashed = hashUnit([signature, body], { declScope: node });
     const signatureMeta = { kind: signature.label, fp1: hashUnit(signature, { declScope: node }).fp1 };
     const named = { declName: declNameOf(node, parent, key), paramNames: params.map(paramNameOf), signature: signatureMeta };
@@ -155,14 +166,14 @@ export const collectScriptUnits = (program, { ubiquitous = new Set() } = {}) => 
     blockCount += 1;
     const blockId = blockCount;
     node.kids.body.forEach((statement, ordinal) => {
-      units.push({ kind: 'stmt', ...spanOf(statement), blockId, ordinal, ...hashUnit(statement) });
+      units.push({ kind: 'stmt', ...spanOf(statement), blockId, ordinal, ...hashCode(statement) });
     });
   };
 
   const addExpr = (node, slot) => {
     const isLightweight = !massAtLeast(node, EXPR_GATE.minMass);
     if (isLightweight) return;
-    const hashed = hashUnit(node);
+    const hashed = hashCode(node);
     const isKept = passesExprGate(hashed, ubiquitous);
     const hasRoom = exprCount < EXPR_GATE.maxPerFile;
     isExprCapped = isExprCapped || (isKept && !hasRoom);
@@ -185,4 +196,34 @@ export const collectScriptUnits = (program, { ubiquitous = new Set() } = {}) => 
 
   visit(program, null, null);
   return { units, isExprCapped };
+};
+
+const ALWAYS_STRICT = /\.(mjs|mts|vue)$/;
+const ALWAYS_SCRIPT = /\.(cjs|cts)$/;
+const MODULE_SYNTAX = new Set(['ImportDeclaration', 'ExportNamedDeclaration', 'ExportDefaultDeclaration', 'ExportAllDeclaration']);
+
+const COMMONJS_GLOBALS = new Set(['require', 'module', 'exports', '__dirname', '__filename']);
+
+const usesCommonJsGlobal = (node) => {
+  const isGlobalName = node.type === 'Identifier' && node.ident?.origin === 'global' && COMMONJS_GLOBALS.has(node.label);
+  if (isGlobalName) return true;
+  return Object.values(node.kids).some((value) => childList(value).some((child) => child && usesCommonJsGlobal(child)));
+};
+
+/**
+ * True when a canonical Program runs as sloppy-mode CommonJS code (#2594): a .cjs/.cts file, or a script
+ * with no import/export that reads require, module, exports, __dirname or __filename, unless it opens
+ * with 'use strict'. .mjs, .mts and .vue are modules. Residual: a classic browser script with none of
+ * those reads as strict (a modern project's .js without imports is far more often an ES module).
+ */
+export const isSloppyProgram = (program, relativePath = '') => {
+  const isModuleFile = ALWAYS_STRICT.test(relativePath);
+  if (isModuleFile) return false;
+  const directives = program?.kids?.directives ?? [];
+  const isStrictDirective = directives.some((directive) => directive.kids?.value?.label === 'use strict');
+  if (isStrictDirective) return false;
+  const isScriptFile = ALWAYS_SCRIPT.test(relativePath);
+  if (isScriptFile) return true;
+  const hasModuleSyntax = (program?.kids?.body ?? []).some((node) => MODULE_SYNTAX.has(node.type));
+  return !hasModuleSyntax && usesCommonJsGlobal(program);
 };
