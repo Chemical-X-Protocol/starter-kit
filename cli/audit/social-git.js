@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
+import { isStdoutTty, isStderrTty } from '../terminal.js';
 
 const safeSpawnSync = (command, args, options = {}) => {
   try {
@@ -211,11 +212,11 @@ export const copyViaOsc52 = (text) => {
       seq = `\x1bP\x1b]52;c;${base64}\x07\x1b\\`;
     }
 
-    if (process.stdout.isTTY) {
+    if (isStdoutTty()) {
       process.stdout.write(seq);
       return true;
     }
-    if (process.stderr.isTTY) {
+    if (isStderrTty()) {
       process.stderr.write(seq);
       return true;
     }

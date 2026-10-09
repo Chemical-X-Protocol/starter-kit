@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { hasGum, gumInput, promptQuestion, renderBanner } from './terminal.js';
+import { hasGum, gumInput, promptQuestion, renderBanner, isStdinTty, isStdoutTty } from './terminal.js';
 import { obtainLicenseKey, fetchStarterKitFiles, loadLocalBlueprintFiles } from './license.js';
 import { runPillarsWizard } from './pillars-wizard.js';
 import { resolvePackageManager } from './build/detector.js';
@@ -19,8 +19,8 @@ const extractTargetName = (projectName, rawArgs) => {
     rawArgs.includes('--non-interactive') ||
     rawArgs.includes('--no-interactive') ||
     Boolean(process.env.CI) ||
-    process.stdout?.isTTY === false ||
-    process.stdin?.isTTY === false;
+    !isStdoutTty() ||
+    !isStdinTty();
 
   return isHeadless ? 'my-molecular-app' : null;
 };
@@ -102,7 +102,7 @@ export const runScaffold = async (projectName, rawArgs = [], onRunAudit = null) 
     process.stdout.write(`  \x1b[32m✔\x1b[0m ${targetRel}\n`);
   }
 
-  const isYes = rawArgs.includes('-y') || rawArgs.includes('--yes') || !process.stdin.isTTY;
+  const isYes = rawArgs.includes('-y') || rawArgs.includes('--yes') || !isStdinTty();
   await runPillarsWizard(isYes ? ['--preset=recommended', '-y', '--write'] : ['--write'], targetDir);
 
   const pm = resolvePackageManager(targetDir);

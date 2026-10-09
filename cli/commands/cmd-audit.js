@@ -5,6 +5,7 @@
  */
 
 import path from 'node:path';
+import { isStdinTty, isStdoutTty } from '../terminal.js';
 import { printHelp } from '../help.js';
 
 /**
@@ -83,7 +84,7 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
   const costPerMillion = costFlag ? parseFloat(costFlag.split('=')[1]) : null;
 
   const isNonInteractive = isNonInteractiveSession(rawArgs);
-  const isInteractive = !isNonInteractive && Boolean(process.stdin.isTTY && process.stdout.isTTY);
+  const isInteractive = !isNonInteractive && isStdinTty() && isStdoutTty();
 
   const isCustomDirFlag = Boolean(customDir?.startsWith('--dir='));
   const customDirValue = isCustomDirFlag ? customDir.split('=')[1] : customDir;

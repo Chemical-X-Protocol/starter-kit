@@ -3,6 +3,8 @@
  * Reusable single-concept booleans and higher-order predicate helpers.
  */
 
+import { isStdoutTty } from '../terminal.js';
+
 const COMPONENT_PATH_SEGMENTS = ['molecules', 'components', '/m-', '/views/', '/pages/'];
 const COMPONENT_EXTENSIONS = new Set(['.vue', '.tsx', '.jsx']);
 const TEMPLATE_EXTENSIONS = new Set(['.vue', '.html', '.svelte']);
@@ -135,7 +137,7 @@ export const isNonInteractiveSession = (rawArgs, env = process.env) => {
   const hasOutputFlag = rawArgs.some((arg) => arg.startsWith('--output=') || arg.startsWith('-o='));
   const hasFormatFlag = FORMAT_FLAGS.some((flag) => rawArgs.includes(flag));
   const hasCiEnv = Boolean(env.CI || env.GIT_DIR);
-  const isNotTTY = Boolean(process.stdout && process.stdout.isTTY === false);
+  const isNotTTY = !isStdoutTty();
   return [hasCliFlag, hasOutputFlag, hasFormatFlag, hasCiEnv, isNotTTY].some(Boolean);
 };
 

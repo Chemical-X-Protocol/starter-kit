@@ -6,7 +6,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { renderBanner, hasGum, gumChoose, promptQuestion } from './terminal.js';
+import { renderBanner, hasGum, gumChoose, promptQuestion, isStdinTty } from './terminal.js';
 import { PILLARS, PILLAR_PRESETS } from './pillars-schema.js';
 import { planFileWrite, applyFileWrites } from './pillars-write-guard.js';
 import { buildHostShims } from './host-shims.js';
@@ -22,7 +22,7 @@ const agentsSeedTarget = (cwd) => {
 
 export const runPillarsWizard = async (rawArgs = [], cwd = process.cwd()) => {
   const isJson = rawArgs.includes('--json');
-  const isYes = rawArgs.includes('-y') || rawArgs.includes('--yes') || !process.stdin.isTTY;
+  const isYes = rawArgs.includes('-y') || rawArgs.includes('--yes') || !isStdinTty();
   const isWrite = rawArgs.includes('--write');
   const isForce = rawArgs.includes('--force');
   const isDryRun = !isWrite || rawArgs.includes('--dry-run') || rawArgs.includes('-n');

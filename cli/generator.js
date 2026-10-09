@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { hasGum, gumChoose, gumInput, promptQuestion, renderBanner } from './terminal.js';
+import { hasGum, gumChoose, gumInput, promptQuestion, renderBanner, isStdinTty } from './terminal.js';
 import { checkOrPromptEvaluation } from './license.js';
 import {
   toPascalCase,
@@ -297,7 +297,7 @@ export const runGenerateWizard = async (rawArgs = []) => {
   }
 
   const isJson = rawArgs.includes('--json');
-  const isYes = rawArgs.includes('-y') || rawArgs.includes('--yes') || isJson || !process.stdin.isTTY;
+  const isYes = rawArgs.includes('-y') || rawArgs.includes('--yes') || isJson || !isStdinTty();
   if (!isJson) renderBanner('Chemical X: Molecular Capsule Wizard');
   await checkOrPromptEvaluation('generate capsule', { isYes });
 

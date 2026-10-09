@@ -11,3 +11,9 @@
 - CLI cold start ~1.1s user CPU per call (`chemx p build`), MCP warm call 12ms: big gap for bursts of small queries.
 - chemx test (CLI) picked vitest instead of the kit's own node --test script and also globbed .claude/worktrees/* copies; needed bypass to run cli/search.spec.js
 - guard matched inside quoted strings and heredoc bodies; fixed with literal stripping (keep as a spec case for chemx hook claude-pre-tool)
+- [G5] `chemx read --start/--end` output has no line numbers, so mapping read output back to edit targets needs a second lookup (G2 owns the fix).
+- [G5] Guard blocks the whole compound Bash command when any segment is `sed -n`/`cat`, including unrelated writes earlier in the same command; the write silently did not happen.
+- [G5] bypass: tests run via `node --test ... # chemx-bypass: runner-detection-wrong-runner` (chemx test picks vitest for this kit).
+- [G5] spot-check-fixes "Fix 1: Index isolation" fails in a nested worktree: openIndexDb walks up from .claude/worktrees/<wt> to the main checkout's .chemx/index.db, which holds cli/ rows. Pre-existing on the base branch (root resolution, G3/G6).
+- [G5] Every `<cmd> --help` was unsafe before G5: `q --help` hung, `search --help` threw printSearchHelp ReferenceError, `build --help` ran the build, `mcp --help` started the server, `install-mcp --help` registered the server, `ui --help` started the web UI, and one of them created a `--help/` directory.
+- [G5] pre-commit `chemx audit --git --min-grade=B` grades every touched file in full, so any edit to a legacy file (license.js, scaffold.js) is blocked by pre-existing debt even with zero new violations. Verified no per-rule increase with a HEAD-vs-tree auditCode delta, then committed with the documented CHEMX_SKIP_PRECOMMIT=1. The hook output under a pipe also printed the full ASCII banner and an AI prompt box (5.4).

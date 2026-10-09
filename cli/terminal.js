@@ -19,8 +19,11 @@ export const openBrowser = (url) => {
 };
 
 // Node leaves isTTY undefined (not false) on pipes and files, so test for truthiness.
+// Every other module asks these helpers; cli/tty-policy.spec.js enforces it.
 export const isStdoutTty = () => Boolean(process.stdout && process.stdout.isTTY);
-export const isInteractive = () => Boolean(process.stdin && process.stdin.isTTY) && isStdoutTty() && !process.env.CI;
+export const isStdinTty = () => Boolean(process.stdin && process.stdin.isTTY);
+export const isStderrTty = () => Boolean(process.stderr && process.stderr.isTTY);
+export const isInteractive = () => isStdinTty() && isStdoutTty() && !process.env.CI;
 
 export const hasGum = () => {
   if (!isInteractive()) return false;
