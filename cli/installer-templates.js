@@ -1,5 +1,5 @@
 export const buildPreCommitHookScript = (minGrade = 'B', minScore = 80) => `#!/bin/sh
-# Chemical X Protocol: Pre-Commit Line Budget & Architecture Gatekeeper
+# Chemical X Protocol: Pre-Commit Architecture Gatekeeper
 # Free architectural guardrail preventing context bloat and monolith sprawl.
 
 REPO_ROOT="\$(git rev-parse --show-toplevel 2>/dev/null)"
@@ -31,80 +31,23 @@ else
   export NO_COLOR=1
 fi
 
-# Load thresholds from .chemx/config.json if available
-CONF_MAX_LINES=""
-CONF_MAX_MOL=""
+# Grade thresholds only apply to the opt-in absolute gate (CHEMX_PRECOMMIT_GATE=grade).
+# Line budgets come from chemx's line-budgets.js through the staged-delta audit,
+# so this hook and \`chemx check\` never disagree.
 CONF_MIN_GRADE=""
 CONF_MIN_SCORE=""
 CONFIG_FILE="\$REPO_ROOT/.chemx/config.json"
 
 if [ -f "\$CONFIG_FILE" ]; then
-  if command -v node >/dev/null 2>&1; then
-    eval \$(node -e "
-      try {
-        const c = JSON.parse(require('fs').readFileSync('\$CONFIG_FILE', 'utf8'));
-        if (c.maxLineCount || c.maxLines) console.log('CONF_MAX_LINES=' + (c.maxLineCount || c.maxLines));
-        if (c.maxMoleculeLineCount || c.maxMoleculeLines) console.log('CONF_MAX_MOL=' + (c.maxMoleculeLineCount || c.maxMoleculeLines));
-        if (c.minGrade) console.log('CONF_MIN_GRADE=' + c.minGrade);
-        if (c.minScore) console.log('CONF_MIN_SCORE=' + c.minScore);
-      } catch (e) {}
-    ")
-  else
-    CONF_MAX_LINES=\$(grep -o '"maxLineCount"[[:space:]]*:[[:space:]]*[0-9]*' "\$CONFIG_FILE" 2>/dev/null | grep -o '[0-9]*\$')
-    CONF_MAX_MOL=\$(grep -o '"maxMoleculeLineCount"[[:space:]]*:[[:space:]]*[0-9]*' "\$CONFIG_FILE" 2>/dev/null | grep -o '[0-9]*\$')
-    CONF_MIN_GRADE=\$(grep -o '"minGrade"[[:space:]]*:[[:space:]]*"[^"]*"' "\$CONFIG_FILE" 2>/dev/null | sed 's/.*"minGrade"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\\1/')
-    CONF_MIN_SCORE=\$(grep -o '"minScore"[[:space:]]*:[[:space:]]*[0-9]*' "\$CONFIG_FILE" 2>/dev/null | grep -o '[0-9]*\$')
-  fi
+  CONF_MIN_GRADE=\$(grep -o '"minGrade"[[:space:]]*:[[:space:]]*"[^"]*"' "\$CONFIG_FILE" 2>/dev/null | sed 's/.*"minGrade"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/')
+  CONF_MIN_SCORE=\$(grep -o '"minScore"[[:space:]]*:[[:space:]]*[0-9]*' "\$CONFIG_FILE" 2>/dev/null | grep -o '[0-9]*\$')
 fi
 
 MIN_GRADE="\${CHEMX_MIN_GRADE:-\${CONF_MIN_GRADE:-${minGrade}}}"
 MIN_SCORE="\${CHEMX_MIN_SCORE:-\${CONF_MIN_SCORE:-${minScore}}}"
-MAX_LINES="\${CHEMX_MAX_LINES:-\${CONF_MAX_LINES:-500}}"
-MAX_MOLECULE_LINES="\${CHEMX_MAX_MOLECULE_LINES:-\${CONF_MAX_MOL:-100}}"
 
-STAGED_FILES=\$(git diff --cached --name-only --diff-filter=ACM | grep -E '\\.(jsx?|tsx?|vue|svelte|cs|py|go)\$' | grep -vE '(\\.(d\\.ts|min\\.|test\\.|spec\\.))')
-[ -z "\$STAGED_FILES" ] && exit 0
-
-FAILED=0
-ERRORS=""
-EXCEEDED_FILES=""
-for F in \$STAGED_FILES; do
-  [ ! -f "\$F" ] && continue
-  L=\$(wc -l < "\$F" | tr -d ' ')
-  case "\$F" in
-    *molecules*|*/m-*|m-*)
-      if [ "\$L" -gt "\$MAX_MOLECULE_LINES" ]; then
-        FAILED=1
-        ERRORS="\${ERRORS}\\n  \${C_RED}✕\${C_RESET} \$F (\$L LOC > \$MAX_MOLECULE_LINES molecule limit)"
-        EXCEEDED_FILES="\${EXCEEDED_FILES}\\n- \$F (\$L LOC > \$MAX_MOLECULE_LINES limit)"
-      fi
-      ;;
-    *)
-      if [ "\$L" -gt "\$MAX_LINES" ]; then
-        FAILED=1
-        ERRORS="\${ERRORS}\\n  \${C_RED}✕\${C_RESET} \$F (\$L LOC > \$MAX_LINES file budget)"
-        EXCEEDED_FILES="\${EXCEEDED_FILES}\\n- \$F (\$L LOC > \$MAX_LINES limit)"
-      fi
-      ;;
-  esac
-done
-
-if [ "\$FAILED" -eq 1 ]; then
-  printf "\\n%s%s[Chemical X] Commit Blocked: Staged files exceed architectural line budgets%s\\n" "\$C_BOLD" "\$C_RED" "\$C_RESET"
-  printf "%b\\n\\n" "\$ERRORS"
-  printf "%s╭──────────────────────────────────────────────────────────────────────────╮%s\\n" "\$C_CYAN" "\$C_RESET"
-  printf "%s│ 🤖 AI REFACTOR PROMPT (Copy & paste into your AI assistant):            │%s\\n" "\$C_CYAN" "\$C_RESET"
-  printf "%s╰──────────────────────────────────────────────────────────────────────────╯%s\\n" "\$C_CYAN" "\$C_RESET"
-  printf "Please refactor the following files that exceed Chemical X line budgets:%b\\n\\n" "\$EXCEEDED_FILES"
-  printf "Refactor Directives:\\n"
-  printf "1. Decompose monolithic logic into crystalline single-purpose modules (< %s lines for files, < %s lines for molecules).\\n" "\$MAX_LINES" "\$MAX_MOLECULE_LINES"
-  printf "2. Extract presentation into Table-of-Contents views and business state into composables/services.\\n"
-  printf "3. Preserve all existing symbols, exports, and public API contracts.\\n"
-  printf "4. Decompose complex inline booleans and flatten nested control flow.\\n"
-  printf "%s────────────────────────────────────────────────────────────────────────────%s\\n\\n" "\$C_CYAN" "\$C_RESET"
-  printf "%s💡 Tip: To bypass line budgets temporarily: CHEMX_SKIP_PRECOMMIT=1 git commit%s\\n\\n" "\$C_YELLOW" "\$C_RESET"
-  exit 1
-fi
+# Nothing added, copied, modified or renamed: nothing to gate.
+git diff --cached --quiet -M --diff-filter=ACMR && exit 0
 
 AUDIT_BIN=""
 if [ -f "./cli/index.js" ]; then

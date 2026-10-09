@@ -1,5 +1,5 @@
 #!/bin/sh
-# Chemical X Protocol: Pre-Commit Line Budget & Architecture Gatekeeper
+# Chemical X Protocol: Pre-Commit Architecture Gatekeeper
 # https://chemicalx.xophz.com | https://github.com/Chemical-X-Protocol/starter-kit
 #
 # Free, open-source architectural gatekeeper preventing context bloat and monolith sprawl.
@@ -35,87 +35,25 @@ else
   export NO_COLOR=1
 fi
 
-# Load thresholds from .chemx/config.json if available
-CONF_MAX_LINES=""
-CONF_MAX_MOL=""
+# Grade thresholds only apply to the opt-in absolute gate (CHEMX_PRECOMMIT_GATE=grade).
+# Line budgets are not checked here: they come from cli/audit/line-budgets.js through
+# the staged-delta audit, so the hook and `chemx check` never disagree (#1476, #1716).
 CONF_MIN_GRADE=""
 CONF_MIN_SCORE=""
 CONFIG_FILE="$REPO_ROOT/.chemx/config.json"
 
 if [ -f "$CONFIG_FILE" ]; then
-  if command -v node >/dev/null 2>&1; then
-    eval $(node -e "
-      try {
-        const c = JSON.parse(require('fs').readFileSync('$CONFIG_FILE', 'utf8'));
-        if (c.maxLineCount || c.maxLines) console.log('CONF_MAX_LINES=' + (c.maxLineCount || c.maxLines));
-        if (c.maxMoleculeLineCount || c.maxMoleculeLines) console.log('CONF_MAX_MOL=' + (c.maxMoleculeLineCount || c.maxMoleculeLines));
-        if (c.minGrade) console.log('CONF_MIN_GRADE=' + c.minGrade);
-        if (c.minScore) console.log('CONF_MIN_SCORE=' + c.minScore);
-      } catch (e) {}
-    ")
-  else
-    CONF_MAX_LINES=$(grep -o '"maxLineCount"[[:space:]]*:[[:space:]]*[0-9]*' "$CONFIG_FILE" 2>/dev/null | grep -o '[0-9]*$')
-    CONF_MAX_MOL=$(grep -o '"maxMoleculeLineCount"[[:space:]]*:[[:space:]]*[0-9]*' "$CONFIG_FILE" 2>/dev/null | grep -o '[0-9]*$')
-    CONF_MIN_GRADE=$(grep -o '"minGrade"[[:space:]]*:[[:space:]]*"[^"]*"' "$CONFIG_FILE" 2>/dev/null | sed 's/.*"minGrade"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
-    CONF_MIN_SCORE=$(grep -o '"minScore"[[:space:]]*:[[:space:]]*[0-9]*' "$CONFIG_FILE" 2>/dev/null | grep -o '[0-9]*$')
-  fi
+  CONF_MIN_GRADE=$(grep -o '"minGrade"[[:space:]]*:[[:space:]]*"[^"]*"' "$CONFIG_FILE" 2>/dev/null | sed 's/.*"minGrade"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
+  CONF_MIN_SCORE=$(grep -o '"minScore"[[:space:]]*:[[:space:]]*[0-9]*' "$CONFIG_FILE" 2>/dev/null | grep -o '[0-9]*$')
 fi
 
 MIN_GRADE="${CHEMX_MIN_GRADE:-${CONF_MIN_GRADE:-B}}"
 MIN_SCORE="${CHEMX_MIN_SCORE:-${CONF_MIN_SCORE:-80}}"
-MAX_LINES="${CHEMX_MAX_LINES:-${CONF_MAX_LINES:-500}}"
-MAX_MOLECULE_LINES="${CHEMX_MAX_MOLECULE_LINES:-${CONF_MAX_MOL:-100}}"
 
-# Detect staged source files (including polyglot C#, Python, Go)
-STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(jsx?|tsx?|vue|svelte|cs|py|go)$' | grep -vE '(\.(d\.ts|min\.|test\.|spec\.))')
-
-if [ -z "$STAGED_FILES" ]; then
+# Nothing added, copied, modified or renamed: nothing to gate. The audit itself
+# decides which staged paths are source files.
+if git diff --cached --quiet -M --diff-filter=ACMR; then
   exit 0
-fi
-
-LINE_BUDGET_FAILED=0
-LINE_BUDGET_ERRORS=""
-EXCEEDED_FILES=""
-
-for FILE in $STAGED_FILES; do
-  if [ -f "$FILE" ]; then
-    LINES=$(wc -l < "$FILE" | tr -d ' ')
-    
-    # Check if file is a molecule capsule
-    case "$FILE" in
-      *molecules*|*/m-*|m-*)
-        if [ "$LINES" -gt "$MAX_MOLECULE_LINES" ]; then
-          LINE_BUDGET_FAILED=1
-          LINE_BUDGET_ERRORS="${LINE_BUDGET_ERRORS}\n  ${C_RED}✕${C_RESET} $FILE ($LINES LOC > $MAX_MOLECULE_LINES LOC molecule capsule limit)"
-          EXCEEDED_FILES="${EXCEEDED_FILES}\n- $FILE ($LINES LOC > $MAX_MOLECULE_LINES LOC molecule limit)"
-        fi
-        ;;
-      *)
-        if [ "$LINES" -gt "$MAX_LINES" ]; then
-          LINE_BUDGET_FAILED=1
-          LINE_BUDGET_ERRORS="${LINE_BUDGET_ERRORS}\n  ${C_RED}✕${C_RESET} $FILE ($LINES LOC > $MAX_LINES LOC file budget)"
-          EXCEEDED_FILES="${EXCEEDED_FILES}\n- $FILE ($LINES LOC > $MAX_LINES LOC file budget)"
-        fi
-        ;;
-    esac
-  fi
-done
-
-if [ "$LINE_BUDGET_FAILED" -eq 1 ]; then
-  printf "\n%s%s[Chemical X] Commit Blocked: Staged files exceed architectural line budgets%s\n" "$C_BOLD" "$C_RED" "$C_RESET"
-  printf "%b\n\n" "$LINE_BUDGET_ERRORS"
-  printf "%s╭──────────────────────────────────────────────────────────────────────────╮%s\n" "$C_CYAN" "$C_RESET"
-  printf "%s│ 🤖 AI REFACTOR PROMPT (Copy & paste into your AI assistant):            │%s\n" "$C_CYAN" "$C_RESET"
-  printf "%s╰──────────────────────────────────────────────────────────────────────────╯%s\n" "$C_CYAN" "$C_RESET"
-  printf "Please refactor the following files that exceed Chemical X line budgets:%b\n\n" "$EXCEEDED_FILES"
-  printf "Refactor Directives:\n"
-  printf "1. Decompose monolithic logic into single-purpose crystalline capsules or helper modules (< %s lines for files, < %s lines for molecules).\n" "$MAX_LINES" "$MAX_MOLECULE_LINES"
-  printf "2. Extract presentation into Table-of-Contents views and business state into composables/services.\n"
-  printf "3. Preserve all existing symbols, exports, and public API contracts.\n"
-  printf "4. Decompose complex inline booleans and flatten nested control flow.\n"
-  printf "%s────────────────────────────────────────────────────────────────────────────%s\n\n" "$C_CYAN" "$C_RESET"
-  printf "%s💡 Tip: To bypass line budgets temporarily: CHEMX_SKIP_PRECOMMIT=1 git commit%s\n\n" "$C_YELLOW" "$C_RESET"
-  exit 1
 fi
 
 AUDIT_BIN=""

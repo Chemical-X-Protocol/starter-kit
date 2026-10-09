@@ -196,6 +196,7 @@ export const runInstallWizard = async (targetDir = '.') => {
   if (shouldMcp) installAllMcpConfigs(targetDir, { silent: false });
   if (shouldQuery) await installAgentSearchConfig(targetDir);
 
-  saveProjectConfig(targetDir, { minGrade: opts.minGrade, minScore: opts.minScore, maxLineCount: 500, maxMoleculeLineCount: 100 });
+  // Line budgets are not written here: they follow the profile via cli/audit/line-budgets.js.
+  saveProjectConfig(targetDir, { minGrade: opts.minGrade, minScore: opts.minScore });
   process.stdout.write('\n\x1b[1m\x1b[32m✔ Chemical X configuration installed successfully!\x1b[0m\n\n');
 };

@@ -74,6 +74,27 @@ test('a new file is compared with an empty base', () => {
   });
 });
 
+test('a renamed file with new hazards is audited against its pre-rename HEAD content', () => {
+  const body = Array.from({ length: 30 }, (_, i) => `export const v${i} = ${i};\n`).join('');
+  withRepo({ 'src/svc.js': body + NESTED('a') }, (root) => {
+    git(root, 'mv', 'src/svc.js', 'src/service.js');
+    stage(root, 'src/service.js', body + NESTED('a') + NESTED('b'));
+    const result = evaluateStagedDelta(root);
+    assert.equal(result.isPassing, false, JSON.stringify(result));
+    assert.equal(result.files[0].file, 'src/service.js');
+    assert.equal(result.files[0].renamedFrom, 'src/svc.js');
+    assert.deepEqual(result.files[0].increases.map((i) => [i.rule, i.before, i.after]), [['CONTROL_FLOW_NESTED_TERNARY', 1, 2]]);
+  });
+});
+
+test('a pure rename of a legacy file is hazard-neutral', () => {
+  withRepo({ 'src/old name.ts': NESTED('a') + NESTED('b') }, (root) => {
+    git(root, 'mv', 'src/old name.ts', 'src/new name.ts');
+    const result = evaluateStagedDelta(root);
+    assert.equal(result.isPassing, true, JSON.stringify(result));
+  });
+});
+
 test('chemx audit --staged-delta exits 1 on new hazards and 0 otherwise', () => {
   withRepo({ 'src/a.ts': 'export const a = 1;\n' }, (root) => {
     const run = () => spawnSync(process.execPath, [CLI, 'audit', '--staged-delta', '--json'], { cwd: root, encoding: 'utf-8' });
