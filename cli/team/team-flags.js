@@ -11,6 +11,8 @@ const parseParentFlagValue = (raw) => {
   return parseInt(raw, 10);
 };
 
+const splitIdTokens = (text) => text.split(',').map((token) => token.trim()).filter(Boolean);
+
 export const parseFlags = (args = []) => {
   const hasJsonFlag = args.includes('--json');
   const hasCompactFlag = args.includes('--compact');
@@ -171,6 +173,13 @@ export const parseFlags = (args = []) => {
 
     const isDepsEquals = arg.startsWith('--deps=');
     if (isDepsEquals) flags.dependencies = valueAfterEquals.split(',').map((id) => Number(id.trim())).filter(Number.isInteger);
+
+    // Raw tokens for `task update`, which validates them itself instead of silently dropping bad ones.
+    const isAddDepEquals = arg.startsWith('--add-dep=');
+    const isRmDepEquals = arg.startsWith('--rm-dep=');
+    if (isDepsEquals) flags.dependencyTokens = splitIdTokens(valueAfterEquals);
+    if (isAddDepEquals) flags.addDependencyTokens = splitIdTokens(valueAfterEquals);
+    if (isRmDepEquals) flags.removeDependencyTokens = splitIdTokens(valueAfterEquals);
 
     const isSprintEquals = arg.startsWith('--sprint=');
     if (isSprintEquals) flags.sprint = valueAfterEquals;

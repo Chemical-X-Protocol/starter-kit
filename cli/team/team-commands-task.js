@@ -126,14 +126,49 @@ const runComplete = (ctx, taskId, flags, isCli, cwd, lead) => {
   return res;
 };
 
-// `task update <id> --deps=1,2` replaces the hard prerequisites (--deps= with no ids clears them).
-// Guaranteed: every id exists and is not the task itself. Not checked: dependency cycles.
+const hasDependencyEdit = (flags) => Boolean(flags.dependencyTokens || flags.addDependencyTokens || flags.removeDependencyTokens);
+
+const parseIdTokens = (tokens) => {
+  const bad = tokens.filter((token) => !/^\d+$/.test(token));
+  return { bad, ids: tokens.filter((token) => /^\d+$/.test(token)).map(Number) };
+};
+
+// True when `target` is reachable from any of `startIds` by following dependencies.
+const reachesTask = (db, startIds, target) => {
+  const seen = new Set();
+  const queue = [...startIds];
+  while (queue.length) {
+    const id = queue.pop();
+    const isTarget = id === target;
+    if (isTarget) return true;
+    const isNew = !seen.has(id);
+    seen.add(id);
+    if (isNew) queue.push(...(getTask(db, id)?.dependencies || []).map(Number));
+  }
+  return false;
+};
+
+// `task update <id> --deps=1,2` replaces the hard prerequisites (--deps= with no ids clears them);
+// --add-dep=/--rm-dep= edit the current list. Applied in that order.
+// Guaranteed: every id is an integer, exists, is not the task itself, and adding it creates no cycle
+// in the dependencies stored at that moment. Not guaranteed: races with a concurrent edit.
+// Returns { refused } without writing anything when a check fails.
 const runSetDependencies = (ctx, taskId, flags, isCli) => {
-  const ids = [...new Set(flags.dependencies)];
-  const unknown = ids.filter((id) => id === Number(taskId) || !getTask(ctx.db, id));
+  const self = Number(taskId);
+  const parsed = [flags.dependencyTokens, flags.addDependencyTokens, flags.removeDependencyTokens].map((tokens) => parseIdTokens(tokens || []));
+  const bad = parsed.flatMap((entry) => entry.bad);
+  const hasBad = bad.length > 0;
+  if (hasBad) return fail(isCli, `Dependencies refused: not a task id: ${bad.join(', ')}`, { error: 'invalid dependencies', refused: true });
+  const [set, added, removed] = parsed.map((entry) => entry.ids);
+  const base = flags.dependencyTokens ? set : (getTask(ctx.db, taskId)?.dependencies || []).map(Number);
+  const ids = [...new Set([...base, ...added])].filter((id) => !removed.includes(id));
+  const unknown = ids.filter((id) => id === self || !getTask(ctx.db, id));
   const hasUnknown = unknown.length > 0;
   if (hasUnknown) return fail(isCli, `Dependencies refused: #${unknown.join(', #')} is this task or does not exist`, { error: 'invalid dependencies', refused: true });
-  ctx.db.prepare('UPDATE agent_tasks SET dependencies = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(ids), Date.now(), Number(taskId));
+  const cyclic = ids.filter((id) => reachesTask(ctx.db, [id], self));
+  const hasCycle = cyclic.length > 0;
+  if (hasCycle) return fail(isCli, `Dependencies refused: #${cyclic.join(', #')} already depends on #${taskId}, which would form a cycle`, { error: 'dependency cycle', refused: true });
+  ctx.db.prepare('UPDATE agent_tasks SET dependencies = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(ids), Date.now(), self);
   const agentHandle = resolveCliAgent(flags, isCli);
   registerAgent(ctx.db, { id: agentHandle, role: 'executor' });
   postFeedEvent(ctx.db, { author_id: agentHandle, task_id: Number(taskId), event_type: 'task_status_updated', message: `Set task #${taskId} dependencies to [${ids.join(', ')}]` });
@@ -143,8 +178,12 @@ const runSetDependencies = (ctx, taskId, flags, isCli) => {
 
 const runUpdate = (ctx, positionals, flags, isCli, cwd) => {
   const taskId = positionals[1];
-  const isDepsOnly = Array.isArray(flags.dependencies) && !flags.status && !positionals[2];
-  if (isDepsOnly) return runSetDependencies(ctx, taskId, flags, isCli);
+  const isDepsEdit = hasDependencyEdit(flags);
+  const depsResult = isDepsEdit ? runSetDependencies(ctx, taskId, flags, isCli) : null;
+  const isDepsRefused = Boolean(depsResult?.refused);
+  if (isDepsRefused) return depsResult;
+  const isDepsOnly = isDepsEdit && !flags.status && !positionals[2];
+  if (isDepsOnly) return depsResult;
   const targetStatus = flags.status || positionals[2] || 'in_progress';
   const isCompletion = targetStatus === 'done' || targetStatus === 'completed';
   if (isCompletion) return runComplete(ctx, taskId, flags, isCli, cwd, `Updated task #${taskId} to status "done"`);
