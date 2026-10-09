@@ -82,15 +82,55 @@ test('refuses a file that is neither tracked nor on disk, and one outside the re
   assert.match(outside.refusals.join('\n'), /outside this repository/);
 });
 
-test('refuses when unrelated paths are already staged, naming them, and leaves the index alone', async (t) => {
+test('a peer\'s staged path is warned about, left staged and never committed', async (t) => {
   const { root, taskId } = makeRepo(t);
   write(root, 'other.txt', 'o\n');
   write(root, 'mine.txt', 'm\n');
   git(root, ['add', 'other.txt']);
   const result = await run(root, ['mine.txt', '-m', `add mine (#${taskId})`]);
-  assert.equal(result.ok, false);
-  assert.match(result.refusals.join('\n'), /already staged: other\.txt/);
+  assert.equal(result.ok, true, result.lines.join('\n'));
+  assert.deepEqual(headFiles(root), ['mine.txt']);
+  assert.match(result.lines.join('\n'), /warning: left alone, staged by others: other\.txt/);
   assert.equal(git(root, ['diff', '--cached', '--name-only']).stdout.trim(), 'other.txt');
+});
+
+const installFailingHook = (root) => {
+  const hook = path.join(root, '.git', 'hooks', 'pre-commit');
+  fs.writeFileSync(hook, '#!/bin/sh\n[ -f "$(git rev-parse --show-toplevel)/block" ] && { echo "gate says no"; exit 1; }\nexit 0\n', { mode: 0o755 });
+};
+
+test('a failing pre-commit hook leaves the index as it was, and a retry after fixing succeeds', async (t) => {
+  const { root, taskId } = makeRepo(t);
+  installFailingHook(root);
+  write(root, 'block', 'x\n');
+  write(root, 'other.txt', 'o\n');
+  write(root, 'mine.txt', 'm\n');
+  write(root, 'base.txt', 'changed\n');
+  git(root, ['add', 'other.txt']);
+  const before = git(root, ['ls-files', '-s']).stdout;
+  const failed = await run(root, ['mine.txt', 'base.txt', '-m', `add mine (#${taskId})`]);
+  assert.equal(failed.ok, false);
+  assert.match(failed.lines.join('\n'), /gate says no/);
+  assert.equal(git(root, ['ls-files', '-s']).stdout, before);
+  assert.equal(commitCount(root), 1);
+  fs.rmSync(path.join(root, 'block'));
+  const retry = await run(root, ['mine.txt', 'base.txt', '-m', `add mine (#${taskId})`]);
+  assert.equal(retry.ok, true, retry.lines.join('\n'));
+  assert.deepEqual(headFiles(root).sort(), ['base.txt', 'mine.txt']);
+  assert.equal(git(root, ['diff', '--cached', '--name-only']).stdout.trim(), 'other.txt');
+});
+
+test('a failure restores a listed file the committer had already staged to its earlier content', async (t) => {
+  const { root, taskId } = makeRepo(t);
+  installFailingHook(root);
+  write(root, 'block', 'x\n');
+  write(root, 'mine.txt', 'first\n');
+  git(root, ['add', 'mine.txt']);
+  write(root, 'mine.txt', 'second\n');
+  const before = git(root, ['ls-files', '-s']).stdout;
+  const failed = await run(root, ['mine.txt', '-m', `add mine (#${taskId})`]);
+  assert.equal(failed.ok, false);
+  assert.equal(git(root, ['ls-files', '-s']).stdout, before);
 });
 
 test('refuses a file under another handle\'s live lease and commits nothing', async (t) => {
@@ -182,7 +222,7 @@ test('the pre-commit hook runs; its failure prints findings, exits non-zero in t
   assert.equal(result.exitCode, 1);
   assert.match(result.lines.join('\n'), /gate: 2 hazards in a\.txt/);
   assert.equal(commitCount(root), 1);
-  assert.equal(git(root, ['diff', '--cached', '--name-only']).stdout.trim(), 'a.txt');
+  assert.equal(git(root, ['diff', '--cached', '--name-only']).stdout.trim(), '');
 });
 
 test('the hook runs as the committer: it sees CHEMX_AGENT_ID from --as', async (t) => {

@@ -24,7 +24,6 @@ const MESSAGES = {
   'task.unknown': (ctx) => `Refused: task #${ctx.taskId} was not found in the team db.`,
   'files.unknown': (ctx) => `Refused: not tracked and not on disk: ${ctx.unknownFiles.join(', ')}.`,
   'files.outsideRepo': (ctx) => `Refused: outside this repository: ${ctx.outsideFiles.join(', ')}.`,
-  'index.unrelatedStaged': (ctx) => `Refused: other paths are already staged: ${ctx.unrelatedStaged.join(', ')}. Unstage them (git restore --staged) or commit them first; chemx commit never touches other staged entries.`,
   'leases.foreign': (ctx) => `Refused: leased by another handle: ${ctx.leaseRefusals.map(formatLease).join('; ')}.`
 };
 
@@ -52,7 +51,6 @@ const buildRules = (ctx) => {
       unknown: ctx.unknownFiles.length > 0,
       outsideRepo: ctx.outsideFiles.length > 0
     },
-    index: { unrelatedStaged: ctx.unrelatedStaged.length > 0 },
     leases: { foreign: ctx.leaseRefusals.length > 0 }
   };
 };

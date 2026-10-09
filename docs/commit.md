@@ -27,7 +27,6 @@ chemx commit notes.txt -m "chore: notes" --no-task="one-off cleanup"
 | `--task` and `--no-task` together | `give --task or --no-task, not both` |
 | Task id not in the team db | `task #<id> was not found` |
 | A listed file that is neither tracked nor on disk, or outside the repository | `not tracked and not on disk`, `outside this repository` |
-| Other paths already staged (named in the message) | `other paths are already staged` |
 | A listed file under another handle's live lease (holder and purpose named) | `leased by another handle` |
 | Nothing changed in the listed files | `nothing to commit` |
 
@@ -43,11 +42,15 @@ The committer is `--as=@handle`, else `CHEMX_AGENT_ID`, else a session handle. W
 
 ## index.lock
 
-If `git add` or `git commit` fails with an `index.lock` error, the command retries after 0.5, 1, 2, 3.5, 5 and 8 seconds (6 retries, about 20 s). If the lock is still held it fails and reports the attempts. It names the holder pid when `fuser` or `lsof` can find it and says `holder pid not found` otherwise, because git does not record the holder. The listed files stay staged; rerunning is safe.
+If `git add` or `git commit` fails with an `index.lock` error, the command retries after 0.5, 1, 2, 3.5, 5 and 8 seconds (6 retries, about 20 s). If the lock is still held it fails and reports the attempts. It names the holder pid when `fuser` or `lsof` can find it and says `holder pid not found` otherwise, because git does not record the holder. A failed `git add` stages nothing, so rerunning is safe.
 
 ## Gate failures
 
-When the hook rejects the commit, the last 20 lines of its output are printed indented, nothing is committed, the listed files stay staged and the exit code is 1. Fix the findings and rerun the same command.
+When the hook rejects the commit, the last 20 lines of its output are printed indented, nothing is committed and the exit code is 1. The index entries of the listed files are put back as they were before the attempt (entries other handles staged are never touched), so rerunning the same command after fixing the findings starts clean. If that restore itself fails (for example a held `index.lock`), the output says so and the listed files may still be staged.
+
+## Other handles' staged paths
+
+The commit is path-limited (`git commit --only` semantics), so paths other handles have staged are neither committed nor unstaged. They are listed in a `warning: left alone, staged by others` line on success.
 
 ## Recording and --release
 
