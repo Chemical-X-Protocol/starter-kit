@@ -43,7 +43,8 @@ export const runPillarsWizard = async (rawArgs = [], cwd = process.cwd()) => {
 
   const useGum = hasGum();
 
-  if (selectedPresetKey && PILLAR_PRESETS[selectedPresetKey]) {
+  const isKnownPreset = Boolean(selectedPresetKey && PILLAR_PRESETS[selectedPresetKey]);
+  if (isKnownPreset) {
     selectedPillarIds = [...PILLAR_PRESETS[selectedPresetKey].pillars];
   } else if (isYes) {
     selectedPresetKey = 'recommended';
