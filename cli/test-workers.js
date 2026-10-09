@@ -12,7 +12,8 @@ const PM_RUN = /^(?:npm|pnpm|bun)\s+run\s+\S+$|^yarn\s+\S+$/;
 
 const setMaxWorkers = (command, workers, { forwardsArgs = false } = {}) => {
   const isPmRun = PM_RUN.test(command.trim());
-  if (isPmRun && !forwardsArgs) return command;
+  const shouldKeepCommand = isPmRun && !forwardsArgs;
+  if (shouldKeepCommand) return command;
   const separator = isPmRun && !command.startsWith('yarn') ? ' --' : '';
   return `${command.replace(MAX_WORKERS, '')}${separator} --maxWorkers=${workers}`;
 };
@@ -24,7 +25,8 @@ const setNodeConcurrency = (command, workers) => {
 };
 
 export const withWorkerCount = (command, runner, workers, options = {}) => {
-  if (runner === 'node') return setNodeConcurrency(command, workers);
+  const isNodeRunner = runner === 'node';
+  if (isNodeRunner) return setNodeConcurrency(command, workers);
   const usesMaxWorkers = runner === 'vitest' || runner === 'jest';
   return usesMaxWorkers ? setMaxWorkers(command, workers, options) : command;
 };
@@ -34,7 +36,8 @@ export const withWorkerCount = (command, runner, workers, options = {}) => {
 export const requestedWorkers = ({ command, cwd, targets = [], budget }) => {
   const caps = [budget];
   const scriptConcurrency = Number([...command.matchAll(NODE_CONCURRENCY)].at(-1)?.[1]);
-  if (Number.isInteger(scriptConcurrency) && scriptConcurrency > 0) caps.push(scriptConcurrency);
+  const hasScriptConcurrency = Boolean(Number.isInteger(scriptConcurrency) && scriptConcurrency > 0);
+  if (hasScriptConcurrency) caps.push(scriptConcurrency);
   const isFileTarget = (target) => !/[*?[{]/.test(target) && fs.statSync(path.resolve(cwd, target), { throwIfNoEntry: false })?.isFile();
   const areAllFiles = targets.length > 0 && targets.every(isFileTarget);
   if (areAllFiles) caps.push(targets.length);
