@@ -28,6 +28,11 @@ const renderCalleeTreeLines = (callees, indent = '  ') => {
 
 export const handleCallTraceCommand = (db, target, { index = null, isJson = false, isCli = true, maxDepth = 3, root = process.cwd() } = {}) => {
   const result = calculateCallTrace(db, target, { maxDepth, root });
+  if (result.notFound) {
+    result.status = STATUS.INCONCLUSIVE;
+    result.reason = `target "${result.target}" is not a symbol or file in the index scope`;
+  }
+  if (isCli && result.notFound) process.exitCode = toExitCode(STATUS.INCONCLUSIVE);
 
   if (isJson) {
     process.stdout.write(JSON.stringify(withIndex(result, index)) + '\n');
@@ -39,6 +44,7 @@ export const handleCallTraceCommand = (db, target, { index = null, isJson = fals
   if (result.filePath) {
     process.stdout.write(`  ${ANSI.DIM}Defined in:${ANSI.RESET} ${result.filePath}:${result.startLine} ${ANSI.DIM}[${result.tier}]${ANSI.RESET}\n`);
   }
+  if (result.notFound) process.stdout.write(`  ${ANSI.GOLD}? Inconclusive: ${result.reason}${ANSI.RESET}\n`);
   process.stdout.write(`  ${ANSI.MINT}Callee Summary:${ANSI.RESET} ${result.totalCallees} downstream calls mapped across ${result.depth} hops\n`);
 
   if (result.callees.length === 0) {

@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { ANSI } from './theme.js';
 import { withIndex } from './search-output.js';
+import { STATUS, toExitCode } from './result-status.js';
 import { debugNote } from './search-debug.js';
 import { auditFile } from './audit.js';
 import {
@@ -20,12 +21,15 @@ const DEF_MAX_LINES = 40;
 
 export const handleDefCommand = (db, targetSymbol, { index = null, isJson = false, isCli = true, isFull = false, root = process.cwd() } = {}) => {
   const def = findSymbolDefinition(db, targetSymbol);
-  if (!def) {
-    const errorMsg = `Symbol "${targetSymbol}" not found in index.`;
+  const isNotFound = !def;
+  if (isNotFound) {
+    const errorMsg = `Symbol "${targetSymbol}" not found in index${index ? ` scope ${index.scope}` : ''}.`;
+    const notFound = withIndex({ status: STATUS.INCONCLUSIVE, reason: errorMsg, error: errorMsg, symbol: targetSymbol }, index);
+    if (isCli) process.exitCode = toExitCode(notFound.status);
     if (isJson) {
-      process.stdout.write(JSON.stringify({ error: errorMsg, symbol: targetSymbol }) + '\n');
+      process.stdout.write(JSON.stringify(notFound) + '\n');
     } else {
-      process.stdout.write(`  ${ANSI.DIM}${errorMsg}${ANSI.RESET}\n\n`);
+      process.stdout.write(`  ${ANSI.GOLD}? Inconclusive: ${errorMsg}${ANSI.RESET}\n\n`);
     }
     if (isCli) process.exit();
     return null;

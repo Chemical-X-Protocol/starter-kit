@@ -237,9 +237,12 @@ export const calculateCallTrace = (db, targetSymbolOrPath, options = {}) => {
 
   const calleeTree = traceCallees(symbolName, targetPath, 1);
   const totalCount = visited.size - 1;
+  const isIndexedFile = !symRow && Boolean(db.prepare('SELECT 1 FROM files WHERE path = ?').get(cleanTarget));
+  const isNotFound = !symRow && !isIndexedFile;
 
   return {
     target: symbolName,
+    notFound: isNotFound,
     filePath: targetPath,
     startLine,
     tier,

@@ -138,3 +138,39 @@ test('G6 sync modules stay under the 150-line module budget', () => {
     assert.ok(lines < 150, `${file} has ${lines} lines`);
   }
 });
+
+test('def and trace of an unknown symbol are inconclusive (exit 3) with the index envelope', async () => {
+  const root = makeProject({ 'src/a.ts': 'export const useA = () => 1;\n' });
+  try {
+    for (const args of [['def', 'useMissing'], ['useMissing', '--trace']]) {
+      const res = runQ(root, args);
+      assert.equal(res.status, 3, `${args.join(' ')}: ${JSON.stringify(res.payload)}`);
+      assert.equal(res.payload.status, 'inconclusive');
+      assert.equal(res.payload.index.scope, 'src');
+    }
+    const { handleChemxQ } = await import('./mcp/tools-q.js');
+    clearDbCache();
+    const mcp = handleChemxQ({ query: 'useMissing', trace: true }, root);
+    assert.equal(mcp.status, 'inconclusive');
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('MCP read backtrace card lists root entry points (rootCallers are objects)', async () => {
+  const root = makeProject({
+    'src/s.ts': 'export const useS = () => 1;\n',
+    'src/main.ts': "import { useS } from './s';\nuseS();\n"
+  });
+  try {
+    runQ(root, ['useS']);
+    clearDbCache();
+    const { handleChemxRead } = await import('./mcp/tools-read.js');
+    const out = handleChemxRead({ path: 'src/s.ts', enrich: true, backtraceSymbol: 'useS' }, root);
+    const text = typeof out === 'string' ? out : JSON.stringify(out);
+    assert.match(text, /Backtrace: useS/);
+    assert.match(text, /<- src\/main\.ts/);
+  } finally {
+    cleanup(root);
+  }
+});

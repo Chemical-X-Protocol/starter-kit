@@ -29,10 +29,18 @@ const formatTextHit = (r) => {
   return `[${r.tier}] ${location} ${match.type || 'match'}${name} (${r.lines} lines)`;
 };
 
+// A trace or backtrace payload carries notFound/ambiguous flags instead of a status.
+const resolvePayloadStatus = (result) => {
+  const hasOwnStatus = Boolean(result.status);
+  if (hasOwnStatus) return result.status;
+  const isUnresolved = Boolean(result.notFound || result.ambiguous);
+  return isUnresolved ? STATUS.INCONCLUSIVE : STATUS.PASS;
+};
+
 // Worst status wins: a graph payload's own 'pass' never hides an inconclusive index.
 const attachIndex = (result, index) => {
   const isObject = result && typeof result === 'object' && !Array.isArray(result);
-  if (isObject) return { ...result, status: combineStatuses([result.status || STATUS.PASS, index.status]), index };
+  if (isObject) return { ...result, status: combineStatuses([resolvePayloadStatus(result), index.status]), index };
   return { status: index.status, index, results: result };
 };
 
