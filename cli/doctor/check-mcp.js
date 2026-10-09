@@ -39,7 +39,8 @@ export const checkMcpLaunch = ({ projectRoot, cliVersion }) => {
   if (!isOwned) return { id: 'mcp-launch', status: STATUS.FAIL, summary: `${MCP_SERVER_NAME} launches something other than chemx; not touched`, fixable: false };
   const launch = describeLaunchVersion(server);
   const problems = [];
-  if (launch.problem) problems.push(launch.problem);
+  const hasLaunchProblem = Boolean(launch.problem);
+  if (hasLaunchProblem) problems.push(launch.problem);
   const isSkewed = launch.version !== null && launch.version !== cliVersion;
   if (isSkewed) problems.push(`launches ${launch.version}, CLI is ${cliVersion}`);
   const hasRootEnv = server.env?.CHEMX_PROJECT_ROOT === projectRoot;
@@ -63,7 +64,8 @@ export const groupProcesses = (processes) => {
 
 export const checkMcpProcesses = ({ cliVersion, procRoot = '/proc' }) => {
   const scan = listChemxMcpProcesses(procRoot);
-  if (!scan.ok) return { id: 'mcp-servers', status: STATUS.INCONCLUSIVE, summary: `cannot scan processes (${scan.reason})` };
+  const isScanFailed = Boolean(!scan.ok);
+  if (isScanFailed) return { id: 'mcp-servers', status: STATUS.INCONCLUSIVE, summary: `cannot scan processes (${scan.reason})` };
   const stale = scan.processes.filter((proc) => proc.isStale || (proc.version && proc.version !== cliVersion));
   const hasNone = scan.processes.length === 0;
   if (hasNone) return { id: 'mcp-servers', status: STATUS.PASS, summary: 'no chemx MCP servers running' };
