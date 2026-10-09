@@ -22,6 +22,13 @@ const armTimer = (delayMs, onFire) => {
   return timer;
 };
 
+// A child must not inherit node:test's harness context, or a nested `node --test` reports
+// to a parent that is not listening and prints no TAP summary at all.
+const childEnv = (extraEnv = {}) => {
+  const { NODE_TEST_CONTEXT, ...parentEnv } = process.env;
+  return { ...parentEnv, FORCE_COLOR: '1', ...extraEnv };
+};
+
 // Runs a shell command with stdin detached (no runner can enter watch mode or wait on a prompt),
 // buffers output, and enforces an optional timeout. Result: { exitCode, stdout, stderr, durationMs,
 // command, timedOut }. A timed-out run reports exitCode null so callers cannot mistake it for a verdict.
@@ -42,7 +49,7 @@ export const executeBuild = (command, cwd = process.cwd(), options = {}) => {
       cwd,
       detached: canSignalGroups,
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, FORCE_COLOR: '1', ...(options.env || {}) }
+      env: childEnv(options.env)
     });
 
     const forwardInterrupt = () => killTree(child, 'SIGINT');
