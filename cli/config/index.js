@@ -26,12 +26,32 @@ const parseCliProfile = (rawArgs = []) => {
   return null;
 };
 
+const warnedProfiles = new Set();
+
+/** A profile name that matches no profile is reported once on stderr, then the default applies. */
+const warnUnknownProfile = (name, origin) => {
+  const isAlreadyWarned = warnedProfiles.has(name);
+  if (isAlreadyWarned) return;
+  warnedProfiles.add(name);
+  const known = Object.keys(PROFILES).join(', ');
+  process.stderr.write(`chemx: unknown profile "${name}" from ${origin} (known: ${known}); using ${DEFAULT_PROFILE}\n`);
+};
+
+const resolveProfile = (cliProfile, fileConfig) => {
+  const requested = cliProfile || fileConfig.profile || DEFAULT_PROFILE;
+  const normalized = String(requested).toLowerCase();
+  const isKnown = Object.hasOwn(PROFILES, normalized);
+  if (isKnown) return { selectedProfile: normalized, unknownProfile: null };
+  warnUnknownProfile(requested, cliProfile ? '--profile' : fileConfig.source);
+  return { selectedProfile: DEFAULT_PROFILE, unknownProfile: requested };
+};
+
 export const loadProjectConfig = (cwd = process.cwd(), rawArgs = []) => {
   const fileConfig = findAndLoadConfigFile(cwd);
   const cliProfile = parseCliProfile(rawArgs);
 
   const isCliProfileExplicit = Boolean(cliProfile);
-  const selectedProfile = cliProfile || fileConfig.profile || DEFAULT_PROFILE;
+  const { selectedProfile, unknownProfile } = resolveProfile(cliProfile, fileConfig);
   const profileDefaults = getProfileDefaults(selectedProfile);
 
   // An explicit --profile replaces file thresholds, but per-rule settings
@@ -46,6 +66,7 @@ export const loadProjectConfig = (cwd = process.cwd(), rawArgs = []) => {
   return {
     source: fileConfig.source,
     profile: selectedProfile,
+    unknownProfile,
     rules: effectiveRules,
     overrides: fileConfig.overrides || [],
     pillars: readPillarSelection(cwd, fileConfig),
