@@ -73,7 +73,8 @@ export const checkUiRequest = (req, auth, url) => {
   const isAuthorized = hasValidQueryToken || isSameToken(headerToken, auth.token) || isSameToken(cookieToken, auth.token);
   if (!isAuthorized) return deny(401, 'Missing or invalid chemx UI token. Open the URL printed by `chemx ui`.');
   const isPost = req.method === 'POST';
-  if (isPost && !isJsonContentType(req)) return deny(415, 'POST requires Content-Type: application/json');
+  const isNonJsonPost = isPost && !isJsonContentType(req);
+  if (isNonJsonPost) return deny(415, 'POST requires Content-Type: application/json');
   // Accepted risk: cookies are not port-scoped, so other servers on the same
   // loopback host receive this HttpOnly cookie. It only authorizes this
   // launch of the UI (the token changes every run).

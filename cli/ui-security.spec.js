@@ -16,7 +16,8 @@ const rawRequest = (port, { method = 'GET', pathname = '/api/status', headers = 
       res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body: data }));
     });
     req.on('error', reject);
-    if (body !== undefined) req.write(body);
+    const hasBody = body !== undefined;
+    if (hasBody) req.write(body);
     req.end();
   });
 

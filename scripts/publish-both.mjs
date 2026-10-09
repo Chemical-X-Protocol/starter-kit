@@ -111,4 +111,5 @@ for (const line of formatPublishSummary(results)) console.log(line);
 console.log('\x1b[1m\x1b[36m-----------------------------------\x1b[0m\n');
 
 process.exitCode = computePublishExitCode(results, TARGETS.length);
-if (process.exitCode !== 0) console.error('\x1b[31m✕ One or more publishes failed.\x1b[0m');
+const hasFailedPublish = process.exitCode !== 0;
+if (hasFailedPublish) console.error('\x1b[31m✕ One or more publishes failed.\x1b[0m');
