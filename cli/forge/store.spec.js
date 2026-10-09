@@ -39,7 +39,8 @@ test('replaceFileUnits stores every unit and returns old and new fps', () => {
   const record = recordOf(SOURCE);
   const first = replaceFileUnits(db, record);
   assert.deepEqual(first.previousFps, []);
-  assert.equal(first.nextFps.length, record.units.length * 3);
+  const innerCount = record.units.filter((unit) => unit.innerFp1).length;
+  assert.equal(first.nextFps.length, (record.units.length + innerCount) * 3, 'own fps plus folded expression fps');
   assert.equal(countLedgerUnits(db), record.units.length);
 
   const second = replaceFileUnits(db, { ...record, contentHash: 'sha-b' });
@@ -91,8 +92,9 @@ test('the kind column refuses unknown unit kinds', () => {
 test('the floor drops only units no solo gate or window can use', () => {
   const content = fs.readFileSync(path.join(KIT_ROOT, SOURCE), 'utf-8');
   const { units } = collectFileUnits(SOURCE, content);
-  const kept = new Set(selectStoredUnits(units).units);
-  const dropped = units.filter((unit) => !kept.has(unit));
+  const keyOf = (unit) => `${unit.kind}@${unit.startOffset}`;
+  const kept = new Set(selectStoredUnits(units).units.map(keyOf));
+  const dropped = units.filter((unit) => !kept.has(keyOf(unit)));
   assert.ok(dropped.length > 0, 'team-flags.js has floor-dropped units');
   const stmtStarts = new Set(units.filter((unit) => unit.kind === 'stmt').map((unit) => unit.startOffset));
   for (const unit of dropped) {
@@ -100,6 +102,31 @@ test('the floor drops only units no solo gate or window can use', () => {
     const isBelowGates = unit.mass < STORE_FLOOR.minMass && evidence(unit.mass, anchorWeight(unit.anchors)) < STORE_FLOOR.minEvidence;
     assert.ok(isExprDuplicate || isBelowGates, `${unit.kind} at line ${unit.start} was dropped without cause`);
   }
+});
+
+// The expression of cli/audit-scope.spec.js:11, verbatim, once as an expression statement and once as a
+// return argument: the stmt fp wraps it, so only the folded inner fps can join the two contexts.
+const WRITE_PACKAGE_JSON = "fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ name: 'scope-fixture' }))";
+const IMPORTS = "import fs from 'node:fs';\nimport path from 'node:path';";
+
+test('a floored expression statement keeps its expression fps for cross-context N1', () => {
+  const asStatement = collectFileUnits('cli/a.js', `${IMPORTS}\nexport const write = (root) => {\n  ${WRITE_PACKAGE_JSON};\n};\n`).units;
+  const asReturn = collectFileUnits('cli/b.js', `${IMPORTS}\nexport const write = (root) => {\n  return ${WRITE_PACKAGE_JSON};\n};\n`).units;
+  const exprA = asStatement.find((unit) => unit.kind === 'expr');
+  const exprB = asReturn.find((unit) => unit.kind === 'expr');
+  assert.ok(exprA && exprB, 'both contexts yield the expr unit');
+  assert.equal(exprA.fp1, exprB.fp1, 'the expr fp is context-free');
+  const storedA = selectStoredUnits(asStatement).units;
+  const storedB = selectStoredUnits(asReturn).units;
+  const isFoldedRow = (unit) => unit.kind === 'expr' && unit.startOffset === exprA.startOffset;
+  assert.equal(storedA.some(isFoldedRow), false, 'the duplicate expr row is folded away');
+  const stmtA = storedA.find((unit) => unit.kind === 'stmt' && unit.startOffset === exprA.startOffset);
+  assert.deepEqual([stmtA.innerFp1, stmtA.innerFp2, stmtA.innerFp3], [exprA.fp1, exprA.fp2, exprA.fp3]);
+  assert.ok(storedB.some((unit) => unit.kind === 'expr' && unit.fp1 === stmtA.innerFp1), 'an N1 join on inner_fp1 finds b.js');
+  const db = openDb();
+  replaceFileUnits(db, { ...recordOf(SOURCE), path: 'cli/a.js', units: storedA });
+  const row = listFileUnits(db, 'cli/a.js').find((candidate) => candidate.kind === 'stmt' && candidate.inner_fp1);
+  assert.equal(row.inner_fp1, exprA.fp1, 'the ledger row carries inner_fp1');
 });
 
 test('the per-file cap keeps fn units first and reports what it dropped', () => {

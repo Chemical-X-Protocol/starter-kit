@@ -8,11 +8,11 @@ import { anchorWeight } from './anchors.js';
 
 // Bump when units, canonicalization, hashing, facets or the store floor change meaning: every file
 // whose row carries another version is fingerprinted again.
-export const FORGE_EXTRACTOR_VERSION = 1;
+export const FORGE_EXTRACTOR_VERSION = 2;
 
 const SQL = {
   stamps: 'SELECT path, content_hash, mtime_ms, size, extractor_version FROM pattern_files',
-  oldFps: 'SELECT fp1, fp2, fp3 FROM pattern_units WHERE file_path = ?',
+  oldFps: 'SELECT fp1, fp2, fp3, inner_fp1, inner_fp2, inner_fp3 FROM pattern_units WHERE file_path = ?',
   deleteUnits: 'DELETE FROM pattern_units WHERE file_path = ?',
   deleteFile: 'DELETE FROM pattern_files WHERE path = ?',
   upsertFile: `INSERT INTO pattern_files (path, content_hash, mtime_ms, size, lang, facet_key, extractor_version, unit_count, dropped_count, updated_at)
@@ -22,7 +22,8 @@ const SQL = {
       unit_count = excluded.unit_count, dropped_count = excluded.dropped_count, updated_at = excluded.updated_at`,
   touchFile: 'UPDATE pattern_files SET mtime_ms = ?, size = ? WHERE path = ?',
   insertUnit: `INSERT INTO pattern_units (file_path, kind, block_id, ordinal, start, end, start_line, end_line, decl_name, is_export,
-    mass, anchor_weight, anchors, fp1, fp2, fp3, facet_key, is_spec, meta) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    mass, anchor_weight, anchors, fp1, fp2, fp3, inner_fp1, inner_fp2, inner_fp3, facet_key, is_spec, meta)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   fileUnits: 'SELECT * FROM pattern_units WHERE file_path = ? ORDER BY start_line, start, id',
   countUnits: 'SELECT COUNT(*) AS c FROM pattern_units'
 };
@@ -62,12 +63,16 @@ const insertUnits = (s, record) => {
       record.path, unit.kind, row.blockId, row.ordinal, unit.startOffset ?? null, unit.endOffset ?? null,
       unit.start ?? 1, unit.end ?? unit.start ?? 1, unit.declName ?? null, null,
       unit.mass, anchorWeight(unit.anchors), JSON.stringify(unit.anchors), unit.fp1, unit.fp2, unit.fp3,
-      record.facet.key, record.facet.spec ? 1 : 0, row.meta
+      unit.innerFp1 ?? null, unit.innerFp2 ?? null, unit.innerFp3 ?? null, record.facet.key, record.facet.spec ? 1 : 0, row.meta
     );
   }
 };
 
-const fpsOf = (rows) => rows.flatMap((row) => [row.fp1, row.fp2, row.fp3]);
+// A unit (camelCase) or a row (snake_case): its own fps plus any folded expression fps (unit-floor.js).
+const fpsOf = (rows) => rows.flatMap((row) => [
+  row.fp1, row.fp2, row.fp3,
+  row.innerFp1 ?? row.inner_fp1, row.innerFp2 ?? row.inner_fp2, row.innerFp3 ?? row.inner_fp3
+].filter(Boolean));
 
 /** Map<path, { contentHash, mtimeMs, size, extractorVersion }> of every ledger file. */
 export const readFileStamps = (db) => {

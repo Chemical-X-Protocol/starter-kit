@@ -1,7 +1,10 @@
 // Which collected units the ledger stores (design doc, BUDGETS: pattern_units <= 40k rows on the kit).
 // The floor drops only rows no grouping path can use, so it is lossless for N1, N2, N3 and W:
-//   expr  an expression statement's expression: the stmt unit at the same offset already carries it
-//         (its fp is a pure function of the expression's), so the expr row only duplicated it
+//   expr  an expression statement's expression: its row is folded into the stmt row at the same
+//         offset, which keeps the expression's own fps as innerFp1/2/3 (pattern_units.inner_fp*).
+//         The stmt fp wraps the expression in ExpressionStatement, so it alone could not join the
+//         same expression used as a return argument, initializer or call argument elsewhere; N1
+//         matches expr fps against both fp* and inner_fp*, so no cross-context bucket is lost.
 //   fn    a body below both gates that apply alone (G1 mass >= 8, G2 E >= 30)
 //   stmt  the only statement of its block below both gates: no window (N2 k >= 2, W >= 3 instances)
 //         can include it, so it could only ever group on its own
@@ -28,15 +31,25 @@ const blockSizesOf = (units) => {
   return sizes;
 };
 
-const createFloorTest = (units) => {
+const createFloorTest = (units, stmtStarts) => {
   const blockSizes = blockSizesOf(units);
-  const stmtStarts = new Set(units.filter((unit) => unit.kind === 'stmt').map((unit) => unit.startOffset));
   return {
     expr: (unit) => stmtStarts.has(unit.startOffset),
     fn: (unit) => isBelowSoloGates(unit),
     stmt: (unit) => blockSizes.get(unit.blockId) === 1 && isBelowSoloGates(unit),
     tmpl: () => false
   };
+};
+
+/** Expr units that an expression statement's stmt row absorbs, by start offset. */
+const foldedExprsOf = (units, stmtStarts) => new Map(units
+  .filter((unit) => unit.kind === 'expr' && stmtStarts.has(unit.startOffset))
+  .map((unit) => [unit.startOffset, unit]));
+
+const withInnerFps = (unit, folded) => {
+  const inner = unit.kind === 'stmt' ? folded.get(unit.startOffset) : null;
+  if (!inner) return unit;
+  return { ...unit, innerFp1: inner.fp1, innerFp2: inner.fp2, innerFp3: inner.fp3 };
 };
 
 const byPriority = (a, b) => KIND_PRIORITY[a.unit.kind] - KIND_PRIORITY[b.unit.kind] || a.index - b.index;
@@ -46,8 +59,10 @@ const byPriority = (a, b) => KIND_PRIORITY[a.unit.kind] - KIND_PRIORITY[b.unit.k
  * in their original (source) order.
  */
 export const selectStoredUnits = (units, { maxUnits = STORE_FLOOR.maxUnitsPerFile } = {}) => {
-  const isFloored = createFloorTest(units);
-  const floored = units.filter((unit) => !isFloored[unit.kind](unit));
+  const stmtStarts = new Set(units.filter((unit) => unit.kind === 'stmt').map((unit) => unit.startOffset));
+  const isFloored = createFloorTest(units, stmtStarts);
+  const folded = foldedExprsOf(units, stmtStarts);
+  const floored = units.filter((unit) => !isFloored[unit.kind](unit)).map((unit) => withInnerFps(unit, folded));
   const isOverCap = floored.length > maxUnits;
   if (!isOverCap) return { units: floored, floorDropped: units.length - floored.length, capDropped: 0 };
   const keptIndexes = new Set(floored.map((unit, index) => ({ unit, index })).sort(byPriority).slice(0, maxUnits).map((entry) => entry.index));

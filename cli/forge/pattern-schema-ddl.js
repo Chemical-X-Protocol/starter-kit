@@ -1,7 +1,8 @@
 // Forge fingerprint ledger DDL (design doc, Data model). search-schema-ddl.js only calls
 // applyPatternSchema, so the index schema file stays small. P2 owns the two ledger tables:
 //   pattern_files  one row per fingerprinted file: content stamp, facet and extractor version
-//   pattern_units  one row per stored unit (fn, stmt, expr, tmpl), cascading from pattern_files
+//   pattern_units  one row per stored unit (fn, stmt, expr, tmpl), cascading from pattern_files;
+//                  inner_fp1..3 hold the fps of an expression statement's expression (unit-floor.js)
 // Later phases add their tables (groups, blueprints, heal runs, library) here.
 import { debugNote } from '../search-debug.js';
 
@@ -37,6 +38,9 @@ const TABLES_SQL = `
     fp1 TEXT NOT NULL,
     fp2 TEXT NOT NULL,
     fp3 TEXT NOT NULL,
+    inner_fp1 TEXT,
+    inner_fp2 TEXT,
+    inner_fp3 TEXT,
     facet_key TEXT NOT NULL,
     is_spec INTEGER NOT NULL DEFAULT 0,
     meta TEXT,
@@ -48,13 +52,20 @@ const INDEXES_SQL = `
   CREATE INDEX IF NOT EXISTS idx_pattern_units_fp1 ON pattern_units(fp1, facet_key);
   CREATE INDEX IF NOT EXISTS idx_pattern_units_fp2 ON pattern_units(fp2, facet_key);
   CREATE INDEX IF NOT EXISTS idx_pattern_units_fp3 ON pattern_units(fp3, facet_key);
+  CREATE INDEX IF NOT EXISTS idx_pattern_units_inner_fp1 ON pattern_units(inner_fp1, facet_key) WHERE inner_fp1 IS NOT NULL;
+  CREATE INDEX IF NOT EXISTS idx_pattern_units_inner_fp2 ON pattern_units(inner_fp2, facet_key) WHERE inner_fp2 IS NOT NULL;
+  CREATE INDEX IF NOT EXISTS idx_pattern_units_inner_fp3 ON pattern_units(inner_fp3, facet_key) WHERE inner_fp3 IS NOT NULL;
   CREATE INDEX IF NOT EXISTS idx_pattern_units_file ON pattern_units(file_path);
   CREATE INDEX IF NOT EXISTS idx_pattern_units_block ON pattern_units(file_path, block_id, ordinal);
   CREATE INDEX IF NOT EXISTS idx_pattern_units_decl ON pattern_units(decl_name, facet_key);
 `;
 
 // [table, column, definition]: columns added after a ledger table first shipped.
-const COLUMN_MIGRATIONS = [];
+const COLUMN_MIGRATIONS = [
+  ['pattern_units', 'inner_fp1', 'TEXT'],
+  ['pattern_units', 'inner_fp2', 'TEXT'],
+  ['pattern_units', 'inner_fp3', 'TEXT']
+];
 
 const columnsOf = (db, table) => new Set((db.prepare(`PRAGMA table_info(${table})`).all() || []).map((c) => c.name));
 
