@@ -1,5 +1,6 @@
 import { COMMANDS_SCHEMA, COMMAND_GROUPS, findCommandSchema } from './commands-schema.js';
 import { renderTtyBanner } from './tty-banner.js';
+import { exemptionNote, SHORT_FLAG_NOTE } from './commands/unknown-flags.js';
 import { optionsBeforeSeparator, isHelpFlagAt, hasHelpFlag } from './help-args.js';
 
 // Help text is generated from commands-schema.js. Top-level help is bounded by shape, not
@@ -56,6 +57,8 @@ export const formatCommandHelp = (entry) => {
   if (hasDescription) lines.push(entry.description);
   const hasFlags = entry.flags.length > 0;
   if (hasFlags) lines.push('', 'FLAGS', ...formatFlagRows(entry.flags));
+  const note = exemptionNote(entry.name);
+  lines.push('', note ?? SHORT_FLAG_NOTE);
   const hasExamples = entry.examples.length > 0;
   if (hasExamples) lines.push('', 'EXAMPLES', ...entry.examples.map((eg) => `  ${eg}`));
   return `${lines.join('\n')}\n`;

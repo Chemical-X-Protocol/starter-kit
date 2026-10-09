@@ -2,11 +2,12 @@
  * unknown-flags.js: reject unknown long flags before a command handler runs.
  * Single responsibility: check `--flag` tokens against the command's schema entry.
  *
- * Guarantees: for a command not in PASSTHROUGH_COMMANDS whose schema entry lists at least one
- * long flag, a `--flag` token before `--` that the entry does not list is reported with the
- * closest listed flag. Not guaranteed: short flags (-x) are not checked, the schema entry may
- * lag a handler (then a real flag is rejected until the entry lists it), and exempt commands
- * keep whatever their handler does with unknown flags.
+ * Guarantees: for a command not in PASSTHROUGH_COMMANDS, a `--flag` token before `--` that the
+ * schema entry does not list is reported, with the closest listed flag when
+ * one is similar. An entry that lists no long flag rejects every long flag. Not guaranteed:
+ * short flags (-x) are not checked here, the schema entry may lag a handler (then a real flag is
+ * rejected until the entry lists it), and exempt commands keep whatever their handler does with
+ * unknown flags. `chemx <cmd> --help` states the exemption (see exemptionNote).
  */
 
 import { findCommandSchema } from '../commands-schema.js';
@@ -17,7 +18,7 @@ export const PASSTHROUGH_COMMANDS = {
   test: 'passes args through to the test runner',
   typecheck: 'passes args through to the type checker',
   lint: 'passes args through to the linter',
-  audit: 'the router also dispatches flags its schema entry does not list (--staged-delta)',
+  audit: 'the handler and the pre-commit hook pass flags its schema entry does not list (--staged-delta, --non-interactive)',
   batch: 'runs other chemx commands, each validated on its own',
   team: 'owns its subcommand parsers',
   project: 'owns its subcommand parsers',
@@ -27,15 +28,21 @@ export const PASSTHROUGH_COMMANDS = {
   log: 'passes args through to git',
   show: 'passes args through to git',
   pkg: 'passes args through to the package manager',
-  ls: 'passes args through to the file lister',
   json: 'passes args through to the JSON reader'
 };
 
 /** Flags every command accepts through the shared boot path. */
 const GLOBAL_FLAGS = new Set(['--help', '--version', '--project-root', '--root', '--as']);
 
+/** Help text for an exempt command, or null when its flags are checked. */
+export const exemptionNote = (name) => {
+  const reason = PASSTHROUGH_COMMANDS[name];
+  return reason ? `Unknown flags are not checked for this command: ${reason}.` : null;
+};
+
+export const SHORT_FLAG_NOTE = 'Short flags (-x) are not checked for typos.';
+
 const LONG_FLAG = /--[a-z][a-z0-9-]*/g;
-const MAX_SUGGESTION_DISTANCE = 3;
 
 const distance = (a, b) => {
   let previous = Array.from({ length: b.length + 1 }, (_, i) => i);
@@ -65,7 +72,9 @@ export const knownLongFlags = (entry) => {
 
 export const suggestFlag = (unknown, candidates) => {
   let best = null;
-  let bestDistance = MAX_SUGGESTION_DISTANCE + 1;
+  // About one edit per three letters, so a short typo does not name an unrelated flag.
+  const maxDistance = Math.max(1, Math.floor(unknown.replace(/^-+/, '').length / 3));
+  let bestDistance = maxDistance + 1;
   for (const candidate of candidates) {
     const d = distance(unknown, candidate);
     const isCloser = d < bestDistance;
@@ -84,8 +93,6 @@ export const findUnknownFlag = (command, rawArgs) => {
   const isChecked = Boolean(entry) && !Object.hasOwn(PASSTHROUGH_COMMANDS, entry.name);
   if (!isChecked) return null;
   const known = knownLongFlags(entry);
-  const hasNoLongFlags = known.size === 0;
-  if (hasNoLongFlags) return null;
   const args = rawArgs.slice(1);
   const separator = args.indexOf('--');
   const options = separator === -1 ? args : args.slice(0, separator);

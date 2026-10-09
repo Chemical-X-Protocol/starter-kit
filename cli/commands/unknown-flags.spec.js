@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { COMMANDS_SCHEMA } from '../commands-schema.js';
-import { findUnknownFlag, knownLongFlags, PASSTHROUGH_COMMANDS } from './unknown-flags.js';
+import { findUnknownFlag, knownLongFlags, exemptionNote, PASSTHROUGH_COMMANDS } from './unknown-flags.js';
 
 const CLI = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'index.js');
 const MADE_UP = '--zzqx-not-a-flag';
@@ -26,12 +26,23 @@ test('ignores tokens after -- and exempt passthrough commands', () => {
   assert.equal(findUnknownFlag('build', ['build', '--', 'vite', '--mode']), null);
 });
 
-test('walks every schema entry: a made-up flag is rejected unless exempt or flagless', () => {
+test('did-you-mean stays quiet when nothing is similar', () => {
+  const message = findUnknownFlag('q', ['q', '--gren', 'foo']);
+  assert.match(message, /unknown flag --gren/);
+  assert.doesNotMatch(message, /did you mean/);
+});
+
+test('flagless commands reject long flags; exempt ones say so in help', () => {
+  assert.match(findUnknownFlag('f', ['f', '--nme', 'x']), /unknown flag --nme/);
+  assert.match(exemptionNote('build'), /not checked/);
+  assert.equal(exemptionNote('q'), null);
+});
+
+test('walks every schema entry: a made-up flag is rejected unless exempt', () => {
   for (const entry of COMMANDS_SCHEMA) {
     const message = findUnknownFlag(entry.name, [entry.name, MADE_UP]);
     const isExempt = Object.hasOwn(PASSTHROUGH_COMMANDS, entry.name);
-    const hasNoLongFlags = knownLongFlags(entry).size === 0;
-    const isSkipped = isExempt || hasNoLongFlags;
+    const isSkipped = isExempt;
     assert.equal(message === null, isSkipped, entry.name);
     if (!isSkipped) assert.match(message, /unknown flag --zzqx-not-a-flag/);
     for (const alias of entry.aliases) {
