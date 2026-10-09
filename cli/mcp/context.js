@@ -45,13 +45,18 @@ export const resolveInsideRoot = (root, requested) => {
 
 const parseAllowedRoots =(env) => (env.CHEMX_MCP_ALLOWED_ROOTS || '').split(path.delimiter).filter((p) => path.isAbsolute(p));
 
+// When the client sent MCP roots or the server was started with a dir, projectRoot may only narrow them.
+const locateProjectRoot = (projectRoot, declaredRoots) => {
+  const isUsableRoot = isExistingDir(projectRoot) && looksLikeProject(projectRoot);
+  if (!isUsableRoot) return { ok: false, error: `projectRoot "${projectRoot}" must be an absolute path to an existing project directory (.chemxrc, .chemx, package.json or .git).` };
+  const isBounded = declaredRoots.length === 0 || declaredRoots.some((root) => resolveInsideRoot(root, projectRoot).isInside);
+  if (!isBounded) return { ok: false, error: `projectRoot "${projectRoot}" is outside the declared roots (${declaredRoots.join(', ')}).` };
+  return { ok: true, root: projectRoot, rootSource: 'projectRoot' };
+};
+
 const locateRoot = ({ projectRoot, mcpRoots, serverRoot, envRoot, bootDir }) => {
   const hasProjectRoot = !(projectRoot === undefined || projectRoot === null);
-  if (hasProjectRoot) {
-    const isUsableRoot = isExistingDir(projectRoot) && looksLikeProject(projectRoot);
-    if (isUsableRoot) return { ok: true, root: projectRoot, rootSource: 'projectRoot' };
-    return { ok: false, error: `projectRoot "${projectRoot}" must be an absolute path to an existing project directory (.chemxrc, .chemx, package.json or .git).` };
-  }
+  if (hasProjectRoot) return locateProjectRoot(projectRoot, [...mcpRoots, serverRoot].filter(Boolean));
   if (mcpRoots.length > 0) return { ok: true, root: mcpRoots[0], rootSource: 'mcpRoots' };
   if (serverRoot) return { ok: true, root: serverRoot, rootSource: 'declared' };
   if (envRoot) return { ok: true, root: envRoot, rootSource: 'env' };
