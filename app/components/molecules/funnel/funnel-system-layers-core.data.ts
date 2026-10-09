@@ -10,10 +10,10 @@ export const CORE_SYSTEM_LAYERS: readonly SystemLayer[] = [
     tone: 'sky',
     icon: 'i-lucide-layers',
     thesis: 'Software shaped like small, independently understandable molecules rather than giant monoliths.',
-    description: 'Enforces hard file bounds (<500 LOC), capsules (<100 LOC), TOC views (<20 LOC), and 2-stage atomic booleans.',
+    description: 'Enforces hard file bounds (<500 LOC), capsules (250-line budget; < 100 LOC under atomic-strict), TOC views (<20 LOC), and 2-stage atomic booleans.',
     agentImpact: 'Narrows the working context an agent holds in memory, eliminating hallucinated state mutations.',
     headlineCommand: '7 Pillars Specification • .cursorrules • AGENTS.md',
-    keyMechanisms: ['< 500 LOC file ceiling (< 100 LOC capsules)', '< 20 LOC top-level TOC views', 'Two-stage atomic booleans with early guards', 'Composables returning 3-5 properties max', '[data, error] = await toResult(...) tuples']
+    keyMechanisms: ['< 500 LOC file ceiling (250-line capsule budget; < 100 LOC under atomic-strict)', '< 20 LOC top-level TOC views', 'Two-stage atomic booleans with early guards', 'Composables returning 3-5 properties max', '[data, error] = await toResult(...) tuples']
   },
   {
     id: 'measurement',
