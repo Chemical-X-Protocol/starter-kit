@@ -85,7 +85,8 @@ const reportArgProblems = (parsed, isJson, isLiteral) => {
     ...describeExtraArgs(parsed, isLiteral)
   ];
   const hasProblems = problems.length > 0;
-  if (hasProblems && !isJson) process.stderr.write(`chemx q: ${problems.join('; ')}\n`);
+  const shouldReportProblems = hasProblems && !isJson;
+  if (shouldReportProblems) process.stderr.write(`chemx q: ${problems.join('; ')}\n`);
   return problems;
 };
 
@@ -173,7 +174,8 @@ export const runSearch = async (rawArgs = [], isCli = true) => {
   }
 
   const passthrough = runPassthroughCommand(parsed, rawArgs, first, second, isJson, isCli);
-  if (passthrough.handled) return passthrough.value;
+  const isPassthroughHandled = Boolean(passthrough.handled);
+  if (isPassthroughHandled) return passthrough.value;
 
   const startTime = Date.now();
   const root = resolveIndexRoot(cwd);
@@ -183,7 +185,8 @@ export const runSearch = async (rawArgs = [], isCli = true) => {
     includeInternal: parsed.flags.has('--include-internal'),
     includeHeldScopes: mode !== 'query'
   });
-  if (!syncRes?.db) return failNoSqlite(isJson, isCli);
+  const hasSearchDb = Boolean(syncRes?.db);
+  if (!hasSearchDb) return failNoSqlite(isJson, isCli);
   const db = syncRes.db;
   const index = { ...describeIndexFromSync(syncRes), argProblems: argProblems.length > 0 ? argProblems : undefined };
   applyExitStatus(indexStatusOf(index), isCli);
