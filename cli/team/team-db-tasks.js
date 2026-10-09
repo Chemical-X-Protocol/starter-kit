@@ -5,7 +5,7 @@
 
 import {
   normalizeAgentId, parseTaskRow, checkDependenciesMet,
-  evaluateClaim, executeStatusUpdate, buildTaskListQuery
+  evaluateClaim, executeStatusUpdate, buildTaskListQuery, recordDepsOverride
 } from './team-db-task-helpers.js';
 import { withImmediateTransaction } from './team-db-transaction.js';
 import { generateTaskPermalink } from './team-vds.js';
@@ -53,7 +53,8 @@ export const createTask = (db, taskData) => {
   return getTask(db, createdId);
 };
 
-export const claimTask = (db, taskId, agentId) => {
+// options.ignoreDeps: a reason string; claims despite unmet dependencies and records the reason on the task.
+export const claimTask = (db, taskId, agentId, options = {}) => {
   const canClaim = Boolean(db) && Boolean(taskId) && Boolean(agentId);
   if (!canClaim) return { success: false, reason: 'missing_args' };
 
@@ -61,7 +62,7 @@ export const claimTask = (db, taskId, agentId) => {
   return withImmediateTransaction(db, () => {
     const task = getTask(db, taskId);
     const depsMet = areTaskDependenciesMet(db, taskId);
-    const claimCheck = evaluateClaim(task, cleanId, depsMet);
+    const claimCheck = evaluateClaim(task, cleanId, depsMet, options.ignoreDeps);
     const isClaimDenied = !claimCheck.allowed;
     if (isClaimDenied) {
       const { allowed, ...failDetails } = claimCheck;
@@ -74,6 +75,8 @@ export const claimTask = (db, taskId, agentId) => {
     const isAlreadyClaimed = info.changes !== 1;
     if (isAlreadyClaimed) return { success: false, reason: 'already_claimed' };
     db.prepare("UPDATE agents SET current_task_id = ?, status = 'busy' WHERE id = ?").run(Number(taskId), cleanId);
+    const wasOverridden = !depsMet;
+    if (wasOverridden) recordDepsOverride(db, task, cleanId, String(options.ignoreDeps).trim());
     return { success: true, task: getTask(db, taskId) };
   });
 };

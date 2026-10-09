@@ -43,14 +43,23 @@ export const checkDependenciesMet = (db, taskId, getTask) => {
   return Number(res?.unfinished || 0) === 0;
 };
 
-export const evaluateClaim = (task, cleanId, isDepsMet) => {
+// Records why unmet dependencies were bypassed, on the task's result_payload (#2589).
+export const recordDepsOverride = (db, task, cleanId, reason) => {
+  const payload = { ...(task.result_payload || {}), deps_override: { by: cleanId, reason, unmet: task.dependencies, at: Date.now() } };
+  db.prepare('UPDATE agent_tasks SET result_payload = ? WHERE id = ?').run(JSON.stringify(payload), Number(task.id));
+};
+
+// ignoreDepsReason: a non-empty string bypasses the dependency check only; a claim held by another handle is still refused.
+export const evaluateClaim = (task, cleanId, isDepsMet, ignoreDepsReason = '') => {
   if (!task) return { allowed: false, reason: 'task_not_found' };
   const isClaimedByOther = task.status === 'in_progress' && Boolean(task.assigned_agent_id) && task.assigned_agent_id !== cleanId;
   if (isClaimedByOther) {
     const message = `Task #${task.id} is already claimed by ${task.assigned_agent_id}; ${buildHandoffHint(task.id, task.assigned_agent_id, cleanId)}`;
     return { allowed: false, reason: 'already_claimed', claimedBy: task.assigned_agent_id, message };
   }
-  if (!isDepsMet) {
+  const isOverridden = typeof ignoreDepsReason === 'string' && ignoreDepsReason.trim() !== '';
+  const isBlockedByDeps = !isDepsMet && !isOverridden;
+  if (isBlockedByDeps) {
     return { allowed: false, reason: 'dependencies_unmet', dependencies: task.dependencies };
   }
   return { allowed: true };
