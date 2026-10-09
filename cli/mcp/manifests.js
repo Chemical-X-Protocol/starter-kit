@@ -467,9 +467,10 @@ export const ALL_MCP_TOOLS = [MASTER_MCP_TOOL, ...SUB_TOOLS];
 
 // The action enum is generated from the live DISPATCHER so the schema never advertises dead actions.
 export const withActionEnum = (tools, actionNames) => tools.map((tool) => {
-  const hasActionEnum = Boolean(tool.inputSchema?.properties?.action?.enum);
+  const actionSchema = tool.inputSchema.properties.action;
+  const hasActionEnum = Boolean(actionSchema) && Array.isArray(actionSchema.enum);
   if (!hasActionEnum) return tool;
-  const properties = { ...tool.inputSchema.properties, action: { ...tool.inputSchema.properties.action, enum: [...actionNames] } };
+  const properties = { ...tool.inputSchema.properties, action: { ...actionSchema, enum: [...actionNames] } };
   return { ...tool, inputSchema: { ...tool.inputSchema, properties } };
 });
 

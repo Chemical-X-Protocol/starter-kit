@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { isInteractive, isStdoutTty } from '../terminal.js';
 import { currentRequestSignal } from '../request-context.js';
+import { scheduleTimeout } from '../timers.js';
 
 const DEFAULT_TIMEOUT_MS = 15 * 60 * 1000;
 const KILL_GRACE_MS = 2000;
@@ -47,9 +48,9 @@ export const executeBuild = (command, cwd = process.cwd(), options = {}) => new 
     stopReason = reason;
     stderrBuffer += `\nchemx: command ${reason === 'timeout' ? `timed out after ${timeoutMs} ms` : 'cancelled'}; process tree killed.\n`;
     killTree(child, ownsGroup, 'SIGTERM');
-    setTimeout(() => killTree(child, ownsGroup, 'SIGKILL'), KILL_GRACE_MS).unref();
+    scheduleTimeout(() => killTree(child, ownsGroup, 'SIGKILL'), KILL_GRACE_MS, { unref: true });
   };
-  const timer = setTimeout(() => stop('timeout'), timeoutMs);
+  const cancelTimeout = scheduleTimeout(() => stop('timeout'), timeoutMs);
   const onAbort = () => stop('cancelled');
   signal?.addEventListener('abort', onAbort, { once: true });
   if (signal?.aborted) onAbort();
@@ -66,7 +67,7 @@ export const executeBuild = (command, cwd = process.cwd(), options = {}) => new 
   });
 
   const finish = (code) => {
-    clearTimeout(timer);
+    cancelTimeout();
     signal?.removeEventListener('abort', onAbort);
     const stoppedCode = stopReason === 'timeout' ? TIMEOUT_EXIT_CODE : CANCEL_EXIT_CODE;
     resolve({

@@ -3,6 +3,7 @@
 import readline from 'node:readline';
 import fs from 'node:fs';
 import { createMcpHandler } from './server.js';
+import { scheduleTimeout } from '../timers.js';
 
 export const RPC_ERRORS = Object.freeze({ PARSE: -32700, INVALID_REQUEST: -32600, INVALID_PARAMS: -32602, INTERNAL: -32603 });
 
@@ -33,9 +34,9 @@ const createOutgoingRequests = (writeJsonRpc) => {
   let sequence = 0;
   const sendRequest = (method, params, timeoutMs = 5000) => new Promise((resolve, reject) => {
     const id = `chemx-${++sequence}`;
-    const timer = setTimeout(() => { pending.delete(id); reject(new Error(`${method} timed out after ${timeoutMs} ms`)); }, timeoutMs);
+    const cancelTimeout = scheduleTimeout(() => { pending.delete(id); reject(new Error(`${method} timed out after ${timeoutMs} ms`)); }, timeoutMs);
     pending.set(id, (message) => {
-      clearTimeout(timer);
+      cancelTimeout();
       const hasError = Boolean(message.error);
       if (hasError) reject(new Error(message.error.message || `${method} failed`));
       else resolve(message.result);

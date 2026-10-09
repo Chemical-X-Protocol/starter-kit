@@ -3,6 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { Worker } from 'node:worker_threads';
+import { scheduleTimeout } from '../timers.js';
 
 const DEFAULT_SCORECARD_TIMEOUT_MS = 120000;
 const WORKER_URL = new URL('./scorecard-worker.js', import.meta.url);
@@ -35,17 +36,17 @@ export const computeScorecard = (cwd, { timeoutMs = DEFAULT_SCORECARD_TIMEOUT_MS
   const worker = new Worker(WORKER_URL, { workerData: { cwd, targetDir: scorecardTarget(cwd) }, stdout: true, stderr: true });
   worker.stdout.on('data', (chunk) => process.stderr.write(chunk));
   worker.stderr.on('data', (chunk) => process.stderr.write(chunk));
-  const timer = setTimeout(() => {
+  const cancelTimeout = scheduleTimeout(() => {
     worker.terminate();
     reject(new Error(`scorecard audit timed out after ${timeoutMs} ms`));
   }, timeoutMs);
   worker.once('message', (scorecard) => {
-    clearTimeout(timer);
+    cancelTimeout();
     worker.terminate();
     resolve(scorecard);
   });
   worker.once('error', (err) => {
-    clearTimeout(timer);
+    cancelTimeout();
     reject(err);
   });
 });
