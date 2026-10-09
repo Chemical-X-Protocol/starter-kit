@@ -54,3 +54,10 @@ test('verify-report: on a pipe, a step announced before a blocking call prints a
   });
   assert.equal(stripAnsi(output), '  … AST Architecture:  running\n  done\n');
 });
+
+test('verify-report: a failed test step names the first failing test', () => {
+  const failed = { status: STATUS.FAIL, reason: null, passed: 5, total: 6, failed: 1, skipped: 0, errors: 0, executionError: null, failures: [{ kind: 'assertion', name: 'cli/ui-*.js under 100 lines: ui-server.js 103', details: [] }] };
+  assert.equal(formatTestStep(failed), '1 failed: cli/ui-*.js under 100 lines: ui-server.js 103');
+  assert.match(formatTestStep({ ...failed, failed: 3 }), /\(\+2 more\)$/);
+  assert.equal(formatTestStep({ ...failed, failures: [] }), '1 failed');
+});

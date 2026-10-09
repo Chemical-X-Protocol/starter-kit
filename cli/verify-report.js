@@ -55,6 +55,18 @@ export const isEmptyAllowed = (section) => isPass(section.status) && section.rea
 // An empty run that --allow-empty accepted passes the gate but proves nothing, so no green check.
 export const testStepIcon = (section) => (isEmptyAllowed(section) ? SKIPPED : section.status);
 
+const NAME_LIMIT = 100;
+
+// Names the first failing test (it may not be the only one); the full list is in chemx test.
+const firstFailureNote = (section) => {
+  const first = (section.failures || [])[0];
+  const hasName = Boolean(first && first.name);
+  if (!hasName) return '';
+  const name = first.name.length > NAME_LIMIT ? `${first.name.slice(0, NAME_LIMIT)}...` : first.name;
+  const more = section.failed + section.errors - 1;
+  return `: ${name}${more > 0 ? ` (+${more} more)` : ''}`;
+};
+
 export const formatTestStep = (section) => {
   if (isEmptyAllowed(section)) return 'No tests ran (allowed by --allow-empty)';
   const skippedNote = section.skipped > 0 ? `, ${section.skipped} skipped` : '';
@@ -63,7 +75,7 @@ export const formatTestStep = (section) => {
   const isBareFailure = section.failed === 0 && section.errors === 0 && section.executionError;
   if (isBareFailure) return `Command Failed (${section.executionError})`;
   const errorNote = section.errors > 0 ? `, ${section.errors} unhandled error(s)` : '';
-  return `${section.failed} failed${errorNote}`;
+  return `${section.failed} failed${errorNote}${firstFailureNote(section)}`;
 };
 
 export const formatBuildStep = (section) => {
