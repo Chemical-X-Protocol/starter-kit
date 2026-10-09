@@ -3,10 +3,14 @@
 
   export const resolveGradeClass = (grade: string): string => {
     const g = grade.toUpperCase();
-    if (g.startsWith('A')) return 'm-chemx-badge__grade--a';
-    if (g.startsWith('B')) return 'm-chemx-badge__grade--b';
-    if (g.startsWith('C')) return 'm-chemx-badge__grade--c';
-    if (g.startsWith('D')) return 'm-chemx-badge__grade--d';
+    const isGradeA = Boolean(g.startsWith('A'));
+    if (isGradeA) return 'm-chemx-badge__grade--a';
+    const isGradeB = Boolean(g.startsWith('B'));
+    if (isGradeB) return 'm-chemx-badge__grade--b';
+    const isGradeC = Boolean(g.startsWith('C'));
+    if (isGradeC) return 'm-chemx-badge__grade--c';
+    const isGradeD = Boolean(g.startsWith('D'));
+    if (isGradeD) return 'm-chemx-badge__grade--d';
     return 'm-chemx-badge__grade--f';
   };
 
