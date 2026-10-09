@@ -35,22 +35,27 @@ export const resolveDeclarationKind = (declaration) => {
   const init = declaration.init;
   if (!init) return 'const';
 
-  if (init.type === 'ArrowFunctionExpression' || init.type === 'FunctionExpression') {
+  const isFunctionInit = init.type === 'ArrowFunctionExpression' || init.type === 'FunctionExpression';
+  if (isFunctionInit) {
     return 'function';
   }
 
-  if (init.type !== 'CallExpression') {
+  const isNotCallInit = init.type !== 'CallExpression';
+  if (isNotCallInit) {
     return 'const';
   }
 
   const calleeName = init.callee?.name;
-  if (calleeName === 'computed') {
+  const isComputedCall = calleeName === 'computed';
+  if (isComputedCall) {
     return 'computed';
   }
-  if (calleeName === 'ref') {
+  const isRefCall = calleeName === 'ref';
+  if (isRefCall) {
     return 'ref';
   }
-  if (calleeName && calleeName.startsWith('use')) {
+  const isHookCall = Boolean(calleeName && calleeName.startsWith('use'));
+  if (isHookCall) {
     return 'hook';
   }
 
@@ -79,7 +84,8 @@ export const summarizeTemplate = (code, filePath = '') => {
     tpl = code;
   }
 
-  if (!tpl.trim()) return null;
+  const isEmptyTemplate = !tpl.trim();
+  if (isEmptyTemplate) return null;
 
   const tagMatches = tpl.matchAll(/<([A-Z][a-zA-Z0-9]+|[a-z]+-[a-z0-9-]+)\b/g);
   const tags = new Set();
@@ -99,8 +105,10 @@ export const summarizeTemplate = (code, filePath = '') => {
   }
 
   const parts = [];
-  if (tags.size > 0) parts.push(`Components: ${Array.from(tags).slice(0, 10).join(', ')}`);
-  if (events.size > 0) parts.push(`Events: ${Array.from(events).slice(0, 8).join(', ')}`);
+  const hasTags = tags.size > 0;
+  if (hasTags) parts.push(`Components: ${Array.from(tags).slice(0, 10).join(', ')}`);
+  const hasEvents = events.size > 0;
+  if (hasEvents) parts.push(`Events: ${Array.from(events).slice(0, 8).join(', ')}`);
 
   return parts.length > 0
     ? `// [Template Summary: ${parts.join(' | ')}]`
@@ -131,7 +139,8 @@ export const extractTemplateContent = (code, filePath = '') => {
     return cleaned || '// No template markup found in Svelte file.';
   }
 
-  if (filePath.endsWith('.tsx') || filePath.endsWith('.jsx')) {
+  const isJsxFile = filePath.endsWith('.tsx') || filePath.endsWith('.jsx');
+  if (isJsxFile) {
     const jsxMatch = code.match(/return\s*\(\s*(<[\s\S]*?>[\s\S]*?)\s*\);/);
     if (jsxMatch) return jsxMatch[1].trim();
   }
