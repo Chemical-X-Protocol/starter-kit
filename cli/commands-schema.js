@@ -409,5 +409,37 @@ export const COMMANDS_SCHEMA = [
       'cx do "d" "p -s" "verify"',
       'cx do "q -g theme" "d"'
     ]
+  },
+  {
+    name: 'hook',
+    aliases: [],
+    usage: 'chemx hook <claude-pre-tool|claude-post-edit|session-start|statusline>',
+    summary: 'Claude Code hook handlers: read the hook JSON on stdin, fail open.',
+    description: 'claude-pre-tool routes raw runners, git diff/log and repo source reads through chemx using a real shell tokenizer; a `# chemx-bypass: <reason>` comment allows the call and logs friction. Installed hooks call node <kit>/cli/hooks/entry.js <hook> to skip CLI boot.',
+    flags: [],
+    examples: [
+      'echo \'{"tool_name":"Bash","tool_input":{"command":"git log"}}\' | chemx hook claude-pre-tool'
+    ]
+  },
+  {
+    name: 'install-hooks',
+    aliases: [],
+    usage: 'chemx install-hooks --host=claude [--scope=local|project] [--dry-run] [--json]',
+    summary: 'Install chemx hooks, statusline and the .mcp.json launch for a host, idempotently.',
+    description: 'Merges into .claude/settings(.local).json, backing up to .chemx/backups first. Replaces only chemx-owned entries (including the bootstrap chemx-guard.mjs), never foreign ones. Re-pins an existing chemx pre-commit hook and CI workflow to the same chemx. Without --host it runs the guardrail wizard.',
+    flags: [
+      { flag: '--host=claude', desc: 'Target host (required for this mode)' },
+      { flag: '--scope=local|project', desc: 'settings.local.json (default) or the shared settings.json' },
+      { flag: '--dry-run', desc: 'Print the plan; write nothing' },
+      { flag: '--no-mcp', desc: 'Leave .mcp.json alone' },
+      { flag: '--no-statusline', desc: 'Leave statusLine alone' },
+      { flag: '--git-hook', desc: 'Also create the pinned git pre-commit hook when missing' },
+      { flag: '--ci', desc: 'Also create the pinned CI workflow when missing' },
+      { flag: '--json', desc: 'Machine-readable report' }
+    ],
+    examples: [
+      'chemx install-hooks --host=claude --dry-run',
+      'chemx install-hooks --host=claude --scope=project'
+    ]
   }
 ];
