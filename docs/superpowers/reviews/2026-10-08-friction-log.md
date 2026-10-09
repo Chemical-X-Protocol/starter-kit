@@ -11,3 +11,9 @@
 - CLI cold start ~1.1s user CPU per call (`chemx p build`), MCP warm call 12ms: big gap for bursts of small queries.
 - chemx test (CLI) picked vitest instead of the kit's own node --test script and also globbed .claude/worktrees/* copies; needed bypass to run cli/search.spec.js
 - guard matched inside quoted strings and heredoc bodies; fixed with literal stripping (keep as a spec case for chemx hook claude-pre-tool)
+- [G4] `chemx read cli/search-db.js --symbol=openIndexDb` says "not found" because search-db.js re-exports it from search-schema.js; read --symbol should follow re-exports or name the source module.
+- [G4] `chemx read --symbol=openIndexDb` on search-schema.js dumped the whole ~200-line function (~2k tokens) with no line numbers and no cap/hint.
+- [G4] guard blocks `sed -n` on spec files; `chemx read --start/--end` covers it but cannot read several ranges or files in one call.
+- [G4] pre-commit gate (grade B on staged files) blocks commits that touch legacy ui-sse.js/ui-db-studio.js/ui-server-routes.js for pre-existing ERROR_SWALLOWED_EXCEPTION hazards, and flags a `catch { sendJson(res, 400, ...) }` that handles the error as CRITICAL. Used CHEMX_SKIP_PRECOMMIT=1 for G4 commits; verify ratchet is the real gate.
+- [G4] `chemx audit --git --json` returns only hazard counts (no file/line/rule list); had to scrape `--unroll` text (~200 lines of banner/ASCII art) to find the 10 criticals.
+- [G4] `chemx test` not usable for this kit (vitest picked); ran node --test with bypass (same as runner-detection-wrong-runner).

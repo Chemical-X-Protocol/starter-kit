@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
+import { classifyConsoleSql } from './ui-sql-guard.js';
 
 export const getDatabaseMetrics = (db, cwd = process.cwd()) => {
   if (!db) return { success: false, error: 'Database unavailable' };
@@ -52,27 +53,15 @@ export const executeSqlQuery = (db, sql = '', maxRows = 100) => {
   const trimmed = sql.trim();
   if (!trimmed) return { success: false, error: 'Empty SQL statement' };
 
+  const verdict = classifyConsoleSql(trimmed);
+  if (!verdict.allowed) return { success: false, error: verdict.reason, query: trimmed };
+
   try {
     const start = performance.now();
-    const isSelect = /^select|^pragma|^explain/i.test(trimmed);
-    
-    if (isSelect) {
-      const rows = db.prepare(trimmed).all().slice(0, maxRows);
-      const durationMs = Number((performance.now() - start).toFixed(2));
-      const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
-      return { success: true, columns, rows, rowCount: rows.length, durationMs, query: trimmed };
-    }
-
-    const info = db.prepare(trimmed).run();
+    const rows = db.prepare(trimmed).all().slice(0, maxRows);
     const durationMs = Number((performance.now() - start).toFixed(2));
-    return {
-      success: true,
-      columns: ['changes', 'lastInsertRowid'],
-      rows: [{ changes: info.changes, lastInsertRowid: info.lastInsertRowid }],
-      rowCount: 1,
-      durationMs,
-      query: trimmed
-    };
+    const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
+    return { success: true, columns, rows, rowCount: rows.length, durationMs, query: trimmed };
   } catch (err) {
     return { success: false, error: err.message, query: trimmed };
   }

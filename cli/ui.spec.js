@@ -72,13 +72,13 @@ test('ui-server: creates HTTP server and handles GET / and API routes', async ()
   let taskJson = null;
 
   try {
-    const resHtml = await fetch(`http://localhost:${running.port}/`);
+    const resHtml = await running.fetch(`http://localhost:${running.port}/`);
     assert.strictEqual(resHtml.status, 200);
     const htmlText = await resHtml.text();
     assert.ok(htmlText.includes('Chemical X: Swarm Control'));
 
-    const resApi = await fetch(`http://localhost:${running.port}/api/swarm/status`);
-    const resFav = await fetch(`http://localhost:${running.port}/favicon.ico`);
+    const resApi = await running.fetch(`http://localhost:${running.port}/api/swarm/status`);
+    const resFav = await running.fetch(`http://localhost:${running.port}/favicon.ico`);
     assert.strictEqual(resFav.status, 204);
 
     assert.strictEqual(resApi.status, 200);
@@ -89,7 +89,7 @@ test('ui-server: creates HTTP server and handles GET / and API routes', async ()
     assert.ok(typeof apiJson.savings.tokensSaved === 'number');
     assert.ok(typeof apiJson.savings.dollarsSaved === 'number');
 
-    const resCodebase = await fetch(`http://localhost:${running.port}/api/swarm/codebase`);
+    const resCodebase = await running.fetch(`http://localhost:${running.port}/api/swarm/codebase`);
     assert.strictEqual(resCodebase.status, 200);
     const codebaseJson = await resCodebase.json();
     assert.strictEqual(codebaseJson.success, true);
@@ -97,7 +97,7 @@ test('ui-server: creates HTTP server and handles GET / and API routes', async ()
     assert.ok(codebaseJson.files.length > 0);
 
     const testTaskTitle = `API Test Task ${Date.now()}`;
-    const resCreateTask = await fetch(`http://localhost:${running.port}/api/swarm/tasks`, {
+    const resCreateTask = await running.fetch(`http://localhost:${running.port}/api/swarm/tasks`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title: testTaskTitle, tier: 'atom', priority: 1 })
@@ -107,7 +107,7 @@ test('ui-server: creates HTTP server and handles GET / and API routes', async ()
     assert.strictEqual(taskJson.success, true);
     assert.ok(taskJson.task?.id);
 
-    const resClaim = await fetch(`http://localhost:${running.port}/api/swarm/tasks/claim`, {
+    const resClaim = await running.fetch(`http://localhost:${running.port}/api/swarm/tasks/claim`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ taskId: taskJson.task.id, agentId: '@api-tester' })
@@ -117,7 +117,7 @@ test('ui-server: creates HTTP server and handles GET / and API routes', async ()
     assert.strictEqual(claimJson.success, true);
 
     const testLockFile = `src/api-lock-test-${Date.now()}.ts`;
-    const resAcquire = await fetch(`http://localhost:${running.port}/api/swarm/locks/acquire`, {
+    const resAcquire = await running.fetch(`http://localhost:${running.port}/api/swarm/locks/acquire`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ filePath: testLockFile, agentId: '@api-tester', purpose: 'test' })
@@ -126,7 +126,7 @@ test('ui-server: creates HTTP server and handles GET / and API routes', async ()
     const acquireJson = await resAcquire.json();
     assert.strictEqual(acquireJson.success, true);
 
-    const resRelease = await fetch(`http://localhost:${running.port}/api/swarm/locks/release`, {
+    const resRelease = await running.fetch(`http://localhost:${running.port}/api/swarm/locks/release`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ filePath: testLockFile, agentId: '@api-tester' })
@@ -135,7 +135,7 @@ test('ui-server: creates HTTP server and handles GET / and API routes', async ()
     const releaseJson = await resRelease.json();
     assert.strictEqual(releaseJson.success, true);
 
-    const resSettings = await fetch(`http://localhost:${running.port}/api/swarm/settings/action`, {
+    const resSettings = await running.fetch(`http://localhost:${running.port}/api/swarm/settings/action`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'heartbeat' })
@@ -144,42 +144,42 @@ test('ui-server: creates HTTP server and handles GET / and API routes', async ()
     const settingsJson = await resSettings.json();
     assert.strictEqual(settingsJson.success, true);
 
-    const resVacuum = await fetch(`http://localhost:${running.port}/api/swarm/settings/action`, {
+    const resVacuum = await running.fetch(`http://localhost:${running.port}/api/swarm/settings/action`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'vacuum' })
     });
     assert.strictEqual((await resVacuum.json()).success, true);
 
-    const resTimeout = await fetch(`http://localhost:${running.port}/api/swarm/settings/action`, {
+    const resTimeout = await running.fetch(`http://localhost:${running.port}/api/swarm/settings/action`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'busy_timeout', timeoutMs: 3000 })
     });
     assert.strictEqual((await resTimeout.json()).success, true);
 
-    const resFeed = await fetch(`http://localhost:${running.port}/api/swarm/feed`, {
+    const resFeed = await running.fetch(`http://localhost:${running.port}/api/swarm/feed`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message: 'Live Feed Spec Test', author: '@spec-tester' })
     });
     assert.strictEqual((await resFeed.json()).success, true);
 
-    const resDone = await fetch(`http://localhost:${running.port}/api/swarm/tasks/done`, {
+    const resDone = await running.fetch(`http://localhost:${running.port}/api/swarm/tasks/done`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ taskId: taskJson.task.id })
     });
     assert.strictEqual((await resDone.json()).success, true);
 
-    const resDbMetrics = await fetch(`http://localhost:${running.port}/api/swarm/database/metrics`);
+    const resDbMetrics = await running.fetch(`http://localhost:${running.port}/api/swarm/database/metrics`);
     assert.strictEqual(resDbMetrics.status, 200);
     const dbMetricsJson = await resDbMetrics.json();
     assert.strictEqual(dbMetricsJson.success, true);
     assert.ok(dbMetricsJson.pageSize > 0);
     assert.ok(Array.isArray(dbMetricsJson.tables));
 
-    const resDbQuery = await fetch(`http://localhost:${running.port}/api/swarm/database/query`, {
+    const resDbQuery = await running.fetch(`http://localhost:${running.port}/api/swarm/database/query`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query: "SELECT name, type FROM sqlite_master WHERE type = 'table' LIMIT 5" })
@@ -190,13 +190,13 @@ test('ui-server: creates HTTP server and handles GET / and API routes', async ()
     assert.ok(dbQueryJson.rows.length > 0);
     assert.ok(typeof dbQueryJson.durationMs === 'number');
 
-    const resAttention = await fetch(`http://localhost:${running.port}/api/swarm/attention`);
+    const resAttention = await running.fetch(`http://localhost:${running.port}/api/swarm/attention`);
     assert.strictEqual(resAttention.status, 200);
     const attentionJson = await resAttention.json();
     assert.strictEqual(attentionJson.success, true);
     assert.ok(Array.isArray(attentionJson.items));
 
-    const resAttentionAction = await fetch(`http://localhost:${running.port}/api/swarm/attention/action`, {
+    const resAttentionAction = await running.fetch(`http://localhost:${running.port}/api/swarm/attention/action`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ itemId: 'task-test', action: 'approve' })

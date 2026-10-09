@@ -22,7 +22,7 @@ const REQUIRED_HTML_MARKERS = [
 test('E2E: GET / delivers full HTML shell with all core modules', async () => {
   const running = await startUiServer({ port: 0 });
   try {
-    const res = await fetch(`http://localhost:${running.port}/`);
+    const res = await running.fetch(`http://localhost:${running.port}/`);
     assert.strictEqual(res.status, 200);
     const contentType = res.headers.get('content-type') || '';
     assert.ok(contentType.includes('text/html'));
@@ -40,7 +40,7 @@ test('E2E: GET /api/status, /api/feed, /api/tasks return valid data structures',
   const running = await startUiServer({ port: 0 });
   try {
     const base = `http://localhost:${running.port}`;
-    const resStatus = await fetch(`${base}/api/status`);
+    const resStatus = await running.fetch(`${base}/api/status`);
     assert.strictEqual(resStatus.status, 200);
     const statusData = await resStatus.json();
     assert.strictEqual(statusData.success, true);
@@ -51,13 +51,13 @@ test('E2E: GET /api/status, /api/feed, /api/tasks return valid data structures',
     assert.ok(typeof statusData.telemetry === 'object');
     assert.ok(typeof statusData.savings === 'object');
 
-    const resFeed = await fetch(`${base}/api/feed`);
+    const resFeed = await running.fetch(`${base}/api/feed`);
     assert.strictEqual(resFeed.status, 200);
     const feedData = await resFeed.json();
     assert.strictEqual(feedData.success, true);
     assert.ok(Array.isArray(feedData.feed));
 
-    const resTasks = await fetch(`${base}/api/tasks`);
+    const resTasks = await running.fetch(`${base}/api/tasks`);
     assert.strictEqual(resTasks.status, 200);
     const tasksData = await resTasks.json();
     assert.strictEqual(tasksData.success, true);
@@ -74,7 +74,7 @@ test('E2E: POST /api/tasks and POST /api/feed persist records to index database'
   try {
     const base = `http://localhost:${running.port}`;
     const taskTitle = `E2E Verify Task ${Date.now()}`;
-    const resTask = await fetch(`${base}/api/tasks`, {
+    const resTask = await running.fetch(`${base}/api/tasks`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title: taskTitle, tier: 'atom', priority: 1 })
@@ -84,13 +84,13 @@ test('E2E: POST /api/tasks and POST /api/feed persist records to index database'
     assert.strictEqual(taskData.success, true);
     assert.strictEqual(taskData.task.title, taskTitle);
 
-    const checkTasks = await fetch(`${base}/api/tasks`);
+    const checkTasks = await running.fetch(`${base}/api/tasks`);
     const allTasks = await checkTasks.json();
     const isTaskPersisted = allTasks.tasks.some((t) => t.title === taskTitle);
     assert.ok(isTaskPersisted, 'Created task must persist in database');
 
     const feedMsg = `E2E Feed Event ${Date.now()}`;
-    const resFeed = await fetch(`${base}/api/feed`, {
+    const resFeed = await running.fetch(`${base}/api/feed`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ author: '@worker_m6', message: feedMsg, channel: 'general' })
@@ -100,7 +100,7 @@ test('E2E: POST /api/tasks and POST /api/feed persist records to index database'
     assert.strictEqual(feedData.success, true);
     assert.ok(feedData.post && feedData.post.id);
 
-    const checkFeed = await fetch(`${base}/api/feed?since_id=${feedData.post.id - 1}`);
+    const checkFeed = await running.fetch(`${base}/api/feed?since_id=${feedData.post.id - 1}`);
     const allFeed = await checkFeed.json();
     const isFeedPersisted = allFeed.feed.some((f) => f.id === feedData.post.id && f.message === feedMsg);
     assert.ok(isFeedPersisted, 'Created feed event must persist in database');
@@ -118,7 +118,7 @@ test('E2E: GET /api/codebase/tree and /api/codebase/file inspect AST and connect
   const running = await startUiServer({ port: 0 });
   try {
     const base = `http://localhost:${running.port}`;
-    const resTree = await fetch(`${base}/api/codebase/tree`);
+    const resTree = await running.fetch(`${base}/api/codebase/tree`);
     assert.strictEqual(resTree.status, 200);
     const treeData = await resTree.json();
     assert.strictEqual(treeData.success, true);
@@ -126,7 +126,7 @@ test('E2E: GET /api/codebase/tree and /api/codebase/file inspect AST and connect
     assert.ok(Array.isArray(treeData.files));
 
     const samplePath = treeData.files[0]?.path || 'src/ui/atoms/a-button/a-button.vue';
-    const resFile = await fetch(`${base}/api/codebase/file?path=${encodeURIComponent(samplePath)}`);
+    const resFile = await running.fetch(`${base}/api/codebase/file?path=${encodeURIComponent(samplePath)}`);
     assert.strictEqual(resFile.status, 200);
     const fileData = await resFile.json();
     assert.strictEqual(fileData.success, true);
@@ -142,7 +142,7 @@ test('E2E: GET /api/db/tables, /api/db/browse, and POST /api/prompts/generate re
   const running = await startUiServer({ port: 0 });
   try {
     const base = `http://localhost:${running.port}`;
-    const resTables = await fetch(`${base}/api/db/tables`);
+    const resTables = await running.fetch(`${base}/api/db/tables`);
     assert.strictEqual(resTables.status, 200);
     const tablesData = await resTables.json();
     assert.strictEqual(tablesData.success, true);
@@ -151,7 +151,7 @@ test('E2E: GET /api/db/tables, /api/db/browse, and POST /api/prompts/generate re
     assert.ok(tablesData.tables.some((t) => t.name === 'agent_tasks'));
     assert.ok(tablesData.tables.some((t) => t.name === 'agent_feed'));
 
-    const resBrowse = await fetch(`${base}/api/db/browse?table=agent_tasks&page=1&pageSize=5`);
+    const resBrowse = await running.fetch(`${base}/api/db/browse?table=agent_tasks&page=1&pageSize=5`);
     assert.strictEqual(resBrowse.status, 200);
     const browseData = await resBrowse.json();
     assert.strictEqual(browseData.success, true);
@@ -159,7 +159,7 @@ test('E2E: GET /api/db/tables, /api/db/browse, and POST /api/prompts/generate re
     assert.ok(Array.isArray(browseData.rows));
     assert.ok(browseData.totalRows >= 1);
 
-    const resPrompt = await fetch(`${base}/api/prompts/generate`, {
+    const resPrompt = await running.fetch(`${base}/api/prompts/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

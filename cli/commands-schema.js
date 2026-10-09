@@ -267,7 +267,8 @@ export const COMMANDS_SCHEMA = [
     summary: 'Launch the Chemical X interactive web dashboard.',
     description: 'Provides real-time Kanban task boards, agent rails, live SQLite Database Studio, and codebase AST tree exploration.',
     flags: [
-      { flag: '--port=<N>', desc: 'Server port (default: 4173)' }
+      { flag: '--port=<N>', desc: 'Server port (default: 4173)' },
+      { flag: '--host=<addr>', desc: 'Bind address (default: 127.0.0.1). A non-loopback host exposes the UI beyond this machine and prints a warning.' }
     ],
     examples: [
       'npx chemx ui',

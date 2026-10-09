@@ -53,7 +53,7 @@ export const routeGet = (pathname, db, cwd = process.cwd(), queryParams = {}) =>
   return null;
 };
 
-export const routePost = (pathname, db, body, cwd = process.cwd()) => {
+export const routePost = (pathname, db, body, cwd = process.cwd(), { consoleDb = db } = {}) => {
   const [cleanPath] = (pathname || '').split('?');
   const postFeedHandler = handleCreateFeedPost || handlePostFeed;
   const normPath = cleanPath.replace(/^\/api\/swarm\//, '/api/');
@@ -72,10 +72,10 @@ export const routePost = (pathname, db, body, cwd = process.cwd()) => {
     '/api/agents/signature': () => handleUpdateSignature(db, body),
     '/api/topics': () => handleCreateTopic(db, body),
     '/api/settings/action': () => handleSettingsAction(db, body),
-    '/api/database/query': () => executeSqlQuery(db, body.query),
+    '/api/database/query': () => executeSqlQuery(consoleDb, body.query),
     '/api/attention/action': () => confirmAttentionItem(db, body.itemId, body.action),
     '/api/prompts/generate': () => handleGeneratePrompt(db, body, cwd),
-    '/api/db/query': () => handleDbQuery(db, body)
+    '/api/db/query': () => handleDbQuery(consoleDb, body)
   };
 
   const hasRoute = Object.prototype.hasOwnProperty.call(routes, normPath);

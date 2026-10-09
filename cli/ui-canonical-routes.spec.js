@@ -107,19 +107,19 @@ test('ui-server-routes: routePost resolves canonical aliases /api/feed and /api/
 test('ui-server: HTTP integration serves canonical routes /api/status, /api/feed, /api/tasks', async () => {
   const running = await startUiServer({ port: 0, cwd: process.cwd() });
   try {
-    const resStatus = await fetch(`http://localhost:${running.port}/api/status`);
+    const resStatus = await running.fetch(`http://localhost:${running.port}/api/status`);
     assert.strictEqual(resStatus.status, 200);
     const jsonStatus = await resStatus.json();
     assert.strictEqual(jsonStatus.success, true);
     assert.ok(Array.isArray(jsonStatus.waitingLocks));
 
-    const resFeed = await fetch(`http://localhost:${running.port}/api/feed`);
+    const resFeed = await running.fetch(`http://localhost:${running.port}/api/feed`);
     assert.strictEqual(resFeed.status, 200);
     const jsonFeed = await resFeed.json();
     assert.strictEqual(jsonFeed.success, true);
     assert.ok(Array.isArray(jsonFeed.feed));
 
-    const resTasks = await fetch(`http://localhost:${running.port}/api/tasks`);
+    const resTasks = await running.fetch(`http://localhost:${running.port}/api/tasks`);
     assert.strictEqual(resTasks.status, 200);
     const jsonTasks = await resTasks.json();
     assert.strictEqual(jsonTasks.success, true);
