@@ -42,6 +42,37 @@ for (const [sourcePath, relativePath] of CASES) {
   });
 }
 
+// Two SFC shapes where the audit and the standalone path used to store different rows: a classic
+// <script> that redeclares an import of <script setup> (the overlay fails, per-block fallback), and a
+// script with a syntax error (template units must not depend on the script parse).
+const SFC_PATH = CASES[3][1];
+const SFC_SOURCE = () => fs.readFileSync(path.join(KIT_ROOT, CASES[3][0]), 'utf-8');
+const CLASSIC_BLOCK = "<script lang=\"ts\">\nimport { ref, computed } from 'vue';\nexport default { name: 'FunnelSystemLayersSection' };\n</script>\n";
+
+const auditContentUnits = (content) => {
+  const fingerprint = createFileFingerprint(SFC_PATH);
+  auditCode(content, path.join(KIT_ROOT, SFC_PATH), SFC_PATH, { fingerprint });
+  return fingerprint.result();
+};
+
+test('an SFC whose script blocks redeclare an import stores the same rows on both paths', () => {
+  const content = `${CLASSIC_BLOCK}${SFC_SOURCE()}`;
+  const audited = auditContentUnits(content);
+  const standalone = collectFileUnits(SFC_PATH, content);
+  assert.equal(standalone.error, null, 'the per-block fallback parses');
+  assert.ok(standalone.units.some((unit) => unit.kind !== 'tmpl'), 'script units from the fallback blocks');
+  assert.deepEqual(standalone.units.map(keyOf), audited.units.map(keyOf));
+});
+
+test('an SFC whose script does not parse still stores its template units on both paths', () => {
+  const content = SFC_SOURCE().replace("const selectedLayerId = ref<string>('architecture');", 'const selectedLayerId = ;');
+  const audited = auditContentUnits(content);
+  const standalone = collectFileUnits(SFC_PATH, content);
+  assert.ok(standalone.error, 'the parse failure is still reported');
+  assert.ok(standalone.units.length > 0 && standalone.units.every((unit) => unit.kind === 'tmpl'));
+  assert.deepEqual(standalone.units.map(keyOf), audited.units.map(keyOf));
+});
+
 test('a Vue SFC contributes both script and template units through the audit', () => {
   const { result } = auditUnitsOf(CASES[3][0], CASES[3][1]);
   const kinds = new Set(result.units.map((unit) => unit.kind));
