@@ -13,7 +13,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { buildRunPlan, routeStages, routeGate, runNameFor } from './team-dispatch-v2.js';
 import { planLanes } from './team-dispatch-select.js';
-import { renderTaskPrompts, renderGatePrompt, fillTemplate } from './team-dispatch-prompts.js';
+import { renderTaskPrompts, renderGatePrompt, fillTemplate, acceptanceOf } from './team-dispatch-prompts.js';
 import { renderRunScript } from './team-dispatch-script.js';
 import { makeFixtureDb, fixtureOptions } from './team-dispatch-v2-fixture.js';
 
@@ -50,6 +50,29 @@ test('selection: target_path only; skip reasons for scoping, root, claims, deps,
   assert.deepEqual(explicit.skipped.map((entry) => [entry.id, entry.reason, entry.claimedBy]), [[99, 'claimed', '@peer']]);
   assert.deepEqual(fixturePlan({ limit: 2 }).tasks.length, 2);
   assert.deepEqual(fixturePlan({ needs: 'deep' }).tasks.map((task) => task.id), [4]);
+});
+
+test('selection: a task the dispatcher holds is skipped with a handoff hint', () => {
+  const db = makeFixtureDb();
+  db.prepare("UPDATE agent_tasks SET assigned_agent_id = '@disp', status = 'in_progress' WHERE id = 1").run();
+  const plan = buildRunPlan(db, fixtureOptions({ tasks: '1,2' }));
+  const skipped = plan.skipped.find((entry) => entry.id === 1);
+  assert.equal(skipped.reason, 'claimed_by_dispatcher');
+  assert.match(skipped.hint, /task handoff 1 <handle> --as=@disp/);
+  assert.ok(!plan.tasks.some((task) => task.id === 1));
+});
+
+test('prompts: inline Acceptance, description in reviewer and repair, own-claim continues, gate lists unfinished tasks', () => {
+  const description = 'Make the run safe (load average 79). Acceptance: `chemx test --changed` passes; two runs never exceed the budget.\nSpec: cli/x.spec.js';
+  assert.equal(acceptanceOf({ description, files: ['a.js'] }), '`chemx test --changed` passes; two runs never exceed the budget.');
+  assert.match(acceptanceOf({ description: 'Do it.', files: ['a.js'] }), /^the task above is done as described/);
+  const plan = fixturePlan();
+  const task = plan.tasks.find((entry) => entry.id === 3);
+  const prompts = renderTaskPrompts(task, plan);
+  assert.ok(prompts.review.includes('Add --flag to the command.') && prompts.repair.includes('Add --flag to the command.'));
+  assert.match(prompts.build, /already_claimed and the holder is you \(@fixture-run-3\)/);
+  const script = renderRunScript(plan);
+  assert.ok(script.includes('__FAILED_LIST__') && script.includes('failed: { type: "array"'));
 });
 
 test('routing: light sonnet/low (haiku when mechanical), standard sonnet/medium, deep opus/high; review same tier; repair and gate light', () => {

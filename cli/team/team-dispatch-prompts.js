@@ -20,7 +20,9 @@ import {
 const DESCRIPTION_LIMIT = 6000;
 const PLACEHOLDER = /\{\{(\w+)\}\}/g;
 const RUNTIME_MARKER = /__(BUILD_RESULT|ISSUES|CLOSE_LIST|RESULTS)__/g;
-const ACCEPTANCE_HEADING = /^[ \t]*acceptance\b[ \t]*(?:criteria)?[ \t]*[:-]?[ \t]*/im;
+// "Acceptance:" at a line start or after a sentence end, so inline descriptions match too.
+const ACCEPTANCE_HEADING = /(?:^|[.\n]\s*)acceptance(?:[ \t]+criteria)?[ \t]*(?:[:-]\s*|(?=\n))/i;
+const SPEC_LINE = /\n[ \t]*spec[ \t]*:/i;
 
 /** Fills {{name}} placeholders in one pass; a placeholder without a value throws (never renders empty). */
 export const fillTemplate = (template, vars) => template.replace(PLACEHOLDER, (match, name) => {
@@ -46,11 +48,13 @@ const snapshotLine = (task) => {
   return `\nAudit snapshot when the task was filed: ${asData(rules)}${lines}. Re-check with chemx check ${task.target}; the file may have changed since.`;
 };
 
-/** The acceptance section of the description (from a line starting "Acceptance"), else a stated default. */
+/** The acceptance section of the description (from "Acceptance:" up to a "Spec:" line), else a stated default. */
 export const acceptanceOf = (task) => {
   const text = asData(task.description);
   const match = ACCEPTANCE_HEADING.exec(text);
-  const section = match ? text.slice(match.index + match[0].length).trim() : '';
+  const rest = match ? text.slice(match.index + match[0].length) : '';
+  const stop = rest.search(SPEC_LINE);
+  const section = (stop >= 0 ? rest.slice(0, stop) : rest).trim();
   const hasSection = section !== '';
   if (hasSection) return section.slice(0, DESCRIPTION_LIMIT);
   return `the task above is done as described; chemx check shows 0 hazards on ${task.files.join(', ')}; the covering specs pass.`;
@@ -84,6 +88,7 @@ export const renderTaskPrompts = (task, plan) => {
   const claimStep = fillTemplate(CLAIM_STEP, { taskId: task.id, handle: task.handle });
   const handoffStep = fillTemplate(HANDOFF_STEP, { taskId: task.id, handle: task.repairer, builder: task.handle });
   const peers = peersFor(plan, task);
+  const description = `${clipDescription(task)}${snapshotLine(task)}`;
   return {
     build: fillTemplate(BUILDER, {
       ...shared,
@@ -91,15 +96,16 @@ export const renderTaskPrompts = (task, plan) => {
       needs: task.needs,
       protocol: protocolFor(plan, task, task.handle, claimStep),
       peers,
-      description: `${clipDescription(task)}${snapshotLine(task)}`
+      description
     }),
-    review: fillTemplate(REVIEWER, { ...shared, handle: task.reviewer, root: plan.root, builder: task.handle }),
+    review: fillTemplate(REVIEWER, { ...shared, handle: task.reviewer, root: plan.root, builder: task.handle, description }),
     repair: fillTemplate(REPAIR, {
       ...shared,
       handle: task.repairer,
       protocol: protocolFor(plan, task, task.repairer, handoffStep),
       peers,
-      target: task.target
+      target: task.target,
+      description
     })
   };
 };

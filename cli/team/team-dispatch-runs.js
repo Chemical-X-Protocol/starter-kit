@@ -42,7 +42,7 @@ const planMessage = (plan, scriptPath) => {
   return `Dispatch run ${plan.run} (${plan.template}): ${plan.tasks.length} task(s) in ${plan.lanes.length} lane(s); gate ${routeText(plan.gate)}.${where}\n${lines.join('\n')}`;
 };
 
-/** Upsert the run, link its tasks, post the plan and one event per task. Keeps created_at and a recorded workflow run id. */
+/** Upsert the run, link its tasks, post the plan and one event per task. Keeps created_at; clears a recorded workflow run id (a re-render is a new run). */
 export const recordRun = (db, plan, { scriptPath = null, now = Date.now() } = {}) => {
   ensureRunTables(db);
   const taskIds = plan.tasks.map((task) => task.id);
@@ -51,7 +51,7 @@ export const recordRun = (db, plan, { scriptPath = null, now = Date.now() } = {}
       INSERT INTO dispatch_runs (name, created_at, updated_at, dispatcher, task_ids, routing, template, script_path)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(name) DO UPDATE SET updated_at = excluded.updated_at, dispatcher = excluded.dispatcher, task_ids = excluded.task_ids,
-        routing = excluded.routing, template = excluded.template, script_path = excluded.script_path
+        routing = excluded.routing, template = excluded.template, script_path = excluded.script_path, workflow_run_id = NULL
     `).run(plan.run, now, now, plan.dispatcher, JSON.stringify(taskIds), JSON.stringify(routingOf(plan)), plan.template, scriptPath);
     db.prepare('DELETE FROM dispatch_run_tasks WHERE run_name = ?').run(plan.run);
     const link = db.prepare('INSERT INTO dispatch_run_tasks (run_name, task_id, handle) VALUES (?, ?, ?)');

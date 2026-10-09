@@ -15,7 +15,7 @@ export const AUTHORITY = [
   'stop only if a message explicitly tells all agents to stop.'
 ].join(' ');
 
-export const CLAIM_STEP = 'Claim the task: chemx team task claim {{taskId}} --as={{handle}}. If the claim is refused because a handle of this run holds it, do not claim again: use the handoff command the refusal prints. If it is refused for any other reason, comment on the task and stop.';
+export const CLAIM_STEP = 'Claim the task: chemx team task claim {{taskId}} --as={{handle}}. If the claim is refused as already_claimed and the holder is you ({{handle}}) or none is named, you already hold the task: continue. If it is refused because another handle of this run holds it, do not claim again: use the handoff command the refusal prints. If it is refused for any other reason, comment on the task and stop.';
 
 export const HANDOFF_STEP = 'This task was built by {{builder}}. Take it over with chemx team task handoff {{taskId}} {{handle}} --as={{builder}}, never a second claim. If the handoff is refused, comment on the task with the refusal and continue only if the task is still yours to finish.';
 
@@ -61,6 +61,7 @@ export const REVIEWER = [
   'You are {{handle}}, an adversarial reviewer for task #{{taskId}} (chemx dispatch run: {{run}}). Read-only: do not edit, lock, claim or commit.',
   'Project: {{root}}. Shell: cd {{root}} && CHEMX_AGENT_ID={{handle}} chemx ...',
   'TASK #{{taskId}}: {{title}}',
+  '{{description}}',
   'Acceptance: {{acceptance}}',
   'Target files: {{files}}',
   'The builder ({{builder}}) reported:',
@@ -80,6 +81,7 @@ export const REPAIR = [
   '{{peers}}',
   '',
   'TASK #{{taskId}}: {{title}}',
+  '{{description}}',
   'A reviewer reported the issues below. Verify each (skip a wrong one with a reason), fix, re-run the affected specs, commit with chemx commit --release,',
   'then close the task: chemx team task done {{taskId}} --target={{target}} --as={{handle}}. If the gate refuses, run chemx team task update {{taskId}} blocked with the reason; never --force.',
   '__ISSUES__',
@@ -93,12 +95,14 @@ export const GATE = [
   'Project: {{root}}. Shell: cd {{root}} && CHEMX_AGENT_ID={{handle}} chemx ...',
   '1. Close the tasks whose review passed, each as its builder: __CLOSE_LIST__',
   '   For each: chemx team task done <id> --target=<file> --as=<builder>. If the gate refuses, chemx team task update <id> blocked with the reason; never --force.',
+  '1b. Tasks that did not finish (status and run handle): __FAILED_LIST__',
+  '   For each: chemx team task update <id> blocked with the status as the reason, then chemx team lock release <file> --as=<run handle> for its target. Return their ids as failed.',
   '2. Find this run\'s workflow id: chemx team dispatch --find-run={{run}}. Record it: chemx team dispatch --record-run={{run}} --workflow-run=<id>. If none is found, say so and skip step 3.',
   '3. chemx team audit-run --run=<id> --no-fail. Report its violations and cost. This run is still going while you run it, so your own calls may be missing: say so.',
   '4. Post a summary: chemx team post "<summary>" --type=status --as={{handle}}.',
   'Per-task results:',
   '__RESULTS__',
-  'Return the structured result: closed (task ids), workflowRun, auditViolations, summary.',
+  'Return the structured result: closed (task ids), failed (task ids), workflowRun, auditViolations, summary.',
   '{{authority}}'
 ].join('\n');
 
@@ -111,7 +115,7 @@ const DELIVERABLE = { type: "object", properties: { item: { type: "string" }, me
 const BUILD_SCHEMA = { type: "object", properties: { commits: { type: "array", items: { type: "string" } }, specs: { type: "string" }, deliverables: { type: "array", items: DELIVERABLE }, openIssues: { type: "string" } }, required: ["commits", "specs", "deliverables", "openIssues"] }
 const ISSUE = { type: "object", properties: { file: { type: "string" }, line: { type: "number" }, problem: { type: "string" }, fix: { type: "string" }, evidence: { type: "string" } }, required: ["file", "problem", "fix"] }
 const REVIEW_SCHEMA = { type: "object", properties: { issues: { type: "array", items: ISSUE }, acceptanceMet: { type: "boolean" }, summary: { type: "string" } }, required: ["issues", "acceptanceMet", "summary"] }
-const GATE_SCHEMA = { type: "object", properties: { closed: { type: "array", items: { type: "number" } }, workflowRun: { type: "string" }, auditViolations: { type: "array", items: { type: "string" } }, summary: { type: "string" } }, required: ["closed", "summary"] }
+const GATE_SCHEMA = { type: "object", properties: { closed: { type: "array", items: { type: "number" } }, failed: { type: "array", items: { type: "number" } }, workflowRun: { type: "string" }, auditViolations: { type: "array", items: { type: "string" } }, summary: { type: "string" } }, required: ["closed", "summary"] }
 const hasText = (value) => typeof value === "string" && value.trim() !== ""
 const isObject = (value) => value !== null && typeof value === "object"
 const listOf = (value) => (Array.isArray(value) ? value : [])
@@ -194,8 +198,10 @@ log(results.map((entry) => "#" + entry.id + " " + entry.status).join(" | "))
 phase("Gate")
 const closeList = results.filter((entry) => entry.status === "clean").map((entry) => "#" + entry.id + " --target=" + byId.get(entry.id).target + " --as=" + byId.get(entry.id).handle)
 const closeText = closeList.length > 0 ? closeList.join("; ") : "none"
+const failedList = results.filter((entry) => entry.status !== "clean" && entry.status !== "repaired").map((entry) => "#" + entry.id + " " + entry.status + " --target=" + byId.get(entry.id).target + " --as=" + byId.get(entry.id).handle)
+const failedText = failedList.length > 0 ? failedList.join("; ") : "none"
 const resultLines = results.map((entry) => "#" + entry.id + " " + entry.status).join("\n")
-const gatePrompt = fill(fill(GATE.prompt, "__CLOSE_LIST__", closeText), "__RESULTS__", resultLines)
+const gatePrompt = fill(fill(fill(GATE.prompt, "__CLOSE_LIST__", closeText), "__FAILED_LIST__", failedText), "__RESULTS__", resultLines)
 const gate = await guarded(gatePrompt, { label: "gate", phase: "Gate", model: GATE.model, effort: GATE.effort, schema: GATE_SCHEMA }, isEmptyGate)
 log("gate: " + (gate.failed ? "failed" : gate.result.summary))
 return { run: RUN, results: results.map((entry) => ({ id: entry.id, status: entry.status })), gate: gate.result }

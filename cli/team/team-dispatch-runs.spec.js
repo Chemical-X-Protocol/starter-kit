@@ -80,6 +80,15 @@ test('--record-run and --find-run: unknown runs refused; a recorded id is return
   assert.deepEqual([found.id, found.source], ['wf_abc', 'recorded']);
 });
 
+test('re-rendering a run clears the recorded workflow run id', (t) => {
+  const root = tempDir(t);
+  const db = makeFixtureDb();
+  dispatch(db, root, ['--workflow', '--run-name=cli-run']);
+  dispatch(db, root, ['--record-run=cli-run', '--workflow-run=wf_old']);
+  dispatch(db, root, ['--workflow', '--run-name=cli-run']);
+  assert.equal(getRun(db, 'cli-run').workflow_run_id, null);
+});
+
 test('findWorkflowRun: scans workflow transcripts for the run marker, exact name only', (t) => {
   const projects = tempDir(t);
   const runDir = (id) => {

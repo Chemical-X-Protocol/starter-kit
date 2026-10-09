@@ -125,8 +125,12 @@ const SCREENS = [
   (entry) => (entry.escapes ? skip(entry, 'target_outside_root') : null),
   (entry) => (entry.files.length === 0 ? skip(entry, 'needs_scoping') : null),
   (entry, ctx) => {
-    const isClaimedByOther = entry.assignee !== '' && entry.assignee !== ctx.dispatcher;
-    return isClaimedByOther ? skip(entry, 'claimed', { claimedBy: entry.assignee }) : null;
+    // A task the dispatcher holds is skipped too: the builder claims as its run handle and would be refused.
+    const isUnassigned = entry.assignee === '';
+    if (isUnassigned) return null;
+    const isDispatcher = entry.assignee === ctx.dispatcher;
+    const hint = isDispatcher ? { hint: `hand it off first: chemx team task handoff ${entry.id} <handle> --as=${ctx.dispatcher}` } : {};
+    return skip(entry, isDispatcher ? 'claimed_by_dispatcher' : 'claimed', { claimedBy: entry.assignee, ...hint });
   },
   (entry, ctx) => {
     const unmet = safeCall(ctx.unmetDependencies, entry.dependencies, []);
