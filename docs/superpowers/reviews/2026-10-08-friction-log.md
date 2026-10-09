@@ -27,3 +27,7 @@
 - [G4] `node $WT/cli/index.js log` and `d` report the repository of the current cwd, not of the worktree whose CLI was invoked (from the parent starter-kit dir it showed base HEAD 89ba848); the mandated "run chemx from your worktree" pattern needs a cd. (reported by the G4 reviewer)
 - [G4] publish.yml now gates on `npm test`; generator specs flake on the shared index.db under parallel node --test, so a publish can fail intermittently until G6 isolates the spec index. (reported by the G4 reviewer)
 - [G4] the Bash guard blocks `cat`/`head` on non-source files too (installer.d.ts, .git/hooks/pre-commit, a /tmp probe script); used the Read tool or a chemx-bypass comment.
+- [G4] `chemx p files` cannot read top-level package.json keys ('Key "files" not found in scripts or dependencies'); needed `node -e` to read `files`/`engines`. (reported by the G4 reviewer)
+- [G4] the PreToolUse guard blocks `git log` even inside an unrelated /tmp fixture repo, where chemx `log` reports the wrong repository anyway. (reported by the G4 reviewer)
+- [G4] the guard blocked `cat cli/mcp/index.js`, and reading a just-written spec header with `head` needed a chemx-bypass comment; separately, an unquoted `--include=*.js` fails under the zsh shell ("no matches found").
+- [G4] `chemx test` still picks vitest for this kit, so every spec run in the fix round used `node --test` with the runner-detection bypass.
