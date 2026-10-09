@@ -88,11 +88,25 @@ export interface SearchResultPayload {
   readonly results: readonly FileIndexRecord[];
 }
 
+export interface SyncSearchIndexResult {
+  readonly db: any;
+  readonly root: string;
+  readonly scopeDirs: readonly string[];
+  readonly scope: string;
+  readonly status: 'fresh' | 'stale';
+  readonly staleReason: string | null;
+  readonly updatedCount: number;
+  readonly removedCount: number;
+  readonly totalFiles: number;
+  readonly skippedFiles: readonly { path: string; reason: string }[];
+  readonly versionNotice: string | null;
+}
+
 export declare function syncSearchIndex(
-  targetDir?: string,
+  targetDir?: string | readonly string[],
   cwd?: string,
-  options?: { reindex?: boolean }
-): { db: any; updatedCount: number; totalFiles: number } | null;
+  options?: { reindex?: boolean; includeInternal?: boolean }
+): SyncSearchIndexResult | null;
 
 export declare function runSearch(
   rawArgs?: string[],
@@ -172,7 +186,7 @@ export declare function queryFilesByHealth(
 
 export interface SingleFileIndexResult {
   readonly db: any;
-  readonly status: 'indexed' | 'deleted';
+  readonly status: 'indexed' | 'deleted' | 'out-of-scope';
   readonly path: string;
   readonly tier?: string;
   readonly lines?: number;
