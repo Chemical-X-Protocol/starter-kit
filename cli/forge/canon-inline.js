@@ -3,10 +3,13 @@
 //   - k has exactly one reference in the whole block, and that reference is in the next statement;
 //   - no statement sits in between (adjacency), so nothing can write in between;
 //   - the reference is the first-evaluated operand of that statement, or e is pure (identifiers,
-//     member reads, literals, operators, typeof).
-// Extra soundness guards: the reference may not sit inside a nested function or a loop body/test
-// (that would change how often e runs), and a member initializer is never moved into callee position
-// (that would change `this`). Short-circuit order is never touched here.
+//     member reads, literals, operators, typeof) and no write, call, new, await, yield or delete
+//     completes inside the statement before the reference is evaluated (`a = b, b = t` must keep t).
+// Extra soundness guards: the reference may not sit inside a nested function, a class field
+// initializer or a loop body/test (that would change when or how often e runs), and a member
+// initializer is never moved into callee position (that would change `this`). Short-circuit order is
+// never touched here. Child slots are visited in Babel VISITOR_KEYS order, which is evaluation order
+// for every expression and statement slot this pass can reach (loops and functions are boundaries).
 import { evaluateRules } from '../rules.js';
 
 const FUNCTION_TYPES = new Set([
@@ -16,6 +19,11 @@ const FUNCTION_TYPES = new Set([
 const LOOP_ONCE_SLOTS = { ForStatement: 'init', ForInStatement: 'right', ForOfStatement: 'right' };
 const LOOP_TYPES = new Set(['ForStatement', 'ForInStatement', 'ForOfStatement', 'WhileStatement', 'DoWhileStatement']);
 const MEMBER_TYPES = new Set(['MemberExpression', 'OptionalMemberExpression']);
+const CLASS_FIELD_TYPES = new Set(['ClassProperty', 'ClassPrivateProperty', 'ClassAccessorProperty']);
+const EFFECT_TYPES = new Set([
+  'AssignmentExpression', 'UpdateExpression', 'CallExpression', 'OptionalCallExpression', 'NewExpression',
+  'AwaitExpression', 'YieldExpression', 'TaggedTemplateExpression'
+]);
 const CALL_SLOTS = new Set(['callee', 'tag']);
 const PURE_TYPES = new Set([
   'Identifier', 'StringLiteral', 'NumericLiteral', 'BooleanLiteral', 'NullLiteral', 'BigIntLiteral',
@@ -52,10 +60,41 @@ const BLOCK_LISTS = { BlockStatement: 'body', Program: 'body', StaticBlock: 'bod
 
 const childList = (value) => (Array.isArray(value) ? value : [value]);
 
-const entersBoundary = (node, key) => {
+/** Slots whose code runs later than the statement itself (function bodies, class field values). */
+const isDeferredSlot = (node, key) => {
   const isFunction = FUNCTION_TYPES.has(node.type);
+  const isFieldValue = CLASS_FIELD_TYPES.has(node.type) && key === 'value';
+  return isFunction || isFieldValue;
+};
+
+const entersBoundary = (node, key) => {
   const isRepeatedLoopSlot = LOOP_TYPES.has(node.type) && LOOP_ONCE_SLOTS[node.type] !== key;
-  return isFunction || isRepeatedLoopSlot;
+  return isDeferredSlot(node, key) || isRepeatedLoopSlot;
+};
+
+const isDelete = (node) => node.type === 'UnaryExpression' && node.label.startsWith('operator:delete');
+const isEffect = (node) => EFFECT_TYPES.has(node.type) || isDelete(node);
+
+/**
+ * True when a side effect completes before `target` reaches `refNode`. Post-order walk in evaluation
+ * order: a node's own effect (a call, a write) is recorded only after its operands, so ancestors of the
+ * reference never count, while earlier siblings (`a = b` in `a = b, b = t`) do. Deferred code is skipped.
+ */
+export const hasEffectBefore = (target, refNode) => {
+  let seenEffect = false;
+  const visit = (node) => {
+    const isReference = node === refNode;
+    if (isReference) return true;
+    for (const [key, value] of Object.entries(node.kids)) {
+      const isSkipped = isDeferredSlot(node, key);
+      const reached = !isSkipped && childList(value).some((child) => child && visit(child));
+      if (reached) return true;
+    }
+    seenEffect = seenEffect || isEffect(node);
+    return false;
+  };
+  visit(target);
+  return seenEffect;
 };
 
 /** Every Identifier reference (not declaration) to bindingId under root, with its parent slot. */
@@ -74,11 +113,10 @@ export const findReferences = (root, bindingId) => {
 };
 
 const headSlotOf = (node) => {
-  const isDelete = node.type === 'UnaryExpression' && node.label.startsWith('operator:delete');
   const isPlainAssign = node.type === 'AssignmentExpression' && node.label === 'operator:=';
   const assignsIdentifier = isPlainAssign && node.kids.left?.type === 'Identifier';
   if (assignsIdentifier) return 'right';
-  if (isDelete) return null;
+  if (isDelete(node)) return null;
   return HEAD_SLOT[node.type] ?? null;
 };
 
@@ -97,8 +135,7 @@ export const firstEvaluated = (statement) => {
 
 /** Pure in the doc's sense: identifiers, member reads, literals, operators and typeof only. */
 export const isPure = (node) => {
-  const isDelete = node.type === 'UnaryExpression' && node.label.startsWith('operator:delete');
-  const isPureType = PURE_TYPES.has(node.type) && !isDelete;
+  const isPureType = PURE_TYPES.has(node.type) && !isDelete(node);
   if (!isPureType) return false;
   return Object.values(node.kids).every((value) => childList(value).every((child) => !child || isPure(child)));
 };
@@ -128,6 +165,7 @@ const planInline = (statements, index) => {
     notSingleUse: () => refs.length !== 1 || isUsedOutside(statements, index, alias.bindingId),
     crossesBoundary: () => ref.crossesBoundary,
     movesImpureWork: () => firstEvaluated(target) !== ref.node && !isPure(alias.init),
+    effectRunsFirst: () => firstEvaluated(target) !== ref.node && hasEffectBefore(target, ref.node),
     rebindsThis: () => CALL_SLOTS.has(ref.key) && MEMBER_TYPES.has(alias.init.type)
   }, { failFast: true });
   return verdict.ok ? { ref, alias } : null;

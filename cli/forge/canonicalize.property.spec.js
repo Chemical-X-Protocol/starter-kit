@@ -59,7 +59,13 @@ const TEMPLATES = [
   { body: (e) => `const k = ${e[0]}; if (!k) return; return ${e[1]};`, inlines: true },
   { body: (e) => `const k = f(3); if (${e[0]} && k) return 1; return 2;`, inlines: false },
   { body: (e) => `const k = f(3); if (k && ${e[0]}) return 1; return 2;`, inlines: true },
-  { body: (e) => `const k = f(4); return ${e[0]} ? k : 0;`, inlines: false }
+  { body: (e) => `const k = f(4); return ${e[0]} ? k : 0;`, inlines: false },
+  // Writes that run before the alias use inside the next statement: a pure alias must still stay.
+  { body: (e) => `const k = a; a = ${e[0]}, b = k; return String(a) + '|' + String(b);`, inlines: false },
+  { body: (e) => `const k = a; return [a = ${e[0]}, k].join('|');`, inlines: false },
+  { body: () => `const k = b; const r = [c, b = 7, k]; return r.join('|');`, inlines: false },
+  { body: (e) => `const k = c; return [${e[0]}, k].join('|');`, inlines: null },
+  { body: () => `const k = a; return [b, k].join('|');`, inlines: true }
 ];
 
 const canonicalBody = (body) => {
@@ -131,6 +137,14 @@ test('side-effecting initializers are never inlined out of first-evaluated posit
     keptCount += Number(isImpure);
   }
   assert.ok(keptCount > 0 && keptCount < CASES_PER_TEMPLATE * 2, 'both pure and impure initializers were generated');
+});
+
+test('an alias read by a class field initializer is never inlined (the field runs at construction)', () => {
+  const body = 'const k = a.v; class A { x = k } a.v = 2; return new A().x;';
+  const { program } = canonicalizeSource(`function host(${PARAMS.join(', ')}) {\n${body}\n}`);
+  const statements = program.kids.body[0].kids.body.kids.body;
+  assert.equal(statements[0].type, 'VariableDeclaration', 'alias must stay before the class');
+  assert.equal(statements.length, 4);
 });
 
 test('the rewrites under test are really exercised', () => {
