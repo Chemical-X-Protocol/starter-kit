@@ -121,7 +121,8 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
   }
 
   if (subCommand === 'task') {
-    const isTaskHelp = flags.help || nonFlagPositional.includes('--help') || nonFlagPositional.includes('-h') || nonFlagPositional.includes('help');
+    // Only the action slot can ask for help; a task titled "... startup and help" must still be created.
+    const isTaskHelp = flags.help || nonFlagPositional[0] === 'help';
     if (isTaskHelp) {
       if (isCli) process.stdout.write(formatTaskHelpCard());
       return { help: true, actions: ['list', 'show', 'add', 'claim', 'done', 'update', 'comment', 'triage', 'reconcile', 'set-target', 'vds-slot', 'trace'] };

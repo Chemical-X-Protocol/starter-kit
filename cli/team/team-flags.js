@@ -73,7 +73,7 @@ export const parseFlags = (args = []) => {
       const raw = arg.slice('--metadata='.length);
       try {
         flags.metadata = JSON.parse(raw);
-      } catch {
+      } catch { // chemx-allow: best-effort non-JSON --metadata is kept verbatim as { raw }
         flags.metadata = { raw };
       }
     }

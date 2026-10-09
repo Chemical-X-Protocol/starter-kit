@@ -27,6 +27,14 @@ test('task add: --desc, --deps, --sprint, --moscow and --rule persist on the tas
   assert.equal(task.rule_id, 'zero-tests-false-green');
 });
 
+test('task add: a title containing the word "help" creates a task instead of printing help', () => {
+  const cwd = makeTempProject();
+  const task = runTeamCli(['task', 'add', 'Output', 'policy,', 'startup', 'and', 'help'], false, cwd);
+  assert.equal(task.title, 'Output policy, startup and help');
+  const helpCard = runTeamCli(['task', 'help'], false, cwd);
+  assert.equal(helpCard.help, true);
+});
+
 test('task list: --sprint and --moscow filter the backlog', () => {
   const cwd = makeTempProject();
   runTeamCli(['task', 'add', 'In sprint', '--sprint=s1', '--moscow=must'], false, cwd);
