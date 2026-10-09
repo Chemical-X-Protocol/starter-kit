@@ -151,3 +151,40 @@ test('extractCallTarget: reads master-tool params and command strings', () => {
   assert.strictEqual(legacy.action, 'write');
   assert.strictEqual(legacy.targetPath, '/tmp/x.js');
 });
+
+test('resolveCallScope: caller-supplied shell commands run only when they are project scripts', () => {
+  const project = makeProject();
+  fs.writeFileSync(path.join(project, 'package.json'), JSON.stringify({ scripts: { test: 'node --test', build: 'vite build' } }));
+  try {
+    const scopeOf = (command, env = {}) => resolveCallScope({ target: extractCallTarget('chemx', { action: 'test', projectRoot: project, params: { command } }), env });
+    assert.strictEqual(scopeOf('head -n 1').ok, false);
+    assert.match(scopeOf('head -n 1').error, /not a package\.json script/);
+    assert.strictEqual(scopeOf('node --test').ok, true, 'script body');
+    assert.strictEqual(scopeOf('npm run build').ok, true, 'named script');
+    assert.strictEqual(scopeOf('pnpm test').ok, true, 'runner shorthand');
+    assert.strictEqual(scopeOf('npm run deploy').ok, false, 'unknown script');
+    assert.strictEqual(scopeOf('head -n 1', { CHEMX_MCP_ALLOW_SHELL: '1' }).ok, true, 'explicit opt-in');
+    const build = extractCallTarget('chemx', { action: 'build', projectRoot: project, params: { command: 'echo hi && pwd' } });
+    assert.strictEqual(resolveCallScope({ target: build, env: {} }).ok, false);
+  } finally {
+    cleanup(project);
+  }
+});
+
+test('resolveCallScope: publishing issues, server restarts and triage audits need a declared root', () => {
+  const boot = makeProject();
+  try {
+    const calls = [
+      extractCallTarget('chemx', { action: 'issue', params: { error: 'x', autoPost: true } }),
+      extractCallTarget('chemx', { action: 'check', params: { path: 'RESTART_MCP' } }),
+      extractCallTarget('chemx', { action: 'audit', params: { triage: true } })
+    ];
+    for (const target of calls) {
+      assert.strictEqual(resolveCallScope({ target, bootRoot: boot, env: {} }).ok, false, `${target.action} should be refused`);
+    }
+    const draftIssue = extractCallTarget('chemx', { action: 'issue', params: { error: 'x' } });
+    assert.strictEqual(resolveCallScope({ target: draftIssue, bootRoot: boot, env: {} }).ok, true);
+  } finally {
+    cleanup(boot);
+  }
+});

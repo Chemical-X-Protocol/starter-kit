@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { parseCommand } from './tools.js';
 import { resolveContext, isInsideDir, hasChemxMarker, findProjectRootFor } from './context.js';
+import { classifyEffects, checkShellCommand, EFFECTS } from './call-effects.js';
 
 export { findProjectRootFor };
 
@@ -28,7 +29,12 @@ export const extractCallTarget = (toolName, toolArgs = {}) => {
   return { action, subAction, params, projectRoot, targetPath: targetPaths[0] ?? null, targetPaths };
 };
 
-export const isMutatingCall = ({ action, subAction }) => {
+// Writes, publishes and server kills all need a declared root (never the boot-dir guess).
+export const isMutatingCall = (target) => {
+  const { action, subAction } = target;
+  const effects = classifyEffects(target);
+  const hasRootBoundEffect = effects.has(EFFECTS.WRITE) || effects.has(EFFECTS.PUBLISH) || effects.has(EFFECTS.KILL);
+  if (hasRootBoundEffect) return true;
   const isTeamAction = TEAM_ACTIONS.has(action);
   if (isTeamAction) return !READ_ONLY_TEAM_SUBACTIONS.has(subAction);
   return MUTATING_ACTIONS.has(action);
@@ -59,5 +65,8 @@ export const resolveCallScope = ({ target, declaredRoot = null, bootRoot = null,
   const requestedPaths = target.targetPaths ?? (target.targetPath ? [target.targetPath] : []);
   const escape = findEscape(scope.root, requestedPaths);
   if (escape) return { ok: false, error: `Path "${escape.requested}" resolves to "${escape.resolved}", outside project root "${scope.root}".` };
+  const isShellCall = classifyEffects(target).has(EFFECTS.SHELL);
+  const shell = isShellCall ? checkShellCommand({ command: target.params.command, root: scope.root, dir: target.params.dir, env }) : { ok: true };
+  if (!shell.ok) return shell;
   return scope;
 };
