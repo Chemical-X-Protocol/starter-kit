@@ -102,3 +102,26 @@ test('MCP write: honors dryRun and overwrite', () => {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('CLI write: --content followed by a flag is a missing value, never the flag text', () => {
+  const dir = makeProject();
+  const cwd = process.cwd();
+  try {
+    fs.writeFileSync(path.join(dir, 'README.md'), '# Title\n\nImportant docs\n');
+    fs.writeFileSync(path.join(dir, 'script.js'), 'console.log(1)\n');
+    process.chdir(dir);
+    for (const file of ['README.md', 'script.js']) {
+      const before = fs.readFileSync(path.join(dir, file), 'utf-8');
+      const { result, text } = captureStderr(() => runWriterCli([file, '--content', '--overwrite'], false));
+      assert.equal(result, null, `${file} must be refused`);
+      assert.match(text, /--content/);
+      assert.equal(fs.readFileSync(path.join(dir, file), 'utf-8'), before);
+    }
+    const inline = captureStderr(() => runWriterCli(['dash.md', '--content=--overwrite'], false));
+    assert.equal(inline.result.created, true);
+    assert.equal(fs.readFileSync(path.join(dir, 'dash.md'), 'utf-8'), '--overwrite');
+  } finally {
+    process.chdir(cwd);
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

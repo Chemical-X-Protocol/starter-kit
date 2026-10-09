@@ -4,7 +4,13 @@
  * so positional detection does not mistake a flag value for a file path.
  */
 
+const FLAG_LIKE_REGEX = /^--?[A-Za-z]/;
+
 /**
+ * A spaced value that looks like a flag (`--content --overwrite`) is never taken as the value:
+ * the value was forgotten, and swallowing the next flag would both write its text and drop it.
+ * Values that start with '-' must use the inline form (`--content=--x`).
+ *
  * @param {string[]} args argv slice.
  * @param {string[]} names Flag spellings, e.g. ['--content', '-c'].
  * @returns {{ value: string|undefined, consumed: number[] }}
@@ -15,8 +21,11 @@ export const readFlagValue = (args, names) => {
     for (const name of names) {
       const isInline = arg.startsWith(`${name}=`);
       if (isInline) return { value: arg.slice(name.length + 1), consumed: [i] };
-      const isSpaced = arg === name && i + 1 < args.length;
-      if (isSpaced) return { value: args[i + 1], consumed: [i, i + 1] };
+      const isBare = arg === name;
+      if (!isBare) continue;
+      const next = args[i + 1];
+      const hasValue = typeof next === 'string' && !FLAG_LIKE_REGEX.test(next);
+      return hasValue ? { value: next, consumed: [i, i + 1] } : { value: undefined, consumed: [i] };
     }
   }
   return { value: undefined, consumed: [] };

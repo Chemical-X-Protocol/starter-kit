@@ -124,7 +124,7 @@ export const runWriterCli = (args, isCli = false) => {
   const content = isStdin ? fs.readFileSync(0, 'utf-8') : fromFileOr(values.content, values.contentFile);
   const isMissingContent = typeof content !== 'string';
   if (isMissingContent) {
-    return fail('chemx write needs --content=<text>, --content-file=<path> or --stdin. Refusing to write an empty file.', isCli);
+    return fail('chemx write needs --content=<text>, --content-file=<path> or --stdin (a value starting with "-" needs the --content=<text> form). Refusing to write.', isCli);
   }
 
   return runGuarded(() => writeFile(filePath, {
