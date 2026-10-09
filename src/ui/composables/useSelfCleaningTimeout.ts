@@ -5,9 +5,8 @@ export function useSelfCleaningTimeout(fn: () => void | Promise<void>, delayMs: 
   let isRunning = false;
 
   const stop = () => {
-    const hasTimer = timerId !== null;
-    if (hasTimer) {
-      clearTimeout(timerId as ReturnType<typeof setTimeout>);
+    if (timerId !== null) {
+      clearTimeout(timerId);
       timerId = null;
     }
     isRunning = false;
@@ -25,8 +24,7 @@ export function useSelfCleaningTimeout(fn: () => void | Promise<void>, delayMs: 
     return stop;
   };
 
-  const hasScope = Boolean(getCurrentScope());
-  if (hasScope) {
+  if (getCurrentScope()) {
     onScopeDispose(() => {
       stop();
     });
