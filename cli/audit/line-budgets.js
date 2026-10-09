@@ -75,9 +75,22 @@ const resolveProfileName = (config = {}) => {
   return config.profile || DEFAULT_PROFILE;
 };
 
+/** A positive integer molecule warning from config, or null ('abc', 0 and -5 are ignored). */
+const parseMoleculeWarning = (value) => {
+  const parsed = Number.parseInt(value, 10);
+  return parsed > 0 ? parsed : null;
+};
+
+/**
+ * enforce-file-length means atomic-strict: its 100 wins over the pragmatic default warning
+ * that loaded rules always carry. Any budget is capped at the file bound (FILE_BUDGET.warn).
+ */
 export const getLineBudgets = (config = {}) => {
   const profile = resolveProfileName(config);
-  const moleculeBudget = config.maxLineCountWarning ?? MOLECULE_BUDGET_BY_PROFILE[profile] ?? MOLECULE_BUDGET_BY_PROFILE[DEFAULT_PROFILE];
+  const profileBudget = MOLECULE_BUDGET_BY_PROFILE[profile] ?? MOLECULE_BUDGET_BY_PROFILE[DEFAULT_PROFILE];
+  const isEnforced = config.enforceFileLength === true;
+  const configured = isEnforced ? null : parseMoleculeWarning(config.maxLineCountWarning);
+  const moleculeBudget = Math.min(configured ?? profileBudget, FILE_BUDGET.warn);
   const isMoleculeHardCap = profile === 'atomic-strict';
   return { profile, file: FILE_BUDGET, molecule: moleculeBudget, isMoleculeHardCap, viewTemplate: VIEW_TEMPLATE_BUDGET };
 };
