@@ -6,10 +6,12 @@ import { findAndLoadConfigFile } from './loader.js';
 /** The product pillar selection written by `chemx pillars` (null when never chosen). */
 const readPillarSelection = (cwd, fileConfig) => {
   const inline = fileConfig.raw?.pillars;
-  if (inline && typeof inline === 'object') return inline;
+  const hasInlinePillars = Boolean(inline && typeof inline === 'object');
+  if (hasInlinePillars) return inline;
   try {
     const stored = JSON.parse(fs.readFileSync(path.join(cwd, '.chemx', 'config.json'), 'utf-8'));
-    return stored?.pillars && typeof stored.pillars === 'object' ? stored.pillars : null;
+    const hasStoredPillars = Boolean(stored?.pillars && typeof stored.pillars === 'object');
+    return hasStoredPillars ? stored.pillars : null;
   } catch {
     return null;
   }
@@ -58,10 +60,11 @@ export const loadProjectConfig = (cwd = process.cwd(), rawArgs = []) => {
   // An explicit --profile replaces file thresholds, but per-rule settings
   // ("RULE_ID": "off" | severity) and tier globs always apply.
   const perRuleSettings = Object.fromEntries(Object.entries(fileConfig.rules || {}).filter(([key]) => RULE_ID_SHAPE.test(key)));
+  const hasTiers = Boolean(fileConfig.tiers);
   const effectiveRules = {
     ...profileDefaults,
     ...(isCliProfileExplicit ? perRuleSettings : fileConfig.rules),
-    ...(fileConfig.tiers ? { tiers: fileConfig.tiers } : {})
+    ...(hasTiers ? { tiers: fileConfig.tiers } : {})
   };
 
   return {
