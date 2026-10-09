@@ -1,5 +1,5 @@
-// Reject codes over a group's LGG (engine doc section 6). Every code is evaluated and stored; the first
-// one is the group's reject reason:
+// Reject codes over a group's LGG (engine doc section 6). Every code is evaluated and stored; the reason
+// is R7 when a convention matches (the house shape explains every other difference), else the first:
 //   R1  more than 4 differing holes (W allows up to 8 leaf holes: literal, key, ref or transform columns;
 //       N3, a same-name near miss, allows one variant hole)
 //   R2  hole nodes over member mass above 0.30 (0.35 for templates)
@@ -59,11 +59,15 @@ const REJECT_RULES = (lgg, group, context) => ({
 /** An LGG with nothing to judge but the facet and the convention (template groups have no script LGG). */
 export const emptyLgg = (memberCount) => ({ memberCount, rootType: null, mass: [], holeNodes: [], holeRatio: 0, holes: [], captures: [] });
 
+const CONVENTION_CODE = 'R7';
+
 /**
  * Judges one LGG. context: { isHomogeneous, convention } (convention: a matching convention id or null).
- * Returns { ok, reason, codes }: reason is the first failing code, codes every failing one, in order.
+ * Returns { ok, reason, codes }: codes are every failing code in order; reason is R7 when it fails, else
+ * the first failing code.
  */
 export const judgeLgg = (lgg, group, context = {}) => {
   const result = evaluateRules(REJECT_RULES(lgg, group, { isHomogeneous: context.isHomogeneous ?? true, convention: context.convention ?? null }));
-  return { ok: result.ok, reason: result.first, codes: result.violations };
+  const isConvention = result.violations.includes(CONVENTION_CODE);
+  return { ok: result.ok, reason: isConvention ? CONVENTION_CODE : result.first, codes: result.violations };
 };

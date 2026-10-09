@@ -134,16 +134,17 @@ export const OPS_COMMANDS = [
     aliases: [],
     group: 'verify',
     brief: 'Find repeated code worth extracting',
-    usage: 'chemx patterns [dir] [--type=<T>] [--min=<N>] [--full] [--score=<labels.json>]',
-    summary: 'List repeated code patterns found by the audit (same handler as the MCP patterns action).',
-    description: 'Prints compact JSON candidates with sample occurrences. Interim alias until the Forge surface lands.',
+    usage: 'chemx patterns [dir] [--type=<T>] [--min=<N>] [--full] [--score=<labels.json>] | chemx patterns --forge [dir] [--rejected] [--explain=<id>] | chemx patterns reject <id> --reason="..." --as=@handle',
+    summary: 'List repeated code patterns found by the audit (same handler as the MCP patterns action), or the Forge groups behind --forge.',
+    description: 'Prints compact JSON candidates with sample occurrences. Interim alias until the Forge surface lands. --forge refreshes the fingerprint ledger, groups it (exact buckets, windows, same-name near misses, siblings, templates), anti-unifies every group, judges it by R1-R8, ranks it, stores the run in index.db and prints one line per ranked group plus a rejected-summary line by reason code. `patterns reject` suppresses a stored group and posts the decision to the team feed.',
     flags: [
       { flag: '--type=<T>', desc: 'Only this pattern type (default: ALL)' },
       { flag: '--min=<N>', desc: 'Minimum file count (default: 2)' },
       { flag: '--full', desc: 'Include every occurrence instead of samples' },
-      { flag: '--score=<labels.json>', desc: 'Score the detector against the content-anchored ground truth (cli/patterns/fixtures/gt/labels.json); add --json, --dir=<d>, --input=<groups.json>' }
+      { flag: '--score=<labels.json>', desc: 'Score the detector against the content-anchored ground truth (cli/patterns/fixtures/gt/labels.json); add --json, --dir=<d>, --input=<groups.json>' },
+      { flag: '--forge', desc: 'Forge groups, one line per ranked group plus the rejected summary; add --rejected (list them with codes), --explain=<id> (holes, members, codes), --include-tests, --idioms, --limit=<N>, --path=<P>, --kind=<K>, --json; `patterns reject <id> --reason=<text> --as=@h` suppresses one' }
     ],
-    examples: ['chemx patterns', 'chemx patterns src --min=3']
+    examples: ['chemx patterns', 'chemx patterns src --min=3', 'chemx patterns --forge', 'chemx patterns --forge --explain=3f2a9c0d', 'chemx patterns reject 3f2a9c0d --reason="house shape" --as=@me']
   },
   {
     name: 'commit',

@@ -5,7 +5,9 @@
 // the shape of each operand, since a drifted copy is a check that lost a conjunct (`!rel.startsWith('..')`
 // against `rel.startsWith('..') || path.isAbsolute(rel)`).
 // A row's shape depends only on its own text, so it is cached by kind and content key
-// (content_hash:start:end) across runs (group-store.js); a warm run parses no file for drift.
+// (content_hash:start:end) across runs (group-store.js shapeKeyOf); a warm run parses no file for drift.
+import { shapeKeyOf } from './group-store.js';
+
 const LOGICAL_TYPES = new Set(['LogicalNary', 'LogicalExpression']);
 const NEGATION_LABEL = 'operator:! prefix';
 
@@ -49,7 +51,7 @@ const UNKNOWN_SHAPE = Object.freeze({ type: null, computed: null, operands: [] }
  */
 export const createShapeReader = (reader, rowsById, { contentHashes = new Map(), cache = new Map() } = {}) => {
   const decisions = new Map();
-  const keyOf = (row) => `${row.kind}|${contentHashes.get(row.file_path) ?? row.file_path}:${row.start}:${row.end}`;
+  const keyOf = (row) => shapeKeyOf(row.kind, `${contentHashes.get(row.file_path) ?? row.file_path}:${row.start}:${row.end}`);
 
   const readShape = (row) => {
     const tree = reader.treeOf({ kind: row.kind, unitIds: [row.id] });

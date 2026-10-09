@@ -1,12 +1,14 @@
 /**
  * patterns-cli.js: `chemx patterns` argv adapter over the MCP handleQueryPatterns handler.
- * Interim alias (Forge P0); P5 replaces it with the Forge surface.
+ * Interim alias (Forge P0); P5 replaces it with the Forge surface. The Forge listing, --rejected,
+ * --explain and `patterns reject` run behind --forge (patterns-forge-cli.js).
  */
 import { handleQueryPatterns } from './tools-patterns.js';
 import { runPatternsScore } from '../patterns/gt-score-cli.js';
 import { syncFingerprints } from '../forge/fingerprint-sync.js';
 import { runForgeGroups } from '../forge/forge-groups.js';
 import { toScorerGroups } from '../forge/group-shape.js';
+import { runPatternsForge, runPatternsReject } from './patterns-forge-cli.js';
 
 const flagValue = (args, name) => args.find((a) => a.startsWith(`--${name}=`))?.slice(name.length + 3);
 
@@ -40,15 +42,19 @@ const runPatternsGroups = (args, cwd) => {
   const sync = syncFingerprints(cwd, { targetDir, includeTests });
   const grouped = runForgeGroups(cwd, { includeSpecs: includeTests, includeIdioms: args.includes('--idioms') });
   const result = grouped
-    ? { status: 'ok', sync: { parsed: sync.parsed, ms: sync.ms }, stats: grouped.stats, groups: toScorerGroups(grouped.groups), refined: toScorerGroups(grouped.refined) }
+    ? { status: 'ok', sync: { parsed: sync.parsed, ms: sync.ms }, stats: grouped.stats, groups: toScorerGroups(grouped.groups), refined: toScorerGroups(grouped.refined), rejected: toScorerGroups([...grouped.rejected, ...grouped.suppressed]) }
     : { status: 'unavailable' };
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   return result;
 };
 
 export const runPatternsCli = (args, cwd = process.cwd()) => {
+  const isRejectRun = args[0] === 'reject';
+  if (isRejectRun) return runPatternsReject(args, cwd);
   const isScoreRun = args.some((arg) => arg.startsWith('--score='));
   if (isScoreRun) return runPatternsScore(args, cwd);
+  const isForgeRun = args.includes('--forge');
+  if (isForgeRun) return runPatternsForge(args, cwd);
   const isSyncRun = args.includes('--sync');
   if (isSyncRun) return runPatternsSync(args, cwd);
   const isGroupsRun = args.includes('--groups');

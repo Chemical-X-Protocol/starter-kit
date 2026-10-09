@@ -4,8 +4,9 @@
 // The LGG verdict of a group is stored under its source id (the content-derived id before refinement),
 // so a later run whose grouping finds the same member set skips the trees and the LGG; W merge
 // decisions are kept the same way by instance pair, and drift root shapes by unit. The caches hold only
-// what the last run used; verdicts are bound to FORGE_EXTRACTOR_VERSION, and the pair and unit keys
-// carry content hashes.
+// what the last run used; every entry is bound to FORGE_EXTRACTOR_VERSION and LGG_STAGE_VERSION (bump
+// it when the LGG, the reject codes, refinement, unify or root shapes change meaning), and the pair and
+// unit keys carry content hashes.
 // A suppression (`chemx patterns reject`) is keyed by the group's path, kind, facet and its members' file
 // and fp2 sequence, so it survives line drift and edits elsewhere in a member file.
 import crypto from 'node:crypto';
@@ -32,7 +33,11 @@ const SQL = {
   groupsByPrefix: 'SELECT * FROM pattern_groups WHERE id LIKE ? ORDER BY id LIMIT 2'
 };
 
+export const LGG_STAGE_VERSION = 2;
+
 const sha = (text, length) => crypto.createHash('sha1').update(text).digest('hex').slice(0, length);
+
+const CACHE_TAG = `${FORGE_EXTRACTOR_VERSION}.${LGG_STAGE_VERSION}`;
 
 const parseJson = (text) => {
   try {
@@ -43,7 +48,10 @@ const parseJson = (text) => {
 };
 
 /** Key of a W merge decision between two instances (their pattern_group_members keys). */
-export const unifyPairKeyOf = (keyA, keyB) => sha(`${keyA}|${keyB}`, 24);
+export const unifyPairKeyOf = (keyA, keyB) => sha(`${CACHE_TAG}|${keyA}|${keyB}`, 24);
+
+/** Key of a cached row shape: the stage version, the row kind and its content key. */
+export const shapeKeyOf = (kind, contentKey) => `${CACHE_TAG}|${kind}|${contentKey}`;
 
 /** Suppression key of a group: path, kind, facet and the members' file#fp2 sequences, sorted. */
 export const suppressionKeyOf = (group, rowsById) => {
@@ -59,7 +67,7 @@ export const readGroupCache = (db) => {
   const verdicts = new Map();
   for (const row of db.prepare(SQL.verdicts).all(FORGE_EXTRACTOR_VERSION)) {
     const stored = parseJson(row.lgg_json);
-    const hasVerdict = Boolean(stored?.verdict);
+    const hasVerdict = Boolean(stored?.verdict) && stored.cacheTag === CACHE_TAG;
     if (hasVerdict) verdicts.set(row.source_id, stored);
   }
   const unify = new Map(db.prepare(SQL.unify).all().map((row) => [row.pair_key, row.ok === 1]));
@@ -76,8 +84,9 @@ export const readSuppressions = (db) => new Map(db.prepare(SQL.suppressions).all
 const storedVerdictOf = (group) => {
   const codes = group.rejectCodes ?? [];
   return {
+    cacheTag: CACHE_TAG,
     lgg: group.lgg ?? null,
-    verdict: { ok: codes.length === 0, reason: codes[0] ?? null, codes },
+    verdict: group.verdict ?? { ok: codes.length === 0, reason: codes[0] ?? null, codes },
     evicted: (group.evicted ?? []).map((entry) => ({ key: entry.key, reason: entry.reason })),
     drift: group.drift ?? []
   };

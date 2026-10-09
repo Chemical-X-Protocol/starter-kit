@@ -4,6 +4,9 @@
 //   equal fp3     their differences are anchor-free expressions
 //   1-2 anchors   their anchors (literals and keys aside, L2 erases them) differ in 1 to
 //                 UNIFY_ANCHOR_SLACK places, as a transform or ref hole does (parseInt; an imported const)
+// R5 (a hole swallows anchors in half the members) is left to the merged group's n-ary LGG: with two
+// members one anchored side is already half, yet A19's DISCUSSION_CATEGORY_SLUG is one ref among four
+// retries. Every other code refuses the merge.
 // Decisions are memoized by instance pair (content-derived keys) and handed back for group-store.js, so
 // a warm run parses only pairs it has never judged.
 import { antiUnify } from './lgg.js';
@@ -14,6 +17,9 @@ import { unifyPairKeyOf } from './group-store.js';
 export const UNIFY_ANCHOR_SLACK = 2;
 
 const LOOSE_ANCHOR = /^(str|num|key):/;
+const GROUP_LEVEL_CODES = new Set(['R5']);
+
+const acceptsMerge = (verdict) => verdict.codes.every((code) => GROUP_LEVEL_CODES.has(code));
 
 const anchorDistance = (a, b) => {
   const left = new Set(a.anchors.filter((anchor) => !LOOSE_ANCHOR.test(anchor)));
@@ -42,7 +48,7 @@ export const createUnifyStep = ({ reader, rowsById, ubiquitousOf, contentHashes,
     if (!isResolved) return false;
     const ubiquitous = ubiquitousOf(rowsById.get(a.unitIds[0])?.facet_key);
     const lgg = antiUnify(trees, { ubiquitous, examples: false });
-    return Boolean(lgg) && judgeLgg(lgg, { path: 'W', kind: a.kind }).ok;
+    return Boolean(lgg) && acceptsMerge(judgeLgg(lgg, { path: 'W', kind: a.kind }));
   };
 
   const unify = (a, b) => {

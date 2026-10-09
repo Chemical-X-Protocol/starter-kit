@@ -6,12 +6,15 @@
 // starts below line 1), so each excerpt element is a template root. Overlapping excerpts of one file come
 // from the same source text, so writing them line by line is consistent. The sandbox is then
 // fingerprinted into its own index db.
+// Script excerpts cut from inside a function get a scaffold function on the free lines around them
+// (gt-scaffold.js), so they are statement units as in the real file; excerpt lines never move.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseFixture } from '../patterns/gt-text.js';
 import { syncFingerprints } from './fingerprint-sync.js';
+import { scaffoldScript } from './gt-scaffold.js';
 
 const KIT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 export const GT_DIR = path.join(KIT_ROOT, 'cli', 'patterns', 'fixtures', 'gt');
@@ -44,8 +47,9 @@ const excerptsByFile = (labels) => {
 const fileTextOf = (file, excerpts) => {
   const lines = [];
   for (const excerpt of excerpts) excerpt.lines.forEach((line, index) => { lines[excerpt.startLine - 1 + index] = line; });
-  const filled = Array.from(lines, (line) => line ?? '');
   const isVue = file.endsWith('.vue');
+  if (!isVue) scaffoldScript(lines, excerpts);
+  const filled = Array.from(lines, (line) => line ?? '');
   const text = isVue ? [...VUE_OPEN, ...filled.slice(VUE_OPEN.length), ...VUE_CLOSE] : filled;
   return `${text.join('\n')}\n`;
 };

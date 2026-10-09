@@ -64,7 +64,8 @@ export const createLggStage = ({ rows, readFile, ubiquitousOf, contentHashes, ca
   const judgeParsed = (group) => {
     const resolved = group.instances.map((instance) => ({ instance, tree: reader.treeOf(instance) }));
     const stale = resolved.filter((member) => !member.tree).map((member) => ({ instance: member.instance, reason: 'stale' }));
-    const refined = refineMembers(resolved.filter((member) => member.tree), judgeOf(group), { ubiquitous: ubiquitousOf(group.facetKey) });
+    const classOf = (member) => member.instance.unitIds.map((id) => rowsById.get(id)?.fp2).join(',');
+    const refined = refineMembers(resolved.filter((member) => member.tree), judgeOf(group), { ubiquitous: ubiquitousOf(group.facetKey), classOf });
     return { ...refined, evicted: [...stale, ...refined.evicted] };
   };
 
@@ -97,6 +98,7 @@ export const createLggStage = ({ rows, readFile, ubiquitousOf, contentHashes, ca
       status: isAccepted ? rebuilt.status : 'rejected',
       ...(isAccepted ? {} : { rejectReason }),
       rejectCodes: outcome.verdict.codes,
+      verdict: outcome.verdict,
       lgg: outcome.lgg,
       sourceId: group.id,
       suppressionKey: suppressionKeyOf(rebuilt, rowsById),
