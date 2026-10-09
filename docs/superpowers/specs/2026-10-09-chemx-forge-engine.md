@@ -37,7 +37,7 @@ Exclusions:
 - `if (c) s` becomes `if (c) { s }`.
 - An expressionless template literal becomes a string.
 - `Boolean(x)` in test position becomes `x`.
-- Static Vue attributes are sorted; directives keep their order.
+- Static Vue attributes are sorted; directives keep their order. A static never sorts across a spread, a bind or v-model of its own name, or a dynamic `[name]` bind, because the later of two writes wins (#2586). Template text keeps the whitespace that renders (JSX text rules, Vue's condensed text, raw `<pre>`), and expression text keeps string literal contents.
 - Soundness is property-tested: the original and canonical forms evaluate equal on generated inputs.
 
 3. HASHES

@@ -117,8 +117,8 @@ test('module identity keeps .mjs/.cjs/.vue apart, node: prefix-only builtins, an
   assert.ok(fnUnit(dynamic, 'src/p/a.ts').anchors.includes('import:src/p/v.mjs#*'));
 });
 
-const jsxList = (item) => `export const host = () => (\n  <ul>\n    <li>${item}</li>\n    <li>b</li>\n    <li>c</li>\n    <li>d</li>\n  </ul>\n);`;
-const vueList = (item) => `<template>\n  <ul>\n    <li>${item}</li>\n    <li>b</li>\n    <li>c</li>\n    <li>d</li>\n  </ul>\n</template>`;
+const jsxList = (item, attrs = '') => `export const host = (p) => (\n  <ul>\n    <li${attrs}>${item}</li>\n    <li>b</li>\n    <li>c</li>\n    <li>d</li>\n  </ul>\n);`;
+const vueList = (item, attrs = '') => `<template>\n  <ul>\n    <li${attrs}>${item}</li>\n    <li>b</li>\n    <li>c</li>\n    <li>d</li>\n  </ul>\n</template>`;
 
 test('template text and expression strings keep the whitespace that renders', () => {
   const jsxPairs = [[' a', 'a'], ['x&nbsp;&nbsp;y', 'x y'], ["{'x  y'}", "{'x y'}"]];
@@ -130,4 +130,14 @@ test('template text and expression strings keep the whitespace that renders', ()
     assert.notEqual(tmplUnit(vueList(left), 'src/a.vue').fp1, tmplUnit(vueList(right), 'src/a.vue').fp1, `Vue ${left} vs ${right}`);
   }
   assert.equal(tmplUnit(jsxList('{p.a  +  1}'), 'src/a.jsx').fp1, tmplUnit(jsxList('{p.a + 1}'), 'src/a.jsx').fp1, 'token spacing still collapses');
+});
+
+test('a static attribute never sorts across a bind that can write its name', () => {
+  // The later of a static and a bound attribute of the same name wins; a dynamic [name] can be any name.
+  const jsx = (attrs) => tmplUnit(jsxList('a', attrs), 'src/a.jsx').fp1;
+  assert.notEqual(jsx(' title="s" title={p.b}'), jsx(' title={p.b} title="s"'));
+  const vue = (attrs) => tmplUnit(vueList('a', attrs), 'src/a.vue').fp1;
+  assert.notEqual(vue(' title="s" :title="b"'), vue(' :title="b" title="s"'));
+  assert.notEqual(vue(' :[k]="v" title="s"'), vue(' title="s" :[k]="v"'));
+  assert.equal(vue(' title="s" :alt="b" role="x"'), vue(' role="x" :alt="b" title="s"'), 'unrelated statics still sort');
 });

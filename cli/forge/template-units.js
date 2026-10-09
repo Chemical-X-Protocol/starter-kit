@@ -8,7 +8,10 @@
 // Static attributes are sorted, directives keep their order. At L3 static and bound attributes are
 // one sorted ATTR group. Sorting never crosses a spread (JSX {...p}, Vue v-bind="obj"): the later of
 // a spread and a same-named attribute wins, so each run between spreads is sorted on its own and the
-// spreads stay where they were. mass counts elements, attributes and text/interp children.
+// spreads stay where they were. The same holds for any attribute that can write a static one's name
+// (#2586): a bind or v-model of the same name, or a bind/directive with a dynamic [name]. Those are
+// barriers like a spread, so a static never moves across them. mass counts elements, attributes and
+// text/interp children.
 import { hash64 } from './murmur.js';
 import { normalizeJsxElement, vueRootElements } from './template-normalize.js';
 import { traverse } from '../babel-lazy.js';
@@ -35,7 +38,23 @@ const LABELS = {
 };
 
 const SPREAD_NAMES = new Set(['spread:', 'bind:']);
+const MODEL_PREFIX = 'model:';
 const isSpreadAttr = (attr) => attr.kind === 'dir' && SPREAD_NAMES.has(attr.name);
+
+/** The attribute name a bind or v-model writes (null for kinds that write none). */
+const writtenName = (attr) => {
+  const isModel = attr.kind === 'dir' && attr.name.startsWith(MODEL_PREFIX);
+  if (isModel) return attr.name.slice(MODEL_PREFIX.length) || 'modelValue';
+  return attr.kind === 'bind' ? attr.name : null;
+};
+
+const hasDynamicName = (attr) => attr.kind !== 'static' && attr.kind !== 'event' && String(attr.name).includes('[');
+
+/** Barrier test for one element: spreads, dynamic names and writes to a static attribute's name. */
+const barrierOf = (attrs) => {
+  const staticNames = new Set(attrs.filter((attr) => attr.kind === 'static').map((attr) => attr.name));
+  return (attr) => isSpreadAttr(attr) || hasDynamicName(attr) || staticNames.has(writtenName(attr));
+};
 
 const orderedRun = (attrs, level) => {
   const isValueAttr = (attr) => attr.kind === 'static' || (level === 2 && attr.kind === 'bind');
@@ -44,11 +63,12 @@ const orderedRun = (attrs, level) => {
 };
 
 const orderedAttrs = (attrs, level) => {
+  const isBarrier = barrierOf(attrs);
   const ordered = [];
   let run = [];
   for (const attr of attrs) {
-    const isSpread = isSpreadAttr(attr);
-    if (isSpread) {
+    const isSplit = isBarrier(attr);
+    if (isSplit) {
       ordered.push(...orderedRun(run, level), attr);
       run = [];
       continue;
