@@ -450,6 +450,54 @@ Because autonomous coding agent models update frequently, this package is contin
 
 ---
 
+## Privacy & network
+
+chemx itself makes no network requests outside the explicit flows in the table below. Audit, verify, search, read, patch, generate and team commands send nothing. Your own test or build tools, which verify runs, may still use the network. A spec (`cli/network-isolation.spec.js`) runs commands with `fetch` and `gh` recorded to keep it that way. `chemx ui` serves a local page on your machine. It does not call out.
+
+### What is sent, when, and to which host
+
+| Flow | When | Host | What is sent |
+| :--- | :--- | :--- | :--- |
+| License download | `chemx init`, `chemx create` / `npm create chemx`, only when a license key is supplied | `https://chemicalx.xophz.com/api/starter-kit/download` | your license key and device id |
+| License fallback check | only if the download host is unreachable | `https://mycompassconsulting.com/wp-json/compass/v1/gatekeeper/licenses/validate` | your license key and device id |
+| Audit share | `chemx audit --share`, or Share in the audit navigator | GitHub (`api.github.com` with `GH_TOKEN`/`GITHUB_TOKEN`, otherwise the `gh` CLI) | the discussion title and body, which are printed in full before you confirm |
+| Error report | only with `--post-issue`, the MCP `autoPost` flag, or `CHEMX_AUTO_POST_ISSUES=true` | GitHub Issues in `CHEMX_ISSUES_REPO`, your repo's GitHub remote, or `Chemical-X-Protocol/starter-kit` | the sanitized error report (tokens, license keys and your home path are masked), which is printed in full before it is posted and is also saved to `.chemx/issues/` |
+
+Notes:
+- **Share asks first.** It prints the target repo, category, title and body, then asks `[y/N]`, which defaults to no. In a non-interactive session it refuses unless you pass `--yes`.
+- **No implicit error posting.** A CI token on its own never posts an issue. When posting is on, chemx prints the target repo, title and body to stderr before sending. It does this even with `--json` or `--silent`, which keep stdout clean. The one exception is the MCP `chemx_report_issue` tool: it posts without printing, because its stdout is the protocol channel, and it returns the exact title, body and URL it sent to the calling agent.
+- **Secrets are masked everywhere a report goes.** Keys passed with `--license`, `CX-` keys, GitHub and npm tokens, and the values of secret-named fields in a report's extra metadata (`token`, `password`, `license`, and so on) are masked. This covers the report file, the issue title, body and prefilled URL, the failure line printed to stderr, and the swarm task that tracks a posted issue.
+- **Device id.** This is a random UUID (`crypto.randomUUID()`). It identifies an install for license seat counting and carries no hardware or personal data. Older `cli_*` ids are kept as they are.
+- **Keys travel over HTTPS only.** `CHEMICAL_X_API_URL` and `COMPASS_GATEKEEPER_URL` can point the license flow at another server, for staging or self-hosting. An override must use `https://`. Plain `http://` is accepted only for `localhost` and `127.0.0.1`. Any other override is refused, with no fallback. When an override is in use, chemx prints its host.
+
+### Where it is stored
+
+| File | Contents | Permissions |
+| :--- | :--- | :--- |
+| `$XDG_CONFIG_HOME/chemx/config.json` (default `~/.config/chemx/config.json`) | the license key you entered or verified | `0600`, in a `0700` directory |
+| `$XDG_CONFIG_HOME/chemx/device_id` | the random device id | `0600` |
+| `<project>/.chemx/discussion.json` | the number and URL of the discussion you shared, so the next share updates it | project-local |
+
+On first use, chemx moves an older `~/.chemical-x/` config into the XDG directory. It tightens the permissions and deletes the old copy. Unknown files in `~/.chemical-x/` are left in place.
+
+For CI, set `CHEMX_LICENSE_KEY`. It is read from the environment and is never written to disk.
+
+### How to turn it off
+
+```bash
+export CHEMX_OFFLINE=1   # chemx's own switch
+export DO_NOT_TRACK=1    # the cross-tool convention; chemx honors it the same way
+```
+
+Either variable disables every network call. The gated flows say so clearly and make no request:
+- **License download:** scaffolding continues with the bundled Community blueprints.
+- **Share:** nothing is posted.
+- **Error report:** the report is saved locally only, and chemx prints the reason and the report's path.
+
+To remove stored data, delete `~/.config/chemx/` and the project's `.chemx/discussion.json`.
+
+---
+
 ## License
 
 Core CLI tools and capsule generators are distributed under the **MIT License**.  

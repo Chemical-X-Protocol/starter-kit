@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import fs from 'node:fs';
-import { runScaffold } from './scaffold.js';
+import { runScaffold, scaffoldExitCode } from './scaffold.js';
 import { runAudit } from './index.js';
 import { sanitizeOutputStreams } from './terminal.js';
 import { installGlobalErrorCatcher } from './errors/index.js';
@@ -44,8 +44,10 @@ if (rawArgs.includes('--version') || rawArgs.includes('-v')) {
     const pkgPath = new URL('../package.json', import.meta.url);
     const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
     process.stdout.write(`create-chemx v${pkg.version || 'unknown'}\n`);
-  } catch {
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
     process.stdout.write('create-chemx\n');
+    process.stderr.write(`(version unavailable: ${reason})\n`);
   }
   process.exit(0);
 }
@@ -82,4 +84,4 @@ const dirArg = (nonFlagArgs[0] === 'create' || nonFlagArgs[0] === 'init' || nonF
   ? nonFlagArgs[1]
   : nonFlagArgs[0];
 
-await runScaffold(dirArg, rawArgs, runAudit);
+process.exitCode = scaffoldExitCode(await runScaffold(dirArg, rawArgs, runAudit));

@@ -260,7 +260,8 @@ export const createCapsuleFiles = ({
       recordFile(controllerFile, path.join(targetDir, controllerFile), buildController(capsuleName, pascalName, domainOpts));
     }
 
-    if (!isLean && !wantsNoScss) {
+    const shouldWriteScss = !isLean && !wantsNoScss;
+    if (shouldWriteScss) {
       const scssFile = `_${capsuleName}.scss`;
       recordFile(scssFile, path.join(targetDir, scssFile), buildScss(capsuleName));
     }
@@ -302,7 +303,9 @@ export const runGenerateWizard = async (rawArgs = []) => {
   const isJson = rawArgs.includes('--json');
   const isYes = rawArgs.includes('-y') || rawArgs.includes('--yes') || isJson || !isStdinTty();
   if (!isJson) await renderTtyBanner('Chemical X: Molecular Capsule Wizard');
-  await checkOrPromptEvaluation('generate capsule', { isYes });
+  const licenseGate = await checkOrPromptEvaluation('generate capsule', { isYes });
+  const isGateCancelled = Boolean(licenseGate.cancelled);
+  if (isGateCancelled) return { success: false, cancelled: true };
 
   const useGum = hasGum();
 
@@ -359,7 +362,8 @@ export const runGenerateWizard = async (rawArgs = []) => {
     return handleJigCli({ rawArgs, positional, rawName, dirArg, descArg, isDryRun, isJson });
   }
 
-  if (!rawName && !isYes) {
+  const shouldPromptName = !rawName && !isYes;
+  if (shouldPromptName) {
     rawName = useGum
       ? gumInput('Capsule feature name (e.g. user-avatar, spark-kpi, auth-status):', 'user-avatar')
       : await promptQuestion('Capsule feature name [user-avatar]: ');
@@ -382,7 +386,8 @@ export const runGenerateWizard = async (rawArgs = []) => {
   const defaultFw = FRAMEWORKS.find((f) => f.id === resolvedFrameworkId || f.ext === resolvedFrameworkId) || FRAMEWORKS[0];
   let selectedFramework = defaultFw;
 
-  if (!frameworkArg && !isYes) {
+  const shouldPromptFramework = !frameworkArg && !isYes;
+  if (shouldPromptFramework) {
     const fwChoice = useGum
       ? gumChoose(FRAMEWORKS.map((f) => f.label), 'Select Framework Flavor')
       : await promptQuestion(`Select Framework Flavor [1=React, 2=Vue 3, 3=Svelte 5] (default: ${defaultFw.id}): `);

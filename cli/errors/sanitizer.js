@@ -5,14 +5,24 @@ const TOKEN_PATTERNS = [
   /github_pat_[a-zA-Z0-9_]{20,}/g,
   /npm_[a-zA-Z0-9]{20,}/g,
   /bearer\s+[a-zA-Z0-9_\-\.]{15,}/gi,
-  /(?:api[_-]?key|secret|token|password)[=:]\s*["']?([a-zA-Z0-9_\-\.]{8,})["']?/gi
+  /(?:api[_-]?key|license[_-]?key|secret|token|password)[=:]\s*["']?([a-zA-Z0-9_\-\.]{8,})["']?/gi
 ];
+
+// License keys: the value after --license (any format, unless it is the next flag) and bare CX-XXXX-XXXX-XXXX keys.
+const LICENSE_FLAG_PATTERN = /(--license(?:=|\s+))(?!-)["']?[^\s"']+["']?/g;
+const LICENSE_KEY_PATTERN = /\bCX(?:-[A-Z0-9]{4}){3,}\b/gi;
+
+export const maskLicenseKeys = (text) => {
+  const isInputString = typeof text === 'string';
+  if (!isInputString) return '';
+  return text.replace(LICENSE_FLAG_PATTERN, '$1[REDACTED_LICENSE]').replace(LICENSE_KEY_PATTERN, '[REDACTED_LICENSE]');
+};
 
 export const maskSensitiveTokens = (text) => {
   const isInputString = typeof text === 'string';
   if (!isInputString) return '';
 
-  let sanitized = text;
+  let sanitized = maskLicenseKeys(text);
   for (const pattern of TOKEN_PATTERNS) {
     sanitized = sanitized.replace(pattern, (match) => {
       const isBearer = match.toLowerCase().startsWith('bearer');
@@ -40,6 +50,26 @@ export const sanitizeText = (text) => {
 
   const masked = maskSensitiveTokens(text);
   return normalizeHomePath(masked);
+};
+
+// Structured caller data (report.context): mask every string, and the whole value of a secret-named key.
+const SECRET_KEY_NAME = /api[_-]?key|license|secret|token|password|passwd|credential|authorization/i;
+
+export const sanitizeValue = (value, seen = new WeakSet()) => {
+  if (typeof value === 'string') return sanitizeText(value);
+  if (!value || typeof value !== 'object') return value;
+  if (seen.has(value)) return '[Circular]';
+  seen.add(value); // ancestors only, so a shared (non-circular) reference is still rendered
+  try {
+    if (Array.isArray(value)) return value.map((item) => sanitizeValue(item, seen));
+    const entries = Object.entries(value).map(([key, item]) => {
+      const isSecretKey = SECRET_KEY_NAME.test(key) && item !== null && typeof item !== 'object' && typeof item !== 'boolean';
+      return [sanitizeText(key), isSecretKey ? '[REDACTED_SECRET]' : sanitizeValue(item, seen)];
+    });
+    return Object.fromEntries(entries);
+  } finally {
+    seen.delete(value);
+  }
 };
 
 export const sanitizeStackTrace = (stack) => {

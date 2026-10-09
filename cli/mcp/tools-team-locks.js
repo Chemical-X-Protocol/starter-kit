@@ -54,6 +54,7 @@ export const handleChemxReportIssue = async (args = {}, cwd = process.cwd()) => 
     autoPost: Boolean(args.autoPost),
     labels: args.labels,
     silent: true,
+    preview: false, // stdio protocol: the agent gets the exact issue in the result instead
     context: args.context,
     skipFileWrite: true
   });

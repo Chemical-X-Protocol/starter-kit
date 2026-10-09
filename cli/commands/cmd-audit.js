@@ -222,8 +222,9 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
   if (isCli) {
     if (isShare) {
       const { handleShareToDiscussions } = await loadNavigator();
-      await handleShareToDiscussions(report);
-      process.exit(0);
+      const { shareExitCode, hasYesFlag } = await import('../share-consent.js');
+      const shared = await handleShareToDiscussions(report, { isYes: hasYesFlag(rawArgs) });
+      process.exit(shareExitCode(shared));
     }
 
     if (isInteractive && !isUnroll) {

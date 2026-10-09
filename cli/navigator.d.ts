@@ -32,7 +32,17 @@ export declare function buildNavigatorMenu(
 export declare function extractPromptFromContent(content: string): string | null;
 export declare function showPagedContent(content: string, promptText?: string | null): Promise<void>;
 export declare function showConversionMenu(onScaffold?: (() => Promise<void>) | null): Promise<void>;
-export declare function handleShareToDiscussions(report: AuditReport): Promise<void>;
+export interface ShareOptions {
+  readonly isYes?: boolean;
+  readonly isInteractive?: boolean;
+}
+export interface ShareResult {
+  readonly status: 'pass' | 'fail' | 'inconclusive';
+  readonly posted: boolean;
+  readonly reason: string | null;
+  readonly url?: string | null;
+}
+export declare function handleShareToDiscussions(report: AuditReport, options?: ShareOptions): Promise<ShareResult>;
 export interface DashboardBannerOptions {
   readonly clear?: boolean;
   readonly interactive?: boolean;

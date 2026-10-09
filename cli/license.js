@@ -1,6 +1,5 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import { spawnSync } from 'node:child_process';
 import {
   hasGum,
@@ -11,23 +10,39 @@ import {
   isStdinTty,
   isStdoutTty
 } from './terminal.js';
-import { toResultSync } from './audit/rules-helpers.js';
+import {
+  resolveConfigPaths,
+  readLicenseKey,
+  storeLicenseKey,
+  loadOrCreateDeviceId,
+  ensurePrivateDir
+} from './license-config.js';
+import { isOfflineMode, describeOffline, resolveEndpoint, announceOverride } from './network-policy.js';
+import { STATUS } from './result-status.js';
 
-export const CONFIG_DIR = path.join(os.homedir(), '.chemical-x');
-export const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
-export const DEVICE_FILE = path.join(CONFIG_DIR, 'device_id');
-
-export const API_BASE = process.env.CHEMICAL_X_API_URL || 'https://chemicalx.xophz.com';
-export const GATEKEEPER_API_URL = process.env.COMPASS_GATEKEEPER_URL || 'https://mycompassconsulting.com/wp-json/compass/v1/gatekeeper';
+export const DEFAULT_API_BASE = 'https://chemicalx.xophz.com';
+export const DEFAULT_GATEKEEPER_URL = 'https://mycompassconsulting.com/wp-json/compass/v1/gatekeeper';
+export const resolveApiBase = (env = process.env) => resolveEndpoint('CHEMICAL_X_API_URL', DEFAULT_API_BASE, env);
+export const resolveGatekeeperUrl = (env = process.env) => resolveEndpoint('COMPASS_GATEKEEPER_URL', DEFAULT_GATEKEEPER_URL, env);
 export const URL_LEARN = 'https://chemicalx.xophz.com';
 export const URL_SPONSOR = 'https://github.com/sponsors/Chemical-X-Protocol';
 export const URL_STANDARD = 'https://mycompassconsulting.com/buy/chemical-x/standard';
 export const URL_MASTER = 'https://mycompassconsulting.com/buy/chemical-x/master';
 
+// Returned by the license prompts when the user picks Exit/Cancel; the CLI entry decides the exit code.
+export const LICENSE_CANCELLED = Object.freeze({ cancelled: true });
+export const isLicenseCancelled = (value) => value === LICENSE_CANCELLED;
+
 export const verifyWithGatekeeper = async (keyOrUser, deviceId = null) => {
+  const isOffline = isOfflineMode();
+  if (isOffline) return { valid: false, offline: true, error: describeOffline('Gatekeeper license check') };
+  const endpoint = resolveGatekeeperUrl();
+  const isEndpointRefused = Boolean(endpoint.error);
+  if (isEndpointRefused) return { valid: false, error: endpoint.error };
+  announceOverride(endpoint);
   const effectiveDeviceId = deviceId || getOrCreateDeviceId();
   try {
-    const res = await fetch(`${GATEKEEPER_API_URL}/licenses/validate`, {
+    const res = await fetch(`${endpoint.url}/licenses/validate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ key: keyOrUser, deviceId: effectiveDeviceId })
@@ -39,61 +54,36 @@ export const verifyWithGatekeeper = async (keyOrUser, deviceId = null) => {
   }
 };
 
-
 export const ensureConfigDir = () => {
-  if (fs.existsSync(CONFIG_DIR)) return true;
-  const [, err] = toResultSync(() => fs.mkdirSync(CONFIG_DIR, { recursive: true }));
-  if (err) {
+  try {
+    ensurePrivateDir(resolveConfigPaths().dir);
+    return true;
+  } catch {
     return false;
   }
-  return true;
 };
 
-export const getOrCreateDeviceId = () => {
-  if (fs.existsSync(DEVICE_FILE)) {
-    try {
-      const id = fs.readFileSync(DEVICE_FILE, 'utf-8').trim();
-      if (id) return id;
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error(String(err));
-      process.stderr.write(`Failed to read device id: ${error.message}\n`);
-    }
-  }
-  const newId = `cli_${Math.random().toString(36).substring(2, 12)}_${Date.now()}`;
-  ensureConfigDir();
-  try {
-    fs.writeFileSync(DEVICE_FILE, newId, 'utf-8');
-  } catch (err) {
-    const error = err instanceof Error ? err : new Error(String(err));
-    process.stderr.write(`Failed to write device id: ${error.message}\n`);
-  }
-  return newId;
-};
+export const getOrCreateDeviceId = () => loadOrCreateDeviceId();
 
-export const getCachedLicenseKey = () => {
-  if (!fs.existsSync(CONFIG_FILE)) {
-    return null;
-  }
-  try {
-    const data = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8'));
-    return data.licenseKey || null;
-  } catch {
-    return null;
-  }
-};
+export const getCachedLicenseKey = () => readLicenseKey();
 
 export const saveLicenseKey = (licenseKey) => {
-  ensureConfigDir();
   try {
-    fs.writeFileSync(
-      CONFIG_FILE,
-      JSON.stringify({ licenseKey, updatedAt: new Date().toISOString() }, null, 2),
-      'utf-8'
-    );
+    return storeLicenseKey(licenseKey);
   } catch (err) {
     const error = err instanceof Error ? err : new Error(String(err));
     process.stderr.write(`Failed to cache license key: ${error.message}\n`);
+    return { saved: false, reason: error.message, path: null };
   }
+};
+
+const persistEnteredKey = (rawKey) => {
+  const normalizedKey = rawKey.trim().toUpperCase();
+  const saveResult = saveLicenseKey(normalizedKey);
+  if (saveResult.saved) {
+    process.stdout.write(`\x1b[32m✔ License saved to ${saveResult.path} (mode 0600)\x1b[0m\n\n`);
+  }
+  return { licensed: true, key: normalizedKey };
 };
 
 const resolveFlagLicense = (args) => {
@@ -174,7 +164,7 @@ export const obtainLicenseKey = async (rawArgs = [], onRunAudit = null) => {
 
     const isExitChoice = choice.startsWith('6.') || !choice;
     if (isExitChoice) {
-      process.exit(0);
+      return LICENSE_CANCELLED;
     }
 
     return gumInput('License Key (CX-XXXX-XXXX-XXXX):', 'CX-XXXX-XXXX-XXXX');
@@ -218,7 +208,7 @@ export const obtainLicenseKey = async (rawArgs = [], onRunAudit = null) => {
   }
 
   if (effectiveChoice === '6') {
-    process.exit(0);
+    return LICENSE_CANCELLED;
   }
 
   return promptQuestion('Enter Chemical X Sponsor License Key (CX-XXXX-XXXX-XXXX): ');
@@ -274,9 +264,7 @@ export const checkOrPromptEvaluation = async (actionLabel = 'generate capsule', 
     if (choice.startsWith('2.')) {
       const enteredKey = gumInput('License Key (CX-XXXX-XXXX-XXXX):', 'CX-XXXX-XXXX-XXXX');
       if (enteredKey && enteredKey !== 'CX-XXXX-XXXX-XXXX') {
-        saveLicenseKey(enteredKey.trim().toUpperCase());
-        process.stdout.write('\x1b[32m✔ License saved to ~/.chemical-x/config.json!\x1b[0m\n\n');
-        return { licensed: true, key: enteredKey.trim().toUpperCase() };
+        return persistEnteredKey(enteredKey);
       }
       return { licensed: false, proceed: true };
     }
@@ -286,15 +274,13 @@ export const checkOrPromptEvaluation = async (actionLabel = 'generate capsule', 
       process.stdout.write(`\x1b[36mOpened checkout in default browser:\x1b[0m ${URL_MASTER}\n`);
       const keyAfterBuy = gumInput('Enter License Key once purchased (or press Enter to skip):');
       if (keyAfterBuy) {
-        saveLicenseKey(keyAfterBuy.trim().toUpperCase());
-        process.stdout.write('\x1b[32m✔ License saved to ~/.chemical-x/config.json!\x1b[0m\n\n');
-        return { licensed: true, key: keyAfterBuy.trim().toUpperCase() };
+        return persistEnteredKey(keyAfterBuy);
       }
       return { licensed: false, proceed: true };
     }
 
     if (choice.startsWith('4.')) {
-      process.exit(0);
+      return { licensed: false, proceed: false, cancelled: true };
     }
 
     return { licensed: false, proceed: true };
@@ -319,9 +305,7 @@ export const checkOrPromptEvaluation = async (actionLabel = 'generate capsule', 
   if (choice === '2') {
     const entered = await promptQuestion('Enter License Key (CX-XXXX-XXXX-XXXX): ');
     if (entered) {
-      saveLicenseKey(entered.trim().toUpperCase());
-      process.stdout.write('\x1b[32m✔ License saved to ~/.chemical-x/config.json!\x1b[0m\n\n');
-      return { licensed: true, key: entered.trim().toUpperCase() };
+      return persistEnteredKey(entered);
     }
     return { licensed: false, proceed: true };
   }
@@ -330,66 +314,79 @@ export const checkOrPromptEvaluation = async (actionLabel = 'generate capsule', 
     openBrowser(URL_MASTER);
     const entered = await promptQuestion('Enter License Key after purchase (or Enter to skip): ');
     if (entered) {
-      saveLicenseKey(entered.trim().toUpperCase());
-      process.stdout.write('\x1b[32m✔ License saved to ~/.chemical-x/config.json!\x1b[0m\n\n');
-      return { licensed: true, key: entered.trim().toUpperCase() };
+      return persistEnteredKey(entered);
     }
     return { licensed: false, proceed: true };
   }
 
   if (choice === '4') {
-    process.exit(0);
+    return { licensed: false, proceed: false, cancelled: true };
   }
 
   return { licensed: false, proceed: true };
 };
 
-export const fetchStarterKitFiles = async (licenseKey) => {
-  const normalizedKey = licenseKey.trim().toUpperCase();
-  const deviceId = getOrCreateDeviceId();
+const failDownload = (reason) => {
+  process.stderr.write(`\x1b[31m✕ ${reason}\x1b[0m\n`);
+  return { status: STATUS.FAIL, files: {}, reason };
+};
 
-  process.stdout.write(`\nVerifying license via edge: ${API_BASE}...\n`);
-
+const requestStarterKit = async (baseUrl, licenseKey, deviceId) => {
   try {
-    const res = await fetch(`${API_BASE}/api/starter-kit/download`, {
+    const res = await fetch(`${baseUrl}/api/starter-kit/download`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ licenseKey: normalizedKey, deviceId })
+      body: JSON.stringify({ licenseKey, deviceId })
     });
-
-    const responseData = await res.json();
-    const isSuccess = Boolean(res.ok && responseData.valid);
-
-    if (!isSuccess) {
-      process.stderr.write(
-        `\x1b[31m✕ License Verification Failed: ${responseData.error || 'Invalid key.'}\x1b[0m\n`
-      );
-      process.stderr.write(`Purchase key at: ${URL_STANDARD}\n\n`);
-      process.exit(1);
-    }
-
-    saveLicenseKey(normalizedKey);
-    process.stdout.write(
-      `\x1b[32m✔ Verified License for @${responseData.githubUser || 'sponsor'}\x1b[0m\n\n`
-    );
-    return responseData.files || {};
+    const data = await res.json();
+    return [{ ok: res.ok, data }, null];
   } catch (err) {
-    // Fallback: Verify with Gatekeeper or local blueprints
-    const gatekeeperCheck = await verifyWithGatekeeper(normalizedKey, deviceId);
-    if (gatekeeperCheck.valid) {
-      saveLicenseKey(normalizedKey);
-      process.stdout.write(
-        `\x1b[32m✔ Verified via Gatekeeper for @${gatekeeperCheck.github_user || 'sponsor'} [Tier: ${gatekeeperCheck.tier}]\x1b[0m\n\n`
-      );
-      const localFiles = loadLocalBlueprintFiles();
-      if (Object.keys(localFiles).length > 0) return localFiles;
-    }
-
-    process.stderr.write(
-      `\x1b[31m✕ Network Error: Failed to reach edge server (${err.message}).\x1b[0m\n`
-    );
-    process.exit(1);
+    return [null, err instanceof Error ? err : new Error(String(err))];
   }
+};
+
+const verifyViaGatekeeperFallback = async (licenseKey, deviceId, networkError) => {
+  const gatekeeperCheck = await verifyWithGatekeeper(licenseKey, deviceId);
+  if (gatekeeperCheck.valid) {
+    saveLicenseKey(licenseKey);
+    process.stdout.write(
+      `\x1b[32m✔ Verified via Gatekeeper for @${gatekeeperCheck.github_user || 'sponsor'} [Tier: ${gatekeeperCheck.tier}]\x1b[0m\n\n`
+    );
+    const localFiles = loadLocalBlueprintFiles();
+    const hasLocalFiles = Object.keys(localFiles).length > 0;
+    if (hasLocalFiles) return { status: STATUS.PASS, files: localFiles, reason: null };
+  }
+  return failDownload(`Network Error: Failed to reach edge server (${networkError.message}).`);
+};
+
+// Returns { status, files, reason }; never exits. Offline mode falls back to the bundled blueprints.
+export const fetchStarterKitFiles = async (licenseKey) => {
+  const normalizedKey = licenseKey.trim().toUpperCase();
+  const isOffline = isOfflineMode();
+  if (isOffline) {
+    const reason = describeOffline('License verification and starter-kit download');
+    process.stderr.write(`${reason}\nUsing the bundled Community blueprints instead.\n`);
+    return { status: STATUS.INCONCLUSIVE, files: loadLocalBlueprintFiles(), reason, offline: true };
+  }
+  const endpoint = resolveApiBase();
+  const isEndpointRefused = Boolean(endpoint.error);
+  if (isEndpointRefused) return failDownload(endpoint.error);
+  announceOverride(endpoint);
+
+  const deviceId = getOrCreateDeviceId();
+  process.stdout.write(`\nVerifying license via edge: ${endpoint.url}...\n`);
+  const [response, networkError] = await requestStarterKit(endpoint.url, normalizedKey, deviceId);
+  if (networkError) return verifyViaGatekeeperFallback(normalizedKey, deviceId, networkError);
+
+  const isSuccess = Boolean(response.ok && response.data && response.data.valid);
+  if (!isSuccess) {
+    const detail = (response.data && response.data.error) || 'Invalid key.';
+    process.stderr.write(`Purchase key at: ${URL_STANDARD}\n`);
+    return failDownload(`License Verification Failed: ${detail}`);
+  }
+  saveLicenseKey(normalizedKey);
+  process.stdout.write(`\x1b[32m✔ Verified License for @${response.data.githubUser || 'sponsor'}\x1b[0m\n\n`);
+  return { status: STATUS.PASS, files: response.data.files || {}, reason: null };
 };
 
 export const loadLocalBlueprintFiles = () => {
