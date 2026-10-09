@@ -55,7 +55,8 @@ export const createMcpHandler = (options = {}) => {
   const resourceScope = async () => resolveContext({ cwd: bootRoot, mcpRoots: await roots.settled(), serverRoot: declaredRoot, env });
   const withScope = async (id, label, produce) => {
     const scope = await resourceScope();
-    if (!scope.ok) return replyError(id, -32602, `${label} failed: ${scope.error}`);
+    const isScopeFailed = !scope.ok;
+    if (isScopeFailed) return replyError(id, -32602, `${label} failed: ${scope.error}`);
     try {
       const result = await produce(scope.root);
       return reply(id, { ...result, _meta: { root: scope.root, rootSource: scope.rootSource, version: scope.version } });
@@ -96,7 +97,8 @@ export const createMcpHandler = (options = {}) => {
 
   const handleRequest = async (request) => {
     const { id, method, params } = request;
-    if (method === 'initialize') return initialize(id, params);
+    const isInitializeRequest = method === 'initialize';
+    if (isInitializeRequest) return initialize(id, params);
     const isNotification = typeof id === 'undefined' || id === null;
     if (isNotification) {
       await NOTIFICATIONS[method]?.(params);
