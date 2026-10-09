@@ -138,8 +138,20 @@ const taskTokens = (taskText) => {
   return [...new Set([...ids, ...files, ...(handle ? [handle] : [])])].slice(0, 12);
 };
 
+// A forced-schema result carries these keys; two or more filled in is the shape of an answer to the task.
+const SCHEMA_KEYS = ['commits', 'specs', 'deliverables', 'openIssues', 'evidence', 'problem', 'fix', 'verdict', 'findings'];
+const isFilled = (v) => (Array.isArray(v) ? v.length > 0 : String(v ?? '').trim() !== '');
+
+const isSchemaShaped = (output) => {
+  const isObject = output !== null && typeof output === 'object' && !Array.isArray(output);
+  if (!isObject) return false;
+  return SCHEMA_KEYS.filter((k) => isFilled(output[k])).length >= 2;
+};
+
 /**
  * Did the agent's final result address its task?
+ * On-task: it names an id, a target file or basename, or the handle, or it is a filled schema-shaped result.
+ * Not guaranteed: a schema-shaped result that is about something else still passes.
  * @returns {{ level: 'likely'|'possible'|null, signals: string[] }}
  */
 export const hijackSignals = ({ taskText, finalOutput, finalText, workCalls, cost, medianCost }) => {
@@ -149,7 +161,8 @@ export const hijackSignals = ({ taskText, finalOutput, finalText, workCalls, cos
   const noResult = result.trim() === '';
   const names = tokens.map((t) => (t.includes('/') ? t.split('/').pop() : t));
   const isMentioned = [...tokens, ...names].some((t) => result.includes(t));
-  const offTask = !noResult && tokens.length > 0 && !isMentioned;
+  const isShaped = isSchemaShaped(finalOutput);
+  const offTask = !noResult && tokens.length > 0 && !isMentioned && !isShaped;
   const zeroSteps = workCalls === 0;
   const nearZeroCost = medianCost > 0 && cost < medianCost * NEAR_ZERO_SHARE;
   if (noResult) signals.push('no-final-result');

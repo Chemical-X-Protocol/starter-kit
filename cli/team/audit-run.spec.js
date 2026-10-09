@@ -14,6 +14,8 @@ import { DatabaseSync } from 'node:sqlite';
 import { readRun } from './usage-reader.js';
 import { loadPricing } from './usage-pricing.js';
 import { auditRun } from './audit-run.js';
+import { hijackSignals } from './audit-run-protocol.js';
+import { classifyInvocation } from './audit-run-adoption.js';
 import { renderAuditRun } from './audit-run-render.js';
 import { runTeamCli } from './team-commands.js';
 
@@ -218,6 +220,29 @@ test('cli: a violated run exits 1 unless --no-fail; --strict is accepted; --json
   const json = JSON.parse(run(dirty, '--json').stdout);
   assert.equal(json.ok, false);
   assert.equal(run('wf_nope_missing', '--strict').status, 1);
+});
+
+const hijackOf = (finalOutput) => hijackSignals({
+  taskText: 'You are @rev-one.\n  Target files: cli/test-audit.js\n  TASK #2597', finalOutput, finalText: '', workCalls: 4, cost: 1, medianCost: 1
+});
+
+test('hijack: a result naming only the target basename, or a filled schema result, is on-task', () => {
+  assert.equal(hijackOf({ note: 'reviewed test-audit.js, nothing wrong' }).level, null);
+  assert.equal(hijackOf({ commits: ['abc'], evidence: 'ok' }).level, null, 'schema-shaped, names nothing');
+  assert.equal(hijackOf({ note: 'the weather is fine' }).level, 'possible', 'unrelated and not schema-shaped');
+  assert.equal(hijackOf({ commits: [], evidence: '' }).level, 'possible', 'empty schema keys do not count');
+});
+
+test('adoption: stdin pipe filters with flag values are plumbing, file reads are not', () => {
+  const inv = (argv, isPiped) => ({ kind: 'shell', argv, isPiped, isScratch: false });
+  const bucket = (argv, isPiped) => classifyInvocation(inv(argv, isPiped)).bucket;
+  assert.equal(bucket(['head', '-n', '5'], true), 'neutral');
+  assert.equal(bucket(['tail', '-n', '20'], true), 'neutral');
+  assert.equal(bucket(['sed', '-n', '1,5p'], true), 'neutral');
+  assert.equal(bucket(['grep', '-A', '3', 'foo'], true), 'neutral');
+  assert.equal(bucket(['grep', '-n', 'foo', 'file.js'], true), 'covered');
+  assert.equal(bucket(['head', '-n', '5', 'file.js'], true), 'covered');
+  assert.equal(bucket(['head', '-n', '5'], false), 'covered', 'not piped: still a native read');
 });
 
 test('api: runTeamCli returns the report and an error for a missing run', (t) => {

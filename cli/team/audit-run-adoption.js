@@ -38,7 +38,34 @@ const gapKey = (rest) => {
   return head.split('/').pop();
 };
 
-const hasFileArg = (rest) => rest.slice(1).some((w) => !w.startsWith('-'));
+// Flags whose next word is a value (head -n 5, grep -A 3, sed -e script), not a file operand.
+const GREP_VALUE_FLAGS = ['-A', '-B', '-C', '-m', '-e', '-f'];
+const VALUE_FLAGS = { head: ['-n', '-c'], tail: ['-n', '-c'], sed: ['-e', '-f'] };
+
+// Operands left once flags and flag values are skipped. Only an exact short flag takes the next word.
+const operandsOf = (words, head) => {
+  const valued = new Set(VALUE_FLAGS[head] ?? (SEARCH.has(head) ? GREP_VALUE_FLAGS : []));
+  const out = [];
+  let skip = false;
+  for (const w of words) {
+    const isFlag = w.startsWith('-') && w.length > 1;
+    const isOperand = !skip && !isFlag;
+    const takesValue = !skip && valued.has(w);
+    out.push(...(isOperand ? [w] : []));
+    skip = takesValue;
+  }
+  return out;
+};
+
+// sed -n 5p / grep PATTERN: the first operand is the script or pattern, the rest are files.
+const hasFileArg = (rest, head) => {
+  const words = rest.slice(1);
+  const operands = operandsOf(words, head);
+  const hasScriptFlag = words.includes('-e') || words.includes('-f');
+  const isScripted = head === 'sed' || SEARCH.has(head);
+  const files = isScripted && !hasScriptFlag ? operands.slice(1) : operands;
+  return files.length > 0;
+};
 
 const classifyShell = (inv) => {
   const rest = headOf(inv.argv);
@@ -56,7 +83,7 @@ const classifyShell = (inv) => {
   const isSearch = SEARCH.has(head);
   const isFileRead = FILE_READERS.has(head);
   const isReader = isSedRead || isSearch || isFileRead;
-  const isStreamed = isPiped && isReader && !hasFileArg(rest.slice(isSearch ? 1 : 0));
+  const isStreamed = isPiped && isReader && !hasFileArg(rest, head);
   if (isStreamed) return { bucket: 'neutral', key: head };
   if (isGit) return { bucket: 'covered', key: `git ${rest[1]}` };
   if (isReader) return { bucket: 'covered', key: isSedRead ? 'sed -n' : head };
