@@ -91,6 +91,7 @@ test('scopeRows: one row per scope from the newest full run, joined with its sta
   const a = rows.find((r) => r.scope === 'apps/a');
   assert.strictEqual(a.runId, 'new', 'metrics come from the newest full run, not the later partial one');
   assert.strictEqual(a.healthScore, 60);
+  assert.deepStrictEqual([a.aiSlopScore, a.medium, a.low, a.monoliths], [90, 3, 4, 2], 'severity breakdown and slop come from the same full run');
   assert.strictEqual(a.runs, 3);
   assert.strictEqual(a.gatePassing, false);
   assert.strictEqual(a.gateRegressions, 2);

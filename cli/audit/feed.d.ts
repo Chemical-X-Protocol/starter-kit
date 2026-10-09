@@ -51,11 +51,15 @@ export interface AuditScopeRow {
   readonly scoreModel: number | null;
   readonly healthScore: number | null;
   readonly grade: string | null;
+  readonly aiSlopScore: number | null;
   readonly files: number | null;
   readonly loc: number | null;
   readonly violations: number | null;
   readonly critical: number | null;
   readonly high: number | null;
+  readonly medium: number | null;
+  readonly low: number | null;
+  readonly monoliths: number | null;
   readonly gatePassing: boolean | null;
   readonly gateBasis: string | null;
   readonly gateRegressions: number | null;
