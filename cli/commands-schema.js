@@ -441,5 +441,21 @@ export const COMMANDS_SCHEMA = [
       'chemx install-hooks --host=claude --dry-run',
       'chemx install-hooks --host=claude --scope=project'
     ]
+  },
+  {
+    name: 'doctor',
+    aliases: [],
+    usage: 'chemx doctor [--fix] [--json] [--root=<dir>]',
+    summary: 'Diagnose how this machine runs chemx: PATH bins, MCP launch and running servers, index, hooks, shims, node.',
+    description: 'Reports each check as ok, FAIL or ?? (inconclusive). Running MCP servers are read from /proc with their version, root and whether the kit code changed after they started. --fix repairs only hooks and the .mcp.json launch (idempotent, backed up); it never edits shims and never kills processes.',
+    flags: [
+      { flag: '--fix', desc: 'Repair hooks and the MCP launch via install-hooks' },
+      { flag: '--json', desc: 'Machine-readable report' },
+      { flag: '--root=<dir>', desc: 'Project root (default: git toplevel)' }
+    ],
+    examples: [
+      'chemx doctor',
+      'chemx doctor --fix'
+    ]
   }
 ];

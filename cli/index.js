@@ -108,7 +108,7 @@ export const ALLOWED_COMMANDS = new Set([
   'ui', 'preview', 'dashboard',
   'create', 'scaffold',
   'init',
-  'hook', 'hooks', 'install-hooks', 'setup-ci',
+  'hook', 'hooks', 'install-hooks', 'setup-ci', 'doctor',
   'add:prop', 'add:state', 'add:action', 'fix',
   'tesseract', 'cube', 'matrix',
   'help', '--help', '-h',

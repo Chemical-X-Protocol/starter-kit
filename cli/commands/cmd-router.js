@@ -175,6 +175,11 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
       await runInstallWizard(rawArgs[1] || process.cwd());
       break;
     }
+    case 'doctor': {
+      const { runDoctorCli } = await import('../doctor/doctor-cli.js');
+      process.exitCode = await runDoctorCli(rawArgs.slice(1));
+      break;
+    }
     case 'pillars':
     case 'rules':
     case 'config:pillars': {
