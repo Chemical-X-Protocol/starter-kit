@@ -179,6 +179,62 @@ test('every index-backed answer carries the freshness stamp (CLI text, MCP text,
   }
 });
 
+test('a read connection card for a git-ignored file says it is not indexed, never zero counts', () => {
+  const root = makeProject({ ...BASE, '.gitignore': 'ignored.ts\n', 'ignored.ts': 'export const useIgnored = () => 1;\n' }, { git: true });
+  try {
+    ensureFresh(root);
+    const cards = buildReadCards(root, path.join(root, 'ignored.ts'), { connections: true });
+    assert.match(cards.connection, /Connections unavailable: ignored\.ts not indexed: ignored by git/);
+    assert.doesNotMatch(cards.connection, /imports 0/);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('a read-only db whose rows are still in the WAL is inconclusive (exit 3), not a crash', () => {
+  const root = makeProject(BASE);
+  try {
+    assert.equal(runQ(root, ['useA']).status, 0);
+    const dbFile = path.join(root, '.chemx', 'index.db');
+    fs.chmodSync(dbFile, 0o444);
+    fs.chmodSync(path.dirname(dbFile), 0o555);
+    const res = runQ(root, ['useA']);
+    assert.doesNotMatch(res.stderr + res.stdout, /no such table/);
+    assert.ok(res.status === 0 || res.status === 3, `exit ${res.status}: ${res.stderr}`);
+  } finally {
+    fs.chmodSync(path.join(root, '.chemx'), 0o755);
+    cleanup(root);
+  }
+});
+
+test('a write lock already held when the db opens gives exit 3 with the busy reason, every time', () => {
+  const root = makeProject(BASE);
+  const dbFile = path.join(root, '.chemx', 'index.db');
+  assert.equal(runQ(root, ['useA']).status, 0);
+  const code = `const { DatabaseSync } = require('node:sqlite'); const db = new DatabaseSync(process.argv[1]); db.exec('BEGIN IMMEDIATE'); console.log('held'); setTimeout(() => process.exit(0), 70000);`;
+  const holder = spawn(process.execPath, ['--no-warnings', '-e', code, dbFile], { stdio: ['ignore', 'pipe', 'ignore'] });
+  return new Promise((resolve, reject) => {
+    holder.stdout.once('data', () => {
+      try {
+        write(root, 'src/a.ts', 'export const useA = () => 2;\n');
+        const first = runQ(root, ['useA']);
+        const second = runQ(root, ['useA', '--json']);
+        for (const res of [first, second]) {
+          assert.equal(res.status, 3, `exit ${res.status}: ${res.stderr}${res.stdout}`);
+          assert.doesNotMatch(res.stderr, /no such table/);
+        }
+        assert.match(first.stdout + first.stderr, /busy/i);
+        resolve();
+      } catch (err) {
+        reject(err);
+      } finally {
+        holder.kill();
+        cleanup(root);
+      }
+    });
+  });
+});
+
 const runQAsync = (root, args) => new Promise((resolve) => {
   const child = spawn(process.execPath, ['--no-warnings', CLI, 'q', ...args], { cwd: root, env: CHILD_ENV });
   let stderr = '';

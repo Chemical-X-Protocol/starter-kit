@@ -36,7 +36,7 @@ export const clearDbCache = () => {
 };
 
 // Per-handle provenance: { isReadOnly, versionReset, isStaleVersion }.
-export const getIndexDbState = (db) => DB_STATE.get(db) || { isReadOnly: false, versionReset: null, isStaleVersion: false };
+export const getIndexDbState = (db) => DB_STATE.get(db) || { isReadOnly: false, versionReset: null, isStaleVersion: false, isBusyAtOpen: false };
 
 export const warmIndexDb = (cwd = process.cwd()) => {
   return openIndexDb(cwd);
@@ -80,13 +80,29 @@ const isPathWritable = (dbPath) => {
   }
 };
 
+// A handle counts only if it can read the schema: immutable=1 ignores the WAL, so rows still in an
+// uncheckpointed WAL look like an empty file. The plain read-only open (which reads the WAL) goes first.
+const openReadableAttempt = (open) => {
+  let db = null;
+  try {
+    db = open();
+    db.prepare('SELECT 1 FROM files LIMIT 1').get();
+    return db;
+  } catch (err) {
+    debugNote.warn('read-only open', err);
+    try { db?.close(); } catch (closeErr) { debugNote.warn('close after failed read-only open', closeErr); }
+    return null;
+  }
+};
+
 const openReadOnlyDb = (dbPath) => {
   const isExistingDb = fs.existsSync(dbPath);
   const attempts = isExistingDb
-    ? [() => new DatabaseSync(`file:${dbPath}?immutable=1`, { readOnly: true }), () => new DatabaseSync(dbPath, { readOnly: true })]
+    ? [() => new DatabaseSync(dbPath, { readOnly: true }), () => new DatabaseSync(`file:${dbPath}?immutable=1`, { readOnly: true })]
     : [];
   for (const attempt of attempts) {
-    try { return attempt(); } catch (err) { debugNote.warn('read-only open', err); }
+    const db = openReadableAttempt(attempt);
+    if (db) return db;
   }
   try {
     const db = new DatabaseSync(':memory:');
@@ -100,7 +116,7 @@ const openReadOnlyDb = (dbPath) => {
 
 // Schema init takes a write lock; a concurrent writer can outlast busy_timeout under load.
 // Retry busy errors instead of silently degrading to a read-only (stale) handle.
-const openWritableDb = (dbPath, attempts = 4) => {
+const openWritableDb = (dbPath, attempts = 4, outcome = {}) => {
   for (let attempt = 1; attempt <= attempts; attempt++) {
     let db = null;
     try {
@@ -109,7 +125,9 @@ const openWritableDb = (dbPath, attempts = 4) => {
       return initWritableDb(db);
     } catch (err) {
       try { db?.close(); } catch (closeErr) { debugNote.warn('close after failed open', closeErr); }
-      const canRetry = isSqliteBusyError(err) && attempt < attempts;
+      const isBusy = isSqliteBusyError(err);
+      const canRetry = isBusy && attempt < attempts;
+      outcome.isBusy = isBusy;
       debugNote.warn(`writable open attempt ${attempt}`, err);
       if (!canRetry) return null;
     }
@@ -128,8 +146,9 @@ export const openIndexDb = (cwd = process.cwd(), options = {}) => {
   if (hasCachedDb) return DB_CACHE.get(dbPath);
 
   let db = null;
+  const outcome = { isBusy: false };
   const canWrite = isPathWritable(dbPath);
-  if (canWrite) db = openWritableDb(dbPath);
+  if (canWrite) db = openWritableDb(dbPath, 4, outcome);
   // A db copied in from another project is refused (closed, never cached) instead of serving its rows.
   if (db) guardProjectStamp(db, dbPath);
 
@@ -139,8 +158,10 @@ export const openIndexDb = (cwd = process.cwd(), options = {}) => {
     if (!db) return null;
     registerVectorFunctions(db);
     const isStaleVersion = !isCurrentIndexVersion(readIndexMeta(db));
-    DB_STATE.set(db, { isReadOnly: true, versionReset: null, isStaleVersion });
+    DB_STATE.set(db, { isReadOnly: true, versionReset: null, isStaleVersion, isBusyAtOpen: outcome.isBusy });
     if (isExistingDb) guardProjectStamp(db, dbPath, { readOnly: true });
+    // A handle opened only because another process held the write lock is never cached: the next call retries.
+    if (outcome.isBusy) return db;
   }
 
   DB_CACHE.set(dbPath, db);

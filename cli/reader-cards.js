@@ -139,6 +139,10 @@ export const buildReadCards = (cwd, targetPath, flags = {}) => {
   if (isEmpty) return unavailableCards(flags, 'the index holds no source files for this project', freshness);
   // Rows are keyed by root-relative posix paths, never by the absolute path the reader holds.
   const relPath = toRootRelative(targetPath, session.root);
+  // A file the index refused to admit has no rows, so zero counts would be a false answer.
+  const refusal = (session.freshness?.notIndexed || []).find((n) => n.path === relPath);
+  const isRefused = Boolean(refusal);
+  if (isRefused) return unavailableCards(flags, `${relPath} not indexed: ${refusal.reason}`, freshness);
   return {
     freshness,
     connection: flags.connections ? buildConnectionCard(db, flags.symbol, relPath) : '',

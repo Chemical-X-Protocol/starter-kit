@@ -10,7 +10,7 @@
 // index.reason says why: the answer then comes from the rows as they were.
 import path from 'node:path';
 import { STATUS } from './result-status.js';
-import { openIndexDb } from './search-schema.js';
+import { openIndexDb, getIndexDbState } from './search-schema.js';
 import { syncSearchIndex } from './search-sync.js';
 import { syncPathRows } from './search-sync-paths.js';
 import { resolveIndexRoot, resolveDefaultScopeDir } from './search-root.js';
@@ -45,6 +45,13 @@ const syncScope = (cwd, root, options) => {
   });
 };
 
+// The write lock was held past busy_timeout while the db opened: nothing was synced, so say so.
+const busyAtOpenIndex = (startedAt) => ({
+  status: STATUS.INCONCLUSIVE,
+  reason: 'index busy at open: another process held the write lock past the busy timeout; the rows are as they were',
+  freshness: { checked: 0, reindexed: 0, removed: 0, hashed: 0, notIndexed: [], ms: Math.round(performance.now() - startedAt) }
+});
+
 /**
  * @param {string} cwd Where chemx runs (the index root is the nearest .chemx above it).
  * @param {object} [options] { paths: files at hand, synced first; scope: dir(s) relative to cwd, or
@@ -58,6 +65,8 @@ export const ensureFresh = (cwd = process.cwd(), options = {}) => {
   const db = openIndexDb(cwd);
   const hasDb = Boolean(db);
   if (!hasDb) return { db: null, root, index: null, freshness: null };
+  const isBusyAtOpen = getIndexDbState(db).isBusyAtOpen;
+  if (isBusyAtOpen) return { db, root, index: busyAtOpenIndex(startedAt), freshness: null };
   const paths = Array.isArray(options.paths) ? options.paths.filter(Boolean) : [];
   const tally = paths.length > 0 ? syncPathRows(db, paths, cwd) : EMPTY_TALLY;
   const wantsScope = options.scope !== false;
