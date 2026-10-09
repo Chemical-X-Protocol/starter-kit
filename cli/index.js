@@ -4,7 +4,7 @@ import './silence-warnings.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { sanitizeOutputStreams } from './terminal.js';
+import { sanitizeOutputStreams, exitQuietlyOnClosedPipe } from './terminal.js';
 import {
   handleError,
   installGlobalErrorCatcher,
@@ -15,6 +15,7 @@ import { printHelp } from './help.js';
 import { ROUTABLE_COMMAND_TOKENS } from './commands-schema.js';
 
 sanitizeOutputStreams();
+exitQuietlyOnClosedPipe();
 installGlobalErrorCatcher();
 
 // ---------------------------------------------------------------------------

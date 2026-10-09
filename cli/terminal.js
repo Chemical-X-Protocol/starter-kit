@@ -140,3 +140,16 @@ export const confirmAction = async (
   }
   return promptConfirm(promptText, defaultVal);
 };
+
+// `chemx <cmd> | head` closes stdout early. A closed pipe is the reader's choice, not a
+// crash, so EPIPE ends the process quietly instead of reaching the error catcher.
+// Any other stream error is rethrown and still reported.
+export const exitQuietlyOnClosedPipe = () => {
+  const onStreamError = (streamError) => {
+    const isClosedPipe = streamError?.code === 'EPIPE';
+    if (!isClosedPipe) throw streamError;
+    process.exit(process.exitCode ?? 0);
+  };
+  process.stdout.on('error', onStreamError);
+  process.stderr.on('error', onStreamError);
+};
