@@ -57,7 +57,8 @@ export const enforceSingleSlot = (db, taskId, targetMoscow = 'must', targetPrior
 
   while (queue.length > 0) {
     const current = queue.shift();
-    if (visited.has(current.id)) continue;
+    const isVisited = visited.has(current.id);
+    if (isVisited) continue;
     visited.add(current.id);
 
     const incumbent = db.prepare(`
