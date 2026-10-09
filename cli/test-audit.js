@@ -1,10 +1,10 @@
 // `chemx test`: run the project's tests silently and report a tri-state verdict.
 import path from 'node:path';
-import { executeBuild } from './build/executor.js';
 import { findProjectRoot } from './build/detector.js';
 import { STATUS, toExitCode } from './result-status.js';
 import { parseCliArgs, describeArgErrors, parseTimeoutSeconds } from './cli-args.js';
 import { planTestCommand } from './test-command.js';
+import { runWithinBudget } from './test-run.js';
 import { parseTestOutput, REASONS } from './test-output.js';
 import { formatTestReport, TEST_HELP } from './test-report.js';
 import { checkNodeModules } from './verify-helpers.js';
@@ -68,7 +68,7 @@ export const runTestAudit = async (rawArgs = [], isCli = false, options = {}) =>
   const allowEmpty = Boolean(parsed.flags.allowEmpty || options.allowEmpty);
   const timeoutMs = parseTimeoutSeconds(parsed.values.timeout) ?? options.timeoutMs ?? null;
   const isRaw = Boolean(parsed.flags.raw) || options.raw === true;
-  const execution = await executeBuild(plan.command, plan.cwd, { raw: isRaw, timeoutMs });
+  const { execution, command, workers, budget, queuedMs } = await runWithinBudget(plan, { raw: isRaw, timeoutMs, env: options.env, onWait: options.onWait });
   const result = parseTestOutput(execution.stdout, execution.stderr, execution.exitCode, { allowEmpty, scoped: targets.length > 0 || Boolean(filter), timedOut: execution.timedOut, timeoutMs });
 
   const report = {
@@ -77,9 +77,12 @@ export const runTestAudit = async (rawArgs = [], isCli = false, options = {}) =>
     reason: result.reason,
     ...(result.detail ? { detail: result.detail } : {}),
     exitCode: execution.exitCode,
-    command: plan.command,
+    command,
     runner: plan.runner,
     runDir,
+    workers,
+    budget,
+    queuedMs,
     durationMs: execution.durationMs,
     totalTests: result.totalTests,
     passed: result.passed,

@@ -19,6 +19,11 @@ export const TEST_HELP = [
   '  --raw                    Stream the runner output as it runs',
   '  -h, --help               Show this help message',
   '',
+  `${ANSI.BOLD}WORKER BUDGET${ANSI.RESET}`,
+  '  All chemx test runs on this machine share floor(cores/2) workers (CHEMX_TEST_CONCURRENCY',
+  '  overrides). A run takes free slots from os.tmpdir()/chemx-test-slots, passes the count to',
+  '  the runner (--test-concurrency / --maxWorkers) and waits, with one line, when none is free.',
+  '',
   `${ANSI.BOLD}EXIT CODES${ANSI.RESET}`,
   '  0 pass, 1 fail, 3 inconclusive (no tests ran, timeout)',
   ''
