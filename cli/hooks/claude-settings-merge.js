@@ -34,6 +34,22 @@ const withoutOwnedHooks = (groups) => {
   return { kept, firstOwnedIndex };
 };
 
+const ownedGroupsOf = (groups) => groups
+  .map((group) => ({ ...group, hooks: (Array.isArray(group?.hooks) ? group.hooks : []).filter((hook) => isChemxHookCommand(hook?.command)) }))
+  .filter((group) => group.hooks.length > 0);
+
+const describeGroup = (group) => `${group.matcher ?? '(all tools)'} -> ${group.hooks.map((hook) => hook.command).join(' ; ')}`;
+
+// One line per event whose chemx-owned entries differ from the desired entry: added or replaced.
+const describeChange = (event, groups, desiredGroup) => {
+  const before = ownedGroupsOf(groups);
+  const isCurrent = JSON.stringify(before) === JSON.stringify([desiredGroup]);
+  if (isCurrent) return null;
+  const isNew = before.length === 0;
+  if (isNew) return `+ ${event}: ${describeGroup(desiredGroup)}`;
+  return `~ ${event}: ${before.map(describeGroup).join(' | ')}  =>  ${describeGroup(desiredGroup)}`;
+};
+
 const mergeEvent = (groups, desiredGroup) => {
   const { kept, firstOwnedIndex } = withoutOwnedHooks(groups);
   const insertAt = firstOwnedIndex === -1 ? kept.length : firstOwnedIndex;
@@ -51,19 +67,35 @@ const mergeStatusLine = (current, launcher, notes) => {
   return desired;
 };
 
+const mergeAllEvents = (currentHooks, launcher) => {
+  const hooks = { ...currentHooks };
+  const changes = [];
+  for (const [event, desiredGroup] of Object.entries(desiredClaudeHooks(launcher))) {
+    const groups = Array.isArray(hooks[event]) ? hooks[event] : [];
+    const change = describeChange(event, groups, desiredGroup);
+    if (change) changes.push(change);
+    hooks[event] = mergeEvent(groups, desiredGroup);
+  }
+  return { hooks, changes };
+};
+
+const describeStatusLineChange = (before, after) => {
+  const isChanged = JSON.stringify(before) !== JSON.stringify(after);
+  if (!isChanged) return [];
+  const marker = before === undefined ? '+' : '~';
+  return [`${marker} statusLine: ${after.command}`];
+};
+
 export const mergeClaudeSettings = (existing, launcher, { statusline = true } = {}) => {
   const isObject = existing !== null && typeof existing === 'object' && !Array.isArray(existing);
   if (!isObject) return { ok: false, error: 'settings file is not a JSON object' };
   const hasHooksObject = existing.hooks === undefined || (typeof existing.hooks === 'object' && !Array.isArray(existing.hooks));
   if (!hasHooksObject) return { ok: false, error: '"hooks" is not an object' };
   const notes = { refusals: [] };
-  const hooks = { ...(existing.hooks ?? {}) };
-  for (const [event, desiredGroup] of Object.entries(desiredClaudeHooks(launcher))) {
-    const groups = Array.isArray(hooks[event]) ? hooks[event] : [];
-    hooks[event] = mergeEvent(groups, desiredGroup);
-  }
+  const { hooks, changes } = mergeAllEvents(existing.hooks ?? {}, launcher);
   const settings = { ...existing, hooks };
   if (statusline) settings.statusLine = mergeStatusLine(existing.statusLine, launcher, notes);
+  if (statusline) changes.push(...describeStatusLineChange(existing.statusLine, settings.statusLine));
   const isUnchanged = JSON.stringify(settings) === JSON.stringify(existing);
-  return { ok: true, settings, isUnchanged, refusals: notes.refusals };
+  return { ok: true, settings, isUnchanged, refusals: notes.refusals, changes };
 };

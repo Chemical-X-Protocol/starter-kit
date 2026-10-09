@@ -1,5 +1,7 @@
-// `chemx install-hooks --host=claude [--scope=local|project] [--dry-run] [--json] [--root=<dir>]
-//   [--no-mcp] [--no-statusline] [--git-hook] [--ci]`
+// `chemx install-hooks --host=claude [--scope=project|local] [--dry-run] [--json] [--root=<dir>]
+//   [--no-mcp] [--no-statusline] [--git-hook] [--ci] [--native-file-tools=block|warn|allow]`
+// The default scope is `project`: the tracked .claude/settings.json, shared by every session and
+// worktree of the repo. `--scope=local` writes the untracked .claude/settings.local.json instead.
 // Idempotent: a second run reports every file unchanged. Exit codes follow cli/result-status.js:
 // 0 all applied, 3 something was refused (foreign entry kept), 1 an input file could not be parsed.
 
@@ -9,6 +11,7 @@ import { STATUS, combineStatuses, toExitCode } from '../result-status.js';
 import { resolveLauncher, KIT_ROOT } from './launcher.js';
 import { buildInstallPlan } from './install-hooks-plan.js';
 import { applyInstallPlan } from './install-hooks-apply.js';
+import { isPolicyMode } from './install-hooks-config.js';
 
 const SUPPORTED_HOSTS = new Set(['claude']);
 const SCOPES = new Set(['local', 'project']);
@@ -24,12 +27,15 @@ const resolveProjectRoot = (explicit, cwd) => {
 
 export const parseInstallArgs = (args, cwd = process.cwd()) => {
   const host = flagValue(args, 'host') ?? (args.includes('--host') ? args[args.indexOf('--host') + 1] : null);
-  const scope = flagValue(args, 'scope') ?? 'local';
+  const scope = flagValue(args, 'scope') ?? 'project';
+  const nativeFileTools = flagValue(args, 'native-file-tools');
   const errors = [];
   const isUnsupportedHost = !SUPPORTED_HOSTS.has(host);
   if (isUnsupportedHost) errors.push(`--host must be one of: ${[...SUPPORTED_HOSTS].join(', ')}`);
   const isUnknownScope = !SCOPES.has(scope);
   if (isUnknownScope) errors.push('--scope must be local or project');
+  const isUnknownPolicy = nativeFileTools !== null && !isPolicyMode(nativeFileTools);
+  if (isUnknownPolicy) errors.push('--native-file-tools must be block, warn or allow');
   return {
     errors,
     host,
@@ -38,7 +44,7 @@ export const parseInstallArgs = (args, cwd = process.cwd()) => {
     kitRoot: flagValue(args, 'kit') ? path.resolve(cwd, flagValue(args, 'kit')) : KIT_ROOT,
     dryRun: args.includes('--dry-run'),
     isJson: args.includes('--json'),
-    options: { mcp: !args.includes('--no-mcp'), statusline: !args.includes('--no-statusline'), gitHook: args.includes('--git-hook'), ci: args.includes('--ci') },
+    options: { mcp: !args.includes('--no-mcp'), statusline: !args.includes('--no-statusline'), gitHook: args.includes('--git-hook'), ci: args.includes('--ci'), nativeFileTools },
   };
 };
 
@@ -82,7 +88,7 @@ export const runInstallHooksCli = async (args, { stdout = process.stdout, stderr
   const parsed = parseInstallArgs(args, cwd);
   const hasErrors = parsed.errors.length > 0;
   if (hasErrors) {
-    stderr.write(`${parsed.errors.join('\n')}\nUsage: chemx install-hooks --host=claude [--scope=local|project] [--dry-run] [--json]\n`);
+    stderr.write(`${parsed.errors.join('\n')}\nUsage: chemx install-hooks --host=claude [--scope=project|local] [--dry-run] [--json] [--native-file-tools=block|warn|allow]\n`);
     return toExitCode(STATUS.FAIL);
   }
   const report = runInstallHooks(parsed);

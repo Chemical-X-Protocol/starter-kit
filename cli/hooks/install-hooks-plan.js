@@ -7,6 +7,7 @@ import { mergeClaudeSettings } from './claude-settings-merge.js';
 import { mergeMcpJson } from './mcp-json-merge.js';
 import { planGitHookPin, planWorkflowPin } from './install-hooks-pins.js';
 import { resolveFileStatus } from './install-hooks-status.js';
+import { planNativeToolsConfig } from './install-hooks-config.js';
 
 const SETTINGS_FILES = { local: path.join('.claude', 'settings.local.json'), project: path.join('.claude', 'settings.json') };
 
@@ -31,7 +32,7 @@ const planJsonFile = (file, label, merge) => {
   const merged = merge(parsed.value);
   const isMergeFailed = !merged.ok;
   if (isMergeFailed) return { file, label, status: 'error', before, after: null, notes: [`${merged.error}; left untouched`] };
-  const notes = [...merged.refusals];
+  const notes = [...(merged.changes ?? []), ...merged.refusals];
   const hasPreviousLaunch = Boolean(merged.previousLaunch);
   if (hasPreviousLaunch) notes.push(`previous launch: ${merged.previousLaunch}`);
   const isRefusedOnly = merged.isUnchanged && merged.refusals.length > 0;
@@ -46,6 +47,7 @@ export const buildInstallPlan = ({ projectRoot, scope, launcher, options }) => {
   actions.push(planJsonFile(settingsFile, `Claude ${scope} settings`, (value) => mergeClaudeSettings(value, launcher, { statusline: options.statusline })));
   const isMcpRequested = Boolean(options.mcp);
   if (isMcpRequested) actions.push(planJsonFile(path.join(projectRoot, '.mcp.json'), 'MCP launch', (value) => mergeMcpJson(value, launcher)));
+  actions.push(planNativeToolsConfig({ projectRoot, mode: options.nativeFileTools }));
   actions.push(planGitHookPin({ projectRoot, launcher, isRequested: options.gitHook }));
   actions.push(planWorkflowPin({ projectRoot, launcher, isRequested: options.ci }));
   return actions.filter(Boolean);

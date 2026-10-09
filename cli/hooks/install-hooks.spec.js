@@ -21,7 +21,9 @@ const makeProject = ({ kitInside = false } = {}) => {
   fs.writeFileSync(path.join(kit, 'cli', 'index.js'), '');
   return { root, kit };
 };
-const install = ({ root, kit }, extra = []) => runInstallHooks(parseInstallArgs(['--host=claude', `--root=${root}`, `--kit=${kit}`, ...extra], root));
+// Most tests exercise the untracked local scope; the default (project) scope has its own tests below.
+const withScope = (extra) => (extra.some((arg) => arg.startsWith('--scope=')) ? extra : ['--scope=local', ...extra]);
+const install = ({ root, kit }, extra = []) => runInstallHooks(parseInstallArgs(['--host=claude', `--root=${root}`, `--kit=${kit}`, ...withScope(extra)], root));
 const readJson = (file) => JSON.parse(fs.readFileSync(file, 'utf-8'));
 const settingsOf = (root, name = 'settings.local.json') => readJson(path.join(root, '.claude', name));
 const commandsOf = (groups) => groups.flatMap((group) => group.hooks.map((hook) => hook.command));

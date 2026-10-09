@@ -7,12 +7,13 @@ export const HOST_COMMANDS = [
     aliases: ['hooks', 'install-hooks', 'setup-ci'],
     group: 'setup',
     brief: 'Run and install Claude/git hooks, CI',
-    usage: 'chemx hook <claude-pre-tool|claude-post-edit|session-start|statusline> | chemx install-hooks --host=claude [--scope=local|project] [--dry-run] [--json]',
+    usage: 'chemx hook <claude-pre-tool|claude-post-edit|session-start|statusline> | chemx install-hooks --host=claude [--scope=project|local] [--dry-run] [--json]',
     summary: 'Claude Code hook handlers and their installer; without --host, install-hooks runs the git hook and CI wizard.',
-    description: 'Hook handlers read the hook JSON on stdin and fail open. claude-pre-tool routes raw runners, git diff/log and repo source reads through chemx with a real shell tokenizer; `# chemx-bypass: <reason>` allows a call and logs friction. install-hooks --host=claude merges hooks, statusLine and the .mcp.json launch idempotently, backs up to .chemx/backups first, replaces only chemx-owned entries and re-pins an existing chemx pre-commit hook and CI workflow to the same chemx.',
+    description: 'Hook handlers read the hook JSON on stdin and fail open. claude-pre-tool is the one guard: with a real shell tokenizer it denies raw runners, git diff/log/show, find, repo-source reads and searches, and shell writes into repo files (redirects, tee, sed -i, perl -i), naming the exact chemx call; it nudges (advice, no block) on git status/add/commit, hand-rolled waits and ls of repo dirs when this chemx has the replacement command; native Read/Edit/Write/Glob/Grep follow nativeFileTools. `# chemx-bypass: <reason>` allows a call, logs friction and, when a rule was overridden, a guard-bypass feed event. install-hooks --host=claude merges hooks, statusLine and the .mcp.json launch into the tracked .claude/settings.json (or the local file with --scope=local) idempotently, lists each added or replaced entry, backs up to .chemx/backups first, replaces only chemx-owned entries and re-pins an existing chemx pre-commit hook and CI workflow to the same chemx. Claude Code may ask you to review changed hooks with /hooks before they apply. Docs: docs/hooks.md.',
     flags: [
       { flag: '--host=claude', desc: 'install-hooks: target host' },
-      { flag: '--scope=local|project', desc: 'settings.local.json (default) or the shared settings.json' },
+      { flag: '--scope=project|local', desc: 'tracked .claude/settings.json (default) or the untracked settings.local.json' },
+      { flag: '--native-file-tools=block|warn|allow', desc: 'Also record the native file tool policy in .chemxrc (strict JSON only)' },
       { flag: '--dry-run', desc: 'Print the plan; write nothing' },
       { flag: '--no-mcp', desc: 'Leave .mcp.json alone' },
       { flag: '--no-statusline', desc: 'Leave statusLine alone' },
@@ -22,7 +23,7 @@ export const HOST_COMMANDS = [
     ],
     examples: [
       'chemx install-hooks --host=claude --dry-run',
-      'chemx install-hooks --host=claude --scope=project',
+      'chemx install-hooks --host=claude --native-file-tools=block',
       'echo \'{"tool_name":"Bash","tool_input":{"command":"git log"}}\' | chemx hook claude-pre-tool'
     ]
   },
