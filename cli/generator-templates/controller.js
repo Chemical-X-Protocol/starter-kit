@@ -5,18 +5,22 @@ export const buildController = (name, pascalName, options = {}) => {
   const fw = options.framework ? options.framework.toLowerCase() : 'react';
   const archetype = resolveArchetype(name, options.description || options.desc, options.template || options.archetype);
 
-  if (archetype && typeof archetype.buildController === 'function') {
+  const hasBuildController = Boolean(archetype && typeof archetype.buildController === 'function');
+  if (hasBuildController) {
     const rawReactController = archetype.buildController(name, pascalName);
-    if (fw === 'vue') {
+    const shouldConvertToVue = fw === 'vue';
+    if (shouldConvertToVue) {
       return convertReactControllerToVue(rawReactController);
     }
-    if (fw === 'svelte') {
+    const shouldConvertToSvelte = fw === 'svelte';
+    if (shouldConvertToSvelte) {
       return convertReactControllerToSvelte(rawReactController, name, pascalName);
     }
     return rawReactController;
   }
 
-  if (fw === 'vue') {
+  const isVueFramework = fw === 'vue';
+  if (isVueFramework) {
     return `import { ref, computed } from 'vue';
 import type { ${pascalName}State, ${pascalName}Descriptor } from './types';
 
@@ -55,7 +59,8 @@ export const use${pascalName}Controller = (options: ControllerOptions = {}) => {
 `;
   }
 
-  if (fw === 'svelte') {
+  const isSvelteFramework = fw === 'svelte';
+  if (isSvelteFramework) {
     return `import type { ${pascalName}State, ${pascalName}Descriptor } from './types';
 
 interface ControllerOptions {
