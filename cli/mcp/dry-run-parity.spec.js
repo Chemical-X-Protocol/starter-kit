@@ -40,6 +40,15 @@ test('parseCommand: a command-string preview flag wins over params for every mut
   assert.equal(parseCommand('write a.ts --overwrite', { content: 'x' }).params.overwrite, true);
 });
 
+test('MCP command-string `write <file> --append` appends instead of replacing', async () => {
+  assert.equal(parseCommand('write a.ts --append', { content: 'x' }).params.append, true);
+  assert.equal(parseCommand('write a.ts', { content: 'x' }).params.append, undefined);
+  await withProject({ 'src/log.txt': 'one\n' }, async (dir) => {
+    await handleChemx({ command: 'write src/log.txt --append', projectRoot: dir, params: { content: 'two\n' } });
+    assert.equal(fs.readFileSync(path.join(dir, 'src/log.txt'), 'utf-8'), 'one\ntwo\n');
+  });
+});
+
 test('MCP autofix honors the dry-run spellings patch and write accept', async () => {
   const source = 'export const a = 1 // hope this helps\n';
   await withProject({ 'src/af.ts': source }, async (dir) => {

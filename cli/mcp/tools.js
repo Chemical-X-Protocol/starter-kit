@@ -151,7 +151,8 @@ const parseCommandParts = (command, params) => {
   if (isWrite) {
     const positional = parts.slice(1).find((p) => !p.startsWith('-'));
     const hasOverwrite = /(^|\s)--overwrite(\s|$)/.test(command);
-    return { action: 'write', params: { path: positional, overwrite: hasOverwrite || undefined, ...params } };
+    const hasAppend = /(^|\s)--append(\s|$)/.test(command);
+    return { action: 'write', params: { path: positional, ...params, overwrite: hasOverwrite || params?.overwrite || undefined, append: hasAppend || params?.append || undefined } };
   }
   const isQuery = subCmd === 'q' || subCmd === 'search';
   if (isQuery) return { action: 'q', params: { query: parts.slice(1).join(' '), ...params } };
