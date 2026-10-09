@@ -26,11 +26,14 @@ const toJsonText = (value) => `${JSON.stringify(value, null, 2)}\n`;
 const planJsonFile = (file, label, merge) => {
   const before = readText(file);
   const parsed = before === null ? { ok: true, value: {} } : parseJson(before);
-  if (!parsed.ok) return { file, label, status: 'error', before, after: null, notes: [`not valid JSON (${parsed.error}); left untouched`] };
+  const isInvalidJson = !parsed.ok;
+  if (isInvalidJson) return { file, label, status: 'error', before, after: null, notes: [`not valid JSON (${parsed.error}); left untouched`] };
   const merged = merge(parsed.value);
-  if (!merged.ok) return { file, label, status: 'error', before, after: null, notes: [`${merged.error}; left untouched`] };
+  const isMergeFailed = !merged.ok;
+  if (isMergeFailed) return { file, label, status: 'error', before, after: null, notes: [`${merged.error}; left untouched`] };
   const notes = [...merged.refusals];
-  if (merged.previousLaunch) notes.push(`previous launch: ${merged.previousLaunch}`);
+  const hasPreviousLaunch = Boolean(merged.previousLaunch);
+  if (hasPreviousLaunch) notes.push(`previous launch: ${merged.previousLaunch}`);
   const isRefusedOnly = merged.isUnchanged && merged.refusals.length > 0;
   const status = resolveFileStatus({ isMissing: before === null, isUnchanged: merged.isUnchanged, isRefusedOnly });
   const after = merged.isUnchanged && before !== null ? before : toJsonText(merged.settings ?? merged.config);
@@ -41,7 +44,8 @@ export const buildInstallPlan = ({ projectRoot, scope, launcher, options }) => {
   const actions = [];
   const settingsFile = path.join(projectRoot, SETTINGS_FILES[scope]);
   actions.push(planJsonFile(settingsFile, `Claude ${scope} settings`, (value) => mergeClaudeSettings(value, launcher, { statusline: options.statusline })));
-  if (options.mcp) actions.push(planJsonFile(path.join(projectRoot, '.mcp.json'), 'MCP launch', (value) => mergeMcpJson(value, launcher)));
+  const isMcpRequested = Boolean(options.mcp);
+  if (isMcpRequested) actions.push(planJsonFile(path.join(projectRoot, '.mcp.json'), 'MCP launch', (value) => mergeMcpJson(value, launcher)));
   actions.push(planGitHookPin({ projectRoot, launcher, isRequested: options.gitHook }));
   actions.push(planWorkflowPin({ projectRoot, launcher, isRequested: options.ci }));
   return actions.filter(Boolean);
