@@ -220,6 +220,10 @@ chemx build
 chemx build --json
 ```
 
+#### One gate rule
+
+The pre-commit hook (`chemx audit --staged-delta`), the ratchet step of `chemx verify` (`chemx-ratchet.json`), `chemx team task done` and the `introducedViolations` list in `patch`/`write` results share one rule: a change fails when any rule's violation count rises in a file, at any severity. A commit the hook accepts therefore cannot turn the ratchet step red. `CHEMX_SKIP_PRECOMMIT=1` skips only the hook; `chemx verify` still applies the rule. On failure the hook prints each new hazard as `RULE@file:line`. Guarantees, non-guarantees and the specs that prove parity are in [docs/audit-gates.md](docs/audit-gates.md).
+
 #### Interactive audit navigator
 
 Run `chemx audit` in a terminal and it opens a menu after the scorecard. It first asks whether to publish the report to GitHub Discussions; the default is **Skip to Menu**, so pressing Enter never posts anything. The menu is grouped, with a divider between groups and rows numbered from 1:
