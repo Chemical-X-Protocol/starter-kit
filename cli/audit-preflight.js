@@ -48,7 +48,8 @@ export const runAuditPreflight = async (rawArgs, options = {}) => {
   const hasExplicitFull = rawArgs.includes('--full') || rawArgs.includes('--deep');
   const isFullySpecified = (hasExplicitDir || hasExplicitGit) && (hasExplicitFast || hasExplicitFull);
 
-  if (!isInteractive || isFullySpecified) {
+  const shouldSkipPrompts = !isInteractive || isFullySpecified;
+  if (shouldSkipPrompts) {
     const fast = hasExplicitFast;
     const fileList = hasExplicitGit ? resolveGitAuditScope(cwd).files : null;
     return { targetDir: customDir || defaultDir, fast, fileList };
@@ -72,7 +73,8 @@ export const runAuditPreflight = async (rawArgs, options = {}) => {
   }
 
   const depthResult = await promptAuditDepth(rawArgs);
-  if (depthResult === null) {
+  const isDepthCancelled = depthResult === null;
+  if (isDepthCancelled) {
     process.exit(0);
   }
   const fast = depthResult;
