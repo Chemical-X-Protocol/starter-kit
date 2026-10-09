@@ -439,11 +439,11 @@ chemx itself makes no network requests outside the explicit flows in the table b
 | License download | `chemx init`, `chemx create` / `npm create chemx`, only when a license key is supplied | `https://chemicalx.xophz.com/api/starter-kit/download` | your license key and device id |
 | License fallback check | only if the download host is unreachable | `https://mycompassconsulting.com/wp-json/compass/v1/gatekeeper/licenses/validate` | your license key and device id |
 | Audit share | `chemx audit --share`, or Share in the audit navigator | GitHub (`api.github.com` with `GH_TOKEN`/`GITHUB_TOKEN`, otherwise the `gh` CLI) | the discussion title and body, which are printed in full before you confirm |
-| Error report | only with `--post-issue`, the MCP `autoPost` flag, or `CHEMX_AUTO_POST_ISSUES=true` | GitHub Issues in `CHEMX_ISSUES_REPO`, your repo's GitHub remote, or `Chemical-X-Protocol/starter-kit` | the sanitized error report, which is also saved to `.chemx/issues/` |
+| Error report | only with `--post-issue`, the MCP `autoPost` flag, or `CHEMX_AUTO_POST_ISSUES=true` | GitHub Issues in `CHEMX_ISSUES_REPO`, your repo's GitHub remote, or `Chemical-X-Protocol/starter-kit` | the sanitized error report (tokens, license keys and your home path are masked), which is printed in full before it is posted and is also saved to `.chemx/issues/` |
 
 Notes:
 - **Share asks first.** It prints the target repo, category, title and body, then asks `[y/N]`, which defaults to no. In a non-interactive session it refuses unless you pass `--yes`.
-- **No implicit error posting.** A CI token on its own never posts an issue.
+- **No implicit error posting.** A CI token on its own never posts an issue. When posting is on, chemx prints the target repo, title and body before sending. Keys passed with `--license` never appear in a report.
 - **Device id.** This is a random UUID (`crypto.randomUUID()`). It identifies an install for license seat counting and carries no hardware or personal data. Older `cli_*` ids are kept as they are.
 - **Keys travel over HTTPS only.** `CHEMICAL_X_API_URL` and `COMPASS_GATEKEEPER_URL` can point the license flow at another server, for staging or self-hosting. An override must use `https://`. Plain `http://` is accepted only for `localhost` and `127.0.0.1`. Any other override is refused, with no fallback. When an override is in use, chemx prints its host.
 
@@ -469,7 +469,7 @@ export DO_NOT_TRACK=1    # the cross-tool convention; chemx honors it the same w
 Either variable disables every network call. The gated flows say so clearly and make no request:
 - **License download:** scaffolding continues with the bundled Community blueprints.
 - **Share:** nothing is posted.
-- **Error report:** the report is saved locally only.
+- **Error report:** the report is saved locally only, and chemx prints the reason and the report's path.
 
 To remove stored data, delete `~/.config/chemx/` and the project's `.chemx/discussion.json`.
 
