@@ -1,4 +1,4 @@
-import { resolveProjectName, resolveCostFigures } from '../navigator-banner-helpers.js';
+import { resolveProjectName, resolveCostFigures } from './project-figures.js';
 
 const countHazards = (violations = []) => {
   const counts = { critical: 0, highMedium: 0, low: 0 };

@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { executeBuild } from './build/executor.js';
 import { loadProjectConfig } from './config/index.js';
-import { runAudit as executeAstAudit } from './audit.js';
+import { runAudit as executeAstAudit } from './audit-engine.js';
 import { runBuildAudit } from './build.js';
 import { findProjectRoot } from './build/detector.js';
 import { resolveAuditScope } from './audit-scope.js';

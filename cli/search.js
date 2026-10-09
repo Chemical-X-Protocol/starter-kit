@@ -34,8 +34,6 @@ import {
   handleHybridCommand,
   handleLiteralSearchCommand
 } from './search-commands.js';
-import { runGenerateWizard } from './generator.js';
-import { runMutatorCli } from './mutators.js';
 import { toColumnar } from './columnar.js';
 import { resolveTargetDir } from './path-scope.js';
 import { ANSI } from './theme.js';
@@ -301,11 +299,13 @@ export const runSearch = async (rawArgs = [], isCli = true) => {
   const isAddTarget = firstArg === 'add' && ['prop', 'state', 'action'].includes(secondArg);
   const isMutatorAction = isFixCommand || isAddPrefix || isAddTarget;
   if (isMutatorAction) {
+    const { runMutatorCli } = await import('./mutators.js');
     return runMutatorCli(rawArgs, isCli);
   }
 
   const isGenerateCommand = ['gen', 'g', 'generate'].includes(firstArg);
   if (isGenerateCommand) {
+    const { runGenerateWizard } = await import('./generator.js');
     return runGenerateWizard(rawArgs.slice(1));
   }
 

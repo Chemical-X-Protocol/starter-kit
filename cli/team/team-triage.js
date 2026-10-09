@@ -10,7 +10,7 @@ import { releaseFileLock } from './team-db-locks.js';
 import { postFeedEvent } from './team-db-feed.js';
 import { registerAgent } from './team-db-agents.js';
 import { ingestTaskTelemetry } from './team-telemetry.js';
-import { runAudit as executeAstAudit, auditFile } from '../audit.js';
+import { runAudit as executeAstAudit, auditFile } from '../audit-engine.js';
 import { syncSearchIndex, syncViolationsIndex, recordAuditSnapshot } from '../search.js';
 
 import { queryUnassignedHazards } from './team-db-task-helpers.js';
