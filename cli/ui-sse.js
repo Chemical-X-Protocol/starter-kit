@@ -27,7 +27,8 @@ export const handleSseConnection = (req, res, db) => {
 };
 
 export const broadcastSseUpdate = (db) => {
-  if (clients.size === 0 || !db) return;
+  const isNotReady = clients.size === 0 || !db;
+  if (isNotReady) return;
   try {
     const state = handleSwarmStatus(db);
     const payload = `data: ${JSON.stringify(state)}\n\n`;
@@ -44,7 +45,8 @@ export const broadcastSseUpdate = (db) => {
 };
 
 export const broadcastSseReload = () => {
-  if (clients.size === 0) return;
+  const hasNoClients = clients.size === 0;
+  if (hasNoClients) return;
   const payload = `event: reload\ndata: ${JSON.stringify({ timestamp: Date.now() })}\n\n`;
   for (const client of clients) {
     try {
