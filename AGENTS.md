@@ -324,39 +324,46 @@ Use same-name shorthand across all languages; eliminate redundant `key: key` dup
 - Halting execution requires an explicit contract: return a `ResultTuple` (`return [null, error]`), emit diagnostic logging (`logger.warn(...)`), update a user-facing error state (`state.error = '...'`), or throw a domain invariant.
 - **Exemptions**: Benign lifecycle no-ops (`abortSignal.aborted`, `!isMounted`), optional prop callbacks (`!props.onClick`), debounce/throttle timers, and pure query predicates.
 
-### H. Domain Validator Functions (Multi-Condition Extraction)
-- When a decision or validation sequence requires 3 or more conditions, cascading early returns at the call site fragment linear control flow and obscure decision logic.
-- Extract multi-condition validation sequences into a pure **Domain Validator Function** (`validate<Action>` or `can<Action>`):
-  - **Stage 1 (Atomic Primitives)**: Raw facts and domain predicates (`hasItems`, `balance >= cost`).
-  - **Stage 2 (Domain Validator)**: Pure function that evaluates the atomic conditions and returns a `ResultTuple` (`[boolean, string | null]`) or `boolean`.
-  - **Stage 3 (Call-Site Guard)**: Single, unnested evaluation reading the validator verdict.
-- **2-Stage Booleans vs Domain Validators**:
+### H. Domain Validator Functions & Lazy Rule Trees
+- When a decision or validation sequence requires 3 or more conditions, cascading early returns at the call site fragment linear control flow and obscure decision logic (`CONTROL_FLOW_CASCADE_GUARDS`).
+- Extract multi-condition validation sequences into a pure **Domain Validator Function** utilizing the canonical `ruleTree` atom (inline the gate in the handler, or extract it into a `validate<Action>` function):
+  - **Stage 1 (Atomic Primitives & Thunks)**: Raw facts or lazy thunks (`() => !user.isVerified`). With `{ failFast: true }`, thunks are skipped once an earlier rule has failed, so later rules can rely on earlier ones. Plain values (`missing: !user`) are evaluated eagerly, and without `failFast` every thunk runs.
+  - **Stage 2 (Domain Rule Tree)**: Categorized tree object (`user: { ... }, cart: { ... }`) evaluated via `ruleTree` or `assertRuleTree`.
+  - **Stage 3 (1-Line Guard Return with Callback)**: Single-line early return accompanied by a diagnostic callback (`if (!gate.ok) return logger.warn(gate.first);`), satisfying Directive 3.G without multiline block ceremonies.
+- **2-Stage Booleans vs Rule Trees**:
   - Use 2-Stage Booleans (3.A) for 1 or 2 atomic conditions at the call site.
-  - Use Domain Validator Functions for 3 or more conditions (`CONTROL_FLOW_CASCADE_GUARDS`).
+  - Use `ruleTree` for 3 or more conditions (`CONTROL_FLOW_CASCADE_GUARDS`).
   ```typescript
   // ❌ Bad: Cascading early returns at call site (>= 3 guards)
-  const handleCheckout = () => {
-    if (!hasItems(cart)) return;
-    if (!isAddressValid(user)) return;
+  const handleCheckout = (cart: Cart, user: User | null, totalCost: number) => {
+    if (!user) return;
+    if (!user.isVerified) return;
+    if (cart.items.length === 0) return;
     if (user.balance < totalCost) return;
-    processPayment();
+    processPayment(cart);
   };
 
-  // ✅ Good: Extracted pure domain validator function
-  const validateCheckout = (cart: Cart, user: User, totalCost: number): [boolean, string | null] => {
-    if (!hasItems(cart)) return [false, 'cart_empty'];
-    if (!isAddressValid(user)) return [false, 'invalid_address'];
-    if (user.balance < totalCost) return [false, 'insufficient_funds'];
-    return [true, null];
-  };
+  // ✅ Good: Literate Lazy Rule Tree with 1-line callback return
+  import { ruleTree } from '@chemx/x-atoms';
 
-  const handleCheckout = () => {
-    const [canProceed, rejectionReason] = validateCheckout(cart, user, totalCost);
-    if (!canProceed) {
-      logger.warn(rejectionReason);
-      return;
-    }
-    processPayment();
+  const handleCheckout = (cart: Cart, user: User | null, totalCost: number) => {
+    const gate = ruleTree({
+      user: {
+        missing: !user,
+        unverified: () => !user?.isVerified
+      },
+      cart: {
+        empty: cart.items.length === 0
+      },
+      payment: {
+        insufficient_funds: () => (user?.balance ?? 0) < totalCost
+      }
+    }, { failFast: true });
+
+    // Single-line early return with diagnostic callback
+    if (!gate.ok) return logger.warn(`Checkout blocked: ${gate.first}`);
+
+    processPayment(cart);
   };
   ```
 

@@ -252,7 +252,7 @@ export const createAstVisitors = ({ relativePath, violations, hookRegistry, conf
             filePath: relativePath,
             line,
             column,
-            hazard: `Cascading guard clauses detected (${guardCount} guards >= 3 limit). Suggestion: Extract into a domain validator function (e.g. const [isAllowed, reason] = validateAction(...)) per Directive 3.H.`,
+            hazard: `Cascading guard clauses detected (${guardCount} guards >= 3 limit). Suggestion: Extract into a domain validator using ruleTree({ scope: { ... } }) with a 1-line callback return per Directive 3.H.`,
             rule: 'CONTROL_FLOW_CASCADE_GUARDS',
             severity: meta.severity,
             pillar: meta.pillar,

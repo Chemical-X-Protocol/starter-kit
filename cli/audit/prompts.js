@@ -245,7 +245,7 @@ export const buildGradeBPrompt = (report, options = {}) => {
   lines.push('1. Typography Hygiene: Replace all em dashes with standard hyphens (-) or colons (:).');
   lines.push('2. Logging Hygiene: Remove unguarded console.log calls or route through central debug proxy.');
   lines.push('3. FontAwesome Compliance: Remove text-* utility classes from icons; use :color prop or inline CSS.');
-  lines.push('4. Cascading Guards: Extract multi-condition validation sequences (>= 3 guards) into a dedicated domain validator function returning [boolean, string | null] or boolean (Directive 3.H).');
+  lines.push('4. Cascading Guards: Extract multi-condition validation sequences (>= 3 guards) into a domain validator using ruleTree({ scope: { ... } }) with a 1-line callback return (Directive 3.H).');
   if (!isSubSection) {
     lines.push('');
     lines.push(buildAgentCommandsSection());

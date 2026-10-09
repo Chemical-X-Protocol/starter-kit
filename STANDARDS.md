@@ -30,7 +30,7 @@ A project or component can receive a perfect **100/100 (Grade A+)** architectura
 
 1. **Gate 1: Architectural Health (`chemx audit`)**
    - Eliminates context bloat and token-burn hazards before code reaches AI context.
-   - Enforces the profile line budget, Two-Stage Booleans (Directive 3.A), and Zero-Raw-DOM (Directive 1.G). Line budget: soft warning at 250 lines when complexity is high (default profile); --profile=atomic-strict caps capsules at 100 lines.
+   - Enforces the profile line budget, Two-Stage Booleans (Directive 3.A), Domain Validator Functions & Lazy Rule Trees (Directive 3.H), and Zero-Raw-DOM (Directive 1.G). Line budget: soft warning at 250 lines when complexity is high (default profile); --profile=atomic-strict caps capsules at 100 lines.
    - Detects LLM conversational residue and AI slop (Directive 7.A).
 
 2. **Gate 2: Production Readiness (`chemx verify`)**

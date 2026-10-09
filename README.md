@@ -82,7 +82,8 @@ starter-kit/
 ├── hooks/
 │   ├── useAsyncData.ts         # 3-state async pipeline with toResult
 │   ├── useSelfCleaningTimer.ts # Unmount-safe timer and RAF hook
-│   └── useTwoStageDecision.ts  # Concept to Decision composition
+│   ├── useTwoStageDecision.ts  # Concept to Decision composition
+│   └── rules.ts                # Lazy Rule Tree & diagnostic validation
 └── cli/
     ├── index.js                # CLI router & capsule generator
     ├── verify.js               # Zero-token-burn verification engine
@@ -341,7 +342,7 @@ Chemical X is **language-agnostic**. The core physics of AI agent code generatio
 | **Python** | `.py` | Structural Regex / AST | Line budgets, AI slop text patterns, fake assertions (`assert True`), `def`/`class` and `import` indexing |
 | **Go** | `.go` | Structural Regex / AST | Line budgets, mock data scanning, tautological assertions, `func`/`type` package indexing |
 | **Rust** | `.rs` | Structural Regex / AST | Line budgets, AI slop text patterns, secret scanning, struct and fn indexing |
-| **TypeScript / JavaScript** | `.ts`, `.tsx`, `.js`, `.jsx` | `@babel/parser` AST (`.vue` via `@vue/compiler-sfc`: every script block plus the template) | AST visitors across 11 audit categories, mapped to the 7 pillars; hook contracts, 2-stage booleans |
+| **TypeScript / JavaScript** | `.ts`, `.tsx`, `.js`, `.jsx` | `@babel/parser` AST (`.vue` via `@vue/compiler-sfc`: every script block plus the template) | AST visitors across 11 audit categories, mapped to the 7 pillars; hook contracts, 2-stage booleans, lazy rule trees |
 | **Vue & Svelte** | `.vue`, `.svelte` | Babel + Template Registry | SFC template clone detection, reactive state verification |
 
 ### Two-Tier Decoupled Audit Pipeline
@@ -353,6 +354,7 @@ Chemical X is **language-agnostic**. The core physics of AI agent code generatio
    * **Polyglot Fake Green Tests:** Catches tautological assertions in C# (`Assert.True(true)`), Python (`assert True`), and Go (`assert.True(t, true)`).
 2. **Tier 2: Deep Language-Specific Analyzers**
    * **Babel Engine:** Deep AST inspection for JS/TS/Vue/Svelte (zero false-positive syntax errors on non-JS code).
+   * **Control Flow & Guard Disciplines (`CONTROL_FLOW_CASCADE_GUARDS`, `CONTROL_FLOW_SILENT_GUARD`):** Flags silent bare returns in side-effecting code, and detects cascading early-return clusters (>= 3 guards), recommending extraction into `ruleTree` with 1-line callback aborts (Directive 3.H).
    * **C# / Clean Architecture Analyzer:** Flags empty `catch (Exception) {}` blocks, simulated delays (`Task.Delay`), and monolithic controllers.
    * **Swallowed catches (`ERROR_SWALLOWED_EXCEPTION`, `AI_SLOP_SHALLOW_CATCH`):** Each swallowing catch site reports once, as `ERROR_SWALLOWED_EXCEPTION` when the error is discarded or `AI_SLOP_SHALLOW_CATCH` when it is only logged to the console. Both are MEDIUM by default. A JS/TS catch escalates to HIGH when a `let` or `var` assigned in the try is read after it with no default or check first (silent `undefined` propagation); C# findings stay MEDIUM. Mark an intentional swallow with a `chemx-allow: best-effort <reason>` comment on the line above the catch, on the catch line, inside its body, or after the try block's closing brace when `catch` starts the next line. Only comments count (never string literals), and the reason is mandatory: an annotation without one is still flagged and its hazard says so.
 
