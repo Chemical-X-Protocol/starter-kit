@@ -58,50 +58,6 @@ export const checkMockDataPatterns = (content, lines, relativePath, violations) 
   });
 };
 
-export const resolveMonolithTier = (lineCount) => {
-  if (lineCount >= 2000) {
-    return {
-      severity: 'CRITICAL',
-      hazard: `Extreme monolith hazard (${lineCount} >= 2,000 lines)`,
-      directive: 'Immediate decomposition required: extreme monolith induces severe agent context degradation'
-    };
-  }
-  if (lineCount >= 1000) {
-    return {
-      severity: 'HIGH',
-      hazard: `Severe monolith hazard (${lineCount} >= 1,000 lines)`,
-      directive: 'Decompose file into domain capsules and molecules to prevent context degradation'
-    };
-  }
-  return {
-    severity: 'MEDIUM',
-    hazard: `Monolith line budget warning (${lineCount} > 500 lines)`,
-    directive: 'Plan decomposition into focused modules before file grows further'
-  };
-};
-
-export const resolveMoleculeTier = (lineCount) => {
-  if (lineCount >= 500) {
-    return {
-      severity: 'CRITICAL',
-      hazard: `Extreme molecule monolith (${lineCount} >= 500 lines)`,
-      directive: 'Decompose molecule capsule into smaller sub-molecules or extract state to hooks'
-    };
-  }
-  if (lineCount >= 250) {
-    return {
-      severity: 'HIGH',
-      hazard: `Oversized molecule capsule (${lineCount} >= 250 lines)`,
-      directive: 'Decompose molecule capsule into smaller sub-molecules or extract state to hooks'
-    };
-  }
-  return {
-    severity: 'MEDIUM',
-    hazard: `Molecule capsule budget warning (${lineCount} > 100 lines)`,
-    directive: 'Split molecule into focused sub-molecules or extract state to hook'
-  };
-};
-
 /**
  * Executes a synchronous operation returning a Go/Rust-style [data, error] tuple.
  * @template T

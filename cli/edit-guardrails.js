@@ -6,14 +6,11 @@ import path from 'node:path';
 import { auditCode } from './audit/rules.js';
 import { isSourceFile } from './languages.js';
 import { countLines } from './line-count.js';
+import { lineLimitFor, resolveFileTier } from './audit/line-budgets.js';
+import { loadProjectConfig } from './config/index.js';
 
 const RAW_DOM_REGEX = /<\s*(button|input|textarea|select)\b[^>]*>/i;
 const isSevere = (severity) => (v) => v.severity === severity;
-
-const isMoleculePath = (relPath) => {
-  const baseName = path.basename(relPath);
-  return relPath.includes('molecules') || relPath.includes('/m-') || baseName.startsWith('m-');
-};
 
 const rawDomViolation = (relPath, content) => {
   const match = content.match(RAW_DOM_REGEX);
@@ -31,24 +28,29 @@ const rawDomViolation = (relPath, content) => {
   };
 };
 
-const auditInMemory = (absPath, relPath, content) => {
+const auditInMemory = (absPath, relPath, content, config) => {
   const isAuditable = isSourceFile(path.basename(absPath), { includeTests: true });
   if (!isAuditable) return [];
   try {
-    return auditCode(content, absPath, relPath);
+    return auditCode(content, absPath, relPath, { config });
   } catch {
     return [];
   }
 };
 
 /**
- * @param {object} params { absPath, relPath, content, skipCheck }
+ * The line limit and tier come from line-budgets.js with the project's .chemxrc profile
+ * (molecules: 250 pragmatic soft budget, 100 atomic-strict; other files: 500).
+ *
+ * @param {object} params { absPath, relPath, content, skipCheck, cwd }
  * @returns {{ lineBudget: object, isClean: boolean, violationsCount: number, criticalCount: number, highCount: number, violations: object[] }}
  */
-export const evaluateGuardrails = ({ absPath, relPath, content, skipCheck = false }) => {
+export const evaluateGuardrails = ({ absPath, relPath, content, skipCheck = false, cwd = process.cwd() }) => {
   const lines = countLines(content);
-  const isMolecule = isMoleculePath(relPath);
-  const limit = isMolecule ? 100 : 500;
+  const config = loadProjectConfig(cwd);
+  const projectRules = config.rules || {};
+  const isMolecule = resolveFileTier(relPath, projectRules) === 'molecule';
+  const limit = lineLimitFor(relPath, projectRules);
   const isBudgetExceeded = lines > limit;
   const lineBudget = {
     lines,
@@ -59,7 +61,7 @@ export const evaluateGuardrails = ({ absPath, relPath, content, skipCheck = fals
       : null
   };
 
-  const violations = skipCheck ? [] : auditInMemory(absPath, relPath, content);
+  const violations = skipCheck ? [] : auditInMemory(absPath, relPath, content, config);
   const domViolation = !skipCheck && isMolecule ? rawDomViolation(relPath, content) : null;
   const hasDomViolation = Boolean(domViolation);
   if (hasDomViolation) violations.push(domViolation);

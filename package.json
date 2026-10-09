@@ -54,7 +54,7 @@
     "ui": "node cli/index.js ui",
     "dev:ui": "node cli/index.js ui --dev",
     "dev:ui:watch": "node --watch --watch-path=cli cli/index.js ui --dev",
-    "test": "node --test cli/audit/*.spec.js cli/mcp/*.spec.js cli/build/*.spec.js cli/team/*.spec.js cli/errors/*.spec.js cli/*.spec.js",
+    "test": "node --test cli/audit/*.spec.js cli/sfc/*.spec.js cli/mcp/*.spec.js cli/build/*.spec.js cli/team/*.spec.js cli/errors/*.spec.js cli/commands/*.spec.js cli/config/*.spec.js cli/*.spec.js",
     "check:frameworks": "node scripts/check-framework-generation.mjs",
     "prepublishOnly": "node scripts/check-framework-generation.mjs",
     "typecheck": "tsc --noEmit",
@@ -69,7 +69,8 @@
     "@babel/parser": "^7.29.8",
     "@babel/traverse": "^7.29.8",
     "@babel/types": "^7.29.8",
-    "@chemx/x-atoms": "26.10.8-285"
+    "@chemx/x-atoms": "26.10.8-285",
+    "@vue/compiler-sfc": "3.5.43"
   },
   "devDependencies": {
     "@types/babel__traverse": "^7.28.0",

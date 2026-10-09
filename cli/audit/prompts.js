@@ -1,4 +1,5 @@
 import { describeLineBudgetPolicy } from '../config/profiles.js';
+import { SIZE_LABELS, hasSizeClass, isMonolithHotspot } from './line-budgets.js';
 import { groupViolationsByRule, buildPathTree } from './reporter-grouping.js';
 import {
   CYAN,
@@ -78,7 +79,7 @@ export const buildGradeFPrompt = (report, options = {}) => {
   const critical = violations
     .filter((v) => v.severity === 'CRITICAL')
     .filter((v) => (excludeAiSlop ? !v.isAiSlop : true));
-  const extremeMonoliths = hotspots.filter((h) => h.lineCount >= 2000);
+  const extremeMonoliths = hotspots.filter(hasSizeClass('extreme'));
 
   const hasNoCritical = critical.length === 0;
   const hasNoMonoliths = extremeMonoliths.length === 0;
@@ -91,7 +92,7 @@ export const buildGradeFPrompt = (report, options = {}) => {
   lines.push(preamble);
 
   if (extremeMonoliths.length > 0) {
-    lines.push('### EXTREME MONOLITHS (>= 2,000 lines of code) : MONOLITH DECOMPOSITION');
+    lines.push(`### EXTREME MONOLITHS (${SIZE_LABELS.extreme} lines of code) : MONOLITH DECOMPOSITION`);
     lines.push('Action: Decompose into crystalline single-responsibility capsules (within the AGENTS.md line budget). Convert top-level view into a declarative Table-of-Contents view.\n');
     extremeMonoliths.forEach((h, i) => {
       lines.push(`${i + 1}. File: \`${h.filePath}\` (${h.lineCount} lines)`);
@@ -125,7 +126,7 @@ export const buildGradeDPrompt = (report, options = {}) => {
   const high = violations
     .filter((v) => v.severity === 'HIGH')
     .filter((v) => (excludeAiSlop ? !v.isAiSlop : true));
-  const severeMonoliths = hotspots.filter((h) => h.lineCount >= 1000 && h.lineCount < 2000);
+  const severeMonoliths = hotspots.filter(hasSizeClass('severe'));
 
   const hasNoHigh = high.length === 0;
   const hasNoMonoliths = severeMonoliths.length === 0;
@@ -138,7 +139,7 @@ export const buildGradeDPrompt = (report, options = {}) => {
   lines.push(preamble);
 
   if (severeMonoliths.length > 0) {
-    lines.push('### SEVERE MONOLITHS (1,000 - 1,999 lines of code)');
+    lines.push(`### SEVERE MONOLITHS (${SIZE_LABELS.severeRange} lines of code)`);
     lines.push('Action: Extract sub-features into isolated molecule capsules (within the AGENTS.md line budget) and domain composables.\n');
     severeMonoliths.forEach((h, i) => {
       lines.push(`${i + 1}. File: \`${h.filePath}\` (${h.lineCount} lines)`);
@@ -169,7 +170,7 @@ export const buildGradeCPrompt = (report, options = {}) => {
   const medium = violations
     .filter((v) => v.severity === 'MEDIUM')
     .filter((v) => (excludeAiSlop ? !v.isAiSlop : true));
-  const warningMonoliths = hotspots.filter((h) => h.lineCount >= 500 && h.lineCount < 1000);
+  const warningMonoliths = hotspots.filter(hasSizeClass('warning'));
 
   const hasNoMedium = medium.length === 0;
   const hasNoMonoliths = warningMonoliths.length === 0;
@@ -182,8 +183,8 @@ export const buildGradeCPrompt = (report, options = {}) => {
   lines.push(preamble);
 
   if (warningMonoliths.length > 0) {
-    lines.push('### WARNING MONOLITHS (500 - 999 lines of code)');
-    lines.push('Action: Bring file under 500 line budget by extracting helper functions, types, and child molecules.\n');
+    lines.push(`### WARNING MONOLITHS (${SIZE_LABELS.warningRange} lines of code)`);
+    lines.push(`Action: Bring file within the ${SIZE_LABELS.warnLimit} line budget by extracting helper functions, types, and child molecules.\n`);
     warningMonoliths.forEach((h, i) => {
       lines.push(`${i + 1}. File: \`${h.filePath}\` (${h.lineCount} lines)`);
     });
@@ -275,7 +276,7 @@ export const buildAiSlopPrompt = (report, options = {}) => {
 export const buildHotspotsPrompt = (report, options = {}) => {
   const { isSubSection = false } = options;
   const { hotspots = [] } = report;
-  const monolithHotspots = hotspots.filter((h) => h.isMonolith || h.lineCount > 500);
+  const monolithHotspots = hotspots.filter(isMonolithHotspot);
 
   const hasNoMonoliths = monolithHotspots.length === 0;
   if (hasNoMonoliths) return '';
@@ -316,7 +317,7 @@ export const buildPillarPrompt = (report, pillarName, options = {}) => {
   const { violations = [], hotspots = [] } = report;
   const pillarViolations = violations.filter((v) => v.pillar === pillarName);
   const isPillar1 = pillarName === 'Line Budgets & Monolith Decomposition';
-  const relevantHotspots = isPillar1 ? hotspots.filter((h) => h.isMonolith || h.lineCount > 500) : [];
+  const relevantHotspots = isPillar1 ? hotspots.filter(isMonolithHotspot) : [];
 
   const hasNoViolations = pillarViolations.length === 0;
   const hasNoHotspots = relevantHotspots.length === 0;

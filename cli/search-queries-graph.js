@@ -5,6 +5,7 @@ import { extractSymbolBlock } from './reader.js';
 import { debugNote } from './search-debug.js';
 import { resolveGraphSeed, walkConsumers, findUnresolvedImporters, findSymbolRow, findCalleeDefinition } from './search-graph-edges.js';
 import { moduleKeysFor } from './search-resolve.js';
+import { computeImportCoverage } from './sfc/import-coverage.js';
 
 const _require = createRequire(import.meta.url);
 let _parse = null;
@@ -60,6 +61,7 @@ export const calculateBlastRadius = (db, targetPathOrSymbol, options = {}) => {
     seedPath: seed.seedPath,
     symbol: seed.symbol,
     totalImpactCount: consumers.length,
+    coverage: computeImportCoverage(db),
     depth: consumers.reduce((acc, c) => Math.max(acc, c.depth), 0),
     directConsumers: consumers.filter((c) => c.depth === 1),
     transitiveConsumers: consumers.filter((c) => c.depth > 1),

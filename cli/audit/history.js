@@ -1,3 +1,4 @@
+import { SIZE_LABELS, hasSizeClass } from './line-budgets.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { groupViolationsBySeverity } from './reporter-utils.js';
@@ -18,13 +19,9 @@ export const createSnapshotFromReport = (report) => {
   const { metrics, health, hotspots = [], violations = [], pillars = {}, contextAnalysis = {} } = report;
   const { critical, high, medium, low } = groupViolationsBySeverity(violations);
 
-  const isExtremeMonolith = (h) => h.lineCount >= 2000;
-  const isSevereMonolith = (h) => h.lineCount >= 1000 && h.lineCount < 2000;
-  const isWarningMonolith = (h) => h.lineCount >= 500 && h.lineCount < 1000;
-
-  const extremeMonoliths = hotspots.filter(isExtremeMonolith).length;
-  const severeMonoliths = hotspots.filter(isSevereMonolith).length;
-  const warningMonoliths = hotspots.filter(isWarningMonolith).length;
+  const extremeMonoliths = hotspots.filter(hasSizeClass('extreme')).length;
+  const severeMonoliths = hotspots.filter(hasSizeClass('severe')).length;
+  const warningMonoliths = hotspots.filter(hasSizeClass('warning')).length;
   const totalMonoliths = extremeMonoliths + severeMonoliths + warningMonoliths;
 
   const pillarSummaries = {};
@@ -39,6 +36,7 @@ export const createSnapshotFromReport = (report) => {
   return {
     id: `audit-${Date.now()}`,
     timestamp: new Date().toISOString(),
+    scope: report.scope ?? null, ruleset: report.ruleset ?? null, scoreModel: report.scoreModel ?? 1,
     health: {
       score: health.score,
       grade: health.grade,
@@ -350,7 +348,7 @@ export const formatTransformationTerminal = (beforeSnapshot, afterSnapshot, opti
 
   const monoBeforeStr = `${beforeSnapshot.monoliths.total}`;
   const monoAfterStr = `${afterSnapshot.monoliths.total}`;
-  lines.push(`   ${'Monolith Files (>500 lines of code)'.padEnd(40)} ${monoBeforeStr.padEnd(16)} ${monoAfterStr.padEnd(16)} ${formatDeltaNumber(delta.monolithDelta, true)}`);
+  lines.push(`   ${`Monolith Files (${SIZE_LABELS.warning} lines of code)`.padEnd(40)} ${monoBeforeStr.padEnd(16)} ${monoAfterStr.padEnd(16)} ${formatDeltaNumber(delta.monolithDelta, true)}`);
 
   const excessBeforeStr = `${beforeSnapshot.tokens.estimatedExcessTokens.toLocaleString()} tok`;
   const excessAfterStr = `${afterSnapshot.tokens.estimatedExcessTokens.toLocaleString()} tok`;

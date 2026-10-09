@@ -1,3 +1,4 @@
+import { SIZE_LABELS, hasSizeClass, isAtLeastSize } from './line-budgets.js';
 import {
   buildGradeFPrompt,
   buildGradeDPrompt,
@@ -23,7 +24,7 @@ export const formatGradeFSection = (report, options = {}) => {
   const { includePrompt = true } = options;
   const { violations, hotspots, pillars } = report;
   const { critical } = groupViolationsBySeverity(violations);
-  const extremeMonoliths = hotspots.filter((h) => h.lineCount >= 2000);
+  const extremeMonoliths = hotspots.filter(hasSizeClass('extreme'));
   const failedPillars = Object.entries(pillars || {}).filter(([_, p]) => p.status === 'FAILED');
   const lines = [];
 
@@ -33,7 +34,7 @@ export const formatGradeFSection = (report, options = {}) => {
   }
   lines.push(`${RED}======================================================================${RESET}`);
   lines.push(`${BOLD}${RED}   GRADE F : CRITICAL ARCHITECTURAL HAZARDS & EXTREME MONOLITHS${RESET}`);
-  lines.push(`${DIM}   Immediate action required: >2,000 lines of code monoliths, render hacks, mock data${RESET}`);
+  lines.push(`${DIM}   Immediate action required: ${SIZE_LABELS.extreme} lines of code monoliths, render hacks, mock data${RESET}`);
   lines.push(`${RED}======================================================================${RESET}`);
   lines.push(`   Critical Violations:  ${critical.length > 0 ? `${RED}${BOLD}${critical.length}${RESET}` : `${GREEN}0${RESET}`}`);
   lines.push(`   Extreme Monoliths:    ${extremeMonoliths.length > 0 ? `${RED}${BOLD}${extremeMonoliths.length}${RESET}` : `${GREEN}0${RESET}`}`);
@@ -43,7 +44,7 @@ export const formatGradeFSection = (report, options = {}) => {
   const totalGradeFItems = critical.length + extremeMonoliths.length + failedPillars.length;
   if (totalGradeFItems === 0) {
     lines.push(`\n   ${GREEN}✔ Outstanding! Zero Grade F hazards detected.${RESET}`);
-    lines.push(`   ${DIM}Codebase is free of extreme monoliths (>2,000 lines of code) and critical violations.${RESET}`);
+    lines.push(`   ${DIM}Codebase is free of extreme monoliths (${SIZE_LABELS.extreme} lines of code) and critical violations.${RESET}`);
   } else {
     if (critical.length > 0) {
       lines.push(`\n   ${BOLD}${RED}🚨 CRITICAL AST VIOLATIONS (${critical.length}):${RESET}\n`);
@@ -51,7 +52,7 @@ export const formatGradeFSection = (report, options = {}) => {
     }
 
     if (extremeMonoliths.length > 0) {
-      lines.push(`   ${BOLD}${RED}💣 EXTREME MONOLITHS (>= 2,000 LINES):${RESET}`);
+      lines.push(`   ${BOLD}${RED}💣 EXTREME MONOLITHS (${SIZE_LABELS.extreme} LINES):${RESET}`);
       lines.push(`   ${DIM}Massive token burn files causing severe context rot and agent hallucination.${RESET}`);
       extremeMonoliths.forEach((h, idx) => {
         lines.push(`   [#${idx + 1}] ${YELLOW}${h.filePath}${RESET} (${h.lineCount} lines, ${h.violationCount} hazards) ${RED}[EXTREME MONOLITH]${RESET}`);
@@ -83,7 +84,7 @@ export const formatGradeDSection = (report, options = {}) => {
   const { includePrompt = true } = options;
   const { violations, hotspots, pillars } = report;
   const { high } = groupViolationsBySeverity(violations);
-  const severeMonoliths = hotspots.filter((h) => h.lineCount >= 1000 && h.lineCount < 2000);
+  const severeMonoliths = hotspots.filter(hasSizeClass('severe'));
   const warnPillars = Object.entries(pillars || {}).filter(([_, p]) => p.status === 'WARN');
   const lines = [];
 
@@ -93,7 +94,7 @@ export const formatGradeDSection = (report, options = {}) => {
   }
   lines.push(`${ORANGE}======================================================================${RESET}`);
   lines.push(`${BOLD}${ORANGE}   GRADE D : HIGH SEVERITY DEBTS & SEVERE MONOLITHS${RESET}`);
-  lines.push(`${DIM}   Refactoring priorities: 1,000 to 1,999 lines of code files and hook saturation > 5${RESET}`);
+  lines.push(`${DIM}   Refactoring priorities: ${SIZE_LABELS.severeRange} lines of code files and hook saturation > 5${RESET}`);
   lines.push(`${ORANGE}======================================================================${RESET}`);
   lines.push(`   High Severity Debts:  ${high.length > 0 ? `${ORANGE}${BOLD}${high.length}${RESET}` : `${GREEN}0${RESET}`}`);
   lines.push(`   Severe Monoliths:     ${severeMonoliths.length > 0 ? `${ORANGE}${BOLD}${severeMonoliths.length}${RESET}` : `${GREEN}0${RESET}`}`);
@@ -103,7 +104,7 @@ export const formatGradeDSection = (report, options = {}) => {
   const totalGradeDItems = high.length + severeMonoliths.length + warnPillars.length;
   if (totalGradeDItems === 0) {
     lines.push(`\n   ${GREEN}✔ Zero Grade D debts detected.${RESET}`);
-    lines.push(`   ${DIM}No severe monoliths (1,000-1,999 lines of code) or saturated hook anti-patterns.${RESET}`);
+    lines.push(`   ${DIM}No severe monoliths (${SIZE_LABELS.severeRange} lines of code) or saturated hook anti-patterns.${RESET}`);
   } else {
     if (high.length > 0) {
       lines.push(`\n   ${BOLD}${ORANGE}⚠️  HIGH SEVERITY VIOLATIONS (${high.length}):${RESET}\n`);
@@ -111,7 +112,7 @@ export const formatGradeDSection = (report, options = {}) => {
     }
 
     if (severeMonoliths.length > 0) {
-      lines.push(`   ${BOLD}${ORANGE}🔥 SEVERE MONOLITHS (1,000 - 1,999 LINES):${RESET}`);
+      lines.push(`   ${BOLD}${ORANGE}🔥 SEVERE MONOLITHS (${SIZE_LABELS.severeRange} LINES):${RESET}`);
       severeMonoliths.forEach((h, idx) => {
         lines.push(`   [#${idx + 1}] ${YELLOW}${h.filePath}${RESET} (${h.lineCount} lines, ${h.violationCount} hazards) ${ORANGE}[SEVERE MONOLITH]${RESET}`);
       });
@@ -142,7 +143,7 @@ export const formatGradeCSection = (report, options = {}) => {
   const { includePrompt = true } = options;
   const { violations, hotspots } = report;
   const { medium } = groupViolationsBySeverity(violations);
-  const warningMonoliths = hotspots.filter((h) => h.lineCount >= 500 && h.lineCount < 1000);
+  const warningMonoliths = hotspots.filter(hasSizeClass('warning'));
   const lines = [];
 
   lines.push('');
@@ -151,7 +152,7 @@ export const formatGradeCSection = (report, options = {}) => {
   }
   lines.push(`${CYAN}======================================================================${RESET}`);
   lines.push(`${BOLD}${CYAN}   GRADE C : MEDIUM SEVERITY DEBTS & MONOLITHIC DRIFT${RESET}`);
-  lines.push(`${DIM}   Architecture debts: 500 to 999 lines of code files and raw inline style attributes${RESET}`);
+  lines.push(`${DIM}   Architecture debts: ${SIZE_LABELS.warningRange} lines of code files and raw inline style attributes${RESET}`);
   lines.push(`${CYAN}======================================================================${RESET}`);
   lines.push(`   Medium Debts:         ${medium.length > 0 ? `${YELLOW}${BOLD}${medium.length}${RESET}` : `${GREEN}0${RESET}`}`);
   lines.push(`   Warning Monoliths:    ${warningMonoliths.length > 0 ? `${YELLOW}${BOLD}${warningMonoliths.length}${RESET}` : `${GREEN}0${RESET}`}`);
@@ -160,7 +161,7 @@ export const formatGradeCSection = (report, options = {}) => {
   const totalGradeCItems = medium.length + warningMonoliths.length;
   if (totalGradeCItems === 0) {
     lines.push(`\n   ${GREEN}✔ Zero Grade C debts detected.${RESET}`);
-    lines.push(`   ${DIM}All files remain under 500 lines with clean styling and handlers.${RESET}`);
+    lines.push(`   ${DIM}All files remain at most ${SIZE_LABELS.warnLimit} lines with clean styling and handlers.${RESET}`);
   } else {
     if (medium.length > 0) {
       lines.push(`\n   ${BOLD}${CYAN}⚡ MEDIUM SEVERITY VIOLATIONS (${medium.length}):${RESET}\n`);
@@ -168,7 +169,7 @@ export const formatGradeCSection = (report, options = {}) => {
     }
 
     if (warningMonoliths.length > 0) {
-      lines.push(`   ${BOLD}${CYAN}⚠️  WARNING MONOLITHS (500 - 999 LINES):${RESET}`);
+      lines.push(`   ${BOLD}${CYAN}⚠️  WARNING MONOLITHS (${SIZE_LABELS.warningRange} LINES):${RESET}`);
       warningMonoliths.forEach((h, idx) => {
         lines.push(`   [#${idx + 1}] ${YELLOW}${h.filePath}${RESET} (${h.lineCount} lines, ${h.violationCount} hazards) ${DIM}[MONOLITH WARNING]${RESET}`);
       });
@@ -255,13 +256,13 @@ export const formatGradeASection = (report) => {
   if (metrics.moleculeCompliantPct === 100) {
     lines.push(`   ${GREEN}✔${RESET} 100% Molecule Capsule Limit (< 100 lines per molecule)`);
   }
-  const hasExtremeMonolith = hotspots.some((h) => h.lineCount >= 2000);
+  const hasExtremeMonolith = hotspots.some(hasSizeClass('extreme'));
   if (!hasExtremeMonolith) {
-    lines.push(`   ${GREEN}✔${RESET} Zero Extreme Monoliths (0 files >= 2,000 lines of code)`);
+    lines.push(`   ${GREEN}✔${RESET} Zero Extreme Monoliths (0 files ${SIZE_LABELS.extreme} lines of code)`);
   }
-  const hasSevereMonolith = hotspots.some((h) => h.lineCount >= 1000);
+  const hasSevereMonolith = hotspots.some((h) => isAtLeastSize(h.lineCount, 'severe'));
   if (!hasSevereMonolith) {
-    lines.push(`   ${GREEN}✔${RESET} Zero Severe Monoliths (0 files >= 1,000 lines of code)`);
+    lines.push(`   ${GREEN}✔${RESET} Zero Severe Monoliths (0 files ${SIZE_LABELS.severe} lines of code)`);
   }
   if (contextAnalysis.riskLevel === 'LOW') {
     lines.push(`   ${GREEN}✔${RESET} Low Context Hazard & Token Burn Risk`);

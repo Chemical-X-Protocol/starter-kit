@@ -2,6 +2,10 @@
  * Chemical X Protocol: Canonical Predicates for AST & CLI Control Flow
  * Reusable single-concept booleans and higher-order predicate helpers.
  */
+import { isErrorishTest } from './lexicon-predicates.js';
+import { isSwallowedCatch } from './catch-predicates.js';
+
+export { isSwallowedCatch };
 
 import { isStdoutTty } from '../terminal.js';
 
@@ -218,6 +222,11 @@ export const isSilentGuardClause = (ifPath, t) => {
 
   if (!hasBareReturn || hasDiagnosticOrHandling) return false;
 
+  // 3.G targets error conditions; a named guard such as `if (!canCheckout) return;`
+  // is the documented 3.A/3.C contract, not a silent failure.
+  const isErrorGuard = isErrorishTest(node.test);
+  if (!isErrorGuard) return false;
+
   const collectTestIdentifiers = (n) => {
     const names = [];
     const walk = (item) => {
@@ -267,48 +276,6 @@ export const isSilentGuardClause = (ifPath, t) => {
   if (!isTargetFunction) return false;
 
   return { funcName: funcName || (isAsync ? 'async operation' : 'command handler') };
-};
-
-export const isSwallowedCatch = (astPath, t) => {
-  const body = astPath.node.body?.body || [];
-  if (body.length === 0) return true;
-
-  const nonNoopStatements = body.filter((stmt) => !t.isEmptyStatement(stmt));
-  if (nonNoopStatements.length === 0) return true;
-
-  let hasActiveHandling = false;
-  astPath.traverse({
-    ThrowStatement() {
-      hasActiveHandling = true;
-    },
-    ReturnStatement(retPath) {
-      if (retPath.node.argument !== null) {
-        hasActiveHandling = true;
-      }
-    },
-    CallExpression(callPath) {
-      const callee = callPath.node.callee;
-      if (t.isMemberExpression(callee)) {
-        const objName = t.isIdentifier(callee.object) ? callee.object.name : '';
-        const propName = t.isIdentifier(callee.property) ? callee.property.name : '';
-        const isLogger = ['console', 'logger', 'log', 'telemetry', 'reportError'].includes(objName);
-        const isHandlingMethod = ['error', 'warn', 'info', 'captureException', 'track'].includes(propName);
-        const isProcessStderr = t.isMemberExpression(callee.object) &&
-          t.isIdentifier(callee.object.object, { name: 'process' }) &&
-          t.isIdentifier(callee.object.property, { name: 'stderr' });
-        if (isLogger || isHandlingMethod || isProcessStderr) {
-          hasActiveHandling = true;
-        }
-      } else if (t.isIdentifier(callee)) {
-        const isHandler = ['handleError', 'reportError', 'captureException', 'toResult'].includes(callee.name);
-        if (isHandler) {
-          hasActiveHandling = true;
-        }
-      }
-    }
-  });
-
-  return !hasActiveHandling;
 };
 
 export const countOptionalChainingDepth = (node, t) => {

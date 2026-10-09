@@ -1,3 +1,4 @@
+import { SIZE_LABELS, classifyFileSize } from './line-budgets.js';
 export {
   CHEMX_COLORS,
   CHEMX_RGB,
@@ -109,12 +110,13 @@ export const resolveTopSectionColor = (report) => {
   return isAllPassed ? GREEN : CYAN;
 };
 
-export const resolveHotspotBadge = (lineCount) => {
-  if (lineCount >= 2000) return ` ${RED}[CRITICAL MONOLITH >= 2,000 lines of code]${RESET}`;
-  if (lineCount >= 1000) return ` ${ORANGE}[SEVERE MONOLITH >= 1,000 lines of code]${RESET}`;
-  if (lineCount > 500) return ` ${YELLOW}[MONOLITH WARNING > 500 lines of code]${RESET}`;
-  return '';
-};
+const HOTSPOT_BADGES = Object.freeze({
+  extreme: ` ${RED}[CRITICAL MONOLITH ${SIZE_LABELS.extreme} lines of code]${RESET}`,
+  severe: ` ${ORANGE}[SEVERE MONOLITH ${SIZE_LABELS.severe} lines of code]${RESET}`,
+  warning: ` ${YELLOW}[MONOLITH WARNING ${SIZE_LABELS.warning} lines of code]${RESET}`
+});
+
+export const resolveHotspotBadge = (lineCount) => HOTSPOT_BADGES[classifyFileSize(lineCount)] ?? '';
 
 export const resolveHealthHearts = (grade, score = 0, isAnsi = true) => {
   const g = String(grade || '').toUpperCase();
@@ -203,12 +205,13 @@ export const resolveMarkdownStatusIcon = (status) => {
   return '🔴 **FAILED**';
 };
 
-export const resolveMarkdownMonolithText = (lineCount) => {
-  if (lineCount >= 2000) return '🔴 **CRITICAL (>= 2,000 lines of code)**';
-  if (lineCount >= 1000) return '🟠 **SEVERE (>= 1,000 lines of code)**';
-  if (lineCount > 500) return '🟡 **WARNING (> 500 lines of code)**';
-  return '🟢 Compliant';
-};
+const MARKDOWN_MONOLITH_TEXT = Object.freeze({
+  extreme: `🔴 **CRITICAL (${SIZE_LABELS.extreme} lines of code)**`,
+  severe: `🟠 **SEVERE (${SIZE_LABELS.severe} lines of code)**`,
+  warning: `🟡 **WARNING (${SIZE_LABELS.warning} lines of code)**`
+});
+
+export const resolveMarkdownMonolithText = (lineCount) => MARKDOWN_MONOLITH_TEXT[classifyFileSize(lineCount)] ?? '🟢 Compliant';
 
 export const formatPillarReactionBadgesTerminal = (pillars = {}) => {
   const badges = [];

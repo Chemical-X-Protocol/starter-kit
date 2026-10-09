@@ -1,3 +1,4 @@
+import { SIZE_LABELS, hasSizeClass, isAtLeastSize } from './line-budgets.js';
 import {
   CYAN,
   GREEN,
@@ -15,8 +16,8 @@ import { buildMasterPrompt, formatPromptBox } from './prompts.js';
 
 const isDegradedPillar = ([_, pillar]) => pillar.status !== 'PASSED';
 const isPassedPillar = ([_, pillar]) => pillar.status === 'PASSED';
-const isExtremeMonolith = (h) => h.lineCount >= 2000;
-const isSevereMonolith = (h) => h.lineCount >= 1000;
+const isExtremeMonolith = hasSizeClass('extreme');
+const isSevereMonolith = (h) => isAtLeastSize(h.lineCount, 'severe');
 
 const formatFailureHotspot = (h, idx) => {
   const monolithBadge = resolveHotspotBadge(h.lineCount);
@@ -127,11 +128,11 @@ export const formatPassesSection = (report) => {
   }
   const hasExtremeMonolith = hotspots.some(isExtremeMonolith);
   if (!hasExtremeMonolith) {
-    lines.push(`   ${GREEN}✔${RESET} Zero Extreme Monoliths (0 files >= 2,000 lines of code)`);
+    lines.push(`   ${GREEN}✔${RESET} Zero Extreme Monoliths (0 files ${SIZE_LABELS.extreme} lines of code)`);
   }
   const hasSevereMonolith = hotspots.some(isSevereMonolith);
   if (!hasSevereMonolith) {
-    lines.push(`   ${GREEN}✔${RESET} Zero Severe Monoliths (0 files >= 1,000 lines of code)`);
+    lines.push(`   ${GREEN}✔${RESET} Zero Severe Monoliths (0 files ${SIZE_LABELS.severe} lines of code)`);
   }
   if (contextAnalysis.riskLevel === 'LOW') {
     lines.push(`   ${GREEN}✔${RESET} Low Context Hazard & Token Burn Risk`);

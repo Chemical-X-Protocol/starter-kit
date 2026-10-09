@@ -7,7 +7,7 @@ import { runAudit } from '../commands/cmd-audit.js';
 import { handleAudit } from '../mcp/tools-audit.js';
 
 const BAD_SOURCE = 'export const p = (r) => { let v; try { v = JSON.parse(r); } catch {} if (v && v.a && v.b && v.c) return v; return null; };\n';
-const SUMMARY_KEYS = ['project', 'scope', 'files', 'loc', 'tokens', 'health', 'aiSlop', 'hazards', 'cost', 'gate'];
+const SUMMARY_KEYS = ['project', 'scope', 'files', 'loc', 'tokens', 'health', 'aiSlop', 'hazards', 'cost', 'gate', 'coverage'];
 
 const makeProject = () => {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-summary-')));

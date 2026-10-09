@@ -30,7 +30,7 @@
   - **Hook & State Density**: Max 4 independent hooks/state setters before extracting into a domain hook or reducer.
   - **Render Tree Depth**: Max 4 nesting levels in JSX/templates; nested ternaries are strictly banned in favor of computed descriptor objects.
   - **Prop Surface Area**: Max 7 flat props before grouping into a typed domain entity model.
-  - **Line Budget**: Soft warning at 250 lines only if cyclomatic complexity is high.
+  - **Line Budget**: Soft warning at 250 lines only if cyclomatic complexity is high. Any file above 500 lines is a monolith warning (HIGH at 1,000, CRITICAL at 2,000). View entry templates (1.B) warn above 200 template lines. Type files follow the same budget (2.A). Lines are counted like `wc -l`. Tier globs for molecules and views are configurable in `.chemxrc` (`tiers: { molecule: ["**/prefabs/**"] }`).
 - **Atomic-Strict Profile (`--profile=atomic-strict`)**: Opt-in strict mode enforcing 100-line capsule caps and mandatory atomization for teams building foundational design system component primitives.
 - **The Rule of Three for Abstractions**: Premature abstraction is worse than duplication. Do NOT extract an atom or molecule until a pattern is reused across 3+ distinct features, or until it encapsulates isolated behavioral/accessibility requirements.
 
@@ -234,6 +234,13 @@ Use same-name shorthand across all languages; eliminate redundant `key: key` dup
 - **Bidirectional Schema Validation**: Domain types and boundary interfaces must be validated against the active schema or OpenAPI contract rather than treated as independently authoritative.
 - **Drift Prevention**: Never hand-craft unvalidated entity definitions. Mismatches in nullability, default values, or field mutations must fail compile-time checks or contract test suites before ingestion.
 
+### H. Swallowed Exceptions (No Silent Catch)
+- A `catch` must propagate (`throw`), return a value (`return [null, error]`), report (a logger, notifier or handler call), or record the failure in state that outlives the catch (`state.error = err`, a fallback assigned to an outer binding). An empty catch is HIGH; a body that still discards the error is MEDIUM (`ERROR_SWALLOWED_EXCEPTION`).
+- An intentional best-effort catch says so on the catch line, inside the block, or on the line above, with a mandatory reason: `catch { // chemx-allow: best-effort cache warmup is optional }`. The same annotation with a rule id (`// chemx-allow: RULE_ID <reason>`) suppresses that one rule on that line.
+
+### I. Data Leveling (No Optional-Chaining Churn)
+- Level an incoming payload once at the boundary (2.F) with sentinels or `normalizeArray`, instead of chaining three or more `?.` through every consumer (`DATA_FLOW_OPTIONAL_CHAINING_CHURN`).
+
 ---
 
 ## 3. Control Flow & Self-Documenting Logic
@@ -392,6 +399,9 @@ Raw inline `style="..."` attributes are strictly prohibited. Visual styling flow
 
 ### C. Self-Cleaning Timer Composables
 - Timers for real-world delays must be managed through self-cleaning composables (`useTimeoutFn`, `useDebounceFn`) that cancel automatically on component unmount via `onScopeDispose` or effect teardown.
+
+### D. Listener Disposal
+- Every `addEventListener` has a matching teardown in the same module: `removeEventListener` with the same event and handler (for example in `onBeforeUnmount`, `onUnmounted`, `onScopeDispose` or an effect cleanup), an `AbortController` `{ signal }`, or `{ once: true }` (`LIFECYCLE_ORPHANED_LISTENER`).
 
 ---
 

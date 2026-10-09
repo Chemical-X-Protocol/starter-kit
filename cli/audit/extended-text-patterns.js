@@ -25,7 +25,7 @@ const FAKE_GREEN_PATTERNS = [
 ];
 
 const IMG_WITHOUT_ALT_PATTERN = new RegExp(['<', 'img\\b', '(?![^>]*\\balt\\s*=)', '[^>]*>'].join(''), 'i');
-const CLICKABLE_CONTAINER_PATTERN = new RegExp(['<', '(div|span)\\b', '(?![^>]*\\brole\\s*=\\s*[\'"](?:button|link|tab)[\'"])', '[^>]*\\b(?:@click|v-on:click)\\s*='].join(''), 'i');
+const CLICKABLE_CONTAINER_PATTERN = new RegExp(['<', '(div|span)\\b', '(?![^>]*\\brole\\s*=\\s*[\'"](?:button|link|tab)[\'"])', '[^>]*\\s(?:@click|v-on:click)\\s*='].join(''), 'i');
 const TABNABBING_TEMPLATE_PATTERN = /<a\b[^>]*\btarget\s*=\s*["']_blank["'][^>]*>/i;
 const JAVASCRIPT_URL_TEMPLATE_PATTERN = /\b(?:href|src|action|formaction)\s*=\s*["']\s*javascript:/i;
 

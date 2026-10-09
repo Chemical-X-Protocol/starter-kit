@@ -53,8 +53,8 @@ window.createFileTreeState = (Vue, api, codebaseFiles) => {
     });
   });
 
-  const cleanFileCount = computed(() => (codebaseFiles.value || []).filter((f) => Number(f.lines || 0) <= 100).length);
-  const monolithFileCount = computed(() => (codebaseFiles.value || []).filter((f) => Number(f.lines || 0) > 100).length);
+  const cleanFileCount = computed(() => (codebaseFiles.value || []).filter((f) => !f.isOverBudget).length);
+  const monolithFileCount = computed(() => (codebaseFiles.value || []).filter((f) => Boolean(f.isOverBudget)).length);
   const codebaseHazardCount = computed(() => (codebaseFiles.value || []).reduce((acc, f) => acc + Number(f.hazardCount || 0), 0));
 
   const isFolderExpanded = (path) => !collapsedFolders.value.has(path);

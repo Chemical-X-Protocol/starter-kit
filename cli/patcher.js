@@ -73,7 +73,7 @@ export const patchFile = (targetPath, params = {}) => {
     parse: fileResult.parse,
     declarations: fileResult.declarations,
     diff: fileResult.diff,
-    ...evaluateGuardrails({ absPath: resolvedPath, relPath: fileResult.file, content: replaced.content, skipCheck })
+    ...evaluateGuardrails({ absPath: resolvedPath, relPath: fileResult.file, content: replaced.content, skipCheck, cwd })
   };
 };
 
@@ -125,6 +125,6 @@ export const writeFile = (targetPath, params = {}) => {
     parse: fileResult.parse,
     declarations: fileResult.declarations,
     diff: fileResult.diff,
-    ...evaluateGuardrails({ absPath: resolvedPath, relPath: fileResult.file, content, skipCheck })
+    ...evaluateGuardrails({ absPath: resolvedPath, relPath: fileResult.file, content, skipCheck, cwd })
   };
 };
