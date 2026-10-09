@@ -34,7 +34,8 @@ export const MCP_RESOURCES = [
 ];
 
 const readLocalFileSafely = (filePath) => {
-  if (fs.existsSync(filePath)) {
+  const fileExists = Boolean(fs.existsSync(filePath));
+  if (fileExists) {
     return fs.readFileSync(filePath, 'utf-8');
   }
   return '';
