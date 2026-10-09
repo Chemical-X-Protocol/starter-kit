@@ -34,9 +34,11 @@ export const handleChemxRead = (args = {}, cwd = process.cwd()) => {
     stripComments: args.stripComments === true,
     compact: args.compact === true,
     startLine,
-    endLine
+    endLine,
+    rev: args.rev
   });
-  res.file = path.relative(targetCwd, targetPath) || res.file;
+  const relFile = path.relative(targetCwd, targetPath) || res.file;
+  res.file = args.rev ? `${args.rev}:${relFile}` : relFile;
 
   const cards = buildReadCards(targetCwd, targetPath, {
     symbol: args.symbol,

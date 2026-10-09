@@ -2,7 +2,8 @@
 
 export const ACTION_HELP = {
   help: '{ action? } this table, or one row',
-  read: '{ path, symbol?, outline?, logic?, template?, enrich?, startLine?, endLine? } (alias r)',
+  read: '{ path, rev?, symbol?, outline?, logic?, template?, enrich?, startLine?, endLine? } (alias r); rev reads the file at a git revision',
+  show: '{ args: [rev, --patch?, --full?] } one commit: subject, author, date, body, stat; --patch is -U0 and collapses like d',
   q: '{ query, literal?, lines?, blastRadius?, trace?, backtrace?, semantic?, hybrid?, tier?, limit?, reindex? } (alias search)',
   patch: '{ path, target|search, replacement|replace, multiple?, dryRun? } writes; needs a declared root',
   write: '{ path, content } writes; needs a declared root',

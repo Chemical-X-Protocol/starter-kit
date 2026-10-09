@@ -11,6 +11,17 @@ import { locateSymbols } from './symbol-locator.js';
 import { blankOutsideScripts } from './sfc-scripts.js';
 import { stripCommentsKeepingLines } from './comment-ranges.js';
 import { conflictHunksOf, describeConflicts } from './conflicts.js';
+import { resolveRevisionRead } from './read-revision.js';
+
+const assertReadableFile = (resolvedPath, rawPath, targetPath) => {
+  if (!fs.existsSync(resolvedPath)) {
+    throw new Error(`File not found: ${rawPath}`);
+  }
+  const stat = fs.statSync(resolvedPath);
+  if (stat.isDirectory()) {
+    throw new Error(`Path is a directory, not a file: ${targetPath}`);
+  }
+};
 
 import {
   stripCodeComments,
@@ -280,6 +291,13 @@ const enrichOutline = (rawContent, filePath, options) => {
  * @returns {object} Token-minified file payload.
  */
 export const readTokenOptimized = (targetPath, options = {}) => {
+  const atRevision = resolveRevisionRead(targetPath, options);
+  if (atRevision) {
+    const { rev, path: revPath, content, startLine: revStart, endLine: revEnd } = atRevision;
+    const res = readTokenOptimized(revPath, { ...options, rev: undefined, sourceContent: content, startLine: revStart, endLine: revEnd });
+    const label = path.isAbsolute(revPath) ? path.relative(options.cwd || process.cwd(), revPath) : revPath;
+    return { ...res, file: `${rev}:${label}`, rev };
+  }
   let rawPath = targetPath;
   let startLine = options.startLine;
   let endLine = options.endLine;
@@ -293,17 +311,10 @@ export const readTokenOptimized = (targetPath, options = {}) => {
 
   const cwd = options.cwd || process.cwd();
   const resolvedPath = resolveSafePath(rawPath, cwd);
+  const hasSourceContent = typeof options.sourceContent === 'string';
+  if (!hasSourceContent) assertReadableFile(resolvedPath, rawPath, targetPath);
 
-  if (!fs.existsSync(resolvedPath)) {
-    throw new Error(`File not found: ${rawPath}`);
-  }
-
-  const stat = fs.statSync(resolvedPath);
-  if (stat.isDirectory()) {
-    throw new Error(`Path is a directory, not a file: ${targetPath}`);
-  }
-
-  const rawContent = fs.readFileSync(resolvedPath, 'utf-8');
+  const rawContent = hasSourceContent ? options.sourceContent : fs.readFileSync(resolvedPath, 'utf-8');
   const rawLines = splitFileLines(rawContent);
   const totalLines = rawLines.length;
 

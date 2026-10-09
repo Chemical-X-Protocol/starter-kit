@@ -117,6 +117,11 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
       setExitCodeFrom(await runLog(rawArgs, true));
       break;
     }
+    case 'show': {
+      const { runShow } = await import('./cmd-wrappers.js');
+      setExitCodeFrom(await runShow(rawArgs, true));
+      break;
+    }
     case 'p':
     case 'pkg': {
       const { runPkg } = await import('./cmd-wrappers.js');

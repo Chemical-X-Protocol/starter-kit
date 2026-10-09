@@ -41,9 +41,9 @@ export const SEARCH_COMMANDS = [
     aliases: ['view', 'r'],
     group: 'search',
     brief: 'Outline, symbol or line range',
-    usage: 'chemx read <file> [options]',
+    usage: 'chemx read <file>|<rev>:<file>[:N-M] [options]',
     summary: 'Token-minified file reader with AST outline and logic extraction.',
-    description: 'Extracts structural outlines, logic skeletons, line ranges, or targeted symbol declarations.',
+    description: 'Extracts structural outlines, logic skeletons, line ranges, or targeted symbol declarations, from the working tree or (rev:file) at a git revision.',
     flags: [
       { flag: '--outline, -o', desc: 'Signatures only' },
       { flag: '--logic, -l', desc: 'AST logic skeleton: control flow, guards and mutations' },
@@ -61,6 +61,7 @@ export const SEARCH_COMMANDS = [
     ],
     examples: [
       'chemx read src/store.ts --outline',
+      'chemx read HEAD~1:src/store.ts --symbol=save',
       'chemx read src/controller.ts --logic',
       'chemx read api.ts --symbol=login',
       'chemx read src/router.ts --start=120 --end=160'

@@ -16,6 +16,20 @@ export const WRAPPER_COMMANDS = [
     examples: ['chemx d', 'chemx d --stat', 'chemx d HEAD~1 --full', 'chemx d --conflicts']
   },
   {
+    name: 'show',
+    aliases: [],
+    group: 'wrappers',
+    brief: 'One commit: header, stat, patch',
+    usage: 'chemx show [rev] [--patch] [--full] [-- <path>...]',
+    summary: 'Subject, author, date, body and stat of one commit (default HEAD).',
+    description: 'Runs git show. --patch adds a -U0 patch that collapses past 80 lines unless --full. To read a file at a revision: chemx read <rev>:<path>.',
+    flags: [
+      { flag: '--patch, -p', desc: 'Append the -U0 patch' },
+      { flag: '--full', desc: 'Never collapse the patch' }
+    ],
+    examples: ['chemx show HEAD~1', 'chemx show a1b2c3d --patch', 'chemx show HEAD --patch -- cli/index.js', 'chemx read HEAD~1:cli/index.js --outline']
+  },
+  {
     name: 'conflicts',
     aliases: [],
     group: 'wrappers',
