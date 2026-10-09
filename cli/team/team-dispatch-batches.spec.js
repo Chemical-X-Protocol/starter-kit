@@ -45,6 +45,17 @@ test('taskFiles: with isKnownFile, description mentions must resolve while targe
   assert.deepEqual(files, ['cli/b.js', 'cli/new.js']);
 });
 
+test('taskFiles: a description mention in a sub-repo task is read in that repo and handed out root-relative (#2488)', () => {
+  const repoTask = task(1, 'apps/kit/cli/a.js', { repo: 'apps/kit', description: 'Also update cli/b.js to match.' });
+  const known = new Set(['apps/kit/cli/b.js', 'cli/b.js']);
+  assert.deepEqual(taskFiles(repoTask, { isKnownFile: (file) => known.has(file) }), ['apps/kit/cli/a.js', 'apps/kit/cli/b.js']);
+  const onlyRootHasIt = new Set(['cli/b.js']);
+  assert.deepEqual(taskFiles(repoTask, { isKnownFile: (file) => onlyRootHasIt.has(file) }), ['apps/kit/cli/a.js']);
+  assert.deepEqual(taskFiles(repoTask, {}), ['apps/kit/cli/a.js', 'apps/kit/cli/b.js']);
+  const rooted = task(2, 'apps/kit/cli/a.js', { repo: 'apps/kit', description: 'See apps/kit/cli/c.js' });
+  assert.deepEqual(taskFiles(rooted, { isKnownFile: (file) => file === 'apps/kit/cli/c.js' }), ['apps/kit/cli/a.js', 'apps/kit/cli/c.js']);
+});
+
 test('planDispatchBatches: tasks on different files land in file-disjoint batches with stable handles', () => {
   const plan = planDispatchBatches([task(1, 'a.js'), task(2, 'b.js'), task(3, 'c.js')], { maxAgents: 4, maxTasksPerAgent: 1 });
   assert.deepEqual(plan.batches.map((batch) => batch.handle), ['@dispatch-queue-1', '@dispatch-queue-2', '@dispatch-queue-3']);

@@ -7,6 +7,7 @@
 import path from 'node:path';
 import { maxNeeds } from './team-needs.js';
 import { DEFAULT_NEEDS } from '../audit/rules-registry.js';
+import { rootRelativePath } from './coordination-repos.js';
 
 export const DEFAULT_MAX_AGENTS = 4;
 export const DEFAULT_MAX_TASKS_PER_AGENT = 3;
@@ -40,6 +41,17 @@ export const normalizeTaskFile = (file, root) => {
   return chosen.replace(/\\/g, '/').replace(/^\.\//, '');
 };
 
+// A mention in a task of repo R reads relative to R (triage writes `File: <repo-relative path>`);
+// the file handed out is root-relative. A mention that already starts with R/ is kept as typed.
+const candidatesFor = (file, repo) => {
+  const isRootRepo = !repo || repo === '.';
+  const isRebased = !isRootRepo && !path.isAbsolute(file);
+  if (!isRebased) return [file];
+  const rebased = rootRelativePath(repo, file);
+  const isAlreadyRooted = file.startsWith(`${repo}/`);
+  return isAlreadyRooted ? [rebased, file] : [rebased];
+};
+
 // Description mentions are noisy (bare basenames, examples, partial paths), so when the caller
 // supplies isKnownFile only mentions that resolve to a real file count; target_path always counts.
 const descriptionFiles = (task, options) => {
@@ -54,7 +66,11 @@ const descriptionFiles = (task, options) => {
     .filter(Boolean)
     .filter(isInProject);
   const canVerify = typeof options.isKnownFile === 'function';
-  return canVerify ? mentioned.filter((file) => options.isKnownFile(file)) : mentioned;
+  const resolved = mentioned.map((file) => {
+    const candidates = candidatesFor(file, task?.repo);
+    return canVerify ? candidates.find((candidate) => options.isKnownFile(candidate)) : candidates[0];
+  });
+  return resolved.filter(Boolean);
 };
 
 /** A task's files: its target_path plus any locations named in its description. */
