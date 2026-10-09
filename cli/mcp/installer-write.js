@@ -3,7 +3,7 @@
  * - unparseable files are refused, never replaced;
  * - files with comments are refused (a rewrite would drop them) with a manual snippet;
  * - other servers and keys are kept; only the chemical-x entry changes;
- * - writes are atomic (temp + rename), follow symlinks and keep CRLF;
+ * - writes are atomic (temp + rename), follow symlinks, keep CRLF and keep the file mode;
  * - the first time chemx touches a user file it is backed up to a new <file>.bak[.N].
  */
 import fs from 'node:fs';
@@ -65,26 +65,43 @@ const nextBackupPath = (file) => {
   return candidate;
 };
 
+/** Permission bits of an existing file, or null for a new file (umask applies then). */
+const existingMode = (file) => {
+  const stat = fs.statSync(file, { throwIfNoEntry: false });
+  return stat ? stat.mode & 0o777 : null;
+};
+
+/** Writes text at a fixed mode: the explicit chmod beats the umask that writeFileSync applies. */
+const writeWithMode = (file, text, mode) => {
+  const hasMode = mode !== null;
+  fs.writeFileSync(file, text, hasMode ? { encoding: 'utf-8', mode } : 'utf-8');
+  if (hasMode) fs.chmodSync(file, mode);
+};
+
 /**
- * Atomic write. Follows symlinks to their target and keeps CRLF line endings.
+ * Atomic write. Follows symlinks to their target and keeps the target's permission bits;
+ * the backup gets the same bits, so a 0600 secret file never gains a world-readable copy.
  * options.backup (default true): copy the previous content to a new backup file first.
  * options.isOwnContent(previous): true when the previous content is chemx output; no backup then.
+ * options.preserveLineEndings (default true): false writes content as given (shell scripts must stay LF).
  * Returns { status: 'written' | 'unchanged', backupPath }.
  */
 export const writeFileSafely = (file, content, options = {}) => {
   const target = resolveWriteTarget(file);
   const hasExisting = fs.existsSync(target);
   const previous = hasExisting ? fs.readFileSync(target, 'utf-8') : null;
-  const finalContent = matchLineEndings(previous, content);
+  const shouldMatchLineEndings = options.preserveLineEndings !== false;
+  const finalContent = shouldMatchLineEndings ? matchLineEndings(previous, content) : content;
   const isUnchanged = previous === finalContent;
   if (isUnchanged) return { status: 'unchanged', backupPath: null };
   fs.mkdirSync(path.dirname(target), { recursive: true });
+  const mode = existingMode(target);
   const isOwnContent = hasExisting && Boolean(options.isOwnContent?.(previous));
   const shouldBackup = hasExisting && options.backup !== false && !isOwnContent;
   const backupPath = shouldBackup ? nextBackupPath(file) : null;
-  if (shouldBackup) fs.writeFileSync(backupPath, previous, 'utf-8');
+  if (shouldBackup) writeWithMode(backupPath, previous, mode);
   const tmp = `${target}.chemx-tmp-${process.pid}`;
-  fs.writeFileSync(tmp, finalContent, 'utf-8');
+  writeWithMode(tmp, finalContent, mode);
   fs.renameSync(tmp, target);
   return { status: 'written', backupPath };
 };

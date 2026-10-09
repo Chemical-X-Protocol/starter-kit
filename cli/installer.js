@@ -38,10 +38,19 @@ export const resolveGitHooksDir = (targetDir = '.') => {
   return null;
 };
 
-const CHEMX_HOOK_MARKER = '# Chemical X Protocol: Pre-Commit';
+const HOOK_THRESHOLDS = /CONF_MIN_GRADE:-([^}]*)\}\}"[\s\S]*?CONF_MIN_SCORE:-([^}]*)\}\}"/;
 
-/** True when a hook file is a chemx-generated hook (safe to replace without a backup). */
-export const isChemxHook = (text = '') => String(text).split('\n').slice(0, 3).some((line) => line.startsWith(CHEMX_HOOK_MARKER));
+/**
+ * True only when a hook is byte-for-byte what chemx generates (for its own thresholds),
+ * so replacing it loses nothing. A chemx hook the user edited is not "own" and gets a backup.
+ */
+export const isChemxHook = (text = '') => {
+  const normalized = String(text).replace(/\r\n/g, '\n');
+  const thresholds = normalized.match(HOOK_THRESHOLDS);
+  const hasThresholds = Boolean(thresholds);
+  if (!hasThresholds) return false;
+  return normalized === buildPreCommitHookScript(thresholds[1], thresholds[2]);
+};
 
 export const installPreCommitHook = (targetDir = '.', options = {}) => {
   const gitHooksDir = resolveGitHooksDir(targetDir);
@@ -55,7 +64,7 @@ export const installPreCommitHook = (targetDir = '.', options = {}) => {
   }
 
   const hookPath = path.join(gitHooksDir, 'pre-commit');
-  const { backupPath } = writeFileSafely(hookPath, buildPreCommitHookScript(options.minGrade, options.minScore), { isOwnContent: isChemxHook });
+  const { backupPath } = writeFileSafely(hookPath, buildPreCommitHookScript(options.minGrade, options.minScore), { isOwnContent: isChemxHook, preserveLineEndings: false });
   fs.chmodSync(hookPath, 0o755);
   const relativeHook = path.relative(path.resolve(targetDir), hookPath);
   const hasBackup = Boolean(backupPath);
