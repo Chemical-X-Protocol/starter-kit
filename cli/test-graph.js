@@ -78,9 +78,24 @@ const scanStatically = (root, files, importers, texts, unreadable) => {
     const startsProcesses = STARTS_PROCESS.test(text);
     if (!startsProcesses) continue;
     for (const match of text.matchAll(FILE_LITERAL)) {
-      for (const target of named.get(match[2]) || []) addEdge(importers, file, target);
+      for (const target of spawnedTargets(file, match[1], named.get(match[2]) || [])) addEdge(importers, file, target);
     }
   }
+};
+
+const isAncestorDir = (dir, file) => dir === '.' || file.startsWith(`${dir}/`);
+
+// A name in a process-starting file ('index.js', '../index.js', `${dir}/team-db.js`) is meant
+// relative to that file, so files with that name in its own directory or an ancestor win
+// (path.join(here, '..', 'index.js') is never cli/team/index.js from cli/). With none there,
+// every file of that name is a candidate: unsure means more specs, never fewer.
+const spawnedTargets = (fromFile, literal, sameName) => {
+  const isPlainPath = literal.includes('/') && !literal.includes('${');
+  const fromDir = path.posix.dirname(fromFile);
+  const exact = isPlainPath ? sameName.filter((f) => f === path.posix.join(fromDir, literal) || f === path.posix.normalize(literal)) : [];
+  if (exact.length > 0) return exact;
+  const nearby = sameName.filter((f) => isAncestorDir(path.posix.dirname(f), fromFile));
+  return nearby.length > 0 ? nearby : sameName;
 };
 
 // Index rows store resolved_path as a module key (path, path without extension, or the dir of
