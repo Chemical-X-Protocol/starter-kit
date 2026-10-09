@@ -2,8 +2,7 @@
 // so a long audit never blocks ping, cancellation or other requests on the server.
 import fs from 'node:fs';
 import path from 'node:path';
-import { Worker } from 'node:worker_threads';
-import { scheduleTimeout } from '../timers.js';
+import { runWorker } from './worker-run.js';
 
 const DEFAULT_SCORECARD_TIMEOUT_MS = 120000;
 const WORKER_URL = new URL('./scorecard-worker.js', import.meta.url);
@@ -14,13 +13,17 @@ const countSeverities = (violations = []) => violations.reduce((rollup, v) => {
   return rollup;
 }, { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 });
 
+const hasMolecules = (report) => (report.metrics?.moleculeCount ?? 0) > 0 && typeof report.metrics.moleculeCompliantPct === 'number';
+
 export const buildScorecard = (report) => ({
   grade: report.health?.grade || 'N/A',
   score: report.health?.score ?? 100,
   status: report.health?.isPassing ? 'PASS' : 'FAIL',
   scannedFiles: report.metrics?.scannedFiles || 0,
   totalLoc: report.metrics?.totalLoc || 0,
-  moleculeCompliantPct: report.metrics?.moleculeCompliantPct ?? 100,
+  // No molecules means nothing to be compliant with: null, never a free 100.
+  moleculeCount: report.metrics?.moleculeCount ?? 0,
+  moleculeCompliantPct: hasMolecules(report) ? report.metrics.moleculeCompliantPct : null,
   severityRollup: countSeverities(report.violations),
   totalViolations: report.totalViolations || 0,
   topHotspots: (report.hotspots || []).slice(0, 3).map((h) => ({ file: h.filePath, lines: h.lineCount, violations: h.violationCount ?? 0 })),
@@ -32,21 +35,8 @@ export const scorecardTarget = (cwd) => {
   return fs.existsSync(srcDir) ? srcDir : path.resolve(cwd);
 };
 
-export const computeScorecard = (cwd, { timeoutMs = DEFAULT_SCORECARD_TIMEOUT_MS } = {}) => new Promise((resolve, reject) => {
-  const worker = new Worker(WORKER_URL, { workerData: { cwd, targetDir: scorecardTarget(cwd) }, stdout: true, stderr: true });
-  worker.stdout.on('data', (chunk) => process.stderr.write(chunk));
-  worker.stderr.on('data', (chunk) => process.stderr.write(chunk));
-  const cancelTimeout = scheduleTimeout(() => {
-    worker.terminate();
-    reject(new Error(`scorecard audit timed out after ${timeoutMs} ms`));
-  }, timeoutMs);
-  worker.once('message', (scorecard) => {
-    cancelTimeout();
-    worker.terminate();
-    resolve(scorecard);
-  });
-  worker.once('error', (err) => {
-    cancelTimeout();
-    reject(err);
-  });
-});
+export const computeScorecard = (cwd, { timeoutMs = DEFAULT_SCORECARD_TIMEOUT_MS } = {}) => runWorker(
+  WORKER_URL,
+  { cwd, targetDir: scorecardTarget(cwd) },
+  { label: 'scorecard audit', timeoutMs }
+);

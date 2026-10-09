@@ -112,10 +112,5 @@ export const startStdioServer = (options = {}) => {
   const rl = readline.createInterface({ input, terminal: false });
   rl.on('line', routeLine);
 
-  const notifyResourceUpdated = (uri) => {
-    const notification = handler.notifyResourceUpdated?.(uri);
-    if (notification) writeJsonRpc(notification);
-  };
-
-  return { rl, handler, notifyResourceUpdated };
+  return { rl, handler };
 };
