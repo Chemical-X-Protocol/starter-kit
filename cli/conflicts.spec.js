@@ -118,7 +118,7 @@ test('boot: conflicts and d --conflicts run even when chemx\'s own sources are m
     const kit = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-broken-kit-')));
     try {
       fs.mkdirSync(path.join(kit, 'cli'));
-      for (const f of ['index.js', 'conflicts.js']) fs.copyFileSync(path.join(CLI_DIR, f), path.join(kit, 'cli', f));
+      for (const f of ['index.js', 'conflicts.js', 'conflicts-cli.js']) fs.copyFileSync(path.join(CLI_DIR, f), path.join(kit, 'cli', f));
       write(kit, 'cli/main.js', [`${OURS} HEAD`, 'export const x = 1;', MID, 'export const x = 2;', `${THEIRS} side`, ''].join('\n'));
       const cli = path.join(kit, 'cli', 'index.js');
       const listed = run(dir, ['conflicts'], cli);

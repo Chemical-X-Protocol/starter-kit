@@ -67,6 +67,11 @@ const isInsideWorkTree = (cwd) => runGit(['rev-parse', '--is-inside-work-tree'],
 
 export const runDiff = async (rawArgs = [], isCli = true, cwd = process.cwd()) => {
   const subArgs = rawArgs.filter((a) => a !== 'd' && a !== 'diff');
+  const wantsConflicts = subArgs.includes('--conflicts');
+  if (wantsConflicts) {
+    const { conflictDiff } = await import('../conflicts-cli.js');
+    return emitWrapperResult(conflictDiff(subArgs, cwd), isCli);
+  }
   const isFull = subArgs.includes('--full');
   const gitArgs = subArgs.filter((a) => a !== '--full');
   const isExplicitNoIndex = gitArgs.includes('--no-index');

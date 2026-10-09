@@ -208,6 +208,7 @@ const DISPATCHER = {
   d: (p, cwd) => runWrapper('runDiff', p.args || [], cwd),
   diff: (p, cwd) => runWrapper('runDiff', p.args || [], cwd),
   log: (p, cwd) => runWrapper('runLog', p.args || [], cwd),
+  conflicts: async (p, cwd) => (await import('../conflicts.js')).collectConflicts(cwd),
   p: (p, cwd) => runWrapper('runPkg', [p.query].filter(Boolean), cwd),
   pkg: (p, cwd) => runWrapper('runPkg', [p.query].filter(Boolean), cwd),
   f: (p, cwd) => runWrapper('runFiles', [p.filter].filter(Boolean), cwd),

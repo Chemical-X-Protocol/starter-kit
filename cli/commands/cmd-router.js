@@ -81,6 +81,12 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
       runReaderCli(rawArgs.slice(1), true);
       break;
     }
+    case 'conflicts': {
+      // Normally answered by the boot shim in cli/index.js before this router loads.
+      const { runConflictsCli } = await import('../conflicts-cli.js');
+      process.exitCode = runConflictsCli(rawArgs, process.cwd());
+      break;
+    }
     case 'patch':
     case 'edit': {
       const { runPatcherCli } = await import('../patcher.js');

@@ -146,6 +146,7 @@ export const runReaderCli = (args, isCli = false) => {
     if (isJson) {
       process.stdout.write(JSON.stringify(res, null, 2) + '\n');
     } else {
+      if (res.conflict) process.stdout.write(`${ANSI.GOLD}⚠ ${res.conflict}${ANSI.RESET}\n`);
       process.stdout.write(`${ANSI.BOLD}${ANSI.CYAN}--- ${formatReadHeader(res)} ---${ANSI.RESET}\n`);
       process.stdout.write(formatReadBody(res) + '\n');
       if (res.enriched) {

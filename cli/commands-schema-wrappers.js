@@ -10,9 +10,21 @@ export const WRAPPER_COMMANDS = [
     description: 'Runs git diff -U0 --no-color. Micro-syncs dirty files to an existing .chemx/index.db.',
     flags: [
       { flag: '--stat', desc: 'Show the diff stat only' },
-      { flag: '--full', desc: 'Never collapse to --stat' }
+      { flag: '--full', desc: 'Never collapse to --stat' },
+      { flag: '--conflicts', desc: 'Combined diff of unmerged files only (works mid-merge, even of chemx itself)' }
     ],
-    examples: ['chemx d', 'chemx d --stat', 'chemx d HEAD~1 --full']
+    examples: ['chemx d', 'chemx d --stat', 'chemx d HEAD~1 --full', 'chemx d --conflicts']
+  },
+  {
+    name: 'conflicts',
+    aliases: [],
+    group: 'wrappers',
+    brief: 'Unmerged paths, both sides',
+    usage: 'chemx conflicts [--json]',
+    summary: 'Lists unmerged paths mid-merge or rebase with both sides of every conflict hunk.',
+    description: 'Reads git ls-files -u and the working files; ours/base/theirs lines per hunk. Loads before the rest of chemx, so it works while chemx itself is mid-merge.',
+    flags: [{ flag: '--json', desc: 'Output { isRepo, unmerged: [{ path, stages, hunks }] }' }],
+    examples: ['chemx conflicts', 'chemx conflicts --json', 'chemx d --conflicts']
   },
   {
     name: 'log',

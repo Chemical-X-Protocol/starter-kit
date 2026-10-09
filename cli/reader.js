@@ -10,6 +10,7 @@ import { isMarkdownFile, generateMarkdownOutline } from './reader-markdown.js';
 import { locateSymbols } from './symbol-locator.js';
 import { blankOutsideScripts } from './sfc-scripts.js';
 import { stripCommentsKeepingLines } from './comment-ranges.js';
+import { conflictHunksOf, describeConflicts } from './conflicts.js';
 
 import {
   stripCodeComments,
@@ -306,6 +307,12 @@ export const readTokenOptimized = (targetPath, options = {}) => {
   const rawLines = splitFileLines(rawContent);
   const totalLines = rawLines.length;
 
+  // An unmerged file is not parseable: AST modes would print a wrong outline or "symbol not
+  // found". Show the numbered lines (what a merge needs) with a one-line note instead.
+  const conflictHunks = conflictHunksOf(rawContent);
+  const conflictNote = conflictHunks.length > 0 ? describeConflicts(rawPath, conflictHunks) : null;
+  if (conflictNote) options = { ...options, template: false, logic: false, outline: false, symbol: undefined, enrich: false };
+
   if (options.template) {
     const templateText = extractTemplateContent(rawContent, targetPath);
     const templateIndex = rawContent.indexOf(templateText);
@@ -382,7 +389,9 @@ export const readTokenOptimized = (targetPath, options = {}) => {
 
   // Read window: files longer than autoThreshold read without a symbol or slice return an AST
   // outline to protect context. A tool budget, not an architecture rule (AGENTS.md owns those).
-  if (!hasLineRange && totalLines > autoThreshold) {
+  const isOverWindow = !hasLineRange && totalLines > autoThreshold;
+  const shouldAutoOutline = isOverWindow && !conflictNote;
+  if (shouldAutoOutline) {
     const outlineText = generateAstOutline(rawContent, rawPath);
     const isCliHint = options.hintSyntax === 'cli';
     const symbolHint = isCliHint
@@ -444,6 +453,7 @@ export const readTokenOptimized = (targetPath, options = {}) => {
     ...(slice.lineNumbers ? { lineNumbers: slice.lineNumbers } : {}),
     ...(slice.notes.length > 0 ? { notes: slice.notes } : {}),
     ...(trailer ? { trailer } : {}),
+    ...(conflictNote ? { conflict: conflictNote } : {}),
   };
 };
 
