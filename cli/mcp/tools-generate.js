@@ -9,7 +9,7 @@ export const handleGenerateCapsule = (args = {}, cwd = process.cwd()) => {
   const isJig = Boolean(args.jig || args.kind || (args.tier && JIG_KINDS.has(args.tier.toLowerCase())));
   if (isJig) {
     const kind = args.kind || (typeof args.jig === 'string' ? args.jig : null) || (args.tier && JIG_KINDS.has(args.tier.toLowerCase()) ? args.tier : 'service');
-    const jigResult = createJigFiles({
+    return createJigFiles({
       kind,
       name: (name || `sample-${kind}`).trim(),
       targetParent: targetDir,
@@ -23,7 +23,6 @@ export const handleGenerateCapsule = (args = {}, cwd = process.cwd()) => {
       dryRun: Boolean(dryRun),
       cwd
     });
-    return jigResult;
   }
 
   const hasName = Boolean(name && name.trim());
@@ -64,7 +63,8 @@ export const handleChemxTrend = async (args = {}, cwd = process.cwd()) => {
   const db = openIndexDb(targetCwd);
   const limit = args.limit || 10;
   const snapshots = fetchScoreTrends(db, limit);
-  if (args.json) {
+  const wantsJson = Boolean(args.json);
+  if (wantsJson) {
     const scores = snapshots.map((s) => s.score);
     const hasScores = snapshots.length > 0;
     const latestScore = hasScores ? snapshots[snapshots.length - 1].score : null;

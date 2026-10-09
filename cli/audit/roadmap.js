@@ -198,10 +198,10 @@ export const buildSelfHealingRoadmapPrompt = (report) => {
   lines.push('Act as a Principal Systems Architect. Execute a self-healing architectural remediation of our codebase by following this strict multi-phase sequence in order:\n');
 
   lines.push('### AI AGENT DISCOVERY & REFACTORING COMMANDS:');
-  lines.push('- Discovery & Inspect: Run `pnpm q "<target>" --inspect` (or `npx chemx search "<target>" --inspect`) to inspect component props and hooks before editing.');
-  lines.push('- Tier Filter: Run `pnpm q "<query>" --tier=molecule` (or `atom`, `organism`, `hook`) to find related capsules.');
-  lines.push('- Zero-Overhead JSON: Run `pnpm q "<query>" --json` for minified AST metadata without burning context tokens on whole files.');
-  lines.push('- Re-Verify Score: Run `npx chemx audit` after completing each phase to verify health score improvements.\n');
+  lines.push('- Discovery & Inspect: Run `chemx q "<target>" --inspect` to inspect component props and hooks before editing.');
+  lines.push('- Tier Filter: Run `chemx q "<query>" --tier=molecule` (or `atom`, `organism`, `hook`) to find related capsules.');
+  lines.push('- Zero-Overhead JSON: Run `chemx q "<query>" --json` for minified AST metadata without burning context tokens on whole files.');
+  lines.push('- Re-Verify Score: Run `chemx audit` after completing each phase to verify health score improvements.\n');
 
   phases.forEach((p) => {
     lines.push(`### STEP ${p.step}: ${p.phase}`);
@@ -215,7 +215,7 @@ export const buildSelfHealingRoadmapPrompt = (report) => {
       }
       const rawTarget = item.target.split(' ')[0].replace(/->.*/, '').trim();
       if (rawTarget && !rawTarget.includes('*')) {
-        lines.push(`   Command: pnpm q "${rawTarget}" --inspect`);
+        lines.push(`   Command: chemx q "${rawTarget}" --inspect`);
       }
     });
     lines.push('');

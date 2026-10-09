@@ -24,7 +24,8 @@ export const HISTORY_TOTAL = 500;
 // the audit still reports, and CHEMX_DEBUG says why nothing was recorded.
 const historyNote = {
   warn: (context, err) => {
-    if (!process.env.CHEMX_DEBUG) return;
+    const isDebugEnabled = Boolean(process.env.CHEMX_DEBUG);
+    if (!isDebugEnabled) return;
     const message = err instanceof Error ? err.message : String(err ?? '');
     process.stderr.write(`[audit history] ${context}: ${message}\n`);
   }
@@ -39,7 +40,8 @@ export const trimAuditHistory = (history, { perScope = HISTORY_PER_SCOPE, total 
   for (let i = history.length - 1; i >= 0 && keptNewestFirst.length < total; i--) {
     const key = scopeKey(history[i]);
     const count = countByScope.get(key) ?? 0;
-    if (count >= perScope) continue;
+    const isScopeFull = count >= perScope;
+    if (isScopeFull) continue;
     countByScope.set(key, count + 1);
     keptNewestFirst.push(history[i]);
   }
@@ -124,7 +126,8 @@ export const createSnapshotFromReport = (report, { scope = null, isPartial = fal
 
 export const getAuditHistory = (cwd = process.cwd()) => {
   const historyPath = path.resolve(cwd, '.chemx', 'history.json');
-  if (!fs.existsSync(historyPath)) return [];
+  const hasHistoryFile = fs.existsSync(historyPath);
+  if (!hasHistoryFile) return [];
   try {
     const raw = fs.readFileSync(historyPath, 'utf-8');
     const parsed = JSON.parse(raw);
@@ -138,7 +141,8 @@ export const getAuditBaseline = (cwd = process.cwd()) => {
   const history = getAuditHistory(cwd);
   const baselinePath = path.resolve(cwd, '.chemx', 'baseline.json');
   let explicitBaseline = null;
-  if (fs.existsSync(baselinePath)) {
+  const hasBaselineFile = fs.existsSync(baselinePath);
+  if (hasBaselineFile) {
     try {
       const raw = fs.readFileSync(baselinePath, 'utf-8');
       explicitBaseline = JSON.parse(raw);
@@ -148,7 +152,8 @@ export const getAuditBaseline = (cwd = process.cwd()) => {
     }
   }
 
-  if (history.length === 0) {
+  const isHistoryEmpty = history.length === 0;
+  if (isHistoryEmpty) {
     return explicitBaseline;
   }
 
@@ -157,7 +162,8 @@ export const getAuditBaseline = (cwd = process.cwd()) => {
   for (const s of history) {
     const currentScore = s.health?.score ?? 100;
     const lowestScore = lowestSnapshot.health?.score ?? 100;
-    if (currentScore < lowestScore) {
+    const isNewLowest = currentScore < lowestScore;
+    if (isNewLowest) {
       lowestSnapshot = s;
     }
   }
@@ -192,7 +198,8 @@ export const saveAuditSnapshot = (report, cwd = process.cwd(), scopeInfo = {}) =
     const timeDiff = Math.abs(Date.now() - new Date(last.timestamp).getTime());
     const isSameMetrics = hasMatchingAuditMetrics(last, snapshot);
 
-    if (timeDiff < 5000 && isSameMetrics) {
+    const isDuplicateSnapshot = timeDiff < 5000 && isSameMetrics;
+    if (isDuplicateSnapshot) {
       return {
         snapshot: last,
         history,
@@ -220,7 +227,8 @@ export const saveAuditSnapshot = (report, cwd = process.cwd(), scopeInfo = {}) =
   const currentScore = snapshot.health?.score ?? 100;
   const baselineScore = currentBaseline?.health?.score ?? 101;
 
-  if (!currentBaseline || currentScore < baselineScore) {
+  const shouldEstablishBaseline = !currentBaseline || currentScore < baselineScore;
+  if (shouldEstablishBaseline) {
     try {
       fs.writeFileSync(baselinePath, JSON.stringify(snapshot, null, 2), 'utf-8');
       isNewBaseline = true;
@@ -263,13 +271,15 @@ export const calculateTransformationDelta = (beforeSnapshot, afterSnapshot) => {
   const costPerMillion = afterSnapshot.tokens?.costPerMillion || beforeSnapshot.tokens?.costPerMillion || 3.0;
 
   const resolveCostPass = (tokensObj) => {
-    if (tokensObj?.excessCostPerPass !== undefined) return tokensObj.excessCostPerPass;
+    const hasExplicitCost = tokensObj?.excessCostPerPass !== undefined;
+    if (hasExplicitCost) return tokensObj.excessCostPerPass;
     const excess = tokensObj?.estimatedExcessTokens || 0;
     return Number(((excess / 1000000) * costPerMillion).toFixed(3));
   };
 
   const resolveMonthlyTax = (tokensObj) => {
-    if (tokensObj?.monthlyWastePerDev !== undefined) return tokensObj.monthlyWastePerDev;
+    const hasExplicitTax = tokensObj?.monthlyWastePerDev !== undefined;
+    if (hasExplicitTax) return tokensObj.monthlyWastePerDev;
     const costPass = resolveCostPass(tokensObj);
     return Number((costPass * 20 * 5 * 4).toFixed(2));
   };
@@ -323,7 +333,8 @@ export const formatTransformationTerminal = (beforeSnapshot, afterSnapshot, opti
   const lines = [];
 
   const formatDeltaNumber = (val, invertPositiveGood = false) => {
-    if (val === 0) return `${DIM}0 (No change)${RESET}`;
+    const isUnchanged = val === 0;
+    if (isUnchanged) return `${DIM}0 (No change)${RESET}`;
     const isGood = invertPositiveGood ? val < 0 : val > 0;
     const sign = val > 0 ? `+${val}` : `${val}`;
     const color = isGood ? GREEN : RED;
@@ -331,7 +342,8 @@ export const formatTransformationTerminal = (beforeSnapshot, afterSnapshot, opti
   };
 
   const formatDeltaCurrency = (val, perUnit = '') => {
-    if (val === 0) return `${DIM}0 (No change)${RESET}`;
+    const isUnchanged = val === 0;
+    if (isUnchanged) return `${DIM}0 (No change)${RESET}`;
     const isGood = val < 0;
     const sign = val > 0 ? `+$${val.toFixed(2)}` : `-$${Math.abs(val).toFixed(2)}`;
     const color = isGood ? GREEN : RED;
@@ -393,10 +405,12 @@ export const formatTransformationTerminal = (beforeSnapshot, afterSnapshot, opti
   lines.push('');
 
   const resolvePillarDeltaArrow = (pDelta) => {
-    if (pDelta.improved) {
+    const isResolved = Boolean(pDelta.improved);
+    if (isResolved) {
       return `${GREEN}▲ RESOLVED${RESET}`;
     }
-    if (pDelta.beforeStatus === pDelta.afterStatus) {
+    const isStatusUnchanged = pDelta.beforeStatus === pDelta.afterStatus;
+    if (isStatusUnchanged) {
       return `${DIM}━ UNCHANGED${RESET}`;
     }
     return `${RED}▼ DEGRADED${RESET}`;
@@ -431,7 +445,8 @@ export const formatHistoryTimelineTerminal = (history) => {
   lines.push(`${CYAN}======================================================================${RESET}`);
   lines.push('');
 
-  if (history.length === 0) {
+  const isTimelineEmpty = history.length === 0;
+  if (isTimelineEmpty) {
     lines.push('   No historical audits recorded yet.');
     lines.push('');
     return lines.join('\n');
@@ -441,8 +456,10 @@ export const formatHistoryTimelineTerminal = (history) => {
   lines.push(`   ----------------------------------------------------------------------------`);
 
   const resolveScoreGradeColor = (score) => {
-    if (score >= 90) return GREEN;
-    if (score >= 70) return YELLOW;
+    const isHealthy = score >= 90;
+    if (isHealthy) return GREEN;
+    const isFair = score >= 70;
+    if (isFair) return YELLOW;
     return RED;
   };
 

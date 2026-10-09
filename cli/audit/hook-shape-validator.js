@@ -88,23 +88,27 @@ export const createHookShapeRegistry = () => {
 
   const validateCrossHookConsistency = () => {
     const consistencyViolations = [];
-    if (entries.length < 2) return consistencyViolations;
+    const hasMultipleHooks = entries.length >= 2;
+    if (!hasMultipleHooks) return consistencyViolations;
 
     for (const [clusterKey, cluster] of Object.entries(SEMANTIC_STATUS_CLUSTERS)) {
       const occurrences = [];
       for (const entry of entries) {
         for (const prop of entry.statusProps) {
           const lower = prop.name.toLowerCase();
-          if (cluster.variants.has(lower)) {
+          const isClusterVariant = cluster.variants.has(lower);
+          if (isClusterVariant) {
             occurrences.push({ ...prop, hookName: entry.hookName, filePath: entry.filePath });
           }
         }
       }
 
       const uniqueNames = Array.from(new Set(occurrences.map((o) => o.name)));
-      if (uniqueNames.length > 1) {
+      const hasMixedNames = uniqueNames.length > 1;
+      if (hasMixedNames) {
         for (const occ of occurrences) {
-          if (occ.name !== cluster.canonical) {
+          const isNonCanonical = occ.name !== cluster.canonical;
+          if (isNonCanonical) {
             const meta = RULE_REGISTRY.HOOK_SHAPE_CONTRACT;
             consistencyViolations.push({
               filePath: occ.filePath,
@@ -132,11 +136,13 @@ export const validateHookReturnShape = ({ retPath, astPath, relativePath, violat
 
   const properties = retPath.node.argument.properties;
   const propCount = properties.length;
-  const hookName = astPath.node.id?.name || astPath.parentPath?.node?.id?.name || 'anonymousHook';
+  const parentNode = astPath.parentPath?.node;
+  const hookName = astPath.node.id?.name || parentNode?.id?.name || 'anonymousHook';
   const meta = RULE_REGISTRY.HOOK_SHAPE_CONTRACT;
   const overloadMeta = RULE_REGISTRY.HOOK_RETURN_OVERLOAD;
 
-  if (propCount > 5) {
+  const isSaturated = propCount > 5;
+  if (isSaturated) {
     violations.push({
       filePath: relativePath,
       line: retPath.node.loc?.start.line || 1,
@@ -199,7 +205,8 @@ export const validateHookReturnShape = ({ retPath, astPath, relativePath, violat
       const isStatusPredicate = STATUS_HEURISTIC_REGEX.test(keyName);
       if (isStatusPredicate) {
         statusProps.push({ name: keyName, line, column });
-        if (MUTUALLY_EXCLUSIVE_STATUSES.has(keyName.toLowerCase())) {
+        const isMutuallyExclusive = MUTUALLY_EXCLUSIVE_STATUSES.has(keyName.toLowerCase());
+        if (isMutuallyExclusive) {
           mutualStatuses.push(keyName);
         }
         continue;
@@ -283,13 +290,15 @@ export const validateHookReturnShape = ({ retPath, astPath, relativePath, violat
     const isStatus = STATUS_HEURISTIC_REGEX.test(keyName) || STATUS_EXACT_NAMES.has(keyName.toLowerCase());
     if (isStatus) {
       statusProps.push({ name: keyName, line, column });
-      if (MUTUALLY_EXCLUSIVE_STATUSES.has(keyName.toLowerCase())) {
+      const isMutuallyExclusive = MUTUALLY_EXCLUSIVE_STATUSES.has(keyName.toLowerCase());
+      if (isMutuallyExclusive) {
         mutualStatuses.push(keyName);
       }
     }
   }
 
-  if (mutualStatuses.length >= 3) {
+  const hasCompetingStatuses = mutualStatuses.length >= 3;
+  if (hasCompetingStatuses) {
     violations.push({
       filePath: relativePath,
       line: retPath.node.loc?.start.line || 1,

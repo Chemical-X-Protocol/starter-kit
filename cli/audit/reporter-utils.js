@@ -84,21 +84,29 @@ export const resolvePillarRiskWeight = (pillarData) => {
 };
 
 export const resolveGradeColor = (scoreOrGrade) => {
-  if (typeof scoreOrGrade === 'string') {
+  const isLetterGrade = typeof scoreOrGrade === 'string';
+  if (isLetterGrade) {
     const g = scoreOrGrade.toUpperCase();
-    if (g.startsWith('A')) return GREEN;
-    if (g === 'B' || g === 'C') return YELLOW;
-    if (g === 'D') return ORANGE;
+    const isTopGrade = g.startsWith('A');
+    if (isTopGrade) return GREEN;
+    const isMiddleGrade = g === 'B' || g === 'C';
+    if (isMiddleGrade) return YELLOW;
+    const isWeakGrade = g === 'D';
+    if (isWeakGrade) return ORANGE;
     return RED;
   }
-  if (scoreOrGrade >= 90) return GREEN;
-  if (scoreOrGrade >= 70) return YELLOW;
+  const isHealthyScore = scoreOrGrade >= 90;
+  if (isHealthyScore) return GREEN;
+  const isAcceptableScore = scoreOrGrade >= 70;
+  if (isAcceptableScore) return YELLOW;
   return RED;
 };
 
 export const resolveRiskColor = (riskLevel) => {
-  if (riskLevel === 'HIGH') return RED;
-  if (riskLevel === 'MODERATE') return YELLOW;
+  const isHighRisk = riskLevel === 'HIGH';
+  if (isHighRisk) return RED;
+  const isModerateRisk = riskLevel === 'MODERATE';
+  if (isModerateRisk) return YELLOW;
   return GREEN;
 };
 
@@ -165,8 +173,10 @@ export const PILLAR_SHORT_NAMES = {
 };
 
 export const resolveBadgeColor = (score) => {
-  if (score >= 90) return '06b6d4';
-  if (score >= 70) return 'f59e0b';
+  const isHealthyScore = score >= 90;
+  if (isHealthyScore) return '06b6d4';
+  const isAcceptableScore = score >= 70;
+  if (isAcceptableScore) return 'f59e0b';
   return 'ef4444';
 };
 
@@ -179,11 +189,13 @@ export const formatPillarShieldBadges = (pillars = {}) => {
     const label = encodeURIComponent(rawLabel);
     let statusText = 'PASS';
     let color = '06b6d4';
-    if (data?.status === 'WARN') {
+    const isWarn = data?.status === 'WARN';
+    const isFailed = data?.status === 'FAILED';
+    if (isWarn) {
       const v = data?.violations || 0;
       statusText = encodeURIComponent(`WARN ${v}`.replace(/-/g, '--').replace(/ /g, '_'));
       color = 'f59e0b';
-    } else if (data?.status === 'FAILED') {
+    } else if (isFailed) {
       const v = data?.violations || 0;
       statusText = encodeURIComponent(`FAIL ${v}`.replace(/-/g, '--').replace(/ /g, '_'));
       color = 'ef4444';
@@ -200,8 +212,10 @@ export const resolvePriorityBadge = (idx) => {
 };
 
 export const resolveMarkdownStatusIcon = (status) => {
-  if (status === 'PASSED') return '🟢 **PASSED**';
-  if (status === 'WARN') return '🟡 **WARN**';
+  const isPassed = status === 'PASSED';
+  if (isPassed) return '🟢 **PASSED**';
+  const isWarn = status === 'WARN';
+  if (isWarn) return '🟡 **WARN**';
   return '🔴 **FAILED**';
 };
 
@@ -218,9 +232,11 @@ export const formatPillarReactionBadgesTerminal = (pillars = {}) => {
   for (const [pillarName, data] of Object.entries(pillars)) {
     const icon = PILLAR_EMOJIS[pillarName] || '🏛️';
     const violations = data?.violations || 0;
-    if (data?.status === 'PASSED') {
+    const isPassed = data?.status === 'PASSED';
+    const isWarn = data?.status === 'WARN';
+    if (isPassed) {
       badges.push(`${GREEN}[ ${icon} PASS ]${RESET}`);
-    } else if (data?.status === 'WARN') {
+    } else if (isWarn) {
       badges.push(`${YELLOW}[ ${icon} WARN (${violations}) ]${RESET}`);
     } else {
       badges.push(`${RED}[ ${icon} FAIL (${violations}) ]${RESET}`);
@@ -234,9 +250,11 @@ export const formatPillarReactionBadgesMarkdown = (pillars = {}) => {
   for (const [pillarName, data] of Object.entries(pillars)) {
     const icon = PILLAR_EMOJIS[pillarName] || '🏛️';
     const violations = data?.violations || 0;
-    if (data?.status === 'PASSED') {
+    const isPassed = data?.status === 'PASSED';
+    const isWarn = data?.status === 'WARN';
+    if (isPassed) {
       badges.push(`\`[ ${icon} PASS ]\``);
-    } else if (data?.status === 'WARN') {
+    } else if (isWarn) {
       badges.push(`\`[ ${icon} WARN: ${violations} ]\``);
     } else {
       badges.push(`\`[ ${icon} FAIL: ${violations} ]\``);

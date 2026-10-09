@@ -43,7 +43,8 @@ export const maskCommentsAndStrings = (code) => {
         out += code[i] === '\n' ? '\n' : ' ';
         i++;
       }
-      if (i < len) {
+      const hasCommentEnd = i < len;
+      if (hasCommentEnd) {
         out += '  ';
         i += 2;
       }
@@ -53,10 +54,12 @@ export const maskCommentsAndStrings = (code) => {
       out += ' '.repeat(skip);
       i += skip;
       while (i < len) {
-        if (code[i] === '"' && code[i + 1] === '"') {
+        const isEscapedQuote = code[i] === '"' && code[i + 1] === '"';
+        const isClosingQuote = code[i] === '"';
+        if (isEscapedQuote) {
           out += '  ';
           i += 2;
-        } else if (code[i] === '"') {
+        } else if (isClosingQuote) {
           out += ' ';
           i++;
           break;
@@ -69,7 +72,8 @@ export const maskCommentsAndStrings = (code) => {
       out += ' ';
       i++;
       while (i < len && code[i] !== '"' && code[i] !== '\n') {
-        if (code[i] === '\\') {
+        const isEscapeChar = code[i] === '\\';
+        if (isEscapeChar) {
           out += '  ';
           i += 2;
         } else {
@@ -77,7 +81,8 @@ export const maskCommentsAndStrings = (code) => {
           i++;
         }
       }
-      if (i < len && code[i] === '"') {
+      const hasClosingDoubleQuote = i < len && code[i] === '"';
+      if (hasClosingDoubleQuote) {
         out += ' ';
         i++;
       }
@@ -85,7 +90,8 @@ export const maskCommentsAndStrings = (code) => {
       out += ' ';
       i++;
       while (i < len && code[i] !== "'" && code[i] !== '\n') {
-        if (code[i] === '\\') {
+        const isEscapeChar = code[i] === '\\';
+        if (isEscapeChar) {
           out += '  ';
           i += 2;
         } else {
@@ -93,7 +99,8 @@ export const maskCommentsAndStrings = (code) => {
           i++;
         }
       }
-      if (i < len && code[i] === "'") {
+      const hasClosingSingleQuote = i < len && code[i] === "'";
+      if (hasClosingSingleQuote) {
         out += ' ';
         i++;
       }
@@ -118,17 +125,22 @@ const extractMethods = (maskedContent) => {
     let endIdx = -1;
 
     for (let i = startIdx; i < maskedContent.length; i++) {
-      if (maskedContent[i] === '{') depth++;
-      else if (maskedContent[i] === '}') {
+      const isOpenBrace = maskedContent[i] === '{';
+      const isCloseBrace = maskedContent[i] === '}';
+      if (isOpenBrace) {
+        depth++;
+      } else if (isCloseBrace) {
         depth--;
-        if (depth === 0) {
+        const isMethodClosed = depth === 0;
+        if (isMethodClosed) {
           endIdx = i;
           break;
         }
       }
     }
 
-    if (endIdx !== -1) {
+    const hasMethodEnd = endIdx !== -1;
+    if (hasMethodEnd) {
       const startLine = maskedContent.slice(0, match.index).split('\n').length;
       methods.push({
         name: methodName,
@@ -168,7 +180,8 @@ const evaluateMethodComplexityAndNesting = (method, relativePath, violations, co
   const nullCoalMatches = body.match(/\?\?/g);
   if (nullCoalMatches) cyclomaticComplexity += nullCoalMatches.length;
 
-  if (cyclomaticComplexity > maxComplexity) {
+  const isTooComplex = cyclomaticComplexity > maxComplexity;
+  if (isTooComplex) {
     const meta = RULE_REGISTRY.COMPLEXITY_CYCLOMATIC_HIGH;
     violations.push({
       filePath: relativePath,
@@ -199,20 +212,23 @@ const evaluateMethodComplexityAndNesting = (method, relativePath, violations, co
       if (pendingControl) {
         controlStack.push({ braceLevel, line: pendingControl.line });
         pendingControl = null;
-        if (controlStack.length > maxControlDepth) {
+        const isNewDeepest = controlStack.length > maxControlDepth;
+        if (isNewDeepest) {
           maxControlDepth = controlStack.length;
           maxDepthLine = curLine;
         }
       }
     } else if (token === '}') {
-      if (controlStack.length > 0 && controlStack[controlStack.length - 1].braceLevel === braceLevel) {
+      const isControlBlockClosing = controlStack.length > 0 && controlStack[controlStack.length - 1].braceLevel === braceLevel;
+      if (isControlBlockClosing) {
         controlStack.pop();
       }
       braceLevel--;
     }
   }
 
-  if (maxControlDepth >= maxNestingLimit) {
+  const isNestedTooDeep = maxControlDepth >= maxNestingLimit;
+  if (isNestedTooDeep) {
     const meta = RULE_REGISTRY.STRUCTURAL_WEIGHT_EXCEEDED;
     violations.push({
       filePath: relativePath,
@@ -231,7 +247,8 @@ const evaluateMethodComplexityAndNesting = (method, relativePath, violations, co
   while ((condMatch = condRegex.exec(body)) !== null) {
     const expr = condMatch[1];
     const logicOps = (expr.match(/&&|\|\|/g) || []).length;
-    if (logicOps >= 3) {
+    const hasManyLogicOps = logicOps >= 3;
+    if (hasManyLogicOps) {
       const lineNum = method.startLine + body.slice(0, condMatch.index).split('\n').length - 1;
       const meta = RULE_REGISTRY.CONTROL_FLOW_INLINE_BOOLEAN;
       violations.push({
@@ -268,7 +285,8 @@ const checkCleanArchitectureAndCoupling = (content, relativePath, violations) =>
     const lineNum = content.slice(0, ctorMatch.index).split('\n').length;
     const rawParams = paramsText.split(',').map((p) => p.trim()).filter(Boolean);
 
-    if (rawParams.length > 5) {
+    const hasExcessiveParams = rawParams.length > 5;
+    if (hasExcessiveParams) {
       const meta = RULE_REGISTRY.COUPLING_EXCESSIVE_INJECTION;
       violations.push({
         filePath: relativePath,
@@ -351,7 +369,8 @@ export const analyzeCSharpCode = (content, relativePath, violations, config = {}
   lines.forEach((lineText, idx) => {
     const lineNum = idx + 1;
 
-    if (SIMULATION_SWITCH_PATTERN.test(lineText)) {
+    const hasSimulationSwitch = SIMULATION_SWITCH_PATTERN.test(lineText);
+    if (hasSimulationSwitch) {
       const meta = RULE_REGISTRY.AI_SLOP_LAZY_PLACEHOLDER;
       violations.push({
         filePath: relativePath,
@@ -366,7 +385,8 @@ export const analyzeCSharpCode = (content, relativePath, violations, config = {}
       });
     }
 
-    if (IN_MEMORY_DB_PATTERN.test(lineText)) {
+    const hasInMemoryDb = IN_MEMORY_DB_PATTERN.test(lineText);
+    if (hasInMemoryDb) {
       const meta = RULE_REGISTRY.SYNTHETIC_MOCK_DATA;
       violations.push({
         filePath: relativePath,
@@ -380,7 +400,8 @@ export const analyzeCSharpCode = (content, relativePath, violations, config = {}
       });
     }
 
-    if (SQLITE_PROVIDER_PATTERN.test(lineText)) {
+    const hasSqliteProvider = SQLITE_PROVIDER_PATTERN.test(lineText);
+    if (hasSqliteProvider) {
       const meta = RULE_REGISTRY.SYNTHETIC_MOCK_DATA;
       violations.push({
         filePath: relativePath,
@@ -394,7 +415,8 @@ export const analyzeCSharpCode = (content, relativePath, violations, config = {}
       });
     }
 
-    if (SIMULATED_DELAY_PATTERN.test(lineText)) {
+    const hasSimulatedDelay = SIMULATED_DELAY_PATTERN.test(lineText);
+    if (hasSimulatedDelay) {
       const meta = RULE_REGISTRY.AI_SLOP_LAZY_PLACEHOLDER;
       violations.push({
         filePath: relativePath,
@@ -409,7 +431,8 @@ export const analyzeCSharpCode = (content, relativePath, violations, config = {}
       });
     }
 
-    if (HARDCODED_LIST_MOCK_PATTERN.test(lineText)) {
+    const hasHardcodedListMock = HARDCODED_LIST_MOCK_PATTERN.test(lineText);
+    if (hasHardcodedListMock) {
       const meta = RULE_REGISTRY.SYNTHETIC_MOCK_DATA;
       violations.push({
         filePath: relativePath,

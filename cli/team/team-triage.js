@@ -11,20 +11,14 @@ import { postFeedEvent } from './team-db-feed.js';
 import { registerAgent } from './team-db-agents.js';
 import { ingestTaskTelemetry } from './team-telemetry.js';
 import { runAudit as executeAstAudit, auditFile } from '../audit-engine.js';
-import { calculateMolecularHealthScore, SCORE_MODEL } from '../audit/metrics.js';
 import { syncSearchIndex, syncViolationsIndex, recordAuditSnapshot } from '../search.js';
 
 import { queryUnassignedHazards } from './team-db-task-helpers.js';
 import { checkCompletionOwnership, buildOwnershipRefusal, buildCompletionGuard } from './team-task-ownership.js';
+import { triageLog } from './team-triage-log.js';
+import { verifyTaskTarget } from './team-triage-verify.js';
 
 export { ingestTaskTelemetry, queryUnassignedHazards };
-
-// Triage is best-effort: a step that cannot run is reported under DEBUG and skipped.
-const triageLog = {
-  warn: (step, subject, err) => {
-    if (process.env.DEBUG) process.stderr.write(`[triage] ${step} skipped for ${subject}: ${err?.message || err}\n`);
-  }
-};
 
 const SEVERITY_PRIORITY = { CRITICAL: 1, HIGH: 2 };
 const priorityForSeverity = (severity, otherwise) => SEVERITY_PRIORITY[severity] ?? otherwise;
@@ -32,7 +26,8 @@ const priorityForSeverity = (severity, otherwise) => SEVERITY_PRIORITY[severity]
 const checkAndCompleteParent = (db, parentId, resolvedTasks) => {
   if (!parentId) return;
   const remaining = db.prepare("SELECT COUNT(*) as count FROM agent_tasks WHERE parent_id = ? AND status != 'done'").get(parentId)?.count || 0;
-  if (remaining === 0) {
+  const areAllChildrenDone = remaining === 0;
+  if (areAllChildrenDone) {
     updateTaskStatus(db, parentId, 'done', {
       resultPayload: {
         reconciled: true,
@@ -80,12 +75,12 @@ export const reconcileAuditTasks = (db, options = {}) => {
       const auditRes = auditFile(fullPath, task.target_path, { cwd });
       const violations = Array.isArray(auditRes) ? auditRes : (auditRes?.fileViolations || auditRes?.violations || []);
       const isBlocking = (v) => {
-        if (v.deprecated === true) return false;
+        const isDeprecated = v.deprecated === true;
+        if (isDeprecated) return false;
         const isDirectiveString = typeof v.directive === 'string';
         const isDeprecatedDirective = isDirectiveString && v.directive.includes('Deprecated');
         if (isDeprecatedDirective) return false;
-        const isCriticalOrHigh = v.severity === 'CRITICAL' || v.severity === 'HIGH';
-        return isCriticalOrHigh;
+        return v.severity === 'CRITICAL' || v.severity === 'HIGH';
       };
       const blockingHazards = violations.filter(isBlocking);
       const isClean = blockingHazards.length === 0;
@@ -107,7 +102,8 @@ export const reconcileAuditTasks = (db, options = {}) => {
     }
   }
 
-  if (resolvedTasks.length > 0) {
+  const hasResolvedTasks = resolvedTasks.length > 0;
+  if (hasResolvedTasks) {
     postFeedEvent(db, {
       author_id: '@triage-bot',
       event_type: 'triage_reconciled',
@@ -129,10 +125,12 @@ export const autoGenerateTasksFromAudit = (db, options = {}) => {
   try {
     const violationsCount = db.prepare('SELECT COUNT(*) as count FROM violations').get()?.count || 0;
     const filesCount = db.prepare('SELECT COUNT(*) as count FROM files').get()?.count || 0;
-    if (violationsCount === 0 && filesCount === 0) {
+    const isIndexEmpty = violationsCount === 0 && filesCount === 0;
+    if (isIndexEmpty) {
       const targetDir = options.targetDir || (fs.existsSync(path.resolve(cwd, 'src')) ? 'src' : '.');
       const report = executeAstAudit(targetDir, { cwd });
-      if (report?.violations) {
+      const hasReportViolations = Boolean(report?.violations);
+      if (hasReportViolations) {
         const syncRes = syncSearchIndex(targetDir, cwd);
         syncViolationsIndex(db, report.violations, { scope: syncRes?.scope || null });
         recordAuditSnapshot(db, report);
@@ -271,7 +269,8 @@ export const autoGenerateTasksFromAudit = (db, options = {}) => {
     if (task) createdTasks.push(task);
   }
 
-  if (createdTasks.length > 0) {
+  const hasCreatedTasks = createdTasks.length > 0;
+  if (hasCreatedTasks) {
     postFeedEvent(db, {
       author_id: '@triage-bot',
       event_type: 'triage_generated',
@@ -290,7 +289,8 @@ export const completeTaskWithAudit = (db, taskId, agentId, options = {}) => {
   if (!task) return null;
 
   const ownership = checkCompletionOwnership(task, agentId, options);
-  if (!ownership.allowed) return buildOwnershipRefusal(task, ownership);
+  const isOwnershipAllowed = Boolean(ownership.allowed);
+  if (!isOwnershipAllowed) return buildOwnershipRefusal(task, ownership);
 
   // No guessed conversation: only an explicit id (option, payload or env) is recorded.
   const conversationId = options.conversationId || task.result_payload?.conversationId || process.env.CONVERSATION_ID || null;
@@ -301,10 +301,12 @@ export const completeTaskWithAudit = (db, taskId, agentId, options = {}) => {
     conversationId,
     chatLink: conversationId ? `conversation://${conversationId}` : null
   };
-  if (ownership.override) resultPayload.ownershipOverride = ownership.override;
+  const hasOwnershipOverride = Boolean(ownership.override);
+  if (hasOwnershipOverride) resultPayload.ownershipOverride = ownership.override;
 
   const targetOverride = options.target || options.targetPath;
-  if (targetOverride) {
+  const hasTargetOverride = Boolean(targetOverride);
+  if (hasTargetOverride) {
     task.target_path = targetOverride;
     try {
       db.prepare('UPDATE agent_tasks SET target_path = ?, updated_at = ? WHERE id = ?').run(
@@ -317,8 +319,10 @@ export const completeTaskWithAudit = (db, taskId, agentId, options = {}) => {
     }
   }
 
-  if (!task.target_path) {
-    if (options.noTargetConfirm !== true && options.force !== true) {
+  const hasTargetPath = Boolean(task.target_path);
+  if (!hasTargetPath) {
+    const isUnconfirmedNoTarget = options.noTargetConfirm !== true && options.force !== true;
+    if (isUnconfirmedNoTarget) {
       return {
         refused: true,
         noTarget: true,
@@ -332,135 +336,8 @@ export const completeTaskWithAudit = (db, taskId, agentId, options = {}) => {
     resultPayload.verified = false;
     resultPayload.noTargetConfirmed = true;
   } else {
-    resultPayload.verificationApplicable = true;
-    const cwd = options.cwd || process.cwd();
-    const fullPath = path.isAbsolute(task.target_path) ? task.target_path : path.resolve(cwd, task.target_path);
-    let verified = false;
-    let hazardCount = 0;
-    let healthScore = 100;
-
-    if (fs.existsSync(fullPath)) {
-      try {
-        const auditRes = auditFile(fullPath, task.target_path, { cwd });
-        const remainingHazards = Array.isArray(auditRes) ? auditRes : (auditRes?.fileViolations || auditRes?.violations || []);
-        hazardCount = remainingHazards.length;
-        healthScore = calculateMolecularHealthScore(remainingHazards, 1).score;
-        const isStrict = Boolean(options.strict);
-        const isBlocking = (v) => {
-          if (isStrict) return true;
-          if (v.deprecated === true) return false;
-          if (typeof v.directive === 'string' && v.directive.includes('Deprecated')) return false;
-          return v.severity === 'CRITICAL' || v.severity === 'HIGH';
-        };
-        const blockingHazards = remainingHazards.filter(isBlocking);
-        const blockingCount = blockingHazards.length;
-
-        verified = blockingCount === 0;
-        resultPayload.verified = verified;
-        resultPayload.hazardCountAfter = hazardCount;
-        resultPayload.blockingHazardCountAfter = blockingCount;
-        resultPayload.healthAfter = healthScore;
-        resultPayload.healthModel = SCORE_MODEL;
-        resultPayload.remainingViolations = remainingHazards.map((v) => v.hazard || v.rule);
-
-        if (blockingCount > 0 && options.force !== true) {
-          return {
-            refused: true,
-            verified: false,
-            taskId: Number(taskId),
-            taskTitle: task.title,
-            hazardCount: blockingCount,
-            totalHazards: hazardCount,
-            targetPath: task.target_path,
-            healthScore,
-            violations: blockingHazards.map((v) => ({ line: v.line, hazard: v.hazard || v.rule, rule: v.rule })),
-            message: `Cannot complete task #${taskId}: ${blockingCount} blocking hazard(s) remain in ${task.target_path}. Fix the hazards or pass --force to complete anyway.`
-          };
-        }
-
-        resultPayload.forced = blockingCount > 0 && options.force === true;
-
-        // Update database files and violations state
-        db.prepare('DELETE FROM violations WHERE file_path = ?').run(task.target_path);
-        if (hazardCount > 0) {
-          const insertStmt = db.prepare(`
-            INSERT INTO violations (file_path, rule, severity, pillar, line, hazard, directive)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-          `);
-          for (const v of remainingHazards) {
-            insertStmt.run(task.target_path, v.rule || '', v.severity || 'LOW', v.pillar || '', v.line || 1, v.hazard || '', v.directive || '');
-          }
-        }
-        db.prepare('UPDATE files SET health_score = ?, hazard_count = ? WHERE path = ?').run(healthScore, hazardCount, task.target_path);
-      } catch (err) {
-        triageLog.warn('completion audit', task.target_path, err); // fall back to the cached file row
-        const fileRow = db.prepare('SELECT health_score, hazard_count, lines FROM files WHERE path = ?').get(task.target_path);
-        if (fileRow) {
-          let blockingCount = fileRow.hazard_count;
-          try {
-            const blockingRow = db.prepare(
-              "SELECT COUNT(*) as count FROM violations WHERE file_path = ? AND severity IN ('CRITICAL', 'HIGH')"
-            ).get(task.target_path);
-            if (blockingRow && typeof blockingRow.count === 'number') {
-              blockingCount = blockingRow.count > 0 ? blockingRow.count : fileRow.hazard_count;
-            }
-          } catch (err) {
-            triageLog.warn('blocking count', task.target_path, err);
-          }
-
-          if (blockingCount > 0 && options.force !== true) {
-            return {
-              refused: true,
-              taskId: Number(taskId),
-              taskTitle: task.title,
-              hazardCount: fileRow.hazard_count,
-              targetPath: task.target_path,
-              healthScore: fileRow.health_score,
-              message: `Cannot complete task #${taskId}: ${fileRow.hazard_count} hazard(s) remain in ${task.target_path}. Fix the hazards or pass --force to complete anyway.`
-            };
-          }
-          resultPayload.verified = blockingCount === 0;
-          resultPayload.healthAfter = fileRow.health_score;
-          resultPayload.hazardCountAfter = fileRow.hazard_count;
-          resultPayload.blockingHazardCountAfter = blockingCount;
-          resultPayload.linesAfter = fileRow.lines;
-          resultPayload.forced = blockingCount > 0 && options.force === true;
-        }
-      }
-    } else {
-      const fileRow = db.prepare('SELECT health_score, hazard_count, lines FROM files WHERE path = ?').get(task.target_path);
-      if (fileRow) {
-        let blockingCount = fileRow.hazard_count;
-        try {
-          const blockingRow = db.prepare(
-            "SELECT COUNT(*) as count FROM violations WHERE file_path = ? AND severity IN ('CRITICAL', 'HIGH')"
-          ).get(task.target_path);
-          if (blockingRow && typeof blockingRow.count === 'number') {
-            blockingCount = blockingRow.count > 0 ? blockingRow.count : fileRow.hazard_count;
-          }
-        } catch (err) {
-          triageLog.warn('blocking count', task.target_path, err);
-        }
-
-        if (blockingCount > 0 && options.force !== true) {
-          return {
-            refused: true,
-            taskId: Number(taskId),
-            taskTitle: task.title,
-            hazardCount: fileRow.hazard_count,
-            targetPath: task.target_path,
-            healthScore: fileRow.health_score,
-            message: `Cannot complete task #${taskId}: ${fileRow.hazard_count} hazard(s) remain in ${task.target_path}. Fix the hazards or pass --force to complete anyway.`
-          };
-        }
-        resultPayload.verified = blockingCount === 0;
-        resultPayload.healthAfter = fileRow.health_score;
-        resultPayload.hazardCountAfter = fileRow.hazard_count;
-        resultPayload.blockingHazardCountAfter = blockingCount;
-        resultPayload.linesAfter = fileRow.lines;
-        resultPayload.forced = blockingCount > 0 && options.force === true;
-      }
-    }
+    const refusal = verifyTaskTarget(db, task, taskId, options, resultPayload);
+    if (refusal) return refusal;
     releaseFileLock(db, task.target_path, agentId);
   }
 
@@ -479,13 +356,14 @@ export const completeTaskWithAudit = (db, taskId, agentId, options = {}) => {
     completedAt: Date.now(),
     completedBy: agentId
   };
-  if (ownership.override) diffReceipt.ownershipOverride = ownership.override;
+  if (hasOwnershipOverride) diffReceipt.ownershipOverride = ownership.override;
   resultPayload.receipt = diffReceipt;
 
   // Ownership is re-checked on the locked row; telemetry is ingested only once every gate passed.
   const guard = buildCompletionGuard(agentId, options, () => { resultPayload.telemetry = ingestTaskTelemetry(db, taskId, agentId, options); });
   const updatedTask = updateTaskStatus(db, taskId, 'done', { resultPayload, diffReceipt, guard });
-  if (updatedTask?.refused) return updatedTask;
+  const wasRefused = Boolean(updatedTask?.refused);
+  if (wasRefused) return updatedTask;
 
   postFeedEvent(db, {
     author_id: agentId,

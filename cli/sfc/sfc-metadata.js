@@ -14,7 +14,10 @@ const keyName = (key) => {
   return '';
 };
 
-const typeLabel = (node) => (node?.typeAnnotation?.typeAnnotation?.type || 'ts').replace(/^TS|Keyword$/g, '').toLowerCase();
+const typeLabel = (node) => {
+  const annotation = node?.typeAnnotation;
+  return (annotation?.typeAnnotation?.type || 'ts').replace(/^TS|Keyword$/g, '').toLowerCase();
+};
 
 const membersOfType = (typeNode, program) => {
   if (t.isTSTypeLiteral(typeNode)) return typeNode.members;
@@ -82,7 +85,8 @@ export const extractTemplateComponentImports = (sfc, localImportNames) => {
   for (const { tag, line } of collectComponentTags(sfc.template?.ast)) {
     const key = toComponentKey(tag);
     const isLocal = localKeys.has(key);
-    if (isLocal || seen.has(key)) continue;
+    const isKnown = isLocal || seen.has(key);
+    if (isKnown) continue;
     seen.add(key);
     rows.push({ importedSymbol: tag, sourceModule: toComponentSpecifier(tag), line });
   }

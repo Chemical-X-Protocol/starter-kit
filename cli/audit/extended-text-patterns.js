@@ -98,35 +98,43 @@ export const checkControllerViewContract = (filePath, relativePath, content, vio
   const controllerFullPath = path.join(dir, `${controllerRel}.ts`);
 
   const [controllerContent, readErr] = toResultSync(() => {
-    if (fs.existsSync(controllerFullPath)) {
+    const hasController = fs.existsSync(controllerFullPath);
+    if (hasController) {
       return fs.readFileSync(controllerFullPath, 'utf-8');
     }
     return null;
   });
 
-  if (readErr || !controllerContent) return;
+  const isControllerUnreadable = Boolean(readErr || !controllerContent);
+  if (isControllerUnreadable) return;
 
   // Locate the last `return {` in the controller (handles early-return guards).
   // Use a brace-depth-aware scan to find the matching closing brace so that
   // nested object literals (e.g. `filter: { current, set }`) do not truncate
-  // the extraction prematurely — the non-greedy `[\s\S]*?` regex stops at the
+  // the extraction prematurely: the non-greedy `[\s\S]*?` regex stops at the
   // first `}` it sees, which is wrong for controllers with nested return props.
   const returnStartIdx = controllerContent.lastIndexOf('return {');
-  if (returnStartIdx === -1) return;
+  const hasReturnObject = returnStartIdx !== -1;
+  if (!hasReturnObject) return;
 
   const openIdx = controllerContent.indexOf('{', returnStartIdx);
-  if (openIdx === -1) return;
+  const hasOpenBrace = openIdx !== -1;
+  if (!hasOpenBrace) return;
 
   let depth = 0;
   let closeIdx = -1;
   for (let i = openIdx; i < controllerContent.length; i++) {
-    if (controllerContent[i] === '{') depth++;
-    else if (controllerContent[i] === '}') {
+    const isOpenBrace = controllerContent[i] === '{';
+    const isCloseBrace = controllerContent[i] === '}';
+    if (isOpenBrace) depth++;
+    else if (isCloseBrace) {
       depth--;
-      if (depth === 0) { closeIdx = i; break; }
+      const isBalanced = depth === 0;
+      if (isBalanced) { closeIdx = i; break; }
     }
   }
-  if (closeIdx === -1) return;
+  const hasCloseBrace = closeIdx !== -1;
+  if (!hasCloseBrace) return;
 
   const returnBody = controllerContent.slice(openIdx + 1, closeIdx);
   const returnedKeys = new Set();
@@ -161,7 +169,8 @@ export const checkControllerViewContract = (filePath, relativePath, content, vio
     const rawKeys = keysStr.split(',').map((k) => k.trim()).filter(Boolean);
     for (const rawKey of rawKeys) {
       const cleanKey = rawKey.split(':')[0].trim();
-      if (cleanKey && !cleanKey.startsWith('...')) {
+      const isNamedKey = Boolean(cleanKey && !cleanKey.startsWith('...'));
+      if (isNamedKey) {
         destructuredKeys.add(cleanKey);
       }
     }
@@ -178,12 +187,14 @@ export const checkControllerViewContract = (filePath, relativePath, content, vio
 
   const missing = [];
   for (const key of destructuredKeys) {
-    if (!returnedKeys.has(key)) {
+    const isReturned = returnedKeys.has(key);
+    if (!isReturned) {
       missing.push(key);
     }
   }
 
-  if (missing.length > 0) {
+  const hasMissingKeys = missing.length > 0;
+  if (hasMissingKeys) {
     violations.push({
       filePath: relativePath,
       line: 1,

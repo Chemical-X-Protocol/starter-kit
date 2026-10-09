@@ -21,9 +21,12 @@ export {
 const parseListFlags = (parts) => {
   const flags = {};
   for (const part of parts) {
-    if (part === '--all') flags.all = true;
-    if (part.startsWith('--status=')) flags.status = part.split('=')[1];
-    if (part.startsWith('--limit=')) flags.limit = parseInt(part.split('=')[1], 10);
+    const isAllFlag = part === '--all';
+    const isStatusFlag = part.startsWith('--status=');
+    const isLimitFlag = part.startsWith('--limit=');
+    if (isAllFlag) flags.all = true;
+    if (isStatusFlag) flags.status = part.split('=')[1];
+    if (isLimitFlag) flags.limit = parseInt(part.split('=')[1], 10);
   }
   return flags;
 };
@@ -45,9 +48,12 @@ export const parseCommand = (command, params) => {
 const parseCommandParts = (command, params) => {
   const parts = command.trim().split(/\s+/);
   const subCmd = parts[0];
-  if (subCmd === 'audit') return { action: subCmd, params: { path: parts[1], ...params } };
-  if (subCmd === 'check') return { action: subCmd, params: { path: parts[1] || 'src', ...params } };
-  if (subCmd === 'test') {
+  const isAudit = subCmd === 'audit';
+  if (isAudit) return { action: subCmd, params: { path: parts[1], ...params } };
+  const isCheck = subCmd === 'check';
+  if (isCheck) return { action: subCmd, params: { path: parts[1] || 'src', ...params } };
+  const isTest = subCmd === 'test';
+  if (isTest) {
     const targetMatch = command.match(/--target=([^\s]+)/);
     const filterMatch = command.match(/(?:--filter=|-t=|-t\s+)([^\s]+)/);
     const positional = parts.slice(1).find((p) => !p.startsWith('-'));
@@ -60,7 +66,8 @@ const parseCommandParts = (command, params) => {
       }
     };
   }
-  if (subCmd === 'jig') {
+  const isJig = subCmd === 'jig';
+  if (isJig) {
     const kind = parts[1];
     const name = parts[2];
     const methodsMatch = command.match(/--methods=([^\s]+)/);
@@ -77,8 +84,10 @@ const parseCommandParts = (command, params) => {
       }
     };
   }
-  if (['verify', 'typecheck'].includes(subCmd)) return { action: subCmd, params };
-  if (subCmd === 'read' || subCmd === 'r') {
+  const isGateCommand = ['verify', 'typecheck'].includes(subCmd);
+  if (isGateCommand) return { action: subCmd, params };
+  const isRead = subCmd === 'read' || subCmd === 'r';
+  if (isRead) {
     const hasOutline = command.includes('--outline') || command.includes(' -o');
     const hasLogic = command.includes('--logic') || command.includes(' -l');
     const hasTemplate = command.includes('--template') || command.includes(' -t');
@@ -107,7 +116,8 @@ const parseCommandParts = (command, params) => {
       }
     };
   }
-  if (subCmd === 'patch') {
+  const isPatch = subCmd === 'patch';
+  if (isPatch) {
     return {
       action: 'patch',
       params: {
@@ -118,13 +128,16 @@ const parseCommandParts = (command, params) => {
       }
     };
   }
-  if (subCmd === 'write') {
+  const isWrite = subCmd === 'write';
+  if (isWrite) {
     const positional = parts.slice(1).find((p) => !p.startsWith('-'));
     const hasOverwrite = /(^|\s)--overwrite(\s|$)/.test(command);
     return { action: 'write', params: { path: positional, overwrite: hasOverwrite || undefined, ...params } };
   }
-  if (subCmd === 'q' || subCmd === 'search') return { action: 'q', params: { query: parts.slice(1).join(' '), ...params } };
-  if (subCmd === 'team') {
+  const isQuery = subCmd === 'q' || subCmd === 'search';
+  if (isQuery) return { action: 'q', params: { query: parts.slice(1).join(' '), ...params } };
+  const isTeam = subCmd === 'team';
+  if (isTeam) {
     const TEAM_ACTIONS = { status: 'team_status', feed: 'team_feed', task: 'team_task', lock: 'team_lock', inbox: 'team_inbox', dm: 'team_dm' };
     const sub = parts[1] || 'status';
     const action = TEAM_ACTIONS[sub] || 'team_task';
@@ -136,7 +149,8 @@ const parseCommandParts = (command, params) => {
       if (isCreate) {
         parsedParams.subAction = 'add';
         const titleTokens = parts.slice(TEAM_ACTIONS[parts[1]] ? 3 : 2);
-        if (titleTokens.length > 0 && !parsedParams.title) {
+        const needsTitle = titleTokens.length > 0 && !parsedParams.title;
+        if (needsTitle) {
           parsedParams.title = titleTokens.join(' ').replace(/^["']|["']$/g, '');
         }
       } else if (taskSub) {
@@ -145,14 +159,16 @@ const parseCommandParts = (command, params) => {
     }
     return { action, params: parsedParams };
   }
-  if (subCmd === 'team_task') {
+  const isTeamTask = subCmd === 'team_task';
+  if (isTeamTask) {
     const parsedParams = { ...parseListFlags(parts), ...params };
     const taskSub = parts[1];
     const isCreate = ['add', 'create', 'new'].includes(taskSub);
     if (isCreate) {
       parsedParams.subAction = 'add';
       const titleTokens = parts.slice(2);
-      if (titleTokens.length > 0 && !parsedParams.title) {
+      const needsTitle = titleTokens.length > 0 && !parsedParams.title;
+      if (needsTitle) {
         parsedParams.title = titleTokens.join(' ').replace(/^["']|["']$/g, '');
       }
     } else if (taskSub) {
@@ -160,20 +176,29 @@ const parseCommandParts = (command, params) => {
     }
     return { action: 'team_task', params: parsedParams };
   }
-  if (subCmd === 'project' || subCmd === 'coordinator') {
+  const isProject = subCmd === 'project' || subCmd === 'coordinator';
+  if (isProject) {
     const subAction = parts[1] || 'status';
     const rest = parts.slice(2).join(' ').replace(/^"|"$/g, '');
     const extra = subAction === 'init' ? { goal: rest || params.goal } : { message: rest || params.message };
     return { action: 'project', params: { subAction, ...extra, ...params } };
   }
-  if (subCmd === 'autofix') return { action: 'autofix', params: { path: parts[1] || 'src', ...params } };
-  if (subCmd === 'trend' || subCmd === 'trends') return { action: 'trend', params };
-  if (['tesseract', 'cube', 'matrix'].includes(subCmd)) return { action: 'tesseract', params };
-  if (subCmd === 'd' || subCmd === 'diff') return { action: 'd', params: { args: parts.slice(1), ...params } };
-  if (subCmd === 'log') return { action: 'log', params: { args: parts.slice(1), ...params } };
-  if (subCmd === 'p' || subCmd === 'pkg') return { action: 'p', params: { query: parts[1], ...params } };
-  if (subCmd === 'f' || subCmd === 'ls') return { action: 'f', params: { filter: parts[1], ...params } };
-  if (subCmd === 'j' || subCmd === 'json') return { action: 'j', params: { path: parts[1], ...params } };
+  const isAutofix = subCmd === 'autofix';
+  if (isAutofix) return { action: 'autofix', params: { path: parts[1] || 'src', ...params } };
+  const isTrend = subCmd === 'trend' || subCmd === 'trends';
+  if (isTrend) return { action: 'trend', params };
+  const isTesseract = ['tesseract', 'cube', 'matrix'].includes(subCmd);
+  if (isTesseract) return { action: 'tesseract', params };
+  const isDiff = subCmd === 'd' || subCmd === 'diff';
+  if (isDiff) return { action: 'd', params: { args: parts.slice(1), ...params } };
+  const isLog = subCmd === 'log';
+  if (isLog) return { action: 'log', params: { args: parts.slice(1), ...params } };
+  const isPkg = subCmd === 'p' || subCmd === 'pkg';
+  if (isPkg) return { action: 'p', params: { query: parts[1], ...params } };
+  const isFiles = subCmd === 'f' || subCmd === 'ls';
+  if (isFiles) return { action: 'f', params: { filter: parts[1], ...params } };
+  const isJson = subCmd === 'j' || subCmd === 'json';
+  if (isJson) return { action: 'j', params: { path: parts[1], ...params } };
   return { action: subCmd, params };
 };
 
@@ -260,7 +285,8 @@ export const handleChemx = async (args = {}, cwd = process.cwd()) => {
 
   const canonical = canonicalAction(action);
   const handler = Object.hasOwn(DISPATCHER, canonical) ? DISPATCHER[canonical] : null;
-  if (handler && shouldOffload(canonical)) return runActionInWorker(canonical, mergedParams, effectiveCwd);
+  const shouldRunInWorker = Boolean(handler && shouldOffload(canonical));
+  if (shouldRunInWorker) return runActionInWorker(canonical, mergedParams, effectiveCwd);
   if (!handler) {
     throw new Error(`Unknown Chemical X action: "${action}". Valid actions: ${ACTION_NAMES.join(', ')}`);
   }

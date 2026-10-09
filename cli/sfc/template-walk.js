@@ -14,7 +14,8 @@ export const walkBabel = (node, visit, parent = null) => {
   if (!isBabelNode(node)) return;
   visit(node, parent);
   for (const [key, value] of Object.entries(node)) {
-    if (SKIPPED_BABEL_KEYS.has(key)) continue;
+    const isSkippedKey = SKIPPED_BABEL_KEYS.has(key);
+    if (isSkippedKey) continue;
     const children = Array.isArray(value) ? value : [value];
     for (const child of children) walkBabel(child, visit, node);
   }
@@ -22,8 +23,9 @@ export const walkBabel = (node, visit, parent = null) => {
 
 /** Maps a location inside a template expression to a file line and column. */
 export const resolveExpressionLocation = (exp, babelNode = null) => {
-  const relLine = babelNode?.loc?.start?.line ?? 1;
-  const relColumn = babelNode?.loc?.start?.column ?? 1;
+  const relStart = babelNode?.loc?.start;
+  const relLine = relStart?.line ?? 1;
+  const relColumn = relStart?.column ?? 1;
   const isFirstLine = relLine === 1;
   const line = exp.loc.start.line + relLine - 1;
   const column = isFirstLine ? exp.loc.start.column + Math.max(0, relColumn - 1) : relColumn + 1;
@@ -37,7 +39,8 @@ const toExpressionEntry = (exp, extra) => {
 
 const visitProps = (element, handlers) => {
   for (const prop of element.props || []) {
-    if (prop.type === NODE.ATTRIBUTE) handlers.onAttribute?.({ attribute: prop, element });
+    const isAttribute = prop.type === NODE.ATTRIBUTE;
+    if (isAttribute) handlers.onAttribute?.({ attribute: prop, element });
     const hasExpression = prop.type === NODE.DIRECTIVE && Boolean(prop.exp);
     if (hasExpression) {
       const directive = { name: prop.name, arg: prop.arg?.content ?? null };
@@ -50,7 +53,8 @@ const visitProps = (element, handlers) => {
 export const walkTemplate = (root, handlers = {}) => {
   if (!root) return;
   const visit = (node) => {
-    if (node.type === NODE.ELEMENT) {
+    const isElement = node.type === NODE.ELEMENT;
+    if (isElement) {
       handlers.onElement?.(node);
       visitProps(node, handlers);
     }

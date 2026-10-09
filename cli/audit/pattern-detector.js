@@ -139,7 +139,8 @@ export const categorizeUiStructure = (signature = '') => {
     normalized.includes('tag');
   if (hasChipOrBadge) {
     const chipCount = (normalized.match(/chip|badge|pill|tag/g) || []).length;
-    if (chipCount > 1) {
+    const isPillRow = chipCount > 1;
+    if (isPillRow) {
       return {
         label: `Shared Pill Row (${signature})`,
         suggestedCapsule: 'm-pill-row',
@@ -183,23 +184,28 @@ export const extractTemplateTokens = (html) => {
   let line = 1;
 
   while (i < html.length) {
-    if (html[i] === '\n') {
+    const isLineBreak = html[i] === '\n';
+    if (isLineBreak) {
       line++;
       i++;
       continue;
     }
 
-    if (html.startsWith('<!--', i)) {
+    const isCommentStart = html.startsWith('<!--', i);
+    if (isCommentStart) {
       const endComment = html.indexOf('-->', i + 4);
-      if (endComment === -1) break;
+      const isUnterminatedComment = endComment === -1;
+      if (isUnterminatedComment) break;
       for (let c = i; c < endComment + 3; c++) {
-        if (html[c] === '\n') line++;
+        const isCommentLineBreak = html[c] === '\n';
+        if (isCommentLineBreak) line++;
       }
       i = endComment + 3;
       continue;
     }
 
-    if (html[i] === '<') {
+    const isTagStart = html[i] === '<';
+    if (isTagStart) {
       const tagLine = line;
       let j = i + 1;
       const isClosing = html[j] === '/';
@@ -217,10 +223,12 @@ export const extractTemplateTokens = (html) => {
 
         while (j < html.length) {
           const ch = html[j];
-          if (ch === '\n') line++;
+          const isTagLineBreak = ch === '\n';
+          if (isTagLineBreak) line++;
 
           if (inQuote) {
-            if (ch === inQuote && html[j - 1] !== '\\') {
+            const isClosingQuote = ch === inQuote && html[j - 1] !== '\\';
+            if (isClosingQuote) {
               inQuote = null;
             }
           } else {
@@ -264,7 +272,8 @@ export const buildTagTree = (tokens) => {
   for (const token of tokens) {
     if (token.isClosing) {
       for (let s = stack.length - 1; s > 0; s--) {
-        if (stack[s].tag === token.tag) {
+        const isMatchingOpen = stack[s].tag === token.tag;
+        if (isMatchingOpen) {
           stack.length = s;
           break;
         }
@@ -282,24 +291,29 @@ export const buildTagTree = (tokens) => {
 };
 
 const getHierarchy = (node, depth = 0) => {
-  if (depth > 2 || !node) return '';
+  const isBeyondDepth = depth > 2 || !node;
+  if (isBeyondDepth) return '';
   const childHierarchy = (node.children || [])
     .map((c) => getHierarchy(c, depth + 1))
     .filter(Boolean);
-  if (childHierarchy.length === 0) return node.tag;
+  const isLeaf = childHierarchy.length === 0;
+  if (isLeaf) return node.tag;
   return `${node.tag}>(${childHierarchy.join('+')})`;
 };
 
 export const recordTemplatePatterns = (registry, templateHtml, relativePath, startLineOffset = 0) => {
-  if (!registry || !templateHtml) return;
+  const hasTemplateInput = Boolean(registry && templateHtml);
+  if (!hasTemplateInput) return;
   const tokens = extractTemplateTokens(templateHtml);
   const nodes = buildTagTree(tokens);
 
   const traverseNodes = (nodeList) => {
     for (const node of nodeList) {
-      if (node.children && node.children.length >= MIN_CHILD_NODES) {
+      const hasEnoughChildren = Boolean(node.children && node.children.length >= MIN_CHILD_NODES);
+      if (hasEnoughChildren) {
         const hierarchy = getHierarchy(node);
-        if (hierarchy && hierarchy.includes('>')) {
+        const isNestedHierarchy = Boolean(hierarchy && hierarchy.includes('>'));
+        if (isNestedHierarchy) {
           registry.record('UI_STRUCTURE', hierarchy, {
             filePath: relativePath,
             line: node.line + startLineOffset,
@@ -307,7 +321,8 @@ export const recordTemplatePatterns = (registry, templateHtml, relativePath, sta
           });
         }
       }
-      if (node.children && node.children.length > 0) {
+      const hasChildren = Boolean(node.children && node.children.length > 0);
+      if (hasChildren) {
         traverseNodes(node.children);
       }
     }
@@ -321,15 +336,19 @@ export const createPatternVisitors = (registry, relativePath) => {
   if (!registry) return {};
 
   const getJsxTagName = (node) => {
-    if (!node || !node.openingElement) return null;
+    const hasOpeningElement = Boolean(node && node.openingElement);
+    if (!hasOpeningElement) return null;
     const nameNode = node.openingElement.name;
-    if (nameNode.type === 'JSXIdentifier') return nameNode.name;
-    if (nameNode.type === 'JSXMemberExpression') return `${nameNode.object.name}.${nameNode.property.name}`;
+    const isIdentifierName = nameNode.type === 'JSXIdentifier';
+    if (isIdentifierName) return nameNode.name;
+    const isMemberName = nameNode.type === 'JSXMemberExpression';
+    if (isMemberName) return `${nameNode.object.name}.${nameNode.property.name}`;
     return null;
   };
 
   const getJsxHierarchy = (node, depth = 0) => {
-    if (depth > 2 || !node || node.type !== 'JSXElement') return '';
+    const isOutsideJsxDepth = depth > 2 || !node || node.type !== 'JSXElement';
+    if (isOutsideJsxDepth) return '';
     const tag = getJsxTagName(node);
     if (!tag) return '';
 
@@ -338,19 +357,22 @@ export const createPatternVisitors = (registry, relativePath) => {
       .map((c) => getJsxHierarchy(c, depth + 1))
       .filter(Boolean);
 
-    if (elementChildren.length === 0) return tag;
+    const isLeaf = elementChildren.length === 0;
+    if (isLeaf) return tag;
     return `${tag}>(${elementChildren.join('+')})`;
   };
 
   return {
     TSTypeAliasDeclaration(path) {
       const typeAnnotation = path.node.typeAnnotation;
-      if (typeAnnotation && typeAnnotation.type === 'TSUnionType') {
+      const isUnionType = Boolean(typeAnnotation && typeAnnotation.type === 'TSUnionType');
+      if (isUnionType) {
         const literals = (typeAnnotation.types || [])
           .filter((t) => t.type === 'TSLiteralType' && typeof t.literal?.value === 'string')
           .map((t) => `'${t.literal.value}'`);
 
-        if (literals.length >= MIN_UNION_MEMBERS) {
+        const hasEnoughMembers = literals.length >= MIN_UNION_MEMBERS;
+        if (hasEnoughMembers) {
           const sorted = Array.from(new Set(literals)).sort().join(' | ');
           registry.record('STATE_UNION', sorted, {
             filePath: relativePath,
@@ -363,9 +385,11 @@ export const createPatternVisitors = (registry, relativePath) => {
 
     JSXElement(path) {
       const directElementChildren = (path.node.children || []).filter((c) => c.type === 'JSXElement');
-      if (directElementChildren.length >= MIN_CHILD_NODES) {
+      const hasEnoughChildren = directElementChildren.length >= MIN_CHILD_NODES;
+      if (hasEnoughChildren) {
         const hierarchy = getJsxHierarchy(path.node);
-        if (hierarchy && hierarchy.includes('>')) {
+        const isNestedHierarchy = Boolean(hierarchy && hierarchy.includes('>'));
+        if (isNestedHierarchy) {
           registry.record('UI_STRUCTURE', hierarchy, {
             filePath: relativePath,
             line: path.node.loc?.start?.line,
@@ -382,7 +406,8 @@ export const createPatternVisitors = (registry, relativePath) => {
         clauseCount++;
         curr = curr.left;
       }
-      if (clauseCount >= 3) {
+      const isCompoundPredicate = clauseCount >= 3;
+      if (isCompoundPredicate) {
         const sig = `CLAUSES_${clauseCount}_OP_${path.node.operator}`;
         registry.record('PREDICATE_LOGIC', sig, {
           filePath: relativePath,
@@ -394,15 +419,18 @@ export const createPatternVisitors = (registry, relativePath) => {
 
     ReturnStatement(path) {
       const functionParent = path.getFunctionParent();
-      const fnName = functionParent?.node?.id?.name;
+      const functionNode = functionParent?.node;
+      const fnName = functionNode?.id?.name;
       const isHook = fnName && /^use[A-Z]/.test(fnName);
 
-      if (isHook && path.node.argument && path.node.argument.type === 'ObjectExpression') {
+      const returnsHookObject = Boolean(isHook && path.node.argument && path.node.argument.type === 'ObjectExpression');
+      if (returnsHookObject) {
         const props = (path.node.argument.properties || [])
           .filter((p) => p.type === 'ObjectProperty' && p.key?.name)
           .map((p) => p.key.name);
 
-        if (props.length >= 3) {
+        const hasSignature = props.length >= 3;
+        if (hasSignature) {
           const sorted = props.sort().join(',');
           registry.record('HOOK_SIGNATURE', sorted, {
             filePath: relativePath,

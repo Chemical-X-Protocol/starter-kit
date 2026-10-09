@@ -52,7 +52,8 @@ export const formatScorecardSection = (report, themeColor = null) => {
   lines.push(`${sectionColor}======================================================================${RESET}`);
 
   const asciiGradeLines = getAsciiGradeLines(health?.grade || 'A', gradeColor);
-  if (asciiGradeLines.length > 0) {
+  const hasAsciiGrade = asciiGradeLines.length > 0;
+  if (hasAsciiGrade) {
     lines.push('');
     for (const asciiLine of asciiGradeLines) {
       lines.push(`   ${asciiLine}`);
@@ -64,7 +65,8 @@ export const formatScorecardSection = (report, themeColor = null) => {
   const hearts = resolveHealthHearts(health?.grade, health?.score);
   lines.push(`   Life / Health Meter: ${hearts} ${gradeColor}${BOLD}${health.score} / 100${RESET} (Grade: ${gradeColor}${BOLD}${health.grade}${RESET} - ${health.label})`);
 
-  if (report.aiSlop) {
+  const hasAiSlop = Boolean(report.aiSlop);
+  if (hasAiSlop) {
     const slopGradeColor = resolveGradeColor(report.aiSlop.grade);
     const slopHearts = resolveHealthHearts(report.aiSlop.grade, report.aiSlop.score);
     lines.push(`   AI Slop Index (ASI): ${slopHearts} ${slopGradeColor}${BOLD}${report.aiSlop.score} / 100${RESET} (Grade: ${slopGradeColor}${BOLD}${report.aiSlop.grade}${RESET} - ${report.aiSlop.label})`);
@@ -93,7 +95,8 @@ export const formatCriticalSection = (report) => {
   lines.push(`${DIM}   Violations that break Molecular line budgets or introduce severe AST bugs${RESET}`);
   lines.push(`${RED}======================================================================${RESET}`);
 
-  if (critical.length === 0) {
+  const hasNoCritical = critical.length === 0;
+  if (hasNoCritical) {
     lines.push(`   ${GREEN}✔ Zero critical hazards detected. No monoliths or breaking AST patterns.${RESET}`);
   } else {
     lines.push(renderGroupedViolationsTerminal(critical));
@@ -115,15 +118,18 @@ export const formatHighMediumSection = (report) => {
   lines.push(`${DIM}   Saturation, complex control flow booleans, and raw inline styles${RESET}`);
   lines.push(`${ORANGE}======================================================================${RESET}`);
 
-  if (totalCount === 0) {
+  const hasNoHighOrMedium = totalCount === 0;
+  if (hasNoHighOrMedium) {
     lines.push(`   ${GREEN}✔ Zero high or medium architecture hazards detected.${RESET}`);
   } else {
-    if (high.length > 0) {
+    const hasHigh = high.length > 0;
+    if (hasHigh) {
       lines.push(`\n   ${BOLD}--- High Severity (${high.length} items) ---${RESET}\n`);
       lines.push(renderGroupedViolationsTerminal(high));
     }
 
-    if (medium.length > 0) {
+    const hasMedium = medium.length > 0;
+    if (hasMedium) {
       lines.push(`\n   ${BOLD}--- Medium Severity (${medium.length} items) ---${RESET}\n`);
       lines.push(renderGroupedViolationsTerminal(medium));
     }
@@ -144,7 +150,8 @@ export const formatLowSection = (report) => {
   lines.push(`${DIM}   Em dash typography violations and unguarded console statements${RESET}`);
   lines.push(`${YELLOW}======================================================================${RESET}`);
 
-  if (low.length === 0) {
+  const hasNoLow = low.length === 0;
+  if (hasNoLow) {
     lines.push(`   ${GREEN}✔ Zero typography or logging hygiene issues detected.${RESET}`);
   } else {
     lines.push(renderGroupedViolationsTerminal(low));
@@ -208,12 +215,14 @@ export const formatSinglePillarSection = (report, pillarName, themeColor = null)
   lines.push(`   Violations:        ${pillarData.violations} total (${pillarData.critical} Critical, ${pillarData.high} High, ${pillarData.medium} Medium, ${pillarData.low} Low)`);
   lines.push(`${sectionColor}----------------------------------------------------------------------${RESET}`);
 
-  if (pillarData.violations === 0) {
+  const hasNoPillarViolations = pillarData.violations === 0;
+  if (hasNoPillarViolations) {
     lines.push(`\n   ${GREEN}✔ Outstanding! Zero violations detected for this pillar.${RESET}`);
     lines.push(`   ${DIM}All inspected modules adhere strictly to Chemical X standards for ${pillarName}.${RESET}\n`);
   } else {
     const pillarViolations = (report.violations || []).filter((v) => v.pillar === pillarName);
-    if (pillarViolations.length > 0) {
+    const hasPillarViolations = pillarViolations.length > 0;
+    if (hasPillarViolations) {
       lines.push(`\n   ${BOLD}${sectionColor}🚨 DETECTED VIOLATIONS (${pillarViolations.length}):${RESET}\n`);
       lines.push(renderGroupedViolationsTerminal(pillarViolations));
     }
@@ -222,7 +231,8 @@ export const formatSinglePillarSection = (report, pillarName, themeColor = null)
   const isPillar1 = pillarName === 'Line Budgets & Monolith Decomposition';
   if (isPillar1) {
     const monolithHotspots = (report?.hotspots || []).filter(isMonolithHotspot);
-    if (monolithHotspots.length > 0) {
+    const hasMonolithHotspots = monolithHotspots.length > 0;
+    if (hasMonolithHotspots) {
       lines.push(`   ${BOLD}${sectionColor}🔥 MONOLITHIC HOTSPOTS (${monolithHotspots.length}):${RESET}`);
       monolithHotspots.forEach((h, idx) => {
         lines.push(formatHotspotItem(h, idx));
@@ -246,7 +256,8 @@ export const formatHotspotsSection = (report, themeColor = null, options = {}) =
   lines.push(`${BOLD}${sectionColor}   TOP REFACTORING HOTSPOTS (PRIORITY RANKING)${RESET}`);
   lines.push(`${sectionColor}======================================================================${RESET}`);
 
-  if (hotspots.length === 0) {
+  const hasNoHotspots = hotspots.length === 0;
+  if (hasNoHotspots) {
     lines.push(`   ${GREEN}✔ Zero hotspot files. All files stay within architectural budgets.${RESET}`);
   } else {
     for (let idx = 0; idx < hotspots.length; idx++) {
@@ -280,7 +291,8 @@ export const formatContextAnalysisSection = (report, themeColor = null) => {
   lines.push(`   Estimated Monolith Bloat:   ~${contextAnalysis.estimatedExcessTokens.toLocaleString()} tokens`);
   lines.push(`   Target Architecture Cut:    ${BOLD}${contextAnalysis.potentialSavingsPct}%${RESET} token reduction potential`);
   lines.push(`   Agent Hallucination Risk:   ${riskColor}${BOLD}${contextAnalysis.riskLevel}${RESET}`);
-  if (contextAnalysis.excessCostPerPass !== undefined) {
+  const hasCostEstimate = contextAnalysis.excessCostPerPass !== undefined;
+  if (hasCostEstimate) {
     const costPass = contextAnalysis.excessCostPerPass.toFixed(3);
     const costMonth = contextAnalysis.monthlyWastePerDev.toFixed(2);
     const costWeek = contextAnalysis.weeklyWastePerDev.toFixed(2);
@@ -310,7 +322,8 @@ export const formatAiSlopSection = (report, themeColor = null, options = {}) => 
   lines.push(`   Slop Hazards Flagged: ${slopViolations.length > 0 ? `${RED}${BOLD}${slopViolations.length}${RESET}` : `${GREEN}0 (Artisanal Clean)${RESET}`}`);
   lines.push(`${sectionColor}----------------------------------------------------------------------${RESET}`);
 
-  if (slopViolations.length === 0) {
+  const hasNoSlop = slopViolations.length === 0;
+  if (hasNoSlop) {
     lines.push(`   ${GREEN}✔ Zero AI slop detected. Codebase is free of conversational residue and echo comments.${RESET}`);
   } else {
     lines.push(renderGroupedViolationsTerminal(slopViolations));

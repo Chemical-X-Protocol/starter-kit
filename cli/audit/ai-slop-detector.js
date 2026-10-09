@@ -86,19 +86,24 @@ const normalizeWords = (text) => {
 const COMMENT_LINE_START = /^\s*(?:\/\/|#|\*|--)/;
 
 const isInsideStringLiteral = (lineText, matchIndex) => {
-  if (matchIndex <= 0) return false;
-  if (COMMENT_LINE_START.test(lineText)) return false;
+  const isAtLineStart = matchIndex <= 0;
+  if (isAtLineStart) return false;
+  const isCommentLine = COMMENT_LINE_START.test(lineText);
+  if (isCommentLine) return false;
 
   let quote = null;
   for (let i = 0; i < matchIndex; i += 1) {
     const ch = lineText[i];
-    if (ch === '\\') {
+    const isEscape = ch === '\\';
+    if (isEscape) {
       i += 1;
       continue;
     }
+    const closesQuote = ch === quote;
+    const opensQuote = ch === '"' || ch === "'" || ch === '`';
     if (quote) {
-      if (ch === quote) quote = null;
-    } else if (ch === '"' || ch === "'" || ch === '`') {
+      if (closesQuote) quote = null;
+    } else if (opensQuote) {
       quote = ch;
     }
   }
@@ -109,7 +114,8 @@ export const checkSlopTextPatterns = (content, lines, relativePath, violations) 
   lines.forEach((lineText, idx) => {
     for (const pat of CONVERSATIONAL_PATTERNS) {
       const hit = pat.regex.exec(lineText);
-      if (hit && !isInsideStringLiteral(lineText, hit.index)) {
+      const isRealHit = Boolean(hit && !isInsideStringLiteral(lineText, hit.index));
+      if (isRealHit) {
         const meta = RULE_REGISTRY[pat.rule];
         violations.push({
           filePath: relativePath,
@@ -127,11 +133,13 @@ export const checkSlopTextPatterns = (content, lines, relativePath, violations) 
     }
 
     const trimmed = lineText.trim();
-    if (trimmed.startsWith('//') && !trimmed.startsWith('///')) {
+    const isLineComment = trimmed.startsWith('//') && !trimmed.startsWith('///');
+    if (isLineComment) {
       const commentBody = trimmed.replace(/^\/\/\s*/, '');
       const commentWords = normalizeWords(commentBody);
 
-      if (commentWords.length >= 2 && commentWords.length <= 6) {
+      const isShortComment = commentWords.length >= 2 && commentWords.length <= 6;
+      if (isShortComment) {
         let nextIdx = idx + 1;
         while (nextIdx < lines.length) {
           const nextTrim = lines[nextIdx].trim();
@@ -139,10 +147,12 @@ export const checkSlopTextPatterns = (content, lines, relativePath, violations) 
             const nextWords = new Set(normalizeWords(nextTrim));
             let matchCount = 0;
             for (const cw of commentWords) {
-              if (nextWords.has(cw)) matchCount += 1;
+              const isEchoedWord = nextWords.has(cw);
+              if (isEchoedWord) matchCount += 1;
             }
             const matchRatio = matchCount / commentWords.length;
-            if (matchRatio >= 0.75) {
+            const isEcho = matchRatio >= 0.75;
+            if (isEcho) {
               const meta = RULE_REGISTRY.AI_SLOP_ECHO_COMMENT;
               violations.push({
                 filePath: relativePath,
@@ -209,7 +219,8 @@ export const createAiSlopVisitors = ({ relativePath, violations }) => {
 
     BlockStatement(astPath) {
       const stmts = astPath.node.body;
-      if (stmts.length >= 2) {
+      const hasMultipleStatements = stmts.length >= 2;
+      if (hasMultipleStatements) {
         for (let i = 0; i < stmts.length - 1; i++) {
           const curr = stmts[i];
           const next = stmts[i + 1];
@@ -236,7 +247,8 @@ export const createAiSlopVisitors = ({ relativePath, violations }) => {
     FunctionDeclaration(astPath) {
       if (!isComponentFile) return;
       const fnName = astPath.node.id?.name?.toLowerCase();
-      if (fnName && REINVENTED_UTILS.has(fnName)) {
+      const isReinventedFn = Boolean(fnName && REINVENTED_UTILS.has(fnName));
+      if (isReinventedFn) {
         const line = astPath.node.loc?.start.line || 1;
         const meta = RULE_REGISTRY.AI_SLOP_UTILITY_REINVENTION;
         violations.push({
@@ -256,7 +268,8 @@ export const createAiSlopVisitors = ({ relativePath, violations }) => {
     VariableDeclarator(astPath) {
       if (!isComponentFile) return;
       const idName = astPath.node.id?.name?.toLowerCase();
-      if (!idName || !REINVENTED_UTILS.has(idName)) return;
+      const isReinventedName = Boolean(idName && REINVENTED_UTILS.has(idName));
+      if (!isReinventedName) return;
 
       const initNode = astPath.node.init;
       const isFunction = t.isArrowFunctionExpression(initNode) || t.isFunctionExpression(initNode);
