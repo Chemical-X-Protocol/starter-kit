@@ -1,5 +1,6 @@
 // Search index DDL: tables, column migrations and indexes. Pure schema, no policy.
 import { debugNote } from './search-debug.js';
+import { applyPatternSchema } from './forge/pattern-schema-ddl.js';
 
 const TABLES_SQL = `
   CREATE TABLE IF NOT EXISTS files (
@@ -144,6 +145,7 @@ export const applyIndexSchema = (db) => {
   db.exec(TABLES_SQL);
   migrateColumns(db);
   db.exec(INDEXES_SQL);
+  applyPatternSchema(db);
 };
 
 const cosine = (b1, b2) => {

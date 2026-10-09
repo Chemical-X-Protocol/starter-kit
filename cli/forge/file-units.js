@@ -10,6 +10,9 @@ import { isForgeExcluded } from './exclusions.js';
 const SCRIPT_EXTENSIONS = /\.(m?js|cjs|jsx|ts|mts|cts|tsx)$/;
 const JSX_EXTENSIONS = /\.(jsx|tsx)$/;
 
+/** True for the files Forge can fingerprint at all: scripts and SFCs (exclusions are separate). */
+export const isForgeSource = (relativePath) => isSfcFile(relativePath) || SCRIPT_EXTENSIONS.test(relativePath);
+
 const toError = (err) => ({ message: err instanceof Error ? err.message : String(err), line: err?.loc?.line ?? 1 });
 
 const scriptUnitsOf = (code, relativePath, options) => {

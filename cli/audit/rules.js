@@ -53,6 +53,8 @@ const runSfcTemplatePasses = (sfc, relativePath, options, ruleConfig, violations
   if (isTemplateMissing) return;
   violations.push(...auditTemplate(sfc.template, relativePath));
   violations.push(...checkTemplateRenderDepth(sfc.template, relativePath, ruleConfig));
+  const fingerprint = options.fingerprint || null;
+  if (fingerprint) fingerprint.addVueTemplate(sfc.template);
   const hasPatternRegistry = Boolean(options.patternRegistry);
   if (hasPatternRegistry) {
     recordTemplatePatterns(options.patternRegistry, sfc.template.content, relativePath, sfc.template.startLine - 1);
@@ -88,7 +90,7 @@ const collectRawViolations = (content, filePath, relativePath, options, ruleConf
       violations.push(parseErrorViolation(relativePath, parsed.error.line, parsed.error.message));
       coverageKind = COVERAGE_KINDS.PARSE_ERROR;
     } else {
-      runAstPasses(parsed.asts, { relativePath, violations, ruleConfig, options });
+      runAstPasses(parsed.asts, { relativePath, violations, ruleConfig, options, code });
     }
   }
 
@@ -99,7 +101,8 @@ const collectRawViolations = (content, filePath, relativePath, options, ruleConf
 };
 
 /**
- * Audits one file. options: { config, fast, patternRegistry, hookRegistry, coverage }.
+ * Audits one file. options: { config, fast, patternRegistry, hookRegistry, coverage, fingerprint }
+ * (fingerprint: a Forge collector from cli/forge/fingerprint-visitors.js, or null to skip Forge).
  * Violations pass through chemx-allow annotations, dedup and per-rule config.
  */
 export const auditCode = (content, filePath, relativePath, options = {}) => {

@@ -12,6 +12,7 @@ import { createPatternVisitors } from './pattern-detector.js';
 import { createHookShapeRegistry } from './hook-shape-validator.js';
 import { buildScriptOverlay } from '../sfc/sfc-parse.js';
 import { createJsxRenderDepthVisitor } from './render-depth.js';
+import { createFingerprintVisitors } from '../forge/fingerprint-visitors.js';
 
 const traverseFn = traverse.default || traverse;
 const PARSE_OPTIONS = { sourceType: 'module', plugins: ['typescript', 'jsx'] };
@@ -54,18 +55,25 @@ const mergeVisitorSets = (visitorSets) => {
   return merged;
 };
 
-/** Runs every AST visitor family over the parsed script ASTs. */
-export const runAstPasses = (asts, { relativePath, violations, ruleConfig, options }) => {
+/**
+ * Runs every AST visitor family over the parsed script ASTs. options.fingerprint (a Forge collector)
+ * fills its binding index in the same traverse and fingerprints each AST right after it; the legacy
+ * pattern visitors still run alongside until Forge replaces them.
+ */
+export const runAstPasses = (asts, { relativePath, violations, ruleConfig, options, code = '' }) => {
   const hookRegistry = options.hookRegistry || createHookShapeRegistry();
+  const fingerprint = options.fingerprint || null;
   for (const ast of asts) {
     const visitorSets = [
       createAstVisitors({ relativePath, violations, hookRegistry, config: ruleConfig }),
       createAiSlopVisitors({ relativePath, violations }),
       createExtendedVisitors({ relativePath, violations }),
       createJsxRenderDepthVisitor({ relativePath, violations, config: ruleConfig }),
-      options.patternRegistry ? createPatternVisitors(options.patternRegistry, relativePath) : {}
+      options.patternRegistry ? createPatternVisitors(options.patternRegistry, relativePath) : {},
+      fingerprint ? createFingerprintVisitors(fingerprint) : {}
     ];
     traverseFn(ast, mergeVisitorSets(visitorSets));
+    if (fingerprint) fingerprint.addScriptAst(ast, code);
   }
   const shouldRunLocalConsistency = !options.hookRegistry;
   if (shouldRunLocalConsistency) violations.push(...hookRegistry.validateCrossHookConsistency());

@@ -7,15 +7,23 @@ import { applyEdits } from './apply-edits.js';
 import { applySearchReplaceBlocks } from './search-replace-blocks.js';
 import { evaluateGuardrails } from './edit-guardrails.js';
 import { assertWriteLockClear } from './team/write-lock-guard.js';
+import { fingerprintFile } from './forge/fingerprint-file.js';
 
 export { runPatcherCli, runWriterCli } from './patcher-cli.js';
 
-const syncIndex = (absPath, cwd) => {
+const syncSearchIndex = (absPath, cwd) => {
   try {
     return Boolean(syncSingleFileIndex(absPath, cwd));
   } catch {
     return false;
   }
+};
+
+// Search-index micro-sync, then the Forge ledger rows of the same file (fingerprintFile never throws).
+const syncIndex = (absPath, cwd) => {
+  const isIndexed = syncSearchIndex(absPath, cwd);
+  fingerprintFile(absPath, cwd);
+  return isIndexed;
 };
 
 const validatePatchParams = (params, targetContent, replacementContent) => {

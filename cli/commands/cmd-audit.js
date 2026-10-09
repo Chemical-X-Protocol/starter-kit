@@ -135,7 +135,10 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
 
   const includeTests = rawArgs.includes('--include-tests') || rawArgs.includes('--tests');
   const auditConfig = loadSharedConfig(process.cwd(), rawArgs);
-  const auditOptions = { outputFile, model, costPerMillion, fast: isFast, fileList, stage, config: auditConfig, includeTests };
+  // The Forge ledger rides on audits that also sync the index (not pre-commit, --no-index or --no-fingerprint).
+  const isFingerprintOptOut = rawArgs.includes('--no-index') || rawArgs.includes('--no-fingerprint');
+  const isFingerprinting = !isFingerprintOptOut && !isStagedScope;
+  const auditOptions = { outputFile, model, costPerMillion, fast: isFast, fileList, stage, config: auditConfig, includeTests, fingerprint: isFingerprinting };
   const report = executeAstAudit(targetDir, auditOptions);
   const auditRelDir = toRelDir(process.cwd(), path.resolve(process.cwd(), targetDir));
   if (isRebaseline) {

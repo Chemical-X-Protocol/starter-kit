@@ -1,0 +1,124 @@
+// Forge fingerprint ledger in index.db (design doc, Data model and INCREMENTAL PATH). A changed file is
+// replaced in one transaction: its old fps are read, its rows deleted (explicitly, so it holds with
+// foreign_keys off too) and the new ones inserted; both fp sets are returned for the dirty set.
+// Every SELECT orders by file_path, start; nothing here sorts with localeCompare.
+import { withIndexTransaction } from '../search-index-write.js';
+import { writeIndexMeta } from '../search-index-meta.js';
+import { anchorWeight } from './anchors.js';
+
+// Bump when units, canonicalization, hashing, facets or the store floor change meaning: every file
+// whose row carries another version is fingerprinted again.
+export const FORGE_EXTRACTOR_VERSION = 1;
+
+const SQL = {
+  stamps: 'SELECT path, content_hash, mtime_ms, size, extractor_version FROM pattern_files',
+  oldFps: 'SELECT fp1, fp2, fp3 FROM pattern_units WHERE file_path = ?',
+  deleteUnits: 'DELETE FROM pattern_units WHERE file_path = ?',
+  deleteFile: 'DELETE FROM pattern_files WHERE path = ?',
+  upsertFile: `INSERT INTO pattern_files (path, content_hash, mtime_ms, size, lang, facet_key, extractor_version, unit_count, dropped_count, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(path) DO UPDATE SET content_hash = excluded.content_hash, mtime_ms = excluded.mtime_ms, size = excluded.size,
+      lang = excluded.lang, facet_key = excluded.facet_key, extractor_version = excluded.extractor_version,
+      unit_count = excluded.unit_count, dropped_count = excluded.dropped_count, updated_at = excluded.updated_at`,
+  touchFile: 'UPDATE pattern_files SET mtime_ms = ?, size = ? WHERE path = ?',
+  insertUnit: `INSERT INTO pattern_units (file_path, kind, block_id, ordinal, start, end, start_line, end_line, decl_name, is_export,
+    mass, anchor_weight, anchors, fp1, fp2, fp3, facet_key, is_spec, meta) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  fileUnits: 'SELECT * FROM pattern_units WHERE file_path = ? ORDER BY start_line, start, id',
+  countUnits: 'SELECT COUNT(*) AS c FROM pattern_units'
+};
+
+const STATEMENTS = new WeakMap();
+
+const statementsFor = (db) => {
+  const cached = STATEMENTS.get(db);
+  if (cached) return cached;
+  const prepared = Object.fromEntries(Object.entries(SQL).map(([name, sql]) => [name, db.prepare(sql)]));
+  STATEMENTS.set(db, prepared);
+  return prepared;
+};
+
+// Kind-specific extras that have no column of their own.
+const META_OF = {
+  fn: (unit) => ({ paramNames: unit.paramNames ?? [] }),
+  tmpl: (unit) => ({ tag: unit.tag, nodeId: unit.nodeId }),
+  stmt: () => null,
+  expr: () => null
+};
+
+const rowOf = (unit) => {
+  const meta = META_OF[unit.kind](unit);
+  const isTemplate = unit.kind === 'tmpl';
+  return {
+    blockId: isTemplate ? (unit.parentId ?? 0) : (unit.blockId ?? null),
+    ordinal: unit.ordinal ?? null,
+    meta: meta ? JSON.stringify(meta) : null
+  };
+};
+
+const insertUnits = (s, record) => {
+  for (const unit of record.units) {
+    const row = rowOf(unit);
+    s.insertUnit.run(
+      record.path, unit.kind, row.blockId, row.ordinal, unit.startOffset ?? null, unit.endOffset ?? null,
+      unit.start ?? 1, unit.end ?? unit.start ?? 1, unit.declName ?? null, null,
+      unit.mass, anchorWeight(unit.anchors), JSON.stringify(unit.anchors), unit.fp1, unit.fp2, unit.fp3,
+      record.facet.key, record.facet.spec ? 1 : 0, row.meta
+    );
+  }
+};
+
+const fpsOf = (rows) => rows.flatMap((row) => [row.fp1, row.fp2, row.fp3]);
+
+/** Map<path, { contentHash, mtimeMs, size, extractorVersion }> of every ledger file. */
+export const readFileStamps = (db) => {
+  const stamps = new Map();
+  for (const row of statementsFor(db).stamps.all()) {
+    stamps.set(row.path, { contentHash: row.content_hash, mtimeMs: Number(row.mtime_ms), size: Number(row.size), extractorVersion: Number(row.extractor_version) });
+  }
+  return stamps;
+};
+
+/** True when a stored stamp still describes this content under the current extractor. */
+export const isStampCurrent = (stamp, contentHash) => {
+  const isSameContent = stamp?.contentHash === contentHash;
+  return isSameContent && stamp.extractorVersion === FORGE_EXTRACTOR_VERSION;
+};
+
+/**
+ * Replaces one file's units. record: { path, contentHash, mtimeMs, size, facet, units, droppedCount }.
+ * Returns { previousFps, nextFps } (fp1, fp2 and fp3 of every old and new row).
+ */
+export const replaceFileUnits = (db, record) => withIndexTransaction(db, () => {
+  const s = statementsFor(db);
+  const previousFps = fpsOf(s.oldFps.all(record.path));
+  s.deleteUnits.run(record.path);
+  s.upsertFile.run(
+    record.path, record.contentHash, Math.trunc(record.mtimeMs ?? 0), record.size ?? 0, record.facet.lang, record.facet.key,
+    FORGE_EXTRACTOR_VERSION, record.units.length, record.droppedCount ?? 0, Date.now()
+  );
+  insertUnits(s, record);
+  return { previousFps, nextFps: fpsOf(record.units) };
+});
+
+/** Records a new mtime/size for a file whose content hash did not change. */
+export const touchFileStamp = (db, filePath, { mtimeMs, size }) => {
+  statementsFor(db).touchFile.run(Math.trunc(mtimeMs), size, filePath);
+};
+
+/** Deletes the ledger rows of these files. Returns the fps they held. */
+export const removeLedgerFiles = (db, filePaths) => withIndexTransaction(db, () => {
+  const s = statementsFor(db);
+  const removedFps = [];
+  for (const filePath of filePaths) {
+    removedFps.push(...fpsOf(s.oldFps.all(filePath)));
+    s.deleteUnits.run(filePath);
+    s.deleteFile.run(filePath);
+  }
+  return removedFps;
+});
+
+export const listFileUnits = (db, filePath) => statementsFor(db).fileUnits.all(filePath);
+
+export const countLedgerUnits = (db) => Number(statementsFor(db).countUnits.get()?.c ?? 0);
+
+export const stampExtractorVersion = (db) => writeIndexMeta(db, { pattern_extractor_version: FORGE_EXTRACTOR_VERSION });

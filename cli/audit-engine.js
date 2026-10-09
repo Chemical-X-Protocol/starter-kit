@@ -19,6 +19,7 @@ import { createCoverageCollector, summarizeCoverage } from './audit/coverage.js'
 import { SCORE_MODEL } from './audit/metrics.js';
 import { RULESET_VERSION } from './audit/rule-revisions.js';
 import { getLineBudgets } from './audit/line-budgets.js';
+import { openAuditForge, finishAuditForge } from './forge/audit-forge.js';
 
 export { auditFile, resolveAuditConfig, scanTree, scanDirectory } from './audit-scan.js';
 
@@ -30,6 +31,7 @@ export const runAudit = (targetDir = 'src', options = {}) => {
   const config = options.config || loadProjectConfig(cwd);
   const includeTests = Boolean(options.includeTests);
   const coverageCollector = createCoverageCollector();
+  const forge = openAuditForge(cwd, options);
   const { violations, fileStats, totalHooks, skippedConflicts = [] } = scanTree(absoluteTarget, cwd, {
     patternRegistry,
     hookRegistry,
@@ -37,8 +39,10 @@ export const runAudit = (targetDir = 'src', options = {}) => {
     fileList: options.fileList || null,
     includeTests,
     config,
-    coverage: coverageCollector
+    coverage: coverageCollector,
+    forge
   });
+  const fingerprint = forge ? finishAuditForge(forge, { absoluteTarget, isPartial: Boolean(options.fileList) }) : null;
 
   const crossHookViolations = hookRegistry.validateCrossHookConsistency();
   violations.push(...crossHookViolations);
@@ -109,7 +113,8 @@ export const runAudit = (targetDir = 'src', options = {}) => {
     patterns,
     roadmap,
     violations,
-    skippedConflicts
+    skippedConflicts,
+    fingerprint
   };
 
   const hasOutputFile = Boolean(options.outputFile);

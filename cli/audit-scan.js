@@ -72,13 +72,17 @@ const auditFileEntry = (fullPath, relPath, scanOptions) => {
 
   const hookMatches = content.match(/\buse[A-Z0-9]\w*\b/g);
   const hookCount = hookMatches ? hookMatches.length : 0;
+  // Forge ledger: a collector for a changed file, null (options.fingerprint=false) for an unchanged one.
+  const fingerprint = scanOptions.forge ? scanOptions.forge.beginFile(fullPath, content) : null;
   const fileViolations = auditCode(content, fullPath, relPath, {
     patternRegistry: scanOptions.patternRegistry,
     hookRegistry: scanOptions.hookRegistry,
     fast: scanOptions.fast,
     config: scanOptions.config,
-    coverage: scanOptions.coverage
+    coverage: scanOptions.coverage,
+    fingerprint
   });
+  if (fingerprint) scanOptions.forge.commitFile(fingerprint);
 
   return { fileStat, hookCount, fileViolations };
 };
@@ -104,7 +108,7 @@ const isTargetIgnored = (targetDir) => {
 
 // One git listing per scan (.gitignore honoured); a plain walk when the dir is not in a repo.
 // IGNORED_DIRS still applies on top so worktree copies and package stores never score.
-const discoverSourceFiles = (targetDir, includeTests) => {
+export const discoverSourceFiles = (targetDir, includeTests) => {
   const gitFiles = listGitFiles(targetDir);
   const isGitRepo = Array.isArray(gitFiles);
   const found = [];

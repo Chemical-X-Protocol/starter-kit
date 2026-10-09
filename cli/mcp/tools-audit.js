@@ -46,7 +46,8 @@ export const handleAudit = (args = {}, cwd = process.cwd()) => {
     cwd: baseCwd,
     config: loadProjectConfig(baseCwd, []),
     model: args.model || 'blended',
-    outputFile: null
+    outputFile: null,
+    fingerprint: true
   };
 
   const report = executeAstAudit(resolvedTarget, options);
