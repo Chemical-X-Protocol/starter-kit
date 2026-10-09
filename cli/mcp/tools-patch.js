@@ -2,6 +2,7 @@ import { patchFile } from '../patcher.js';
 import { parseSearchReplaceBlocks } from '../search-replace-blocks.js';
 import { handleCheckCommand } from '../search-commands.js';
 import { resolveSafePath } from '../path-scope.js';
+import { toCompact } from '../commands/cmd-check.js';
 
 export const isSevereViolation = (v) => {
   const isCritical = v.severity === 'CRITICAL';
@@ -111,5 +112,11 @@ export const handleChemxCheck = (args = {}, cwd = process.cwd()) => {
     throw new Error('chemx_check requires "path" argument.');
   }
   const targetPath = resolveSafePath(args.path, cwd);
-  return handleCheckCommand(targetPath, { isJson: true, isCli: false });
+  const isFull = args.compact === false || args.full === true;
+  const result = handleCheckCommand(targetPath, { isJson: true, isCli: false });
+  const isErrored = Boolean(result?.error);
+  const keepsFull = isFull || isErrored;
+  if (keepsFull) return result;
+  const compact = toCompact([result]);
+  return { ...compact.files[0], violationsCount: result.violationsCount, rules: compact.rules };
 };

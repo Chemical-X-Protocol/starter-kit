@@ -53,6 +53,17 @@ test('check audits every path and a dirty later path is never reported clean', (
   });
 });
 
+test('check --json --compact gives [rule,line,severity] rows and one rules map, exit 1', () => {
+  withProject({ 'src/b.ts': NESTED }, (root) => {
+    const { status, payload } = runCheck(root, ['src/b.ts', '--compact']);
+    assert.equal(status, 1);
+    const [row] = payload.files[0].hazards;
+    assert.equal(row.length, 3);
+    assert.ok(payload.rules[row[0]].hazard);
+    assert.equal(payload.files[0].violations, undefined);
+  });
+});
+
 test('check fails when any of several paths is missing', () => {
   withProject({ 'src/a.ts': 'export const a = 1;\n' }, (root) => {
     const { status, payload } = runCheck(root, ['src/a.ts', 'src/missing.ts']);

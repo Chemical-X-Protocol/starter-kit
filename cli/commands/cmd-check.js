@@ -38,7 +38,7 @@ const checkMany = (targets, { isJson, config }) => {
  * Compact JSON (--json --compact): per file only [rule, line, severity] rows, and each rule's
  * hazard/directive/pillar text once under `rules`. Rule text is whatever the first hit carried.
  */
-const toCompact = (files) => {
+export const toCompact = (files) => {
   const rules = {};
   const out = files.map((f) => {
     const hasError = Boolean(f.error);
