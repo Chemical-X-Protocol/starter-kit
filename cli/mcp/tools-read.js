@@ -59,5 +59,5 @@ export const handleChemxRead = (args = {}, cwd = process.cwd()) => {
   const fence = body.includes('```') ? '~~~' : '```';
   const fenced = `${fence}${lang}\n${body}\n${fence}`;
   const header = `// ${formatReadHeader(res)}${cards.connection}\n`;
-  return header + cards.context + fenced;
+  return header + cards.context + fenced + (cards.freshness || '');
 };

@@ -8,7 +8,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { scanScope } from './search-scan.js';
-import { syncSearchIndex } from './search-sync.js';
+import { ensureFresh } from './index-freshness.js';
 import { resolveIndexRoot } from './search-root.js';
 import { moduleKeysFor } from './search-resolve.js';
 import { findOpenFiles } from './test-graph-open.js';
@@ -136,11 +136,12 @@ const readIndex = (root, files, importers, index) => {
   const isOwnIndex = path.resolve(resolveIndexRoot(root)) === path.resolve(root);
   if (!isOwnIndex) return `the nearest index belongs to ${resolveIndexRoot(root)}, not ${root}`;
   try {
-    const sync = syncSearchIndex('.', root, {});
-    if (!sync) return 'no index database';
-    const isStale = sync.status !== 'fresh';
-    if (isStale) return `index ${sync.status}: ${sync.staleReason}`;
-    mergeIndexEdges(sync.db, files, importers, index);
+    const session = ensureFresh(root, { scope: '.' });
+    const hasDb = Boolean(session.db);
+    if (!hasDb) return 'no index database';
+    const isStale = session.index.status !== 'pass';
+    if (isStale) return `index ${session.index.status}: ${session.index.reason}`;
+    mergeIndexEdges(session.db, files, importers, index);
     return null;
   } catch (error) {
     return `index unreadable: ${error.message}`;

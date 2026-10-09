@@ -103,6 +103,18 @@ export const upsertFileIndexBatch = (db, records, batchSize = 200) => {
   }
 };
 
+// Racy rows whose content hash still matched (index-row-check.js): only synced_at moves, so the
+// row stops being racy once its file is older than RACY_SLACK_MS. entries: [{ path, syncedAt }].
+export const stampRowsSynced = (db, entries) => {
+  const hasEntries = entries.length > 0;
+  if (!hasEntries) return 0;
+  withIndexTransaction(db, () => {
+    const stmt = db.prepare('UPDATE files SET synced_at = ? WHERE path = ?');
+    for (const entry of entries) stmt.run(entry.syncedAt, entry.path);
+  });
+  return entries.length;
+};
+
 export const deleteFileIndexRows = (db, filePaths) => {
   const hasPaths = filePaths.length > 0;
   if (!hasPaths) return 0;

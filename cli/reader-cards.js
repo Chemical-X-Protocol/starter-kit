@@ -4,8 +4,10 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { openIndexDb } from './search-db.js';
+import { ensureFresh } from './index-freshness.js';
 import { chemxDbPathFor } from './sqlite-memory.js';
+import { formatIndexLine } from './search-output.js';
+import { toRootRelative } from './search-root.js';
 import {
   findSymbolReferences, findFileDependencies, findFileDependents, calculateBlastRadius,
   calculateCallTrace, calculateBacktrace,
@@ -75,12 +77,14 @@ export const buildBacktraceCard = (db, symbol) => {
   }
 };
 
-const NO_INDEX_HINT = 'no search index at .chemx/index.db; run `cx q <symbol>` once to build it, then re-read';
+// A read never creates .chemx in a project that has none (a read is not an opt-in to chemx).
+// With .chemx present, a missing or stale index is built or synced before the cards answer.
+const NO_HOME_HINT = 'no search index: this project has no .chemx yet; run `chemx q <symbol>` once to create it, then re-read';
 
-const hasBuiltIndex = (cwd) => {
+const hasIndexHome = (cwd) => {
   const dbFile = chemxDbPathFor(cwd);
   const hasPath = Boolean(dbFile);
-  return hasPath && fs.existsSync(dbFile);
+  return hasPath && fs.existsSync(path.dirname(dbFile));
 };
 
 const isIndexEmpty = (db) => {
@@ -91,20 +95,22 @@ const isIndexEmpty = (db) => {
   }
 };
 
-const unavailableCards = (flags) => ({
-  connection: flags.connections ? `\n// Connections unavailable: ${NO_INDEX_HINT}.` : '',
+const unavailableCards = (flags, why, freshness = '') => ({
+  connection: flags.connections ? `\n// Connections unavailable: ${why}.` : '',
   context: '',
-  trace: flags.traceSymbol ? `\n// Forward Trace unavailable: ${NO_INDEX_HINT}.` : '',
-  backtrace: flags.backtraceSymbol ? `\n// Backtrace unavailable: ${NO_INDEX_HINT}.` : ''
+  trace: flags.traceSymbol ? `\n// Forward Trace unavailable: ${why}.` : '',
+  backtrace: flags.backtraceSymbol ? `\n// Backtrace unavailable: ${why}.` : '',
+  freshness
 });
 
-const openCardsDb = (cwd) => {
+// Graph cards read other files' rows (dependents, callers, callees), so they sync the project
+// scope and every held scope; the context card reads only the target's own imports.
+const syncForCards = (cwd, targetPath, flags) => {
+  const needsGraph = Boolean(flags.connections || flags.traceSymbol || flags.backtraceSymbol);
   try {
-    return openIndexDb(cwd);
+    return ensureFresh(cwd, { paths: [targetPath], scope: needsGraph ? null : false, includeHeldScopes: needsGraph });
   } catch (err) {
-    const isDebug = Boolean(process.env.CHEMX_DEBUG);
-    if (isDebug) process.stderr.write(`[read-cards] index unavailable: ${err.message}\n`);
-    return null;
+    return { db: null, error: err instanceof Error ? err.message : String(err) };
   }
 };
 
@@ -114,21 +120,29 @@ const openCardsDb = (cwd) => {
  * @param {string} cwd Project root (index location).
  * @param {string} targetPath Absolute file path.
  * @param {object} flags { symbol, connections, traceSymbol, backtraceSymbol, context }
- * @returns {{ connection: string, context: string, trace: string, backtrace: string }}
+ * @returns {{ connection: string, context: string, trace: string, backtrace: string, freshness: string }}
+ *   freshness is the index line of the sync these cards answered from (index-freshness.js).
  */
 export const buildReadCards = (cwd, targetPath, flags = {}) => {
-  const empty = { connection: '', context: '', trace: '', backtrace: '' };
+  const empty = { connection: '', context: '', trace: '', backtrace: '', freshness: '' };
   const wantsContext = Boolean(flags.context && flags.symbol);
   const needsDb = Boolean(flags.connections || wantsContext || flags.traceSymbol || flags.backtraceSymbol);
   if (!needsDb) return empty;
-  const isIndexMissing = !hasBuiltIndex(cwd);
-  if (isIndexMissing) return unavailableCards(flags);
-  const db = openCardsDb(cwd);
-  const isUnusable = !db || isIndexEmpty(db);
-  if (isUnusable) return unavailableCards(flags);
+  const isHomeMissing = !hasIndexHome(cwd);
+  if (isHomeMissing) return unavailableCards(flags, NO_HOME_HINT);
+  const session = syncForCards(cwd, targetPath, flags);
+  const db = session.db;
+  const freshness = session.index ? `\n// ${formatIndexLine(session.index)}` : '';
+  const hasNoDb = !db;
+  if (hasNoDb) return unavailableCards(flags, `index unavailable (${session.error || 'SQLite engine not available'})`);
+  const isEmpty = isIndexEmpty(db);
+  if (isEmpty) return unavailableCards(flags, 'the index holds no source files for this project', freshness);
+  // Rows are keyed by root-relative posix paths, never by the absolute path the reader holds.
+  const relPath = toRootRelative(targetPath, session.root);
   return {
-    connection: flags.connections ? buildConnectionCard(db, flags.symbol, targetPath) : '',
-    context: wantsContext ? buildContextEnvelope(db, targetPath) : '',
+    freshness,
+    connection: flags.connections ? buildConnectionCard(db, flags.symbol, relPath) : '',
+    context: wantsContext ? buildContextEnvelope(db, relPath) : '',
     trace: flags.traceSymbol ? buildTraceCard(db, flags.traceSymbol) : '',
     backtrace: flags.backtraceSymbol ? buildBacktraceCard(db, flags.backtraceSymbol) : ''
   };

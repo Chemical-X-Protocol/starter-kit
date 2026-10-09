@@ -2,7 +2,7 @@
 // CPU to load. A plain `chemx read` must not pay for it (wrappers-startup.spec), so reader-cards.js
 // loads only when a card is requested: callers await loadReadCards() before the synchronous read.
 
-const EMPTY_CARDS = Object.freeze({ connection: '', context: '', trace: '', backtrace: '' });
+const EMPTY_CARDS = Object.freeze({ connection: '', context: '', trace: '', backtrace: '', freshness: '' });
 const CARD_FLAG = /^--(connections$|trace=|backtrace=)/;
 
 let loadedBuilder = null;

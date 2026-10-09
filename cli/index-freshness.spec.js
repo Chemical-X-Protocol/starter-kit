@@ -1,0 +1,158 @@
+// Index truth (#2552): every index reader answers from rows that match the files on disk at the
+// moment of the call, and says so in a freshness stamp. Files here are edited with plain
+// fs.writeFileSync / renameSync / rmSync, never through chemx.
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { spawnSync, spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { clearDbCache, openIndexDb } from './search-db.js';
+import { ensureFresh } from './index-freshness.js';
+import { handleChemxQ } from './mcp/tools-q.js';
+import { buildReadCards } from './reader-cards.js';
+
+const CLI = path.join(path.dirname(fileURLToPath(import.meta.url)), 'index.js');
+const STAMP = /synced \d+ files, \d+ re-indexed, \d+ removed(, \d+ racy rows hash-checked)?, \d+ms/;
+const CHILD_ENV = { ...process.env, NO_COLOR: '1', CHEMX_PROJECT_ROOT: '' };
+
+const makeProject = (files, { git = false } = {}) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-fresh-'));
+  fs.mkdirSync(path.join(root, '.chemx'));
+  for (const [rel, content] of Object.entries(files)) {
+    fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
+    fs.writeFileSync(path.join(root, rel), content);
+  }
+  if (git) spawnSync('git', ['init', '-q', root], { stdio: 'ignore' });
+  return root;
+};
+
+const cleanup = (root) => {
+  clearDbCache();
+  fs.rmSync(root, { recursive: true, force: true });
+};
+
+const write = (root, rel, content) => {
+  fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
+  fs.writeFileSync(path.join(root, rel), content);
+};
+
+const indexedPaths = (root) => openIndexDb(root).prepare('SELECT path FROM files ORDER BY path').all().map((r) => r.path);
+
+const runQ = (root, args) => spawnSync(process.execPath, ['--no-warnings', CLI, 'q', ...args], { cwd: root, encoding: 'utf-8', env: CHILD_ENV });
+
+const BASE = {
+  'src/a.ts': 'export const useA = () => 1;\n',
+  'src/b.ts': "import { useA } from './a';\nexport const useB = () => useA();\n"
+};
+
+test('q, read connections and blast radius see a file edited outside chemx', () => {
+  const root = makeProject(BASE);
+  try {
+    ensureFresh(root);
+    write(root, 'src/b.ts', 'export const useB = () => 2;\n');
+    write(root, 'src/c.ts', "import { useA } from './a';\nexport const useC = () => useA();\n");
+    assert.match(String(handleChemxQ({ query: 'useC' }, root)), /src\/c\.ts:2 definition useC/);
+    const cards = buildReadCards(root, path.join(root, 'src/a.ts'), { connections: true });
+    assert.match(cards.connection, /imported by 1 file\(s\)/, cards.connection);
+    assert.match(cards.freshness, STAMP);
+    const blast = handleChemxQ({ query: 'src/a.ts', blastRadius: true }, root);
+    const pathColumn = blast.cols.indexOf('path');
+    assert.deepEqual(blast.rows.map((row) => row[pathColumn]), ['src/c.ts']);
+    assert.match(JSON.stringify(blast.index.freshness), /"checked":3/);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('a read of one file syncs that file first, with one stat and no scope walk', () => {
+  const root = makeProject(BASE);
+  try {
+    ensureFresh(root);
+    write(root, 'src/a.ts', 'export const useAlphaRenamed = () => 1;\n');
+    const session = ensureFresh(root, { paths: ['src/a.ts'], scope: false });
+    assert.equal(session.freshness.checked, 1);
+    assert.equal(session.freshness.reindexed, 1);
+    const names = session.db.prepare("SELECT name FROM symbols WHERE file_path = 'src/a.ts'").all().map((r) => r.name);
+    assert.deepEqual(names, ['useAlphaRenamed']);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('deletes and renames on disk are reflected by the next answer', () => {
+  const root = makeProject(BASE);
+  try {
+    ensureFresh(root);
+    fs.renameSync(path.join(root, 'src/b.ts'), path.join(root, 'src/moved.ts'));
+    fs.rmSync(path.join(root, 'src/a.ts'));
+    const session = ensureFresh(root);
+    assert.deepEqual(indexedPaths(root), ['src/moved.ts']);
+    assert.equal(session.freshness.removed, 2);
+    const fileAtHand = ensureFresh(root, { paths: ['src/moved.ts'], scope: false });
+    fs.rmSync(path.join(root, 'src/moved.ts'));
+    const gone = ensureFresh(root, { paths: ['src/moved.ts'], scope: false });
+    assert.equal(fileAtHand.freshness.removed, 0);
+    assert.equal(gone.freshness.removed, 1);
+    assert.deepEqual(indexedPaths(root), []);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('a git-ignored file is not indexed unless its dir is passed explicitly', () => {
+  const root = makeProject({ ...BASE, '.gitignore': 'gen/\n', 'gen/g.ts': 'export const useGen = () => 1;\n' }, { git: true });
+  try {
+    ensureFresh(root);
+    assert.ok(!indexedPaths(root).includes('gen/g.ts'), 'the project scope skips ignored files');
+    const atHand = ensureFresh(root, { paths: ['gen/g.ts'], scope: false });
+    assert.match(atHand.freshness.notIndexed[0].reason, /ignored by git/);
+    assert.match(String(handleChemxQ({ query: 'useGen' }, root)), /No matching/);
+    ensureFresh(root, { scope: 'gen' });
+    assert.ok(indexedPaths(root).includes('gen/g.ts'), 'an explicit --dir opts in');
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('every index-backed answer carries the freshness stamp (CLI text, MCP text, JSON)', () => {
+  const root = makeProject(BASE);
+  try {
+    const text = runQ(root, ['useA']);
+    assert.equal(text.status, 0, text.stderr);
+    assert.match(text.stdout, STAMP);
+    const json = JSON.parse(runQ(root, ['useA', '--json', '--raw-json']).stdout.trim().split('\n').pop());
+    assert.equal(typeof json.index.freshness.checked, 'number');
+    assert.equal(typeof json.index.freshness.ms, 'number');
+    clearDbCache();
+    const mcp = String(handleChemxQ({ query: 'useA' }, root));
+    assert.match(mcp.split('\n').pop(), STAMP, 'the MCP text answer ends with the stamp');
+  } finally {
+    cleanup(root);
+  }
+});
+
+const runQAsync = (root, args) => new Promise((resolve) => {
+  const child = spawn(process.execPath, ['--no-warnings', CLI, 'q', ...args], { cwd: root, env: CHILD_ENV });
+  let stderr = '';
+  child.stderr.on('data', (chunk) => { stderr += String(chunk); });
+  child.on('close', (code) => resolve({ code, stderr }));
+});
+
+test('two concurrent cold syncs of the same db do not error and leave one row per file', async () => {
+  const files = Object.fromEntries(Array.from({ length: 60 }, (_, i) => [`src/m${i}.ts`, `export const useM${i} = () => ${i};\n`]));
+  const root = makeProject(files);
+  try {
+    const results = await Promise.all([runQAsync(root, ['useM1']), runQAsync(root, ['useM2'])]);
+    for (const res of results) {
+      assert.ok(res.code === 0 || res.code === 3, `exit ${res.code}: ${res.stderr}`);
+      assert.doesNotMatch(res.stderr, /SQLITE|database is locked|UNIQUE/);
+    }
+    const db = openIndexDb(root);
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM files').get().n, 60);
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM symbols WHERE name = 'useM7'").get().n, 1);
+  } finally {
+    cleanup(root);
+  }
+});

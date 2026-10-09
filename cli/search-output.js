@@ -28,6 +28,23 @@ export const describeIndexFromSync = (syncRes) => {
   };
 };
 
+// Index envelope for an answer that synced only the files at hand (ensureFresh with scope false).
+export const describePathsIndex = (db, root, tally) => ({
+  root, scope: 'files at hand', scopeDirs: [], files: tally.checked, version: INDEX_VERSION,
+  status: STATUS.PASS, reason: null, notice: null, skipped: tally.skipped.length, conflicts: []
+});
+
+// The freshness stamp of one ensureFresh call (index-freshness.js): files compared with disk,
+// rows re-parsed, rows dropped for deleted files, racy rows hash-checked, and wall time.
+export const formatFreshness = (freshness) => {
+  const hasFreshness = Boolean(freshness);
+  if (!hasFreshness) return '';
+  const hashed = freshness.hashed > 0 ? `, ${freshness.hashed} racy rows hash-checked` : '';
+  const notIndexed = (freshness.notIndexed || []).map((n) => `${n.path} not indexed: ${n.reason}`);
+  const notes = notIndexed.length > 0 ? `; ${notIndexed.join('; ')}` : '';
+  return `synced ${freshness.checked} files, ${freshness.reindexed} re-indexed, ${freshness.removed} removed${hashed}, ${freshness.ms}ms${notes}`;
+};
+
 const formatConflictNote = (index) => {
   const conflicts = index.conflicts || [];
   const hasNoConflicts = conflicts.length === 0;
@@ -59,7 +76,8 @@ export const formatIndexLine = (index) => {
   const notice = index.notice ? `; ${index.notice}` : '';
   const isInconclusive = index.status === STATUS.INCONCLUSIVE;
   const verdict = isInconclusive ? `; INCONCLUSIVE: ${index.reason}` : '';
-  return `${base}${notice}${formatConflictNote(index)}${verdict}`;
+  const stamp = index.freshness ? `; ${formatFreshness(index.freshness)}` : '';
+  return `${base}${notice}${formatConflictNote(index)}${stamp}${verdict}`;
 };
 
 // Text answers other than the default query page print the index line first, since their

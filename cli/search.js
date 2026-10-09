@@ -20,7 +20,8 @@ import { resolveTargetDir } from './path-scope.js';
 import { syncSearchIndex, syncSingleFileIndex } from './search-sync.js';
 import { parseSearchArgs, hasAnyFlag, readIntValue } from './search-args.js';
 import { resolveIndexRoot, resolveDefaultScopeDir } from './search-root.js';
-import { describeIndexFromSync, applyExitStatus, indexStatusOf, printIndexLine } from './search-output.js';
+import { applyExitStatus, indexStatusOf, printIndexLine } from './search-output.js';
+import { ensureFresh } from './index-freshness.js';
 import { buildQueryPayload, printQueryPage } from './search-query-view.js';
 import { STATUS } from './result-status.js';
 
@@ -181,15 +182,16 @@ export const runSearch = async (rawArgs = [], isCli = true) => {
   const startTime = Date.now();
   const root = resolveIndexRoot(cwd);
   const { mode, isSubcommand } = resolveMode(parsed, first);
-  const syncRes = syncSearchIndex(resolveScopeTarget(parsed, cwd, root), cwd, {
+  const session = ensureFresh(cwd, {
+    scope: resolveScopeTarget(parsed, cwd, root),
     reindex: parsed.flags.has('--reindex'),
     includeInternal: parsed.flags.has('--include-internal'),
     includeHeldScopes: mode !== 'query'
   });
-  const hasSearchDb = Boolean(syncRes?.db);
+  const hasSearchDb = Boolean(session.db);
   if (!hasSearchDb) return failNoSqlite(isJson, isCli);
-  const db = syncRes.db;
-  const index = { ...describeIndexFromSync(syncRes), argProblems: argProblems.length > 0 ? argProblems : undefined };
+  const db = session.db;
+  const index = { ...session.index, argProblems: argProblems.length > 0 ? argProblems : undefined };
   applyExitStatus(indexStatusOf(index), isCli);
 
   const limit = readIntValue(parsed, 'limit', mode === 'query' ? 50 : 20);
@@ -202,7 +204,7 @@ export const runSearch = async (rawArgs = [], isCli = true) => {
   }
 
   const query = first.trim();
-  const page = queryIndexPage(db, { query, tier: parsed.values.tier || null, limit, scopeDirs: syncRes.scopeDirs });
+  const page = queryIndexPage(db, { query, tier: parsed.values.tier || null, limit, scopeDirs: index.scopeDirs });
   const durationMs = Date.now() - startTime;
   if (isJson) {
     const payload = buildQueryPayload(page, { query, tier: parsed.values.tier || null, durationMs, isColumnar, index });

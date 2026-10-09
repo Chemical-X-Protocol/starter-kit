@@ -145,7 +145,7 @@ export const runReaderCli = (args, isCli = false) => {
       traceSymbol,
       backtraceSymbol
     });
-    const cardText = [cards.connection, cards.trace, cards.backtrace].filter(Boolean).join('');
+    const cardText = [cards.connection, cards.trace, cards.backtrace, cards.freshness].filter(Boolean).join('');
     if (cardText) res.cards = cardText.trim();
 
     if (isJson) {
