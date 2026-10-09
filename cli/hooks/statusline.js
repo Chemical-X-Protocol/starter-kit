@@ -12,8 +12,12 @@ export const buildStatusline = (status) => {
   const servers = status.servers;
   const hasStale = Boolean(servers?.stale);
   if (hasStale) parts.push(`MCP STALE x${servers.stale}`);
-  else if (servers?.running) parts.push(`mcp ok x${servers.running}`);
-  if (!status.mcpLaunch.ok) parts.push('launch: run chemx doctor');
+  else {
+    const hasRunningServers = Boolean(servers?.running);
+    if (hasRunningServers) parts.push(`mcp ok x${servers.running}`);
+  }
+  const isLaunchOk = Boolean(status.mcpLaunch.ok);
+  if (!isLaunchOk) parts.push('launch: run chemx doctor');
   return parts.join(' | ');
 };
 
