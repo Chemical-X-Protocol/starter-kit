@@ -41,12 +41,15 @@ export const handleChemxPatch = (args = {}, cwd = process.cwd()) => {
   }
 
   const targetPath = resolveSafePath(args.path, cwd);
+  const isDryRun = Boolean(args.dryRun);
   const result = patchFile(targetPath, {
     targetContent,
     replacementContent,
     allowMultiple: Boolean(args.allowMultiple || args.multiple),
+    dryRun: isDryRun,
     cwd
   });
+  if (isDryRun) return { ...result, dryRun: true, warnings: formatPatchWarnings(result) };
 
   try {
     syncSingleFileIndex(targetPath, cwd);

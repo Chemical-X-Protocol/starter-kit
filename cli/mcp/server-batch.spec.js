@@ -62,3 +62,11 @@ test('envelope: wrapper output is plain text without ANSI or JSON-in-text', asyn
   assert.strictEqual(res.result.content[0].text, 'build: echo hi\n');
   assert.doesNotMatch(textOf(res), /\u001b\[/);
 });
+
+test('dryRun: MCP patch with dryRun:true never writes', async () => {
+  const project = makeFixtureProject({ 'package.json': PKG, 'src/x.ts': 'export const a = 1;\n' });
+  const handler = createMcpHandler({ bootDir: KIT_ROOT, staleness: false });
+  const res = await call(handler, { action: 'patch', projectRoot: project, params: { path: 'src/x.ts', search: 'a = 1', replace: 'a = 2', dryRun: true } });
+  assert.strictEqual(res.result.isError, false, textOf(res));
+  assert.strictEqual(fs.readFileSync(path.join(project, 'src/x.ts'), 'utf-8'), 'export const a = 1;\n');
+});
