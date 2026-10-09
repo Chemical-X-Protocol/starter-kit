@@ -23,11 +23,21 @@ export interface NavigatorMenuItem {
 
 export declare function formatButtonTag(label: string, color?: string, width?: number): string;
 export declare function buildNavigatorMenu(
-  topActions: readonly NavigatorMenuItem[],
-  activeGrades: readonly NavigatorMenuItem[],
-  midActions: readonly NavigatorMenuItem[],
-  bottomActions: readonly NavigatorMenuItem[]
+  ...sections: readonly (readonly NavigatorMenuItem[])[]
 ): { menuItems: NavigatorMenuItem[]; menuOptions: string[] };
+
+export type NavigatorSectionId = 'fix' | 'grades' | 'setup' | 'track' | 'general';
+export interface NavigatorSection {
+  readonly id: NavigatorSectionId;
+  readonly items: NavigatorMenuItem[];
+}
+export interface NavigatorSectionInput {
+  readonly actions: Record<string, unknown>;
+  readonly grades?: readonly (NavigatorMenuItem & { readonly name?: string; readonly violations?: number })[];
+  readonly guardrailsInstalled?: boolean;
+  readonly queryIndexInstalled?: boolean;
+}
+export declare function planNavigatorSections(input: NavigatorSectionInput): NavigatorSection[];
 
 export declare function extractPromptFromContent(content: string): string | null;
 export declare function showPagedContent(content: string, promptText?: string | null): Promise<void>;

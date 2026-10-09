@@ -65,19 +65,22 @@ export const handleShareToDiscussions = async (report, options = {}) => {
         '1. 🚀 Post Transformation Showcase (Before vs. After Delta)',
         '2. 📋 Post Single Audit Scorecard (Current Snapshot Only)'
       ]);
-      if (choice?.includes('1.')) shareType = 'transformation';
+      const isTransformationChoice = Boolean(choice?.includes('1.'));
+      if (isTransformationChoice) shareType = 'transformation';
     } else {
       process.stdout.write('\nSelect Discussion Post Format:\n');
       process.stdout.write('  [1] 🚀 Post Transformation Showcase (Before vs. After Delta)\n');
       process.stdout.write('  [2] 📋 Post Single Audit Scorecard (Current Snapshot Only)\n');
       const choice = await promptQuestion('Choice [1]: ');
-      if (!choice || choice.trim() === '1') shareType = 'transformation';
+      const isTransformationTyped = !choice || choice.trim() === '1';
+      if (isTransformationTyped) shareType = 'transformation';
     }
   }
 
   let detectedSite = '';
   const pkgPath = path.resolve(process.cwd(), 'package.json');
-  if (fs.existsSync(pkgPath)) {
+  const hasPackageJson = fs.existsSync(pkgPath);
+  if (hasPackageJson) {
     try {
       const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
       detectedSite = pkg.homepage || pkg.website || '';
@@ -89,7 +92,8 @@ export const handleShareToDiscussions = async (report, options = {}) => {
   }
 
   const stored = getStoredDiscussion();
-  if (!detectedSite && stored?.website) {
+  const shouldUseStoredWebsite = Boolean(!detectedSite && stored?.website);
+  if (shouldUseStoredWebsite) {
     detectedSite = stored.website;
   }
 
@@ -125,7 +129,8 @@ export const handleShareToDiscussions = async (report, options = {}) => {
   const existingNumber = isStoredForTarget ? stored.number : null;
   process.stdout.write(renderSharePreview({ repo: DEFAULT_DISCUSSION_REPO, category, title, body, existingNumber }));
   const consent = await confirmShare({ repo: DEFAULT_DISCUSSION_REPO, isYes, canPrompt });
-  if (!consent.confirmed) {
+  const isConfirmed = Boolean(consent.confirmed);
+  if (!isConfirmed) {
     process.stderr.write(`${consent.reason}\n`);
     const refusedStatus = consent.declined ? STATUS.INCONCLUSIVE : STATUS.FAIL;
     return shareResult(refusedStatus, false, consent.reason, { declined: consent.declined });

@@ -68,7 +68,8 @@ export const renderDashboardBanner = (
     const pad = " ".repeat(Math.max(2, col1Pad - visualWidth(col1[i])));
     const content = col1[i] + pad + col2[i];
     const w = visualWidth(content);
-    if (w > maxW) maxW = w;
+    const isWidestRow = w > maxW;
+    if (isWidestRow) maxW = w;
     rows.push({ content, width: w });
   }
 

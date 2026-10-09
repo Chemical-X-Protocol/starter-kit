@@ -63,15 +63,18 @@ const GRADE_RISK_RANKS = {
 const comparePillarsByRisk = (a, b) => {
   const rankA = GRADE_RISK_RANKS[a.grade] ?? 0;
   const rankB = GRADE_RISK_RANKS[b.grade] ?? 0;
-  if (rankA !== rankB) {
+  const isRankDifferent = rankA !== rankB;
+  if (isRankDifferent) {
     return rankB - rankA;
   }
 
-  if (b.riskWeight !== a.riskWeight) {
+  const isRiskWeightDifferent = b.riskWeight !== a.riskWeight;
+  if (isRiskWeightDifferent) {
     return b.riskWeight - a.riskWeight;
   }
 
-  if (b.violations !== a.violations) {
+  const isViolationCountDifferent = b.violations !== a.violations;
+  if (isViolationCountDifferent) {
     return b.violations - a.violations;
   }
 
@@ -152,7 +155,7 @@ export const buildDashboardActionGroups = ({ report, onScaffold = null, onRerun 
   };
 
   const handleInstallSearchAction = async () => {
-    process.stdout.write('\n\x1b[1mInstalling AI Agent Query Machine...\x1b[0m\n');
+    process.stdout.write('\n\x1b[1mSetting up the query index for "chemx q"...\x1b[0m\n');
     await installAgentSearchConfig(process.cwd());
     if (hasGum()) {
       gumChoose(["<-- Back to Audit Dashboard"]);
@@ -197,11 +200,13 @@ export const buildDashboardActionGroups = ({ report, onScaffold = null, onRerun 
     }
 
     const previousSnapshot = history.length > 1 ? history[history.length - 2] : null;
-    if (previousSnapshot && previousSnapshot.id !== baseline?.id) {
+    const hasDistinctPreviousSnapshot = Boolean(previousSnapshot && previousSnapshot.id !== baseline?.id);
+    if (hasDistinctPreviousSnapshot) {
       output += "\n\n" + formatTransformationTerminal(previousSnapshot, currentSnapshot, { isStepDelta: true });
     }
 
-    if (history.length > 0) {
+    const hasHistory = history.length > 0;
+    if (hasHistory) {
       output += "\n\n" + formatHistoryTimelineTerminal(history);
     }
 
@@ -281,29 +286,29 @@ export const buildDashboardActionGroups = ({ report, onScaffold = null, onRerun 
 
   const installAction = {
     key: "install",
-    tag: formatButtonTag("Install", "\x1b[32m"),
-    label: "🪝 Step 1: Install Pre-Commit Hook & GitHub CI Workflow",
+    tag: formatButtonTag("Guardrails", "\x1b[32m"),
+    label: "🪝 Guardrails: install pre-commit hook & GitHub CI workflow",
     action: handleInstallAction
   };
 
   const installSearchAction = {
     key: "install_search",
-    tag: formatButtonTag("Query Machine", "\x1b[38;2;56;189;248m"),
-    label: "⚡ Step 2: Install AI Agent Query Tool (\"pnpm q\" script + SQLite index)",
+    tag: formatButtonTag("Query Index", "\x1b[38;2;56;189;248m"),
+    label: "⚡ Query Index: set up \"chemx q\" (package script + SQLite index)",
     action: handleInstallSearchAction
   };
 
   const roadmapAction = {
     key: "roadmap",
     tag: formatButtonTag("Roadmap", "\x1b[38;2;45;212;191m"),
-    label: "🌱 Step 3: Self-Healing Fix Roadmap (Remediation Order & AI Prompts)",
+    label: "🌱 Self-Healing Fix Roadmap (Remediation Order & AI Prompts)",
     action: handleRoadmapAction
   };
 
   const upgradeAction = {
     key: "upgrade",
     tag: formatButtonTag("Upgrade", "\x1b[33m"),
-    label: "💎 Step 4: Unlock Full Molecular Blueprints & Generator (Team Power Puff)",
+    label: "💎 Upgrade: Unlock Full Molecular Blueprints & Generator (Team Power Puff)",
     action: handleUpgradeAction
   };
 

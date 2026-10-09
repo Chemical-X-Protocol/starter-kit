@@ -7,6 +7,7 @@ import { writeFileSafely } from './mcp/installer-write.js';
 import { addPackageScripts } from './mcp/installer-package.js';
 import { runPillarsWizard } from './pillars-wizard.js';
 import { readExistingProjectConfig } from './config/loader.js';
+import { LEGACY_LINE_BUDGET_KEYS } from './audit/line-budgets.js';
 
 export { buildPreCommitHookScript, buildGitHubWorkflowScript } from './installer-templates.js';
 export { installAllMcpConfigs } from './mcp/installer.js';
@@ -15,7 +16,8 @@ export { readExistingProjectConfig } from './config/loader.js';
 export const resolveGitHooksDir = (targetDir = '.') => {
   const resolvedTarget = path.resolve(targetDir);
   const gitPath = path.join(resolvedTarget, '.git');
-  if (!fs.existsSync(gitPath)) return null;
+  const hasGitEntry = fs.existsSync(gitPath);
+  if (!hasGitEntry) return null;
 
   try {
     const stat = fs.statSync(gitPath);
@@ -62,7 +64,8 @@ export const installPreCommitHook = (targetDir = '.', options = {}) => {
     return false;
   }
 
-  if (!fs.existsSync(gitHooksDir)) {
+  const isHooksDirMissing = !fs.existsSync(gitHooksDir);
+  if (isHooksDirMissing) {
     fs.mkdirSync(gitHooksDir, { recursive: true });
   }
 
@@ -79,7 +82,8 @@ export const installPreCommitHook = (targetDir = '.', options = {}) => {
 
 export const installGitHubWorkflow = (targetDir = '.', options = {}) => {
   const wfDir = path.resolve(targetDir, '.github', 'workflows');
-  if (!fs.existsSync(wfDir)) fs.mkdirSync(wfDir, { recursive: true });
+  const isWorkflowDirMissing = !fs.existsSync(wfDir);
+  if (isWorkflowDirMissing) fs.mkdirSync(wfDir, { recursive: true });
   const wfPath = path.join(wfDir, 'chemx-audit.yml');
   fs.writeFileSync(wfPath, buildGitHubWorkflowScript(options.minGrade, options.minScore), 'utf-8');
   process.stdout.write(`  \x1b[32m✔\x1b[0m Installed GitHub Actions CI workflow: .github/workflows/chemx-audit.yml\n`);
@@ -88,13 +92,11 @@ export const installGitHubWorkflow = (targetDir = '.', options = {}) => {
 
 export const saveProjectConfig = (targetDir = '.', config = {}) => {
   const chemxDir = path.resolve(targetDir, '.chemx');
-  if (!fs.existsSync(chemxDir)) fs.mkdirSync(chemxDir, { recursive: true });
+  const isChemxDirMissing = !fs.existsSync(chemxDir);
+  if (isChemxDirMissing) fs.mkdirSync(chemxDir, { recursive: true });
   fs.writeFileSync(path.join(chemxDir, 'config.json'), JSON.stringify(config, null, 2), 'utf-8');
   process.stdout.write(`  \x1b[32m✔\x1b[0m Saved project settings to: .chemx/config.json\n`);
 };
-
-// Legacy keys nothing reads: line budgets follow the profile via cli/audit/line-budgets.js.
-const LEGACY_LINE_BUDGET_KEYS = ['maxLineCount', 'maxMoleculeLineCount'];
 
 /** The installer's settings merged over the existing config, so pillars, profile and framework survive. */
 export const buildInstallerProjectConfig = (opts = {}, existing = {}) => {
@@ -131,6 +133,37 @@ export const areGuardrailsInstalled = (targetDir = '.') => {
   const hasHook = hookContent.includes('Chemical X') || hookContent.includes('chemx');
 
   return hasWf && hasHook;
+};
+
+const QUERY_PACKAGE_NAMES = ['chemx', '@chemx/starter-kit'];
+
+/** package.json parsed as an object, or null when it is missing, unreadable or not valid JSON. */
+const readPackageJsonSafely = (pkgPath) => {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+    const isObject = Boolean(parsed) && typeof parsed === 'object';
+    return isObject ? parsed : null;
+  } catch {
+    return null;
+  }
+};
+
+const isQueryPackageListed = (deps) => QUERY_PACKAGE_NAMES.some((name) => Boolean(deps?.[name]));
+
+/**
+ * True once "chemx q" can run here: package.json wires chemx in (a `chemx` script, the legacy `q`
+ * script, or chemx as a dependency) AND the SQLite index (.chemx/index.db) has been built.
+ */
+export const isQueryMachineInstalled = (targetDir = '.') => {
+  const resolvedTarget = path.resolve(targetDir);
+  const hasIndexDb = fs.existsSync(path.join(resolvedTarget, '.chemx', 'index.db'));
+  if (!hasIndexDb) return false;
+
+  const pkg = readPackageJsonSafely(path.join(resolvedTarget, 'package.json'));
+  const scripts = pkg?.scripts || {};
+  const hasQueryScript = Boolean(scripts.chemx || scripts.q);
+  const hasQueryDependency = isQueryPackageListed(pkg?.dependencies) || isQueryPackageListed(pkg?.devDependencies);
+  return hasQueryScript || hasQueryDependency;
 };
 
 export const ensurePackageScripts = (targetDir = '.') => {
@@ -191,16 +224,17 @@ export const runInstallWizard = async (targetDir = '.') => {
   process.stdout.write('\n\x1b[1m\x1b[38;2;98;201;255mChemical X: Architecture Guardrail & Query Installer\x1b[0m\n\n');
   const targetChoice = hasGum()
     ? gumChoose([
-        '1. Install All Guardrails (Pre-Commit Hook + GitHub CI + project MCP config + Query Machine)',
+        '1. Install All Guardrails (Pre-Commit Hook + GitHub CI + project MCP config + Query Index)',
         '2. Model Context Protocol (MCP) Server only (.cursor, .vscode, and Antigravity in ~/.gemini)',
         '3. Architectural Pillars & Agent Steering Wizard (AGENTS.md seed + CLAUDE.md, .cursorrules, llms.txt shims)',
-        '4. Agent Query Machine only ("pnpm q" script + SQLite index)',
+        '4. Query Index only ("chemx" package script for "chemx q" + SQLite index)',
         '5. Git Pre-Commit Hook only (.git/hooks/pre-commit)',
         '6. GitHub Actions CI Workflow only (.github/workflows/chemx-audit.yml)',
         '7. Cancel'
       ])
-    : await promptQuestion('Select target: [1] All, [2] MCP, [3] Pillars Wizard, [4] Query Machine, [5] Hook, [6] CI, [7] Cancel (default: 1): ');
-  if (targetChoice?.includes('Cancel') || targetChoice === '7') return;
+    : await promptQuestion('Select target: [1] All, [2] MCP, [3] Pillars Wizard, [4] Query Index, [5] Hook, [6] CI, [7] Cancel (default: 1): ');
+  const isCancelled = Boolean(targetChoice?.includes('Cancel')) || targetChoice === '7';
+  if (isCancelled) return;
 
   const targets = planWizardTargets(targetChoice);
   if (targets.isMcpOnly) {
@@ -214,11 +248,11 @@ export const runInstallWizard = async (targetDir = '.') => {
     return;
   }
 
-  const isQueryOnly = targetChoice.includes('Query Machine only') || targetChoice === '4';
+  const isQueryOnly = targetChoice.includes('Query Index only') || targetChoice === '4';
   if (isQueryOnly) {
-    process.stdout.write('\n\x1b[1mInstalling AI Agent Query Machine...\x1b[0m\n');
+    process.stdout.write('\n\x1b[1mSetting up the query index for "chemx q"...\x1b[0m\n');
     await installAgentSearchConfig(targetDir);
-    process.stdout.write('\n\x1b[1m\x1b[32m✔ Chemical X Agent Query Machine installed successfully!\x1b[0m\n\n');
+    process.stdout.write('\n\x1b[1m\x1b[32m✔ Query index ready: agents can run "chemx q".\x1b[0m\n\n');
     return;
   }
 

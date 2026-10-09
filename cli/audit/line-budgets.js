@@ -15,6 +15,9 @@ import path from 'node:path';
 export const FILE_BUDGET = Object.freeze({ warn: 500, high: 1000, critical: 2000 });
 export const VIEW_TEMPLATE_BUDGET = Object.freeze({ warn: 200, critical: 500 });
 
+// Config keys from before profiles; nothing reads them, so the installer drops them on save.
+export const LEGACY_LINE_BUDGET_KEYS = Object.freeze(['maxLineCount', 'maxMoleculeLineCount']);
+
 /**
  * File size class with the LINE_BUDGET_FILE boundaries: 'warning' above warn (MEDIUM),
  * 'severe' from high (HIGH), 'extreme' from critical (CRITICAL), else null. Reporters,
