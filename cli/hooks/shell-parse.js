@@ -11,6 +11,10 @@ const LIST_TERMINATORS = { for: 'do', select: 'do', case: 'in' };
 const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*(\[[^\]]*\])?\+?=/;
 const SHELL_NAMES = new Set(['bash', 'sh', 'zsh', 'dash']);
 const MAX_DEPTH = 4;
+// A for-loop word list is expanded only when every word is a plain literal; anything else stays unresolved.
+const LITERAL_LOOP_WORD = /^[^$`*?[{~]+$/;
+const MAX_LOOP_WORDS = 50;
+const MAX_LOOP_COPIES = 200;
 
 const PIPE_OPS = new Set(['|', '|&']);
 // Operators after which a `cd` runs in a forked subshell (its effect is lost) or only maybe runs.
@@ -72,11 +76,67 @@ const classifyWord = (token, current, parser) => {
 const WORD_HANDLERS = {
   'word.inList': (token, current, parser) => {
     const isTerminator = !token.quoted && token.value === parser.skippingList;
-    if (isTerminator) parser.skippingList = null;
+    const action = isTerminator ? () => { parser.skippingList = null; } : () => collectLoopWord(token, parser.forDecl);
+    action();
   },
-  'word.keyword': () => {},
-  'word.listKeyword': (token, current, parser) => { parser.skippingList = LIST_TERMINATORS[token.value]; },
+  'word.keyword': (token, current, parser) => { (KEYWORD_EFFECTS[token.value] ?? NO_EFFECT)(parser); },
+  'word.listKeyword': (token, current, parser) => {
+    parser.skippingList = LIST_TERMINATORS[token.value];
+    parser.forDecl = { for: { name: null, words: null } }[token.value] ?? null;
+  },
   'word.assignment': (token, current) => { current.assigns.push(token.value); }
+};
+
+const isLiteralLoopWord = (token) => token.subs.length === 0 && LITERAL_LOOP_WORD.test(token.raw);
+
+// Collect `for NAME in WORDS` while the list is skipped; the loop is only usable when every word is literal.
+const collectLoopWord = (token, decl) => {
+  const phase = ruleTree({
+    decl: { none: !decl, needsName: () => decl.name === null, needsIn: () => decl.words === null }
+  }, { failFast: true }).first;
+  const isIn = token.value === 'in' && !token.quoted;
+  const steps = {
+    'decl.none': () => {},
+    'decl.needsName': () => { decl.name = token.value; },
+    'decl.needsIn': () => { decl.words = isIn ? [] : null; }
+  };
+  (steps[phase] ?? (() => decl.words.push(token)))();
+};
+
+const NO_EFFECT = () => {};
+const KEYWORD_EFFECTS = {
+  do: (parser) => { parser.loops.push(loopFrame(parser.forDecl)); parser.forDecl = null; },
+  done: (parser) => { parser.loops.pop(); }
+};
+
+const loopFrame = (decl) => {
+  const hasList = decl && decl.name !== null && decl.words !== null;
+  const isLiteral = hasList && decl.words.length <= MAX_LOOP_WORDS && decl.words.every(isLiteralLoopWord);
+  const isName = hasList && /^[A-Za-z_][A-Za-z0-9_]*$/.test(decl.name);
+  return isLiteral && isName ? { name: decl.name, words: decl.words.map((word) => word.value) } : { name: null, words: [] };
+};
+
+const substituteVar = (text, name, value) => text.replace(new RegExp(`\\$(?:\\{${name}\\}|${name}(?![A-Za-z0-9_]))`, 'g'), () => value);
+
+const withLoopValue = (command, name, value) => ({
+  ...command,
+  argv: command.argv.map((word) => substituteVar(word, name, value)),
+  redirects: command.redirects.map((redirect) => ({ ...redirect, target: substituteVar(redirect.target, name, value) }))
+});
+
+const usesLoopVar = (command, name) => [...command.argv, ...command.redirects.map((redirect) => redirect.target)].some((text) => substituteVar(text, name, '') !== text);
+
+// A command inside `for f in a b; do ... done` becomes one copy per literal word with $f resolved.
+const expandLoops = (command, loops) => {
+  let copies = [command];
+  for (const loop of loops) {
+    const isUsable = loop.name !== null && copies.some((copy) => usesLoopVar(copy, loop.name));
+    const isTooMany = copies.length * loop.words.length > MAX_LOOP_COPIES;
+    const isExpandable = isUsable && !isTooMany;
+    const expand = (copy) => (isExpandable ? loop.words.map((word) => withLoopValue(copy, loop.name, word)) : [copy]);
+    copies = copies.flatMap(expand);
+  }
+  return copies;
 };
 
 const pushArgv = (token, current) => { current.argv.push(token.value); };
@@ -103,12 +163,12 @@ const nextDir = (parser, command, endOperator) => {
 const groupTokens = (tokens, initialDir = ROOT_DIR) => {
   const commands = [];
   const comments = [];
-  const parser = { skippingList: null, pendingRedirect: null, pipeline: 0, dir: initialDir, previousOperator: null, subshells: [] };
+  const parser = { skippingList: null, pendingRedirect: null, forDecl: null, loops: [], pipeline: 0, dir: initialDir, previousOperator: null, subshells: [] };
   let current = newCommand();
 
   const recordCommand = (command, operator) => {
     command.dir = parser.dir;
-    commands.push(command);
+    commands.push(...expandLoops(command, parser.loops));
     parser.dir = nextDir(parser, command, operator);
   };
 

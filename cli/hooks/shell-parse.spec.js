@@ -41,7 +41,7 @@ test('env prefixes become assignments; redirections keep fd, op and target', () 
 });
 
 test('for, case and control keywords never put list words in command position', () => {
-  assert.deepEqual(argvs('for x in vitest jest; do echo $x; done'), [['echo', '$x']]);
+  assert.deepEqual(argvs('for x in vitest jest; do echo $x; done'), [['echo', 'vitest'], ['echo', 'jest']]);
   assert.deepEqual(argvs('if [ -f a ]; then tsc; fi'), [['[', '-f', 'a', ']'], ['tsc']]);
   assert.deepEqual(argvs('while read f; do wc -l "$f"; done'), [['read', 'f'], ['wc', '-l', '$f']]);
 });
@@ -50,6 +50,21 @@ test('comments are collected separately and # inside a word is not a comment', (
   const parsed = parseShell('echo a#b # chemx-bypass: reason\nls');
   assert.deepEqual(parsed.commands.map((command) => command.argv), [['echo', 'a#b'], ['ls']]);
   assert.deepEqual(parsed.comments, [' chemx-bypass: reason']);
+});
+
+test('for-loop literal word lists resolve the loop variable in each body command (#2590)', () => {
+  assert.deepEqual(argvs('for f in a.js "b c.js"; do sed -i s/x/y/ $f; done'), [['sed', '-i', 's/x/y/', 'a.js'], ['sed', '-i', 's/x/y/', 'b c.js']]);
+  assert.deepEqual(argvs('for f in a b; do echo ${f}; done; echo $f'), [['echo', 'a'], ['echo', 'b'], ['echo', '$f']]);
+  assert.deepEqual(argvs('for f in a b; do for g in x y; do echo $f$g; done; done').length, 4);
+  const redirected = parseShell('for f in a b; do echo hi > $f.md; done').commands.map((command) => command.redirects[0].target);
+  assert.deepEqual(redirected, ['a.md', 'b.md']);
+});
+
+test('for-loop lists with variables, globs or substitutions stay unresolved (#2590)', () => {
+  assert.deepEqual(argvs('for f in $LIST; do echo $f; done'), [['echo', '$f']]);
+  assert.deepEqual(argvs('for f in *.js; do echo $f; done'), [['echo', '$f']]);
+  assert.deepEqual(argvs('for f in $(ls) a; do echo $f; done').filter((argv) => argv[0] === 'echo'), [['echo', '$f']]);
+  assert.deepEqual(argvs('while true; do echo $f; done'), [['true'], ['echo', '$f']]);
 });
 
 test('unterminated quotes and substitutions do not throw', () => {

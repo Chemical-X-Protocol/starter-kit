@@ -3,7 +3,7 @@
 // arguments of the command being denied.
 
 import { fileOperands, gitSubcommand, stdoutWrites, globToSubstring, optionValue } from './guard-args.js';
-import { isRepoWritePath, isRepoPath } from './guard-paths.js';
+import { isRepoWritePath, isRepoPath, isUnresolvedInRepo } from './guard-paths.js';
 
 const IN_PLACE_FLAG = /^-(?![MmIeE])[a-zA-Z]*i(?:\.[\w~]+)?$/;
 const SED_SCRIPT_FLAGS = new Set(['-e', '--expression', '-f', '--file']);
@@ -56,11 +56,23 @@ const inPlaceTargets = (parts, args, context) => {
 };
 
 // gawk `-i inplace` rewrites its file operands; the program is the first operand unless -f names it.
-const awkInPlaceFiles = ({ args }, context) => {
-  const isInPlace = args.some((arg, index) => (arg === '-i' && args[index + 1] === 'inplace') || arg === '-iinplace' || arg === '--include=inplace');
+const isAwkInPlace = (args) => args.some((arg, index) => (arg === '-i' && args[index + 1] === 'inplace') || arg === '-iinplace' || arg === '--include=inplace');
+const awkOperands = (args) => {
   const operands = fileOperands(args, new Set(['-F', '-v', '-f', '-i']));
-  const files = args.includes('-f') ? operands : operands.slice(1);
-  return isInPlace ? files.filter((file) => isRepoWritePath(file, context)) : [];
+  return args.includes('-f') ? operands : operands.slice(1);
+};
+const awkInPlaceFiles = ({ args }, context) => (isAwkInPlace(args) ? awkOperands(args).filter((file) => isRepoWritePath(file, context)) : []);
+
+// In-place edits (sed -i, perl -i, awk -i inplace) whose file operand is still a variable or substitution
+// while the command runs inside the project: the guard cannot tell whether the target is a repo file.
+const IN_PLACE_PARTS = { sed: sedParts, perl: perlParts };
+const unresolvedInPlaceTargets = ({ tool, args }, context) => {
+  const isAwk = tool === 'awk';
+  const isSedOrPerl = Object.hasOwn(IN_PLACE_PARTS, tool);
+  const hasFlag = args.some((arg) => IN_PLACE_FLAG.test(arg) || arg === '--in-place' || arg.startsWith('--in-place='));
+  const isInPlace = isAwk ? isAwkInPlace(args) : isSedOrPerl && hasFlag;
+  const files = isAwk ? awkOperands(args) : (IN_PLACE_PARTS[tool]?.({ args }).files ?? []);
+  return isInPlace ? files.filter((file) => isUnresolvedInRepo(file, context)) : [];
 };
 
 const nodeTestParts = ({ args }) => {
@@ -116,6 +128,11 @@ export const SHELL_REWRITE_RULES = [
     id: 'shell-awk-in-place',
     matches: (invocation, command, context) => invocation.tool === 'awk' && awkInPlaceFiles(invocation, context).length > 0,
     use: (invocation, command, context) => patchHint(awkInPlaceFiles(invocation, context)[0], null),
+  },
+  {
+    id: 'shell-in-place-unresolved',
+    matches: (invocation, command, context) => unresolvedInPlaceTargets(invocation, context).length > 0,
+    use: (invocation, command, context) => `chemx patch <file> (cannot verify the target ${unresolvedInPlaceTargets(invocation, context)[0]}: it is a variable inside a repo; patch the file by its literal path)`,
   },
   {
     id: 'raw-node-test',

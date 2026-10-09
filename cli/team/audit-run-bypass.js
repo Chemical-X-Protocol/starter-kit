@@ -5,8 +5,9 @@
  *
  * Not a finding: a shell command that touches /tmp, mktemp or ~/.claude (scratch work), a target outside
  * every repo root (so a native call on a /tmp file), /dev/*, and a native call on ~/.claude or node_modules.
- * Limits: a target built from a variable, glob or substitution cannot be resolved and is skipped, never
- * guessed; a write made by an interpreter (node -e, python -c) is not seen; repo roots are the nearest .git
+ * Limits: a target built from a glob cannot be resolved and is skipped, never guessed; an in-place sed, perl or
+ * awk edit whose target is a variable or substitution, run in a directory inside a repo, is reported as an
+ * unresolved-target bypass at that directory (other writers with such a target are skipped); a write made by an interpreter (node -e, python -c) is not seen; repo roots are the nearest .git
  * above each call's recorded cwd (the cwd itself when none exists on this machine).
  */
 import os from 'node:os';
@@ -15,6 +16,7 @@ import { findRepoRoot } from '../hooks/repo-membership.js';
 const WRITE_OPS = new Set(['>', '>>', '>|', '&>', '&>>']);
 const SCRIPT_FLAGS = new Set(['-e', '-f', '-E']);
 const UNRESOLVED = /[$`*?{]/;
+const VARIABLE_WORD = /[$`]/;
 // /tmp is not listed: a path there is a finding only when a recorded repo root sits above it.
 const SCRATCH_ROOTS = ['/dev', '/proc'];
 
@@ -105,12 +107,16 @@ export const shellWritesOf = (inv, roots, home = os.homedir()) => {
   const isCounted = inv.kind === 'shell' && !isScratch;
   if (!isCounted) return [];
   const editor = editorWrites(inv.argv);
-  const words = [...redirectTargets(inv), ...(editor ? editor.files.map((word) => ({ how: editor.how, word })) : [])];
+  const words = [...redirectTargets(inv), ...(editor ? editor.files.map((word) => ({ how: editor.how, word, isInPlace: editor.how !== 'tee' })) : [])];
+  const cwdHere = resolveWord(inv, '.', home);
   const writes = [];
-  for (const { how, word } of words) {
+  for (const { how, word, isInPlace } of words) {
     const abs = resolveWord(inv, word, home);
     const isHit = abs !== null && isRepoPath(abs, roots, home);
     if (isHit) writes.push({ how, target: abs });
+    // An in-place edit whose target stays a variable, run inside a repo, is reported at the directory it ran in.
+    const isUnresolvedHere = isInPlace && abs === null && VARIABLE_WORD.test(String(word)) && cwdHere !== null && isRepoPath(cwdHere, roots, home);
+    if (isUnresolvedHere) writes.push({ how: `${how} (unresolved target)`, target: cwdHere });
   }
   return writes;
 };

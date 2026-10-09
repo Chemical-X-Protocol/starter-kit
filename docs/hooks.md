@@ -47,7 +47,9 @@ The native-tool rows apply when `nativeFileTools` is `block` (environment `CHEMX
 
 ### Shell write coverage
 
-Covered writers: `>`, `>>`, `>|`, `&>` redirects (heredocs included), `tee`, `sed -i`, `perl -i` and `awk -i inplace`. Not covered, and allowed even on repo files: `cp`, `mv`, `install`, `patch`, `git apply`, `git checkout -- <file>`, `dd`, `truncate`, editors, scripts that write on their own, and any target whose path is an unresolved variable. The guard is a nudge toward chemx's logged edits, not a sandbox.
+Covered writers: `>`, `>>`, `>|`, `&>` redirects (heredocs included), `tee`, `sed -i`, `perl -i` and `awk -i inplace`. Not covered, and allowed even on repo files: `cp`, `mv`, `install`, `patch`, `git apply`, `git checkout -- <file>`, `dd`, `truncate`, editors, scripts that write on their own, and any target whose path is an unresolved variable, with one exception below. The guard is a nudge toward chemx's logged edits, not a sandbox.
+
+In-place edits with an unverifiable target (#2590): a `for NAME in WORDS` list made only of plain literal words (no `$`, backtick, glob or brace; at most 50 words, 200 expanded commands) is expanded, so each item is checked as the target. A `sed -i`, `perl -i` or `awk -i inplace` whose file operand still contains a variable or substitution, run in a directory the guard can place inside the project, is denied with "cannot verify the target"; use `chemx patch`, or append `# chemx-bypass: <reason>`. Not guaranteed: loop words from a variable, glob or substitution, `while`/`read` loops, nested shells that set the variable, and a directory the guard cannot determine (`cd "$DIR"`) still fail open. `chemx team audit-run` reports the same unresolved in-place edit as a bypass at the directory it ran in.
 
 ### Working directory tracking
 

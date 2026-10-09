@@ -65,5 +65,16 @@ export const isRepoSourcePath = (word, context) => isRepoFileWithExtension(word,
 // Source, docs and config files that `chemx patch` / `chemx write` should change.
 export const isRepoWritePath = (word, context) => isRepoFileWithExtension(word, context, WRITE_EXTENSIONS);
 
+// A word that stays a variable or substitution while the command runs inside the project (and outside
+// free locations): its target cannot be verified. A literal absolute prefix outside the project clears it.
+export const isUnresolvedInRepo = (word, context) => {
+  const isVariable = UNRESOLVED_VARIABLE.test(word) || word.includes('`');
+  const isCheckable = isVariable && !context.cwdUnknown;
+  const prefix = isCheckable ? expandKnownVariables(word, context).split(/[$`]/)[0] : '';
+  const isOutsideByPrefix = path.isAbsolute(prefix) && !isInsideDirectory(prefix, context.root);
+  const cwdIsRouted = isInsideDirectory(context.cwd, context.root) && !isFreeLocation(path.resolve(context.cwd), context);
+  return isCheckable && cwdIsRouted && !isOutsideByPrefix;
+};
+
 // Any path (file or directory) inside the project that is not a free location.
 export const isRepoPath = (word, context) => repoPathOf(word, context) !== null;

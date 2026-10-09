@@ -9,6 +9,10 @@ const CONTEXT = { cwd: '/repo', root: '/repo', enforceSearch: true, hasChemxComm
 const bash = (command) => ({ tool_name: 'Bash', tool_input: { command } });
 const decide = (command, context = CONTEXT) => decidePreTool(bash(command), context);
 
+// The real bypass of 2026-10-09 (wf_6530e940-d31): a for-loop word list fed to sed -i through $f.
+const LOOP_FIXTURE = 'for f in cli/doctor/doctor-hooks.spec.js cli/hooks/install-hooks.spec.js plugins/claude-code/hooks/hooks.json; do chemx team lock acquire $f --as=@x; '
+  + "sed -i 's/NotebookEdit|Glob\\(.\\)/NotebookEdit|Glob|Agent|Workflow\\1/' $f; done";
+
 const DENY_CASES = [
   ["sed -i 's/foo/bar/' src/a.ts", /chemx patch src\/a\.ts <<'EOF'.*SEARCH "foo" ======= "bar"/],
   ["sed -i.bak -e 's/a.b/c/' src/a.ts", /chemx patch src\/a\.ts.*literal text, not regexes/],
@@ -48,6 +52,13 @@ const DENY_CASES = [
   ['git cat-file -p HEAD:src/a.js', /chemx read HEAD:src\/a\.js/],
   ["awk -i inplace '{ sub(/a/, \"b\") } 1' src/a.js", /chemx patch src\/a\.js/],
   ['xargs cat < list', /chemx do "read <file>/],
+  // #2590: variable targets of in-place edits.
+  ['sed -i s/a/b/ $f', /chemx patch <file>.*cannot verify the target \$f/],
+  ['perl -pi -e s/a/b/ "$FILE"', /cannot verify the target \$FILE/],
+  ["awk -i inplace '1' ${TARGET}", /cannot verify the target \$\{TARGET\}/],
+  ['for f in $LIST; do sed -i s/a/b/ $f; done', /cannot verify the target \$f/],
+  ['for f in a.js b.js; do sed -i s/a/b/ $f; done', /chemx patch a\.js/],
+  [LOOP_FIXTURE, /chemx patch cli\/doctor\/doctor-hooks\.spec\.js/],
   ['git ls-files | xargs -n1 cat < list.txt', /chemx do/],
 ];
 
@@ -61,6 +72,8 @@ for (const [command, expectedUse] of DENY_CASES) {
 }
 
 const ALLOW_CASES = [
+  'cd /tmp/rv && sed -i s/a/b/ $f', 'sed -i s/a/b/ /tmp/$f', 'cd $UNKNOWN_DIR && sed -i s/a/b/ $f', 'sed -i s/a/b/ $f # chemx-bypass: scratch copy',
+  'for f in /tmp/a.js /tmp/b.js; do sed -i s/a/b/ $f; done', 'sed s/a/b/ $f', 'sed -i s/a/b/ build.log',
   'echo hi > /tmp/x.md', 'echo hi >> $UNKNOWN_DIR/x.md', 'echo hi > build.log', 'echo hi > .chemx/state.json',
   'echo hi > node_modules/pkg/index.js', 'echo hi > tmp/x.md', 'echo hi > scratch/x.ts', 'echo hi > /dev/null',
   "sed -i 's/a/b/' /tmp/x.ts", "sed -i 's/a/b/' build.log", "sed 's/a/b/' /tmp/x.ts", "sed 's/a/b/' build.log", 'wc -l < build.log', 'wc -l < /tmp/a.js', 'wc -l src/a.js', 'git -C /tmp/rv/other grep foo', 'cd /tmp/rv/other && git grep foo', 'git -C /tmp/rv/other cat-file -p HEAD:src/a.js', 'git cat-file -e HEAD:src/a.js', 'git cat-file -t HEAD', 'xargs cat < /tmp/list', 'echo a | xargs cat', 'cat < /tmp/a.js', "awk -i inplace '1' /tmp/a.js", "sed -n '1,5p' /tmp/x.ts",

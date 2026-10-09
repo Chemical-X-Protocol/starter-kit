@@ -16,6 +16,15 @@ const invsOf = (command) => invocationsOf({ name: 'Bash', at: 1, cwd: REPO, inpu
 const commitsOf = (command) => commitsWithoutTask(invsOf(command));
 const writesOf = (command) => invsOf(command).flatMap((inv) => shellWritesOf(inv, [REPO], '/home/nobody'));
 
+test('bypass: a for-loop word list of literal repo files is reported per file, an unresolved in-place target by directory (#2590)', () => {
+  const looped = writesOf('for f in a.js b.js; do sed -i s/x/y/ $f; done');
+  assert.deepEqual(looped.map((w) => w.target), [`${REPO}/a.js`, `${REPO}/b.js`]);
+  const unresolved = writesOf('for f in $LIST; do sed -i s/x/y/ $f; done');
+  assert.deepEqual(unresolved.map((w) => [w.how, w.target]), [['sed -i (unresolved target)', REPO]]);
+  assert.equal(writesOf('cd /tmp/scratch && sed -i s/x/y/ $f').length, 0);
+  assert.equal(writesOf('cd $DIR && sed -i s/x/y/ $f').length, 0);
+});
+
 test('task text: the computed task turn wins over the relayed request that mentions it', () => {
   const relay = turn('[Workflow harness - user request] the user said: see the computed task text that follows');
   const task = turn('[Workflow harness - computed task] You are @a. Task #42 File: cli/x.js');
