@@ -28,6 +28,11 @@ import {
   handleHealthFilterCommand
 } from './search-commands.js';
 
+// Fixture rows go to a private index, never the kit's shared .chemx/index.db that
+// other spec files read in parallel (spot-check-fixes asserts it holds no cli/ rows).
+const FIXTURE_INDEX_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-search-spec-'));
+test.after(() => fs.rmSync(FIXTURE_INDEX_ROOT, { recursive: true, force: true }));
+
 test('resolveTargetDir: returns custom directory if provided as first argument', () => {
   const result = resolveTargetDir('packages/core', '--dir=other/path');
   assert.strictEqual(result, 'packages/core');
@@ -70,7 +75,7 @@ test('resolveTargetDir: defaults to . when .sln or csproj exists at repo root', 
 });
 
 test('search-db: indexes symbols with line ranges and finds definition', () => {
-  const db = openIndexDb();
+  const db = openIndexDb(FIXTURE_INDEX_ROOT);
   if (!db) return;
 
   upsertFileIndex(db, {
@@ -103,7 +108,7 @@ test('search-db: indexes symbols with line ranges and finds definition', () => {
 });
 
 test('search-db: tracks imports and references accurately', () => {
-  const db = openIndexDb();
+  const db = openIndexDb(FIXTURE_INDEX_ROOT);
   if (!db) return;
 
   upsertFileIndex(db, {
@@ -134,7 +139,7 @@ test('search-db: tracks imports and references accurately', () => {
 });
 
 test('search-db: syncs and queries violations index', () => {
-  const db = openIndexDb();
+  const db = openIndexDb(FIXTURE_INDEX_ROOT);
   if (!db) return;
 
   const testViolations = [
@@ -172,7 +177,7 @@ test('search-db: syncs and queries violations index', () => {
 });
 
 test('search-commands: def, refs, deps, hazards, pack return valid payloads in JSON mode', () => {
-  const db = openIndexDb();
+  const db = openIndexDb(FIXTURE_INDEX_ROOT);
   if (!db) return;
 
   const defRes = handleDefCommand(db, 'sampleFunction', { isJson: true, isCli: false });
@@ -195,7 +200,7 @@ test('search-commands: def, refs, deps, hazards, pack return valid payloads in J
 });
 
 test('search-db: records snapshots, progression, and stamps file health', () => {
-  const db = openIndexDb();
+  const db = openIndexDb(FIXTURE_INDEX_ROOT);
   if (!db) return;
 
   const mockReport = {
