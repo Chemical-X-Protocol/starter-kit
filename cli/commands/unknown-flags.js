@@ -58,16 +58,19 @@ const EXTRA_FLAGS = {
   // Flags still here are not yet in a schema entry; none is verified as a user flag unless noted.
   // conflicts: the router's `d --conflicts` token, read in conflicts-cli.js; not a flag of `conflicts` itself.
   conflicts: ['--conflicts'],
-  // trend, patterns, hook, init, create, generate: the handler source names these but the read was not traced.
+  // Traced (#4566): init/create read --headless, --ci, --non-interactive, --no-interactive and --install in
+  // scaffold.js, and create reads --preset=; all are in their schema entries. The '--write' in scaffold.js and
+  // installer.js is an argument passed to the pillars wizard, not a flag of init, create, generate or hook.
+  // No handler read of init --preset, patterns --name or generate --install was found; they are dropped.
+  // generate: the mutation-args.js global list accepts these; not verified that the generate handler reads them.
   trend: ['--limit'],
-  init: ['--preset', '--write'],
-  create: ['--write'],
-  generate: ['--headless', '--ci', '--non-interactive', '--no-interactive', '--write', '--install'],
-  hook: ['--write'],
+  generate: ['--headless', '--ci', '--non-interactive', '--no-interactive'],
   // trend, badge and verify live in cli/commands-schema-verify.js (task #4493's file): move these there after it lands.
   badge: ['--grade', '--label', '--report-url', '--discussion', '--format', '--copy'],
-  verify: ['--allow-empty', '--all-packages', '--timeout', '--profile'],
+  // patterns: a string '--name' appears in the patterns route's sources (found by schema-flag-coverage.spec.js); its read was not traced.
   patterns: ['--name'],
+  verify: ['--allow-empty', '--all-packages', '--timeout', '--profile'],
+
   // Flags the team subcommands parse (dispatch, task, tokens, audit-run, migrate, inbox/dm/feed, lock), so the
   // typo check never rejects a real one as a near miss of another (#4569). Per-subcommand schemas: #4554.
   team: [

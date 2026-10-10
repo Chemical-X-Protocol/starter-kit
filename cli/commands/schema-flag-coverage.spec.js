@@ -96,7 +96,8 @@ const routerSources = () => {
 const KNOWN_GAPS = new Set([]);
 // Strings a handler builds as argv for another chemx command; they are not flags of the named command.
 // doctor-cli.js passes these to install-hooks when --fix repairs hooks or the MCP launch.
-const INTERNAL_ARGV = new Set(['doctor --host', 'doctor --scope', 'doctor --kit', 'doctor --write-mcp']);
+// scaffold.js passes --write and --preset=recommended to the pillars wizard on behalf of init and create, and installer.js does the same on the hook route (#4566).
+const INTERNAL_ARGV = new Set(['doctor --host', 'doctor --scope', 'doctor --kit', 'doctor --write-mcp', 'init --write', 'init --preset', 'create --write', 'hook --write', 'generate --write', 'generate --install']);
 
 test('every checked command the router dispatches has its handler flags listed (#4510)', () => {
   const routes = routerSources();
