@@ -66,7 +66,8 @@ test('prompts: builder and repair close only when every deliverable is met, else
   const plan = fixturePlan();
   const first = renderTaskPrompts(plan.tasks.find((entry) => entry.id === 3), plan);
   for (const prompt of [first.build, first.repair]) {
-    assert.match(prompt, /leave the task in_progress/);
+    assert.match(prompt, /task update \d+ blocked with a reason naming the follow-up ids/);
+    assert.ok(!/leave the task in_progress/.test(prompt));
     assert.match(prompt, /task add "<unmet item>" --parent=\d+ --needs=light/);
   }
   assert.match(first.repair, /only if every deliverable of the task is met/);
