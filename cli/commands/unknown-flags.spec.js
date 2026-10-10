@@ -75,6 +75,14 @@ test('typo-checked commands reject one typo each with the intended flag', () => 
   }
 });
 
+test('team accepts the flags its subcommands parse, so a real flag is never a near miss (#4569)', () => {
+  const dispatch = ['team', 'dispatch', '--workflow=out.js', '--tasks=1,2', '--run-name=r', '--max-agents=6', '--dry-run'];
+  assert.equal(findUnknownFlag('team', dispatch), null);
+  assert.equal(findUnknownFlag('team', ['team', 'dispatch', '--record-run=r', '--workflow-run=wf_1']), null);
+  assert.equal(findUnknownFlag('team', ['team', 'task', 'close', '7', '--duplicate-of=8']), null);
+  assert.match(findUnknownFlag('team', ['team', 'task', 'list', '--stauts=queued']), /did you mean --status\?/);
+});
+
 const STRICT = {
   audit: ['--strcit', '--strict'],
   project: ['--jsno', '--json'],

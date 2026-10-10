@@ -68,7 +68,19 @@ const EXTRA_FLAGS = {
   badge: ['--grade', '--label', '--report-url', '--discussion', '--format', '--copy'],
   verify: ['--allow-empty', '--all-packages', '--timeout', '--profile'],
   patterns: ['--name'],
-  team: ['--run', '--task', '--status', '--repo', '--all-repos', '--type', '--purpose', '--needs', '--parent', '--desc']
+  // Flags the team subcommands parse (dispatch, task, tokens, audit-run, migrate, inbox/dm/feed, lock), so the
+  // typo check never rejects a real one as a near miss of another (#4569). Per-subcommand schemas: #4554.
+  team: [
+    '--run', '--task', '--status', '--repo', '--all-repos', '--type', '--purpose', '--needs', '--parent', '--desc',
+    '--tasks', '--workflow', '--run-name', '--max-agents', '--per-agent', '--max-tasks-per-agent', '--record-run',
+    '--workflow-run', '--find-run', '--goal', '--dry-run', '--headless', '--limit', '--rule', '--duplicate-of',
+    '--cancel', '--ignore-deps', '--target', '--no-target-confirm', '--new', '--all', '--agent', '--prio',
+    '--priority', '--sprint', '--moscow', '--deps', '--add-dep', '--rm-dep', '--description', '--title', '--tier',
+    '--reason', '--import', '--model', '--cost', '--since', '--tokens', '--prompt-tokens', '--completion-tokens',
+    '--cached-tokens', '--log', '--metadata', '--no-fail', '--from', '--keep-ids', '--into', '--source-repo',
+    '--drop-junk', '--mark-read', '--thread', '--to', '--append', '--overwrite', '--in-place', '--compact',
+    '--projects', '--url', '--pid', '--force'
+  ]
 };
 
 /** Short flags a handler reads beyond COMMON_SHORT_FLAGS and its schema entry. */
