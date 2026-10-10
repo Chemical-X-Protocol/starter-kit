@@ -46,7 +46,8 @@ test('parseSearchArgs: flag values never become the query and -- ends options', 
   assert.deepEqual(parseSearchArgs(['-n', '5', 'useWindowStore']).positionals, ['useWindowStore']);
   assert.equal(parseSearchArgs(['-n', '5', 'useWindowStore']).values.limit, '5');
   assert.equal(parseSearchArgs(['-g', '--x-glass', '-n', '5']).pattern, '--x-glass');
-  assert.deepEqual(parseSearchArgs(['-g', '--', '--x-glass']).positionals, ['--x-glass']);
+  assert.equal(parseSearchArgs(['-g', '--', '--x-glass']).pattern, '--x-glass');
+  assert.deepEqual(parseSearchArgs(['--', '--x-glass']).positionals, ['--x-glass']);
   assert.deepEqual(parseSearchArgs(['--dir', 'apps', 'foo']).positionals, ['foo']);
   assert.deepEqual(parseSearchArgs(['foo', '--bogus']).unknownFlags, ['--bogus']);
 });

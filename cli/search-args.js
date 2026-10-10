@@ -46,7 +46,14 @@ export const parseSearchArgs = (rawArgs = []) => {
     }
     const isOptionsTerminator = token === '--';
     if (isOptionsTerminator) {
-      isOptionsEnded = true;
+      // `-g -- <pattern>`: exactly one token is the pattern; later tokens are parsed as usual.
+      const takesPattern = parsed.pattern === null && hasAnyFlag(parsed, [...LITERAL_FLAGS]) && rawArgs[i + 1] !== undefined;
+      if (takesPattern) {
+        parsed.pattern = String(rawArgs[i + 1]);
+        i += 1;
+      } else {
+        isOptionsEnded = true;
+      }
       continue;
     }
     const isFlag = isFlagLike(token);

@@ -77,6 +77,9 @@ export const handleLiteralSearchCommand = (_db, query, {
   }
 
   if (isLineOnly) {
+    // stderr keeps stdout as bare path:line records for pipes.
+    const hasNoMatches = res.matches.length === 0;
+    if (hasNoMatches) process.stderr.write('no matches\n');
     for (const m of res.matches) {
       process.stdout.write(`${m.path}:${m.line}\n`);
     }
