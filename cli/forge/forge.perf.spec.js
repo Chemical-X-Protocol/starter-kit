@@ -7,11 +7,15 @@
 // The two cold budgets are NOT met yet (uncapped fingerprinting measured +93% on the kit, cold
 // `chemx patterns --sync` 12.4 to 18.7s): they run as todo tests that report their numbers without
 // failing the suite, until #2554 (one-pass Merkle hashing) lands and turns them into gates.
+// The cold budgets are calibrated against a fixed reference workload timed in this same process: a
+// busy machine scales the limit by (reference now / best reference seen), never below 1. This keeps a
+// loaded run from failing on contention alone; it does not prove the budget holds on an idle machine.
 // Times are the minimum of rounds after a warm-up, so module loading and JIT are excluded. Whole-audit
 // wall time on a shared machine swings by more than 3% between identical runs, so the warm budget
 // times the exact work Forge adds to a ledger-current audit (session open, beginFile on every file,
 // finish) and compares it with the fastest audit of the same corpus.
 import test from 'node:test';
+import crypto from 'node:crypto';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -35,6 +39,22 @@ const BUDGET = Object.freeze({
 });
 const COLD_TODO = 'cold budgets are not met yet: #2554 (one-pass Merkle hashing, cheaper ledger writes)';
 
+// Calibration: the fastest of `rounds` runs of a fixed workload, read through an injectable clock.
+const REFERENCE_BUFFER = Buffer.alloc(1 << 20, 7);
+const referenceWork = () => crypto.createHash('sha256').update(REFERENCE_BUFFER).digest('hex');
+const measureReference = (now = () => performance.now(), work = referenceWork, rounds = 5) => {
+  let best = Infinity;
+  for (let round = 0; round < rounds; round += 1) {
+    const startedAt = now();
+    work();
+    best = Math.min(best, now() - startedAt);
+  }
+  return best;
+};
+const loadFactor = (quietMs, currentMs) => (quietMs > 0 && currentMs > quietMs ? currentMs / quietMs : 1);
+const QUIET_REFERENCE_MS = measureReference(undefined, undefined, 15);
+const calibratedLimit = (limitMs) => limitMs * loadFactor(QUIET_REFERENCE_MS, measureReference());
+
 const makeProject = (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-forge-perf-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
@@ -56,6 +76,22 @@ const audit = (dir, options = {}) => runAudit(dir, { cwd: dir, ...options });
 const editFiles = (dir, count) => {
   for (const name of CORPUS.slice(0, count)) fs.appendFileSync(path.join(dir, 'lib', name), `\n// perf edit ${Date.now()}\n`);
 };
+
+test('calibration: the load factor follows a stubbed clock and never drops below 1', () => {
+  const ticks = [0, 4, 10, 12, 20, 30];
+  let at = 0;
+  const now = () => ticks[at++];
+  assert.equal(measureReference(now, () => {}, 3), 2, 'best of the 4, 2 and 10 ms rounds');
+  assert.equal(loadFactor(2, 8), 4);
+  assert.equal(loadFactor(2, 1), 1, 'a faster machine than the baseline does not tighten the limit');
+  assert.equal(loadFactor(0, 5), 1, 'no usable baseline leaves the limit unchanged');
+  assert.equal(loadFactor(2, 2), 1);
+});
+
+test('calibration: a real regression still exceeds the scaled limit', () => {
+  assert.ok(9000 > 1000 * loadFactor(2, 8), 'a 9x slowdown fails even at a 4x load factor');
+  assert.ok(3000 <= 1000 * loadFactor(2, 8), 'a 3x slowdown passes at a 4x load factor');
+});
 
 test('the corpus is the fixed set of non-spec Forge modules', () => {
   assert.ok(CORPUS.length >= 20, `corpus has ${CORPUS.length} files`);
@@ -108,7 +144,7 @@ test('warm sync: no edits, and 5 changed files, each take 1s or less', (t) => {
 test('cold sync: 8s per 630 files, scaled to the corpus', { todo: COLD_TODO }, (t) => {
   sync(makeProject(t));
   const cold = timed(() => sync(makeProject(t)));
-  const limitMs = BUDGET.coldSyncMsPerFile * CORPUS.length;
+  const limitMs = calibratedLimit(BUDGET.coldSyncMsPerFile * CORPUS.length);
   t.diagnostic(`cold sync ${cold.ms.toFixed(0)}ms for ${CORPUS.length} files, limit ${limitMs.toFixed(0)}ms`);
   assert.equal(cold.result.parsed, CORPUS.length);
   assert.ok(cold.ms <= limitMs, `cold sync ${cold.ms.toFixed(0)}ms > ${limitMs.toFixed(0)}ms`);
@@ -119,7 +155,7 @@ test('cold audit: uncapped fingerprinting costs at most +15%', { todo: COLD_TODO
   audit(makeProject(t), uncapped);
   const withForge = timed(() => audit(makeProject(t), uncapped));
   const without = timed(() => audit(makeProject(t)));
-  const limitMs = without.ms * (1 + BUDGET.coldAuditShare);
+  const limitMs = calibratedLimit(without.ms * (1 + BUDGET.coldAuditShare));
   t.diagnostic(`cold audit ${withForge.ms.toFixed(0)}ms uncapped, ${without.ms.toFixed(0)}ms without, limit ${limitMs.toFixed(0)}ms`);
   assert.equal(withForge.result.fingerprint.fingerprinted, CORPUS.length);
   assert.ok(withForge.ms <= limitMs, `cold audit ${withForge.ms.toFixed(0)}ms > ${limitMs.toFixed(0)}ms`);
