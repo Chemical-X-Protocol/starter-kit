@@ -10,6 +10,7 @@ import { claimWriteLease } from './team/write-lock-guard.js';
 import { fingerprintFile } from './forge/fingerprint-file.js';
 import { introducedViolationsOf } from './audit/gate-delta.js';
 import { noteCounterfactual } from './telemetry/call-ledger.js';
+import { newMissingImports, missingImportMessage } from './missing-imports.js';
 
 export { runPatcherCli, runWriterCli } from './patcher-cli.js';
 
@@ -42,6 +43,15 @@ const syncIndex = (absPath, cwd) => {
 
 // Sentences about leases the edit re-acquired after a lapse (cli/team/lease-renew.js); absent when none.
 const leaseNotesOf = (applied) => (applied.leaseNotes ? { leaseNotes: applied.leaseNotes } : {});
+
+// A static relative import of a file that does not exist crashes every chemx process once the
+// edited file is a hub module, so the edit is refused unless the caller opts out.
+const refuseMissingImports = (resolvedPath, beforeText, afterText, params) => {
+  const isAllowed = Boolean(params.allowMissingImport);
+  const missing = isAllowed ? [] : newMissingImports(resolvedPath, beforeText, afterText);
+  const hasMissing = missing.length > 0;
+  if (hasMissing) throw new Error(missingImportMessage(params.relPath, missing));
+};
 
 const validatePatchParams = (params, targetContent, replacementContent) => {
   const hasBlocks = Array.isArray(params.blocks) && params.blocks.length > 0;
@@ -76,6 +86,7 @@ const validatePatchParams = (params, targetContent, replacementContent) => {
  * @param {string} [params.cwd=process.cwd()] Workspace root.
  * @param {boolean} [params.dryRun=false] Validate and diff without writing.
  * @param {string[]} [params.allowRemoved] Top-level declarations this patch may remove.
+ * @param {boolean} [params.allowMissingImport=false] Allow a newly added relative import of a file that does not exist.
  * @param {string} [params.agentId] Caller identity for team lock checks.
  * @param {boolean} [params.skipIndex=false] Skip SQLite micro-indexing.
  * @param {boolean} [params.skipCheck=false] Skip the architecture audit.
@@ -103,6 +114,7 @@ export const patchFile = (targetPath, params = {}) => {
   const replaced = hasBlocks
     ? applySearchReplaceBlocks(fileContent, params.blocks, replaceOptions)
     : replaceLiteral(fileContent, targetContent, replacementContent, replaceOptions);
+  refuseMissingImports(resolvedPath, fileContent, replaced.content, { allowMissingImport: params.allowMissingImport, relPath: targetPath });
   const applied = applyEdits([{ path: resolvedPath, content: replaced.content, allowRemoved }], { cwd, dryRun, agentId });
   const fileResult = applied.files[0];
   const shouldIndex = !skipIndex && !dryRun;
@@ -172,6 +184,7 @@ export const writeFile = (targetPath, params = {}) => {
   const beforeContent = isExisting ? fs.readFileSync(resolvedPath, 'utf-8') : null;
   const beforeGuardrails = beforeContent && !skipCheck ? evaluateGuardrails({ absPath: resolvedPath, relPath: targetPath, content: beforeContent, skipCheck, cwd }) : { violations: [] };
 
+  refuseMissingImports(resolvedPath, beforeContent, content, { allowMissingImport: params.allowMissingImport, relPath: targetPath });
   const applied = applyEdits([{ path: resolvedPath, content, allowRemoved }], { cwd, dryRun, agentId });
   const fileResult = applied.files[0];
   const shouldIndex = !skipIndex && !dryRun;

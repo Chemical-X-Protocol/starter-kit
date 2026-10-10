@@ -3,7 +3,7 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { patchFile } from './patcher.js';
+import { patchFile, writeFile } from './patcher.js';
 import { syncSingleFileIndex, openIndexDb, findSymbolDefinition } from './search.js';
 
 test('patchFile: surgically replaces unique target chunk and updates line counts', () => {
@@ -192,3 +192,65 @@ test('patchFile: dryRun previews changes without writing to disk', () => {
   }
 });
 
+
+const inTempDir = (prefix, body) => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  try { body(tmpDir); } finally { fs.rmSync(tmpDir, { recursive: true, force: true }); }
+};
+
+test('patchFile: an unparseable result is refused and the file is unchanged', () => {
+  inTempDir('chemx-patch-broken-', (tmpDir) => {
+    const testFile = path.join(tmpDir, 'hub.js');
+    const original = 'export const list = [1, 2];\n';
+    fs.writeFileSync(testFile, original, 'utf-8');
+    assert.throws(
+      () => patchFile(testFile, { targetContent: '[1, 2]', replacementContent: '[1, 2]]', cwd: tmpDir, skipIndex: true }),
+      /does not parse|V8 rejects/
+    );
+    assert.strictEqual(fs.readFileSync(testFile, 'utf-8'), original);
+  });
+});
+
+test('patchFile: a newly added import of a missing file is refused, the file is unchanged', () => {
+  inTempDir('chemx-patch-missing-', (tmpDir) => {
+    const testFile = path.join(tmpDir, 'hub.js');
+    const original = 'export const a = 1;\n';
+    fs.writeFileSync(testFile, original, 'utf-8');
+    const params = { targetContent: 'export const a = 1;', replacementContent: "import { b } from './new-module.js';\nexport const a = b;", cwd: tmpDir, skipIndex: true };
+    assert.throws(() => patchFile(testFile, params), /new-module\.js, which does not exist/);
+    assert.strictEqual(fs.readFileSync(testFile, 'utf-8'), original);
+  });
+});
+
+test('patchFile: the missing import is allowed once the module exists or allowMissingImport is set', () => {
+  inTempDir('chemx-patch-present-', (tmpDir) => {
+    const testFile = path.join(tmpDir, 'hub.js');
+    fs.writeFileSync(testFile, 'export const a = 1;\n', 'utf-8');
+    const params = { targetContent: 'export const a = 1;', replacementContent: "import { b } from './new-module.js';\nexport const a = b;", cwd: tmpDir, skipIndex: true, skipCheck: true };
+    const allowed = patchFile(testFile, { ...params, allowMissingImport: true });
+    assert.strictEqual(allowed.status, 'ok');
+    fs.writeFileSync(testFile, 'export const a = 1;\n', 'utf-8');
+    fs.writeFileSync(path.join(tmpDir, 'new-module.js'), 'export const b = 2;\n', 'utf-8');
+    assert.strictEqual(patchFile(testFile, params).status, 'ok');
+  });
+});
+
+test('patchFile: an import that was already missing before the edit does not block it', () => {
+  inTempDir('chemx-patch-preexisting-', (tmpDir) => {
+    const testFile = path.join(tmpDir, 'hub.js');
+    fs.writeFileSync(testFile, "import { x } from './gone.js';\nexport const a = x;\n", 'utf-8');
+    const result = patchFile(testFile, { targetContent: 'export const a = x;', replacementContent: 'export const a = x + 1;', cwd: tmpDir, skipIndex: true, skipCheck: true });
+    assert.strictEqual(result.status, 'ok');
+  });
+});
+
+test('writeFile: a new file importing a missing module is refused and not created', () => {
+  inTempDir('chemx-write-missing-', (tmpDir) => {
+    const testFile = path.join(tmpDir, 'fresh.js');
+    assert.throws(
+      () => writeFile(testFile, { content: "import { b } from './nope.js';\nexport const a = b;\n", cwd: tmpDir, skipIndex: true }),
+      /nope\.js, which does not exist/
+    );
+    assert.strictEqual(fs.existsSync(testFile), false);
+  });
+});
