@@ -277,9 +277,23 @@ const planInline = (statements, index) => {
     aliasesEval: () => isGlobalEval(alias.init),
     movesImpureWork: () => firstEvaluated(target) !== ref.node && !isInert(alias.init),
     effectRunsFirst: () => firstEvaluated(target) !== ref.node && !isConstant(alias.init) && hasEffectBefore(target, ref.node),
-    rebindsThis: () => CALL_SLOTS.has(ref.key) && MEMBER_TYPES.has(alias.init.type)
+    rebindsThis: () => CALL_SLOTS.has(ref.key) && MEMBER_TYPES.has(alias.init.type),
+    writesAlias: () => isWriteTarget(ref),
+    typeofHidesThrow: () => isTypeofOfGlobal(ref, alias.init)
   }, { failFast: true });
   return verdict.ok ? { ref, alias } : null;
+};
+
+// Write targets (#2596): `k++`, `k = v` and `for (k in o)` throw on a const; inlined they would write
+// the init instead (`a++`, `o.x = v`).
+const WRITE_SLOTS = { AssignmentExpression: 'left', UpdateExpression: 'argument', ForInStatement: 'left', ForOfStatement: 'left' };
+const isWriteTarget = (ref) => WRITE_SLOTS[ref.parent?.type] === ref.key;
+
+/** `typeof k` throws when the init `undeclared` does, while `typeof undeclared` is 'undefined' (#2596). */
+const isTypeofOfGlobal = (ref, init) => {
+  const isTypeof = ref.parent?.type === 'UnaryExpression' && ref.parent.label.startsWith('operator:typeof');
+  const isGlobalRead = init.type === 'Identifier' && init.ident.origin === 'global';
+  return isTypeof && isGlobalRead;
 };
 
 const replaceChild = (parent, key, from, to) => {

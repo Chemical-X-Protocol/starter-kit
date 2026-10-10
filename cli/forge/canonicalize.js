@@ -11,13 +11,29 @@ import { isInlineRequested } from './inline-mode.js';
 
 export const PARSE_OPTIONS = Object.freeze({ sourceType: 'module', plugins: ['typescript', 'jsx'] });
 
+const childList = (value) => (Array.isArray(value) ? value : [value]);
+
+/**
+ * A direct eval or a `with` anywhere in the tree can read any binding by name, so renaming one is
+ * visible (#2596): every binder keeps its name (hash-labels.js appends it to the #k / @k number).
+ */
+const keepBinderNames = (node) => {
+  const isBinder = node.type === 'Identifier' && node.ident?.origin === 'local';
+  if (isBinder) node.keepsName = true;
+  for (const value of Object.values(node.kids)) {
+    for (const child of childList(value)) child && keepBinderNames(child);
+  }
+};
+
 /**
  * Canonicalizes one Babel node. bindings: Map<IdentifierNode, entry> from buildBindingIndex.
  * inline: run single-use alias inlining (unsound-prone, off by default; CHEMX_FORGE_INLINE=1 turns it on).
  */
 export const canonicalize = (node, { bindings, inline = isInlineRequested() }) => {
-  const converted = convertNode(node, { bindings });
+  const ctx = { bindings, hasDynamicScope: false };
+  const converted = convertNode(node, ctx);
   if (!converted) return null;
+  if (ctx.hasDynamicScope) keepBinderNames(converted);
   return normalizeLogic(inline ? inlineAliases(converted) : converted);
 };
 

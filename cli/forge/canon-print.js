@@ -65,6 +65,13 @@ const printProperty = (node) => {
   return `${keyText}: ${printCanonical(node.kids.value)}`;
 };
 
+/** Array elements; a trailing hole needs its own comma (`[a, ,]` has length 2). */
+const printElements = (node) => {
+  const elements = node.kids.elements;
+  const isTrailingHole = elements.at(-1)?.type === 'ArrayHole';
+  return `[${joinWith(elements, ', ')}${isTrailingHole ? ',' : ''}]`;
+};
+
 const PRINTERS = {
   Program: (node) => joinWith(node.kids.body, '\n'),
   BlockStatement: (node) => `{ ${joinWith(node.kids.body, ' ')} }`,
@@ -94,11 +101,12 @@ const PRINTERS = {
   OptionalMemberExpression: printMember,
   ArrowFunctionExpression: printFunction,
   FunctionExpression: printFunction,
-  ArrayExpression: (node) => `[${joinWith(node.kids.elements, ', ')}]`,
+  ArrayExpression: printElements,
+  ArrayHole: () => '',
   ObjectExpression: (node) => `({ ${joinWith(node.kids.properties, ', ')} })`,
   ObjectProperty: printProperty,
   ObjectPattern: (node) => `{ ${joinWith(node.kids.properties, ', ')} }`,
-  ArrayPattern: (node) => `[${joinWith(node.kids.elements, ', ')}]`,
+  ArrayPattern: printElements,
   AssignmentPattern: (node) => `${printCanonical(node.kids.left)} = ${printCanonical(node.kids.right)}`,
   AwaitExpression: (node) => `(await ${printCanonical(node.kids.argument)})`,
   SequenceExpression: (node) => `(${joinWith(node.kids.expressions, ', ')})`

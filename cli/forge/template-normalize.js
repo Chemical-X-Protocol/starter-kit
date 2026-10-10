@@ -35,22 +35,27 @@ const runAt = (text, index) => {
 /**
  * Expression source with whitespace between tokens collapsed to one space. Quoted and template literal
  * text is kept verbatim. A same-line run is kept as is when the text has a `/` (it may be a regex), and
- * text with a backtick is kept whole (a template can nest quotes this scanner does not track).
+ * text with a backtick is kept whole (a template can nest quotes this scanner does not track). When the
+ * text may hold a line comment (`//`), a run with a line break collapses to one line break instead, so
+ * `a // c\n + 1` never reads like `a // c + 1` (#2596).
  */
 const squashCode = (raw) => {
   const text = String(raw ?? '');
   const hasTemplate = text.includes('`');
   if (hasTemplate) return text.trim();
   const mayHoldRegex = text.includes('/');
+  const mayHoldLineComment = text.includes('//');
   let out = '';
   let index = 0;
   while (index < text.length) {
     const isQuote = QUOTES.has(text[index]);
     const run = isQuote ? '' : runAt(text, index);
     const end = isQuote ? literalEnd(text, index) : index + Math.max(run.length, 1);
-    const keepsRun = mayHoldRegex && !/[\r\n]/.test(run);
+    const hasBreak = /[\r\n]/.test(run);
+    const keepsRun = mayHoldRegex && !hasBreak;
     const isCollapsible = run.length > 0 && !keepsRun;
-    out += isCollapsible ? ' ' : text.slice(index, end);
+    const collapsed = mayHoldLineComment && hasBreak ? '\n' : ' ';
+    out += isCollapsible ? collapsed : text.slice(index, end);
     index = end;
   }
   return out.trim();

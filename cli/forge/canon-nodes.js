@@ -45,6 +45,11 @@ const BLOCK_SLOTS = {
   DoWhileStatement: new Set(['body'])
 };
 const NEGATED_EQUALITY = { '!==': '===', '!=': '==' };
+// Babel holds an array elision as a null element; it becomes an ArrayHole leaf so `[a, , b]` never
+// equals `[a, b]` (null list items are otherwise type-only TS nodes and drop out, #2596).
+const HOLE_PARENTS = new Set(['ArrayExpression', 'ArrayPattern']);
+// A direct eval or a `with` reads bindings by name at runtime (#2596): see canonicalize.js.
+const isDirectEval = (node, ctx) => node.type === 'CallExpression' && node.callee?.type === 'Identifier' && node.callee.name === 'eval' && (ctx.bindings.get(node.callee) ?? UNKNOWN_IDENTIFIER).origin === 'global';
 
 const LITERAL_LABELS = {
   StringLiteral: (node) => ['string', JSON.stringify(node.value)],
@@ -118,9 +123,13 @@ const wrapInBlock = (statement, ctx) => {
   return makeNode('BlockStatement', '', { directives: [], body: [converted] }, statement, { isExpr: false });
 };
 
+const holeNode = () => makeNode('ArrayHole', '', {}, null, { isExpr: false });
+
 const convertSlot = (node, key, ctx) => {
   const value = node[key];
   const isList = Array.isArray(value);
+  const keepsHoles = isList && HOLE_PARENTS.has(node.type);
+  if (keepsHoles) return value.map((item) => (item === null ? holeNode() : convertNode(item, ctx))).filter(Boolean);
   if (isList) return value.map((item) => convertNode(item, ctx)).filter(Boolean);
   if (!value) return null;
   const isPropertyName = isMemberPropertySlot(node, key);
@@ -140,6 +149,8 @@ const isProtoSetter = (node) => {
 };
 
 const convertGeneric = (node, ctx) => {
+  const isDynamicScope = node.type === 'WithStatement' || isDirectEval(node, ctx);
+  if (isDynamicScope) ctx.hasDynamicScope = true;
   const kids = {};
   const keys = (t.VISITOR_KEYS[node.type] ?? []).filter((key) => !SKIPPED_KEYS.has(key));
   for (const key of keys) kids[key] = convertSlot(node, key, ctx);

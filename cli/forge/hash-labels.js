@@ -49,7 +49,8 @@ const VALUE = { t2: 'Val', v2: 'VAL', skip: SKIP_ALL };
 const describeIdentifier = (node, ctx) => {
   const kind = identifierKind(node, ctx.declared);
   const isBinder = kind === 'local' || kind === 'capture';
-  if (isBinder) return same('Identifier', ctx.binderLabel(node, kind));
+  const binder = isBinder ? ctx.binderLabel(node, kind) : null;
+  if (isBinder) return same('Identifier', node.keepsName ? `${binder}:${node.label}` : binder);
   const isUndefined = kind === 'trivial' && node.label === 'undefined';
   if (isUndefined) return same('Identifier', node.label, VALUE);
   const isAnchor = kind === 'anchor';
@@ -60,11 +61,14 @@ const describeIdentifier = (node, ctx) => {
   return same('Identifier', label, { anchor, isL3Anchor: true });
 };
 
+// A private name (`o.#v`) brand-checks its receiver and throws where `o.v` reads undefined, so L2 keeps
+// it apart from public names (PKEY, #2596).
 const describePropName = (node, ctx) => {
   const isCallName = ctx.role === 'callName';
   if (isCallName) return same('PropName', node.label, { anchor: `call:${node.label}`, isL3Anchor: true });
   const isKeyed = ctx.role === 'prop';
-  return isKeyed ? same('PropName', node.label, { v2: 'KEY' }) : same('PropName', node.label);
+  const keyLabel = node.label.startsWith('#') ? 'PKEY' : 'KEY';
+  return isKeyed ? same('PropName', node.label, { v2: keyLabel }) : same('PropName', node.label);
 };
 
 const literalAnchor = (node) => {

@@ -220,3 +220,46 @@ test('tags, modifiers, slot props, flag attributes and event case keep what rend
   const slot = (props) => tmplUnit(`<template>\n  <Comp>\n    <template #item="${props}"><li>{{ a }}</li><li>b</li><li>c</li><li>d</li></template>\n  </Comp>\n</template>`, 'src/a.vue', 'Comp').fp1;
   assert.notEqual(slot('{ a }'), slot('{ b: a }'), 'slot props are part of the slot');
 });
+
+// Fuzz findings (#2596, cli/forge/fuzz): each pair was measured to behave differently in the fuzz
+// oracle (node 22, isolated vm contexts); canonicalize.fuzz.spec.js re-checks them with inlining off.
+test('an array elision is a value: it is never dropped', () => {
+  // A has no index 1 (or reads index 1), B reads index 0: [1, , 3] gives undefined vs 1.
+  assertFnDiffer(fnBody('return [o, , f];'), fnBody('return [o, f];'));
+  assertFnDiffer(fnBody('return [o, ,];'), fnBody('return [o,];'));
+  assertFnDiffer(fnBody('const [, x] = o; return x;'), fnBody('const [x] = o; return x;'));
+  assertFnDiffer(fnBody('let x; [, x] = o; return x;'), fnBody('let x; [x] = o; return x;'));
+  assert.equal(fnUnit(fnBody('return [o,];')).fp1, fnUnit(fnBody('return [o];')).fp1, 'a trailing comma is not an elision');
+});
+
+test('binders keep their names in a file with a direct eval', () => {
+  // A's eval finds the local v ('object' for o = {}), B's finds none ('undefined'); the script pair
+  // returns the eval's var v (3) against the param.
+  assertFnDiffer(fnBody("const v = o; return eval('typeof v');"), fnBody("const w = o; return eval('typeof v');"));
+  const script = (name) => `function host(o) { var ${name} = o; eval('var v = 3'); return ${name}; }\nmodule.exports = { host };`;
+  assertFnDiffer(script('v'), script('w'), ['src/p/a.cjs', 'src/p/a.cjs']);
+  const indirect = (name) => fnBody(`const ${name} = o; return [${name}, (0, eval)('1')];`);
+  assert.equal(fnUnit(indirect('v')).fp1, fnUnit(indirect('w')).fp1, 'an indirect eval sees no local, so renames still merge');
+});
+
+test('a private member read is not a public one, even at L2', () => {
+  // o = {}: A throws a TypeError (brand check), B returns undefined.
+  const read = (code) => collectFileUnits('src/p/a.ts', code).units.find((unit) => unit.kind === 'fn' && unit.declName === 'read');
+  const left = read('export class C { #v = 1; static read(o) { return o.#v; } }');
+  const right = read('export class C { _v = 1; static read(o) { return o._v; } }');
+  assert.notEqual(left.fp2, right.fp2);
+});
+
+test('a line comment in a template expression keeps its line break', () => {
+  // A renders a + 1; B comments the rest of the expression out (a compile error in Vue).
+  assert.notEqual(tmplUnit(vueList('{{ a // c\n + 1 }}'), 'src/a.vue').fp1, tmplUnit(vueList('{{ a // c + 1 }}'), 'src/a.vue').fp1);
+});
+
+test('inlining never moves an alias into a write target, nor under typeof', () => {
+  // A throws (assignment to a const, or the undeclared read); B writes the param or returns 'undefined'.
+  assertFnDiffer(fnBody('const k = o; return k++;'), fnBody('return o++;'));
+  assertFnDiffer(fnBody('const k = o; return k = 2;'), fnBody('return o = 2;'));
+  assertFnDiffer(fnBody('const k = undeclared; return typeof k;'), fnBody('return typeof undeclared;'));
+  const local = fnUnit(fnBody('const k = o.x; return typeof k;'));
+  assert.equal(local.fp1, fnUnit(fnBody('return typeof o.x;')).fp1, 'a member read still inlines into typeof');
+});
