@@ -39,6 +39,21 @@ export const isCallIdiom = (group) => {
   return isSimpleKind && isOneLine && group.mass <= CALL_IDIOM.maxMass && isLibrary && !isLocal;
 };
 
+// String-building windows (#5909): a W group whose every window is made of calls to one method that builds
+// output (lines.push(...), out.write(...)) and nothing else the ledger can see (no other call, global or import
+// shared by all windows) is a run of the same call, not a shape worth extracting. Its score is scaled down; the
+// group stays kept, ranked and listed. The test reads only the shared anchors, so it cannot see the receiver: a
+// window of calls to push on different receivers is demoted too, and a window with one more shared call is not.
+export const BUILD_WINDOW = Object.freeze({ weight: 0.1, calls: Object.freeze(['call:push', 'call:write']) });
+
+/** True when the group is a W group whose windows share one build call (push or write) and no other call, global or import. */
+export const isBuildWindow = (group) => {
+  const isStructural = (anchor) => /^(call|global|import):/.test(anchor);
+  const structural = sharedAnchors(group.instances).filter(isStructural);
+  const isWindow = group.path === 'W';
+  return isWindow && structural.length === 1 && BUILD_WINDOW.calls.includes(structural[0]);
+};
+
 const isSpecFacet = (facetKey) => facetKey.split(':')[2] === 'spec';
 
 /** placementOk of a group: its facet carries a package root. */
@@ -50,7 +65,8 @@ export const scoreOf = (group) => {
   const specWeight = isSpecFacet(group.facetKey ?? '') ? SPEC_WEIGHT : 1;
   const levelWeight = LEVEL_WEIGHTS[group.path] ?? 0;
   const idiomWeight = isCallIdiom(group) ? CALL_IDIOM.weight : 1;
-  return (group.memberCount - 1) * group.mass * (1 - holeRatio) * placementOkOf(group) * levelWeight * specWeight * idiomWeight;
+  const buildWeight = isBuildWindow(group) ? BUILD_WINDOW.weight : 1;
+  return (group.memberCount - 1) * group.mass * (1 - holeRatio) * placementOkOf(group) * levelWeight * specWeight * idiomWeight * buildWeight;
 };
 
 const contains = (outer, inner) => outer.file === inner.file && outer.start <= inner.start && inner.end <= outer.end;
@@ -72,6 +88,64 @@ const neighboursOf = (groups) => {
 
 const familyIdOf = (group) => group.foldedInto ?? group.id;
 
+const overlaps = (a, b) => a.file === b.file && a.start < b.end && b.start < a.end;
+
+const SIBLING_MIN_ANCHORS = 3;
+
+// A host is a sibling of a group when the group's shared anchors are a part of the host's, both are of one kind,
+// and every instance of the group is in a file where the host has an instance: the group is the host's
+// call chain seen without one step (a write then exit, over a stringify then write then exit).
+const isSiblingOf = (group, host) => {
+  const own = sharedAnchors(group.instances);
+  const hostFiles = new Set(host.instances.map((instance) => instance.file));
+  const hostAnchors = new Set(sharedAnchors(host.instances));
+  const isPart = own.length >= SIBLING_MIN_ANCHORS && own.every((anchor) => hostAnchors.has(anchor));
+  return isPart && group.kind === host.kind && group.instances.every((instance) => hostFiles.has(instance.file));
+};
+
+// Slots (unfolded groups) that already hold a site, by file, so a lower slot is only compared with slots in its files.
+const hostIndexOf = () => {
+  const byFile = new Map();
+  const list = [];
+  return {
+    add: (host) => {
+      list.push(host);
+      host.instances.forEach((instance) => pushTo(byFile, instance.file, { host, instance }));
+    },
+    sibling: (group) => list.find((host) => isSiblingOf(group, host)) ?? null,
+    // The first (highest) host whose instances overlap every instance of the group.
+    find: (group) => {
+      const hits = new Map();
+      for (const instance of group.instances) {
+        const owners = new Set((byFile.get(instance.file) ?? []).filter((row) => overlaps(row.instance, instance)).map((row) => row.host));
+        owners.forEach((host) => hits.set(host, (hits.get(host) ?? 0) + 1));
+      }
+      return [...hits].filter(([, count]) => count === group.instances.length).map(([host]) => host).sort(byScore)[0] ?? null;
+    }
+  };
+};
+
+// Shared sites (#5909): a slot every instance of which overlaps an instance of a higher slot is the same
+// code seen as another shape (reporter-grouping.js:264 in two slots). It joins that slot with everything it
+// had folded, and never chains. A slot with a site of its own elsewhere stays a slot (fold.spec.js: a piece
+// that also stands elsewhere). Only overlap of sites is read, not what the code does, so two different
+// shapes over the same lines are folded too; the folded slot stays listed under the host.
+const foldSharedSites = (ranked) => {
+  const byId = new Map(ranked.map((group) => [group.id, group]));
+  const hosts = hostIndexOf();
+  for (const group of ranked.filter((candidate) => candidate.foldedInto === null)) {
+    const host = hosts.find(group) ?? hosts.sibling(group);
+    if (!host) {
+      hosts.add(group);
+      continue;
+    }
+    const members = [{ id: group.id, reason: 'sites' }, ...group.folded];
+    members.forEach((member) => Object.assign(byId.get(member.id), { foldedInto: host.id, foldedVia: null, foldReason: member.reason }));
+    host.folded = [...host.folded, ...members];
+    group.folded = [];
+  }
+};
+
 /**
  * Scores, folds and links accepted groups in place: score, rank, foldedInto, foldReason, folded (on a
  * root), dependsOn and isSurfaced. options.skeletonOf(group) feeds fold.js's variant rule. Returns the
@@ -81,6 +155,7 @@ export const rankGroups = (groups, { skeletonOf } = {}) => {
   for (const group of groups) Object.assign(group, { score: scoreOf(group), foldedInto: null, foldReason: null, folded: [], dependsOn: [], isSurfaced: false });
   const ranked = [...groups].sort(byScore);
   foldGroups(ranked, skeletonOf ? { skeletonOf } : {});
+  foldSharedSites(ranked);
   const neighbours = neighboursOf(ranked);
   for (const group of ranked) {
     const isOtherFamily = (other) => familyIdOf(other) !== familyIdOf(group);

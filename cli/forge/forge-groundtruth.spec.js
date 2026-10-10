@@ -160,7 +160,7 @@ test('maximality: folded groups point at a surfacing root that lists them (the s
   const byId = new Map(state.result.groups.map((group) => [group.id, group]));
   const folded = state.result.groups.filter((group) => group.foldedInto);
   assert.ok(folded.length > 0);
-  const FOLD_REASONS = new Set(['inside', 'overlap', 'block', 'wrapper', 'variant', 'fragment']);
+  const FOLD_REASONS = new Set(['inside', 'overlap', 'block', 'wrapper', 'variant', 'fragment', 'sites']);
   for (const group of folded) {
     const host = byId.get(group.foldedInto);
     assert.equal(host.foldedInto, null);
