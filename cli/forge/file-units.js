@@ -24,7 +24,7 @@ const unitsOf = (relativePath, content, options) => {
   if (sfc) fingerprint.addVueTemplate(sfc.template);
   const code = sfc ? sfc.scriptOverlay : content;
   const hasCode = code.trim().length > 0;
-  const parsed = hasCode ? parseScriptAsts(code, sfc, content) : NO_SCRIPT;
+  const parsed = hasCode ? parseScriptAsts(code, sfc, content, relativePath) : NO_SCRIPT;
   for (const ast of parsed.asts) {
     traverse(ast, createFingerprintVisitors(fingerprint));
     fingerprint.addScriptAst(ast, code);

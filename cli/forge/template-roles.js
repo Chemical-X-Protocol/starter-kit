@@ -33,7 +33,7 @@ const rootSetsOf = (relativePath, content) => {
   const sfc = isSfc ? parseSfc(content, relativePath) : null;
   const hasTemplate = Boolean(sfc?.template?.isParsed);
   if (isSfc) return hasTemplate ? [vueRootElements(sfc.template.ast)] : [];
-  return parseScriptAsts(content, null, content).asts.map((ast) => jsxRootElements(ast, content));
+  return parseScriptAsts(content, null, content, relativePath).asts.map((ast) => jsxRootElements(ast, content));
 };
 
 const isStructuralAttr = (attr) => {

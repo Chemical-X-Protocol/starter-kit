@@ -57,7 +57,7 @@ const indexFile = (relativePath, content) => {
   const index = emptyIndex();
   const { sfc, code } = scriptOf(relativePath, content);
   const hasCode = code.trim().length > 0;
-  const asts = hasCode ? parseScriptAsts(code, sfc, content).asts : [];
+  const asts = hasCode ? parseScriptAsts(code, sfc, content, relativePath).asts : [];
   for (const ast of asts) {
     const bindings = buildBindingIndex(ast, { filePath: relativePath });
     const program = canonicalize(ast.program, { bindings });

@@ -41,7 +41,7 @@ const endsOfFile = (relativePath, content) => {
   const sfc = isSfcFile(relativePath) ? parseSfc(content, relativePath) : null;
   const code = sfc ? sfc.scriptOverlay : content;
   const hasCode = code.trim().length > 0;
-  const asts = hasCode ? parseScriptAsts(code, sfc, content).asts : [];
+  const asts = hasCode ? parseScriptAsts(code, sfc, content, relativePath).asts : [];
   asts.forEach((ast) => collectEnds(ast, ends));
   return ends;
 };

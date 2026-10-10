@@ -3,13 +3,14 @@
 // -> (opt-in, unsound-prone) single-use alias inlining to a fixpoint -> Boolean-in-test, n-ary flattening and De Morgan.
 // The tree is for hashing only and is never emitted back into source files.
 import { parse } from '../babel-lazy.js';
+import { SCRIPT_PARSE_OPTIONS, parseOptionsFor } from '../sfc/script-asts.js';
 import { buildBindingIndex } from './bindings.js';
 import { convertNode } from './canon-nodes.js';
 import { inlineAliases } from './canon-inline.js';
 import { normalizeLogic } from './canon-logic.js';
 import { isInlineRequested } from './inline-mode.js';
 
-export const PARSE_OPTIONS = Object.freeze({ sourceType: 'module', plugins: ['typescript', 'jsx'] });
+export const PARSE_OPTIONS = SCRIPT_PARSE_OPTIONS;
 
 const childList = (value) => (Array.isArray(value) ? value : [value]);
 
@@ -42,7 +43,7 @@ export const canonicalize = (node, { bindings, inline = isInlineRequested() }) =
  * filePath (project-relative) resolves relative import sources in import anchors.
  */
 export const canonicalizeSource = (code, { filePath = null } = {}) => {
-  const ast = parse(code, PARSE_OPTIONS);
+  const ast = parse(code, parseOptionsFor(filePath));
   const bindings = buildBindingIndex(ast, { filePath });
   return { ast, bindings, program: canonicalize(ast.program, { bindings }) };
 };

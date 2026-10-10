@@ -84,7 +84,7 @@ const collectRawViolations = (content, filePath, relativePath, options, ruleConf
   if (isEmptyScript) coverageKind = COVERAGE_KINDS.EMPTY;
 
   if (hasCode) {
-    const parsed = parseScriptAsts(code, sfc, content);
+    const parsed = parseScriptAsts(code, sfc, content, relativePath);
     const hasParseError = Boolean(parsed.error);
     if (hasParseError) {
       violations.push(parseErrorViolation(relativePath, parsed.error.line, parsed.error.message));

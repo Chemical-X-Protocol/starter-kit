@@ -21,8 +21,6 @@ const ALIAS_CLASSES = Object.freeze(['alias', 'seeds', 'mixed', 'tdz', 'destruct
 // Rewrites whose pairs the real parser rejects, so they never reach evaluation. Each entry names the
 // task that fixes it; the coverage test fails when one starts hashing (remove it) or a new one dies.
 const KNOWN_DEAD = Object.freeze({
-  'class-members/accessor-keyword': '#4563',
-  'typescript/angle-cast': '#4563',
   'blocks/sloppy-function-in-if': '#4542',
   'strict/with-statement': '#4542'
 });
