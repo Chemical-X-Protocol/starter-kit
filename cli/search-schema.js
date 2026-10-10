@@ -136,7 +136,7 @@ const openWritableDb = (dbPath, attempts = 4, outcome = {}) => {
   return null;
 };
 
-export const openIndexDb = (cwd = process.cwd(), options = {}) => {
+const openIndexDbUntimed = (cwd, options) => {
   if (!DatabaseSync) return null;
   const isMemoryTarget = isSqliteMemoryTarget(cwd);
   if (isMemoryTarget) return openMemoryDb();
@@ -168,5 +168,22 @@ export const openIndexDb = (cwd = process.cwd(), options = {}) => {
   // Busy-retry and the env-gated slow-transaction log cover every writer of this db (#4520), not only team calls.
   withBusyRetry(db);
   DB_CACHE.set(dbPath, db);
+  return db;
+};
+
+/**
+ * Opens (or returns the cached) index db. With CHEMX_DB_SLOW_TX_MS set, an open slower than the
+ * threshold is logged to stderr. The time includes busy-wait behind another writer and schema init,
+ * so it measures this open, not who held the lock.
+ */
+export const openIndexDb = (cwd = process.cwd(), options = {}) => {
+  const threshold = Number(process.env.CHEMX_DB_SLOW_TX_MS);
+  const isWatched = Number.isFinite(threshold) && threshold > 0;
+  if (!isWatched) return openIndexDbUntimed(cwd, options);
+  const at = Date.now();
+  const db = openIndexDbUntimed(cwd, options);
+  const elapsed = Date.now() - at;
+  const isSlow = elapsed > threshold;
+  if (isSlow) process.stderr.write(`[chemx-db] openIndexDb elapsed ${elapsed} ms, including busy-wait and schema init (pid ${process.pid})\n`);
   return db;
 };
