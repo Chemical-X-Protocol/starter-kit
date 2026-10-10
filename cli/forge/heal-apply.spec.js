@@ -228,9 +228,15 @@ test('a healed temp project: chemx read <rev>:<path> shows the pre-heal file, an
     const [firstLine, secondLine] = original.split('\n');
     assert.ok(atRev.stdout.includes(`1|${firstLine}`) && atRev.stdout.includes(`2|${secondLine}`), atRev.stdout);
 
+    // verify refuses a tree without node_modules, so link the kit's; otherwise it would exit before auditing anything.
+    fs.symlinkSync(path.join(KIT_ROOT, 'node_modules'), path.join(copy.dir, 'node_modules'), 'dir');
     const verify = chemx(copy.dir, ['verify', `--dir=${copy.dir}`, '--json']);
-    // Guaranteed: verify ran to a verdict on the healed tree (exit 0 or 1), not a usage error or crash.
-    assert.ok([0, 1].includes(verify.status), `${verify.status}: ${verify.stderr}`);
+    // Exit 3 is verify's 'inconclusive' verdict (a temp project with no tests ran), which is a real verdict, not a crash.
+    assert.ok([0, 1, 3].includes(verify.status), `${verify.status}: ${verify.stderr}`);
     assert.doesNotMatch(verify.stderr, /unknown flag|unrecognized/i);
+    const report = JSON.parse(verify.stdout);
+    // Guaranteed: verify got past the dependency check and ran its audit stage on the healed tree. The pass/fail verdict is not asserted.
+    assert.doesNotMatch(String(report.error ?? ''), /node_modules/, verify.stdout);
+    assert.ok(typeof report.audit?.score === 'number' && report.audit.score > 0, verify.stdout.slice(0, 600));
   });
 });
