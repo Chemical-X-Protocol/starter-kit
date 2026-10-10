@@ -12,6 +12,12 @@ import { getFileLockStatus } from './team-db-locks.js';
 import { takeLeaseWhenFree } from '../edit-locks.js';
 import { handleChemxPatch } from '../mcp/tools-patch.js';
 
+// Keep a shell-exported CHEMX_PROJECT_ROOT from redirecting the temp project's db.
+const savedRoot = process.env.CHEMX_PROJECT_ROOT;
+delete process.env.CHEMX_PROJECT_ROOT;
+const restoreRoot = () => Object.assign(process.env, savedRoot === undefined ? {} : { CHEMX_PROJECT_ROOT: savedRoot });
+test.after(restoreRoot);
+
 const makeProject = (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-auto-lease-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
