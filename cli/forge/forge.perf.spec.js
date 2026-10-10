@@ -59,7 +59,16 @@ const IDLE_REFERENCE_MS = 1;
 const MAX_LOAD_FACTOR = 8;
 const loadFactor = (quietMs, currentMs) => (quietMs > 0 && currentMs > quietMs ? Math.min(currentMs / quietMs, MAX_LOAD_FACTOR) : 1);
 const QUIET_REFERENCE_MS = IDLE_REFERENCE_MS;
-const calibratedLimit = (limitMs) => limitMs * loadFactor(QUIET_REFERENCE_MS, measureReference());
+// The cold budgets are judged on this process's CPU time (user + sys, process.cpuUsage), not wall time:
+// a busy machine stretches wall time by waiting for a core, which says nothing about the work done. CPU
+// time still moves with clock speed and shared caches, so the reference is read on the same CPU clock.
+// Wall time is only a loose sanity bound (WALL_SANITY_FACTOR times the limit) that catches a hang.
+const cpuNowMs = () => {
+  const usage = process.cpuUsage();
+  return (usage.user + usage.system) / 1000;
+};
+const WALL_SANITY_FACTOR = 20;
+const calibratedLimit = (limitMs) => limitMs * loadFactor(QUIET_REFERENCE_MS, measureReference(cpuNowMs));
 
 const makeProject = (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-forge-perf-'));
@@ -72,8 +81,10 @@ const makeProject = (t) => {
 
 const timed = (run) => {
   const startedAt = performance.now();
+  const cpuStartedAt = cpuNowMs();
   const result = run();
-  return { ms: performance.now() - startedAt, result };
+  const cpuMs = cpuNowMs() - cpuStartedAt;
+  return { ms: performance.now() - startedAt, cpuMs, result };
 };
 
 const sync = (dir) => syncFingerprints(dir, { targetDir: dir, log: () => {} });
@@ -152,26 +163,28 @@ test('cold sync: 8s per 630 files, scaled to the corpus', { todo: COLD_TODO }, (
   sync(makeProject(t));
   const cold = timed(() => sync(makeProject(t)));
   const limitMs = calibratedLimit(BUDGET.coldSyncMsPerFile * CORPUS.length);
-  t.diagnostic(`cold sync ${cold.ms.toFixed(0)}ms for ${CORPUS.length} files, limit ${limitMs.toFixed(0)}ms`);
+  t.diagnostic(`cold sync ${cold.cpuMs.toFixed(0)}ms CPU (${cold.ms.toFixed(0)}ms wall) for ${CORPUS.length} files, limit ${limitMs.toFixed(0)}ms CPU`);
   assert.equal(cold.result.parsed, CORPUS.length);
-  assert.ok(cold.ms <= limitMs, `cold sync ${cold.ms.toFixed(0)}ms > ${limitMs.toFixed(0)}ms`);
+  assert.ok(cold.cpuMs <= limitMs, `cold sync ${cold.cpuMs.toFixed(0)}ms CPU > ${limitMs.toFixed(0)}ms`);
+  assert.ok(cold.ms <= limitMs * WALL_SANITY_FACTOR, `cold sync wall ${cold.ms.toFixed(0)}ms is past the loose sanity bound`);
 });
 
 test('cold audit: uncapped fingerprinting costs at most +15%', { todo: COLD_TODO }, (t) => {
   const uncapped = { fingerprint: true, fingerprintBudget: { share: 1, allowanceChars: Infinity } };
   audit(makeProject(t), uncapped);
-  // Both sides are timed in the same run; the limit is a plain ratio, so no load factor is applied.
+  // Both sides are timed in the same run on CPU time; the limit is a plain ratio, so no load factor is applied.
   const withRuns = [];
   const withoutRuns = [];
   for (let round = 0; round < 2; round += 1) {
     withRuns.push(timed(() => audit(makeProject(t), uncapped)));
     withoutRuns.push(timed(() => audit(makeProject(t))));
   }
-  const fastest = (runs) => runs.reduce((best, run) => (run.ms < best.ms ? run : best));
+  const fastest = (runs) => runs.reduce((best, run) => (run.cpuMs < best.cpuMs ? run : best));
   const withForge = fastest(withRuns);
   const without = fastest(withoutRuns);
-  const limitMs = without.ms * (1 + BUDGET.coldAuditShare);
-  t.diagnostic(`cold audit ${withForge.ms.toFixed(0)}ms uncapped, ${without.ms.toFixed(0)}ms without, limit ${limitMs.toFixed(0)}ms`);
+  const limitMs = without.cpuMs * (1 + BUDGET.coldAuditShare);
+  t.diagnostic(`cold audit ${withForge.cpuMs.toFixed(0)}ms CPU uncapped, ${without.cpuMs.toFixed(0)}ms without, limit ${limitMs.toFixed(0)}ms (wall ${withForge.ms.toFixed(0)}ms)`);
   assert.equal(withForge.result.fingerprint.fingerprinted, CORPUS.length);
-  assert.ok(withForge.ms <= limitMs, `cold audit ${withForge.ms.toFixed(0)}ms > ${limitMs.toFixed(0)}ms`);
+  assert.ok(withForge.cpuMs <= limitMs, `cold audit ${withForge.cpuMs.toFixed(0)}ms CPU > ${limitMs.toFixed(0)}ms`);
+  assert.ok(withForge.ms <= Math.max(without.ms, 1) * WALL_SANITY_FACTOR, `cold audit wall ${withForge.ms.toFixed(0)}ms is past the loose sanity bound`);
 });
