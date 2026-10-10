@@ -37,6 +37,13 @@ test('patch and write still run when a commands-schema module is broken', () => 
     const written = run('write', 'src/b.js', '--content=export const b = 1;\n');
     assert.equal(fs.readFileSync(path.join(project, 'src', 'b.js'), 'utf-8'), 'export const b = 1;\n', written.stdout + written.stderr);
 
+    const hooked = spawnSync('node', [entry, 'hook', 'claude-pre-tool'], {
+      cwd: project, encoding: 'utf-8', env: { ...process.env, NO_COLOR: '1' },
+      input: JSON.stringify({ tool_name: 'Bash', tool_input: { command: 'cat src/a.js' }, cwd: project }),
+    });
+    assert.match(hooked.stdout, /permissionDecision/, hooked.stdout + hooked.stderr);
+    assert.doesNotMatch(hooked.stderr, /SyntaxError|minimal repair path/);
+
     const other = run('status');
     assert.notEqual(other.status, 0, 'only patch, edit and write are rescued');
   } finally {

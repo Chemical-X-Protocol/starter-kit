@@ -8,7 +8,12 @@ import { fileOperands, gitSubcommand, hasInPlaceFlag, inputRedirectTargets, opti
 import { READ_GAP_RULES, GIT_GREP_RULE } from './guard-rules-reads.js';
 import { SHELL_REWRITE_RULES } from './guard-rules-shell.js';
 import { NUDGE_RULES } from './guard-rules-nudge.js';
-import { findCommandSchema } from '../commands-schema.js';
+// The schema router imports every commands-schema-*.js, which agents edit mid-flight. Load it on its
+// own so a syntax error there leaves the guard on its built-in rules (every nudge stays active).
+let findCommandSchema = null;
+try {
+  ({ findCommandSchema } = await import('../commands-schema.js'));
+} catch { /* chemx-allow: best-effort the schema only hides nudges for commands chemx lacks */ }
 
 const DIFF_SCRIPTING_FLAGS = /^--(?:quiet|exit-code|name-only|name-status|numstat|check|raw)$/;
 const LOG_SCRIPTING_FLAGS = /^--(?:format|pretty=(?:format|tformat):)|^--pretty=format|^--format=/;
@@ -98,7 +103,7 @@ export const SEARCH_RULES = [
 ];
 
 const hasChemxCommand = (context, name) => {
-  const probe = context.hasChemxCommand ?? ((command) => findCommandSchema(command) !== null);
+  const probe = context.hasChemxCommand ?? ((command) => findCommandSchema === null || findCommandSchema(command) !== null);
   return probe(name);
 };
 

@@ -178,7 +178,17 @@ const readStdinBlocks = () => {
  * call ledger; nothing else about the edit is relaxed. Returns false for any other command.
  */
 export const REPAIR_COMMANDS = ['patch', 'edit', 'write'];
-export const runRepairCommand = (command, args) => {
+// `hook <name>` also runs from here (no stderr note: hosts read hook stderr), so a broken schema module
+// cannot take the guard down. The hook modules load on their own; a schema module they import breaks only that hook.
+export const runRepairCommand = async (command, args) => {
+  const isHookCommand = command === 'hook' || command === 'hooks';
+  if (isHookCommand) {
+    const { HOOKS, runHookCli } = await import('./hooks/run-hook.js');
+    const isKnownHook = Object.hasOwn(HOOKS, args[0] ?? '');
+    if (!isKnownHook) return false;
+    process.exitCode = await runHookCli(args);
+    return true;
+  }
   const isRepairable = REPAIR_COMMANDS.includes(command);
   if (!isRepairable) return false;
   const run = command === 'write' ? runWriterCli : runPatcherCli;

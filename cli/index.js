@@ -34,6 +34,7 @@ const runRepairPath = async (loadError) => {
   try {
     const { REPAIR_COMMANDS, runRepairCommand } = await import('./patcher-cli.js');
     const isRepairable = REPAIR_COMMANDS.includes(ARGS[0]);
+    // Hooks are repairable too, but stay quiet: the host reads a hook's stderr as its verdict.
     // The runner exits the process when it finishes, so the note goes out first.
     if (isRepairable) process.stderr.write(`! chemx could not load fully (${String(loadError.message).split('\n')[0]}); running '${ARGS[0]}' from the minimal repair path.\n`);
     return runRepairCommand(ARGS[0], ARGS.slice(1));
