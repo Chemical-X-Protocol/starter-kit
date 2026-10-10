@@ -23,17 +23,33 @@ const pickHeaderMode = (lines) => HEADER_MODES.find((mode) => lines.some((raw) =
 const collectBlocks = (lines, mode) => {
   const blocks = [];
   let current = null;
+  // TAP: node prints a crashed file's stderr as top-level `# ...` comments BEFORE its `not ok` line, so
+  // those belong to the next block (#5921). Held back until the next line says which block they join.
+  let held = [];
+  const push = (line) => {
+    const hasRoom = current && current.body.length < MAX_BLOCK_LINES;
+    if (hasRoom) current.body.push(line);
+  };
   for (const raw of lines) {
     const headerMatch = mode.match(raw.trim(), raw);
     if (headerMatch) {
       const isTodo = /#\s*TODO\b/i.test(raw);
       current = { name: headerMatch[1].replace(/\s*#\s*TODO\b.*$/i, '').replace(/\s+\(?\d+(?:\.\d+)?m?s\)?$/, ''), body: [], isTodo };
       blocks.push(current);
+      for (const comment of held) push(comment.replace(/^#\s?/, ''));
+      held = [];
       continue;
     }
-    const hasRoom = current && current.body.length < MAX_BLOCK_LINES;
-    if (hasRoom) current.body.push(raw);
+    const isTopComment = mode.name === 'tap' && /^# /.test(raw) && !/^# (?:tests|suites|pass|fail|cancelled|skipped|todo|duration_ms|Subtest:)\b/.test(raw);
+    if (isTopComment) {
+      held.push(raw);
+      continue;
+    }
+    for (const comment of held) push(comment);
+    held = [];
+    push(raw);
   }
+  for (const comment of held) push(comment);
   return blocks;
 };
 
