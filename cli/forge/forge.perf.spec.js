@@ -51,8 +51,14 @@ const measureReference = (now = () => performance.now(), work = referenceWork, r
   }
   return best;
 };
-const loadFactor = (quietMs, currentMs) => (quietMs > 0 && currentMs > quietMs ? currentMs / quietMs : 1);
-const QUIET_REFERENCE_MS = measureReference(undefined, undefined, 15);
+// The baseline is a fixed nominal idle time for the reference workload (about 1ms for 1MB of sha256 on
+// a typical idle core), not a measurement taken at load: a baseline timed under load would cancel the
+// load it is meant to correct for. The factor is capped, so a regression still fails; a slower CPU
+// than nominal gets a looser limit, which is the cost of not measuring an idle machine.
+const IDLE_REFERENCE_MS = 1;
+const MAX_LOAD_FACTOR = 8;
+const loadFactor = (quietMs, currentMs) => (quietMs > 0 && currentMs > quietMs ? Math.min(currentMs / quietMs, MAX_LOAD_FACTOR) : 1);
+const QUIET_REFERENCE_MS = IDLE_REFERENCE_MS;
 const calibratedLimit = (limitMs) => limitMs * loadFactor(QUIET_REFERENCE_MS, measureReference());
 
 const makeProject = (t) => {
@@ -86,6 +92,7 @@ test('calibration: the load factor follows a stubbed clock and never drops below
   assert.equal(loadFactor(2, 1), 1, 'a faster machine than the baseline does not tighten the limit');
   assert.equal(loadFactor(0, 5), 1, 'no usable baseline leaves the limit unchanged');
   assert.equal(loadFactor(2, 2), 1);
+  assert.equal(loadFactor(1, 500), MAX_LOAD_FACTOR, 'the factor is capped so a huge slowdown cannot excuse itself');
 });
 
 test('calibration: a real regression still exceeds the scaled limit', () => {
@@ -153,9 +160,17 @@ test('cold sync: 8s per 630 files, scaled to the corpus', { todo: COLD_TODO }, (
 test('cold audit: uncapped fingerprinting costs at most +15%', { todo: COLD_TODO }, (t) => {
   const uncapped = { fingerprint: true, fingerprintBudget: { share: 1, allowanceChars: Infinity } };
   audit(makeProject(t), uncapped);
-  const withForge = timed(() => audit(makeProject(t), uncapped));
-  const without = timed(() => audit(makeProject(t)));
-  const limitMs = calibratedLimit(without.ms * (1 + BUDGET.coldAuditShare));
+  // Both sides are timed in the same run; the limit is a plain ratio, so no load factor is applied.
+  const withRuns = [];
+  const withoutRuns = [];
+  for (let round = 0; round < 2; round += 1) {
+    withRuns.push(timed(() => audit(makeProject(t), uncapped)));
+    withoutRuns.push(timed(() => audit(makeProject(t))));
+  }
+  const fastest = (runs) => runs.reduce((best, run) => (run.ms < best.ms ? run : best));
+  const withForge = fastest(withRuns);
+  const without = fastest(withoutRuns);
+  const limitMs = without.ms * (1 + BUDGET.coldAuditShare);
   t.diagnostic(`cold audit ${withForge.ms.toFixed(0)}ms uncapped, ${without.ms.toFixed(0)}ms without, limit ${limitMs.toFixed(0)}ms`);
   assert.equal(withForge.result.fingerprint.fingerprinted, CORPUS.length);
   assert.ok(withForge.ms <= limitMs, `cold audit ${withForge.ms.toFixed(0)}ms > ${limitMs.toFixed(0)}ms`);
