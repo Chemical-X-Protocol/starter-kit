@@ -132,3 +132,30 @@ test('a task repo column points the lookup at that repo (#4591)', (t) => {
 test('shasIn needs the word commit or sha before the hex', () => {
   assert.deepEqual(shasIn('commit e48167e and sha: abcdef1234, deadbeef alone'), ['e48167e', 'abcdef1234']);
 });
+
+test('a task repo relative to the superproject is found when gitRoot is a submodule (#5851)', (t) => {
+  const outer = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-shas-super-'));
+  t.after(() => fs.rmSync(outer, { recursive: true, force: true }));
+  const mk = (dir) => { fs.mkdirSync(dir, { recursive: true }); run(dir, 'init', '-q'); fs.writeFileSync(path.join(dir, 'f.txt'), 'f\n'); run(dir, 'add', 'f.txt'); run(dir, 'commit', '-q', '-m', 'init'); };
+  const youmeos = path.join(outer, 'src-youmeos');
+  const kit = path.join(outer, 'src-kit');
+  mk(youmeos);
+  mk(kit);
+  const sup = path.join(outer, 'sup');
+  mk(sup);
+  const add = (src, dest) => run(sup, '-c', 'protocol.file.allow=always', 'submodule', 'add', '-q', src, dest);
+  add(youmeos, 'apps/youmeos');
+  add(kit, 'apps/kit');
+  const yRoot = path.join(sup, 'apps/youmeos');
+  fs.writeFileSync(path.join(yRoot, 'y.txt'), 'y\n');
+  run(yRoot, 'add', 'y.txt');
+  run(yRoot, 'commit', '-q', '-m', 'feat: y (#11)');
+  const sha = run(yRoot, 'rev-parse', 'HEAD').stdout.trim();
+  const env = makeEnv(t);
+  env.db.exec('ALTER TABLE agent_tasks ADD COLUMN repo TEXT');
+  env.db.exec("UPDATE agent_tasks SET repo = 'apps/youmeos' WHERE id = 11");
+  env.db.prepare('INSERT INTO agent_feed (timestamp, author_id, task_id, event_type, message) VALUES (?, ?, ?, ?, ?)').run(env.now, '@one', 11, 'task_comment', `commit ${sha.slice(0, 7)}`);
+  const out = crossCheckShas(env.db, env.agents, path.join(sup, 'apps/kit'));
+  assert.equal(out.missing.length, 0);
+  assert.equal(out.items[0].subject, 'feat: y (#11)');
+});

@@ -106,11 +106,19 @@ const submoduleRoots = (root) => {
   return out.stdout.split('\n').filter((l) => l.startsWith('160000')).map((l) => path.join(root, l.split('\t')[1] ?? ''));
 };
 
+/** Superproject working tree of root, or null when root is not a submodule. */
+const superRoot = (root) => {
+  const out = git(root, ['rev-parse', '--show-superproject-working-tree']);
+  return out.status === 0 && out.stdout.trim() ? out.stdout.trim() : null;
+};
+
 /** Find a reported sha: the repo of the task it was reported for (agent_tasks.repo), then the root, then each submodule. Null when none has it. */
 const resolveSha = (db, gitRoot, report) => {
   const [row] = report.taskId === null ? [] : safeAll(db, 'SELECT repo FROM agent_tasks WHERE id = ?', [report.taskId]);
-  const taskRepo = row?.repo ? path.resolve(gitRoot, row.repo) : null;
-  const candidates = [taskRepo, gitRoot, ...submoduleRoots(gitRoot)].filter(Boolean);
+  // agent_tasks.repo is relative to the coordination root, which is the superproject when gitRoot is itself a submodule.
+  const bases = [gitRoot, superRoot(gitRoot)].filter(Boolean);
+  const taskRepos = row?.repo ? bases.map((b) => path.resolve(b, row.repo)) : [];
+  const candidates = [...taskRepos, ...bases, ...bases.flatMap(submoduleRoots)].filter(Boolean);
   for (const root of [...new Set(candidates)]) {
     const commit = inspectSha(root, report.sha);
     if (commit) return commit;
