@@ -31,7 +31,9 @@ const slowTxMs = () => {
 
 const callSite = () => {
   const frames = String(new Error().stack || '').split('\n').slice(2);
-  const outside = frames.find((line) => !line.includes('coordination-busy.js'));
+  // Skip this file and the generic transaction wrapper so the log names the caller that opened the write.
+  const isWrapper = (line) => line.includes('coordination-busy.js') || line.includes('team-db-transaction.js');
+  const outside = frames.find((line) => !isWrapper(line));
   return (outside || 'unknown call site').trim();
 };
 
