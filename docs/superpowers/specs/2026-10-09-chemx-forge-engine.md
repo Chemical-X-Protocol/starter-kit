@@ -28,7 +28,8 @@ Exclusions:
   - there is no write in between;
   - either the reference is the first-evaluated operand of that statement, or e is inert and nothing that could run code completes before the reference. Inert means it cannot throw and runs no user code: literals, non-global identifiers, undefined/NaN/Infinity, and `!`, `typeof`, `void`, `===`, `&&`, `||`, `??`, `?:` over inert operands. Member reads are not inert, because a getter can run or `null.x` can throw (`const n = u.name; return u && n` must keep n). Arithmetic, `==`, templates and spreads are not inert either, because valueOf, toString and iterators run code (#2586);
   - the reference is not inside a nested function, a class field value, a loop body or test, or a destructuring pattern;
-  - e is not the global `eval`, the file has no direct eval or `with`, and the const is not declared in a switch case, since its scope is the whole switch.
+  - e is not the global `eval`, the file has no direct eval or `with`, and the const is not declared in a switch case, since its scope is the whole switch;
+  - the reference is not a write target (`k++`, `k = v`, `for (k in o)`), which throws on a const, and it is not the operand of `typeof` when e is a global identifier, since `typeof undeclared` does not throw but `const k = undeclared` does (#2596).
   This undoes the CONTROL_FLOW_INLINE_BOOLEAN and NAMING_BARE_BOOLEAN forms:
   - `const isAsFlag = arg === '--as'; const shouldReadAsNext = isAsFlag && hasNextArg; if (shouldReadAsNext) flags.as = nextArg` becomes `if (arg === '--as' && hasNextArg) flags.as = nextArg`.
   - useSwarmTasks.ts:10-11 and useSwarmFeed.ts:11-12 then hash the same (only with inlining on; with it off they stay apart).
@@ -52,8 +53,27 @@ Exclusions:
 - `if (c) s` becomes `if (c) { s }`.
 - An expressionless template literal becomes a string.
 - `Boolean(x)` in test position becomes `x`.
-- Static Vue attributes are sorted; directives keep their order. A static never sorts across a spread, a bind or v-model of its own name, or a dynamic `[name]` bind, because the later of two writes wins (#2586). Template text keeps the whitespace that renders (JSX text rules, Vue's condensed text, raw `<pre>`), and expression text keeps string literal contents.
-- Soundness is property-tested: the original and canonical forms evaluate equal on generated inputs.
+- An array elision is an `ArrayHole` leaf, so `[a, , b]` never equals `[a, b]` and `const [, x] = o` never equals `const [x] = o` (#2596).
+- In a file with a direct `eval(...)` or a `with` statement, every binder label carries its name (`#0:v`), because that code can read bindings by name; an indirect `(0, eval)(...)` sees no local and changes nothing (#2596).
+- Static Vue attributes are sorted; directives keep their order. A static never sorts across a spread, a bind or v-model of its own name, or a dynamic `[name]` bind, because the later of two writes wins (#2586). Template text keeps the whitespace that renders (JSX text rules, Vue's condensed text, raw `<pre>`), and expression text keeps string literal contents. When expression text contains `//`, a whitespace run that holds a line break collapses to one line break, not a space, so a line comment never swallows the rest of the expression (#2596).
+- Soundness is property-tested: the original and canonical forms evaluate equal on generated inputs (`canonicalize.property.spec.js`, inlining on).
+- Soundness is also fuzzed differentially (#2596, `cli/forge/fuzz/`). A seeded generator builds pairs of snippets that differ by one rewrite, across 27 construct classes. The classes cover boolean logic and implicit conversions, template literals, array holes, TDZ, var hoisting and redeclaration, switch scope and fallthrough, destructuring defaults, binder renames, getters/setters and ToPrimitive, `__proto__`, class members, spread and iterators, optional chaining, try/finally, generators and async code, arrow and block bodies, strict and sloppy code, module specifiers, TS stripping, JSX and Vue templates, key spellings, JSX in functions, alias inlining, a random-program mutator (one mutated site inside random surrounding code), and every pinned pair of `canonicalize.soundness.spec.js`. Each pair is hashed with the real pipeline (`collectFileUnits`). When the selected unit merges at L1, or at L2 for a rewrite that L2 does not erase by design, both sides run in fresh vm contexts on generated inputs, and the fuzzer compares their event lists. A failure is shrunk by replaying the recorded choices.
+  - Observed: the returned value, serialized with own keys, descriptors and prototypes; the intrinsic type of a thrown error; the ordered side effects on the inputs (getter reads, ToPrimitive hints, iterator steps, proxy traps, calls, probe calls); and the steps of draining a returned promise, iterator or function. Templates add the rendered tree, directives with modifiers, slot output for sample slot props, and template-context reads, writes and calls under two synthetic events. TS, JSX and imports go through the TypeScript compiler (CommonJS output), and module resolution follows the TS bundler model.
+  - Not observed: error messages, `Function.prototype.name` and source text. These follow binder names, and renaming binders is what L1 abstracts. A consistent rename that changes `f.name` therefore still merges at L1, and the fuzzer does not report it (#4540). The oracle also skips class, style, key, ref and id on templates (passthrough), Vue patch flags and hoisting, and template prop order. A project with two sources of one stem (x.js next to x.ts) is not modelled.
+  - Lanes: `canonicalize.fuzz.spec.js` runs in the fast lane: seed 0x2596, 10 pairs per class plus the pinned pairs, 4 inputs each, all classes with inlining off and the alias-holding classes with inlining on. `canonicalize.fuzz.slow.spec.js` runs in the slow lane: `CHEMX_FUZZ_SEED`, default 0x51ed, and `CHEMX_FUZZ_PER_CLASS`, default 300, with 8 inputs and both modes.
+  - Measured, 2026-10-09, before the fixes: 300 pairs per class, seed 0x2596, both modes, with the 24 classes that existed then (keys, JSX in functions and the mutator came later). Unsound merges found:
+    - array elisions: 8 rewrite kinds, L1;
+    - renames visible to a direct eval: 2, L1;
+    - `o.#v` against `o._v` merging at L2;
+    - a Vue interpolation whose `//` comment swallowed the rest of the line once newlines collapsed (a valid template merged with one that does not compile);
+    - with inlining on, an alias moved into a write target (`k++`) and an alias of an undeclared global moved under `typeof`.
+
+    Each fix refuses the merge (rules above and in the inlining rules), and each pair is pinned in `canonicalize.soundness.spec.js` and in `fuzz/seeds.js`. The `k = v` write pin generalizes the measured `k++` case and was not itself found by the fuzzer.
+  - After the fixes:
+    - The same 300-per-class run found 0 failures in either mode.
+    - One large run with all 27 classes, 1000 pairs per class and seed 0x51ed (26,083 pairs per mode, 6 inputs each, run from a script calling runFuzz rather than the slow spec), found 0 failures in either mode. With inlining off, 5,852 pairs merged at L1 and 29 at L2, and all of them were evaluated. With inlining on, 6,119 merged at L1 and 29 at L2. 6 input vectors per mode were inconclusive (a timeout after the 20x retry, or one side failing to compile), and 825 pairs per mode did not hash (a parse error or no such unit, mostly sloppy-only syntax under the module parse, #4542). That run took 11 to 12.5 minutes per mode on a machine at load average about 27.
+    - The fast spec took 6.5 s inside `chemx test` at load average about 8, and 36 s at about 30.
+  - Limits: the fuzzer finds only what its rewrites express, so 0 failures bounds these classes and is no proof of soundness. Stmt, expr and window units are not checked on their own (#4541).
 
 3. HASHES
 Merkle: h(node) = mix(type, label, children). Two murmur3-32 lanes give 16 hex chars.
@@ -61,7 +81,7 @@ Merkle: h(node) = mix(type, label, children). Two murmur3-32 lanes give 16 hex c
 - **L2:** like L1, plus:
   - literals become STR, NUM, REGEX, TPL(n) or BOOL;
   - null, undefined, {} and [] become VAL;
-  - non-call member properties on non-anchor receivers, and object keys, become KEY. So flags.as and flags.to collide.
+  - non-call member properties on non-anchor receivers, and object keys, become KEY. So flags.as and flags.to collide. A private name (`o.#v`) becomes PKEY instead, since its brand check throws where `o.v` reads undefined (#2596).
   Callee method names (startsWith, relative) stay anchors.
 - **L3:** like L2, plus every maximal anchor-free expression becomes E.
 
