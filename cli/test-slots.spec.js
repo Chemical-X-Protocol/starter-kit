@@ -8,6 +8,7 @@ import { resolveTestBudget, acquireTestSlots, listTestSlots, formatTestSlots, SL
 import { scheduleTimeout } from './timers.js';
 import { withWorkerCount } from './test-workers.js';
 import { runTestAudit } from './test-audit.js';
+import { handleChemxTest } from './mcp/tools-verify.js';
 import { STATUS } from './result-status.js';
 
 const tempDir = (prefix) => fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -184,6 +185,87 @@ test('test-slots: listTestSlots and formatTestSlots show holders with handle, ta
     assert.match(text, /@lister, task 12/);
     assert.deepEqual(listTestSlots({ dir: path.join(dir, 'missing'), budget: 2, env: {} }).holders, []);
     first.release();
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+const projectWithSlots = (budgetEnv = {}) => {
+  const root = tempDir('chemx-slots-project-');
+  fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ name: 'p', type: 'module', scripts: { test: 'node --test spec/*.spec.js' } }));
+  fs.mkdirSync(path.join(root, 'node_modules'));
+  fs.mkdirSync(path.join(root, 'spec'));
+  fs.writeFileSync(path.join(root, 'spec/a.spec.js'), "import test from 'node:test';\ntest('a', () => {});\n");
+  const { [SLOT_OWNER_ENV]: _owner, ...parentEnv } = process.env;
+  const env = { ...parentEnv, CHEMX_TEST_CONCURRENCY: '1', CHEMX_TEST_SLOTS_DIR: path.join(root, 'slots'), ...budgetEnv };
+  return { root, env };
+};
+
+test('test-slots: chemx test --slots lists holders with handle, task and age, as text and JSON', async () => {
+  const { root, env } = projectWithSlots();
+  try {
+    const held = await acquireTestSlots({ dir: env.CHEMX_TEST_SLOTS_DIR, budget: 1, env: { CHEMX_AGENT_ID: '@holder', CHEMX_TASK_ID: '41' } });
+    const report = await runTestAudit(['--slots', '--json'], false, { cwd: root, print: false, env });
+    assert.equal(report.success, true);
+    assert.equal(report.holders[0].handle, '@holder');
+    assert.equal(report.holders[0].task, '41');
+    assert.equal(typeof report.holders[0].ageMs, 'number');
+    held.release();
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('test-slots: chemx test --wait-timeout gives up with an inconclusive "queued too long" report, running nothing', async () => {
+  const { root, env } = projectWithSlots();
+  try {
+    const held = await acquireTestSlots({ dir: env.CHEMX_TEST_SLOTS_DIR, budget: 1, env: { CHEMX_AGENT_ID: '@holder' } });
+    const report = await runTestAudit(['--json', '--wait-timeout=1'], false, { cwd: root, print: false, env, onWait: () => {} });
+    assert.equal(report.status, STATUS.INCONCLUSIVE);
+    assert.equal(report.reason, 'QUEUE_TIMEOUT');
+    assert.match(report.detail, /queued too long.*@holder.*no tests ran/);
+    held.release();
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('test-slots: an MCP test call under a full budget returns queued status within 2 seconds', async () => {
+  const { root, env } = projectWithSlots();
+  const saved = { dir: process.env.CHEMX_TEST_SLOTS_DIR, conc: process.env.CHEMX_TEST_CONCURRENCY, owner: process.env[SLOT_OWNER_ENV] };
+  Object.assign(process.env, { CHEMX_TEST_SLOTS_DIR: env.CHEMX_TEST_SLOTS_DIR, CHEMX_TEST_CONCURRENCY: '1' });
+  delete process.env[SLOT_OWNER_ENV];
+  try {
+    const held = await acquireTestSlots({ dir: env.CHEMX_TEST_SLOTS_DIR, budget: 1, env: { CHEMX_AGENT_ID: '@holder' } });
+    const started = Date.now();
+    const report = await handleChemxTest({ dir: root });
+    assert.ok(Date.now() - started < 2500, `took ${Date.now() - started}ms`);
+    assert.equal(report.queued, true);
+    assert.equal(report.status, STATUS.INCONCLUSIVE);
+    assert.match(report.retryCommand, /chemx test/);
+    assert.equal(report.holders[0].handle, '@holder');
+    held.release();
+  } finally {
+    for (const [key, value] of [['CHEMX_TEST_SLOTS_DIR', saved.dir], ['CHEMX_TEST_CONCURRENCY', saved.conc], [SLOT_OWNER_ENV, saved.owner]]) {
+      const isUnset = value === undefined;
+      if (isUnset) delete process.env[key];
+      else process.env[key] = value;
+    }
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('test-slots: onLongWait fires once after a grant that waited past longWaitMs', async () => {
+  const dir = tempDir('chemx-slots-');
+  try {
+    const first = await acquireTestSlots({ dir, budget: 1, env: { CHEMX_AGENT_ID: '@holder' } });
+    const events = [];
+    const second = acquireTestSlots({ dir, budget: 1, env: {}, pollMs: 10, longWaitMs: 50, onLongWait: (info) => events.push(info), onWait: () => {} });
+    await new Promise((resolve) => scheduleTimeout(resolve, 120));
+    first.release();
+    (await second).release();
+    assert.equal(events.length, 1);
+    assert.ok(events[0].queuedMs >= 50);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

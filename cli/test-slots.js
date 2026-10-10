@@ -238,7 +238,7 @@ export const acquireTestSlots = async (options = {}) => {
       if (hasTakenSlots) {
         const queuedMs = Date.now() - start;
         const grant = holdSlots(taken, budget, queuedMs, heartbeatMs);
-        const isLongWait = queuedMs >= LONG_WAIT_MS && Boolean(options.onLongWait);
+        const isLongWait = queuedMs >= (options.longWaitMs ?? LONG_WAIT_MS) && Boolean(options.onLongWait);
         if (isLongWait) options.onLongWait({ queuedMs, budget, holders: lastHolders });
         return grant;
       }

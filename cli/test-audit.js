@@ -5,6 +5,7 @@ import { STATUS, toExitCode } from './result-status.js';
 import { parseCliArgs, describeArgErrors, parseTimeoutSeconds } from './cli-args.js';
 import { planTestCommand } from './test-command.js';
 import { runWithinBudget } from './test-run.js';
+import { listTestSlots, formatTestSlots, SLOT_WAIT_TIMEOUT_CODE } from './test-slots.js';
 import { resolveChangeScope } from './test-scope.js';
 import { applyLane, laneSpecs, planLanes, requestedLane } from './test-lanes.js';
 import { profileSpecs } from './test-profile.js';
@@ -17,8 +18,8 @@ import { checkNodeModules } from './verify-helpers.js';
 import { formatAgentJson } from './agent-json.js';
 
 const TEST_ARGS = {
-  booleans: { '--json': 'json', '--raw': 'raw', '--allow-empty': 'allowEmpty', '--changed': 'changed', '--related': 'related', '--all-packages': 'allPackages', '--all': 'all', '--slow': 'slow', '--profile': 'profile', '--help': 'help', '-h': 'help' },
-  values: { '--top': 'top', '--depth': 'depth', '--target': 'target', '--filter': 'filter', '-t': 'filter', '--test-name-pattern': 'filter', '--timeout': 'timeout', '--base': 'base' }
+  booleans: { '--json': 'json', '--raw': 'raw', '--allow-empty': 'allowEmpty', '--changed': 'changed', '--related': 'related', '--all-packages': 'allPackages', '--all': 'all', '--slow': 'slow', '--profile': 'profile', '--slots': 'slots', '--help': 'help', '-h': 'help' },
+  values: { '--top': 'top', '--depth': 'depth', '--target': 'target', '--filter': 'filter', '-t': 'filter', '--test-name-pattern': 'filter', '--timeout': 'timeout', '--wait-timeout': 'waitTimeout', '--base': 'base' }
 };
 
 const emptyCounts = { totalTests: 0, passed: 0, failed: 0, skipped: 0, errors: 0 };
@@ -83,12 +84,39 @@ const runProfileCommand = async (parsed, options, cwd, output) => {
   const hasNoSpecs = specs.length === 0;
   if (hasNoSpecs) return emit(earlyReport(STATUS.INCONCLUSIVE, 'test --profile', { reason: REASONS.NO_TESTS_RAN, detail: `no specs to profile in the ${lane} lane (${PROFILE_NEEDS})`, exitCode: 0 }), output);
   const timeoutMs = parseTimeoutSeconds(parsed.values.timeout) ?? options.timeoutMs ?? null;
-  const profile = await profileSpecs(specs, cwd, { timeoutMs, env: options.env, onWait: options.onWait });
+  const waitTimeoutMs = parseWaitTimeoutMs(parsed.values.waitTimeout, options.waitTimeoutMs);
+  const profile = await profileSpecs(specs, cwd, { timeoutMs, env: options.env, onWait: options.onWait, waitTimeoutMs }).catch((error) => (error?.code === SLOT_WAIT_TIMEOUT_CODE ? error : Promise.reject(error)));
+  const isProfileTimeout = profile instanceof Error;
+  if (isProfileTimeout) return emit(waitTimeoutReport(profile), output);
   const status = profile.failedSpecs > 0 ? STATUS.FAIL : STATUS.PASS;
   const top = Number(parsed.values.top) > 0 ? Number(parsed.values.top) : undefined;
   const counts = { totalTests: profile.testCount, passed: profile.testCount, failed: profile.failedSpecs };
   return emit(earlyReport(status, `test --profile (${lane} lane)`, { exitCode: status === STATUS.PASS ? 0 : 1, durationMs: profile.elapsedMs, ...counts, profile, top }), output);
 };
+
+// --wait-timeout=<seconds>: 0 waits without limit; unset keeps the default (10 min); junk is ignored.
+const parseWaitTimeoutMs = (value, fallback) => {
+  const isZero = value !== undefined && String(value).trim() === '0';
+  if (isZero) return 0;
+  return parseTimeoutSeconds(value) ?? fallback ?? undefined;
+};
+
+// --slots: who holds the shared test-run worker slots, and who is queued. No tests run.
+const runSlotsCommand = (options, output) => {
+  const snapshot = listTestSlots({ env: options.env });
+  if (output.shouldPrint) process.stdout.write(output.isJson ? `${formatAgentJson(snapshot)}\n` : formatTestSlots(snapshot));
+  if (output.isCli) process.exit(0);
+  return { slots: true, success: true, ...snapshot };
+};
+
+// A run that gave up queueing: nothing ran, nothing is held. Inconclusive, never a pass.
+const queuedReport = (grant) => earlyReport(STATUS.INCONCLUSIVE, 'test', {
+  reason: 'QUEUED', exitCode: 0, queued: true, position: grant.position, holders: grant.holders, retryCommand: grant.retryCommand,
+  detail: `all test slots were busy after ${Math.round(grant.queuedMs / 1000)}s (queue position about ${grant.position}); no tests ran and no slot is held. Run again: ${grant.retryCommand}`
+});
+
+// The wait timeout is a usage-level stop, not a test failure: nothing ran.
+const waitTimeoutReport = (error) => earlyReport(STATUS.INCONCLUSIVE, 'test', { reason: 'QUEUE_TIMEOUT', exitCode: 0, detail: `${error.message}; no tests ran (--wait-timeout=<seconds> changes the limit, 0 removes it)` });
 
 // `--related=<file>` is the same as `--related <file>` (--related takes the files that follow it).
 // A comma list (`--related=a,b,c`) is split into one file per entry; paths containing commas are not supported.
@@ -104,6 +132,9 @@ export const runTestAudit = async (rawArgs = [], isCli = false, options = {}) =>
     if (isCli) process.exit(0);
     return { help: true, success: true };
   }
+
+  const isSlots = Boolean(parsed.flags.slots);
+  if (isSlots) return runSlotsCommand(options, output);
 
   const customCmd = parsed.command || options.command;
   const argError = describeArgErrors(parsed, 'test');
@@ -146,7 +177,17 @@ export const runTestAudit = async (rawArgs = [], isCli = false, options = {}) =>
 
   const timeoutMs = parseTimeoutSeconds(parsed.values.timeout) ?? options.timeoutMs ?? null;
   const isRaw = Boolean(parsed.flags.raw) || options.raw === true;
-  const { execution, command, workers, budget, queuedMs } = await runWithinBudget(plan, { raw: isRaw, timeoutMs, env: options.env, onWait: options.onWait });
+  const waitTimeoutMs = parseWaitTimeoutMs(parsed.values.waitTimeout, options.waitTimeoutMs);
+  const retryCommand = ['chemx test', ...rawArgs.filter((arg) => arg !== '--json')].join(' ');
+  const budgeted = await runWithinBudget(plan, {
+    raw: isRaw, timeoutMs, env: options.env, onWait: options.onWait, waitTimeoutMs,
+    task: options.task ?? options.env?.CHEMX_TASK_ID, returnQueuedAfterMs: options.returnQueuedAfterMs, retryCommand: options.retryCommand ?? retryCommand
+  }).catch((error) => (error?.code === SLOT_WAIT_TIMEOUT_CODE ? error : Promise.reject(error)));
+  const isWaitTimeout = budgeted instanceof Error;
+  if (isWaitTimeout) return emit(waitTimeoutReport(budgeted), output);
+  const isQueued = budgeted.queued === true;
+  if (isQueued) return emit(queuedReport(budgeted), output);
+  const { execution, command, workers, budget, queuedMs } = budgeted;
   const result = parseTestOutput(execution.stdout, execution.stderr, execution.exitCode, { allowEmpty, scoped: targets.length > 0 || Boolean(filter), timedOut: execution.timedOut, timeoutMs });
 
   const report = {

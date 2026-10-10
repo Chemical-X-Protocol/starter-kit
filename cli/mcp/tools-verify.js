@@ -11,6 +11,8 @@ const timeoutArgs = (args) => {
   return hasTimeout ? [`--timeout=${args.timeout}`] : [];
 };
 
+const MCP_QUEUE_RETURN_MS = 1500;
+
 // changed/base/related select affected specs (test-scope.js); related paths are as given.
 const changeArgs = (args) => ({
   changed: Boolean(args.changed),
@@ -54,7 +56,9 @@ export const handleChemxTest = async (args = {}, cwd = process.cwd()) => {
     ...changeArgs(args),
     print: false,
     cwd: targetDirOf(args, cwd),
-    timeoutMs: DEFAULT_STEP_TIMEOUT_MS
+    timeoutMs: DEFAULT_STEP_TIMEOUT_MS,
+    // A host call timeout would kill a call that queues silently: report {queued:true} instead.
+    returnQueuedAfterMs: MCP_QUEUE_RETURN_MS
   });
 };
 
