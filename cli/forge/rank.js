@@ -1,6 +1,6 @@
 // Ranking (engine doc section 8):
 //   score = (instances - 1) * mass * (1 - holeRatio) * placementOk * levelWeight * (spec ? 0.5 : 1)
-//   levelWeight  N1 fp1 (L1) 1.0, N1 fp2 and N2 (L2) 0.9, W 0.8, N3, N1 fp3 and T (L3) 0.6, library 1.2
+//   levelWeight  N1 fp1 (L1) 1.0, N1 fp2 and N2 (L2) 0.9, W 0.8, N3, N1 fp3 and T (L3) 0.6, N4 (name twins, review candidates) 0.4, library 1.2
 //   placementOk  1 when the group's facet names a package root (every member then has a same-facet host
 //                inside that root), else 0 and the group is an observation
 // Maximality: fold.js folds every group that is not a shape of its own into the group that stands for
@@ -15,7 +15,7 @@ import { foldGroups } from './fold.js';
 
 export const TOP_SURFACED = 20;
 
-export const LEVEL_WEIGHTS = Object.freeze({ 'N1-fp1': 1, 'N1-fp2': 0.9, N2: 0.9, W: 0.8, N3: 0.6, 'N1-fp3': 0.6, T: 0.6, LIB: 1.2 });
+export const LEVEL_WEIGHTS = Object.freeze({ 'N1-fp1': 1, 'N1-fp2': 0.9, N2: 0.9, W: 0.8, N3: 0.6, 'N1-fp3': 0.6, T: 0.6, N4: 0.4, LIB: 1.2 });
 
 const SPEC_WEIGHT = 0.5;
 

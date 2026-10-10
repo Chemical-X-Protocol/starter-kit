@@ -45,15 +45,19 @@ const ratioLimitOf = (group) => (group.kind === 'tmpl' ? REJECT_LIMITS.maxTempla
 
 const swallowsAnchors = (lgg) => lgg.holes.some((hole) => hole.kind !== 'transform' && hole.anchoredMembers * 2 >= lgg.memberCount);
 
+// N4 (name twins) are same-name helpers whose bodies differ by construction: their hole codes (R1-R5, R8)
+// would reject every one, so only the facet and convention codes judge them. They stay review candidates.
+const isNameTwin = (group) => group.path === 'N4';
+
 const REJECT_RULES = (lgg, group, context) => ({
-  R1: () => lgg.holes.length > holeLimitOf(group) && !isTableShaped(lgg, group),
-  R2: () => lgg.holeRatio > ratioLimitOf(group),
-  R3: () => lgg.holes.some((hole) => hole.hasLocal),
-  R4: () => lgg.holes.some((hole) => hole.hasExit),
-  R5: () => swallowsAnchors(lgg),
+  R1: () => !isNameTwin(group) && lgg.holes.length > holeLimitOf(group) && !isTableShaped(lgg, group),
+  R2: () => !isNameTwin(group) && lgg.holeRatio > ratioLimitOf(group),
+  R3: () => !isNameTwin(group) && lgg.holes.some((hole) => hole.hasLocal),
+  R4: () => !isNameTwin(group) && lgg.holes.some((hole) => hole.hasExit),
+  R5: () => !isNameTwin(group) && swallowsAnchors(lgg),
   R6: () => !context.isHomogeneous,
   R7: () => Boolean(context.convention),
-  R8: () => captureParamsOf(lgg.captures) > REJECT_LIMITS.maxCaptureParams
+  R8: () => !isNameTwin(group) && captureParamsOf(lgg.captures) > REJECT_LIMITS.maxCaptureParams
 });
 
 /** An LGG with nothing to judge but the facet and the convention (template groups have no script LGG). */

@@ -34,7 +34,7 @@ const SQL = {
   groupsByPrefix: 'SELECT * FROM pattern_groups WHERE id LIKE ? ORDER BY id LIMIT 2'
 };
 
-export const LGG_STAGE_VERSION = 3;
+export const LGG_STAGE_VERSION = 4;
 
 const sha = (text, length) => crypto.createHash('sha1').update(text).digest('hex').slice(0, length);
 

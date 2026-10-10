@@ -7,6 +7,8 @@
 //       gated by G2.
 //   N3  fn units with the same declared name and equal fp3; gated by G1 (the name is the extra evidence),
 //       LGG then allows one variant hole (needsLgg).
+//   N4  name twins (groupNameTwins, below): the same helper name in 2+ files with body evidence instead of
+//       a shared fp. Review candidates only: needsLgg, assumed behaviorDelta, ranked below N1-N3.
 // A statement instance (N1) or window (N2) with an own return must end its function's body, or end in an
 // unconditional `return` (exits.js, body-ends.js); ending a loop or `if` body is not enough. Any other
 // such span cannot be cut out as a piece and is dropped before the gates.
@@ -16,7 +18,7 @@
 // context: { contentHashes, ubiquitousOf, mayReturnAt and strandsAt(file, start, end),
 // endsFunctionBody(row), reject(draft, reason, finish) }; reject hears every group that failed its gate
 // or instance rules and finish() builds it in full.
-import { draftGroup, finishGroup, instanceOfRow, instanceOfRows, metricsOf, pushTo, spansFiles } from './group-shape.js';
+import { byCodePoint, draftGroup, finishGroup, instanceOfRow, instanceOfRows, metricsOf, pushTo, spansFiles } from './group-shape.js';
 import { admitGroup, checkGate, labelIdiom, GATE_OF_PATH } from './gates.js';
 import { blocksOf, runsOf, windowsOfRuns, windowKeyOf, nonOverlapping, dropDominated } from './windows.js';
 
@@ -159,4 +161,104 @@ export const groupNamed = (rows, context) => {
     .filter(spansFiles)
     .map((named) => admitted({ ...N3_SPEC, kind: 'fn', facetKey: named[0].facet_key }, named, context, { toInstance: instanceOfRow }))
     .filter(Boolean);
+};
+
+// N4 (#4487): a name twin. Fn rows that re-declare the same helper name in 2+ files without sharing a
+// structural level (N1-N3 cannot see them: a Type-3 re-implementation). The name alone is weak, so a pair
+// is linked only on body evidence; a group is a clique of linked rows. N4 groups are review
+// candidates: needsLgg is true, the bodies are assumed to differ in behavior (behaviorDelta), and N4
+// ranks below N1-N3, so they are never an auto-heal.
+export const N4_EVIDENCE = Object.freeze({ minNameLength: 6, minMass: 8, minJaccard: 0.6, minLiteralLength: 4, minRegexPrefix: 10 });
+
+// Names too generic to say anything (also declared by unrelated code in many files).
+export const N4_STOPLIST = new Set([
+  'handler', 'format', 'render', 'setup', 'init', 'cleanup', 'finish', 'record', 'matches', 'visit', 'execute', 'process',
+  'handle', 'create', 'update', 'remove', 'resolve', 'options', 'config', 'helper', 'wrapper', 'factory', 'default',
+  'constructor', 'tostring', 'callback', 'listener', 'compare', 'filter', 'reduce', 'predicate', 'iterate'
+]);
+
+const N4_SPEC = Object.freeze({ path: 'N4', level: 3, needsLgg: true, behaviorDelta: 'assumed' });
+
+const anchorsOfRow = (row) => (Array.isArray(row.anchors) ? row.anchors : JSON.parse(row.anchors || '[]'));
+
+const nameKeyOf = (name) => name.replace(/^_+/, '').toLowerCase();
+
+const isN4Candidate = (row) => {
+  const name = row.decl_name ?? '';
+  const isLongEnough = name.length >= N4_EVIDENCE.minNameLength;
+  return row.kind === 'fn' && isLongEnough && row.mass >= N4_EVIDENCE.minMass && !N4_STOPLIST.has(nameKeyOf(name));
+};
+
+const jaccardOf = (a, b) => {
+  const left = new Set(a);
+  const right = new Set(b);
+  const shared = [...right].filter((anchor) => left.has(anchor)).length;
+  const union = left.size + right.size - shared;
+  return union === 0 ? 0 : shared / union;
+};
+
+const prefixLength = (a, b) => {
+  let length = 0;
+  while (length < a.length && length < b.length && a[length] === b[length]) length += 1;
+  return length;
+};
+
+const regexBodies = (anchors) => anchors.filter((anchor) => anchor.startsWith('regex:')).map((anchor) => anchor.slice(6));
+
+const longStrings = (anchors) => anchors.filter((anchor) => anchor.startsWith('str:') && anchor.length - 6 >= N4_EVIDENCE.minLiteralLength);
+
+// A shared string literal of 4+ characters, or two regex literals that start the same for 10+ characters.
+const sharesLiteral = (a, b) => {
+  const strings = new Set(longStrings(a));
+  const hasString = longStrings(b).some((anchor) => strings.has(anchor));
+  const regexes = regexBodies(b);
+  const hasRegex = regexBodies(a).some((left) => regexes.some((right) => prefixLength(left, right) >= N4_EVIDENCE.minRegexPrefix));
+  return hasString || hasRegex;
+};
+
+const isLinked = (a, b) => jaccardOf(a, b) >= N4_EVIDENCE.minJaccard || sharesLiteral(a, b);
+
+// Greedy cliques of the link relation among one name's rows, in row order: a row joins a group only
+// when it is linked to every member (in another file than each), so one weak link never chains two
+// unrelated readers together. Rows left alone are dropped. Rows are put in file/start order first, so
+// the groups never depend on the order the ledger gave them.
+const byRowPlace = (a, b) => byCodePoint(a.file_path, b.file_path) || a.start - b.start || byCodePoint(String(a.id), String(b.id));
+
+const linkedCliques = (unsortedRows) => {
+  const rows = [...unsortedRows].sort(byRowPlace);
+  const anchors = rows.map(anchorsOfRow);
+  const isTwin = (i, j) => rows[i].file_path !== rows[j].file_path && isLinked(anchors[i], anchors[j]);
+  const taken = new Set();
+  const cliques = [];
+  const cliqueFrom = (seed) => {
+    const members = [seed];
+    for (let next = seed + 1; next < rows.length; next += 1) {
+      const canJoin = !taken.has(next) && members.every((member) => isTwin(member, next));
+      if (canJoin) members.push(next);
+    }
+    members.forEach((member) => taken.add(member));
+    return members;
+  };
+  rows.forEach((row, seed) => {
+    const members = taken.has(seed) ? [] : cliqueFrom(seed);
+    const isTwinGroup = members.length > 1;
+    if (isTwinGroup) cliques.push(members.map((member) => rows[member]));
+  });
+  return cliques;
+};
+
+/** N4: same normalized declared name (6+ characters, not stoplisted), same facet, 2+ files, body evidence. */
+export const groupNameTwins = (rows, context) => {
+  const buckets = new Map();
+  for (const row of rows) {
+    const isCandidate = isN4Candidate(row);
+    if (isCandidate) pushTo(buckets, `${row.facet_key}|${nameKeyOf(row.decl_name)}`, row);
+  }
+  return [...buckets.values()]
+    .filter(spansFiles)
+    .flatMap(linkedCliques)
+    .filter(spansFiles)
+    .map((twins) => admitted({ ...N4_SPEC, kind: 'fn', facetKey: twins[0].facet_key }, twins, context, { toInstance: instanceOfRow }))
+    .filter(Boolean)
+    .map((group) => ({ ...group, behaviorDelta: N4_SPEC.behaviorDelta }));
 };

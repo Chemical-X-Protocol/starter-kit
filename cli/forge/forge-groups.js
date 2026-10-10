@@ -12,7 +12,7 @@ import { openIndexDb } from '../search-schema.js';
 import { resolveIndexRoot } from '../search-root.js';
 import { byCodePoint, byLocation } from './group-shape.js';
 import { createUbiquityIndex } from './gates.js';
-import { groupExact, groupWindows, groupNamed } from './group.js';
+import { groupExact, groupWindows, groupNamed, groupNameTwins } from './group.js';
 import { groupSiblings, groupTemplateSiblings } from './siblings.js';
 import { groupTemplates } from './templates.js';
 import { createRoleReader } from './template-roles.js';
@@ -24,7 +24,7 @@ import { readGroupCache, readSuppressions, writeGroupRun, suppressionKeyOf } fro
 import { runKeyOf, scopeKeyOf, readCachedRun, writeCachedRun, isStoredRun, markStoredRun } from './run-cache.js';
 import { readBodyEnds, writeBodyEnds } from './body-end-cache.js';
 
-export const PATH_ORDER = Object.freeze(['N1-fp1', 'N1-fp2', 'N1-fp3', 'N2', 'N3', 'W', 'T']);
+export const PATH_ORDER = Object.freeze(['N1-fp1', 'N1-fp2', 'N1-fp3', 'N2', 'N3', 'N4', 'W', 'T']);
 
 // Rejections kept in full (the others are only counted): T partitions refinement turned away.
 const REFINE_PREFIX = 'refine.';
@@ -130,7 +130,7 @@ export const buildForgeGroups = (ledger, { readFile = () => null, unify, include
   const stage = createLggStage({ rows, readFile, ubiquitousOf: context.ubiquitousOf, contentHashes: ledger.contentHashes, cache });
   const unifyStep = unify === undefined ? stage.unify : unify;
   const found = [
-    ...groupExact(rows, context), ...groupWindows(rows, context), ...groupNamed(rows, context),
+    ...groupExact(rows, context), ...groupWindows(rows, context), ...groupNamed(rows, context), ...groupNameTwins(rows, context),
     ...groupSiblings(rows, context, { unify: unifyStep }), ...groupTemplateSiblings(rows, context), ...groupTemplates(rows, context)
   ];
   const unique = dedupeById(found.sort(byPathThenLocation));
