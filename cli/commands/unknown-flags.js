@@ -61,7 +61,7 @@ const EXTRA_FLAGS = {
   // Traced (#4566): init/create read --headless, --ci, --non-interactive, --no-interactive and --install in
   // scaffold.js, and create reads --preset=; all are in their schema entries. The '--write' in scaffold.js and
   // installer.js is an argument passed to the pillars wizard, not a flag of init, create, generate or hook.
-  // No handler read of init --preset, patterns --name or generate --install was found; they are dropped.
+  // No handler read of init --preset or generate --install was found; they are dropped, so init --preset is now rejected as unknown. patterns --name is kept below.
   // generate: the mutation-args.js global list accepts these; not verified that the generate handler reads them.
   trend: ['--limit'],
   generate: ['--headless', '--ci', '--non-interactive', '--no-interactive'],
