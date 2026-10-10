@@ -14,7 +14,8 @@ import { DatabaseSync } from 'node:sqlite';
 import { readRun } from './usage-reader.js';
 import { loadPricing } from './usage-pricing.js';
 import { auditRun } from './audit-run.js';
-import { hijackSignals } from './audit-run-protocol.js';
+import { hijackSignals, editsWithoutLease, unresolvedEdits } from './audit-run-protocol.js';
+import { invocationsOf } from './audit-run-invocations.js';
 import { classifyInvocation } from './audit-run-adoption.js';
 import { renderAuditRun } from './audit-run-render.js';
 import { runTeamCli } from './team-commands.js';
@@ -267,4 +268,37 @@ test('api: runTeamCli returns the report and an error for a missing run', (t) =>
   assert.equal(report.ok, true);
   assert.match(runTeamCli(['audit-run', '--run=/nonexistent/run'], false, env.root).error, /Run not found/);
   assert.match(runTeamCli(['audit-run'], false, env.root).error, /--run is required/);
+});
+
+// #4543: leases and edits are compared as resolved paths, not as written.
+const KIT = '/r/apps/chemical-x/starter-kit';
+const callsOf = (...commands) => commands.flatMap((command, i) => invocationsOf({ name: 'Bash', at: BASE + i * 1000, cwd: KIT, input: { command } }));
+
+test('4543: a lease taken root-relative covers a patch written relative to the kit dir', () => {
+  const invs = callsOf('chemx patch cli/commands-schema-edit.js --target=a --replacement=b');
+  const taken = [{ file: 'apps/chemical-x/starter-kit/cli/commands-schema-edit.js', at: BASE }];
+  assert.deepEqual(editsWithoutLease(invs, taken), []);
+  assert.equal(editsWithoutLease(invs, []).length, 1, 'without the lease it is still a gap');
+});
+
+test('4543: cd and simple variables are replayed before comparing', () => {
+  const invs = callsOf(
+    'cd /r && chemx patch apps/chemical-x/starter-kit/cli/a.js --target=a --replacement=b',
+    'K=cli/team; chemx patch $K/b.js --target=a --replacement=b',
+    'cd cli && F="c.js" && chemx patch ${F} --target=a --replacement=b'
+  );
+  const taken = ['cli/a.js', 'cli/team/b.js', 'cli/c.js'].map((f) => ({ file: `apps/chemical-x/starter-kit/${f}`, at: BASE }));
+  assert.deepEqual(editsWithoutLease(invs, taken), []);
+});
+
+test('4543: an unresolvable path is reported as unresolved, never as unleased', () => {
+  const invs = callsOf('chemx patch $UNSET/x.js --target=a --replacement=b', 'cd - && chemx patch y.js --target=a --replacement=b');
+  assert.deepEqual(editsWithoutLease(invs, []), []);
+  assert.deepEqual(unresolvedEdits(invs).map((e) => e.file), ['$UNSET/x.js', 'y.js']);
+});
+
+test('4543: a lease on another file does not cover the edit', () => {
+  const invs = callsOf('chemx patch cli/a.js --target=a --replacement=b');
+  const taken = [{ file: 'apps/chemical-x/starter-kit/cli/other.js', at: BASE }];
+  assert.deepEqual(editsWithoutLease(invs, taken).map((e) => e.file), ['cli/a.js']);
 });

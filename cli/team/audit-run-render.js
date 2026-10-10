@@ -65,6 +65,8 @@ const protocolLines = (p) => [
   ...list(p.uncommitted, (c) => `${at(c.at)} ${who(c)} ${c.command}`),
   `  edits without a lease: ${p.unleasedEdits.length}`,
   ...list(p.unleasedEdits, (e) => `${at(e.at)} ${who(e)} ${e.verb} ${e.file}`),
+  `  edits with an unresolved path (not judged): ${(p.unresolvedEdits ?? []).length}`,
+  ...list(p.unresolvedEdits ?? [], (e) => `${at(e.at)} ${who(e)} ${e.verb} ${e.file}`),
   `  claims never closed: ${p.unclosedClaims.length}`,
   ...list(p.unclosedClaims, (c) => `${who(c)} task #${c.task}`)
 ];

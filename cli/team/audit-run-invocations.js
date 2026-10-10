@@ -36,11 +36,18 @@ const chemxArgs = (argv) => {
   return isChemx ? rest.slice(1) : null;
 };
 
+// NAME=value words of one command as an object (quotes stripped; later words win).
+const assignmentsOf = (words = []) => Object.fromEntries(words.map((w) => {
+  const at = w.indexOf('=');
+  return [w.slice(0, at), unquote(w.slice(at + 1))];
+}).filter(([name]) => /^[A-Za-z_]\w*$/.test(name)));
+
 const bashInvocations = (call) => {
   const command = String(call.input.command ?? '');
   const { commands } = parseShell(command);
   const isScratch = isScratchText(command);
   const result = [];
+  const vars = {};
   commands.forEach((cmd, index) => {
     const isEmpty = cmd.argv.length === 0 && cmd.redirects.length === 0;
     if (isEmpty) return;
@@ -48,11 +55,14 @@ const bashInvocations = (call) => {
     const args = chemxArgs(cmd.argv);
     const isChemx = args !== null;
     const dir = cmd.dir ?? { steps: [], unknown: false };
+    const own = assignmentsOf(cmd.assigns);
+    const isBareAssignment = cmd.argv.length === 0;
+    if (isBareAssignment) Object.assign(vars, own);
     const ownText = [...cmd.argv, ...cmd.redirects.map((r) => r.target)].join(' ');
     const isSegmentScratch = isScratchText(ownText);
     result.push({
       via: 'bash', kind: isChemx ? 'chemx' : 'shell', at: call.at, cwd: call.cwd, raw: command,
-      argv: isChemx ? args : cmd.argv, redirects: cmd.redirects, dir, isPiped, isScratch, isSegmentScratch
+      argv: isChemx ? args : cmd.argv, redirects: cmd.redirects, dir, isPiped, isScratch, isSegmentScratch, vars: { ...vars, ...own }
     });
   });
   return result;

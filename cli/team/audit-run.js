@@ -18,7 +18,7 @@ import { readTranscriptCalls, isOverheadTool } from './audit-run-calls.js';
 import { invocationsOf } from './audit-run-invocations.js';
 import { repoRootsOf, shellWritesOf, nativeBypassOf } from './audit-run-bypass.js';
 import { classifyInvocation, summarizeAdoption } from './audit-run-adoption.js';
-import { commitsWithoutTask, editsWithoutLease, unclosedClaims, hijackSignals } from './audit-run-protocol.js';
+import { commitsWithoutTask, editsWithoutLease, unresolvedEdits, unclosedClaims, hijackSignals } from './audit-run-protocol.js';
 import { optionOf } from './team-commands-tokens.js';
 import { openTeamContext } from './coordination-db.js';
 import { renderAuditRun } from './audit-run-render.js';
@@ -87,6 +87,7 @@ const auditAgent = (run, agent, row, ctx) => {
     blocked: blockedOf(invs, agent, ctx.roots, ctx.home),
     commits: commitsWithoutTask(invs).map((c) => ({ ...who(agent), ...c })),
     unleased: editsWithoutLease(invs, taken).map((e) => ({ ...who(agent), ...e })),
+    unresolved: unresolvedEdits(invs).map((e) => ({ ...who(agent), ...e })),
     unclosed: unclosedClaims(invs, statuses).map((id) => ({ ...who(agent), task: id })),
     parsed, steps
   };
@@ -133,7 +134,7 @@ export const auditRun = (run, ctx = {}) => {
     leases: leaseSection(full.db, priced.rows, ctx.starveMs),
     bypasses: { shell: audits.flatMap((a) => a.bypasses.filter((b) => b.type === 'shell-write')), native: audits.flatMap((a) => a.bypasses.filter((b) => b.type === 'native-tool')), blocked: audits.flatMap((a) => a.blocked), guard: full.db ? guardBypasses(full.db, priced.rows) : [], crashes: full.db ? guardCrashes(full.db, priced.rows) : [] },
     adoption: summarizeAdoption(audits.flatMap((a) => a.classified)),
-    protocol: { uncommitted: audits.flatMap((a) => a.commits), unleasedEdits: audits.flatMap((a) => a.unleased), unclosedClaims: audits.flatMap((a) => a.unclosed) },
+    protocol: { uncommitted: audits.flatMap((a) => a.commits), unleasedEdits: audits.flatMap((a) => a.unleased), unresolvedEdits: audits.flatMap((a) => a.unresolved), unclosedClaims: audits.flatMap((a) => a.unclosed) },
     hijacks: hijacksOf(audits, isLargeEnough ? medianCost : 0),
     cost: { totalCost: priced.totals.cost, totalTokens: priced.totals.total, perAgent: audits.map((a) => a.agent).sort((x, y) => y.cost - x.cost) }
   };
