@@ -39,6 +39,8 @@ export const scriptFilesOf = (parsedCommands) => {
 
 // Repo files an inline interpreter script writes by a literal (or same-script variable) path.
 // A script file this same command line created (and runs) counts as that interpreter's script.
+// Known gap, not guaranteed: script paths match by their literal spelling, so a script written by
+// one path and run by another (after a cd, or by shebang execution) is not recognised.
 const scriptRepoTargets = (command, context) => interpreterWrites(command.argv, command.redirects, context.scriptFiles ?? {}).targets.filter((target) => isRepoPath(target, context));
 
 // Advice only: the script writes to a computed path and also names a repo file, so the target is unverified.
