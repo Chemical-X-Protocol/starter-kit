@@ -7,17 +7,7 @@ import { routeGet, routePost, parseJsonBody } from './ui-server-routes.js';
 import { handleSseConnection, broadcastSseUpdate, broadcastSseReload, closeSseHub } from './ui-sse.js';
 import { createUiAuth, checkUiRequest, createUiFetch, isLoopbackHost, resolveUiUrlHost, DEFAULT_UI_HOST } from './ui-auth.js';
 import { openConsoleDb } from './ui-sql-guard.js';
-
-const sendJson = (res, status, payload, extraHeaders = {}, afterSend = null) => {
-  res.writeHead(status, { 'Content-Type': 'application/json', ...extraHeaders });
-  res.end(JSON.stringify(payload));
-  if (afterSend) afterSend();
-  return res;
-};
-
-const runRoute = (handler) => {
-  try { return [handler(), null]; } catch (err) { return [null, err]; }
-};
+import { sendJson, runRoute } from './ui-route-helpers.js';
 
 export const createUiServer = (cwd = process.cwd(), options = {}) => {
   const indexDb = openIndexDb(cwd);
