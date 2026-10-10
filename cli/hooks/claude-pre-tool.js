@@ -22,6 +22,7 @@ import { isPromotedNudge, resolveNudgePromotion } from './guard-config.js';
 import { NATIVE_FILE_TOOLS, decideNativeTool, resolveNativeToolMode } from './native-tool-policy.js';
 import { decideEditLock, resolveHookAgentId } from './native-edit-lock.js';
 import { everyChemxCallCarriesIdentity, identityDenyReason, resolveDispatchHandle } from './dispatch-identity.js';
+import { foreignRunIdentities, foreignIdentityDenyReason } from './foreign-identity.js';
 import { hasAnonymousActingCall, inheritedOrchestratorHandle, orchestratorActingReason } from './session-identity.js';
 
 // The route guard pulls in the dispatch modules, which agents edit mid-flight. Load it on its own so
@@ -110,6 +111,14 @@ const decideDispatchIdentity = (command, context) => {
   return isMissing ? { decision: 'deny', rule: 'dispatch-identity', segment: command.slice(0, SEGMENT_LIMIT), reason: identityDenyReason(handle) } : null;
 };
 
+// A dispatched agent may not name another handle of its own run as its identity (#5740).
+const decideForeignIdentity = (command, context) => {
+  const handle = context.dispatchHandle ?? null;
+  const foreign = handle === null ? [] : foreignRunIdentities(command, handle);
+  const isForeign = foreign.length > 0;
+  return isForeign ? { decision: 'deny', rule: 'foreign-identity', segment: command.slice(0, SEGMENT_LIMIT), reason: foreignIdentityDenyReason(handle, foreign) } : null;
+};
+
 // A subagent's anonymous state-changing chemx call would resolve to the orchestrator it inherits (#4562).
 const decideInheritedIdentity = (command, context) => {
   const handle = context.inheritedHandle ?? null;
@@ -119,7 +128,7 @@ const decideInheritedIdentity = (command, context) => {
 
 const decideBash = (input, context) => {
   const command = String(input.command ?? '');
-  const missingIdentity = decideDispatchIdentity(command, context) ?? decideInheritedIdentity(command, context);
+  const missingIdentity = decideDispatchIdentity(command, context) ?? decideForeignIdentity(command, context) ?? decideInheritedIdentity(command, context);
   if (missingIdentity) return missingIdentity;
   const { rule, segment, use, bypassReason, nudges } = findViolation(command, context);
   const hasBypass = bypassReason !== null;
