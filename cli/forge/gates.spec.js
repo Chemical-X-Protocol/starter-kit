@@ -46,6 +46,15 @@ test('a cross-file group needs 2 files, and a 2-instance one needs G2 or G1 with
   assert.equal(admitGroup(group({ path: 'N1-fp2' })).reason, 'G2.lowEvidence');
 });
 
+test('a 2-instance exact whole-function clone with mass >= 20 and some anchor weight is admitted', () => {
+  const pair = group({ kind: 'fn', memberCount: 2, ...metrics(21, 1) });
+  assert.equal(admitGroup(pair).ok, true);
+  assert.equal(admitGroup({ ...pair, ...metrics(19, 1) }).reason, 'instances.weakPair');
+  assert.equal(admitGroup({ ...pair, ...metrics(21, 0) }).reason, 'instances.weakPair');
+  assert.equal(admitGroup({ ...pair, kind: 'stmt' }).reason, 'instances.weakPair');
+  assert.equal(admitGroup({ ...pair, path: 'N2' }).reason, 'G2.lowEvidence');
+});
+
 test('a template group needs 3 instances in 2 files and G4', () => {
   const tile = group({ path: 'T', kind: 'tmpl', ...metrics(11, 0) });
   assert.equal(admitGroup(tile).ok, true);

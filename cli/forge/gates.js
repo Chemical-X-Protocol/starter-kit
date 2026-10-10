@@ -7,6 +7,8 @@
 //   cross-file  at least 2 files; a 2-instance group needs G2, or G1 with anchorWeight >= 3
 //   within-file at least 3 instances, only through W (siblings.js applies the W floor)
 //   templates   at least 3 instances
+//   fn-clone pair  a 2-instance exact whole-function group (N1-fp1, kind fn) also passes with G1, mass >= 20
+//               and anchorWeight >= 1: the pair rule alone dropped small alpha-equivalent twins (#4443)
 //   idiom       an expr group with more than 25 instances across more than 10 directories and E < 35
 // mass, anchorWeight and E are group metrics (group-shape.js metricsOf): the smallest instance mass and
 // the weight of the anchors every instance shares, ubiquitous anchors weighing 0. Ubiquity is per facet:
@@ -29,6 +31,9 @@ export const IDIOM = Object.freeze({ moreThanInstances: 25, moreThanDirs: 10, be
 /** The gate each grouping path must pass (W has its own floor in siblings.js). */
 export const GATE_OF_PATH = Object.freeze({ 'N1-fp1': 'G1', 'N1-fp2': 'G2', 'N1-fp3': 'G3', N2: 'G2', N3: 'G1', T: 'G4', W: null });
 
+/** The extra way a 2-instance exact whole-function clone is a strong pair (both fns, same fp1, G1 met). */
+export const FN_CLONE_PAIR = Object.freeze({ minMass: 20, minAnchorWeight: 1 });
+
 const GATE_RULES = {
   G1: (m) => ({ lowEvidence: m.evidence < GATES.G1.minEvidence, lowMass: m.mass < GATES.G1.minMass }),
   G2: (m) => ({ lowEvidence: m.evidence < GATES.G2.minEvidence, lowAnchorWeight: m.anchorWeight < GATES.G2.minAnchorWeight }),
@@ -44,7 +49,9 @@ export const checkGate = (gate, metrics) => (gate ? evaluateRules(GATE_RULES[gat
 const isStrongPair = (group) => {
   const passesG2 = checkGate('G2', group).ok;
   const isAnchoredG1 = checkGate('G1', group).ok && group.anchorWeight >= INSTANCE_RULES.pairAnchorWeight;
-  return passesG2 || isAnchoredG1;
+  const isFnClone = group.path === 'N1-fp1' && group.kind === 'fn' && checkGate('G1', group).ok;
+  const isSubstantialClone = isFnClone && group.mass >= FN_CLONE_PAIR.minMass && group.anchorWeight >= FN_CLONE_PAIR.minAnchorWeight;
+  return passesG2 || isAnchoredG1 || isSubstantialClone;
 };
 
 const INSTANCE_CHECKS = {
