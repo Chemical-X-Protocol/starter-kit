@@ -89,6 +89,46 @@ test('an unreported commit on a run task is listed as info; no db says not check
   assert.equal(crossCheckShas(null, env.agents, env.root).available, false);
 });
 
+test('a sha committed in a submodule resolves there, not unknown (#4591)', (t) => {
+  const env = makeEnv(t);
+  const sub = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-shas-sub-'));
+  t.after(() => fs.rmSync(sub, { recursive: true, force: true }));
+  run(sub, 'init', '-q');
+  fs.writeFileSync(path.join(sub, 's.txt'), 'x\n');
+  run(sub, 'add', 's.txt');
+  run(sub, 'commit', '-q', '-m', 'feat: s (#11)');
+  commit(env, 'a.txt', 'feat: a (#11)');
+  run(env.root, '-c', 'protocol.file.allow=always', 'submodule', 'add', '-q', sub, 'kit');
+  const inner = path.join(env.root, 'kit');
+  fs.writeFileSync(path.join(inner, 'k.txt'), 'k\n');
+  run(inner, 'add', 'k.txt');
+  run(inner, 'commit', '-q', '-m', 'feat: k (#11)');
+  const sha = run(inner, 'rev-parse', 'HEAD').stdout.trim();
+  assert.notEqual(run(env.root, 'cat-file', '-e', `${sha}^{commit}`).status, 0);
+  env.db.prepare('INSERT INTO agent_feed (timestamp, author_id, task_id, event_type, message) VALUES (?, ?, ?, ?, ?)').run(env.now, '@one', 11, 'task_comment', `commit ${sha.slice(0, 7)}`);
+  const out = crossCheckShas(env.db, env.agents, env.root);
+  assert.equal(out.items.length, 1);
+  assert.equal(out.missing.length, 0);
+  assert.equal(out.items[0].subject, 'feat: k (#11)');
+});
+
+test('a task repo column points the lookup at that repo (#4591)', (t) => {
+  const env = makeEnv(t);
+  const other = path.join(env.root, 'pkg');
+  fs.mkdirSync(other);
+  run(other, 'init', '-q');
+  fs.writeFileSync(path.join(other, 'p.txt'), 'p\n');
+  run(other, 'add', 'p.txt');
+  run(other, 'commit', '-q', '-m', 'feat: p (#11)');
+  const sha = run(other, 'rev-parse', 'HEAD').stdout.trim();
+  env.db.exec('ALTER TABLE agent_tasks ADD COLUMN repo TEXT');
+  env.db.exec("UPDATE agent_tasks SET repo = 'pkg' WHERE id = 11");
+  env.db.prepare('INSERT INTO agent_feed (timestamp, author_id, task_id, event_type, message) VALUES (?, ?, ?, ?, ?)').run(env.now, '@one', 11, 'task_comment', `commit ${sha}`);
+  const out = crossCheckShas(env.db, env.agents, env.root);
+  assert.equal(out.missing.length, 0);
+  assert.equal(out.items[0].subject, 'feat: p (#11)');
+});
+
 test('shasIn needs the word commit or sha before the hex', () => {
   assert.deepEqual(shasIn('commit e48167e and sha: abcdef1234, deadbeef alone'), ['e48167e', 'abcdef1234']);
 });

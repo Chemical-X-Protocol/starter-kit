@@ -10,6 +10,7 @@
  * attribution from the lease holder of the touched files, shas written without the word commit/sha before them,
  * and shas in transcripts that never reached the feed. Pure read; no network.
  */
+import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { safeAll } from './team-db-readonly.js';
 
@@ -91,10 +92,30 @@ const reportsOf = (db, agents, win) => {
       const isRepeat = seen.has(key);
       if (isRepeat) continue;
       seen.add(key);
-      reports.push({ sha, reporter: r.author_id, source: isCommitEvent ? 'commit event' : 'feed text', subject: isCommitEvent ? meta.subject ?? null : null });
+      reports.push({ sha, taskId: Number.isFinite(r.task_id) ? r.task_id : null, reporter: r.author_id, source: isCommitEvent ? 'commit event' : 'feed text', subject: isCommitEvent ? meta.subject ?? null : null });
     }
   }
   return reports;
+};
+
+/** Submodule (gitlink) paths under root, absolute. Empty when root is not a repo. */
+const submoduleRoots = (root) => {
+  const out = git(root, ['ls-files', '--stage']);
+  const isFailed = out.status !== 0;
+  if (isFailed) return [];
+  return out.stdout.split('\n').filter((l) => l.startsWith('160000')).map((l) => path.join(root, l.split('\t')[1] ?? ''));
+};
+
+/** Find a reported sha: the repo of the task it was reported for (agent_tasks.repo), then the root, then each submodule. Null when none has it. */
+const resolveSha = (db, gitRoot, report) => {
+  const [row] = report.taskId === null ? [] : safeAll(db, 'SELECT repo FROM agent_tasks WHERE id = ?', [report.taskId]);
+  const taskRepo = row?.repo ? path.resolve(gitRoot, row.repo) : null;
+  const candidates = [taskRepo, gitRoot, ...submoduleRoots(gitRoot)].filter(Boolean);
+  for (const root of [...new Set(candidates)]) {
+    const commit = inspectSha(root, report.sha);
+    if (commit) return commit;
+  }
+  return null;
 };
 
 const verdict = (db, report, commit, inWindow) => {
@@ -122,7 +143,7 @@ export const crossCheckShas = (db, agents, gitRoot) => {
   if (isUnavailable) return { available: false, note: 'no coordination db, git root or run window, so reported shas were not checked', ...empty };
   const inWindow = windowCommits(gitRoot, win);
   const items = reportsOf(db, agents, win).map((report) => {
-    const commit = inspectSha(gitRoot, report.sha);
+    const commit = resolveSha(db, gitRoot, report);
     return { ...report, ...verdict(db, report, commit, inWindow) };
   });
   const handles = new Set(agents.map((a) => a.handle));
