@@ -18,6 +18,7 @@ const flagValue = (args, name) => args.find((arg) => arg.startsWith(`--${name}=`
 const write = (lines) => process.stdout.write(`${lines.join('\n')}\n`);
 
 const VALUE_FLAGS = new Set(['--undo', '--as']);
+const DEFAULT_SPEC_DEPTH = 2;
 
 /** { target, item, dryRun, json, agent, fills: [[hole, value]], undo, specDepth } from argv. */
 export const parseHealArgs = (args) => {
@@ -25,10 +26,10 @@ export const parseHealArgs = (args) => {
   const undo = flagValue(args, 'undo') ?? (undoIndex === -1 ? null : args[undoIndex + 1] ?? '');
   const positional = args.filter((arg, index) => !arg.startsWith('-') && !VALUE_FLAGS.has(args[index - 1]));
   const fills = args.filter((arg) => arg.startsWith('--fill=')).map((arg) => arg.slice('--fill='.length)).map((pair) => [pair.slice(0, pair.indexOf('=')), pair.slice(pair.indexOf('=') + 1)]);
-  const depth = Number(flagValue(args, 'spec-depth'));
+  const depth = Number(flagValue(args, 'spec-depth') ?? DEFAULT_SPEC_DEPTH);
   return {
     target: positional[0] ?? null, item: flagValue(args, 'item'), dryRun: args.includes('--dry-run'), json: args.includes('--json'),
-    agent: flagValue(args, 'as') ?? process.env.CHEMX_AGENT_ID ?? '', fills, undo, specDepth: Number.isInteger(depth) && depth >= 0 ? depth : 2
+    agent: flagValue(args, 'as') ?? process.env.CHEMX_AGENT_ID ?? '', fills, undo, specDepth: Number.isInteger(depth) && depth >= 0 ? depth : DEFAULT_SPEC_DEPTH
   };
 };
 
