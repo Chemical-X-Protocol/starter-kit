@@ -56,4 +56,11 @@ export const resolveLabels = (labels, labelsDir, root) => {
 // Anchors whose fixture text no longer matches the hash recorded in labels.json (fixture/label drift).
 export const mismatchedAnchorIds = (resolvedItems) => resolvedItems.flatMap((item) => item.anchors.filter((anchor) => !anchor.hashMatches).map((anchor) => anchor.id));
 
-export const staleAnchorIds = (resolvedItems) => resolvedItems.flatMap((item) => item.anchors.filter((anchor) => anchor.isStale).map((anchor) => anchor.id));
+// A stale anchor carrying `retired` ({ commit, reason }) was retired on purpose: its text is gone and a commit cites the heal.
+const isRetired = (anchor) => Boolean(anchor.retired);
+
+// Stale anchors nobody retired: these need a re-anchor or a retirement.
+export const staleAnchorIds = (resolvedItems) => resolvedItems.flatMap((item) => item.anchors.filter((anchor) => anchor.isStale && !isRetired(anchor)).map((anchor) => anchor.id));
+
+// Anchors retired on purpose that are still stale (retired anchors that match again are not listed).
+export const retiredAnchorIds = (resolvedItems) => resolvedItems.flatMap((item) => item.anchors.filter((anchor) => anchor.isStale && isRetired(anchor)).map((anchor) => anchor.id));

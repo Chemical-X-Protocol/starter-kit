@@ -6,6 +6,9 @@
 //   related = ids whose anchors may overlap this item's without counting as foreign sites
 //   subsumedBy = scored as found when that item is found (A23 inside A21)
 //   lean = for C items, the labeler's leaning (for, against)
+// Healed code (#4486): anchors whose text is gone carry `retired: { commit, reason }` in labels.json (A4.7, A6.*, A7.1-3/5,
+// A15.7-16, C7.1); their specs below are labeling-time provenance only. Do not rerun gt-build.js blindly: it reads by these
+// recorded lines, which have drifted, and would drop the retired markers.
 const at = (file, ...ranges) => ranges.map((range) => `${file}:${range}`);
 const many = (pairs) => pairs.flatMap(([file, ...ranges]) => at(file, ...ranges));
 
@@ -17,7 +20,7 @@ const TRUE_ITEMS = [
   { id: 'A1', title: 'Team flag parsing: inline --x= and --x <next> blocks', confidence: 'high', anchors: at('cli/team/team-flags.js', ...TEAM_FLAG_PAIRS) },
   { id: 'A2', title: 'Ad-hoc flag value readers re-implementing readFlagValue', confidence: 'high', anchors: many([['cli/friction/friction-cli.js', '15'], ['cli/hooks/install-hooks-cli.js', '16', '26'], ['cli/license.js', '91-96'], ['cli/config/index.js', '23-30']]) },
   { id: 'A3', title: 'Resolve project root via git rev-parse with cwd fallback', confidence: 'high', anchors: many([['cli/friction/friction-cli.js', '18-23'], ['cli/hooks/install-hooks-cli.js', '18-23']]) },
-  { id: 'A4', title: 'Is the path inside the root check', confidence: 'high', related: ['A5', 'A6', 'B11'], anchors: many([['cli/hooks/guard-paths.js', '16-20'], ['cli/mcp/context.js', '21-24'], ['cli/path-scope.js', '39-40', '47-48', '59-60'], ['cli/edit-locks.js', '72'], ['cli/team/lease-renew.js', '34'], ['cli/hooks/native-tool-policy.js', '99'], ['cli/mcp/installer-report.js', '31'], ['cli/team/team-dispatch-batches.js', '38'], ['cli/typecheck-command.js', '42']]) },
+  { id: 'A4', title: 'Is the path inside the root check', confidence: 'high', related: ['A5', 'A6', 'B11'], anchors: many([['cli/hooks/guard-paths.js', '16-20'], ['cli/mcp/context.js', '21-24'], ['cli/path-scope.js', '39-40', '47-48', '59-60'], ['cli/team/lease-roots.js', '28'], ['cli/team/lease-renew.js', '34'], ['cli/hooks/native-tool-policy.js', '99'], ['cli/mcp/installer-report.js', '31'], ['cli/team/team-dispatch-batches.js', '38'], ['cli/typecheck-command.js', '42']]) },
   { id: 'A5', title: 'Show a path relative to a base when inside, absolute otherwise', confidence: 'high', related: ['A4'], anchors: many([['cli/hooks/native-tool-policy.js', '97-101'], ['cli/mcp/installer-report.js', '29-33'], ['cli/typecheck-command.js', '40-44'], ['cli/team/team-dispatch-batches.js', '33-40']]) },
   { id: 'A6', title: 'leaseKeys copied verbatim', confidence: 'high', anchors: many([['cli/edit-locks.js', '70-74'], ['cli/team/lease-renew.js', '32-36']]) },
   { id: 'A7', title: 'Read a JSON file, return a fallback on any error', confidence: 'high', related: ['A8'], anchors: many([['cli/doctor/check-host.js', '15-21'], ['cli/hooks/project-status.js', '11-17'], ['cli/doctor/kit-locate.js', '9-16'], ['cli/build/detector.js', '24-32'], ['cli/project-detector.js', '4-13'], ['cli/audit/status-file.js', '27-33'], ['cli/config/index.js', '11-17'], ['cli/sfc/module-aliases.js', '41-47']]) },
@@ -53,7 +56,7 @@ const FALSE_ITEMS = [
   { id: 'B8', title: 'JSON readers whose error contracts differ from A7', anchors: many([['cli/audit/ratchet.js', '37-48'], ['cli/doctor/check-mcp.js', '14-21'], ['cli/workspace.js', '10-16'], ['cli/commands/cmd-wrappers-json.js', '13-16']]) },
   { id: 'B9', title: 'Truncation from different ends', anchors: many([['cli/navigator-banner-helpers.js', '14-18'], ['cli/team/task-list-view.js', '10-14'], ['cli/errors/formatter.js', '7']]) },
   { id: 'B10', title: 'm-token-stat vs the A24 stat tile', related: ['A24'], anchors: many([[`${UI}/m-token-stat/m-token-stat.vue`, '22-53'], [`${UI}/m-savings-modal/m-savings-modal.vue`, '26-29']]) },
-  { id: 'B11', title: 'Same 3-clause && count as A4, different meaning', related: ['A4'], anchors: many([['cli/terminal.js', '29'], ['cli/edit-locks.js', '72']]) }
+  { id: 'B11', title: 'Same 3-clause && count as A4, different meaning', related: ['A4'], anchors: many([['cli/terminal.js', '29'], ['cli/team/lease-roots.js', '28']]) }
 ];
 
 const BORDERLINE_ITEMS = [

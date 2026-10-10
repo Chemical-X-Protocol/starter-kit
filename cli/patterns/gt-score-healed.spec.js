@@ -15,3 +15,12 @@ test('an item whose anchors are all stale is excluded from recall and reported a
   assert.equal(report.recallA.recall, 1);
   assert.equal(report.recallByScope.code.items, 1);
 });
+
+test('a subsumedBy pair with a healed side skips inheritance and does not throw', () => {
+  const parent = item('A21', [anchor('A21.1', 'a.js', false), anchor('A21.2', 'b.js', false)]);
+  const child = { ...item('A23', [anchor('A23.1', 'c.js', true), anchor('A23.2', 'd.js', true)]), subsumedBy: 'A21' };
+  const group = { id: 'g1', path: 'P', occurrences: [{ file: 'a.js', startLine: 1, endLine: 5 }, { file: 'b.js', startLine: 1, endLine: 5 }] };
+  const report = scoreGroups([parent, child], [group]);
+  assert.deepEqual(report.healedItems, ['A23']);
+  assert.equal(report.recallA.items, 1);
+});

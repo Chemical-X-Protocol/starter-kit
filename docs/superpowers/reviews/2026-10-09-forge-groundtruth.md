@@ -271,3 +271,9 @@ C6 isPlainObject variants that do not exclude arrays (envelope.js:12, agent-json
 C7 The `isCli && isJson` branches in team-commands.js:85-99
 - These fit A15. The human renderer is always a separate format*Card function, so `emitResult(res, flags, formatX)` would read naturally there.
 - Inline multi-branch human text such as team-commands-lock.js:88-90 would need a function argument. That is still fine, but the call site is less clean.
+
+Healed and re-anchored items (#4486, 2026-10-09)
+- The scorer re-finds anchors by content, so code that was fixed after labeling goes stale. Rules: an item with fewer than 2 live anchors is "healed" and leaves the recall denominator (A6: leaseKeys now exists once, in cli/team/lease-roots.js). It stays in labels.json.
+- Re-anchored: A4.6 and B11.2 (the isInside check, same hash) now point at cli/team/lease-roots.js:28. Fixtures keep their original provenance header; gt-build.js was not rerun because it reads by recorded line numbers, which have drifted.
+- Retired (text absent, `retired: {commit, reason}` in labels.json): A4.7, A6.1, A6.2 (fd61ca6, f779598); A7.1, A7.2, A7.3, A7.5 (97b7be0, readJsonOr); A15.7-A15.16 and C7.1 (a00d12e). Commits are the last to change the text's occurrence count in that file.
+- A16 and A17 are spec items and score only with `--include-tests`: both credited, spec scope 2/2; A recall 19/25 = 76% overall (code 17/23).

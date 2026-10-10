@@ -214,9 +214,9 @@
         },
         {
           "id": "A4.6",
-          "file": "cli/edit-locks.js",
-          "startLine": 72,
-          "endLine": 72,
+          "file": "cli/team/lease-roots.js",
+          "startLine": 28,
+          "endLine": 28,
           "hash": "b970514f96ee2a2c"
         },
         {
@@ -224,7 +224,8 @@
           "file": "cli/team/lease-renew.js",
           "startLine": 34,
           "endLine": 34,
-          "hash": "b970514f96ee2a2c"
+          "hash": "b970514f96ee2a2c",
+          "retired": { "commit": "f779598", "reason": "lease-renew.js copy of the inside-root check was removed; one copy lives in cli/team/lease-roots.js" }
         },
         {
           "id": "A4.8",
@@ -306,14 +307,16 @@
           "file": "cli/edit-locks.js",
           "startLine": 70,
           "endLine": 74,
-          "hash": "80ea312eadfd503e"
+          "hash": "80ea312eadfd503e",
+          "retired": { "commit": "fd61ca6", "reason": "leaseKeys moved out of edit-locks.js into cli/team/lease-roots.js" }
         },
         {
           "id": "A6.2",
           "file": "cli/team/lease-renew.js",
           "startLine": 32,
           "endLine": 36,
-          "hash": "cbbf5b8bc77d5ff4"
+          "hash": "cbbf5b8bc77d5ff4",
+          "retired": { "commit": "f779598", "reason": "leaseKeys moved out of lease-renew.js into cli/team/lease-roots.js" }
         }
       ]
     },
@@ -331,21 +334,24 @@
           "file": "cli/doctor/check-host.js",
           "startLine": 15,
           "endLine": 21,
-          "hash": "637b47ad2daeea18"
+          "hash": "637b47ad2daeea18",
+          "retired": { "commit": "97b7be0", "reason": "inline JSON reader replaced by readJsonOr (#4507)" }
         },
         {
           "id": "A7.2",
           "file": "cli/hooks/project-status.js",
           "startLine": 11,
           "endLine": 17,
-          "hash": "fc22bdb3a23703e9"
+          "hash": "fc22bdb3a23703e9",
+          "retired": { "commit": "97b7be0", "reason": "inline JSON reader replaced by readJsonOr (#4507)" }
         },
         {
           "id": "A7.3",
           "file": "cli/doctor/kit-locate.js",
           "startLine": 9,
           "endLine": 16,
-          "hash": "41f429408b1d5283"
+          "hash": "41f429408b1d5283",
+          "retired": { "commit": "97b7be0", "reason": "inline JSON reader replaced by readJsonOr (#4507)" }
         },
         {
           "id": "A7.4",
@@ -359,7 +365,8 @@
           "file": "cli/project-detector.js",
           "startLine": 4,
           "endLine": 13,
-          "hash": "1b28be7f485e470c"
+          "hash": "1b28be7f485e470c",
+          "retired": { "commit": "97b7be0", "reason": "inline JSON reader replaced by readJsonOr (#4507)" }
         },
         {
           "id": "A7.6",
@@ -700,70 +707,80 @@
           "file": "cli/team/team-commands.js",
           "startLine": 85,
           "endLine": 85,
-          "hash": "efdf1b183958e7fa"
+          "hash": "efdf1b183958e7fa",
+          "retired": { "commit": "a00d12e", "reason": "inline isCli JSON emit no longer in team-commands.js; last commit that changed its occurrence count" }
         },
         {
           "id": "A15.8",
           "file": "cli/team/team-commands.js",
           "startLine": 96,
           "endLine": 96,
-          "hash": "b6ca860b38d4bdb1"
+          "hash": "b6ca860b38d4bdb1",
+          "retired": { "commit": "a00d12e", "reason": "inline isCli JSON emit no longer in team-commands.js; last commit that changed its occurrence count" }
         },
         {
           "id": "A15.9",
           "file": "cli/team/team-commands.js",
           "startLine": 114,
           "endLine": 114,
-          "hash": "21e0c4c2e5960977"
+          "hash": "21e0c4c2e5960977",
+          "retired": { "commit": "a00d12e", "reason": "inline isCli JSON emit no longer in team-commands.js; last commit that changed its occurrence count" }
         },
         {
           "id": "A15.10",
           "file": "cli/team/team-commands.js",
           "startLine": 134,
           "endLine": 134,
-          "hash": "28a0003dc4518f0e"
+          "hash": "28a0003dc4518f0e",
+          "retired": { "commit": "a00d12e", "reason": "inline isCli JSON emit no longer in team-commands.js; last commit that changed its occurrence count" }
         },
         {
           "id": "A15.11",
           "file": "cli/team/team-commands.js",
           "startLine": 173,
           "endLine": 173,
-          "hash": "3043b9c15871f6b9"
+          "hash": "3043b9c15871f6b9",
+          "retired": { "commit": "a00d12e", "reason": "inline isCli JSON emit no longer in team-commands.js; last commit that changed its occurrence count" }
         },
         {
           "id": "A15.12",
           "file": "cli/team/team-commands.js",
           "startLine": 199,
           "endLine": 199,
-          "hash": "efdf1b183958e7fa"
+          "hash": "efdf1b183958e7fa",
+          "retired": { "commit": "a00d12e", "reason": "inline isCli JSON emit no longer in team-commands.js; last commit that changed its occurrence count" }
         },
         {
           "id": "A15.13",
           "file": "cli/team/team-commands.js",
           "startLine": 228,
           "endLine": 228,
-          "hash": "28a0003dc4518f0e"
+          "hash": "28a0003dc4518f0e",
+          "retired": { "commit": "a00d12e", "reason": "inline isCli JSON emit no longer in team-commands.js; last commit that changed its occurrence count" }
         },
         {
           "id": "A15.14",
           "file": "cli/team/team-commands.js",
           "startLine": 253,
           "endLine": 253,
-          "hash": "d6955c5e8264dd1b"
+          "hash": "d6955c5e8264dd1b",
+          "retired": { "commit": "a00d12e", "reason": "inline isCli JSON emit no longer in team-commands.js; last commit that changed its occurrence count" }
         },
         {
           "id": "A15.15",
           "file": "cli/team/team-commands.js",
           "startLine": 333,
           "endLine": 333,
-          "hash": "5df8b2ff5ad1774c"
+          "hash": "5df8b2ff5ad1774c",
+          "retired": { "commit": "a00d12e", "reason": "inline isCli JSON emit no longer in team-commands.js; last commit that changed its occurrence count" }
         },
         {
           "id": "A15.16",
           "file": "cli/team/team-commands.js",
           "startLine": 343,
           "endLine": 343,
-          "hash": "f8489567b5c78515"
+          "hash": "f8489567b5c78515",
+          "retired": { "commit": "a00d12e", "reason": "inline isCli JSON emit no longer in team-commands.js; last commit that changed its occurrence count" }
         },
         {
           "id": "A15.17",
@@ -1645,9 +1662,9 @@
         },
         {
           "id": "B11.2",
-          "file": "cli/edit-locks.js",
-          "startLine": 72,
-          "endLine": 72,
+          "file": "cli/team/lease-roots.js",
+          "startLine": 28,
+          "endLine": 28,
           "hash": "b970514f96ee2a2c"
         }
       ]
@@ -1811,7 +1828,8 @@
           "file": "cli/team/team-commands.js",
           "startLine": 85,
           "endLine": 99,
-          "hash": "7fd5145cbf4739c2"
+          "hash": "7fd5145cbf4739c2",
+          "retired": { "commit": "a00d12e", "reason": "isCli && isJson branch no longer in team-commands.js; last commit that changed its occurrence count" }
         }
       ]
     }

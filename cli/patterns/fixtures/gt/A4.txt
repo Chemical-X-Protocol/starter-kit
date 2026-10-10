@@ -24,7 +24,7 @@ export const isInsideDir = (root, target) => {
   const relReal = path.relative(realBase, realExisting);
   const isSymlinkEscape = relReal.startsWith('..') || path.isAbsolute(relReal);
 // @@ end
-// @@ anchor A4.6 cli/edit-locks.js:72-72 sha=b970514f96ee2a2c
+// @@ anchor A4.6 cli/team/lease-roots.js:28-28 sha=b970514f96ee2a2c
   const isInside = (key) => key !== '' && !key.startsWith('..') && !path.isAbsolute(key);
 // @@ end
 // @@ anchor A4.7 cli/team/lease-renew.js:34-34 sha=b970514f96ee2a2c

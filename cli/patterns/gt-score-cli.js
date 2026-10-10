@@ -7,7 +7,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { handleQueryPatterns } from '../mcp/tools-patterns.js';
-import { loadLabels, resolveLabels, staleAnchorIds, mismatchedAnchorIds } from './gt-resolve.js';
+import { loadLabels, resolveLabels, staleAnchorIds, retiredAnchorIds, mismatchedAnchorIds } from './gt-resolve.js';
 import { scoreGroups } from './gt-score.js';
 import { runForgeGroups } from '../forge/forge-groups.js';
 import { toScorerGroups } from '../forge/group-shape.js';
@@ -41,12 +41,14 @@ const readGroups = (args, cwd) => {
 
 const percent = (value) => (value === null ? 'n/a' : `${(value * 100).toFixed(0)}%`);
 
-export const formatScore = (report, staleIds, mismatchIds = []) => {
+export const formatScore = (report, staleIds, mismatchIds = [], retiredIds = []) => {
   const { recallA, falseItems, precision } = report;
   const surfacedList = falseItems.surfaced.join(' ');
   const lines = [
     `groups ${report.groups}: ${precision.trueGroups} true, ${precision.falseGroups} false (B-class), ${precision.unlabeledGroups} unlabeled`,
     `A recall ${recallA.credit}/${recallA.items} = ${percent(recallA.recall)} (found ${recallA.found}, partial ${recallA.partial}, missed ${recallA.missed})`,
+    `A recall by scope: code ${report.recallByScope.code.credit}/${report.recallByScope.code.items}, spec ${report.recallByScope.spec.credit}/${report.recallByScope.spec.items}`,
+    `healed items (${report.healedItems.length}, excluded from recall): ${report.healedItems.join(' ')}`,
     `B surfaced ${falseItems.surfacedCount}/${falseItems.items} ${surfacedList}`,
     `precision labeled ${percent(precision.labeled)}, overall ${percent(precision.overall)}`,
     `by type: ${Object.entries(report.byType).map(([type, count]) => `${type} ${count}`).join(', ')}`
@@ -54,6 +56,8 @@ export const formatScore = (report, staleIds, mismatchIds = []) => {
   for (const [name, row] of Object.entries(report.perPath)) {
     lines.push(`path ${name}: ${row.groups} groups, ${row.true} true, ${row.false} false, ${row.borderline} borderline, ${row.unlabeled} unlabeled, item credit ${row.itemCredit}`);
   }
+  const hasRetired = retiredIds.length > 0;
+  if (hasRetired) lines.push(`retired anchors (${retiredIds.length}, intentional, each cites a commit in labels.json): ${retiredIds.join(' ')}`);
   const hasStale = staleIds.length > 0;
   if (hasStale) lines.push(`stale anchors (${staleIds.length}): ${staleIds.join(' ')}`);
   const hasMismatch = mismatchIds.length > 0;
@@ -68,8 +72,9 @@ export const runPatternsScore = (args, cwd = process.cwd()) => {
   const report = scoreGroups(items, readGroups(args, cwd));
   const staleIds = staleAnchorIds(items);
   const mismatchIds = mismatchedAnchorIds(items);
+  const retiredIds = retiredAnchorIds(items);
   const wantsJson = args.includes('--json');
-  const text = wantsJson ? `${JSON.stringify({ ...report, staleAnchors: staleIds, mismatchedAnchors: mismatchIds }, null, 2)}\n` : formatScore(report, staleIds, mismatchIds);
+  const text = wantsJson ? `${JSON.stringify({ ...report, staleAnchors: staleIds, retiredAnchors: retiredIds, mismatchedAnchors: mismatchIds }, null, 2)}\n` : formatScore(report, staleIds, mismatchIds, retiredIds);
   process.stdout.write(text);
   return report;
 };
