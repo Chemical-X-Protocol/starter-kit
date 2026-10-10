@@ -15,7 +15,7 @@ import { buildRunPlan, routeStages, routeGate, runNameFor } from './team-dispatc
 import { planLanes } from './team-dispatch-select.js';
 import { renderTaskPrompts, renderGatePrompt, fillTemplate, acceptanceOf } from './team-dispatch-prompts.js';
 import { renderRunScript } from './team-dispatch-script.js';
-import { TEMPLATE_VERSION } from './dispatch-templates/dispatch-v1.js';
+import { TEMPLATE_VERSION, ZSH_NOTE, protocolLines } from './dispatch-templates/dispatch-v1.js';
 import { makeFixtureDb, fixtureOptions } from './team-dispatch-v2-fixture.js';
 
 const GOLDEN = fileURLToPath(new URL('../fixtures/dispatch/workflow-golden.txt', import.meta.url));
@@ -203,10 +203,19 @@ test('script: meta literal first, schemas, retry guard and gate present; golden 
   assert.ok(script.includes('// skipped: #6 locked (cli/locked.js held by @peer)'));
   const shouldUpdate = process.env.CHEMX_UPDATE_GOLDEN === '1';
   if (shouldUpdate) fs.writeFileSync(GOLDEN, script);
-  assert.equal(script, fs.readFileSync(GOLDEN, 'utf8'), 'golden drifted: review the diff, then rerun with CHEMX_UPDATE_GOLDEN=1');
+  // The golden is recorded under zsh; the zsh line is the only part that depends on SHELL (#4553).
+  const golden = fs.readFileSync(GOLDEN, 'utf8');
+  const expected = script.includes(ZSH_NOTE) ? golden : golden.split(`${ZSH_NOTE}\\n`).join('');
+  assert.equal(script, expected, 'golden drifted: review the diff, then rerun with CHEMX_UPDATE_GOLDEN=1 under zsh');
   assert.equal(renderRunScript(fixturePlan({ needs: 'deep', tasks: '5' })), null, 'no ready task renders nothing');
   assert.match(runNameFor('', 'queue', [3, 1]), /^dispatch-queue-[0-9a-f]{6}$/);
   assert.equal(runNameFor('', 'queue', [3, 1]), runNameFor(undefined, 'queue', [1, 3]));
+});
+
+test('protocol: the zsh word-splitting line renders only for a zsh SHELL', () => {
+  assert.ok(protocolLines('/usr/bin/zsh').includes(ZSH_NOTE));
+  assert.ok(protocolLines('zsh').includes(ZSH_NOTE));
+  for (const shell of ['/bin/bash', '/bin/zshell', '', undefined]) assert.ok(!protocolLines(shell).includes(ZSH_NOTE), String(shell));
 });
 
 test('script: node --check passes on the rendered script', (t) => {

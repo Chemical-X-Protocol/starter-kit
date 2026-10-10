@@ -23,9 +23,16 @@ export const HANDOFF_STEP = 'This task was built by {{builder}}. Take it over wi
 // so it cannot tell whether every deliverable is met; the agent has to.
 export const UNMET_RULE = 'A deliverable is met only when you ran a command whose output shows it. If any deliverable is unmet: run chemx team task comment {{taskId}} "<each unmet item and why>" --as={{handle}}, and file one follow-up per unmet item: chemx team task add "<unmet item>" --parent={{taskId}} --needs=light --desc="<what is missing and the command that shows it>" --as={{handle}} (another tier only if the task says so). Then do not leave the task claimed and silent: run chemx team task update {{taskId}} blocked with a reason naming the follow-up ids (for example "unmet: see #<follow-up ids>"), then release your locks: chemx team lock release <file> --as={{handle}} for each file you locked; if the core deliverables are met, hand the task to the orchestrator instead. This is an instruction to you; chemx does not enforce it.';
 
-export const PROTOCOL = [
+// Rendered only when the host shell is zsh (#4553). It reads SHELL when this module loads, so it describes the
+// shell of the process that renders the prompt, not necessarily the shell an agent's Bash tool runs under.
+export const ZSH_NOTE = 'Shell is zsh: an unquoted $var is one word; loop over an array or use ${=var}.';
+
+export const isZshShell = (shell) => typeof shell === 'string' && /(^|\/)zsh$/.test(shell.trim());
+
+export const protocolLines = (shell) => [
   'Project: {{root}} (shared checkout on main: no worktrees, branches, stash, reset or push).',
   'Shell: cd {{root}} && CHEMX_AGENT_ID={{handle}} chemx ... ; team commands also take --as={{handle}}.',
+  ...(isZshShell(shell) ? [ZSH_NOTE] : []),
   '1. Run chemx status before editing. A file another handle leases is not yours: chemx wait --lock-free=<file> --timeout=20m, or report it.',
   '2. {{claimStep}}',
   '3. Lock each existing file right before its first edit: chemx team lock acquire <file> --as={{handle}} --purpose="#{{taskId}}".',
@@ -34,7 +41,9 @@ export const PROTOCOL = [
   '6. Commit small and green: chemx commit <files> -m "<type>(<area>): <summary> (#{{taskId}})" --release. Never git add -A, commit -a, stash, reset or checkout.',
   '7. Progress: chemx team task comment {{taskId}} "<msg>" --as={{handle}}. Friction (chemx wrong, noisy or missing something): chemx team task add "Friction: <what>" --needs=light --desc="<exact command and output>" --as={{handle}}.',
   'Under-promise: every message, help line and doc sentence states exactly what is guaranteed and what is not.'
-].join('\n');
+];
+
+export const PROTOCOL = protocolLines(process.env.SHELL).join('\n');
 
 export const PEERS = [
   'Peers outside this run (live claims and leases when the script was rendered; respect them):{{pathNote}}',
