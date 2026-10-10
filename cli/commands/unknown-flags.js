@@ -83,6 +83,12 @@ export const suggestFlag = (unknown, candidates) => {
   return best;
 };
 
+const isKnownSearchFlag = (token, known) => {
+  const name = token.split('=')[0];
+  const isShortKnown = ['-n', '-i', '-l', '-j', '-F', '-d', '-h'].includes(name);
+  return isShortKnown || known.has(name) || GLOBAL_FLAGS.has(name);
+};
+
 /**
  * @param {string} command first CLI token (name or alias)
  * @param {string[]} rawArgs args including the command token
@@ -98,6 +104,15 @@ export const findUnknownFlag = (command, rawArgs) => {
   const options = separator === -1 ? args : args.slice(0, separator);
   for (let i = 0; i < options.length; i++) {
     const arg = String(options[i]);
+    // `q -g <pattern>`: the token after -g/--literal is the pattern even when it starts with '-'.
+    // Mirrors search-args.js: a following known flag or `--` is not taken as the pattern.
+    const isLiteralFlag = entry.name === 'search' && (arg === '-g' || arg === '--literal');
+    if (isLiteralFlag) {
+      const next = options[i + 1] === undefined ? undefined : String(options[i + 1]);
+      const isPattern = next !== undefined && !isKnownSearchFlag(next, known);
+      if (isPattern) i++;
+      continue;
+    }
     const isLongFlag = arg.startsWith('--') && arg.length > 2;
     if (!isLongFlag) continue;
     const hasInlineValue = arg.includes('=');

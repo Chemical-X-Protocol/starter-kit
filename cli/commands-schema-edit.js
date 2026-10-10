@@ -14,7 +14,11 @@ export const EDIT_COMMANDS = [
       { flag: '<<\'EOF\' ... EOF', desc: 'Blocks: "<<<<<<< SEARCH", old lines, "=======", new lines, ">>>>>>> REPLACE"' },
       { flag: '--target="<old>"', desc: 'Exact text block to replace' },
       { flag: '--replacement="<new>"', desc: 'New replacement content' },
-      { flag: '--multiple', desc: 'Allow replacing multiple occurrences' },
+      { flag: '--replace', desc: 'Alias of --replacement' },
+      { flag: '--target-file=<path>', desc: 'Read the exact text block to replace from a file' },
+      { flag: '--replacement-file=<path>', desc: 'Read the replacement content from a file' },
+      { flag: '--allow-remove=<a,b>', desc: 'Top-level declarations the patch may remove' },
+      { flag: '--multiple, --allow-multiple', desc: 'Allow replacing multiple occurrences' },
       { flag: '--dry-run', desc: 'Preview patch without writing to disk' },
       { flag: '--json', desc: 'Output result as minified JSON' }
     ],
@@ -35,6 +39,8 @@ export const EDIT_COMMANDS = [
     flags: [
       { flag: '-, --stdin', desc: 'Read the whole content from stdin (heredoc)' },
       { flag: '--content="<text>"', desc: 'File content to write' },
+      { flag: '--content-file=<path>', desc: 'Read the file content from a file' },
+      { flag: '--allow-remove=<a,b>', desc: 'Top-level declarations an overwrite may remove' },
       { flag: '--overwrite', desc: 'Allow replacing an existing file' },
       { flag: '--append', desc: 'Add the content to the end of the file (created if missing), with the same parse check, audit, index sync and lock checks; refused with --overwrite; no newline is inserted for you' },
       { flag: '--json', desc: 'Output result as minified JSON' }

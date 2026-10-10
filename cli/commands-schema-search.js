@@ -13,7 +13,7 @@ export const SEARCH_COMMANDS = [
       { flag: '--columnar', desc: 'Token-compact columnar format (cols/rows) for agent pipelines' },
       { flag: '-i, --inspect', desc: 'Inspect props and hooks without full source' },
       { flag: '--tier=<tier>', desc: 'Filter by tier: atom, molecule, organism, hook, view' },
-      { flag: '--blast-radius', desc: 'Map direct consumers, transitive dependents and impacted tiers (aliases: --blast, --impact)' },
+      { flag: '--blast-radius, --blast, --impact', desc: 'Map direct consumers, transitive dependents and impacted tiers' },
       { flag: '--trace', desc: 'Forward call trace: downstream functions invoked by target' },
       { flag: '--backtrace', desc: 'Reverse backtrace: upstream callers leading to target' },
       { flag: '--max-depth=<N>', desc: 'Max depth for blast radius / trace traversal (default: 5)' },
@@ -27,7 +27,14 @@ export const SEARCH_COMMANDS = [
       { flag: '--dir=<path>', desc: 'Scope to search (default: the project default, src/ or .)' },
       { flag: '-l, --lines', desc: 'Line-only output (path:line)' },
       { flag: '--failing, --clean', desc: 'Filter capsules by architectural health status' },
-      { flag: '--reindex', desc: 'Force re-index before running query' }
+      { flag: '--reindex', desc: 'Force re-index before running query' },
+      { flag: '--raw-json', desc: 'With --json: row objects instead of columnar cols/rows' },
+      { flag: '--no-columnar', desc: 'Same as --raw-json' },
+      { flag: '--include-internal', desc: 'Include internal symbols in the results' },
+      { flag: '--rule=<id>', desc: 'Rule id for --hazards' },
+      { flag: '--critical', desc: 'Only critical hazards (with --hazards)' },
+      { flag: '--progression, --degraded, --crystalline', desc: 'Accepted by the q argument parser (cli/search-args.js); effect set by the query mode' },
+      { flag: '--regex, --hidden, --full, --ignore-case, --fixed-strings', desc: 'Accepted by the q argument parser (cli/search-args.js); -F is --fixed-strings' }
     ],
     examples: [
       'chemx q "badge"',

@@ -30,6 +30,41 @@ test('handler flags are all listed in the schema entry', () => {
   assert.deepEqual(gaps, []);
 });
 
+// #4510: handlers outside cmd-*.js. Each checked command maps to the files that parse its flags.
+// patch and write share patcher-cli.js, so a flag there must be listed on at least one of the two.
+const cliDir = path.join(dir, '..');
+const HANDLER_SOURCES = {
+  search: ['search-args.js'],
+  patch: ['patcher-cli.js'],
+  write: ['patcher-cli.js']
+};
+const EXEMPT_SHARED = { patch: 'write', write: 'patch' };
+
+test('non-cmd handler flags (search, patch, write) are all listed in the schema entry (#4510)', () => {
+  const gaps = [];
+  for (const [command, files] of Object.entries(HANDLER_SOURCES)) {
+    const entry = findCommandSchema(command);
+    const sibling = EXEMPT_SHARED[command] ? knownLongFlags(findCommandSchema(EXEMPT_SHARED[command])) : new Map();
+    const known = knownLongFlags(entry);
+    for (const file of files) {
+      const src = fs.readFileSync(path.join(cliDir, file), 'utf8');
+      const used = new Set((src.match(/['"`](--[a-z][a-z0-9-]*)/g) ?? []).map((s) => s.slice(1)));
+      for (const flag of used) {
+        const isListed = known.has(flag) || sibling.has(flag) || GLOBAL.has(flag);
+        if (!isListed) gaps.push(`${command} ${flag}`);
+      }
+    }
+  }
+  assert.deepEqual(gaps, []);
+});
+
+test('q -g takes a dash-prefixed pattern and the real q flags are accepted (#4510)', () => {
+  assert.equal(findUnknownFlag('q', ['q', '-g', '--x-glass', '-n', '5', '--json']), null);
+  assert.equal(findUnknownFlag('q', ['q', 'x', '--raw-json']), null);
+  assert.equal(findUnknownFlag('patch', ['patch', 'a.js', '--allow-remove=a,b']), null);
+  assert.match(findUnknownFlag('q', ['q', '-g', '--json', '--bogus']) ?? '', /--bogus/);
+});
+
 test('check accepts --profile, --json and --compact', () => {
   assert.equal(findUnknownFlag('check', ['check', 'a.vue', '--profile=atomic-strict', '--json', '--compact']), null);
   assert.equal(findUnknownFlag('check', ['check', 'a.vue', '--profile', 'atomic-strict']), null);
