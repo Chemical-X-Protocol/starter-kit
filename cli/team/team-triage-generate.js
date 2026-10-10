@@ -111,11 +111,11 @@ const hasOpenTask = (db, placed, rule) => Boolean(db.prepare(
   `SELECT 1 FROM agent_tasks WHERE repo = ? AND target_path = ? AND rule_id = ? AND status IN ${OPEN}`
 ).get(placed.repo, placed.path, rule));
 
-const findOrCreateParent = (db, ruleInfo, repo, createdTasks) => {
+const findOrCreateParent = (db, ruleInfo, repo, createdTasks, make = createTask) => {
   const existing = db.prepare(`SELECT * FROM agent_tasks WHERE origin_type = 'audit' AND rule_id = ? AND repo = ? AND parent_id IS NULL AND status IN ${OPEN}`).get(ruleInfo.rule, repo);
   if (existing) return existing;
   const dirSummary = ruleInfo.directive ? `: ${ruleInfo.directive.slice(0, 60)}` : '';
-  const parent = createTask(db, {
+  const parent = make(db, {
     title: `[${ruleInfo.rule}]${dirSummary} (${ruleInfo.file_count} files)`,
     description: `Hazard: ${ruleInfo.hazard || 'Architectural hazard detected'}\nDirective: ${ruleInfo.directive || 'Refactor into molecular compliance'}\nTotal violations: ${ruleInfo.violation_count} across ${ruleInfo.file_count} file(s).`,
     tier: 'organism', priority: priorityForSeverity(ruleInfo.severity, 3), origin_type: 'audit',
@@ -125,15 +125,20 @@ const findOrCreateParent = (db, ruleInfo, repo, createdTasks) => {
   return parent;
 };
 
-const createRuleTasks = (db, scope, ruleInfo, fileRows, isHierarchical, createdTasks) => {
+// run = { make, limit, dryRun }: dryRun counts without writing; limit caps tasks created in one run.
+const isFull = (run, createdTasks) => createdTasks.length >= run.limit;
+
+const createRuleTasks = (db, scope, ruleInfo, fileRows, isHierarchical, createdTasks, run) => {
+  if (isFull(run, createdTasks)) return;
   const shouldGroup = isHierarchical || ruleInfo.file_count > 1;
-  const parentTask = shouldGroup ? findOrCreateParent(db, ruleInfo, scope.repo, createdTasks) : null;
+  const parentTask = shouldGroup ? findOrCreateParent(db, ruleInfo, scope.repo, createdTasks, run.make) : null;
   for (const fv of fileRows) {
+    if (isFull(run, createdTasks)) break;
     const placed = scope.place(fv.file_path);
     const isPlaceable = Boolean(placed) && !hasOpenTask(db, placed, ruleInfo.rule);
     if (!isPlaceable) continue;
     const lineStr = fv.lines ? ` (Lines: ${fv.lines})` : '';
-    const childTask = createTask(db, {
+    const childTask = run.make(db, {
       title: shouldGroup ? `${placed.path}: Fix ${ruleInfo.rule}` : `Resolve architectural hazards in ${placed.path} (${ruleInfo.rule})`,
       description: `File: ${placed.path}${lineStr}\nHazard: ${fv.hazard || ruleInfo.hazard}\nDirective: ${fv.directive || ruleInfo.directive}`,
       tier: fv.tier || 'molecule', target_path: placed.path, repo: placed.repo,
@@ -143,16 +148,18 @@ const createRuleTasks = (db, scope, ruleInfo, fileRows, isHierarchical, createdT
     });
     if (childTask) createdTasks.push(childTask);
   }
-  if (parentTask) rollUpParentNeeds(db, parentTask.id);
+  const shouldRollUp = Boolean(parentTask) && !run.dryRun;
+  if (shouldRollUp) rollUpParentNeeds(db, parentTask.id);
 };
 
-const createHealthTasks = (db, scope, candidates, createdTasks) => {
+const createHealthTasks = (db, scope, candidates, createdTasks, run) => {
   for (const item of candidates) {
+    if (isFull(run, createdTasks)) break;
     const placed = scope.place(item.path);
     const isPlaceable = Boolean(placed) && !hasOpenTask(db, placed, item.rules_summary || 'ARCHITECTURAL_HAZARD');
     if (!isPlaceable) continue;
     const rulesText = item.rules_summary ? ` (${item.rules_summary})` : '';
-    const task = createTask(db, {
+    const task = run.make(db, {
       title: `Resolve architectural hazards in ${placed.path}${rulesText}`,
       description: `Target file has health score ${item.health_score}/100 with ${item.hazard_count || item.violation_count || 1} detected hazard(s). Refactor into molecular compliance.`,
       tier: item.tier || 'molecule', target_path: placed.path, repo: placed.repo, priority: item.health_score < 70 ? 1 : 2,
@@ -183,17 +190,22 @@ export const generateTriageTasks = (db, options = {}) => {
   const indexDb = options.indexDb || db;
   seedEmptyIndex(indexDb, cwd, options);
   const createdTasks = [];
-  registerAgent(db, { id: '@triage-bot', name: 'Triage Bot', role: 'triage', capabilities: ['audit', 'triage', 'task_creation'] });
+  const isDryRun = options.dryRun === true;
+  const limit = Number.isFinite(options.limit) && options.limit > 0 ? options.limit : Infinity;
+  let fakeId = 0;
+  const make = isDryRun ? (_db, fields) => ({ ...fields, id: `dry-${++fakeId}` }) : createTask;
+  const run = { make, limit, dryRun: isDryRun };
+  if (!isDryRun) registerAgent(db, { id: '@triage-bot', name: 'Triage Bot', role: 'triage', capabilities: ['audit', 'triage', 'task_creation'] });
   const scope = buildScope(indexDb, options, cwd);
   withTaskSchema(indexDb, db, (schema) => {
     for (const ruleInfo of groupRules(indexDb, schema, scope.repo)) {
-      createRuleTasks(db, scope, ruleInfo, fileRowsFor(indexDb, schema, scope.repo, ruleInfo.rule), options.hierarchy === true, createdTasks);
+      createRuleTasks(db, scope, ruleInfo, fileRowsFor(indexDb, schema, scope.repo, ruleInfo.rule), options.hierarchy === true, createdTasks, run);
     }
     const candidates = queryUnassignedHazards(indexDb, { schema, repo: scope.repo, insideOnly: true }).slice(0, options.maxTasks || 10);
-    createHealthTasks(db, scope, candidates, createdTasks);
+    createHealthTasks(db, scope, candidates, createdTasks, run);
   });
-  const hasCreatedTasks = createdTasks.length > 0;
-  if (hasCreatedTasks) {
+  const shouldPostFeed = createdTasks.length > 0 && !isDryRun;
+  if (shouldPostFeed) {
     postFeedEvent(db, { author_id: '@triage-bot', event_type: 'triage_generated', message: `Generated ${createdTasks.length} refactoring task(s) from AST index`, metadata: { taskIds: createdTasks.map((t) => t.id) } });
   }
   return createdTasks;

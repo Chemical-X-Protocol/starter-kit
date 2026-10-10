@@ -7,6 +7,8 @@
 import path from 'node:path';
 import { isStdinTty, isStdoutTty } from '../terminal.js';
 
+const TRIAGE_RUN_CAP = 50;
+
 /**
  * @param {string|null} customDir
  * @param {boolean} isCli
@@ -165,7 +167,11 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
   // Triage writes to the shared team db, so it runs only when asked: --triage or .chemxrc autoTriage: true (#5480).
   const isTriageRequested = rawArgs.includes('--triage');
   const isTriageEnabled = isTriageRequested || projectConfig?.autoTriage === true;
-  const shouldTriage = isTriageEnabled && !isTriageOptOut && !isPartialIntent && hasIndexSync;
+  const isTriageEligible = !isTriageOptOut && !isPartialIntent && hasIndexSync;
+  const shouldTriage = isTriageEnabled && isTriageEligible;
+  // One run files at most TRIAGE_RUN_CAP tasks unless --triage-all (#5480).
+  const triageLimit = rawArgs.includes('--triage-all') ? undefined : TRIAGE_RUN_CAP;
+  const shouldPreview = !isTriageEnabled && isTriageEligible && isCli && !isJson;
   const isTriageIgnored = isTriageRequested && !shouldTriage && !isTriageOptOut;
   if (isTriageIgnored) {
     process.stderr.write('triage skipped: partial scan (--fast/--git/--staged) or --no-index\n');
@@ -182,7 +188,7 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
       syncViolationsIndex(syncRes.db, report.violations, { scope: isPartialAudit ? null : syncRes.scope });
       if (shouldTriage) {
         // Hazards come from this package's index; tasks go to the team db for the cwd (#2488).
-        const triaged = triageFromIndex(syncRes.db, { cwd: process.cwd(), targetDir });
+        const triaged = triageFromIndex(syncRes.db, { cwd: process.cwd(), targetDir, limit: triageLimit });
         const createdTasks = triaged.created;
         hasTriaged = true;
         const { listTasks } = await import('../team/index.js');
@@ -192,6 +198,18 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
         if (shouldLogTriage) {
           process.stdout.write(`\x1b[32m✔\x1b[0m Auto-triage synchronized ${createdTasks.length} team task(s) in SQLite backlog.\n`);
         }
+        const isCapped = triageLimit !== undefined && createdTasks.length >= triageLimit;
+        const shouldNoteCap = isCapped && isCli && !isJson;
+        if (shouldNoteCap) {
+          process.stdout.write(`Triage stopped at the ${triageLimit}-task cap; more hazards may remain. Run with --triage-all to file them all.\n`);
+        }
+      }
+      if (shouldPreview) {
+        // Dry run: nothing is written to the team db. The count is an estimate from this run's index.
+        const preview = triageFromIndex(syncRes.db, { cwd: process.cwd(), targetDir, dryRun: true });
+        const wouldCreate = preview.created.length;
+        const hasWouldCreate = wouldCreate > 0;
+        if (hasWouldCreate) process.stdout.write(`Triage would create ${wouldCreate} task(s) on the shared board; none were created. Run with --triage to file up to ${TRIAGE_RUN_CAP} (--triage-all for all).\n`);
       }
       const hasClonesFlag = rawArgs.includes('--clones');
       if (hasClonesFlag) {

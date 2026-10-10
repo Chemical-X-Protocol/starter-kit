@@ -26,11 +26,11 @@ const describeTriage = (tasks, skipped) => {
  * cwd's team db. Falls back to the index db only when no team db can be opened.
  * @returns {{ created: object[], teamDb: object, repo: string }}
  */
-export const triageFromIndex = (indexDb, { cwd, targetDir } = {}) => {
+export const triageFromIndex = (indexDb, { cwd, targetDir, limit, dryRun } = {}) => {
   const ctx = openTeamContext(cwd);
   const hasTeamDb = Boolean(ctx.db);
   const scope = hasTeamDb ? { teamDb: ctx.db, root: ctx.root, repo: ctx.repo } : { teamDb: indexDb, root: undefined, repo: '.' };
-  const created = autoGenerateTasksFromAudit(scope.teamDb, { cwd, targetDir, indexDb, root: scope.root, repo: hasTeamDb ? scope.repo : undefined });
+  const created = autoGenerateTasksFromAudit(scope.teamDb, { cwd, targetDir, limit, dryRun, indexDb, root: scope.root, repo: hasTeamDb ? scope.repo : undefined });
   return { created, teamDb: scope.teamDb, repo: scope.repo };
 };
 

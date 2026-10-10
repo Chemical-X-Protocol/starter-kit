@@ -8,6 +8,7 @@ import { openIndexDb } from './search-db.js';
 import { listTasks } from './team/team-db-tasks.js';
 import { handleAudit, handleGetRefactorPrompt } from './mcp/tools-audit.js';
 import { runAudit } from './commands/cmd-audit.js';
+import { triageFromIndex } from './team/team-commands-triage.js';
 
 const BAD_SOURCE = [
   'export const parse = (raw) => {',
@@ -47,7 +48,7 @@ test('mcp audit: creates no tasks unless triage is requested', () => {
   }
 });
 
-const auditTaskCount = async (args, { needsViolations = true, commit = false } = {}) => {
+const auditTaskCount = async (args, { needsViolations = true, commit = false, config = {} } = {}) => {
   const cwd = makeProject();
   if (commit) commitAll(cwd);
   const original = process.cwd();
@@ -55,7 +56,7 @@ const auditTaskCount = async (args, { needsViolations = true, commit = false } =
   try {
     process.chdir(cwd);
     process.stdout.write = () => true;
-    const report = await runAudit(undefined, false, ['--json', '--dir=src', ...args], () => ({}));
+    const report = await runAudit(undefined, false, ['--json', '--dir=src', ...args], () => config);
     process.stdout.write = originalWrite;
     if (needsViolations) assert.ok(report.totalViolations > 0, 'fixture must produce violations');
     return { count: taskCount(cwd), report };
@@ -80,6 +81,29 @@ test('cli audit: --triage reports the rules that have tasks', async () => {
 test('cli audit: --triage stays accepted and still triages', async () => {
   const { count } = await auditTaskCount(['--triage']);
   assert.ok(count > 0);
+});
+
+test('cli audit: .chemxrc autoTriage true triages without --triage, and --no-triage still wins', async () => {
+  const on = await auditTaskCount([], { config: { autoTriage: true } });
+  assert.ok(on.count > 0);
+  const off = await auditTaskCount(['--no-triage'], { config: { autoTriage: true } });
+  assert.strictEqual(off.count, 0);
+});
+
+test('triageFromIndex: dryRun counts without writing, limit caps a run', () => {
+  const cwd = makeProject();
+  try {
+    handleAudit({ path: 'src' }, cwd);
+    const indexDb = openIndexDb(cwd);
+    const preview = triageFromIndex(indexDb, { cwd, targetDir: 'src', dryRun: true });
+    assert.ok(preview.created.length > 0, 'fixture has hazards to preview');
+    assert.strictEqual(taskCount(cwd), 0, 'dry run leaves agent_tasks unchanged');
+    const capped = triageFromIndex(indexDb, { cwd, targetDir: 'src', limit: 1 });
+    assert.strictEqual(capped.created.length, 1);
+    assert.strictEqual(taskCount(cwd), 1);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
 });
 
 test('cli audit: --no-triage creates no tasks', async () => {
