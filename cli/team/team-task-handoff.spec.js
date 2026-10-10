@@ -9,6 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { openIndexDb } from '../search-schema.js';
 import { claimTask, getTask } from './team-db-tasks.js';
+import { requestFileLock, listActiveLeases } from './team-db-locks.js';
 import { queryFeed } from './team-db-feed.js';
 import { completeTaskWithAudit } from './team-triage.js';
 import { runTeamCli } from './team-commands.js';
@@ -98,6 +99,31 @@ test('handoff: a refused claim names the handoff path', (t) => {
   assert.equal(res.reason, 'already_claimed');
   assert.match(res.message, new RegExp(`chemx team task handoff ${id} @bob --as=<them>`));
   assert.match(res.message, /@alice or the task creator/);
+});
+
+const leaseOwners = (db) => Object.fromEntries(listActiveLeases(db).map((lease) => [lease.file_path, lease.locked_by]));
+
+test('handoff --with-locks: moves live leases naming the task, not other tasks or expired ones (#5740)', (t) => {
+  const { root, db, id } = makeBoard(t);
+  requestFileLock(db, 'cli/a.js', '@alice', { purpose: `#${id}` });
+  requestFileLock(db, 'cli/other.js', '@alice', { purpose: `#${id}9` });
+  requestFileLock(db, 'cli/old.js', '@alice', { purpose: `#${id}`, ttlMs: 1 });
+  const res = runTeamCli(['task', 'handoff', String(id), '@bob', '--as=@alice', '--with-locks'], false, root);
+  assert.equal(res.success, true);
+  assert.deepEqual(res.movedLeases.map((lease) => lease.file_path), ['cli/a.js']);
+  const owners = leaseOwners(db);
+  assert.equal(owners['cli/a.js'], '@bob');
+  assert.equal(owners['cli/other.js'], '@alice');
+  const event = queryFeed(db, { task_id: id, event_type: 'lock_transferred' })[0];
+  assert.deepEqual(event.metadata, { from: '@alice', to: '@bob', by: '@alice' });
+});
+
+test('handoff without --with-locks leaves every lease with the old holder (#5740)', (t) => {
+  const { root, db, id } = makeBoard(t);
+  requestFileLock(db, 'cli/a.js', '@alice', { purpose: `#${id}` });
+  handoff(root, id, '@bob', '@alice');
+  assert.equal(leaseOwners(db)['cli/a.js'], '@alice');
+  assert.equal(queryFeed(db, { task_id: id, event_type: 'lock_transferred' }).length, 0);
 });
 
 test('handoff: the task help card lists it', () => {

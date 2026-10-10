@@ -19,7 +19,7 @@ const splitIdTokens = (text) => text.split(',').map((token) => token.trim()).fil
  * here), and no per-subcommand list exists yet, so this cannot reject a flag by itself (#4554).
  */
 export const PARSED_TEAM_FLAGS = Object.freeze([
-  '--json', '--compact', '--mark-read', '--force', '--no-target-confirm', '--help', '--as', '--to', '--since',
+  '--json', '--compact', '--mark-read', '--force', '--with-locks', '--no-target-confirm', '--help', '--as', '--to', '--since',
   '--limit', '--max-agents', '--per-agent', '--max-tasks-per-agent', '--thread', '--task', '--parent', '--type',
   '--status', '--all', '--agent', '--target', '--tier', '--rule', '--prio', '--priority', '--new', '--purpose',
   '--pid', '--tokens', '--prompt-tokens', '--completion-tokens', '--cached-tokens', '--cost', '--model', '--desc',
@@ -44,6 +44,7 @@ export const parseFlags = (args = []) => {
     markRead: hasMarkReadFlag,
     force: hasForceFlag,
     noTargetConfirm: hasNoTargetConfirmFlag,
+    withLocks: args.includes('--with-locks'),
     help: hasHelpFlag
   };
   for (let i = 0; i < args.length; i++) {
