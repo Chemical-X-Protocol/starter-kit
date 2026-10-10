@@ -70,7 +70,7 @@ const protocolLines = (p) => [
   ...list(p.unresolvedEdits ?? [], (e) => `${at(e.at)} ${who(e)} ${e.verb} ${e.file}`),
   `  claims never closed: ${p.unclosedClaims.length}`,
   ...list(p.unclosedClaims, (c) => `${who(c)} task #${c.task}`),
-  `  subagent acted as orchestrator (state-changing chemx call with no identity in its text): ${(p.asOrchestrator ?? []).length}`,
+  `  subagent acted as orchestrator (state-changing Bash chemx call with no identity in its text, or naming the orchestrator; MCP calls are not checked): ${(p.asOrchestrator ?? []).length}`,
   ...list(p.asOrchestrator ?? [], (c) => `${at(c.at)} ${who(c)} ${c.command}`)
 ];
 

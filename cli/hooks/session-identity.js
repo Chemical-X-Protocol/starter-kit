@@ -41,6 +41,12 @@ export const sessionIdentity = (payload, env = process.env) => {
 const ACTING_COMMANDS = new Set(['write', 'patch', 'commit', 'autofix', 'generate', 'verify', 'test']);
 const ACTING_TEAM_WORDS = new Set(['claim', 'acquire', 'release', 'handoff', 'done', 'comment', 'add', 'update', 'post', 'dm']);
 
+// `chemx do "write a.js" "verify"`: each quoted sub-command is acting on its own.
+const subCommandWords = (sub) => {
+  const words = String(sub ?? '').trim().split(/\s+/).filter(Boolean);
+  return words[0] === 'chemx' ? words.slice(1) : words;
+};
+
 /** True for a transcript path inside a `subagents` directory (Agent tool and workflow agents). */
 export const isSubagentTranscript = (transcriptPath) => {
   const hasPath = typeof transcriptPath === 'string' && transcriptPath !== '';
@@ -52,7 +58,8 @@ export const isActingChemxArgs = (args = []) => {
   const [head, ...rest] = args;
   const isTeam = head === 'team';
   const isTeamAction = isTeam && rest.slice(0, 2).some((word) => ACTING_TEAM_WORDS.has(word));
-  return ACTING_COMMANDS.has(head) || isTeamAction;
+  const isBatchAction = head === 'do' && rest.some((sub) => isActingChemxArgs(subCommandWords(sub)));
+  return ACTING_COMMANDS.has(head) || isTeamAction || isBatchAction;
 };
 
 /** The inherited orchestrator handle a subagent call at this payload would act as, or null. */
@@ -64,14 +71,15 @@ export const inheritedOrchestratorHandle = (payload) => {
 };
 
 /** True when the command runs a state-changing chemx call and some chemx call in it names no identity. */
-export const hasAnonymousActingCall = (command) => {
+export const hasAnonymousActingCall = (command, inheritedHandle = null) => {
   const text = String(command ?? '');
   const isActing = (parsed) => {
     const invocation = parsed.argv.length > 0 ? resolveInvocation(parsed.argv) : null;
     return invocation !== null && isChemxInvocation(invocation) && isActingChemxArgs(invocation.args);
   };
   const acts = parseShell(text).commands.some(isActing);
-  return acts && !everyChemxCallCarriesIdentity(text);
+  const namesInherited = inheritedHandle !== null && text.includes(inheritedHandle);
+  return acts && (namesInherited || !everyChemxCallCarriesIdentity(text));
 };
 
 export const orchestratorActingReason = (handle) => `chemx identity: this call would act as the orchestrator ${handle}, because subagents inherit its CHEMX_AGENT_ID, so a lease, claim or commit would be attributed to it. `

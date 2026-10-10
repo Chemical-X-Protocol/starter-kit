@@ -111,7 +111,7 @@ const decideDispatchIdentity = (command, context) => {
 // A subagent's anonymous state-changing chemx call would resolve to the orchestrator it inherits (#4562).
 const decideInheritedIdentity = (command, context) => {
   const handle = context.inheritedHandle ?? null;
-  const isInherited = handle !== null && hasAnonymousActingCall(command);
+  const isInherited = handle !== null && hasAnonymousActingCall(command, handle);
   return isInherited ? { decision: 'deny', rule: 'inherited-identity', segment: command.slice(0, SEGMENT_LIMIT), reason: orchestratorActingReason(handle) } : null;
 };
 

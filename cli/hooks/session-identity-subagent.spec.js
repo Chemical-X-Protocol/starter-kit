@@ -65,3 +65,17 @@ test('guard: identity in the text, a read-only call, or the main session is allo
   assert.equal(decide(SUB, 'chemx read cli/a.js').decision, 'allow');
   assert.equal(decide(MAIN, 'chemx write cli/a.js --stdin').decision, 'allow');
 });
+
+test('guard: a chemx do batch is acting when any quoted sub-command is', () => {
+  assert.equal(isActingChemxArgs(['do', 'write a.js', 'verify']), true);
+  assert.equal(isActingChemxArgs(['do', 'read a.js', 'team status']), false);
+  assert.equal(decide(SUB, 'chemx do "write a.js" "verify"').rule, 'inherited-identity');
+  assert.equal(decide(SUB, 'chemx do "read a.js" "q foo"').decision, 'allow');
+  assert.equal(decide(SUB, 'chemx do "write a.js" --as=@sub').decision, 'allow');
+});
+
+test('guard: naming the orchestrator handle explicitly is denied for a subagent', () => {
+  assert.equal(decide(SUB, 'CHEMX_AGENT_ID=@claude-3f9a1c7e chemx write a.js').rule, 'inherited-identity');
+  assert.equal(decide(SUB, 'chemx team task claim 1 --as=@claude-3f9a1c7e').rule, 'inherited-identity');
+  assert.equal(decide(MAIN, 'CHEMX_AGENT_ID=@claude-3f9a1c7e chemx write a.js').decision, 'allow');
+});

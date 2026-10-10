@@ -24,6 +24,7 @@ import { openTeamContext } from './coordination-db.js';
 import { renderAuditRun } from './audit-run-render.js';
 import { crossCheckShas } from './audit-run-shas.js';
 import { anonymousActingCalls } from './audit-run-identity.js';
+import { toSessionHandle } from './agent-identity.js';
 import { leaseLapses, leaseWaiters, guardBypasses, guardCrashes, leasesTaken, taskStatuses } from './audit-run-db.js';
 
 const median = (values) => {
@@ -75,6 +76,13 @@ const blockedOf = (invs, agent, roots, home) => {
 
 const claimedIds = (invs) => invs.filter((i) => i.kind === 'chemx' && i.argv[0] === 'team' && i.argv[2] === 'claim').map((i) => Number(i.argv[3])).filter(Number.isFinite);
 
+// The orchestrator session id is the directory above `subagents` in the run path.
+const inheritedOf = (run) => {
+  const parts = String(run.dir ?? '').split(/[\\/]/);
+  const at = parts.lastIndexOf('subagents');
+  return at > 0 ? toSessionHandle(parts[at - 1]) : null;
+};
+
 const auditAgent = (run, agent, row, ctx) => {
   const parsed = readAgentCalls(run, agent);
   const invs = parsed.calls.flatMap((call) => invocationsOf(call).map((inv) => ({ ...inv, isDenied: call.isDenied === true })));
@@ -91,7 +99,7 @@ const auditAgent = (run, agent, row, ctx) => {
     unleased: editsWithoutLease(invs, taken).map((e) => ({ ...who(agent), ...e })),
     unresolved: unresolvedEdits(invs).map((e) => ({ ...who(agent), ...e })),
     unclosed: unclosedClaims(invs, statuses).map((id) => ({ ...who(agent), task: id })),
-    asOrchestrator: anonymousActingCalls(invs).map((c) => ({ ...who(agent), ...c })),
+    asOrchestrator: anonymousActingCalls(invs, inheritedOf(run)).map((c) => ({ ...who(agent), ...c })),
     edits: resolvedEdits(invs).map((e) => ({ at: e.at, key: e.key })),
     parsed, steps
   };

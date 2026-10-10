@@ -147,6 +147,20 @@ test('protocol: unleased edits, commits without a task id, unclosed claims', (t)
   assert.deepEqual(protocol.unclosedClaims.map((c) => `${c.handle} #${c.task}`), ['@dirty-two #22']);
 });
 
+test('subagent acted as orchestrator: an anonymous acting call becomes a violation row', (t) => {
+  const env = makeEnv(t);
+  const anon = { id: 'a4', label: 'fix:cli/x.js', lines: [
+    user(BASE, env.repo, taskText('@anon-four', 44, 'cli/x.js')),
+    bash(BASE + 1000, env.repo, 'chemx write cli/x.js --stdin'),
+    bash(BASE + 2000, env.repo, 'chemx read cli/x.js')
+  ] };
+  writeRun(env, 'wf_anon', [anon]);
+  const report = audit(env, 'wf_anon');
+  assert.deepEqual(report.protocol.asOrchestrator.map((c) => `${c.handle} ${c.command}`), ['@anon-four chemx write cli/x.js --stdin']);
+  assert.ok(report.violations.some((v) => /subagent acted as orchestrator/.test(v)));
+  assert.match(renderAuditRun(report), /subagent acted as orchestrator[^\n]*: 1\n[^\n]*@anon-four chemx write cli\/x\.js/);
+});
+
 test('a lease the db shows the agent took covers its edit', (t) => {
   const env = makeEnv(t);
   writeRun(env, 'wf_dirty', [dirtyAgent(env.repo)]);
