@@ -116,6 +116,38 @@ test('audit scope: verify resolves a monorepo --dir once, from the caller direct
   });
 });
 
+const makeMonorepo = (root) => {
+  fs.writeFileSync(path.join(root, 'pnpm-workspace.yaml'), "packages:\n  - 'apps/*'\n");
+  fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ name: 'mono', scripts: { test: 'node -e ""', typecheck: 'node -e ""' } }));
+  fs.mkdirSync(path.join(root, 'apps/a'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'apps/a/package.json'), JSON.stringify({ name: 'a' }));
+  fs.writeFileSync(path.join(root, 'apps/a/bad.js'), 'export const a = 1;\n');
+  fs.writeFileSync(path.join(root, 'src/x.js'), 'export const x = 1;\n');
+};
+
+test('audit scope: workspace root narrows to src/ and names the excluded packages only when asked', async () => {
+  await withProject({ dirs: ['src', 'apps/a'] }, (root) => {
+    makeMonorepo(root);
+    const plain = resolveAuditScope({ projectRoot: root });
+    assert.strictEqual(plain.relDir, '.');
+    const narrowed = resolveAuditScope({ projectRoot: root, narrowWorkspaceRoot: true });
+    assert.strictEqual(narrowed.source, 'workspace-root');
+    assert.strictEqual(narrowed.relDir, 'src');
+    assert.deepStrictEqual(narrowed.excluded, ['apps/a']);
+    const explicit = resolveAuditScope({ projectRoot: root, explicitDir: 'apps/a', narrowWorkspaceRoot: true });
+    assert.strictEqual(explicit.source, 'explicit');
+  });
+});
+
+test('audit scope: verify at a temp monorepo root audits src/ only and reports the excluded packages', async () => {
+  await withProject({ dirs: ['src', 'apps/a', 'node_modules'] }, async (root) => {
+    makeMonorepo(root);
+    const summary = await runProjectVerify(['--json', '--allow-empty'], false, { cwd: root, print: false });
+    const rootEntry = summary.packages.find((pkg) => pkg.dir === '.');
+    assert.deepStrictEqual(rootEntry.scope, { dir: 'src', source: 'workspace-root', excluded: ['apps/a'] });
+  });
+});
+
 test('audit scope: verify names what typecheck and tests ran, since only the audit is scoped', async () => {
   await withProject({ dirs: ['src', 'node_modules'] }, async (root) => {
     fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ name: 'p', scripts: { test: 'node -e ""', typecheck: 'node -e ""' } }));

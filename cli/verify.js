@@ -85,7 +85,7 @@ export const runProjectVerify = async (rawArgs = [], isCli = false, options = {}
     const runInPackage = (pkg, args) => runProjectVerify(args, false, { ...packageOptions, cwd: pkg.dir });
     return emitWorkspace(await verifyWorkspace(workspace, flags, runInPackage), { isJson, isCli, shouldPrint }, formatVerifyLine);
   }
-  const scope = resolveAuditScope({ projectRoot: cwd, explicitDir: explicitAbsDir });
+  const scope = resolveAuditScope({ projectRoot: cwd, explicitDir: explicitAbsDir, narrowWorkspaceRoot: true });
 
   const nmStatus = checkNodeModules(cwd);
   if (nmStatus) {
@@ -138,7 +138,8 @@ export const runProjectVerify = async (rawArgs = [], isCli = false, options = {}
   const gate = computeGateVerdict({ projectRoot: cwd, scope: scope.relDir, violations: auditReport.violations, isPartialScan: Boolean(changes) });
   const auditStatus = gate.isPassing ? STATUS.PASS : STATUS.FAIL;
   const auditText = `${auditReport.health.grade} (${auditReport.health.score}/100, ${auditReport.totalViolations} violations)`;
-  const auditScope = changes ? `${changes.files.length} changed file(s) vs ${changes.base}` : `${scope.relDir}/`;
+  const excludedNote = scope.excluded ? `, ${scope.excluded.length} package/submodule dir(s) not audited (--all-packages runs their own audits)` : '';
+  const auditScope = changes ? `${changes.files.length} changed file(s) vs ${changes.base}` : `${scope.relDir}/${excludedNote}`;
   progress.finish(stepLine(auditStatus, 'AST Architecture', auditText, `${auditScope}, ${gate.basis} gate`));
 
   // Only the audit is scoped; typecheck, tests and build run project-wide, so each line names its command.
@@ -163,7 +164,7 @@ export const runProjectVerify = async (rawArgs = [], isCli = false, options = {}
   const summary = {
     status,
     success: status === STATUS.PASS,
-    scope: changes ? { dir: scope.relDir, source: 'changed', base: changes.base, files: changes.files, typecheck: 'whole project' } : { dir: scope.relDir, source: scope.source, ...(listing && !listing.ok ? { changedError: listing.error } : {}) },
+    scope: changes ? { dir: scope.relDir, source: 'changed', base: changes.base, files: changes.files, typecheck: 'whole project' } : { dir: scope.relDir, source: scope.source, ...(scope.excluded ? { excluded: scope.excluded } : {}), ...(listing && !listing.ok ? { changedError: listing.error } : {}) },
     architecturalWarning,
     audit: {
       status: auditStatus,
