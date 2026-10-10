@@ -6,8 +6,9 @@
  * backoff until a deadline. Guarantee: retries only statements issued outside an open transaction on
  * this handle; a statement inside a transaction still fails on first busy, because replaying it could
  * hide a lost snapshot. Not guaranteed: the wait is bounded (default 30 s), then the busy error is thrown.
- * CHEMX_DB_SLOW_TX_MS (default off): log transactions on a patched handle held longer than that, with
- * the call site, to stderr.
+ * CHEMX_DB_SLOW_TX_MS (default off): log transactions, and single autocommit run() statements, on a patched
+ * handle held longer than that, with the call site, to stderr. Not logged: exec() outside BEGIN/COMMIT and
+ * get/all reads. The log names the slow holder's call site, not who blocked a waiter.
  */
 import fs from 'node:fs';
 import { isSqliteBusyError } from './team-db-transaction.js';
@@ -124,10 +125,25 @@ const watchTransactions = (rawExec) => {
   };
 };
 
+/** Times one autocommit write (run outside a transaction) and logs it when it exceeds the slow threshold. */
+const timedRun = (db, raw, args) => {
+  const threshold = slowTxMs();
+  const isWatched = Boolean(threshold) && db.isTransaction !== true;
+  if (!isWatched) return raw(...args);
+  const site = callSite();
+  const at = Date.now();
+  const out = raw(...args);
+  const held = Date.now() - at;
+  const isSlow = held > threshold;
+  if (isSlow) process.stderr.write(`[chemx-db] autocommit statement held ${held} ms (pid ${process.pid}) at ${site}\n`);
+  return out;
+};
+
 const patchStatement = (db, stmt) => {
   for (const name of STMT_METHODS) {
     const raw = stmt[name].bind(stmt);
-    stmt[name] = (...args) => retryBusy(db, () => raw(...args));
+    const call = name === 'run' ? (...args) => timedRun(db, raw, args) : raw;
+    stmt[name] = (...args) => retryBusy(db, () => call(...args));
   }
   return stmt;
 };
