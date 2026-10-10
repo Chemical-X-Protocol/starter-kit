@@ -168,7 +168,7 @@ export const groupNamed = (rows, context) => {
 // is linked only on body evidence; a group is a clique of linked rows. N4 groups are review
 // candidates: needsLgg is true, the bodies are assumed to differ in behavior (behaviorDelta), and N4
 // ranks below N1-N3, so they are never an auto-heal.
-export const N4_EVIDENCE = Object.freeze({ minNameLength: 6, minMass: 8, minJaccard: 0.6, minLiteralLength: 4, minRegexPrefix: 10 });
+export const N4_EVIDENCE = Object.freeze({ minNameLength: 6, minMass: 8, minJaccard: 0.6, minTwins: 3, minLiteralLength: 4, minRegexPrefix: 10 });
 
 // Names too generic to say anything (also declared by unrelated code in many files).
 export const N4_STOPLIST = new Set([
@@ -239,19 +239,35 @@ const linkedCliques = (unsortedRows) => {
     members.forEach((member) => taken.add(member));
     return members;
   };
+  // The shared name is never enough: a clique needs a second signal. Either 3+ twins whose anchor sets
+  // overlap, or one pair of members that shares a distinctive literal or regex prefix.
+  const hasSecondSignal = (members) => members.length >= N4_EVIDENCE.minTwins
+    || members.some((left, i) => members.slice(i + 1).some((right) => sharesLiteral(anchors[left], anchors[right])));
   rows.forEach((row, seed) => {
     const members = taken.has(seed) ? [] : cliqueFrom(seed);
-    const isTwinGroup = members.length > 1;
+    const isTwinGroup = members.length > 1 && hasSecondSignal(members);
     if (isTwinGroup) cliques.push(members.map((member) => rows[member]));
   });
   return cliques;
 };
 
-/** N4: same normalized declared name (6+ characters, not stoplisted), same facet, 2+ files, body evidence. */
-export const groupNameTwins = (rows, context) => {
+// A row inside a span a stronger group of a different shape (stmt, expr, window) already claims is that
+// group's business: a name shared with another file is no reason to report the same code twice.
+const createClaimTest = (stronger) => {
+  const claims = stronger.filter((group) => group.kind !== 'fn').flatMap((group) => group.instances ?? []);
+  return (row) => claims.some((span) => span.file === row.file_path && span.start < row.end && row.start < span.end);
+};
+
+/**
+ * N4: same normalized declared name (6+ characters, not stoplisted), same facet, 2+ files, a second
+ * signal beyond the name (see linkedCliques). options.stronger: the groups already found; a row
+ * overlapping a member of one of them that is not an fn group never joins an N4 group.
+ */
+export const groupNameTwins = (rows, context, { stronger = [] } = {}) => {
   const buckets = new Map();
+  const isClaimed = createClaimTest(stronger);
   for (const row of rows) {
-    const isCandidate = isN4Candidate(row);
+    const isCandidate = isN4Candidate(row) && !isClaimed(row);
     if (isCandidate) pushTo(buckets, `${row.facet_key}|${nameKeyOf(row.decl_name)}`, row);
   }
   return [...buckets.values()]

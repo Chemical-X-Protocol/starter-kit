@@ -129,8 +129,9 @@ export const buildForgeGroups = (ledger, { readFile = () => null, unify, include
   const { rows } = ledger;
   const stage = createLggStage({ rows, readFile, ubiquitousOf: context.ubiquitousOf, contentHashes: ledger.contentHashes, cache });
   const unifyStep = unify === undefined ? stage.unify : unify;
+  const strongerFound = [...groupExact(rows, context), ...groupWindows(rows, context), ...groupNamed(rows, context)];
   const found = [
-    ...groupExact(rows, context), ...groupWindows(rows, context), ...groupNamed(rows, context), ...groupNameTwins(rows, context),
+    ...strongerFound, ...groupNameTwins(rows, context, { stronger: strongerFound }),
     ...groupSiblings(rows, context, { unify: unifyStep }), ...groupTemplateSiblings(rows, context), ...groupTemplates(rows, context)
   ];
   const unique = dedupeById(found.sort(byPathThenLocation));

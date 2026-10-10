@@ -57,3 +57,16 @@ test('N4 ranks below N1-N3 and the hole codes do not reject it', () => {
   assert.equal(judgeLgg(manyHoles, { path: 'N4', kind: 'fn' }).ok, true);
   assert.equal(judgeLgg(manyHoles, { path: 'N3', kind: 'fn' }).ok, false);
 });
+
+test('the same name plus a shared literal in a pair is a group', () => {
+  const left = ['call:read', 'str:"utf-8"'];
+  const right = ['call:read', 'str:"utf-8"', 'call:parse'];
+  assert.equal(groupNameTwins([row('a.js', 'readThing', left), row('b.js', 'readThing', right)], context).length, 1);
+});
+
+test('a row inside a stmt group of a stronger path is not an N4 member', () => {
+  const rows = [row('a.js', 'readThing', ANSI_A), row('b.js', 'readThing', ANSI_B)];
+  const stronger = [{ kind: 'stmt', instances: [{ file: 'a.js', start: 5, end: 20 }] }];
+  assert.deepEqual(groupNameTwins(rows, context, { stronger }), []);
+  assert.equal(groupNameTwins(rows, context, { stronger: [{ kind: 'fn', instances: [{ file: 'a.js', start: 5, end: 20 }] }] }).length, 1);
+});
