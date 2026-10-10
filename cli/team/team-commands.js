@@ -119,5 +119,10 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
   // Every task-id argument (positional id, --parent, --task, --deps) resolves for the caller's repo.
   const taskAction = args.subCommand === 'task' ? (args.positionals[0] || 'list') : '';
   const resolved = resolveTaskIdArgs(ctx.db, ctx, taskAction, args.positionals, args.flags, isCli);
+  const isRefused = Boolean(resolved.refusal);
+  if (isRefused) {
+    if (isCli) process.stderr.write(`\x1b[31m✕ ${resolved.refusal}\x1b[0m\n`);
+    return { error: resolved.refusal, refused: true };
+  }
   return runSubCommand(ctx, { ...args, positionals: resolved.positionals, flags: resolved.flags }, isCli, cwd);
 };

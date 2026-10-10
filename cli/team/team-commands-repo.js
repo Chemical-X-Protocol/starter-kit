@@ -39,10 +39,26 @@ const writeNotices = (notices, isCli) => {
 };
 
 /**
+ * Refusal text for a malformed argument the shell most likely mangled, or null. A task id with
+ * whitespace after its digits is two words passed as one; an empty --target= has no value.
+ */
+export const describeShellMangledArg = (taskAction, positionals, flags) => {
+  const idArg = ID_ARG_ACTIONS.has(taskAction) ? positionals[1] : undefined;
+  const isSpacedId = typeof idArg === 'string' && /^\d+\s+\S/.test(idArg);
+  if (isSpacedId) return `task id "${idArg}" contains a space: your shell passed two words as one (zsh does not split $var; use \${=p} or an array)`;
+  const isEmptyTarget = flags.target === '' || flags.target === true;
+  if (isEmptyTarget) return '--target needs a value but got an empty one: check that the shell variable you passed is set (an unset or unsplit variable expands to nothing)';
+  return null;
+};
+
+/**
  * Resolves every task-id argument for the caller's repo. Returns new positionals and flags (the
  * inputs are not mutated) plus the ambiguity notices, already printed to stderr for the CLI.
+ * A malformed argument returns `refusal` text and resolves nothing.
  */
 export const resolveTaskIdArgs = (db, context, taskAction, positionals, flags, isCli) => {
+  const refusal = describeShellMangledArg(taskAction, positionals, flags);
+  if (refusal) return { positionals, flags, notices: [], refusal };
   const notices = [];
   const resolveOne = (raw) => {
     const ref = resolveTaskRef(db, raw, { repo: context.repo });
