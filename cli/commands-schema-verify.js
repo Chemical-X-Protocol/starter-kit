@@ -13,7 +13,11 @@ export const VERIFY_COMMANDS = [
       { flag: '--build', desc: 'Include production build audit step' },
       { flag: '--changed', desc: 'Audit only changed source files and run only the affected specs; typecheck stays whole-project' },
       { flag: '--base=<rev>', desc: 'With --changed: compare against this revision' },
-      { flag: '--json', desc: 'Output the status card as JSON' }
+      { flag: '--json', desc: 'Output the status card as JSON' },
+      { flag: '--allow-empty', desc: 'Accepted by verify; its effect is not documented here' },
+      { flag: '--all-packages', desc: 'Accepted by verify; its effect is not documented here' },
+      { flag: '--timeout=<n>', desc: 'Accepted by verify; the unit and scope are not documented here' },
+      { flag: '--profile', desc: 'Accepted by verify; its effect is not documented here' }
     ],
     examples: ['chemx verify', 'chemx verify --json']
   },
@@ -112,7 +116,10 @@ export const VERIFY_COMMANDS = [
     usage: 'chemx trend [options]',
     summary: 'Show audit score history recorded in the index.',
     description: 'Reads audit snapshots from .chemx/index.db.',
-    flags: [{ flag: '--json', desc: 'Output snapshots as JSON' }],
+    flags: [
+      { flag: '--json', desc: 'Output snapshots as JSON' },
+      { flag: '--limit=<n>', desc: 'Accepted by trend; whether the handler reads it is not traced' }
+    ],
     examples: ['chemx trend']
   },
   {
@@ -123,7 +130,14 @@ export const VERIFY_COMMANDS = [
     usage: 'chemx badge [options]',
     summary: 'Generate the architectural grade badge.',
     description: 'Writes chemx-badge.svg from the latest audit.',
-    flags: [],
+    flags: [
+      { flag: '--grade=<A|B|C|D|F>', desc: 'Accepted by badge; its effect is not documented here' },
+      { flag: '--label=<text>', desc: 'Accepted by badge; its effect is not documented here' },
+      { flag: '--report-url=<url>', desc: 'Accepted by badge; its effect is not documented here' },
+      { flag: '--discussion=<url>', desc: 'Accepted by badge; its effect is not documented here' },
+      { flag: '--format=<fmt>', desc: 'Accepted by badge; its effect is not documented here' },
+      { flag: '--copy', desc: 'Accepted by badge; its effect is not documented here' }
+    ],
     examples: ['chemx badge']
   },
   {
