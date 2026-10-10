@@ -188,3 +188,35 @@ test('cold audit: uncapped fingerprinting costs at most +15%', { todo: COLD_TODO
   assert.ok(withForge.cpuMs <= limitMs, `cold audit ${withForge.cpuMs.toFixed(0)}ms CPU > ${limitMs.toFixed(0)}ms`);
   assert.ok(withForge.ms <= Math.max(without.ms, 1) * WALL_SANITY_FACTOR, `cold audit wall ${withForge.ms.toFixed(0)}ms is past the loose sanity bound`);
 });
+
+// Gates that hold today: a generous CPU-time ratio, so a real regression fails while load alone does not.
+// They do not show the strict budgets above are met (they are not, #2554); they bound how far off they are.
+const GATE_SYNC_FACTOR = 3;
+const GATE_AUDIT_RATIO = 4;
+
+test('cold sync gate: CPU time stays within 3x of the strict per-file budget', (t) => {
+  sync(makeProject(t));
+  const cold = timed(() => sync(makeProject(t)));
+  const limitMs = calibratedLimit(BUDGET.coldSyncMsPerFile * CORPUS.length) * GATE_SYNC_FACTOR;
+  t.diagnostic(`cold sync gate ${cold.cpuMs.toFixed(0)}ms CPU, limit ${limitMs.toFixed(0)}ms CPU (${cold.ms.toFixed(0)}ms wall)`);
+  assert.equal(cold.result.parsed, CORPUS.length);
+  assert.ok(cold.cpuMs <= limitMs, `cold sync ${cold.cpuMs.toFixed(0)}ms CPU > ${limitMs.toFixed(0)}ms`);
+  assert.ok(cold.ms <= limitMs * WALL_SANITY_FACTOR, `cold sync wall ${cold.ms.toFixed(0)}ms is past the loose sanity bound`);
+});
+
+test('cold audit gate: uncapped fingerprinting costs at most 4x the audit alone in CPU time', (t) => {
+  const uncapped = { fingerprint: true, fingerprintBudget: { share: 1, allowanceChars: Infinity } };
+  audit(makeProject(t), uncapped);
+  const withRuns = [];
+  const withoutRuns = [];
+  for (let round = 0; round < 2; round += 1) {
+    withRuns.push(timed(() => audit(makeProject(t), uncapped)));
+    withoutRuns.push(timed(() => audit(makeProject(t))));
+  }
+  const fastest = (runs) => runs.reduce((best, run) => (run.cpuMs < best.cpuMs ? run : best));
+  const withForge = fastest(withRuns);
+  const without = fastest(withoutRuns);
+  t.diagnostic(`cold audit gate ${withForge.cpuMs.toFixed(0)}ms CPU with, ${without.cpuMs.toFixed(0)}ms without`);
+  assert.equal(withForge.result.fingerprint.fingerprinted, CORPUS.length);
+  assert.ok(withForge.cpuMs <= without.cpuMs * GATE_AUDIT_RATIO, `cold audit ${withForge.cpuMs.toFixed(0)}ms CPU > ${GATE_AUDIT_RATIO}x ${without.cpuMs.toFixed(0)}ms`);
+});
