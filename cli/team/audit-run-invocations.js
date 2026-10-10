@@ -48,6 +48,8 @@ const bashInvocations = (call) => {
   const isScratch = isScratchText(command);
   const result = [];
   const vars = {};
+  const isOneEdit = commands.filter((cmd) => chemxArgs(cmd.argv)?.[0] === 'patch').length === 1;
+  const printedPath = isOneEdit ? call.printedPath ?? null : null;
   commands.forEach((cmd, index) => {
     const isEmpty = cmd.argv.length === 0 && cmd.redirects.length === 0;
     if (isEmpty) return;
@@ -62,7 +64,8 @@ const bashInvocations = (call) => {
     const isSegmentScratch = isScratchText(ownText);
     result.push({
       via: 'bash', kind: isChemx ? 'chemx' : 'shell', at: call.at, cwd: call.cwd, raw: command,
-      argv: isChemx ? args : cmd.argv, redirects: cmd.redirects, dir, isPiped, isScratch, isSegmentScratch, vars: { ...vars, ...own }
+      argv: isChemx ? args : cmd.argv, redirects: cmd.redirects, dir, isPiped, isScratch, isSegmentScratch, vars: { ...vars, ...own },
+      printedPath: isChemx && args[0] === 'patch' ? printedPath : null
     });
   });
   return result;

@@ -93,7 +93,7 @@ const displayOf = (inv, absolute) => {
 
 // Two spellings of one file: equal, or an absolute path ending in the other's root-relative form (the feed and
 // the lease table store paths relative to the coordination root).
-const sameFile = (a, b) => {
+export const sameFile = (a, b) => {
   const isEqual = a === b;
   const aAbs = path.isAbsolute(a);
   const bAbs = path.isAbsolute(b);
@@ -182,6 +182,9 @@ export const editsWithoutLease = (invs, taken = []) => {
   }
   return result;
 };
+
+/** Every counted edit with a resolved path: [{ at, key, file, verb }]. Lets the lease audit compare edits to lapses (#4543). */
+export const resolvedEdits = (invs) => invs.map(editOf).filter((e) => e && e.key !== null);
 
 /** Edits whose path could not be resolved (an unset variable, a substitution, an unknown cd): not judged either way. */
 export const unresolvedEdits = (invs) => invs.map(editOf)

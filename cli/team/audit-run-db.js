@@ -17,6 +17,7 @@
  */
 import { safeAll } from './team-db-readonly.js';
 import { DEFAULT_LEASE_CAP_MS } from './lease-cap.js';
+import { sameFile } from './audit-run-protocol.js';
 
 const SLACK_MS = 15 * 60 * 1000;
 const LOCK_EVENTS = "('lock_acquired','lock_granted','lock_released','lock_expired')";
@@ -45,10 +46,19 @@ const agentFor = (agents, handle, at) => {
 const lapseRows = (db, win) => safeAll(db, "SELECT * FROM agent_feed WHERE event_type = 'lock_expired' AND timestamp >= ? AND timestamp <= ? ORDER BY id", [win.from, win.to + SLACK_MS]);
 const editMarks = (db) => new Map(safeAll(db, 'SELECT file_path, locked_by, edited_at FROM lease_edit_marks').map((m) => [`${m.file_path}\u0000${m.locked_by}`, m.edited_at]));
 
-const lapseItem = (row, agent, marks) => {
+// When the holder edited the lapsed file after the lease ended: the newest edit mark, or the newest transcript edit
+// of the same file (compared as resolved paths: cwd-relative and root-relative spellings are one file, #4543).
+const editedAfter = (row, meta, marks, edits, expiresAt) => {
+  const mark = marks.get(`${row.file_path}\u0000${meta.holder}`) ?? null;
+  const own = (edits.get(meta.holder) ?? []).filter((e) => sameFile(row.file_path, e.key) && e.at !== null && e.at > expiresAt);
+  const latest = own.reduce((max, e) => Math.max(max, e.at), 0);
+  return mark !== null && mark > expiresAt ? mark : latest || mark;
+};
+
+const lapseItem = (row, agent, marks, edits) => {
   const meta = metaOf(row);
   const expiresAt = Number(meta.expires_at) || row.timestamp;
-  const editedAt = marks.get(`${row.file_path}\u0000${meta.holder}`) ?? null;
+  const editedAt = editedAfter(row, meta, marks, edits, expiresAt);
   const isActive = agent.startedAt <= expiresAt && expiresAt <= agent.endedAt;
   const isEdited = editedAt !== null && editedAt > expiresAt;
   const activeKind = isEdited ? 'lapsed' : 'benign';
@@ -59,7 +69,8 @@ const lapseItem = (row, agent, marks) => {
   };
 };
 
-export const leaseLapses = (db, agents) => {
+/** edits: Map handle -> [{ at, key }] of the transcript edits (resolved paths); optional. */
+export const leaseLapses = (db, agents, edits = new Map()) => {
   const win = windowOf(agents);
   if (!win) return [];
   const marks = editMarks(db);
@@ -67,7 +78,7 @@ export const leaseLapses = (db, agents) => {
   for (const row of lapseRows(db, win)) {
     const holder = metaOf(row).holder;
     const agent = agentFor(agents, holder, Number(metaOf(row).expires_at) || row.timestamp);
-    if (agent) items.push(lapseItem(row, agent, marks));
+    if (agent) items.push(lapseItem(row, agent, marks, edits));
   }
   return items;
 };

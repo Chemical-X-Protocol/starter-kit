@@ -19,6 +19,7 @@ import { invocationsOf } from './audit-run-invocations.js';
 import { classifyInvocation } from './audit-run-adoption.js';
 import { renderAuditRun } from './audit-run-render.js';
 import { runTeamCli } from './team-commands.js';
+import { readTranscriptCalls } from './audit-run-calls.js';
 
 // A bare `node --test` from a shell that exports CHEMX_PROJECT_ROOT must not aim temp projects at the real db.
 delete process.env.CHEMX_PROJECT_ROOT;
@@ -295,6 +296,48 @@ test('4543: an unresolvable path is reported as unresolved, never as unleased', 
   const invs = callsOf('chemx patch $UNSET/x.js --target=a --replacement=b', 'cd - && chemx patch y.js --target=a --replacement=b');
   assert.deepEqual(editsWithoutLease(invs, []), []);
   assert.deepEqual(unresolvedEdits(invs).map((e) => e.file), ['$UNSET/x.js', 'y.js']);
+});
+
+test('4543: a lapsed lease edited afterwards counts, though the agent wrote a kit-relative path', (t) => {
+  const env = makeEnv(t);
+  const sub = path.join(env.repo, 'sub');
+  const agent = { id: 'l4', label: 'fix:sub/cli/a.js', lines: [
+    user(BASE, sub, taskText('@lapse-four', 44, 'cli/a.js')),
+    bash(BASE + 31000, sub, 'chemx patch cli/a.js --target=a --replacement=b'),
+    use(BASE + 60000, sub, 'StructuredOutput', { status: 'fixed' })
+  ] };
+  writeRun(env, 'wf_lapse', [agent]);
+  const db = makeDb(t, env);
+  feed(db, { at: BASE + 30500, author: '@system', file: 'sub/cli/a.js', type: 'lock_expired', meta: { holder: '@lapse-four', expires_at: BASE + 30000, acquired_at: BASE, purpose: '#44' } });
+  const report = audit(env, 'wf_lapse', db);
+  assert.deepEqual(report.leases.lapsed.map((l) => `${l.handle} ${l.file} ${l.editedAfterLapse}`), ['@lapse-four sub/cli/a.js true']);
+});
+
+test('4543: an edit before the lease expired is not a lapse', (t) => {
+  const env = makeEnv(t);
+  const sub = path.join(env.repo, 'sub');
+  const agent = { id: 'l5', label: 'fix:sub/cli/a.js', lines: [
+    user(BASE, sub, taskText('@lapse-five', 45, 'cli/a.js')),
+    bash(BASE + 10000, sub, 'chemx patch cli/a.js --target=a --replacement=b'),
+    use(BASE + 60000, sub, 'StructuredOutput', { status: 'fixed' })
+  ] };
+  writeRun(env, 'wf_nolapse', [agent]);
+  const db = makeDb(t, env);
+  feed(db, { at: BASE + 30500, author: '@system', file: 'sub/cli/a.js', type: 'lock_expired', meta: { holder: '@lapse-five', expires_at: BASE + 30000, acquired_at: BASE, purpose: '#45' } });
+  assert.deepEqual(audit(env, 'wf_nolapse', db).leases.lapsed, []);
+});
+
+test('4543: the path chemx printed (Patched <path>) wins over an unresolvable spelling', () => {
+  const entry = (type, message) => JSON.stringify({ type, timestamp: new Date(BASE).toISOString(), cwd: KIT, message });
+  const text = [
+    entry('assistant', { content: [{ type: 'tool_use', id: 'tu1', name: 'Bash', input: { command: 'chemx patch $F --target=a --replacement=b' } }] }),
+    entry('user', { content: [{ type: 'tool_result', tool_use_id: 'tu1', content: '✔ Patched cli/team/x.js (1 block)' }] })
+  ].join('\n');
+  const invs = readTranscriptCalls(text).calls.flatMap(invocationsOf);
+  assert.deepEqual(unresolvedEdits(invs), []);
+  const taken = [{ file: 'apps/chemical-x/starter-kit/cli/team/x.js', at: BASE }];
+  assert.deepEqual(editsWithoutLease(invs, taken), []);
+  assert.equal(editsWithoutLease(invs, []).length, 1);
 });
 
 test('4543: a lease on another file does not cover the edit', () => {

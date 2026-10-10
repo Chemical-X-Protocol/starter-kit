@@ -18,7 +18,7 @@ import { readTranscriptCalls, isOverheadTool } from './audit-run-calls.js';
 import { invocationsOf } from './audit-run-invocations.js';
 import { repoRootsOf, shellWritesOf, nativeBypassOf } from './audit-run-bypass.js';
 import { classifyInvocation, summarizeAdoption } from './audit-run-adoption.js';
-import { commitsWithoutTask, editsWithoutLease, unresolvedEdits, unclosedClaims, hijackSignals } from './audit-run-protocol.js';
+import { commitsWithoutTask, editsWithoutLease, resolvedEdits, unresolvedEdits, unclosedClaims, hijackSignals } from './audit-run-protocol.js';
 import { optionOf } from './team-commands-tokens.js';
 import { openTeamContext } from './coordination-db.js';
 import { renderAuditRun } from './audit-run-render.js';
@@ -89,6 +89,7 @@ const auditAgent = (run, agent, row, ctx) => {
     unleased: editsWithoutLease(invs, taken).map((e) => ({ ...who(agent), ...e })),
     unresolved: unresolvedEdits(invs).map((e) => ({ ...who(agent), ...e })),
     unclosed: unclosedClaims(invs, statuses).map((id) => ({ ...who(agent), task: id })),
+    edits: resolvedEdits(invs).map((e) => ({ at: e.at, key: e.key })),
     parsed, steps
   };
 };
@@ -98,9 +99,15 @@ const hijacksOf = (audits, medianCost) => audits.map((a) => {
   return level ? { ...a.agent, level, signals, final: (a.parsed.finalOutput ? JSON.stringify(a.parsed.finalOutput) : a.parsed.finalText).slice(0, 160) } : null;
 }).filter(Boolean);
 
-const leaseSection = (db, agents, starveMs) => {
+const editsByHandle = (audits) => {
+  const byHandle = new Map();
+  for (const a of audits) byHandle.set(a.agent.handle, [...(byHandle.get(a.agent.handle) ?? []), ...a.edits]);
+  return byHandle;
+};
+
+const leaseSection = (db, agents, starveMs, edits) => {
   if (!db) return { available: false, note: 'no coordination db was readable, so lease lapses and waiters were not checked', lapsed: [], benign: [], abandoned: [], waiters: { total: 0, starved: [] } };
-  const lapses = leaseLapses(db, agents);
+  const lapses = leaseLapses(db, agents, edits);
   return { available: true, note: 'from the feed: only lapses recorded by a build that writes lock_expired and not archived are visible', lapsed: lapses.filter((l) => l.kind === 'lapsed'), benign: lapses.filter((l) => l.kind === 'benign'), abandoned: lapses.filter((l) => l.kind === 'abandoned'), waiters: leaseWaiters(db, agents, { starveMs }) };
 };
 
@@ -131,7 +138,7 @@ export const auditRun = (run, ctx = {}) => {
   const isLargeEnough = audits.length >= 4;
   const report = {
     runId: run.runId, dir: run.dir, agents: audits.length, missingTranscripts: run.missingTranscripts,
-    leases: leaseSection(full.db, priced.rows, ctx.starveMs),
+    leases: leaseSection(full.db, priced.rows, ctx.starveMs, editsByHandle(audits)),
     bypasses: { shell: audits.flatMap((a) => a.bypasses.filter((b) => b.type === 'shell-write')), native: audits.flatMap((a) => a.bypasses.filter((b) => b.type === 'native-tool')), blocked: audits.flatMap((a) => a.blocked), guard: full.db ? guardBypasses(full.db, priced.rows) : [], crashes: full.db ? guardCrashes(full.db, priced.rows) : [] },
     adoption: summarizeAdoption(audits.flatMap((a) => a.classified)),
     protocol: { uncommitted: audits.flatMap((a) => a.commits), unleasedEdits: audits.flatMap((a) => a.unleased), unresolvedEdits: audits.flatMap((a) => a.unresolved), unclosedClaims: audits.flatMap((a) => a.unclosed) },

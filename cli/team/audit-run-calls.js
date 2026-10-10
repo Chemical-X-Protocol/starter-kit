@@ -58,6 +58,19 @@ const deniedIdsOf = (entries) => {
   return ids;
 };
 
+// Path chemx printed for an edit ("Patched <path>"), by tool_use id; preferred over the spelling the agent typed (#4543).
+const PATCHED_LINE = /^\s*(?:✔\s*)?Patched\s+(\S+)/m;
+const printedPathsOf = (entries) => {
+  const paths = new Map();
+  for (const entry of entries.filter((e) => e.type === 'user')) {
+    for (const block of blocksOf(entry.message?.content)) {
+      const match = block?.type === 'tool_result' ? PATCHED_LINE.exec(textOf(block.content)) : null;
+      if (match) paths.set(block.tool_use_id, match[1].replace(/[.:,]+$/, ''));
+    }
+  }
+  return paths;
+};
+
 // The task text: the user turn the harness computed (falls back to the first user turns).
 const taskTextOf = (entries) => {
   const users = entries.filter((e) => e.type === 'user').slice(0, 4).map((e) => textOf(e.message?.content));
@@ -73,6 +86,7 @@ export const readTranscriptCalls = (text) => {
   const entries = parseLines(text);
   const calls = [];
   const denied = deniedIdsOf(entries);
+  const printed = printedPathsOf(entries);
   let finalOutput = null;
   let finalText = '';
   for (const entry of entries) {
@@ -87,7 +101,7 @@ export const readTranscriptCalls = (text) => {
       const input = block.input && typeof block.input === 'object' ? block.input : {};
       const isFinal = block.name === 'StructuredOutput';
       if (isFinal) finalOutput = input;
-      calls.push({ at: stampOf(entry), cwd: entry.cwd || '', name: block.name, input, isDenied: denied.has(block.id) });
+      calls.push({ at: stampOf(entry), cwd: entry.cwd || '', name: block.name, input, isDenied: denied.has(block.id), printedPath: printed.get(block.id) ?? null });
     }
   }
   return { calls, taskText: taskTextOf(entries), finalOutput, finalText };
