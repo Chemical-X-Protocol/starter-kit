@@ -13,6 +13,23 @@ const parseParentFlagValue = (raw) => {
 
 const splitIdTokens = (text) => text.split(',').map((token) => token.trim()).filter(Boolean);
 
+/**
+ * Long flags parseFlags itself reads, shared by every team subcommand. Guaranteed: each is read in
+ * parseFlags below. Not guaranteed: a subcommand's own handler may read more (those are not listed
+ * here), and no per-subcommand list exists yet, so this cannot reject a flag by itself (#4554).
+ */
+export const PARSED_TEAM_FLAGS = Object.freeze([
+  '--json', '--compact', '--mark-read', '--force', '--no-target-confirm', '--help', '--as', '--to', '--since',
+  '--limit', '--max-agents', '--per-agent', '--max-tasks-per-agent', '--thread', '--task', '--parent', '--type',
+  '--status', '--all', '--agent', '--target', '--tier', '--rule', '--prio', '--priority', '--new', '--purpose',
+  '--pid', '--tokens', '--prompt-tokens', '--completion-tokens', '--cached-tokens', '--cost', '--model', '--desc',
+  '--description', '--deps', '--add-dep', '--rm-dep', '--sprint', '--moscow', '--needs', '--reason',
+  '--duplicate-of', '--ignore-deps', '--cancel', '--log', '--title', '--metadata'
+]);
+
+/** @returns {boolean} whether parseFlags reads this long flag (the part before any `=`) */
+export const isParsedTeamFlag = (token) => PARSED_TEAM_FLAGS.includes(String(token).split('=')[0]);
+
 export const parseFlags = (args = []) => {
   const hasJsonFlag = args.includes('--json');
   const hasCompactFlag = args.includes('--compact');
