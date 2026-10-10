@@ -37,7 +37,7 @@ export const protocolLines = (shell) => [
   '2. {{claimStep}}',
   '3. Lock each existing file right before its first edit: chemx team lock acquire <file> --as={{handle}} --purpose="#{{taskId}}".',
   '4. Read with chemx read (<file>:<a>-<b>, --outline, --symbol=<name>) and search with chemx q or chemx q -g "<text>" -l <path>. Edit only with chemx patch or chemx write. Never use built-in Read/Edit/Write/Grep/Glob on repo files, and never cat, sed, heredocs or redirects into source.',
-  '5. Run targeted specs only: chemx test <spec files> (add --depth=2 for neighbours), never the full suite. chemx check <file> must show 0 hazards at every severity for every file you touch. Specs use temp dirs and temp dbs.',
+  '5. Run targeted specs only: chemx test <spec files> (add --depth=2 for neighbours), never the full suite. Run chemx check on every file you touch: your edit must introduce no hazard (chemx patch and write print any they introduce) and the hazard your task names must be gone. Hazards a legacy file already had before your edit are not yours to fix unless the task says so; list them in your result. Specs use temp dirs and temp dbs.',
   '6. Commit small and green: chemx commit <files> -m "<type>(<area>): <summary> (#{{taskId}})" --release. Never git add -A, commit -a, stash, reset or checkout.',
   '7. Progress: chemx team task comment {{taskId}} "<msg>" --as={{handle}}. Friction (chemx wrong, noisy or missing something): chemx team task add "Friction: <what>" --needs=light --desc="<exact command and output>" --as={{handle}}.',
   'Under-promise: every message, help line and doc sentence states exactly what is guaranteed and what is not.'
@@ -83,7 +83,7 @@ export const REVIEWER = [
   '__BUILD_RESULT__',
   '1. Read the builder\'s commits: chemx log -n 30, then chemx show <sha> for each commit naming #{{taskId}}.',
   '2. Run chemx test --changed --base=<parent of the builder\'s first commit> --depth=2 and report the pass and fail counts.',
-  '3. Run chemx check on every touched file: 0 hazards at every severity is required.',
+  '3. Run chemx check on every touched file: the edit must introduce no hazard and the hazard the task names must be gone. Hazards the file had before the edit do not fail the review.',
   '4. Try to break each claimed deliverable with a real command.',
   'Report only confirmed defects, each with file, line, problem, fix and the command whose output shows it. Set acceptanceMet only when every acceptance item is shown met.',
   '{{authority}}'
