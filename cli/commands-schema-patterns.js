@@ -46,5 +46,24 @@ export const PATTERNS_COMMANDS = [
       { flag: '--as=<@handle>', desc: 'With fill: who filled the hole' }
     ],
     examples: ['chemx blueprint 01c90f0e', 'chemx blueprint --item=A7 --json', 'chemx blueprint holes bp_aeabff52315c', 'chemx blueprint fill bp_aeabff52315c name=readJson --as=@me']
+  },
+  {
+    name: 'heal',
+    aliases: [],
+    group: 'verify',
+    brief: 'Apply a blueprint, verify, roll back on failure',
+    usage: 'chemx heal <bp-id|group-id> [--dry-run] [--fill=<hole>=<value>] [--json] --as=@handle | chemx heal --item=<A7> ... | chemx heal --undo=<run-id> --as=@handle',
+    summary: 'Extract the piece of a blueprint and replace its call sites with calls, then verify (parse, audit delta, typecheck, covering specs, post-condition) and roll back to byte-identical files on any failure.',
+    description: 'Plans the heal in memory (members re-located by fp and body hash, so line drift is not staleness and a changed body refuses with BLUEPRINT_STALE), leases every path or none (CHEMX_FILE_LOCKED on any foreign lease, before any write), writes through applyEdits, then verifies: parse, no rule count rises in a touched file under the project config and atomic-strict, the piece in the checkJs-strict sandbox plus a scoped tsc delta where the project typechecks the files, the covering specs (reverse imports, depth 2) through chemx test, and the post-condition. A failure restores every file and records outcome rolled_back with the stage. Each attempt is a heal_runs row. --dry-run prints the diff and the in-memory audit and writes nothing. --undo restores an applied run while every file still has the bytes the heal left. Heal never commits. Today it handles extract-function and reuse blueprints whose piece has a body (library pieces).',
+    flags: [
+      { flag: '--dry-run', desc: 'Print the diff, the in-memory audit and post-condition, and the lease check; write and lease nothing' },
+      { flag: '--item=<id>', desc: 'Name the group by a ground-truth item, as chemx blueprint --item does' },
+      { flag: '--fill=<hole>=<value>', desc: 'Fill a hole before healing (validated like chemx blueprint fill); repeatable' },
+      { flag: '--undo=<run-id>', desc: 'Restore the files of an applied, uncommitted heal run (also --undo <run-id>)' },
+      { flag: '--spec-depth=<N>', desc: 'Reverse-import depth for covering specs (default 2)' },
+      { flag: '--json', desc: 'Print the result as JSON' },
+      { flag: '--as=<@handle>', desc: 'Who heals (leases are taken as this handle); required except for --dry-run' }
+    ],
+    examples: ['chemx heal --item=A7 --dry-run', 'chemx heal bp_aeabff52315c --as=@me', 'chemx heal --undo=hr_0a1b2c3d4e --as=@me']
   }
 ];

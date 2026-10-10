@@ -78,7 +78,8 @@ const holeLines = (blueprint) => blueprint.holes.flatMap((hole) => [
 ]);
 
 // A group id builds the blueprint; a stored blueprint id reads it back (fills applied by the caller).
-const resolveBlueprint = (db, cwd, options) => {
+// options: { target, item }. Shared with `chemx heal` (heal-cli.js).
+export const resolveBlueprint = (db, cwd, options) => {
   const isStoredId = options.target?.startsWith('bp_');
   if (isStoredId) return readBlueprint(db, options.target);
   syncFingerprints(cwd, { targetDir: null, includeTests: false });
@@ -93,7 +94,7 @@ const resolveBlueprint = (db, cwd, options) => {
   return { blueprint };
 };
 
-const fillContextOf = (db, cwd, blueprint) => {
+export const fillContextOf = (db, cwd, blueprint) => {
   const context = contextFor(db, cwd);
   return { declaredIn: context.declaredIn, files: blueprint.locks };
 };

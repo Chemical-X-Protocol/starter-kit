@@ -1,0 +1,179 @@
+--- a/cli/doctor/check-host.js
++++ b/cli/doctor/check-host.js
+@@ -9,6 +9,7 @@
+ import { HOST_SHIM_FILES, buildHostShims } from '../host-shims.js';
+ import { GENERATED_MARKERS } from '../pillars-write-guard.js';
+ import { PILLARS } from '../pillars-schema.js';
++import { readJsonOr } from '../fs-json.js';
+ 
+ const EVENTS = ['PreToolUse', 'PostToolUse', 'SessionStart'];
+ const SCOPE_FILES = [
+@@ -20,11 +21,8 @@
+ const BOOTSTRAP_PATH = /([^\s"']*chemx-guard\.mjs)/;
+ 
+ const readJsonOrEmpty = (file) => {
+-  try {
+-    return JSON.parse(fs.readFileSync(file, 'utf-8'));
+-  } catch {
+-    return {}; // missing or unparseable settings count as "no hooks"; install-hooks reports parse errors
+-  }
++  // missing or unparseable settings count as "no hooks"; install-hooks reports parse errors
++  return readJsonOr(file, {});
+ };
+ 
+ const entryPathOf = (command, projectRoot) => {
+--- a/cli/doctor/kit-locate.js
++++ b/cli/doctor/kit-locate.js
+@@ -3,16 +3,14 @@
+ 
+ import fs from 'node:fs';
+ import path from 'node:path';
++import { readJsonOr } from '../fs-json.js';
+ 
+ const KIT_PACKAGES = new Set(['@chemx/starter-kit', '@chem-x/starter-kit', 'chemx', 'create-chemx', '@chemx/create-chemx']);
+ 
+ const readPackage = (dir) => {
+   const file = path.join(dir, 'package.json');
+-  try {
+-    return JSON.parse(fs.readFileSync(file, 'utf-8'));
+-  } catch {
+-    return null; // no or unreadable package.json at this level: keep walking up
+-  }
++  // no or unreadable package.json at this level: keep walking up
++  return readJsonOr(file, null);
+ };
+ 
+ const isKitPackage = (pkg) => {
+--- /dev/null
++++ b/cli/fs-json.js
+@@ -0,0 +1,17 @@
++import fs from 'node:fs';
++
++/**
++ * Reads and parses a JSON file; returns the fallback when the file is missing or not valid JSON.
++ * @template T
++ * @param {string} file Path of the JSON file.
++ * @param {T} fallback Value returned when the file cannot be read or parsed.
++ * @returns {unknown | T} The parsed document, or the fallback.
++ */
++export const readJsonOr = (file, fallback) => {
++  try {
++    return JSON.parse(fs.readFileSync(file, 'utf-8'));
++  } catch (err) {
++    // A missing or malformed file is an expected state for this reader: the caller supplies the fallback.
++    return fallback;
++  }
++};
+--- a/cli/hooks/project-status.js
++++ b/cli/hooks/project-status.js
+@@ -2,18 +2,15 @@
+ // snapshot (it may be a partial scan, so the file count is kept), ratchet ceiling, MCP launch skew and
+ // stale chemx MCP servers for this root. Every source is optional; missing data stays null.
+ 
+-import fs from 'node:fs';
+ import path from 'node:path';
+ import { readKitVersion } from './launcher.js';
+ import { listChemxMcpProcesses } from '../doctor/proc-scan.js';
+ import { checkMcpLaunch } from '../doctor/check-mcp.js';
++import { readJsonOr } from '../fs-json.js';
+ 
+ const readJson = (file) => {
+-  try {
+-    return JSON.parse(fs.readFileSync(file, 'utf-8'));
+-  } catch {
+-    return null; // absent or unreadable status sources are reported as unknown
+-  }
++  // absent or unreadable status sources are reported as unknown
++  return readJsonOr(file, null);
+ };
+ 
+ const lastAudit = (root, now) => {
+--- a/cli/main.js
++++ b/cli/main.js
+@@ -11,6 +11,7 @@
+ } from './errors/index.js';
+ import { printHelp } from './help.js';
+ import { ROUTABLE_COMMAND_TOKENS } from './commands-schema.js';
++import { readJsonOr } from './fs-json.js';
+ 
+ sanitizeOutputStreams();
+ exitQuietlyOnClosedPipe();
+@@ -38,11 +39,7 @@
+   const cfgPath = path.resolve(process.cwd(), '.chemx', 'config.json');
+   const isMissing = Boolean(!fs.existsSync(cfgPath));
+   if (isMissing) return {};
+-  try {
+-    return JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
+-  } catch {
+-    return {};
+-  }
++  return readJsonOr(cfgPath, {});
+ };
+ 
+ // ---------------------------------------------------------------------------
+--- a/cli/project-detector.js
++++ b/cli/project-detector.js
+@@ -1,15 +1,12 @@
+ import fs from 'node:fs';
+ import path from 'node:path';
++import { readJsonOr } from './fs-json.js';
+ 
+ export const loadProjectConfig = (cwd = process.cwd()) => {
+   const cfgPath = path.resolve(cwd, '.chemx', 'config.json');
+   const hasConfig = fs.existsSync(cfgPath);
+   if (!hasConfig) return {};
+-  try {
+-    return JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
+-  } catch {
+-    return {};
+-  }
++  return readJsonOr(cfgPath, {});
+ };
+ 
+ export const normalizeFramework = (val) => {
+--- a/cli/team/usage-reader.js
++++ b/cli/team/usage-reader.js
+@@ -9,6 +9,7 @@
+ import os from 'node:os';
+ import path from 'node:path';
+ import { parseTranscript } from './usage-transcript.js';
++import { readJsonOr } from '../fs-json.js';
+ 
+ const AGENT_FILE_RE = /^agent-(.+)\.jsonl$/;
+ 
+@@ -59,11 +60,7 @@
+ };
+ 
+ const readJson = (file) => {
+-  try {
+-    return JSON.parse(fs.readFileSync(file, 'utf8'));
+-  } catch {
+-    return {};
+-  }
++  return readJsonOr(file, {});
+ };
+ 
+ const readJournalLabels = (dir) => {
+--- a/cli/test-slots.js
++++ b/cli/test-slots.js
+@@ -7,6 +7,7 @@
+ import os from 'node:os';
+ import path from 'node:path';
+ import { scheduleTimeout } from './timers.js';
++import { readJsonOr } from './fs-json.js';
+ 
+ // Set in the runner's environment: a chemx test started by a spec inside a slot-holding run is
+ // already covered by its parent's slot, so it runs with one worker and never waits (no deadlock).
+@@ -59,11 +60,7 @@
+ };
+ 
+ const readHolder = (file) => {
+-  try {
+-    return JSON.parse(fs.readFileSync(file, 'utf8'));
+-  } catch {
+-    return null;
+-  }
++  return readJsonOr(file, null);
+ };
+ 
+ // Claims up to `want` free slots (indices below `budget`); returns the claimed files and the

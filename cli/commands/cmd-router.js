@@ -401,6 +401,11 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
       setExitCodeFrom(runBlueprintCli(rawArgs.slice(1)));
       break;
     }
+    case 'heal': {
+      const { runHealCli } = await import('../forge/heal-cli.js');
+      setExitCodeFrom(await runHealCli(rawArgs.slice(1)));
+      break;
+    }
     case 'help':
     case '--help':
     case '-h':
