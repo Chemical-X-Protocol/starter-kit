@@ -70,6 +70,18 @@ test('a script file created on the same line is read when the caller passes it',
   assert.deepEqual(found.targets, ['src/g.py']);
 });
 
+test('timeout/nice wrappers, open(file=, mode=), deno eval and Bun.write are detected (#4585 review)', () => {
+  const denied = [
+    `timeout 5 python3 -c "open('cli/a.js','w').write('x')"`,
+    `nice -n 5 python3 -c "open('cli/a.js','w').write('x')"`,
+    `python3 -c "open(file='cli/a.js', mode='w').write('x')"`,
+    `deno eval "Deno.writeTextFileSync('cli/a.js','x')"`,
+    `bun -e "Bun.write('cli/a.js','x')"`,
+  ];
+  for (const command of denied) assert.equal(decide(command).decision, 'deny', command);
+  assert.notEqual(decide(`timeout 5 node -e "fs.writeFileSync('/tmp/x',1)"`).decision, 'deny');
+});
+
 test('audit-run counts the #4514 call as a shell write into a repo file', () => {
   const root = '/work/repo';
   const invs = invocationsOf({ name: 'Bash', at: 1, cwd: root, input: { command: BYPASS_4514 } });

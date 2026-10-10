@@ -10,11 +10,12 @@ const INTERPRETERS = [
   [/^ruby$/, 'ruby'],
   [/^perl$/, 'perl'],
 ];
-const WRAPPERS = new Set(['env', 'command', 'exec', 'nohup', 'sudo', 'time']);
+const WRAPPERS = new Set(['env', 'command', 'exec', 'nohup', 'sudo', 'time', 'timeout', 'nice', 'ionice', 'xargs']);
+const OPERAND_WRAPPERS = { timeout: /^\d+(?:\.\d+)?[smhd]?$/, nice: /^-?\d+$/, ionice: /^-?\d+$/ };
 const ASSIGNMENT_WORD = /^[A-Za-z_]\w*=/;
 const INLINE_FLAGS = {
   python: /^(?:-c|-[A-Za-z]*c)$/,
-  js: /^(?:-e|-p|-pe|-ep|--eval|--print)$/,
+  js: /^(?:-e|-p|-pe|-ep|--eval|--print|eval)$/,
   ruby: /^(?:-e|-[A-Za-z]*e)$/,
   perl: /^(?:-e|-E|-[A-Za-z]*[eE])$/,
 };
@@ -27,7 +28,11 @@ const baseName = (word) => String(word ?? '').split('/').pop();
 // { family, args } of the interpreter this command runs, or null.
 const interpreterOf = (argv) => {
   let rest = [...argv];
-  while (rest.length > 0 && (WRAPPERS.has(baseName(rest[0])) || ASSIGNMENT_WORD.test(rest[0]))) rest = rest.slice(1);
+  while (rest.length > 0 && (WRAPPERS.has(baseName(rest[0])) || ASSIGNMENT_WORD.test(rest[0]))) {
+    const operand = OPERAND_WRAPPERS[baseName(rest[0])];
+    rest = rest.slice(1);
+    while (operand && rest.length > 0 && (/^-/.test(rest[0]) || operand.test(rest[0]))) rest = rest.slice(1);
+  }
   const head = baseName(rest[0]);
   const found = INTERPRETERS.find(([pattern]) => pattern.test(head));
   return found ? { family: found[1], args: rest.slice(1) } : null;
@@ -110,11 +115,13 @@ const isWriteMode = (mode, vars) => {
   const resolved = resolveExpression(mode, vars);
   return resolved !== null && /^[rbtU]*[wax]|\+/.test(resolved);
 };
-const modeOf = (args) => args.slice(1).find((arg) => /^mode\s*=/.test(arg))?.replace(/^mode\s*=\s*/, '') ?? args[1];
+const keyword = (args, name) => args.find((arg) => new RegExp(`^${name}\\s*=(?!=)`).test(arg))?.replace(/^\w+\s*=\s*/, '');
+const modeOf = (args) => keyword(args, 'mode') ?? args[1];
+const fileOf = (args) => keyword(args, 'file') ?? args[0];
 
 // Each table row: [call regex, (args, vars) => path expressions written]. The regex ends on the "(" of the call.
 const PYTHON = [
-  [/(?<![\w.])(?:io\.)?open\s*\(/g, (args, vars) => (isWriteMode(modeOf(args), vars) ? [args[0]] : [])],
+  [/(?<![\w.])(?:io\.)?open\s*\(/g, (args, vars) => (isWriteMode(modeOf(args), vars) ? [fileOf(args)] : [])],
   [/\bshutil\.(?:copy|copy2|copyfile|copytree)\s*\(/g, (args) => [args[1]]],
   [/\b(?:shutil\.move|os\.(?:replace|rename))\s*\(/g, (args) => [args[0], args[1]]],
 ];
@@ -122,6 +129,7 @@ const PYTHON_METHODS = /(Path\([^()]*\)|[$@]?[A-Za-z_][\w$]*)\.(?:write_text|wri
 const JS = [
   [/\b(?:writeFileSync|writeFile|appendFileSync|appendFile|createWriteStream|rmSync|rm)\s*\(/g, (args) => [args[0]]],
   [/\.(?:writeTextFileSync|writeTextFile|remove|removeSync)\s*\(/g, (args) => [args[0]]],
+  [/\bBun\.write\s*\(/g, (args) => [args[0]]],
   [/\b(?:copyFileSync|copyFile)\s*\(/g, (args) => [args[1]]],
   [/\b(?:renameSync|rename)\s*\(/g, (args) => [args[0], args[1]]],
 ];
