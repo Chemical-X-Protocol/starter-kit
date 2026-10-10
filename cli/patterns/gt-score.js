@@ -111,13 +111,21 @@ const applySubsumption = (aItems, credits) => {
   for (const item of aItems.filter((entry) => entry.subsumedBy)) {
     const parent = credits.get(item.subsumedBy);
     const own = credits.get(item.id);
-    const inherits = parent.credit > own.credit;
+    const inherits = parent && own && parent.credit > own.credit;
     if (inherits) credits.set(item.id, { ...parent, itemId: item.id, via: item.subsumedBy });
   }
   return credits;
 };
 
 const countBy = (keys) => Object.fromEntries([...new Set(keys)].sort(byCodePoint).map((key) => [key, keys.filter((k) => k === key).length]));
+
+const liveAnchors = (item) => item.anchors.filter((a) => !a.isStale);
+
+// An item with fewer live anchors than MIN_COVERED can no longer be credited by any group: its code was healed
+// or moved. It leaves the recall denominator and is reported as healed (labels.json keeps it).
+const isHealed = (item) => liveAnchors(item).length < MIN_COVERED;
+
+const isSpecItem = (item) => item.anchors.length > 0 && item.anchors.every((a) => /\.(spec|test)\.[cm]?[jt]s$/.test(a.file));
 
 const sumCredit = (rows) => rows.reduce((total, row) => total + row.credit, 0);
 
@@ -150,9 +158,13 @@ export const scoreGroups = (resolvedItems, groups) => {
   const related = relatedPairs(resolvedItems);
   const ordered = [...groups].sort((a, b) => byCodePoint(String(a.id), String(b.id)));
   const analyses = ordered.map((group) => classifyGroup(group, resolvedItems, anchorIndex, related));
-  const aItems = resolvedItems.filter((item) => item.class === 'A');
+  const allA = resolvedItems.filter((item) => item.class === 'A');
+  const aItems = allA.filter((item) => !isHealed(item));
+  const healedItems = allA.filter(isHealed).map((item) => item.id).sort(byCodePoint);
   const credits = applySubsumption(aItems, bestCreditPerItem(aItems, analyses));
   const creditRows = [...credits.values()].sort((a, b) => byCodePoint(a.itemId, b.itemId));
+  const specIds = new Set(aItems.filter(isSpecItem).map((item) => item.id));
+  const recallByScope = { code: recallSummary(creditRows.filter((row) => !specIds.has(row.itemId))), spec: recallSummary(creditRows.filter((row) => specIds.has(row.itemId))) };
   const verdicts = analyses.map((analysis) => ({ id: analysis.group.id, path: analysis.group.path ?? 'unknown', type: analysis.group.type ?? null, sites: analysis.group.occurrences.length, unlabeledSites: analysis.unlabeledSites, verdict: verdictOf(analysis) }));
   const paths = [...new Set(verdicts.map((entry) => entry.path))].sort(byCodePoint);
   const surfaced = (kind) => [...new Set(verdicts.filter((entry) => entry.verdict.kind === kind).map((entry) => entry.verdict.itemId))].sort(byCodePoint);
@@ -163,6 +175,8 @@ export const scoreGroups = (resolvedItems, groups) => {
     schema: 'chemx.gt-score/1',
     groups: verdicts.length,
     recallA: recallSummary(creditRows),
+    recallByScope,
+    healedItems,
     perItem: creditRows,
     falseItems: { items: bItems.length, surfaced: surfaced('false'), surfacedCount: surfaced('false').length },
     borderlineSurfaced: surfaced('borderline'),
