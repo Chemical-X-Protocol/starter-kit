@@ -83,7 +83,10 @@ const isDirectory = (dir) => fs.existsSync(dir) && fs.statSync(dir).isDirectory(
 // The git repo that owns a path (a submodule counts as its own repo); null when none does.
 const ownerOf = (cwd, file) => {
   const resolved = path.resolve(cwd, file);
-  let dir = resolved;
+  // A submodule's own root belongs to the parent repo (a pointer bump), so look from its parent.
+  const own = isDirectory(resolved) ? gitRoot(resolved) : null;
+  const isRepoRoot = own !== null && fs.realpathSync(own) === fs.realpathSync(resolved);
+  let dir = isRepoRoot ? path.dirname(resolved) : resolved;
   while (!isDirectory(dir) && dir !== path.dirname(dir)) dir = path.dirname(dir);
   const root = gitRoot(dir);
   const abs = root ? path.join(fs.realpathSync(dir), path.relative(dir, resolved)) : resolved;
@@ -96,11 +99,15 @@ const groupLines = (groups) => [...groups].map(([root, files]) => `  ${root}: ${
 const routeToOwner = (parsed, cwd) => {
   const groups = new Map();
   const absFiles = [];
+  const orphans = [];
   for (const file of parsed.files) {
     const { root, abs } = ownerOf(cwd, file);
     absFiles.push(abs);
     if (root) groups.set(root, [...(groups.get(root) ?? []), file]);
+    else orphans.push(file);
   }
+  const isMixedWithOrphans = orphans.length > 0 && groups.size > 0;
+  if (isMixedWithOrphans) return { refusal: ['Refused: these files are not inside any git repository. Nothing was staged.', ...orphans.map((file) => `  ${file}`)] };
   const isSplit = groups.size > 1;
   if (isSplit) return { refusal: ['Refused: the listed files belong to more than one git repository. Commit each group separately. Nothing was staged. Groups:', ...groupLines(groups)] };
   const [owner] = groups.keys();

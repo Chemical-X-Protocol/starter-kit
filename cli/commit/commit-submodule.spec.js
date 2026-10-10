@@ -58,6 +58,26 @@ test('a path inside a submodule is committed in the submodule, with repo-relativ
   assert.deepEqual(result.data.files, ['a.txt']);
 });
 
+test('the bare submodule path is a pointer bump committed in the superproject', async (t) => {
+  const root = makeSuper(t);
+  fs.writeFileSync(path.join(root, 'sub', 'a.txt'), 'changed\n');
+  git(path.join(root, 'sub'), ['commit', '-q', '-am', 'move']);
+  const result = await run(root, ['sub', '-m', 'bump sub', '--no-task=spec']);
+  assert.equal(result.ok, true, result.lines.join('\n'));
+  assert.deepEqual(git(root, ['show', '--name-only', '--format=', 'HEAD']).stdout.split('\n').filter(Boolean), ['sub']);
+});
+
+test('a file outside any git repository is refused, not dropped', async (t) => {
+  const root = makeSuper(t);
+  const stray = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-commit-stray-'));
+  t.after(() => fs.rmSync(stray, { recursive: true, force: true }));
+  fs.writeFileSync(path.join(stray, 'x.txt'), 'x\n');
+  fs.writeFileSync(path.join(root, 'top.txt'), 'changed\n');
+  const result = await run(root, ['top.txt', path.join(stray, 'x.txt'), '-m', 'm', '--no-task=spec']);
+  assert.equal(result.ok, false);
+  assert.match(result.lines.join('\n'), /not inside any git repository/);
+});
+
 test('files spanning the superproject and a submodule are refused with the grouping', async (t) => {
   const root = makeSuper(t);
   fs.writeFileSync(path.join(root, 'sub', 'a.txt'), 'changed\n');
