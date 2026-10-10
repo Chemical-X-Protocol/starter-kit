@@ -39,7 +39,7 @@ export const describeCompletion = (res, taskId, lead) => {
   if (!hasResult) return fail(`Task #${taskId} not found`);
   const isRefused = Boolean(res.refused);
   if (isRefused) {
-    const hasOwnMessage = Boolean(res.noTarget || res.ownership);
+    const hasOwnMessage = Boolean(res.noTarget || res.ownership || res.uncommitted);
     const hazardText = `Cannot complete task #${taskId}: ${res.hazardCount} hazard(s) remain in ${res.targetPath}. Fix the hazards or pass --force to complete anyway.`;
     return fail(hasOwnMessage ? res.message : hazardText);
   }

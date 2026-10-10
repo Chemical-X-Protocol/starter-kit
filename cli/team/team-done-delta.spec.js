@@ -84,6 +84,7 @@ test('a hazard already at HEAD is not added when the project root is a git subdi
 
 test('a LOW hazard already at HEAD does not refuse task done', () => {
   withCommittedFile(LOW_HAZARD, `${LOW_HAZARD}export const b = 2;\n`, (root) => {
+    git(root, 'commit', '-q', '-am', 'edit'); // task done also refuses uncommitted targets (#4519)
     const outcome = completeIn(root);
     assert.notEqual(outcome?.refused, true, JSON.stringify(outcome));
   });

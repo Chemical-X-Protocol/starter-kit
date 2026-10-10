@@ -18,6 +18,7 @@ import { queryUnassignedHazards } from './team-db-task-helpers.js';
 import { checkCompletionOwnership, buildOwnershipRefusal, buildCompletionGuard } from './team-task-ownership.js';
 import { triageLog } from './team-triage-log.js';
 import { verifyTaskTarget } from './team-triage-verify.js';
+import { uncommittedTargets, buildUncommittedRefusal } from './team-task-uncommitted.js';
 import { backfillAuditTaskNeeds } from './team-needs.js';
 import { generateTriageTasks } from './team-triage-generate.js';
 import { repoDir } from './coordination-repos.js';
@@ -199,6 +200,9 @@ export const completeTaskWithAudit = (db, taskId, agentId, options = {}) => {
   } else {
     const refusal = verifyTaskTarget(indexDb, task, taskId, options, resultPayload);
     if (refusal) return refusal;
+    const dirtyFiles = options.force === true ? [] : uncommittedTargets(options.cwd || process.cwd(), task);
+    const hasDirtyFiles = dirtyFiles.length > 0;
+    if (hasDirtyFiles) return buildUncommittedRefusal(taskId, dirtyFiles);
     releaseFileLock(db, task.target_path, agentId, { cwd: options.cwd });
   }
 
