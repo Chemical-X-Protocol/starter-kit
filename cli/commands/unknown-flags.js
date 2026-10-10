@@ -55,6 +55,18 @@ const EXTRA_FLAGS = {
     '--include-tests', '--tests', '--no-index', '--no-fingerprint', '--triage', '--clones', '--clone-threshold',
     '--hotspot-graph', '--limit', '--all-packages', '--full-only', '--concurrency', '--scope', '--since'
   ],
+  conflicts: ['--conflicts'],
+  trend: ['--limit'],
+  init: ['--headless', '--yes', '--ci', '--non-interactive', '--no-interactive', '--framework', '--preset', '--write', '--install'],
+  create: ['--ci', '--non-interactive', '--no-interactive', '--preset', '--write'],
+  generate: ['--headless', '--yes', '--ci', '--non-interactive', '--no-interactive', '--preset', '--write', '--install'],
+  hook: ['--write'],
+  doctor: ['--host', '--scope', '--kit', '--write-mcp'],
+  pillars: ['--yes', '--force'],
+  badge: ['--grade', '--label', '--report-url', '--discussion', '--format', '--copy'],
+  verify: ['--allow-empty', '--changed', '--all-packages', '--timeout', '--profile', '--base'],
+  ui: ['--dev', '--allow-host'],
+  patterns: ['--name'],
   team: ['--run', '--task', '--status', '--repo', '--all-repos', '--type', '--purpose', '--needs', '--parent', '--desc']
 };
 

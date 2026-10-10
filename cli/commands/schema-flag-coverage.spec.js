@@ -93,16 +93,7 @@ const routerSources = () => {
 // Known gaps found when the scan widened to every routed handler; each is a flag the handler reads
 // that its schema entry does not list yet (tracked by the #4510 follow-up). A new gap is not added here silently:
 // anything not in this set fails the test.
-const KNOWN_GAPS = new Set([
-  'conflicts --conflicts', 'trend --limit',
-  'init --headless', 'init --yes', 'init --ci', 'init --non-interactive', 'init --no-interactive', 'init --framework', 'init --preset', 'init --write', 'init --install',
-  'create --ci', 'create --non-interactive', 'create --no-interactive', 'create --preset', 'create --write',
-  'hook --write', 'doctor --host', 'doctor --scope', 'doctor --kit', 'doctor --write-mcp', 'pillars --yes', 'pillars --force',
-  'generate --headless', 'generate --yes', 'generate --ci', 'generate --non-interactive', 'generate --no-interactive', 'generate --preset', 'generate --write', 'generate --install',
-  'badge --grade', 'badge --label', 'badge --report-url', 'badge --discussion', 'badge --format', 'badge --copy',
-  'verify --allow-empty', 'verify --changed', 'verify --all-packages', 'verify --timeout', 'verify --profile', 'verify --base',
-  'ui --dev', 'ui --allow-host', 'patterns --name'
-]);
+const KNOWN_GAPS = new Set([]);
 
 test('every checked command the router dispatches has its handler flags listed (#4510)', () => {
   const routes = routerSources();
@@ -156,7 +147,7 @@ test('team task help lists every task-level flag team-flags.js parses (#4509)', 
   const ELSEWHERE = new Set([
     '--type', '--task', '--rule', '--tier', '--purpose', '--run', '--workflow', '--compact', '--mark-read',
     '--to', '--since', '--max-agents', '--per-agent', '--max-tasks-per-agent', '--thread', '--pid', '--tokens',
-    '--prompt-tokens', '--completion-tokens', '--cached-tokens', '--cost', '--model', '--log', '--metadata',
+    '--prompt-tokens', '--completion-tokens', '--cached-tokens', '--cost', '--model', '--log', '--metadata', '--new',
   ]);
   const missing = [...parsed].filter((f) => !ELSEWHERE.has(f) && !card.includes(f));
   assert.deepEqual(missing, []);
