@@ -38,9 +38,18 @@ const totalsLines = (t) => [
   `   Net saving: ${fmtInt(t.netSavedTokens)} tokens = gross minus ${fmtInt(t.unmeasuredTokens)} tokens returned by calls with no counterfactual (counted as pure cost)`
 ];
 
+const dbLine = (d) => `     ${d.label}: ${d.error ? `not read (${d.error})` : `${fmtInt(d.calls)} calls in the run window, ${fmtInt(d.logged)} logged in total`}`;
+
+const sourceLines = (c) => {
+  const dbs = c.dbs ?? [];
+  const failed = (c.dbsUnreadable ?? []).map((label) => `     ${label}: not read (could not be opened)`);
+  const where = c.dbsRoot ? ` under ${c.dbsRoot}, searched to 4 levels deep` : '';
+  return dbs.length === 0 ? [] : [`   Call dbs read (${dbs.length})${where}:`, ...dbs.map(dbLine), ...failed];
+};
+
 const toolingLines = (tooling) => {
   const c = tooling.coverage;
-  const head = [`2. Tooling (n = ${fmtInt(tooling.totals.calls)} attributed calls, ${fmtInt(tooling.totals.measured)} with a token counterfactual)`, `   Coverage: ${c.note}`];
+  const head = [`2. Tooling (n = ${fmtInt(tooling.totals.calls)} attributed calls, ${fmtInt(tooling.totals.measured)} with a token counterfactual)`, `   Coverage: ${c.note}`, ...sourceLines(c)];
   const isEmpty = tooling.totals.calls === 0;
   const gap = `   Unattributed: ${fmtInt(c.unattributed)} logged calls in the run window carry no agent handle and are not counted.`;
   const body = isEmpty ? ['   No attributed calls: tooling savings are not measured for this run, and no figure is estimated.'] : [...tooling.actions.map(actionLine), ...methodLines(tooling.actions), ...totalsLines(tooling.totals)];

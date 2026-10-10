@@ -14,6 +14,7 @@ import { priceRun } from '../team/usage-compute.js';
 import { routingLine, MIN_ROUTING_AGENTS } from './savings-routing.js';
 import { accountCalls, handleWindows, mergeWindows, loadRunCalls } from './savings-tooling.js';
 import { buildSavingsReport, coverageNote } from './savings-report.js';
+import { openExtraLedgerDbs } from './savings-dbs.js';
 import { renderSavingsCard } from './savings-render.js';
 import { noteCounterfactual, runLoggedMcp, recordCall, pickCounterfactual, measureChars, estimateTokens, findLedgerDbPath, mapSession, unattributedStats, reattributeCalls } from './call-ledger.js';
 
@@ -207,6 +208,45 @@ test('attribution (#4465): the session map resolves at call time and reattribute
   ]);
   assert.deepEqual(reattributeCalls(db), { updated: 1, ambiguousSessions: 1 });
   assert.deepEqual(db.prepare('SELECT agent FROM tool_calls ORDER BY id').all().map((r) => r.agent), ['@only', null, null, '@only', null]);
+});
+
+test('report (#5888): calls logged in two package dbs under one root are both counted and both named', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-savings-dbs-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const files = ['.chemx', path.join('apps', 'youmeos', '.chemx'), path.join('apps', 'other', '.chemx')].map((d) => path.join(root, d, 'index.db'));
+  files.forEach((f) => fs.mkdirSync(path.dirname(f), { recursive: true }));
+  const [rootFile, youmeosFile, otherFile] = files;
+  const cwd = path.join(root, 'apps', 'youmeos');
+  const call = (agentHandle, action) => ({ ts: T0 + 2 * MIN, agent: agentHandle, surface: 'mcp', action, ok: true, resultChars: 400, cf: { kind: 'file-whole', chars: 4000, calls: 0 } });
+  [[rootFile, '@a0', 'read'], [youmeosFile, '@a0', 'patch'], [otherFile, '@a1', 'read']].forEach(([file, who, action]) => {
+    const seed = new DatabaseSync(file);
+    recordCall(seed, call(who, action));
+    seed.close();
+  });
+  const own = new DatabaseSync(youmeosFile);
+  t.after(() => own.close());
+  const found = openExtraLedgerDbs(own, cwd);
+  t.after(() => found.extras.forEach((e) => e.db.close()));
+  assert.equal(fs.realpathSync(found.root), fs.realpathSync(root));
+  assert.deepEqual(found.extras.map((e) => e.label).sort(), [path.join('.chemx', 'index.db'), path.join('apps', 'other', '.chemx', 'index.db')].sort());
+  const report = buildSavingsReport({ run: runOf(5, 'claude-haiku-5-5'), pricing: PRICING, db: own, extraDbs: found.extras, ownLabel: found.own });
+  assert.equal(report.tooling.totals.calls, 3);
+  assert.equal(report.tooling.coverage.loggedTotal, 3);
+  assert.deepEqual(report.tooling.coverage.dbs.map((d) => d.calls), [1, 1, 1]);
+  const card = renderSavingsCard(report);
+  assert.match(card, /Tooling \(n = 3 attributed calls/);
+  assert.match(card, /Call dbs read \(3\)/);
+  assert.match(card, /apps.youmeos.\.chemx.index\.db: 1 calls in the run window/);
+  assert.match(card, /apps.other.\.chemx.index\.db: 1 calls/);
+});
+
+test('report (#5888): a package db with no tool_calls table is named as not read and adds nothing', (t) => {
+  const own = makeDb(t);
+  const bare = new DatabaseSync(':memory:');
+  t.after(() => bare.close());
+  const report = buildSavingsReport({ run: runOf(5, 'claude-haiku-5-5'), pricing: PRICING, db: own, extraDbs: [{ label: 'apps/x/.chemx/index.db', db: bare, isReadOnly: true }] });
+  assert.equal(report.tooling.totals.calls, 0);
+  assert.match(renderSavingsCard(report), /apps\/x\/\.chemx\/index\.db: not read \(no tool_calls table\)/);
 });
 
 test('coverage: the note says exactly what the log can and cannot cover', () => {

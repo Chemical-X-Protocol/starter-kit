@@ -9,7 +9,8 @@ import { priceRun } from '../team/usage-compute.js';
 import { loadPricing } from '../team/usage-pricing.js';
 import { optionOf } from '../team/team-commands-tokens.js';
 import { routingLine, DEFAULT_BASELINE, isKnownBaseline } from './savings-routing.js';
-import { accountCalls, handleWindows, loadRunCalls } from './savings-tooling.js';
+import { accountCalls, handleWindows } from './savings-tooling.js';
+import { loadRunCallsFrom, openExtraLedgerDbs } from './savings-dbs.js';
 import { renderSavingsCard } from './savings-render.js';
 
 const USAGE = 'Usage: chemx report savings --run=<wf_id|run dir> [--json] [--baseline=opus|sonnet|haiku|fable] [--projects=<dir>]';
@@ -27,7 +28,7 @@ export const coverageNote = ({ loggedTotal, loggedFrom }, window) => {
   const hasWindow = Number.isFinite(window.start) && Number.isFinite(window.end);
   const rules = [
     [!hasWindow, 'the run has no timestamps, so calls cannot be attributed; tooling is not measured.'],
-    [loggedTotal === 0, 'no chemx calls have been logged in this database yet; tooling is not measured for this run.'],
+    [loggedTotal === 0, 'no chemx calls have been logged in the databases read yet; tooling is not measured for this run.'],
     [loggedFrom > window.end, `call logging began ${isoOf(loggedFrom)}, after this run ended (${isoOf(window.end)}); tooling is not measured for this run.`],
     [loggedFrom > window.start, `call logging began ${isoOf(loggedFrom)}, partway through this run (started ${isoOf(window.start)}). Only calls after that moment can appear; earlier calls were not recorded and are not estimated.`]
   ];
@@ -36,10 +37,10 @@ export const coverageNote = ({ loggedTotal, loggedFrom }, window) => {
 };
 
 /** Build the report object from a run read by readRun and an open db. Pure apart from reading the db. */
-export const buildSavingsReport = ({ run, pricing, baseline = DEFAULT_BASELINE, db }) => {
+export const buildSavingsReport = ({ run, pricing, baseline = DEFAULT_BASELINE, db, extraDbs = [], ownLabel = 'current db' }) => {
   const priced = priceRun(run, pricing, baseline);
   const window = runWindowOf(priced.rows);
-  const loaded = loadRunCalls(db, handleWindows(priced.rows), window);
+  const loaded = loadRunCallsFrom([{ label: ownLabel, db }, ...extraDbs], handleWindows(priced.rows), window);
   const accounted = accountCalls(loaded.rows);
   return {
     runId: priced.runId,
@@ -52,6 +53,7 @@ export const buildSavingsReport = ({ run, pricing, baseline = DEFAULT_BASELINE, 
         loggedFrom: loaded.loggedFrom,
         loggedTotal: loaded.loggedTotal,
         unattributed: loaded.unattributed,
+        dbs: loaded.dbs,
         note: coverageNote(loaded, window)
       }
     }
@@ -83,7 +85,11 @@ export const runReportCli = (args, isCli, { db, cwd = process.cwd() } = {}) => {
   const run = readRun(runId, optionOf(args, 'projects'));
   if (!run) return fail(`Run not found: ${runId}`, isCli);
   if (!db) return fail('SQLite database unavailable: the tool call log cannot be read.', isCli);
-  const report = buildSavingsReport({ run, pricing: loadPricing(cwd), baseline, db });
+  const found = openExtraLedgerDbs(db, cwd);
+  const report = buildSavingsReport({ run, pricing: loadPricing(cwd), baseline, db, extraDbs: found.extras, ownLabel: found.own });
+  report.tooling.coverage.dbsUnreadable = found.failed;
+  report.tooling.coverage.dbsRoot = found.root;
+  found.extras.forEach((e) => e.db.close());
   if (isCli) process.stdout.write(args.includes('--json') ? `${JSON.stringify(report, null, 2)}\n` : `${renderSavingsCard(report)}\n`);
   return report;
 };
