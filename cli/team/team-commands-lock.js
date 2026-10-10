@@ -157,6 +157,7 @@ export const handleUnlockCommand = (db, nonFlagPositional, flags, isCli, cwd = p
   if (warning) res.warning = warning;
   if (isCli) {
     if (flags.isJson) process.stdout.write(`${JSON.stringify(res, null, 2)}\n`);
+    else if (res.dequeued) process.stdout.write(`\x1b[32m✔\x1b[0m Left the queue for ${file} (no lock was held)\n`);
     else if (isReleased) process.stdout.write(`\x1b[32m✔\x1b[0m Released lock on ${file}\n`);
     else process.stderr.write(`\x1b[31m✕ Unlock failed: ${res.message ?? res.reason}${warning ? ` ${warning}` : ''}\x1b[0m\n`);
   }

@@ -53,6 +53,9 @@ it forever. So the rule while anyone is queued for a lease is:
   file + 10 minutes**, never past it. "Edit" means a chemx `patch`, `write` or the like on that file by the
   holder; if there was none, the time the lease was granted counts. The edit itself still renews to now +
   5 minutes and restarts the 10 minutes.
+- **Leaving the queue.** `lock release <file>` by a queued non-holder marks its queue row `cancelled` and
+  returns `dequeued: true` (the CLI prints `Left the queue for <file>`); no lock is released. The holder's
+  cap then no longer counts that waiter. This does not stop a poll already running elsewhere.
 - The cap is 10 minutes by default; set `CHEMX_LEASE_CAP_MINUTES` to change it.
 - The cap never shortens a lease. A renewal made before the waiter arrived can already run up to one TTL
   (5 minutes) past the cap time, and `lock renew` (explicit, by the holder) is not capped.
