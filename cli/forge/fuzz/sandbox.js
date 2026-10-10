@@ -10,6 +10,7 @@ import vm from 'node:vm';
 import { installHarness } from './harness.js';
 import { compileModule } from './transpile.js';
 import { resolveSpecifier } from './resolve.js';
+import { bindingHook } from './binding-hook.js';
 
 const HARNESS_SCRIPT = new vm.Script(`(${installHarness.toString()})(globalThis);`, { filename: 'fuzz-harness.js' });
 export const TIMEOUT_MS = 250;
@@ -56,7 +57,7 @@ const compileAll = (side, context) => {
   const compiled = {};
   for (const [path, code] of Object.entries(side.files)) {
     const js = compileModule(path, code, { mode: side.mode });
-    const body = path === side.entry ? `${js}${HOST_EXPORT}` : js;
+    const body = path === side.entry ? `${js}${HOST_EXPORT}${bindingHook(js)}` : js;
     compiled[path] = vm.compileFunction(body, WRAPPER_PARAMS, { parsingContext: context, filename: path });
   }
   return compiled;

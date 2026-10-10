@@ -1,14 +1,14 @@
 // Fuzz generators for control flow and function kinds (#2596): try/finally, generators and async
 // code, arrow vs function bodies (the expression-body rewrite of canon-nodes.js), bare vs braced
 // statement bodies (the block rewrite), and strict vs sloppy code (the sloppy mark of units.js).
-import { bodyPair, expr, fromRewrites, sourcePair } from './gen-kit.js';
+import { bodyPair, differsOnlyInLiterals, expr, fromRewrites, sourcePair } from './gen-kit.js';
 
 const e = (g) => expr(g, 2);
 const SCRIPT = Object.freeze({ mode: 'script', entry: 'src/p/a.cjs', invoke: '(mod.host ?? mod)(...args)' });
 
 const TRIES = [
   ['finally-vs-before', (g) => { const x = e(g); return bodyPair(`try { return ${x}; } finally { f(1); }`, `f(1); return ${x};`); }],
-  ['finally-override', (g) => { const [x, y] = [e(g), e(g)]; return bodyPair(`try { return ${x}; } finally { return ${y}; }`, `try { return ${y}; } finally { return ${x}; }`); }],
+  ['finally-override', (g) => { const [x, y] = [e(g), e(g)]; return bodyPair(`try { return ${x}; } finally { return ${y}; }`, `try { return ${y}; } finally { return ${x}; }`, { abstracts: differsOnlyInLiterals(x, y) }); }],
   ['optional-catch-binding', (g) => { const x = e(g); return bodyPair(`try { return ${x}; } catch (err) { return 'c'; }`, `try { return ${x}; } catch { return 'c'; }`); }],
   ['catch-rename', (g) => { const x = e(g); return bodyPair(`try { throw ${x}; } catch (err) { return err; }`, `try { throw ${x}; } catch (e2) { return e2; }`); }],
   ['try-unwrap', (g) => { const x = e(g); return bodyPair(`try { return ${x}; } catch { return 'c'; }`, `return ${x};`); }],

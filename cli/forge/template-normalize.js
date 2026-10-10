@@ -32,19 +32,23 @@ const runAt = (text, index) => {
   return pattern.exec(text)?.[0] ?? '';
 };
 
+const UNSCANNABLE = /\/\*|\\[\r\n]|\/[^/\r\n]*['"][^/\r\n]*\//;
+
 /**
  * Expression source with whitespace between tokens collapsed to one space. Quoted and template literal
  * text is kept verbatim. A same-line run is kept as is when the text has a `/` (it may be a regex), and
  * text with a backtick is kept whole (a template can nest quotes this scanner does not track). When the
- * text may hold a line comment (`//`), a run with a line break collapses to one line break instead, so
- * `a // c\n + 1` never reads like `a // c + 1` (#2596).
+ * a run with a line break always collapses to one line break, never a space: a line comment (`//`) and
+ * automatic semicolon insertion both depend on it, so `a // c\n + 1` never reads like `a // c + 1`
+ * (#2596) and `a = n\nf();` never reads like `a = n f();` (#4560). Text the scanner cannot tokenize
+ * reliably is kept whole: a block comment or a regex holding a quote (either can shift the quote
+ * state) and a backslash before a line break (a string continuation).
  */
 const squashCode = (raw) => {
   const text = String(raw ?? '');
-  const hasTemplate = text.includes('`');
-  if (hasTemplate) return text.trim();
+  const isUnscannable = text.includes('`') || UNSCANNABLE.test(text);
+  if (isUnscannable) return text.trim();
   const mayHoldRegex = text.includes('/');
-  const mayHoldLineComment = text.includes('//');
   let out = '';
   let index = 0;
   while (index < text.length) {
@@ -54,7 +58,7 @@ const squashCode = (raw) => {
     const hasBreak = /[\r\n]/.test(run);
     const keepsRun = mayHoldRegex && !hasBreak;
     const isCollapsible = run.length > 0 && !keepsRun;
-    const collapsed = mayHoldLineComment && hasBreak ? '\n' : ' ';
+    const collapsed = hasBreak ? '\n' : ' ';
     out += isCollapsible ? collapsed : text.slice(index, end);
     index = end;
   }

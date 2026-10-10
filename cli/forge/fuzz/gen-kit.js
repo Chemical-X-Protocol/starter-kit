@@ -27,6 +27,14 @@ export const expr = (g, depth = 2, leaves = LEAVES) => {
   return g.pick(COMBINERS)(g, () => expr(g, depth - 1, leaves));
 };
 
+const LITERAL = /\b\d+\b|''|'x'|`t`|\bnull\b|\bNaN\b/g;
+
+/**
+ * True when two expressions differ only in literals. A rewrite that swaps them is then a merge L2 makes
+ * by design (it erases literals), so the pair must be evaluated on an L1 merge only (#4560).
+ */
+export const differsOnlyInLiterals = (x, y) => x.replace(LITERAL, 'L') === y.replace(LITERAL, 'L');
+
 /** Body forms: the expression in value, test, loop-test, alias and effect position. */
 export const BODY_FORMS = Object.freeze([
   (e) => `return ${e};`,

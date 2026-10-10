@@ -96,6 +96,13 @@ export const SEEDS = Object.freeze([
   FN(fnBody("const v = o; return eval('typeof v');"), fnBody("const w = o; return eval('typeof v');")),
   FN("function host(o) { var v = o; eval('var v = 3'); return v; }\nmodule.exports = { host };", "function host(o) { var w = o; eval('var v = 3'); return w; }\nmodule.exports = { host };", ['src/p/a.cjs', 'src/p/a.cjs']),
   VUE('<li>{{ a // c\n + 1 }}</li>', '<li>{{ a // c + 1 }}</li>'),
+  VUE('<li @keyup="async\nfunction g() { f(); } g();">x</li>', '<li @keyup="async function g() { f(); } g();">x</li>'),
+  VUE('<li @keyup="a = n\nf();">x</li>', '<li @keyup="a = n f();">x</li>'),
+  VUE('<li @keyup="a = b\n++n;">x</li>', '<li @keyup="a = b ++n;">x</li>'),
+  VUE("<li>{{ a /* it's */ + 'x\\\n   y' }}</li>", "<li>{{ a /* it's */ + 'x\\ y' }}</li>"),
+  VUE("<li>{{ /'/.source + 'x\\\n   y' }}</li>", "<li>{{ /'/.source + 'x\\ y' }}</li>"),
+  JSX(jsxList('a', ' onClick={() => { let async = p.f; async\nfunction g() { p.g(); } return g(); }}'), jsxList('a', ' onClick={() => { let async = p.f; async function g() { p.g(); } return g(); }}')),
+  JSX(jsxList('a', " title={/'/.source + 'x\\\n   y'}"), jsxList('a', " title={/'/.source + 'x\\ y'}")),
   FN(fnBody('const k = o; return k++;'), fnBody('return o++;')),
   FN(fnBody('const k = o; return k = 2;'), fnBody('return o = 2;')),
   FN(fnBody('const k = undeclared; return typeof k;'), fnBody('return typeof undeclared;'))

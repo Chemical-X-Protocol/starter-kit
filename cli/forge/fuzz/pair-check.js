@@ -65,7 +65,8 @@ const describeVector = (pair, vector) => {
 };
 
 // A loaded machine can cut a run off; a timed-out vector is rerun with this much more time, and a vector
-// still timing out, or one side failing to compile (an invalid program, not a merge), is inconclusive.
+// still timing out, or both sides failing to compile (two invalid programs), is inconclusive. Exactly one
+// side failing to compile is a difference: a valid program merged with one that does not compile (#4560).
 const RETRY_FACTOR = 20;
 const isCutOff = (events) => events.includes('timeout');
 const isInvalid = (events) => events.some((event) => event.startsWith('compile-throw:SyntaxError') || event === 'compile-error');
@@ -77,7 +78,7 @@ const evaluate = (pair, side, vector, timeoutMs) => {
 };
 
 /** Both sides on one vector: { left, right, isInconclusive }. */
-const evaluateVector = (pair, vector) => {
+export const evaluateVector = (pair, vector) => {
   let left = evaluate(pair, pair.left, vector);
   let right = evaluate(pair, pair.right, vector);
   const isRetried = isCutOff(left) || isCutOff(right);
@@ -85,7 +86,8 @@ const evaluateVector = (pair, vector) => {
     left = evaluate(pair, pair.left, vector, TIMEOUT_MS * RETRY_FACTOR);
     right = evaluate(pair, pair.right, vector, TIMEOUT_MS * RETRY_FACTOR);
   }
-  const isInconclusive = isCutOff(left) || isCutOff(right) || isInvalid(left) || isInvalid(right);
+  const isBothInvalid = isInvalid(left) && isInvalid(right);
+  const isInconclusive = isCutOff(left) || isCutOff(right) || isBothInvalid;
   return { left, right, isInconclusive };
 };
 

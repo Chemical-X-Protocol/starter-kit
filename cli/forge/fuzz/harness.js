@@ -206,13 +206,17 @@ export function installHarness(global) {
     const finish = () => {
       global.__fuzzDone = true;
     };
+    const conclude = async () => {
+      await fireHandlers();
+      recordEndState();
+    };
     try {
       const returned = thunk(values);
       events.push(`ret:${serialize(returned)}`);
-      settle(returned).then(finish, finish);
+      settle(returned).then(conclude).then(finish, finish);
     } catch (err) {
       events.push(`throw:${errorType(err)}`);
-      finish();
+      conclude().then(finish, finish);
     }
   };
   global.__fuzzDone = false;
@@ -223,7 +227,20 @@ export function installHarness(global) {
     if (!isFiltered) return props;
     return Object.fromEntries(Object.entries(props).filter(([key]) => !PASSTHROUGH.has(key)).sort(([left], [right]) => (left < right ? -1 : Number(left > right))));
   };
-  global.__h = (type, props, ...children) => ({ $type: type, props: keptProps(props), children });
+  const jsxHandlers = [];
+  const HANDLER_PROP = /^on[A-Z]/;
+  const collectHandlers = (props) => {
+    const isCollected = templateMode.isOn && props !== null && typeof props === 'object';
+    if (!isCollected) return;
+    for (const [key, value] of Object.entries(props)) {
+      const isHandler = HANDLER_PROP.test(key) && typeof value === 'function';
+      if (isHandler) jsxHandlers.push(value);
+    }
+  };
+  global.__h = (type, props, ...children) => {
+    collectHandlers(props);
+    return { $type: type, props: keptProps(props), children };
+  };
   global.__fuzzTemplate = (names) => {
     templateMode.isOn = true;
     for (const name of names) {
@@ -233,6 +250,63 @@ export function installHarness(global) {
     }
   };
   global.__Fragment = Symbol('Fragment');
+  const fakeEvent = (key) => {
+    const target = { value: '5', checked: true };
+    return {
+      type: 'fuzz', key, target, currentTarget: target, button: 0, ctrlKey: false, shiftKey: false, altKey: false, metaKey: false,
+      preventDefault: () => events.push('preventDefault'), stopPropagation: () => events.push('stopPropagation')
+    };
+  };
+  /** Template mode: every rendered on[A-Z] handler runs under the two synthetic events the Vue path uses (#4560). */
+  const fireHandlers = async () => {
+    for (const [index, handler] of jsxHandlers.entries()) {
+      for (const key of ['Enter', 'a']) {
+        events.push(`fire handler#${index} ${key}`);
+        try {
+          const result = handler(fakeEvent(key));
+          events.push(`handler-ret:${serialize(result)}`);
+          const isThenable = result !== null && typeof result === 'object' && typeof result.then === 'function';
+          if (isThenable) await step('handler-await', () => result);
+        } catch (err) {
+          events.push(`handler-throw:${errorType(err)}`);
+        }
+      }
+    }
+  };
+  const baselineKeys = new Set(Reflect.ownKeys(global));
+  const isHarnessKey = (key) => (typeof key === 'string' && key.startsWith('__fuzz')) || key === '__h' || key === '__Fragment';
+  const quietly = (read) => {
+    const wasQuiet = state.isQuiet;
+    state.isQuiet = true;
+    try {
+      return read();
+    } catch (err) {
+      return `unserializable:${errorType(err)}`;
+    } finally {
+      state.isQuiet = wasQuiet;
+    }
+  };
+  const objectState = (value) => quietly(() => (typeof value === 'function' ? describeFunction(value, 0, new Map([[value, 0]])) : serializeObject(value, 0, new Map([[value, 0]]))));
+  /**
+   * After the run settles (#4560): the end state of every object input, of the entry module's own
+   * top-level bindings (sandbox.js exports them) and of the globals the code created, read through
+   * descriptors with logging off, so a write the return value never shows still tells two sides apart.
+   */
+  const recordEndState = () => {
+    for (const [value, label] of inputs) {
+      const isObjectInput = typeof label === 'number' && value !== null && (typeof value === 'object' || typeof value === 'function');
+      if (isObjectInput) events.push(`end input#${label}:${objectState(value)}`);
+    }
+    const bindings = typeof global.__fuzzBindings === 'function' ? quietly(() => global.__fuzzBindings()) : [];
+    for (const [index, value] of bindings.entries()) events.push(`end binding#${index}:${quietly(() => serialize(value))}`);
+    for (const key of Reflect.ownKeys(global)) {
+      const isUserKey = !baselineKeys.has(key) && !isHarnessKey(key);
+      const desc = isUserKey ? Reflect.getOwnPropertyDescriptor(global, key) : null;
+      const isComponent = Boolean(desc) && 'value' in desc && inputs.has(desc.value);
+      const isReported = Boolean(desc) && !isComponent;
+      if (isReported) events.push(`end global ${keyText(key)}:${'value' in desc ? quietly(() => serialize(desc.value)) : 'accessor'}`);
+    }
+  };
   global.__fuzzEvents = events;
   global.__fuzzErrorType = errorType;
   global.__fuzzSerialize = serialize;

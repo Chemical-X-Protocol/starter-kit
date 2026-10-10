@@ -20,7 +20,11 @@ const JSX_ATTRS = [
   [' onClick={p.f}', ' onclick={p.f}'], [' onKeyDown={p.f}', ' onKeydown={p.f}'], [' onClick={p.f}', ' onClick={p.g}', true],
   [' title="s" alt="t"', ' alt="t" title="s"'], [' title="s" {...p}', ' {...p} title="s"'], [' title="s" title={p.b}', ' title={p.b} title="s"'],
   [" title='s'", ' title="s"'], [' title="a&amp;b"', ' title="a&b"', true], [' className="a"', ' className="b"'], [' title={p.a}', ' title={ p.a }', true],
-  [' data-x="1"', ' data-X="1"'], [' aria-label="s"', ' ariaLabel="s"']
+  [' data-x="1"', ' data-X="1"'], [' aria-label="s"', ' ariaLabel="s"'],
+  // Handler statements with line breaks (#4560): ASI makes a break differ from a space.
+  [' onClick={() => { let async = p.f; async\nfunction g() { p.g(); } return g(); }}', ' onClick={() => { let async = p.f; async function g() { p.g(); } return g(); }}', true],
+  [' onClick={() => { p.a = p.n\np.f(); }}', ' onClick={() => { p.a = p.n; p.f(); }}', true], [' onClick={() => { p.f();\n\n p.g(); }}', ' onClick={() => { p.f();\n p.g(); }}', true],
+  [" title={/'/.source + 'x\\\n  y'}", " title={/'/.source + 'x\\ y'}", true], [" title={p.a /* it's */ + 'x\\\n  y'}", " title={p.a /* it's */ + 'x\\ y'}", true]
 ];
 const JSX_TEXT = [
   ['a  b', 'a b', true], ['a\n      b', 'a b'], ['x&nbsp;y', 'x y'], ['a&amp;b', 'a&b'], [' a', 'a', true], ["{'a'}", 'a'],
@@ -35,7 +39,10 @@ const VUE_ATTRS = [
   [' :foo.prop="n"', ' :foo="n"'], [' :foo.prop="n"', ' .foo="n"'], [' disabled', ' disabled=""'], [' disabled', ' :disabled="true"'],
   [' title="s" role="x"', ' role="x" title="s"'], [' title="s" :title="b"', ' :title="b" title="s"'], [' title="s" v-bind="obj"', ' v-bind="obj" title="s"'],
   [' :[k]="v" title="s"', ' title="s" :[k]="v"'], [' class="a"', ' class="b"'], [' @click="f"', ' @click="f()"', true], [' @click="f"', ' @click="g"', true],
-  [' :title="a+1"', ' :title="a + 1"', true], [' :title="a  +  1"', ' :title="a + 1"', true]
+  [' :title="a+1"', ' :title="a + 1"', true], [' :title="a  +  1"', ' :title="a + 1"', true],
+  [' @keyup="async\nfunction g() { f(); } g();"', ' @keyup="async function g() { f(); } g();"', true], [' @keyup="a = n\nf();"', ' @keyup="a = n f();"', true],
+  [' @keyup="a = b\n++n;"', ' @keyup="a = b ++n;"', true], [' @click="a = n;  f();"', ' @click="a = n; f();"', true], [' @click="a = n;\n\n f();"', ' @click="a = n;\n f();"', true],
+  [" :title=\"/'/.source + 'x\\\n  y'\"", " :title=\"/'/.source + 'x\\ y'\"", true]
 ];
 const VUE_INNERS = [
   ['<input v-model.number="n">', '<input v-model="n">'], ['<input v-model.trim="n">', '<input v-model="n">'], ['<input v-model="n" value="a">', '<input value="a" v-model="n">'],

@@ -255,6 +255,28 @@ test('a line comment in a template expression keeps its line break', () => {
   assert.notEqual(tmplUnit(vueList('{{ a // c\n + 1 }}'), 'src/a.vue').fp1, tmplUnit(vueList('{{ a // c + 1 }}'), 'src/a.vue').fp1);
 });
 
+test('a line break in a template expression never collapses to a space (#4560)', () => {
+  // ASI: A reads ctx.async and declares a sync g, B declares an async g; `a = n\nf();` runs both
+  // statements, `a = n f();` does not compile; `a = b\n++n;` is two statements, `a = b ++n;` is a syntax error.
+  const vueOn = (handler) => tmplUnit(vueList('x', ` @keyup="${handler}"`), 'src/a.vue').fp1;
+  assert.notEqual(vueOn('async\nfunction g() { f(); } g();'), vueOn('async function g() { f(); } g();'));
+  assert.notEqual(vueOn('a = n\nf();'), vueOn('a = n f();'));
+  assert.notEqual(vueOn('a = b\n++n;'), vueOn('a = b ++n;'));
+  const jsx = (body) => tmplUnit(jsxList('a', ` onClick={() => { ${body} }}`), 'src/a.jsx').fp1;
+  assert.notEqual(jsx('let async = p.f; async\nfunction g() { p.g(); } return g();'), jsx('let async = p.f; async function g() { p.g(); } return g();'));
+  assert.equal(vueOn('a = n;  f();'), vueOn('a = n; f();'), 'same-line spacing still collapses');
+});
+
+test('template expression text the scanner cannot tokenize keeps its line continuations (#4560)', () => {
+  // A string continuation keeps the spaces after the break ("1x   y"); B has one space. The quote inside a
+  // block comment or a regex would otherwise start a fake literal and flip which text is a string.
+  const interp = (inner) => tmplUnit(vueList(`{{ ${inner} }}`), 'src/a.vue').fp1;
+  assert.notEqual(interp("a /* it's */ + 'x\\\n   y'"), interp("a /* it's */ + 'x\\ y'"));
+  assert.notEqual(interp("/'/.source + 'x\\\n   y'"), interp("/'/.source + 'x\\ y'"));
+  const attr = (value) => tmplUnit(jsxList('a', ` title={${value}}`), 'src/a.jsx').fp1;
+  assert.notEqual(attr("/'/.source + 'x\\\n   y'"), attr("/'/.source + 'x\\ y'"));
+});
+
 test('inlining never moves an alias into a write target, nor under typeof', () => {
   // A throws (assignment to a const, or the undeclared read); B writes the param or returns 'undefined'.
   assertFnDiffer(fnBody('const k = o; return k++;'), fnBody('return o++;'));
