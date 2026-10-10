@@ -10,7 +10,7 @@ import fs from 'node:fs';
 export const readJsonOr = (file, fallback) => {
   try {
     return JSON.parse(fs.readFileSync(file, 'utf-8'));
-  } catch (err) {
+  } catch {
     // A missing or malformed file is an expected state for this reader: the caller supplies the fallback.
     return fallback;
   }

@@ -42,7 +42,7 @@ export const recordHealRun = (db, run) => {
   ensureHealTables(db);
   return withIndexTransaction(db, () => {
     const { seq } = db.prepare(SQL.nextSeq).get();
-    const id = `hr_${crypto.createHash('sha1').update(`${run.blueprintId}:${seq}`).digest('hex').slice(0, 10)}`;
+    const id = `hr_${crypto.createHash('sha1').update(`${run.blueprintId}:${seq}:${crypto.randomBytes(6).toString('hex')}`).digest('hex').slice(0, 10)}`;
     db.prepare(SQL.insert).run(
       id, run.blueprintId, run.agent || '', run.outcome, run.stage ?? null, run.code ?? null, tailLines(run.output),
       JSON.stringify(run.verify ?? null), JSON.stringify(run.files ?? []), run.diff ?? '', seq, Date.now()

@@ -54,6 +54,22 @@ test('an unsynced edit turns the cache off; the sync after it makes a new key', 
   assert.equal(runForgeGroups(dir).runCache, 'hit');
 });
 
+test('restoring a file byte-for-byte after a re-fingerprint is a miss, because the unit row ids changed', (t) => {
+  const dir = makeProject(t);
+  const file = path.join(dir, 'lib', 'b.js');
+  const original = fs.readFileSync(file, 'utf-8');
+  assert.equal(runForgeGroups(dir).runCache, 'miss');
+  fs.appendFileSync(file, '\nexport const extra = 1;\n');
+  syncFingerprints(dir, { log: () => {} });
+  fs.writeFileSync(file, original);
+  syncFingerprints(dir, { log: () => {} });
+  const after = runForgeGroups(dir);
+  assert.equal(after.runCache, 'miss');
+  const known = new Set(openIndexDb(dir).prepare('SELECT id FROM pattern_units').all().map((row) => row.id));
+  const named = after.groups.flatMap((group) => group.instances.flatMap((instance) => instance.unitIds));
+  assert.ok(named.length > 0 && named.every((id) => known.has(id)), 'every unit id a group names is in the ledger');
+});
+
 test('a suppression makes a new key, and the hit after it is suppressed too', (t) => {
   const dir = makeProject(t);
   const first = runForgeGroups(dir);

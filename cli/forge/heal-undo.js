@@ -53,8 +53,14 @@ export const undoHeal = (runId, { root, db, agentId }) => {
   const { run } = found;
   try {
     const leases = acquireAll(root, run.files.map((file) => file.file), { agentId, purpose: `undo ${run.id}` });
-    applyEdits(restoreEdits(run.files), { cwd: root, agentId });
-    releaseTaken(root, leases.taken, agentId);
+    try {
+      applyEdits(restoreEdits(run.files), { cwd: root, agentId });
+    } catch (error) {
+      releaseTaken(root, leases.taken, agentId);
+      throw error;
+    }
+    // The heal kept its leases for a commit that an undo cancels: free every file of the run this agent holds.
+    releaseTaken(root, run.files.map((file) => file.file), agentId);
   } catch (error) {
     const isKnown = error instanceof HealError || error instanceof EditRefusedError;
     if (!isKnown) throw error;

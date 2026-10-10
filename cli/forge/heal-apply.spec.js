@@ -11,6 +11,7 @@ import { undoHeal } from './heal-undo.js';
 import { readHealRun } from './heal-store.js';
 import { readBlueprint } from './blueprint-store.js';
 import { nodeTestRunner } from './heal-specs.js';
+import { introducedFailures } from './heal-verify.js';
 import { collectFileUnits } from './file-units.js';
 import { openTeamDb } from '../team/coordination-db.js';
 import { requestFileLock, listActiveLeases } from '../team/team-db-locks.js';
@@ -99,7 +100,22 @@ test('a real heal passes every verify stage, meets the post-condition, and undo 
     assert.equal(undone.outcome, 'undone');
     assertSameTree(snapshotTree(copy.dir), before);
     assert.equal(readHealRun(copy.db, result.runId).run.outcome, 'undone');
+    assert.deepEqual(ownLeases(copy.dir), [], 'an undo frees the leases of the heal it cancels');
+
+    const again = await heal(copy, blueprint);
+    assert.equal(again.outcome, 'applied', JSON.stringify(again.verify ?? again));
+    assert.notEqual(again.runId, result.runId, 'run ids are not reused');
   });
+});
+
+test('specs stage: a same-named failure in another spec file is introduced, and duplicates compare as a multiset', async () => {
+  const baseline = { failures: ['a.spec.js::reads config'] };
+  const options = { baselineSpecs: async () => baseline };
+  const run = { failures: ['a.spec.js::reads config', 'b.spec.js::reads config'] };
+  assert.deepEqual(await introducedFailures(run, ['a.spec.js', 'b.spec.js'], options), { introduced: ['b.spec.js::reads config'], preExisting: ['a.spec.js::reads config'] });
+  const twice = { failures: ['a.spec.js::works', 'a.spec.js::works'] };
+  const once = { baselineSpecs: async () => ({ failures: ['a.spec.js::works'] }) };
+  assert.deepEqual(await introducedFailures(twice, ['a.spec.js'], once), { introduced: ['a.spec.js::works'], preExisting: ['a.spec.js::works'] });
 });
 
 test('an injected rule violation in the piece rolls back to byte-identical files with outcome rolled_back at stage audit', async () => {
@@ -172,8 +188,8 @@ test('a covering spec that fails before and after the edit is reported as pre-ex
     fs.writeFileSync(path.join(copy.dir, 'cli/project-detector.extra.spec.js'), extraSpec("test('already broken', () => {\n  assert.equal(typeof loadProjectConfig, 'number');\n});"));
     const result = await heal(copy, state.sandbox.blueprints.A7);
     assert.equal(result.outcome, 'applied', JSON.stringify(result.verify?.stages?.[3] ?? result));
-    assert.deepEqual(result.verify.stages[3].preExisting, ['already broken']);
-    assert.match(result.verify.stages[3].detail, /fail the same way before the edit/);
+    assert.deepEqual(result.verify.stages[3].preExisting, ['cli/project-detector.extra.spec.js::already broken']);
+    assert.match(result.verify.stages[3].detail, /failed before the edit/);
   });
 });
 
@@ -184,7 +200,7 @@ test('a covering spec the edit breaks rolls the heal back at stage specs', async
     const result = await heal(copy, state.sandbox.blueprints.A7);
     assert.equal(result.outcome, 'rolled_back', JSON.stringify(result.verify?.stages?.[3] ?? result));
     assert.equal(result.stage, 'specs');
-    assert.deepEqual(result.verify.stages[3].introduced, ['no fs-json module']);
+    assert.deepEqual(result.verify.stages[3].introduced, ['cli/project-detector.extra.spec.js::no fs-json module']);
     assertSameTree(snapshotTree(copy.dir), before);
   });
 });

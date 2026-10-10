@@ -60,18 +60,32 @@ const typecheckStage = async (root, plan, baseline, options) => {
 // A failing run is compared with the same specs on the files before the edit (options.baselineSpecs
 // restores them, runs the specs and re-applies the edit): only failures the edit introduced count. A run
 // whose failing tests cannot be named fails outright.
-const introducedFailures = async (run, specs, options) => {
+export const introducedFailures = async (run, specs, options) => {
   const canCompare = Array.isArray(run.failures) && run.failures.length > 0 && typeof options.baselineSpecs === 'function';
   if (!canCompare) return { introduced: null, preExisting: [] };
   const before = await options.baselineSpecs(specs);
   const isComparable = Array.isArray(before.failures);
   if (!isComparable) return { introduced: null, preExisting: [] };
-  return { introduced: run.failures.filter((name) => !before.failures.includes(name)), preExisting: run.failures.filter((name) => before.failures.includes(name)) };
+  // Multiset compare on `<file>::<name>`: a failure is pre-existing only while an unmatched one with the same file and name failed before.
+  const unmatched = [...before.failures];
+  const introduced = [];
+  const preExisting = [];
+  for (const name of run.failures) {
+    const at = unmatched.indexOf(name);
+    const isNew = at === -1;
+    if (isNew) {
+      introduced.push(name);
+      continue;
+    }
+    unmatched.splice(at, 1);
+    preExisting.push(name);
+  }
+  return { introduced, preExisting };
 };
 
 const specsDetail = (count, run, compared) => {
   const hasPreExisting = compared.preExisting.length > 0;
-  const preNote = hasPreExisting ? `; ${compared.preExisting.length} failing test(s) fail the same way before the edit: ${compared.preExisting.slice(0, 3).join('; ')}` : '';
+  const preNote = hasPreExisting ? `; ${compared.preExisting.length} failing test(s) failed before the edit (same spec file and test name; messages are not compared): ${compared.preExisting.slice(0, 3).join('; ')}` : '';
   const verdict = run.ok ? 'pass' : `fail${compared.introduced ? ` (${compared.introduced.length} introduced)` : ''}`;
   return `${count} covering specs ${verdict}${preNote}`;
 };

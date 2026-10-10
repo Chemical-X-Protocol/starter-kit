@@ -33,6 +33,11 @@ export const runShow = async (rawArgs = [], isCli = true, cwd = process.cwd()) =
   const isOutsideRepo = !isInsideWorkTree(cwd);
   if (isOutsideRepo) return emitWrapperResult({ output: '', code: NOT_A_REPO_CODE, error: `not a git repository: ${cwd}` }, isCli);
   const { rev, wantsPatch, isFull, tail } = parseShowArgs(subArgs);
+  const isBlob = runGit(['cat-file', '-t', rev], cwd).stdout.trim() === 'blob';
+  if (isBlob) {
+    const blob = runGit(['show', '--no-color', rev], cwd);
+    return emitWrapperResult({ output: blob.stdout, code: blob.code, error: blob.error }, isCli);
+  }
   const header = runGit(['show', '-s', '--no-color', '--date=iso', `--format=${HEADER_FORMAT}`, rev], cwd);
   const isHeaderFailed = header.code !== 0;
   if (isHeaderFailed) return emitWrapperResult({ output: '', code: header.code, error: header.error }, isCli);

@@ -63,14 +63,18 @@ const lastJsonLine = (text) => {
 export const chemxTestRunner = (root, specs) => {
   const run = runWith(root, process.execPath, [CHEMX_CLI, 'test', '--json', ...specs]);
   const report = lastJsonLine(run.stdout);
-  const failures = Array.isArray(report?.failures) ? report.failures.map((failure) => String(failure.name ?? '')) : null;
+  const failures = Array.isArray(report?.failures) ? report.failures.map((failure) => `${failure.file ?? failure.path ?? failure.suite ?? ''}::${String(failure.name ?? '')}`) : null;
   const lines = (report?.failures ?? []).map((failure) => `${failure.name}${failure.message ? `: ${failure.message}` : ''}`);
   return { ok: run.status === 0 && report?.success !== false, output: report ? [`${report.passed ?? 0} passed, ${report.failed ?? 0} failed`, ...lines].join('\n') : run.output, failures };
 };
 
-/** Plain `node --test <specs>` (projects without chemx test lanes, and specs of the heal engine itself). */
+/**
+ * Plain `node --test <specs>` (projects without chemx test lanes, and specs of the heal engine itself). Each spec
+ * runs on its own so a failure is named `<spec file>::<test name>`; the same name in two files stays two failures.
+ */
 export const nodeTestRunner = (root, specs) => {
-  const run = runWith(root, process.execPath, ['--test', ...specs]);
-  const failures = [...run.stdout.matchAll(/^\s*not ok \d+ - (.+)$/gm)].map((match) => match[1].trim());
-  return { ok: run.status === 0, output: run.output, failures };
+  const runs = specs.map((spec) => ({ spec, run: runWith(root, process.execPath, ['--test', spec]) }));
+  const failures = runs.flatMap(({ spec, run }) => [...run.stdout.matchAll(/^\s*not ok \d+ - (.+)$/gm)].map((match) => `${spec}::${match[1].trim()}`));
+  const output = runs.map(({ run }) => run.output).join('\n');
+  return { ok: runs.every(({ run }) => run.status === 0), output, failures };
 };

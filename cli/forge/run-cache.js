@@ -29,6 +29,8 @@ const IMPORT_PATTERN = /^\s*(?:import|export)\s[^'"]*?from\s+['"](\.[^'"]+)['"]|
 export const STORED_SCOPE = 'stored-groups';
 
 const SQL = {
+  units: 'SELECT COUNT(*) AS n, COALESCE(MIN(id), 0) AS lo, COALESCE(MAX(id), 0) AS hi, COALESCE(SUM(id), 0) AS total FROM pattern_units',
+  unitsNoSpecs: 'SELECT COUNT(*) AS n, COALESCE(MIN(id), 0) AS lo, COALESCE(MAX(id), 0) AS hi, COALESCE(SUM(id), 0) AS total FROM pattern_units WHERE is_spec = 0',
   files: 'SELECT path, content_hash, facet_key, extractor_version, mtime_ms, size FROM pattern_files ORDER BY path',
   key: 'SELECT run_key FROM pattern_run_cache WHERE scope_key = ?',
   payload: 'SELECT payload FROM pattern_run_cache WHERE scope_key = ? AND run_key = ?',
@@ -92,9 +94,12 @@ export const runKeyOf = (db, root, options, suppressions) => {
   const isDiskCurrent = files.every((row) => isStampCurrent(root, row));
   if (!isDiskCurrent) return null;
   const ledger = files.map((row) => `${row.path}|${row.content_hash}|${row.facet_key}|${row.extractor_version}`).join('\n');
+  // Unit row ids change whenever a file is re-fingerprinted (a heal, its undo): a stored run names ids, so the key carries them.
+  const unitRows = db.prepare(options.includeSpecs ? SQL.units : SQL.unitsNoSpecs).get();
+  const units = `${unitRows.n}|${unitRows.lo}|${unitRows.hi}|${unitRows.total}`;
   const suppressed = [...suppressions.entries()].map(([key, entry]) => `${key}|${entry.reason ?? ''}`).sort().join('\n');
   const flags = `${scopeKeyOf(options)}|inline=${isInlineRequested() ? 1 : 0}`;
-  return sha1([engineHashOf(), flags, suppressed, ledger].join('\0'));
+  return sha1([engineHashOf(), flags, suppressed, units, ledger].join('\0'));
 };
 
 // The result's two Maps travel as entry lists, so the payload parses without a reviver (a reviver call per
