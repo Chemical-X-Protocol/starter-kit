@@ -172,19 +172,24 @@ test('an edit on a lapsed lease someone else took is refused, never re-acquired'
   assert.equal(db.prepare('SELECT locked_by FROM file_leases WHERE file_path = ?').get('src/a.js').locked_by, '@spec-b');
 });
 
-test('patchFile and writeFile results carry the lease note for a re-acquired lease', (t) => {
+// Since #4492 patch/write take a free file's lease up front (claimWriteLease), so by the time applyEdits
+// plans the edit the lapsed lease is already live again and no lease note is produced. Guaranteed here:
+// the edit succeeds, the editor holds a live lease, and no note appears. The note itself stays covered
+// through applyEdits above.
+test('patchFile and writeFile re-take a lapsed own lease up front and add no lease note', (t) => {
   const { root, db } = makeProject(t);
   requestFileLock(db, 'src/a.js', '@spec-a', { cwd: root });
   lapse(db, 'src/a.js');
   const options = { cwd: root, agentId: '@spec-a', skipIndex: true, skipCheck: true };
 
   const patched = patchFile('src/a.js', { ...options, targetContent: 'a = 1', replacementContent: 'a = 2' });
-  assert.equal(patched.leaseNotes.length, 1);
-  assert.match(patched.leaseNotes[0], /nobody had taken it, so this edit re-acquired it until /);
+  assert.equal(patched.leaseNotes, undefined);
+  assert.equal(db.prepare('SELECT locked_by FROM file_leases WHERE file_path = ?').get('src/a.js').locked_by, '@spec-a');
+  assert.ok(db.prepare('SELECT expires_at FROM file_leases WHERE file_path = ?').get('src/a.js').expires_at > Date.now(), 'the lease is live again');
 
   lapse(db, 'src/a.js');
   const written = writeFile('src/a.js', { ...options, content: 'export const a = 3;\n', overwrite: true });
-  assert.equal(written.leaseNotes.length, 1);
+  assert.equal(written.leaseNotes, undefined);
 
   const live = patchFile('src/a.js', { ...options, targetContent: 'a = 3', replacementContent: 'a = 4' });
   assert.equal(live.leaseNotes, undefined, 'a live lease needs no note');
