@@ -37,5 +37,7 @@ export const verifyWorkspace = async (workspace, { changed, base, allPackages },
 export const formatVerifyLine = (entry) => {
   const steps = ['audit', 'typecheck', 'tests'].map((step) => `${step} ${entry[step]?.status ?? '-'}`).join(', ');
   const icon = entry.status === STATUS.PASS ? `${ANSI.LIME}✔` : `${ANSI.RED}✖`;
-  return `  ${icon}${ANSI.RESET} ${entry.status} ${ANSI.DIM}(${steps})${ANSI.RESET}\n`;
+  const excluded = Array.isArray(entry.scope?.excluded) ? entry.scope.excluded : [];
+  const scopeLine = excluded.length > 0 ? `    ${ANSI.DIM}audited ${entry.scope.dir}/; not audited: ${excluded.join(", ")} (--all-packages runs their own audits)${ANSI.RESET}\n` : "";
+  return `  ${icon}${ANSI.RESET} ${entry.status} ${ANSI.DIM}(${steps})${ANSI.RESET}\n${scopeLine}`;
 };

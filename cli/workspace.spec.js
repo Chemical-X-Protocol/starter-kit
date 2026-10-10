@@ -53,7 +53,8 @@ const withMonorepo = async (fn) => {
     git(root, 'commit', '-q', '-m', 'base');
     return await fn(root);
   } finally {
-    if (previousRoot !== undefined) process.env.CHEMX_PROJECT_ROOT = previousRoot;
+    const hadPreviousRoot = previousRoot !== undefined;
+    if (hadPreviousRoot) process.env.CHEMX_PROJECT_ROOT = previousRoot;
     fs.rmSync(root, { recursive: true, force: true });
   }
 };
@@ -80,6 +81,16 @@ test('workspace: test, typecheck and verify at the monorepo root run the root pa
       assert.match(report.notes.join(' '), /ran only the root package's own .*--all-packages/);
     }
     assert.equal(reports[0].status, STATUS.FAIL, 'the root test script (which fails here) was the one that ran');
+  });
+});
+
+test('workspace: text-mode root verify names the audited dir and the excluded packages', { timeout: 120000 }, async () => {
+  await withMonorepo(async (root) => {
+    fs.mkdirSync(path.join(root, 'src'));
+    fs.writeFileSync(path.join(root, 'src/r.js'), 'export const r = 1;\n');
+    const cli = path.resolve(import.meta.dirname, 'index.js');
+    const run = spawnSync(process.execPath, [cli, 'verify'], { cwd: root, encoding: 'utf8', env: { ...process.env, CHEMX_NONINTERACTIVE: '1', NO_COLOR: '1' }, timeout: 110000 });
+    assert.match(run.stdout, /audited src\/; not audited: .*packages\/alpha.*packages\/beta.*packages\/gamma.*--all-packages/, run.stdout);
   });
 });
 
