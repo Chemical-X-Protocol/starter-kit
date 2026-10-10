@@ -29,6 +29,9 @@ const TEAM_COMMANDS = ['status', 'task', 'lock', 'unlock', 'feed', 'post', 'inbo
 // Subcommands whose handlers do not parse --help themselves; the others print their own help.
 const HELPLESS_SUBCOMMANDS = ['post', 'dm', 'inbox', 'feed', 'tokens', 'telemetry', 'profile', 'handoff', 'train', 'triage', 'audit-run'];
 
+// Subcommands whose handlers print help before using ctx.db.
+const HELP_FIRST_SUBCOMMANDS = ['task', 'lock', 'unlock', 'dispatch'];
+
 const splitPositionals = (restArgs) => {
   const positionals = [];
   for (let i = 0; i < restArgs.length; i++) {
@@ -96,6 +99,9 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
     if (isCli) process.stdout.write(formatTeamHelpCard());
     return { help: true, commands: TEAM_COMMANDS };
   }
+  // These handlers print their own help before touching the db, so help runs without opening one.
+  const isOwnHelp = HELP_FIRST_SUBCOMMANDS.includes(args.subCommand) && (args.flags.help || args.positionals.includes('help'));
+  if (isOwnHelp) return SUB_COMMANDS[args.subCommand]({ db: null, root: null }, args, isCli, cwd);
   // migrate opens its own target (the coordination db, or --into) and never the cwd's silo.
   const isMigrate = args.subCommand === 'migrate';
   if (isMigrate) return handleMigrateCommand(args.flags, isCli, cwd);

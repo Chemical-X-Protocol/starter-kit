@@ -22,3 +22,13 @@ for (const sub of ['post', 'dm', 'inbox', 'feed', 'handoff', 'audit-run']) {
     });
   }
 }
+
+for (const sub of ['task', 'lock', 'unlock', 'dispatch']) {
+  for (const flag of ['--help', '-h']) {
+    test(`team ${sub} ${flag} prints help and creates no .chemx dir`, (t) => {
+      const dir = makeEmptyDir(t);
+      runTeamCli([sub, flag], false, dir);
+      assert.deepEqual(fs.readdirSync(dir), []);
+    });
+  }
+}
