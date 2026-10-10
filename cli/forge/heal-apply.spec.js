@@ -5,6 +5,7 @@ import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { createHealSandbox, copySandbox, snapshotTree, HEAL_FIXTURES, KIT_ROOT } from './heal-sandbox.js';
 import { runHeal } from './heal-apply.js';
 import { undoHeal } from './heal-undo.js';
@@ -202,5 +203,34 @@ test('a covering spec the edit breaks rolls the heal back at stage specs', async
     assert.equal(result.stage, 'specs');
     assert.deepEqual(result.verify.stages[3].introduced, ['cli/project-detector.extra.spec.js::no fs-json module']);
     assertSameTree(snapshotTree(copy.dir), before);
+  });
+});
+
+const CLI = path.join(KIT_ROOT, 'cli/index.js');
+const chemx = (cwd, args) => spawnSync(process.execPath, [CLI, ...args], { cwd, encoding: 'utf-8', env: { ...process.env, CHEMX_PROJECT_ROOT: cwd, NO_COLOR: '1' } });
+const git = (cwd, ...args) => spawnSync('git', args, { cwd, encoding: 'utf-8' });
+
+test('a healed temp project: chemx read <rev>:<path> shows the pre-heal file, and chemx verify runs on the healed tree', async () => {
+  await withCopy(async (copy) => {
+    git(copy.dir, 'init', '-q', '-b', 'main');
+    git(copy.dir, 'config', 'user.email', 'dev@example.test');
+    git(copy.dir, 'config', 'user.name', 'Dev Person');
+    git(copy.dir, 'add', '-A');
+    git(copy.dir, 'commit', '-qm', 'before the heal');
+    const original = fs.readFileSync(path.join(copy.dir, 'cli/main.js'), 'utf-8');
+    const result = await heal(copy, state.sandbox.blueprints.A7);
+    assert.equal(result.outcome, 'applied', JSON.stringify(result.verify ?? result));
+    assert.notEqual(fs.readFileSync(path.join(copy.dir, 'cli/main.js'), 'utf-8'), original);
+
+    const atRev = chemx(copy.dir, ['read', 'HEAD:cli/main.js:1-6']);
+    assert.equal(atRev.status, 0, atRev.stderr);
+    assert.match(atRev.stdout, /HEAD:cli\/main\.js/);
+    const [firstLine, secondLine] = original.split('\n');
+    assert.ok(atRev.stdout.includes(`1|${firstLine}`) && atRev.stdout.includes(`2|${secondLine}`), atRev.stdout);
+
+    const verify = chemx(copy.dir, ['verify', `--dir=${copy.dir}`, '--json']);
+    // Guaranteed: verify ran to a verdict on the healed tree (exit 0 or 1), not a usage error or crash.
+    assert.ok([0, 1].includes(verify.status), `${verify.status}: ${verify.stderr}`);
+    assert.doesNotMatch(verify.stderr, /unknown flag|unrecognized/i);
   });
 });
