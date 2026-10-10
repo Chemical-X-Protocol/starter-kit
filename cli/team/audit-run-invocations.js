@@ -49,7 +49,8 @@ const bashInvocations = (call) => {
   const result = [];
   const vars = {};
   const isOneEdit = commands.filter((cmd) => chemxArgs(cmd.argv)?.[0] === 'patch').length === 1;
-  const printedPath = isOneEdit ? call.printedPath ?? null : null;
+  // chemx prints 'Patched <path>:L69-70'; drop the line-range suffix so the path equals the lease key (#4568).
+  const printedPath = isOneEdit && call.printedPath ? call.printedPath.replace(/:L?\d+(?:-\d+)?$/, '') : null;
   commands.forEach((cmd, index) => {
     const isEmpty = cmd.argv.length === 0 && cmd.redirects.length === 0;
     if (isEmpty) return;

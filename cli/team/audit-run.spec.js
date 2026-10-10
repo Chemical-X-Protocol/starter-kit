@@ -354,6 +354,17 @@ test('4543: the path chemx printed (Patched <path>) wins over an unresolvable sp
   assert.equal(editsWithoutLease(invs, []).length, 1);
 });
 
+test('4568: the :L<a>-<b> suffix of the printed path is dropped before the lease match', () => {
+  const entry = (type, message) => JSON.stringify({ type, timestamp: new Date(BASE).toISOString(), cwd: KIT, message });
+  const text = [
+    entry('assistant', { content: [{ type: 'tool_use', id: 'tu1', name: 'Bash', input: { command: 'chemx patch $F --target=a --replacement=b' } }] }),
+    entry('user', { content: [{ type: 'tool_result', tool_use_id: 'tu1', content: '✔ Patched cli/team/x.js:L69-70' }] })
+  ].join('\n');
+  const invs = readTranscriptCalls(text).calls.flatMap(invocationsOf);
+  const taken = [{ file: 'apps/chemical-x/starter-kit/cli/team/x.js', at: BASE }];
+  assert.deepEqual(editsWithoutLease(invs, taken), []);
+});
+
 test('4543: a lease on another file does not cover the edit', () => {
   const invs = callsOf('chemx patch cli/a.js --target=a --replacement=b');
   const taken = [{ file: 'apps/chemical-x/starter-kit/cli/other.js', at: BASE }];
