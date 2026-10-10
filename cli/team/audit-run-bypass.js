@@ -7,12 +7,14 @@
  * every repo root (so a native call on a /tmp file), /dev/*, and a native call on ~/.claude or node_modules.
  * Limits: a target built from a glob cannot be resolved and is skipped, never guessed; an in-place sed, perl or
  * awk edit whose target is a variable or substitution, run in a directory inside a repo, is reported as an
- * unresolved-target bypass at that directory (so is one with no file operand under xargs or find -exec; other writers with such a target are skipped); a write made by an interpreter (node -e, python -c) is not seen; repo roots are the nearest .git
+ * unresolved-target bypass at that directory (so is one with no file operand under xargs or find -exec; other writers with such a target are skipped); a write made by an inline python/node/ruby/perl script is counted only when its target is a literal (or a same-script variable set to one), found by the same detector the guard uses (hooks/interpreter-writes.js), and a computed target is not seen; repo roots are the nearest .git
  * above each call's recorded cwd (the cwd itself when none exists on this machine).
  */
 import os from 'node:os';
 import path from 'node:path';
 import { findRepoRoot } from '../hooks/repo-membership.js';
+import { parseShell } from '../hooks/shell-parse.js';
+import { interpreterWrites, createdScriptFiles } from '../hooks/interpreter-writes.js';
 const WRITE_OPS = new Set(['>', '>>', '>|', '&>', '&>>']);
 // The words a chemx PreToolUse hook denial carries (the command guard and the nativeFileTools policy).
 const GUARD_DENIAL = /^PreToolUse:[\w-]+ hook error:\s*chemx (?:guard|policy)\b/i;
@@ -121,6 +123,14 @@ function editorWritesOf(argv) {
   return isTee ? { how: 'tee', files: args.filter((w) => !isFlag(w)) } : null;
 }
 
+// Literal files an inline interpreter script of this call writes (a script file made on the same line included).
+const interpreterTargets = (inv) => {
+  const first = interpreterWrites(inv.argv, inv.redirects);
+  if (!first.isInterpreter) return [];
+  const files = createdScriptFiles(parseShell(String(inv.raw ?? '')).commands);
+  return interpreterWrites(inv.argv, inv.redirects, files).targets.map((word) => ({ how: 'interpreter script', word }));
+};
+
 const redirectTargets = (inv) => inv.redirects.filter((r) => WRITE_OPS.has(r.op)).map((r) => ({ how: `redirect ${r.op}`, word: r.target }));
 
 const isScratchPath = (abs, home) => SCRATCH_ROOTS.some((root) => isUnder(abs, root)) || isUnder(abs, path.join(home, '.claude'));
@@ -142,7 +152,7 @@ export const shellWritesOf = (inv, roots, home = os.homedir()) => {
   const isCounted = inv.kind === 'shell' && !isScratch;
   if (!isCounted) return [];
   const editor = editorWrites(inv.argv);
-  const words = [...redirectTargets(inv), ...(editor ? editor.files.map((word) => ({ how: editor.how, word, isInPlace: editor.how !== 'tee' })) : [])];
+  const words = [...redirectTargets(inv), ...interpreterTargets(inv), ...(editor ? editor.files.map((word) => ({ how: editor.how, word, isInPlace: editor.how !== 'tee' })) : [])];
   const cwdHere = resolveWord(inv, '.', home);
   const writes = [];
   for (const { how, word, isInPlace } of words) {

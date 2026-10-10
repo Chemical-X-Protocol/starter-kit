@@ -1,9 +1,10 @@
 // Deny rules for shell commands that chemx replaces one-to-one: writes into repo files (redirects,
-// heredocs, tee, sed -i, perl -i), node --test, git show and find. Each `use` fills in the real
-// arguments of the command being denied.
+// heredocs, tee, sed -i, perl -i, inline python/node/ruby/perl scripts that write a literal repo
+// path), node --test, git show and find. Each `use` fills in the real arguments of the command being denied.
 
 import { fileOperands, gitSubcommand, stdoutWrites, globToSubstring, optionValue } from './guard-args.js';
 import { isRepoWritePath, isRepoPath, isUnresolvedInRepo } from './guard-paths.js';
+import { interpreterWrites } from './interpreter-writes.js';
 
 const IN_PLACE_FLAG = /^-(?![MmIeE])[a-zA-Z]*i(?:\.[\w~]+)?$/;
 const SED_SCRIPT_FLAGS = new Set(['-e', '--expression', '-f', '--file']);
@@ -25,6 +26,18 @@ const patchHint = (file, script) => {
   if (isLiteral) return `${base} with one block: <<<<<<< SEARCH "${found[2]}" ======= "${found[3]}" >>>>>>> REPLACE, each marker on its own line`;
   return `${base} with <<<<<<< SEARCH / ======= / >>>>>>> REPLACE blocks (patch matches literal text, not regexes)`;
 };
+
+// Repo files an inline interpreter script writes by a literal (or same-script variable) path.
+const scriptRepoTargets = (command, context) => interpreterWrites(command.argv, command.redirects).targets.filter((target) => isRepoPath(target, context));
+
+// Advice only: the script writes to a computed path and also names a repo file, so the target is unverified.
+const hasUnverifiedScriptWrite = (command, context) => {
+  const found = interpreterWrites(command.argv, command.redirects);
+  const namesRepoFile = found.mentioned.some((word) => isRepoPath(word, context));
+  return found.unresolved > 0 && namesRepoFile && scriptRepoTargets(command, context).length === 0;
+};
+
+const scriptWriteHint = (file) => `chemx patch ${file} <<'EOF' (edit in place) or chemx write ${file} - <<'EOF' (add --overwrite when the file exists); an interpreter script that writes a repo file bypasses chemx`;
 
 const redirectTargets = (command, context) => stdoutWrites(command).filter((write) => isRepoWritePath(write.target, context));
 
@@ -167,6 +180,17 @@ export const SHELL_REWRITE_RULES = [
     id: 'shell-in-place-unresolved',
     matches: (invocation, command, context) => unresolvedInPlaceTargets(invocation, context).length > 0,
     use: (invocation, command, context) => `chemx patch <file> (cannot verify the target ${unresolvedInPlaceTargets(invocation, context)[0]}: it is a variable inside a repo; patch the file by its literal path)`,
+  },
+  {
+    id: 'shell-interpreter-write',
+    matches: (invocation, command, context) => scriptRepoTargets(command, context).length > 0,
+    use: (invocation, command, context) => scriptWriteHint(scriptRepoTargets(command, context)[0]),
+  },
+  {
+    id: 'shell-interpreter-write-unverified',
+    severity: 'nudge',
+    matches: (invocation, command, context) => hasUnverifiedScriptWrite(command, context),
+    use: 'chemx patch <file> or chemx write <file>: this script writes to a path computed at run time and names a repo file, so chemx cannot verify the target',
   },
   {
     id: 'raw-node-test',
