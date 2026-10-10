@@ -80,3 +80,25 @@ test('command tree: lock actions and capsule prefixes match their sources', () =
   const prefixLine = mainText.split('\n').find((l) => l.startsWith('const CAPSULE_PREFIXES'));
   assert.deepStrictEqual(CAPSULE_PREFIXES, [...prefixLine.matchAll(/'([^']+)'/g)].map((m) => m[1]));
 });
+
+const withFlags = (...texts) => resolveInvocation({
+  kind: 'cli',
+  words: [texts[0]],
+  rawWords: texts.map((text) => ({ text, quoted: false }))
+});
+
+test('resolve: a cited flag the command schema does not list fails', () => {
+  assert.strictEqual(withFlags('read', '--outline'), null);
+  assert.match(withFlags('read', '--removed-flag'), /unknown flag --removed-flag/);
+});
+
+test('resolve: pass-through commands do not fail on the wrapped tool flags', () => {
+  assert.strictEqual(withFlags('test', '--reporter=dot'), null);
+  assert.strictEqual(withFlags('build', '--mode', 'production'), null);
+  assert.strictEqual(withFlags('log', '--oneline'), null);
+});
+
+test('resolve: placeholder and bracketed flags pass', () => {
+  assert.strictEqual(withFlags('read', '--<flag>'), null);
+  assert.strictEqual(withFlags('audit', '--feed[=history'), null);
+});

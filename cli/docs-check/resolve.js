@@ -1,9 +1,13 @@
 /**
  * Docs check resolver: does the command an invocation names exist?
  * Consults the command schema, the team command tree and the MCP action enum.
- * Checks names only: flags and arguments are never validated, and nothing runs.
+ * Checks command names, then each unquoted --flag against the same schema table the router's
+ * unknown-flag check uses. Pass-through commands (test, build, git wrappers) keep that check's
+ * rules: their flags are not checked, or only for typos close to a chemx flag. Argument values
+ * are never validated, and nothing runs.
  */
 import { findCommandSchema } from '../commands-schema.js';
+import { findUnknownFlag } from '../commands/unknown-flags.js';
 import { MCP_TOOLS } from '../mcp/tools.js';
 import {
   TEAM_SUBCOMMANDS, TEAM_TASK_ACTIONS, TEAM_LOCK_ACTIONS, TEAM_FRONT_DOORS, CAPSULE_PREFIXES, BUILTIN_TOKENS
@@ -46,14 +50,27 @@ const checkHelpTarget = (words) => {
   return isOpen || isKnownCommand(target) ? null : `unknown command "${target}" (chemx help lists commands)`;
 };
 
-const checkCli = (words) => {
+/** Unquoted tokens only: a quoted word is a value, and a placeholder flag names nothing to check. */
+const flagArgs = (rawWords) => (rawWords ?? [])
+  .map((w) => (w.quoted || isPlaceholder(w.text) || /\[|^-+</.test(w.text) ? '' : w.text));
+
+const checkFlags = (words, rawWords) => {
+  const args = flagArgs(rawWords);
+  const isChecked = args.length > 0 && args[0] === words[0];
+  const message = isChecked ? findUnknownFlag(words[0], args) : null;
+  return message ? `${message.replace(/ Run `chemx .*$/, '')} (not in the command's schema)` : null;
+};
+
+const checkCli = (words, rawWords) => {
   const first = words[0];
   const isOpen = first === undefined || isPlaceholder(first);
   if (isOpen) return null;
   if (!isKnownCommand(first)) return `unknown command "${first}" (chemx help lists commands)`;
   const isTeam = TEAM_FRONT_DOORS.includes(first);
-  if (isTeam) return checkTeam(words);
-  return first === 'help' ? checkHelpTarget(words) : null;
+  const isHelp = first === 'help';
+  const nameReason = isTeam ? checkTeam(words) : null;
+  const helpReason = isHelp ? checkHelpTarget(words) : null;
+  return nameReason ?? helpReason ?? checkFlags(words, rawWords);
 };
 
 const checkMcp = (action) => {
@@ -64,5 +81,5 @@ const checkMcp = (action) => {
 /** @returns {string|null} why the invocation fails, or null when its names all exist */
 export const resolveInvocation = (invocation) => {
   const isMcp = invocation.kind === 'mcp';
-  return isMcp ? checkMcp(invocation.action) : checkCli(invocation.words);
+  return isMcp ? checkMcp(invocation.action) : checkCli(invocation.words, invocation.rawWords);
 };

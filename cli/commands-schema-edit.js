@@ -91,6 +91,8 @@ export const EDIT_COMMANDS = [
       { flag: '--lean', desc: 'Generate minimal capsule without controller/spec' },
       { flag: '--yes, -y', desc: 'Skip interactive prompts' },
       { flag: '--preset=<name>', desc: 'Apply a named preset (read by the jig generator)' },
+      { flag: '--jig=<kind>', desc: 'Generate a non-UI file of this kind with the jig generator' },
+      { flag: '--kind=<kind>', desc: 'Same as --jig=<kind>' },
       { flag: '--json', desc: 'Output the plan as JSON' }
     ],
     examples: [

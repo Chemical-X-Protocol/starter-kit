@@ -57,7 +57,7 @@ const parseDocsArgs = (args) => {
 export const formatDocsReport = (result) => {
   const rows = result.failures.map((f) => `${f.file}:${f.line}  ${f.text}\n    ${f.reason}`);
   const verdict = result.failures.length === 0 ? 'ok' : `${result.failures.length} failed`;
-  const summary = `docs check: ${verdict}. ${result.checked} invocation(s) in ${result.files} file(s); command and subcommand names only, flags are not checked.`;
+  const summary = `docs check: ${verdict}. ${result.checked} invocation(s) in ${result.files} file(s); command names, and --flags against each command's schema. Pass-through commands (test, build, lint, typecheck) are not flag-checked; team and git wrappers only for typos close to a chemx flag. Short flags and argument values on those are not checked.`;
   return `${[...rows, summary].join('\n')}\n`;
 };
 
