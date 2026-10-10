@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { COMMANDS_SCHEMA } from '../commands-schema.js';
-import { findUnknownFlag, knownLongFlags, exemptionNote, PASSTHROUGH_COMMANDS } from './unknown-flags.js';
+import { findUnknownFlag, knownLongFlags, exemptionNote, PASSTHROUGH_COMMANDS, TYPO_CHECKED } from './unknown-flags.js';
 
 const CLI = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'index.js');
 const MADE_UP = '--zzqx-not-a-flag';
@@ -57,6 +57,40 @@ test('every flag a schema entry lists is accepted', () => {
       assert.equal(findUnknownFlag(entry.name, [entry.name, `${flag}=x`]), null, `${entry.name} ${flag}`);
     }
   }
+});
+
+const TYPOS = {
+  audit: ['--non-interactiv', '--non-interactive'],
+  team: ['--targt', '--target'],
+  project: ['--jsn', '--json'],
+  diff: ['--stats', '--stat'],
+  log: ['--projct-root', '--project-root'],
+  show: ['--pach', '--patch'],
+  pkg: ['--scripst', '--scripts'],
+  json: ['--hel', '--help'],
+  mcp: ['--instal', '--install'],
+  'install-mcp': ['--hlp', '--help'],
+  batch: ['--vesion', '--version']
+};
+
+test('typo-checked commands reject one typo each with the intended flag', () => {
+  assert.deepEqual(Object.keys(TYPOS).sort(), [...TYPO_CHECKED].sort());
+  for (const [name, [typo, intended]] of Object.entries(TYPOS)) {
+    assert.match(findUnknownFlag(name, [name, typo]), new RegExp(`unknown flag ${typo};.*did you mean ${intended}\\?`), name);
+    assert.equal(findUnknownFlag(name, [name, intended]), null, name);
+  }
+});
+
+test('typo-checked commands pass flags that are not close to a chemx flag, such as git flags', () => {
+  assert.equal(findUnknownFlag('log', ['log', '--oneline', '--graph', '--author=x']), null);
+  assert.equal(findUnknownFlag('diff', ['diff', '--cached', '--name-only']), null);
+  assert.match(exemptionNote('diff'), /Only chemx's own flags are checked/);
+});
+
+test('short flags are rejected on strictly checked commands', () => {
+  assert.match(findUnknownFlag('hook', ['hook', '-Z']), /unknown flag -Z/);
+  assert.equal(findUnknownFlag('q', ['q', 'foo', '-l']), null);
+  assert.equal(findUnknownFlag('log', ['log', '-Z']), null);
 });
 
 test('the real CLI exits 1 and names the closest flag', () => {

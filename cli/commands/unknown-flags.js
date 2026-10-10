@@ -31,16 +31,50 @@ export const PASSTHROUGH_COMMANDS = {
   json: 'passes args through to the JSON reader'
 };
 
+/**
+ * Exempt commands that still get a typo check: an unknown long flag is rejected only when it is
+ * close to a flag chemx knows (schema entry, EXTRA_FLAGS or a global one). A flag that is not
+ * close to any is left to the handler or the wrapped tool, so git's own flags pass.
+ */
+export const TYPO_CHECKED = new Set([
+  'audit', 'batch', 'team', 'project', 'mcp', 'install-mcp', 'diff', 'log', 'show', 'pkg', 'json'
+]);
+
+/** Flags handlers accept that the schema entry does not list; used only as typo candidates. */
+const EXTRA_FLAGS = {
+  audit: ['--staged-delta', '--non-interactive'],
+  team: ['--run', '--task', '--status', '--repo', '--all-repos', '--type', '--purpose', '--needs', '--parent', '--desc']
+};
+
 /** Flags every command accepts through the shared boot path. */
 const GLOBAL_FLAGS = new Set(['--help', '--version', '--project-root', '--root', '--as']);
 
 /** Help text for an exempt command, or null when its flags are checked. */
 export const exemptionNote = (name) => {
   const reason = PASSTHROUGH_COMMANDS[name];
-  return reason ? `Unknown flags are not checked for this command: ${reason}.` : null;
+  if (!reason) return null;
+  const isTypoChecked = TYPO_CHECKED.has(name);
+  const typoNote = `Only chemx's own flags are checked, and only for typos close to a known flag; any other flag is passed on unchecked (${reason}).`;
+  return isTypoChecked ? typoNote : `Unknown flags are not checked for this command: ${reason}.`;
 };
 
-export const SHORT_FLAG_NOTE = 'Short flags (-x) are not checked for typos.';
+export const SHORT_FLAG_NOTE = 'Short flags (-x) other than -h, -j, -l, -n, -i, -F, -d, -f, -p, -s and -g, and those the command lists, are rejected.';
+
+/** Short flags accepted on checked commands besides the ones their schema entry lists. */
+const COMMON_SHORT_FLAGS = new Set(['-h', '-j', '-l', '-n', '-i', '-F', '-d', '-f', '-p', '-s', '-g']);
+const SHORT_FLAG = /(?<![\w-])-[A-Za-z](?![\w-])/g;
+
+const withExtraFlags = (entry, known) => {
+  for (const extra of EXTRA_FLAGS[entry.name] ?? []) known.set(extra, known.get(extra) ?? false);
+  return known;
+};
+
+/** Short flags the schema entry lists. */
+const knownShortFlags = (entry) => {
+  const shorts = new Set(COMMON_SHORT_FLAGS);
+  for (const { flag } of entry.flags ?? []) for (const m of flag.matchAll(SHORT_FLAG)) shorts.add(m[0]);
+  return shorts;
+};
 
 const LONG_FLAG = /--[a-z][a-z0-9-]*/g;
 
@@ -96,9 +130,13 @@ const isKnownSearchFlag = (token, known) => {
  */
 export const findUnknownFlag = (command, rawArgs) => {
   const entry = findCommandSchema(command);
-  const isChecked = Boolean(entry) && !Object.hasOwn(PASSTHROUGH_COMMANDS, entry.name);
-  if (!isChecked) return null;
-  const known = knownLongFlags(entry);
+  if (!entry) return null;
+  const isExempt = Object.hasOwn(PASSTHROUGH_COMMANDS, entry.name);
+  const isTypoOnly = isExempt && TYPO_CHECKED.has(entry.name);
+  const isUnchecked = isExempt && !isTypoOnly;
+  if (isUnchecked) return null;
+  const known = withExtraFlags(entry, knownLongFlags(entry));
+  const shorts = isTypoOnly ? null : knownShortFlags(entry);
   const args = rawArgs.slice(1);
   const separator = args.indexOf('--');
   const options = separator === -1 ? args : args.slice(0, separator);
@@ -113,6 +151,8 @@ export const findUnknownFlag = (command, rawArgs) => {
       if (isPattern) i++;
       continue;
     }
+    const isBadShort = shorts !== null && /^-[A-Za-z](=.*)?$/.test(arg) && !shorts.has(arg.slice(0, 2));
+    if (isBadShort) return `chemx ${entry.name}: unknown flag ${arg.slice(0, 2)}. Run \`chemx ${entry.name} --help\`.`;
     const isLongFlag = arg.startsWith('--') && arg.length > 2;
     if (!isLongFlag) continue;
     const hasInlineValue = arg.includes('=');
@@ -121,7 +161,10 @@ export const findUnknownFlag = (command, rawArgs) => {
     const consumesNext = known.get(name) === true && !hasInlineValue;
     if (consumesNext) i++;
     if (isAccepted) continue;
-    const closest = suggestFlag(name, known.keys());
+    const candidates = isTypoOnly ? [...known.keys(), ...GLOBAL_FLAGS] : known.keys();
+    const closest = suggestFlag(name, candidates);
+    const isPassedOn = isTypoOnly && !closest;
+    if (isPassedOn) continue;
     const hint = closest ? `; did you mean ${closest}?` : '';
     return `chemx ${entry.name}: unknown flag ${name}${hint} Run \`chemx ${entry.name} --help\`.`;
   }
