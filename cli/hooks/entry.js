@@ -14,6 +14,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { Readable } from 'node:stream';
 import { pathToFileURL } from 'node:url';
 
 export const CRASH_EVENT_TYPE = 'guard-crash';
@@ -130,6 +131,25 @@ const fallbackRun = async (name, raw, env, stdout, loadError) => {
   return 0;
 };
 
+// A nested checkout registers this hook in both the host and the kit settings, so one tool call runs it
+// twice. Only the first run for a given tool_use_id proceeds; the marker lives in the OS temp dir.
+// Best effort: if the marker cannot be written, the hook runs (a duplicate is better than a skipped guard).
+const DEDUPE_HOOKS = new Set(['claude-pre-tool']);
+export function claimToolUse(payload, name, env = process.env) {
+  const id = payload?.tool_use_id;
+  const hasToolUseId = typeof id === 'string' && id.length > 0;
+  if (!hasToolUseId) return true;
+  try {
+    const dir = path.join(env.CHEMX_HOOK_DEDUPE_DIR || os.tmpdir(), 'chemx-hook-dedupe');
+    fs.mkdirSync(dir, { recursive: true });
+    const key = crypto.createHash('sha1').update(`${payload.session_id || ''}|${name}|${id}`).digest('hex');
+    fs.closeSync(fs.openSync(path.join(dir, key), 'wx'));
+    return true;
+  } catch (error) {
+    return error?.code !== 'EEXIST';
+  }
+}
+
 // `loader` is injectable so a spec can point at a guard dir whose module throws on import.
 export const runEntry = async (args, { stdin = process.stdin, stdout = process.stdout, env = process.env, loader = () => import('./run-hook.js') } = {}) => {
   let mod;
@@ -139,8 +159,20 @@ export const runEntry = async (args, { stdin = process.stdin, stdout = process.s
     const loadError = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
     return fallbackRun(args[0], await readStdin(stdin), env, stdout, loadError);
   }
-  return mod.runHookCli(args, { stdin, stdout, env });
+  const dedupes = DEDUPE_HOOKS.has(args[0]);
+  const raw = dedupes ? await readStdin(stdin) : null;
+  const alreadyRan = dedupes && !claimToolUse(parseJson(raw), args[0], env);
+  const io = dedupes ? { stdin: Readable.from([Buffer.from(raw)]), stdout, env } : { stdin, stdout, env };
+  return alreadyRan ? 0 : mod.runHookCli(args, io);
 };
+
+function parseJson(raw) {
+  try {
+    return JSON.parse(raw || '{}');
+  } catch {
+    return null; // chemx-allow: best-effort not JSON, so no tool_use_id and the hook handles the payload itself
+  }
+}
 
 const isMain = () => {
   try { return pathToFileURL(fs.realpathSync(process.argv[1])).href === import.meta.url; } catch { return false; }

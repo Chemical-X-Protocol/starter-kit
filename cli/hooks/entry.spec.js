@@ -144,3 +144,21 @@ test('normal path delegates to runHookCli when the module loads', async () => {
   assert.equal(code, 0);
   assert.deepEqual(calls, [['x']]);
 });
+
+test('two runs with the same tool_use_id run the guard once (#4521)', async (t) => {
+  const env = { CHEMX_HOOK_DEDUPE_DIR: tempDir(t) };
+  const payload = JSON.stringify({ session_id: 's', tool_use_id: 'toolu_1', tool_name: 'Bash' });
+  let runs = 0;
+  const readAll = (stream) => new Promise((resolve) => { let body = ''; stream.on('data', (c) => { body += c; }).on('end', () => resolve(body)); });
+  const loader = async () => ({ runHookCli: async (_args, io) => { runs += 1; io.stdout.write(`advice:${await readAll(io.stdin)}`); return 0; } });
+  const go = async (id) => {
+    const { out, stream } = sink();
+    const body = id ? payload.replace('toolu_1', id) : payload;
+    await runEntry(['claude-pre-tool'], { stdin: Readable.from([Buffer.from(body)]), stdout: stream, env, loader });
+    return out.text;
+  };
+  assert.match(await go(), /^advice:.*toolu_1/);
+  assert.equal(await go(), '');
+  assert.match(await go('toolu_2'), /^advice:/);
+  assert.equal(runs, 2);
+});
