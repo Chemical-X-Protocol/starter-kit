@@ -8,6 +8,8 @@
  * guaranteed: that restore can itself fail (the failure text says so); leases are checked, not
  * enforced by git, so a lease taken after the check is not seen; recording on the task is best effort.
  */
+import fs from 'node:fs';
+import path from 'node:path';
 import { parseCommitArgs } from './commit-args.js';
 import { buildCommitMessage } from './commit-message.js';
 import { collectRefusals } from './commit-validate.js';
@@ -76,15 +78,55 @@ export const formatSuccessLines = (data, isReleaseAsked) => {
   return [`sha: ${data.sha}`, `subject: ${data.subject}`, `files: ${data.files.join(', ')}`, `gate: ${data.gate}`, `task: ${data.task}`, recordLine, ...releaseLine, ...warnLines, ...data.peerLines];
 };
 
+const isDirectory = (dir) => fs.existsSync(dir) && fs.statSync(dir).isDirectory();
+
+// The git repo that owns a path (a submodule counts as its own repo); null when none does.
+const ownerOf = (cwd, file) => {
+  const resolved = path.resolve(cwd, file);
+  let dir = resolved;
+  while (!isDirectory(dir) && dir !== path.dirname(dir)) dir = path.dirname(dir);
+  const root = gitRoot(dir);
+  const abs = root ? path.join(fs.realpathSync(dir), path.relative(dir, resolved)) : resolved;
+  return { root, abs };
+};
+
+const groupLines = (groups) => [...groups].map(([root, files]) => `  ${root}: ${files.join(', ')}`);
+
+// Sends the listed files to the one repo that owns them; refuses when they span several.
+const routeToOwner = (parsed, cwd) => {
+  const groups = new Map();
+  const absFiles = [];
+  for (const file of parsed.files) {
+    const { root, abs } = ownerOf(cwd, file);
+    absFiles.push(abs);
+    if (root) groups.set(root, [...(groups.get(root) ?? []), file]);
+  }
+  const isSplit = groups.size > 1;
+  if (isSplit) return { refusal: ['Refused: the listed files belong to more than one git repository. Commit each group separately. Nothing was staged. Groups:', ...groupLines(groups)] };
+  const [owner] = groups.keys();
+  const isMoved = owner !== undefined && owner !== gitRoot(cwd);
+  return { cwd: isMoved ? owner : cwd, files: isMoved ? absFiles : parsed.files };
+};
+
 /**
+ * Paths inside a submodule are committed in that submodule (its own index, hook and task trailer);
+ * paths that span several repositories are refused with the grouping. Not guaranteed: a submodule
+ * pointer bump in the superproject is a separate commit.
  * @param {string[]} args Everything after `chemx commit`.
  * @param {{ cwd?: string, env?: object, sleep?: Function, delaysMs?: number[] }} [options]
  * @returns {Promise<{ ok: boolean, exitCode: number, lines: string[], refusals: string[], json: boolean, data?: object }>}
  */
 export const runCommit = async (args, options = {}) => {
-  const cwd = options.cwd ?? process.cwd();
-  const env = options.env ?? process.env;
   const parsed = parseCommitArgs(args);
+  const startCwd = options.cwd ?? process.cwd();
+  const routed = parsed.files.length ? routeToOwner(parsed, startCwd) : { cwd: startCwd, files: parsed.files };
+  const isRefused = Boolean(routed.refusal);
+  if (isRefused) return refused(routed.refusal, parsed);
+  return commitInRepo({ ...parsed, files: routed.files }, routed.cwd, options);
+};
+
+const commitInRepo = async (parsed, cwd, options) => {
+  const env = options.env ?? process.env;
   const root = gitRoot(cwd);
   const facts = root ? gatherFacts(parsed, cwd, root, env) : null;
   const preflight = facts ? collectRefusals(facts) : [NOT_A_REPO];
