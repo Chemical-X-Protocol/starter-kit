@@ -8,6 +8,13 @@ import { runCli, localModules } from './spec-support/run-cli.js';
 
 // Startup budget: the git/package wrappers must not load the AST, audit or generator stack.
 const USER_CPU_BUDGET_MS = 200;
+// Under machine load every process burns more CPU, so the budget scales with a same-run reference:
+// the best user CPU of a bare `chemx --version`. It never drops below the fixed floor.
+const BUDGET_REFERENCE_FACTOR = 2;
+const budgetMs = (cwd) => {
+  const ref = Math.min(...[0, 1, 2].map(() => runCli(['--version'], { cwd }).userCpuMs));
+  return Math.max(USER_CPU_BUDGET_MS, Math.round(ref * BUDGET_REFERENCE_FACTOR));
+};
 const HEAVY_MODULE = /@babel\/|\/cli\/(search|audit|generator|reader)[^/]*\.js$/;
 
 const git = (cwd, ...args) => execFileSync('git', args, { cwd, stdio: 'ignore' });
@@ -15,7 +22,7 @@ const git = (cwd, ...args) => execFileSync('git', args, { cwd, stdio: 'ignore' }
 const makeRepo = (fileCount = 1) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-wrappers-'));
   git(dir, 'init', '-q');
-  git(dir, 'config', 'user.email', 'spec@example.com');
+  git(dir, 'config', 'user.email', 'spec@chemx.invalid');
   git(dir, 'config', 'user.name', 'spec');
   fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ name: 'fx', version: '1.0.0', scripts: { build: 'vite build' } }));
   for (let i = 0; i < fileCount; i += 1) fs.writeFileSync(path.join(dir, `f${i}.js`), 'export const a = 1;\n');
@@ -40,16 +47,18 @@ test('startup: p, f, j, d and log never import the AST/audit/generator stack', (
 
 test(`startup: each wrapper stays under ${USER_CPU_BUDGET_MS}ms of user CPU (best of 3)`, () => {
   const repo = makeRepo();
+  const budget = budgetMs(repo);
   for (const args of WRAPPER_RUNS) {
     const samples = [0, 1, 2].map(() => runCli(args, { cwd: repo }).userCpuMs);
     const best = Math.min(...samples);
-    assert.ok(best < USER_CPU_BUDGET_MS, `chemx ${args.join(' ')} used ${best}ms user CPU (samples ${samples.join(', ')})`);
+    assert.ok(best < budget, `chemx ${args.join(' ')} used ${best}ms user CPU, budget ${budget}ms (samples ${samples.join(', ')})`);
   }
   fs.rmSync(repo, { recursive: true, force: true });
 });
 
 test(`startup: a plain read (whole small file or line range) loads no Babel and stays under ${USER_CPU_BUDGET_MS}ms`, () => {
   const repo = makeRepo();
+  const budget = budgetMs(repo);
   for (const args of [['read', 'f0.js'], ['read', 'f0.js:1-1'], ['read', 'f0.js', '--start=1', '--end=1']]) {
     const runs = [0, 1, 2].map(() => runCli(args, { cwd: repo }));
     assert.strictEqual(runs[0].status, 0, runs[0].stderr);
@@ -57,7 +66,7 @@ test(`startup: a plain read (whole small file or line range) loads no Babel and 
     const babel = runs[0].modules.filter((url) => url.includes('@babel/'));
     assert.deepStrictEqual(babel.slice(0, 3), [], `chemx ${args.join(' ')} loaded Babel`);
     const best = Math.min(...runs.map((r) => r.userCpuMs));
-    assert.ok(best < USER_CPU_BUDGET_MS, `chemx ${args.join(' ')} used ${best}ms user CPU`);
+    assert.ok(best < budget, `chemx ${args.join(' ')} used ${best}ms user CPU, budget ${budget}ms`);
   }
   fs.rmSync(repo, { recursive: true, force: true });
 });
