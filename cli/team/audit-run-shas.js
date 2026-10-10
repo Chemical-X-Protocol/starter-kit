@@ -16,7 +16,7 @@ import { safeAll } from './team-db-readonly.js';
 const SLACK_MS = 15 * 60 * 1000;
 const SEP = '\u001f';
 const END = '\u001e';
-const SHA_AFTER_WORD = /\b(?:commits?|committed|sha)\b[:=\s`'"(]*([0-9a-f]{7,40})\b/gi;
+const SHA_AFTER_WORD = /\b(?:commits?|committed|sha|fixed in|landed in|rev|revision)\b[:=\s`'"(]*([0-9a-f]{7,40})\b/gi;
 const TRAILER = /^Chemx-Agent:\s*(\S+)/im;
 const TASK_MARK = /#(\d+)/g;
 
@@ -129,7 +129,7 @@ export const crossCheckShas = (db, agents, gitRoot) => {
   const unreported = inWindow.filter((c) => !items.some((i) => c.sha.startsWith(i.sha) || i.sha.startsWith(c.sha))).map((c) => ({ sha: c.sha, subject: c.subject, taskId: taskIdOf(c.subject), claimant: claimantOf(db, taskIdOf(c.subject)) })).filter((c) => handles.has(c.claimant));
   return {
     available: true,
-    note: 'attribution is inferred from the Chemx-Agent trailer or the task id in the subject, not proof; shas are found only after the word commit, committed or sha in feed rows',
+    note: 'attribution is inferred from the Chemx-Agent trailer or the task id in the subject, not proof; shas are found only after the words commit, committed, sha, rev, revision, fixed in or landed in in feed rows (a bare sha is not collected); the lease-holder fallback is not implemented, so a commit without a trailer or task id is not attributed; a sha with no commit event cannot be classed as rewritten',
     items, missing: items.filter((i) => i.status === 'missing'), otherHandle: items.filter((i) => i.status === 'other-handle'), rewritten: items.filter((i) => i.status === 'rewritten'), unreported
   };
 };

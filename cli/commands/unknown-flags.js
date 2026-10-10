@@ -77,7 +77,7 @@ const EXTRA_FLAGS = {
     '--cancel', '--ignore-deps', '--target', '--no-target-confirm', '--new', '--all', '--agent', '--prio',
     '--priority', '--sprint', '--moscow', '--deps', '--add-dep', '--rm-dep', '--description', '--title', '--tier',
     '--reason', '--import', '--model', '--cost', '--since', '--tokens', '--prompt-tokens', '--completion-tokens',
-    '--cached-tokens', '--log', '--metadata', '--no-fail', '--from', '--keep-ids', '--into', '--source-repo',
+    '--cached-tokens', '--log', '--metadata', '--no-fail', '--strict', '--from', '--keep-ids', '--into', '--source-repo',
     '--drop-junk', '--mark-read', '--thread', '--to', '--append', '--overwrite', '--in-place', '--compact',
     '--projects', '--url', '--pid', '--force'
   ]
