@@ -6,7 +6,7 @@
  * Change a template by adding a new version file, so a rendered script always names the text it used.
  */
 
-export const TEMPLATE_VERSION = 'dispatch-v1';
+export const TEMPLATE_VERSION = 'dispatch-v1.1';
 
 // First AND last line of every prompt (#2508: one hijack in ~60 agents with the line only first).
 export const AUTHORITY = [
@@ -65,6 +65,7 @@ export const REVIEWER = [
   '{{authority}}',
   'You are {{handle}}, an adversarial reviewer for task #{{taskId}} (chemx dispatch run: {{run}}). Read-only: do not edit, lock, claim or commit.',
   'Project: {{root}}. Shell: cd {{root}} && CHEMX_AGENT_ID={{handle}} chemx ...',
+  '{{waiting}}',
   'TASK #{{taskId}}: {{title}}',
   '{{description}}',
   'Acceptance: {{acceptance}}',

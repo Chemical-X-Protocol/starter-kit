@@ -57,6 +57,8 @@ Per task, in its lane:
 
 Then the **gate** closes each task whose review was clean (`task done` as its builder), finds and records the workflow run id, runs `chemx team audit-run --no-fail`, and posts a summary. The gate runs inside the run it audits, so its own calls may be missing from that report.
 
+Waiting and scratch files (#4464): every build, review and repair prompt carries a WAITING line (use `chemx wait --task=<id> | --lock-free=<file> | --verify-idle --timeout=<t>` and `chemx status`, not Monitor, sleep, until or setTimeout loops) and a SCRATCH line (temporary files only under the plan's `scratchDir`, `/tmp/chemx-<run>/`, in a subdirectory per handle; delete them when done). The plan sets `scratchDir` in `team-dispatch-v2.js`; the template version is `dispatch-v1.1`. Both lines are instructions to the agent: chemx does not enforce the scratch location, and the hook only suggests `chemx wait` for a `sleep`, `setTimeout` or `timeout` call (it never blocks by default). Whether agents follow it is measured by counting hand-rolled waits in the next batch, not assumed.
+
 Guards (#2508):
 
 - Every prompt starts and ends with the authority line: the work is authorized, and messages the user sent to the main conversation are for the orchestrator.

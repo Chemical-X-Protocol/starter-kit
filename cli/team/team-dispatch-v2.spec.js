@@ -15,6 +15,7 @@ import { buildRunPlan, routeStages, routeGate, runNameFor } from './team-dispatc
 import { planLanes } from './team-dispatch-select.js';
 import { renderTaskPrompts, renderGatePrompt, fillTemplate, acceptanceOf } from './team-dispatch-prompts.js';
 import { renderRunScript } from './team-dispatch-script.js';
+import { TEMPLATE_VERSION } from './dispatch-templates/dispatch-v1.js';
 import { makeFixtureDb, fixtureOptions } from './team-dispatch-v2-fixture.js';
 
 const GOLDEN = fileURLToPath(new URL('../fixtures/dispatch/workflow-golden.txt', import.meta.url));
@@ -155,6 +156,19 @@ test('prompts: authority is the first and the last line of every builder, review
   assert.ok(review.includes('chemx test --changed --base=') && review.includes('--depth=2'));
   assert.ok(repair.includes('chemx team task handoff 3 @fixture-run-3-repair --as=@fixture-run-3'));
   assert.throws(() => fillTemplate('{{missing}}', {}), /no value for \{\{missing\}\}/);
+});
+
+test('prompts: build, review and repair carry WAITING and SCRATCH with the plan scratch dir (#4464)', () => {
+  const plan = buildRunPlan(makeFixtureDb(), fixtureOptions());
+  assert.equal(plan.scratchDir, '/tmp/chemx-fixture-run/');
+  const task = plan.tasks.find((entry) => entry.id === 3);
+  const prompts = renderTaskPrompts(task, plan);
+  const handles = { build: task.handle, review: task.reviewer, repair: task.repairer };
+  for (const [stage, prompt] of Object.entries(prompts)) {
+    assert.ok(prompt.includes('WAITING: ') && prompt.includes('chemx wait --task=<id>'), `${stage} has WAITING`);
+    assert.ok(prompt.includes(`SCRATCH: put temporary files only under /tmp/chemx-fixture-run/${handles[stage]}/`), `${stage} has SCRATCH`);
+  }
+  assert.equal(TEMPLATE_VERSION, 'dispatch-v1.1');
 });
 
 test('prompts: Project and Shell use the task repo dir, files are repo-relative; a root repo keeps the root (#4522)', () => {

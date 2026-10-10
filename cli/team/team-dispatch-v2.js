@@ -190,6 +190,7 @@ export const buildRunPlan = (db, options = {}) => {
     template: TEMPLATE_VERSION,
     run,
     root,
+    scratchDir: `/tmp/chemx-${run}/`,
     dispatcher,
     goal: String(options.goal || ''),
     routingSource: routing ? 'config' : 'defaults',
