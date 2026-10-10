@@ -116,6 +116,12 @@ test('short flags are rejected on strictly checked commands, not on git passthro
   assert.equal(findUnknownFlag('log', ['log', '-Z']), null);
 });
 
+test('report accepts --reattribute (#4574) and the real CLI does not reject it as an unknown flag', () => {
+  assert.equal(findUnknownFlag('report', ['report', 'savings', '--reattribute']), null);
+  const run = spawnSync('node', [CLI, 'report', 'savings', '--reattribute'], { encoding: 'utf8' });
+  assert.doesNotMatch(run.stderr + run.stdout, /unknown flag/);
+});
+
 test('the real CLI exits 1 and names the closest flag', () => {
   const run = spawnSync('node', [CLI, 'hook', '--native-file-tool=block', '--dry-run'], { encoding: 'utf8' });
   assert.equal(run.status, 1);

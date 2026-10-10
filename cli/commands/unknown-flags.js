@@ -67,6 +67,8 @@ const EXTRA_FLAGS = {
   // trend, badge and verify flags live in cli/commands-schema-verify.js (#4565).
   // patterns: a string '--name' appears in the patterns route's sources (found by schema-flag-coverage.spec.js); its read was not traced.
   patterns: ['--name'],
+  // report: runReportCli reads --projects, --reattribute, --baseline, --run and --json (savings-report.js, #4574).
+  report: ['--projects', '--reattribute', '--baseline', '--run', '--json'],
 
   // Flags the team subcommands parse (dispatch, task, tokens, audit-run, migrate, inbox/dm/feed, lock), so the
   // typo check never rejects a real one as a near miss of another (#4569). Per-subcommand schemas: #4554.

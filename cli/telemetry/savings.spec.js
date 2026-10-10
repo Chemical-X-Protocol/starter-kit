@@ -266,6 +266,23 @@ test('report (#5888): a package db with no tool_calls table is named as not read
   assert.match(renderSavingsCard(report), /apps\/x\/\.chemx\/index\.db: not read \(no tool_calls table\)/);
 });
 
+test('render (#4574): unattributed share and the reattribute outcome are stated, and not run is said so', (t) => {
+  const db = makeDb(t);
+  recordCall(db, { ts: T0 + 2 * MIN, agent: '@a0', surface: 'mcp', action: 'read', ok: true, resultChars: 400, cf: { kind: 'file-whole', chars: 4000, calls: 0 } });
+  recordCall(db, { ts: T0 + 2 * MIN, agent: null, surface: 'mcp', action: 'read', ok: true, resultChars: 400, cf: { kind: 'file-whole', chars: 4000, calls: 0 } });
+  const report = buildSavingsReport({ run: runOf(5, 'claude-haiku-5-5'), pricing: PRICING, db });
+  const cov = report.tooling.coverage;
+  const stats = unattributedStats(db, cov.runStart, cov.runEnd);
+  cov.loggedInWindow = stats.total;
+  cov.unattributedShare = stats.share;
+  cov.reattribute = null;
+  const before = renderSavingsCard(report);
+  assert.match(before, /Unattributed: 1 logged calls in the run window carry no agent handle \(50\.0% of 2 logged/);
+  assert.match(before, /Reattribute: not run\. Pass --reattribute/);
+  cov.reattribute = { updated: 3, ambiguousSessions: 2 };
+  assert.match(renderSavingsCard(report), /Reattribute: filled 3 calls from single-handle sessions; 2 sessions map to several handles/);
+});
+
 test('coverage: the note says exactly what the log can and cannot cover', () => {
   const window = { start: T0, end: T0 + 10 * MIN };
   assert.match(coverageNote({ loggedTotal: 0, loggedFrom: null }, window), /no chemx calls have been logged/);
