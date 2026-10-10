@@ -37,7 +37,7 @@ export const PROTOCOL = [
 ].join('\n');
 
 export const PEERS = [
-  'Peers outside this run (live claims and leases when the script was rendered; respect them):',
+  'Peers outside this run (live claims and leases when the script was rendered; respect them):{{pathNote}}',
   '{{peerLines}}',
   'This run ({{run}}): {{laneCount}} lane(s) run at the same time; the tasks of one lane run one after another. Never edit another task\'s files:',
   '{{runLines}}',

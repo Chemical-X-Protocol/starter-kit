@@ -4,6 +4,7 @@
  * line (#2508). Task text from the db is inserted as data: a placeholder inside it is never expanded,
  * and the script's run-time markers are defused so a description cannot capture a result.
  */
+import path from 'node:path';
 import {
   TEMPLATE_VERSION,
   AUTHORITY,
@@ -40,6 +41,17 @@ const clipDescription = (task) => {
   return clipped || '(no description: the title is the task)';
 };
 
+const repoOf = (task) => task.repo || '.';
+// Files and targets in a plan are root-relative; an agent works from its task's repo directory (#4522).
+const inRepo = (task, file) => (repoOf(task) === '.' ? file : path.posix.relative(repoOf(task), file));
+const repoView = (task) => ({
+  ...task,
+  files: task.files.map((file) => inRepo(task, file)),
+  extraFiles: (task.extraFiles || []).map((file) => inRepo(task, file)),
+  target: task.target ? inRepo(task, task.target) : task.target
+});
+const projectDir = (plan, task) => path.resolve(plan.root, repoOf(task));
+
 const snapshotLine = (task) => {
   const rules = task.snapshot?.rules;
   const hasRules = typeof rules === 'string' && rules !== '';
@@ -71,7 +83,10 @@ const runLines = (plan) => plan.lanes.flatMap((lane, laneIndex) => lane.map((id)
   return `- #${id} (lane ${laneIndex + 1}) ${task.handle}: ${task.files.join(', ')}`;
 })).join('\n');
 
+const pathNoteFor = (plan, task) => (repoOf(task) === '.' ? '' : ` Paths in the peer list and the run list are relative to the checkout root ${plan.root}; your own files are relative to your Project directory.`);
+
 const peersFor = (plan, task) => fillTemplate(PEERS, {
+  pathNote: pathNoteFor(plan, task),
   peerLines: plan.peers.length > 0 ? plan.peers.join('\n') : '- none',
   run: plan.run,
   laneCount: plan.lanes.length,
@@ -79,7 +94,7 @@ const peersFor = (plan, task) => fillTemplate(PEERS, {
   files: task.files.join(', ')
 });
 
-const protocolFor = (plan, task, handle, claimStep) => fillTemplate(PROTOCOL, { root: plan.root, handle, taskId: task.id, claimStep });
+const protocolFor = (plan, task, handle, claimStep) => fillTemplate(PROTOCOL, { root: projectDir(plan, task), handle, taskId: task.id, claimStep });
 
 // Empty without extras, so a task with only a target renders the same text as before (#4426).
 const extraFilesNote = (task) => {
@@ -88,7 +103,8 @@ const extraFilesNote = (task) => {
 };
 
 /** { build, review, repair } prompts for one task of the plan. */
-export const renderTaskPrompts = (task, plan) => {
+export const renderTaskPrompts = (rootTask, plan) => {
+  const task = repoView(rootTask);
   const authority = authorityFor(plan, `task #${task.id}`);
   const shared = { authority, taskId: task.id, run: plan.run, version: TEMPLATE_VERSION, title: asData(task.title), files: task.files.join(', '), acceptance: acceptanceOf(task) };
   const claimStep = fillTemplate(CLAIM_STEP, { taskId: task.id, handle: task.handle });
@@ -105,7 +121,7 @@ export const renderTaskPrompts = (task, plan) => {
       peers,
       description
     }),
-    review: fillTemplate(REVIEWER, { ...shared, handle: task.reviewer, root: plan.root, builder: task.handle, description }),
+    review: fillTemplate(REVIEWER, { ...shared, handle: task.reviewer, root: projectDir(plan, task), builder: task.handle, description }),
     repair: fillTemplate(REPAIR, {
       ...shared,
       handle: task.repairer,

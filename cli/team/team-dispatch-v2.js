@@ -144,6 +144,7 @@ const toPlanTask = (entry, run, routing) => ({
   rule: entry.rule,
   mechanical: entry.mechanical,
   weight: entry.weight,
+  repo: entry.repo || '.',
   target: entry.target,
   files: entry.files,
   extraFiles: entry.extraFiles ?? [],

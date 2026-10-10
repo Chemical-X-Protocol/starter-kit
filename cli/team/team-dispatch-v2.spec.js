@@ -146,6 +146,27 @@ test('prompts: authority is the first and the last line of every builder, review
   assert.throws(() => fillTemplate('{{missing}}', {}), /no value for \{\{missing\}\}/);
 });
 
+test('prompts: Project and Shell use the task repo dir, files are repo-relative; a root repo keeps the root (#4522)', () => {
+  const db = makeFixtureDb();
+  db.prepare("UPDATE agent_tasks SET repo = 'apps/kit' WHERE id = 1").run();
+  const plan = buildRunPlan(db, fixtureOptions());
+  const kit = plan.tasks.find((task) => task.id === 1);
+  const root = plan.tasks.find((task) => task.id === 4);
+  assert.equal(kit.repo, 'apps/kit');
+  assert.equal(root.repo, '.');
+  for (const prompt of Object.values(renderTaskPrompts(kit, plan))) {
+    assert.ok(prompt.includes('cd /work/kit/apps/kit'), 'kit task works from its repo dir');
+    assert.ok(!prompt.includes('cd /work/kit &&'), 'not from the host root');
+  }
+  const kitBuild = renderTaskPrompts(kit, plan).build;
+  assert.ok(kitBuild.includes('Target files: cli/a.js'), 'target is repo-relative');
+  assert.ok(kitBuild.includes('relative to the checkout root /work/kit'), 'peer paths are labelled root-relative');
+  const rootBuild = renderTaskPrompts(root, plan).build;
+  assert.ok(rootBuild.includes('Shell: cd /work/kit && '), 'repo . keeps the root');
+  assert.ok(!rootBuild.includes('relative to the checkout root'));
+  assert.ok(renderGatePrompt(plan).includes('cd /work/kit &&'), 'the gate runs from the coordination root');
+});
+
 test('script: meta literal first, schemas, retry guard and gate present; golden render is stable', () => {
   const script = renderRunScript(fixturePlan());
   assert.equal(script, renderRunScript(fixturePlan()), 'same db state, same bytes');

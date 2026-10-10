@@ -106,6 +106,7 @@ const toEntry = (task, options) => {
     needs: task.needs,
     needsSource: task.needsSource || 'task',
     parentId: task.parent_id ?? null,
+    repo: String(task.repo || '.'),
     rule: String(task.rule_id || ''),
     assignee: String(task.assigned_agent_id || ''),
     dependencies: parseDependencies(task.dependencies),
