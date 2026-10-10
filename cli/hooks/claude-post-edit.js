@@ -6,11 +6,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { isRepoSourcePath } from './guard-paths.js';
-import { scopeViolations } from './post-edit-scope.js';
 import { helperHintsFor, loadXatomsCatalog } from './xatoms-hints.js';
 import { OUT_OF_BAND_RULE, outOfBandMessage, scanOutOfBand } from './out-of-band-edits.js';
 import { logBypassToDb } from './bypass-log.js';
-import { resolveHookAgentId } from './native-edit-lock.js';
 
 const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
 const MAX_HAZARDS = 8;
@@ -49,6 +47,8 @@ const runPostBash = async (payload, env, log) => {
   const scan = scanOutOfBand({ root, command });
   const hasFindings = scan !== null && scan.changed.length > 0;
   if (!hasFindings) return null;
+  // native-edit-lock pulls in the lease db layer (~0.2s to load): only load it once there is a finding to log.
+  const { resolveHookAgentId } = await import('./native-edit-lock.js');
   const handle = resolveHookAgentId(payload, env);
   const reason = `changed outside chemx: ${scan.changed.slice(0, 5).join(', ')}`;
   await log({ root, handle, reason, rule: OUT_OF_BAND_RULE, command, session: payload?.session_id ?? null });
@@ -70,6 +70,7 @@ export const runPostEdit = async (payload, env = process.env, { log = logBypassT
   if (!isAuditable) return null;
   const relativePath = path.relative(root, absolute);
   const { auditFile } = await import('../audit.js');
+  const { scopeViolations } = await import('./post-edit-scope.js');
   const scoped = scopeViolations(auditFile(absolute, relativePath), { file: absolute, cwd: root, since: env.CHEMX_POST_EDIT_SINCE || null });
   const isClean = scoped.violations.length === 0;
   if (isClean) return null;

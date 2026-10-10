@@ -2,7 +2,6 @@
 // fails open: malformed input or an internal error allows the tool call and writes nothing.
 
 import { appendFriction } from '../friction/friction-log.js';
-import { buildPreToolContext, decidePreTool, toPreToolOutput } from './claude-pre-tool.js';
 import { logBypassToDb } from './bypass-log.js';
 
 const readStdin = async (stream) => {
@@ -33,7 +32,9 @@ const recordBypassInDb = async (payload, context, result) => {
   return logBypassToDb({ root: context.root, handle: context.agentId, reason: result.bypassReason, rule: result.rule, command, session: payload?.session_id ?? null });
 };
 
+// claude-pre-tool is the heaviest import of the hook chain: load it only for PreToolUse so post hooks skip it.
 const runPreTool = async (payload, env) => {
+  const { buildPreToolContext, decidePreTool, toPreToolOutput } = await import('./claude-pre-tool.js');
   const context = buildPreToolContext(payload, env);
   const result = decidePreTool(payload, context);
   recordPreToolFriction(payload, context, result, env);
