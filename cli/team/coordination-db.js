@@ -12,6 +12,7 @@ import { findChemxDir } from '../audit/chemx-dir.js';
 import { guardProjectStamp } from '../db-project-stamp.js';
 import { initTeamSchema } from './team-schema.js';
 import { isSpecProcess } from './coordination-root.js';
+import { withBusyRetry } from './coordination-busy.js';
 import { closeQuietly } from './team-db-readonly.js';
 import { resolveTeamDbTarget, teamDbPathFor, mergedSourceDbs, isUnmergedSilo } from './coordination-target.js';
 
@@ -66,7 +67,8 @@ const openAtRoot = (root) => {
  */
 export const openTeamContext = (startDir = process.cwd(), options = {}) => {
   const target = resolveTeamDbTarget(startDir, options);
-  const db = target.refused ? null : openAtRoot(target.root);
+  const opened = target.refused ? null : openAtRoot(target.root);
+  const db = withBusyRetry(opened);
   return { ...target, db };
 };
 
