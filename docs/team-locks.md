@@ -100,6 +100,18 @@ Limit: the lapse record lives in the feed. A lease cleaned by an older chemx, or
 archive pass, is reported without the lapse sentence (the shorter "you do not hold a lease" form).
 The wording only ever says less, never more.
 
+## Handing leases over (#5740)
+
+`chemx team task handoff <id> @to --as=@from` moves the task, not its leases. Add `--with-locks` to also move every
+live lease whose purpose names `#<id>` (not `#<id>` followed by another digit) to the new owner; each move is a
+`lock_transferred` feed event. Expired leases and leases whose purpose does not name the task stay as they are.
+Not guaranteed: a lease taken with a purpose that omits the task id is not moved.
+
+A dispatched agent whose handle the hook resolved is denied a chemx call that names another handle of its own run
+(`--as=`, or `CHEMX_AGENT_ID=`) as its identity (rule `foreign-identity`). Handles outside the run, variable
+identities and agents whose handle did not resolve are not checked. `chemx team audit-run` lists the Bash calls
+whose explicit identity differs from the agent's own under "acted as another handle".
+
 ## Commit guard
 
 `chemx team lock check-staged` checks the files in `git diff --cached` (or the files you name) against
