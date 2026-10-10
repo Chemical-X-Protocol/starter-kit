@@ -27,16 +27,33 @@ export const hasPlannedChanges = (plan, storedKey) => {
   return hasRowChanges || computeNextScopeKey(storedKey, plan) !== (storedKey || '');
 };
 
-// The key is re-read under the write lock, so a scope another process merged after this sync
-// read meta is kept, and its rows are not pruned as orphans.
+// Key before rows: a new scope dir joins the key before any of its rows are written. A concurrent
+// sync reads rows before meta (search-sync.js), so it may see the key without all of the dir's rows,
+// which it re-walks, but never rows that no stored scope covers, which it would prune as orphans.
+const mergeAddedDirs = (db, addDirs, attempts) => {
+  const storedKey = readIndexMeta(db).scope || '';
+  const isCovered = computeNextScopeKey(storedKey, { addDirs }) === storedKey;
+  if (isCovered) return;
+  withIndexTransaction(db, () => {
+    writeIndexMeta(db, { scope: computeNextScopeKey(readIndexMeta(db).scope, { addDirs }) });
+  }, attempts);
+};
+
+// The rows go in short transactions (upsertFileIndexBatch), never one around the whole sync: that
+// held the shared write lock for 88 s on a stale root index and starved every team write (#5919).
+// Each file's rows are written whole and match the file as parsed, so a busy failure or a crash
+// before the commit below leaves only true rows, under a key that covers them. At the commit the
+// key is re-read under the write lock, so a scope another process merged after this sync read meta
+// is kept, and its rows are not pruned as orphans.
 export const commitSyncPlan = (db, plan, attempts) => {
   const committed = { scopeKey: null, removedCount: 0 };
+  mergeAddedDirs(db, plan.addDirs, attempts);
+  upsertFileIndexBatch(db, plan.records, { attempts });
   withIndexTransaction(db, () => {
     const currentKey = readIndexMeta(db).scope;
     const scopeKey = computeNextScopeKey(currentKey, plan);
     const orphans = plan.orphans.filter((relPath) => !isScopeCovered([relPath], scopeKey));
     const removable = [...plan.removable, ...orphans];
-    upsertFileIndexBatch(db, plan.records);
     deleteFileIndexRows(db, removable);
     writeIndexMeta(db, { scope: scopeKey, syncedAt: Date.now() });
     committed.scopeKey = scopeKey;

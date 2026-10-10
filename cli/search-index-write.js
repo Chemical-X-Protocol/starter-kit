@@ -93,14 +93,27 @@ export const upsertFileIndex = (db, record) => {
   withIndexTransaction(db, () => writeFileRows(db, record));
 };
 
-// Writes many records in bounded transactions so a cold build never holds the write lock
-// for the whole parse, yet still avoids one autocommit per statement.
-export const upsertFileIndexBatch = (db, records, batchSize = 200) => {
-  for (let start = 0; start < records.length; start += batchSize) {
-    const batch = records.slice(start, start + batchSize);
+// Writes many records in short transactions, so a large sync never holds the write lock (shared
+// with every team write on the root db) for long (#5919), yet still avoids one autocommit per
+// statement. Each transaction commits after batchSize records or once it has held the lock for
+// maxHoldMs, whichever comes first, and always writes at least one record. A retried transaction
+// restarts from its own first record, so none is skipped. attempts is the busy-retry budget of
+// each transaction.
+export const upsertFileIndexBatch = (db, records, { batchSize = 200, maxHoldMs = 250, attempts = 5 } = {}) => {
+  let next = 0;
+  while (next < records.length) {
+    const first = next;
+    let end = first;
     withIndexTransaction(db, () => {
-      for (const record of batch) writeFileRows(db, record);
-    });
+      const began = Date.now();
+      end = first;
+      const hasRoom = () => end < records.length && end - first < batchSize && (end === first || Date.now() - began < maxHoldMs);
+      while (hasRoom()) {
+        writeFileRows(db, records[end]);
+        end++;
+      }
+    }, attempts);
+    next = end;
   }
 };
 
