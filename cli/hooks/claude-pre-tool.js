@@ -16,6 +16,7 @@
 import { parseShell } from './shell-parse.js';
 import { resolveInvocation, isChemxInvocation } from './guard-invocation.js';
 import { activeRules } from './guard-rules.js';
+import { scriptFilesOf } from './guard-rules-shell.js';
 import { contextForCommand } from './guard-paths.js';
 import { isPromotedNudge, resolveNudgePromotion } from './guard-config.js';
 import { NATIVE_FILE_TOOLS, decideNativeTool, resolveNativeToolMode } from './native-tool-policy.js';
@@ -53,13 +54,14 @@ const useOf = (rule, invocation, parsed, context) => (typeof rule.use === 'funct
 const collectHits = (parsedCommands, context) => {
   const rules = activeRules(context);
   const hits = [];
+  const scriptFiles = scriptFilesOf(parsedCommands);
   for (const parsed of parsedCommands) {
     const hasArgv = parsed.argv.length > 0;
     if (!hasArgv) continue;
     const invocation = resolveInvocation(parsed.argv);
     const isOwnedByChemx = isChemxInvocation(invocation);
     if (isOwnedByChemx) continue;
-    const commandContext = contextForCommand(context, parsed.dir);
+    const commandContext = { ...contextForCommand(context, parsed.dir), scriptFiles };
     const rule = rules.find((candidate) => candidate.matches(invocation, parsed, commandContext));
     if (rule) hits.push({ rule, segment: segmentOf(parsed), use: useOf(rule, invocation, parsed, commandContext) });
   }

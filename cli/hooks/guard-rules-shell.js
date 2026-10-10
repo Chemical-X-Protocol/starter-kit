@@ -4,7 +4,7 @@
 
 import { fileOperands, gitSubcommand, stdoutWrites, globToSubstring, optionValue } from './guard-args.js';
 import { isRepoWritePath, isRepoPath, isUnresolvedInRepo } from './guard-paths.js';
-import { interpreterWrites } from './interpreter-writes.js';
+import { interpreterWrites, createdScriptFiles } from './interpreter-writes.js';
 
 const IN_PLACE_FLAG = /^-(?![MmIeE])[a-zA-Z]*i(?:\.[\w~]+)?$/;
 const SED_SCRIPT_FLAGS = new Set(['-e', '--expression', '-f', '--file']);
@@ -27,12 +27,23 @@ const patchHint = (file, script) => {
   return `${base} with <<<<<<< SEARCH / ======= / >>>>>>> REPLACE blocks (patch matches literal text, not regexes)`;
 };
 
+// Script files the whole command line creates: `cat > f <<E` bodies plus `tee f <<E` bodies (path -> body).
+export const scriptFilesOf = (parsedCommands) => {
+  const teed = parsedCommands.flatMap((command) => {
+    const body = (command.redirects ?? []).find((redirect) => typeof redirect.body === 'string');
+    const isTee = body && command.argv[0] === 'tee';
+    return isTee ? fileOperands(command.argv.slice(1), new Set()).map((file) => [file, body.body]) : [];
+  });
+  return { ...Object.fromEntries(teed), ...createdScriptFiles(parsedCommands) };
+};
+
 // Repo files an inline interpreter script writes by a literal (or same-script variable) path.
-const scriptRepoTargets = (command, context) => interpreterWrites(command.argv, command.redirects).targets.filter((target) => isRepoPath(target, context));
+// A script file this same command line created (and runs) counts as that interpreter's script.
+const scriptRepoTargets = (command, context) => interpreterWrites(command.argv, command.redirects, context.scriptFiles ?? {}).targets.filter((target) => isRepoPath(target, context));
 
 // Advice only: the script writes to a computed path and also names a repo file, so the target is unverified.
 const hasUnverifiedScriptWrite = (command, context) => {
-  const found = interpreterWrites(command.argv, command.redirects);
+  const found = interpreterWrites(command.argv, command.redirects, context.scriptFiles ?? {});
   const namesRepoFile = found.mentioned.some((word) => isRepoPath(word, context));
   return found.unresolved > 0 && namesRepoFile && scriptRepoTargets(command, context).length === 0;
 };

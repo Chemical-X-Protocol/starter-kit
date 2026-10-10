@@ -62,6 +62,9 @@ const DENY_CASES = [
   ['printf a.js | xargs sed -i s/x/y/', /cannot verify the target \(files from a pipe or find\)/],
   ['find . -name "*.js" -exec sed -i s/x/y/ {} +', /cannot verify the target \(files from a pipe or find\)/],
   ['git ls-files | xargs -n1 cat < list.txt', /chemx do/],
+  // #4603: a script file written and run in the same command.
+  ["mkdir -p /tmp/s && cat > /tmp/s/split.mjs <<E\nimport fs from 'node:fs';\nconst f = \"cli/a.js\";\nfs.writeFileSync(f, 'x');\nfs.writeFileSync(\"cli/b.js\", 'y');\nE\nnode /tmp/s/split.mjs", /chemx (?:patch|write) cli\/a\.js/],
+  ["printf x | tee /tmp/w.py <<'E'\nopen('src/a.ts', 'w').write('x')\nE\npython3 /tmp/w.py", /chemx (?:patch|write) src\/a\.ts/],
 ];
 
 for (const [command, expectedUse] of DENY_CASES) {
