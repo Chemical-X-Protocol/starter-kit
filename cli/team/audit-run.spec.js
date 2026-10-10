@@ -65,7 +65,7 @@ const cleanAgent = (repo) => ({
     mcp(BASE + 2000, repo, { action: 'team_lock', params: { subAction: 'acquire', path: 'cli/a.js' } }),
     mcp(BASE + 3000, repo, { action: 'patch', params: { path: 'cli/a.js' } }),
     bash(BASE + 4000, repo, 'CHEMX_AGENT_ID=@clean-one chemx commit cli/a.js -m "fix(a): tidy (#11)" --release'),
-    bash(BASE + 5000, repo, 'chemx team task done 11 --target=cli/a.js'),
+    bash(BASE + 5000, repo, 'chemx team task done 11 --target=cli/a.js --as=@clean-one'),
     use(BASE + 60000, repo, 'StructuredOutput', { file: 'cli/a.js', status: 'fixed', task: 11 })
   ]
 });

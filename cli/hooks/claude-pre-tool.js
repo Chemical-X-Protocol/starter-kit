@@ -21,6 +21,7 @@ import { isPromotedNudge, resolveNudgePromotion } from './guard-config.js';
 import { NATIVE_FILE_TOOLS, decideNativeTool, resolveNativeToolMode } from './native-tool-policy.js';
 import { decideEditLock, resolveHookAgentId } from './native-edit-lock.js';
 import { everyChemxCallCarriesIdentity, identityDenyReason, resolveDispatchHandle } from './dispatch-identity.js';
+import { hasAnonymousActingCall, inheritedOrchestratorHandle, orchestratorActingReason } from './session-identity.js';
 
 // The route guard pulls in the dispatch modules, which agents edit mid-flight. Load it on its own so
 // a broken dispatch module only disables routing advice, not every other rule.
@@ -107,9 +108,16 @@ const decideDispatchIdentity = (command, context) => {
   return isMissing ? { decision: 'deny', rule: 'dispatch-identity', segment: command.slice(0, SEGMENT_LIMIT), reason: identityDenyReason(handle) } : null;
 };
 
+// A subagent's anonymous state-changing chemx call would resolve to the orchestrator it inherits (#4562).
+const decideInheritedIdentity = (command, context) => {
+  const handle = context.inheritedHandle ?? null;
+  const isInherited = handle !== null && hasAnonymousActingCall(command);
+  return isInherited ? { decision: 'deny', rule: 'inherited-identity', segment: command.slice(0, SEGMENT_LIMIT), reason: orchestratorActingReason(handle) } : null;
+};
+
 const decideBash = (input, context) => {
   const command = String(input.command ?? '');
-  const missingIdentity = decideDispatchIdentity(command, context);
+  const missingIdentity = decideDispatchIdentity(command, context) ?? decideInheritedIdentity(command, context);
   if (missingIdentity) return missingIdentity;
   const { rule, segment, use, bypassReason, nudges } = findViolation(command, context);
   const hasBypass = bypassReason !== null;
@@ -141,10 +149,11 @@ export const buildPreToolContext = (payload, env = process.env) => {
   const nudgePromotion = resolveNudgePromotion(root, env);
   const scratchDir = payload?.scratchpad_dir ?? null;
   const isBash = payload?.tool_name === 'Bash';
-  const hasEnvIdentity = String(env.CHEMX_AGENT_ID ?? '').trim() !== '';
-  const dispatchHandle = isBash && !hasEnvIdentity ? resolveDispatchHandle(payload, { root, env }) : null;
+  // The identity must be in the command text: an inherited CHEMX_AGENT_ID is the orchestrator's (#4562).
+  const dispatchHandle = isBash ? resolveDispatchHandle(payload, { root, env }) : null;
+  const inheritedHandle = isBash ? inheritedOrchestratorHandle(payload) : null;
   const routeGuardMode = routeGuard === null ? 'off' : routeGuard.resolveRouteGuardMode(root, env);
-  return { cwd, root, enforceSearch: env.CHEMX_GUARD_SEARCH !== '0', mode, agentId, nudgePromotion, scratchDir, routeGuard: routeGuardMode, dispatchHandle };
+  return { cwd, root, enforceSearch: env.CHEMX_GUARD_SEARCH !== '0', mode, agentId, nudgePromotion, scratchDir, routeGuard: routeGuardMode, dispatchHandle, inheritedHandle };
 };
 
 // Deny carries permissionDecision; an advisory allow carries only additionalContext, so it never

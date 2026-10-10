@@ -2,6 +2,9 @@
 // through $CLAUDE_ENV_FILE, and refresh the agents row (heartbeat). Every step fails open.
 
 import fs from 'node:fs';
+import { parseShell } from './shell-parse.js';
+import { resolveInvocation, isChemxInvocation } from './guard-invocation.js';
+import { everyChemxCallCarriesIdentity } from './dispatch-identity.js';
 import { registerAgent } from '../team/team-db-agents.js';
 import { AGENT_ID_ENV, resolveAgentIdentity, toSessionHandle } from '../team/agent-identity.js';
 import { closeQuietly, openExistingTeamDb } from '../team/team-db-readonly.js';
@@ -29,6 +32,50 @@ export const sessionIdentity = (payload, env = process.env) => {
   const sessionEnv = hasSession ? { ...env, [SESSION_ID_ENV]: sessionId } : env;
   return resolveAgentIdentity(undefined, sessionEnv);
 };
+
+// Subagents (Agent tool, workflows) source the same $CLAUDE_ENV_FILE as their orchestrator, so an
+// anonymous chemx call of theirs resolves to the orchestrator's handle (#4562). Guaranteed here: a
+// transcript path with a `subagents` directory is recognised, and a chemx call that changes shared
+// state (claims, locks, writes, commits, verify runs) without an identity in its own text is named.
+// Not guaranteed: read-only calls, or a subagent whose transcript path has another shape.
+const ACTING_COMMANDS = new Set(['write', 'patch', 'commit', 'autofix', 'generate', 'verify', 'test']);
+const ACTING_TEAM_WORDS = new Set(['claim', 'acquire', 'release', 'handoff', 'done', 'comment', 'add', 'update', 'post', 'dm']);
+
+/** True for a transcript path inside a `subagents` directory (Agent tool and workflow agents). */
+export const isSubagentTranscript = (transcriptPath) => {
+  const hasPath = typeof transcriptPath === 'string' && transcriptPath !== '';
+  return hasPath && transcriptPath.split(/[\\/]/).includes('subagents');
+};
+
+/** True when chemx args (the words after the chemx binary) take a lease, claim, write, commit or run a gate. */
+export const isActingChemxArgs = (args = []) => {
+  const [head, ...rest] = args;
+  const isTeam = head === 'team';
+  const isTeamAction = isTeam && rest.slice(0, 2).some((word) => ACTING_TEAM_WORDS.has(word));
+  return ACTING_COMMANDS.has(head) || isTeamAction;
+};
+
+/** The inherited orchestrator handle a subagent call at this payload would act as, or null. */
+export const inheritedOrchestratorHandle = (payload) => {
+  const isSubagent = isSubagentTranscript(payload?.transcript_path);
+  const sessionId = safeSessionId(payload);
+  const hasSession = isSubagent && Boolean(sessionId);
+  return hasSession ? toSessionHandle(sessionId) : null;
+};
+
+/** True when the command runs a state-changing chemx call and some chemx call in it names no identity. */
+export const hasAnonymousActingCall = (command) => {
+  const text = String(command ?? '');
+  const isActing = (parsed) => {
+    const invocation = parsed.argv.length > 0 ? resolveInvocation(parsed.argv) : null;
+    return invocation !== null && isChemxInvocation(invocation) && isActingChemxArgs(invocation.args);
+  };
+  const acts = parseShell(text).commands.some(isActing);
+  return acts && !everyChemxCallCarriesIdentity(text);
+};
+
+export const orchestratorActingReason = (handle) => `chemx identity: this call would act as the orchestrator ${handle}, because subagents inherit its CHEMX_AGENT_ID, so a lease, claim or commit would be attributed to it. `
+  + `Set CHEMX_AGENT_ID: prefix the command with \`export CHEMX_AGENT_ID=<your handle>; \` or pass --as=<your handle>. The hook cannot choose your handle for you.`;
 
 const exportSkipReason = (sessionId, env) => {
   const agentId = env[AGENT_ID_ENV];
