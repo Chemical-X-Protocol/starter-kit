@@ -11,6 +11,8 @@ export const VERIFY_COMMANDS = [
     flags: [
       { flag: '--dir=<path>', desc: 'Target directory (default: .chemxrc "scope", else project root)' },
       { flag: '--build', desc: 'Include production build audit step' },
+      { flag: '--changed', desc: 'Audit only changed source files and run only the affected specs; typecheck stays whole-project' },
+      { flag: '--base=<rev>', desc: 'With --changed: compare against this revision' },
       { flag: '--json', desc: 'Output the status card as JSON' }
     ],
     examples: ['chemx verify', 'chemx verify --json']
