@@ -55,6 +55,11 @@ test('a 2-instance exact whole-function clone with mass >= 20 and some anchor we
   assert.equal(admitGroup({ ...pair, path: 'N2' }).reason, 'G2.lowEvidence');
 });
 
+test('the measured A12 pair (normalizeHandle / normalizeAgentId: mass 21, anchorWeight 2, evidence 27) is admitted', () => {
+  const a12 = group({ kind: 'fn', memberCount: 2, mass: 21, anchorWeight: 2, evidence: 27 });
+  assert.equal(admitGroup(a12).ok, true);
+});
+
 test('a template group needs 3 instances in 2 files and G4', () => {
   const tile = group({ path: 'T', kind: 'tmpl', ...metrics(11, 0) });
   assert.equal(admitGroup(tile).ok, true);
