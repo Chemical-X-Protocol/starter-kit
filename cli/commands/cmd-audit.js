@@ -162,8 +162,10 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
   const hasIndexSync = !rawArgs.includes('--no-index') && !isStagedScope;
   // --git / --changed that fell back to a full scan (nothing changed) is still a git-scoped intent.
   const isPartialIntent = isPartialAudit || hasGitFlag;
-  const shouldTriage = !isTriageOptOut && !isPartialIntent && hasIndexSync;
+  // Triage writes to the shared team db, so it runs only when asked: --triage or .chemxrc autoTriage: true (#5480).
   const isTriageRequested = rawArgs.includes('--triage');
+  const isTriageEnabled = isTriageRequested || projectConfig?.autoTriage === true;
+  const shouldTriage = isTriageEnabled && !isTriageOptOut && !isPartialIntent && hasIndexSync;
   const isTriageIgnored = isTriageRequested && !shouldTriage && !isTriageOptOut;
   if (isTriageIgnored) {
     process.stderr.write('triage skipped: partial scan (--fast/--git/--staged) or --no-index\n');
@@ -324,7 +326,7 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
           if (isScoreFail) process.stdout.write(`  \x1b[31m•\x1b[0m Score ${report.health.score}/100 is below required minimum score ${minScore}/100\n`);
           if (isDefaultFail) process.stdout.write(`  \x1b[31m•\x1b[0m Unresolved hazards: ${critical.length} Critical, ${high.length} High (run 'chemx audit --unroll' to inspect)\n`);
           if (isStrictFail) process.stdout.write(`  \x1b[31m•\x1b[0m Strict mode: ${report.violations.length} total violation(s) detected\n`);
-          if (!hasTriaged) process.stdout.write('  \x1b[36m💡 Convert hazards into team tasks: chemx team task triage\x1b[0m\n');
+          if (!hasTriaged) process.stdout.write('  \x1b[36m💡 Convert hazards into team tasks (opt-in, writes to the shared board): chemx audit --triage\x1b[0m\n');
         }
       }
     }

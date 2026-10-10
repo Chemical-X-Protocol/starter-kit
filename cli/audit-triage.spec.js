@@ -66,8 +66,13 @@ const auditTaskCount = async (args, { needsViolations = true, commit = false } =
   }
 };
 
-test('cli audit: a full-scope audit triages by default', async () => {
-  const { count, report } = await auditTaskCount([]);
+test('cli audit: a plain audit leaves agent_tasks unchanged (triage is opt-in, #5480)', async () => {
+  const { count } = await auditTaskCount([]);
+  assert.strictEqual(count, 0);
+});
+
+test('cli audit: --triage reports the rules that have tasks', async () => {
+  const { count, report } = await auditTaskCount(['--triage']);
   assert.ok(count > 0);
   assert.ok(Array.isArray(report.taskRules), 'report carries the rules that have tasks');
 });
