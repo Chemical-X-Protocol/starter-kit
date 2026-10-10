@@ -16,7 +16,7 @@ import { createFileFingerprint } from './fingerprint-visitors.js';
 import { selectStoredUnits, STORE_FLOOR } from './unit-floor.js';
 import {
   readFileStamps, isStampCurrent, replaceFileUnits, removeLedgerFiles, touchFileStamp, stampExtractorVersion, countLedgerUnits,
-  updateFileFacet, FORGE_EXTRACTOR_VERSION
+  updateFileFacet, FORGE_EXTRACTOR_VERSION, isLedgerCold, deferSecondaryIndexes, restoreSecondaryIndexes
 } from './store.js';
 
 export const contentHashOf = (content) => crypto.createHash('sha1').update(content).digest('hex');
@@ -61,6 +61,9 @@ export const createForgeSession = (db, { root, log = writeStderr, batchSize = 10
   const open = new Map();
   const work = { seenChars: 0, fingerprintedChars: 0 };
   let queue = [];
+  // A cold or version-bumped ledger rewrites most rows: drop the secondary indexes at the first write.
+  const isCold = isLedgerCold(stamps);
+  let isIndexDeferred = false;
 
   const claimBudget = (chars) => {
     const limit = budget.share * work.seenChars + budget.allowanceChars;
@@ -77,6 +80,11 @@ export const createForgeSession = (db, { root, log = writeStderr, batchSize = 10
     queue = [];
     const hasBatch = batch.length > 0;
     if (!hasBatch) return;
+    const shouldDefer = isCold && !isIndexDeferred;
+    if (shouldDefer) {
+      isIndexDeferred = true;
+      deferSecondaryIndexes(db);
+    }
     withIndexTransaction(db, () => {
       for (const record of batch) {
         const { previousFps, nextFps } = replaceFileUnits(db, record);
@@ -184,6 +192,10 @@ export const createForgeSession = (db, { root, log = writeStderr, batchSize = 10
 
   const finish = () => {
     flush();
+    if (isIndexDeferred) {
+      restoreSecondaryIndexes(db);
+      isIndexDeferred = false;
+    }
     stampExtractorVersion(db);
     return { ...stats, dirty: dirty.size, ledgerRows: countLedgerUnits(db), extractorVersion: FORGE_EXTRACTOR_VERSION };
   };

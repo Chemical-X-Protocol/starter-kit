@@ -6,6 +6,7 @@ import { withIndexTransaction } from '../search-index-write.js';
 import { writeIndexMeta } from '../search-index-meta.js';
 import { anchorWeight } from './anchors.js';
 import { isInlineRequested, INLINE_VERSION_OFFSET } from './inline-mode.js';
+import { applyPatternSchema } from './pattern-schema-ddl.js';
 
 // Bump when units, canonicalization, hashing, facets or the store floor change meaning: every file
 // whose row carries another version is fingerprinted again.
@@ -120,6 +121,28 @@ export const replaceFileUnits = (db, record) => withIndexTransaction(db, () => {
   insertUnits(s, record);
   return { previousFps, nextFps: fpsOf(record.units) };
 });
+
+// Every pattern_units index except idx_pattern_units_file, which the per-file delete and oldFps reads need.
+const SECONDARY_UNIT_INDEXES = [
+  'idx_pattern_units_fp1', 'idx_pattern_units_fp2', 'idx_pattern_units_fp3',
+  'idx_pattern_units_inner_fp1', 'idx_pattern_units_inner_fp2', 'idx_pattern_units_inner_fp3',
+  'idx_pattern_units_block', 'idx_pattern_units_decl'
+];
+
+/** True when no ledger file carries the current extractor version (empty ledger or after a version bump). */
+export const isLedgerCold = (stamps) => ![...stamps.values()].some((stamp) => stamp.extractorVersion === FORGE_EXTRACTOR_VERSION);
+
+/**
+ * Drops the 8 secondary pattern_units indexes before a bulk insert. Call restoreSecondaryIndexes after;
+ * if the process dies first, the next applyPatternSchema (every open) recreates them. Reads that rely on
+ * those indexes are only slower, not wrong, while they are absent.
+ */
+export const deferSecondaryIndexes = (db) => {
+  for (const name of SECONDARY_UNIT_INDEXES) db.exec(`DROP INDEX IF EXISTS ${name};`);
+};
+
+/** Recreates any missing ledger index (idempotent: CREATE INDEX IF NOT EXISTS). */
+export const restoreSecondaryIndexes = (db) => applyPatternSchema(db);
 
 /** Records a new mtime/size for a file whose content hash did not change. */
 export const touchFileStamp = (db, filePath, { mtimeMs, size }) => {
