@@ -55,17 +55,18 @@ const EXTRA_FLAGS = {
     '--include-tests', '--tests', '--no-index', '--no-fingerprint', '--triage', '--clones', '--clone-threshold',
     '--hotspot-graph', '--limit', '--all-packages', '--full-only', '--concurrency', '--scope', '--since'
   ],
+  // Flags still here are not yet in a schema entry; none is verified as a user flag unless noted.
+  // conflicts: the router's `d --conflicts` token, read in conflicts-cli.js; not a flag of `conflicts` itself.
   conflicts: ['--conflicts'],
+  // trend, patterns, hook, init, create, generate: the handler source names these but the read was not traced.
   trend: ['--limit'],
-  init: ['--headless', '--yes', '--ci', '--non-interactive', '--no-interactive', '--framework', '--preset', '--write', '--install'],
-  create: ['--ci', '--non-interactive', '--no-interactive', '--preset', '--write'],
-  generate: ['--headless', '--yes', '--ci', '--non-interactive', '--no-interactive', '--preset', '--write', '--install'],
+  init: ['--preset', '--write'],
+  create: ['--write'],
+  generate: ['--headless', '--ci', '--non-interactive', '--no-interactive', '--write', '--install'],
   hook: ['--write'],
-  doctor: ['--host', '--scope', '--kit', '--write-mcp'],
-  pillars: ['--yes', '--force'],
+  // trend, badge and verify live in cli/commands-schema-verify.js (task #4493's file): move these there after it lands.
   badge: ['--grade', '--label', '--report-url', '--discussion', '--format', '--copy'],
-  verify: ['--allow-empty', '--changed', '--all-packages', '--timeout', '--profile', '--base'],
-  ui: ['--dev', '--allow-host'],
+  verify: ['--allow-empty', '--all-packages', '--timeout', '--profile'],
   patterns: ['--name'],
   team: ['--run', '--task', '--status', '--repo', '--all-repos', '--type', '--purpose', '--needs', '--parent', '--desc']
 };

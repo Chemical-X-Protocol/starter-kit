@@ -94,6 +94,9 @@ const routerSources = () => {
 // that its schema entry does not list yet (tracked by the #4510 follow-up). A new gap is not added here silently:
 // anything not in this set fails the test.
 const KNOWN_GAPS = new Set([]);
+// Strings a handler builds as argv for another chemx command; they are not flags of the named command.
+// doctor-cli.js passes these to install-hooks when --fix repairs hooks or the MCP launch.
+const INTERNAL_ARGV = new Set(['doctor --host', 'doctor --scope', 'doctor --kit', 'doctor --write-mcp']);
 
 test('every checked command the router dispatches has its handler flags listed (#4510)', () => {
   const routes = routerSources();
@@ -109,7 +112,7 @@ test('every checked command the router dispatches has its handler flags listed (
     const known = acceptedLongFlags(entry);
     for (const src of sources) {
       for (const raw of new Set((src.match(/['"`](--[a-z][a-z0-9-]*)/g) ?? []).map((s) => s.slice(1)))) {
-        const isKnownGap = KNOWN_GAPS.has(`${entry.name} ${raw}`);
+        const isKnownGap = KNOWN_GAPS.has(`${entry.name} ${raw}`) || INTERNAL_ARGV.has(`${entry.name} ${raw}`);
         const isListed = known.has(raw) || GLOBAL.has(raw) || GIT_ARGV.has(raw) || isKnownGap;
         if (!isListed) gaps.push(`${entry.name} ${raw}`);
       }

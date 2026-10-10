@@ -89,6 +89,8 @@ export const EDIT_COMMANDS = [
       { flag: '--tier=<tier>', desc: 'Specify tier: atom, molecule, organism, hook, view' },
       { flag: '--framework=<id>', desc: 'Framework flavor: react, vue, svelte' },
       { flag: '--lean', desc: 'Generate minimal capsule without controller/spec' },
+      { flag: '--yes, -y', desc: 'Skip interactive prompts' },
+      { flag: '--preset=<name>', desc: 'Apply a named preset (read by the jig generator)' },
       { flag: '--json', desc: 'Output the plan as JSON' }
     ],
     examples: [
