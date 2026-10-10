@@ -100,7 +100,9 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
     return { help: true, commands: TEAM_COMMANDS };
   }
   // These handlers print their own help before touching the db, so help runs without opening one.
-  const isOwnHelp = HELP_FIRST_SUBCOMMANDS.includes(args.subCommand) && (args.flags.help || args.positionals.includes('help'));
+  // Only a --help/-h flag or the first positional "help" counts: a title such as "startup and help" is not a help request.
+  const wantsHelp = args.flags.help || args.restArgs.some((a) => a === '-h' || a === '--help') || args.positionals[0] === 'help';
+  const isOwnHelp = HELP_FIRST_SUBCOMMANDS.includes(args.subCommand) && wantsHelp;
   if (isOwnHelp) return SUB_COMMANDS[args.subCommand]({ db: null, root: null }, args, isCli, cwd);
   // migrate opens its own target (the coordination db, or --into) and never the cwd's silo.
   const isMigrate = args.subCommand === 'migrate';
