@@ -10,7 +10,9 @@ export const VERIFY_MORE_COMMANDS = [
     description: 'Validates structural weight, line budgets and tier rules, and populates the SQLite index.',
     flags: [
       { flag: '--json', desc: 'Output the audit summary as JSON (--full for the complete report)' },
-      { flag: '--no-triage', desc: 'Skip auto-triage (full-scope audits turn hazards into team tasks by default)' },
+      { flag: '--triage', desc: 'File hazards as tasks in the shared team board (off unless --triage or .chemxrc autoTriage: true); at most 50 new tasks per run' },
+      { flag: '--triage-all', desc: 'With --triage: no per-run cap on new tasks' },
+      { flag: '--no-triage', desc: 'Never triage, even when .chemxrc sets autoTriage: true' },
       { flag: '--rebaseline', desc: 'Record per-rule counts to chemx-ratchet.json (full scans only)' },
       { flag: '--strict', desc: 'Fail on any architectural hazard' },
       { flag: '--markdown', desc: 'Generate a Markdown audit report' },

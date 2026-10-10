@@ -5,14 +5,18 @@ import { collectFileUnits } from '../forge/file-units.js';
 import { RULESET_VERSION, RULE_REVISIONS } from '../audit/rule-revisions.js';
 import { RULE_REGISTRY } from '../audit/rules-registry.js';
 import { FP_LEVELS } from './entry-schema.js';
+import { FORGE_EXTRACTOR_VERSION } from '../forge/store.js';
 
 const FP_FIELD = Object.freeze({ l1: 'fp1', l2: 'fp2', l3: 'fp3' });
 const HASH_LENGTH = 12;
 
 const byCodePoint = (a, b) => Number(a > b) - Number(a < b);
 
-/** Bump when the Forge extractor's canonical forms change (fp values change); entries stamped with another value re-verify. */
-export const EXTRACTOR_VERSION = 2;
+/**
+ * The Forge extractor version entries are stamped with. It is Forge's own version, not a copy, so a change to
+ * the canonical forms (which changes fp values) re-verifies every entry without a second bump to remember (#5904).
+ */
+export const EXTRACTOR_VERSION = FORGE_EXTRACTOR_VERSION;
 
 /** The ruleset the audit currently enforces: { version, revisionsHash, extractor } (ids and revisions, not code). */
 export const currentRuleset = ({ revisionTable = RULE_REVISIONS, version = RULESET_VERSION, extractor = EXTRACTOR_VERSION } = {}) => {

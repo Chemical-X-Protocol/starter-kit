@@ -33,9 +33,9 @@
     }
   ],
   "fp": {
-    "l1": "1da36297e10f0c9d",
-    "l2": "d8bc077057293f12",
-    "l3": "523f13bfc5321135"
+    "l1": "8b2f674576e09936",
+    "l2": "e67a5370e7679a71",
+    "l3": "b40762b747c224c7"
   },
   "aliases": [],
   "canonicalFor": [],
@@ -49,7 +49,7 @@
   ],
   "verifiedRuleset": {
     "version": 5,
-    "extractor": 2,
+    "extractor": 8,
     "revisionsHash": "deb22e623872"
   },
   "status": "verified",
