@@ -20,6 +20,7 @@ import { contextForCommand } from './guard-paths.js';
 import { isPromotedNudge, resolveNudgePromotion } from './guard-config.js';
 import { NATIVE_FILE_TOOLS, decideNativeTool, resolveNativeToolMode } from './native-tool-policy.js';
 import { decideEditLock, resolveHookAgentId } from './native-edit-lock.js';
+import { everyChemxCallCarriesIdentity, identityDenyReason, resolveDispatchHandle } from './dispatch-identity.js';
 
 // The route guard pulls in the dispatch modules, which agents edit mid-flight. Load it on its own so
 // a broken dispatch module only disables routing advice, not every other rule.
@@ -97,8 +98,19 @@ const decideNativeFileTool = (tool, input, context) => {
   return decideEditLock({ tool, input, root, cwd, agentId, findLease: context.findLease }) ?? policy;
 };
 
+const callsChemx = (command) => parseShell(command).commands.some((parsed) => parsed.argv.length > 0 && isChemxInvocation(resolveInvocation(parsed.argv)));
+
+// A dispatched builder (handle resolved from its transcript and the recorded run) must name its identity on every chemx call.
+const decideDispatchIdentity = (command, context) => {
+  const handle = context.dispatchHandle ?? null;
+  const isMissing = handle !== null && callsChemx(command) && !everyChemxCallCarriesIdentity(command);
+  return isMissing ? { decision: 'deny', rule: 'dispatch-identity', segment: command.slice(0, SEGMENT_LIMIT), reason: identityDenyReason(handle) } : null;
+};
+
 const decideBash = (input, context) => {
   const command = String(input.command ?? '');
+  const missingIdentity = decideDispatchIdentity(command, context);
+  if (missingIdentity) return missingIdentity;
   const { rule, segment, use, bypassReason, nudges } = findViolation(command, context);
   const hasBypass = bypassReason !== null;
   const overrodeRule = rule?.id ?? nudges[0]?.rule.id ?? null;
@@ -128,8 +140,11 @@ export const buildPreToolContext = (payload, env = process.env) => {
   const agentId = resolveHookAgentId(payload, env);
   const nudgePromotion = resolveNudgePromotion(root, env);
   const scratchDir = payload?.scratchpad_dir ?? null;
+  const isBash = payload?.tool_name === 'Bash';
+  const hasEnvIdentity = String(env.CHEMX_AGENT_ID ?? '').trim() !== '';
+  const dispatchHandle = isBash && !hasEnvIdentity ? resolveDispatchHandle(payload, { root, env }) : null;
   const routeGuardMode = routeGuard === null ? 'off' : routeGuard.resolveRouteGuardMode(root, env);
-  return { cwd, root, enforceSearch: env.CHEMX_GUARD_SEARCH !== '0', mode, agentId, nudgePromotion, scratchDir, routeGuard: routeGuardMode };
+  return { cwd, root, enforceSearch: env.CHEMX_GUARD_SEARCH !== '0', mode, agentId, nudgePromotion, scratchDir, routeGuard: routeGuardMode, dispatchHandle };
 };
 
 // Deny carries permissionDecision; an advisory allow carries only additionalContext, so it never
