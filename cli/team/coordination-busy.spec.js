@@ -110,7 +110,7 @@ test('a single autocommit run() past CHEMX_DB_SLOW_TX_MS is logged with its call
     };
     db.prepare('WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM c WHERE x < 3000000) INSERT INTO t SELECT x FROM c').run();
     process.stderr.write = realWrite;
-    const logged = lines.find((l) => l.includes('[chemx-db] autocommit statement held'));
+    const logged = lines.find((l) => l.includes('[chemx-db] autocommit statement elapsed'));
     assert.ok(logged, `no slow-statement line in: ${lines.join('|')}`);
     assert.match(logged, /coordination-busy\.spec\.js/);
   } finally {

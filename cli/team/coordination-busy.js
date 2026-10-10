@@ -135,7 +135,7 @@ const timedRun = (db, raw, args) => {
   const out = raw(...args);
   const held = Date.now() - at;
   const isSlow = held > threshold;
-  if (isSlow) process.stderr.write(`[chemx-db] autocommit statement held ${held} ms (pid ${process.pid}) at ${site}\n`);
+  if (isSlow) process.stderr.write(`[chemx-db] autocommit statement elapsed ${held} ms, including any busy-wait behind another writer, so it may be a victim and not the holder (pid ${process.pid}) at ${site}\n`);
   return out;
 };
 
