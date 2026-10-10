@@ -176,6 +176,10 @@ export const releaseFileLock = (db, filePath, agentId, options = {}) => {
     const existingLease = db.prepare('SELECT * FROM file_leases WHERE file_path = ?').get(cleanPath);
     const isHolder = Boolean(existingLease) && existingLease.locked_by === cleanId;
     if (!isHolder) {
+      // A queued non-holder leaves the FIFO queue: release doubles as "cancel my wait".
+      const left = db.prepare("UPDATE file_lock_queue SET status = 'cancelled' WHERE file_path = ? AND agent_id = ? AND status = 'waiting'").run(cleanPath, cleanId);
+      const wasQueued = left.changes > 0;
+      if (wasQueued) return { success: true, dequeued: true, promotedWaiter: null };
       const lapse = findLapse(db, cleanPath, cleanId);
       const message = explainNotHolder(cleanPath, lapse, existingLease, Date.now());
       const lapseNote = lapse ? { lapse } : {};
