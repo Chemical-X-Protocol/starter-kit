@@ -60,17 +60,11 @@ test('every flag a schema entry lists is accepted', () => {
 });
 
 const TYPOS = {
-  audit: ['--non-interactiv', '--non-interactive'],
   team: ['--targt', '--target'],
-  project: ['--jsn', '--json'],
-  diff: ['--stats', '--stat'],
-  log: ['--projct-root', '--project-root'],
-  show: ['--pach', '--patch'],
-  pkg: ['--scripst', '--scripts'],
-  json: ['--hel', '--help'],
-  mcp: ['--instal', '--install'],
-  'install-mcp': ['--hlp', '--help'],
-  batch: ['--vesion', '--version']
+  diff: ['--stagd', '--staged'],
+  log: ['--onelin', '--oneline'],
+  show: ['--stta', '--stat'],
+  pkg: ['--scripst', '--scripts']
 };
 
 test('typo-checked commands reject one typo each with the intended flag', () => {
@@ -81,14 +75,35 @@ test('typo-checked commands reject one typo each with the intended flag', () => 
   }
 });
 
-test('typo-checked commands pass flags that are not close to a chemx flag, such as git flags', () => {
-  assert.equal(findUnknownFlag('log', ['log', '--oneline', '--graph', '--author=x']), null);
+const STRICT = {
+  audit: ['--strcit', '--strict'],
+  project: ['--jsno', '--json'],
+  json: ['--hepl', '--help'],
+  mcp: ['--instal', '--install'],
+  'install-mcp': ['--globl', '--global'],
+  batch: ['--vesion', '--version']
+};
+
+test('audit, project, json, mcp, install-mcp and batch reject typos and made-up flags', () => {
+  for (const [name, [typo, intended]] of Object.entries(STRICT)) {
+    assert.match(findUnknownFlag(name, [name, typo]), new RegExp(`unknown flag ${typo};.*did you mean ${intended}\\?`), name);
+    assert.equal(findUnknownFlag(name, [name, intended]), null, name);
+    assert.match(findUnknownFlag(name, [name, MADE_UP]), /unknown flag --zzqx-not-a-flag/, name);
+  }
+  assert.match(findUnknownFlag('install-mcp', ['install-mcp', '--dry-ru']), /unknown flag --dry-ru/);
+  assert.equal(findUnknownFlag('audit', ['audit', '--non-interactive', '--staged-delta', '-y']), null);
+});
+
+test('git passthrough commands allow git flags and check only chemx flags', () => {
+  assert.equal(findUnknownFlag('log', ['log', '--oneline', '--graph', '--author=x', '-Z']), null);
   assert.equal(findUnknownFlag('diff', ['diff', '--cached', '--name-only']), null);
   assert.match(exemptionNote('diff'), /Only chemx's own flags are checked/);
 });
 
-test('short flags are rejected on strictly checked commands', () => {
+test('short flags are rejected on strictly checked commands, not on git passthrough', () => {
   assert.match(findUnknownFlag('hook', ['hook', '-Z']), /unknown flag -Z/);
+  assert.match(findUnknownFlag('audit', ['audit', '-Z']), /unknown flag -Z/);
+  assert.match(findUnknownFlag('team', ['team', '-Z', 'status']), /unknown flag -Z/);
   assert.equal(findUnknownFlag('q', ['q', 'foo', '-l']), null);
   assert.equal(findUnknownFlag('log', ['log', '-Z']), null);
 });

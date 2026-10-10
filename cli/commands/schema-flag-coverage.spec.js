@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { findCommandSchema } from '../commands-schema.js';
-import { knownLongFlags, PASSTHROUGH_COMMANDS, findUnknownFlag } from './unknown-flags.js';
+import { knownLongFlags, acceptedLongFlags, PASSTHROUGH_COMMANDS, findUnknownFlag } from './unknown-flags.js';
 
 const dir = path.dirname(fileURLToPath(import.meta.url));
 const GLOBAL = new Set(['--help', '--version', '--project-root', '--root', '--as']);
@@ -20,7 +20,7 @@ test('handler flags are all listed in the schema entry', () => {
     const entry = findCommandSchema(file.slice(4, -3));
     const isChecked = entry && !Object.hasOwn(PASSTHROUGH_COMMANDS, entry.name);
     if (!isChecked) continue;
-    const known = knownLongFlags(entry);
+    const known = acceptedLongFlags(entry);
     const used = fs.readFileSync(path.join(dir, file), 'utf8').match(/['"`](--[a-z][a-z0-9-]*)/g) ?? [];
     for (const raw of new Set(used.map((s) => s.slice(1)))) {
       const isListed = known.has(raw) || GLOBAL.has(raw);
@@ -46,13 +46,13 @@ const patcherSource = (command, src) => command === 'patch'
   : src.slice(src.indexOf('const WRITE_HELP'), src.indexOf('];', src.indexOf('const WRITE_HELP'))) + src.slice(src.indexOf('const WRITE_FLAGS'));
 const scopedSource = (command, file, src) => (path.basename(file) === 'patcher-cli.js' ? patcherSource(command, src) : src);
 // Flags a handler passes to git, not flags of the chemx command.
-const GIT_ARGV = new Set(['--show-toplevel', '--porcelain', '--untracked-files', '--no-color', '--diff-filter']);
+const GIT_ARGV = new Set(['--show-toplevel', '--porcelain', '--untracked-files', '--no-color', '--diff-filter', '--get-regexp']);
 
 test('non-cmd handler flags (search, patch, write) are all listed in the schema entry (#4510)', () => {
   const gaps = [];
   for (const [command, files] of Object.entries(HANDLER_SOURCES)) {
     const entry = findCommandSchema(command);
-    const known = knownLongFlags(entry);
+    const known = acceptedLongFlags(entry);
     for (const file of files) {
       const src = scopedSource(command, file, fs.readFileSync(path.join(cliDir, file), 'utf8'));
       const used = new Set((src.match(/['"`](--[a-z][a-z0-9-]*)/g) ?? []).map((s) => s.slice(1)));
@@ -115,7 +115,7 @@ test('every checked command the router dispatches has its handler flags listed (
     if (isSkipped) continue;
     seen.add(entry.name);
     const sources = [text, ...files.filter((f) => fs.existsSync(f)).map((f) => scopedSource(entry.name, f, fs.readFileSync(f, 'utf8')))];
-    const known = knownLongFlags(entry);
+    const known = acceptedLongFlags(entry);
     for (const src of sources) {
       for (const raw of new Set((src.match(/['"`](--[a-z][a-z0-9-]*)/g) ?? []).map((s) => s.slice(1)))) {
         const isKnownGap = KNOWN_GAPS.has(`${entry.name} ${raw}`);

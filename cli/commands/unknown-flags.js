@@ -2,10 +2,13 @@
  * unknown-flags.js: reject unknown long flags before a command handler runs.
  * Single responsibility: check `--flag` tokens against the command's schema entry.
  *
- * Guarantees: for a command not in PASSTHROUGH_COMMANDS, a `--flag` token before `--` that the
+ * Guarantees: audit, project, json, mcp, install-mcp and batch are checked strictly against the
+ * schema entry plus EXTRA_FLAGS (flags their handlers read that the entry does not list). team, pkg,
+ * diff, log and show are typo-checked only (TYPO_CHECKED); git flags there are suggestion candidates.
+ * For a command not in PASSTHROUGH_COMMANDS, a `--flag` token before `--` that the
  * schema entry does not list is reported, with the closest listed flag when
  * one is similar. An entry that lists no long flag rejects every long flag. Not guaranteed:
- * short flags (-x) are not checked here, the schema entry may lag a handler (then a real flag is
+ * short flags are not checked on exempt or git/pkg commands, the schema entry may lag a handler (then a real flag is
  * rejected until the entry lists it), and exempt commands keep whatever their handler does with
  * unknown flags. `chemx <cmd> --help` states the exemption (see exemptionNote).
  */
@@ -18,17 +21,11 @@ export const PASSTHROUGH_COMMANDS = {
   test: 'passes args through to the test runner',
   typecheck: 'passes args through to the type checker',
   lint: 'passes args through to the linter',
-  audit: 'the handler and the pre-commit hook pass flags its schema entry does not list (--staged-delta, --non-interactive)',
-  batch: 'runs other chemx commands, each validated on its own',
   team: 'owns its subcommand parsers',
-  project: 'owns its subcommand parsers',
-  mcp: 'MCP server and installer parse their own args',
-  'install-mcp': 'the installer parses its own args',
   diff: 'passes args through to git',
   log: 'passes args through to git',
   show: 'passes args through to git',
   pkg: 'passes args through to the package manager',
-  json: 'passes args through to the JSON reader'
 };
 
 /**
@@ -36,14 +33,37 @@ export const PASSTHROUGH_COMMANDS = {
  * close to a flag chemx knows (schema entry, EXTRA_FLAGS or a global one). A flag that is not
  * close to any is left to the handler or the wrapped tool, so git's own flags pass.
  */
-export const TYPO_CHECKED = new Set([
-  'audit', 'batch', 'team', 'project', 'mcp', 'install-mcp', 'diff', 'log', 'show', 'pkg', 'json'
-]);
+export const TYPO_CHECKED = new Set(['team', 'diff', 'log', 'show', 'pkg']);
+
+/** Commands that forward their args to git; short flags are never checked on them. */
+const GIT_COMMANDS = new Set(['diff', 'log', 'show']);
+
+/** Common git flags, used only as did-you-mean candidates (never to accept or reject). */
+const GIT_FLAGS = [
+  '--oneline', '--stat', '--staged', '--cached', '--name-only', '--name-status', '--graph', '--patch',
+  '--shortstat', '--numstat', '--summary', '--decorate', '--all', '--author', '--since', '--until',
+  '--grep', '--follow', '--no-merges', '--merges', '--reverse', '--abbrev-commit', '--pretty',
+  '--format', '--color', '--no-color', '--word-diff', '--diff-filter', '--check', '--relative'
+];
 
 /** Flags handlers accept that the schema entry does not list; used only as typo candidates. */
 const EXTRA_FLAGS = {
-  audit: ['--staged-delta', '--non-interactive'],
+  audit: [
+    '--staged-delta', '--non-interactive', '--no-interactive', '--ci', '--headless', '--yes', '--md', '--share',
+    '--post', '--prompt-on-fail', '--copy-prompt', '--stage', '--relax', '--draft', '--dir', '--output',
+    '--min-score', '--model', '--cost-per-million', '--staged', '--fast', '--quick', '--full', '--deep', '--all',
+    '--include-tests', '--tests', '--no-index', '--no-fingerprint', '--triage', '--clones', '--clone-threshold',
+    '--hotspot-graph', '--limit', '--all-packages', '--full-only', '--concurrency', '--scope', '--since'
+  ],
   team: ['--run', '--task', '--status', '--repo', '--all-repos', '--type', '--purpose', '--needs', '--parent', '--desc']
+};
+
+/** Short flags a handler reads beyond COMMON_SHORT_FLAGS and its schema entry. */
+const EXTRA_SHORT_FLAGS = {
+  audit: ['-y', '-o'],
+  'install-mcp': ['-y'],
+  mcp: ['-y'],
+  team: ['-m', '-c', '-e', '-z', '-a', '-E', '-I', '-L', '-P', '-A', '-B', '-C']
 };
 
 /** Flags every command accepts through the shared boot path. */
@@ -70,25 +90,31 @@ const withExtraFlags = (entry, known) => {
 };
 
 /** Short flags the schema entry lists. */
+/** Long flags the command accepts: its schema entry plus the handler flags in EXTRA_FLAGS. */
+export const acceptedLongFlags = (entry) => withExtraFlags(entry, knownLongFlags(entry));
+
 const knownShortFlags = (entry) => {
-  const shorts = new Set(COMMON_SHORT_FLAGS);
+  const shorts = new Set([...COMMON_SHORT_FLAGS, ...(EXTRA_SHORT_FLAGS[entry.name] ?? [])]);
   for (const { flag } of entry.flags ?? []) for (const m of flag.matchAll(SHORT_FLAG)) shorts.add(m[0]);
   return shorts;
 };
 
 const LONG_FLAG = /--[a-z][a-z0-9-]*/g;
 
+/** Edit distance where swapping two adjacent letters costs one edit (--hepl -> --help). */
 const distance = (a, b) => {
-  let previous = Array.from({ length: b.length + 1 }, (_, i) => i);
+  const rows = [Array.from({ length: b.length + 1 }, (_, j) => j)];
   for (let i = 1; i <= a.length; i++) {
-    const current = [i];
+    const row = [i];
     for (let j = 1; j <= b.length; j++) {
       const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      current[j] = Math.min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + cost);
+      row[j] = Math.min(rows[i - 1][j] + 1, row[j - 1] + 1, rows[i - 1][j - 1] + cost);
+      const isSwap = i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1];
+      if (isSwap) row[j] = Math.min(row[j], rows[i - 2][j - 2] + 1);
     }
-    previous = current;
+    rows.push(row);
   }
-  return previous[b.length];
+  return rows[a.length][b.length];
 };
 
 /** @returns {Map<string, boolean>} long flag -> whether the schema shows it taking a value */
@@ -136,7 +162,8 @@ export const findUnknownFlag = (command, rawArgs) => {
   const isUnchecked = isExempt && !isTypoOnly;
   if (isUnchecked) return null;
   const known = withExtraFlags(entry, knownLongFlags(entry));
-  const shorts = isTypoOnly ? null : knownShortFlags(entry);
+  const isShortUnchecked = isTypoOnly && !Object.hasOwn(EXTRA_SHORT_FLAGS, entry.name);
+  const shorts = isShortUnchecked ? null : knownShortFlags(entry);
   const args = rawArgs.slice(1);
   const separator = args.indexOf('--');
   const options = separator === -1 ? args : args.slice(0, separator);
@@ -157,11 +184,13 @@ export const findUnknownFlag = (command, rawArgs) => {
     if (!isLongFlag) continue;
     const hasInlineValue = arg.includes('=');
     const name = hasInlineValue ? arg.slice(0, arg.indexOf('=')) : arg;
-    const isAccepted = known.has(name) || GLOBAL_FLAGS.has(name);
+    const isGitFlag = isTypoOnly && GIT_COMMANDS.has(entry.name) && GIT_FLAGS.includes(name);
+    const isAccepted = known.has(name) || GLOBAL_FLAGS.has(name) || isGitFlag;
     const consumesNext = known.get(name) === true && !hasInlineValue;
     if (consumesNext) i++;
     if (isAccepted) continue;
-    const candidates = isTypoOnly ? [...known.keys(), ...GLOBAL_FLAGS] : known.keys();
+    const gitFlags = GIT_COMMANDS.has(entry.name) ? GIT_FLAGS : [];
+    const candidates = [...known.keys(), ...GLOBAL_FLAGS, ...gitFlags];
     const closest = suggestFlag(name, candidates);
     const isPassedOn = isTypoOnly && !closest;
     if (isPassedOn) continue;

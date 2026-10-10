@@ -10,7 +10,9 @@ export const OPS_COMMANDS = [
     description: 'Exposes the single `chemx` tool over JSON-RPC 2.0 on stdio.',
     flags: [
       { flag: '--install', desc: 'Register the MCP server in host client settings' },
-      { flag: '--sync', desc: 'Sync Antigravity MCP tool schema definitions' }
+      { flag: '--sync', desc: 'Sync Antigravity MCP tool schema definitions' },
+      { flag: '--global', desc: 'Also register in the home-directory client configs' },
+      { flag: '--antigravity', desc: 'Same as --global (Antigravity host config)' }
     ],
     examples: ['chemx mcp', 'chemx mcp --sync']
   },
@@ -22,7 +24,10 @@ export const OPS_COMMANDS = [
     usage: 'chemx install-mcp [options]',
     summary: 'Register the chemx MCP server in host client settings.',
     description: 'Writes the chemical-x server entry into supported MCP client configs.',
-    flags: [],
+    flags: [
+      { flag: '--global', desc: 'Also register in the home-directory client configs' },
+      { flag: '--antigravity', desc: 'Same as --global (Antigravity host config)' }
+    ],
     examples: ['chemx install-mcp']
   },
   {
