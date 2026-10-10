@@ -11,7 +11,7 @@ export const TEAM_SUBCOMMANDS = [
 
 export const TEAM_TASK_ACTIONS = [
   'list', 'show', 'view', 'info', 'comment', 'post', 'vds-slot', 'slot', 'trace', 'claim', 'handoff', 'close',
-  'done', 'complete', 'update', 'create', 'add', 'new', 'triage', 'reconcile', 'prune', 'set-target', 'target'
+  'done', 'complete', 'update', 'create', 'add', 'new', 'triage', 'reconcile', 'prune', 'set-target', 'target', 'set-files'
 ];
 
 // A first word that is not one of these is a file path (default action: acquire).
