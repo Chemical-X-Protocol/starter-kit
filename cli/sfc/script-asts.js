@@ -7,7 +7,7 @@ import { buildScriptOverlay } from './sfc-parse.js';
 
 // Decorators and auto-accessors (#4563) are on for every file. JSX is on unless the path is a plain TypeScript
 // file (.ts/.mts/.cts), where `<T>x` is a cast and JSX would reject it; a null path keeps JSX on.
-const SHARED_PLUGINS = Object.freeze(['typescript', ['decorators', { decoratorsBeforeExport: false }], 'decoratorAutoAccessors']);
+const SHARED_PLUGINS = Object.freeze(['typescript', 'decorators', 'decoratorAutoAccessors']);
 const PLAIN_TS = /\.[mc]?ts$/i;
 
 export const SCRIPT_PARSE_OPTIONS = Object.freeze({ sourceType: 'module', plugins: [...SHARED_PLUGINS, 'jsx'] });
