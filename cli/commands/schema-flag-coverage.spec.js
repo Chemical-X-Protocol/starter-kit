@@ -151,7 +151,7 @@ test('team task help lists every task-level flag team-flags.js parses (#4509)', 
   const ELSEWHERE = new Set([
     '--type', '--task', '--rule', '--tier', '--purpose', '--run', '--workflow', '--compact', '--mark-read',
     '--to', '--since', '--max-agents', '--per-agent', '--max-tasks-per-agent', '--thread', '--pid', '--tokens',
-    '--prompt-tokens', '--completion-tokens', '--cached-tokens', '--cost', '--model', '--log', '--metadata', '--new',
+    '--prompt-tokens', '--completion-tokens', '--cached-tokens', '--cost', '--model', '--log', '--metadata',
   ]);
   const missing = [...parsed].filter((f) => !ELSEWHERE.has(f) && !card.includes(f));
   assert.deepEqual(missing, []);

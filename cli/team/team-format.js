@@ -279,6 +279,7 @@ export const formatTaskHelpCard = () => {
     '    \x1b[33m--cancel\x1b[0m <reason>        close: cancel the task with a reason',
     '    \x1b[33m--target\x1b[0m <path>          done: file whose hazards gate completion (set-target stores it)',
     '    \x1b[33m--no-target-confirm\x1b[0m      done: skip the target confirmation prompt',
+    '    \x1b[33m--new\x1b[0m                  lock acquire: lease a file that does not exist yet',
     '    \x1b[33m--force, -f\x1b[0m              Force complete task even with remaining hazards',
     '    \x1b[33m--json\x1b[0m                   Output machine-readable JSON format',
     '    \x1b[33m--help, -h\x1b[0m               Show this help message',
