@@ -139,6 +139,9 @@ export const parseFlags = (args = []) => {
     const shouldReadPrioNext = isPrioFlag && hasNextArg;
     if (shouldReadPrioNext) flags.priority = parseInt(nextArg, 10);
 
+    const isNewFlag = arg === '--new';
+    if (isNewFlag) flags.allowNew = true;
+
     const isPurposeEquals = arg.startsWith('--purpose=');
     if (isPurposeEquals) flags.purpose = arg.split('=')[1];
 

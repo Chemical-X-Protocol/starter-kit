@@ -3,6 +3,7 @@
  * Prevents race collisions with deterministic queueing and reactive promotion
  */
 
+import fs from 'node:fs';
 import path from 'node:path';
 import { postFeedEvent } from './team-db-feed.js';
 import { DEFAULT_TTL_MS, cleanExpiredLeases, promoteNextWaiter, enqueueWaiter, describeLease } from './team-db-lock-promotion.js';
@@ -68,6 +69,26 @@ const normalizeAgentId = (id) => {
   return isPrefixed ? id : `@${id}`;
 };
 
+// A path that does not exist leases nothing real (#4544). Suggest the same relative path under the
+// coordination root or the repo root when it exists there; `allowNew` skips the check.
+const missingPathRefusal = (db, filePath, cleanPath, options) => {
+  const scope = resolveLeaseScope(db, options);
+  const absPath = path.resolve(scope.from, filePath);
+  const exists = fs.existsSync(absPath);
+  if (exists) return null;
+  const bases = [scope.projectRoot, process.env.CHEMX_PROJECT_ROOT, options.repoRoot].filter(Boolean);
+  const rel = path.isAbsolute(filePath) ? cleanPath : filePath;
+  const hit = bases.map((base) => path.resolve(base, rel)).find((candidate) => fs.existsSync(candidate));
+  const suggestion = hit ? path.relative(scope.projectRoot, hit) || hit : null;
+  const hint = suggestion ? ` Did you mean ${suggestion}?` : '';
+  return {
+    granted: false,
+    reason: 'path_not_found',
+    suggestion,
+    message: `${filePath} does not exist (looked for ${absPath}); no lease was taken.${hint} Pass --new to lease a file you are about to create.`
+  };
+};
+
 export const requestFileLock = (db, filePath, agentId, options = {}) => {
   const hasDb = Boolean(db);
   const hasPath = Boolean(filePath);
@@ -77,6 +98,10 @@ export const requestFileLock = (db, filePath, agentId, options = {}) => {
 
   const cleanPath = leaseKeyFor(db, filePath, options);
   if (!cleanPath) return { granted: false, reason: 'path_traversal' };
+
+  const mustExist = options.requireExisting === true;
+  const missing = mustExist ? missingPathRefusal(db, filePath, cleanPath, options) : null;
+  if (missing) return missing;
 
   const cleanId = normalizeAgentId(agentId);
   const pid = typeof options.pid === 'number' ? options.pid : 0;

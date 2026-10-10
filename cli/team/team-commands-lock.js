@@ -119,6 +119,7 @@ export const handleLockCommand = (db, nonFlagPositional, flags, isCli, cwd = pro
     purpose: flags.purpose,
     priority: flags.priority,
     pid: flags.pid ? Number(flags.pid) : 0,
+    requireExisting: !flags.allowNew,
     cwd
   });
 

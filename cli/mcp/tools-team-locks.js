@@ -27,6 +27,7 @@ export const handleChemxTeamLock = async (args = {}, cwd = process.cwd()) => {
       purpose: args.purpose,
       ttlMs: args.ttlMs,
       pid: process.pid,
+      requireExisting: args.new !== true,
       cwd
     });
   }
