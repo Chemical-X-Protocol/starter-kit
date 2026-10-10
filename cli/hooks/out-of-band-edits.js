@@ -54,8 +54,11 @@ export const parsePorcelain = (text) => {
   return files;
 };
 
+// --ignore-submodules=all: git status reports a dirty submodule as one directory entry, which the scan
+// skips anyway (not a file), but computing it makes git status every submodule (~400 ms on this
+// monorepo's 67 vs ~30 ms without). Files inside a submodule are therefore not looked at, as before.
 const dirtyFiles = (root) => {
-  const run = spawnSync('git', ['--no-optional-locks', 'status', '--porcelain', '-z', '--untracked-files=all'], { cwd: root, encoding: 'utf-8', maxBuffer: 16 * 1024 * 1024 });
+  const run = spawnSync('git', ['--no-optional-locks', 'status', '--ignore-submodules=all', '--porcelain', '-z', '--untracked-files=all'], { cwd: root, encoding: 'utf-8', maxBuffer: 16 * 1024 * 1024 });
   const isOk = run.status === 0 && typeof run.stdout === 'string';
   return isOk ? parsePorcelain(run.stdout) : null;
 };
