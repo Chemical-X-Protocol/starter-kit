@@ -49,4 +49,4 @@ export const newMissingImports = (absPath, beforeText, afterText) => {
   return [...new Set(fresh)].filter((spec) => !existsAsModule(path.resolve(dir, spec)));
 };
 
-export const missingImportMessage = (file, missing) => `${file}: imports ${missing.join(', ')}, which does not exist, so nothing was written (a missing module crashes every process that loads this file). Create the module first, or pass allowMissingImport (an API parameter; no CLI flag exists yet, see #4606) for a multi-file change that creates it next. Only relative JS/TS imports the edit adds are checked.`;
+export const missingImportMessage = (file, missing) => `${file}: imports ${missing.join(', ')}, which does not exist, so nothing was written (a missing module crashes every process that loads this file). Create the module first, or pass --allow-missing-import (API: allowMissingImport) for a multi-file change that creates it next. Only relative JS/TS imports the edit adds are checked.`;

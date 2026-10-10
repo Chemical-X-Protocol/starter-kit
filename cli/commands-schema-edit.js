@@ -18,6 +18,7 @@ export const EDIT_COMMANDS = [
       { flag: '--target-file=<path>', desc: 'Read the exact text block to replace from a file' },
       { flag: '--replacement-file=<path>', desc: 'Read the replacement content from a file' },
       { flag: '--allow-remove=<a,b>', desc: 'Top-level declarations the patch may remove' },
+      { flag: '--allow-missing-import', desc: 'Allow the patch to add a relative JS/TS import whose module does not exist yet (for a multi-file change that creates it next)' },
       { flag: '--multiple, --allow-multiple', desc: 'Allow replacing multiple occurrences' },
       { flag: '--dry-run', desc: 'Preview patch without writing to disk' },
       { flag: '--json', desc: 'Output result as minified JSON' }
@@ -41,6 +42,7 @@ export const EDIT_COMMANDS = [
       { flag: '--content="<text>"', desc: 'File content to write' },
       { flag: '--content-file=<path>', desc: 'Read the file content from a file' },
       { flag: '--allow-remove=<a,b>', desc: 'Top-level declarations an overwrite may remove' },
+      { flag: '--allow-missing-import', desc: 'Allow the file to add a relative JS/TS import whose module does not exist yet (for a multi-file change that creates it next)' },
       { flag: '--overwrite', desc: 'Allow replacing an existing file' },
       { flag: '--append', desc: 'Add the content to the end of the file (created if missing), with the same parse check, audit, index sync and lock checks; refused with --overwrite; no newline is inserted for you' },
       { flag: '--json', desc: 'Output result as minified JSON' }
