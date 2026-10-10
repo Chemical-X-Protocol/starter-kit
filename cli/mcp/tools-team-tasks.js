@@ -15,7 +15,7 @@ import { resolveDependencyStates } from '../team/task-detail-sections.js';
 import { checkNeedsInput } from '../team/team-needs.js';
 import { openTeamContext } from '../team/coordination-db.js';
 import { resolveTaskRef } from '../team/task-ref.js';
-import { resolveListRepo, prepareTaskTarget } from '../team/team-commands-repo.js';
+import { resolveListRepo, prepareTaskTarget, describeShellMangledArg } from '../team/team-commands-repo.js';
 import { repoDir } from '../team/coordination-repos.js';
 
 // Team actions use the coordination db for the call's root (projectRoot), never CHEMX_PROJECT_ROOT's
@@ -64,6 +64,9 @@ const setTarget = (ctx, args, cwd) => {
 };
 
 export const handleChemxTeamTask = async (rawArgs = {}, cwd = process.cwd()) => {
+  const mangled = describeShellMangledArg('show', ['', rawArgs.taskId ?? rawArgs.id], { target: rawArgs.target ?? rawArgs.targetPath });
+  const isMangled = Boolean(mangled);
+  if (isMangled) return { error: mangled, refused: true };
   const ctx = openTeamContext(cwd);
   const { db } = ctx;
   if (!db) return { error: ctx.refused || 'sqlite_unavailable' };
