@@ -8,6 +8,7 @@
 import { SEARCH_COMMANDS } from './commands-schema-search.js';
 import { EDIT_COMMANDS } from './commands-schema-edit.js';
 import { VERIFY_COMMANDS } from './commands-schema-verify.js';
+import { VERIFY_MORE_COMMANDS } from './commands-schema-badge.js';
 import { WRAPPER_COMMANDS } from './commands-schema-wrappers.js';
 import { OPS_COMMANDS } from './commands-schema-ops.js';
 import { PATTERNS_COMMANDS } from './commands-schema-patterns.js';
@@ -16,7 +17,7 @@ import { REPORT_COMMANDS } from './commands-schema-report.js';
 
 export const COMMAND_GROUPS = ['search', 'edit', 'verify', 'wrappers', 'agents', 'setup'];
 
-export const COMMANDS_SCHEMA = [...SEARCH_COMMANDS, ...EDIT_COMMANDS, ...VERIFY_COMMANDS, ...WRAPPER_COMMANDS, ...OPS_COMMANDS, ...PATTERNS_COMMANDS, ...REPORT_COMMANDS, ...HOST_COMMANDS];
+export const COMMANDS_SCHEMA = [...SEARCH_COMMANDS, ...EDIT_COMMANDS, ...VERIFY_COMMANDS, ...VERIFY_MORE_COMMANDS, ...WRAPPER_COMMANDS, ...OPS_COMMANDS, ...PATTERNS_COMMANDS, ...REPORT_COMMANDS, ...HOST_COMMANDS];
 
 const COMMAND_INDEX = new Map(
   COMMANDS_SCHEMA.flatMap((entry) => [entry.name, ...entry.aliases].map((token) => [token, entry]))
