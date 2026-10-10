@@ -215,6 +215,7 @@ test('report (#5888): calls logged in two package dbs under one root are both co
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const files = ['.chemx', path.join('apps', 'youmeos', '.chemx'), path.join('apps', 'other', '.chemx')].map((d) => path.join(root, d, 'index.db'));
   files.forEach((f) => fs.mkdirSync(path.dirname(f), { recursive: true }));
+  fs.writeFileSync(path.join(root, 'pnpm-workspace.yaml'), 'packages:\n  - apps/*\n');
   const [rootFile, youmeosFile, otherFile] = files;
   const cwd = path.join(root, 'apps', 'youmeos');
   const call = (agentHandle, action) => ({ ts: T0 + 2 * MIN, agent: agentHandle, surface: 'mcp', action, ok: true, resultChars: 400, cf: { kind: 'file-whole', chars: 4000, calls: 0 } });
@@ -238,6 +239,22 @@ test('report (#5888): calls logged in two package dbs under one root are both co
   assert.match(card, /Call dbs read \(3\)/);
   assert.match(card, /apps.youmeos.\.chemx.index\.db: 1 calls in the run window/);
   assert.match(card, /apps.other.\.chemx.index\.db: 1 calls/);
+});
+
+test('report (#5888): a stray db in an ancestor of the repo is never opened and the root is the workspace root', (t) => {
+  const outer = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-savings-stray-'));
+  t.after(() => fs.rmSync(outer, { recursive: true, force: true }));
+  const repo = path.join(outer, 'repo');
+  const dbFiles = [path.join(outer, '.chemx'), path.join(repo, '.chemx'), path.join(repo, 'apps', 'youmeos', '.chemx')].map((d) => path.join(d, 'index.db'));
+  dbFiles.forEach((f) => fs.mkdirSync(path.dirname(f), { recursive: true }));
+  fs.writeFileSync(path.join(repo, 'pnpm-workspace.yaml'), 'packages:\n  - apps/*\n');
+  dbFiles.forEach((f) => new DatabaseSync(f).close());
+  const own = new DatabaseSync(dbFiles[1]);
+  t.after(() => own.close());
+  const found = openExtraLedgerDbs(own, repo);
+  t.after(() => found.extras.forEach((e) => e.db.close()));
+  assert.equal(fs.realpathSync(found.root), fs.realpathSync(repo));
+  assert.deepEqual(found.extras.map((e) => e.label), [path.join('apps', 'youmeos', '.chemx', 'index.db')]);
 });
 
 test('report (#5888): a package db with no tool_calls table is named as not read and adds nothing', (t) => {

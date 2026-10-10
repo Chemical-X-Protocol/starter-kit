@@ -2,13 +2,14 @@
  * Chemical X Protocol: which call-ledger databases `chemx report savings` reads (#5888).
  * The ledger row is written to the nearest .chemx/index.db above the caller's cwd, so a run working in
  * a sub-package (apps/youmeos) logs to that package's db, not to the root one. The report therefore
- * reads the db it was handed plus every other package db found under the coordination root, and names
+ * reads the db it was handed plus every other package db found under the coordination root (the repo or workspace root, so a stray db in an ancestor such as ~/.chemx is never opened), and names
  * each one. Guaranteed: the dbs listed were opened and read. Not guaranteed: a db outside the search
  * (deeper than MAX_DEPTH, or under a skipped directory) is not found and its calls are not counted.
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import { loadRunCalls } from './savings-tooling.js';
+import { resolveCoordinationRoot } from '../team/coordination-root.js';
 
 export const MAX_DEPTH = 4;
 const SKIP = new Set(['node_modules', '.git', 'dist', 'build', 'vendor', '.cache']);
@@ -34,13 +35,8 @@ const subdirsOf = (dir) => {
 
 const hasLedgerFile = (dir) => fs.existsSync(path.join(dir, LEDGER_FILE));
 
-/** The highest ancestor of cwd (cwd included) that holds .chemx/index.db, or cwd when none does. */
-export const ledgerRootOf = (cwd) => {
-  const chain = [];
-  for (let dir = path.resolve(cwd); !chain.includes(dir); dir = path.dirname(dir)) chain.push(dir);
-  const holders = chain.filter(hasLedgerFile);
-  return holders.length > 0 ? holders[holders.length - 1] : path.resolve(cwd);
-};
+/** The coordination root chemx team uses (repo or workspace marker), never just any ancestor holding a db. */
+export const ledgerRootOf = (cwd) => resolveCoordinationRoot(cwd).root;
 
 /** Every .chemx/index.db at root or at most MAX_DEPTH directories below it, as absolute paths. */
 export const findLedgerDbs = (root) => {
