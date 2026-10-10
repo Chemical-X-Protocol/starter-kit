@@ -60,6 +60,21 @@ test('done refuses a dirty target, naming it, and passes after commit', () => {
   });
 });
 
+test('done refuses a dirty set-files entry, naming it', () => {
+  inTempRepo((root) => {
+    const db = setupDb();
+    fs.writeFileSync(path.join(root, 'src/b.js'), 'export const b = 1;\n');
+    git(root, 'add', '-A');
+    git(root, 'commit', '-q', '-m', 'b');
+    const task = createTask(db, { title: 'Edit a.js', target_path: TARGET, extra_files: ['src/b.js'], tier: 'util', origin_type: 'manual' });
+    claimTask(db, task.id, '@spec-a');
+    fs.writeFileSync(path.join(root, 'src/b.js'), 'export const b = 2;\n');
+    const refusal = completeTaskWithAudit(db, task.id, '@spec-a', { cwd: root });
+    assert.equal(refusal.uncommitted, true);
+    assert.match(refusal.message, /b\.js/);
+  });
+});
+
 test('--force completes a dirty target', () => {
   inTempRepo((root) => {
     const db = setupDb();
