@@ -6,16 +6,14 @@ import { runFuzz, formatFailure } from './run.js';
 
 export const FUZZ_SEED = Number(process.env.CHEMX_FUZZ_SEED ?? 0x51ed);
 export const FUZZ_PER_CLASS = Number(process.env.CHEMX_FUZZ_PER_CLASS ?? 300);
-// Per-test limit in ms. Alone, a shard took ~175 s on a busy machine, and the full suite runs it beside
-// many other files, so the limit is generous: it is a backstop for a hang, not a speed target.
-// CHEMX_FUZZ_TIMEOUT_MS overrides it. Not guaranteed: a synchronous run cannot be interrupted by it.
-export const FUZZ_TIMEOUT_MS = Number(process.env.CHEMX_FUZZ_TIMEOUT_MS ?? 1_800_000);
+// No per-test timeout: node:test's default is already unlimited, and a synchronous run cannot be
+// interrupted by one. The file-level failure seen in one --all run (#5907) is not explained.
 
 /** Registers the two large-run tests (inlining off, on) for `classes`. */
 export const defineFuzzShard = (classes) => {
   for (const inline of [false, true]) {
     const mode = inline ? 'inlining on' : 'inlining off (default)';
-    test(`large fuzz run (seed ${FUZZ_SEED}, ${FUZZ_PER_CLASS} per class), ${classes.join(', ')}, ${mode}`, { timeout: FUZZ_TIMEOUT_MS }, () => {
+    test(`large fuzz run (seed ${FUZZ_SEED}, ${FUZZ_PER_CLASS} per class), ${classes.join(', ')}, ${mode}`, () => {
       const report = runFuzz({ seed: FUZZ_SEED, perClass: FUZZ_PER_CLASS, inputs: 8, classes, inline });
       const failures = report.failures.map(formatFailure).join('\n\n');
       assert.equal(report.failures.length, 0, `${report.failures.length} unsound merge(s)\n\n${failures}`);
