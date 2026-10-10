@@ -86,19 +86,26 @@ const mcpWords = (input) => {
   return (isTeam ? team : plain).filter((w) => w !== '' && w !== undefined);
 };
 
+// The identity an MCP call carries in params.agentId / params.as (the fields the call ledger reads), or ''.
+const mcpAsOf = (input) => {
+  const p = input.params && typeof input.params === 'object' ? input.params : {};
+  return String(p.agentId ?? p.as ?? input.agentId ?? input.as ?? '');
+};
+
 const mcpInvocations = (call) => {
   const input = call.input;
   const lines = [];
   const hasCommand = typeof input.command === 'string';
-  if (hasCommand) lines.push(wordsOf(input.command));
+  const topAs = mcpAsOf(input);
+  if (hasCommand) lines.push({ argv: wordsOf(input.command), mcpAs: topAs });
   const batch = Array.isArray(input.commands) ? input.commands : [];
-  for (const line of batch) lines.push(wordsOf(line));
+  for (const line of batch) lines.push({ argv: wordsOf(line), mcpAs: topAs });
   const hasAction = typeof input.action === 'string';
-  if (hasAction) lines.push(mcpWords(input).map(String));
+  if (hasAction) lines.push({ argv: mcpWords(input).map(String), mcpAs: topAs });
   const items = Array.isArray(input.batch) ? input.batch : [];
-  for (const item of items) lines.push(mcpWords(item ?? {}).map(String));
-  return lines.filter((argv) => argv.length > 0).map((argv) => ({
-    via: 'mcp', kind: 'chemx', at: call.at, cwd: call.cwd, raw: argv.join(' '), argv, redirects: [],
+  for (const item of items) lines.push({ argv: mcpWords(item ?? {}).map(String), mcpAs: mcpAsOf(item ?? {}) || topAs });
+  return lines.filter(({ argv }) => argv.length > 0).map(({ argv, mcpAs }) => ({
+    via: 'mcp', kind: 'chemx', mcpAs, at: call.at, cwd: call.cwd, raw: argv.join(' '), argv, redirects: [],
     dir: { steps: [], unknown: false }, isPiped: false, isScratch: false
   }));
 };

@@ -61,9 +61,9 @@ const writeRun = (env, id, agents) => {
 const cleanAgent = (repo) => ({
   id: 'c1', label: 'fix:cli/a.js', lines: [
     user(BASE, repo, taskText('@clean-one', 11, 'cli/a.js')),
-    mcp(BASE + 1000, repo, { action: 'team_task', params: { subAction: 'claim', taskId: 11 } }),
-    mcp(BASE + 2000, repo, { action: 'team_lock', params: { subAction: 'acquire', path: 'cli/a.js' } }),
-    mcp(BASE + 3000, repo, { action: 'patch', params: { path: 'cli/a.js' } }),
+    mcp(BASE + 1000, repo, { action: 'team_task', params: { subAction: 'claim', taskId: 11, agentId: '@clean-one' } }),
+    mcp(BASE + 2000, repo, { action: 'team_lock', params: { subAction: 'acquire', path: 'cli/a.js', agentId: '@clean-one' } }),
+    mcp(BASE + 3000, repo, { action: 'patch', params: { path: 'cli/a.js', agentId: '@clean-one' } }),
     bash(BASE + 4000, repo, 'CHEMX_AGENT_ID=@clean-one chemx commit cli/a.js -m "fix(a): tidy (#11)" --release'),
     bash(BASE + 5000, repo, 'chemx team task done 11 --target=cli/a.js --as=@clean-one'),
     use(BASE + 60000, repo, 'StructuredOutput', { file: 'cli/a.js', status: 'fixed', task: 11 })

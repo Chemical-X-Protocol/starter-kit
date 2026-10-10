@@ -50,6 +50,22 @@ test('own identity exported, handoff to the orchestrator named in the call: 0 ro
   assert.equal(anonymousActingCalls(own, orch).length, 1);
 });
 
+const mcpInvs = (...inputs) => inputs.flatMap((input, i) => invocationsOf({ name: 'mcp__chemical-x__chemx', input, at: i, cwd: '/repo' }));
+
+test('MCP patch call without agentId or as is reported as acting anonymously; with the agent own id it is not', () => {
+  const bare = mcpInvs({ action: 'patch', params: { path: 'a.js' } });
+  assert.equal(anonymousActingCalls(bare).length, 1);
+  const own = mcpInvs({ action: 'patch', params: { path: 'a.js', agentId: '@me' } }, { action: 'read', params: { path: 'a.js' } });
+  assert.deepEqual(anonymousActingCalls(own), []);
+  assert.equal(anonymousActingCalls(mcpInvs({ action: 'patch', params: { path: 'a.js', agentId: '@orch-1' } }), '@orch-1').length, 1);
+});
+
+test('MCP patch call naming another handle is reported as acted as another handle', () => {
+  const found = actedAsOtherHandle(mcpInvs({ action: 'patch', params: { path: 'a.js', agentId: '@val-5' } }, { action: 'patch', params: { path: 'a.js', as: '@me' } }), '@me', '@orch-1');
+  assert.equal(found.length, 1);
+  assert.equal(found[0].identity, '@val-5');
+});
+
 test('read-only chemx calls and plain shell are not reported', () => {
   assert.deepEqual(rows('chemx read cli/a.js', 'chemx team status', 'git status'), []);
 });

@@ -2,7 +2,8 @@
 // changes shared state (claim, lock, write, commit, verify) and names no identity resolves to the
 // CHEMX_AGENT_ID its orchestrator exported through $CLAUDE_ENV_FILE. Guaranteed: such a call in the
 // transcript is listed, also one that names the orchestrator's own handle. Not guaranteed: whether the
-// env really held that id, read-only calls, nor calls routed through MCP (only Bash chemx calls are read).
+// env really held that id, nor read-only calls. MCP chemx calls count too: their identity is params.agentId /
+// params.as (or --as in a command string); an earlier Bash export does not apply to them.
 
 import { isActingChemxArgs } from '../hooks/session-identity.js';
 
@@ -21,7 +22,7 @@ const asValue = (argv) => {
 const exportedValue = (inv) => (inv.argv.slice(1).find((word) => IDENTITY_ASSIGN.test(word)) ?? '').replace(/^CHEMX_AGENT_ID=/, '').replace(/^["']|["']$/g, '');
 // The identity a call acts as: only this is compared with the orchestrator's handle. A handle merely
 // mentioned (a handoff target, comment text) does not make the call anonymous (#5850).
-const identityOf = (inv, exported, isChemx) => [String(inv.vars?.CHEMX_AGENT_ID ?? ''), isChemx ? asValue(inv.argv) : '', exported ?? ''].filter(Boolean);
+const identityOf = (inv, exported, isChemx) => [String(inv.vars?.CHEMX_AGENT_ID ?? ''), isChemx ? asValue(inv.argv) : '', String(inv.mcpAs ?? ''), exported ?? ''].filter(Boolean);
 const HELP_FLAG = /^(?:--help|-h|--version)$/;
 // Read-only shapes the audit skips: --help/--version, and `test --changed` (#5850).
 const isActing = (argv) => !argv.some((word) => HELP_FLAG.test(word)) && !(argv[0] === 'test' && argv.includes('--changed')) && isActingChemxArgs(argv);
@@ -34,24 +35,25 @@ const explicitIdOf = (inv, exportedId) => {
   const asIndex = inv.argv.findIndex((word) => word === '--as');
   const asEquals = inv.argv.map((word) => word.match(AS_VALUE)?.[1]).find(Boolean);
   const spaced = asIndex >= 0 ? inv.argv[asIndex + 1] : undefined;
-  const id = asEquals ?? spaced ?? (String(inv.vars?.CHEMX_AGENT_ID ?? '') || exportedId);
+  const own = String(inv.vars?.CHEMX_AGENT_ID ?? '') || (inv.via === 'mcp' ? '' : exportedId);
+  const id = asEquals ?? spaced ?? (String(inv.mcpAs ?? '') || own);
   return id ? withAt(id) : null;
 };
 
 const exportedIdOf = (inv) => inv.argv.slice(1).map((word) => word.match(/^CHEMX_AGENT_ID=(\S+)$/)?.[1]).find(Boolean) ?? null;
 
 /**
- * Rows { at, command, identity } for state-changing Bash chemx calls whose explicit identity is not the agent's own
+ * Rows { at, command, identity } for state-changing chemx calls (Bash or MCP) whose explicit identity is not the agent's own
  * handle (#5740). Guaranteed: a call naming a different handle through --as, an inline CHEMX_AGENT_ID= or an earlier
  * export is listed; the orchestrator handle is left to anonymousActingCalls. Not guaranteed: calls without any
- * identity, MCP calls, or an identity held in a shell variable.
+ * identity, or an identity held in a shell variable. MCP calls are read through params.agentId / params.as.
  */
 export const actedAsOtherHandle = (invs, ownHandle, inheritedHandle = null) => {
   const rows = [];
   let exportedId = null;
   for (const inv of invs) {
     if (isIdentityExport(inv)) exportedId = exportedIdOf(inv) ? withAt(exportedIdOf(inv)) : exportedId;
-    const isChemx = inv.kind === 'chemx' && inv.via === 'bash';
+    const isChemx = inv.kind === 'chemx';
     const identity = isChemx ? explicitIdOf(inv, exportedId) : null;
     const isOther = identity !== null && identity !== withAt(ownHandle ?? '') && identity !== inheritedHandle;
     const isReported = isOther && inv.isDenied !== true && isActing(inv.argv) && Boolean(ownHandle);
@@ -66,9 +68,9 @@ export const anonymousActingCalls = (invs, inheritedHandle = null) => {
   const rows = [];
   for (const inv of invs) {
     if (isIdentityExport(inv)) exportedIn.set(inv.raw, exportedValue(inv));
-    const isChemx = inv.kind === 'chemx' && inv.via === 'bash';
+    const isChemx = inv.kind === 'chemx';
     const isDenied = inv.isDenied === true;
-    const hasIdentity = exportedIn.has(inv.raw) || hasInlineId(inv) || (isChemx && hasAs(inv.argv));
+    const hasIdentity = exportedIn.has(inv.raw) || hasInlineId(inv) || (isChemx && (hasAs(inv.argv) || String(inv.mcpAs ?? '') !== ''));
     const namesInherited = inheritedHandle !== null && identityOf(inv, exportedIn.get(inv.raw), isChemx).includes(inheritedHandle);
     const carries = hasIdentity && !namesInherited;
     const isAnonymous = isChemx && !isDenied && isActing(inv.argv) && !carries;
