@@ -199,6 +199,23 @@ test('test-output: vitest separator lines with a [n/m] counter are not failure d
   assert.ok(!parsed.failures[0].details.some((d) => /⎯/.test(d)), parsed.failures[0].details.join(' | '));
 });
 
+test('test-output: a failing todo test is reported as todo, never as a failure', () => {
+  const out = [
+    '✔ real test (1ms)',
+    '✖ cold sync (0.2ms) # TODO',
+    '✖ real broken (2ms)',
+    'ℹ tests 3',
+    'ℹ pass 1',
+    'ℹ fail 1',
+    'ℹ todo 1'
+  ].join('\n');
+  const result = parseTestOutput(out, '', 1);
+  assert.deepEqual(result.failures.map((f) => f.name), ['real broken']);
+  assert.equal(result.failed, 1);
+  assert.equal(result.todo, 1);
+  assert.equal(result.todoFailing, 1);
+});
+
 test('test-output: a missing test script is a failure, not an empty run, when specific tests were asked for', () => {
   const stderr = 'npm error Missing script: "test"\nnpm error\nnpm error To see a list of scripts, run:\nnpm error   npm run';
   const scoped = parseTestOutput('', stderr, 1, { scoped: true });

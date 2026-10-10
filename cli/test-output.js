@@ -8,6 +8,7 @@ import {
   extractAssertionFailures,
   extractUnhandledErrors,
   findFatalLine,
+  findFailingTodos,
   findFirstErrorLine,
   findNoTestsLine,
   tailLines
@@ -51,7 +52,7 @@ const readNumber = (line, pattern) => {
 };
 
 const parseCounts = (cleanLines) => {
-  const counts = { totalTests: 0, passed: 0, failed: 0, skipped: 0, errors: 0 };
+  const counts = { totalTests: 0, passed: 0, failed: 0, skipped: 0, errors: 0, todo: 0 };
   let hasRunnerSummary = false;
   for (const line of cleanLines) {
     const isRunnerSummary = /^Tests:?\s+/i.test(line);
@@ -72,7 +73,9 @@ const parseCounts = (cleanLines) => {
     counts.passed = nodeCount('pass') ?? counts.passed;
     counts.failed = (nodeCount('fail') ?? counts.failed);
     counts.failed += nodeCount('cancelled') ?? 0;
-    counts.skipped += (nodeCount('skipped') ?? 0) + (nodeCount('todo') ?? 0);
+    const todoCount = nodeCount('todo') ?? 0;
+    counts.todo += todoCount;
+    counts.skipped += (nodeCount('skipped') ?? 0) + todoCount;
   }
   const emptyNodeFiles = hasRunnerSummary ? 0 : countEmptyNodeFiles(cleanLines);
   counts.passed = Math.max(0, counts.passed - emptyNodeFiles);
@@ -147,5 +150,6 @@ export const parseTestOutput = (stdout = '', stderr = '', exitCode = 0, options 
     noTestsLine: findNoTestsLine(lines, { scoped: Boolean(options.scoped) })
   });
 
-  return { success: verdict.status === STATUS.PASS, ...verdict, ...counts, failures };
+  const todoFailing = findFailingTodos(lines).length;
+  return { success: verdict.status === STATUS.PASS, ...verdict, ...counts, todoFailing, failures };
 };

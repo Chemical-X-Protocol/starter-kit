@@ -26,7 +26,8 @@ const collectBlocks = (lines, mode) => {
   for (const raw of lines) {
     const headerMatch = mode.match(raw.trim(), raw);
     if (headerMatch) {
-      current = { name: headerMatch[1].replace(/\s+\d+(?:\.\d+)?m?s$/, ''), body: [] };
+      const isTodo = /#\s*TODO\b/i.test(raw);
+      current = { name: headerMatch[1].replace(/\s*#\s*TODO\b.*$/i, '').replace(/\s+\(?\d+(?:\.\d+)?m?s\)?$/, ''), body: [], isTodo };
       blocks.push(current);
       continue;
     }
@@ -60,6 +61,13 @@ const toFailure = (block, mode) => {
   return { kind: 'assertion', name: block.name, message, location, details };
 };
 
+// Failing `todo` tests: the names of todo tests that node reports as not ok. They are not failures.
+export const findFailingTodos = (lines) => {
+  const mode = pickHeaderMode(lines);
+  if (!mode) return [];
+  return [...new Set(collectBlocks(lines, mode).filter((b) => b.isTodo).map((b) => b.name))];
+};
+
 export const extractAssertionFailures = (lines) => {
   const mode = pickHeaderMode(lines);
   if (!mode) return [];
@@ -69,7 +77,8 @@ export const extractAssertionFailures = (lines) => {
   for (const block of collectBlocks(lines, mode)) {
     const isSummaryHeader = /^failing tests:?$/i.test(block.name);
     const isRollup = mode.name === 'tap' && isSuiteRollup(block.body);
-    const shouldSkip = isSummaryHeader || isRollup;
+    // node --test exits 0 for a failing `todo` test, so it is reported as todo, never as a failure.
+    const shouldSkip = isSummaryHeader || isRollup || block.isTodo;
     if (shouldSkip) continue;
     const previous = byName.get(block.name);
     const isFuller = !previous || block.body.length > previous.body.length;

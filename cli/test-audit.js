@@ -207,6 +207,8 @@ export const runTestAudit = async (rawArgs = [], isCli = false, options = {}) =>
     passed: result.passed,
     failed: result.failed,
     skipped: result.skipped,
+    todo: result.todo,
+    todoFailing: result.todoFailing,
     errors: result.errors,
     executionError: result.executionError,
     failures: result.failures,
