@@ -2,18 +2,15 @@
 // snapshot (it may be a partial scan, so the file count is kept), ratchet ceiling, MCP launch skew and
 // stale chemx MCP servers for this root. Every source is optional; missing data stays null.
 
-import fs from 'node:fs';
 import path from 'node:path';
 import { readKitVersion } from './launcher.js';
 import { listChemxMcpProcesses } from '../doctor/proc-scan.js';
 import { checkMcpLaunch } from '../doctor/check-mcp.js';
+import { readJsonOr } from '../fs-json.js';
 
 const readJson = (file) => {
-  try {
-    return JSON.parse(fs.readFileSync(file, 'utf-8'));
-  } catch {
-    return null; // absent or unreadable status sources are reported as unknown
-  }
+  // absent or unreadable status sources are reported as unknown
+  return readJsonOr(file, null);
 };
 
 const lastAudit = (root, now) => {

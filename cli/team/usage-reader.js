@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { parseTranscript } from './usage-transcript.js';
+import { readJsonOr } from '../fs-json.js';
 
 const AGENT_FILE_RE = /^agent-(.+)\.jsonl$/;
 
@@ -59,11 +60,7 @@ const readJsonLines = (file) => {
 };
 
 const readJson = (file) => {
-  try {
-    return JSON.parse(fs.readFileSync(file, 'utf8'));
-  } catch {
-    return {};
-  }
+  return readJsonOr(file, {});
 };
 
 const readJournalLabels = (dir) => {

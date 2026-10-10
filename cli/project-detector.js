@@ -1,15 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { readJsonOr } from './fs-json.js';
 
 export const loadProjectConfig = (cwd = process.cwd()) => {
   const cfgPath = path.resolve(cwd, '.chemx', 'config.json');
   const hasConfig = fs.existsSync(cfgPath);
   if (!hasConfig) return {};
-  try {
-    return JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
-  } catch {
-    return {};
-  }
+  return readJsonOr(cfgPath, {});
 };
 
 export const normalizeFramework = (val) => {

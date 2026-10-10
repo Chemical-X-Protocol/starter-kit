@@ -11,6 +11,7 @@ import {
 } from './errors/index.js';
 import { printHelp } from './help.js';
 import { ROUTABLE_COMMAND_TOKENS } from './commands-schema.js';
+import { readJsonOr } from './fs-json.js';
 
 sanitizeOutputStreams();
 exitQuietlyOnClosedPipe();
@@ -38,11 +39,7 @@ const loadProjectConfig = () => {
   const cfgPath = path.resolve(process.cwd(), '.chemx', 'config.json');
   const isMissing = Boolean(!fs.existsSync(cfgPath));
   if (isMissing) return {};
-  try {
-    return JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
-  } catch {
-    return {};
-  }
+  return readJsonOr(cfgPath, {});
 };
 
 // ---------------------------------------------------------------------------

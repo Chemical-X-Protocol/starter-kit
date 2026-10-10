@@ -3,16 +3,14 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { readJsonOr } from '../fs-json.js';
 
 const KIT_PACKAGES = new Set(['@chemx/starter-kit', '@chem-x/starter-kit', 'chemx', 'create-chemx', '@chemx/create-chemx']);
 
 const readPackage = (dir) => {
   const file = path.join(dir, 'package.json');
-  try {
-    return JSON.parse(fs.readFileSync(file, 'utf-8'));
-  } catch {
-    return null; // no or unreadable package.json at this level: keep walking up
-  }
+  // no or unreadable package.json at this level: keep walking up
+  return readJsonOr(file, null);
 };
 
 const isKitPackage = (pkg) => {

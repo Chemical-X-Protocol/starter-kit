@@ -9,6 +9,7 @@ import { KIT_ROOT, resolveLauncher } from '../hooks/launcher.js';
 import { HOST_SHIM_FILES, buildHostShims } from '../host-shims.js';
 import { GENERATED_MARKERS } from '../pillars-write-guard.js';
 import { PILLARS } from '../pillars-schema.js';
+import { readJsonOr } from '../fs-json.js';
 
 const EVENTS = ['PreToolUse', 'PostToolUse', 'SessionStart'];
 const SCOPE_FILES = [
@@ -20,11 +21,8 @@ const INSTALLED_ENTRY = /cli\/hooks\/entry\.js/;
 const BOOTSTRAP_PATH = /([^\s"']*chemx-guard\.mjs)/;
 
 const readJsonOrEmpty = (file) => {
-  try {
-    return JSON.parse(fs.readFileSync(file, 'utf-8'));
-  } catch {
-    return {}; // missing or unparseable settings count as "no hooks"; install-hooks reports parse errors
-  }
+  // missing or unparseable settings count as "no hooks"; install-hooks reports parse errors
+  return readJsonOr(file, {});
 };
 
 const entryPathOf = (command, projectRoot) => {

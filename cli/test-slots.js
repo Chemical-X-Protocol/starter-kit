@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { scheduleTimeout } from './timers.js';
+import { readJsonOr } from './fs-json.js';
 
 // Set in the runner's environment: a chemx test started by a spec inside a slot-holding run is
 // already covered by its parent's slot, so it runs with one worker and never waits (no deadlock).
@@ -59,11 +60,7 @@ const withMutex = (dir, fn) => {
 };
 
 const readHolder = (file) => {
-  try {
-    return JSON.parse(fs.readFileSync(file, 'utf8'));
-  } catch {
-    return null;
-  }
+  return readJsonOr(file, null);
 };
 
 // Claims up to `want` free slots (indices below `budget`); returns the claimed files and the
