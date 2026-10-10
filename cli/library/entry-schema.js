@@ -38,7 +38,8 @@ const fpProblems = (fp) => {
 
 const stampProblems = (stamp) => {
   const isValid = isRecord(stamp) && Number.isInteger(stamp.version) && isText(stamp.revisionsHash);
-  return failedMessages([[isValid, 'verifiedRuleset must be { version, revisionsHash }']]);
+  const isExtractorValid = stamp?.extractor === undefined || Number.isInteger(stamp.extractor);
+  return failedMessages([[isValid && isExtractorValid, 'verifiedRuleset must be { version, revisionsHash, extractor? } with integer version and extractor']]);
 };
 
 const holeProblems = (hole, index) => {

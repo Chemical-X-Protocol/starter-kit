@@ -11,11 +11,14 @@ const HASH_LENGTH = 12;
 
 const byCodePoint = (a, b) => Number(a > b) - Number(a < b);
 
-/** The ruleset the audit currently enforces: { version, revisionsHash } (ids and revisions, not code). */
-export const currentRuleset = ({ revisionTable = RULE_REVISIONS, version = RULESET_VERSION } = {}) => {
+/** Bump when the Forge extractor's canonical forms change (fp values change); entries stamped with another value re-verify. */
+export const EXTRACTOR_VERSION = 2;
+
+/** The ruleset the audit currently enforces: { version, revisionsHash, extractor } (ids and revisions, not code). */
+export const currentRuleset = ({ revisionTable = RULE_REVISIONS, version = RULESET_VERSION, extractor = EXTRACTOR_VERSION } = {}) => {
   const revisions = Object.entries(revisionTable).sort(([a], [b]) => byCodePoint(a, b));
   const body = JSON.stringify([version, revisions, Object.keys(RULE_REGISTRY).sort(byCodePoint)]);
-  return { version, revisionsHash: crypto.createHash('sha256').update(body).digest('hex').slice(0, HASH_LENGTH) };
+  return { version, extractor, revisionsHash: crypto.createHash('sha256').update(body).digest('hex').slice(0, HASH_LENGTH) };
 };
 
 /** Units of a text as if it lived at relativePath (library/ itself is excluded from detection). */

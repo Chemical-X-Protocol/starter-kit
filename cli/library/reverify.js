@@ -3,11 +3,18 @@
 // quarantines it (still used for detection, refused for heal) and files a Library: task. Blueprint ids
 // never include the ruleset, so open blueprints are untouched here.
 import fs from 'node:fs';
-import { currentRuleset } from './entry-fp.js';
+import path from 'node:path';
+import { computePieceFp, currentRuleset } from './entry-fp.js';
 import { verifyItem } from './verify.js';
 import { quarantineTitle } from './library-tasks.js';
 
-const isStampCurrent = (stamp, ruleset) => stamp.version === ruleset.version && stamp.revisionsHash === ruleset.revisionsHash;
+const isStampCurrent = (stamp, ruleset) => stamp.version === ruleset.version && stamp.revisionsHash === ruleset.revisionsHash && stamp.extractor === ruleset.extractor;
+
+// Recomputes fp with the current extractor. Returns the stored fp when the piece has no readable fn unit.
+const restampedFp = (item) => {
+  const piece = item.pieceFile ? computePieceFp(item.entry, fs.readFileSync(path.join(item.dir, item.pieceFile), 'utf-8')) : null;
+  return piece ?? item.entry.fp;
+};
 
 const failureLabels = (outcome) => {
   const rules = outcome.failedRules;
@@ -29,7 +36,8 @@ const reverifyOne = async (item, ruleset, { write, fileTask }) => {
   const failures = outcome.ok ? [] : failureLabels(outcome);
   const isNewlyQuarantined = !outcome.ok && entry.status !== 'quarantined';
   const stamp = outcome.ok ? ruleset : entry.verifiedRuleset;
-  if (write) writeEntry(item, { ...entry, status: nextStatus, verifiedRuleset: stamp });
+  const fp = outcome.ok ? restampedFp(item) : entry.fp;
+  if (write) writeEntry(item, { ...entry, fp, status: nextStatus, verifiedRuleset: stamp });
   const title = quarantineTitle(item.id, failures, ruleset.version);
   const description = `${item.id} failed ${outcome.checks.filter((check) => !check.ok).map((check) => `${check.name}: ${check.detail}`).join('; ')}`;
   const task = isNewlyQuarantined && fileTask ? fileTask({ id: item.id, title, description }) : null;

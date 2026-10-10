@@ -2,32 +2,83 @@
   "id": "vue-ts/nullable-timer-handle",
   "version": "1.0.0",
   "role": "resolution",
-  "facet": { "lang": "ts", "runtime": "browser", "framework": "vue" },
+  "facet": {
+    "lang": "ts",
+    "runtime": "browser",
+    "framework": "vue"
+  },
   "exportName": "useSelfCleaningTimeout",
   "defaultModule": "src/composables/useSelfCleaningTimeout.ts",
   "signature": "useSelfCleaningTimeout(fn: () => void | Promise<void>, delayMs: number): { start, stop, isActive }",
   "params": [
-    { "name": "fn", "kind": "value", "type": "() => void | Promise<void>" },
-    { "name": "delayMs", "kind": "value", "type": "number" }
+    {
+      "name": "fn",
+      "kind": "value",
+      "type": "() => void | Promise<void>"
+    },
+    {
+      "name": "delayMs",
+      "kind": "value",
+      "type": "number"
+    }
   ],
   "holes": [
-    { "id": "name", "kind": "name", "default": "useSelfCleaningTimeout", "locate": { "identifier": "useSelfCleaningTimeout" } },
-    { "id": "handle", "kind": "name", "default": "timerId", "locate": { "identifier": "timerId" } }
+    {
+      "id": "name",
+      "kind": "name",
+      "default": "useSelfCleaningTimeout",
+      "locate": {
+        "identifier": "useSelfCleaningTimeout"
+      }
+    },
+    {
+      "id": "handle",
+      "kind": "name",
+      "default": "timerId",
+      "locate": {
+        "identifier": "timerId"
+      }
+    }
   ],
-  "fp": { "l1": "380abf4cbdee1c06", "l2": "5e73ad0ff11f81c9", "l3": "a0399a87231c1485" },
+  "fp": {
+    "l1": "380abf4cbdee1c06",
+    "l2": "5e73ad0ff11f81c9",
+    "l3": "a0399a87231c1485"
+  },
   "aliases": [],
-  "canonicalFor": ["CONTROL_FLOW_INLINE_BOOLEAN", "TIMER_DISCIPLINE"],
+  "canonicalFor": [
+    "CONTROL_FLOW_INLINE_BOOLEAN",
+    "TIMER_DISCIPLINE"
+  ],
   "conflictsResolved": [
     {
-      "rules": ["CONTROL_FLOW_INLINE_BOOLEAN", "TIMER_DISCIPLINE", "tsc-strict"],
+      "rules": [
+        "CONTROL_FLOW_INLINE_BOOLEAN",
+        "TIMER_DISCIPLINE",
+        "tsc-strict"
+      ],
       "note": "Clearing a nullable handle without a branch: clearTimeout(timerId) takes the handle by name, so TIMER_DISCIPLINE sees it cleared, and there is no if, so no inline boolean and no let narrowing through an alias."
     }
   ],
   "negatives": [
-    { "file": "negative/const-alias.ts.txt", "expect": "reports", "rule": "TIMER_DISCIPLINE", "provenance": "alias form: clearTimeout keys on 'id', the handle is 'timerId'" },
-    { "file": "negative/inline-guard.ts.txt", "expect": "reports", "rule": "CONTROL_FLOW_INLINE_BOOLEAN", "provenance": "inline guard: if (timerId !== null) clearTimeout(timerId)" }
+    {
+      "file": "negative/const-alias.ts.txt",
+      "expect": "reports",
+      "rule": "TIMER_DISCIPLINE",
+      "provenance": "alias form: clearTimeout keys on 'id', the handle is 'timerId'"
+    },
+    {
+      "file": "negative/inline-guard.ts.txt",
+      "expect": "reports",
+      "rule": "CONTROL_FLOW_INLINE_BOOLEAN",
+      "provenance": "inline guard: if (timerId !== null) clearTimeout(timerId)"
+    }
   ],
-  "verifiedRuleset": { "version": 5, "revisionsHash": "deb22e623872" },
+  "verifiedRuleset": {
+    "version": 5,
+    "extractor": 2,
+    "revisionsHash": "deb22e623872"
+  },
   "status": "verified",
   "provenance": "src/ui/composables/useSelfCleaningTimeout.ts:3-37 (kit checkout 2026-10-09)"
 }
