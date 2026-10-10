@@ -22,3 +22,12 @@ Not measured: an idle machine, the 971-file git scope, stamp-only time for cold/
 ## Method
 
 Each of 5 rounds used its own fresh copy of the kit (`rsync` then `cp -a`) so cold meant no `.chemx/index.db`. In order: cold `q`, two warm `q`, append `// bench N` to `cli/index-freshness.js` and `chemx read` it with `--outline`, append the same line to 5 other `cli/*.js` files, then `q`. Edits were made with the shell, outside chemx. The script was a throwaway in `/tmp`; rerun the same steps to compare.
+
+## Busy write lock (#4594)
+
+A read-only reader such as q that finds the index write lock held waits instead of failing at once: its writes retry on SQLITE_BUSY for up to CHEMX_DB_BUSY_DEADLINE_MS (default 30000, from #4520).
+
+- Lock clears within the wait: the answer is fresh, index status pass, exit 0. The call can take that long.
+- Lock still held at the deadline: the rows are served as they were, index status inconclusive with a busy reason, exit 3.
+
+Not guaranteed: any particular wait time, or that a holder releases. Spec: cli/index-freshness.spec.js sets a 1500 ms deadline to test the exit 3 path.

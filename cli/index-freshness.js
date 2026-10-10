@@ -6,8 +6,12 @@
 // Guarantee: when index.status is pass, every row the answer can read was compared with its file
 // on disk during this call (mtime + size, and the content hash when the row is racy); files
 // deleted or renamed on disk have no rows. When the db is read-only, another process held the
-// write lock past busy_timeout, or a scope dir is missing, index.status is inconclusive and
+// write lock past the busy wait, or a scope dir is missing, index.status is inconclusive and
 // index.reason says why: the answer then comes from the rows as they were.
+// Busy contract (#4594): a held write lock is waited for, not failed at once: the sync's writes retry
+// (#4520) for up to CHEMX_DB_BUSY_DEADLINE_MS (default 30 s). If the lock clears in that time the
+// answer is fresh (pass); if not, it is inconclusive with the busy reason. The wait is bounded, not
+// guaranteed to be short.
 import path from 'node:path';
 import { STATUS } from './result-status.js';
 import { openIndexDb, getIndexDbState } from './search-schema.js';

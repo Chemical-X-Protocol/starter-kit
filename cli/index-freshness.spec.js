@@ -42,7 +42,9 @@ const write = (root, rel, content) => {
 
 const indexedPaths = (root) => openIndexDb(root).prepare('SELECT path FROM files ORDER BY path').all().map((r) => r.path);
 
-const runQ = (root, args) => spawnSync(process.execPath, ['--no-warnings', CLI, 'q', ...args], { cwd: root, encoding: 'utf-8', env: CHILD_ENV });
+const runQ = (root, args, env = {}) => spawnSync(process.execPath, ['--no-warnings', CLI, 'q', ...args], { cwd: root, encoding: 'utf-8', env: { ...CHILD_ENV, ...env } });
+
+const BUSY_ENV = { CHEMX_DB_BUSY_DEADLINE_MS: '1500' };
 
 const BASE = {
   'src/a.ts': 'export const useA = () => 1;\n',
@@ -209,7 +211,9 @@ test('a read-only db whose rows are still in the WAL is inconclusive (exit 3), n
   }
 });
 
-test('a write lock already held when the db opens gives exit 3 with the busy reason, every time', () => {
+// Contract (#4594): a read-only q waits for a held write lock up to CHEMX_DB_BUSY_DEADLINE_MS (default 30 s, #4520),
+// then answers from the rows as they were with exit 3 and the busy reason. If the lock clears first, it answers fresh (exit 0).
+test('a write lock held past the busy deadline gives exit 3 with the busy reason, every time', () => {
   const root = makeProject(BASE);
   const dbFile = path.join(root, '.chemx', 'index.db');
   assert.equal(runQ(root, ['useA']).status, 0);
@@ -219,8 +223,8 @@ test('a write lock already held when the db opens gives exit 3 with the busy rea
     holder.stdout.once('data', () => {
       try {
         write(root, 'src/a.ts', 'export const useA = () => 2;\n');
-        const first = runQ(root, ['useA']);
-        const second = runQ(root, ['useA', '--json']);
+        const first = runQ(root, ['useA'], BUSY_ENV);
+        const second = runQ(root, ['useA', '--json'], BUSY_ENV);
         for (const res of [first, second]) {
           assert.equal(res.status, 3, `exit ${res.status}: ${res.stderr}${res.stdout}`);
           assert.doesNotMatch(res.stderr, /no such table/);
