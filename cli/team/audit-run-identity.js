@@ -14,6 +14,13 @@ const isIdentityExport = (inv) => inv.kind === 'shell' && inv.argv[0] === 'expor
 const hasAs = (argv) => argv.some((word, i) => AS_FLAG.test(word) && (word.includes('=') || (argv[i + 1] ?? '') !== ''));
 const hasInlineId = (inv) => String(inv.vars?.CHEMX_AGENT_ID ?? '') !== '';
 
+const escapeRe = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+// A handle counts only as a whole token: @validation-5 is not named by @validation-5-4390.
+const namesHandle = (raw, handle) => new RegExp('(?<![\\w@-])' + escapeRe(handle) + '(?![\\w-])').test(raw);
+const HELP_FLAG = /^(?:--help|-h|--version)$/;
+// Read-only shapes the audit skips: --help/--version, and `test --changed` (#5850).
+const isActing = (argv) => !argv.some((word) => HELP_FLAG.test(word)) && !(argv[0] === 'test' && argv.includes('--changed')) && isActingChemxArgs(argv);
+
 /** Rows { at, command } for chemx calls of one agent that act without an identity of their own. */
 export const anonymousActingCalls = (invs, inheritedHandle = null) => {
   const exportedIn = new Set();
@@ -23,9 +30,9 @@ export const anonymousActingCalls = (invs, inheritedHandle = null) => {
     const isChemx = inv.kind === 'chemx' && inv.via === 'bash';
     const isDenied = inv.isDenied === true;
     const hasIdentity = exportedIn.has(inv.raw) || hasInlineId(inv) || (isChemx && hasAs(inv.argv));
-    const namesInherited = inheritedHandle !== null && inv.raw.includes(inheritedHandle);
+    const namesInherited = inheritedHandle !== null && namesHandle(inv.raw, inheritedHandle);
     const carries = hasIdentity && !namesInherited;
-    const isAnonymous = isChemx && !isDenied && isActingChemxArgs(inv.argv) && !carries;
+    const isAnonymous = isChemx && !isDenied && isActing(inv.argv) && !carries;
     if (isAnonymous) rows.push({ at: inv.at, command: inv.raw.replace(/\s+/g, ' ').slice(0, COMMAND_LIMIT) });
   }
   return rows;

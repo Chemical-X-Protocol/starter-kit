@@ -22,6 +22,12 @@ test('a call naming the orchestrator handle is reported even with an identity', 
   assert.equal(anonymousActingCalls(invs).length, 0);
 });
 
+test('own handle exported with a longer name, --help, read and test --changed give 0 rows (#5850)', () => {
+  const commands = ['cd /x && export CHEMX_AGENT_ID=@validation-5-4390; chemx team task comment 4390 hi', 'F=a.js; chemx read $F:264-296; chemx patch --help', 'chemx test --changed'];
+  const invs = commands.flatMap((command, i) => invocationsOf({ name: 'Bash', input: { command }, at: i, cwd: '/repo' }));
+  assert.deepEqual(anonymousActingCalls(invs, '@validation-5'), []);
+});
+
 test('read-only chemx calls and plain shell are not reported', () => {
   assert.deepEqual(rows('chemx read cli/a.js', 'chemx team status', 'git status'), []);
 });
