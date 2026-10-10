@@ -38,24 +38,94 @@ const HANDLER_SOURCES = {
   patch: ['patcher-cli.js'],
   write: ['patcher-cli.js']
 };
-const EXEMPT_SHARED = { patch: 'write', write: 'patch' };
+// patcher-cli.js serves both commands; its flag reads are split per command so a flag listed on one
+// schema entry cannot hide a gap on the other. Shared helpers (between the two blocks) are not scanned.
+const sliceBetween = (src, from, to) => src.slice(src.indexOf(from), src.indexOf(to));
+const patcherSource = (command, src) => command === 'patch'
+  ? sliceBetween(src, 'const PATCH_HELP', 'const WRITE_HELP') + sliceBetween(src, 'const PATCH_FLAGS', 'const WRITE_FLAGS')
+  : src.slice(src.indexOf('const WRITE_HELP'), src.indexOf('];', src.indexOf('const WRITE_HELP'))) + src.slice(src.indexOf('const WRITE_FLAGS'));
+const scopedSource = (command, file, src) => (path.basename(file) === 'patcher-cli.js' ? patcherSource(command, src) : src);
+// Flags a handler passes to git, not flags of the chemx command.
+const GIT_ARGV = new Set(['--show-toplevel', '--porcelain', '--untracked-files', '--no-color', '--diff-filter']);
 
 test('non-cmd handler flags (search, patch, write) are all listed in the schema entry (#4510)', () => {
   const gaps = [];
   for (const [command, files] of Object.entries(HANDLER_SOURCES)) {
     const entry = findCommandSchema(command);
-    const sibling = EXEMPT_SHARED[command] ? knownLongFlags(findCommandSchema(EXEMPT_SHARED[command])) : new Map();
     const known = knownLongFlags(entry);
     for (const file of files) {
-      const src = fs.readFileSync(path.join(cliDir, file), 'utf8');
+      const src = scopedSource(command, file, fs.readFileSync(path.join(cliDir, file), 'utf8'));
       const used = new Set((src.match(/['"`](--[a-z][a-z0-9-]*)/g) ?? []).map((s) => s.slice(1)));
       for (const flag of used) {
-        const isListed = known.has(flag) || sibling.has(flag) || GLOBAL.has(flag);
+        const isListed = known.has(flag) || GLOBAL.has(flag);
         if (!isListed) gaps.push(`${command} ${flag}`);
       }
     }
   }
   assert.deepEqual(gaps, []);
+});
+
+// Every checked command the router dispatches: the case block plus the modules it imports are scanned.
+const routerSources = () => {
+  const lines = fs.readFileSync(path.join(dir, 'cmd-router.js'), 'utf8').split('\n');
+  const blocks = [];
+  let current = null;
+  for (const line of lines) {
+    const label = line.match(/^\s{4}case '([^']+)':\s*(\{)?\s*$/);
+    if (label) {
+      const startsNewBlock = !current || current.body.length > 0;
+      if (startsNewBlock) { current = { labels: [], body: [] }; blocks.push(current); }
+      current.labels.push(label[1]);
+    } else if (current) {
+      current.body.push(line);
+    }
+  }
+  const map = new Map();
+  for (const { labels, body } of blocks) {
+    const text = body.join('\n');
+    // patcher.js re-exports; the flag reads live in patcher-cli.js.
+    const files = [...text.matchAll(/import\('(\.\.?\/[^']+\.js)'\)/g)].map((m) => path.resolve(dir, m[1].replace('patcher.js', 'patcher-cli.js')));
+    for (const label of labels) map.set(label, { text, files });
+  }
+  return map;
+};
+
+// Known gaps found when the scan widened to every routed handler; each is a flag the handler reads
+// that its schema entry does not list yet (tracked by the #4510 follow-up). A new gap is not added here silently:
+// anything not in this set fails the test.
+const KNOWN_GAPS = new Set([
+  'conflicts --conflicts', 'trend --limit',
+  'init --headless', 'init --yes', 'init --ci', 'init --non-interactive', 'init --no-interactive', 'init --framework', 'init --preset', 'init --write', 'init --install',
+  'create --ci', 'create --non-interactive', 'create --no-interactive', 'create --preset', 'create --write',
+  'hook --write', 'doctor --host', 'doctor --scope', 'doctor --kit', 'doctor --write-mcp', 'pillars --yes', 'pillars --force',
+  'generate --headless', 'generate --yes', 'generate --ci', 'generate --non-interactive', 'generate --no-interactive', 'generate --preset', 'generate --write', 'generate --install',
+  'badge --grade', 'badge --label', 'badge --report-url', 'badge --discussion', 'badge --format', 'badge --copy',
+  'verify --allow-empty', 'verify --changed', 'verify --all-packages', 'verify --timeout', 'verify --profile', 'verify --base',
+  'ui --dev', 'ui --allow-host', 'patterns --name'
+]);
+
+test('every checked command the router dispatches has its handler flags listed (#4510)', () => {
+  const routes = routerSources();
+  const gaps = [];
+  const seen = new Set();
+  for (const [label, { text, files }] of routes) {
+    const entry = findCommandSchema(label);
+    const isChecked = entry && !Object.hasOwn(PASSTHROUGH_COMMANDS, entry.name);
+    const isSkipped = !isChecked || seen.has(entry.name);
+    if (isSkipped) continue;
+    seen.add(entry.name);
+    const sources = [text, ...files.filter((f) => fs.existsSync(f)).map((f) => scopedSource(entry.name, f, fs.readFileSync(f, 'utf8')))];
+    const known = knownLongFlags(entry);
+    for (const src of sources) {
+      for (const raw of new Set((src.match(/['"`](--[a-z][a-z0-9-]*)/g) ?? []).map((s) => s.slice(1)))) {
+        const isKnownGap = KNOWN_GAPS.has(`${entry.name} ${raw}`);
+        const isListed = known.has(raw) || GLOBAL.has(raw) || GIT_ARGV.has(raw) || isKnownGap;
+        if (!isListed) gaps.push(`${entry.name} ${raw}`);
+      }
+    }
+  }
+  assert.deepEqual(gaps, []);
+  assert.ok(seen.size > 20, `router mapping found only ${seen.size} checked commands`);
 });
 
 test('q -g takes a dash-prefixed pattern and the real q flags are accepted (#4510)', () => {
