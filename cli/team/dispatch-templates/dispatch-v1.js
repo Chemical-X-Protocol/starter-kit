@@ -21,7 +21,7 @@ export const HANDOFF_STEP = 'This task was built by {{builder}}. Take it over wi
 
 // Closing rule shared by the builder and the repair agent (#4430). task done checks hazards on the target only,
 // so it cannot tell whether every deliverable is met; the agent has to.
-export const UNMET_RULE = 'A deliverable is met only when you ran a command whose output shows it. If any deliverable is unmet: run chemx team task comment {{taskId}} "<each unmet item and why>" --as={{handle}}, and file one follow-up per unmet item: chemx team task add "<unmet item>" --parent={{taskId}} --needs=light --desc="<what is missing and the command that shows it>" --as={{handle}} (another tier only if the task says so). Then do not leave the task claimed and silent: run chemx team task update {{taskId}} blocked with a reason naming the follow-up ids (for example "unmet: see #<follow-up ids>"); if the core deliverables are met, hand the task to the orchestrator instead. This is an instruction to you; chemx does not enforce it.';
+export const UNMET_RULE = 'A deliverable is met only when you ran a command whose output shows it. If any deliverable is unmet: run chemx team task comment {{taskId}} "<each unmet item and why>" --as={{handle}}, and file one follow-up per unmet item: chemx team task add "<unmet item>" --parent={{taskId}} --needs=light --desc="<what is missing and the command that shows it>" --as={{handle}} (another tier only if the task says so). Then do not leave the task claimed and silent: run chemx team task update {{taskId}} blocked with a reason naming the follow-up ids (for example "unmet: see #<follow-up ids>"), then release your locks: chemx team lock release <file> --as={{handle}} for each file you locked; if the core deliverables are met, hand the task to the orchestrator instead. This is an instruction to you; chemx does not enforce it.';
 
 export const PROTOCOL = [
   'Project: {{root}} (shared checkout on main: no worktrees, branches, stash, reset or push).',
@@ -103,7 +103,8 @@ export const GATE = [
   '   For each: chemx team task done <id> --target=<file> --as=<builder>. If the gate refuses, chemx team task update <id> blocked with the reason; never --force.',
   '1b. Tasks that did not finish (status and run handle): __FAILED_LIST__',
   '   For each: chemx team task update <id> blocked with the status as the reason, then chemx team lock release <file> --as=<run handle> for its target. Return their ids as failed.',
-  '1c. A task an agent already set to blocked and that names follow-up ids is blocked-with-follow-ups, not a failure: list it separately in the summary with its follow-up ids, and leave its status and lock as the agent left them.',
+  '1c. Repaired tasks (their repair agent may have left unmet deliverables): __REPAIRED_LIST__',
+  '   For each: chemx team task show <id>. If it is blocked and names follow-up ids, it is blocked-with-follow-ups, not a failure: list it separately in the summary with its follow-up ids, and do not run 1b on it or change its status. If it is still in_progress, list it as unclosed and run chemx team task update <id> blocked with the reason "repair ended without closing". If it is done, nothing to do.',
   '2. Find this run\'s workflow id: chemx team dispatch --find-run={{run}}. Record it: chemx team dispatch --record-run={{run}} --workflow-run=<id>. If none is found, say so and skip step 3.',
   '3. chemx team audit-run --run=<id> --no-fail. Report its violations and cost. This run is still going while you run it, so your own calls may be missing: say so.',
   '4. Post a summary: chemx team post "<summary>" --type=status --as={{handle}}.',
@@ -206,9 +207,11 @@ phase("Gate")
 const closeList = results.filter((entry) => entry.status === "clean").map((entry) => "#" + entry.id + " --target=" + byId.get(entry.id).target + " --as=" + byId.get(entry.id).handle)
 const closeText = closeList.length > 0 ? closeList.join("; ") : "none"
 const failedList = results.filter((entry) => entry.status !== "clean" && entry.status !== "repaired").map((entry) => "#" + entry.id + " " + entry.status + " --target=" + byId.get(entry.id).target + " --as=" + byId.get(entry.id).handle)
+const repairedList = results.filter((entry) => entry.status === "repaired").map((entry) => "#" + entry.id + " --as=" + byId.get(entry.id).handle)
+const repairedText = repairedList.length > 0 ? repairedList.join("; ") : "none"
 const failedText = failedList.length > 0 ? failedList.join("; ") : "none"
 const resultLines = results.map((entry) => "#" + entry.id + " " + entry.status).join("\n")
-const gatePrompt = fill(fill(fill(GATE.prompt, "__CLOSE_LIST__", closeText), "__FAILED_LIST__", failedText), "__RESULTS__", resultLines)
+const gatePrompt = fill(fill(fill(fill(GATE.prompt, "__CLOSE_LIST__", closeText), "__FAILED_LIST__", failedText), "__REPAIRED_LIST__", repairedText), "__RESULTS__", resultLines)
 const gate = await guarded(gatePrompt, { label: "gate", phase: "Gate", model: GATE.model, effort: GATE.effort, schema: GATE_SCHEMA }, isEmptyGate)
 log("gate: " + (gate.failed ? "failed" : gate.result.summary))
 return { run: RUN, results: results.map((entry) => ({ id: entry.id, status: entry.status })), gate: gate.result }
