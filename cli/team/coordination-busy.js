@@ -9,6 +9,7 @@
  * CHEMX_DB_SLOW_TX_MS (default off): log transactions on a patched handle held longer than that, with
  * the call site, to stderr.
  */
+import fs from 'node:fs';
 import { isSqliteBusyError } from './team-db-transaction.js';
 
 const PATCHED = Symbol.for('chemx.coordination.busyRetry');
@@ -33,7 +34,50 @@ const callSite = () => {
   return (outside || 'unknown call site').trim();
 };
 
-const HOLDER_HINT = 'holder unknown: another chemx process or tool holds the write lock';
+const UNKNOWN_HOLDER = 'holder unknown';
+
+const dbFilePath = (db) => {
+  try {
+    const row = db.prepare('PRAGMA database_list').all().find((r) => r.name === 'main');
+    return row?.file || '';
+  } catch {
+    return '';
+  }
+};
+
+/**
+ * Best-effort (Linux /proc only): other processes that hold the db file open, as 'pid N (cmd)'. An open
+ * handle is not proof of the writer; every chemx process on this db has one. Returns '' when unavailable.
+ */
+export const openHolders = (dbPath, selfPid = process.pid) => {
+  if (!dbPath) return '';
+  const found = [];
+  try {
+    for (const entry of fs.readdirSync('/proc')) {
+      const isPid = /^\d+$/.test(entry);
+      const isOther = isPid && Number(entry) !== selfPid;
+      const isFull = found.length >= 3;
+      if (isFull) break;
+      if (!isOther) continue;
+      try {
+        const isOpen = fs.readdirSync(`/proc/${entry}/fd`).some((fd) => fs.readlinkSync(`/proc/${entry}/fd/${fd}`) === dbPath);
+        if (!isOpen) continue;
+        const cmd = fs.readFileSync(`/proc/${entry}/cmdline`, 'utf8').split('\0').filter(Boolean).slice(0, 6).join(' ');
+        found.push(`pid ${entry} (${cmd.slice(0, 80)})`);
+      } catch {
+        // chemx-allow: best-effort a process can exit or deny /proc access mid-scan
+      }
+    }
+  } catch {
+    return '';
+  }
+  return found.join(', ');
+};
+
+const holderHint = (db) => {
+  const holders = openHolders(dbFilePath(db));
+  return holders ? `db open in ${holders}; the writer is not identified` : UNKNOWN_HOLDER;
+};
 
 /** Runs fn, retrying on SQLITE_BUSY with jittered backoff until the deadline. */
 export const retryBusy = (db, fn) => {
@@ -52,7 +96,7 @@ export const retryBusy = (db, fn) => {
       if (isGiveUp) throw err;
       if (!isNoticed) {
         isNoticed = true;
-        process.stderr.write(`coordination db busy (${HOLDER_HINT}), retrying for up to ${Math.round(limit / 1000)}s\n`);
+        process.stderr.write(`coordination db busy (held by: ${holderHint(db)}), retrying for up to ${Math.round(limit / 1000)}s\n`);
       }
       attempt++;
       const wait = Math.min(1000, 25 * 2 ** Math.min(attempt, 6)) + Math.floor(Math.random() * 25);

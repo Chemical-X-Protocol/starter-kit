@@ -9,6 +9,7 @@ import { ensureIndexVersion, readIndexMeta, isCurrentIndexVersion } from './sear
 import { debugNote } from './search-debug.js';
 import { isSqliteBusyError } from './team/team-db-transaction.js';
 import { guardProjectStamp } from './db-project-stamp.js';
+import { withBusyRetry } from './team/coordination-busy.js';
 
 let DatabaseSync = null;
 try {
@@ -164,6 +165,8 @@ export const openIndexDb = (cwd = process.cwd(), options = {}) => {
     if (outcome.isBusy) return db;
   }
 
+  // Busy-retry and the env-gated slow-transaction log cover every writer of this db (#4520), not only team calls.
+  withBusyRetry(db);
   DB_CACHE.set(dbPath, db);
   return db;
 };
