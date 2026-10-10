@@ -19,25 +19,24 @@ export const LEVEL_WEIGHTS = Object.freeze({ 'N1-fp1': 1, 'N1-fp2': 0.9, N2: 0.9
 
 const SPEC_WEIGHT = 0.5;
 
-// Call idioms (#5889): a group whose every member is one line of one standard-library or framework call
+// Call idioms (#5889): a group whose every member is one line made only of standard-library, framework or global calls (several may nest)
 // (path.relative(...), fs.existsSync(...), fs.readFileSync(p, 'utf-8')) is a value-level idiom, not a
 // reusable shape. Its site count would otherwise out-rank real duplicates, so its score is scaled down;
 // the group is still kept, ranked and listed, just later. The test reads only the ledger facts a group
 // carries (kinds, lines, mass, shared anchors), never source text, so it can misjudge: a one-call line
 // that is a real duplicate is demoted too, and a call idiom wrapped in other calls is not.
-export const CALL_IDIOM = Object.freeze({ weight: 0.1, maxMass: 20, kinds: Object.freeze(['expr', 'stmt']) });
+export const CALL_IDIOM = Object.freeze({ weight: 0.1, maxMass: 25, kinds: Object.freeze(['expr', 'stmt']) });
 
 const isOutsideModule = (anchor) => anchor.startsWith('import:') && anchor.slice('import:'.length).split('#')[0].includes('/');
 
-/** True when the group is one single-line call of an imported library or a global, with no other call. */
+/** True when the group is one single-line call of an imported library or a global, with no project-local anchor. */
 export const isCallIdiom = (group) => {
   const isSimpleKind = group.instances.every((instance) => CALL_IDIOM.kinds.includes(instance.kind));
   const isOneLine = group.instances.every((instance) => instance.startLine === instance.endLine);
   const shared = sharedAnchors(group.instances);
-  const isOneCall = shared.filter((anchor) => anchor.startsWith('call:')).length === 1;
   const isLibrary = shared.some((anchor) => anchor.startsWith('global:') || (anchor.startsWith('import:') && !isOutsideModule(anchor)));
   const isLocal = shared.some(isOutsideModule);
-  return isSimpleKind && isOneLine && group.mass <= CALL_IDIOM.maxMass && isOneCall && isLibrary && !isLocal;
+  return isSimpleKind && isOneLine && group.mass <= CALL_IDIOM.maxMass && isLibrary && !isLocal;
 };
 
 const isSpecFacet = (facetKey) => facetKey.split(':')[2] === 'spec';
