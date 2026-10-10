@@ -41,6 +41,15 @@ test('acted as another handle: own handle, no identity, the orchestrator handle 
   assert.deepEqual(asRows(own, 'chemx team lock release a.js --as=' + own, 'chemx team task claim 5', 'chemx team lock release a.js --as=@orch-1', 'chemx read a.js --as=@val-5-4201'), []);
 });
 
+test('own identity exported, handoff to the orchestrator named in the call: 0 rows (#5850)', () => {
+  const orch = '@orch-1';
+  const commands = [`cd /x && export CHEMX_AGENT_ID=@v-5-4390; chemx team task comment 4 "hi" --as=@v-5-4390 && chemx team task handoff 4 ${orch} --as=@v-5-4390`, 'export CHEMX_AGENT_ID=@v-5-4390; cd /x && chemx team task comment 4 "hi"'];
+  const invs = commands.flatMap((command, i) => invocationsOf({ name: 'Bash', input: { command }, at: i, cwd: '/repo' }));
+  assert.deepEqual(anonymousActingCalls(invs, orch), []);
+  const own = invocationsOf({ name: 'Bash', input: { command: `export CHEMX_AGENT_ID=${orch}; chemx write a.js` }, at: 1, cwd: '/repo' });
+  assert.equal(anonymousActingCalls(own, orch).length, 1);
+});
+
 test('read-only chemx calls and plain shell are not reported', () => {
   assert.deepEqual(rows('chemx read cli/a.js', 'chemx team status', 'git status'), []);
 });
