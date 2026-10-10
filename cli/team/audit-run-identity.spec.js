@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { invocationsOf } from './audit-run-invocations.js';
-import { anonymousActingCalls } from './audit-run-identity.js';
+import { anonymousActingCalls, actedAsOtherHandle } from './audit-run-identity.js';
 
 const rows = (...commands) => anonymousActingCalls(commands.flatMap((command, i) => invocationsOf({ name: 'Bash', input: { command }, at: i, cwd: '/repo' })));
 
@@ -26,6 +26,19 @@ test('own handle exported with a longer name, --help, read and test --changed gi
   const commands = ['cd /x && export CHEMX_AGENT_ID=@validation-5-4390; chemx team task comment 4390 hi', 'F=a.js; chemx read $F:264-296; chemx patch --help', 'chemx test --changed'];
   const invs = commands.flatMap((command, i) => invocationsOf({ name: 'Bash', input: { command }, at: i, cwd: '/repo' }));
   assert.deepEqual(anonymousActingCalls(invs, '@validation-5'), []);
+});
+
+const asRows = (own, ...commands) => actedAsOtherHandle(commands.flatMap((command, i) => invocationsOf({ name: 'Bash', input: { command }, at: i, cwd: '/repo' })), own, '@orch-1');
+
+test('acted as another handle: --as, inline and exported identities that are not the agent own are reported (#5740)', () => {
+  const found = asRows('@val-5-4201-repair', 'chemx team lock release cli/a.js --as=@val-5-4201', 'CHEMX_AGENT_ID=@val-5-4201 chemx write cli/a.js --stdin', 'export CHEMX_AGENT_ID=@val-5-4201; chemx commit cli/a.js -m x');
+  assert.equal(found.length, 3);
+  assert.equal(found[0].identity, '@val-5-4201');
+});
+
+test('acted as another handle: own handle, no identity, the orchestrator handle and read-only calls give 0 rows (#5740)', () => {
+  const own = '@val-5-4201-repair';
+  assert.deepEqual(asRows(own, 'chemx team lock release a.js --as=' + own, 'chemx team task claim 5', 'chemx team lock release a.js --as=@orch-1', 'chemx read a.js --as=@val-5-4201'), []);
 });
 
 test('read-only chemx calls and plain shell are not reported', () => {

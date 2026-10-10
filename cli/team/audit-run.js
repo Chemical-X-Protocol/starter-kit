@@ -23,7 +23,7 @@ import { optionOf } from './team-commands-tokens.js';
 import { openTeamContext } from './coordination-db.js';
 import { renderAuditRun } from './audit-run-render.js';
 import { crossCheckShas } from './audit-run-shas.js';
-import { anonymousActingCalls } from './audit-run-identity.js';
+import { anonymousActingCalls, actedAsOtherHandle } from './audit-run-identity.js';
 import { toSessionHandle } from './agent-identity.js';
 import { leaseLapses, leaseWaiters, guardBypasses, guardCrashes, leasesTaken, taskStatuses } from './audit-run-db.js';
 
@@ -100,6 +100,7 @@ const auditAgent = (run, agent, row, ctx) => {
     unresolved: unresolvedEdits(invs).map((e) => ({ ...who(agent), ...e })),
     unclosed: unclosedClaims(invs, statuses).map((id) => ({ ...who(agent), task: id })),
     asOrchestrator: anonymousActingCalls(invs, inheritedOf(run)).map((c) => ({ ...who(agent), ...c })),
+    asOtherHandle: actedAsOtherHandle(invs, agent.handle, inheritedOf(run)).map((c) => ({ ...who(agent), ...c })),
     edits: resolvedEdits(invs).map((e) => ({ at: e.at, key: e.key })),
     parsed, steps
   };
@@ -132,6 +133,7 @@ const violationsOf = (r) => [
   [r.protocol.unleasedEdits.length, 'edit without a lease'],
   [r.protocol.unclosedClaims.length, 'claim never closed'],
   [r.protocol.asOrchestrator.length, 'subagent acted as orchestrator (state-changing chemx call with no identity)'],
+  [(r.protocol.asOtherHandle ?? []).length, 'acted as another handle (state-changing chemx call whose explicit identity is not the agent\'s own)'],
   [r.hijacks.filter((h) => h.level === 'likely').length, 'likely relayed-message hijack'],
   [r.shas.missing.length, 'reported commit sha that git does not have'],
   [r.shas.otherHandle.length, 'reported commit sha inferred to belong to another handle']
@@ -155,7 +157,7 @@ export const auditRun = (run, ctx = {}) => {
     leases: leaseSection(full.db, priced.rows, ctx.starveMs, editsByHandle(audits)),
     bypasses: { shell: audits.flatMap((a) => a.bypasses.filter((b) => b.type === 'shell-write')), native: audits.flatMap((a) => a.bypasses.filter((b) => b.type === 'native-tool')), blocked: audits.flatMap((a) => a.blocked), guard: full.db ? guardBypasses(full.db, priced.rows) : [], crashes: full.db ? guardCrashes(full.db, priced.rows) : [] },
     adoption: summarizeAdoption(audits.flatMap((a) => a.classified)),
-    protocol: { uncommitted: audits.flatMap((a) => a.commits), unleasedEdits: audits.flatMap((a) => a.unleased), unresolvedEdits: audits.flatMap((a) => a.unresolved), unclosedClaims: audits.flatMap((a) => a.unclosed), asOrchestrator: audits.flatMap((a) => a.asOrchestrator) },
+    protocol: { uncommitted: audits.flatMap((a) => a.commits), unleasedEdits: audits.flatMap((a) => a.unleased), unresolvedEdits: audits.flatMap((a) => a.unresolved), unclosedClaims: audits.flatMap((a) => a.unclosed), asOrchestrator: audits.flatMap((a) => a.asOrchestrator), asOtherHandle: audits.flatMap((a) => a.asOtherHandle) },
     hijacks: hijacksOf(audits, isLargeEnough ? medianCost : 0),
     shas: crossCheckShas(full.db, priced.rows, ctx.gitRoot ?? null),
     cost: { totalCost: priced.totals.cost, totalTokens: priced.totals.total, perAgent: audits.map((a) => a.agent).sort((x, y) => y.cost - x.cost) }

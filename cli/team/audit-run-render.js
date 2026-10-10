@@ -71,7 +71,9 @@ const protocolLines = (p) => [
   `  claims never closed: ${p.unclosedClaims.length}`,
   ...list(p.unclosedClaims, (c) => `${who(c)} task #${c.task}`),
   `  subagent acted as orchestrator (state-changing Bash chemx call with no identity in its text, or naming the orchestrator; MCP calls are not checked): ${(p.asOrchestrator ?? []).length}`,
-  ...list(p.asOrchestrator ?? [], (c) => `${at(c.at)} ${who(c)} ${c.command}`)
+  ...list(p.asOrchestrator ?? [], (c) => `${at(c.at)} ${who(c)} ${c.command}`),
+  `  acted as another handle (state-changing Bash chemx call whose explicit identity differs from the agent's own; MCP calls and variable identities are not checked): ${(p.asOtherHandle ?? []).length}`,
+  ...list(p.asOtherHandle ?? [], (c) => `${at(c.at)} ${who(c)} as ${c.identity}: ${c.command}`)
 ];
 
 const hijackLines = (hijacks) => [
