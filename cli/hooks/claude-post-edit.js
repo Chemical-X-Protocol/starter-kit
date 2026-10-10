@@ -1,4 +1,5 @@
-// `chemx hook claude-post-edit`: after Edit/Write/MultiEdit on a repo source file, run the chemx
+// `chemx hook claude-post-edit`: after a Bash call, flag repo files written outside chemx (see
+// out-of-band-edits.js). After Edit/Write/MultiEdit on a repo source file, run the chemx
 // check (auditFile) on it and hand the hazards, with x-atoms helper hints, back to the model as
 // PostToolUse additionalContext. Clean files and non-source files produce no output at all.
 
@@ -7,6 +8,9 @@ import path from 'node:path';
 import { isRepoSourcePath } from './guard-paths.js';
 import { scopeViolations } from './post-edit-scope.js';
 import { helperHintsFor, loadXatomsCatalog } from './xatoms-hints.js';
+import { OUT_OF_BAND_RULE, outOfBandMessage, scanOutOfBand } from './out-of-band-edits.js';
+import { logBypassToDb } from './bypass-log.js';
+import { resolveHookAgentId } from './native-edit-lock.js';
 
 const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
 const MAX_HAZARDS = 8;
@@ -29,7 +33,23 @@ export const formatHazards = ({ relativePath, scope, violations, catalog }) => {
   return lines.join('\n');
 };
 
-export const runPostEdit = async (payload, env = process.env) => {
+// After a Bash call: tell the model about repo files written outside chemx and log one bypass.
+const runPostBash = async (payload, env, log) => {
+  const cwd = payload.cwd || process.cwd();
+  const root = env.CLAUDE_PROJECT_DIR || cwd;
+  const command = String(payload?.tool_input?.command ?? '');
+  const scan = scanOutOfBand({ root, command });
+  const hasFindings = scan !== null && scan.changed.length > 0;
+  if (!hasFindings) return null;
+  const handle = resolveHookAgentId(payload, env);
+  const reason = `changed outside chemx: ${scan.changed.slice(0, 5).join(', ')}`;
+  await log({ root, handle, reason, rule: OUT_OF_BAND_RULE, command, session: payload?.session_id ?? null });
+  return { hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: outOfBandMessage(scan.changed) } };
+};
+
+export const runPostEdit = async (payload, env = process.env, { log = logBypassToDb } = {}) => {
+  const isBash = payload?.tool_name === 'Bash';
+  if (isBash) return runPostBash(payload, env, log);
   const isEditTool = EDIT_TOOLS.has(payload?.tool_name);
   const file = editedFile(payload);
   const hasEditedFile = isEditTool && Boolean(file);

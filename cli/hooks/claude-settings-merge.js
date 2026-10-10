@@ -6,7 +6,7 @@ const OWNED_COMMAND = /cli\/hooks\/entry\.js|chemx-guard\.mjs|\b(?:chemx|cx)\s+h
 export const isChemxHookCommand = (command) => OWNED_COMMAND.test(String(command ?? ''));
 
 export const PRE_TOOL_MATCHER = 'Bash|Grep|Read|Edit|Write|MultiEdit|NotebookEdit|Glob|Agent|Workflow';
-export const POST_EDIT_MATCHER = 'Edit|Write|MultiEdit|NotebookEdit';
+export const POST_EDIT_MATCHER = 'Edit|Write|MultiEdit|NotebookEdit|Bash';
 
 export const desiredClaudeHooks = (launcher) => ({
   PreToolUse: { matcher: PRE_TOOL_MATCHER, hooks: [{ type: 'command', command: launcher.hookCommand('claude-pre-tool'), timeout: 10 }] },

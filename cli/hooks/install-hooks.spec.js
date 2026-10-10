@@ -36,7 +36,7 @@ test('fresh install writes the three hook events, statusLine and the .mcp.json l
   assert.deepEqual(Object.keys(settings.hooks).sort(), ['PostToolUse', 'PreToolUse', 'SessionStart']);
   assert.match(settings.hooks.PreToolUse[0].hooks[0].command, /cli\/hooks\/entry\.js" claude-pre-tool$/);
   assert.equal(settings.hooks.PreToolUse[0].matcher, 'Bash|Grep|Read|Edit|Write|MultiEdit|NotebookEdit|Glob|Agent|Workflow');
-  assert.equal(settings.hooks.PostToolUse[0].matcher, 'Edit|Write|MultiEdit|NotebookEdit');
+  assert.equal(settings.hooks.PostToolUse[0].matcher, 'Edit|Write|MultiEdit|NotebookEdit|Bash');
   assert.match(settings.statusLine.command, /statusline$/);
   const server = readJson(path.join(project.root, '.mcp.json')).mcpServers['chemical-x'];
   assert.deepEqual(server, { command: 'node', args: [path.join(project.kit, 'cli', 'index.js'), 'mcp'], env: { CHEMX_PROJECT_ROOT: project.root, NO_COLOR: '1' } });
