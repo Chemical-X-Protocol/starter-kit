@@ -12,8 +12,9 @@ import { routingLine, DEFAULT_BASELINE, isKnownBaseline } from './savings-routin
 import { accountCalls, handleWindows } from './savings-tooling.js';
 import { loadRunCallsFrom, openExtraLedgerDbs } from './savings-dbs.js';
 import { renderSavingsCard } from './savings-render.js';
+import { unattributedStats, reattributeCalls } from './call-ledger.js';
 
-const USAGE = 'Usage: chemx report savings --run=<wf_id|run dir> [--json] [--baseline=opus|sonnet|haiku|fable] [--projects=<dir>]';
+const USAGE = 'Usage: chemx report savings --run=<wf_id|run dir> [--json] [--baseline=opus|sonnet|haiku|fable] [--projects=<dir>] [--reattribute]';
 
 const isoOf = (ms) => new Date(ms).toISOString();
 
@@ -85,10 +86,15 @@ export const runReportCli = (args, isCli, { db, cwd = process.cwd() } = {}) => {
   const run = readRun(runId, optionOf(args, 'projects'));
   if (!run) return fail(`Run not found: ${runId}`, isCli);
   if (!db) return fail('SQLite database unavailable: the tool call log cannot be read.', isCli);
+  const reattribute = args.includes('--reattribute') ? reattributeCalls(db) : null;
   const found = openExtraLedgerDbs(db, cwd);
   const report = buildSavingsReport({ run, pricing: loadPricing(cwd), baseline, db, extraDbs: found.extras, ownLabel: found.own });
   report.tooling.coverage.dbsUnreadable = found.failed;
   report.tooling.coverage.dbsRoot = found.root;
+  const stats = unattributedStats(db, report.tooling.coverage.runStart, report.tooling.coverage.runEnd);
+  report.tooling.coverage.loggedInWindow = stats.total;
+  report.tooling.coverage.unattributedShare = stats.share;
+  report.tooling.coverage.reattribute = reattribute;
   found.extras.forEach((e) => e.db.close());
   if (isCli) process.stdout.write(args.includes('--json') ? `${JSON.stringify(report, null, 2)}\n` : `${renderSavingsCard(report)}\n`);
   return report;

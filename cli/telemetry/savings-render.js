@@ -51,9 +51,11 @@ const toolingLines = (tooling) => {
   const c = tooling.coverage;
   const head = [`2. Tooling (n = ${fmtInt(tooling.totals.calls)} attributed calls, ${fmtInt(tooling.totals.measured)} with a token counterfactual)`, `   Coverage: ${c.note}`, ...sourceLines(c)];
   const isEmpty = tooling.totals.calls === 0;
-  const gap = `   Unattributed: ${fmtInt(c.unattributed)} logged calls in the run window carry no agent handle and are not counted.`;
+  const share = Number.isFinite(c.unattributedShare) ? ` (${(c.unattributedShare * 100).toFixed(1)}% of ${fmtInt(c.loggedInWindow)} logged in the run window)` : '';
+  const gap = `   Unattributed: ${fmtInt(c.unattributed)} logged calls in the run window carry no agent handle${share} and are not counted.`;
+  const fix = c.reattribute ? [`   Reattribute: filled ${fmtInt(c.reattribute.updated)} calls from single-handle sessions; ${fmtInt(c.reattribute.ambiguousSessions)} sessions map to several handles and were left as they are. Counts above were read after this step.`] : ['   Reattribute: not run. Pass --reattribute to fill calls from sessions that map to exactly one handle (this writes to the call log).'];
   const body = isEmpty ? ['   No attributed calls: tooling savings are not measured for this run, and no figure is estimated.'] : [...tooling.actions.map(actionLine), ...methodLines(tooling.actions), ...totalsLines(tooling.totals)];
-  return [...head, ...body, gap];
+  return [...head, ...body, gap, ...fix];
 };
 
 export const renderSavingsCard = (report) => [
