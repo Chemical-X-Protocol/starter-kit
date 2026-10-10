@@ -7,7 +7,7 @@
  */
 import { findForeignLease } from '../edit-locks.js';
 import { resolveSafePath } from '../path-scope.js';
-import { getFileLockStatus, listActiveLeases, renewFileLock } from './team-db-locks.js';
+import { getFileLockStatus, listActiveLeases, renewFileLock, adviseMissingPath } from './team-db-locks.js';
 import { contentionOf } from './lease-cap.js';
 import { clockTime } from './lease-lapse.js';
 import { describeContention } from './lease-contention.js';
@@ -22,6 +22,23 @@ const minutesLeft = (ms, now) => Math.max(0, Math.round((Number(ms) - now) / 600
 const purposeNote = (purpose) => (purpose ? ` (${purpose})` : '');
 
 const writeJson = (res) => process.stdout.write(`${JSON.stringify(res, null, 2)}\n`);
+
+// Non-blocking (#4544): a check, status or release on a path that does not exist still runs; this
+// only says so, and names the path that does exist when there is one. Nothing is refused or changed.
+export const missingPathWarning = (db, file, cwd) => {
+  const advice = adviseMissingPath(db, file, { cwd });
+  if (!advice) return null;
+  const hint = advice.suggestion ? ` Did you mean ${advice.suggestion}?` : '';
+  return `warning: ${file} does not exist (looked for ${advice.absPath}).${hint}`;
+};
+
+const warnMissing = (db, file, cwd, isCli) => {
+  const warning = missingPathWarning(db, file, cwd);
+  const hasWarning = Boolean(warning);
+  const shouldPrint = hasWarning && isCli;
+  if (shouldPrint) process.stderr.write(`\x1b[33m${warning}\x1b[0m\n`);
+  return hasWarning ? { warning } : {};
+};
 
 const setExit = (isCli, code) => {
   if (isCli) process.exitCode = code;
@@ -39,7 +56,8 @@ export const runLockCheck = (db, file, agentId, flags, isCli, cwd) => {
   const isLocked = Boolean(lease);
   const held = isLocked ? null : describeHeld(getFileLockStatus(db, file, { cwd }), agentId);
   const lockedRes = isLocked ? { locked_by: lease.lockedBy, purpose: lease.purpose, expires_at: lease.expiresAt } : {};
-  const res = { file, clear: !isLocked, ...lockedRes, ...(held ?? {}) };
+  const warned = warnMissing(db, file, cwd, isCli && !flags.isJson);
+  const res = { file, clear: !isLocked, ...lockedRes, ...(held ?? {}), ...warned };
   setExit(isCli, isLocked ? EXIT_LOCKED : 0);
   const isQuiet = !isCli;
   if (isQuiet) return res;
@@ -57,7 +75,8 @@ export const runLockCheck = (db, file, agentId, flags, isCli, cwd) => {
 export const runLockStatus = (db, file, flags, isCli, cwd) => {
   const status = getFileLockStatus(db, file, { cwd });
   const contention = status?.lease ? contentionOf(db, status.lease, Date.now()) : null;
-  const res = { file, ...status, ...(contention ? { renewalCapAt: contention.capAt, renewalCapped: contention.isCapped } : {}) };
+  const warned = warnMissing(db, file, cwd, isCli && !flags.isJson);
+  const res = { file, ...warned, ...status, ...(contention ? { renewalCapAt: contention.capAt, renewalCapped: contention.isCapped } : {}) };
   const isQuiet = !isCli;
   if (isQuiet) return res;
   if (flags.isJson) {

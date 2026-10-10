@@ -71,21 +71,33 @@ const normalizeAgentId = (id) => {
 
 // A path that does not exist leases nothing real (#4544). Suggest the same relative path under the
 // coordination root or the repo root when it exists there; `allowNew` skips the check.
-const missingPathRefusal = (db, filePath, cleanPath, options) => {
+// Returns null when the path exists; otherwise where it was looked for and, when the same path
+// exists under the coordination root, repo root or project root env, a suggestion relative to the
+// caller's cwd (absolute when outside it).
+export const adviseMissingPath = (db, filePath, options = {}) => {
   const scope = resolveLeaseScope(db, options);
   const absPath = path.resolve(scope.from, filePath);
-  const exists = fs.existsSync(absPath);
-  if (exists) return null;
+  const isPresent = fs.existsSync(absPath);
+  if (isPresent) return null;
   const bases = [scope.projectRoot, process.env.CHEMX_PROJECT_ROOT, options.repoRoot].filter(Boolean);
-  const rel = path.isAbsolute(filePath) ? cleanPath : filePath;
+  const rel = path.isAbsolute(filePath) ? path.relative(scope.projectRoot, absPath) : filePath;
   const hit = bases.map((base) => path.resolve(base, rel)).find((candidate) => fs.existsSync(candidate));
-  const suggestion = hit ? path.relative(scope.projectRoot, hit) || hit : null;
-  const hint = suggestion ? ` Did you mean ${suggestion}?` : '';
+  const fromCwd = hit ? path.relative(scope.from, hit) : '';
+  const isInside = fromCwd !== '' && !fromCwd.startsWith('..') && !path.isAbsolute(fromCwd);
+  const nearest = isInside ? fromCwd : hit;
+  const suggestion = hit ? nearest : null;
+  return { absPath, suggestion, from: scope.from };
+};
+
+const missingPathRefusal = (db, filePath, options) => {
+  const advice = adviseMissingPath(db, filePath, options);
+  if (!advice) return null;
+  const hint = advice.suggestion ? ` Did you mean ${advice.suggestion}? (relative to ${advice.from})` : '';
   return {
     granted: false,
     reason: 'path_not_found',
-    suggestion,
-    message: `${filePath} does not exist (looked for ${absPath}); no lease was taken.${hint} Pass --new to lease a file you are about to create.`
+    suggestion: advice.suggestion,
+    message: `${filePath} does not exist (looked for ${advice.absPath}); no lease was taken.${hint} Pass --new to lease a file you are about to create.`
   };
 };
 
@@ -100,7 +112,7 @@ export const requestFileLock = (db, filePath, agentId, options = {}) => {
   if (!cleanPath) return { granted: false, reason: 'path_traversal' };
 
   const mustExist = options.requireExisting === true;
-  const missing = mustExist ? missingPathRefusal(db, filePath, cleanPath, options) : null;
+  const missing = mustExist ? missingPathRefusal(db, filePath, options) : null;
   if (missing) return missing;
 
   const cleanId = normalizeAgentId(agentId);

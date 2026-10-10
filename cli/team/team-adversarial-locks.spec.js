@@ -115,6 +115,8 @@ test('adversarial-locks: CLI mutual exclusion between two separate agent invocat
     const db = openIndexDb(tmpCwd);
     initTeamSchema(db);
     const testFile = 'src/components/button.vue';
+    fs.mkdirSync(path.join(tmpCwd, 'src/components'), { recursive: true });
+    fs.writeFileSync(path.join(tmpCwd, testFile), '<template />\n');
 
     // Agent 1 acquires the lock via CLI
     const res1 = runTeamCli(['lock', 'acquire', testFile, '--as', '@agent-1'], false, tmpCwd);

@@ -31,6 +31,8 @@ const makeProject = (t) => {
 const runCli = (root, args) => {
   const env = { ...process.env, FORCE_COLOR: '0' };
   delete env.CHEMX_AGENT_ID;
+  delete env.CHEMX_SESSION_ID;
+  delete env.CLAUDE_SESSION_ID;
   const res = spawnSync(process.execPath, [CLI_PATH, ...args], { cwd: root, env, encoding: 'utf-8' });
   return { code: res.status, stdout: res.stdout, stderr: res.stderr };
 };

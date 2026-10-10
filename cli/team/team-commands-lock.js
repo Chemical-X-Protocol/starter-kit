@@ -4,7 +4,7 @@ import { requestFileLock, releaseFileLock } from './team-db.js';
 import { formatLockHelpCard } from './team-format.js';
 import { isPathTraversal } from '../path-scope.js';
 import { resolveAgentIdentity, describeIdentityHint } from './agent-identity.js';
-import { runLockCheck, runLockStatus, runLockList, runLockRenew } from './team-commands-lock-views.js';
+import { runLockCheck, runLockStatus, runLockList, runLockRenew, missingPathWarning } from './team-commands-lock-views.js';
 import { runLockCheckStaged } from './team-commands-lock-staged.js';
 import { clockTime } from './lease-lapse.js';
 import { DEFAULT_TTL_MS } from './team-db-lock-promotion.js';
@@ -153,10 +153,12 @@ export const handleUnlockCommand = (db, nonFlagPositional, flags, isCli, cwd = p
   writeIdentityHint(identity, isCli, flags.isJson);
   const res = releaseFileLock(db, file, identity.id, { cwd });
   const isReleased = Boolean(res.success);
+  const warning = isReleased ? null : missingPathWarning(db, file, cwd);
+  if (warning) res.warning = warning;
   if (isCli) {
     if (flags.isJson) process.stdout.write(`${JSON.stringify(res, null, 2)}\n`);
     else if (isReleased) process.stdout.write(`\x1b[32m✔\x1b[0m Released lock on ${file}\n`);
-    else process.stderr.write(`\x1b[31m✕ Unlock failed: ${res.message ?? res.reason}\x1b[0m\n`);
+    else process.stderr.write(`\x1b[31m✕ Unlock failed: ${res.message ?? res.reason}${warning ? ` ${warning}` : ''}\x1b[0m\n`);
   }
   return res;
 };

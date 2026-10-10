@@ -9,6 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { openIndexDb } from '../search-schema.js';
 import { requestFileLock } from './team-db-locks.js';
+import { handleLockCommand, handleUnlockCommand } from './team-commands-lock.js';
 
 const makeProject = (t) => {
   delete process.env.CHEMX_PROJECT_ROOT;
@@ -26,8 +27,8 @@ test('a doubled prefix is refused with a suggestion and stores no lease', (t) =>
   const res = requestFileLock(db, 'kit/lanes.json', '@spec', { cwd: path.join(root, 'kit'), requireExisting: true });
   assert.equal(res.granted, false);
   assert.equal(res.reason, 'path_not_found');
-  assert.equal(res.suggestion, path.join('kit', 'lanes.json'));
-  assert.match(res.message, /Did you mean kit\/lanes\.json\?/);
+  assert.equal(res.suggestion, 'lanes.json');
+  assert.match(res.message, /Did you mean lanes\.json\?/);
   assert.equal(leaseCount(db), 0);
 });
 
@@ -36,4 +37,31 @@ test('an existing path is granted and allowNew-style callers may lease a file to
   assert.equal(requestFileLock(db, 'lanes.json', '@spec', { cwd: path.join(root, 'kit'), requireExisting: true }).granted, true);
   assert.equal(requestFileLock(db, 'kit/new.js', '@spec', { cwd: root, requireExisting: false }).granted, true);
   assert.equal(requestFileLock(db, 'kit/never.js', '@spec', { cwd: root, requireExisting: true }).reason, 'path_not_found');
+});
+
+test('handleLockCommand from a subdirectory suggests a cwd-relative path, not the input', (t) => {
+  const { root, db } = makeProject(t);
+  const cwd = path.join(root, 'kit');
+  const res = handleLockCommand(db, ['kit/lanes.json'], { as: '@spec' }, false, cwd);
+  assert.equal(res.granted, false);
+  assert.equal(res.suggestion, 'lanes.json');
+  assert.notEqual(res.suggestion, 'kit/lanes.json');
+  assert.equal(leaseCount(db), 0);
+  const allowed = handleLockCommand(db, ['kit/new.js'], { as: '@spec', allowNew: true }, false, root);
+  assert.equal(allowed.granted, true);
+});
+
+test('check and release warn on a missing path with the suggestion, without refusing', (t) => {
+  const { root, db } = makeProject(t);
+  const cwd = path.join(root, 'kit');
+  const checked = handleLockCommand(db, ['check', 'kit/lanes.json'], { as: '@spec' }, false, cwd);
+  assert.equal(checked.clear, true);
+  assert.match(checked.warning, /Did you mean lanes\.json\?/);
+  const status = handleLockCommand(db, ['status', 'kit/lanes.json'], { as: '@spec' }, false, cwd);
+  assert.match(status.warning, /does not exist/);
+  const released = handleUnlockCommand(db, ['kit/lanes.json'], { as: '@spec' }, false, cwd);
+  assert.equal(released.success, false);
+  assert.match(released.warning, /Did you mean lanes\.json\?/);
+  const fine = handleLockCommand(db, ['check', 'lanes.json'], { as: '@spec' }, false, cwd);
+  assert.equal(fine.warning, undefined);
 });
