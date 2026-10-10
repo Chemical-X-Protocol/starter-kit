@@ -5,6 +5,8 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+delete process.env.CHEMX_PROJECT_ROOT;
+
 const schemaUrl = new URL('./search-schema.js', import.meta.url).href;
 const openInChild = (threshold) => {
   const dir = mkdtempSync(join(tmpdir(), 'chemx-slowlog-'));
