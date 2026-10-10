@@ -137,7 +137,7 @@ test('before a migrate, a lock from the package db blocks the same file from the
 
 test('status and wait read the dbs the resolver names: the package db and the coordination db', () => withSilo((repo) => {
   runTeamCli(['lock', 'acquire', 'src/x.js', '--as=@spec-sub'], false, repo.pkgA);
-  runTeamCli(['lock', 'acquire', 'loose/dir/n.js', '--as=@spec-root'], false, repo.root);
+  runTeamCli(['lock', 'acquire', 'loose/dir/n.js', '--new', '--as=@spec-root'], false, repo.root);
   assert.deepEqual(teamDbRootsFor(path.join(repo.pkgA, 'src')), [repo.pkgA, repo.root]);
   const fromPackage = liveLeases(repo.pkgA).map((lease) => lease.abs).sort();
   assert.deepEqual(fromPackage, [path.join(repo.root, 'loose', 'dir', 'n.js'), path.join(repo.pkgA, 'src', 'x.js')]);

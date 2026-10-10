@@ -6,6 +6,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { describeShellMangledArg, resolveTaskIdArgs } from './team-commands-repo.js';
 
+// Spec hygiene: a bare node --test must not inherit a shell's CHEMX_PROJECT_ROOT.
+delete process.env.CHEMX_PROJECT_ROOT;
+
 test('a task id with an embedded space says the shell passed two words as one', () => {
   const text = describeShellMangledArg('done', ['done', '4471 test-lanes.json'], {});
   assert.match(text, /task id "4471 test-lanes\.json" contains a space/);

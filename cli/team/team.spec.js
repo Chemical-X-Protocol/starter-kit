@@ -265,7 +265,8 @@ test('mcp-tools: executes team MCP tools with columnar outputs', async () => {
     const lockRes = await executeMcpTool('chemx_team_lock', {
       action: 'acquire',
       filePath: 'src/test-lock.ts',
-      agentId: '@test-bot'
+      agentId: '@test-bot',
+      new: true
     }, tmpCwd);
     assert.strictEqual(lockRes.granted, true);
 

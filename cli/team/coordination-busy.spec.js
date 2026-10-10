@@ -9,6 +9,9 @@ import { DatabaseSync } from 'node:sqlite';
 import { withBusyRetry, openHolders } from './coordination-busy.js';
 import { openIndexDb, clearDbCache } from '../search-db.js';
 
+// Spec hygiene (#4520): a bare node --test must not inherit a shell's CHEMX_PROJECT_ROOT.
+delete process.env.CHEMX_PROJECT_ROOT;
+
 const HOLD_MS = 7000;
 
 const holder = (dbPath, ms) =>
