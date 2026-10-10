@@ -32,6 +32,7 @@ const PATCH_HELP = [
   '  --replacement-file=<p>   Read the replacement from a file',
   '  --multiple               Replace every occurrence',
   '  --allow-remove=<a,b>     Top-level declarations the patch may remove',
+  '  --allow-missing-import   Allow the edit although it leaves an import unresolved',
   '  --as=<agent>             Agent id for team lock checks (default $CHEMX_AGENT_ID, else unique to this process)',
   '  -n, --dry-run            Print the unified diff without writing (--dryRun, --dry-run=<any> too)',
   '  --json                   Output result as JSON',
@@ -53,6 +54,7 @@ const WRITE_HELP = [
   '  --overwrite              Allow replacing an existing file',
   '  --append                 Add the content to the end of the file (created if missing); same checks as a write; not with --overwrite',
   '  --allow-remove=<a,b>     Top-level declarations an overwrite may remove',
+  '  --allow-missing-import   Allow the write although it leaves an import unresolved',
   '  --as=<agent>             Agent id for team lock checks',
   '  -n, --dry-run            Print the unified diff without writing (--dryRun, --dry-run=<any> too)',
   '  --json                   Output result as JSON',
@@ -158,7 +160,7 @@ const PATCH_FLAGS = {
   targetFile: ['--target-file'], replacementFile: ['--replacement-file'],
   allowRemove: ['--allow-remove'], as: ['--as']
 };
-const PATCH_SWITCHES = ['--multiple', '--allow-multiple'];
+const PATCH_SWITCHES = ['--multiple', '--allow-multiple', '--allow-missing-import'];
 const NO_PATCH_INPUT = `chemx patch needs SEARCH/REPLACE blocks on stdin (chemx patch <file> <<'EOF' ... EOF) or --target/--replacement. Nothing was changed.`;
 
 // An interactive terminal never counts as input: refusing beats blocking on, or writing, nothing.
@@ -214,12 +216,13 @@ export const runPatcherCli = (args, isCli = false) => {
     allowMultiple: hasFlag(args, PATCH_SWITCHES),
     dryRun: hasPreviewFlag(args),
     allowRemoved: splitList(values.allowRemove),
+    allowMissingImport: args.includes('--allow-missing-import'),
     agentId: values.as
   }), 'patch', args.includes('--json'), isCli);
 };
 
 const WRITE_FLAGS = { content: ['--content'], contentFile: ['--content-file'], allowRemove: ['--allow-remove'], as: ['--as'] };
-const WRITE_SWITCHES = ['--stdin', '--overwrite', '--append'];
+const WRITE_SWITCHES = ['--stdin', '--overwrite', '--append', '--allow-missing-import'];
 const MISSING_CONTENT = 'chemx write needs --content=<text>, --content-file=<path> or --stdin (a value starting with "-" needs the --content=<text> form). Refusing to write.';
 
 const readWriteContent = (args, values) => {
@@ -246,6 +249,7 @@ export const runWriterCli = (args, isCli = false) => {
     append: args.includes('--append'),
     dryRun: hasPreviewFlag(args),
     allowRemoved: splitList(values.allowRemove),
+    allowMissingImport: args.includes('--allow-missing-import'),
     agentId: values.as
   }), 'write', args.includes('--json'), isCli);
 };
