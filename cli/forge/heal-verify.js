@@ -57,13 +57,34 @@ const typecheckStage = async (root, plan, baseline, options) => {
   return stageResult('typecheck', isOk, `sandbox: ${piece.status} (${piece.detail}); ${scopedDetail}`, { modes: { sandbox: piece.status, scoped: hasScoped ? 'ran' : 'not-run' }, introduced });
 };
 
-const specsStage = (root, plan, options) => {
+// A failing run is compared with the same specs on the files before the edit (options.baselineSpecs
+// restores them, runs the specs and re-applies the edit): only failures the edit introduced count. A run
+// whose failing tests cannot be named fails outright.
+const introducedFailures = async (run, specs, options) => {
+  const canCompare = Array.isArray(run.failures) && run.failures.length > 0 && typeof options.baselineSpecs === 'function';
+  if (!canCompare) return { introduced: null, preExisting: [] };
+  const before = await options.baselineSpecs(specs);
+  const isComparable = Array.isArray(before.failures);
+  if (!isComparable) return { introduced: null, preExisting: [] };
+  return { introduced: run.failures.filter((name) => !before.failures.includes(name)), preExisting: run.failures.filter((name) => before.failures.includes(name)) };
+};
+
+const specsDetail = (count, run, compared) => {
+  const hasPreExisting = compared.preExisting.length > 0;
+  const preNote = hasPreExisting ? `; ${compared.preExisting.length} failing test(s) fail the same way before the edit: ${compared.preExisting.slice(0, 3).join('; ')}` : '';
+  const verdict = run.ok ? 'pass' : `fail${compared.introduced ? ` (${compared.introduced.length} introduced)` : ''}`;
+  return `${count} covering specs ${verdict}${preNote}`;
+};
+
+const specsStage = async (root, plan, options) => {
   const found = coveringSpecs(root, plan.files.map((file) => file.file), { depth: options.specDepth ?? 2, direct: options.directSpecs ?? [] });
   const hasSpecs = found.specs.length > 0;
   const openNote = found.open.length > 0 ? `; loads the graph cannot pin in ${found.open.join(', ')} (not expanded)` : '';
   if (!hasSpecs) return stageResult('specs', true, `no covering specs found (reverse imports, depth ${options.specDepth ?? 2})${openNote}`, { specs: [] });
   const run = options.runSpecs(root, found.specs);
-  return stageResult('specs', run.ok, `${found.specs.length} covering specs ${run.ok ? 'pass' : 'fail'}${openNote}`, { specs: found.specs, output: run.output });
+  const compared = run.ok ? { introduced: [], preExisting: [] } : await introducedFailures(run, found.specs, options);
+  const isOk = run.ok || (Array.isArray(compared.introduced) && compared.introduced.length === 0);
+  return stageResult('specs', isOk, `${specsDetail(found.specs.length, run, compared)}${openNote}`, { specs: found.specs, output: run.output, introduced: compared.introduced, preExisting: compared.preExisting });
 };
 
 /** The post-condition alone: { ok, count, limit, longFiles }. */
@@ -82,7 +103,8 @@ const postStage = (plan, memberFps) => {
 
 /**
  * Runs the stages in order and stops at the first failure. options: { runSpecs(root, specs) -> { ok,
- * output }, checkerRoot, specDepth, directSpecs }. baseline: { covered, diagnostics, error } from
+ * output, failures }, baselineSpecs(specs) -> same on the before files, checkerRoot, specDepth,
+ * directSpecs }. baseline: { covered, diagnostics, error } from
  * scopedBaseline before the write. Returns { ok, stage (failed stage or null), stages }.
  */
 export const verifyHeal = async ({ root, plan, memberFps, baseline, options }) => {

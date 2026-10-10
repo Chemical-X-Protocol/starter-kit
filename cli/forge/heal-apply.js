@@ -105,6 +105,19 @@ const finishSuccess = (db, blueprint, plan, verify, written, { root, agentId, le
   return { outcome: 'applied', runId, diff: written.diff, verify, plan, leases };
 };
 
+// Runs the specs on the files as they were before the edit, then writes the edit again. Used only when the
+// specs fail after the edit, to tell failures the edit introduced from ones the checkout already had.
+const specBaselineFor = (root, plan, agentId, runSpecs) => (specs) => {
+  applyEdits(restoreEditsOf(plan), { cwd: root, agentId });
+  const isBefore = isRestored(root, plan.files);
+  if (!isBefore) throw new HealError('HEAL_BASELINE', 'the files did not return to their before state for the spec baseline');
+  try {
+    return runSpecs(root, specs);
+  } finally {
+    applyEdits(editsOf(plan), { cwd: root, agentId });
+  }
+};
+
 // A stage that throws is a failed stage: the files are written by now, so they must be rolled back.
 const verifySafely = async (input) => {
   try {
@@ -127,9 +140,10 @@ const applyAndVerify = async (db, blueprint, plan, options) => {
     releaseTaken(root, leases.taken, agentId);
     throw error;
   }
+  const runSpecs = options.runSpecs ?? chemxTestRunner;
   const verify = await verifySafely({
     root, plan, memberFps: blueprint.callSites.map((site) => site.memberFp), baseline,
-    options: { runSpecs: options.runSpecs ?? chemxTestRunner, checkerRoot: options.checkerRoot, specDepth: options.specDepth, directSpecs: blueprint.verify?.specs?.direct ?? [] }
+    options: { runSpecs, baselineSpecs: specBaselineFor(root, plan, agentId, runSpecs), checkerRoot: options.checkerRoot, specDepth: options.specDepth, directSpecs: blueprint.verify?.specs?.direct ?? [] }
   });
   const context = { root, agentId, leases };
   return verify.ok ? finishSuccess(db, blueprint, plan, verify, written, context) : finishFailure(db, blueprint, plan, verify, context);

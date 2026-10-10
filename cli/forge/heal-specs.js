@@ -44,12 +44,33 @@ const runEnv = () => {
 
 const runWith = (root, command, args) => {
   const run = spawnSync(command, args, { cwd: root, encoding: 'utf-8', timeout: RUN_TIMEOUT_MS, maxBuffer: 64 * 1024 * 1024, env: runEnv() });
-  const output = `${run.stdout ?? ''}\n${run.stderr ?? ''}`.trim();
-  return { ok: run.status === 0, output, exitCode: run.status };
+  return { status: run.status, output: `${run.stdout ?? ''}\n${run.stderr ?? ''}`.trim(), stdout: run.stdout ?? '' };
 };
 
-/** Default runner: `chemx test <specs>` from the kit this module belongs to. */
-export const chemxTestRunner = (root, specs) => runWith(root, process.execPath, [CHEMX_CLI, 'test', ...specs]);
+const lastJsonLine = (text) => {
+  const line = text.trim().split('\n').reverse().find((candidate) => candidate.startsWith('{'));
+  try {
+    return line ? JSON.parse(line) : null;
+  } catch {
+    return null; // not chemx test JSON: the run is judged by its exit code alone
+  }
+};
+
+/**
+ * Default runner: `chemx test --json <specs>` from the kit this module belongs to. Returns { ok, output,
+ * failures } where failures are the failing test names (null when the output could not be read).
+ */
+export const chemxTestRunner = (root, specs) => {
+  const run = runWith(root, process.execPath, [CHEMX_CLI, 'test', '--json', ...specs]);
+  const report = lastJsonLine(run.stdout);
+  const failures = Array.isArray(report?.failures) ? report.failures.map((failure) => String(failure.name ?? '')) : null;
+  const lines = (report?.failures ?? []).map((failure) => `${failure.name}${failure.message ? `: ${failure.message}` : ''}`);
+  return { ok: run.status === 0 && report?.success !== false, output: report ? [`${report.passed ?? 0} passed, ${report.failed ?? 0} failed`, ...lines].join('\n') : run.output, failures };
+};
 
 /** Plain `node --test <specs>` (projects without chemx test lanes, and specs of the heal engine itself). */
-export const nodeTestRunner = (root, specs) => runWith(root, process.execPath, ['--test', ...specs]);
+export const nodeTestRunner = (root, specs) => {
+  const run = runWith(root, process.execPath, ['--test', ...specs]);
+  const failures = [...run.stdout.matchAll(/^\s*not ok \d+ - (.+)$/gm)].map((match) => match[1].trim());
+  return { ok: run.status === 0, output: run.output, failures };
+};

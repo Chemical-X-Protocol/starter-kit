@@ -164,3 +164,27 @@ test('the A4 blueprint is refused before any write while its members differ in p
     assertSameTree(snapshotTree(copy.dir), before);
   });
 });
+
+const extraSpec = (body) => `import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport fs from 'node:fs';\nimport { loadProjectConfig } from './project-detector.js';\n\n${body}\n`;
+
+test('a covering spec that fails before and after the edit is reported as pre-existing, not blamed on the heal', async () => {
+  await withCopy(async (copy) => {
+    fs.writeFileSync(path.join(copy.dir, 'cli/project-detector.extra.spec.js'), extraSpec("test('already broken', () => {\n  assert.equal(typeof loadProjectConfig, 'number');\n});"));
+    const result = await heal(copy, state.sandbox.blueprints.A7);
+    assert.equal(result.outcome, 'applied', JSON.stringify(result.verify?.stages?.[3] ?? result));
+    assert.deepEqual(result.verify.stages[3].preExisting, ['already broken']);
+    assert.match(result.verify.stages[3].detail, /fail the same way before the edit/);
+  });
+});
+
+test('a covering spec the edit breaks rolls the heal back at stage specs', async () => {
+  await withCopy(async (copy) => {
+    fs.writeFileSync(path.join(copy.dir, 'cli/project-detector.extra.spec.js'), extraSpec("test('no fs-json module', () => {\n  assert.equal(typeof loadProjectConfig, 'function');\n  assert.equal(fs.existsSync(new URL('./fs-json.js', import.meta.url)), false);\n});"));
+    const before = snapshotTree(copy.dir);
+    const result = await heal(copy, state.sandbox.blueprints.A7);
+    assert.equal(result.outcome, 'rolled_back', JSON.stringify(result.verify?.stages?.[3] ?? result));
+    assert.equal(result.stage, 'specs');
+    assert.deepEqual(result.verify.stages[3].introduced, ['no fs-json module']);
+    assertSameTree(snapshotTree(copy.dir), before);
+  });
+});
