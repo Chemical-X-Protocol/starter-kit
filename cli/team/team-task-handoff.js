@@ -11,7 +11,7 @@ import { getTask } from './team-db-tasks.js';
 import { registerAgent } from './team-db-agents.js';
 import { postFeedEvent } from './team-db-feed.js';
 import { withImmediateTransaction } from './team-db-transaction.js';
-import { findDispatcherRun } from './team-dispatcher-authority.js';
+import { findRunAuthority } from './team-dispatcher-authority.js';
 
 export const HANDOFF_USAGE = 'chemx team task handoff <taskId> <@to> --as=<@from> [--with-locks]';
 
@@ -59,7 +59,8 @@ export const handoffTask = (db, taskId, toHandle, byHandle, options = {}) => {
   registerAgent(db, { id: to, role: 'executor' });
   const result = withImmediateTransaction(db, () => {
     const task = getTask(db, taskId);
-    const dispatcherRun = findDispatcherRun(db, task, by);
+    const authority = findRunAuthority(db, task, by);
+    const dispatcherRun = authority?.run ?? null;
     const verdict = evaluateHandoff({ task, taskId, to, by, creator: findTaskCreator(db, taskId), dispatcherRun });
     const isDenied = !verdict.allowed;
     if (isDenied) return { success: false, reason: verdict.reason, message: verdict.message };
@@ -70,7 +71,7 @@ export const handoffTask = (db, taskId, toHandle, byHandle, options = {}) => {
     if (hasPreviousOwner) db.prepare("UPDATE agents SET current_task_id = NULL, status = 'idle' WHERE id = ? AND current_task_id = ?").run(from, Number(taskId));
     db.prepare("UPDATE agents SET current_task_id = ?, status = 'busy' WHERE id = ?").run(Number(taskId), to);
     const movedLeases = options.withLocks === true ? transferLeases(db, taskId, to) : [];
-    return { success: true, from, to, by, dispatcherRun, movedLeases, task: getTask(db, taskId) };
+    return { success: true, from, to, by, dispatcherRun, authorityRole: authority?.role ?? null, movedLeases, task: getTask(db, taskId) };
   });
   const isRefused = !result.success;
   if (isRefused) return result;
@@ -81,8 +82,8 @@ export const handoffTask = (db, taskId, toHandle, byHandle, options = {}) => {
     recipient_id: to,
     task_id: Number(taskId),
     event_type: 'task_handoff',
-    message: `Handoff task #${taskId}: ${label} -> ${to} (by ${by}${result.dispatcherRun ? `, by dispatcher of run ${result.dispatcherRun}` : ''})`,
-    metadata: { from: result.from, to, by, ...(result.dispatcherRun ? { dispatcher_run: result.dispatcherRun } : {}) }
+    message: `Handoff task #${taskId}: ${label} -> ${to} (by ${by}${result.dispatcherRun ? `, by ${result.authorityRole === 'run handle' ? 'a handle' : 'dispatcher'} of run ${result.dispatcherRun}` : ''})`,
+    metadata: { from: result.from, to, by, ...(result.dispatcherRun ? { dispatcher_run: result.dispatcherRun, authority: result.authorityRole } : {}) }
   });
   for (const lease of result.movedLeases) {
     postFeedEvent(db, {

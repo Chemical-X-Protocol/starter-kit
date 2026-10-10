@@ -17,7 +17,7 @@ export const AUTHORITY = [
 
 export const CLAIM_STEP = 'Claim the task: chemx team task claim {{taskId}} --as={{handle}}. If the claim is refused as already_claimed and the holder is you ({{handle}}) or none is named, you already hold the task: continue. If it is refused because another handle of this run holds it, do not claim again: use the handoff command the refusal prints. If it is refused for any other reason, comment on the task and stop.';
 
-export const HANDOFF_STEP = 'This task was built by {{builder}}. Take it over with chemx team task handoff {{taskId}} {{handle}} --as={{builder}}, never a second claim. If the handoff is refused, comment on the task with the refusal and continue only if the task is still yours to finish.';
+export const HANDOFF_STEP = 'This task was built by {{builder}}. Take it over under your own handle with chemx team task handoff {{taskId}} {{handle}} --with-locks --as={{handle}} (a handle of this run may take its tasks over, and --with-locks moves the leases the builder holds for this task to you), never a second claim and never --as={{builder}}. If the handoff is refused, comment on the task with the refusal and continue only if the task is still yours to finish.';
 
 // Closing rule shared by the builder and the repair agent (#4430). task done checks hazards on the target only,
 // so it cannot tell whether every deliverable is met; the agent has to.
@@ -109,10 +109,10 @@ export const GATE = [
   '{{authority}}',
   'You are {{handle}}, the gate for chemx dispatch run {{run}} (chemx dispatch run: {{run}}). Do not edit source.',
   'Project: {{root}}. Shell: cd {{root}} && CHEMX_AGENT_ID={{handle}} chemx ...',
-  '1. Close the tasks whose review passed, each as its builder: __CLOSE_LIST__',
-  '   For each: chemx team task done <id> --target=<file> --as=<builder>. If the gate refuses, chemx team task update <id> blocked with the reason; never --force.',
+  '1. Close the tasks whose review passed: __CLOSE_LIST__',
+  '   For each, under your own handle: chemx team task handoff <id> {{handle}} --as={{handle}}, then chemx team task done <id> --target=<file> --as={{handle}}. If the gate refuses, chemx team task update <id> blocked with the reason; never --force, and never --as=<another handle>.',
   '1b. Tasks that did not finish (status and run handle): __FAILED_LIST__',
-  '   For each: chemx team task update <id> blocked with the status as the reason, then chemx team lock release <file> --as=<run handle> for its target. Return their ids as failed.',
+  '   For each: chemx team task update <id> blocked with the status as the reason, after first taking it over with chemx team task handoff <id> {{handle}} --with-locks --as={{handle}}, then chemx team lock release <file> --as={{handle}} for its target. Return their ids as failed.',
   '1c. Repaired tasks (their repair agent may have left unmet deliverables): __REPAIRED_LIST__',
   '   For each: chemx team task show <id>. If it is blocked and names follow-up ids, it is blocked-with-follow-ups, not a failure: list it separately in the summary with its follow-up ids, and do not run 1b on it or change its status. If it is still in_progress, list it as unclosed and run chemx team task update <id> blocked with the reason "repair ended without closing". If it is done, nothing to do.',
   '2. Find this run\'s workflow id: chemx team dispatch --find-run={{run}}. Record it: chemx team dispatch --record-run={{run}} --workflow-run=<id>. If none is found, say so and skip step 3.',

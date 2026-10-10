@@ -56,6 +56,32 @@ test('dispatcher has no authority over a task outside the run', (t) => {
   assert.equal(res.reason, 'not_authorized');
 });
 
+test('a repair takes the run task over from its builder under its own handle (#5894)', (t) => {
+  const { root, db, inRun } = makeRun(t);
+  runTeamCli(['task', 'handoff', String(inRun), `@run-${inRun}`, '--as=@orch'], false, root);
+  const res = runTeamCli(['task', 'handoff', String(inRun), `@run-${inRun}-repair`, `--as=@run-${inRun}-repair`], false, root);
+  assert.equal(res.success, true, JSON.stringify(res));
+  assert.equal(getTask(db, inRun).assigned_agent_id, `@run-${inRun}-repair`);
+  const events = queryFeed(db, { taskId: inRun });
+  assert.ok(events.some((e) => e.event_type === 'task_handoff' && e.message.includes('by a handle of run run-x')));
+});
+
+test('the run gate takes a run task over and closes it under its own handle (#5894)', (t) => {
+  const { root, db, inRun } = makeRun(t);
+  const takeover = runTeamCli(['task', 'handoff', String(inRun), '@run-x-gate', '--as=@run-x-gate'], false, root);
+  assert.equal(takeover.success, true, JSON.stringify(takeover));
+  const res = runTeamCli(['task', 'close', String(inRun), '--cancel=gate closed it', '--as=@run-x-gate'], false, root);
+  assert.equal(res.success, true, JSON.stringify(res));
+  assert.equal(getTask(db, inRun).status, 'cancelled');
+});
+
+test('a handle of another task in no run has no authority over a run task', (t) => {
+  const { root, inRun } = makeRun(t);
+  const res = runTeamCli(['task', 'handoff', String(inRun), '@run-999', '--as=@run-999'], false, root);
+  assert.equal(res.success, false);
+  assert.equal(res.reason, 'not_authorized');
+});
+
 test('a handle other than the dispatcher has no authority over a run task', (t) => {
   const { root, inRun } = makeRun(t);
   const res = runTeamCli(['task', 'handoff', String(inRun), '@bob', '--as=@stranger'], false, root);

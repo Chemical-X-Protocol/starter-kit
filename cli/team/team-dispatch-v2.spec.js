@@ -154,7 +154,8 @@ test('prompts: authority is the first and the last line of every builder, review
   assert.ok(!build.includes('@gone'), 'expired leases are not peers');
   assert.ok(build.includes('- #2 (lane 1) @fixture-run-2: cli/b.js'), 'run map lists the other tasks');
   assert.ok(review.includes('chemx test --changed --base=') && review.includes('--depth=2'));
-  assert.ok(repair.includes('chemx team task handoff 3 @fixture-run-3-repair --as=@fixture-run-3'));
+  assert.ok(repair.includes('chemx team task handoff 3 @fixture-run-3-repair --with-locks --as=@fixture-run-3-repair'), 'the repair takes the task over under its own handle (#5894)');
+  assert.ok(!repair.includes('handoff 3 @fixture-run-3-repair --as=@fixture-run-3 '), 'the repair never hands off as the builder (#5894)');;
   assert.throws(() => fillTemplate('{{missing}}', {}), /no value for \{\{missing\}\}/);
 });
 
