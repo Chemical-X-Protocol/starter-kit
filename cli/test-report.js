@@ -50,7 +50,8 @@ export const TEST_HELP = [
 const plural = (count, word) => `${count} ${word}${count === 1 ? '' : 's'}`;
 
 export const formatTestHeadline = (report) => {
-  const skippedNote = report.skipped > 0 ? `, ${report.skipped} skipped` : '';
+  const todoNote = report.todo > 0 ? `, todo: ${report.todo}, of which failing: ${report.todoFailing || 0}` : '';
+  const skippedNote = `${report.skipped > 0 ? `, ${report.skipped} skipped` : ''}${todoNote}`;
   if (isPass(report.status)) {
     const isEmptyAllowed = report.passed === 0;
     if (isEmptyAllowed) return `${ANSI.DIM}-${ANSI.RESET} ${ANSI.BOLD}No tests ran (allowed by --allow-empty)${ANSI.RESET}`;
@@ -69,7 +70,7 @@ export const formatTestHeadline = (report) => {
   const didNotStart = report.failures.some((f) => f.kind === 'startup-error') && report.failed === 0;
   if (didNotStart) return `${ANSI.RED}✖${ANSI.RESET} ${ANSI.BOLD}Test runner failed to start:${ANSI.RESET} ${report.executionError}`;
   const errorNote = report.errors > 0 ? `, ${plural(report.errors, 'unhandled error')}` : '';
-  return `${ANSI.RED}✖${ANSI.RESET} ${ANSI.BOLD}Test Failures (${report.failed} failed${errorNote} out of ${report.totalTests})${ANSI.RESET}`;
+  return `${ANSI.RED}✖${ANSI.RESET} ${ANSI.BOLD}Test Failures (${report.failed} failed${errorNote} out of ${report.totalTests}${todoNote})${ANSI.RESET}`;
 };
 
 // One line naming what --changed / --related selected, or why the whole suite ran.

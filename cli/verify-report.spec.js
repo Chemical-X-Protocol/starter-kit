@@ -8,6 +8,13 @@ import { SKIPPED } from './verify-steps.js';
 
 const emptyAllowed = { status: STATUS.PASS, reason: 'EMPTY_ALLOWED', passed: 0, total: 0, totalTests: 0, failed: 0, skipped: 0, errors: 0, executionError: null };
 
+test('verify-report: the headline prints todo and failing todo counts apart from failures', () => {
+  const pass = formatTestHeadline({ status: STATUS.PASS, passed: 7, skipped: 0, todo: 2, todoFailing: 2, durationMs: 5, failures: [] });
+  assert.match(stripAnsi(pass), /7 passed, todo: 2, of which failing: 2 in 5ms/);
+  const fail = formatTestHeadline({ status: STATUS.FAIL, failed: 1, errors: 0, totalTests: 4, todo: 2, todoFailing: 1, failures: [{ kind: 'test' }] });
+  assert.match(stripAnsi(fail), /1 failed out of 4, todo: 2, of which failing: 1/);
+});
+
 test('verify-report: an empty run accepted by --allow-empty never reads "Passed (0/0)" or gets a green check', () => {
   assert.equal(formatTestStep(emptyAllowed), 'No tests ran (allowed by --allow-empty)');
   assert.equal(testStepIcon(emptyAllowed), SKIPPED);

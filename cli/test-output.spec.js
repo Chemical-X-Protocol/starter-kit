@@ -216,6 +216,13 @@ test('test-output: a failing todo test is reported as todo, never as a failure',
   assert.equal(result.todoFailing, 1);
 });
 
+test('test-output: a header with a parenthesised duration and no TODO marker is a plain failure', () => {
+  const out = ['✖ plain broken (0.2ms)', 'ℹ tests 1', 'ℹ pass 0', 'ℹ fail 1'].join('\n');
+  const result = parseTestOutput(out, '', 1);
+  assert.deepEqual(result.failures.map((f) => f.name), ['plain broken']);
+  assert.equal(result.todoFailing, 0);
+});
+
 test('test-output: a missing test script is a failure, not an empty run, when specific tests were asked for', () => {
   const stderr = 'npm error Missing script: "test"\nnpm error\nnpm error To see a list of scripts, run:\nnpm error   npm run';
   const scoped = parseTestOutput('', stderr, 1, { scoped: true });
