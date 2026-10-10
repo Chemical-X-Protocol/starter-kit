@@ -11,6 +11,7 @@ import { fingerprintFile } from './forge/fingerprint-file.js';
 import { introducedViolationsOf } from './audit/gate-delta.js';
 import { noteCounterfactual } from './telemetry/call-ledger.js';
 import { newMissingImports, missingImportMessage } from './missing-imports.js';
+import { recordEditSha } from './team/edit-shas.js';
 
 export { runPatcherCli, runWriterCli } from './patcher-cli.js';
 
@@ -117,6 +118,7 @@ export const patchFile = (targetPath, params = {}) => {
   refuseMissingImports(resolvedPath, fileContent, replaced.content, { allowMissingImport: params.allowMissingImport, relPath: targetPath });
   const applied = applyEdits([{ path: resolvedPath, content: replaced.content, allowRemoved }], { cwd, dryRun, agentId });
   const fileResult = applied.files[0];
+  if (!dryRun) recordEditSha(resolvedPath, { cwd, handle: agentId ?? process.env.CHEMX_AGENT_ID ?? null });
   const shouldIndex = !skipIndex && !dryRun;
   const indexed = shouldIndex ? syncIndex(resolvedPath, cwd) : false;
 
@@ -187,6 +189,7 @@ export const writeFile = (targetPath, params = {}) => {
   refuseMissingImports(resolvedPath, beforeContent, content, { allowMissingImport: params.allowMissingImport, relPath: targetPath });
   const applied = applyEdits([{ path: resolvedPath, content, allowRemoved }], { cwd, dryRun, agentId });
   const fileResult = applied.files[0];
+  if (!dryRun) recordEditSha(resolvedPath, { cwd, handle: agentId ?? process.env.CHEMX_AGENT_ID ?? null });
   const shouldIndex = !skipIndex && !dryRun;
   const indexed = shouldIndex ? syncIndex(resolvedPath, cwd) : false;
 

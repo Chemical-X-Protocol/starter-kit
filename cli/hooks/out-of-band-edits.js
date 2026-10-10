@@ -5,9 +5,11 @@
 // extension are looked at; a file is flagged when its sha1 differs from the one last recorded, or when
 // it is new to the record and was modified after the record was last written. NOT guaranteed: the first
 // call in a checkout only records a baseline; a call made only of chemx commands is treated as
-// in-band as a whole (a chemx command chained with other commands is scanned); chemx patch/write do
-// not yet record sha1s, so a Bash call is the only place the record is refreshed or a non-Bash
-// writer is covered, via the PostToolUse hook for MCP chemx and Edit/Write; a file changed by a peer's non-chemx write between two hook runs is attributed to
+// in-band as a whole (a chemx command chained with other commands is scanned); chemx patch/write
+// record each file's sha1 in the coordination db (edit_shas, cli/team/edit-shas.js) and a file whose
+// sha1 equals that row is not flagged; a missing row (no db, failed record) means unknown, not foreign.
+// The private record is still what a Bash call refreshes, and non-Bash writers are covered via the
+// PostToolUse hook for MCP chemx and Edit/Write; a file changed by a peer's non-chemx write between two hook runs is attributed to
 // whoever ran the next Bash call; a write that leaves git status unchanged (already-dirty file with
 // the same stat) is missed. The record lives at <root>/.chemx/post-bash-seen.json.
 
@@ -18,6 +20,7 @@ import { spawnSync } from 'node:child_process';
 import { isRepoWritePath } from './guard-paths.js';
 import { parseShell } from './shell-parse.js';
 import { resolveInvocation, isChemxInvocation } from './guard-invocation.js';
+import { lookupEditSha } from '../team/edit-shas.js';
 
 export const OUT_OF_BAND_RULE = 'out_of_band_edit';
 const SEEN_FILE = ['.chemx', 'post-bash-seen.json'];
@@ -86,11 +89,15 @@ const statOf = (absolute) => {
 };
 
 // One dirty file against the record: { entry, isChanged }. isChanged is false for an unchanged stat.
-const judgeFile = ({ absolute, stat, known, previous }) => {
+// A sha1 chemx patch/write recorded in the coordination db (edit_shas) that equals the file's current
+// sha1 means the content is the last chemx write: not flagged, whatever the private record says.
+const judgeFile = ({ absolute, stat, known, previous, root }) => {
   const isStatSame = Boolean(known) && known.m === stat.mtimeMs && known.s === stat.size;
   if (isStatSame) return { entry: known, isChanged: false };
   const hash = sha1Of(absolute);
   const entry = { m: stat.mtimeMs, s: stat.size, h: hash };
+  const isChemxWrite = lookupEditSha(absolute, root)?.sha1 === hash;
+  if (isChemxWrite) return { entry, isChanged: false };
   const isNewToRecord = !known;
   const isModifiedSince = previous !== null && stat.mtimeMs > previous.at;
   return { entry, isChanged: isNewToRecord ? isModifiedSince : known.h !== hash };
@@ -114,7 +121,7 @@ export const scanOutOfBand = ({ root, command, now = Date.now(), isInBandTool = 
     const stat = isRepoWritePath(absolute, { cwd: root, root }) ? statOf(absolute) : null;
     const isSkipped = stat === null;
     if (isSkipped) continue;
-    const verdict = judgeFile({ absolute, stat, known: previous?.files[relative], previous });
+    const verdict = judgeFile({ absolute, stat, known: previous?.files[relative], previous, root });
     files[relative] = verdict.entry;
     const isOutOfBand = verdict.isChanged && !isInBandFor();
     if (isOutOfBand) changed.push(relative);

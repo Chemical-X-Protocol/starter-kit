@@ -6,6 +6,9 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { runPostEdit } from './claude-post-edit.js';
 import { parsePorcelain } from './out-of-band-edits.js';
+import { openIndexDb } from '../search-schema.js';
+import { closeQuietly } from '../team/team-db-readonly.js';
+import { writeFile } from '../patcher.js';
 
 const created = [];
 after(() => { for (const dir of created) fs.rmSync(dir, { recursive: true, force: true }); });
@@ -53,6 +56,21 @@ test('a node script write after the baseline is flagged and logged as out_of_ban
   assert.equal(logged[0].rule, 'out_of_band_edit');
   assert.equal(logged[0].handle, '@spec');
   assert.equal(await bash(root, 'ls', logged), null, 'the same change is not flagged twice');
+});
+
+test('a file whose sha1 chemx write recorded in the db is not flagged, a later foreign write is (#4608)', async () => {
+  delete process.env.CHEMX_PROJECT_ROOT;
+  const root = tempRepo();
+  closeQuietly(openIndexDb(root, { fresh: true }));
+  const logged = [];
+  await bash(root, 'ls', logged);
+  writeFile('a.js', { content: 'export const a = 3;\n', overwrite: true, cwd: root, agentId: '@spec', skipIndex: true, skipCheck: true });
+  const later = new Date(Date.now() + 5000);
+  fs.utimesSync(path.join(root, 'a.js'), later, later);
+  assert.equal(await bash(root, 'node /tmp/x.mjs', logged), null);
+  put(path.join(root, 'a.js'), 'export const a = 4;\n');
+  const output = await bash(root, 'node /tmp/x.mjs', logged);
+  assert.match(output.hookSpecificOutput.additionalContext, /a\.js was changed/);
 });
 
 test('a chemx command that writes is not flagged', async () => {
