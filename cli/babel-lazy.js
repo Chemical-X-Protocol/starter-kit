@@ -23,6 +23,13 @@ export const traverse = (ast, visitors, ...rest) => {
   return traverseFn(ast, visitors, ...rest);
 };
 
+// traverse.cache: { scope: WeakMap<Node, Scope>, path: ... }. Read `.scope` at each use: Babel swaps
+// in a new WeakMap when the cache is cleared.
+export const traverseCache = () => {
+  traverseFn = traverseFn ?? loadTraverse();
+  return traverseFn.cache;
+};
+
 let typesModule = null;
 const loadTypes = () => {
   typesModule = typesModule ?? requireBabel('@babel/types');

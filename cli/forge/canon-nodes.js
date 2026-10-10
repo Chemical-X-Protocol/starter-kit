@@ -85,20 +85,46 @@ const locOf = (node) => {
   return { start: loc.start.line, end: loc.end.line, startOffset: node.start, endOffset: node.end };
 };
 
+// Read once per process, not per node (#5911): t.isExpression through the lazy proxy, and each
+// type's visitor keys without the skipped ones.
+let isBabelExpression = null;
+const isExpressionNode = (node) => {
+  isBabelExpression = isBabelExpression ?? t.isExpression;
+  return isBabelExpression(node);
+};
+const keptKeysByType = new Map();
+const keptKeysOf = (type) => {
+  const cached = keptKeysByType.get(type);
+  if (cached) return cached;
+  const keys = (t.VISITOR_KEYS[type] ?? []).filter((key) => !SKIPPED_KEYS.has(key));
+  keptKeysByType.set(type, keys);
+  return keys;
+};
+
+const NO_EXTRA = Object.freeze({});
+
 /** Builds a canonical node. `from` supplies loc; isExpr defaults to Babel's notion of an expression. */
-export const makeNode = (type, label, kids, from, extra = {}) => ({
+export const makeNode = (type, label, kids, from, extra = NO_EXTRA) => ({
   type,
   label,
   kids,
-  isExpr: extra.isExpr ?? Boolean(from && t.isExpression(from)),
+  isExpr: extra.isExpr ?? Boolean(from && isExpressionNode(from)),
   loc: extra.loc ?? locOf(from),
   ident: extra.ident ?? null,
   lit: extra.lit ?? null
 });
 
+const joinLabel = (head, tail) => (head ? `${head} ${tail}` : tail);
+
+/** The present LABEL_FLAGS in order, `flag` for true and `flag:value` otherwise, space-separated. */
 const flagLabel = (node) => {
-  const present = LABEL_FLAGS.filter((flag) => node[flag] !== undefined && node[flag] !== null && node[flag] !== false);
-  return present.map((flag) => (node[flag] === true ? flag : `${flag}:${node[flag]}`)).join(' ');
+  let label = '';
+  for (const flag of LABEL_FLAGS) {
+    const value = node[flag];
+    const isPresent = value !== undefined && value !== null && value !== false;
+    if (isPresent) label = joinLabel(label, value === true ? flag : `${flag}:${value}`);
+  }
+  return label;
 };
 
 const nameOfKey = (key) => {
@@ -152,11 +178,10 @@ const convertGeneric = (node, ctx) => {
   const isDynamicScope = node.type === 'WithStatement' || isDirectEval(node, ctx);
   if (isDynamicScope) ctx.hasDynamicScope = true;
   const kids = {};
-  const keys = (t.VISITOR_KEYS[node.type] ?? []).filter((key) => !SKIPPED_KEYS.has(key));
-  for (const key of keys) kids[key] = convertSlot(node, key, ctx);
+  for (const key of keptKeysOf(node.type)) kids[key] = convertSlot(node, key, ctx);
   const textLabel = TEXT_LABELS[node.type]?.(node);
-  const protoFlag = isProtoSetter(node) ? 'protoSetter' : '';
-  const label = [textLabel ?? flagLabel(node), protoFlag].filter(Boolean).join(' ');
+  const baseLabel = textLabel ?? flagLabel(node);
+  const label = isProtoSetter(node) ? joinLabel(baseLabel, 'protoSetter') : baseLabel;
   return makeNode(node.type, label, kids, node);
 };
 

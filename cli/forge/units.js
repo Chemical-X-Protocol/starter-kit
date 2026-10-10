@@ -102,12 +102,17 @@ const signatureNode = (fn, isSloppy) => ({
   lit: null
 });
 
-const spanOf = (node) => ({
-  start: node.loc?.start ?? null,
-  end: node.loc?.end ?? null,
-  startOffset: node.loc?.startOffset ?? null,
-  endOffset: node.loc?.endOffset ?? null
-});
+/**
+ * A unit row: kind, the node's span, the kind's meta (in its key order), then the hasher's fields.
+ * Built key by key instead of from object spreads: this runs once per unit of every file (#5911).
+ */
+const unitOf = (kind, node, meta, hashed) => {
+  const loc = node.loc;
+  const unit = { kind, start: loc?.start ?? null, end: loc?.end ?? null, startOffset: loc?.startOffset ?? null, endOffset: loc?.endOffset ?? null };
+  for (const key in meta) unit[key] = meta[key];
+  for (const key in hashed) unit[key] = hashed[key];
+  return unit;
+};
 
 const isNegation = (node) => node.type === 'UnaryExpression' && node.label === 'operator:! prefix';
 
@@ -159,18 +164,18 @@ const unitRequestsOf = (program) => {
   };
 
   const visit = (node, parent, key) => {
-    const isFunction = FUNCTION_TYPES.has(node.type) && node.kids.body?.type === 'BlockStatement';
+    const { kids } = node;
+    const isFunction = FUNCTION_TYPES.has(node.type) && kids.body?.type === 'BlockStatement';
     if (isFunction) requestFn(node, parent, key);
     const isUnitBlock = node.type === 'BlockStatement' && !node.isArrowBody;
     if (isUnitBlock) requestBlock(node);
     const candidate = exprCandidateOf(node, parent, key);
     if (candidate) requestExpr(candidate, key);
-    for (const childKey of Object.keys(node.kids)) {
-      const value = node.kids[childKey];
-      const children = Array.isArray(value) ? value : null;
-      const isSingleChild = !children && Boolean(value);
-      if (children) for (const child of children) child && visit(child, node, childKey);
-      if (isSingleChild) visit(value, node, childKey);
+    for (const childKey in kids) {
+      const value = kids[childKey];
+      const isList = Array.isArray(value);
+      if (isList) for (const child of value) child && visit(child, node, childKey);
+      else if (value) visit(value, node, childKey);
     }
   };
 
@@ -200,11 +205,11 @@ export const collectScriptUnits = (program, { ubiquitous = new Set(), isSloppy =
     const hashed = hasher.hashTop(windowOf([signature, node.kids.body]), node);
     const signatureMeta = { kind: signature.label, fp1: hasher.hashTop(signature, node).fp1 };
     const named = { declName: declNameOf(node, parent, key), paramNames: params.map(paramNameOf), signature: signatureMeta };
-    units.push({ kind: 'fn', ...spanOf(node), ...named, ...hashed });
+    units.push(unitOf('fn', node, named, hashed));
   };
 
   const addStmt = ({ node, blockId, ordinal }) => {
-    units.push({ kind: 'stmt', ...spanOf(node), blockId, ordinal, ...hashCode(node) });
+    units.push(unitOf('stmt', node, { blockId, ordinal }, hashCode(node)));
   };
 
   // A candidate under EXPR_GATE.minMass canonical nodes cannot pass the gate, so it is not hashed.
@@ -216,7 +221,7 @@ export const collectScriptUnits = (program, { ubiquitous = new Set(), isSloppy =
     const hasRoom = exprCount < EXPR_GATE.maxPerFile;
     isExprCapped = isExprCapped || (isKept && !hasRoom);
     const shouldStore = isKept && hasRoom;
-    if (shouldStore) units.push({ kind: 'expr', ...spanOf(node), slot, ...hashed });
+    if (shouldStore) units.push(unitOf('expr', node, { slot }, hashed));
     exprCount += shouldStore ? 1 : 0;
   };
 

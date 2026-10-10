@@ -4,10 +4,12 @@
 // It drives the same collector the audit feeds (createFileFingerprint) over the same trees
 // (parseScriptAsts, with its per-block SFC fallback), so the audit, `chemx patterns --sync` and a
 // chemx patch/write store identical rows. Vue template units never depend on the script parsing.
+// The binding index comes from fillBindingIndex (a walk over Babel's crawled scopes, #5911), which
+// fills what createFingerprintVisitors fills inside the audit's traverse.
 import { parseSfc, isSfcFile } from '../sfc/sfc-parse.js';
 import { parseScriptAsts } from '../sfc/script-asts.js';
-import { traverse } from '../babel-lazy.js';
-import { createFileFingerprint, createFingerprintVisitors } from './fingerprint-visitors.js';
+import { fillBindingIndex } from './bindings.js';
+import { createFileFingerprint } from './fingerprint-visitors.js';
 import { isForgeExcluded } from './exclusions.js';
 
 const SCRIPT_EXTENSIONS = /\.(m?js|cjs|jsx|ts|mts|cts|tsx)$/;
@@ -26,7 +28,7 @@ const unitsOf = (relativePath, content, options) => {
   const hasCode = code.trim().length > 0;
   const parsed = hasCode ? parseScriptAsts(code, sfc, content, relativePath) : NO_SCRIPT;
   for (const ast of parsed.asts) {
-    traverse(ast, createFingerprintVisitors(fingerprint));
+    fillBindingIndex(ast, fingerprint.bindings, fingerprint.ids, fingerprint.relativePath);
     fingerprint.addScriptAst(ast, code);
   }
   const result = fingerprint.result();

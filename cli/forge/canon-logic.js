@@ -18,7 +18,6 @@ const TEST_SLOTS = {
 };
 const NOT_LABEL = 'operator:! prefix';
 
-const childList = (value) => (Array.isArray(value) ? value : [value]);
 
 const isNot = (node) => node?.type === 'UnaryExpression' && node.label === NOT_LABEL;
 
@@ -86,14 +85,21 @@ const isTestSlot = (node, key, inTest) => {
   return isOwnTest || isNotArgument || isLogicalOperand || isBranchInTest;
 };
 
-/** Rewrites one canonical subtree bottom-up. inTest marks that only the truthiness of node matters. */
+/**
+ * Rewrites one canonical subtree bottom-up. inTest marks that only the truthiness of node matters.
+ * Each kid slot is rewritten in place (a list gets a new array), with no per-slot entry or wrapper
+ * arrays: this runs once per canonical node of every file (#5911).
+ */
 export const normalizeLogic = (node, inTest = false) => {
   const isStrippable = inTest && isGlobalBooleanCall(node);
   if (isStrippable) return normalizeLogic(node.kids.arguments[0], true);
-  for (const [key, value] of Object.entries(node.kids)) {
+  const { kids } = node;
+  for (const key in kids) {
+    const value = kids[key];
     const childInTest = isTestSlot(node, key, inTest);
-    const rewritten = childList(value).map((child) => child && normalizeLogic(child, childInTest));
-    node.kids[key] = Array.isArray(value) ? rewritten : rewritten[0];
+    const isList = Array.isArray(value);
+    if (isList) kids[key] = value.map((child) => child && normalizeLogic(child, childInTest));
+    else kids[key] = value && normalizeLogic(value, childInTest);
   }
   const operator = operatorOf(node);
   return operator ? normalizeLogical(node, operator) : node;

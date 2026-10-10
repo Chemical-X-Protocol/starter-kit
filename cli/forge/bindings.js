@@ -3,6 +3,9 @@
 // where that binding comes from: 'import' (module binding), 'global' (no binding in the file),
 // 'local' (declared somewhere in the file) or 'name' (a property name or key, not a binding at all).
 // describeIdentifier is exported so a shared audit traversal can fill the same index in its own pass.
+// Every describer reads a site { node, parent, grandparent, scope }: createBindingVisitors builds one
+// from each NodePath of a Babel traverse (the audit's merged pass), and fillBindingIndex from a plain
+// walk over the scopes Babel crawled (binding-walk.js, #5911), so both fill the same index.
 // An import entry also carries importRef '<source>#<imported>' (default, * or the exported name), so
 // `get` from 'lodash' and `get` from './api' never share a label or an anchor. A relative source is
 // resolved against the file's directory when filePath is known, and a `node:` prefix is dropped for
@@ -14,7 +17,8 @@
 // global require(), as an import entry with importRef '<source>#*'.
 import { builtinModules } from 'node:module';
 import path from 'node:path';
-import { traverse } from '../babel-lazy.js';
+import { lazyTypes, traverse } from '../babel-lazy.js';
+import { walkBindingSites } from './binding-walk.js';
 
 const NAME_ENTRY = Object.freeze({ origin: 'name', bindingId: null, isDecl: false, importRef: null });
 const INTERCHANGEABLE_EXTENSION = /\.(js|jsx|ts|tsx)$/;
@@ -78,7 +82,7 @@ const idFor = (binding, ids) => {
  * or a let/const/class declared earlier in the same function, outside a switch case (a case can be
  * jumped over). Imports, class-expression names and reads from a nested function are never certain.
  */
-const isInitializedAt = (binding, nodePath) => {
+const isInitializedAt = (binding, site) => {
   const kind = binding?.kind;
   const isAlwaysInitialized = ALWAYS_INITIALIZED.has(kind);
   if (isAlwaysInitialized) return true;
@@ -86,59 +90,72 @@ const isInitializedAt = (binding, nodePath) => {
   if (!isLexical) return false;
   const declaration = binding.path;
   const end = declaration.node?.end;
-  const endsBefore = typeof end === 'number' && typeof nodePath.node.start === 'number' && end <= nodePath.node.start;
-  const isSameFunction = binding.scope.getFunctionParent() === nodePath.scope.getFunctionParent();
+  const endsBefore = typeof end === 'number' && typeof site.node.start === 'number' && end <= site.node.start;
+  const isSameFunction = binding.scope.getFunctionParent() === site.scope.getFunctionParent();
   const statement = declaration.isVariableDeclarator() ? declaration.parentPath : declaration;
   const isInCase = Boolean(statement?.parentPath?.isSwitchCase());
   return endsBefore && isSameFunction && !isInCase;
 };
 
+let babelTests = null;
+const identifierTests = () => {
+  babelTests = babelTests ?? { isReferenced: lazyTypes.isReferenced, isBinding: lazyTypes.isBinding };
+  return babelTests;
+};
+
+/** The site of a NodePath: what every describer reads (grandparent as NodePath#isReferencedIdentifier reads it). */
+export const siteOfPath = (nodePath) => ({ node: nodePath.node, parent: nodePath.parent, grandparent: nodePath.parentPath?.parent, scope: nodePath.scope });
+
 /**
- * Describes one Identifier path. `ids` maps Babel binding objects to small per-file integers;
- * filePath (project-relative) resolves relative import sources. isInitialized (references only) says the
- * read cannot throw a TDZ ReferenceError (alias inlining relies on it).
+ * Describes one Identifier site ({ node, parent, grandparent, scope }, see siteOfPath). `ids` maps
+ * Babel binding objects to small per-file integers; filePath (project-relative) resolves relative
+ * import sources. isInitialized (references only) says the read cannot throw a TDZ ReferenceError
+ * (alias inlining relies on it). isRef and isDecl are t.isReferenced and t.isBinding, which is what
+ * NodePath#isReferencedIdentifier and #isBindingIdentifier compute for an Identifier.
  */
-export const describeIdentifier = (nodePath, ids, filePath = null) => {
+export const describeIdentifier = (site, ids, filePath = null) => {
+  const { node, parent, grandparent } = site;
+  const { isReferenced, isBinding } = identifierTests();
   // Babel reports some references (the operand of `!`) as binding identifiers too: a reference wins.
-  const isRef = nodePath.isReferencedIdentifier();
-  const isDecl = !isRef && nodePath.isBindingIdentifier();
+  const isRef = isReferenced(node, parent, grandparent);
+  const isDecl = !isRef && isBinding(node, parent, grandparent);
   const isNameOnly = !isDecl && !isRef;
   if (isNameOnly) return NAME_ENTRY;
-  const binding = nodePath.scope.getBinding(nodePath.node.name);
+  const binding = site.scope.getBinding(node.name);
   const origin = originOf(binding);
   const importRef = origin === 'import' ? importRefOf(binding, filePath) : null;
-  const isInitialized = isRef && isInitializedAt(binding, nodePath);
+  const isInitialized = isRef && isInitializedAt(binding, site);
   return { origin, bindingId: idFor(binding, ids), isDecl, importRef, isInitialized };
 };
 
 /** Entry for a JSX element name that names a value (component or member root), else null. */
-const describeJsxName = (nodePath, ids, filePath) => {
-  const { node, parent } = nodePath;
+const describeJsxName = (site, ids, filePath) => {
+  const { node, parent } = site;
   const isElementName = JSX_NAME_PARENTS.has(parent.type) && parent.name === node;
   const isComponentName = isElementName && !INTRINSIC_JSX_NAME.test(node.name);
   const isMemberRoot = parent.type === 'JSXMemberExpression' && parent.object === node;
   const isReference = isComponentName || isMemberRoot;
   if (!isReference) return null;
-  const binding = nodePath.scope.getBinding(node.name);
+  const binding = site.scope.getBinding(node.name);
   const origin = originOf(binding);
   const importRef = origin === 'import' ? importRefOf(binding, filePath) : null;
   return { origin, bindingId: idFor(binding, ids), isDecl: false, importRef };
 };
 
 /** The string source of import('x') or a global require('x'), else null. */
-const dynamicSourceOf = (nodePath) => {
-  const { node } = nodePath;
+const dynamicSourceOf = (site) => {
+  const { node } = site;
   const callee = node.callee;
   const isImportCall = callee?.type === 'Import';
-  const isRequire = callee?.type === 'Identifier' && callee.name === 'require' && !nodePath.scope.getBinding('require');
+  const isRequire = callee?.type === 'Identifier' && callee.name === 'require' && !site.scope.getBinding('require');
   const source = node.type === 'ImportExpression' ? node.source : node.arguments?.[0];
   const isCall = isImportCall || isRequire || node.type === 'ImportExpression';
   const isStatic = source?.type === 'StringLiteral';
   return isCall && isStatic ? source : null;
 };
 
-const indexDynamicSource = (nodePath, index, filePath) => {
-  const source = dynamicSourceOf(nodePath);
+const indexDynamicSource = (site, index, filePath) => {
+  const source = dynamicSourceOf(site);
   if (!source) return;
   const importRef = `${normalizeImportSource(source.value, filePath)}#*`;
   index.set(source, { origin: 'import', bindingId: null, isDecl: false, importRef });
@@ -150,45 +167,70 @@ const indexDynamicSource = (nodePath, index, filePath) => {
  * vi.mock all resolve it against the file, so the same text in two directories names two files.
  * Static import/export sources are left to their bindings.
  */
-const indexRelativeString = (nodePath, value, index, filePath) => {
+const indexRelativeString = (site, value, index, filePath) => {
   const isRelative = Boolean(filePath) && typeof value === 'string' && RELATIVE_PATH.test(value);
-  const isModuleSource = MODULE_SOURCE_PARENTS.has(nodePath.parent?.type) && nodePath.parent.source === nodePath.node;
-  const isAnchor = isRelative && !isModuleSource && !index.has(nodePath.node);
+  const isModuleSource = MODULE_SOURCE_PARENTS.has(site.parent?.type) && site.parent.source === site.node;
+  const isAnchor = isRelative && !isModuleSource && !index.has(site.node);
   if (!isAnchor) return;
   const importRef = `${normalizeImportSource(value, filePath)}#*`;
-  index.set(nodePath.node, { origin: 'import', bindingId: null, isDecl: false, importRef });
+  index.set(site.node, { origin: 'import', bindingId: null, isDecl: false, importRef });
 };
 
-/**
- * Babel visitors that fill `index` (Map<node, entry>); `ids` numbers bindings per file. Shared by
- * buildBindingIndex and the audit's merged traverse, so both build the same index.
- */
-export const createBindingVisitors = (index, ids, filePath = null) => {
-  const onCall = (nodePath) => indexDynamicSource(nodePath, index, filePath);
+/** Site handlers by node type that fill `index` (Map<node, entry>); `ids` numbers bindings per file. */
+const createSiteHandlers = (index, ids, filePath) => {
+  const onCall = (site) => indexDynamicSource(site, index, filePath);
   return {
-    Identifier(nodePath) {
-      index.set(nodePath.node, describeIdentifier(nodePath, ids, filePath));
+    Identifier(site) {
+      index.set(site.node, describeIdentifier(site, ids, filePath));
     },
-    JSXIdentifier(nodePath) {
-      const entry = describeJsxName(nodePath, ids, filePath);
-      if (entry) index.set(nodePath.node, entry);
+    JSXIdentifier(site) {
+      const entry = describeJsxName(site, ids, filePath);
+      if (entry) index.set(site.node, entry);
     },
     CallExpression: onCall,
     ImportExpression: onCall,
-    StringLiteral(nodePath) {
-      indexRelativeString(nodePath, nodePath.node.value, index, filePath);
+    StringLiteral(site) {
+      indexRelativeString(site, site.node.value, index, filePath);
     },
-    TemplateLiteral(nodePath) {
-      const isPlain = nodePath.node.expressions.length === 0 && nodePath.parent?.type !== 'TaggedTemplateExpression';
-      if (isPlain) indexRelativeString(nodePath, nodePath.node.quasis[0]?.value.cooked, index, filePath);
+    TemplateLiteral(site) {
+      const isPlain = site.node.expressions.length === 0 && site.parent?.type !== 'TaggedTemplateExpression';
+      if (isPlain) indexRelativeString(site, site.node.quasis[0]?.value.cooked, index, filePath);
     }
   };
 };
 
-/** Builds Map<IdentifierNode, entry> for a whole Babel File/Program AST in one traversal. */
+/**
+ * Babel visitors that fill `index` (Map<node, entry>); `ids` numbers bindings per file. The audit's
+ * merged traverse uses these; fillBindingIndex builds the same index without a visitor traverse.
+ */
+export const createBindingVisitors = (index, ids, filePath = null) => {
+  const visitors = {};
+  for (const [type, handle] of Object.entries(createSiteHandlers(index, ids, filePath))) visitors[type] = (nodePath) => handle(siteOfPath(nodePath));
+  return visitors;
+};
+
+/**
+ * Fills `index` and `ids` for one Babel AST as createBindingVisitors would in a traverse of it, from a
+ * walk over the scopes Babel crawled (binding-walk.js). When the walk cannot finish (a scopable node
+ * without a crawled scope, or a root that is not a File), nothing it found is kept and a real
+ * traverse fills the index instead.
+ */
+export const fillBindingIndex = (ast, index, ids, filePath = null) => {
+  const walkedIndex = new Map();
+  const walkedIds = new Map(ids);
+  const isWalked = walkBindingSites(ast, createSiteHandlers(walkedIndex, walkedIds, filePath));
+  if (!isWalked) {
+    traverse(ast, createBindingVisitors(index, ids, filePath));
+    return;
+  }
+  for (const [node, entry] of walkedIndex) index.set(node, entry);
+  for (const [binding, id] of walkedIds) ids.set(binding, id);
+};
+
+/** Builds Map<IdentifierNode, entry> for a whole Babel File/Program AST. */
 export const buildBindingIndex = (ast, { filePath = null } = {}) => {
   const index = new Map();
-  traverse(ast, createBindingVisitors(index, new Map(), filePath));
+  fillBindingIndex(ast, index, new Map(), filePath);
   return index;
 };
 
