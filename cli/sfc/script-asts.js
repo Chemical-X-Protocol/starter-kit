@@ -29,9 +29,15 @@ const tryParse = (code, options) => {
   }
 };
 
+// An SFC whose inline script blocks are all lang="ts" gets the plain TypeScript options (no JSX), so `<T>x` casts parse.
+const isTsSfc = (sfc) => {
+  const inline = sfc ? sfc.scripts.filter((s) => !s.src) : [];
+  return inline.length > 0 && inline.every((s) => /^[mc]?tsx?$/i.test(s.lang) && !/^tsx$/i.test(s.lang));
+};
+
 /** Returns { asts, error }: one AST normally, one per script block on fallback. */
 export const parseScriptAsts = (code, sfc, content, filePath = null) => {
-  const options = parseOptionsFor(filePath);
+  const options = isTsSfc(sfc) ? PLAIN_TS_PARSE_OPTIONS : parseOptionsFor(filePath);
   const combined = tryParse(code, options);
   const hasCombinedAst = Boolean(combined.ast);
   if (hasCombinedAst) return { asts: [combined.ast], error: null };
