@@ -1,6 +1,6 @@
 # Forge blueprints
 
-`chemx blueprint` turns one accepted Forge group into a plan: what kind of extraction it is, what the piece is called and where it lives, which call sites it replaces, which near misses it leaves alone, and which judgment calls are still open. It plans only. Nothing is edited; the heal engine that applies a blueprint is not built yet (P6).
+`chemx blueprint` turns one accepted Forge group into a plan: what kind of extraction it is, what the piece is called and where it lives, which call sites it replaces, which near misses it leaves alone, and which judgment calls are still open. It plans only. Nothing is edited; `chemx heal` applies a blueprint (`docs/forge-heal.md`).
 
 ```
 chemx blueprint <group-id|bp-id> [--json]
@@ -19,7 +19,7 @@ Schema `chemx.blueprint/1`, printed as canonical JSON (sorted keys, LF, no times
 | :--- | :--- |
 | `kind` | `extract-function`, `reuse`, `tabulate`, `extract-component`, `extract-composable`, `extract-hook` or `advisory` |
 | `piece` | name, module, whether the module is new, where the placement came from, the library piece (`fromPiece`), signature, params, and the library piece's code as `body` |
-| `callSites` | file, line range, content hash, member fp2 and the import to add |
+| `callSites` | file, line range, body hash (the member text with each line trimmed, so heal tells a moved member from a changed one), file content hash, member fp2 and the import to add |
 | `evidence` | instance and file counts, mass, E, hole ratio, shared anchors and `rejectedMembers` |
 | `drift`, `holes` | similar spans that differ, and the open and defaulted judgment calls |
 | `needs`, `autoApplicable` | the work tier and whether every hole has a default |
