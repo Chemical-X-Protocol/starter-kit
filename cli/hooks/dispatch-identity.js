@@ -42,9 +42,48 @@ export const dispatchAgentFromTranscript = (transcriptPath) => {
   return { workflowId: path.basename(dir), label, taskId: Number(task[1]), dir };
 };
 
+const SAFE_AGENT_ID = /^[A-Za-z0-9_-]+$/;
+
+// The session directory a transcript path belongs to: the part before `subagents`, else the main transcript minus `.jsonl`.
+const sessionDirOf = (transcriptPath) => {
+  const parts = transcriptPath.split(path.sep);
+  const at = parts.lastIndexOf('subagents');
+  return at > 0 ? parts.slice(0, at).join(path.sep) : transcriptPath.replace(/\.jsonl$/, '');
+};
+
+// <subagents dir>/**/agent-<id>.meta.json, searched downwards; a workflow agent sits in workflows/<wf>/.
+const findMetaDir = (subagentsDir, agentId) => {
+  const wanted = `agent-${agentId}.meta.json`;
+  const walk = (dir, depth) => {
+    let entries = [];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return null;
+    }
+    const hasMeta = entries.some((entry) => entry.isFile() && entry.name === wanted);
+    const isTooDeep = depth >= 3;
+    const subdirs = isTooDeep ? [] : entries.filter((entry) => entry.isDirectory());
+    const below = subdirs.reduce((found, entry) => found ?? walk(path.join(dir, entry.name), depth + 1), null);
+    return hasMeta ? dir : below;
+  };
+  return walk(subagentsDir, 0);
+};
+
+/** { workflowId, label, taskId, dir } for a workflow agent named by the payload's agent_id (the documented subagent marker), else by its transcript path; null when neither identifies a build agent. */
+export const dispatchAgentFromPayload = (payload) => {
+  const agentId = payload?.agent_id;
+  const transcript = payload?.transcript_path;
+  const hasAgentId = typeof agentId === 'string' && SAFE_AGENT_ID.test(agentId);
+  const hasPath = typeof transcript === 'string' && transcript !== '';
+  const dir = hasAgentId && hasPath ? findMetaDir(path.join(sessionDirOf(transcript), 'subagents'), agentId) : null;
+  const inWorkflow = dir !== null && path.dirname(dir).endsWith(WORKFLOW_PARENT);
+  return dispatchAgentFromTranscript(inWorkflow ? path.join(dir, `agent-${agentId}.jsonl`) : transcript);
+};
+
 /** The recorded builder handle of a dispatched agent, or null. Needs a run tied to this workflow id. */
 export const resolveDispatchHandle = (payload, { root, env = process.env, projectsRoot } = {}) => {
-  const agent = dispatchAgentFromTranscript(payload?.transcript_path);
+  const agent = dispatchAgentFromPayload(payload);
   if (!agent) return null;
   const teamRoot = root ? teamRootFor(root, { env }) : null;
   const db = teamRoot ? openExistingTeamDb(teamRoot) : null;

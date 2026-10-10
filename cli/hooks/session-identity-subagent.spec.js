@@ -59,6 +59,17 @@ test('guard: a subagent acting without identity text is denied even when the env
   assert.equal(decide(WORKFLOW, 'chemx team lock acquire cli/a.js').rule, 'inherited-identity');
 });
 
+test('agent_id marks a subagent even with a main-session transcript_path (#4598)', () => {
+  const payload = { tool_name: 'Bash', session_id: SESSION, agent_id: 'a9', transcript_path: MAIN, cwd: '/nonexistent-root', tool_input: { command: 'chemx write cli/a.js --stdin' } };
+  assert.equal(inheritedOrchestratorHandle(payload), '@claude-3f9a1c7e');
+  assert.equal(inheritedOrchestratorHandle({ ...payload, agent_id: undefined }), null);
+  const denied = decidePreTool(payload, buildPreToolContext(payload, {}));
+  assert.equal(denied.rule, 'inherited-identity');
+  assert.match(denied.reason, /act as the orchestrator @claude-3f9a1c7e/);
+  const named = { ...payload, tool_input: { command: 'CHEMX_AGENT_ID=@sub chemx write a.js' } };
+  assert.equal(decidePreTool(named, buildPreToolContext(named, {})).decision, 'allow');
+});
+
 test('guard: identity in the text, a read-only call, or the main session is allowed', () => {
   assert.equal(decide(SUB, 'CHEMX_AGENT_ID=@sub chemx write cli/a.js --stdin').decision, 'allow');
   assert.equal(decide(SUB, 'chemx team task claim 1 --as=@sub').decision, 'allow');

@@ -64,7 +64,9 @@ export const isActingChemxArgs = (args = []) => {
 
 /** The inherited orchestrator handle a subagent call at this payload would act as, or null. */
 export const inheritedOrchestratorHandle = (payload) => {
-  const isSubagent = isSubagentTranscript(payload?.transcript_path);
+  // agent_id is the documented marker of a subagent hook call; the transcript path is only a fallback (#4598).
+  const hasAgentId = typeof payload?.agent_id === 'string' && payload.agent_id !== '';
+  const isSubagent = hasAgentId || isSubagentTranscript(payload?.transcript_path);
   const sessionId = safeSessionId(payload);
   const hasSession = isSubagent && Boolean(sessionId);
   return hasSession ? toSessionHandle(sessionId) : null;

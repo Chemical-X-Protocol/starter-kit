@@ -10,8 +10,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { ensureRunTables } from '../team/team-dispatch-runs.js';
-import { decidePreTool } from './claude-pre-tool.js';
-import { everyChemxCallCarriesIdentity, dispatchAgentFromTranscript, resolveDispatchHandle } from './dispatch-identity.js';
+import { decidePreTool, buildPreToolContext } from './claude-pre-tool.js';
+import { everyChemxCallCarriesIdentity, dispatchAgentFromTranscript, dispatchAgentFromPayload, resolveDispatchHandle } from './dispatch-identity.js';
 
 const WF = 'wf_abc123';
 const ENV = {};
@@ -66,6 +66,27 @@ test('guard denies a chemx call without identity, naming the exact prefix; ident
   }
   const noHandle = decidePreTool(bash(payload, 'chemx verify'), { ...context, dispatchHandle: null });
   assert.equal(noHandle.decision, 'allow', 'a non-dispatched session is never asked for an identity');
+});
+
+test('payload agent_id with a main-session transcript_path resolves the dispatch handle (#4598)', (t) => {
+  const { root, payload } = fixture(t);
+  const main = { tool_name: 'Bash', agent_id: 'a1', agent_type: 'workflow-subagent', transcript_path: path.join(root, 'proj', 'sess.jsonl'), tool_input: {} };
+  assert.equal(dispatchAgentFromPayload(main).taskId, 4510);
+  assert.equal(resolveDispatchHandle(main, { root, env: ENV }), '@fixes-1-4510');
+  assert.equal(resolveDispatchHandle({ ...main, agent_id: 'zz' }, { root, env: ENV }), null, 'unknown agent id');
+  assert.equal(resolveDispatchHandle({ ...main, agent_id: '../a1' }, { root, env: ENV }), null, 'unsafe agent id');
+  assert.equal(resolveDispatchHandle(payload, { root, env: ENV }), '@fixes-1-4510', 'transcript path stays a fallback');
+});
+
+test('guard: agent_id payload without identity text is denied with the dispatch handle (#4598)', (t) => {
+  const { root } = fixture(t);
+  const main = { tool_name: 'Bash', agent_id: 'a1', transcript_path: path.join(root, 'proj', 'sess.jsonl'), cwd: root, tool_input: { command: 'chemx verify' } };
+  const context = { ...buildPreToolContext(main, { CLAUDE_PROJECT_DIR: root }), enforceSearch: false };
+  const denied = decidePreTool(main, context);
+  assert.equal(denied.rule, 'dispatch-identity');
+  assert.match(denied.reason, /export CHEMX_AGENT_ID=@fixes-1-4510; /);
+  const ok = { ...main, tool_input: { command: 'CHEMX_AGENT_ID=@fixes-1-4510 chemx verify' } };
+  assert.equal(decidePreTool(ok, context).decision, 'allow');
 });
 
 test('identity is checked per chemx call, not per command string', () => {
