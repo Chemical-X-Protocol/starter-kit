@@ -28,7 +28,10 @@ const failed = (lines, parsed, extra = {}) => ({ ok: false, exitCode: 1, refusal
 
 const lockedOutLines = (outcome) => {
   const holder = outcome.lockHolder ? `pid ${outcome.lockHolder}` : 'holder pid not found';
-  return [`Failed: .git/index.lock stayed held after ${outcome.attempts} attempt(s) (${holder}). Nothing was committed. Rerun when the other git process ends.`];
+  const advice = outcome.lockHolder
+    ? 'Rerun when the other git process ends.'
+    : 'No holder was found, so the lock file may be stale (left by a crashed git); chemx does not delete it. If no git process is running, remove it yourself (rm .git/index.lock; in a submodule, the path from git rev-parse --git-path index.lock), then rerun.';
+  return [`Failed: .git/index.lock stayed held after ${outcome.attempts} attempt(s) (${holder}). Nothing was committed. ${advice}`];
 };
 
 const gateFailureLines = (outcome) => [
