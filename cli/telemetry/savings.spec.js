@@ -15,7 +15,7 @@ import { routingLine, MIN_ROUTING_AGENTS } from './savings-routing.js';
 import { accountCalls, handleWindows, mergeWindows, loadRunCalls } from './savings-tooling.js';
 import { buildSavingsReport, coverageNote } from './savings-report.js';
 import { renderSavingsCard } from './savings-render.js';
-import { noteCounterfactual, runLoggedMcp, recordCall, pickCounterfactual, measureChars, estimateTokens, findLedgerDbPath } from './call-ledger.js';
+import { noteCounterfactual, runLoggedMcp, recordCall, pickCounterfactual, measureChars, estimateTokens, findLedgerDbPath, mapSession, unattributedStats, reattributeCalls } from './call-ledger.js';
 
 // An in-memory db per test: nothing touches a project db or the shared /tmp one.
 const { DatabaseSync } = await import('node:sqlite');
@@ -134,7 +134,7 @@ test('ledger: rows hold sizes and counts, never content, paths or arguments', as
   assert.equal(output, secret);
   const rows = db.prepare('SELECT * FROM tool_calls').all();
   assert.equal(rows.length, 1);
-  assert.deepEqual({ ...rows[0] }, { id: rows[0].id, ts: T0, agent: '@a0', surface: 'mcp', action: 'read', ok: 1, result_chars: secret.length, cf_kind: 'file-whole', cf_chars: 5000, cf_calls: 0 });
+  assert.deepEqual({ ...rows[0] }, { id: rows[0].id, ts: T0, agent: '@a0', surface: 'mcp', action: 'read', ok: 1, result_chars: secret.length, cf_kind: 'file-whole', cf_chars: 5000, cf_calls: 0, session: null });
   const dump = JSON.stringify(rows);
   assert.equal(dump.includes('SECRET'), false);
   assert.equal(dump.includes('secret/path'), false);
@@ -176,6 +176,37 @@ test('ledger: the default opener finds the project db without creating one, writ
   const rows = check.prepare('SELECT agent, action, result_chars FROM tool_calls').all().map((r) => ({ ...r }));
   check.close();
   assert.deepEqual(rows, [{ agent: '@x', action: 'read', result_chars: 3 }]);
+});
+
+test('attribution (#4465): explicit wins, env fills, nothing known stays NULL and is counted', async (t) => {
+  const db = makeDb(t);
+  const base = { toolName: 'chemx', cwd: '/tmp', now: () => T0, openDb: async () => handleOf(db), run: async () => 'x' };
+  await runLoggedMcp({ ...base, env: { CHEMX_AGENT_ID: '@env' }, args: { action: 'read' } });
+  await runLoggedMcp({ ...base, env: { CHEMX_AGENT_ID: '@env' }, args: { action: 'read', params: { agentId: '@explicit' } } });
+  await runLoggedMcp({ ...base, env: {}, args: { action: 'read' } });
+  const agents = db.prepare('SELECT agent FROM tool_calls ORDER BY id').all().map((r) => r.agent);
+  assert.deepEqual(agents, ['@env', '@explicit', null]);
+  assert.deepEqual(unattributedStats(db), { total: 3, unattributed: 1, share: 1 / 3 });
+  assert.equal(unattributedStats(db, T0 + 1).share, null);
+});
+
+test('attribution (#4465): the session map resolves at call time and reattribute fills only unambiguous sessions', async (t) => {
+  const db = makeDb(t);
+  const base = { toolName: 'chemx', cwd: '/tmp', now: () => T0, openDb: async () => handleOf(db), run: async () => 'x', args: { action: 'q' } };
+  await runLoggedMcp({ ...base, env: { CHEMX_SESSION_ID: 's-one' } });
+  await runLoggedMcp({ ...base, env: { CHEMX_SESSION_ID: 's-two' } });
+  await runLoggedMcp({ ...base, env: {} });
+  mapSession(db, 's-one', '@only');
+  mapSession(db, 's-two', '@a');
+  mapSession(db, 's-two', '@b');
+  await runLoggedMcp({ ...base, env: { CHEMX_SESSION_ID: 's-one' } });
+  await runLoggedMcp({ ...base, env: { CHEMX_SESSION_ID: 's-two' } });
+  assert.deepEqual(db.prepare('SELECT agent, session FROM tool_calls ORDER BY id').all().map((r) => ({ ...r })), [
+    { agent: null, session: 's-one' }, { agent: null, session: 's-two' }, { agent: null, session: null },
+    { agent: '@only', session: 's-one' }, { agent: null, session: 's-two' }
+  ]);
+  assert.deepEqual(reattributeCalls(db), { updated: 1, ambiguousSessions: 1 });
+  assert.deepEqual(db.prepare('SELECT agent FROM tool_calls ORDER BY id').all().map((r) => r.agent), ['@only', null, null, '@only', null]);
 });
 
 test('coverage: the note says exactly what the log can and cannot cover', () => {

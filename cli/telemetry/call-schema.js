@@ -29,12 +29,25 @@ const DDL = `
   );
   CREATE INDEX IF NOT EXISTS idx_tool_calls_ts ON tool_calls(ts);
   CREATE INDEX IF NOT EXISTS idx_tool_calls_agent ON tool_calls(agent, ts);
+  CREATE TABLE IF NOT EXISTS session_handles (
+    session_id TEXT NOT NULL,
+    handle TEXT NOT NULL,
+    PRIMARY KEY (session_id, handle)
+  );
 `;
+
+/** #4465: nullable session column on tables created before it existed. Guarded, so a second run is a no-op. */
+const addSessionColumn = (db) => {
+  const columns = db.prepare('PRAGMA table_info(tool_calls)').all();
+  const hasSession = columns.some((column) => column.name === 'session');
+  if (!hasSession) db.exec('ALTER TABLE tool_calls ADD COLUMN session TEXT');
+};
 
 /** Create the table once per open db handle. */
 export const initCallSchema = (db) => {
   const isUnusable = !db || readyDbs.has(db);
   if (isUnusable) return;
   db.exec(DDL);
+  addSessionColumn(db);
   readyDbs.add(db);
 };

@@ -68,15 +68,79 @@ export const pickCounterfactual = (notes, isBatch = false) => {
   return isUnambiguous ? { kind: kinds[0], ...notes.get(kinds[0]) } : NO_COUNTERFACTUAL;
 };
 
-const INSERT_SQL = `INSERT INTO tool_calls (ts, agent, surface, action, ok, result_chars, cf_kind, cf_chars, cf_calls)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+const INSERT_SQL = `INSERT INTO tool_calls (ts, agent, surface, action, ok, result_chars, cf_kind, cf_chars, cf_calls, session)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+
+const clean = (value) => (typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined);
+
+/** The session id a call ran under (CHEMX_SESSION_ID, set by the SessionStart hook), or null. */
+export const sessionOf = (env = process.env) => clean(env?.CHEMX_SESSION_ID) ?? null;
+
+const singleSessionHandle = (db, sessionId) => {
+  try {
+    initCallSchema(db);
+    const rows = db.prepare('SELECT handle FROM session_handles WHERE session_id = ?').all(sessionId);
+    return rows.length === 1 ? rows[0].handle : null;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * #4465: whose call is this. In order: the explicit handle (--as, params.agentId), CHEMX_AGENT_ID or
+ * CHEMX_AGENT, then the handle the session map holds for this call's session when it holds exactly one.
+ * Else null, stored as NULL and counted as unattributed. It never guesses: one MCP server shared by
+ * several concurrent subagents has one environment, so env alone cannot tell them apart.
+ */
+export const resolveHandle = (explicit, env = process.env, db = null) => {
+  const direct = clean(explicit) ?? clean(env?.CHEMX_AGENT_ID) ?? clean(env?.CHEMX_AGENT);
+  if (direct) return direct;
+  const sessionId = sessionOf(env);
+  return sessionId && db ? singleSessionHandle(db, sessionId) : null;
+};
+
+/** Record that a session acts as a handle. Several handles for one session make it ambiguous. */
+export const mapSession = (db, sessionId, handle) => {
+  try {
+    initCallSchema(db);
+    db.prepare('INSERT OR IGNORE INTO session_handles (session_id, handle) VALUES (?, ?)').run(sessionId, handle);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/** Logged calls with and without a handle in a time window. share is null when nothing was logged. */
+export const unattributedStats = (db, start = 0, end = Number.MAX_SAFE_INTEGER) => {
+  initCallSchema(db);
+  const { total, unattributed } = db.prepare('SELECT COUNT(*) AS total, COALESCE(SUM(agent IS NULL), 0) AS unattributed FROM tool_calls WHERE ts >= ? AND ts <= ?').get(start, end);
+  return { total, unattributed, share: total ? unattributed / total : null };
+};
+
+/**
+ * Fill NULL agents from the session map, only for sessions that map to exactly one handle.
+ * Returns { updated, ambiguousSessions }. Rows with no session, or an unmapped or ambiguous one, stay NULL.
+ */
+export const reattributeCalls = (db) => {
+  initCallSchema(db);
+  const sessions = db.prepare('SELECT session_id, COUNT(*) AS n, MIN(handle) AS handle FROM session_handles GROUP BY session_id').all();
+  const update = db.prepare('UPDATE tool_calls SET agent = ? WHERE agent IS NULL AND session = ?');
+  let updated = 0;
+  let ambiguousSessions = 0;
+  for (const entry of sessions) {
+    const isAmbiguous = entry.n !== 1;
+    ambiguousSessions += isAmbiguous ? 1 : 0;
+    updated += isAmbiguous ? 0 : Number(update.run(entry.handle, entry.session_id).changes);
+  }
+  return { updated, ambiguousSessions };
+};
 
 /** Insert one row. Returns false (never throws) when the db is missing or the write fails. */
 export const recordCall = (db, row) => {
   try {
     initCallSchema(db);
     const cf = row.cf || NO_COUNTERFACTUAL;
-    db.prepare(INSERT_SQL).run(row.ts, row.agent || null, row.surface, normalizeAction(row.action), row.ok ? 1 : 0, toCount(row.resultChars), cf.kind, cf.chars, cf.calls);
+    db.prepare(INSERT_SQL).run(row.ts, row.agent || null, row.surface, normalizeAction(row.action), row.ok ? 1 : 0, toCount(row.resultChars), cf.kind, cf.chars, cf.calls, row.session || null);
     return true;
   } catch {
     return false;
@@ -163,7 +227,8 @@ export const runLoggedMcp = async ({ toolName, args, cwd, run, openDb = openLedg
   } finally {
     const handle = await openDb(cwd, env);
     const cf = pickCounterfactual(store.notes, isBatchArgs(args));
-    recordAndRelease(handle, { ts: now(), agent: handleOfMcp(args), surface: 'mcp', action: actionOfMcp(toolName, args), ok: isOk, resultChars: measureChars(output), cf });
+    const agent = resolveHandle(handleOfMcp(args), env, handle?.db);
+    recordAndRelease(handle, { ts: now(), agent, session: sessionOf(env), surface: 'mcp', action: actionOfMcp(toolName, args), ok: isOk, resultChars: measureChars(output), cf });
   }
 };
 
@@ -190,10 +255,10 @@ export const runLoggedCli = async ({ command, rawArgs, cwd, run, openDb = openLe
   if (!handle) return run();
   const store = { notes: new Map() };
   const written = meterOutput();
-  const agent = asFromWords(rawArgs) ?? env.CHEMX_AGENT_ID;
+  const agent = resolveHandle(asFromWords(rawArgs), env, handle.db);
   process.once('exit', (code) => {
     const cf = pickCounterfactual(store.notes);
-    recordAndRelease(handle, { ts: now(), agent, surface: 'cli', action: command, ok: code === 0, resultChars: written(), cf });
+    recordAndRelease(handle, { ts: now(), agent, session: sessionOf(env), surface: 'cli', action: command, ok: code === 0, resultChars: written(), cf });
   });
   return scope.run(store, run);
 };
