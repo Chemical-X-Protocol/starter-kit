@@ -241,7 +241,7 @@ export const formatTaskHelpCard = () => {
     '    \x1b[32mshow\x1b[0m <taskId>                Display full details and activity stream for a task',
     '    \x1b[32madd\x1b[0m "<title>"                Create a new task in the queue',
     '    \x1b[32mclaim\x1b[0m <taskId>              Claim an unassigned task for an agent',
-    '    \x1b[32mhandoff\x1b[0m <taskId> <@to>      Pass a task to another agent (assignee or creator only)',
+    '    \x1b[32mhandoff\x1b[0m <taskId> <@to>      Pass a task to another agent (assignee or creator only); --with-locks also moves your live leases naming the task',
     '    \x1b[32mdone\x1b[0m <taskId>               Complete a task with automatic verification audit',
     '    \x1b[32mclose\x1b[0m <taskId>              End a task that will not be completed: --duplicate-of=<id> or --cancel=<reason>',
     '    \x1b[32mupdate\x1b[0m <taskId> [status]    Update task status (in_progress, blocked, done)',
