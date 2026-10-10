@@ -3,6 +3,7 @@
  * SHOWN evidence lines (agent label, handle, time, command); --json carries every row.
  */
 import { clockTime } from './lease-lapse.js';
+import { shaLines } from './audit-run-shas.js';
 
 const SHOWN = 8;
 const money = (n) => `$${Number(n).toFixed(2)}`;
@@ -96,6 +97,7 @@ export const renderAuditRun = (report) => {
     ...adoptionLines(report.adoption), '',
     ...protocolLines(report.protocol), '',
     ...hijackLines(report.hijacks), '',
-    ...costLines(report.cost)
+    ...costLines(report.cost), '',
+    ...shaLines(report.shas)
   ].join('\n');
 };

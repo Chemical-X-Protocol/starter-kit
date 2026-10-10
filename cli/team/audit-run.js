@@ -22,6 +22,7 @@ import { commitsWithoutTask, editsWithoutLease, resolvedEdits, unresolvedEdits, 
 import { optionOf } from './team-commands-tokens.js';
 import { openTeamContext } from './coordination-db.js';
 import { renderAuditRun } from './audit-run-render.js';
+import { crossCheckShas } from './audit-run-shas.js';
 import { leaseLapses, leaseWaiters, guardBypasses, guardCrashes, leasesTaken, taskStatuses } from './audit-run-db.js';
 
 const median = (values) => {
@@ -120,7 +121,9 @@ const violationsOf = (r) => [
   [r.protocol.uncommitted.length, 'commit without a task id'],
   [r.protocol.unleasedEdits.length, 'edit without a lease'],
   [r.protocol.unclosedClaims.length, 'claim never closed'],
-  [r.hijacks.filter((h) => h.level === 'likely').length, 'likely relayed-message hijack']
+  [r.hijacks.filter((h) => h.level === 'likely').length, 'likely relayed-message hijack'],
+  [r.shas.missing.length, 'reported commit sha that git does not have'],
+  [r.shas.otherHandle.length, 'reported commit sha inferred to belong to another handle']
 ].filter(([count]) => count > 0).map(([count, what]) => `${count} x ${what}`);
 
 /**
@@ -143,6 +146,7 @@ export const auditRun = (run, ctx = {}) => {
     adoption: summarizeAdoption(audits.flatMap((a) => a.classified)),
     protocol: { uncommitted: audits.flatMap((a) => a.commits), unleasedEdits: audits.flatMap((a) => a.unleased), unresolvedEdits: audits.flatMap((a) => a.unresolved), unclosedClaims: audits.flatMap((a) => a.unclosed) },
     hijacks: hijacksOf(audits, isLargeEnough ? medianCost : 0),
+    shas: crossCheckShas(full.db, priced.rows, ctx.gitRoot ?? null),
     cost: { totalCost: priced.totals.cost, totalTokens: priced.totals.total, perAgent: audits.map((a) => a.agent).sort((x, y) => y.cost - x.cost) }
   };
   report.violations = violationsOf(report);
@@ -159,7 +163,7 @@ export const handleAuditRun = (db, opts, isCli, cwd = process.cwd()) => {
     if (isCli) process.stderr.write(`x ${message}\n${AUDIT_USAGE}\n`);
     return { error: message };
   }
-  const report = auditRun(run, { db, pricing: loadPricing(cwd) });
+  const report = auditRun(run, { db, pricing: loadPricing(cwd), gitRoot: cwd });
   const body = opts.json ? JSON.stringify(report, null, 2) : renderAuditRun(report);
   if (isCli) process.stdout.write(`${body}\n`);
   const isFailure = !opts.noFail && !report.ok;
