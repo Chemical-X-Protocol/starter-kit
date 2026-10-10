@@ -52,7 +52,7 @@ export const parsePorcelain = (text) => {
 };
 
 const dirtyFiles = (root) => {
-  const run = spawnSync('git', ['status', '--porcelain', '-z', '--untracked-files=all'], { cwd: root, encoding: 'utf-8', maxBuffer: 16 * 1024 * 1024 });
+  const run = spawnSync('git', ['--no-optional-locks', 'status', '--porcelain', '-z', '--untracked-files=all'], { cwd: root, encoding: 'utf-8', maxBuffer: 16 * 1024 * 1024 });
   const isOk = run.status === 0 && typeof run.stdout === 'string';
   return isOk ? parsePorcelain(run.stdout) : null;
 };
@@ -105,7 +105,8 @@ export const scanOutOfBand = ({ root, command, now = Date.now(), isInBandTool = 
   if (isGitUnusable) return null;
   const seenFile = path.join(root, ...SEEN_FILE);
   const previous = readSeen(seenFile);
-  const isInBand = callsChemx(command) || isInBandTool;
+  // Parsing the command is only needed once a file has changed, so a quiet call skips it.
+  const isInBandFor = () => isInBandTool || callsChemx(command);
   const files = {};
   const changed = [];
   for (const relative of dirty) {
@@ -115,7 +116,7 @@ export const scanOutOfBand = ({ root, command, now = Date.now(), isInBandTool = 
     if (isSkipped) continue;
     const verdict = judgeFile({ absolute, stat, known: previous?.files[relative], previous });
     files[relative] = verdict.entry;
-    const isOutOfBand = verdict.isChanged && !isInBand;
+    const isOutOfBand = verdict.isChanged && !isInBandFor();
     if (isOutOfBand) changed.push(relative);
   }
   writeSeen(seenFile, { at: now, files });
