@@ -32,12 +32,20 @@ export const checkTypecheck = async (item, text, cwd = KIT_ROOT_DIR) => {
   }
 };
 
+// NODE_TEST_CONTEXT marks a process started by a node:test runner; a nested `node --test` that inherits it
+// skips its files and exits 0 without running them, so it is never passed on.
+const specEnv = () => {
+  const env = { ...process.env, NODE_NO_WARNINGS: '1' };
+  delete env.NODE_TEST_CONTEXT;
+  return env;
+};
+
 /** Verification (iv): piece.spec.* passes under node --test. */
 export const checkPieceSpec = (item) => {
   const hasSpec = Boolean(item.specFile);
   if (!hasSpec) return result('spec', false, 'no piece.spec.js or piece.spec.ts');
   const run = spawnSync(process.execPath, ['--test', path.join(item.dir, item.specFile)], {
-    encoding: 'utf-8', timeout: SPEC_TIMEOUT_MS, env: { ...process.env, NODE_NO_WARNINGS: '1' }
+    encoding: 'utf-8', timeout: SPEC_TIMEOUT_MS, env: specEnv()
   });
   const tail = `${run.stdout}\n${run.stderr}`.trim().split('\n').slice(-6).join(' | ');
   return result('spec', run.status === 0, tail);

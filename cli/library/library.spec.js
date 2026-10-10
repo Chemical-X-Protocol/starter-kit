@@ -13,7 +13,7 @@ import { getProfileDefaults } from '../config/profiles.js';
 import { closeOwnTeamHandles } from '../team/coordination-db.js';
 import { LIBRARY_ROOT, KIT_ROOT_DIR, loadLibrary } from './registry.js';
 import { RULE_REVISIONS } from '../audit/rule-revisions.js';
-import { verifyItem } from './verify.js';
+import { verifyItem, checkPieceSpec } from './verify.js';
 import { checkNegatives, checkFp } from './verify-checks.js';
 import { reverifyLibrary } from './reverify.js';
 import { currentRuleset } from './entry-fp.js';
@@ -33,6 +33,14 @@ const copyLibrary = (t) => {
 };
 
 const failedChecks = (outcome) => outcome.checks.filter((check) => !check.ok).map((check) => `${check.name}: ${check.detail}`);
+
+test('checkPieceSpec runs a failing spec for real even when called from inside a node:test run', (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-piece-spec-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  fs.writeFileSync(path.join(dir, 'piece.spec.js'), "import test from 'node:test';\ntest('fails', () => { throw new Error('boom'); });\n");
+  const outcome = checkPieceSpec({ dir, specFile: 'piece.spec.js' });
+  assert.equal(outcome.ok, false, outcome.detail);
+});
 
 test('the registry loads the seed entries in id order with no schema problems', () => {
   assert.deepEqual(kitItems.map((item) => item.id), SEED_IDS);
