@@ -94,7 +94,15 @@ const peersFor = (plan, task) => fillTemplate(PEERS, {
   files: task.files.join(', ')
 });
 
-const protocolFor = (plan, task, handle, claimStep) => fillTemplate(PROTOCOL, { root: projectDir(plan, task), handle, taskId: task.id, claimStep });
+// Scratch dir is derived from the run and handle (no plan.scratchDir yet); the text states a policy, not enforcement (#4464).
+const scratchDirFor = (plan, handle) => `/tmp/chemx-${plan.run}/${handle}/`;
+
+const WAITING_SCRATCH = (scratchDir) => [
+  'WAITING: to wait for a task, a lock or a verify run, use chemx wait --task=<id> | --lock-free=<file> | --verify-idle --timeout=<t>; check state with chemx status. Do not use Monitor, sleep, until or setTimeout loops.',
+  `SCRATCH: put temporary files only under ${scratchDir} (never the user's home or tracked repo paths) and delete them when done. This is a policy, not enforced by chemx.`
+].join('\n');
+
+const protocolFor = (plan, task, handle, claimStep) => `${fillTemplate(PROTOCOL, { root: projectDir(plan, task), handle, taskId: task.id, claimStep })}\n${WAITING_SCRATCH(scratchDirFor(plan, handle))}`;
 
 // Empty without extras, so a task with only a target renders the same text as before (#4426).
 const extraFilesNote = (task) => {

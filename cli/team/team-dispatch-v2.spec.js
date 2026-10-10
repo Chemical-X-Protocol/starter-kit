@@ -73,6 +73,16 @@ test('prompts: builder and repair close only when every deliverable is met, else
   assert.match(first.repair, /only if every deliverable of the task is met/);
 });
 
+test('prompts: builder and repair carry WAITING and SCRATCH text with the run scratch dir (#4464)', () => {
+  const plan = fixturePlan();
+  const task = plan.tasks.find((entry) => entry.id === 3);
+  const prompts = renderTaskPrompts(task, plan);
+  assert.match(prompts.build, /WAITING: .*chemx wait --task=/);
+  assert.ok(prompts.build.includes(`/tmp/chemx-${plan.run}/${task.handle}/`));
+  assert.ok(prompts.repair.includes(`/tmp/chemx-${plan.run}/${task.repairer}/`));
+  assert.match(prompts.repair, /SCRATCH: .*never the user's home/);
+});
+
 test('selection: a task the dispatcher holds is skipped with a handoff hint', () => {
   const db = makeFixtureDb();
   db.prepare("UPDATE agent_tasks SET assigned_agent_id = '@disp', status = 'in_progress' WHERE id = 1").run();
