@@ -34,7 +34,6 @@
   "excluded": [
     {"glob":"app/**/*.spec.ts","why":"vitest specs for the studio UI; the kit has no vitest runner configured"},
     {"glob":"blueprints/**/*.spec.ts","why":"vitest specs shipped as generator blueprints, not kit tests"},
-    {"glob":"library/**/piece.spec.js","why":"library piece specs; the test script has no library glob, so no lane runs them automatically (run one with chemx test library/node-js/<piece>/piece.spec.js); adding a glob to package.json needs its owner"},
     {"glob":"scratch/**","why":"scratch experiments; verify_ui_adversarial.spec.js currently fails 2 of 5"},
     {"glob":"src/ui/**/*.spec.ts","why":"TypeScript node:test specs; the test script has no .ts glob (they pass under node 22 type stripping, adding them needs user OK)"}
   ]
