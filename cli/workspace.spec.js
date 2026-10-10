@@ -124,6 +124,18 @@ test('workspace: lint and audit at the monorepo root refuse too', { timeout: 600
   });
 });
 
+test('workspace: audit below the root in a dir without package.json audits that dir, not the monorepo (#4619)', { timeout: 60000 }, async () => {
+  await withMonorepo(async (root) => {
+    const sub = path.join(root, 'tools', 'plain');
+    fs.mkdirSync(sub, { recursive: true });
+    fs.writeFileSync(path.join(sub, 'a.js'), 'export const a = 1;\n');
+    const cli = path.resolve(import.meta.dirname, 'index.js');
+    const audit = spawnSync(process.execPath, [cli, 'audit', '--json'], { cwd: sub, encoding: 'utf8', env: { ...process.env, CHEMX_NONINTERACTIVE: '1' }, timeout: 60000 });
+    const lastLine = audit.stdout.trim().split('\n').pop() || '{}';
+    assert.notEqual(JSON.parse(lastLine).reason, 'MONOREPO_ROOT', audit.stdout + audit.stderr);
+  });
+});
+
 test('workspace: test --all-packages runs each package with its own runner and combines the statuses', { timeout: 120000 }, async () => {
   await withMonorepo(async (root) => {
     const report = await runTestAudit(['--all-packages', '--json'], false, quiet(root));

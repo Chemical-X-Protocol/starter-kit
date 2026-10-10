@@ -139,7 +139,11 @@ export const allPackagesOrRefuse = async (workspace, command, allPackages, scope
 // Prints the refusal with the package list and sets exit code 3; --all-packages opts in.
 export const refuseMonorepoRootAudit = (posDir, rawArgs, cwd = process.cwd()) => {
   const hasScope = Boolean(posDir) || rawArgs.some((arg) => /^--(?:dir=|all-packages$|git$|changed$)/.test(arg));
-  const workspace = hasScope ? null : workspaceAt(findProjectRoot(cwd));
+  const root = findProjectRoot(cwd);
+  // Only a run started at the workspace root itself is refused. A directory below it with no
+  // package.json of its own (a submodule app) resolves upward to the root and audits itself (#4619).
+  const isAtRoot = path.resolve(cwd) === path.resolve(root);
+  const workspace = hasScope || !isAtRoot ? null : workspaceAt(root);
   if (!workspace) return false;
   const report = refusalReport('audit', workspace, 'pass --dir=<package>, use --changed');
   const isJson = rawArgs.includes('--json');
