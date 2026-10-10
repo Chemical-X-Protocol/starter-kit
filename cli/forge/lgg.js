@@ -4,8 +4,9 @@
 // equal tuples share one hole (a repeated difference is one param). Inside shared code, an outer-bound
 // identifier (a capture, @k at L1) is a capture when every member names the same binding, and a ref
 // hole when the names differ (fetchLocks vs fetchTasks: the refetch callback of A21).
-// Members are unit trees (unit-trees.js); the walk reads per-node notes from hashUnit's onNode, so the
-// digests are exactly the ledger's. Hole kinds and facts come from hole-kinds.js; rejects.js judges them.
+// Members are unit trees (unit-trees.js); the walk reads per-node notes from hashUnit's onNode (hash.js).
+// Those are hash.js digests, not the ledger's fp values (unit-hash.js computes those, #2554); the walk
+// compares them only with each other. Hole kinds and facts come from hole-kinds.js; rejects.js judges them.
 import { hashUnit } from './hash.js';
 import { holeFactsOf } from './hole-kinds.js';
 import { printCanonical } from './canon-print.js';

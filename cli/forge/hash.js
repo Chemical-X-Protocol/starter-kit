@@ -3,13 +3,16 @@
 // unit's mass (canonical node count) and its distinct L1 anchors. Binder numbers (#k for binders the
 // unit declares, @k for outer file bindings) are assigned in first-use order, so they never depend on
 // names, file order or anything outside the unit.
+// This walk serves the LGG (lgg.js, which needs per-node digests) and the reference side of
+// unit-hash.equivalence.spec.js. Ledger fps come from unit-hash.js (#2554): other values, and per level
+// the same units share an fp, barring a hash collision.
 import { hashLabelPair, mixPair, pairHex } from './murmur.js';
 import { childRole, describeNode, SKIP_ALL_KIDS } from './hash-labels.js';
 
 const WINDOW_TYPE = 'Window';
-const ERASED = mixPair(hashLabelPair('E', ''), []);
+export const ERASED = mixPair(hashLabelPair('E', ''), []);
 const NULL_MARK = 0x6e756c6c;
-const LIST_MARK = 0x6c697374;
+export const LIST_MARK = 0x6c697374;
 
 const childList = (value) => (Array.isArray(value) ? value : [value]);
 
@@ -43,14 +46,15 @@ const createBinderNumbering = () => {
 
 const mix = (type, label, ints) => mixPair(hashLabelPair(type, label), ints);
 
-const pushPair = (ints, pair) => {
+export const pushPair = (ints, pair) => {
   ints.push(pair[0], pair[1]);
 };
 
 const NULL_PAIR = [NULL_MARK, NULL_MARK];
-const NULL_RESULT = { l1: NULL_PAIR, l2: NULL_PAIR, l3: NULL_PAIR, isAnchored: false };
+/** The digests of an absent child slot, at every level. */
+export const NULL_RESULT = Object.freeze({ l1: NULL_PAIR, l2: NULL_PAIR, l3: NULL_PAIR, isAnchored: false });
 
-const skipsKey = (skip, key) => skip === SKIP_ALL_KIDS || Boolean(skip?.has(key));
+export const skipsKey = (skip, key) => skip === SKIP_ALL_KIDS || Boolean(skip?.has(key));
 
 /**
  * Fingerprints one canonical unit. root: a canonical node, or an array of statements (a window).

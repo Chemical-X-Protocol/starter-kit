@@ -4,9 +4,11 @@
 //   warm sync        no edits, or 5 or fewer changed files: 1s or less
 //   cold sync        8s for about 630 files, scaled per file to the corpus
 //   cold audit       uncapped fingerprinting at most +15% over the audit alone
-// The two cold budgets are NOT met yet (uncapped fingerprinting measured +93% on the kit, cold
-// `chemx patterns --sync` 12.4 to 18.7s): they run as todo tests that report their numbers without
-// failing the suite, until #2554 (one-pass Merkle hashing) lands and turns them into gates.
+// The two cold budgets are NOT met yet. Uncapped fingerprinting measured +93% on the kit before #2554;
+// one-pass unit hashing (#2554) about halved unit collection, and this corpus still measured +75% to
+// +89% uncapped afterwards (2026-10-09, under load). The rest is the binding traverse, ledger inserts,
+// parsing and canonicalization (#5897, #5900). They run as todo tests that report their numbers without
+// failing the suite until #5900 turns them into gates.
 // The cold budgets are calibrated against a fixed reference workload timed in this same process: a
 // busy machine scales the limit by (reference now / best reference seen), never below 1. This keeps a
 // loaded run from failing on contention alone; it does not prove the budget holds on an idle machine.
@@ -37,7 +39,7 @@ const BUDGET = Object.freeze({
   coldSyncMsPerFile: 8000 / 630,
   coldAuditShare: 0.15
 });
-const COLD_TODO = 'cold budgets are not met yet: #2554 (one-pass Merkle hashing, cheaper ledger writes)';
+const COLD_TODO = 'cold budgets are not met yet: #5900 (traverse, parse, canonicalize) and #5897 (ledger writes)';
 
 // Calibration: the fastest of `rounds` runs of a fixed workload, read through an injectable clock.
 const REFERENCE_BUFFER = Buffer.alloc(1 << 20, 7);
@@ -190,7 +192,7 @@ test('cold audit: uncapped fingerprinting costs at most +15%', { todo: COLD_TODO
 });
 
 // Gates that hold today: a generous CPU-time ratio, so a real regression fails while load alone does not.
-// They do not show the strict budgets above are met (they are not, #2554); they bound how far off they are.
+// They do not show the strict budgets above are met (they are not, #5900); they bound how far off they are.
 const GATE_SYNC_FACTOR = 3;
 const GATE_AUDIT_RATIO = 4;
 

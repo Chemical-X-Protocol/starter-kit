@@ -15,7 +15,9 @@
 //         (`const isOutside = e; if (isOutside)` becomes `if (e)`), and leading `!`s are looked
 //         through, because De Morgan turns `!x && !y` into `!(x || y)`. Each expr unit records its
 //         slot (init, test, argument, expression or arguments) for the store floor.
-import { hashUnit } from './hash.js';
+// One preorder pass lists the unit tops; unit-hash.js then fingerprints all of them from one walk of
+// the Program (#2554), so a node is hashed once per file however many units contain it.
+import { createUnitHasher } from './unit-hash.js';
 import { anchorWeight, countNonUbiquitous, evidence } from './anchors.js';
 
 export const EXPR_GATE = Object.freeze({ minEvidence: 18, minMass: 8, minAnchors: 2, maxPerFile: 200 });
@@ -88,6 +90,8 @@ const signatureKind = (fn, isSloppy = false) => {
 /** Leaf hashed ahead of stmt and expr units of a sloppy script, so they never meet strict code. */
 const SLOPPY_MARK = Object.freeze({ type: 'SloppyScript', label: '', kids: {}, isExpr: false, loc: null, ident: null, lit: null });
 
+const windowOf = (nodes) => ({ type: 'Window', label: '', kids: { body: nodes }, isExpr: false, loc: null, ident: null, lit: null });
+
 const signatureNode = (fn, isSloppy) => ({
   type: 'FnSignature',
   label: signatureKind(fn, isSloppy),
@@ -116,20 +120,6 @@ const exprCandidateOf = (node, parent, key) => {
   return EXPR_TYPES.has(candidate.type) ? candidate : null;
 };
 
-/** Canonical node count, capped: a cheap mass pre-check before hashing an expr candidate. */
-const massAtLeast = (node, minimum) => {
-  let count = 0;
-  const stack = [node];
-  while (stack.length > 0 && count < minimum) {
-    const current = stack.pop();
-    count += 1;
-    for (const value of Object.values(current.kids)) {
-      for (const child of childList(value)) child && stack.push(child);
-    }
-  }
-  return count >= minimum;
-};
-
 const passesExprGate = (hashed, ubiquitous) => {
   const weight = anchorWeight(hashed.anchors, ubiquitous);
   const isHeavy = evidence(hashed.mass, weight) >= EXPR_GATE.minEvidence;
@@ -139,39 +129,87 @@ const passesExprGate = (hashed, ubiquitous) => {
 };
 
 /**
+ * The unit tops of a Program in preorder (source order): { requests, wanted }. A request is
+ * { kind: 'fn', node, parent, key }, { kind: 'stmt', node, blockId, ordinal } or
+ * { kind: 'expr', node, slot }; wanted holds every node the hasher must keep a record of.
+ */
+const unitRequestsOf = (program) => {
+  const requests = [];
+  const wanted = new Set();
+  let blockCount = 0;
+
+  const requestFn = (node, parent, key) => {
+    requests.push({ kind: 'fn', node, parent, key });
+    wanted.add(node).add(node.kids.body);
+    for (const param of node.kids.params ?? []) param && wanted.add(param);
+  };
+
+  const requestBlock = (node) => {
+    blockCount += 1;
+    const blockId = blockCount;
+    node.kids.body.forEach((statement, ordinal) => {
+      requests.push({ kind: 'stmt', node: statement, blockId, ordinal });
+      wanted.add(statement);
+    });
+  };
+
+  const requestExpr = (candidate, slot) => {
+    requests.push({ kind: 'expr', node: candidate, slot });
+    wanted.add(candidate);
+  };
+
+  const visit = (node, parent, key) => {
+    const isFunction = FUNCTION_TYPES.has(node.type) && node.kids.body?.type === 'BlockStatement';
+    if (isFunction) requestFn(node, parent, key);
+    const isUnitBlock = node.type === 'BlockStatement' && !node.isArrowBody;
+    if (isUnitBlock) requestBlock(node);
+    const candidate = exprCandidateOf(node, parent, key);
+    if (candidate) requestExpr(candidate, key);
+    for (const childKey of Object.keys(node.kids)) {
+      const value = node.kids[childKey];
+      const children = Array.isArray(value) ? value : null;
+      const isSingleChild = !children && Boolean(value);
+      if (children) for (const child of children) child && visit(child, node, childKey);
+      if (isSingleChild) visit(value, node, childKey);
+    }
+  };
+
+  visit(program, null, null);
+  return { requests, wanted };
+};
+
+/**
  * Collects fn, stmt and expr units from a canonical Program (canonicalize.js).
  * options.ubiquitous: Set of facet-ubiquitous anchors (weight 0) for the expr gate. options.isSloppy:
- * the program is a non-strict script (see isSloppyProgram).
+ * the program is a non-strict script (see isSloppyProgram). options.createHasher(program, wanted):
+ * the fingerprinting strategy, { sizeOf(node), hashTop(top, scopeNode) }; default unit-hash.js
+ * (unit-hash.equivalence.spec.js passes one built on hash.js).
  * Returns { units, isExprCapped }; units are in preorder, which is source order.
  */
-export const collectScriptUnits = (program, { ubiquitous = new Set(), isSloppy = false } = {}) => {
+export const collectScriptUnits = (program, { ubiquitous = new Set(), isSloppy = false, createHasher = createUnitHasher } = {}) => {
+  const { requests, wanted } = unitRequestsOf(program);
+  const hasher = createHasher(program, wanted);
+  const hashCode = (node) => hasher.hashTop(isSloppy ? windowOf([SLOPPY_MARK, node]) : node, node);
   const units = [];
-  const hashCode = (node) => hashUnit(isSloppy ? [SLOPPY_MARK, node] : node);
-  let blockCount = 0;
   let exprCount = 0;
   let isExprCapped = false;
 
-  const addFn = (node, parent, key) => {
-    const body = node.kids.body;
+  const addFn = ({ node, parent, key }) => {
     const params = node.kids.params ?? [];
     const signature = signatureNode(node, isSloppy);
-    const hashed = hashUnit([signature, body], { declScope: node });
-    const signatureMeta = { kind: signature.label, fp1: hashUnit(signature, { declScope: node }).fp1 };
+    const hashed = hasher.hashTop(windowOf([signature, node.kids.body]), node);
+    const signatureMeta = { kind: signature.label, fp1: hasher.hashTop(signature, node).fp1 };
     const named = { declName: declNameOf(node, parent, key), paramNames: params.map(paramNameOf), signature: signatureMeta };
     units.push({ kind: 'fn', ...spanOf(node), ...named, ...hashed });
   };
 
-  const addBlock = (node) => {
-    if (node.isArrowBody) return;
-    blockCount += 1;
-    const blockId = blockCount;
-    node.kids.body.forEach((statement, ordinal) => {
-      units.push({ kind: 'stmt', ...spanOf(statement), blockId, ordinal, ...hashCode(statement) });
-    });
+  const addStmt = ({ node, blockId, ordinal }) => {
+    units.push({ kind: 'stmt', ...spanOf(node), blockId, ordinal, ...hashCode(node) });
   };
 
-  const addExpr = (node, slot) => {
-    const isLightweight = !massAtLeast(node, EXPR_GATE.minMass);
+  // A candidate under EXPR_GATE.minMass canonical nodes cannot pass the gate, so it is not hashed.
+  const addExpr = ({ node, slot }) => {
+    const isLightweight = hasher.sizeOf(node) < EXPR_GATE.minMass;
     if (isLightweight) return;
     const hashed = hashCode(node);
     const isKept = passesExprGate(hashed, ubiquitous);
@@ -182,19 +220,8 @@ export const collectScriptUnits = (program, { ubiquitous = new Set(), isSloppy =
     exprCount += shouldStore ? 1 : 0;
   };
 
-  const visit = (node, parent, key) => {
-    const isFunction = FUNCTION_TYPES.has(node.type) && node.kids.body?.type === 'BlockStatement';
-    if (isFunction) addFn(node, parent, key);
-    const isBlock = node.type === 'BlockStatement';
-    if (isBlock) addBlock(node);
-    const candidate = exprCandidateOf(node, parent, key);
-    if (candidate) addExpr(candidate, key);
-    for (const [childKey, value] of Object.entries(node.kids)) {
-      for (const child of childList(value)) child && visit(child, node, childKey);
-    }
-  };
-
-  visit(program, null, null);
+  const adders = { fn: addFn, stmt: addStmt, expr: addExpr };
+  for (const request of requests) adders[request.kind](request);
   return { units, isExprCapped };
 };
 

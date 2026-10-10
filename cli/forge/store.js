@@ -16,7 +16,9 @@ import { isInlineRequested, INLINE_VERSION_OFFSET } from './inline-mode.js';
 // 7: canonicalization soundness fixes from the fuzzer (#2596): array elisions hashed, binder names kept in
 // files with a direct eval or `with`, private member names apart at L2, line breaks kept in template
 // expressions that may hold a `//` comment, and the opt-in inlining refuses write targets and typeof globals.
-const EXTRACTOR_BASE = 7;
+// 8: one-pass unit hashing (#2554, unit-hash.js): fp values change; which units share an fp, per level,
+// does not (unit-hash.equivalence.spec.js).
+const EXTRACTOR_BASE = 8;
 export const FORGE_EXTRACTOR_VERSION = EXTRACTOR_BASE + (isInlineRequested() ? INLINE_VERSION_OFFSET : 0);
 
 const SQL = {
