@@ -9,6 +9,7 @@ import { registerAgent } from '../team/team-db-agents.js';
 import { AGENT_ID_ENV, resolveAgentIdentity, toSessionHandle } from '../team/agent-identity.js';
 import { closeQuietly, openExistingTeamDb } from '../team/team-db-readonly.js';
 import { teamRootFor } from '../team/coordination-target.js';
+import { mapSession } from '../telemetry/call-ledger.js';
 
 export const SESSION_ID_ENV = 'CHEMX_SESSION_ID';
 // Only plain ids are written into a sourced shell file; anything else is skipped, never quoted.
@@ -140,6 +141,8 @@ export const touchAgentPresence = (root, identity, { sessionId = null, env = pro
     const updated = db.prepare('UPDATE agents SET heartbeat = ? WHERE id = ?').run(Date.now(), identity.id);
     const isKnown = Number(updated.changes) > 0;
     if (!isKnown) registerAgent(db, { id: identity.id, role: 'session', metadata: { sessionId, source: identity.source } });
+    // #4465: record session -> handle so later calls without an explicit handle can be attributed.
+    if (sessionId) mapSession(db, sessionId, identity.id);
     return true;
   } catch (err) {
     debugNote(env, `agent presence skipped: ${err.message}`);
