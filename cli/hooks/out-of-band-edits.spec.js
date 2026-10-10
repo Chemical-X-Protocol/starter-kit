@@ -65,6 +65,26 @@ test('a chemx command that writes is not flagged', async () => {
   assert.equal(await bash(root, 'ls', logged), null, 'recorded as seen after the chemx call');
 });
 
+test('a write by the MCP chemx tool is not blamed on the next Bash call', async () => {
+  const root = tempRepo();
+  const logged = [];
+  await bash(root, 'ls', logged);
+  put(path.join(root, 'a.js'), 'export const a = 4;\n');
+  await runPostEdit({ tool_name: 'mcp__chemical-x__chemx', tool_input: {}, cwd: root }, { CLAUDE_PROJECT_DIR: root }, { log: async () => {} });
+  assert.equal(await bash(root, 'ls', logged), null);
+  assert.equal(logged.length, 0);
+});
+
+test('a script write chained after a chemx command is still flagged', async () => {
+  const root = tempRepo();
+  const logged = [];
+  await bash(root, 'ls', logged);
+  put(path.join(root, 'a.js'), 'export const a = 5;\n');
+  const output = await bash(root, 'chemx test && node evil.mjs', logged);
+  assert.match(output.hookSpecificOutput.additionalContext, /a\.js was changed/);
+  assert.equal(logged.length, 1);
+});
+
 test('files outside the repo, ignored files and non-write extensions are not flagged', async () => {
   const root = tempRepo();
   const logged = [];

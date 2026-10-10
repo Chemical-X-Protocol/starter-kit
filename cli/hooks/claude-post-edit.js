@@ -33,6 +33,14 @@ export const formatHazards = ({ relativePath, scope, violations, catalog }) => {
   return lines.join('\n');
 };
 
+// After MCP chemx or Edit/Write: refresh the seen record so the next Bash call does not blame them.
+const refreshRecordAfterWriter = (payload, env) => {
+  const isChemxMcp = String(payload?.tool_name ?? '').startsWith('mcp__chemical-x__');
+  const isInBandWriter = isChemxMcp || EDIT_TOOLS.has(payload?.tool_name);
+  if (!isInBandWriter) return;
+  scanOutOfBand({ root: env.CLAUDE_PROJECT_DIR || payload.cwd || process.cwd(), command: '', isInBandTool: true });
+};
+
 // After a Bash call: tell the model about repo files written outside chemx and log one bypass.
 const runPostBash = async (payload, env, log) => {
   const cwd = payload.cwd || process.cwd();
@@ -50,6 +58,7 @@ const runPostBash = async (payload, env, log) => {
 export const runPostEdit = async (payload, env = process.env, { log = logBypassToDb } = {}) => {
   const isBash = payload?.tool_name === 'Bash';
   if (isBash) return runPostBash(payload, env, log);
+  refreshRecordAfterWriter(payload, env);
   const isEditTool = EDIT_TOOLS.has(payload?.tool_name);
   const file = editedFile(payload);
   const hasEditedFile = isEditTool && Boolean(file);

@@ -4,8 +4,10 @@
 // Guarantees: only dirty files that git reports (git status --porcelain) and that have a write
 // extension are looked at; a file is flagged when its sha1 differs from the one last recorded, or when
 // it is new to the record and was modified after the record was last written. NOT guaranteed: the first
-// call in a checkout only records a baseline; a call that runs any chemx command is treated as in-band
-// as a whole; a file changed by a peer's non-chemx write between two hook runs is attributed to
+// call in a checkout only records a baseline; a call made only of chemx commands is treated as
+// in-band as a whole (a chemx command chained with other commands is scanned); chemx patch/write do
+// not yet record sha1s, so a Bash call is the only place the record is refreshed or a non-Bash
+// writer is covered, via the PostToolUse hook for MCP chemx and Edit/Write; a file changed by a peer's non-chemx write between two hook runs is attributed to
 // whoever ran the next Bash call; a write that leaves git status unchanged (already-dirty file with
 // the same stat) is missed. The record lives at <root>/.chemx/post-bash-seen.json.
 
@@ -21,9 +23,12 @@ export const OUT_OF_BAND_RULE = 'out_of_band_edit';
 const SEEN_FILE = ['.chemx', 'post-bash-seen.json'];
 const MAX_LISTED = 5;
 
+// True only when every simple command in the call is a chemx invocation. A chemx command chained
+// with anything else (`chemx test && node x.mjs`) is not exempt.
 export const callsChemx = (command) => {
   try {
-    return parseShell(String(command ?? '')).commands.some((parsed) => parsed.argv.length > 0 && isChemxInvocation(resolveInvocation(parsed.argv)));
+    const commands = parseShell(String(command ?? '')).commands;
+    return commands.length > 0 && commands.every((parsed) => parsed.argv.length > 0 && isChemxInvocation(resolveInvocation(parsed.argv)));
   } catch { // chemx-allow: best-effort an unparsable command is judged not to be a chemx call
     return false;
   }
@@ -92,13 +97,15 @@ const judgeFile = ({ absolute, stat, known, previous }) => {
 };
 
 // Returns { changed: [relative paths], baseline: boolean } or null when git is unusable.
-export const scanOutOfBand = ({ root, command, now = Date.now() }) => {
+// isInBandTool: the call was a non-Bash chemx writer (MCP chemx, Edit/Write after their own gates);
+// the record is refreshed and nothing is flagged.
+export const scanOutOfBand = ({ root, command, now = Date.now(), isInBandTool = false }) => {
   const dirty = dirtyFiles(root);
   const isGitUnusable = dirty === null;
   if (isGitUnusable) return null;
   const seenFile = path.join(root, ...SEEN_FILE);
   const previous = readSeen(seenFile);
-  const isInBand = callsChemx(command);
+  const isInBand = callsChemx(command) || isInBandTool;
   const files = {};
   const changed = [];
   for (const relative of dirty) {
