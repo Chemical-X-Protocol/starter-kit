@@ -249,6 +249,7 @@ export const formatTaskHelpCard = () => {
     '    \x1b[32mtriage\x1b[0m                    Generate tasks from AST architectural hazards',
     '    \x1b[32mreconcile\x1b[0m                 Auto-resolve tasks whose hazards have been fixed',
     '    \x1b[32mset-target\x1b[0m <id> <path>     Assign target file path to a task',
+    '    \x1b[32mset-files\x1b[0m <id> [<file...>] Set extra files for a task (no files clears the list)',
     '    \x1b[32mvds-slot\x1b[0m <id> <moscow> <p> Set MoSCoW slot and priority on a task',
     '    \x1b[32mtrace\x1b[0m <id> <url>            Attach provenance trace URL to a task',
     '',
