@@ -171,6 +171,21 @@ const readStdinBlocks = () => {
   return parseSearchReplaceBlocks(text);
 };
 
+/**
+ * Repair path for the boot shim (cli/index.js): when the CLI proper cannot load (for example a
+ * half-written commands-schema-*.js), `patch`, `edit` and `write` still run from here. This module
+ * and its imports never touch the command-schema modules. It skips the router's lease renewal and
+ * call ledger; nothing else about the edit is relaxed. Returns false for any other command.
+ */
+export const REPAIR_COMMANDS = ['patch', 'edit', 'write'];
+export const runRepairCommand = (command, args) => {
+  const isRepairable = REPAIR_COMMANDS.includes(command);
+  if (!isRepairable) return false;
+  const run = command === 'write' ? runWriterCli : runPatcherCli;
+  run(args, true);
+  return true;
+};
+
 export const runPatcherCli = (args, isCli = false) => {
   if (isHelpRequest(args)) return showHelp(args, PATCH_HELP, isCli);
   const unknown = findUnknownFlags(args, [...Object.values(PATCH_FLAGS).flat(), ...PATCH_SWITCHES]);

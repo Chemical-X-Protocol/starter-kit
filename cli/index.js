@@ -28,10 +28,26 @@ const IS_DIRECT = isDirectExecution();
 const ARGS = process.argv.slice(2);
 const EARLY = IS_DIRECT ? wantsEarlyConflictCommand(ARGS) : null;
 
+// When the CLI proper cannot load, patch/edit/write still run from patcher-cli.js (it never imports
+// the command-schema modules), so chemx can repair the file that broke it. Nothing else is rescued.
+const runRepairPath = async (loadError) => {
+  try {
+    const { REPAIR_COMMANDS, runRepairCommand } = await import('./patcher-cli.js');
+    const isRepairable = REPAIR_COMMANDS.includes(ARGS[0]);
+    // The runner exits the process when it finishes, so the note goes out first.
+    if (isRepairable) process.stderr.write(`! chemx could not load fully (${String(loadError.message).split('\n')[0]}); running '${ARGS[0]}' from the minimal repair path.\n`);
+    return runRepairCommand(ARGS[0], ARGS.slice(1));
+  } catch {
+    return false;
+  }
+};
+
 const loadMain = async () => {
   try {
     return await import('./main.js');
   } catch (err) {
+    const isRepaired = IS_DIRECT && await runRepairPath(err);
+    if (isRepaired) return {};
     const message = IS_DIRECT ? explainLoadFailure(path.dirname(CLI_FILE)) : null;
     if (!message) throw err;
     process.stderr.write(`✕ ${message}\n`);
@@ -53,5 +69,5 @@ export const {
   handleError, withErrorCatcher, publishIssue, ALLOWED_COMMANDS
 } = main;
 
-const shouldRunMain = IS_DIRECT && !EARLY;
+const shouldRunMain = IS_DIRECT && !EARLY && typeof main.runMain === 'function';
 if (shouldRunMain) main.runMain();
