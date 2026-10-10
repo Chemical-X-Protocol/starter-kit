@@ -1,7 +1,7 @@
 import './silence-warnings.js';
 import fs from 'node:fs';
 import path from 'node:path';
-import { ensureChemxDir } from './audit/history.js';
+import { ensureChemxDir } from './audit/chemx-dir.js';
 import { initTeamSchema } from './team/team-schema.js';
 import { isSqliteMemoryTarget } from './sqlite-memory.js';
 import { applyIndexSchema, registerVectorFunctions } from './search-schema-ddl.js';
