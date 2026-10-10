@@ -63,13 +63,10 @@ const EXTRA_FLAGS = {
   // installer.js is an argument passed to the pillars wizard, not a flag of init, create, generate or hook.
   // No handler read of init --preset or generate --install was found; they are dropped, so init --preset is now rejected as unknown. patterns --name is kept below.
   // generate: the mutation-args.js global list accepts these; not verified that the generate handler reads them.
-  trend: ['--limit'],
   generate: ['--headless', '--ci', '--non-interactive', '--no-interactive'],
-  // trend, badge and verify live in cli/commands-schema-verify.js (task #4493's file): move these there after it lands.
-  badge: ['--grade', '--label', '--report-url', '--discussion', '--format', '--copy'],
+  // trend, badge and verify flags live in cli/commands-schema-verify.js (#4565).
   // patterns: a string '--name' appears in the patterns route's sources (found by schema-flag-coverage.spec.js); its read was not traced.
   patterns: ['--name'],
-  verify: ['--allow-empty', '--all-packages', '--timeout', '--profile'],
 
   // Flags the team subcommands parse (dispatch, task, tokens, audit-run, migrate, inbox/dm/feed, lock), so the
   // typo check never rejects a real one as a near miss of another (#4569). Per-subcommand schemas: #4554.
