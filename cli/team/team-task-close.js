@@ -13,6 +13,7 @@ import { getTask } from './team-db-tasks.js';
 import { postFeedEvent } from './team-db-feed.js';
 import { withImmediateTransaction } from './team-db-transaction.js';
 import { findTaskCreator } from './team-task-handoff.js';
+import { findDispatcherRun } from './team-dispatcher-authority.js';
 
 export const CLOSE_USAGE = 'chemx team task close <id> --duplicate-of=<id> | --cancel=<reason> --as=<@me>';
 export const CLOSED_STATUSES = ['duplicate', 'cancelled'];
@@ -30,7 +31,7 @@ const CLOSE_RULES = [
   { reason: 'duplicate_target_not_found', test: (c) => c.duplicateOf && !c.target, say: (c) => `Duplicate target #${c.duplicateOf} not found.` },
   {
     reason: 'not_authorized',
-    test: (c) => c.by !== c.task?.assigned_agent_id && c.by !== c.creator,
+    test: (c) => c.by !== c.task?.assigned_agent_id && c.by !== c.creator && !c.dispatcherRun,
     say: (c) => `${c.by} may not close task #${c.taskId}: only its assignee (${c.task?.assigned_agent_id || 'none'}) or its creator (${c.creator || 'unknown'}) can.`
   }
 ];
@@ -48,7 +49,7 @@ export const closeTask = (db, taskId, options, byHandle) => {
   const id = toTaskId(taskId);
   const result = withImmediateTransaction(db, () => {
     const task = getTask(db, id);
-    const ctx = { task, taskId: id, by, duplicateOf, target: hasDuplicate ? getTask(db, duplicateOf) : null, creator: findTaskCreator(db, id) };
+    const ctx = { task, taskId: id, by, duplicateOf, target: hasDuplicate ? getTask(db, duplicateOf) : null, creator: findTaskCreator(db, id), dispatcherRun: findDispatcherRun(db, task, by) };
     const broken = CLOSE_RULES.find((rule) => rule.test(ctx));
     const isDenied = Boolean(broken);
     if (isDenied) return { success: false, reason: broken.reason, message: broken.say(ctx) };
@@ -58,18 +59,19 @@ export const closeTask = (db, taskId, options, byHandle) => {
     const owner = task.assigned_agent_id;
     const hasOwner = Boolean(owner);
     if (hasOwner) db.prepare("UPDATE agents SET current_task_id = NULL, status = 'idle' WHERE id = ? AND current_task_id = ?").run(owner, id);
-    return { success: true, status, by, duplicateOf, reason: hasCancel ? cancelReason : null };
+    return { success: true, status, by, duplicateOf, dispatcherRun: ctx.dispatcherRun, reason: hasCancel ? cancelReason : null };
   });
   const isRefused = !result.success;
   if (isRefused) return result;
 
-  const message = hasDuplicate ? `Closed task #${id} as a duplicate of #${duplicateOf} (by ${by})` : `Cancelled task #${id}: ${cancelReason} (by ${by})`;
+  const via = result.dispatcherRun ? `, by dispatcher of run ${result.dispatcherRun}` : '';
+  const message = hasDuplicate ? `Closed task #${id} as a duplicate of #${duplicateOf} (by ${by}${via})` : `Cancelled task #${id}: ${cancelReason} (by ${by}${via})`;
   postFeedEvent(db, {
     author_id: by,
     task_id: id,
     event_type: 'task_closed',
     message,
-    metadata: { status: result.status, duplicate_of: duplicateOf, reason: result.reason, by }
+    metadata: { status: result.status, duplicate_of: duplicateOf, reason: result.reason, by, ...(result.dispatcherRun ? { dispatcher_run: result.dispatcherRun } : {}) }
   });
   return { ...result, task: getTask(db, id) };
 };

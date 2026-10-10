@@ -11,6 +11,7 @@ import { getTask } from './team-db-tasks.js';
 import { registerAgent } from './team-db-agents.js';
 import { postFeedEvent } from './team-db-feed.js';
 import { withImmediateTransaction } from './team-db-transaction.js';
+import { findDispatcherRun } from './team-dispatcher-authority.js';
 
 export const HANDOFF_USAGE = 'chemx team task handoff <taskId> <@to> --as=<@from>';
 
@@ -25,7 +26,7 @@ const HANDOFF_RULES = [
   { reason: 'same_assignee', test: (c) => c.task?.assigned_agent_id === c.to, say: (c) => `Task #${c.taskId} is already assigned to ${c.to}.` },
   {
     reason: 'not_authorized',
-    test: (c) => c.by !== c.task?.assigned_agent_id && c.by !== c.creator,
+    test: (c) => c.by !== c.task?.assigned_agent_id && c.by !== c.creator && !c.dispatcherRun,
     say: (c) => `${c.by} may not hand off task #${c.taskId}: only its assignee (${c.task?.assigned_agent_id || 'none'}) or its creator (${c.creator || 'unknown'}) can.`
   }
 ];
@@ -45,7 +46,8 @@ export const handoffTask = (db, taskId, toHandle, byHandle) => {
   registerAgent(db, { id: to, role: 'executor' });
   const result = withImmediateTransaction(db, () => {
     const task = getTask(db, taskId);
-    const verdict = evaluateHandoff({ task, taskId, to, by, creator: findTaskCreator(db, taskId) });
+    const dispatcherRun = findDispatcherRun(db, task, by);
+    const verdict = evaluateHandoff({ task, taskId, to, by, creator: findTaskCreator(db, taskId), dispatcherRun });
     const isDenied = !verdict.allowed;
     if (isDenied) return { success: false, reason: verdict.reason, message: verdict.message };
 
@@ -54,7 +56,7 @@ export const handoffTask = (db, taskId, toHandle, byHandle) => {
     db.prepare("UPDATE agent_tasks SET assigned_agent_id = ?, status = 'in_progress', updated_at = ? WHERE id = ?").run(to, Date.now(), Number(taskId));
     if (hasPreviousOwner) db.prepare("UPDATE agents SET current_task_id = NULL, status = 'idle' WHERE id = ? AND current_task_id = ?").run(from, Number(taskId));
     db.prepare("UPDATE agents SET current_task_id = ?, status = 'busy' WHERE id = ?").run(Number(taskId), to);
-    return { success: true, from, to, by, task: getTask(db, taskId) };
+    return { success: true, from, to, by, dispatcherRun, task: getTask(db, taskId) };
   });
   const isRefused = !result.success;
   if (isRefused) return result;
@@ -65,8 +67,8 @@ export const handoffTask = (db, taskId, toHandle, byHandle) => {
     recipient_id: to,
     task_id: Number(taskId),
     event_type: 'task_handoff',
-    message: `Handoff task #${taskId}: ${label} -> ${to} (by ${by})`,
-    metadata: { from: result.from, to, by }
+    message: `Handoff task #${taskId}: ${label} -> ${to} (by ${by}${result.dispatcherRun ? `, by dispatcher of run ${result.dispatcherRun}` : ''})`,
+    metadata: { from: result.from, to, by, ...(result.dispatcherRun ? { dispatcher_run: result.dispatcherRun } : {}) }
   });
   return result;
 };
