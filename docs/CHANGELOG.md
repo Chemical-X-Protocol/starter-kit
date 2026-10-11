@@ -6,6 +6,28 @@ The package version is minute-precision CalVer and is bumped by CI. It is not ed
 
 This section was written from the day's commit subjects and their task titles. It states what each change does and, where known, what it does not guarantee. It is a summary, not a complete list: about 490 commits landed on 2026-10-09, and many of them are mechanical audit-hazard cleanups (for example "name inline conditions" per file) that change no behavior and are not listed one by one.
 
+## Unreleased (main, 2026-10-10)
+
+### Scaffold (`npm create chemx`)
+
+- A pristine Vue or Svelte scaffold passes `chemx verify`. The capsule barrels were React-shaped (named imports from an extension-less `./m-sample-card`), so `tsc` reported three errors in both. A blueprint that differs per framework now carries the framework before its extension (`index.vue.ts`, `_vitest.config.svelte.ts`) and lands at the untagged path; the untagged file is the React one, and each framework's file list picks its variant (#5940, #5941).
+- Vue scaffolds get `@vitejs/plugin-vue` and `jsdom` with a vitest config that loads them, so the shipped `m-tab-button` spec runs instead of failing to parse the SFC. Svelte scaffolds get `@sveltejs/vite-plugin-svelte`, a `src/shims-svelte.d.ts` reference and a server-render spec for `m-sample-card`, so the run is a pass rather than "no test files" (#5940, #5941).
+
+### Generator (`chemx generate`)
+
+- A local `src/components/atoms` (or `src/atoms`) directory is imported by relative path (`import AtomButton from '../atoms/a-button'`; `.vue`/`.svelte` with their extension) instead of `@/components/atoms`, which no scaffolded tsconfig or vitest config aliases. `detectInstalledFamily` returns it as `atomsDir`; `atomsPackage` is only ever a package name. When the directory has no `a-button` for the framework the capsule keeps a raw button (#5942).
+- The fallback archetype's props declare `variant`, which the fallback component bodies render; a clean React scaffold plus `generate m-note` now typechecks (#5942).
+- A capsule name that is not a lowercase slug (letters, digits, single hyphens) is refused before any path or identifier is built: `generate ../../x` used to sanitise the folder and leave `m-../../x` in file names and `../../x` in identifiers (#5943).
+
+### Test runner
+
+- A test file that failed to load (vitest "Test Files N failed", jest "Test Suites: N failed") counts as a failure when no individual test did, so the report never reads `fail` with `failed: 0` (#5944).
+- vitest 1.x also receives `--minWorkers=N` with `--maxWorkers=N`: that major defaults `minWorkers` to the core count and its pool refused a smaller maximum ("minThreads and maxThreads must not conflict"), which broke every `chemx test` in a scaffolded project on a machine with more cores than the slot budget. The installed major is read from `node_modules/vitest/package.json`; later majors get `--maxWorkers` alone (#5946).
+
+### Outline
+
+- The Python outline labels a `class` as `class`; `def` stays `function` (#5945).
+
 ## Unreleased (main, 2026-10-09)
 
 ### Coordination

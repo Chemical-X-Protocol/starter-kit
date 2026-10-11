@@ -4,6 +4,7 @@ import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
+import { resolveScaffoldTarget, FRAMEWORK_CONFIGS } from './scaffold-frameworks.js';
 
 const CLI_DIR = path.resolve(import.meta.dirname);
 const CREATE_BIN = path.join(CLI_DIR, 'create.js');
@@ -290,7 +291,10 @@ describe('Scaffolding Entrypoint Invocations', () => {
   });
 
   const RELATIVE_IMPORT = /(?:from\s+|import\s*\(\s*|@use\s+)['"](\.{1,2}\/[^'"]+)['"]/g;
-  const IMPORT_SUFFIXES = ['', '.ts', '.tsx', '.d.ts', '.vue', '.svelte', '.scss', '/index.ts'];
+  // tsc resolves an extension-less specifier to .ts/.tsx/.d.ts only; a `.vue` or `.svelte` file
+  // must be named with its extension (a bare './m-sample-card' next to m-sample-card.vue is an error).
+  const TS_SUFFIXES = ['', '.ts', '.tsx', '.d.ts', '/index.ts'];
+  const SFC_SUFFIXES = [...TS_SUFFIXES, '.vue', '.svelte', '.scss'];
 
   const findUnresolvedImports = (projectDir) => getAllFiles(projectDir)
     .filter((file) => /\.(ts|tsx|vue|svelte)$/.test(file))
@@ -299,10 +303,42 @@ describe('Scaffolding Entrypoint Invocations', () => {
     .filter(({ file, specifier }) => {
       const base = path.resolve(path.dirname(file), specifier);
       const sassPartial = path.join(path.dirname(base), `_${path.basename(base)}`);
-      const candidates = [...IMPORT_SUFFIXES.map((s) => base + s), sassPartial + '.scss'];
+      const suffixes = /\.tsx?$/.test(file) ? TS_SUFFIXES : SFC_SUFFIXES;
+      const candidates = [...suffixes.map((s) => base + s), sassPartial + '.scss'];
       return !candidates.some((candidate) => fs.existsSync(candidate) && fs.statSync(candidate).isFile());
     })
     .map(({ file, specifier }) => `${path.relative(projectDir, file)} -> ${specifier}`);
+
+  test('framework-tagged blueprints land at the untagged path, and every framework list ships one variant per file', () => {
+    assert.equal(resolveScaffoldTarget('molecule-capsule/index.vue.ts'), 'src/components/m-sample-card/index.ts');
+    assert.equal(resolveScaffoldTarget('molecule-capsule/m-chemx-badge/index.svelte.ts'), 'src/components/m-sample-card/m-chemx-badge/index.ts');
+    assert.equal(resolveScaffoldTarget('_vitest.config.svelte.ts'), 'vitest.config.ts');
+    assert.equal(resolveScaffoldTarget('molecule-capsule/m-sample-card.spec.svelte.ts'), 'src/components/m-sample-card/m-sample-card.spec.ts');
+    assert.equal(resolveScaffoldTarget('molecule-capsule/m-sample-card.vue'), 'src/components/m-sample-card/m-sample-card.vue', 'a framework extension is not a tag');
+    for (const [id, config] of Object.entries(FRAMEWORK_CONFIGS)) {
+      const targets = config.files.map(resolveScaffoldTarget);
+      assert.deepEqual(targets.filter((t, i) => targets.indexOf(t) !== i), [], `${id}: two blueprints map to one file`);
+    }
+  });
+
+  for (const [framework, ext, plugin] of [['vue', 'vue', '@vitejs/plugin-vue'], ['svelte', 'svelte', '@sveltejs/vite-plugin-svelte']]) {
+    test(`framework barrels: --framework=${framework} barrels import the SFCs, and vitest loads them through ${plugin}`, () => {
+      const tmpBase = fs.mkdtempSync(path.join(os.tmpdir(), `chemx-test-barrels-${framework}-`));
+      cleanupDirs.push(tmpBase);
+      const targetDir = path.join(tmpBase, `${framework}-app`);
+      const result = spawnSync('node', [CREATE_BIN, targetDir, `--framework=${framework}`, '--yes', '--skip-install'], { encoding: 'utf-8', cwd: tmpBase, timeout: 15000 });
+      assert.equal(result.status, 0, `Failed: ${result.stderr}`);
+
+      const capsule = path.join(targetDir, 'src/components/m-sample-card');
+      assert.match(fs.readFileSync(path.join(capsule, 'index.ts'), 'utf-8'), new RegExp(`from './m-sample-card\\.${ext}'`));
+      assert.match(fs.readFileSync(path.join(capsule, 'm-chemx-badge/index.ts'), 'utf-8'), new RegExp(`from './m-chemx-badge\\.${ext}'`));
+      assert.ok(!fs.existsSync(path.join(capsule, 'index.vue.ts')) && !fs.existsSync(path.join(capsule, 'index.svelte.ts')), 'no tagged file name leaks into the project');
+      assert.match(fs.readFileSync(path.join(targetDir, 'vitest.config.ts'), 'utf-8'), new RegExp(plugin.replace(/[/@.]/g, '\\$&')));
+      const pkg = JSON.parse(fs.readFileSync(path.join(targetDir, 'package.json'), 'utf-8'));
+      assert.ok(pkg.devDependencies[plugin], `${plugin} is a devDependency`);
+      assert.ok(getAllFiles(capsule).some((f) => f.endsWith('.spec.ts')), 'the capsule ships a spec the runner can collect');
+    });
+  }
 
   for (const [framework, ext] of [['react', 'tsx'], ['vue', 'vue'], ['svelte', 'svelte']]) {
     test(`project layout: --framework=${framework} places capsules under src/ and CI under .github/, with every relative import resolving`, () => {

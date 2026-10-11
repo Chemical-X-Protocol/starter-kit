@@ -10,7 +10,8 @@ const SCAFFOLD_FILE_TARGETS = {
   '_tsconfig.json': 'tsconfig.json',
   '_vitest.config.ts': 'vitest.config.ts',
   '_gitignore': '.gitignore',
-  'shims-vue.d.ts': 'src/shims-vue.d.ts'
+  'shims-vue.d.ts': 'src/shims-vue.d.ts',
+  'shims-svelte.d.ts': 'src/shims-svelte.d.ts'
 };
 
 const SCAFFOLD_DIR_TARGETS = [
@@ -21,7 +22,14 @@ const SCAFFOLD_DIR_TARGETS = [
 
 const isViewTemplateFile = (rel) => /^_?view-template\./.test(rel);
 
-export const resolveScaffoldTarget = (rel) => {
+// A blueprint that differs per framework carries the framework before its extension
+// (`index.vue.ts`, `_vitest.config.svelte.ts`); the tag is dropped on the way out, and the
+// untagged file is the React one. The framework's own file list picks which variant ships.
+const FRAMEWORK_TAG = /\.(?:react|vue|svelte)(\.[^./]+)$/;
+export const stripFrameworkTag = (rel) => rel.replace(FRAMEWORK_TAG, '$1');
+
+export const resolveScaffoldTarget = (taggedRel) => {
+  const rel = stripFrameworkTag(taggedRel);
   const hasFileTarget = Object.hasOwn(SCAFFOLD_FILE_TARGETS, rel);
   if (hasFileTarget) return SCAFFOLD_FILE_TARGETS[rel];
   if (isViewTemplateFile(rel)) return `src/views/${rel}`;
@@ -77,27 +85,33 @@ export const FRAMEWORK_CONFIGS = {
     deps: {
       vue: '^3.4.0'
     },
+    // vite is pinned to the major vitest 1.x bundles, so plugin-vue types against the same copy;
+    // sass compiles the SFC <style lang="scss"> blocks under test.
     devDeps: {
+      '@vitejs/plugin-vue': '^5.0.0',
       '@vue/test-utils': '^2.4.6',
       '@types/node': '^22.0.0',
       'create-chemx': 'latest',
+      jsdom: '^25.0.0',
+      sass: '^1.77.0',
       typescript: '^5.4.0',
+      vite: '^5.4.0',
       vitest: '^1.6.0'
     },
     files: [
       '_tsconfig.json',
-      '_vitest.config.ts',
+      '_vitest.config.vue.ts',
       '_view-template.scss',
       'workflows/chemx-audit.yml',
       'shims-vue.d.ts',
       'atoms/a-button.vue',
       'view-template.vue',
       'molecule-capsule/_m-sample-card.scss',
-      'molecule-capsule/index.ts',
+      'molecule-capsule/index.vue.ts',
       'molecule-capsule/types.d.ts',
       'molecule-capsule/m-sample-card.vue',
       'molecule-capsule/m-chemx-badge/_m-chemx-badge.scss',
-      'molecule-capsule/m-chemx-badge/index.ts',
+      'molecule-capsule/m-chemx-badge/index.vue.ts',
       'molecule-capsule/m-chemx-badge/types.d.ts',
       'molecule-capsule/m-chemx-badge/m-chemx-badge.vue',
       'molecule-capsule/m-tab-button/_m-tab-button.scss',
@@ -117,6 +131,7 @@ export const FRAMEWORK_CONFIGS = {
       svelte: '^5.0.0'
     },
     devDeps: {
+      '@sveltejs/vite-plugin-svelte': '^4.0.0',
       '@types/node': '^22.0.0',
       'create-chemx': 'latest',
       typescript: '^5.4.0',
@@ -124,17 +139,19 @@ export const FRAMEWORK_CONFIGS = {
     },
     files: [
       '_tsconfig.json',
-      '_vitest.config.ts',
+      '_vitest.config.svelte.ts',
       '_view-template.scss',
       'workflows/chemx-audit.yml',
+      'shims-svelte.d.ts',
       'atoms/a-button.svelte',
       'view-template.svelte',
       'molecule-capsule/_m-sample-card.scss',
-      'molecule-capsule/index.ts',
+      'molecule-capsule/index.svelte.ts',
       'molecule-capsule/types.d.ts',
       'molecule-capsule/m-sample-card.svelte',
+      'molecule-capsule/m-sample-card.spec.svelte.ts',
       'molecule-capsule/m-chemx-badge/_m-chemx-badge.scss',
-      'molecule-capsule/m-chemx-badge/index.ts',
+      'molecule-capsule/m-chemx-badge/index.svelte.ts',
       'molecule-capsule/m-chemx-badge/types.d.ts',
       'molecule-capsule/m-chemx-badge/m-chemx-badge.svelte'
     ]
