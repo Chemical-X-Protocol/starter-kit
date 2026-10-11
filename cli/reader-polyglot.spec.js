@@ -39,6 +39,12 @@ test('outline: renders Python declarations instead of an empty header', () => {
   assert.ok(out.includes('ConsentService'), `expected ConsentService in:\n${out}`);
 });
 
+test('outline: a Python class is labelled class, its methods and functions are labelled function', () => {
+  const out = generateAstOutline(PY, 'services/consent.py');
+  const body = out.split('\n').filter((l) => !l.startsWith('// Outline:'));
+  assert.deepEqual(body, ['class ConsentService', 'function revoke', 'function helper'], out);
+});
+
 test('outline: still renders JavaScript exports unchanged', () => {
   const js = `export const FOO = 1;\nexport function bar(a) { return a; }\n`;
   const out = generateAstOutline(js, 'cli/thing.js');

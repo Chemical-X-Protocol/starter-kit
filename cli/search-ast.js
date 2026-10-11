@@ -57,9 +57,10 @@ const extractRegexFallback = (content, filePath = '') => {
     symbols.push({ name: m[1], kind: 'class', isExport: true, startLine: 1, endLine: 1, signature: '' });
   }
 
-  const pyMatches = polyglotSource.matchAll(/(?:def|class)\s+([A-Za-z0-9_]+)/g);
+  const pyMatches = polyglotSource.matchAll(/\b(def|class)\s+([A-Za-z0-9_]+)/g);
   for (const m of pyMatches) {
-    symbols.push({ name: m[1], kind: 'function', isExport: true, startLine: 1, endLine: 1, signature: '' });
+    const isClass = m[1] === 'class';
+    symbols.push({ name: m[2], kind: isClass ? 'class' : 'function', isExport: true, startLine: 1, endLine: 1, signature: '' });
   }
 
   const goMatches = polyglotSource.matchAll(/(?:func(?:\s*\([^)]*\))?\s+|type\s+)([A-Za-z0-9_]+)/g);
