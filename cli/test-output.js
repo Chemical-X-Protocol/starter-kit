@@ -51,10 +51,16 @@ const readNumber = (line, pattern) => {
   return match ? parseInt(match[1], 10) : null;
 };
 
+// vitest "Test Files  1 failed | 2 passed (3)", jest "Test Suites: 1 failed, 3 total": a file that
+// failed to load ran no test, so without this it would be a FAIL verdict with 0 failed tests.
+const FAILED_FILES_LINE = /^Test (?:Files|Suites):?\s+(\d+)\s+failed/i;
+
 const parseCounts = (cleanLines) => {
   const counts = { totalTests: 0, passed: 0, failed: 0, skipped: 0, errors: 0, todo: 0 };
   let hasRunnerSummary = false;
+  let failedFiles = 0;
   for (const line of cleanLines) {
+    failedFiles = readNumber(line, FAILED_FILES_LINE) ?? failedFiles;
     const isRunnerSummary = /^Tests:?\s+/i.test(line);
     if (isRunnerSummary) {
       counts.passed = readNumber(line, /(\d+)\s+passed/i) ?? 0;
@@ -80,6 +86,11 @@ const parseCounts = (cleanLines) => {
   const emptyNodeFiles = hasRunnerSummary ? 0 : countEmptyNodeFiles(cleanLines);
   counts.passed = Math.max(0, counts.passed - emptyNodeFiles);
   counts.totalTests = Math.max(0, counts.totalTests - emptyNodeFiles);
+  const hasOnlyFileFailures = counts.failed === 0 && failedFiles > 0;
+  if (hasOnlyFileFailures) {
+    counts.failed = failedFiles;
+    counts.totalTests += failedFiles;
+  }
   return counts;
 };
 

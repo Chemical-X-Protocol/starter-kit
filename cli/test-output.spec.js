@@ -199,6 +199,39 @@ test('test-output: vitest separator lines with a [n/m] counter are not failure d
   assert.ok(!parsed.failures[0].details.some((d) => /⎯/.test(d)), parsed.failures[0].details.join(' | '));
 });
 
+test('test-output: a suite that failed to load counts as a failure, never "fail with 0 failed"', () => {
+  const vitest = [
+    ' FAIL  src/m-tab-button.spec.ts [ src/m-tab-button.spec.ts ]',
+    'Error: Failed to parse source for import analysis because the content contains invalid JS syntax. Install @vitejs/plugin-vue to handle .vue files.',
+    ' ❯ TransformPluginContext._formatError node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49258:41',
+    '',
+    ' Test Files  1 failed | 1 passed (2)',
+    '      Tests  2 passed (2)'
+  ].join('\n');
+  const parsed = parseTestOutput(vitest, '', 1);
+  assert.equal(parsed.status, STATUS.FAIL);
+  assert.equal(parsed.failed, 1, 'the unloadable file is the failure');
+  assert.equal(parsed.passed, 2);
+  assert.equal(parsed.totalTests, 3);
+  assert.equal(parsed.failures.length, 1);
+
+  const jest = [
+    ' FAIL  src/a.test.ts',
+    '  ● Test suite failed to run',
+    '',
+    '    Cannot find module ./missing from src/a.test.ts',
+    '',
+    'Test Suites: 1 failed, 1 total',
+    'Tests:       0 total'
+  ].join('\n');
+  const parsedJest = parseTestOutput(jest, '', 1);
+  assert.equal(parsedJest.status, STATUS.FAIL);
+  assert.equal(parsedJest.failed, 1);
+
+  const twoFilesOneTest = ' Test Files  2 failed (3)\n      Tests  1 failed | 4 passed (5)\n';
+  assert.equal(parseTestOutput(twoFilesOneTest, '', 1).failed, 1, 'counted tests win over file counts');
+});
+
 test('test-output: a failing todo test is reported as todo, never as a failure', () => {
   const out = [
     '✔ real test (1ms)',
