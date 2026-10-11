@@ -8,7 +8,8 @@
 ## ⚡ Quick Agent Reflex Table (Token-Bounded Commands)
 | Standard Reflex | `chemx` Equivalent | Token & Architecture Advantage |
 | :--- | :--- | :--- |
-| `grep -rn "pattern" .` | `chemx q -g "pattern"` or `chemx q -g "pattern" -l` | Fixed-string search of every text file `.gitignore` allows (submodules, docs, styles, JSON, PHP); full `path:line:text` lines or line-only (-l); `--regex` opts into regex; `-- <pattern>` for a pattern starting with `-`. Uses `rg` when installed, a JS walker otherwise; the header states files searched and the engine. |
+| `grep -rn "pattern" .` | `chemx q -g "pattern" --bare` or `chemx q -g "pattern" -C 3 --bare` | Fixed-string search matching rg token-for-token (57 chars / 14 tokens per hit); add `-C <N>` to inspect surrounding code in a single turn without a second read call. |
+| `sed -n 'N,Mp' <file>` | `chemx read <file>:N-M --bare` | Verbatim slice matching sed byte-for-byte; 0 header, box or line number tokens. |
 | `git diff` | `chemx d` | Zero-context (`-U0`), auto-collapses to `--stat` if > 80 lines, micro-syncs index. |
 | `git log` | `chemx log -n 5` | One-line commit history (5 commits measured about 140 tokens on 2026-10-09, roughly 28 per commit). |
 | `find . -name "*.vue"` | `chemx f "*.vue"` | Strictly filters by `.gitignore` and ignored dirs. |

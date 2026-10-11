@@ -32,7 +32,8 @@ const failWith = (message, { isJson, isCli, isQuiet }) => {
 
 export const handleLiteralSearchCommand = (_db, query, {
   isCaseInsensitive = false, isLineOnly = false, isRegex = false, isHidden = false,
-  limit = 20, isJson = false, isCli = true, cwd = process.cwd(), dir = null, engine = null, isQuiet = false, argProblems = []
+  limit = 20, isJson = false, isCli = true, cwd = process.cwd(), dir = null, engine = null, isQuiet = false, argProblems = [],
+  isBare = false, context = 0, beforeContext = 0, afterContext = 0
 } = {}) => {
   const hasQuery = typeof query === 'string' && query.length > 0;
   if (!hasQuery) return failWith('missing search pattern (use `chemx q -g -- <pattern>` for a pattern starting with -)', { isJson, isCli, isQuiet });
@@ -53,7 +54,7 @@ export const handleLiteralSearchCommand = (_db, query, {
 
   let res;
   try {
-    res = runLiteralSearch({ root, scopeDirs: scope.scopeDirs, pattern: query, isRegex, isCaseInsensitive, isHidden, limit, engine });
+    res = runLiteralSearch({ root, scopeDirs: scope.scopeDirs, pattern: query, isRegex, isCaseInsensitive, isHidden, limit, engine, context, beforeContext, afterContext });
   } catch (err) {
     return failWith(err instanceof Error ? err.message : String(err), { isJson, isCli, isQuiet });
   }
@@ -61,7 +62,7 @@ export const handleLiteralSearchCommand = (_db, query, {
   const hasSearchedNothing = res.filesSearched === 0;
   const status = hasSearchedNothing ? STATUS.INCONCLUSIVE : STATUS.PASS;
   const payload = {
-    status, query, mode: isRegex ? 'regex' : 'fixed', isCaseInsensitive, isLineOnly,
+    status, query, mode: isRegex ? 'regex' : 'fixed', isCaseInsensitive, isLineOnly, isBare,
     engine: res.engine, root, scope: scope.scopeKey, filesSearched: res.filesSearched, filesMatched: res.filesMatched,
     count: res.matches.length, totalMatches: res.totalMatches, truncated: res.truncated, skipped: res.skipped,
     reason: hasSearchedNothing ? 'no searchable files in scope' : undefined,
@@ -72,6 +73,38 @@ export const handleLiteralSearchCommand = (_db, query, {
   if (isQuiet) return payload;
   if (isJson) {
     process.stdout.write(JSON.stringify(payload) + '\n');
+    finish(status, isCli);
+    return payload;
+  }
+
+  if (isBare) {
+    let lastPath = null;
+    let lastLine = null;
+    for (let i = 0; i < res.matches.length; i++) {
+      const m = res.matches[i];
+      const hasBeforeContext = Boolean(m.before && m.before.length > 0);
+      const hasAfterContext = Boolean(m.after && m.after.length > 0);
+      const hasContext = hasBeforeContext || hasAfterContext;
+      const isSubsequentMatch = i > 0;
+      const shouldCheckContiguity = hasContext && isSubsequentMatch;
+      if (shouldCheckContiguity) {
+        const isNonContiguous = lastPath !== m.path || (m.before?.[0]?.line ?? m.line) > (lastLine + 1);
+        if (isNonContiguous) process.stdout.write('--\n');
+      }
+      if (hasBeforeContext) {
+        for (const b of m.before) {
+          process.stdout.write(`${m.path}-${b.line}-${b.text}\n`);
+        }
+      }
+      process.stdout.write(`${m.path}:${m.line}:${m.text}\n`);
+      if (hasAfterContext) {
+        for (const a of m.after) {
+          process.stdout.write(`${m.path}-${a.line}-${a.text}\n`);
+        }
+      }
+      lastPath = m.path;
+      lastLine = m.after?.[m.after.length - 1]?.line ?? m.line;
+    }
     finish(status, isCli);
     return payload;
   }
@@ -90,9 +123,28 @@ export const handleLiteralSearchCommand = (_db, query, {
   const plural = res.totalMatches === 1 ? '' : 'es';
   process.stdout.write(`\n${ANSI.BOLD}${ANSI.CYAN}Literal search${ANSI.RESET} "${query}" ${ANSI.DIM}(${payload.mode}${isCaseInsensitive ? ', ignore-case' : ''}): ${res.totalMatches} match${plural} in ${res.filesMatched} files${ANSI.RESET}\n`);
   process.stdout.write(`  ${ANSI.DIM}${describeScope(res, root, scope.scopeKey)}${ANSI.RESET}\n`);
-  for (const m of res.matches) {
+  for (let i = 0; i < res.matches.length; i++) {
+    const m = res.matches[i];
+    const hasBeforeContext = Boolean(m.before && m.before.length > 0);
+    const hasAfterContext = Boolean(m.after && m.after.length > 0);
+    const hasContext = hasBeforeContext || hasAfterContext;
+    const isSubsequentMatch = i > 0;
+    const shouldSeparateChunk = hasContext && isSubsequentMatch;
+    if (shouldSeparateChunk) {
+      process.stdout.write(`${ANSI.DIM}--${ANSI.RESET}\n`);
+    }
+    if (hasBeforeContext) {
+      for (const b of m.before) {
+        process.stdout.write(`${ANSI.DIM}${m.path}-${b.line}-${b.text}${ANSI.RESET}\n`);
+      }
+    }
     const location = `${ANSI.BOLD}${m.path}${ANSI.RESET}:${ANSI.GOLD}${m.line}${ANSI.RESET}`;
     process.stdout.write(isLineOnly ? `${location}\n` : `${location}:${m.text}\n`);
+    if (hasAfterContext) {
+      for (const a of m.after) {
+        process.stdout.write(`${ANSI.DIM}${m.path}-${a.line}-${a.text}${ANSI.RESET}\n`);
+      }
+    }
   }
   const isTruncated = Boolean(res.truncated);
   if (isTruncated) process.stdout.write(`\n  ${ANSI.GOLD}Showing ${res.matches.length} of ${res.totalMatches} matches. Use -n <num> to see more, -l for path:line only.${ANSI.RESET}\n`);

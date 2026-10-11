@@ -162,12 +162,20 @@ export const runSearch = async (rawArgs = [], isCli = true) => {
     const hasPathArgs = pathArgs.length > 0;
     const dir = parsed.values.dir ?? (hasPathArgs ? pathArgs : null);
     const isLineOnly = hasAnyFlag(parsed, ['-l', '--lines']);
-    const defaultLimit = isLineOnly ? Number.MAX_SAFE_INTEGER : 20;
+    const isBare = hasAnyFlag(parsed, ['--bare', '-b']);
+    const context = parsed.values.context !== undefined ? readIntValue(parsed, 'context', 0) : 0;
+    const beforeContext = parsed.values.beforeContext !== undefined ? readIntValue(parsed, 'beforeContext', 0) : context;
+    const afterContext = parsed.values.afterContext !== undefined ? readIntValue(parsed, 'afterContext', 0) : context;
+    const defaultLimit = (isLineOnly || isBare) ? Number.MAX_SAFE_INTEGER : 20;
     const limit = parsed.values.limit !== undefined ? readIntValue(parsed, 'limit', 20) : defaultLimit;
 
     return handleLiteralSearchCommand(null, pattern, {
       isCaseInsensitive: hasAnyFlag(parsed, ['-i', '--ignore-case']),
       isLineOnly,
+      isBare,
+      context,
+      beforeContext,
+      afterContext,
       isRegex: parsed.flags.has('--regex'),
       isHidden: parsed.flags.has('--hidden'),
       limit, isJson, isCli, cwd,

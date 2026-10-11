@@ -97,6 +97,17 @@ test('literal search command: truncation is explicit and line-only drops text', 
   assert.equal(res.matches[0].text, undefined);
 });
 
+test('literal search: context flags attach before and after lines', () => {
+  const res = runLiteralSearch({ root: KIT_ROOT, pattern: 'const SYM_TS', limit: 5, context: 2 });
+  assert.ok(res.matches.length > 0);
+  const match = res.matches.find((m) => m.path.includes('reader-symbol.spec.js'));
+  assert.ok(match, 'found match in reader-symbol.spec.js');
+  assert.ok(Array.isArray(match.before), 'has before context array');
+  assert.ok(Array.isArray(match.after), 'has after context array');
+  assert.ok(match.before.length > 0, 'before lines attached');
+  assert.ok(match.after.length > 0, 'after lines attached');
+});
+
 test('chemx q -g treats a dash-prefixed pattern as the pattern, not a flag value', async () => {
   const root = makeRepo();
   try {

@@ -59,11 +59,48 @@ export const handleChemxQ = (args = {}, cwd = process.cwd()) => {
   if (!query) throw new Error('chemx_q requires "query" or "symbol" argument.');
   const isLiteral = Boolean(args.literal);
   if (isLiteral) {
-    return handleLiteralSearchCommand(null, query, {
+    const isBare = args.bare !== false && !args.json;
+    const context = typeof args.context === 'number' ? args.context : 0;
+    const beforeContext = typeof args.beforeContext === 'number' ? args.beforeContext : context;
+    const afterContext = typeof args.afterContext === 'number' ? args.afterContext : context;
+    const res = handleLiteralSearchCommand(null, query, {
       isJson: false, isCli: false, cwd: targetCwd, dir: args.paths || args.path || args.dir || null,
       isRegex: Boolean(args.regex), isCaseInsensitive: Boolean(args.ignoreCase), isLineOnly: Boolean(args.lines || args.linesOnly),
-      isHidden: Boolean(args.hidden), limit: typeof args.limit === 'number' ? args.limit : 50, isQuiet: true
+      isHidden: Boolean(args.hidden), limit: typeof args.limit === 'number' ? args.limit : 50, isQuiet: true,
+      isBare, context, beforeContext, afterContext
     });
+    const isJson = Boolean(args.json);
+    if (isJson) return res;
+    const hasNoMatches = res.matches.length === 0;
+    if (hasNoMatches) return `no matches for "${query}"`;
+    const lines = [];
+    let lastPath = null;
+    let lastLine = null;
+    for (let i = 0; i < res.matches.length; i++) {
+      const m = res.matches[i];
+      const hasBeforeContext = Boolean(m.before && m.before.length > 0);
+      const hasAfterContext = Boolean(m.after && m.after.length > 0);
+      const hasCtx = hasBeforeContext || hasAfterContext;
+      const isSubsequentMatch = i > 0;
+      const shouldCheckSeparator = hasCtx && isSubsequentMatch;
+      if (shouldCheckSeparator) {
+        const isDifferentPath = lastPath !== m.path;
+        const firstLine = m.before?.[0]?.line ?? m.line;
+        const isLineGap = firstLine > (lastLine + 1);
+        const isNonContiguous = isDifferentPath || isLineGap;
+        if (isNonContiguous) lines.push('--');
+      }
+      if (hasBeforeContext) {
+        for (const b of m.before) lines.push(`${m.path}-${b.line}-${b.text}`);
+      }
+      lines.push(`${m.path}:${m.line}:${m.text}`);
+      if (hasAfterContext) {
+        for (const a of m.after) lines.push(`${m.path}-${a.line}-${a.text}`);
+      }
+      lastPath = m.path;
+      lastLine = m.after?.[m.after.length - 1]?.line ?? m.line;
+    }
+    return lines.join('\n');
   }
   const session = syncIndexForQuery(targetCwd, args);
   const { db, index } = session;

@@ -4,7 +4,10 @@
 
 const VALUE_FLAGS = new Map([
   ['-n', 'limit'], ['--limit', 'limit'], ['--dir', 'dir'], ['--tier', 'tier'],
-  ['--max-depth', 'maxDepth'], ['--rule', 'rule'], ['-d', 'maxDepth']
+  ['--max-depth', 'maxDepth'], ['--rule', 'rule'], ['-d', 'maxDepth'],
+  ['-C', 'context'], ['--context', 'context'],
+  ['-B', 'beforeContext'], ['--before-context', 'beforeContext'],
+  ['-A', 'afterContext'], ['--after-context', 'afterContext']
 ]);
 
 const BOOLEAN_FLAGS = new Set([
@@ -12,11 +15,12 @@ const BOOLEAN_FLAGS = new Set([
   '-l', '--lines', '--include-internal', '--reindex', '--blast-radius', '--blast', '--impact',
   '--trace', '--backtrace', '--semantic', '--hybrid', '--critical', '--progression', '--failing',
   '--degraded', '--crystalline', '--clean', '--regex', '-F', '--fixed-strings', '--hidden',
-  '--full', '--help', '-h', '--ignore-case'
+  '--full', '--help', '-h', '--ignore-case', '--bare', '-b'
 ]);
 
 const LITERAL_FLAGS = new Set(['-g', '--literal']);
-const INTEGER_KEYS = new Set(['limit', 'maxDepth']);
+const CONTEXT_KEYS = new Set(['context', 'beforeContext', 'afterContext']);
+const INTEGER_KEYS = new Set(['limit', 'maxDepth', ...CONTEXT_KEYS]);
 
 const isKnownFlag = (token) => {
   const name = token.split('=')[0];
@@ -71,8 +75,10 @@ export const parseSearchArgs = (rawArgs = []) => {
       const shouldConsumeSeparateValue = !hasInlineValue && hasValue;
       if (shouldConsumeSeparateValue) i += 1;
       if (hasValue) parsed.values[valueKey] = String(value);
-      const isBadInteger = hasValue && INTEGER_KEYS.has(valueKey) && !isPositiveInteger(String(value));
-      if (isBadInteger) parsed.invalidValues.push(`${name} ${value} (expected a positive integer)`);
+      const isBadInteger = hasValue && INTEGER_KEYS.has(valueKey) && (
+        CONTEXT_KEYS.has(valueKey) ? !/^\d+$/.test(String(value)) : !isPositiveInteger(String(value))
+      );
+      if (isBadInteger) parsed.invalidValues.push(`${name} ${value} (expected a ${CONTEXT_KEYS.has(valueKey) ? 'non-negative' : 'positive'} integer)`);
       continue;
     }
     const isBoolean = BOOLEAN_FLAGS.has(name);
@@ -97,6 +103,6 @@ export const hasAnyFlag = (parsed, names) => names.some((name) => parsed.flags.h
 export const readIntValue = (parsed, key, fallback) => {
   const raw = parsed.values[key];
   const value = Number.parseInt(raw, 10);
-  const isValid = Number.isFinite(value) && value > 0;
+  const isValid = Number.isFinite(value) && (CONTEXT_KEYS.has(key) ? value >= 0 : value > 0);
   return isValid ? value : fallback;
 };

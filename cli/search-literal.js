@@ -55,9 +55,27 @@ const searchWithJs = (root, scopeDirs, options, collect) => {
     if (isBinary) { stats.skippedBinary += 1; continue; }
     stats.filesSearched += 1;
     const lines = buffer.toString('utf-8').split('\n');
+    const beforeCount = options.beforeContext || options.context || 0;
+    const afterCount = options.afterContext || options.context || 0;
+    const hasContext = beforeCount > 0 || afterCount > 0;
     lines.forEach((line, idx) => {
       const isMatch = matches(line);
-      if (isMatch) collect({ path: rel, line: idx + 1, text: clampLine(line) });
+      if (isMatch) {
+        const item = { path: rel, line: idx + 1, text: clampLine(line) };
+        if (hasContext) {
+          const before = [];
+          for (let b = Math.max(0, idx - beforeCount); b < idx; b++) {
+            before.push({ line: b + 1, text: clampLine(lines[b]) });
+          }
+          const after = [];
+          for (let a = idx + 1; a <= Math.min(lines.length - 1, idx + afterCount); a++) {
+            after.push({ line: a + 1, text: clampLine(lines[a]) });
+          }
+          item.before = before;
+          item.after = after;
+        }
+        collect(item);
+      }
     });
   }
   return stats;
@@ -103,20 +121,54 @@ const decodeRipgrepText = (data) => {
 
 const searchWithRipgrep = (root, scopeDirs, options, collect) => {
   const { textFiles, stats } = classifyRipgrepFiles(root, scopeDirs, options);
+  const beforeCount = options.beforeContext || options.context || 0;
+  const afterCount = options.afterContext || options.context || 0;
+  const hasContext = beforeCount > 0 || afterCount > 0;
   const args = ['--json', ...RG_FILTER_ARGS, '--text', '--max-filesize', String(MAX_FILE_BYTES), options.isCaseInsensitive ? '--ignore-case' : '--case-sensitive', '--sort', 'path'];
   if (!options.isRegex) args.push('--fixed-strings');
   if (options.isHidden) args.push('--hidden');
+  const hasLeadingContext = beforeCount > 0;
+  if (hasLeadingContext) args.push('-B', String(beforeCount));
+  const hasTrailingContext = afterCount > 0;
+  if (hasTrailingContext) args.push('-A', String(afterCount));
   args.push('--', options.pattern, ...scopeDirs);
   const stdout = runRipgrep(root, args);
+  let currentMatch = null;
+  const pendingBefore = [];
   for (const raw of stdout.split('\n')) {
     if (!raw) continue;
     const event = JSON.parse(raw);
-    const isMatchEvent = event.type === 'match';
-    if (!isMatchEvent) continue;
-    const rel = (event.data.path.text || '').replace(/^\.\//, '');
+    const rel = (event.data?.path?.text || '').replace(/^\.\//, '');
     const isTextFile = textFiles.has(rel);
     if (!isTextFile) continue;
-    collect({ path: rel, line: event.data.line_number, text: clampLine(decodeRipgrepText(event.data.lines).replace(/\n$/, '')) });
+
+    const isContextEvent = event.type === 'context';
+    if (isContextEvent) {
+      const lineObj = { line: event.data.line_number, text: clampLine(decodeRipgrepText(event.data.lines).replace(/\n$/, '')) };
+      const isTrailingForCurrent = Boolean(currentMatch && currentMatch.path === rel && currentMatch.after && currentMatch.after.length < afterCount);
+      if (isTrailingForCurrent) {
+        currentMatch.after.push(lineObj);
+      } else {
+        pendingBefore.push({ path: rel, ...lineObj });
+        const isBufferExceeded = pendingBefore.length > beforeCount;
+        if (isBufferExceeded) pendingBefore.shift();
+      }
+      continue;
+    }
+
+    const isMatchEvent = event.type === 'match';
+    if (isMatchEvent) {
+      const line = event.data.line_number;
+      const text = clampLine(decodeRipgrepText(event.data.lines).replace(/\n$/, ''));
+      const before = hasContext ? pendingBefore.filter((p) => p.path === rel && p.line < line).map(({ path: _, ...rest }) => rest) : undefined;
+      pendingBefore.length = 0;
+      currentMatch = { path: rel, line, text };
+      if (hasContext) {
+        currentMatch.before = before;
+        currentMatch.after = [];
+      }
+      collect(currentMatch);
+    }
   }
   return stats;
 };
@@ -128,8 +180,8 @@ const resolveEngine = (requested) => {
 };
 
 // Returns { engine, filesSearched, filesMatched, totalMatches, matches (<= limit), truncated, skipped }.
-export const runLiteralSearch = ({ root, scopeDirs = ['.'], pattern, isRegex = false, isCaseInsensitive = false, isHidden = false, limit = 20, engine = null }) => {
-  const options = { pattern, isRegex, isCaseInsensitive, isHidden };
+export const runLiteralSearch = ({ root, scopeDirs = ['.'], pattern, isRegex = false, isCaseInsensitive = false, isHidden = false, limit = 20, engine = null, context = 0, beforeContext = 0, afterContext = 0 }) => {
+  const options = { pattern, isRegex, isCaseInsensitive, isHidden, context, beforeContext, afterContext };
   const matches = [];
   const matchedFiles = new Set();
   let totalMatches = 0;

@@ -52,6 +52,11 @@ export const handleChemxRead = (args = {}, cwd = process.cwd()) => {
     backtraceSymbol: args.backtraceSymbol
   });
 
+  const isBare = Boolean(args.bare);
+  if (isBare) {
+    return res.content;
+  }
+
   const ext = path.extname(targetPath).toLowerCase();
   const lang = EXT_LANG_MAP[ext] || '';
   const bodyParts = [formatReadBody(res), res.enriched, cards.trace, cards.backtrace].filter(Boolean);

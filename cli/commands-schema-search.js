@@ -28,6 +28,10 @@ export const SEARCH_COMMANDS = [
       { flag: '-l, --lines', desc: 'Line-only output (path:line)' },
       { flag: '--failing, --clean', desc: 'Filter capsules by architectural health status' },
       { flag: '--reindex', desc: 'Force re-index before running query' },
+      { flag: '--bare, -b', desc: 'Raw match lines without headers, banners, ANSI, or tips' },
+      { flag: '-C, --context=<N>', desc: 'Lines of context before and after each match' },
+      { flag: '-B, --before-context=<N>', desc: 'Lines of leading context before each match' },
+      { flag: '-A, --after-context=<N>', desc: 'Lines of trailing context after each match' },
       { flag: '--raw-json', desc: 'With --json: row objects instead of columnar cols/rows' },
       { flag: '--no-columnar', desc: 'Same as --raw-json' },
       { flag: '--include-internal', desc: 'Include internal symbols in the results' },
@@ -65,6 +69,7 @@ export const SEARCH_COMMANDS = [
       { flag: '--compact', desc: 'Remove blank lines and indentation' },
       { flag: '--start=<N>', desc: 'Starting line number (1-indexed)' },
       { flag: '--end=<N>', desc: 'Ending line number (1-indexed)' },
+      { flag: '--bare, -b', desc: 'Raw content without headers or line numbers' },
       { flag: '--json', desc: 'Output result as minified JSON' }
     ],
     examples: [

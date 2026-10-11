@@ -86,7 +86,40 @@ export const replaceLiteral = (content, target, replacement, options = {}) => {
   const effectiveTarget = shouldNormalizeEol ? toCrlf(target) : target;
   const effectiveReplacement = shouldNormalizeEol ? toCrlf(replacement) : replacement;
 
-  const indexes = findAll(content, effectiveTarget);
+  let indexes = findAll(content, effectiveTarget);
+  let finalTarget = effectiveTarget;
+  const needsWhitespaceFallback = indexes.length === 0;
+  if (needsWhitespaceFallback) {
+    const contentLines = content.split('\n');
+    const targetLines = effectiveTarget.split('\n');
+    const targetStripped = targetLines.map((l) => l.replace(/[ \t]+$/, ''));
+    const contentStripped = contentLines.map((l) => l.replace(/[ \t]+$/, ''));
+    const matchLineIndexes = [];
+    for (let i = 0; i <= contentStripped.length - targetStripped.length; i++) {
+      let isMatch = true;
+      for (let j = 0; j < targetStripped.length; j++) {
+        const isDifferentLine = contentStripped[i + j] !== targetStripped[j];
+        if (isDifferentLine) {
+          isMatch = false;
+          break;
+        }
+      }
+      if (isMatch) matchLineIndexes.push(i);
+    }
+    const isUniqueFuzzy = matchLineIndexes.length === 1;
+    if (isUniqueFuzzy) {
+      const startLine = matchLineIndexes[0];
+      const endLine = startLine + targetLines.length;
+      const matchedSlice = contentLines.slice(startLine, endLine).join('\n');
+      const candidateIndexes = findAll(content, matchedSlice);
+      const isSingleCandidate = candidateIndexes.length === 1;
+      if (isSingleCandidate) {
+        indexes = candidateIndexes;
+        finalTarget = matchedSlice;
+      }
+    }
+  }
+
   validateMatches(indexes, content, filePath, isCrlfFile, options.allowMultiple);
 
   const lines = indexes.map((idx) => lineOfIndex(content, idx));
@@ -95,7 +128,7 @@ export const replaceLiteral = (content, target, replacement, options = {}) => {
   let cursor = 0;
   for (const idx of indexes) {
     result += content.slice(cursor, idx) + effectiveReplacement;
-    cursor = idx + effectiveTarget.length;
+    cursor = idx + finalTarget.length;
   }
   const firstStart = indexes[0];
   const lastEnd = result.length;

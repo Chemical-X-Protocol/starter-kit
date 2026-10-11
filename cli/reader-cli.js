@@ -73,6 +73,7 @@ export const runReaderCli = (args, isCli = false) => {
   }
 
   const isJson = args.includes('--json') || args.includes('-j');
+  const isBare = args.includes('--bare') || args.includes('-b');
   const isOutline = args.includes('--outline') || args.includes('-o');
   const isLogic = args.includes('--logic') || args.includes('-l');
   const isTemplate = args.includes('--template') || args.includes('-t');
@@ -150,6 +151,8 @@ export const runReaderCli = (args, isCli = false) => {
 
     if (isJson) {
       process.stdout.write(JSON.stringify(res, null, 2) + '\n');
+    } else if (isBare) {
+      process.stdout.write((res.content || '') + '\n');
     } else {
       const hasConflict = Boolean(res.conflict);
       if (hasConflict) process.stdout.write(`${ANSI.GOLD}⚠ ${res.conflict}${ANSI.RESET}\n`);

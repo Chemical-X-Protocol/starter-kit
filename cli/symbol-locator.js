@@ -13,15 +13,16 @@ import { extractScriptBlocks, isSfcFile } from './sfc-scripts.js';
 
 const DECLARATION_TYPES = new Set([
   'FunctionDeclaration', 'ClassDeclaration', 'VariableDeclarator', 'TSInterfaceDeclaration',
-  'TSTypeAliasDeclaration', 'TSEnumDeclaration', 'TSModuleDeclaration',
-  'ClassMethod', 'ClassPrivateMethod', 'ClassProperty', 'ObjectMethod', 'ObjectProperty'
+  'TSTypeAliasDeclaration', 'TSEnumDeclaration', 'TSModuleDeclaration', 'TSDeclareFunction',
+  'ClassMethod', 'ClassPrivateMethod', 'ClassProperty', 'ObjectMethod', 'ObjectProperty',
+  'TSMethodSignature', 'TSPropertySignature'
 ]);
 const FUNCTION_VALUE_TYPES = new Set(['ArrowFunctionExpression', 'FunctionExpression', 'ObjectExpression']);
 
 const keyName = (key) => key?.name ?? key?.value ?? key?.id?.name ?? null;
 
 const ownName = (node) => {
-  const isKeyed = ['ClassMethod', 'ClassPrivateMethod', 'ClassProperty', 'ObjectMethod', 'ObjectProperty'].includes(node.type);
+  const isKeyed = ['ClassMethod', 'ClassPrivateMethod', 'ClassProperty', 'ObjectMethod', 'ObjectProperty', 'TSMethodSignature', 'TSPropertySignature'].includes(node.type);
   if (isKeyed) return keyName(node.key);
   const isVariableDeclarator = node.type === 'VariableDeclarator';
   if (isVariableDeclarator) {

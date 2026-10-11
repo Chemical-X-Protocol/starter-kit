@@ -73,3 +73,23 @@ test('read --symbol reports the range and every match', () => {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('symbol: TS declare functions and interface methods resolve accurately', () => {
+  const tsCode = [
+    'export interface Cache<Data = any> {',
+    '  get(key: string): Data | undefined;',
+    '  set(key: string, value: Data): void;',
+    '}',
+    'export declare function mutate<Data = any>(key: string): Promise<Data>;'
+  ].join('\n');
+
+  const mutateSym = extractSymbolBlock(tsCode, 'mutate', 'index.d.ts');
+  assert.equal(mutateSym.startLine, 5);
+  assert.equal(mutateSym.endLine, 5);
+  assert.match(mutateSym.code, /export declare function mutate/);
+
+  const getMethod = extractSymbolBlock(tsCode, 'Cache.get', 'index.ts');
+  assert.equal(getMethod.startLine, 2);
+  assert.equal(getMethod.endLine, 2);
+  assert.match(getMethod.code, /get\(key: string\)/);
+});

@@ -140,7 +140,7 @@ const escapeRegExp = (text) => String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&
  */
 const extractSymbolBlockByText = (code, symbol) => {
   const lines = code.split('\n');
-  const targetRegex = new RegExp(`(^|\\s)(const|function|class|type|interface|let|var|def|fn|func|struct|enum)\\s+${escapeRegExp(symbol)}\\b`);
+  const targetRegex = new RegExp(`(^|\\s)(?:export\\s+)?(?:default\\s+)?(?:declare\\s+)?(?:async\\s+)?(const|function|class|type|interface|let|var|def|fn|func|struct|enum)\\s+${escapeRegExp(symbol)}\\b`);
   const isCommentLine = (line) => /^\s*(\/\/|#|\*|\/\*)/.test(line);
   const targetIndex = lines.findIndex((line) => !isCommentLine(line) && targetRegex.test(line));
   const isMissing = targetIndex === -1;
@@ -176,11 +176,9 @@ const extractSymbolBlockByText = (code, symbol) => {
  */
 export const extractSymbolBlock = (code, symbol, filePath = '') => {
   const matches = locateSymbols(code, filePath, symbol);
-  const isUnsupported = matches === null;
-  if (isUnsupported) return extractSymbolBlockByText(code, symbol);
-  const hasMatch = matches.length > 0;
-  if (!hasMatch) return null;
-  return { ...matches[0], matches: matches.map(({ code: _code, ...range }) => range) };
+  const hasMatch = Boolean(matches && matches.length > 0);
+  if (hasMatch) return { ...matches[0], matches: matches.map(({ code: _code, ...range }) => range) };
+  return extractSymbolBlockByText(code, symbol);
 };
 
 /**
