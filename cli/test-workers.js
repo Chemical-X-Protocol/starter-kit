@@ -8,14 +8,33 @@ import path from 'node:path';
 const NODE_CONCURRENCY = /\s--test-concurrency(?:=|\s+)(\S+)/g;
 const NODE_TEST_FLAG = /(^|\s)--test(?=\s|$)/;
 const MAX_WORKERS = /\s--maxWorkers(?:=|\s+)\S+/g;
+const MIN_WORKERS = /\s--minWorkers(?:=|\s+)\S+/g;
 const PM_RUN = /^(?:npm|pnpm|bun)\s+run\s+\S+$|^yarn\s+\S+$/;
 
-const setMaxWorkers = (command, workers, { forwardsArgs = false } = {}) => {
+// vitest 1.x defaults minWorkers to the core count and its pool refuses a smaller --maxWorkers
+// ("minThreads and maxThreads must not conflict"), so that major gets --minWorkers=N as well.
+const installedVitestMajor = (cwd) => {
+  const hasCwd = typeof cwd === 'string' && cwd.length > 0;
+  if (!hasCwd) return null;
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(cwd, 'node_modules/vitest/package.json'), 'utf-8'));
+    const major = parseInt(String(pkg.version).split('.')[0], 10);
+    return Number.isInteger(major) ? major : null;
+  } catch {
+    return null;
+  }
+};
+
+const setMaxWorkers = (command, workers, runner, { forwardsArgs = false, cwd = null } = {}) => {
   const isPmRun = PM_RUN.test(command.trim());
   const shouldKeepCommand = isPmRun && !forwardsArgs;
   if (shouldKeepCommand) return command;
   const separator = isPmRun && !command.startsWith('yarn') ? ' --' : '';
-  return `${command.replace(MAX_WORKERS, '')}${separator} --maxWorkers=${workers}`;
+  const stripped = command.replace(MAX_WORKERS, '').replace(MIN_WORKERS, '');
+  const vitestMajor = runner === 'vitest' ? installedVitestMajor(cwd) : null;
+  const needsMinWorkers = vitestMajor !== null && vitestMajor < 2;
+  const minWorkers = needsMinWorkers ? ` --minWorkers=${workers}` : '';
+  return `${stripped}${separator} --maxWorkers=${workers}${minWorkers}`;
 };
 
 const setNodeConcurrency = (command, workers) => {
@@ -28,7 +47,7 @@ export const withWorkerCount = (command, runner, workers, options = {}) => {
   const isNodeRunner = runner === 'node';
   if (isNodeRunner) return setNodeConcurrency(command, workers);
   const usesMaxWorkers = runner === 'vitest' || runner === 'jest';
-  return usesMaxWorkers ? setMaxWorkers(command, workers, options) : command;
+  return usesMaxWorkers ? setMaxWorkers(command, workers, runner, options) : command;
 };
 
 // The workers a run asks for: the budget, capped by the script's own --test-concurrency and,

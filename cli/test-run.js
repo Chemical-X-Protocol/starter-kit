@@ -40,7 +40,7 @@ export const runWithinBudget = async (plan, options = {}) => {
   });
   const isQueued = grant.queued === true;
   if (isQueued) return grant;
-  const command = withWorkerCount(plan.command, plan.runner, grant.workers, { forwardsArgs: plan.forwardsArgs });
+  const command = withWorkerCount(plan.command, plan.runner, grant.workers, { forwardsArgs: plan.forwardsArgs, cwd: plan.cwd });
   try {
     // NODE_TEST_CONTEXT would make a nested `node --test` report to a parent that is not listening.
     const { NODE_TEST_CONTEXT, ...extraEnv } = options.env || {};

@@ -69,6 +69,21 @@ test('test-workers: the granted worker count reaches the runner', () => {
   assert.equal(withWorkerCount('npx jest --maxWorkers=9', 'jest', 2), 'npx jest --maxWorkers=2');
 });
 
+// vitest 1.x defaults minWorkers to the core count, and tinypool refuses a --maxWorkers below it.
+test('test-workers: vitest 1.x also gets --minWorkers so the count never conflicts with its default minimum', () => {
+  const withVitest = (version) => {
+    const cwd = tempDir('chemx-vitest-version-');
+    fs.mkdirSync(path.join(cwd, 'node_modules/vitest'), { recursive: true });
+    fs.writeFileSync(path.join(cwd, 'node_modules/vitest/package.json'), JSON.stringify({ name: 'vitest', version }));
+    return cwd;
+  };
+  assert.equal(withWorkerCount('npx vitest run', 'vitest', 2, { cwd: withVitest('1.6.1') }), 'npx vitest run --maxWorkers=2 --minWorkers=2');
+  assert.equal(withWorkerCount('npx vitest run --minWorkers=9', 'vitest', 2, { cwd: withVitest('1.6.1') }), 'npx vitest run --maxWorkers=2 --minWorkers=2');
+  assert.equal(withWorkerCount('npx vitest run', 'vitest', 2, { cwd: withVitest('2.1.0') }), 'npx vitest run --maxWorkers=2');
+  assert.equal(withWorkerCount('npm run test -- --foo', 'vitest', 2, { cwd: withVitest('1.6.1'), forwardsArgs: true }), 'npm run test -- --foo --maxWorkers=2 --minWorkers=2');
+  assert.equal(withWorkerCount('npx vitest run', 'vitest', 2, { cwd: tempDir('chemx-no-vitest-') }), 'npx vitest run --maxWorkers=2', 'no installed vitest: the pool-agnostic flag only');
+});
+
 const PROBE_SPEC = [
   "import fs from 'node:fs';",
   "import path from 'node:path';",
