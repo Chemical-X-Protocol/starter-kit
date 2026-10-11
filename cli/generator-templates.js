@@ -1,4 +1,4 @@
-export { toPascalCase, toCamelCase } from './generator-templates/naming.js';
+export { toPascalCase, toCamelCase, describeCapsuleNameError, assertValidCapsuleName } from './generator-templates/naming.js';
 export { resolveArchetype, ALL_ARCHETYPES } from './generator-templates/archetypes/index.js';
 export { buildReactComponent } from './generator-templates/react.js';
 export { buildVueComponent } from './generator-templates/vue.js';

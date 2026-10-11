@@ -1,5 +1,7 @@
 export interface TemplateOptions {
   readonly atomsPackage?: string | null;
+  /** Relative specifier of a local a-button atom (no alias): `../atoms/a-button`, `../atoms/a-button.vue`. */
+  readonly atomsPath?: string | null;
   readonly hasController?: boolean;
 }
 
@@ -19,6 +21,8 @@ export declare function resolveArchetype(slug?: string): ArchetypeDefinition;
 
 export declare function toPascalCase(str: string): string;
 export declare function toCamelCase(str: string): string;
+export declare function describeCapsuleNameError(name: string): string | null;
+export declare function assertValidCapsuleName(name: string): void;
 
 export declare function buildReactComponent(name: string, pascalName: string, options?: TemplateOptions): string;
 export declare function buildVueComponent(name: string, pascalName: string, options?: TemplateOptions): string;

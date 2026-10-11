@@ -116,7 +116,8 @@ test('project-detector: detectInstalledFamily falls back to local components/ato
 
   const family = detectInstalledFamily(tmpDir);
   assert.strictEqual(family.hasAtoms, true);
-  assert.strictEqual(family.atomsPackage, '@/components/atoms');
+  assert.strictEqual(family.atomsPackage, null, 'a local directory is not a package specifier');
+  assert.strictEqual(family.atomsDir, path.join(tmpDir, 'src/components/atoms'));
 
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });

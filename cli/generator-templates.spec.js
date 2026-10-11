@@ -50,6 +50,23 @@ test('components: buildReactComponent handles options', () => {
   assert.ok(lean.includes('const canProceed = true;'));
 });
 
+test('components: a local atom path is a default import of the atom file in every framework', () => {
+  const react = buildReactComponent('m-card', 'Card', { atomsPath: '../atoms/a-button' });
+  assert.ok(react.includes("import AtomButton from '../atoms/a-button';"), react);
+  assert.ok(react.includes('<AtomButton') && !react.includes('<button'), react);
+
+  const vue = buildVueComponent('m-card', 'Card', { atomsPath: '../atoms/a-button.vue' });
+  assert.ok(vue.includes("import AButton from '../atoms/a-button.vue';"), vue);
+  assert.ok(vue.includes('<a-button') && !vue.includes('<button'), vue);
+
+  const svelte = buildSvelteComponent('m-card', 'Card', { atomsPath: '../atoms/a-button.svelte' });
+  assert.ok(svelte.includes("import AtomButton from '../atoms/a-button.svelte';"), svelte);
+  assert.ok(svelte.includes('<AtomButton') && !svelte.includes('<button'), svelte);
+
+  const taskList = buildReactComponent('m-task-list', 'TaskList', { atomsPath: '../atoms/a-button' });
+  assert.ok(taskList.includes("import AtomButton from '../atoms/a-button';") && !taskList.includes('<button'), taskList);
+});
+
 test('components: buildVueComponent and buildSvelteComponent handle options', () => {
   const vue = buildVueComponent('m-card', 'Card', { atomsPackage: '@chemx/x-atoms' });
   assert.ok(vue.includes('<a-button'));

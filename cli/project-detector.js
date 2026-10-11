@@ -90,27 +90,18 @@ export const detectTestRunner = (startDir = process.cwd()) => {
 const ATOMS_PACKAGES = ['@chemx/x-atoms', '@chemx/atoms', 'x-atoms', '@chem-x/x-atoms'];
 const PALETTE_PACKAGES = ['@chemx/o-command-palette', '@chemx/command-palette', 'o-command-palette', '@chem-x/o-command-palette'];
 
-const resolveLocalAtomsCandidate = (cwd) => {
-  const componentAtomsPath = path.resolve(cwd, 'src/components/atoms');
-  const hasComponentAtoms = fs.existsSync(componentAtomsPath);
-  if (hasComponentAtoms) {
-    return '@/components/atoms';
-  }
-
-  const directAtomsPath = path.resolve(cwd, 'src/atoms');
-  const hasDirectAtoms = fs.existsSync(directAtomsPath);
-  if (hasDirectAtoms) {
-    return '@/atoms';
-  }
-
-  return null;
+// The absolute path of a local atoms directory. It is not a package: the generator imports its
+// atoms by relative path, since a scaffolded project has no `@/` alias for it.
+const resolveLocalAtomsDir = (cwd) => {
+  const candidates = ['src/components/atoms', 'src/atoms'].map((rel) => path.resolve(cwd, rel));
+  return candidates.find((dir) => fs.existsSync(dir)) || null;
 };
 
 export const detectInstalledFamily = (cwd = process.cwd()) => {
   const pkgPath = path.resolve(cwd, 'package.json');
   const hasPackageJson = fs.existsSync(pkgPath);
   if (!hasPackageJson) {
-    return { hasAtoms: false, atomsPackage: null, hasPalette: false, palettePackage: null };
+    return { hasAtoms: false, atomsPackage: null, atomsDir: null, hasPalette: false, palettePackage: null };
   }
 
   try {
@@ -120,18 +111,17 @@ export const detectInstalledFamily = (cwd = process.cwd()) => {
     const atomsCandidate = ATOMS_PACKAGES.find((name) => Boolean(deps[name]));
     const paletteCandidate = PALETTE_PACKAGES.find((name) => Boolean(deps[name]));
 
-    const localAtomsCandidate = resolveLocalAtomsCandidate(cwd);
-
-    const resolvedAtomsPackage = atomsCandidate || localAtomsCandidate || null;
+    const atomsDir = atomsCandidate ? null : resolveLocalAtomsDir(cwd);
 
     return {
-      hasAtoms: Boolean(resolvedAtomsPackage),
-      atomsPackage: resolvedAtomsPackage,
+      hasAtoms: Boolean(atomsCandidate || atomsDir),
+      atomsPackage: atomsCandidate || null,
+      atomsDir,
       hasPalette: Boolean(paletteCandidate),
       palettePackage: paletteCandidate || null
     };
   } catch {
-    return { hasAtoms: false, atomsPackage: null, hasPalette: false, palettePackage: null };
+    return { hasAtoms: false, atomsPackage: null, atomsDir: null, hasPalette: false, palettePackage: null };
   }
 };
 

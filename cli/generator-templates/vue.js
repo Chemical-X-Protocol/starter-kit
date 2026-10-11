@@ -1,10 +1,12 @@
 import { resolveArchetype } from './archetypes/index.js';
+import { buildAtomImport, hasAtomSource } from './atom-import.js';
 
 export const buildVueComponent = (name, pascalName, options = {}) => {
-  const atomsPackage = options.atomsPackage || null;
+  const hasAtoms = hasAtomSource(options);
   const hasController = options.hasController !== false;
   const archetype = resolveArchetype(name, options.description || options.desc, options.template || options.archetype);
 
+  const atomImport = buildAtomImport({ framework: 'vue', atomsPackage: options.atomsPackage, atomsPath: options.atomsPath });
   const controllerImport = hasController
     ? `import { use${pascalName}Controller } from './${name}.controller';\n`
     : '';
@@ -16,7 +18,7 @@ export const buildVueComponent = (name, pascalName, options = {}) => {
     let bodyContent = '';
     const isTaskList = archetype.id === 'task-list';
     if (isTaskList) {
-      const btnTag = atomsPackage ? 'a-button' : 'button';
+      const btnTag = hasAtoms ? 'a-button' : 'button';
       bodyContent = `    <form
       class="${name}__form"
       @submit.prevent="(e) => {
@@ -59,7 +61,7 @@ export const buildVueComponent = (name, pascalName, options = {}) => {
     </ul>`;
     } else {
       let converted = archetype.buildReactBody(name, pascalName);
-      if (atomsPackage) {
+      if (hasAtoms) {
         converted = converted
           .replace(/<button\b/g, '<a-button')
           .replace(/<\/button>/g, '</a-button>');
@@ -73,7 +75,7 @@ export const buildVueComponent = (name, pascalName, options = {}) => {
 
     return `<script setup lang="ts">
 import type { ${pascalName}Props, ${pascalName}Emits } from './types';
-${controllerImport}
+${atomImport}${controllerImport}
 const props = withDefaults(defineProps<${pascalName}Props>(), {});
 
 const emit = defineEmits<${pascalName}Emits>();
@@ -93,7 +95,7 @@ ${bodyContent}
 `;
   }
 
-  const actionButton = atomsPackage
+  const actionButton = hasAtoms
     ? `      <a-button
         :disabled="!canProceed"
         @click="handleAction"
@@ -120,7 +122,7 @@ const handleAction = () => emit('action', props.title);`;
 
   return `<script setup lang="ts">
 import type { ${pascalName}Props, ${pascalName}Emits } from './types';
-${controllerImport}
+${atomImport}${controllerImport}
 const props = withDefaults(defineProps<${pascalName}Props>(), {
   variant: 'standard'
 });

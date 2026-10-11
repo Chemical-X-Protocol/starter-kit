@@ -1,10 +1,11 @@
 import { resolveArchetype } from './archetypes/index.js';
+import { buildAtomImport, hasAtomSource } from './atom-import.js';
 
 export const buildSvelteComponent = (name, pascalName, options = {}) => {
-  const atomsPackage = options.atomsPackage || null;
+  const hasAtoms = hasAtomSource(options);
   const hasController = options.hasController !== false;
   const archetype = resolveArchetype(name, options.description || options.desc, options.template || options.archetype);
-  const atomImport = atomsPackage ? `import { AtomButton } from '${atomsPackage}';\n` : '';
+  const atomImport = buildAtomImport({ framework: 'svelte', atomsPackage: options.atomsPackage, atomsPath: options.atomsPath });
 
   const controllerImport = hasController
     ? `import { create${pascalName}Controller } from './${name}.controller';\n`
@@ -16,7 +17,7 @@ export const buildSvelteComponent = (name, pascalName, options = {}) => {
     let bodyContent = '';
     const isTaskList = archetype.id === 'task-list';
     if (isTaskList) {
-      const btnTag = atomsPackage ? 'AtomButton' : 'button';
+      const btnTag = hasAtoms ? 'AtomButton' : 'button';
       bodyContent = `  <form
     class="${name}__form"
     onsubmit={(e) => {
@@ -62,7 +63,7 @@ export const buildSvelteComponent = (name, pascalName, options = {}) => {
   </ul>`;
     } else {
       let converted = archetype.buildReactBody(name, pascalName);
-      if (atomsPackage) {
+      if (hasAtoms) {
         converted = converted
           .replace(/<button\b/g, '<AtomButton')
           .replace(/<\/button>/g, '</AtomButton>');
@@ -93,7 +94,7 @@ ${bodyContent}
 `;
   }
 
-  const actionButton = atomsPackage
+  const actionButton = hasAtoms
     ? `    <AtomButton
       disabled={!controller.canProceed}
       onclick={controller.handleAction}

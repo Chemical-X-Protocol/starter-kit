@@ -5,10 +5,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { resolveArchetype, buildCompactCapsule } from './generator-templates.js';
-import { detectInstalledFamily } from './project-detector.js';
 import { writeGeneratedFiles } from './generator-writes.js';
 
-export const createCompactCapsule = ({ capsuleName, pascalName, capsuleDesc, explicitTemplate, selectedFramework, selectedTier, resolvedParent, cwd, dryRun, agentId }) => {
+export const createCompactCapsule = ({ capsuleName, pascalName, capsuleDesc, explicitTemplate, selectedFramework, selectedTier, resolvedParent, cwd, dryRun, agentId, atomsPackage = null, atomsPath = null }) => {
   const compFile = `${capsuleName}.${selectedFramework.ext}`;
   const targetFilePath = path.resolve(resolvedParent, compFile);
 
@@ -18,13 +17,13 @@ export const createCompactCapsule = ({ capsuleName, pascalName, capsuleDesc, exp
   }
 
   const archetype = resolveArchetype(capsuleName, capsuleDesc, explicitTemplate);
-  const installedFamily = detectInstalledFamily(cwd);
   const compactContent = buildCompactCapsule({
     capsuleName,
     pascalName,
     framework: selectedFramework.id,
     archetype,
-    atomsPackage: installedFamily.atomsPackage
+    atomsPackage,
+    atomsPath
   });
 
   const filesCreated = [compFile];

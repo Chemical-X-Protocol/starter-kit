@@ -172,6 +172,7 @@ export interface ${pascal}Descriptor {
     buildProps: (name, pascal) => `export interface ${pascal}Props {
   readonly title?: string;
   readonly subtitle?: string;
+  readonly variant?: 'standard' | 'highlight';
   readonly onAction?: () => void;
 }
 `,

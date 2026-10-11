@@ -7,6 +7,8 @@ import { checkOrPromptEvaluation } from './license.js';
 import {
   toPascalCase,
   toCamelCase,
+  describeCapsuleNameError,
+  assertValidCapsuleName,
   buildReactComponent,
   buildVueComponent,
   buildSvelteComponent,
@@ -37,6 +39,7 @@ import { handleJigCli } from './generator-jig-cli.js';
 import { hasPreviewFlag, readFlagValue } from './cli-args.js';
 import { createCompactCapsule } from './generator-compact.js';
 import { writeGeneratedFiles } from './generator-writes.js';
+import { resolveLocalAtomPath } from './generator-templates/atom-import.js';
 export { printGenerateHelp } from './generator-help.js';
 export { createJigFiles, JIG_KINDS } from './generator-jig.js';
 export { handleJigCli } from './generator-jig-cli.js';
@@ -115,6 +118,7 @@ export const createCapsuleFiles = ({
 }) => {
   const capsuleDesc = desc || description || '';
   const cleanName = (name || 'user-avatar').trim().toLowerCase();
+  assertValidCapsuleName(cleanName);
   const selectedTier = resolveSelectedTier(tier, cleanName);
   const explicitTemplate = template || templateArg || null;
   const isCompact = Boolean(compact || flat);
@@ -138,8 +142,10 @@ export const createCapsuleFiles = ({
 
   const isHookOrView = selectedTier.tier === 'hook' || selectedTier.tier === 'view';
   const canUseCompact = isCompact && !isHookOrView;
+  const installedFamily = detectInstalledFamily(cwd);
   if (canUseCompact) {
-    return createCompactCapsule({ capsuleName, pascalName, capsuleDesc, explicitTemplate, selectedFramework, selectedTier, resolvedParent, cwd, dryRun, agentId });
+    const atomsPath = resolveLocalAtomPath({ atomsDir: installedFamily.atomsDir, targetDir: resolvedParent, framework: selectedFramework.id });
+    return createCompactCapsule({ capsuleName, pascalName, capsuleDesc, explicitTemplate, selectedFramework, selectedTier, resolvedParent, cwd, dryRun, agentId, atomsPackage: installedFamily.atomsPackage, atomsPath });
   }
 
   const targetDir = path.resolve(resolvedParent, capsuleName);
@@ -191,9 +197,9 @@ export const createCapsuleFiles = ({
     const compFile = `${capsuleName}.${selectedFramework.ext}`;
     const specFile = `${capsuleName}.spec.ts`;
     const hasController = !isLean && selectedTier.tier !== 'atom';
-    const installedFamily = detectInstalledFamily(cwd);
     const templateOpts = {
       atomsPackage: installedFamily.atomsPackage,
+      atomsPath: resolveLocalAtomPath({ atomsDir: installedFamily.atomsDir, targetDir, framework: selectedFramework.id }),
       hasController,
       description: capsuleDesc,
       framework: selectedFramework.id,
@@ -336,6 +342,16 @@ export const runGenerateWizard = async (rawArgs = []) => {
     process.exit(1);
   }
   const cleanName = (rawName || 'user-avatar').trim().toLowerCase();
+  const nameError = describeCapsuleNameError(cleanName);
+  if (nameError) {
+    if (isJson) {
+      process.stdout.write(JSON.stringify({ error: nameError, success: false }) + '\n');
+      process.exit(1);
+    }
+    const errorLine = `✕ Error: ${nameError}`;
+    process.stderr.write(isStderrTty() ? `\x1b[31m${errorLine}\x1b[0m\n` : `${errorLine}\n`);
+    process.exit(1);
+  }
   const selectedTier = resolveSelectedTier(explicitTier, cleanName);
 
   const targetCwd = dirArg ? path.resolve(process.cwd(), dirArg) : process.cwd();

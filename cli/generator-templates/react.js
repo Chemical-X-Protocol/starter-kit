@@ -1,11 +1,12 @@
 import { resolveArchetype } from './archetypes/index.js';
+import { buildAtomImport, hasAtomSource } from './atom-import.js';
 
 export const buildReactComponent = (name, pascalName, options = {}) => {
-  const atomsPackage = options.atomsPackage || null;
+  const hasAtoms = hasAtomSource(options);
   const hasController = options.hasController !== false;
   const archetype = resolveArchetype(name, options.description || options.desc, options.template || options.archetype);
 
-  const atomImport = atomsPackage ? `import { AtomButton } from '${atomsPackage}';\n` : '';
+  const atomImport = buildAtomImport({ framework: 'react', atomsPackage: options.atomsPackage, atomsPath: options.atomsPath });
   const controllerImport = hasController
     ? `import { use${pascalName}Controller } from './${name}.controller';\n`
     : '';
@@ -13,7 +14,7 @@ export const buildReactComponent = (name, pascalName, options = {}) => {
   const hasReactBuilder = Boolean(archetype && archetype.id !== 'state-boundary' && typeof archetype.buildReactBody === 'function');
   if (hasReactBuilder) {
     let bodyContent = archetype.buildReactBody(name, pascalName);
-    if (atomsPackage) {
+    if (hasAtoms) {
       bodyContent = bodyContent
         .replace(/<button\b/g, '<AtomButton')
         .replace(/<\/button>/g, '</AtomButton>');
@@ -40,7 +41,7 @@ export default ${pascalName};
 `;
   }
 
-  const actionButton = atomsPackage
+  const actionButton = hasAtoms
     ? `        <AtomButton
           disabled={!canProceed}
           onClick={handleAction}

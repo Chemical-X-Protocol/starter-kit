@@ -4,7 +4,7 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { runGenerateWizard } from './generator.js';
+import { runGenerateWizard, createCapsuleFiles } from './generator.js';
 import {
   toPascalCase,
   toCamelCase,
@@ -292,6 +292,45 @@ test('runGenerateWizard: generated capsule files are automatically indexed in .c
 
 
 
+
+test('createCapsuleFiles: a name that is not a lowercase slug is refused before any path or identifier is built', () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-gen-badname-'));
+  for (const name of ['../../x', 'm-../../x', 'hero banner', 'hero--banner', '-hero', 'hero_banner', 'héro']) {
+    assert.throws(() => createCapsuleFiles({ name, dryRun: true, cwd, framework: 'react' }), /Invalid capsule name/, name);
+  }
+  assert.strictEqual(createCapsuleFiles({ name: 'HeroBanner2', dryRun: true, cwd, framework: 'react' }).capsuleName, 'm-herobanner2');
+  assert.deepStrictEqual(fs.readdirSync(cwd), [], 'nothing is written for a refused name');
+  fs.rmSync(cwd, { recursive: true, force: true });
+});
+
+test('generate: a hostile capsule name exits 1 with the reason and writes nothing', async () => {
+  const { runCliAsync } = await import('./spec-support/run-cli.js');
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-gen-hostile-'));
+  const res = await runCliAsync(['generate', '../../x', '-y', '--json'], { cwd: sandbox });
+  assert.strictEqual(res.status, 1, res.stdout + res.stderr);
+  assert.match(res.stdout, /Invalid capsule name/);
+  assert.deepStrictEqual(fs.readdirSync(sandbox).filter((f) => f !== '.chemx'), [], 'nothing is written for a refused name');
+  fs.rmSync(sandbox, { recursive: true, force: true });
+});
+
+test('createCapsuleFiles: a local atoms directory is imported by relative path, not an unaliased @/ specifier', () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-gen-local-atoms-'));
+  fs.mkdirSync(path.join(cwd, 'src/components/atoms'), { recursive: true });
+  fs.writeFileSync(path.join(cwd, 'package.json'), JSON.stringify({ name: 'local-atoms', devDependencies: { vitest: '^1.6.0' } }));
+  fs.writeFileSync(path.join(cwd, 'src/components/atoms/a-button.tsx'), 'export const AtomButton = () => null;\nexport default AtomButton;\n');
+
+  const res = createCapsuleFiles({ name: 'note', framework: 'react', targetParent: 'src/components', cwd });
+  const tsx = fs.readFileSync(path.join(res.targetDir, 'm-note.tsx'), 'utf8');
+  assert.ok(tsx.includes("import AtomButton from '../atoms/a-button';"), tsx);
+  assert.ok(!tsx.includes('@/components/atoms'), tsx);
+  const props = fs.readFileSync(path.join(res.targetDir, 'types/props.d.ts'), 'utf8');
+  assert.ok(props.includes('readonly variant?:'), 'the fallback body renders variant, so the fallback props declare it');
+
+  const vue = createCapsuleFiles({ name: 'memo', framework: 'vue', targetParent: 'src/components', cwd });
+  const sfc = fs.readFileSync(path.join(vue.targetDir, 'm-memo.vue'), 'utf8');
+  assert.ok(sfc.includes('<button'), 'no a-button.vue atom: the Vue capsule keeps a raw button rather than importing a missing file');
+  fs.rmSync(cwd, { recursive: true, force: true });
+});
 
 test('generate: a non-interactive run without a name refuses instead of writing a default capsule', async () => {
   const { runCliAsync } = await import('./spec-support/run-cli.js');

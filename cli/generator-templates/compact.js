@@ -4,10 +4,11 @@
  */
 
 import { toPascalCase } from './naming.js';
+import { buildAtomImport, hasAtomSource } from './atom-import.js';
 
 export const buildCompactReact = (name, pascalName, archetype, options = {}) => {
-  const atomsPackage = options.atomsPackage || null;
-  const atomImport = atomsPackage ? `import { AtomButton } from '${atomsPackage}';\n` : '';
+  const hasAtoms = hasAtomSource(options);
+  const atomImport = buildAtomImport({ framework: 'react', atomsPackage: options.atomsPackage, atomsPath: options.atomsPath });
 
   const rawProps = archetype && typeof archetype.buildProps === 'function'
     ? archetype.buildProps(name, pascalName)
@@ -26,7 +27,7 @@ export const buildCompactReact = (name, pascalName, archetype, options = {}) => 
     ? archetype.buildReactBody(name, pascalName)
     : `      <div className="${name}__content">\n        {children}\n      </div>`;
 
-  if (atomsPackage) {
+  if (hasAtoms) {
     body = body.replace(/<button\b/g, '<AtomButton').replace(/<\/button>/g, '</AtomButton>');
   }
 
@@ -117,7 +118,8 @@ export const buildCompactCapsule = ({
   pascalName,
   framework = 'react',
   archetype = null,
-  atomsPackage = null
+  atomsPackage = null,
+  atomsPath = null
 }) => {
   const fw = (framework || 'react').toLowerCase();
   const isVue = fw === 'vue';
@@ -128,5 +130,5 @@ export const buildCompactCapsule = ({
   if (isSvelte) {
     return buildCompactSvelte(capsuleName, pascalName, archetype);
   }
-  return buildCompactReact(capsuleName, pascalName, archetype, { atomsPackage });
+  return buildCompactReact(capsuleName, pascalName, archetype, { atomsPackage, atomsPath });
 };
