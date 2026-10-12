@@ -50,6 +50,15 @@ test('anonymous acting call: identity inline, --as or exported earlier clears it
   assert.equal(hasAnonymousActingCall('export CHEMX_AGENT_ID=@me; chemx commit a.js -m x'), false);
 });
 
+test('inherited handle matches at a token boundary: -<role> suffix passes, exact handle is refused', () => {
+  const inherited = '@claude-3f9a1c7e';
+  assert.equal(hasAnonymousActingCall(`chemx team task claim 1 --as=${inherited}-identity`, inherited), false);
+  assert.equal(hasAnonymousActingCall(`export CHEMX_AGENT_ID=${inherited}-x; chemx write a.js`, inherited), false);
+  assert.equal(hasAnonymousActingCall(`chemx team task claim 1 --as=${inherited}`, inherited), true);
+  assert.equal(hasAnonymousActingCall(`chemx team task claim 1 --as="${inherited}"`, inherited), true);
+  assert.equal(hasAnonymousActingCall(`chemx team task claim 1 --as=${inherited}-x ${inherited}`, inherited), true);
+});
+
 test('guard: a subagent acting without identity text is denied even when the env holds the orchestrator id', () => {
   const denied = decide(SUB, 'chemx write cli/a.js --stdin');
   assert.equal(denied.decision, 'deny');

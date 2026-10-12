@@ -73,6 +73,18 @@ export const inheritedOrchestratorHandle = (payload) => {
   return hasSession ? toSessionHandle(sessionId) : null;
 };
 
+/** True when `text` names `handle` as a whole token, so `@sess-role` does not count as `@sess`. */
+const namesHandleAtBoundary = (text, handle) => {
+  let from = text.indexOf(handle);
+  while (from !== -1) {
+    const next = text[from + handle.length];
+    const endsHandle = next === undefined || !/[A-Za-z0-9_-]/.test(next);
+    if (endsHandle) return true;
+    from = text.indexOf(handle, from + 1);
+  }
+  return false;
+};
+
 /** True when the command runs a state-changing chemx call and some chemx call in it names no identity. */
 export const hasAnonymousActingCall = (command, inheritedHandle = null) => {
   const text = String(command ?? '');
@@ -81,7 +93,7 @@ export const hasAnonymousActingCall = (command, inheritedHandle = null) => {
     return invocation !== null && isChemxInvocation(invocation) && isActingChemxArgs(invocation.args);
   };
   const acts = parseShell(text).commands.some(isActing);
-  const namesInherited = inheritedHandle !== null && text.includes(inheritedHandle);
+  const namesInherited = inheritedHandle !== null && namesHandleAtBoundary(text, inheritedHandle);
   return acts && (namesInherited || !everyChemxCallCarriesIdentity(text));
 };
 
