@@ -6,13 +6,19 @@ import fs from 'node:fs';
 import { withMutex, isLive, readHolder, slotFile } from './slot-files.js';
 import { nextSeq, writeTicket, writeJoin, liveJoins, leaveJoin, readResult, currentLine } from './job-line-tickets.js';
 
-// The record a ticket or join file holds (a ticket adds `state`, and `startedAt` once it runs).
+// The record a join file holds; a ticket adds `state` and `startedAt` (ticketOf).
 export const recordOf = (job, now) => ({ pid: process.pid, token: job.token, since: job.since, heartbeat: now, kind: job.kind, key: job.key, ...job.identity });
+
+// The owner's ticket as it stands: running from the moment it claimed the heavy slots.
+export const ticketOf = (job, now) => {
+  const hasStarted = job.startedAt !== null;
+  return { ...recordOf(job, now), state: hasStarted ? 'running' : 'waiting', startedAt: job.startedAt };
+};
 
 const takeTicket = (job, seq, now) => {
   job.role = 'owner';
   job.seq = seq;
-  writeTicket(job.dir, seq, { ...recordOf(job, now), state: 'waiting' });
+  writeTicket(job.dir, seq, ticketOf(job, now));
 };
 
 const joinTicket = (job, seq, now) => {
@@ -53,14 +59,18 @@ const viewOf = (job, entries, now) => {
   return { kind: job.kind, budget: job.budget, heavy: job.heavy, position: ahead.length + 1, ahead, running, heldSlots: heavySlotsHeld(job, now) };
 };
 
-// Rule 2: claim the heavy slots (light-slot record shape plus `seq`) and turn the ticket running.
-const startTicket = (job, ticket, now) => {
+// The record a heavy slot holds: the light-slot shape plus the ticket's `seq`.
+export const slotRecordOf = (job, now) => ({ pid: process.pid, token: job.token, since: job.startedAt, heartbeat: now, ...job.identity, seq: job.seq });
+
+// Rule 2: claim the heavy slots and turn the ticket running.
+const startTicket = (job, now) => {
+  job.startedAt = now;
   for (let index = 0; index < job.heavy; index++) {
     const file = slotFile(job.dir, index);
-    fs.writeFileSync(file, JSON.stringify({ pid: process.pid, token: job.token, since: now, heartbeat: now, ...job.identity, seq: job.seq }));
+    fs.writeFileSync(file, JSON.stringify(slotRecordOf(job, now)));
     job.slotFiles.push(file);
   }
-  writeTicket(job.dir, job.seq, { ...ticket, state: 'running', startedAt: now, heartbeat: now });
+  writeTicket(job.dir, job.seq, ticketOf(job, now));
 };
 
 // Our ticket was swept as stale (our heartbeat lapsed while we lived). If a joiner already took it
@@ -79,7 +89,7 @@ const ownerTurn = (job) => withMutex(job.dir, () => {
   const isOurTicket = holder?.token === job.token;
   const canStart = isOurTicket && view.ahead.length === 0 && view.heldSlots === 0;
   if (!isOurTicket) recoverTicket(job, holder, now);
-  if (canStart) startTicket(job, holder, now);
+  if (canStart) startTicket(job, now);
   return { isFinal: canStart, view };
 });
 
@@ -100,8 +110,10 @@ const takeOverIfOldest = (job, now) => {
 const joinerTurn = (job) => withMutex(job.dir, () => {
   const now = Date.now();
   const stored = readResult(job.dir, job.seq);
-  const hasResult = Boolean(stored);
-  if (hasResult) {
+  // Only a run that started after this caller joined is the one it waits for: a request never joins
+  // a run that already started. An older result is a stalled owner's late one (its seq was taken over).
+  const isOurRun = Boolean(stored) && stored.startedAt >= job.since;
+  if (isOurRun) {
     leaveJoin(job.dir, job.seq, recordOf(job, now), now, job.staleMs);
     job.role = 'done';
     const shared = { owner: stored.owner, joined: stored.joined, seq: job.seq };

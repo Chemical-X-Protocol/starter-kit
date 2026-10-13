@@ -8,9 +8,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { SLOT_OWNER_ENV, SLOT_DEFAULTS, defaultSlotsDir, resolveTestBudget, withMutex, readHolder, identityOf, delay, everyBeat } from './slot-files.js';
-import { resolveLanes, writeTicket, readTicket, writeJoin, liveJoins, leaveJoin, writeResult, clearTicket } from './job-line-tickets.js';
-import { enterLine, recordOf, TURNS } from './job-line-turns.js';
+import { SLOT_OWNER_ENV, SLOT_DEFAULTS, defaultSlotsDir, resolveTestBudget, withMutex, isLive, readHolder, identityOf, delay, everyBeat } from './slot-files.js';
+import { resolveLanes, writeTicket, readTicket, writeJoin, liveJoins, leaveJoin, writeResult, readResult, clearTicket } from './job-line-tickets.js';
+import { enterLine, recordOf, ticketOf, slotRecordOf, TURNS } from './job-line-turns.js';
 import { ownerOf, waitLine } from './job-line-text.js';
 
 export { resolveLanes } from './job-line-tickets.js';
@@ -28,9 +28,9 @@ const createJob = (kind, key, options, env, budget) => {
     dir, kind, key, budget, heavy: resolveLanes(env, budget).heavy, token: randomUUID(), identity: identityOf(options, env),
     pollMs: options.pollMs ?? SLOT_DEFAULTS.pollMs, heartbeatMs: options.heartbeatMs ?? SLOT_DEFAULTS.heartbeatMs,
     staleMs: options.staleMs ?? SLOT_DEFAULTS.staleMs, statusMs: options.statusMs ?? SLOT_DEFAULTS.statusMs,
-    onWait: options.onWait || ((line) => process.stderr.write(line)), signal: options.signal,
+    onWait: options.onWait || ((line) => process.stderr.write(line)), onWarn: options.onWarn || ((line) => process.stderr.write(line)), signal: options.signal,
     returnQueuedAfterMs: options.returnQueuedAfterMs, retryCommand: options.retryCommand || RETRY_BY_KIND[kind],
-    start: Date.now(), since: Date.now(), lastStatus: null, role: 'none', seq: 0, slotFiles: []
+    start: Date.now(), since: Date.now(), startedAt: null, lastStatus: null, role: 'none', seq: 0, slotFiles: [], hasWarned: false
   };
 };
 
@@ -88,26 +88,52 @@ const leaveLine = (job) => {
 };
 
 // Rule 3: write the result for live joiners, then free the slots and the ticket, in one section,
-// so a joiner never sees the ticket gone without its result.
+// so a joiner never sees the ticket gone without its result. An owner whose seq was taken over
+// while it stalled writes nothing: the joiners of that seq wait for the takeover's run.
 const finishTicket = (job, result) => withMutex(job.dir, () => {
   const now = Date.now();
   const joined = liveJoins(job.dir, job.seq, now, job.staleMs).length;
-  const hasJoiners = joined > 0;
-  if (hasJoiners) writeResult(job.dir, job.seq, { owner: ownerOf({ ...job.identity, pid: process.pid }), joined, workers: job.heavy, result });
+  const ticket = readTicket(job.dir, job.seq);
+  const isTicketOurs = ticket?.token === job.token;
+  const isSeqUnclaimed = !ticket && !readResult(job.dir, job.seq);
+  const canHandOver = joined > 0 && (isTicketOurs || isSeqUnclaimed);
+  if (canHandOver) writeResult(job.dir, job.seq, { owner: ownerOf({ ...job.identity, pid: process.pid }), joined, workers: job.heavy, startedAt: job.startedAt, result });
   releaseTicket(job, now);
   job.role = 'done';
-  return joined;
+  return canHandOver ? joined : 0;
 });
 
-const refreshTicket = (job, now) => {
-  const ticket = readTicket(job.dir, job.seq);
-  const isOurTicket = ticket?.token === job.token;
-  if (isOurTicket) writeTicket(job.dir, job.seq, { ...ticket, heartbeat: now });
+// Said once per job: after a stall the line could not keep two heavy runs apart.
+const warnOverlap = (job, what) => {
+  const isFirstWarning = !job.hasWarned;
+  if (isFirstWarning) job.onWarn(`chemx: this ${job.kind} run stalled past the stale window (${job.staleMs}ms) and another run took ${what}; the heavy budget is exceeded until one of them ends\n`);
+  job.hasWarned = true;
+};
+
+// Heavy slots the job holds stay refreshed; one that was freed while it stalled is taken back, and
+// one another run holds now is left to it.
+const refreshSlots = (job, now) => {
   for (const file of job.slotFiles) {
     const record = readHolder(file);
     const isOurSlot = record?.token === job.token;
+    const isHeldByOther = !isOurSlot && isLive(record, now, job.staleMs);
     if (isOurSlot) fs.writeFileSync(file, JSON.stringify({ ...record, heartbeat: now }));
+    else if (isHeldByOther) warnOverlap(job, 'its heavy slots');
+    else fs.writeFileSync(file, JSON.stringify(slotRecordOf(job, now)));
   }
+};
+
+// An owner whose ticket was swept while it lived (a stall past staleMs: a suspended machine, Ctrl+Z)
+// puts it back, running if it runs, unless the seq was taken over (a ticket or a result under it).
+const refreshTicket = (job, now) => {
+  const ticket = readTicket(job.dir, job.seq);
+  const isOurTicket = ticket?.token === job.token;
+  const isSeqFree = !ticket && !readResult(job.dir, job.seq);
+  const isRunning = job.startedAt !== null;
+  if (isOurTicket) writeTicket(job.dir, job.seq, { ...ticket, heartbeat: now });
+  else if (isSeqFree) writeTicket(job.dir, job.seq, ticketOf(job, now));
+  else if (isRunning) warnOverlap(job, 'its line ticket');
+  refreshSlots(job, now);
 };
 
 // A joiner rewrites its whole join file, so one swept while its process lived comes back.
@@ -146,7 +172,8 @@ const runAsOwner = async (job, run) => {
  * { queued: true, position, ahead, retryCommand, workers: 0, budget, queuedMs } with nothing held.
  * `run`'s result must be JSON-serialisable (executeBuild's is). A run that throws writes no result:
  * its joiners take the ticket over in turn. Options: dir, env, budget, handle, task, command, onWait,
- * signal, returnQueuedAfterMs, retryCommand, pollMs, heartbeatMs, staleMs, statusMs.
+ * onWarn (the one-line overlap warning after a stall; default stderr), signal, returnQueuedAfterMs,
+ * retryCommand, pollMs, heartbeatMs, staleMs, statusMs.
  */
 export const runHeavy = async ({ kind, key, ...options }, run) => {
   const env = options.env || process.env;

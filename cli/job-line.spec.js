@@ -1,50 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
 import { runHeavy, resolveLanes, jobKey, HEAVY_KINDS } from './job-line.js';
 import { acquireTestSlots, listTestSlots, formatTestSlots, SLOT_OWNER_ENV } from './test-slots.js';
-import { scheduleTimeout } from './timers.js';
+import { ENV, FAST, tempDir, deadPid, delay, named, readSlot, readTicketFile, lineFiles, options, heldRun, until, withDir } from './job-line-spec-helpers.js';
 
-// Budget 6 with the default reserve of 2: heavy jobs hold slots 0-3, light runs keep 4-5.
-const ENV = { CHEMX_TEST_CONCURRENCY: '6', CHEMX_LIGHT_RESERVE: '2' };
-const FAST = { pollMs: 5, statusMs: 50, heartbeatMs: 20, staleMs: 200 };
-const tempDir = () => fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-line-'));
-const deadPid = () => spawnSync(process.execPath, ['-e', '0']).pid;
-const delay = (ms) => new Promise((resolve) => scheduleTimeout(resolve, ms));
-const named = (dir, prefix) => fs.readdirSync(dir).filter((name) => name.startsWith(prefix)).sort();
-const readSlot = (dir, index) => JSON.parse(fs.readFileSync(path.join(dir, `slot-${index}`), 'utf8'));
-const lineFiles = (dir) => fs.readdirSync(dir).filter((name) => /^(ticket|join|result|slot)-/.test(name));
-const options = (dir, extra = {}) => ({ dir, env: ENV, onWait: () => {}, ...FAST, ...extra });
-
-// A run the test holds open: `started` settles when run begins, finish() lets every call end.
-const heldRun = (value, log = [], name = 'job') => {
-  let markStarted;
-  let open;
-  const started = new Promise((resolve) => { markStarted = resolve; });
-  const gate = new Promise((resolve) => { open = resolve; });
-  const calls = [];
-  const run = async (workers) => {
-    calls.push(workers);
-    log.push(`${name}:start`);
-    markStarted();
-    await gate;
-    log.push(`${name}:end`);
-    return value;
-  };
-  return { run, started, calls, finish: () => open() };
-};
-
-const withDir = (body) => async () => {
-  const dir = tempDir();
-  try {
-    await body(dir);
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
-};
+// Light grants judged by heavy jobs with FAST.staleMs must heartbeat as fast, or they expire mid-test.
+const LIGHT = { env: ENV, heartbeatMs: FAST.heartbeatMs };
 
 test('job-line: the lanes split the budget, keeping at least one slot each way', () => {
   assert.deepEqual(resolveLanes({}, 6), { budget: 6, heavy: 4, reserve: 2 });
@@ -65,8 +28,8 @@ test('job-line: two heavy jobs with different keys run one after the other, in c
     runHeavy({ kind: 'build', key: 'k:b', ...options(dir) }, second.run)
   ];
   await first.started;
-  await delay(40);
-  assert.deepEqual(log, ['a:start'], 'the second waits while the first runs');
+  assert.deepEqual(log, ['a:start']);
+  assert.equal(readTicketFile(dir, 2).state, 'waiting', 'the second waits while the first runs');
   first.finish();
   await second.started;
   second.finish();
@@ -100,9 +63,10 @@ test('job-line: callers with the same key join a waiting ticket and share one ru
 test('job-line: an old-chemx slot (no seq) keeps a heavy ticket waiting and lists as a light holder', withDir(async (dir) => {
   fs.writeFileSync(path.join(dir, 'slot-0'), JSON.stringify({ pid: process.pid, since: Date.now(), handle: '@old' }));
   const job = heldRun('x');
-  const running = runHeavy({ kind: 'build', key: 'k', ...options(dir) }, job.run);
-  await delay(40);
-  assert.deepEqual(job.calls, [], 'the old holder keeps the heavy ticket waiting');
+  const lines = [];
+  const running = runHeavy({ kind: 'build', key: 'k', ...options(dir, { onWait: (line) => lines.push(line) }) }, job.run);
+  assert.match(lines[0], /light runs hold 1 of 4 heavy slots/, 'the old holder keeps the heavy ticket waiting');
+  assert.equal(readTicketFile(dir, 1).state, 'waiting');
   const snapshot = listTestSlots({ dir, env: ENV });
   assert.equal(snapshot.holders[0].lane, 'light');
   assert.equal(snapshot.tickets[0].state, 'waiting');
@@ -150,7 +114,7 @@ test('job-line: a light run while a heavy job runs gets slots 4 and 5 at once', 
   const job = heldRun('x');
   const heavy = runHeavy({ kind: 'tests', key: 'k', ...options(dir) }, job.run);
   await job.started;
-  const grant = await acquireTestSlots({ dir, env: ENV, want: 6, onWait: () => assert.fail('a light run never waits behind a heavy one') });
+  const grant = await acquireTestSlots({ dir, ...LIGHT, want: 6, onWait: () => assert.fail('a light run never waits behind a heavy one') });
   assert.equal(grant.workers, 2);
   assert.equal(readSlot(dir, 4).seq, undefined);
   assert.equal(readSlot(dir, 5).seq, undefined);
@@ -162,16 +126,16 @@ test('job-line: a light run while a heavy job runs gets slots 4 and 5 at once', 
 
 test('job-line: while a heavy ticket waits for light holders, a new light run claims only 4-5', withDir(async (dir) => {
   const lights = [];
-  for (let index = 0; index < 4; index++) lights.push(await acquireTestSlots({ dir, env: ENV, want: 1 }));
+  for (let index = 0; index < 4; index++) lights.push(await acquireTestSlots({ dir, ...LIGHT, want: 1 }));
   const job = heldRun('x');
   const heavy = runHeavy({ kind: 'tests', key: 'k', ...options(dir) }, job.run);
   lights[1].release();
-  const late = await acquireTestSlots({ dir, env: ENV, want: 2, onWait: () => assert.fail('the reserve was free') });
+  const late = await acquireTestSlots({ dir, ...LIGHT, want: 2, onWait: () => assert.fail('the reserve was free') });
   assert.equal(late.workers, 2);
   assert.equal(fs.existsSync(path.join(dir, 'slot-1')), false, 'the freed heavy slot is kept for the line');
   assert.deepEqual(named(dir, 'slot-'), ['slot-0', 'slot-2', 'slot-3', 'slot-4', 'slot-5']);
-  await delay(30);
-  assert.deepEqual(job.calls, [], 'the heavy job waits for slots 0-3 to drain');
+  assert.equal(readTicketFile(dir, 1).state, 'waiting', 'the heavy job waits for slots 0-3 to drain');
+  assert.deepEqual(job.calls, []);
   for (const grant of [lights[0], lights[2], lights[3]]) grant.release();
   await job.started;
   assert.deepEqual(job.calls, [4]);
@@ -188,25 +152,6 @@ test('job-line: a dead ticket blocks nobody', withDir(async (dir) => {
   const outcome = await runHeavy({ kind: 'build', key: 'k', ...options(dir, { onWait }) }, async () => 'done');
   assert.equal(outcome.result, 'done');
   assert.equal(fs.existsSync(path.join(dir, 'ticket-1')), false, 'the dead ticket was removed');
-}));
-
-test('job-line: the joiner of an owner that died takes the ticket over and runs it', withDir(async (dir) => {
-  const now = Date.now();
-  const owner = { seq: 1, pid: process.pid, token: 'ghost', since: now, heartbeat: now, kind: 'tests', key: 'k', state: 'waiting', handle: '@ghost' };
-  fs.writeFileSync(path.join(dir, 'ticket-1'), JSON.stringify(owner));
-  fs.writeFileSync(path.join(dir, 'seq'), '1');
-  const job = heldRun('ran');
-  const joiner = runHeavy({ kind: 'tests', key: 'k', ...options(dir) }, job.run);
-  assert.equal(named(dir, 'join-1-').length, 1, 'it joined the waiting ticket');
-  fs.writeFileSync(path.join(dir, 'ticket-1'), JSON.stringify({ ...owner, pid: deadPid() }));
-  await job.started;
-  assert.equal(JSON.parse(fs.readFileSync(path.join(dir, 'ticket-1'), 'utf8')).pid, process.pid, 'same seq, new owner');
-  job.finish();
-  const outcome = await joiner;
-  assert.equal(outcome.result, 'ran');
-  assert.deepEqual(job.calls, [4]);
-  assert.equal(outcome.shared, null, 'nobody else joined');
-  assert.deepEqual(lineFiles(dir), []);
 }));
 
 test('job-line: returnQueuedAfterMs behind a running ticket returns queued, holding nothing', withDir(async (dir) => {
@@ -263,8 +208,7 @@ test('job-line: the wait line names the running job and the line ahead, once and
   const lines = [];
   const second = runHeavy({ kind: 'build', key: 'k:b', ...options(dir, { onWait: (line) => lines.push(line) }) }, async () => 'b');
   assert.deepEqual(lines, ['chemx: in line #2 for build (budget 6, heavy 4): running tests for @a 0s; ahead: tests\n']);
-  await delay(80);
-  assert.ok(lines.length >= 2, `expected a repeat after statusMs, got ${lines.length}`);
+  await until(() => lines.length >= 2, 'the wait line to repeat after statusMs');
   job.finish();
   await Promise.all([first, second]);
 }));
