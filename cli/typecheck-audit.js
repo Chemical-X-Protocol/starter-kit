@@ -9,6 +9,8 @@ import { runSandboxTypecheck } from './typecheck-sandbox.js';
 import { parseTypecheckOutput, checkNodeModules } from './verify-helpers.js';
 import { formatAgentJson } from './agent-json.js';
 import { workspaceAt, emitWorkspace, rootOrAllPackages } from './workspace-run.js';
+import { runInLine, lineOptionsOf } from './job-line-run.js';
+import { sharedRunField, sharedRunNote } from './job-line-text.js';
 
 const TYPECHECK_ARGS = {
   booleans: { '--json': 'json', '--raw': 'raw', '--checkjs': 'checkjs', '--no-checkjs': 'noCheckjs', '--all-packages': 'allPackages', '--help': 'help', '-h': 'help' },
@@ -31,10 +33,14 @@ const TYPECHECK_HELP = [
   '  --json                   Output structured diagnostics as JSON',
   '  --raw                    Stream the checker output as it runs',
   '  -h, --help               Show this help message',
+  '',
+  `${ANSI.BOLD}THE LINE${ANSI.RESET}`,
+  '  A typecheck is heavy work: it waits its turn in the line the full test run and the build share',
+  '  (chemx test --help), and a caller asking for the same check while it waits shares its run.',
   ''
 ].join('\n');
 
-const formatTypecheckReport = (report) => {
+const typecheckBody = (report) => {
   if (isPass(report.status)) {
     return `  ${ANSI.LIME}✔${ANSI.RESET} ${ANSI.BOLD}TypeScript typecheck clean${ANSI.RESET} ${ANSI.DIM}(${report.durationMs}ms, ${report.command})${ANSI.RESET}\n`;
   }
@@ -51,6 +57,8 @@ const formatTypecheckReport = (report) => {
   if (hasMore) out.push(`    ${ANSI.DIM}...and ${report.errors.length - 10} more diagnostics${ANSI.RESET}`);
   return `${out.join('\n')}\n\n`;
 };
+
+const formatTypecheckReport = (report) => `${typecheckBody(report)}${sharedRunNote(report)}`;
 
 const emit = (report, { isJson, isCli, shouldPrint }) => {
   if (shouldPrint) process.stdout.write(isJson ? `${formatAgentJson(report)}\n` : formatTypecheckReport(report));
@@ -122,7 +130,8 @@ export const runTypecheckAudit = async (rawArgs = [], isCli = false, options = {
 
   const timeoutMs = parseTimeoutSeconds(parsed.values.timeout) ?? options.timeoutMs ?? null;
   const isRaw = Boolean(parsed.flags.raw) || options.raw === true;
-  const execution = await executeBuild(plan.command, cwd, { raw: isRaw, timeoutMs });
+  const line = await runInLine({ kind: 'typecheck', cwd, keyCommand: plan.command, raw: isRaw, ...lineOptionsOf(options) }, () => executeBuild(plan.command, cwd, { raw: isRaw, timeoutMs }));
+  const { execution } = line;
   const errors = parseTypecheckOutput(execution.stdout, execution.stderr);
   const status = typecheckStatusOf(execution, errors);
   const hasBareFailure = status === STATUS.FAIL && errors.length === 0;
@@ -140,7 +149,8 @@ export const runTypecheckAudit = async (rawArgs = [], isCli = false, options = {
     durationMs: execution.durationMs,
     errorCount: errors.length,
     executionError: describeExecutionError(execution, hasBareFailure, timeoutMs),
-    errors
+    errors,
+    ...sharedRunField(line.shared)
   };
   return emit(report, output);
 };

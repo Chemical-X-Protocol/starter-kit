@@ -2,6 +2,7 @@
 import { ANSI } from './theme.js';
 import { STATUS, isPass, isInconclusive } from './result-status.js';
 import { formatProfile } from './test-profile.js';
+import { sharedRunNote } from './job-line-text.js';
 
 export const TEST_HELP = [
   `${ANSI.BOLD}USAGE${ANSI.RESET}`,
@@ -23,9 +24,10 @@ export const TEST_HELP = [
   '  --slow                   Run only the slow lane (specs that spawn the CLI/MCP server,',
   '                           stress and timing specs), as declared in test-lanes.json',
   '  --profile [--top=<n>]    Wall time per spec file, slowest first (lane: default, --all, --slow)',
-  '  --slots                  List who holds the shared test worker slots and who is queued (handle,',
-  '                           task, age); with --json, as JSON. Runs no tests',
-  '  --wait-timeout=<seconds> Give up queueing for a slot after this long (default 600; 0 = no limit).',
+  '  --slots                  List who holds the shared test worker slots, who is queued and the heavy',
+  '                           line (handle, task, age, joined); with --json, as JSON. Runs no tests',
+  '  --wait-timeout=<seconds> Give up queueing after this long (a light run waits 600 by default; a full',
+  '                           suite waits as long as it takes unless this is given; 0 = no limit).',
   '                           Result: inconclusive, "queued too long, held by <handle>"; no tests ran',
   '  --allow-empty            Treat a run that collects zero tests as a pass',
   '  --timeout=<seconds>      Stop the run after this long (result: inconclusive)',
@@ -35,12 +37,24 @@ export const TEST_HELP = [
   '',
   `${ANSI.BOLD}WORKER BUDGET${ANSI.RESET}`,
   '  All chemx test runs on this machine share floor(cores/2) workers (CHEMX_TEST_CONCURRENCY',
-  '  overrides). A run takes free slots from os.tmpdir()/chemx-test-slots, passes the count to',
+  '  overrides). A light run takes free slots from os.tmpdir()/chemx-test-slots, passes the count to',
   '  the runner (--test-concurrency / --maxWorkers) and waits when none is free, printing a status',
   '  line to stderr every 30s (holders, queue position). Holders refresh a heartbeat every 10s; one',
   '  silent for 60s is reclaimed even if its pid is alive. Over MCP, a call that finds no free slot',
   '  returns {queued:true, position, retryCommand} after about 1.5s instead of blocking; run the',
-  '  retryCommand later. A run that waited 60s+ posts a "test-queue" feed event when a team db resolves.',
+  '  retryCommand later. A light run that waited 60s+ posts a "test-queue" feed event when a team db resolves.',
+  '',
+  `${ANSI.BOLD}THE LINE${ANSI.RESET}`,
+  '  The budget splits into two lanes. A run with named targets (a spec file or directory) is light: it',
+  '  takes free slots at once and never waits behind a full suite. A run with no named targets (the full',
+  '  suite), a typecheck and a build are heavy: each takes a ticket and runs one at a time, first come',
+  '  first served, holding the budget less CHEMX_LIGHT_RESERVE slots (default 2; at least 1 each way when',
+  '  the budget is 2 or more) and telling the runner that many workers. The reserve stays free for light runs.',
+  '  Waiting prints "chemx: in line #<n> for <kind> (budget <b>, heavy <h>): running <kind> for <who> <age>;',
+  '  ahead: <kinds>" to stderr. A heavy request for the same project and command as a ticket that has',
+  '  not started joins it: one run serves every caller, and each prints "chemx: shared run (owner <who>,',
+  '  <n> joined)" (JSON: sharedRun {owner, joined, seq}). A request that comes after the run started',
+  '  takes a ticket of its own. A chemx run inside a heavy run is covered by its slots and does not wait.',
   '',
   `${ANSI.BOLD}EXIT CODES${ANSI.RESET}`,
   '  0 pass, 1 fail, 3 inconclusive (no tests ran, timeout)',
@@ -108,5 +122,5 @@ export const formatTestReport = (report) => {
   }
   const showsCommand = report.status !== STATUS.PASS;
   if (showsCommand) out.push(`  ${ANSI.DIM}[${report.command}]${ANSI.RESET}`);
-  return `${out.join('\n')}\n`;
+  return `${out.join('\n')}\n${sharedRunNote(report)}`;
 };

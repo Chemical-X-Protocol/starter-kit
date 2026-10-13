@@ -38,6 +38,8 @@ export interface BuildAuditReport {
   readonly categories: Record<string, number>;
   readonly diagnostics: readonly BuildDiagnostic[];
   readonly rawTail: readonly string[];
+  /** Present when the build came from a run shared with other callers (the heavy line). */
+  readonly sharedRun?: { readonly owner: string; readonly joined: number; readonly seq: number };
 }
 
 export interface BuildOptions {

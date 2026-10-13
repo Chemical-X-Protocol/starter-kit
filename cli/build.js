@@ -8,6 +8,8 @@ import { handleError } from './errors/index.js';
 import { STATUS, toExitCode } from './result-status.js';
 import { parseCliArgs, describeArgErrors, parseTimeoutSeconds, joinCommandWords } from './cli-args.js';
 import { formatAgentJson } from './agent-json.js';
+import { runInLine, lineOptionsOf } from './job-line-run.js';
+import { sharedRunField } from './job-line-text.js';
 
 export const BUILD_ARGS = {
   booleans: {
@@ -32,6 +34,10 @@ const BUILD_HELP = [
   '  --silent, --summary      Quieter terminal output',
   '  --raw                    Stream the build output as it runs',
   '  --prep-issue, --post-issue  Prepare or post an issue report for a failed build',
+  '',
+  'THE LINE',
+  '  A build is heavy work: it waits its turn in the line the full test run and the typecheck share',
+  '  (chemx test --help), and a caller asking for the same build while it waits shares its run.',
   ''
 ].join('\n');
 
@@ -81,11 +87,12 @@ export const runBuildAudit = async (rawArgs = [], isCli = false, options = {}) =
     process.stdout.write(`${ANSI.CYAN}Auditing build:${ANSI.RESET} ${ANSI.DIM}${command}${ANSI.RESET}\n`);
   }
 
-  const executionResult = await executeBuild(command, cwd, { raw: isRaw, timeoutMs });
+  const line = await runInLine({ kind: 'build', cwd, keyCommand: command, raw: isRaw, ...lineOptionsOf(options) }, () => executeBuild(command, cwd, { raw: isRaw, timeoutMs }));
+  const executionResult = line.execution;
   const rawDiagnostics = parseBuildOutput(executionResult.stdout, executionResult.stderr);
   const status = buildStatusOf(executionResult);
   const timeoutNote = executionResult.timedOut ? { executionError: `Timed out after ${timeoutMs}ms` } : {};
-  const report = { status, ...groupBuildDiagnostics(rawDiagnostics, executionResult), ...timeoutNote };
+  const report = { status, ...groupBuildDiagnostics(rawDiagnostics, executionResult), ...timeoutNote, ...sharedRunField(line.shared) };
 
   if (isJson) {
     if (shouldPrint) {

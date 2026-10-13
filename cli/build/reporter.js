@@ -1,4 +1,5 @@
 import { ANSI } from '../theme.js';
+import { sharedRunNote } from '../job-line-text.js';
 
 const formatDiagnosticItem = (item) => {
   const loc = item.file
@@ -22,13 +23,14 @@ export const formatTerminalBuildReport = (report, options = {}) => {
   if (report.success) {
     if (isSilent) return '';
     const successHeader = `${ANSI.BOLD}${ANSI.LIME}✔ Build Succeeded${ANSI.RESET} ${ANSI.DIM}(${durationSec}s)${ANSI.RESET}`;
-    if (report.counts.warnings === 0) return `${successHeader}\n`;
+    const sharedNote = sharedRunNote(report);
+    if (report.counts.warnings === 0) return `${successHeader}\n${sharedNote}`;
 
     const warningLines = report.diagnostics
       .filter((d) => d.severity === 'WARNING')
       .map(formatDiagnosticItem)
       .join('\n');
-    return `${successHeader}\n${ANSI.GOLD}Warnings (${report.counts.warnings}):${ANSI.RESET}\n${warningLines}\n`;
+    return `${successHeader}\n${ANSI.GOLD}Warnings (${report.counts.warnings}):${ANSI.RESET}\n${warningLines}\n${sharedNote}`;
   }
 
   const out = [];
@@ -58,7 +60,7 @@ export const formatTerminalBuildReport = (report, options = {}) => {
   );
   out.push(`${ANSI.DIM}Tip: Run with --json to emit structured machine-readable diagnostics for AI agents.${ANSI.RESET}\n`);
 
-  return out.join('\n');
+  return `${out.join('\n')}${sharedRunNote(report)}`;
 };
 
 export const formatJsonBuildReport = (report) => {

@@ -21,6 +21,11 @@ export const VERIFY_HELP = [
   '  --json                   Output summary status card as JSON',
   '  -h, --help               Show this help message',
   '',
+  `${ANSI.BOLD}THE LINE${ANSI.RESET}`,
+  '  The typecheck, the full test run and the build each wait their turn in the heavy line (see',
+  '  chemx test --help). Two verifies of the same tree share all three runs; a shared step prints',
+  '  "chemx: shared run (owner <who>, <n> joined)" and carries sharedRun in the JSON.',
+  '',
   `${ANSI.BOLD}EXIT CODES${ANSI.RESET}`,
   '  0 pass, 1 fail, 3 inconclusive (no tests ran, missing checker, step timeout)',
   ''

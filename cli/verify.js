@@ -19,6 +19,7 @@ import {
   VERIFY_HELP, stepLine, formatTypecheckStep, formatTestStep, testStepIcon, formatBuildStep, createProgress, formatVerdict, isEmptyAllowed
 } from './verify-report.js';
 import { formatAgentJson } from './agent-json.js';
+import { sharedRunNote } from './job-line-text.js';
 import { resolveVerifyChanges, changedAuditOptions, testArgsFor, verifyWorkspace, formatVerifyLine } from './verify-changed.js';
 import { workspaceAt, emitWorkspace } from './workspace-run.js';
 
@@ -145,17 +146,17 @@ export const runProjectVerify = async (rawArgs = [], isCli = false, options = {}
   // Only the audit is scoped; typecheck, tests and build run project-wide, so each line names its command.
   progress.start('TypeScript');
   const typecheck = typecheckSection(await runTypecheckAudit([], false, { print: false, cwd, timeoutMs, inWorkspace: true }));
-  progress.finish(stepLine(typecheck.status, 'TypeScript', formatTypecheckStep(typecheck), typecheck.status === SKIPPED ? '' : typecheck.command));
+  progress.finish(stepLine(typecheck.status, 'TypeScript', formatTypecheckStep(typecheck), typecheck.status === SKIPPED ? '' : typecheck.command) + sharedRunNote(typecheck));
 
   progress.start('Test Suite');
   const tests = testsSection(await runTestAudit(testArgsFor(changes, base), false, { print: false, cwd, timeoutMs, allowEmpty, inWorkspace: true }));
-  progress.finish(stepLine(testStepIcon(tests), 'Test Suite', formatTestStep(tests), tests.command));
+  progress.finish(stepLine(testStepIcon(tests), 'Test Suite', formatTestStep(tests), tests.command) + sharedRunNote(tests));
 
   let build = null;
   if (includeBuild) {
     progress.start('Production Build');
     build = buildSection(await runBuildAudit(['--json'], false, { print: false, cwd, timeoutMs }));
-    progress.finish(stepLine(build.status, 'Production Build', formatBuildStep(build), build.command));
+    progress.finish(stepLine(build.status, 'Production Build', formatBuildStep(build), build.command) + sharedRunNote(build));
   }
 
   const stepStatuses = { audit: auditStatus, typecheck: typecheck.status, tests: tests.status, build: build?.status };

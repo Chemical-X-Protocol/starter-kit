@@ -3,6 +3,7 @@
 // left out of the combined verdict instead of being counted as a pass.
 import { STATUS, combineStatuses } from './result-status.js';
 import { TYPECHECK_REASONS } from './typecheck-command.js';
+import { sharedRunField } from './job-line-text.js';
 
 export const DEFAULT_STEP_TIMEOUT_MS = 10 * 60 * 1000;
 export const SKIPPED = 'skipped';
@@ -23,7 +24,8 @@ export const buildSection = (buildReport) => ({
   totalDiagnostics: buildReport.counts?.total ?? 0,
   errors: buildReport.counts?.errors ?? 0,
   executionError: buildReport.executionError || null,
-  rawTail: (buildReport.rawTail || []).slice(-5)
+  rawTail: (buildReport.rawTail || []).slice(-5),
+  ...sharedRunField(buildReport.sharedRun)
 });
 
 export const typecheckSection = (typeReport) => ({
@@ -33,7 +35,8 @@ export const typecheckSection = (typeReport) => ({
   reason: typeReport.reason || null,
   errorCount: typeReport.errorCount,
   executionError: typeReport.executionError || null,
-  errors: typeReport.errors.slice(0, 5)
+  errors: typeReport.errors.slice(0, 5),
+  ...sharedRunField(typeReport.sharedRun)
 });
 
 export const testsSection = (testReport) => ({
@@ -48,7 +51,8 @@ export const testsSection = (testReport) => ({
   errors: testReport.errors || 0,
   executionError: testReport.executionError || null,
   failures: testReport.failures.slice(0, 3),
-  ...(testReport.selection ? { selection: testReport.selection } : {})
+  ...(testReport.selection ? { selection: testReport.selection } : {}),
+  ...sharedRunField(testReport.sharedRun)
 });
 
 // stepStatuses: { audit, typecheck, tests, build? } where each value is a STATUS or SKIPPED.
