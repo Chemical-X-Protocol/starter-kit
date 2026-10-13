@@ -210,3 +210,31 @@ test('job-line takeover: a run that throws hands the ticket to its joiner, who r
   assert.deepEqual(joined.calls, [4]);
   assert.deepEqual(lineFiles(dir), [], 'no result was left for anyone');
 }));
+
+test('job-line takeover: a running owner whose slot dir was removed (rm -rf to unstick) still returns its result', withDir(async (dir) => {
+  const warnings = [];
+  const job = heldRun('done');
+  const owner = runHeavy({ kind: 'tests', key: 'k', ...options(dir, { onWarn: (line) => warnings.push(line) }) }, job.run);
+  await job.started;
+  fs.rmSync(dir, { recursive: true, force: true });
+  job.finish();
+  const outcome = await owner;
+  assert.equal(outcome.result, 'done');
+  assert.deepEqual(warnings, []);
+  assert.deepEqual(lineFiles(dir), [], 'the dir was made again and left clean');
+}));
+
+test('job-line takeover: bookkeeping that fails after the run never costs the run its outcome', withDir(async (dir) => {
+  const warnings = [];
+  const job = heldRun('done');
+  const owner = runHeavy({ kind: 'tests', key: 'k', ...options(dir, { heartbeatMs: 60000, onWarn: (line) => warnings.push(line) }) }, job.run);
+  await job.started;
+  fs.rmSync(dir, { recursive: true, force: true });
+  fs.writeFileSync(dir, 'a file where the slot dir was');
+  job.finish();
+  const outcome = await owner;
+  assert.equal(outcome.result, 'done');
+  assert.equal(outcome.shared, null);
+  assert.match(warnings.join(''), /could not hand the result to its joiners \(ENOTDIR/);
+  assert.match(warnings.join(''), /could not leave the line/);
+}));

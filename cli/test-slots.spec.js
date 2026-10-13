@@ -4,7 +4,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { resolveTestBudget, acquireTestSlots, listTestSlots, formatTestSlots, SLOT_OWNER_ENV, SLOT_WAIT_TIMEOUT_CODE } from './test-slots.js';
+import { resolveTestBudget, acquireTestSlots, listTestSlots, formatTestSlots, withMutex, SLOT_OWNER_ENV, SLOT_WAIT_TIMEOUT_CODE } from './test-slots.js';
+import { everyBeat } from './slot-files.js';
 import { scheduleTimeout } from './timers.js';
 import { withWorkerCount } from './test-workers.js';
 import { runTestAudit } from './test-audit.js';
@@ -326,21 +327,36 @@ test('test-slots: the listing tells heavy holders from light ones and lists the 
   }
 });
 
-test('test-slots: a heartbeat whose slot directory was removed reports it and never crashes the process', async () => {
+test('test-slots: a heartbeat whose slot directory was removed makes it again and never crashes the process', async () => {
   const dir = tempDir('chemx-slots-');
-  const written = [];
-  const write = process.stderr.write;
   try {
     const grant = await acquireTestSlots({ dir, budget: 1, env: {}, heartbeatMs: 10 });
     fs.rmSync(dir, { recursive: true, force: true });
-    process.stderr.write = (chunk) => written.push(String(chunk));
     await new Promise((resolve) => scheduleTimeout(resolve, 60));
-    process.stderr.write = write;
+    assert.equal(fs.existsSync(dir), true, 'the heartbeat\'s mutex made the dir again');
     grant.release();
-    assert.match(written.join(''), /chemx: slot heartbeat failed/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('test-slots: withMutex makes a removed slot dir again; a failing heartbeat is reported, never thrown', async () => {
+  const parent = tempDir('chemx-slots-');
+  const written = [];
+  const write = process.stderr.write;
+  try {
+    const dir = path.join(parent, 'gone');
+    assert.equal(withMutex(dir, () => 42), 42);
+    assert.equal(fs.existsSync(dir), true);
+    process.stderr.write = (chunk) => written.push(String(chunk));
+    const stop = everyBeat(10, () => { throw new Error('disk full'); });
+    await new Promise((resolve) => scheduleTimeout(resolve, 40));
+    stop();
+    process.stderr.write = write;
+    assert.match(written.join(''), /chemx: slot heartbeat failed \(disk full\); trying again in 10ms/);
   } finally {
     process.stderr.write = write;
-    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(parent, { recursive: true, force: true });
   }
 });
 

@@ -156,10 +156,21 @@ const keepAlive = (job) => {
   };
 };
 
+// Bookkeeping after a run must never cost the run's outcome: a failure is reported, and what is left
+// in the line goes stale and is swept by heartbeat like a dead holder's files.
+const bestEffort = (job, what, step, fallback) => {
+  try {
+    return step();
+  } catch (error) {
+    job.onWarn(`chemx: could not ${what} (${error.message}); the run's outcome stands, its line files clear as stale\n`);
+    return fallback;
+  }
+};
+
 const runAsOwner = async (job, run) => {
   const queuedMs = Date.now() - job.start;
   const result = await run(job.heavy);
-  const joined = finishTicket(job, result);
+  const joined = bestEffort(job, 'hand the result to its joiners', () => finishTicket(job, result), 0);
   const hasJoiners = joined > 0;
   const shared = hasJoiners ? { owner: ownerOf({ ...job.identity, pid: process.pid }), joined, seq: job.seq } : null;
   return { result, workers: job.heavy, budget: job.budget, queuedMs, shared };
@@ -191,6 +202,6 @@ export const runHeavy = async ({ kind, key, ...options }, run) => {
     return await runAsOwner(job, run);
   } finally {
     stopKeepingAlive();
-    leaveLine(job);
+    bestEffort(job, 'leave the line', () => leaveLine(job));
   }
 };

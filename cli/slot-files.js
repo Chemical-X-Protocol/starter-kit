@@ -41,7 +41,8 @@ const sleepSync = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),
 export const delay = (ms) => new Promise((resolve) => scheduleTimeout(resolve, ms));
 
 // The critical section only reads and writes a few small files, so a mutex older than
-// MUTEX_STALE_MS belongs to a process that died inside it.
+// MUTEX_STALE_MS belongs to a process that died inside it. A slot dir removed under a live run (an
+// `rm -rf` to unstick the line) is made again, so the run can still finish and hand over.
 export const withMutex = (dir, fn) => {
   const lock = path.join(dir, '.mutex');
   for (;;) {
@@ -49,6 +50,11 @@ export const withMutex = (dir, fn) => {
       fs.mkdirSync(lock);
       break;
     } catch (error) {
+      const isDirGone = error.code === 'ENOENT';
+      if (isDirGone) {
+        fs.mkdirSync(dir, { recursive: true });
+        continue;
+      }
       const isOtherError = error.code !== 'EEXIST';
       if (isOtherError) throw error;
       const mtime = fs.statSync(lock, { throwIfNoEntry: false })?.mtimeMs ?? Date.now();
