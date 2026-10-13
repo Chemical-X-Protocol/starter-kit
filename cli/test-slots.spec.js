@@ -343,3 +343,18 @@ test('test-slots: a heartbeat whose slot directory was removed reports it and ne
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('test-slots: a light run takes the reserve slots first, then the heavy slots while no ticket is live', async () => {
+  const dir = tempDir('chemx-slots-');
+  try {
+    const slotNames = () => fs.readdirSync(dir).filter((name) => name.startsWith('slot-')).sort();
+    const first = await acquireTestSlots({ dir, budget: 6, want: 1, env: {} });
+    assert.deepEqual(slotNames(), ['slot-4'], 'the reserve first');
+    const second = await acquireTestSlots({ dir, budget: 6, want: 3, env: {} });
+    assert.deepEqual(slotNames(), ['slot-0', 'slot-1', 'slot-4', 'slot-5'], 'the rest of the reserve, then heavy slots 0 and 1');
+    first.release();
+    second.release();
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

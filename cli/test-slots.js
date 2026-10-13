@@ -8,9 +8,10 @@
 // across processes. Waiting runs leave a `wait-<pid>` file so the queue can be listed; the
 // position it reports is informational and does not enforce first-come order.
 // This is the light lane. Heavy jobs (a full suite, a typecheck, a build) take turns in the line of
-// job-line.js and hold slots 0..heavy-1 while they run; while any heavy ticket is live, a light run
-// claims only the reserve slots heavy..budget-1, so the heavy slots drain for the line. A slot file
-// without `seq` is a light holder (old chemx writes only those).
+// job-line.js and hold slots 0..heavy-1 while they run. A light run takes the reserve slots
+// heavy..budget-1 first and spills into the heavy slots only while no heavy ticket is live, so a
+// heavy job rarely waits for single-file runs. A slot file without `seq` is a light holder (old
+// chemx writes only those, lowest index first).
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -33,23 +34,30 @@ const describeHolder = (holder) => {
   return parts.join(' ');
 };
 
-// Claims up to `want` free slots (indices below `budget`, and only from `heavy` up while a heavy
-// ticket is live); returns the claimed files and the live records holding the rest.
+const indicesFrom = (start, end) => Array.from({ length: Math.max(0, end - start) }, (_, offset) => start + offset);
+
+// Light runs look at the reserve (heavy..budget-1) first, so the heavy slots stay free for the next
+// heavy job, and only then at the heavy slots 0..heavy-1.
+const lightScanOrder = (budget, heavy) => [...indicesFrom(heavy, budget), ...indicesFrom(0, heavy)];
+
+// Claims up to `want` free slots, reserve first; a heavy slot only while no heavy ticket is live.
+// Returns the claimed files and the live records holding the rest.
 const claimFreeSlots = (dir, { budget, heavy }, want, identity, staleMs) => withMutex(dir, () => {
   const taken = [];
   const holders = [];
   const now = Date.now();
   const token = randomUUID();
   const isLineLive = liveTickets(dir, now, staleMs).length > 0;
-  const firstLightIndex = isLineLive ? heavy : 0;
-  for (let index = 0; index < budget && taken.length < want; index++) {
+  for (const index of lightScanOrder(budget, heavy)) {
+    const hasEnough = taken.length >= want;
+    if (hasEnough) break;
     const file = slotFile(dir, index);
     const holder = readHolder(file);
     if (isLive(holder, now, staleMs)) {
       holders.push(holder);
       continue;
     }
-    const isKeptForLine = index < firstLightIndex;
+    const isKeptForLine = isLineLive && index < heavy;
     if (isKeptForLine) continue;
     fs.writeFileSync(file, JSON.stringify({ pid: process.pid, token, since: now, heartbeat: now, ...identity }));
     taken.push({ file, token });

@@ -44,7 +44,7 @@ Epic #1324. Design: [2026-10-13-chemx-job-line-design.md](superpowers/specs/2026
 
 The lane is decided by what the caller asked for, before `test-lanes.json` turns an empty scope into the lane's spec list, so `chemx test` in a project with lanes is heavy even though it ends up naming hundreds of specs.
 
-Slots `0 .. heavy-1` are the heavy slots, the rest the light reserve. `heavy = budget - CHEMX_LIGHT_RESERVE`; the reserve defaults to 2 and is at least 1 each way when the budget is 2 or more (a budget of 1 is all heavy). With budget 6 a heavy job holds 4 slots and light runs keep 2. A heavy test run tells the runner that many workers (`--maxWorkers`, `--test-concurrency`); a typecheck or build is told nothing, its slots only keep the line. While a heavy ticket is live (waiting or running), light runs take only reserve slots, and any heavy slot a light run still holds is handed back when that run ends.
+Slots `0 .. heavy-1` are the heavy slots, the rest the light reserve. `heavy = budget - CHEMX_LIGHT_RESERVE`; the reserve defaults to 2 and is at least 1 each way when the budget is 2 or more (a budget of 1 is all heavy). With budget 6 a heavy job holds 4 slots and light runs keep 2. A heavy test run tells the runner that many workers (`--maxWorkers`, `--test-concurrency`); a typecheck or build is told nothing, its slots only keep the line. A light run takes reserve slots first and spills into the heavy slots only while no heavy ticket is live, so a single-file run does not make the next heavy job wait. While a heavy ticket is live (waiting or running), light runs take only reserve slots, and any heavy slot a light run still holds is handed back when that run ends.
 
 Waiting. A heavy caller prints once, then every 30 s, to stderr:
 

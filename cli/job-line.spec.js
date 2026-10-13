@@ -125,18 +125,19 @@ test('job-line: a light run while a heavy job runs gets slots 4 and 5 at once', 
 }));
 
 test('job-line: while a heavy ticket waits for light holders, a new light run claims only 4-5', withDir(async (dir) => {
+  // Six light runs fill the reserve first, then the heavy slots: slots 4, 5, 0, 1, 2, 3 in that order.
   const lights = [];
-  for (let index = 0; index < 4; index++) lights.push(await acquireTestSlots({ dir, ...LIGHT, want: 1 }));
+  for (let index = 0; index < 6; index++) lights.push(await acquireTestSlots({ dir, ...LIGHT, want: 1 }));
   const job = heldRun('x');
   const heavy = runHeavy({ kind: 'tests', key: 'k', ...options(dir) }, job.run);
-  lights[1].release();
+  for (const grant of [lights[0], lights[1], lights[3]]) grant.release();
   const late = await acquireTestSlots({ dir, ...LIGHT, want: 2, onWait: () => assert.fail('the reserve was free') });
   assert.equal(late.workers, 2);
   assert.equal(fs.existsSync(path.join(dir, 'slot-1')), false, 'the freed heavy slot is kept for the line');
   assert.deepEqual(named(dir, 'slot-'), ['slot-0', 'slot-2', 'slot-3', 'slot-4', 'slot-5']);
   assert.equal(readTicketFile(dir, 1).state, 'waiting', 'the heavy job waits for slots 0-3 to drain');
   assert.deepEqual(job.calls, []);
-  for (const grant of [lights[0], lights[2], lights[3]]) grant.release();
+  for (const grant of [lights[2], lights[4], lights[5]]) grant.release();
   await job.started;
   assert.deepEqual(job.calls, [4]);
   job.finish();

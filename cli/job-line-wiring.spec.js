@@ -84,8 +84,20 @@ test('wiring: a full test run that waits past --wait-timeout gives up with the q
   await ahead;
 }));
 
+test('wiring: a light run holding the reserve leaves the heavy slots free: a full test run starts at once', withProject(async ({ slots, work, log }) => {
+  const light = await acquireTestSlots({ dir: slots, env: lineEnv(slots, { CHEMX_AGENT_ID: '@light' }), want: 2, heartbeatMs: FAST.heartbeatMs });
+  assert.deepEqual(named(slots, 'slot-'), ['slot-4', 'slot-5'], 'the light run took the reserve');
+  const outcome = await runWithinBudget(planOf(work, probeCommand(log, slots)), { env: lineEnv(slots), returnQueuedAfterMs: 20, ...QUIET });
+  assert.equal(outcome.queued, undefined, 'it did not wait for the light run');
+  assert.equal(outcome.execution.exitCode, 0, outcome.execution.stderr);
+  assert.deepEqual(probed(log)[0].kinds, { 'ticket-1': 'tests' });
+  assert.equal(outcome.workers, 4);
+  light.release();
+}));
+
 test('wiring: a queued full test run reports who holds the slots and keeps no ticket', withProject(async ({ slots, work, log }) => {
-  const light = await acquireTestSlots({ dir: slots, env: lineEnv(slots, { CHEMX_AGENT_ID: '@light' }), want: 1, heartbeatMs: FAST.heartbeatMs });
+  // Three light slots: the reserve (4, 5) and heavy slot 0, which the full run has to wait for.
+  const light = await acquireTestSlots({ dir: slots, env: lineEnv(slots, { CHEMX_AGENT_ID: '@light' }), want: 3, heartbeatMs: FAST.heartbeatMs });
   const plan = planOf(work, `node count.cjs ${log}`);
   const outcome = await runWithinBudget(plan, { env: lineEnv(slots), returnQueuedAfterMs: 20, retryCommand: 'chemx test --json', ...QUIET });
   assert.equal(outcome.queued, true);
