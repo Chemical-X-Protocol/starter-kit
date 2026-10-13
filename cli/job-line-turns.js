@@ -120,9 +120,12 @@ const joinerTurn = (job) => withMutex(job.dir, () => {
     return { isFinal: true, value: { result: stored.result, workers: stored.workers, budget: job.budget, queuedMs: now - job.start, shared } };
   }
   const { entries } = currentLine(job.dir, now, job.staleMs);
-  const hasTicket = entries.some((entry) => entry.seq === job.seq && !entry.takeover);
+  const joined = entries.find((entry) => entry.seq === job.seq && !entry.takeover);
+  const hasTicket = Boolean(joined);
   if (!hasTicket) takeOverIfOldest(job, now);
-  return { isFinal: false, view: viewOf(job, entries, now) };
+  // The run this joiner waits for has started: from here it waits for a result, not for a turn.
+  const hasRunStarted = joined?.state === 'running';
+  return { isFinal: false, view: viewOf(job, entries, now), hasRunStarted };
 });
 
 export const TURNS = { owner: ownerTurn, joiner: joinerTurn };

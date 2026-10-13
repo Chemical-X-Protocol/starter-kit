@@ -5,6 +5,7 @@ import { runWithinBudget } from './test-run.js';
 import { runTypecheckAudit } from './typecheck-audit.js';
 import { runBuildAudit } from './build.js';
 import { runHeavy } from './job-line.js';
+import { runInLine } from './job-line-run.js';
 import { acquireTestSlots, SLOT_OWNER_ENV, SLOT_WAIT_TIMEOUT_CODE } from './test-slots.js';
 import { STATUS } from './result-status.js';
 import { FAST, options, named, heldRun, delay } from './job-line-spec-helpers.js';
@@ -93,6 +94,26 @@ test('wiring: a light run holding the reserve leaves the heavy slots free: a ful
   assert.deepEqual(probed(log)[0].kinds, { 'ticket-1': 'tests' });
   assert.equal(outcome.workers, 4);
   light.release();
+}));
+
+test('wiring: a joiner\'s --wait-timeout stops counting once the run it joined has started', withProject(async ({ slots, work }) => {
+  const blocker = heldRun('blocker');
+  const ahead = runHeavy({ kind: 'tests', key: 'k:blocker', ...options(slots) }, blocker.run);
+  await blocker.started;
+  const owner = heldRun({ exitCode: 0, stdout: 'built\n', stderr: '', durationMs: 1 });
+  const line = { kind: 'build', cwd: work, keyCommand: 'node build.cjs', env: lineEnv(slots), ...QUIET };
+  const WAIT_LIMIT_MS = 500;
+  const first = runInLine(line, owner.run);
+  const joiner = runInLine({ ...line, waitTimeoutMs: WAIT_LIMIT_MS }, async () => assert.fail('the joiner runs nothing'));
+  assert.equal(named(slots, 'join-').length, 1, 'the second caller joined the waiting build');
+  blocker.finish();
+  await owner.started;
+  await delay(WAIT_LIMIT_MS * 2);
+  owner.finish();
+  const [built, shared] = await Promise.all([first, joiner]);
+  assert.deepEqual(shared.execution, built.execution, 'the joiner got the run it joined, not a queue timeout');
+  assert.equal(shared.shared.joined, 1);
+  await ahead;
 }));
 
 test('wiring: a queued full test run reports who holds the slots and keeps no ticket', withProject(async ({ slots, work, log }) => {

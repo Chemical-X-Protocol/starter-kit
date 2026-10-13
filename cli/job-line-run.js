@@ -17,7 +17,8 @@ export const lineOptionsOf = (options = {}) => {
 };
 
 // An explicit --wait-timeout: stop waiting for a turn after `ms`. The abort reaches the wait only; a
-// job that has started is never cut short (the first thing the run does is stop the timer).
+// job that has started is never cut short: the limit stops when the run starts, for a joiner when the
+// run it joined starts (runHeavy's onStart), and again as the first thing an owner's run does.
 const waitLimitOf = (ms, outerSignal) => {
   const controller = new AbortController();
   let hasExpired = false;
@@ -80,7 +81,7 @@ export const runInLine = async ({ kind, cwd, keyCommand, raw = false, waitTimeou
     return execution;
   };
   try {
-    const outcome = await runHeavy({ kind, key: jobKey({ kind, cwd, command: keyCommand }), ...lineOptions, budget, signal: limit.signal }, run);
+    const outcome = await runHeavy({ kind, key: jobKey({ kind, cwd, command: keyCommand }), ...lineOptions, budget, signal: limit.signal, onStart: limit.stop }, run);
     const isQueued = outcome.queued === true;
     if (isQueued) return { ...outcome, holders: liveHolders(budget, lineOptions) };
     const isJoined = granted === null;

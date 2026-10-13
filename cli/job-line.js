@@ -29,6 +29,7 @@ const createJob = (kind, key, options, env, budget) => {
     pollMs: options.pollMs ?? SLOT_DEFAULTS.pollMs, heartbeatMs: options.heartbeatMs ?? SLOT_DEFAULTS.heartbeatMs,
     staleMs: options.staleMs ?? SLOT_DEFAULTS.staleMs, statusMs: options.statusMs ?? SLOT_DEFAULTS.statusMs,
     onWait: options.onWait || ((line) => process.stderr.write(line)), onWarn: options.onWarn || ((line) => process.stderr.write(line)), signal: options.signal,
+    onStart: options.onStart || (() => {}), hasSeenStart: false,
     returnQueuedAfterMs: options.returnQueuedAfterMs, retryCommand: options.retryCommand || RETRY_BY_KIND[kind],
     start: Date.now(), since: Date.now(), startedAt: null, lastStatus: null, role: 'none', seq: 0, slotFiles: [], hasWarned: false
   };
@@ -49,6 +50,13 @@ const reportWait = (job, view) => {
   }
 };
 
+// Fires options.onStart once, when the run this caller waits for starts (its own, or the one it joined).
+const markRunStarted = (job) => {
+  const isFirstSight = !job.hasSeenStart;
+  if (isFirstSight) job.onStart();
+  job.hasSeenStart = true;
+};
+
 // Polls until the owner may start ({ isFinal }), a joiner has its result or a caller gives up
 // waiting ({ isFinal, value }). Heavy tickets have no wait timeout: a dead holder goes by heartbeat.
 const waitTurn = async (job) => {
@@ -57,6 +65,7 @@ const waitTurn = async (job) => {
     if (isAborted) throw new Error('chemx: cancelled while waiting in line');
     const step = TURNS[job.role](job);
     if (step.isFinal) return step;
+    if (step.hasRunStarted) markRunStarted(job);
     reportWait(job, step.view);
     const waitedMs = Date.now() - job.start;
     const shouldReturnQueued = job.returnQueuedAfterMs !== undefined && waitedMs >= job.returnQueuedAfterMs;
@@ -169,6 +178,7 @@ const bestEffort = (job, what, step, fallback) => {
 
 const runAsOwner = async (job, run) => {
   const queuedMs = Date.now() - job.start;
+  markRunStarted(job);
   const result = await run(job.heavy);
   const joined = bestEffort(job, 'hand the result to its joiners', () => finishTicket(job, result), 0);
   const hasJoiners = joined > 0;
@@ -183,7 +193,8 @@ const runAsOwner = async (job, run) => {
  * { queued: true, position, ahead, retryCommand, workers: 0, budget, queuedMs } with nothing held.
  * `run`'s result must be JSON-serialisable (executeBuild's is). A run that throws writes no result:
  * its joiners take the ticket over in turn. Options: dir, env, budget, handle, task, command, onWait,
- * onWarn (the one-line overlap warning after a stall; default stderr), signal, returnQueuedAfterMs,
+ * onWarn (the one-line overlap warning after a stall; default stderr), onStart (called once when the
+ * run this caller waits for starts: its own, or the ticket it joined turning running), signal, returnQueuedAfterMs,
  * retryCommand, pollMs, heartbeatMs, staleMs, statusMs.
  */
 export const runHeavy = async ({ kind, key, ...options }, run) => {
