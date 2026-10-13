@@ -13,6 +13,9 @@ const timeoutArgs = (args) => {
 
 const MCP_QUEUE_RETURN_MS = 1500;
 
+// What to run later when the call answered {queued:true}: the CLI form of the call.
+const retryCommandOf = (base, args, extra = []) => [base, ...timeoutArgs(args), ...extra, ...(args.command ? ['--', args.command] : [])].join(' ');
+
 // changed/base/related select affected specs (test-scope.js); related paths are as given.
 const changeArgs = (args) => ({
   changed: Boolean(args.changed),
@@ -32,7 +35,11 @@ export const handleAuditBuild = async (args = {}, cwd = process.cwd()) => {
   if (hasCommand) {
     rawArgs.push('--', args.command);
   }
-  return runBuildAudit(rawArgs, false, { print: false, cwd: targetDirOf(args, cwd), timeoutMs: DEFAULT_STEP_TIMEOUT_MS });
+  // A host call timeout would kill a call that queues silently behind a heavy job: report {queued:true} instead.
+  return runBuildAudit(rawArgs, false, {
+    print: false, cwd: targetDirOf(args, cwd), timeoutMs: DEFAULT_STEP_TIMEOUT_MS,
+    returnQueuedAfterMs: MCP_QUEUE_RETURN_MS, retryCommand: retryCommandOf('chemx build', args)
+  });
 };
 
 export const handleChemxTypecheck = async (args = {}, cwd = process.cwd()) => {
@@ -42,7 +49,10 @@ export const handleChemxTypecheck = async (args = {}, cwd = process.cwd()) => {
     allPackages: Boolean(args.allPackages),
     print: false,
     cwd: targetDirOf(args, cwd),
-    timeoutMs: DEFAULT_STEP_TIMEOUT_MS
+    timeoutMs: DEFAULT_STEP_TIMEOUT_MS,
+    // A host call timeout would kill a call that queues silently behind a heavy job: report {queued:true} instead.
+    returnQueuedAfterMs: MCP_QUEUE_RETURN_MS,
+    retryCommand: retryCommandOf('chemx typecheck', args, args.allPackages ? ['--all-packages'] : [])
   });
 };
 

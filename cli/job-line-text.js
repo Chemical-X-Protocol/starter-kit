@@ -57,3 +57,16 @@ export const sharedRunNote = (report) => {
   const isShared = Boolean(report.sharedRun);
   return isShared ? `  ${ANSI.DIM}${sharedRunLine(report.sharedRun)}${ANSI.RESET}\n` : '';
 };
+
+// The report fields of a caller that gave up queueing: nothing ran and nothing is held, so the result
+// is QUEUED (inconclusive), never a pass. `grant` is the queued outcome of acquireTestSlots (holders)
+// or of the heavy line (holders and ahead); `what` names what did not run ("tests", "typecheck", "build").
+export const queuedFields = (grant, what) => {
+  const isInLine = Array.isArray(grant.ahead);
+  const busy = isInLine ? 'the heavy line was busy' : 'all test slots were busy';
+  const aheadField = isInLine ? { ahead: grant.ahead } : {};
+  return {
+    reason: 'QUEUED', exitCode: 0, queued: true, position: grant.position, holders: grant.holders, ...aheadField, retryCommand: grant.retryCommand,
+    detail: `${busy} after ${Math.round(grant.queuedMs / 1000)}s (queue position about ${grant.position}); no ${what} ran and no slot is held. Run again: ${grant.retryCommand}`
+  };
+};

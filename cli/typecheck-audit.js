@@ -10,7 +10,7 @@ import { parseTypecheckOutput, checkNodeModules } from './verify-helpers.js';
 import { formatAgentJson } from './agent-json.js';
 import { workspaceAt, emitWorkspace, rootOrAllPackages } from './workspace-run.js';
 import { runInLine, lineOptionsOf } from './job-line-run.js';
-import { sharedRunField, sharedRunNote } from './job-line-text.js';
+import { sharedRunField, sharedRunNote, queuedFields } from './job-line-text.js';
 
 const TYPECHECK_ARGS = {
   booleans: { '--json': 'json', '--raw': 'raw', '--checkjs': 'checkjs', '--no-checkjs': 'noCheckjs', '--all-packages': 'allPackages', '--help': 'help', '-h': 'help' },
@@ -45,7 +45,7 @@ const typecheckBody = (report) => {
     return `  ${ANSI.LIME}✔${ANSI.RESET} ${ANSI.BOLD}TypeScript typecheck clean${ANSI.RESET} ${ANSI.DIM}(${report.durationMs}ms, ${report.command})${ANSI.RESET}\n`;
   }
   if (isInconclusive(report.status)) {
-    return `  ${ANSI.YELLOW}?${ANSI.RESET} ${ANSI.BOLD}Typecheck inconclusive: ${report.reason}${ANSI.RESET} ${ANSI.DIM}(${report.executionError})${ANSI.RESET}\n`;
+    return `  ${ANSI.YELLOW}?${ANSI.RESET} ${ANSI.BOLD}Typecheck inconclusive: ${report.reason}${ANSI.RESET} ${ANSI.DIM}(${report.executionError || report.detail})${ANSI.RESET}\n`;
   }
   const hasNoDiagnostics = report.errors.length === 0;
   if (hasNoDiagnostics) {
@@ -114,7 +114,8 @@ export const runTypecheckAudit = async (rawArgs = [], isCli = false, options = {
   if (workspace) {
     const allPackages = Boolean(parsed.flags.allPackages || options.allPackages);
     const timeoutArgs = parsed.values.timeout ? [`--timeout=${parsed.values.timeout}`] : [];
-    const runInPackage = (pkg) => runTypecheckAudit(timeoutArgs, false, { timeoutMs: options.timeoutMs, cwd: pkg.dir, print: false, json: true, inWorkspace: true });
+    const queueing = { returnQueuedAfterMs: options.returnQueuedAfterMs, retryCommand: options.retryCommand };
+    const runInPackage = (pkg) => runTypecheckAudit(timeoutArgs, false, { timeoutMs: options.timeoutMs, cwd: pkg.dir, print: false, json: true, inWorkspace: true, ...queueing });
     return emitWorkspace(await rootOrAllPackages(workspace, 'typecheck', allPackages, runInPackage), output, formatTypecheckReport);
   }
   const nmStatus = checkNodeModules(cwd);
@@ -130,7 +131,10 @@ export const runTypecheckAudit = async (rawArgs = [], isCli = false, options = {
 
   const timeoutMs = parseTimeoutSeconds(parsed.values.timeout) ?? options.timeoutMs ?? null;
   const isRaw = Boolean(parsed.flags.raw) || options.raw === true;
-  const line = await runInLine({ kind: 'typecheck', cwd, keyCommand: plan.command, raw: isRaw, ...lineOptionsOf(options) }, () => executeBuild(plan.command, cwd, { raw: isRaw, timeoutMs }));
+  const lineRequest = { kind: 'typecheck', cwd, keyCommand: plan.command, raw: isRaw, returnQueuedAfterMs: options.returnQueuedAfterMs, retryCommand: options.retryCommand, ...lineOptionsOf(options) };
+  const line = await runInLine(lineRequest, () => executeBuild(plan.command, cwd, { raw: isRaw, timeoutMs }));
+  const isQueued = line.queued === true;
+  if (isQueued) return emit(earlyReport(STATUS.INCONCLUSIVE, plan.command, queuedFields(line, 'typecheck')), output);
   const { execution } = line;
   const errors = parseTypecheckOutput(execution.stdout, execution.stderr);
   const status = typecheckStatusOf(execution, errors);

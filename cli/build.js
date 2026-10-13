@@ -9,7 +9,7 @@ import { STATUS, toExitCode } from './result-status.js';
 import { parseCliArgs, describeArgErrors, parseTimeoutSeconds, joinCommandWords } from './cli-args.js';
 import { formatAgentJson } from './agent-json.js';
 import { runInLine, lineOptionsOf } from './job-line-run.js';
-import { sharedRunField } from './job-line-text.js';
+import { sharedRunField, queuedFields } from './job-line-text.js';
 
 export const BUILD_ARGS = {
   booleans: {
@@ -49,6 +49,11 @@ export const resolveBuildCommand = (parsed) => {
   return parsed.command || parsed.values.command || positionalCommand || null;
 };
 
+// A build that gave up queueing: nothing ran, nothing is held. Inconclusive, never a pass.
+const queuedBuildReport = (command, line) => ({
+  status: STATUS.INCONCLUSIVE, success: false, command, counts: { total: 0, errors: 0, warnings: 0, files: 0 }, diagnostics: [], rawTail: [], ...queuedFields(line, 'build')
+});
+
 const buildStatusOf = (execution) => {
   const isTimedOut = Boolean(execution.timedOut);
   if (isTimedOut) return STATUS.INCONCLUSIVE;
@@ -87,7 +92,15 @@ export const runBuildAudit = async (rawArgs = [], isCli = false, options = {}) =
     process.stdout.write(`${ANSI.CYAN}Auditing build:${ANSI.RESET} ${ANSI.DIM}${command}${ANSI.RESET}\n`);
   }
 
-  const line = await runInLine({ kind: 'build', cwd, keyCommand: command, raw: isRaw, ...lineOptionsOf(options) }, () => executeBuild(command, cwd, { raw: isRaw, timeoutMs }));
+  const lineRequest = { kind: 'build', cwd, keyCommand: command, raw: isRaw, returnQueuedAfterMs: options.returnQueuedAfterMs, retryCommand: options.retryCommand, ...lineOptionsOf(options) };
+  const line = await runInLine(lineRequest, () => executeBuild(command, cwd, { raw: isRaw, timeoutMs }));
+  const isQueued = line.queued === true;
+  if (isQueued) {
+    const queued = queuedBuildReport(command, line);
+    if (shouldPrint) process.stdout.write(isJson ? `${formatJsonBuildReport(queued)}\n` : `${queued.detail}\n`);
+    if (isCli) process.exit(toExitCode(queued.status));
+    return queued;
+  }
   const executionResult = line.execution;
   const rawDiagnostics = parseBuildOutput(executionResult.stdout, executionResult.stderr);
   const status = buildStatusOf(executionResult);

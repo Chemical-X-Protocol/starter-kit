@@ -16,7 +16,7 @@ import { parseTestOutput, REASONS } from './test-output.js';
 import { formatTestReport, TEST_HELP } from './test-report.js';
 import { checkNodeModules } from './verify-helpers.js';
 import { formatAgentJson } from './agent-json.js';
-import { sharedRunField } from './job-line-text.js';
+import { sharedRunField, queuedFields } from './job-line-text.js';
 
 const TEST_ARGS = {
   booleans: { '--json': 'json', '--raw': 'raw', '--allow-empty': 'allowEmpty', '--changed': 'changed', '--related': 'related', '--all-packages': 'allPackages', '--all': 'all', '--slow': 'slow', '--profile': 'profile', '--slots': 'slots', '--help': 'help', '-h': 'help' },
@@ -110,17 +110,8 @@ const runSlotsCommand = (options, output) => {
   return { slots: true, success: true, ...snapshot };
 };
 
-// A run that gave up queueing: nothing ran, nothing is held. Inconclusive, never a pass. A full suite
-// that waited in the heavy line also names the tickets ahead of it.
-const queuedReport = (grant) => {
-  const isInLine = Array.isArray(grant.ahead);
-  const busy = isInLine ? 'the heavy line was busy' : 'all test slots were busy';
-  const aheadField = isInLine ? { ahead: grant.ahead } : {};
-  return earlyReport(STATUS.INCONCLUSIVE, 'test', {
-    reason: 'QUEUED', exitCode: 0, queued: true, position: grant.position, holders: grant.holders, ...aheadField, retryCommand: grant.retryCommand,
-    detail: `${busy} after ${Math.round(grant.queuedMs / 1000)}s (queue position about ${grant.position}); no tests ran and no slot is held. Run again: ${grant.retryCommand}`
-  });
-};
+// A run that gave up queueing: nothing ran, nothing is held. Inconclusive, never a pass.
+const queuedReport = (grant) => earlyReport(STATUS.INCONCLUSIVE, 'test', queuedFields(grant, 'tests'));
 
 // The wait timeout is a usage-level stop, not a test failure: nothing ran.
 const waitTimeoutReport = (error) => earlyReport(STATUS.INCONCLUSIVE, 'test', { reason: 'QUEUE_TIMEOUT', exitCode: 0, detail: `${error.message}; no tests ran (--wait-timeout=<seconds> changes the limit, 0 removes it)` });
