@@ -206,3 +206,10 @@ test('test-command: a package test script that execs jest with "$@" is planned a
 test('test-command: the worker cap rides a forwarding script as `-- --maxWorkers=N`', () => {
   assert.equal(withWorkerCount('pnpm run test', 'jest', 4, { forwardsArgs: true }), 'pnpm run test -- --maxWorkers=4');
 });
+
+test('test-command: a custom command returns the targets it runs, so a scoped run is never the full suite', () => {
+  const plan = planTestCommand('npx jest', process.cwd(), { targets: ['a.spec.js', 'b.spec.js'] });
+  assert.deepEqual(plan.targets, ['a.spec.js', 'b.spec.js']);
+  assert.match(plan.command, /^npx jest a\.spec\.js b\.spec\.js$/);
+  assert.deepEqual(planTestCommand('npx jest', process.cwd()).targets, [], 'no targets: the full suite');
+});

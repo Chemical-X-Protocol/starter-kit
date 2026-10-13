@@ -156,7 +156,11 @@ export const runTestAudit = async (rawArgs = [], isCli = false, options = {}) =>
   const allowEmpty = Boolean(parsed.flags.allowEmpty || options.allowEmpty);
   const lane = requestedLane({ all: parsed.flags.all || options.all, slow: parsed.flags.slow || options.slow });
   const depth = parseDepth(parsed.values.depth ?? options.depth);
-  const scope = applyLane(cwd, limitDepth(resolveScope(parsed, options, cwd), depth), lane);
+  const requested = limitDepth(resolveScope(parsed, options, cwd), depth);
+  // The worker lane comes from what the caller asked for, before test lanes widen an empty scope
+  // into the lane's spec list: named specs (or affected ones) are light, anything else is the suite.
+  const isNamedRun = requested.targets.length > 0;
+  const scope = applyLane(cwd, requested, lane);
   const hasLaneError = Boolean(scope.laneError);
   if (hasLaneError) return emit(earlyReport(STATUS.FAIL, customCmd || 'test', { reason: 'USAGE', executionError: scope.laneError }), output);
   const { targets, filter, selection, emptyDetail } = scope;
@@ -178,7 +182,7 @@ export const runTestAudit = async (rawArgs = [], isCli = false, options = {}) =>
   const waitTimeoutMs = parseWaitTimeoutMs(parsed.values.waitTimeout, options.waitTimeoutMs);
   const retryCommand = ['chemx test', ...rawArgs.filter((arg) => arg !== '--json')].join(' ');
   const budgeted = await runWithinBudget(plan, {
-    raw: isRaw, timeoutMs, env: options.env, onWait: options.onWait, waitTimeoutMs,
+    heavy: !isNamedRun, raw: isRaw, timeoutMs, env: options.env, onWait: options.onWait, waitTimeoutMs,
     task: options.task ?? options.env?.CHEMX_TASK_ID, returnQueuedAfterMs: options.returnQueuedAfterMs, retryCommand: options.retryCommand ?? retryCommand
   }).catch((error) => (error?.code === SLOT_WAIT_TIMEOUT_CODE ? error : Promise.reject(error)));
   const isWaitTimeout = budgeted instanceof Error;

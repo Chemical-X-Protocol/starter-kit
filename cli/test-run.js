@@ -1,8 +1,8 @@
 // Runs a planned test command inside the shared cross-process worker budget, in one of two lanes.
-// A run that names targets is light: take free slots at once, tell the runner how many workers it
-// got, run, give the slots back. A run with no targets is the full suite and heavy: it waits its
-// turn in the line (job-line.js), shares one run with callers asking for the same thing, and tells
-// the runner the heavy worker count.
+// A run whose caller named targets is light: take free slots at once, tell the runner how many
+// workers it got, run, give the slots back. Anything else is the full suite (or a test lane's whole
+// spec list) and heavy: it waits its turn in the line (job-line.js), shares one run with callers
+// asking for the same thing, and tells the runner the heavy worker count.
 import { executeBuild } from './build/executor.js';
 import { currentRequestSignal } from './request-context.js';
 import { acquireTestSlots, resolveTestBudget, SLOT_OWNER_ENV } from './test-slots.js';
@@ -58,7 +58,7 @@ const runLight = async (plan, options, { env, budget, signal }) => {
 // asking for the same suite share a run.
 const runFullSuite = async (plan, options, { env, budget, signal }) => {
   const { heavy } = resolveLanes(env, budget);
-  const cap = requestedWorkers({ command: plan.command, cwd: plan.cwd, targets: [], budget: heavy });
+  const cap = requestedWorkers({ command: plan.command, cwd: plan.cwd, targets: plan.targets || [], budget: heavy });
   const fitted = (granted) => withWorkerCount(plan.command, plan.runner, Math.min(granted, cap), { forwardsArgs: plan.forwardsArgs, cwd: plan.cwd });
   const line = {
     kind: 'tests', cwd: plan.cwd, keyCommand: fitted(heavy), raw: options.raw, waitTimeoutMs: options.waitTimeoutMs, budget, signal,
@@ -70,6 +70,8 @@ const runFullSuite = async (plan, options, { env, budget, signal }) => {
   return { execution: outcome.execution, command: fitted(outcome.workers), workers: outcome.workers, budget, queuedMs: outcome.queuedMs, shared: outcome.shared };
 };
 
+// options.heavy says which lane the caller's request belongs to (runTestAudit decides it before test
+// lanes turn an empty scope into a spec list); without it, a plan with no targets is the full suite.
 // options.env replaces process.env for budget resolution and is added to the runner's env.
 // options.waitTimeoutMs / returnQueuedAfterMs / retryCommand / task go to the lane that waits (a light
 // run's default wait limit is 10 minutes; a full suite waits without one unless waitTimeoutMs is given).
@@ -81,7 +83,7 @@ export const runWithinBudget = async (plan, options = {}) => {
   const env = options.env || process.env;
   const budget = resolveTestBudget(env);
   const signal = options.signal ?? currentRequestSignal();
-  const isFullSuite = (plan.targets || []).length === 0;
+  const isFullSuite = options.heavy ?? (plan.targets || []).length === 0;
   const lane = { env, budget, signal };
   return isFullSuite ? runFullSuite(plan, options, lane) : runLight(plan, options, lane);
 };

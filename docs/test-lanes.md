@@ -39,8 +39,10 @@ Epic #1324. Design: [2026-10-13-chemx-job-line-design.md](superpowers/specs/2026
 
 | Lane | Runs | Behaviour |
 | :--- | :--- | :--- |
-| light | `chemx test <targets>` (a named spec file or directory) | claims free slots at once, first free first served; never waits behind a heavy job |
-| heavy | `chemx test` with no targets (the full suite), `chemx typecheck`, `chemx build`, and the typecheck, test and (with `--build`) build steps of `chemx verify` (its audit step is not in the line; its test step is heavy when it names no specs) | takes a ticket and runs one at a time, first come first served |
+| light | a test run whose caller names specs: `chemx test <targets>` (a spec file or directory, also with `-- <cmd>`), `chemx_test` over MCP with `testTarget`, and `--changed` / `--related` runs that select affected specs | claims free slots at once, reserve slots first; never waits behind a heavy job |
+| heavy | a test run that names nothing: `chemx test` (with test lanes: the whole fast lane), `--slow`, `--all`, a `--changed` run that falls back to the full suite, verify's test step when it names no specs; plus `chemx typecheck`, `chemx build` and verify's typecheck and (with `--build`) build steps (its audit step is not in the line) | takes a ticket and runs one at a time, first come first served |
+
+The lane is decided by what the caller asked for, before `test-lanes.json` turns an empty scope into the lane's spec list, so `chemx test` in a project with lanes is heavy even though it ends up naming hundreds of specs.
 
 Slots `0 .. heavy-1` are the heavy slots, the rest the light reserve. `heavy = budget - CHEMX_LIGHT_RESERVE`; the reserve defaults to 2 and is at least 1 each way when the budget is 2 or more (a budget of 1 is all heavy). With budget 6 a heavy job holds 4 slots and light runs keep 2. A heavy test run tells the runner that many workers (`--maxWorkers`, `--test-concurrency`); a typecheck or build is told nothing, its slots only keep the line. While a heavy ticket is live (waiting or running), light runs take only reserve slots, and any heavy slot a light run still holds is handed back when that run ends.
 

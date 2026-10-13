@@ -172,13 +172,15 @@ export const scriptForwardsArgs = (script = '') => {
 };
 
 // Returns { command, cwd, runner, missingTargets, targets, forwardsArgs }. missingTargets lists node --test targets
-// that do not exist on disk; the caller reports those as inconclusive instead of running.
+// that do not exist on disk; the caller reports those as inconclusive instead of running. `targets` are
+// the ones the command runs (a custom command gets them appended), so a scoped run is never taken for
+// the full suite.
 export const planTestCommand = (customCmd, cwd = process.cwd(), options = {}) => {
   const targets = (options.targets || []).map(String).filter(Boolean);
   const filter = options.filter ? String(options.filter).trim() : null;
   const hasCustom = Boolean(customCmd && customCmd.trim().length > 0);
   if (hasCustom) {
-    return { command: appendScopeToCustom(customCmd, targets, filter), cwd, runner: detectRunnerFromScript(customCmd), missingTargets: [] };
+    return { command: appendScopeToCustom(customCmd, targets, filter), cwd, runner: detectRunnerFromScript(customCmd), missingTargets: [], targets };
   }
 
   const owner = findOwningPackageDir(cwd, targets, declaresTestRunner);
