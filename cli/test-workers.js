@@ -1,7 +1,8 @@
 // Fits a planned test command to the worker slots it was granted (see test-slots.js): node
 // --test gets --test-concurrency=N, vitest and jest get --maxWorkers=N. A package-manager script
 // (`npm run test:run`) gets the flag forwarded only when the plan says the script is a single
-// runner command; otherwise the command is left alone and the run still holds its slots.
+// runner command or ends in `exec <runner> "$@"`; otherwise the command is left alone and the run
+// still holds its slots.
 import fs from 'node:fs';
 import path from 'node:path';
 

@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { planTestCommand, detectTestRunner, detectRunnerFromScript } from './test-command.js';
+import { planTestCommand, detectTestRunner, detectRunnerFromScript, scriptForwardsArgs } from './test-command.js';
+import { withWorkerCount } from './test-workers.js';
 import { parseCliArgs } from './cli-args.js';
 
 const makeProject = (files) => {
@@ -179,4 +180,29 @@ test('test-command: `$` sequences in a filter are kept literally, never read as 
   assert.equal(amp.command, `node --test --test-name-pattern='costs $&' cli/x.spec.js`);
   const group = planTestCommand('node --test cli/x.spec.js', process.cwd(), { filter: "price $1 $' total" });
   assert.equal(group.command, `node --test --test-name-pattern='price $1 $'\\'' total' cli/x.spec.js`);
+});
+
+test('test-command: a script that ends in exec <runner> "$@" forwards its arguments', () => {
+  assert.equal(scriptForwardsArgs(`sh -c 'if [ "$1" = "--" ]; then shift; fi; exec jest "$@"' sh`), true);
+  assert.equal(scriptForwardsArgs('jest'), true);
+  assert.equal(scriptForwardsArgs('vitest run'), true);
+  assert.equal(scriptForwardsArgs(`sh -c 'exec vitest run "$@"' sh`), true);
+  assert.equal(scriptForwardsArgs('jest && echo done'), false);
+  assert.equal(scriptForwardsArgs(`sh -c 'jest "$@"; echo done' sh`), false);
+  assert.equal(scriptForwardsArgs(`sh -c 'exec jest "$@"; echo done' sh`), false, 'a command after the exec');
+  assert.equal(scriptForwardsArgs(''), false);
+});
+
+test('test-command: a package test script that execs jest with "$@" is planned as forwarding the worker cap', () => {
+  const script = `sh -c 'if [ "$1" = "--" ]; then shift; fi; exec jest "$@"' sh`;
+  withProject({ 'package.json': { scripts: { test: script } } }, (root) => {
+    const plan = planTestCommand(null, root);
+    assert.equal(plan.runner, 'jest');
+    assert.equal(plan.forwardsArgs, true);
+    assert.match(withWorkerCount(plan.command, plan.runner, 4, { forwardsArgs: plan.forwardsArgs }), / -- --maxWorkers=4$/);
+  });
+});
+
+test('test-command: the worker cap rides a forwarding script as `-- --maxWorkers=N`', () => {
+  assert.equal(withWorkerCount('pnpm run test', 'jest', 4, { forwardsArgs: true }), 'pnpm run test -- --maxWorkers=4');
 });

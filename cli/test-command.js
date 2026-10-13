@@ -156,6 +156,21 @@ const appendScopeToCustom = (customCmd, targets, filter) => {
   return `${command} ${flag}${quoteFilter(filter)}`;
 };
 
+const SHELL_CHARS = /[&|;<>`$()]/;
+// The script's last command is `exec <runner> ... "$@"` inside `sh -c '...' sh`: nothing may follow the
+// "$@" but the closing quote and the `sh` argv0, and no `;`, `&&` or `|` may sit between exec and it.
+const EXEC_RUNNER_WITH_ARGS = /(?<![\w-])exec\s+(?:jest|vitest|node)(?=\s)[^;&|<>`()]*"\$@"'\s+sh\s*$/;
+
+// True when `<pm> run <script> -- --flag` hands --flag to the runner: the script is one plain command
+// (no shell syntax), or it ends by exec-ing the runner with "$@". Any other shell script swallows the flag.
+export const scriptForwardsArgs = (script = '') => {
+  const text = String(script).trim();
+  const isEmpty = text.length === 0;
+  if (isEmpty) return false;
+  const isSingleCommand = !SHELL_CHARS.test(text);
+  return isSingleCommand || EXEC_RUNNER_WITH_ARGS.test(text);
+};
+
 // Returns { command, cwd, runner, missingTargets, targets, forwardsArgs }. missingTargets lists node --test targets
 // that do not exist on disk; the caller reports those as inconclusive instead of running.
 export const planTestCommand = (customCmd, cwd = process.cwd(), options = {}) => {
@@ -191,7 +206,7 @@ export const planTestCommand = (customCmd, cwd = process.cwd(), options = {}) =>
   const isPureNodeScript = runner === 'node' && (script.match(NODE_TEST_SEGMENT)?.[0] || '').trim() === script && script.length > 0;
   if (isPureNodeScript) return { command: buildNodeCommand(script, runCwd, [], null), cwd: runCwd, runner, missingTargets: [], targets: [] };
   const command = pm === 'yarn' ? `yarn ${scriptName}` : `${pm} run ${scriptName}`;
-  const forwardsArgs = script.length > 0 && !/[&|;<>`$()]/.test(script);
+  const forwardsArgs = scriptForwardsArgs(script);
   return { command, cwd: runCwd, runner, missingTargets: [], targets: [], forwardsArgs };
 };
 
