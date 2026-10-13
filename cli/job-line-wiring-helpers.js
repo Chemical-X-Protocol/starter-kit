@@ -52,20 +52,24 @@ export const probed = (log) => logLines(log).map((line) => JSON.parse(line));
 // A plan the way planTestCommand builds one, for a command that is not a real test runner.
 export const planOf = (work, command, extra = {}) => ({ command, cwd: work, runner: 'jest', forwardsArgs: true, missingTargets: [], targets: [], ...extra });
 
-// The text written to stdout while `body` runs. Binary chunks pass through: they are the test
-// runner's own events, and swallowing them would lose tests.
-export const captureStdout = async (body) => {
+// The text written to `stream` (stdout or stderr) while `body` runs. Binary chunks pass through:
+// they are the test runner's own events, and swallowing them would lose tests.
+const captureStream = async (stream, body) => {
   const chunks = [];
-  const original = process.stdout.write;
-  process.stdout.write = (chunk, ...rest) => {
+  const original = stream.write;
+  stream.write = (chunk, ...rest) => {
     const isText = typeof chunk === 'string';
     if (isText) return chunks.push(chunk) > 0;
-    return original.call(process.stdout, chunk, ...rest);
+    return original.call(stream, chunk, ...rest);
   };
   try {
     await body();
   } finally {
-    process.stdout.write = original;
+    stream.write = original;
   }
   return chunks.join('');
 };
+
+export const captureStdout = (body) => captureStream(process.stdout, body);
+// For callers that print their wait line to stderr by default, so a spec keeps it out of the test log.
+export const captureStderr = (body) => captureStream(process.stderr, body);

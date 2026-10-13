@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import path from 'node:path';
 import { runWithinBudget } from './test-run.js';
 import { runTypecheckAudit } from './typecheck-audit.js';
 import { runBuildAudit } from './build.js';
@@ -125,15 +124,20 @@ test('wiring: the build runner takes a build ticket around its command', withPro
   assert.deepEqual(named(slots, 'ticket-'), []);
 }));
 
+// A real node spawn on a loaded machine can take a good part of a second to start, so the build's
+// own --timeout is counted in seconds; the wait outlasts it, which is what the spec shows.
+const BUILD_TIMEOUT_MS = 3000;
+const WAIT_IN_LINE_MS = 3500;
+
 test('wiring: a build waits in the line without spending its --timeout on the wait', withProject(async ({ slots, work, log }) => {
   const blocker = heldRun('blocker');
   const ahead = runHeavy({ kind: 'tests', key: 'k:blocker', ...options(slots) }, blocker.run);
   await blocker.started;
-  const building = runBuildAudit(['--json'], false, { cwd: work, print: false, command: probeCommand(log, slots), timeoutMs: 400, env: lineEnv(slots), ...QUIET });
-  await delay(600);
+  const building = runBuildAudit(['--json'], false, { cwd: work, print: false, command: probeCommand(log, slots), timeoutMs: BUILD_TIMEOUT_MS, env: lineEnv(slots), ...QUIET });
+  await delay(WAIT_IN_LINE_MS);
   assert.deepEqual(logLines(log), [], 'it waits for the running job');
   blocker.finish();
   const report = await building;
-  assert.equal(report.status, STATUS.PASS, 'the 400ms timeout counted only the run');
+  assert.equal(report.status, STATUS.PASS, `the ${BUILD_TIMEOUT_MS}ms timeout counted only the run, not the ${WAIT_IN_LINE_MS}ms wait`);
   await ahead;
 }));

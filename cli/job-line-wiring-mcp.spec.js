@@ -5,7 +5,7 @@ import { runHeavy } from './job-line.js';
 import { SLOT_OWNER_ENV } from './test-slots.js';
 import { STATUS } from './result-status.js';
 import { options, named, heldRun } from './job-line-spec-helpers.js';
-import { withProject, probeCommand, logLines } from './job-line-wiring-helpers.js';
+import { withProject, probeCommand, logLines, captureStderr } from './job-line-wiring-helpers.js';
 
 // The MCP handlers read the slot dir and budget from process.env, so these specs set it for their run.
 const inLineEnv = async (slots, body) => {
@@ -24,15 +24,22 @@ const inLineEnv = async (slots, body) => {
   }
 };
 
-// A heavy job of another key holds the line; `call` is the MCP handler under test.
+// The MCP call returns after MCP_QUEUE_RETURN_MS (1.5 s). The bound below is far wider so a loaded
+// machine does not flake it, yet still shows the call did not wait for the running job to end.
+const ANSWERED_WITHIN_MS = 5000;
+
+// A heavy job of another key holds the line; `call` is the MCP handler under test. The wait line the
+// queued call prints goes to stderr (stdout is the MCP channel), so it is captured here, not leaked.
 const queuedBehindARunningJob = (slots, call) => inLineEnv(slots, async () => {
   const blocker = heldRun('blocker');
   const ahead = runHeavy({ kind: 'tests', key: 'k:blocker', ...options(slots, { handle: '@builder' }) }, blocker.run);
   await blocker.started;
   const started = Date.now();
-  const report = await call();
+  let report;
+  const printed = await captureStderr(async () => { report = await call(); });
   const waitedMs = Date.now() - started;
-  assert.ok(waitedMs < 2500, `answered in ${waitedMs}ms, not after the running job`);
+  assert.ok(waitedMs < ANSWERED_WITHIN_MS, `answered in ${waitedMs}ms, not after the running job`);
+  assert.match(printed, /^chemx: in line #2 for \w+ \(budget 6, heavy 4\): running tests for @builder/, 'the wait line went to stderr');
   assert.deepEqual(named(slots, 'ticket-'), ['ticket-1'], 'the queued call left no ticket of its own');
   blocker.finish();
   await ahead;
@@ -51,13 +58,13 @@ const assertQueued = (report, noun, retryPattern) => {
   assert.match(report.detail, new RegExp(`no ${noun} ran and no slot is held`));
 };
 
-test('wiring mcp: chemx_typecheck answers queued within ~2s behind a running heavy job', withProject(async ({ slots, work, log }) => {
+test('wiring mcp: chemx_typecheck answers queued without waiting for a running heavy job', withProject(async ({ slots, work, log }) => {
   const report = await queuedBehindARunningJob(slots, () => handleChemxTypecheck({ dir: work, command: probeCommand(log, slots) }, work));
   assertQueued(report, 'typecheck', /^chemx typecheck -- node probe\.cjs/);
   assert.deepEqual(logLines(log), [], 'the checker did not run');
 }));
 
-test('wiring mcp: chemx_build answers queued within ~2s behind a running heavy job', withProject(async ({ slots, work, log }) => {
+test('wiring mcp: chemx_build answers queued without waiting for a running heavy job', withProject(async ({ slots, work, log }) => {
   const report = await queuedBehindARunningJob(slots, () => handleAuditBuild({ dir: work, command: probeCommand(log, slots), timeout: 30 }, work));
   assertQueued(report, 'build', /^chemx build --timeout=30 -- node probe\.cjs/);
   assert.deepEqual(logLines(log), [], 'the build did not run');
