@@ -6,6 +6,13 @@ The package version is minute-precision CalVer and is bumped by CI. It is not ed
 
 This section was written from the day's commit subjects and their task titles. It states what each change does and, where known, what it does not guarantee. It is a summary, not a complete list: about 490 commits landed on 2026-10-09, and many of them are mechanical audit-hazard cleanups (for example "name inline conditions" per file) that change no behavior and are not listed one by one.
 
+## Unreleased (feat/job-line, 2026-10-13)
+
+### Test runner, typecheck and build (the job line)
+
+- Heavy jobs take turns. A full `chemx test`, `chemx typecheck` and `chemx build` (and the MCP tools and `chemx verify` steps that run them) wait in one first-come line per machine and run one at a time, holding the worker budget less `CHEMX_LIGHT_RESERVE` slots (default 2). Runs with named test targets are light: they take free slots at once and never wait behind a heavy job. Waiting prints `chemx: in line #<n> for <kind> (budget <b>, heavy <h>): ...`; MCP calls that cannot start return `queued` after about 1.5 s. Callers that ask for the same project and command while its ticket is still waiting share one run (`chemx: shared run (owner <who>, <n> joined)`, `sharedRun` in JSON); a request that arrives after the run started takes its own turn. `chemx test --slots` lists the tickets. Raw `pnpm test` and `pnpm build` are not in the line, and sessions on older chemx ignore the tickets, so only the order and the sharing are missing for them while a rollout is mixed (#1324, see `docs/test-lanes.md`).
+- `--maxWorkers` reaches the runner through a package script that ends with `exec jest|vitest|node ... "$@"`; before, such a script dropped the flag and jest ran on every core while the run booked only its share of the slots (#1324).
+
 ## Unreleased (main, 2026-10-10)
 
 ### Scaffold (`npm create chemx`)

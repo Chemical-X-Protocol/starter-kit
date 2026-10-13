@@ -33,6 +33,35 @@ Both honour the lanes: affected slow-lane specs are listed in the report as not 
 
 Why `--depth` exists: the CLI entry imports nearly every command module, and every spec that runs the CLI depends on the entry, so a change deep in the tree reaches over a hundred specs even though most only exercise it incidentally. Import hops are the closest cheap proxy for "tests that are about this change".
 
+## The line
+
+Epic #1324. Design: [2026-10-13-chemx-job-line-design.md](superpowers/specs/2026-10-13-chemx-job-line-design.md). Every chemx run on a machine shares one worker budget: `CHEMX_TEST_CONCURRENCY`, else half the cores, kept as slot files under `os.tmpdir()/chemx-test-slots` (`CHEMX_TEST_SLOTS_DIR` moves the directory). The budget is split into two lanes so a full suite, a typecheck and a build from several sessions take turns instead of piling onto the same cores.
+
+| Lane | Runs | Behaviour |
+| :--- | :--- | :--- |
+| light | `chemx test <targets>` (a named spec file or directory) | claims free slots at once, first free first served; never waits behind a heavy job |
+| heavy | `chemx test` with no targets (the full suite), `chemx typecheck`, `chemx build`, and the three steps of `chemx verify` | takes a ticket and runs one at a time, first come first served |
+
+Slots `0 .. heavy-1` are the heavy slots, the rest the light reserve. `heavy = budget - CHEMX_LIGHT_RESERVE`; the reserve defaults to 2 and is at least 1 each way when the budget is 2 or more (a budget of 1 is all heavy). With budget 6 a heavy job holds 4 slots and light runs keep 2. A heavy test run tells the runner that many workers (`--maxWorkers`, `--test-concurrency`); a typecheck or build is told nothing, its slots only keep the line. While a heavy ticket is live (waiting or running), light runs take only reserve slots, and any heavy slot a light run still holds is handed back when that run ends.
+
+Waiting. A heavy caller prints once, then every 30 s, to stderr:
+
+`chemx: in line #3 for build (budget 6, heavy 4): running tests for @sonnet-oh2 (task 1317) 2m10s; ahead: typecheck`
+
+A heavy job has no wait limit by default (a dead holder is reclaimed by its heartbeat). `chemx test --wait-timeout=<seconds>` gives up with `QUEUE_TIMEOUT` (inconclusive, exit 3, nothing ran; `0` removes the limit); a job that has started is never cut short, and its own `--timeout` counts from the start of the run, not from the wait. Light runs keep the 10 minute default. Over MCP, `chemx_test`, `chemx_typecheck` and `chemx_audit_build` calls that cannot start within about 1.5 s return `{ queued: true, position, ahead, holders, retryCommand }` with status `inconclusive` instead of blocking; no ticket and no slot stays held, run `retryCommand` later.
+
+Sharing a run. A heavy job's key is its kind, the project root and the command after worker fitting. A caller whose key matches a ticket that is still waiting does not take a ticket: it writes a `join` file and waits, and every joiner gets the owner's result (exit code, stdout, stderr, duration). A caller that arrives after the ticket started takes a ticket of its own, since its edits may be newer than that run. A joiner prints `chemx: shared run (owner @sonnet-oh2, 2 joined)`; JSON reports carry `sharedRun: { owner, joined, seq }`, and `--raw` replays the stored output. If the owner dies before writing the result, the oldest live joiner takes the ticket over (same sequence number, same place in line) and runs it. `chemx verify` shares per step, so two verifies of one tree share all three.
+
+A chemx run started inside a heavy run (`CHEMX_TEST_SLOT_OWNER` is set) is covered by that run's slots: it does not wait and runs on one worker.
+
+Listing. `chemx test --slots` prints who holds each slot (heavy holders carry their ticket number), who is queued for a light slot, and one line per ticket, for example `  line #3 running tests: @a (task 7), 12s, 2 joined`.
+
+Files in the slot directory: `slot-<n>` (`{ pid, token, since, heartbeat, handle, task, command }`, unchanged), `seq` (the ticket counter), `ticket-<seq>`, `join-<seq>-<pid>-<id>` and `result-<seq>`. Old chemx reads only `slot-<n>` and ignores the rest; new chemx treats a slot held with no ticket as a light holder. So during a rollout the budget is still never exceeded; only the order and the sharing are missing for old callers.
+
+The worker cap reaches the runner for a package script that ends with `exec jest|vitest|node ... "$@"` (do-it-for-the-xp's `test` script), not only for a script that is one plain command. A script that does neither is left alone and the run holds its slots.
+
+Not guaranteed: raw `pnpm test` / `pnpm build` (not through chemx) are not in the line; neither are dev servers and Cypress. The line caps the workers a runner is told, not what a build tool (webpack, terser) spawns itself. Two callers share a run only when the key matches exactly. Pinned by `cli/job-line*.spec.js`, `cli/test-slots.spec.js` and `cli/test-command.spec.js`.
+
 ## Profile
 
 `chemx test --profile [--all|--slow] [--top=<n>] [--json]` runs each spec file as its own `node --test` process, several at a time inside the shared worker budget, and prints the wall clock of each, slowest first. The method is printed with the numbers. Times include node startup and grow on a busy machine; they are not CPU time and not the time a file takes inside one combined run. A full profile executes every spec, so run it once, not in a loop, and not while a peer is mid-verify.
