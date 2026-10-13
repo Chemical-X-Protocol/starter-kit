@@ -1,11 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { handleChemxTypecheck, handleAuditBuild } from './mcp/tools-verify.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import { handleChemxTypecheck, handleAuditBuild, handleChemxTest } from './mcp/tools-verify.js';
 import { runHeavy } from './job-line.js';
-import { SLOT_OWNER_ENV } from './test-slots.js';
+import { acquireTestSlots, SLOT_OWNER_ENV } from './test-slots.js';
 import { STATUS } from './result-status.js';
-import { options, named, heldRun } from './job-line-spec-helpers.js';
-import { withProject, probeCommand, logLines, captureStderr } from './job-line-wiring-helpers.js';
+import { FAST, options, named, heldRun } from './job-line-spec-helpers.js';
+import { withProject, lineEnv, probeCommand, logLines, captureStderr } from './job-line-wiring-helpers.js';
 
 // The MCP handlers read the slot dir and budget from process.env, so these specs set it for their run.
 const inLineEnv = async (slots, body) => {
@@ -46,7 +48,7 @@ const queuedBehindARunningJob = (slots, call) => inLineEnv(slots, async () => {
   return report;
 });
 
-const assertQueued = (report, noun, retryPattern) => {
+const assertQueued = (report, noun, retryCommand) => {
   assert.equal(report.queued, true);
   assert.equal(report.status, STATUS.INCONCLUSIVE);
   assert.equal(report.reason, 'QUEUED');
@@ -54,19 +56,19 @@ const assertQueued = (report, noun, retryPattern) => {
   assert.equal(report.position, 2);
   assert.deepEqual(report.ahead.map((entry) => entry.kind), ['tests']);
   assert.deepEqual(report.holders.map((holder) => holder.handle), ['@builder']);
-  assert.match(report.retryCommand, retryPattern);
+  assert.equal(report.retryCommand, retryCommand, 'the retry runs the same call from the dir it named');
   assert.match(report.detail, new RegExp(`no ${noun} ran and no slot is held`));
 };
 
 test('wiring mcp: chemx_typecheck answers queued without waiting for a running heavy job', withProject(async ({ slots, work, log }) => {
   const report = await queuedBehindARunningJob(slots, () => handleChemxTypecheck({ dir: work, command: probeCommand(log, slots) }, work));
-  assertQueued(report, 'typecheck', /^chemx typecheck -- node probe\.cjs/);
+  assertQueued(report, 'typecheck', `cd ${work} && chemx typecheck -- ${probeCommand(log, slots)}`);
   assert.deepEqual(logLines(log), [], 'the checker did not run');
 }));
 
 test('wiring mcp: chemx_build answers queued without waiting for a running heavy job', withProject(async ({ slots, work, log }) => {
   const report = await queuedBehindARunningJob(slots, () => handleAuditBuild({ dir: work, command: probeCommand(log, slots), timeout: 30 }, work));
-  assertQueued(report, 'build', /^chemx build --timeout=30 -- node probe\.cjs/);
+  assertQueued(report, 'build', `cd ${work} && chemx build --timeout=30 -- ${probeCommand(log, slots)}`);
   assert.deepEqual(logLines(log), [], 'the build did not run');
 }));
 
@@ -80,4 +82,21 @@ test('wiring mcp: with the line free, the MCP typecheck and build run as before'
     assert.equal(build.queued, undefined);
     assert.equal(logLines(log).length, 2);
   });
+}));
+
+test('wiring mcp: a queued chemx_test retry runs from its dir with its target and filter', withProject(async ({ slots, work }) => {
+  fs.mkdirSync(path.join(work, 'spec'));
+  fs.writeFileSync(path.join(work, 'spec/a.spec.js'), '');
+  const report = await inLineEnv(slots, async () => {
+    const everySlot = await acquireTestSlots({ dir: slots, env: lineEnv(slots, { CHEMX_AGENT_ID: '@light' }), want: 6, heartbeatMs: FAST.heartbeatMs });
+    try {
+      let queued;
+      await captureStderr(async () => { queued = await handleChemxTest({ dir: work, testTarget: 'spec/a.spec.js', filter: "it's two words" }, work); });
+      return queued;
+    } finally {
+      everySlot.release();
+    }
+  });
+  assert.equal(report.queued, true);
+  assert.equal(report.retryCommand, `cd ${work} && chemx test spec/a.spec.js --filter='it'\\''s two words'`);
 }));
