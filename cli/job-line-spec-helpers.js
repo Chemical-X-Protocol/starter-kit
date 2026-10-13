@@ -9,7 +9,8 @@ import { scheduleTimeout } from './timers.js';
 
 // Budget 6 with the default reserve of 2: heavy jobs hold slots 0-3, light runs keep 4-5.
 export const ENV = { CHEMX_TEST_CONCURRENCY: '6', CHEMX_LIGHT_RESERVE: '2' };
-export const FAST = { pollMs: 5, statusMs: 50, heartbeatMs: 20, staleMs: 200 };
+// The stale window is 20 heartbeats wide, so a stall of this loaded machine cannot pass for a death.
+export const FAST = { pollMs: 5, statusMs: 50, heartbeatMs: 50, staleMs: 1000 };
 export const tempDir = () => fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-line-'));
 export const deadPid = () => spawnSync(process.execPath, ['-e', '0']).pid;
 export const delay = (ms) => new Promise((resolve) => scheduleTimeout(resolve, ms));

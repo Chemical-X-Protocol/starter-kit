@@ -56,7 +56,7 @@ test('job-line takeover: a running owner leaves a slot another run took and says
   const beats = readSlot(dir, 1).heartbeat;
   await until(() => readSlot(dir, 1).heartbeat > beats + FAST.heartbeatMs, 'two more heartbeats');
   assert.equal(warnings.length, 1, 'one warning per job');
-  assert.match(warnings[0], /chemx: this tests run stalled past the stale window \(200ms\) and another run took its heavy slots/);
+  assert.ok(warnings[0].startsWith(`chemx: this tests run stalled past the stale window (${FAST.staleMs}ms) and another run took its heavy slots`), warnings[0]);
   assert.equal(readSlot(dir, 0).token, 'other', 'the slot is left to the run that holds it');
   job.finish();
   await owner;
@@ -101,9 +101,10 @@ test('job-line takeover: a joiner never takes the result of a run that started b
 
 test('job-line takeover: a result nobody is left to read goes after the stale window; one with a reader stays', withDir(async (dir) => {
   const now = Date.now();
-  writeJson(dir, 'result-5', { seq: 5, writtenAt: now - 1000, result: 'abandoned' });
+  const old = now - FAST.staleMs * 2;
+  writeJson(dir, 'result-5', { seq: 5, writtenAt: old, result: 'abandoned' });
   writeJson(dir, 'result-6', { seq: 6, writtenAt: now, result: 'young' });
-  writeJson(dir, 'result-7', { seq: 7, writtenAt: now - 1000, result: 'awaited' });
+  writeJson(dir, 'result-7', { seq: 7, writtenAt: old, result: 'awaited' });
   writeJson(dir, `join-7-${process.pid}-reader`, liveRecord({ seq: 7, token: 'reader' }));
   currentLine(dir, now, FAST.staleMs);
   assert.deepEqual(named(dir, 'result-'), ['result-6', 'result-7']);

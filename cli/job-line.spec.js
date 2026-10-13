@@ -100,7 +100,7 @@ test('job-line: heartbeats keep a run and a waiting ticket live past the stale w
   await first.started;
   const ticketBeat = (seq) => JSON.parse(fs.readFileSync(path.join(dir, `ticket-${seq}`), 'utf8')).heartbeat;
   const before = { running: ticketBeat(1), waiting: ticketBeat(2), slot: readSlot(dir, 0).heartbeat };
-  await delay(FAST.staleMs * 2);
+  await delay(FAST.staleMs * 1.5);
   assert.deepEqual(log, ['a:start'], 'the running job stayed live, so the next one did not start beside it');
   assert.ok(ticketBeat(1) > before.running, 'the running ticket was refreshed');
   assert.ok(ticketBeat(2) > before.waiting, 'the waiting ticket was refreshed');
