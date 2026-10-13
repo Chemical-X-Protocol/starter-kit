@@ -7,85 +7,22 @@
 // an older chemx) is judged by its pid alone. A short mkdir mutex makes the scan-and-claim atomic
 // across processes. Waiting runs leave a `wait-<pid>` file so the queue can be listed; the
 // position it reports is informational and does not enforce first-come order.
+// This is the light lane. Heavy jobs (a full suite, a typecheck, a build) take turns in the line of
+// job-line.js and hold slots 0..heavy-1 while they run; while any heavy ticket is live, a light run
+// claims only the reserve slots heavy..budget-1, so the heavy slots drain for the line. A slot file
+// without `seq` is a light holder (old chemx writes only those).
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { scheduleTimeout } from './timers.js';
-import { readJsonOr } from './fs-json.js';
+import { SLOT_OWNER_ENV, SLOT_DEFAULTS, defaultSlotsDir, resolveTestBudget, withMutex, isLive, readHolder, identityOf, slotFile, delay, everyBeat } from './slot-files.js';
+import { resolveLanes, liveTickets, currentLine } from './job-line-tickets.js';
+import { ticketLine } from './job-line-text.js';
 
-// Set in the runner's environment: a chemx test started by a spec inside a slot-holding run is
-// already covered by its parent's slot, so it runs with one worker and never waits (no deadlock).
-export const SLOT_OWNER_ENV = 'CHEMX_TEST_SLOT_OWNER';
+// The shared helpers moved to slot-files.js; re-exported so every existing import keeps working.
+export { SLOT_OWNER_ENV, defaultSlotsDir, resolveTestBudget, withMutex, isLive, readHolder } from './slot-files.js';
 export const SLOT_WAIT_TIMEOUT_CODE = 'CHEMX_SLOT_WAIT_TIMEOUT';
-const MUTEX_STALE_MS = 2000;
-const DEFAULT_POLL_MS = 200;
-const DEFAULT_HEARTBEAT_MS = 10000;
-const DEFAULT_STALE_MS = 60000;
-const DEFAULT_STATUS_MS = 30000;
 const DEFAULT_WAIT_TIMEOUT_MS = 10 * 60000;
 const LONG_WAIT_MS = 60000;
-
-export const defaultSlotsDir = (env = process.env) => env.CHEMX_TEST_SLOTS_DIR || path.join(os.tmpdir(), 'chemx-test-slots');
-
-// CHEMX_TEST_CONCURRENCY when it is a positive integer, otherwise half the cores (at least 1).
-export const resolveTestBudget = (env = process.env, cores = os.availableParallelism()) => {
-  const fromEnv = Number(env.CHEMX_TEST_CONCURRENCY);
-  const hasOverride = Number.isInteger(fromEnv) && fromEnv > 0;
-  return hasOverride ? fromEnv : Math.max(1, Math.floor(cores / 2));
-};
-
-const isAlive = (pid) => {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return error.code === 'EPERM';
-  }
-};
-
-const sleepSync = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-
-// The critical section only reads and writes a few small files, so a mutex older than
-// MUTEX_STALE_MS belongs to a process that died inside it.
-const withMutex = (dir, fn) => {
-  const lock = path.join(dir, '.mutex');
-  for (;;) {
-    try {
-      fs.mkdirSync(lock);
-      break;
-    } catch (error) {
-      const isOtherError = error.code !== 'EEXIST';
-      if (isOtherError) throw error;
-      const mtime = fs.statSync(lock, { throwIfNoEntry: false })?.mtimeMs ?? Date.now();
-      const isStale = Date.now() - mtime > MUTEX_STALE_MS;
-      if (isStale) fs.rmSync(lock, { recursive: true, force: true });
-      else sleepSync(5);
-    }
-  }
-  try {
-    return fn();
-  } finally {
-    fs.rmSync(lock, { recursive: true, force: true });
-  }
-};
-
-const readHolder = (file) => readJsonOr(file, null);
-
-// A record counts as live when its pid exists and, if it carries a heartbeat, the heartbeat is
-// newer than the stale window.
-const isLive = (record, now, staleMs) => {
-  const hasPid = Boolean(record) && Number.isInteger(record.pid);
-  const hasHeartbeat = hasPid && typeof record.heartbeat === 'number';
-  const isFresh = !hasHeartbeat || now - record.heartbeat <= staleMs;
-  return hasPid && isFresh && isAlive(record.pid);
-};
-
-const identityOf = (options, env) => ({
-  handle: options.handle ?? env.CHEMX_AGENT_ID ?? null,
-  task: options.task ?? env.CHEMX_TASK_ID ?? null,
-  command: String(options.command ?? process.argv.slice(2).join(' ')).slice(0, 200)
-});
 
 const describeHolder = (holder) => {
   const parts = [holder.handle || `pid ${holder.pid}`];
@@ -96,20 +33,24 @@ const describeHolder = (holder) => {
   return parts.join(' ');
 };
 
-// Claims up to `want` free slots (indices below `budget`); returns the claimed files and the
-// live records holding the rest.
-const claimFreeSlots = (dir, budget, want, identity, staleMs) => withMutex(dir, () => {
+// Claims up to `want` free slots (indices below `budget`, and only from `heavy` up while a heavy
+// ticket is live); returns the claimed files and the live records holding the rest.
+const claimFreeSlots = (dir, { budget, heavy }, want, identity, staleMs) => withMutex(dir, () => {
   const taken = [];
   const holders = [];
   const now = Date.now();
   const token = randomUUID();
+  const isLineLive = liveTickets(dir, now, staleMs).length > 0;
+  const firstLightIndex = isLineLive ? heavy : 0;
   for (let index = 0; index < budget && taken.length < want; index++) {
-    const file = path.join(dir, `slot-${index}`);
+    const file = slotFile(dir, index);
     const holder = readHolder(file);
     if (isLive(holder, now, staleMs)) {
       holders.push(holder);
       continue;
     }
+    const isKeptForLine = index < firstLightIndex;
+    if (isKeptForLine) continue;
     fs.writeFileSync(file, JSON.stringify({ pid: process.pid, token, since: now, heartbeat: now, ...identity }));
     taken.push({ file, token });
   }
@@ -121,18 +62,17 @@ const isOurs = (file, token) => {
   return record?.pid === process.pid && record?.token === token;
 };
 
-const holdSlots = (taken, budget, queuedMs, heartbeatMs) => {
-  const beat = () => {
+// The heartbeat reads then writes slot files, so it runs inside the mutex like every claim.
+const holdSlots = (dir, taken, budget, queuedMs, heartbeatMs) => {
+  const stopBeat = everyBeat(heartbeatMs, () => withMutex(dir, () => {
     for (const { file, token } of taken) {
       const record = readHolder(file);
       const isStillOurs = record?.pid === process.pid && record?.token === token;
       if (isStillOurs) fs.writeFileSync(file, JSON.stringify({ ...record, heartbeat: Date.now() }));
     }
-  };
-  const timer = setInterval(beat, heartbeatMs);
-  timer.unref();
+  }));
   const releaseSync = () => {
-    clearInterval(timer);
+    stopBeat();
     for (const { file, token } of taken) {
       if (isOurs(file, token)) fs.rmSync(file, { force: true });
     }
@@ -156,24 +96,37 @@ const liveWaiters = (dir, now, staleMs) => {
   return live.sort((a, b) => a.since - b.since || a.pid - b.pid);
 };
 
-// Snapshot for `chemx test --slots`: who holds each slot, and who is queued.
+// The heavy line's live tickets with how many callers joined each. Sweeping dead tickets writes,
+// so it runs inside the mutex.
+const listTickets = (dir, now, staleMs) => withMutex(dir, () => {
+  const { tickets, joins } = currentLine(dir, now, staleMs);
+  return tickets.map((ticket) => ({
+    seq: ticket.seq, kind: ticket.kind, state: ticket.state, handle: ticket.handle ?? null, task: ticket.task ?? null, pid: ticket.pid,
+    ageMs: now - ticket.since, joined: joins.filter((join) => join.seq === ticket.seq).length
+  }));
+});
+
+// Snapshot for `chemx test --slots`: who holds each slot (heavy holders carry the ticket's seq),
+// who is queued for a light slot, and the heavy line.
 export const listTestSlots = (options = {}) => {
   const env = options.env || process.env;
   const dir = options.dir || defaultSlotsDir(env);
   const budget = options.budget ?? resolveTestBudget(env);
-  const staleMs = options.staleMs ?? DEFAULT_STALE_MS;
+  const staleMs = options.staleMs ?? SLOT_DEFAULTS.staleMs;
   const now = options.now ?? Date.now();
   const hasDir = fs.existsSync(dir);
-  if (!hasDir) return { dir, budget, holders: [], waiting: [] };
+  if (!hasDir) return { dir, budget, holders: [], waiting: [], tickets: [] };
   const holders = [];
   for (let index = 0; index < budget; index++) {
-    const record = readHolder(path.join(dir, `slot-${index}`));
+    const record = readHolder(slotFile(dir, index));
     if (!record) continue;
     const state = isLive(record, now, staleMs) ? 'held' : 'stale';
-    holders.push({ slot: index, state, pid: record.pid, handle: record.handle ?? null, task: record.task ?? null, command: record.command ?? null, ageMs: now - record.since, heartbeatAgeMs: typeof record.heartbeat === 'number' ? now - record.heartbeat : null });
+    const isHeavyHolder = Number.isInteger(record.seq);
+    const lane = isHeavyHolder ? 'heavy' : 'light';
+    holders.push({ slot: index, state, lane, seq: record.seq ?? null, pid: record.pid, handle: record.handle ?? null, task: record.task ?? null, command: record.command ?? null, ageMs: now - record.since, heartbeatAgeMs: typeof record.heartbeat === 'number' ? now - record.heartbeat : null });
   }
   const waiting = liveWaiters(dir, now, staleMs).map((record, index) => ({ position: index + 1, pid: record.pid, handle: record.handle ?? null, task: record.task ?? null, waitedMs: now - record.since }));
-  return { dir, budget, holders, waiting };
+  return { dir, budget, holders, waiting, tickets: listTickets(dir, now, staleMs) };
 };
 
 // Plain-text rendering of listTestSlots; states only what the files say.
@@ -186,16 +139,17 @@ export const formatTestSlots = (snapshot) => {
     const beat = holder.heartbeatAgeMs === null ? 'no heartbeat' : `heartbeat ${Math.round(holder.heartbeatAgeMs / 1000)}s ago`;
     lines.push(`  slot ${holder.slot} ${holder.state}: ${who},${task}, pid ${holder.pid}, age ${Math.round(holder.ageMs / 1000)}s, ${beat}`);
   }
+  for (const ticket of snapshot.tickets || []) lines.push(ticketLine(ticket));
   for (const waiter of snapshot.waiting) {
     lines.push(`  queued #${waiter.position}: ${waiter.handle || `pid ${waiter.pid}`}, waiting ${Math.round(waiter.waitedMs / 1000)}s`);
   }
   return `${lines.join('\n')}\n`;
 };
 
-const holderList = (holders) => [...new Set(holders.map(describeHolder))].join('; ');
+// With no holder to name, the free slots are being kept for the heavy line.
+const holderList = (holders) => [...new Set(holders.map(describeHolder))].join('; ') || 'the heavy line';
 
 const waitLine = (budget, holders, position, waitedMs) => `chemx test: waiting for a test slot (budget ${budget} worker(s), queue position about ${position}, waited ${Math.round(waitedMs / 1000)}s, held by ${holderList(holders)}; set CHEMX_TEST_CONCURRENCY to change)\n`;
-const delay = (ms) => new Promise((resolve) => scheduleTimeout(resolve, ms));
 
 // Resolves to { workers, budget, queuedMs, nested, queued, release } once at least one slot is free.
 // A run takes min(want, free slots) workers. While queued it reports itself through onWait once,
@@ -214,10 +168,11 @@ export const acquireTestSlots = async (options = {}) => {
   if (isNested) return { workers: 1, budget, queuedMs: 0, nested: true, queued: false, release: () => {} };
   const dir = options.dir || defaultSlotsDir(env);
   fs.mkdirSync(dir, { recursive: true });
+  const lanes = resolveLanes(env, budget);
   const onWait = options.onWait || ((line) => process.stderr.write(line));
-  const heartbeatMs = options.heartbeatMs ?? DEFAULT_HEARTBEAT_MS;
-  const staleMs = options.staleMs ?? DEFAULT_STALE_MS;
-  const statusMs = options.statusMs ?? DEFAULT_STATUS_MS;
+  const heartbeatMs = options.heartbeatMs ?? SLOT_DEFAULTS.heartbeatMs;
+  const staleMs = options.staleMs ?? SLOT_DEFAULTS.staleMs;
+  const statusMs = options.statusMs ?? SLOT_DEFAULTS.statusMs;
   const waitTimeoutMs = options.waitTimeoutMs ?? DEFAULT_WAIT_TIMEOUT_MS;
   const identity = identityOf(options, env);
   const start = Date.now();
@@ -232,12 +187,12 @@ export const acquireTestSlots = async (options = {}) => {
   };
   try {
     for (;;) {
-      const { taken, holders } = claimFreeSlots(dir, budget, want, identity, staleMs);
+      const { taken, holders } = claimFreeSlots(dir, lanes, want, identity, staleMs);
       lastHolders = holders;
       const hasTakenSlots = taken.length > 0;
       if (hasTakenSlots) {
         const queuedMs = Date.now() - start;
-        const grant = holdSlots(taken, budget, queuedMs, heartbeatMs);
+        const grant = holdSlots(dir, taken, budget, queuedMs, heartbeatMs);
         const isLongWait = queuedMs >= (options.longWaitMs ?? LONG_WAIT_MS) && Boolean(options.onLongWait);
         if (isLongWait) options.onLongWait({ queuedMs, budget, holders: lastHolders });
         return grant;
@@ -268,7 +223,7 @@ export const acquireTestSlots = async (options = {}) => {
       }
       const isAborted = Boolean(options.signal?.aborted);
       if (isAborted) throw new Error('chemx test: cancelled while waiting for a test slot');
-      await delay(options.pollMs ?? DEFAULT_POLL_MS);
+      await delay(options.pollMs ?? SLOT_DEFAULTS.pollMs);
     }
   } finally {
     finish();

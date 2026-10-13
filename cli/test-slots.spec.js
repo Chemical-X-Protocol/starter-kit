@@ -285,3 +285,61 @@ test('test-slots: onLongWait fires once after a grant that waited past longWaitM
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+const liveTicket = (seq, extra = {}) => ({ seq, pid: process.pid, token: `t${seq}`, since: Date.now(), heartbeat: Date.now(), kind: 'tests', key: `k${seq}`, state: 'waiting', ...extra });
+
+test('test-slots: while a heavy ticket is live, light runs keep to the reserve slots; without one, any slot', async () => {
+  const dir = tempDir('chemx-slots-');
+  try {
+    fs.writeFileSync(path.join(dir, 'ticket-1'), JSON.stringify(liveTicket(1)));
+    const reserved = await acquireTestSlots({ dir, budget: 6, want: 6, env: {}, onWait: () => assert.fail('the reserve was free') });
+    assert.equal(reserved.workers, 2, 'budget 6 with the default reserve of 2');
+    assert.deepEqual(fs.readdirSync(dir).filter((name) => name.startsWith('slot-')).sort(), ['slot-4', 'slot-5']);
+    reserved.release();
+    fs.rmSync(path.join(dir, 'ticket-1'));
+    const open = await acquireTestSlots({ dir, budget: 6, want: 6, env: {} });
+    assert.equal(open.workers, 6, 'no ticket: every free slot');
+    open.release();
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('test-slots: the listing tells heavy holders from light ones and lists the tickets with their joiners', () => {
+  const dir = tempDir('chemx-slots-');
+  try {
+    const now = Date.now();
+    fs.writeFileSync(path.join(dir, 'ticket-3'), JSON.stringify(liveTicket(3, { state: 'running', handle: '@heavy' })));
+    fs.writeFileSync(path.join(dir, 'ticket-4'), JSON.stringify(liveTicket(4, { kind: 'build' })));
+    fs.writeFileSync(path.join(dir, 'join-4-1-abc'), JSON.stringify({ seq: 4, pid: process.pid, token: 'j', since: now, heartbeat: now }));
+    fs.writeFileSync(path.join(dir, 'slot-0'), JSON.stringify({ pid: process.pid, token: 'h', since: now, heartbeat: now, handle: '@heavy', seq: 3 }));
+    fs.writeFileSync(path.join(dir, 'slot-5'), JSON.stringify({ pid: process.pid, token: 'l', since: now, heartbeat: now, handle: '@light' }));
+    const snapshot = listTestSlots({ dir, budget: 6, env: {} });
+    assert.deepEqual(snapshot.holders.map((holder) => [holder.slot, holder.lane]), [[0, 'heavy'], [5, 'light']]);
+    assert.deepEqual(snapshot.tickets.map((ticket) => [ticket.seq, ticket.state, ticket.kind, ticket.joined]), [[3, 'running', 'tests', 0], [4, 'waiting', 'build', 1]]);
+    const text = formatTestSlots(snapshot);
+    assert.match(text, /line #3 running tests: @heavy, \d+s, 0 joined/);
+    assert.match(text, /line #4 waiting build: pid \d+, \d+s, 1 joined/);
+    assert.match(text, /2 of 6 held/, 'the header is unchanged');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('test-slots: a heartbeat whose slot directory was removed reports it and never crashes the process', async () => {
+  const dir = tempDir('chemx-slots-');
+  const written = [];
+  const write = process.stderr.write;
+  try {
+    const grant = await acquireTestSlots({ dir, budget: 1, env: {}, heartbeatMs: 10 });
+    fs.rmSync(dir, { recursive: true, force: true });
+    process.stderr.write = (chunk) => written.push(String(chunk));
+    await new Promise((resolve) => scheduleTimeout(resolve, 60));
+    process.stderr.write = write;
+    grant.release();
+    assert.match(written.join(''), /chemx: slot heartbeat failed/);
+  } finally {
+    process.stderr.write = write;
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
