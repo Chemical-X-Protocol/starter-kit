@@ -15,6 +15,7 @@ import { checkTemplateRenderDepth } from './render-depth.js';
 import { parseSfc, isSfcFile } from '../sfc/sfc-parse.js';
 import { COVERAGE_KINDS, recordFileCoverage } from './coverage.js';
 import { parseScriptAsts, runAstPasses } from './ast-passes.js';
+import { runTailwindUnscannedPass } from './tailwind-unscanned.js';
 
 export { PILLARS, RULE_REGISTRY, createHookShapeRegistry };
 
@@ -91,6 +92,7 @@ const collectRawViolations = (content, filePath, relativePath, options, ruleConf
       coverageKind = COVERAGE_KINDS.PARSE_ERROR;
     } else {
       runAstPasses(parsed.asts, { relativePath, violations, ruleConfig, options, code });
+      runTailwindUnscannedPass(parsed.asts, { filePath, relativePath, violations, options });
     }
   }
 
@@ -101,8 +103,10 @@ const collectRawViolations = (content, filePath, relativePath, options, ruleConf
 };
 
 /**
- * Audits one file. options: { config, fast, patternRegistry, hookRegistry, coverage, fingerprint }
- * (fingerprint: a Forge collector from cli/forge/fingerprint-visitors.js, or null to skip Forge).
+ * Audits one file. options: { config, fast, patternRegistry, hookRegistry, coverage, fingerprint, cwd, tailwindContent }
+ * (fingerprint: a Forge collector from cli/forge/fingerprint-visitors.js, or null to skip Forge;
+ * cwd: the project root for the Tailwind content probe; tailwindContent: content globs overriding
+ * tailwind.config, or null to silence TAILWIND_UNSCANNED_CLASS_STRING).
  * Violations pass through chemx-allow annotations, dedup and per-rule config.
  */
 export const auditCode = (content, filePath, relativePath, options = {}) => {

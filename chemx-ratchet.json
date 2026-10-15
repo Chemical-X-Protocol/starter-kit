@@ -1,9 +1,9 @@
 {
   "version": 2,
-  "ruleset": 5,
+  "ruleset": 6,
   "scopes": {
     ".": {
-      "ruleset": 5,
+      "ruleset": 6,
       "allRules": true,
       "rules": {},
       "revisions": {
@@ -51,6 +51,7 @@
         "STRUCTURAL_WEIGHT_EXCEEDED": 1,
         "SYNTAX_PARSE_ERROR": 3,
         "SYNTHETIC_MOCK_DATA": 1,
+        "TAILWIND_UNSCANNED_CLASS_STRING": 6,
         "TEST_FAKE_GREEN": 1,
         "TEST_MISSING_COLOCATED": 1,
         "TIMER_DISCIPLINE": 3,
@@ -61,7 +62,7 @@
       }
     },
     "cli": {
-      "ruleset": 5,
+      "ruleset": 6,
       "allRules": true,
       "rules": {
         "CONTROL_FLOW_INLINE_BOOLEAN": 804
@@ -111,6 +112,7 @@
         "STRUCTURAL_WEIGHT_EXCEEDED": 1,
         "SYNTAX_PARSE_ERROR": 3,
         "SYNTHETIC_MOCK_DATA": 1,
+        "TAILWIND_UNSCANNED_CLASS_STRING": 6,
         "TEST_FAKE_GREEN": 1,
         "TEST_MISSING_COLOCATED": 1,
         "TIMER_DISCIPLINE": 3,

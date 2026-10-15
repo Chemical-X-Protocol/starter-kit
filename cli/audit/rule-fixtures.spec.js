@@ -61,6 +61,7 @@ const FIXTURES = {
   DATA_FLOW_OPTIONAL_CHAINING_CHURN: { path: 'src/o.ts', bad: 'export const theme = (u) => u?.profile?.settings?.theme;\n', good: 'export const theme = (u) => u?.theme;\n' },
   RAW_INLINE_STYLE: { path: 'src/s.tsx', bad: 'export const S = () => <p style={{ color: "red" }}>x</p>;\n', good: 'export const S = () => <p className="note">x</p>;\n' },
   ICON_SVG_STYLE_LEAK: { path: 'src/i.tsx', bad: 'export const I = () => <i className="fa fa-star text-primary" />;\n', good: 'export const I = () => <i className="fa fa-star" />;\n' },
+  TAILWIND_UNSCANNED_CLASS_STRING: { path: 'src/lib/temple-map.ts', options: { tailwindContent: ['./src/**/*.vue'] }, bad: "export const STYLES = { gold: 'bg-amber-500 text-white rounded-lg px-4' };\n", good: "export const STYLES = { gold: 'gold' };\n" },
   TYPOGRAPHY_EM_DASH: { path: 'src/e.ts', bad: `// one ${String.fromCharCode(0x2014)} two\nexport const e = 1;\n`, good: '// one - two\nexport const e = 1;\n' },
   UNGUARDED_LOGGING: { path: 'src/l.ts', bad: 'export const f = (n) => { console.log(n); };\n', good: 'export const f = (n) => { debug.log(n); };\n' },
   SYNTAX_PARSE_ERROR: { path: 'src/p.ts', bad: 'export const = ;\n', good: 'export const p = 1;\n' },
@@ -83,14 +84,15 @@ const FIXTURES = {
 const auditFixture = (rule, fixture, variant) => {
   const content = fixture[variant];
   const hasSiblings = Boolean(fixture.siblings);
-  if (!hasSiblings) return auditCode(content, fixture.path, fixture.path, { config: fixture.config });
+  const options = { config: fixture.config, ...fixture.options };
+  if (!hasSiblings) return auditCode(content, fixture.path, fixture.path, options);
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-fixture-'));
   try {
     const full = path.join(root, fixture.path);
     fs.mkdirSync(path.dirname(full), { recursive: true });
     fs.writeFileSync(full, content);
     for (const [name, text] of Object.entries(fixture.siblings[variant] || {})) fs.writeFileSync(path.join(path.dirname(full), name), text);
-    return auditCode(content, full, fixture.path, { config: fixture.config });
+    return auditCode(content, full, fixture.path, options);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

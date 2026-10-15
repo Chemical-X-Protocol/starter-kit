@@ -418,6 +418,7 @@ Raw inline `style="..."` attributes are strictly prohibited. Visual styling flow
 - Long strings of utility shorthand recreate the exact cognitive noise and AI context degradation of inline styles.
 - Decouple visual styling into scoped classes via `@apply` or centralized SCSS mixins (`@include glass;`).
 - Templates must read like a clean, semantic outline rather than an unreadable wall of styling shorthand.
+- Class strings must stay where Tailwind looks (`TAILWIND_UNSCANNED_CLASS_STRING`): in a Tailwind v3 project, a string of 3 or more utility classes in a `.js`, `.ts`, `.mjs` or `.cjs` file that no `content` glob of `tailwind.config` matches is purged from production CSS. Move it into a template or a file the globs scan, or add the file pattern to `content`. The rule reads the config as text and stays silent for Tailwind v4 or a config whose `content` list is not literal.
 
 ### C. Wrapper Atoms & Explicit Slot Forwarding
 - Never use dynamic slot iteration with `v-for="(_, slot) in $slots"` in wrapper components.

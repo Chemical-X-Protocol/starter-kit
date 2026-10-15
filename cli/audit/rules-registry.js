@@ -232,6 +232,12 @@ export const RULE_REGISTRY = {
     needs: 'light',
     directive: 'Avoid text-* utility classes on FontAwesome icons; use color prop or CSS'
   },
+  TAILWIND_UNSCANNED_CLASS_STRING: {
+    pillar: PILLARS.PILLAR_5,
+    severity: 'HIGH',
+    needs: 'standard',
+    directive: 'Move Tailwind class strings into a template or a file the Tailwind content globs scan, or add the file pattern to content'
+  },
   TYPOGRAPHY_EM_DASH: {
     pillar: PILLARS.PILLAR_7,
     severity: 'LOW',

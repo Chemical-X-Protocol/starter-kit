@@ -12,7 +12,7 @@
  * a rule without a bump fails the suite. At runtime a baseline also records every
  * registered rule's revision, so a rule it never saw is adopted, not a regression.
  */
-export const RULESET_VERSION = 5;
+export const RULESET_VERSION = 6;
 
 export const RULE_REVISIONS = Object.freeze({
   // Ruleset 2: the 40-year canon rules (a3a1ac9, 9461ed2).
@@ -36,7 +36,9 @@ export const RULE_REVISIONS = Object.freeze({
   ERROR_SWALLOWED_EXCEPTION: 4,
   AI_SLOP_SHALLOW_CATCH: 4,
   // Ruleset 5: cascading guard detection and domain validator extraction (Directive 3.H).
-  CONTROL_FLOW_CASCADE_GUARDS: 5
+  CONTROL_FLOW_CASCADE_GUARDS: 5,
+  // Ruleset 6: Tailwind content-glob coverage (review 2026-10-15).
+  TAILWIND_UNSCANNED_CLASS_STRING: 6
 });
 
 export const resolveRuleRevision = (rule) => RULE_REVISIONS[rule] ?? 1;
