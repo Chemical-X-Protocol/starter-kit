@@ -63,15 +63,20 @@ test('AGENTS.md 3.A counter-example (the if asks) is flagged', () => {
 });
 
 test('3.A is literal: raw comparisons and compound logic fail, named or negated names pass', () => {
-  const failing = ['a && b', 'x === y', '!a || !b', 'RE.test(s)', 'fs.existsSync(p)'];
+  const failing = ['a && b', 'x === y', '!a || !b', 'RE.test(s)', 'user.getName()'];
   for (const testExpr of failing) {
-    const code = `export function f(a, b, x, y, s, p, RE, fs) {\n  if (${testExpr}) run();\n}\n`;
+    const code = `export function f(a, b, x, y, s, RE, user) {\n  if (${testExpr}) run();\n}\n`;
     const hits = audit(code).filter((v) => v.rule === 'CONTROL_FLOW_INLINE_BOOLEAN');
     assert.equal(hits.length, 1, `expected a violation for if (${testExpr})`);
   }
-  const passing = ['isReady', '!isReady', 'state.isReady', 'hasItems(cart)', 'store.canSave()', '!canProceed.value'];
+  const passing = [
+    'isReady', '!isReady', 'state.isReady', 'hasItems(cart)', 'store.canSave()', '!canProceed.value',
+    'sale.ok', '!opts?.flag', 'items.length', 'flags[key]',
+    'fs.existsSync(p)', 'map.has(key)', 'list.includes(x)', 'Array.isArray(v)'
+  ];
   for (const testExpr of passing) {
-    const code = `export function f(isReady, state, cart, store, canProceed) {\n  if (${testExpr}) run();\n}\n`;
+    const params = 'isReady, state, cart, store, canProceed, sale, opts, items, flags, key, map, list, Array, v, fs, p, x';
+    const code = `export function f(${params}) {\n  if (${testExpr}) run();\n}\n`;
     const hits = audit(code).filter((v) => v.rule === 'CONTROL_FLOW_INLINE_BOOLEAN');
     assert.equal(hits.length, 0, `expected no violation for if (${testExpr})`);
   }

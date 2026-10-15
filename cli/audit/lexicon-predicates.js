@@ -1,7 +1,9 @@
 /**
  * The named-condition lexicon from AGENTS.md 3.A and 3.F, as AST predicates.
- * A conditional test passes when it is an identifier, its negation, or a call or
- * member access whose name is an assertion (prefix followed by its subject).
+ * A conditional test passes when it is an identifier, its negation, a member
+ * chain with no operators (a property read is already a name), or a call whose
+ * callee name is an assertion, a standard predicate method, or carries a
+ * predicate word (`fs.existsSync(p)`, `map.has(key)`).
  */
 import * as t from '@babel/types';
 
@@ -13,6 +15,21 @@ export const ASSERTION_PREFIXES = [
 
 const ASSERTION_NAME = new RegExp(`^(?:${ASSERTION_PREFIXES.join('|')})[A-Z0-9_$]`);
 const TRANSPARENT_MEMBERS = new Set(['value', 'current']);
+
+/** Standard-library methods that return a boolean by name alone (`test` is deliberately absent). */
+export const PREDICATE_METHODS = new Set([
+  'has', 'includes', 'some', 'every', 'startsWith', 'endsWith',
+  'isArray', 'isNaN', 'isFinite', 'isInteger', 'isSafeInteger'
+]);
+
+/** Words that make a verb-named call read as a question (`existsSync`, `isPathValid`). */
+export const PREDICATE_WORDS = new Set([
+  'exists', 'equals', 'matches', 'valid', 'ok', 'enabled', 'disabled', 'active',
+  'visible', 'hidden', 'ready', 'empty', 'defined', 'present', 'loaded', 'done',
+  'complete', 'dirty', 'stale', 'expired', 'pending', 'selected', 'checked',
+  'open', 'closed', 'locked', 'found', 'known', 'allowed', 'blocked', 'accepted',
+  'passed', 'failed'
+]);
 const ERRORISH_WORDS = new Set([
   'err', 'error', 'errors', 'fail', 'fails', 'failed', 'failure', 'exception',
   'invalid', 'rejected', 'fault', 'denied'
@@ -50,11 +67,27 @@ const isAssertionMember = (member) => {
   return isAssertionName(propName);
 };
 
-const isAssertionCall = (call) => {
+const isMemberNode = (n) => t.isMemberExpression(n) || t.isOptionalMemberExpression(n);
+const isCallNode = (n) => t.isCallExpression(n) || t.isOptionalCallExpression(n);
+
+const isPredicateName = (name) => isAssertionName(name) || PREDICATE_METHODS.has(name) ||
+  splitNameWords(name).some((word) => PREDICATE_WORDS.has(word));
+
+const isPredicateCall = (call) => {
   const callee = unwrapExpression(call.callee);
-  if (t.isIdentifier(callee)) return isAssertionName(callee.name);
-  const isMemberCallee = t.isMemberExpression(callee) || t.isOptionalMemberExpression(callee);
-  return isMemberCallee && isAssertionName(memberPropertyName(callee));
+  if (t.isIdentifier(callee)) return isPredicateName(callee.name);
+  return isMemberNode(callee) && isPredicateName(memberPropertyName(callee));
+};
+
+/** A chain of reads and calls rooted at a name, with no operator anywhere along it. */
+const isPlainChain = (node) => {
+  const expr = unwrapExpression(node);
+  if (!expr) return false;
+  const isRoot = t.isIdentifier(expr) || t.isThisExpression(expr) || t.isSuper(expr) || t.isMetaProperty(expr);
+  if (isRoot) return true;
+  if (isMemberNode(expr)) return isPlainChain(expr.object);
+  if (isCallNode(expr)) return isPlainChain(expr.callee);
+  return false;
 };
 
 /** True when a test reads a named boolean per AGENTS.md 3.A. */
@@ -64,10 +97,8 @@ export const isNamedCondition = (node) => {
   if (t.isIdentifier(expr)) return true;
   const isNegation = t.isUnaryExpression(expr, { operator: '!' });
   if (isNegation) return isNamedCondition(expr.argument);
-  const isMember = t.isMemberExpression(expr) || t.isOptionalMemberExpression(expr);
-  if (isMember) return isAssertionMember(expr);
-  const isCall = t.isCallExpression(expr) || t.isOptionalCallExpression(expr);
-  if (isCall) return isAssertionCall(expr);
+  if (isMemberNode(expr)) return isPlainChain(expr) || isAssertionMember(expr);
+  if (isCallNode(expr)) return isPredicateCall(expr);
   return false;
 };
 
