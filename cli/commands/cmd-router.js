@@ -201,6 +201,12 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
         runStagedDeltaCommand(rawArgs.slice(1));
         break;
       }
+      const isBaseDelta = rawArgs.some((arg) => arg === '--delta-base' || arg.startsWith('--delta-base='));
+      if (isBaseDelta) {
+        const { runBaseDeltaCommand } = await import('./cmd-staged-delta.js');
+        runBaseDeltaCommand(rawArgs.slice(1));
+        break;
+      }
       const isFeed = rawArgs.some((arg) => arg === '--feed' || arg.startsWith('--feed='));
       if (isFeed) {
         const { runAuditFeedCommand } = await import('./cmd-audit-feed.js');

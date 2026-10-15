@@ -4,7 +4,8 @@ import { runAudit as executeAstAudit } from './audit-engine.js';
 import { runBuildAudit } from './build.js';
 import { findProjectRoot } from './build/detector.js';
 import { resolveAuditScope } from './audit-scope.js';
-import { computeGateVerdict } from './audit/gate-verdict.js';
+import { computeGateVerdict, evaluateDeltaVerdict } from './audit/gate-verdict.js';
+import { evaluateBaseDelta, summarizeBaseDelta } from './audit/base-delta.js';
 import { ANSI } from './theme.js';
 import { STATUS, toExitCode } from './result-status.js';
 import { parseCliArgs, describeArgErrors, parseTimeoutSeconds } from './cli-args.js';
@@ -20,7 +21,7 @@ import {
 } from './verify-report.js';
 import { formatAgentJson } from './agent-json.js';
 import { sharedRunNote } from './job-line-text.js';
-import { resolveVerifyChanges, changedAuditOptions, testArgsFor, verifyWorkspace, formatVerifyLine } from './verify-changed.js';
+import { resolveVerifyChanges, changedAuditOptions, testArgsFor, verifyWorkspace, formatVerifyLine, formatDeltaFailure } from './verify-changed.js';
 import { workspaceAt, emitWorkspace } from './workspace-run.js';
 
 export {
@@ -136,12 +137,16 @@ export const runProjectVerify = async (rawArgs = [], isCli = false, options = {}
   const hasNoChangedSource = Boolean(changes) && changes.files.length === 0;
   const auditOptions = changes ? changedAuditOptions(cwd, changes) : {};
   const auditReport = hasNoChangedSource ? EMPTY_AUDIT : executeAstAudit(scope.dir, { cwd, config: projectConfig, ...auditOptions });
-  const gate = computeGateVerdict({ projectRoot: cwd, scope: scope.relDir, violations: auditReport.violations, isPartialScan: Boolean(changes) });
+  // --changed with an explicit --base gates on the change itself: each rule's count against the base, at any severity (#6091).
+  const baseDelta = changes && base ? evaluateBaseDelta(cwd, changes.base, rawArgs, { config: projectConfig }) : null;
+  const gate = baseDelta ? evaluateDeltaVerdict(baseDelta) : computeGateVerdict({ projectRoot: cwd, scope: scope.relDir, violations: auditReport.violations, isPartialScan: Boolean(changes) });
   const auditStatus = gate.isPassing ? STATUS.PASS : STATUS.FAIL;
   const auditText = `${auditReport.health.grade} (${auditReport.health.score}/100, ${auditReport.totalViolations} violations)`;
   const excludedNote = scope.excluded ? `, ${scope.excluded.length} package/submodule dir(s) not audited (--all-packages runs their own audits)` : '';
   const auditScope = changes ? `${changes.files.length} changed file(s) vs ${changes.base}` : `${scope.relDir}/${excludedNote}`;
-  progress.finish(stepLine(auditStatus, 'AST Architecture', auditText, `${auditScope}, ${gate.basis} gate`));
+  const gateNote = baseDelta ? `${changes.files.length} changed file(s), delta gate vs ${changes.base}` : `${auditScope}, ${gate.basis} gate`;
+  const deltaFailure = baseDelta && !gate.isPassing ? formatDeltaFailure(baseDelta) : '';
+  progress.finish(stepLine(auditStatus, 'AST Architecture', auditText, gateNote) + deltaFailure);
 
   // Only the audit is scoped; typecheck, tests and build run project-wide, so each line names its command.
   progress.start('TypeScript');
@@ -176,7 +181,8 @@ export const runProjectVerify = async (rawArgs = [], isCli = false, options = {}
       passing: gate.isPassing,
       basis: gate.basis,
       regressions: gate.regressions.slice(0, 10),
-      note: gate.note
+      note: gate.note,
+      ...(baseDelta ? { delta: summarizeBaseDelta(baseDelta) } : {})
     },
     typecheck,
     tests,

@@ -49,7 +49,7 @@ const GIT_FLAGS = [
 /** Flags handlers accept that the schema entry does not list; used only as typo candidates. */
 const EXTRA_FLAGS = {
   audit: [
-    '--staged-delta', '--non-interactive', '--no-interactive', '--ci', '--headless', '--yes', '--md', '--share',
+    '--staged-delta', '--delta-base', '--non-interactive', '--no-interactive', '--ci', '--headless', '--yes', '--md', '--share',
     '--post', '--prompt-on-fail', '--copy-prompt', '--stage', '--relax', '--draft', '--dir', '--output',
     '--min-score', '--model', '--cost-per-million', '--staged', '--fast', '--quick', '--full', '--deep', '--all',
     '--include-tests', '--tests', '--no-index', '--no-fingerprint', '--triage', '--clones', '--clone-threshold',

@@ -12,18 +12,19 @@ import { loadProjectConfig } from '../config/index.js';
 import { isSourceFilePath } from '../audit-preflight-git.js';
 import { evaluateChanges } from './gate-delta.js';
 
-const gitText = (cwd, args) => {
+export const gitText = (cwd, args) => {
   const result = spawnSync('git', args, { cwd, encoding: 'utf-8', maxBuffer: 64 * 1024 * 1024 });
   return result.status === 0 ? result.stdout : null;
 };
 
 /**
- * Staged additions, copies, modifications and renames as { file, basePath }. A rename
- * (git mv plus edits) is compared with HEAD at its old path, so it can neither slip
- * past the gate nor count its inherited hazards as new. `-z` keeps odd paths intact.
+ * Additions, copies, modifications and renames from `git diff --name-status -z -M --diff-filter=ACMR`
+ * output as { file, basePath, isRename }. A rename (git mv plus edits) is compared with the base at
+ * its old path, so it can neither slip past a gate nor count its inherited hazards as new; a copy is
+ * new content and has no base. `-z` keeps odd paths intact. Shared by the staged and the base-ref gate.
  */
-const listStagedSources = (cwd) => {
-  const fields = (gitText(cwd, ['diff', '--cached', '--name-status', '-z', '-M', '--diff-filter=ACMR']) ?? '').split('\0');
+export const parseNameStatus = (output) => {
+  const fields = output.split('\0');
   const entries = [];
   let i = 0;
   while (i < fields.length && fields[i]) {
@@ -39,13 +40,21 @@ const listStagedSources = (cwd) => {
   return entries.filter((entry) => isSourceFilePath(entry.file));
 };
 
-const toChange = (cwd, { file, basePath, isRename }, config) => {
+const listStagedSources = (cwd) =>
+  parseNameStatus(gitText(cwd, ['diff', '--cached', '--name-status', '-z', '-M', '--diff-filter=ACMR']) ?? '');
+
+/** One evaluateChanges entry: `baseText` audited as the before state, `afterText` as the after state of `file`. */
+export const changeFromContents = (cwd, { file, basePath, isRename }, { baseText, afterText, config }) => {
   const absPath = path.join(cwd, file);
-  const staged = gitText(cwd, ['show', `:${file}`]) ?? '';
-  const base = basePath ? gitText(cwd, ['show', `HEAD:${basePath}`]) ?? '' : '';
-  const before = auditCode(base, absPath, file, { config });
-  const after = auditCode(staged, absPath, file, { config });
+  const before = auditCode(baseText, absPath, file, { config });
+  const after = auditCode(afterText, absPath, file, { config });
   return isRename ? { file, renamedFrom: basePath, before, after } : { file, before, after };
+};
+
+const toChange = (cwd, entry, config) => {
+  const afterText = gitText(cwd, ['show', `:${entry.file}`]) ?? '';
+  const baseText = entry.basePath ? gitText(cwd, ['show', `HEAD:${entry.basePath}`]) ?? '' : '';
+  return changeFromContents(cwd, entry, { baseText, afterText, config });
 };
 
 /**

@@ -3,6 +3,7 @@
 import path from 'node:path';
 import { listChangedFiles } from './test-changes.js';
 import { isSourceFilePath } from './audit-preflight-git.js';
+import { formatSites } from './audit/gate-delta.js';
 import { ANSI } from './theme.js';
 import { STATUS } from './result-status.js';
 import { changedPackages, runPerPackage, changeNotes, rootOrAllPackages } from './workspace-run.js';
@@ -14,6 +15,12 @@ export const resolveVerifyChanges = (root, base = null) => {
   if (isListingFailed) return { ok: false, error: listing.error };
   const files = listing.files.filter((f) => f.status !== 'D' && isSourceFilePath(f.path)).map((f) => f.path);
   return { ok: true, base: listing.base, files };
+};
+
+// The rising rules of a failed base delta under its step line: one `RULE@file:line [SEVERITY]` per new hazard.
+export const formatDeltaFailure = (delta) => {
+  const lines = delta.baseMissing ? [delta.error] : delta.files.flatMap(formatSites);
+  return lines.map((line) => `      ${ANSI.RED}${line}${ANSI.RESET}\n`).join('');
 };
 
 export const changedAuditOptions = (root, changes) => ({ fileList: changes.files.map((file) => path.join(root, file)) });

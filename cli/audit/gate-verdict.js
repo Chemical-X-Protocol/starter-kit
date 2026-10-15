@@ -27,6 +27,17 @@ export const evaluateGateVerdict = ({ violations, ratchetEval }) => {
   return { isPassing: !hasSevereViolation, basis: 'severity', regressions: [], adopted: [], note: ratchetEval.message ?? null };
 };
 
+/**
+ * The verdict of `verify --changed --base=<ref>` (#6091): the per-rule delta against the base
+ * decides, at any severity, and the repo-wide ratchet and the severity gate are not consulted.
+ * `delta` is an evaluateBaseDelta result.
+ */
+export const evaluateDeltaVerdict = (delta) => {
+  const risen = delta.files.length;
+  const note = delta.baseMissing ? delta.error : `${risen} changed file(s) raise a rule's violation count vs ${delta.base}`;
+  return { isPassing: delta.isPassing, basis: 'delta', regressions: [], adopted: [], note: delta.isPassing ? null : note };
+};
+
 const PARTIAL_SCAN_EVAL = {
   status: 'partial',
   regressions: [],
