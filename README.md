@@ -180,7 +180,7 @@ chemx build --json
 
 #### One gate rule
 
-The pre-commit hook (`chemx audit --staged-delta`), the ratchet step of `chemx verify` (`chemx-ratchet.json`), `chemx team task done` and the `introducedViolations` list in `patch`/`write` results share one rule: a change fails when any rule's violation count rises in a file, at any severity. A commit the hook accepts therefore cannot turn the ratchet step red. `CHEMX_SKIP_PRECOMMIT=1` skips only the hook; `chemx verify` still applies the rule. On failure the hook prints each new hazard as `RULE@file:line`. Guarantees, non-guarantees and the specs that prove parity are in [docs/audit-gates.md](docs/audit-gates.md).
+The pre-commit hook (`chemx audit --staged-delta`), the base delta gate (`chemx audit --delta-base=<ref>`, `chemx verify --changed --base=<ref>`), the ratchet step of `chemx verify` (`chemx-ratchet.json`), `chemx team task done` and the `introducedViolations` list in `patch`/`write` results share one rule: a change fails when any rule's violation count rises in a file, at any severity. A commit the hook accepts therefore cannot turn the ratchet step red. The base delta gate scores only the files a branch changed against their merge-base, so a branch that fixes one rule stays green even while the trunk is over the ratchet on other rules. `CHEMX_SKIP_PRECOMMIT=1` skips only the hook; `chemx verify` still applies the rule. On failure the hook prints each new hazard as `RULE@file:line`. Guarantees, non-guarantees and the specs that prove parity are in [docs/audit-gates.md](docs/audit-gates.md).
 
 #### Interactive audit navigator
 

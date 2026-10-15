@@ -148,6 +148,20 @@ export interface AuditOptions {
   readonly strict?: boolean;
 }
 
+/** Per-call options of auditCode (cli/audit/rules.js). */
+export interface AuditCodeOptions {
+  readonly config?: unknown;
+  readonly fast?: boolean;
+  readonly patternRegistry?: unknown;
+  readonly hookRegistry?: unknown;
+  readonly coverage?: unknown;
+  readonly fingerprint?: unknown;
+  /** Project root for the Tailwind content probe; derived from filePath minus relativePath when absent. */
+  readonly cwd?: string;
+  /** Tailwind content globs overriding tailwind.config; null or [] silences TAILWIND_UNSCANNED_CLASS_STRING. */
+  readonly tailwindContent?: readonly string[] | null;
+}
+
 export interface SeverityGroupedViolations {
   readonly critical: readonly HazardViolation[];
   readonly high: readonly HazardViolation[];
@@ -156,7 +170,7 @@ export interface SeverityGroupedViolations {
 }
 
 export declare function groupViolationsBySeverity(violations: readonly HazardViolation[]): SeverityGroupedViolations;
-export declare function auditCode(content: string, filePath: string, relativePath: string): HazardViolation[];
+export declare function auditCode(content: string, filePath: string, relativePath: string, options?: AuditCodeOptions): HazardViolation[];
 export declare function auditFile(filePath: string, relativePath: string): HazardViolation[];
 export declare function scanDirectory(targetDir: string, baseDir: string): HazardViolation[];
 export declare function runAudit(targetDir?: string, options?: AuditOptions): AuditReport;
