@@ -252,7 +252,7 @@ Use same-name shorthand across all languages; eliminate redundant `key: key` dup
 ### A. Named Conditions & Two-Stage Composition
 > The `if` never asks a question. The question is asked and named before the branch, and the `if` reads the answer.
 
-- Every conditional test is a named boolean: an identifier, its negation, or a call or member access whose name is an assertion (3.F). A raw comparison (`x === y`, `n >= 5`), a truthiness check on a non-boolean (`if (user)`, `if (obj.prop)`), inline compound logic (`a && b`), or a verb-named call (`RE.test(s)`, `fs.existsSync(p)`) inside the test is a violation.
+- Every conditional test is a named boolean: an identifier, its negation, a bare property read (`sale.ok`, `items.length`), or a call whose name states an assertion or a predicate (3.F: `hasItems(cart)`, `map.has(key)`, `fs.existsSync(p)`). A raw comparison (`x === y`, `n >= 5`), inline compound logic (`a && b`), or a call whose name states no predicate (`RE.test(s)`, `user.getName()`) inside the test is a violation.
 - Naming is the point, not the ceremony: it forces the question inline code hides (why `<= 0` and not `=== -1`?), and an edit to a named condition changes its definition without touching the branch.
 - **Stage 1** names each atomic concept. **Stage 2** names the decision, only when 2 or more concepts compose; a single comparison gets one name and no wrapper. Guard with early returns.
   ```typescript
