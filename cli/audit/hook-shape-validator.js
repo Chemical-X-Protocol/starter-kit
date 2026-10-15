@@ -1,14 +1,40 @@
 import * as t from '@babel/types';
 import { RULE_REGISTRY } from './rules-registry.js';
 
-const VERB_PREFIX_REGEX = /^(add|remove|toggle|set|get|fetch|load|save|delete|clear|reset|refresh|update|create|edit|send|sync|init|setup|dispose|trigger|post|put|patch|apply|dismiss|select|deselect|filter|sort|search|open|close|show|hide|start|stop|cancel|execute|run|retry|submit|validate|mutate|next|prev|step|increment|decrement|insert|upsert|drop|enable|disable|register|unregister|login|logout|checkout|publish|archive|discard|confirm|undo|redo|claim|complete|acquire|release|download|upload|export|import|handle|play|pause|resume|seek|unlock|restore|advance|focus|notify|broadcast|copy|format)([A-Z0-9_].*)?$/;
+export const HOOK_ACTION_VERBS = [
+  'abort', 'accept', 'acquire', 'activate', 'add', 'advance', 'align', 'animate', 'append', 'apply',
+  'approve', 'archive', 'assign', 'attach', 'begin', 'bind', 'boot', 'broadcast', 'build', 'calculate',
+  'cancel', 'center', 'check', 'checkout', 'choose', 'claim', 'clear', 'clone', 'close', 'collapse',
+  'complete', 'compute', 'conceal', 'confirm', 'connect', 'convert', 'copy', 'create', 'deactivate', 'debounce',
+  'decline', 'decrement', 'defer', 'delete', 'dequeue', 'deselect', 'detach', 'disable', 'discard', 'disconnect',
+  'dismiss', 'dispatch', 'dispose', 'download', 'drag', 'draw', 'drop', 'duplicate', 'edit', 'emit',
+  'enable', 'end', 'enqueue', 'ensure', 'evict', 'execute', 'expand', 'export', 'fetch', 'fill',
+  'filter', 'finalize', 'finish', 'fit', 'flag', 'flip', 'flush', 'focus', 'follow', 'fork',
+  'format', 'generate', 'get', 'go', 'grant', 'halt', 'handle', 'hide', 'highlight', 'hydrate',
+  'import', 'increment', 'init', 'insert', 'invalidate', 'invite', 'join', 'jump', 'kill', 'launch',
+  'leave', 'link', 'load', 'lock', 'log', 'login', 'logout', 'mark', 'maximize', 'measure',
+  'merge', 'minimize', 'mount', 'move', 'mutate', 'mute', 'navigate', 'next', 'notify', 'open',
+  'parse', 'patch', 'pause', 'persist', 'pick', 'pin', 'play', 'poll', 'pop', 'populate',
+  'post', 'prefetch', 'prepare', 'prepend', 'prev', 'preview', 'print', 'publish', 'purge', 'push',
+  'put', 'queue', 'read', 'record', 'redirect', 'redo', 'refetch', 'refresh', 'register', 'reject',
+  'release', 'reload', 'remove', 'rename', 'render', 'reorder', 'replace', 'reply', 'report', 'reposition',
+  'request', 'reset', 'resize', 'resolve', 'restart', 'restore', 'resume', 'retry', 'revalidate', 'reveal',
+  'revoke', 'rewind', 'rotate', 'run', 'save', 'scan', 'schedule', 'scroll', 'search', 'seed',
+  'seek', 'select', 'send', 'set', 'setup', 'share', 'show', 'shuffle', 'shutdown', 'skip',
+  'snap', 'sort', 'spawn', 'split', 'start', 'step', 'stop', 'stroke', 'submit', 'subscribe',
+  'swap', 'sync', 'throttle', 'toggle', 'track', 'transform', 'translate', 'trigger', 'unbind', 'undo',
+  'unfollow', 'unlink', 'unlock', 'unmount', 'unmute', 'unpin', 'unregister', 'unsubscribe', 'unwatch', 'update',
+  'upload', 'upsert', 'validate', 'verify', 'wait', 'watch', 'write', 'zoom',
+];
+
+const VERB_PREFIX_REGEX = new RegExp(`^(${HOOK_ACTION_VERBS.join('|')})([A-Z0-9_].*)?$`);
 
 const STATUS_HEURISTIC_REGEX = /^(is[A-Z]|has[A-Z]|can[A-Z]|should[A-Z])|.*(Error|Status)$/;
 const STATUS_EXACT_NAMES = new Set(['status', 'error', 'loading', 'pending', 'ready']);
 const ACTION_WRAPPER_KEYS = new Set(['actions', 'handlers', 'methods', 'operations']);
 
 const RAW_DOM_REF_REGEX = /^(dom|element|container|input|button|target|root|node)?Ref$|.*(Element|Node|Dom)Ref$/i;
-const INTERMEDIATE_VAL_REGEX = /^(temp|draft|raw|partial|interim|scratch|memoized)([A-Z_].*)?$/i;
+const INTERMEDIATE_VAL_REGEX = /^(temp|draft|raw|partial|interim|scratch|memoized)([A-Z0-9_].*)?$/;
 const UNGROUPED_CALLBACK_REGEX = /^(on[A-Z]|callback$|.*Callback$)/;
 
 const MUTUALLY_EXCLUSIVE_STATUSES = new Set([
