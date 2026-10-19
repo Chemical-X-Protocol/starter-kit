@@ -42,6 +42,13 @@ This section was written from the day's commit subjects and their task titles. I
 
 - The Python outline labels a `class` as `class`; `def` stays `function` (#5945).
 
+### Search and reader Unix parity
+
+- `chemx q -g` (literal search) supports `--bare` (`-b`) and context peeks `-C <N>`, `-B <N>`, `-A <N>`, achieving token and byte parity with `ripgrep` (57 chars / 14 tokens per match). The MCP `chemx_q` tool supports `bare: true`, `context`, `beforeContext`, and `afterContext` params.
+- `chemx read <file>:N-M` supports `--bare` (`-b`), outputting verbatim slice text without box borders, line numbers, or header decorations, achieving byte-for-byte parity with `sed -n 'N,Mp'`. The MCP `chemx_read` tool supports `bare: true`.
+- TypeScript ambient function declarations (`declare function`) and interface method signatures resolve in AST symbol extraction (`chemx read --symbol=<name>`), preventing failed lookups on `.d.ts` declaration files.
+- Surgical patch operations tolerantly match lines with trailing whitespace differences before reporting a patch mismatch.
+
 ## Unreleased (main, 2026-10-09)
 
 ### Coordination

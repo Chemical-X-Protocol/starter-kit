@@ -34,10 +34,10 @@ A blocked call is denied before it runs. The denial names the exact chemx call, 
 | `npm run build`, `vite build` | `chemx build -- <command>` |
 | `git diff`, `git log` | `chemx d`, `chemx log` |
 | `git show <rev>` | `chemx show <rev>`; `git show <rev>:<path>` becomes `chemx read <rev>:<path>` |
-| `cat`, `head`, `tail`, `less`, `sed` (any script, not `-i`) on a repo source file, also as `cmd < file`; `wc`, `nl`, `sort`, `cut`, `diff` and similar readers with `< file` | `chemx read <file> --outline`, `--symbol=<name>` or `--start=N --end=M` |
+| `cat`, `head`, `tail`, `less`, `sed` (any script, not `-i`) on a repo source file, also as `cmd < file`; `wc`, `nl`, `sort`, `cut`, `diff` and similar readers with `< file` | `chemx read <file> --outline`, `--symbol=<name>` or `chemx read <file>:N-M --bare` |
 | `git cat-file -p <rev>:<path>` | `chemx read <rev>:<path>` |
 | `xargs cat < list` (a repo file feeding the file list) | `chemx do "read <file> --outline" ...` |
-| `git grep`; `grep -r`, `rg`, `ag`, `ack`; `grep` or `awk` on a repo source file | `chemx q -g "<text>"`; `chemx q -g "<text>" --dir=<file>`; `chemx read <file> --start=N --end=M` |
+| `git grep`; `grep -r`, `rg`, `ag`, `ack`; `grep` or `awk` on a repo source file | `chemx q -g "<text>" --bare` (add `-C <N>` for context peek); `chemx q -g "<text>" --dir=<file>`; `chemx read <file>:N-M --bare` |
 | `find` in the repo (plain tests only) | `chemx f "<name part>"` |
 | `sed -i`, `perl -i`, `awk -i inplace` on a repo file | `chemx patch <file> <<'EOF'` with SEARCH/REPLACE blocks (a simple `s/a/b/` is filled in) |
 | `>`, `>>`, a heredoc or `tee` into a repo file | `chemx write <file> - <<'EOF'` or `chemx write <file> --append - <<'EOF'` |

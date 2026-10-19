@@ -59,7 +59,7 @@ export const handleChemxQ = (args = {}, cwd = process.cwd()) => {
   if (!query) throw new Error('chemx_q requires "query" or "symbol" argument.');
   const isLiteral = Boolean(args.literal);
   if (isLiteral) {
-    const isBare = args.bare !== false && !args.json;
+    const isBare = Boolean(args.bare);
     const context = typeof args.context === 'number' ? args.context : 0;
     const beforeContext = typeof args.beforeContext === 'number' ? args.beforeContext : context;
     const afterContext = typeof args.afterContext === 'number' ? args.afterContext : context;
@@ -70,7 +70,8 @@ export const handleChemxQ = (args = {}, cwd = process.cwd()) => {
       isBare, context, beforeContext, afterContext
     });
     const isJson = Boolean(args.json);
-    if (isJson) return res;
+    const shouldReturnObject = isJson || !isBare;
+    if (shouldReturnObject) return res;
     const hasNoMatches = res.matches.length === 0;
     if (hasNoMatches) return `no matches for "${query}"`;
     const lines = [];

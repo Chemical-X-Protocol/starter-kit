@@ -49,7 +49,8 @@ test('MCP chemx_q literal mode searches the repo without writing to stdout', asy
     process.stdout.write = originalWrite;
     const payload = JSON.parse(text);
     assert.equal(payload.totalMatches, 1);
-    assert.equal(payload.matches[0].path, 'notes.md');
+    const bareText = await callQ(handler, { query: '--x-glass', literal: true, bare: true, projectRoot: root });
+    assert.equal(bareText.trim(), 'notes.md:1:remember --x-glass tokens');
     assert.equal(leaked, '', 'nothing is written to the JSON-RPC stdout channel');
   } finally {
     process.stdout.write = originalWrite;
