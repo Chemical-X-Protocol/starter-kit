@@ -12,5 +12,6 @@
       "@/*": ["src/ui/*", "src/*"]
     }
   },
-  "include": ["blueprints", "hooks", "src"]
+  "include": ["blueprints", "hooks", "src"],
+  "exclude": ["blueprints/_vitest.config.vue.ts", "blueprints/_vitest.config.svelte.ts"]
 }
