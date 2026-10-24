@@ -153,6 +153,8 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
   report.gate = computeGateVerdict({ projectRoot: process.cwd(), scope: auditRelDir, violations: report.violations, isPartialScan: isPartialAudit });
   report.scope = auditRelDir;
   if (scope.excluded) report.excludedDirs = scope.excluded;
+  const shouldNoteNarrowing = Boolean(scope.excluded) && !isJson;
+  if (shouldNoteNarrowing) process.stdout.write(`Narrowed to ${auditRelDir}/ (workspace root). Not scanned: ${scope.excluded.join(', ')}. Pass --dir=. to scan everything.\n`);
   const historyScope = { scope: auditRelDir, isPartial: isPartialAudit };
   saveAuditSnapshot(report, process.cwd(), historyScope);
   const hasSkippedConflicts = report.skippedConflicts?.length > 0;

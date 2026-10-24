@@ -169,6 +169,11 @@ test('audit scope: cli audit at a workspace root narrows to src/ and reports the
       process.stdout.write = () => true;
       const report = await runAudit(undefined, false, ['--json'], () => ({}));
       process.stdout.write = originalWrite;
+      let printed = '';
+      process.stdout.write = (chunk) => { printed += String(chunk); return true; };
+      await runAudit(undefined, false, [], () => ({}));
+      process.stdout.write = originalWrite;
+      assert.match(printed, /Narrowed to src\/.*apps\/a/);
       assert.strictEqual(report.scope, 'src');
       assert.deepStrictEqual(report.excludedDirs, ['apps/a']);
       const full = await runAudit(undefined, false, ['--json', '--dir=.'], () => ({}));
