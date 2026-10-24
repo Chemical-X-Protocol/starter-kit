@@ -4,6 +4,8 @@ import { isBabelParsable } from './languages.js';
 import { parseSfc, isSfcFile, buildScriptOverlay } from './sfc/sfc-parse.js';
 import { extractSfcProps, extractTemplateComponentImports, extractScriptSrcImports, componentNameFromPath } from './sfc/sfc-metadata.js';
 import { extractModuleMetadata } from './search-ast-module.js';
+import { isPhpPath } from './php/php-parse.js';
+import { phpIndexMetadata } from './php/php-symbols.js';
 
 const TIER_PATTERNS = [
   { tier: 'atom', test: (p, b) => p.includes('atoms/') || p.includes('/a-') || b.startsWith('a-') || /(?:^|[\\/])(?:Domain|Entities|Models)[\\/]/i.test(p) },
@@ -192,6 +194,8 @@ const extractSfcMetadata = (base, sfc, ast, filePath, contentLines) => {
 };
 
 export const extractAstMetadata = (content, filePath) => {
+  // PHP never reaches the regex fallback: a parse failure must yield no symbols, not JS-pattern junk.
+  if (isPhpPath(filePath)) return phpIndexMetadata(content, filePath);
   if (!isBabelParsable(filePath)) {
     return extractRegexFallback(content, filePath);
   }

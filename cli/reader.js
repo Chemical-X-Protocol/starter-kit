@@ -6,6 +6,8 @@ import { ANSI } from './theme.js';
 import { resolveSafePath } from './path-scope.js';
 import { isBabelParsable } from './languages.js';
 import { extractAstMetadata } from './search-ast.js';
+import { isPhpPath } from './php/php-parse.js';
+import { generatePhpOutline } from './php/php-outline.js';
 import { isMarkdownFile, generateMarkdownOutline } from './reader-markdown.js';
 import { locateSymbols } from './symbol-locator.js';
 import { stripCommentsKeepingLines } from './comment-ranges.js';
@@ -89,6 +91,7 @@ const describeCompanion = (filePath, scriptContent, externalSrc) => {
 export const generateAstOutline = (code, filePath) => {
   if (isMarkdownFile(filePath)) return generateMarkdownOutline(code, filePath);
   if (isStylesheetFile(filePath)) return [`// Outline: ${filePath}`, ...outlineStylesheet(code)].join('\n');
+  if (isPhpPath(filePath)) return generatePhpOutline(code, filePath);
   const isComponentFile = filePath.endsWith('.vue') || filePath.endsWith('.svelte');
   const sfcScript = isComponentFile ? resolveSfcScript(code, filePath) : { scriptContent: code, externalSrc: null };
   const { scriptContent } = sfcScript;

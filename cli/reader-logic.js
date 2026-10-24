@@ -189,6 +189,8 @@ const isLogicStatement = (stmt) => {
  * @returns {string} Labeled logic skeleton.
  */
 export const generateAstLogicSkeleton = (code, filePath) => {
+  const isPhp = /\.php$/i.test(filePath);
+  if (isPhp) return `// Logic Skeleton: ${filePath}\nlogic skeleton not available for PHP; use --outline or --symbol`;
   const isSfc = filePath.endsWith('.vue') || filePath.endsWith('.svelte');
   const scriptContent = isSfc ? parseSfc(code, filePath).scriptOverlay : code;
   const lines = [`// Logic Skeleton: ${filePath} (${SKELETON_LABEL})`];
