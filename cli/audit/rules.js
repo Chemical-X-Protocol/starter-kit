@@ -16,13 +16,21 @@ import { parseSfc, isSfcFile } from '../sfc/sfc-parse.js';
 import { COVERAGE_KINDS, recordFileCoverage } from './coverage.js';
 import { parseScriptAsts, runAstPasses } from './ast-passes.js';
 import { runTailwindUnscannedPass } from './tailwind-unscanned.js';
+import { isPhpPath } from '../php/php-parse.js';
+import { analyzePhp } from '../php/php-analyzer.js';
 
 export { PILLARS, RULE_REGISTRY, createHookShapeRegistry };
 
-/** Accepts either a loaded project config ({ rules, overrides }) or a bare rules object. */
+const FULL_CONFIG_KEYS = ['rules', 'overrides', 'wordpress', 'php'];
+
+/**
+ * Accepts either a loaded project config (an object with any of rules, overrides, wordpress, php)
+ * or a bare rules object. A full config keeps its other keys; rules and overrides default to empty.
+ */
 const normalizeConfig = (config) => {
-  const isFullConfig = Boolean(config?.rules) && typeof config.rules === 'object';
-  return isFullConfig ? config : { rules: config || {}, overrides: [] };
+  const isObject = Boolean(config) && typeof config === 'object';
+  const isFullConfig = isObject && FULL_CONFIG_KEYS.some((key) => key in config);
+  return isFullConfig ? { ...config, rules: config.rules ?? {}, overrides: config.overrides ?? [] } : { rules: config || {}, overrides: [] };
 };
 
 const parseErrorViolation = (relativePath, line, message) => {
@@ -70,11 +78,29 @@ const describeSfcCoverage = (sfc) => (sfc ? {
 
 const describeTextOnlyReason = (options) => (options.fast ? 'fast mode: AST rules skipped' : 'no AST parser for this language');
 
-const collectRawViolations = (content, filePath, relativePath, options, ruleConfig) => {
+/** PHP never reaches the Babel, SFC or Tailwind passes; analyzePhp owns parsing and its passes. */
+const collectPhpViolations = (content, filePath, relativePath, options, config, violations) => {
+  const analysis = analyzePhp({ content, filePath, relativePath, options, config, violations });
+  const hasHighComplexity = violations.some((v) => v.rule === 'COMPLEXITY_CYCLOMATIC_HIGH');
+  violations.push(...checkLineBudgets({ content, relativePath, config: config.rules, sfc: null, hasHighComplexity }));
+  const record = { relativePath, kind: analysis.kind, sfc: null, language: 'php', reason: analysis.reason };
+  recordFileCoverage(options.coverage, record);
+  return {
+    violations,
+    coverage: { kind: record.kind, language: record.language, reason: record.reason },
+    commentRegions: analysis.commentRegions,
+    fileHeaderEndLine: analysis.fileHeaderEndLine
+  };
+};
+
+const collectRawViolations = (content, filePath, relativePath, options, config) => {
+  const ruleConfig = config.rules;
   const violations = [];
   let coverageReason = null;
   const lines = content.split('\n');
   runTextPasses(content, lines, filePath, relativePath, ruleConfig, violations);
+  const isPhp = isPhpPath(filePath);
+  if (isPhp) return collectPhpViolations(content, filePath, relativePath, options, config, violations);
 
   const sfc = isSfcFile(filePath) ? parseSfc(content, filePath) : null;
   const isAstEligible = !options.fast && isBabelParsable(filePath);
@@ -124,8 +150,8 @@ export const auditCode = (content, filePath, relativePath, options = {}) =>
  */
 export function auditCodeDetailed(content, filePath, relativePath, options = {}) {
   const config = normalizeConfig(options.config);
-  const { violations: raw, coverage } = collectRawViolations(content, filePath, relativePath, options, config.rules);
-  const filtered = applyAuditPostFilters(raw, content.split('\n'));
+  const { violations: raw, coverage, commentRegions = null, fileHeaderEndLine = 0 } = collectRawViolations(content, filePath, relativePath, options, config);
+  const filtered = applyAuditPostFilters(raw, content.split('\n'), { commentRegions, fileHeaderEndLine });
   const violations = applyRuleOverrides(filtered, relativePath, config).map(withTaxonomy);
   return { violations, coverage };
 }
