@@ -63,6 +63,9 @@ const DEFAULT_TIER_PATTERNS = Object.freeze({
   view: [/(?:^|[\\/])views[\\/]/, /(?:^|[\\/])pages[\\/]/, /View\.[tj]sx?$/]
 });
 const VIEW_MARKUP_EXTENSIONS = new Set(['.vue', '.tsx', '.jsx', '.svelte']);
+// PHP is view markup only as a WordPress partial or template; PHP has no molecule tier.
+const PHP_VIEW_DIRECTORY = /(?:^|[\\/])(?:partials|templates)[\\/]/;
+const isPhpPath = (relativePath) => path.extname(relativePath).toLowerCase() === '.php';
 
 /** Lines as `wc -l` counts them: a trailing newline does not open a new line. */
 export const countLines = (content) => {
@@ -141,6 +144,7 @@ const matchesConfiguredTier = (relPath, globs = []) => globs.some((glob) => glob
 /** 'molecule' | 'view' | null. `.chemxrc` `tiers: { molecule: [globs], view: [globs] }` extends the defaults. */
 export const resolveFileTier = (relativePath, config = {}) => {
   const normalized = relativePath.split(path.sep).join('/');
+  if (isPhpPath(normalized)) return PHP_VIEW_DIRECTORY.test(normalized) ? 'view' : null;
   const baseName = path.basename(normalized);
   const tiers = config.tiers || {};
   const isMolecule = DEFAULT_TIER_PATTERNS.molecule.some((re) => re.test(normalized)) ||
@@ -151,4 +155,8 @@ export const resolveFileTier = (relativePath, config = {}) => {
 };
 
 /** View budgets apply to markup-bearing view entries, never to .ts/.js controllers. */
-export const isViewMarkupFile = (relativePath) => VIEW_MARKUP_EXTENSIONS.has(path.extname(relativePath));
+export const isViewMarkupFile = (relativePath) => {
+  const normalized = relativePath.split(path.sep).join('/');
+  if (isPhpPath(normalized)) return PHP_VIEW_DIRECTORY.test(normalized);
+  return VIEW_MARKUP_EXTENSIONS.has(path.extname(relativePath));
+};
