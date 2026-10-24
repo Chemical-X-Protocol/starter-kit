@@ -4,6 +4,7 @@
 // the project root, so src/components/blueprints or cli/build stay indexed.
 import fs from 'node:fs';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { isSourceFile } from './languages.js';
 import { debugNote } from './search-debug.js';
 import { listGitFiles } from './git-file-listing.js';
@@ -52,6 +53,9 @@ const walk = (dir, root, fileList) => {
   }
 };
 
+// status 0: ignored; anything else (not ignored, no git, not a repo): treated as not ignored.
+const isDirGitIgnored = (root, dir) => spawnSync('git', ['-C', root, 'check-ignore', '-q', '--', dir], { stdio: 'ignore' }).status === 0;
+
 // scopeDirs are root-relative posix dirs ('.' for the whole project). An explicitly requested
 // dir is always walked, even when its own name is on the ignore list. Dirs that do not exist
 // are listed in `missing` so callers can refuse to answer for them.
@@ -77,6 +81,11 @@ export const scanScope = (root, scopeDirs) => {
   const config = findAndLoadConfigFile(root);
   const userExcludes = Array.isArray(config?.raw?.exclude) ? config.raw.exclude : [];
 
+  const ignoredDirCache = new Map();
+  const isTargetIgnored = (dir) => {
+    if (!ignoredDirCache.has(dir)) ignoredDirCache.set(dir, isDirGitIgnored(root, dir));
+    return ignoredDirCache.get(dir);
+  };
   fileList.files = fileList.files.filter((f) => {
     const isDuplicate = seen.has(f.relPath);
     if (isDuplicate) return false;
@@ -87,9 +96,11 @@ export const scanScope = (root, scopeDirs) => {
 
     const hasGitFilter = gitFilesSet !== null;
     if (hasGitFilter) {
+      // An explicit dir keeps git-ignored files only when that dir is itself wholly ignored.
       const isExplicitTarget = scopeDirs.some((dir) => {
         const isCustomScope = dir !== '.' && dir !== 'src';
-        return isCustomScope && (f.relPath === dir || f.relPath.startsWith(`${dir}/`));
+        const isUnderDir = f.relPath === dir || f.relPath.startsWith(`${dir}/`);
+        return isCustomScope && isUnderDir && isTargetIgnored(dir);
       });
       const isAllowedByGit = gitFilesSet.has(f.relPath);
       const isKept = isAllowedByGit || isExplicitTarget;

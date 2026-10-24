@@ -36,6 +36,6 @@ export const whyNotIndexable = (root, relPath, heldKey) => {
   if (!isCovered) return `outside the index scope (${coveringKey})`;
   if (isUnderIgnoredDir(relPath)) return 'under a generated or vendored dir';
   if (isExcludedByConfig(root, relPath)) return 'matched by a config exclude glob';
-  if (isGitIgnored(root, relPath)) return 'ignored by git (pass its dir with --dir to opt in)';
+  if (isGitIgnored(root, relPath)) return 'ignored by git';
   return null;
 };
