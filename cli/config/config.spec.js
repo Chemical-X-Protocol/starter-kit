@@ -6,6 +6,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_PROFILE, getProfileDefaults, loadProjectConfig } from './index.js';
+import { resolveAuditConfig } from '../audit-scan.js';
 
 describe('Chemical X Configuration & Profiles', () => {
   it('defines pragmatic as the default profile with greybeard staff thresholds', () => {
@@ -52,6 +53,44 @@ describe('Chemical X Configuration & Profiles', () => {
     assert.strictEqual(cfg.profile, 'pragmatic');
     assert.strictEqual(cfg.rules.enforceFileLength, false);
     assert.strictEqual(cfg.rules.maxCyclomaticComplexity, 12);
+  });
+});
+
+describe('wordpress and php config keys (#6511)', () => {
+  const withRc = (content, fn) => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-wp-config-'));
+    try {
+      fs.writeFileSync(path.join(root, '.chemxrc'), content);
+      fn(root);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  };
+
+  it('exposes top-level wordpress and php from .chemxrc', () => {
+    withRc('{ "wordpress": false, "php": { "version": "7.4" } }', (root) => {
+      const cfg = loadProjectConfig(root);
+      assert.strictEqual(cfg.wordpress, false);
+      assert.strictEqual(cfg.php.version, '7.4');
+    });
+  });
+
+  it('leaves them undefined when the config does not set them', () => {
+    const cfg = loadProjectConfig('/tmp/non-existent-dir-for-chemx-test');
+    assert.strictEqual(cfg.wordpress, undefined);
+    assert.strictEqual(cfg.php, undefined);
+  });
+
+  it('a changed .chemxrc mtime invalidates the audit config cache', () => {
+    withRc('{ "php": { "version": "7.4" } }', (root) => {
+      assert.strictEqual(resolveAuditConfig(root).php.version, '7.4');
+      assert.strictEqual(resolveAuditConfig(root), resolveAuditConfig(root));
+      const rc = path.join(root, '.chemxrc');
+      fs.writeFileSync(rc, '{ "php": { "version": "8.2" } }');
+      const later = new Date(Date.now() + 5000);
+      fs.utimesSync(rc, later, later);
+      assert.strictEqual(resolveAuditConfig(root).php.version, '8.2');
+    });
   });
 });
 

@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { RULESET_VERSION, resolveRuleRevision } from './rule-revisions.js';
 import { RULE_REGISTRY } from './rules-registry.js';
+import { LANGUAGE_DEFINITIONS } from '../languages.js';
 
 /**
  * chemx-ratchet.json, format version 2:
@@ -12,9 +13,37 @@ import { RULE_REGISTRY } from './rules-registry.js';
  * `allRules: true` means `revisions` lists every rule that existed at recording time,
  * so a registered rule missing from it is new and is adopted even if nobody bumped its revision.
  * Every full scan upgrades the scope to the current rule set (see upgradeScope).
+ * `languages` lists the file extensions a scope was recorded over. A scope without it is
+ * read as the extensions scanned before PHP support (LEGACY_LANGUAGES). Counts from
+ * violations in a file whose extension is not in that set are adopted, not gated, and the
+ * extension is then recorded; violations without a file path are always gated.
  */
 export const RATCHET_FILE = 'chemx-ratchet.json';
 const RATCHET_VERSION = 2;
+
+const PRE_PHP_EXCLUDED = new Set(['.php']);
+const allExtensions = () => Object.values(LANGUAGE_DEFINITIONS).flatMap((lang) => [...lang.extensions]);
+const LEGACY_LANGUAGES = allExtensions().filter((ext) => !PRE_PHP_EXCLUDED.has(ext)).sort();
+
+/** The extensions a full scan covers now (what a scope records). */
+const currentLanguages = () => allExtensions().sort();
+
+const recordedLanguages = (entry) => (Array.isArray(entry.languages) ? entry.languages : LEGACY_LANGUAGES);
+
+const mergeLanguages = (entry, adopted = []) => {
+  const adoptedExtensions = adopted.flatMap((item) => item.extensions ?? []);
+  return [...new Set([...recordedLanguages(entry), ...currentLanguages(), ...adoptedExtensions])].sort();
+};
+
+const extensionOf = (violation) => {
+  const file = violation.filePath ?? violation.file;
+  return typeof file === 'string' ? path.extname(file).toLowerCase() : '';
+};
+
+const isOutsideLanguages = (violation, languages) => {
+  const ext = extensionOf(violation);
+  return ext !== '' && !languages.has(ext);
+};
 
 export const countViolationsByRule = (violations = []) => {
   const counts = {};
@@ -69,7 +98,7 @@ const readExistingOrEmpty = (projectRoot) => {
 export const writeRatchet = (projectRoot, { scope, violations }) => {
   const ratchet = readExistingOrEmpty(projectRoot);
   const rules = sortKeys(countViolationsByRule(violations));
-  ratchet.scopes[scope] = { ruleset: RULESET_VERSION, allRules: true, rules, revisions: currentRevisions(rules) };
+  ratchet.scopes[scope] = { ruleset: RULESET_VERSION, allRules: true, rules, revisions: currentRevisions(rules), languages: currentLanguages() };
   persistRatchet(projectRoot, ratchet);
   return ratchet.scopes[scope];
 };
@@ -86,7 +115,8 @@ const upgradeScope = (entry, adopted) => {
     ruleset: Math.max(entry.ruleset ?? 1, RULESET_VERSION),
     allRules: true,
     rules: sortKeys(rules),
-    revisions: currentRevisions(rules)
+    revisions: currentRevisions(rules),
+    languages: mergeLanguages(entry, adopted)
   };
 };
 
@@ -94,7 +124,8 @@ const upgradeScope = (entry, adopted) => {
 export const needsScopeUpgrade = (entry, adopted = []) => {
   if (!entry) return false;
   const upgraded = upgradeScope(entry, adopted);
-  const isSame = JSON.stringify(upgraded) === JSON.stringify({ ruleset: entry.ruleset, allRules: entry.allRules, rules: entry.rules, revisions: entry.revisions });
+  const stored = { ruleset: entry.ruleset, allRules: entry.allRules, rules: entry.rules, revisions: entry.revisions, languages: entry.languages };
+  const isSame = JSON.stringify(upgraded) === JSON.stringify(stored);
   return !isSame;
 };
 
@@ -116,7 +147,10 @@ const recordedRevision = (entry, rule) => {
 };
 
 const compareToBaseline = (entry, violations) => {
+  const languages = new Set(recordedLanguages(entry));
   const current = countViolationsByRule(violations);
+  const outsideViolations = violations.filter((v) => isOutsideLanguages(v, languages));
+  const outside = countViolationsByRule(outsideViolations);
   const allRules = new Set([...Object.keys(current), ...Object.keys(entry.rules)]);
   const regressions = [];
   const adopted = [];
@@ -125,9 +159,14 @@ const compareToBaseline = (entry, violations) => {
     const count = current[rule] ?? 0;
     const isNewerRevision = revision > recordedRevision(entry, rule);
     const baseline = entry.rules[rule] ?? 0;
-    if (isNewerRevision) adopted.push({ rule, baseline, current: count, revision });
-    const isRegression = !isNewerRevision && count > baseline;
-    if (isRegression) regressions.push({ rule, baseline, current: count });
+    const outsideCount = outside[rule] ?? 0;
+    const gatedCount = count - outsideCount;
+    const extensions = [...new Set(outsideViolations.filter((v) => v.rule === rule).map(extensionOf))];
+    if (isNewerRevision) adopted.push({ rule, baseline, current: count, revision, extensions });
+    const isLanguageAdoption = !isNewerRevision && outsideCount > 0;
+    if (isLanguageAdoption) adopted.push({ rule, baseline, current: baseline + outsideCount, revision, reason: 'language', extensions });
+    const isRegression = !isNewerRevision && gatedCount > baseline;
+    if (isRegression) regressions.push({ rule, baseline, current: gatedCount });
   }
   return { regressions, adopted };
 };

@@ -28,13 +28,25 @@ const isSourceFile = (name, options = {}) => {
 };
 
 const configCache = new Map();
+const CONFIG_FILES = ['.chemxrc', '.chemxrc.json', path.join('.chemx', 'config.json'), 'package.json'];
 
-/** Project config for single-file audits (check, patch, task gates, MCP), loaded once per root. */
+// "<mtimeMs>" per config file ("-" when absent): an edit to any of them changes the key.
+const configStamp = (cwd) => CONFIG_FILES.map((name) => {
+  try {
+    return String(fs.statSync(path.join(cwd, name)).mtimeMs);
+  } catch {
+    return '-';
+  }
+}).join('|');
+
+/** Project config for single-file audits (check, patch, task gates, MCP), reloaded when a config file's mtime changes. */
 export const resolveAuditConfig = (cwd = process.cwd()) => {
+  const stamp = configStamp(cwd);
   const cached = configCache.get(cwd);
-  if (cached) return cached;
+  const isFresh = cached?.stamp === stamp;
+  if (isFresh) return cached.config;
   const config = loadProjectConfig(cwd);
-  configCache.set(cwd, config);
+  configCache.set(cwd, { stamp, config });
   return config;
 };
 

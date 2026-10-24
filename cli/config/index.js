@@ -74,6 +74,8 @@ export const loadProjectConfig = (cwd = process.cwd(), rawArgs = []) => {
     rules: effectiveRules,
     overrides: fileConfig.overrides || [],
     pillars: readPillarSelection(cwd, fileConfig),
+    wordpress: fileConfig.raw?.wordpress,
+    php: fileConfig.raw?.php,
     raw: fileConfig.raw || {},
     stage: fileConfig.raw?.stage || 'strict'
   };
