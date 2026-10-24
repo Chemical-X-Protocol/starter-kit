@@ -36,7 +36,7 @@ export const handleAudit = (args = {}, cwd = process.cwd()) => {
     };
   }
 
-  const scope = resolveAuditScope({ projectRoot: baseCwd, explicitDir: explicitTarget });
+  const scope = resolveAuditScope({ projectRoot: baseCwd, explicitDir: explicitTarget, narrowWorkspaceRoot: true });
   const isScopeInvalid = !scope.ok;
   if (isScopeInvalid) return { type: 'refusal', success: false, error: scope.message, candidates: scope.candidates };
   const resolvedTarget = scope.dir;
@@ -71,7 +71,10 @@ export const handleAudit = (args = {}, cwd = process.cwd()) => {
   const isPassing = !isStrictFail && !isScoreFail && gate.isPassing;
 
   const shouldReturnSummary = args.full !== true;
-  if (shouldReturnSummary) return buildAuditSummary({ ...report, gate: { ...gate, isPassing } }, { projectRoot: baseCwd, scope: rawTarget });
+  if (shouldReturnSummary) {
+    const summary = buildAuditSummary({ ...report, gate: { ...gate, isPassing } }, { projectRoot: baseCwd, scope: rawTarget });
+    return scope.excluded ? { ...summary, excludedDirs: scope.excluded } : summary;
+  }
 
   return {
     type: 'directory',
@@ -84,7 +87,8 @@ export const handleAudit = (args = {}, cwd = process.cwd()) => {
     violations: report.violations,
     contextAnalysis: report.contextAnalysis,
     gate,
-    isPassing
+    isPassing,
+    ...(scope.excluded ? { excludedDirs: scope.excluded } : {})
   };
 };
 

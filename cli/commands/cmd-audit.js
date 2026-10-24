@@ -83,7 +83,7 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
   const isCustomDirFlag = Boolean(customDir?.startsWith('--dir='));
   const customDirValue = isCustomDirFlag ? customDir.split('=')[1] : customDir;
   const explicitDir = customDirValue || (dirFlag ? dirFlag.split('=')[1] : null);
-  const resolvedScope = resolveAuditScope({ projectRoot: process.cwd(), explicitDir });
+  const resolvedScope = resolveAuditScope({ projectRoot: process.cwd(), explicitDir, narrowWorkspaceRoot: true });
   const isStagedScope = rawArgs.includes('--staged');
   const hasGitFlag = rawArgs.includes('--git') || rawArgs.includes('--changed') || isStagedScope;
   const isGitScopedAmbiguity = hasGitFlag && resolvedScope.reason === 'ambiguous';
@@ -152,6 +152,7 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
   const isPartialAudit = Boolean(fileList) || isFast;
   report.gate = computeGateVerdict({ projectRoot: process.cwd(), scope: auditRelDir, violations: report.violations, isPartialScan: isPartialAudit });
   report.scope = auditRelDir;
+  if (scope.excluded) report.excludedDirs = scope.excluded;
   const historyScope = { scope: auditRelDir, isPartial: isPartialAudit };
   saveAuditSnapshot(report, process.cwd(), historyScope);
   const hasSkippedConflicts = report.skippedConflicts?.length > 0;

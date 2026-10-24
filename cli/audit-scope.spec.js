@@ -157,3 +157,39 @@ test('audit scope: verify names what typecheck and tests ran, since only the aud
     assert.match(summary.tests.command, /test/);
   });
 });
+
+test('audit scope: cli audit at a workspace root narrows to src/ and reports the excluded dirs', async () => {
+  await withProject({ dirs: ['src', 'apps/a'] }, async (root) => {
+    makeMonorepo(root);
+    const { runAudit } = await import('./commands/cmd-audit.js');
+    const original = process.cwd();
+    const originalWrite = process.stdout.write;
+    try {
+      process.chdir(root);
+      process.stdout.write = () => true;
+      const report = await runAudit(undefined, false, ['--json'], () => ({}));
+      process.stdout.write = originalWrite;
+      assert.strictEqual(report.scope, 'src');
+      assert.deepStrictEqual(report.excludedDirs, ['apps/a']);
+      const full = await runAudit(undefined, false, ['--json', '--dir=.'], () => ({}));
+      assert.strictEqual(full.scope, '.');
+      assert.strictEqual(full.excludedDirs, undefined);
+    } finally {
+      process.stdout.write = originalWrite;
+      process.chdir(original);
+    }
+  });
+});
+
+test('audit scope: mcp audit narrows a workspace root unless dir is "."', async () => {
+  await withProject({ dirs: ['src', 'apps/a'] }, async (root) => {
+    makeMonorepo(root);
+    const { handleAudit } = await import('./mcp/tools-audit.js');
+    const narrowed = handleAudit({}, root);
+    assert.strictEqual(narrowed.scope, 'src');
+    assert.deepStrictEqual(narrowed.excludedDirs, ['apps/a']);
+    const full = handleAudit({ dir: '.' }, root);
+    assert.strictEqual(full.scope, '.');
+    assert.strictEqual(full.excludedDirs, undefined);
+  });
+});
