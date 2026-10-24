@@ -13,10 +13,33 @@ export const COVERAGE_KINDS = Object.freeze({
 
 export const createCoverageCollector = () => ({ files: [] });
 
-/** Records one file. `sfc` is { scriptBlocks, hasTemplate, isTemplateParsed } for .vue files. */
-export const recordFileCoverage = (collector, { relativePath, kind, sfc = null }) => {
+/**
+ * Records one file. `sfc` is { scriptBlocks, hasTemplate, isTemplateParsed } for .vue files;
+ * `language` (language id) and `reason` (why the file was not fully parsed) are optional.
+ */
+export const recordFileCoverage = (collector, { relativePath, kind, sfc = null, language = null, reason = null }) => {
   if (!collector) return;
-  collector.files.push({ relativePath, kind, sfc });
+  collector.files.push({ relativePath, kind, sfc, language, reason });
+};
+
+const BUCKET_FIELD_BY_KIND = {
+  [COVERAGE_KINDS.AST]: 'ast',
+  [COVERAGE_KINDS.TEXT_ONLY]: 'textOnly',
+  [COVERAGE_KINDS.PARSE_ERROR]: 'parseErrors'
+};
+
+const summarizeByLanguage = (entries) => {
+  const byLanguage = {};
+  for (const entry of entries) {
+    if (!entry.language) continue;
+    const bucket = byLanguage[entry.language] ?? { files: 0, ast: 0, textOnly: 0, parseErrors: 0 };
+    bucket.files += 1;
+    const field = BUCKET_FIELD_BY_KIND[entry.kind];
+    const isCounted = Boolean(field);
+    if (isCounted) bucket[field] += 1;
+    byLanguage[entry.language] = bucket;
+  }
+  return byLanguage;
 };
 
 const isPartialEntry = (entry) => {
@@ -42,6 +65,7 @@ export const summarizeCoverage = (collector) => {
       scriptBlocks: sfcEntries.reduce((sum, e) => sum + (e.sfc.scriptBlocks ?? 0), 0),
       templatesParsed: sfcEntries.filter((e) => e.sfc.isTemplateParsed).length
     },
+    byLanguage: summarizeByLanguage(entries),
     isPartial: partialFiles.length > 0,
     partialFiles: partialFiles.slice(0, 20)
   };

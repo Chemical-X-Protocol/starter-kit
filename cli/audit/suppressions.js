@@ -59,8 +59,39 @@ const withContinuation = (annotation, lines, idx, scan) => {
   return { ...buildAnnotation(annotation.token, reason, annotation), lastLine: lastIdx + 1 };
 };
 
-/** Map of 1-based marker line number to the allow annotation written in a comment there. */
-export const parseAllowAnnotations = (lines) => {
+// An annotation whose block comment is still open at the end of its line and has no reason yet.
+const isOpenBlockAt = (lineText, annotation, regions) => {
+  const markerRegion = regions.find(([start, end]) => annotation.markerIndex >= start && annotation.markerIndex < end);
+  const runsToLineEnd = Boolean(markerRegion) && markerRegion[1] >= lineText.length;
+  return runsToLineEnd && !COMMENT_CLOSERS.test(lineText.slice(annotation.markerIndex));
+};
+
+const withPrecomputedContinuation = (annotation, lines, idx, regions) => {
+  const isOpenBlock = annotation.reason === '' && isOpenBlockAt(lines[idx], annotation, regions);
+  if (!isOpenBlock) return { ...annotation, lastLine: idx + 1 };
+  const { reason, lastIdx } = readBlockContinuation(lines, idx + 1, '*/');
+  return { ...buildAnnotation(annotation.token, reason, annotation), lastLine: lastIdx + 1 };
+};
+
+// commentRegions: one entry per line (index 0 is line 1), each a list of [start, end) columns.
+const parseWithPrecomputedRegions = (lines, commentRegions) => {
+  const annotations = new Map();
+  lines.forEach((lineText, idx) => {
+    const annotation = parseAllowAnnotation(lineText);
+    if (!annotation) return;
+    const regions = commentRegions[idx] ?? [];
+    const isInComment = regions.some(([start, end]) => annotation.markerIndex >= start && annotation.markerIndex < end);
+    if (isInComment) annotations.set(idx + 1, withPrecomputedContinuation(annotation, lines, idx, regions));
+  });
+  return annotations;
+};
+
+/**
+ * Map of 1-based marker line number to the allow annotation written in a comment there.
+ * `commentRegions` (per-line [start, end) column pairs) replaces the line scanner when given.
+ */
+export const parseAllowAnnotations = (lines, commentRegions = null) => {
+  if (commentRegions) return parseWithPrecomputedRegions(lines, commentRegions);
   const annotations = new Map();
   let state = INITIAL_SCAN_STATE;
   lines.forEach((lineText, idx) => {
@@ -80,23 +111,24 @@ const doesTokenCover = (token, rule) => {
   return token === rule;
 };
 
-const isAnnotationInRange = (annotationLine, annotation, violation) => {
+const isAnnotationInRange = (annotationLine, annotation, violation, headerEndLine = 0) => {
   const endLine = violation.endLine ?? violation.line;
   const isWithin = annotationLine >= violation.line && annotationLine <= endLine;
   const isLineAbove = annotation.isCommentOnly && annotation.lastLine === violation.line - 1;
   const isAfterTryBrace = annotationLine === violation.tryBraceLine && annotation.markerIndex >= violation.tryBraceColumn;
-  return isWithin || isLineAbove || isAfterTryBrace;
+  const isInHeader = violation.line === 1 && annotationLine >= 1 && annotationLine <= headerEndLine;
+  return isWithin || isLineAbove || isAfterTryBrace || isInHeader;
 };
 
-const listCoveringAnnotations = (violation, annotations) => [...annotations]
-  .filter(([line, annotation]) => doesTokenCover(annotation.token, violation.rule) && isAnnotationInRange(line, annotation, violation))
+const listCoveringAnnotations = (violation, annotations, headerEndLine = 0) => [...annotations]
+  .filter(([line, annotation]) => doesTokenCover(annotation.token, violation.rule) && isAnnotationInRange(line, annotation, violation, headerEndLine))
   .map(([, annotation]) => annotation);
 
-export const isSuppressedByAnnotation = (violation, annotations) =>
-  listCoveringAnnotations(violation, annotations).some((annotation) => annotation.hasReason);
+export const isSuppressedByAnnotation = (violation, annotations, headerEndLine = 0) =>
+  listCoveringAnnotations(violation, annotations, headerEndLine).some((annotation) => annotation.hasReason);
 
-const withMissingReasonNote = (violation, annotations) => {
-  const reasonless = listCoveringAnnotations(violation, annotations)[0];
+const withMissingReasonNote = (violation, annotations, headerEndLine = 0) => {
+  const reasonless = listCoveringAnnotations(violation, annotations, headerEndLine)[0];
   if (!reasonless) return violation;
   const note = `the chemx-allow: ${reasonless.token} annotation needs a reason (reason is mandatory)`;
   return { ...violation, hazard: `${violation.hazard}; ${note}` };
@@ -120,11 +152,11 @@ export const dedupeViolations = (violations) => {
 };
 
 /** Applies annotations (suppression and missing-reason notes) and dedup; returns a new array. */
-export const applyAuditPostFilters = (violations, lines) => {
-  const annotations = parseAllowAnnotations(lines);
+export const applyAuditPostFilters = (violations, lines, { commentRegions = null, fileHeaderEndLine = 0 } = {}) => {
+  const annotations = parseAllowAnnotations(lines, commentRegions);
   const hasAnnotations = annotations.size > 0;
   const allowed = hasAnnotations
-    ? violations.filter((v) => !isSuppressedByAnnotation(v, annotations)).map((v) => withMissingReasonNote(v, annotations))
+    ? violations.filter((v) => !isSuppressedByAnnotation(v, annotations, fileHeaderEndLine)).map((v) => withMissingReasonNote(v, annotations, fileHeaderEndLine))
     : violations;
   return dedupeViolations(allowed);
 };

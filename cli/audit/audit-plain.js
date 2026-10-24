@@ -10,6 +10,14 @@ const formatGate = (gate) => {
   return `gate: ${verdict}${basis}${note}`;
 };
 
+// One line per language, only when more than one language was scanned.
+const formatLanguageLines = (coverage) => {
+  const entries = Object.entries(coverage?.byLanguage ?? {});
+  const isMultiLanguage = entries.length > 1;
+  if (!isMultiLanguage) return [];
+  return entries.map(([language, c]) => `  ${language}: ${c.files} files, ${c.ast} ast, ${c.textOnly} text-only, ${c.parseErrors} parse errors`);
+};
+
 export const formatPlainAuditSummary = (summary) => {
   const { critical, highMedium, low } = summary.hazards;
   const total = critical + highMedium + low;
@@ -21,6 +29,7 @@ export const formatPlainAuditSummary = (summary) => {
   for (const { rule, baseline, current } of summary.gate.regressions ?? []) {
     lines.push(`  regression: ${rule} ${baseline} -> ${current}`);
   }
+  lines.push(...formatLanguageLines(summary.coverage));
   lines.push('detail: chemx audit --json | chemx audit --unroll | chemx q --hazards');
   return `${lines.join('\n')}\n`;
 };

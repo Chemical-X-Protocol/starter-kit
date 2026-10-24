@@ -68,14 +68,18 @@ const describeSfcCoverage = (sfc) => (sfc ? {
   isTemplateParsed: Boolean(sfc.template?.isParsed)
 } : null);
 
+const describeTextOnlyReason = (options) => (options.fast ? 'fast mode: AST rules skipped' : 'no AST parser for this language');
+
 const collectRawViolations = (content, filePath, relativePath, options, ruleConfig) => {
   const violations = [];
+  let coverageReason = null;
   const lines = content.split('\n');
   runTextPasses(content, lines, filePath, relativePath, ruleConfig, violations);
 
   const sfc = isSfcFile(filePath) ? parseSfc(content, filePath) : null;
   const isAstEligible = !options.fast && isBabelParsable(filePath);
   let coverageKind = isAstEligible ? COVERAGE_KINDS.AST : COVERAGE_KINDS.TEXT_ONLY;
+  if (!isAstEligible) coverageReason = describeTextOnlyReason(options);
 
   const shouldRunSfcPasses = Boolean(isAstEligible && sfc);
   if (shouldRunSfcPasses) runSfcTemplatePasses(sfc, relativePath, options, ruleConfig, violations);
@@ -90,6 +94,7 @@ const collectRawViolations = (content, filePath, relativePath, options, ruleConf
     if (hasParseError) {
       violations.push(parseErrorViolation(relativePath, parsed.error.line, parsed.error.message));
       coverageKind = COVERAGE_KINDS.PARSE_ERROR;
+      coverageReason = parsed.error.message;
     } else {
       runAstPasses(parsed.asts, { relativePath, violations, ruleConfig, options, code });
       runTailwindUnscannedPass(parsed.asts, { filePath, relativePath, violations, options });
@@ -98,8 +103,9 @@ const collectRawViolations = (content, filePath, relativePath, options, ruleConf
 
   const hasHighComplexity = violations.some((v) => v.rule === 'COMPLEXITY_CYCLOMATIC_HIGH');
   violations.push(...checkLineBudgets({ content, relativePath, config: ruleConfig, sfc, hasHighComplexity }));
-  recordFileCoverage(options.coverage, { relativePath, kind: coverageKind, sfc: describeSfcCoverage(sfc) });
-  return violations;
+  const record = { relativePath, kind: coverageKind, sfc: describeSfcCoverage(sfc), language: getLanguageForFile(filePath)?.id ?? null, reason: coverageReason };
+  recordFileCoverage(options.coverage, record);
+  return { violations, coverage: { kind: record.kind, language: record.language, reason: record.reason } };
 };
 
 /**
@@ -109,9 +115,17 @@ const collectRawViolations = (content, filePath, relativePath, options, ruleConf
  * tailwind.config, or null to silence TAILWIND_UNSCANNED_CLASS_STRING).
  * Violations pass through chemx-allow annotations, dedup and per-rule config.
  */
-export const auditCode = (content, filePath, relativePath, options = {}) => {
+export const auditCode = (content, filePath, relativePath, options = {}) =>
+  auditCodeDetailed(content, filePath, relativePath, options).violations;
+
+/**
+ * Like auditCode, but also returns this file's coverage record: { violations, coverage: { kind, language, reason } }.
+ * The record is built per call, so it does not depend on options.coverage.
+ */
+export function auditCodeDetailed(content, filePath, relativePath, options = {}) {
   const config = normalizeConfig(options.config);
-  const raw = collectRawViolations(content, filePath, relativePath, options, config.rules);
+  const { violations: raw, coverage } = collectRawViolations(content, filePath, relativePath, options, config.rules);
   const filtered = applyAuditPostFilters(raw, content.split('\n'));
-  return applyRuleOverrides(filtered, relativePath, config).map(withTaxonomy);
-};
+  const violations = applyRuleOverrides(filtered, relativePath, config).map(withTaxonomy);
+  return { violations, coverage };
+}

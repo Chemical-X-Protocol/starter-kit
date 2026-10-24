@@ -14,8 +14,8 @@ const countHazards = (violations = []) => {
 
 const summarizeCoverageForCard = (coverage) => {
   if (!coverage) return null;
-  const { files, astPct, parseErrors, textOnly, isPartial, sfc } = coverage;
-  return { files, astPct, parseErrors, textOnly, isPartial, sfcTemplates: sfc?.templatesParsed ?? 0 };
+  const { files, astPct, parseErrors, textOnly, isPartial, sfc, byLanguage = {} } = coverage;
+  return { files, astPct, parseErrors, textOnly, isPartial, sfcTemplates: sfc?.templatesParsed ?? 0, byLanguage };
 };
 
 export const buildAuditSummary = (report, { projectRoot, scope }) => {

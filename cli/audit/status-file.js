@@ -44,7 +44,7 @@ export const buildScopeStatus = (report) => ({
     regressions: (report.gate?.regressions ?? []).length,
     adopted: (report.gate?.adopted ?? []).map((a) => a.rule)
   },
-  coverage: report.coverage ? { astPct: report.coverage.astPct, isPartial: report.coverage.isPartial } : null,
+  coverage: report.coverage ? { astPct: report.coverage.astPct, isPartial: report.coverage.isPartial, byLanguage: report.coverage.byLanguage ?? {} } : null,
   hazards: countBySeverity(report.violations),
   isPartialScan: Boolean(report.options?.fileList) || Boolean(report.options?.fast)
 });
