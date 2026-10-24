@@ -123,6 +123,12 @@ function hitAt(dir, filePath, segment) {
   return onDisk || atSegment;
 }
 
+/** The path segment proves WordPress even when scanRoot sits below the segment root. */
+function aboveScanRoot(segment, scanRoot) {
+  const proven = Boolean(segment) && isUnder(scanRoot, segment.root) && scanRoot !== segment.root;
+  return proven ? { isWordPress: true, ...segment } : NOT_WORDPRESS;
+}
+
 function walkUp(filePath, scanRoot) {
   const segment = segmentRoot(filePath);
   let dir = dirname(filePath);
@@ -131,7 +137,7 @@ function walkUp(filePath, scanRoot) {
     const parent = dirname(dir);
     const atTop = dir === scanRoot || parent === dir;
     const settled = Boolean(hit) || atTop;
-    if (settled) return hit || NOT_WORDPRESS;
+    if (settled) return hit || aboveScanRoot(segment, scanRoot);
     dir = parent;
   }
 }

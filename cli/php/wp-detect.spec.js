@@ -31,6 +31,13 @@ test('plugin header at the plugin root marks nested files', () => {
   assert.deepEqual(got, { isWordPress: true, root: join(root, 'demo'), kind: 'plugin' });
 });
 
+test('scanRoot below the plugin segment root still reports the plugin', () => {
+  const file = put('wp-content/plugins/foo/src/a/x.php');
+  const scan = join(root, 'wp-content/plugins/foo/src');
+  const got = detectWordPress(file, { scanRoot: scan });
+  assert.deepEqual(got, { isWordPress: true, root: join(root, 'wp-content/plugins/foo'), kind: 'plugin' });
+});
+
 test('theme root is found through style.css', () => {
   put('theme/style.css', '/*\nTheme Name: Demo\n*/');
   const file = put('theme/inc/a.php');
