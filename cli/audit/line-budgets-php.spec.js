@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { checkLineBudgets } from './budget-rules.js';
-import { resolveFileTier, isViewMarkupFile } from './line-budgets.js';
+import { resolveFileTier, isViewMarkupFile, countLines } from './line-budgets.js';
+import { PHP_STRUCTURE_FIXTURES } from '../fixtures/php/structure.fixtures.js';
 
 const phpLines = (n) => `<?php\n${Array.from({ length: n - 1 }, (_, i) => `echo ${i};`).join('\n')}\n`;
 const check = (relativePath, lines) => checkLineBudgets({ content: phpLines(lines), relativePath, config: {} });
@@ -15,6 +16,13 @@ test('a 210-line PHP partial gives VIEW_MONOLITH at MEDIUM', () => {
 
 test('a 210-line PHP template gives VIEW_MONOLITH', () => {
   assert.deepEqual(check('plugin/templates/x.php', 210).map((v) => v.rule), ['VIEW_MONOLITH']);
+});
+
+test('the VIEW_MONOLITH fixture pair: the 210-line partial fires, the short one does not', () => {
+  const { path: relativePath, bad, good } = PHP_STRUCTURE_FIXTURES.VIEW_MONOLITH;
+  assert.equal(countLines(bad), 210);
+  assert.deepEqual(checkLineBudgets({ content: bad, relativePath, config: {} }).map((v) => v.rule), ['VIEW_MONOLITH']);
+  assert.deepEqual(checkLineBudgets({ content: good, relativePath, config: {} }), []);
 });
 
 test('a 200-line PHP partial stays inside the view budget', () => {
