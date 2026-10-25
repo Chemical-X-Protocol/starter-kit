@@ -26,6 +26,9 @@ export const RULE_DEFAULTS = {
 
 const isWordPressFile = (ctx) => Boolean(ctx.wp) && ctx.wp.isWordPress === true;
 const hasWriteVerb = (endpoint) => endpoint.methods.verbs.some((v) => WRITE_VERBS.has(v));
+// Task #6707: permission kind 'callable_fail_open' is deliberately not public here. Measured 2026-10-25: 0 corpus hits;
+// held-out 1 callable (8 routes, card vault a708d6a check_read_permission, true) and 0 hits on card vault ae81b02 and
+// 23 third-party plugins. Far under the 10 hits the bar names, so no rule acts on it yet.
 const isPublic = (endpoint) => PUBLIC_KINDS.has(endpoint.permission.kind);
 
 /** Every state write and outbound request, and the first auth-like call, within HOPS of a callback. */

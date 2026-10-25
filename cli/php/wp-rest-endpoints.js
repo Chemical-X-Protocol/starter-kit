@@ -10,6 +10,7 @@ import { walk, walkScope, scopeOf, literalString, nodeLine } from './php-walk.js
 import { createScopeIndex } from './php-taint.js';
 import { createNameResolver } from './php-names.js';
 import { describeCallable, returnsTrueOnly } from './php-callables.js';
+import { isFailOpen } from './wp-fail-open.js';
 
 const CLASS_KINDS = new Set(['class', 'interface', 'trait', 'enum']);
 const CLOSURE_KINDS = new Set(['closure', 'arrowfunc']);
@@ -220,6 +221,19 @@ function resolveTarget(desc, env) {
   return isHidden ? null : target;
 }
 
+/** The method or function declared at a line of this file, or null (a callable in another file is not read). */
+function declarationAt(target, env) {
+  const isHere = Boolean(target) && target.file === env.rel;
+  let found = null;
+  const visit = (n) => {
+    const isMatch = (n.kind === 'method' || n.kind === 'function') && nodeLine(n) === target.line;
+    if (isMatch) found = n;
+    return found === null;
+  };
+  if (isHere) walk(env.ctx.ast, visit);
+  return found;
+}
+
 function permissionOf(entry, env) {
   const node = entry ? entry.value : null;
   const literal = literalString(node);
@@ -234,6 +248,7 @@ function permissionOf(entry, env) {
     [isReturnTrue, 'return_true'],
     [isClosure && returnsTrueOnly(node), 'closure_true'],
     [isTrueTarget, 'callable_true'],
+    [Boolean(target) && isFailOpen(declarationAt(target, env)), 'callable_fail_open'],
   ];
   const hit = byRule.find(([applies]) => applies);
   return { kind: hit ? hit[1] : 'other', line: entry ? nodeLine(entry) : null, target: isTrueTarget ? target : null };
@@ -299,8 +314,9 @@ const cache = new WeakMap();
 /**
  * Every register_rest_route call in the file, resolved: [{ line, namespace, route, isReadable, unreadable,
  * endpoints: [{ line, shape, methods: { verbs, resolved, isDefault }, permission: { kind, line, target },
- * callback: { line, label, target } }] }]. permission.kind is missing, return_true, closure_true, callable_true or
- * other. A target is a project-index declaration ({ id, file, line, fact }) or null when it did not resolve (or
+ * callback: { line, label, target } }] }]. permission.kind is missing, return_true, closure_true, callable_true, callable_fail_open
+ * (task #6707: ends in return true, denials only under a credential-present branch, same-file callable only; data,
+ * not in PUBLIC_KINDS, so no rule acts on it) or other. A target is a project-index declaration ({ id, file, line, fact }) or null when it did not resolve (or
  * lies in another file while ctx.crossFile is false). Memoised per ctx (the parse cache can hand the same tree to two ctxs).
  */
 export function resolveRestRoutes(ctx) {

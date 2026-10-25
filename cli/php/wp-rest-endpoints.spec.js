@@ -5,7 +5,7 @@ import path from 'node:path';
 import { HEADER, writePlugin } from '../fixtures/php/routes.fixtures.js';
 import { buildPassContext } from '../fixtures/php/pass-context.js';
 import { getProjectIndex } from './wp-project-index.js';
-import { resolveRestRoutes } from './wp-rest-endpoints.js';
+import { resolveRestRoutes, PUBLIC_KINDS } from './wp-rest-endpoints.js';
 
 function resolve(files, { file = 'demo.php', crossFile = true, withIndex = true } = {}) {
   const plugin = writePlugin(files);
@@ -116,6 +116,22 @@ test('permission kinds: __return_true, closures and arrow functions returning on
   assert.equal(kindOf("'permission_callback' => false"), 'missing');
 });
 
+const failOpenKind = (body) => kindOf("'permission_callback' => 'demo_perm'", `function demo_perm( $request ) {\n${body}\n}`);
+
+test('permission kind callable_fail_open: ends in return true and denies only when a key was sent (task #6707, data only)', () => {
+  const sent = "$key = $request->get_header( 'authorization' );\n\tif ( ! empty( $key ) ) {\n\t\tif ( ! demo_valid( $key ) ) {\n\t\t\treturn new WP_Error( 'rest_forbidden' );\n\t\t}\n\t}\n\treturn true;";
+  assert.equal(failOpenKind(sent), 'callable_fail_open');
+  // the fail-open kind is not one of the public kinds the write and read rules act on
+  assert.equal(PUBLIC_KINDS.has('callable_fail_open'), false);
+});
+
+test('permission kind callable_fail_open: not set when a denial is outside the credential branch, thrown, switched, or only delegated', () => {
+  assert.equal(failOpenKind("if ( ! current_user_can( 'edit_posts' ) ) {\n\t\treturn false;\n\t}\n\treturn true;"), 'other');
+  assert.equal(failOpenKind("try {\n\t\tdemo_check( $request );\n\t} catch ( Exception $e ) {\n\t\treturn false;\n\t}\n\treturn true;"), 'other');
+  assert.equal(failOpenKind("switch ( $request->get_param( 'a' ) ) {\n\t\tcase 'x':\n\t\t\treturn false;\n\t}\n\treturn true;"), 'other');
+  assert.equal(failOpenKind("$result = demo_decide( $request );\n\tif ( null !== $result ) {\n\t\treturn $result;\n\t}\n\treturn true;"), 'other');
+  assert.equal(failOpenKind("return demo_check( $request );"), 'other');
+});
 test('permission kind callable_true: a resolvable callable whose body is only return true (quests style)', () => {
   const rest = `class Demo_Rest {
 	public function check_permission() {
