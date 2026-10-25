@@ -8,6 +8,7 @@ import { MCP_SERVER_NAME } from '../hooks/launcher.js';
 import { isChemxServer } from '../hooks/mcp-json-merge.js';
 import { locateKit } from './kit-locate.js';
 import { listChemxMcpProcesses } from './proc-scan.js';
+import { defaultClaudeHome, groupLines, groupStaleByRoot } from './mcp-groups.js';
 
 const PINNED_NPX = /(?:^|\s)(?:chemx|@chemx\/starter-kit)@(\S+)/;
 
@@ -55,24 +56,29 @@ export const checkMcpLaunch = ({ projectRoot, cliVersion }) => {
   return { id: 'mcp-launch', status: isHealthy ? STATUS.PASS : STATUS.FAIL, summary, fixable: !isHealthy, details: launch };
 };
 
-// Group servers by version, staleness and root so 18 sessions read as a few lines, pids included.
-export const groupProcesses = (processes) => {
-  const groups = new Map();
-  for (const proc of processes) {
-    const key = `${proc.version ?? '?'}${proc.isStale ? ' (code changed since start)' : ''} root=${proc.root ?? '?'}`;
-    groups.set(key, [...(groups.get(key) ?? []), proc.pid]);
-  }
-  return [...groups].map(([key, pids]) => `${pids.length}x ${key} [pids ${pids.slice(0, 6).join(',')}${pids.length > 6 ? ',...' : ''}]`).join('; ');
+const staleReason = (proc, cliVersion) => {
+  const reasons = [];
+  if (proc.isStale) reasons.push('code changed since start');
+  const isSkewed = proc.version && proc.version !== cliVersion;
+  if (isSkewed) reasons.push(`runs ${proc.version} (CLI ${cliVersion})`);
+  return reasons.join(' + ');
 };
 
-export const checkMcpProcesses = ({ cliVersion, procRoot = '/proc' }) => {
+const plural = (count, word) => `${count} ${word}${count === 1 ? '' : 's'}`;
+
+export const checkMcpProcesses = ({ cliVersion, procRoot = '/proc', claudeHome = defaultClaudeHome() }) => {
   const scan = listChemxMcpProcesses(procRoot);
   const isScanFailed = Boolean(!scan.ok);
   if (isScanFailed) return { id: 'mcp-servers', status: STATUS.INCONCLUSIVE, summary: `cannot scan processes (${scan.reason})` };
-  const stale = scan.processes.filter((proc) => proc.isStale || (proc.version && proc.version !== cliVersion));
   const hasNone = scan.processes.length === 0;
   if (hasNone) return { id: 'mcp-servers', status: STATUS.PASS, summary: 'no chemx MCP servers running' };
-  const listing = groupProcesses(scan.processes);
-  const advice = stale.length > 0 ? ` | ${stale.length} stale: reconnect with /mcp or restart those sessions (doctor never kills)` : '';
-  return { id: 'mcp-servers', status: stale.length > 0 ? STATUS.FAIL : STATUS.PASS, summary: `${scan.processes.length} running: ${listing}${advice}`, details: scan.processes };
+  const stale = scan.processes.filter((proc) => staleReason(proc, cliVersion));
+  const hasStale = stale.length > 0;
+  if (!hasStale) {
+    const versions = [...new Set(scan.processes.map((proc) => proc.version ?? '?'))].join(', ');
+    return { id: 'mcp-servers', status: STATUS.PASS, summary: `${scan.processes.length} running, all current (${versions})`, details: scan.processes };
+  }
+  const groups = groupStaleByRoot(stale, { reasonOf: (proc) => staleReason(proc, cliVersion), claudeHome });
+  const summary = `${scan.processes.length} running, ${stale.length} stale in ${plural(groups.length, 'project root')}; doctor never kills processes`;
+  return { id: 'mcp-servers', status: STATUS.FAIL, summary, lines: groups.flatMap(groupLines), groups, details: scan.processes };
 };

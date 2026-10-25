@@ -28,7 +28,7 @@
 npm install -g chemx          # or: npx chemx <command>
 
 # 2. Check the install in your project
-chemx doctor                  # read-only; reports stale index rows, hooks and coverage
+chemx doctor                  # read-only; kit commit vs CI pin, stale MCP servers by session, index, hooks, coverage
 
 # 3. Wire Claude Code to chemx (writes .claude/settings.json; --dry-run shows the change first)
 chemx install-hooks --host=claude --dry-run

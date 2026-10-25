@@ -48,6 +48,15 @@ Full reference: [search.md](search.md). Measured on the kit (characters): `q <te
 - Paths after a plain query scope the symbol answer and the fallback, as they already did for `-g`; a missing path is an error that shows how to quote a phrase (it used to be "ignored extra argument(s)").
 - Not done: a fresh worktree's first `q` still re-indexes every file (1,406 files, 4.8 s idle and 7.0 s under load, 0.13 s warm). The index and the team board share one db that refuses to be copied to a worktree, so seeding it needs its own design: filed as #6769 with the measurements.
 
+### Doctor: kit drift, CI pin, sessions behind stale servers, jest layout (epic #6745, K10 #6755)
+
+Full reference: [doctor.md](doctor.md). Found when the chemx on PATH (the starter-kit working copy) was 56 commits ahead of `origin/main` while CI ran `npx chemx@<pin>`: audit counts differed and `doctor` said nothing.
+
+- New `kit`, `kit-origin` and `ci-pin` lines (`cli/doctor/check-kit.js`): the running kit's version, commit and branch; ahead/behind of the local `origin/main` ref (no network; `chemx doctor --fetch` fetches first, and a failed fetch is reported as `??`, never `FAIL`); and the `CHEMX_VERSION` pin (or a literal `chemx@x`) in the project's `.github/workflows/*.yml`, `FAIL` when it differs from the running kit.
+- `mcp-servers` no longer prints a pid list: current servers are counted, stale ones are grouped by project root with the Claude session id behind each (`CLAUDE_CODE_SESSION_ID` from `/proc/<pid>/environ`), the transcript path for a one-session group, the parent pid when no session is exposed, and one restart hint per group (`cli/doctor/mcp-groups.js`). A check can now carry extra `lines`, which the text report indents under it; `--json` has them and the `groups`.
+- New `jest-deps` line (`cli/doctor/check-env.js`, `jest-deps.js`) for pnpm projects: `??` when a bare `snapshotSerializers` or `transform` module, or one named by the preset (read as text, never executed), resolves only under `node_modules/.pnpm/node_modules` and `NODE_PATH` does not cover it, naming the `NODE_PATH=` a raw jest run needs. `chemx test` sets it by itself (#6754), so this is a flag, not a failure.
+- Help (`commands-schema-host.js`), `docs/doctor.md`, the docs index and the README line were updated.
+
 ### Board output diet (epic #6745, K4 #6749)
 
 Full reference: [coordination-db.md](coordination-db.md#reading-the-board-cheaply). Measured on the live board (characters): `team feed` 27,290 -> 2,564, `team status` 9,167 -> 3,912, `team task show` of the epic 8,643 -> 4,655, 275 with `--brief`.
