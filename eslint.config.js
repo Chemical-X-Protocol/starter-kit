@@ -1,4 +1,5 @@
-// ESLint for the kit itself, so `chemx lint` works here and in CI (K12, #6757). ESLint 9 flat config.
+// ESLint for the kit itself, so `chemx lint` works here and in CI (K12, #6757). ESLint 10 flat config
+// (9 reads it too).
 //
 // What it is for: bugs (a name used but never defined, a duplicate key, unreachable code) plus the
 // AGENTS.md rules a linter can state: no nested ternaries (3.D), no silent catch (a catch needs a
@@ -29,7 +30,11 @@ export default [
       'no-control-regex': 'off',
       'no-useless-escape': 'off',
       'no-regex-spaces': 'off',
-      'no-extra-boolean-cast': 'off'
+      'no-extra-boolean-cast': 'off',
+      // ESLint 10 additions: `let x = default; if (...) x = ...` is how the kit names a default, and a
+      // rethrow without `cause` is a message-only error, so neither blocks a merge.
+      'no-useless-assignment': 'off',
+      'preserve-caught-error': 'warn'
     }
   },
   {
