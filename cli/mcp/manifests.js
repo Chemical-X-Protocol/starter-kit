@@ -74,7 +74,6 @@ export const MASTER_MCP_TOOL = {
           multiple: { type: 'boolean', description: 'Allow replacing multiple occurrences (for patch)' },
           dryRun: { type: 'boolean', description: 'Preview change without writing to disk; returns a unified diff (for patch, write, autofix, generate)' },
           allowRemoved: { type: 'array', items: { type: 'string' }, description: 'Top-level declarations a patch/write may remove. Any removal not named here is refused, renames included (removing A while adding B)' },
-          agentId: { type: 'string', description: 'Caller agent id for team lock checks on patch/write (default @agent)' },
           content: { type: 'string', description: 'File content to write (for write)' },
           overwrite: { type: 'boolean', description: 'Required to replace an existing file (for write); without it write refuses' },
           append: { type: 'boolean', description: 'write: add content to the end of the file (created if missing) with the same parse check, audit, index sync and lock checks; refused together with overwrite; no newline is inserted for you' },

@@ -25,6 +25,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # ESLint 9 with the kit's own eslint.config.js (errors fail; warnings are tolerated).
+      - name: Lint
+        run: node cli/index.js lint
+
       # Gate on the ratchet (chemx-ratchet.json): fail only when a rule rises above its recorded
       # baseline. Set the CHEMX_MIN_GRADE / CHEMX_MIN_SCORE repo variables to add absolute floors.
       - name: Run Chemical X Architectural Audit
