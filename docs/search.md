@@ -25,6 +25,8 @@ chemx q useTheme src/hooks            # symbols under src/hooks
 chemx q -g "useTheme" src/hooks docs  # text under both
 ```
 
+The text header names at most five of the scoped paths and counts the rest (`searched 498 files in cli/a.js,...,cli/e.js (+493 more) under /work/app`), so a shell-expanded glob does not print every file on each call; `--json` keeps the full `scope`.
+
 A path that does not exist is an error that names it and shows how to quote a phrase (`chemx q -g "foo bar"`); nothing is searched, so a mistyped phrase is never answered from the wrong scope. `--dir=<path>` is the same scope for the symbol index, and `--glob <path>` is another name for `--dir` (a path, not a pattern: an unquoted `cli/*.js` is expanded by the shell into paths, a quoted one is refused with that hint). `--max <N>` is another name for `-n <N>`.
 
 ## What is searched

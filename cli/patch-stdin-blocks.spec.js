@@ -124,7 +124,7 @@ test('help: patch and write show the heredoc form first', () => {
     const patchUsage = run(dir, ['patch', '--help']).stdout.split('\n')[1];
     assert.match(patchUsage, /<<'EOF'/);
     const writeUsage = run(dir, ['write', '--help']).stdout.split('\n')[1];
-    assert.match(writeUsage, /write <file> - /);
+    assert.match(writeUsage, /write <file> \[options\] <<'EOF'/);
     assert.match(run(dir, ['help', 'patch']).stdout, /<<'EOF'/);
   });
 });

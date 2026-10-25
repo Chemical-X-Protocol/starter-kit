@@ -5,7 +5,7 @@
  */
 import fs from 'node:fs';
 import { ANSI } from './theme.js';
-import { isStdinTty } from './terminal.js';
+import { isStdinTty, hasPipedStdin } from './terminal.js';
 import { parseValueFlags, hasFlag, splitList, hasPreviewFlag, findUnknownFlags, unknownFlagsMessage } from './cli-args.js';
 import { patchFile } from './patcher.js';
 import { writeOrAppend } from './write-append.js';
@@ -45,16 +45,17 @@ const PATCH_HELP = [
 
 const WRITE_HELP = [
   'USAGE',
-  "  chemx write <file> - [options] <<'EOF'",
+  "  chemx write <file> [options] <<'EOF'",
   '  whole file content',
   '  EOF',
+  '  (with no content argument a piped or redirected stdin is the content; `-` and --stdin still work)',
   '  chemx write <file> --content="text" [options]',
   '',
   '  A write the guards refuse (the content does not parse, drops a top-level declaration not named in',
   '  --allow-remove, imports a missing module) changes nothing: the file stays byte for byte as it was.',
   '',
   'OPTIONS',
-  '  -, --stdin               Read content from stdin (heredoc)',
+  '  -, --stdin               Read content from stdin (heredoc); optional when no content argument is given',
   '  --content=<text>         File content (also: --content <text>)',
   '  --content-file=<path>    Read content from a file',
   '  --overwrite              Allow replacing an existing file',
@@ -229,12 +230,33 @@ export const runPatcherCli = (args, isCli = false) => {
 
 const WRITE_FLAGS = { content: ['--content'], contentFile: ['--content-file'], allowRemove: ['--allow-remove'], as: ['--as'] };
 const WRITE_SWITCHES = ['--stdin', '--overwrite', '--append', '--allow-missing-import'];
-const MISSING_CONTENT = 'chemx write needs --content=<text>, --content-file=<path> or --stdin (a value starting with "-" needs the --content=<text> form). Refusing to write.';
+const MISSING_CONTENT = 'chemx write needs --content=<text>, --content-file=<path> or --stdin, or content on stdin (pipe or redirect it: chemx write <file> <<\'EOF\'). A value starting with "-" needs the --content=<text> form. Refusing to write.';
 
+// A stdin nobody wrote to (a harness hands down an idle, non-blocking socket) reads as EAGAIN: no input.
+const readDetectedStdin = () => {
+  try {
+    return readStdin();
+  } catch (error) {
+    const isIdleStdin = error.code === 'EAGAIN';
+    if (isIdleStdin) return '';
+    throw error;
+  }
+};
+
+// With no content argument, a piped stdin is the content (no --stdin needed). An empty or idle pipe is
+// not: writing an empty file from a harness's silent stdin would hide the mistake.
 const readWriteContent = (args, values) => {
-  const isStdin = args.includes('--stdin') || args.includes('-');
-  const content = isStdin ? readStdin() : fromFileOr(values.content, values.contentFile);
-  const isMissingContent = typeof content !== 'string';
+  const hasContentArgument = typeof values.content === 'string' || typeof values.contentFile === 'string';
+  const isStdinNamed = args.includes('--stdin') || args.includes('-');
+  const isStdinDetected = !isStdinNamed && !hasContentArgument && hasPipedStdin();
+  const readers = [
+    [isStdinNamed, readStdin],
+    [isStdinDetected, readDetectedStdin],
+    [true, () => fromFileOr(values.content, values.contentFile)]
+  ];
+  const [, read] = readers.find(([applies]) => applies);
+  const content = read();
+  const isMissingContent = typeof content !== 'string' || (isStdinDetected && content === '');
   if (isMissingContent) throw new Error(MISSING_CONTENT);
   return content;
 };

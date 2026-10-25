@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import readline from "node:readline";
 import { spawnSync } from "node:child_process";
 
@@ -27,6 +28,21 @@ export const isStdoutTty = () => Boolean(process.stdout && process.stdout.isTTY)
 export const isStdinTty = () => Boolean(process.stdin && process.stdin.isTTY);
 export const isStderrTty = () => Boolean(process.stderr && process.stderr.isTTY);
 export const isInteractive = () => isStdinTty() && isStdoutTty() && !process.env.CI;
+
+// A pipe, a socket (what a Node parent or an agent harness hands down) or a redirected file: stdin carries
+// data for this process. A terminal, /dev/null and a closed stdin do not. (#6773)
+export const hasPipedStdin = () => {
+  const isTerminal = isStdinTty();
+  if (isTerminal) return false;
+  try {
+    const kind = fs.fstatSync(0);
+    return kind.isFIFO() || kind.isSocket() || kind.isFile();
+  } catch (error) {
+    const isStdinClosed = error.code === "EBADF";
+    if (isStdinClosed) return false;
+    throw error;
+  }
+};
 
 export const hasGum = () => {
   if (!isInteractive()) return false;

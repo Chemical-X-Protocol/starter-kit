@@ -5,6 +5,7 @@ import { withIndex } from './search-output.js';
 import { STATUS, toExitCode } from './result-status.js';
 import { debugNote } from './search-debug.js';
 import { checkFilePayload, formatCheckText } from './check-report.js';
+import { withUnsplitHint } from './args-unsplit-hint.js';
 import {
   findSymbolDefinition,
   findSymbolReferences,
@@ -325,7 +326,7 @@ export const handleCheckCommand = (targetFile, { index = null, isJson = false, i
   const absPath = path.resolve(process.cwd(), targetFile);
   const doesFileExist = fs.existsSync(absPath);
   if (!doesFileExist) {
-    const errorMsg = `File not found: ${targetFile}`;
+    const errorMsg = withUnsplitHint(`File not found: ${targetFile}`, [targetFile], { exists: () => false });
     const shouldOutputJson = isJson && isCli;
     if (shouldOutputJson) {
       process.stdout.write(JSON.stringify({ error: errorMsg, success: false }) + '\n');

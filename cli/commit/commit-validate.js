@@ -4,6 +4,7 @@
  * caller (git, the lease tables, the team db); this module only decides.
  */
 import { ruleTree } from '../rules.js';
+import { unsplitHint } from '../args-unsplit-hint.js';
 
 const formatLease = (refusal) => {
   const purpose = refusal.purpose ? ` (${refusal.purpose})` : '';
@@ -14,6 +15,13 @@ const BOARD_LABELS = { flag: '--board', claim: 'your claim', cwd: 'this director
 
 // "/a (your claim) or /b (this directory)": every board the task number was looked up on.
 const describeBoards = (looked) => looked.map((board) => `${board.root} (${BOARD_LABELS[board.source] ?? board.source})`).join(' or ');
+
+// An unknown file is neither tracked nor on disk, so a name with spaces between words is a joined list (zsh did not split it).
+const unknownFilesMessage = (ctx) => {
+  const hint = unsplitHint(ctx.unknownFiles, { exists: () => false });
+  const note = hint ? ` (${hint})` : '';
+  return `Refused: not tracked and not on disk: ${ctx.unknownFiles.join(', ')}${note}.`;
+};
 
 const unknownTaskMessage = (ctx) => {
   const where = describeBoards(ctx.boardLooked ?? []);
@@ -36,7 +44,7 @@ const MESSAGES = {
   'task.emptyReason': () => 'Refused: --no-task needs a non-empty reason.',
   'task.unknown': unknownTaskMessage,
   'board.unusable': (ctx) => `Refused: ${ctx.boardError}`,
-  'files.unknown': (ctx) => `Refused: not tracked and not on disk: ${ctx.unknownFiles.join(', ')}.`,
+  'files.unknown': unknownFilesMessage,
   'files.outsideRepo': (ctx) => `Refused: outside this repository: ${ctx.outsideFiles.join(', ')}.`,
   'leases.foreign': (ctx) => `Refused: leased by another handle: ${ctx.leaseRefusals.map(formatLease).join('; ')}.`
 };
