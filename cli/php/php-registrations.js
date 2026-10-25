@@ -93,10 +93,11 @@ function restRoute(node, env, describe, scopeId) {
 function loaderCallable(args, env, describe) {
   const holder = args[1];
   const method = literalString(args[2]);
-  const isObject = Boolean(holder) && holder.kind === 'variable' && method !== null;
+  // With a literal method name the second argument is the component: an object or a class name.
+  const isComponent = Boolean(holder) && method !== null;
   const fallback = args[1] ? describe(args[1], env) : null;
-  const cls = isObject ? classOfExpr(holder, env) : null;
-  if (!isObject) return fallback;
+  const cls = isComponent ? classOfExpr(holder, env) : null;
+  if (!isComponent) return fallback;
   const fqn = cls ? cls.fqn : null;
   return {
     form: 'loader', class: fqn, method, function: null,

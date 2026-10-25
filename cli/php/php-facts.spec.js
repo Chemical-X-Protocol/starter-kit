@@ -157,6 +157,7 @@ class Boot {
     $admin = new Admin();
     $loader->add_action('admin_menu', $admin, 'menu');
     $this->loader->add_action('wp_ajax_save', $this, 'save');
+    $this->loader->add_action('init', 'Plug\\\\Types', 'register');
     add_action('wp_ajax_' . $kind, 'dyn');
   }
 }
@@ -171,6 +172,10 @@ class Boot {
   assert.equal(by('admin_menu').callback.target, 'Plug\\Admin::menu');
   assert.equal(by('wp_ajax_save').ajax, 'wp_ajax');
   assert.equal(by('wp_ajax_save').callback.target, 'Plug\\Boot::save');
+  assert.equal(by('init').callback.target, 'Plug\\Boot::setup', 'the function form is unchanged');
+  const typed = hooks.find((h) => h.hook === 'init' && h.via === 'method');
+  assert.equal(typed.callback.form, 'loader');
+  assert.equal(typed.callback.target, 'Plug\\Types::register', 'a class-name component names a static callable');
   const dynamic = hooks.find((h) => h.hook === null);
   assert.equal(dynamic.hookPrefix, 'wp_ajax_');
   assert.equal(dynamic.ajax, 'wp_ajax');
