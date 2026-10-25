@@ -3,6 +3,7 @@
 // effect and guard checks are name matches over the project index within 2 hops, not proof of behavior.
 // Dark until the language flip registers .php.
 import { resolveRestRoutes, indexPathOf, PUBLIC_KINDS } from './wp-rest-endpoints.js';
+import { RULE_DEFAULTS as SHADOW_DEFAULTS, wpShadowedRouteRegistration } from './wp-route-shadow.js';
 
 const WRITE_ROUTE = 'SECURITY_WP_PUBLIC_WRITE_ROUTE';
 const NO_PERMISSION = 'SECURITY_WP_REST_NO_PERMISSION_CALLBACK';
@@ -22,6 +23,7 @@ export const RULE_DEFAULTS = {
   [WRITE_ROUTE]: { defaultOn: true, corpus: '22/25 directive, 14/25 real holes', heldOut: '1/1', measured: '2026-10-25' },
   [NO_PERMISSION]: { defaultOn: true, corpus: '0 hits of 570 endpoints', heldOut: '0 hits on 281 endpoints (akismet, WooCommerce controllers and API)', measured: '2026-10-24' },
   [READ_EFFECT]: { defaultOn: false, corpus: '5/8', heldOut: 'not labelled (5 hits unlabelled: card vault 4, WooCommerce 1)', measured: '2026-10-24' },
+  ...SHADOW_DEFAULTS,
 };
 
 const isWordPressFile = (ctx) => Boolean(ctx.wp) && ctx.wp.isWordPress === true;
@@ -122,4 +124,5 @@ export const wpRouteRegistrations = [
   { name: 'wp-public-write-route', rules: [WRITE_ROUTE], isWordPress: true, run: wpPublicWriteRoutePass },
   { name: 'wp-rest-no-permission', rules: [NO_PERMISSION], isWordPress: true, run: wpNoPermissionPass },
   { name: 'wp-read-side-effect', rules: [READ_EFFECT], isWordPress: true, run: wpReadSideEffectPass },
+  wpShadowedRouteRegistration,
 ];

@@ -295,6 +295,12 @@ function isRestRouteCall(node) {
   return name === 'register_rest_route';
 }
 
+/** The variable naming the namespace when it is not a literal ({ name, scope }): two routes in one scope with the same name are taken to share it. */
+function variableOf(node) {
+  const isVariable = isKind(node, 'variable') && typeof node.name === 'string' && node.name !== 'this';
+  return isVariable ? { name: node.name, scope: scopeOf(node) } : null;
+}
+
 function routeOf(call, env) {
   const args = call.arguments || [];
   const none = { arrays: [], unreadable: 0, isReadable: false };
@@ -302,6 +308,7 @@ function routeOf(call, env) {
   return {
     line: nodeLine(call),
     namespace: literalString(args[0]),
+    namespaceVariable: variableOf(args[0]),
     route: literalString(args[1]),
     isReadable,
     unreadable,
@@ -312,7 +319,7 @@ function routeOf(call, env) {
 const cache = new WeakMap();
 
 /**
- * Every register_rest_route call in the file, resolved: [{ line, namespace, route, isReadable, unreadable,
+ * Every register_rest_route call in the file, resolved: [{ line, namespace, namespaceVariable, route, isReadable, unreadable,
  * endpoints: [{ line, shape, methods: { verbs, resolved, isDefault }, permission: { kind, line, target },
  * callback: { line, label, target } }] }]. permission.kind is missing, return_true, closure_true, callable_true, callable_fail_open
  * (task #6707: ends in return true, denials only under a credential-present branch, same-file callable only; data,

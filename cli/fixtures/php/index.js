@@ -10,6 +10,7 @@ import { SQL_FIXTURES } from './sql.fixtures.js';
 import { REQUEST_FLOW_FIXTURES } from './request-flow.fixtures.js';
 import { AUTH_FILTER_FIXTURES } from './auth-filters.fixtures.js';
 import { REGISTRATION_FIXTURES } from './registration.fixtures.js';
+import { SHADOW_FIXTURES } from './shadow.fixtures.js';
 
 /** [familyName, fixtures] in merge order. */
 export const PHP_FIXTURE_FAMILIES = Object.freeze([
@@ -22,6 +23,7 @@ export const PHP_FIXTURE_FAMILIES = Object.freeze([
   ['request-flow', REQUEST_FLOW_FIXTURES],
   ['auth-filters', AUTH_FILTER_FIXTURES],
   ['registration', REGISTRATION_FIXTURES],
+  ['shadow', SHADOW_FIXTURES],
 ]);
 
 export const PHP_FIXTURES = Object.freeze(Object.assign({}, ...PHP_FIXTURE_FAMILIES.map(([, fixtures]) => fixtures)));

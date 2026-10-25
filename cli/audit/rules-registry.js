@@ -127,6 +127,13 @@ export const RULE_REGISTRY = {
     isDefaultOff: true,
     directive: 'Return the incoming error from a rest_authentication_errors callback, or authenticate the request with a real credential check; returning null or true for a failed request lets it through (Directive 9.D)'
   },
+  SECURITY_WP_SHADOWED_ROUTE: {
+    pillar: PILLARS.PILLAR_9,
+    severity: 'MEDIUM',
+    needs: 'standard',
+    isDefaultOff: true,
+    directive: 'Register a literal REST route before any regex route in the same namespace that matches its path for the same verb; WordPress runs the first match, so the later route never runs (Directive 9.D)'
+  },
   SECURITY_WP_PUBLIC_REGISTRATION_ROUTE: {
     pillar: PILLARS.PILLAR_9,
     severity: 'HIGH',
