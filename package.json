@@ -73,12 +73,15 @@
     "php-parser": "3.7.0"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.5",
     "@types/babel__traverse": "^7.28.0",
     "@types/node": "^22.20.2",
     "@types/react": "^18.3.31",
     "@types/react-dom": "^18.3.7",
     "@vue/test-utils": "^2.5.1",
     "chemx": "file:.",
+    "eslint": "^9.39.5",
+    "globals": "^16.5.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "typescript": "^5.9.3",

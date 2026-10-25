@@ -62,15 +62,16 @@ export const VERIFY_COMMANDS = [
     aliases: ['check:lint', 'eslint'],
     group: 'verify',
     brief: 'Run ESLint, results grouped by file',
-    usage: 'chemx lint [path] [options] [-- <command>]',
-    summary: 'Token-conserving linter runner with automatic fix.',
-    description: 'Executes ESLint with grouped diagnostics, target scoping and --fix support.',
+    usage: 'chemx lint [path...] [options] [-- <command>]',
+    summary: 'Token-conserving linter runner with automatic fix; with paths it also answers chemx check.',
+    description: 'Executes ESLint with grouped diagnostics, target scoping and --fix support. With paths it appends the micro-check hazards of those paths (inline booleans, dispatch switches, silent catches: what chemx check prints), so one pass answers both and either failing fails it. A directory with no package.json or no ESLint config (flat or legacy) has nothing for ESLint to read: lint says so in one line ("no ESLint config in <root>; ran chemx check on <n> files instead") and runs chemx check on the named paths, or on every source file under the directory.',
     flags: [
       { flag: '--fix', desc: 'Automatically fix fixable lint errors' },
-      { flag: '--json', desc: 'Output structured diagnostics as JSON' },
-      { flag: '--raw', desc: 'Do not capture or format output' }
+      { flag: '--json', desc: 'Output structured diagnostics as JSON (hazards, micro and note carry the micro-check side)' },
+      { flag: '--raw', desc: 'Do not capture or format output' },
+      { flag: '--all-packages', desc: 'At a monorepo root: lint every workspace package (else refused)' }
     ],
-    examples: ['chemx lint', 'chemx lint --fix', 'chemx lint src/app.vue --fix']
+    examples: ['chemx lint', 'chemx lint --fix', 'chemx lint src/app.vue --fix', 'chemx lint cli/a.js cli/b.js']
   },
   {
     name: 'build',

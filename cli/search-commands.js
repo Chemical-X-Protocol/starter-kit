@@ -4,8 +4,7 @@ import { ANSI } from './theme.js';
 import { withIndex } from './search-output.js';
 import { STATUS, toExitCode } from './result-status.js';
 import { debugNote } from './search-debug.js';
-import { auditFileDetailed } from './audit-scan.js';
-import { inconclusiveReason } from './audit/inconclusive.js';
+import { checkFilePayload, formatCheckText } from './check-report.js';
 import {
   findSymbolDefinition,
   findSymbolReferences,
@@ -310,11 +309,7 @@ export const handleHealthFilterCommand = (db, status, { index = null, isJson = f
 };
 
 /** options.config: a loaded project config (e.g. with --profile applied); defaults to the cwd's config. */
-/** The audit options for `check`: the config when given, and `fast` (AST rules skipped, so PHP is inconclusive). */
-const checkAuditOptions = (config, isFast) => ({ ...(config ? { config } : {}), ...(isFast ? { fast: true } : {}) });
-
 export const handleCheckCommand = (targetFile, { index = null, isJson = false, isCli = true, config = null, isFast = false } = {}) => {
-  const startTime = Date.now();
   if (!targetFile) {
     const errorMsg = 'Please specify a target file to check. Example: chemx check src/components/m-card.vue';
     const shouldOutputJson = isJson && isCli;
@@ -341,57 +336,18 @@ export const handleCheckCommand = (targetFile, { index = null, isJson = false, i
     return { error: errorMsg, success: false };
   }
 
-  const relPath = path.relative(process.cwd(), absPath);
-  const { violations, coverage } = auditFileDetailed(absPath, relPath, checkAuditOptions(config, isFast));
-  const inconclusive = inconclusiveReason(coverage);
-  const isInconclusive = inconclusive !== null;
-  const durationMs = Date.now() - startTime;
-
-  const criticalCount = violations.filter((v) => v.severity === 'CRITICAL').length;
-  const highMedCount = violations.filter((v) => ['HIGH', 'MEDIUM'].includes(v.severity)).length;
-  const isClean = violations.length === 0 && !isInconclusive;
-
-  const payload = {
-    file: relPath,
-    isClean,
-    ...(isInconclusive ? { inconclusive } : {}),
-    durationMs,
-    violationsCount: violations.length,
-    criticalCount,
-    highMedCount,
-    violations
-  };
+  const payload = checkFilePayload(absPath, path.relative(process.cwd(), absPath), { config, isFast });
 
   if (isJson) {
     if (isCli) {
       process.stdout.write(JSON.stringify(withIndex(payload, index)) + '\n');
-      process.exit(isClean ? 0 : 1);
+      process.exit(payload.isClean ? 0 : 1);
     }
     return payload;
   }
 
-  if (isClean) {
-    process.stdout.write(`\n${ANSI.BOLD}${ANSI.LIME}✔ Crystalline:${ANSI.RESET} ${relPath} ${ANSI.DIM}(0 hazards, ${durationMs}ms)${ANSI.RESET}\n\n`);
-    if (isCli) process.exit();
-    return payload;
-  }
-
-  process.stdout.write(`\n${ANSI.BOLD}${ANSI.GOLD}Chemical X Micro-Check:${ANSI.RESET} ${ANSI.BOLD}${relPath}${ANSI.RESET} ${ANSI.DIM}(${durationMs}ms)${ANSI.RESET}\n`);
-  if (isInconclusive) process.stdout.write(`  ${ANSI.GOLD}inconclusive: ${inconclusive}${ANSI.RESET} ${ANSI.DIM}(the AST rules did not run; a clean result is not claimed)${ANSI.RESET}\n`);
-  process.stdout.write(`  ${ANSI.RED}💥 ${criticalCount} Critical${ANSI.RESET} | ${ANSI.GOLD}🔥 ${highMedCount} High/Med${ANSI.RESET}\n\n`);
-
-  for (const v of violations) {
-    const color = v.severity === 'CRITICAL' ? ANSI.RED : ANSI.GOLD;
-    process.stdout.write(`  ${color}[${v.severity}]${ANSI.RESET} Line ${v.line}: ${v.rule}\n`);
-    process.stdout.write(`    ${ANSI.DIM}Hazard: ${v.hazard}${ANSI.RESET}\n`);
-    const hasDirective = Boolean(v.directive);
-    if (hasDirective) {
-      process.stdout.write(`    ${ANSI.CYAN}Directive: ${v.directive}${ANSI.RESET}\n`);
-    }
-  }
-  process.stdout.write('\n');
-
-  if (isCli) process.exit(1);
+  process.stdout.write(formatCheckText(payload));
+  if (isCli) process.exit(payload.isClean ? 0 : 1);
   return payload;
 };
 
