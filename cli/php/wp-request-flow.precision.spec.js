@@ -75,7 +75,13 @@ const CASES = [
   { rule: SSRF, label: 'TP', origin: 'shape', ref: 'moving-castle import.php:36 (host taken from parse_url of a request value)', weight: 0,
     files: single(`$parsed = wp_parse_url( $request->get_param( 'connection_url' ) );\n$base_url = $parsed['scheme'] . '://' . $parsed['host'];\nwp_remote_get( $base_url . '/wp-json/demo/v1/schema' );`) },
   { rule: SSRF, label: 'TP', origin: 'shape', ref: 'esc_url_raw passes taint', weight: 0, files: single(`wp_remote_get( esc_url_raw( $_GET['u'] ) );`) },
-  { rule: SSRF, label: 'FP', origin: 'shape', ref: 'wp_http_validate_url kills the flow', weight: 0, files: single(`$u = $_GET['u'];\nif ( ! wp_http_validate_url( $u ) ) { return; }\nwp_remote_get( $u );`) },
+  { rule: SSRF, label: 'FP', origin: 'shape', ref: 'wp_http_validate_url plus redirection 0 kills the flow', weight: 0, files: single(`$u = $_GET['u'];\nif ( ! wp_http_validate_url( $u ) ) { return; }\nwp_remote_get( $u, array( 'redirection' => 0 ) );`) },
+  { rule: SSRF, label: 'TP', origin: 'shape', ref: 'wp_http_validate_url then wp_remote_get follows 5 unvalidated redirects (#6706)', weight: 0, files: single(`$u = $_GET['u'];\nif ( ! wp_http_validate_url( $u ) ) { return; }\nwp_remote_get( $u );`) },
+  { rule: SSRF, label: 'TP', origin: 'shape', ref: 'card vault image-cache.php:239,245 (validated callee, redirection 5)', weight: 0,
+    files: {
+      'demo.php': `${HEADER}function demo_image( $request ) {\n\treturn Demo_Cache::fetch( $request->get_param( 'fallback_url' ) );\n}\n`,
+      'includes/class-demo-cache.php': `<?php\nclass Demo_Cache {\n\tpublic static function fetch( $url ) {\n\t\tif ( ! wp_http_validate_url( $url ) ) {\n\t\t\treturn null;\n\t\t}\n\t\treturn wp_remote_get( $url, array( 'redirection' => 5 ) );\n\t}\n}\n`,
+    } },
   { rule: REDIRECT, label: 'FP', origin: 'shape', ref: 'wp_validate_redirect kills the flow', weight: 0, files: single(`wp_redirect( wp_validate_redirect( $_GET['to'], home_url() ) );`) },
   { rule: SSRF, label: 'FP', origin: 'shape', ref: 'uploaded temp file is a path, not a URL', weight: 0, files: single(`$files = $request->get_file_params();\n$data = file_get_contents( $files['f']['tmp_name'] );`) },
 ];

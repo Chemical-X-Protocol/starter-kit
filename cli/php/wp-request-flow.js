@@ -30,6 +30,12 @@ const REDIRECT = 'SECURITY_WP_OPEN_REDIRECT';
 // true it would read 4/4. The samples are small and labelled by one reader.
 // A rule ships on only when both corpus and held-out precision are 80% or better: none does, so all three
 // default to off.
+// Task #6706 (2026-10-25): wp_http_validate_url is no longer a guard for wp_remote_get/post/request/head
+// unless the call passes 'redirection' => 0 or 'reject_unsafe_urls' => true, because those follow up to 5
+// redirects the validator never saw. Remeasured: corpus 5 SSRF hits (the same labelled true ones, 0 new),
+// held-out third-party plugins 1 SSRF hit (no validator involved, 0 new), card vault a708d6a gains
+// class-card-vault-catalog-rest.php:640 (true, review #18). The rule stays default-off. Not covered:
+// an inline wp_remote_get( wp_http_validate_url( $u ) ) and options built outside an array literal.
 export const RULE_DEFAULTS = {
   [INPUT]: { defaultOn: false, corpus: '8/9', heldOut: '7/31', measured: '2026-10-24' },
   [SSRF]: { defaultOn: false, corpus: '8/8', heldOut: '1/3', measured: '2026-10-24' },
@@ -72,7 +78,7 @@ const SEED = Object.freeze({
 
 const HAZARDS = {
   input: (label) => `A superglobal value reaches ${label} with no sanitizer on the way. Sanitize it first, for example sanitize_text_field( wp_unslash( ... ) ) or an absint cast, or validate it against a fixed list (Directive 9.D).`,
-  [SSRF]: (sink) => `A request value can choose the host of the URL passed to ${sink}(). Validate it with wp_http_validate_url(), build the URL from a fixed base, or use wp_safe_remote_*() (Directive 9.D).`,
+  [SSRF]: (sink) => `A request value can choose the host of the URL passed to ${sink}(). Build the URL from a fixed base, use wp_safe_remote_*(), or validate it with wp_http_validate_url() and also pass 'redirection' => 0 or 'reject_unsafe_urls' => true, because wp_http_validate_url() checks only the first URL and a redirect can lead elsewhere (Directive 9.D).`,
   [REDIRECT]: (sink) => `A request value can choose the host of the URL passed to ${sink}(). Validate it with wp_validate_redirect() or use wp_safe_redirect() (Directive 9.D).`,
 };
 
@@ -94,7 +100,7 @@ function postContentArgs(node) {
 }
 
 function wpdbSink(node, info) {
-  const name = info.name.toLowerCase();
+  const name = String(info.name || '').toLowerCase();
   const isText = WPDB_TEXT_METHODS.has(name) && isWpdbReceiver(node.what.what);
   return isText ? { label: `$wpdb->${name}()`, args: node.arguments.slice(0, 1) } : null;
 }
@@ -187,6 +193,38 @@ function cleanDefinitions(idx, isClean) {
 }
 
 const urlIndexOf = (scope) => cleanDefinitions(createScopeIndex(scope), isUnknownCall);
+
+/** The URL index with every wp_http_validate_url / wp_validate_redirect check forgotten. */
+function unvalidatedUrlIndexOf(scope) {
+  const idx = urlIndexOf(scope);
+  idx.validations = new Map();
+  return idx;
+}
+
+// wp_remote_* follow up to 5 redirects by default and wp_http_validate_url checks only the first URL, so a
+// validated URL can still lead to a request-chosen host unless the call turns redirects off or asks
+// WordPress to reject unsafe URLs (which it applies to each redirect). Other sinks keep the validator as a guard.
+const REDIRECT_FOLLOWING = new Set(['wp_remote_get', 'wp_remote_post', 'wp_remote_request', 'wp_remote_head']);
+
+function optionValue(options, key) {
+  const items = options && options.kind === 'array' ? options.items || [] : [];
+  const entry = items.find((item) => item && item.kind === 'entry' && literalString(item.key) === key);
+  return entry ? entry.value : null;
+}
+
+/** True when the options literal sets 'redirection' to 0 / false or 'reject_unsafe_urls' to true. */
+function limitsRedirects(options) {
+  const redirection = optionValue(options, 'redirection');
+  const reject = optionValue(options, 'reject_unsafe_urls');
+  const redirectsOff = Boolean(redirection) && ['0', 'false'].includes(String(redirection.value).toLowerCase());
+  const rejects = Boolean(reject) && String(reject.value).toLowerCase() === 'true';
+  return redirectsOff || rejects;
+}
+
+/** True when a validator is no guard for this call: it follows redirects and its options do not limit them. */
+function followsRedirects(name, node) {
+  return REDIRECT_FOLLOWING.has(String(name).toLowerCase()) && !limitsRedirects(node.arguments[1]);
+}
 const inputIndexOf = (scope) => cleanDefinitions(createScopeIndex(scope), isJsonEncode);
 
 function concatParts(node) {
@@ -195,9 +233,10 @@ function concatParts(node) {
 }
 
 /** True when the URL argument can have a request-chosen host and is neither an upload path nor an unknown call's result. */
-function urlFlows(arg, data) {
+function urlFlows(arg, data, ignoreValidation = false) {
   const skipped = !arg || isUploadTemp(arg, data) || isUnknownCall(arg);
-  return !skipped && hostTaint(arg, data.url(), BOTH_SOURCES);
+  const idx = ignoreValidation ? data.rawUrl() : data.url();
+  return !skipped && hostTaint(arg, idx, BOTH_SOURCES);
 }
 
 function createState(ctx) {
@@ -207,10 +246,12 @@ function createState(ctx) {
     if (!scopes.has(scope)) {
       let input = null;
       let url = null;
+      let rawUrl = null;
       scopes.set(scope, {
         tmpVars: uploadTempVariables(scope),
         input: () => (input = input || inputIndexOf(scope)),
         url: () => (url = url || urlIndexOf(scope)),
+        rawUrl: () => (rawUrl = rawUrl || unvalidatedUrlIndexOf(scope)),
       });
     }
     return scopes.get(scope);
@@ -266,12 +307,12 @@ function urlSinksIn(fn) {
     const info = node.kind === 'call' ? callName(node) : null;
     const rule = info && info.kind === 'function' ? URL_SINKS.get(info.name.toLowerCase()) : null;
     const arg = rule ? node.arguments[0] : null;
-    if (arg) sinks.push({ rule, name: info.name, line: nodeLine(node), arg });
+    if (arg) sinks.push({ rule, name: info.name, line: nodeLine(node), arg, follows: followsRedirects(info.name, node) });
   });
   return sinks;
 }
 
-const reachesHost = (sink, idx) => hostTaint(sink.arg, idx, BOTH_SOURCES);
+const reachesHost = (sink, indexes) => hostTaint(sink.arg, sink.follows ? indexes.raw : indexes.checked, BOTH_SOURCES);
 
 /**
  * For each parameter of `fn` (a function or method node), the URL sinks in its own body whose URL host
@@ -280,19 +321,19 @@ const reachesHost = (sink, idx) => hostTaint(sink.arg, idx, BOTH_SOURCES);
  */
 export function summarizeParamSinks(fn) {
   const sinks = urlSinksIn(fn);
-  const idx = urlIndexOf(fn);
-  const direct = new Set(sinks.filter((sink) => reachesHost(sink, idx)));
+  const indexes = { checked: urlIndexOf(fn), raw: unvalidatedUrlIndexOf(fn) };
+  const direct = new Set(sinks.filter((sink) => reachesHost(sink, indexes)));
   const found = [];
   (fn.arguments || []).forEach((param, position) => {
-    const def = (idx.defs.get(paramName(param)) || []).find((d) => d.kind === 'param');
-    if (!def) return;
-    def.expr = SEED;
-    idx.caches.clear();
-    for (const sink of sinks.filter((s) => !direct.has(s) && reachesHost(s, idx))) {
-      found.push({ param: position, rule: sink.rule, name: sink.name, line: sink.line });
+    const defs = Object.values(indexes).map((idx) => (idx.defs.get(paramName(param)) || []).find((d) => d.kind === 'param'));
+    if (defs.some((def) => !def)) return;
+    defs.forEach((def) => { def.expr = SEED; });
+    Object.values(indexes).forEach((idx) => idx.caches.clear());
+    for (const sink of sinks.filter((s) => !direct.has(s) && reachesHost(s, indexes))) {
+      found.push({ param: position, rule: sink.rule, name: sink.name, line: sink.line, follows: sink.follows });
     }
-    def.expr = null;
-    idx.caches.clear();
+    defs.forEach((def) => { def.expr = null; });
+    Object.values(indexes).forEach((idx) => idx.caches.clear());
   });
   return found;
 }
@@ -335,7 +376,7 @@ function checkInput(ctx, state, node) {
 }
 
 function checkDirect(ctx, state, node, rule, name) {
-  const flows = urlFlows(node.arguments[0], state.dataFor(node));
+  const flows = urlFlows(node.arguments[0], state.dataFor(node), followsRedirects(name, node));
   if (flows) ctx.report(rule, node, HAZARDS[rule](name));
 }
 
@@ -353,9 +394,9 @@ function checkHop(ctx, state, node, info) {
   const eligible = Boolean(resolver) && Boolean(info) && CALLEE_KINDS.has(info.kind);
   if (!eligible) return;
   const data = state.dataFor(node);
-  const tainted = node.arguments.map((arg, i) => (urlFlows(arg, data) ? i : -1)).filter((i) => i >= 0);
+  const tainted = node.arguments.map((arg, i) => (urlFlows(arg, data, true) ? i : -1)).filter((i) => i >= 0);
   const hit = tainted.length > 0 ? resolver.resolve(node, info) : null;
-  const entry = hit ? summaryFor(ctx.index, hit).find((s) => tainted.includes(s.param)) : null;
+  const entry = hit ? summaryFor(ctx.index, hit).find((s) => tainted.includes(s.param) && (s.follows || urlFlows(node.arguments[s.param], data))) : null;
   if (entry) reportHop(ctx, resolver.rel, node, info, hit, entry);
 }
 

@@ -111,10 +111,22 @@ test('SSRF: URL sinks fire when a request value chooses the host', () => {
   assert.deepEqual(rulesOf(`$u = $_GET['u']; if ( $param ) { $u = 'https://fixed.test/'; } wp_remote_get( $u );`), [rule]);
 });
 
+test('SSRF: a validated URL still fires for wp_remote_* that follow redirects', () => {
+  const rule = ['SECURITY_WP_SSRF'];
+  const guard = `$u = $_GET['u']; if ( ! wp_http_validate_url( $u ) ) { return; } `;
+  assert.deepEqual(rulesOf(`${guard}wp_remote_get( $u );`), rule);
+  assert.deepEqual(rulesOf(`${guard}wp_remote_get( $u, array( 'redirection' => 5 ) );`), rule);
+  assert.deepEqual(rulesOf(`${guard}wp_remote_post( $u, array( 'timeout' => 5 ) );`), rule);
+  assert.deepEqual(rulesOf(`${guard}wp_remote_get( $u, array( 'reject_unsafe_urls' => false ) );`), rule);
+  assert.deepEqual(rulesOf(`${guard}wp_safe_remote_get( $u );`), []);
+});
+
 test('SSRF and redirect: esc_url_raw passes taint; validators, safe bases, safe sinks and path-only values do not', () => {
   assert.deepEqual(rulesOf(`wp_remote_get( esc_url_raw( $_GET['u'] ) );`), ['SECURITY_WP_SSRF']);
   assert.deepEqual(rulesOf(`wp_remote_get( wp_http_validate_url( $_GET['u'] ) );`), []);
-  assert.deepEqual(rulesOf(`$u = $_GET['u']; if ( ! wp_http_validate_url( $u ) ) { return; } wp_remote_get( $u );`), []);
+  assert.deepEqual(rulesOf(`$u = $_GET['u']; if ( ! wp_http_validate_url( $u ) ) { return; } wp_remote_get( $u, array( 'redirection' => 0 ) );`), []);
+  assert.deepEqual(rulesOf(`$u = $_GET['u']; if ( ! wp_http_validate_url( $u ) ) { return; } wp_remote_get( $u, array( 'reject_unsafe_urls' => true ) );`), []);
+  assert.deepEqual(rulesOf(`$u = $_GET['u']; if ( ! wp_http_validate_url( $u ) ) { return; } file_get_contents( $u );`), []);
   assert.deepEqual(rulesOf(`wp_redirect( wp_validate_redirect( $_GET['to'], home_url() ) );`), []);
   assert.deepEqual(rulesOf(`wp_safe_redirect( $_GET['to'] );`), []);
   assert.deepEqual(rulesOf(`wp_safe_remote_get( $_GET['u'] );`), []);
@@ -150,7 +162,12 @@ test('one hop in the same file is not crossFile; a redirect helper gives OPEN_RE
 
 test('one hop stays silent for a path-only callee and for a callee that validates', () => {
   assert.deepEqual(audit(REQUEST_FLOW_PLUGINS.pathOnly), []);
-  assert.deepEqual(audit(REQUEST_FLOW_PLUGINS.validatedCallee), []);
+  assert.deepEqual(audit(REQUEST_FLOW_PLUGINS.validatedCalleeNoRedirect), []);
+});
+
+test('one hop still fires when the callee validates but follows redirects', () => {
+  const hits = audit(REQUEST_FLOW_PLUGINS.validatedCallee);
+  assert.deepEqual(hits.map((h) => h.rule), ['SECURITY_WP_SSRF']);
 });
 
 test('crossFile false drops the cross-file hop but keeps the same-file one', () => {

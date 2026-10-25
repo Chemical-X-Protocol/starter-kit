@@ -44,7 +44,7 @@ function demo_probe( $request ) {
 	if ( ! wp_http_validate_url( $url ) ) {
 		return new WP_Error( 'demo_bad_url', 'Invalid URL.' );
 	}
-	return wp_remote_get( $url );
+	return wp_remote_get( $url, array( 'redirection' => 0 ) );
 }
 `,
   },
@@ -99,6 +99,10 @@ export const REQUEST_FLOW_PLUGINS = {
   pathOnly: {
     'demo.php': `${HEADER}function demo_image( $request ) {\n\treturn Demo_Cache::fetch( $request->get_param( 'src' ) );\n}\n`,
     'includes/class-demo-cache.php': `<?php\nclass Demo_Cache {\n\tpublic static function fetch( $name ) {\n\t\treturn wp_remote_get( 'https://cdn.example.test/' . $name );\n\t}\n}\n`,
+  },
+  validatedCalleeNoRedirect: {
+    'demo.php': `${HEADER}function demo_image( $request ) {\n\treturn Demo_Cache::fetch( $request->get_param( 'src' ) );\n}\n`,
+    'includes/class-demo-cache.php': `<?php\nclass Demo_Cache {\n\tpublic static function fetch( $url ) {\n\t\tif ( ! wp_http_validate_url( $url ) ) {\n\t\t\treturn null;\n\t\t}\n\t\treturn wp_remote_get( $url, array( 'redirection' => 0 ) );\n\t}\n}\n`,
   },
   validatedCallee: {
     'demo.php': `${HEADER}function demo_image( $request ) {\n\treturn Demo_Cache::fetch( $request->get_param( 'src' ) );\n}\n`,
