@@ -31,7 +31,7 @@ export const ACTION_HELP = {
   team_status: '{}',
   team_feed: '{ sinceId?, threadId?, taskId?, agentId?, limit? }',
   team_post: '{ message, authorId?, recipientId?, taskId? } writes',
-  team_task: '{ subAction: list|show|add|claim|done|brief|..., taskId?, title?, needs?, kind?: task|decision|epic, fromFile? (add many), search?, titles? (list), full? (show), briefText?|briefFile?|clear? (brief) } non-list sub-actions write',
+  team_task: '{ subAction: list|show|add|claim|done|brief|..., taskId?, title?, needs?: light|standard|deep, kind?: task|decision|epic, fromFile? (add many), search?, titles? (list), full? (show), briefText?|briefFile?|clear? (brief) } non-list sub-actions write',
   team_lock: '{ action: acquire|release, filePath, agentId, purpose?, ttlMs? } writes',
   team_inbox: '{ agentId|as, sinceId?, limit?, markRead? }',
   team_dm: '{ to|recipientId, message, as? } writes'
