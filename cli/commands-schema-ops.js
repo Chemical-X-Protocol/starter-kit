@@ -1,4 +1,6 @@
 // Command schema entries for the agents and setup groups. Assembled in commands-schema.js.
+import { TEAM_COMMANDS } from './commands-schema-team.js';
+
 export const OPS_COMMANDS = [
   {
     name: 'mcp',
@@ -30,42 +32,7 @@ export const OPS_COMMANDS = [
     ],
     examples: ['chemx install-mcp']
   },
-  {
-    name: 'team',
-    aliases: ['swarm', 'feed', 'tokens', 'telemetry', 'benchmark', 'ablation', 'memory'],
-    group: 'agents',
-    brief: 'Tasks, file locks, DMs and feed',
-    usage: 'chemx team <status|task|lock|unlock|feed|post|inbox|dm|tokens|benchmark> [options]',
-    summary: 'Multi-agent coordination layer backed by SQLite (.chemx/index.db).',
-    description: 'Task queues, status transitions, AST verification on completion and file locks. `tokens` and `benchmark` are team subcommands. Run `chemx team task --help` for task detail. An option with a value takes it after a space or an equals sign (`--prio 2`, `--prio=2`).',
-    flags: [
-      { flag: '--as=<@handle>', desc: 'Agent identity handle (e.g. @claude)' },
-      { flag: '--target=<path>', desc: 'Target file path for task AST verification' },
-      { flag: '--no-target-confirm', desc: 'Complete a task that has no target file without verification' },
-      { flag: '--force, -f', desc: 'Force complete task even if hazards remain' },
-      { flag: '--tokens=<N>', desc: 'Prompt tokens consumed by task' },
-      { flag: '--cost=<USD>', desc: 'Estimated dollar cost for task' },
-      { flag: '--epic=<id>', desc: 'tokens: tokens, cost and wall time over an epic\'s children, recursively (see docs/team-tokens.md)' },
-      { flag: '--from=<@handle>', desc: 'feed: only events authored by this handle' },
-      { flag: '--type=<lock|status|post|task>', desc: 'feed: an event-type group (or an exact event type, comma-separated)' },
-      { flag: '--since=<id>', desc: 'feed: only events after this event id' },
-      { flag: '--full', desc: 'feed: whole messages (default: the newest 20, one line each)' },
-      { flag: '--brief', desc: 'task show: header facts and only the comments after the description' },
-      { flag: '--mine', desc: 'status: only your open tasks, leases and own events' },
-      { flag: '--blockers', desc: 'status: also list the blocked tasks' },
-      { flag: '--json', desc: 'Output data as JSON' }
-    ],
-    examples: [
-      'chemx team task list',
-      'chemx team task add "Implement dark mode toggle" --prio=1',
-      'chemx team task claim 1 --as=@coder',
-      'chemx team task show 12 --brief',
-      'chemx team lock src/a.js src/b.js --as=@coder',
-      'chemx team task done 1 --as=@coder',
-      'chemx team feed --from=@coder --type=lock',
-      'chemx team status --mine'
-    ]
-  },
+  ...TEAM_COMMANDS,
   {
     name: 'run',
     aliases: [],
