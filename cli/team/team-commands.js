@@ -20,9 +20,8 @@ import { isBoardCommand, runBoardCommand } from './team-commands-board.js';
 import { runTaskCommand } from './team-commands-task.js';
 import { runTriage } from './team-commands-triage.js';
 import { handleMigrateCommand } from './team-commands-migrate.js';
-import { parseRepoFlags, resolveTaskIdArgs, REPO_VALUE_FLAGS } from './team-commands-repo.js';
-
-const ARG_VAL_FLAGS = ['--target', '--as', '--to', '--agent', '--since', '--limit', '--thread', '--task', '--parent', '--rule', '--priority', '--prio', '--moscow', '--needs', '--url', '--pid', '--run', '--projects', ...REPO_VALUE_FLAGS];
+import { parseRepoFlags, resolveTaskIdArgs } from './team-commands-repo.js';
+import { normalizeValueFlags, describeMissingValue } from './team-flag-values.js';
 
 const TEAM_COMMANDS = ['status', 'task', 'lock', 'unlock', 'feed', 'post', 'inbox', 'dm', 'tokens', 'audit-run', 'triage', 'benchmark', 'train', 'migrate', 'route'];
 
@@ -32,18 +31,8 @@ const HELPLESS_SUBCOMMANDS = ['post', 'dm', 'inbox', 'feed', 'tokens', 'telemetr
 // Subcommands whose handlers print help before using ctx.db.
 const HELP_FIRST_SUBCOMMANDS = ['task', 'lock', 'unlock', 'dispatch'];
 
-const splitPositionals = (restArgs) => {
-  const positionals = [];
-  for (let i = 0; i < restArgs.length; i++) {
-    const a = restArgs[i];
-    const isFlagToken = a.startsWith('-');
-    if (isFlagToken) continue;
-    const isVal = i > 0 && ARG_VAL_FLAGS.includes(restArgs[i - 1]);
-    if (isVal) continue;
-    positionals.push(a);
-  }
-  return positionals;
-};
+// Takes arguments already through normalizeValueFlags: a value flag is one `--flag=value` word, so every word left is a positional.
+const splitPositionals = (normalizedArgs) => normalizedArgs.filter((word) => !word.startsWith('-'));
 
 // `--` ends options: every later word is literal text (a task title may contain --test).
 const parseArgs = (rawArgs) => {
@@ -52,8 +41,9 @@ const parseArgs = (rawArgs) => {
   const optionArgs = hasTerminator ? rawArgs.slice(0, terminatorIndex) : rawArgs;
   const titleWords = hasTerminator ? rawArgs.slice(terminatorIndex + 1) : [];
   const restArgs = optionArgs.slice(1);
-  const flags = { ...parseFlags(restArgs), ...parseRepoFlags(restArgs) };
-  return { subCommand: optionArgs[0] || 'status', restArgs, flags, positionals: splitPositionals(restArgs), titleWords };
+  const { args: normalized, missing: missingValues } = normalizeValueFlags(restArgs);
+  const flags = { ...parseFlags(normalized), ...parseRepoFlags(normalized) };
+  return { subCommand: optionArgs[0] || 'status', restArgs, flags, positionals: splitPositionals(normalized), titleWords, missingValues };
 };
 
 const SUB_COMMANDS = {
@@ -104,6 +94,16 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
   const wantsHelp = args.flags.help || args.restArgs.some((a) => a === '-h' || a === '--help') || args.positionals[0] === 'help';
   const isOwnHelp = HELP_FIRST_SUBCOMMANDS.includes(args.subCommand) && wantsHelp;
   if (isOwnHelp) return SUB_COMMANDS[args.subCommand]({ db: null, root: null }, args, isCli, cwd);
+  // A value flag with no value is refused before any db opens, so a flag the shell dropped the value of never writes (#6746).
+  const hasMissingValue = args.missingValues.length > 0;
+  if (hasMissingValue) {
+    const message = describeMissingValue(args.missingValues);
+    if (isCli) {
+      process.stderr.write(`\x1b[31m✕ ${message}\x1b[0m\n`);
+      process.exitCode = 1;
+    }
+    return { error: message, refused: true };
+  }
   // migrate opens its own target (the coordination db, or --into) and never the cwd's silo.
   const isMigrate = args.subCommand === 'migrate';
   if (isMigrate) return handleMigrateCommand(args.flags, isCli, cwd);

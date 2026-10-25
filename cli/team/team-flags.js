@@ -13,6 +13,8 @@ const parseParentFlagValue = (raw) => {
 
 const splitIdTokens = (text) => text.split(',').map((token) => token.trim()).filter(Boolean);
 
+import { normalizeValueFlags } from './team-flag-values.js';
+
 /**
  * Long flags parseFlags itself reads, shared by every team subcommand. Guaranteed: each is read in
  * parseFlags below. Not guaranteed: a subcommand's own handler may read more (those are not listed
@@ -30,7 +32,8 @@ export const PARSED_TEAM_FLAGS = Object.freeze([
 /** @returns {boolean} whether parseFlags reads this long flag (the part before any `=`) */
 export const isParsedTeamFlag = (token) => PARSED_TEAM_FLAGS.includes(String(token).split('=')[0]);
 
-export const parseFlags = (args = []) => {
+export const parseFlags = (rawArgs = []) => {
+  const { args } = normalizeValueFlags(rawArgs);
   const hasJsonFlag = args.includes('--json');
   const hasCompactFlag = args.includes('--compact');
   const hasMarkReadFlag = args.includes('--mark-read');
@@ -49,8 +52,7 @@ export const parseFlags = (args = []) => {
   };
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
-    const nextArg = args[i + 1];
-    const hasNextArg = Boolean(nextArg && !nextArg.startsWith('-'));
+    const valueAfterEquals = arg.slice(arg.indexOf('=') + 1);
 
     const isNoTargetConfirm = arg === '--no-target-confirm';
     if (isNoTargetConfirm) flags.noTargetConfirm = true;
@@ -59,136 +61,85 @@ export const parseFlags = (args = []) => {
     if (isMarkRead) flags.markRead = true;
 
     const isAsEquals = arg.startsWith('--as=');
-    if (isAsEquals) flags.as = arg.split('=')[1];
-
-    const isAsFlag = arg === '--as';
-    const shouldReadAsNext = isAsFlag && hasNextArg;
-    if (shouldReadAsNext) flags.as = nextArg;
+    if (isAsEquals) flags.as = valueAfterEquals;
 
     const isToEquals = arg.startsWith('--to=');
-    if (isToEquals) flags.to = arg.split('=')[1];
-
-    const isToFlag = arg === '--to';
-    const shouldReadToNext = isToFlag && hasNextArg;
-    if (shouldReadToNext) flags.to = nextArg;
+    if (isToEquals) flags.to = valueAfterEquals;
 
     const isSinceEquals = arg.startsWith('--since=');
-    if (isSinceEquals) flags.since = parseInt(arg.split('=')[1], 10);
-
-    const isSinceFlag = arg === '--since';
-    const shouldReadSinceNext = isSinceFlag && hasNextArg;
-    if (shouldReadSinceNext) flags.since = parseInt(nextArg, 10);
+    if (isSinceEquals) flags.since = parseInt(valueAfterEquals, 10);
 
     const isLimitEquals = arg.startsWith('--limit=');
-    if (isLimitEquals) flags.limit = parseInt(arg.split('=')[1], 10);
-
-    const isLimitFlag = arg === '--limit';
-    const shouldReadLimitNext = isLimitFlag && hasNextArg;
-    if (shouldReadLimitNext) flags.limit = parseInt(nextArg, 10);
+    if (isLimitEquals) flags.limit = parseInt(valueAfterEquals, 10);
 
     const isMaxAgentsEquals = arg.startsWith('--max-agents=');
-    if (isMaxAgentsEquals) flags.maxAgents = parseInt(arg.split('=')[1], 10);
+    if (isMaxAgentsEquals) flags.maxAgents = parseInt(valueAfterEquals, 10);
 
     const isPerAgentEquals = arg.startsWith('--per-agent=') || arg.startsWith('--max-tasks-per-agent=');
-    if (isPerAgentEquals) flags.maxTasksPerAgent = parseInt(arg.split('=')[1], 10);
+    if (isPerAgentEquals) flags.maxTasksPerAgent = parseInt(valueAfterEquals, 10);
 
     const isThreadEquals = arg.startsWith('--thread=');
-    if (isThreadEquals) flags.thread = parseInt(arg.split('=')[1], 10);
-
-    const isThreadFlag = arg === '--thread';
-    const shouldReadThreadNext = isThreadFlag && hasNextArg;
-    if (shouldReadThreadNext) flags.thread = parseInt(nextArg, 10);
+    if (isThreadEquals) flags.thread = parseInt(valueAfterEquals, 10);
 
     const isTaskEquals = arg.startsWith('--task=');
-    if (isTaskEquals) flags.task = parseInt(arg.split('=')[1], 10);
-
-    const isTaskFlag = arg === '--task';
-    const shouldReadTaskNext = isTaskFlag && hasNextArg;
-    if (shouldReadTaskNext) flags.task = parseInt(nextArg, 10);
+    if (isTaskEquals) flags.task = parseInt(valueAfterEquals, 10);
 
     const isParentEquals = arg.startsWith('--parent=');
     if (isParentEquals) {
-      flags.parent = parseParentFlagValue(arg.split('=')[1]);
-    }
-
-    const isParentFlag = arg === '--parent';
-    const shouldReadParentNext = isParentFlag && hasNextArg;
-    if (shouldReadParentNext) {
-      flags.parent = parseParentFlagValue(nextArg);
+      flags.parent = parseParentFlagValue(valueAfterEquals);
     }
 
     const isTypeEquals = arg.startsWith('--type=');
-    if (isTypeEquals) flags.type = arg.split('=')[1];
+    if (isTypeEquals) flags.type = valueAfterEquals;
 
     const isStatusEquals = arg.startsWith('--status=');
-    if (isStatusEquals) flags.status = arg.split('=')[1];
+    if (isStatusEquals) flags.status = valueAfterEquals;
 
     const isAllFlag = arg === '--all';
     if (isAllFlag) flags.all = true;
 
     const isAgentEquals = arg.startsWith('--agent=');
-    if (isAgentEquals) flags.agent = arg.split('=')[1];
-
-    const isAgentFlag = arg === '--agent';
-    const shouldReadAgentNext = isAgentFlag && hasNextArg;
-    if (shouldReadAgentNext) flags.agent = nextArg;
+    if (isAgentEquals) flags.agent = valueAfterEquals;
 
     const isTargetEquals = arg.startsWith('--target=');
-    if (isTargetEquals) flags.target = arg.split('=')[1];
-
-    const isTargetFlag = arg === '--target';
-    const shouldReadTargetNext = isTargetFlag && hasNextArg;
-    if (shouldReadTargetNext) flags.target = nextArg;
+    if (isTargetEquals) flags.target = valueAfterEquals;
 
     const isTierEquals = arg.startsWith('--tier=');
-    if (isTierEquals) flags.tier = arg.split('=')[1];
+    if (isTierEquals) flags.tier = valueAfterEquals;
 
     const isRuleEquals = arg.startsWith('--rule=');
-    if (isRuleEquals) flags.rule = arg.split('=')[1];
-
-    const isRuleFlag = arg === '--rule';
-    const shouldReadRuleNext = isRuleFlag && hasNextArg;
-    if (shouldReadRuleNext) flags.rule = nextArg;
+    if (isRuleEquals) flags.rule = valueAfterEquals;
 
     const isPrioEquals = arg.startsWith('--prio=') || arg.startsWith('--priority=');
-    if (isPrioEquals) flags.priority = parseInt(arg.split('=')[1], 10);
-
-    const isPrioFlag = arg === '--prio' || arg === '--priority';
-    const shouldReadPrioNext = isPrioFlag && hasNextArg;
-    if (shouldReadPrioNext) flags.priority = parseInt(nextArg, 10);
+    if (isPrioEquals) flags.priority = parseInt(valueAfterEquals, 10);
 
     const isNewFlag = arg === '--new';
     if (isNewFlag) flags.allowNew = true;
 
     const isPurposeEquals = arg.startsWith('--purpose=');
-    if (isPurposeEquals) flags.purpose = arg.split('=')[1];
+    if (isPurposeEquals) flags.purpose = valueAfterEquals;
 
     const isPidEquals = arg.startsWith('--pid=');
-    if (isPidEquals) flags.pid = parseInt(arg.split('=')[1], 10);
-
-    const isPidFlag = arg === '--pid';
-    const shouldReadPidNext = isPidFlag && hasNextArg;
-    if (shouldReadPidNext) flags.pid = parseInt(nextArg, 10);
+    if (isPidEquals) flags.pid = parseInt(valueAfterEquals, 10);
 
     const isTokensEquals = arg.startsWith('--tokens=');
-    if (isTokensEquals) flags.tokens = parseInt(arg.split('=')[1], 10);
+    if (isTokensEquals) flags.tokens = parseInt(valueAfterEquals, 10);
 
     const isPromptTokensEquals = arg.startsWith('--prompt-tokens=');
-    if (isPromptTokensEquals) flags.promptTokens = parseInt(arg.split('=')[1], 10);
+    if (isPromptTokensEquals) flags.promptTokens = parseInt(valueAfterEquals, 10);
 
     const isCompletionTokensEquals = arg.startsWith('--completion-tokens=');
-    if (isCompletionTokensEquals) flags.completionTokens = parseInt(arg.split('=')[1], 10);
+    if (isCompletionTokensEquals) flags.completionTokens = parseInt(valueAfterEquals, 10);
 
     const isCachedTokensEquals = arg.startsWith('--cached-tokens=');
-    if (isCachedTokensEquals) flags.cachedTokens = parseInt(arg.split('=')[1], 10);
+    if (isCachedTokensEquals) flags.cachedTokens = parseInt(valueAfterEquals, 10);
 
     const isCostEquals = arg.startsWith('--cost=');
-    if (isCostEquals) flags.cost = parseFloat(arg.split('=')[1]);
+    if (isCostEquals) flags.cost = parseFloat(valueAfterEquals);
 
     const isModelEquals = arg.startsWith('--model=');
-    if (isModelEquals) flags.model = arg.split('=')[1];
+    if (isModelEquals) flags.model = valueAfterEquals;
 
-    const valueAfterEquals = arg.slice(arg.indexOf('=') + 1);
     const isDescFlag = arg.startsWith('--desc=') || arg.startsWith('--description=');
     if (isDescFlag) flags.description = valueAfterEquals;
 
@@ -210,10 +161,6 @@ export const parseFlags = (args = []) => {
 
     const isNeedsEquals = arg.startsWith('--needs=');
     if (isNeedsEquals) flags.needs = valueAfterEquals;
-
-    const isNeedsFlag = arg === '--needs';
-    const shouldReadNeedsNext = isNeedsFlag && hasNextArg;
-    if (shouldReadNeedsNext) flags.needs = nextArg;
 
     const isReasonEquals = arg.startsWith('--reason=');
     if (isReasonEquals) flags.reason = valueAfterEquals;

@@ -48,3 +48,50 @@ test('task list: --sprint and --moscow filter the backlog', () => {
   const bySprintAndMoscow = runTeamCli(['task', 'list', '--sprint=s1', '--moscow=must', '--json'], false, cwd);
   assert.equal(bySprintAndMoscow.rows.length, 1);
 });
+
+test('task add: every value flag accepts the next word as well as an equals sign (#6746)', () => {
+  const cwd = makeTempProject();
+  const epic = runTeamCli(['task', 'add', 'Phase epic', '--sprint', 's1'], false, cwd);
+  const task = runTeamCli([
+    'task', 'add', 'Child', 'item',
+    '--parent', String(epic.id),
+    '--desc', 'Acceptance: a=b keeps its equals sign',
+    '--deps', `${epic.id}, 999`,
+    '--sprint', 's1', '--moscow', 'should', '--rule', 'r1', '--prio', '3', '--needs', 'deep'
+  ], false, cwd);
+
+  assert.equal(task.title, 'Child item', 'no flag value leaks into the title');
+  assert.equal(task.parent_id, epic.id);
+  assert.equal(task.description, 'Acceptance: a=b keeps its equals sign');
+  assert.deepEqual(task.dependencies, [epic.id, 999]);
+  assert.equal(task.sprint_tag, 's1');
+  assert.equal(task.moscow, 'should');
+  assert.equal(task.priority, 3);
+  assert.equal(task.rule_id, 'r1');
+  const titled = runTeamCli(['task', 'add', '--title', 'From a flag', '--description', 'long text'], false, cwd);
+  assert.equal(titled.title, 'From a flag');
+  assert.equal(titled.description, 'long text');
+});
+
+test('task list: --status, --sprint and --moscow filter with a space as well as an equals sign (#6746)', () => {
+  const cwd = makeTempProject();
+  runTeamCli(['task', 'add', 'In sprint', '--sprint', 's1', '--moscow', 'must'], false, cwd);
+  runTeamCli(['task', 'add', 'Other sprint', '--sprint', 's2', '--moscow', 'must'], false, cwd);
+  const blocked = runTeamCli(['task', 'add', 'Stuck', '--sprint', 's1', '--moscow', 'could'], false, cwd);
+  runTeamCli(['task', 'update', String(blocked.id), 'blocked', '--reason', 'waiting'], false, cwd);
+
+  const titles = (view) => view.rows.map((row) => row[view.cols.indexOf('title')]).sort();
+  assert.deepEqual(titles(runTeamCli(['task', 'list', '--sprint', 's1', '--moscow', 'must', '--json'], false, cwd)), ['In sprint']);
+  assert.deepEqual(titles(runTeamCli(['task', 'list', '--status', 'blocked', '--json'], false, cwd)), ['Stuck']);
+});
+
+test('task add: a value flag with no value is refused by name and creates nothing (#6746)', () => {
+  const cwd = makeTempProject();
+  const refused = runTeamCli(['task', 'add', 'Orphan', '--parent'], false, cwd);
+  assert.equal(refused.refused, true);
+  assert.match(refused.error, /--parent/);
+  const middle = runTeamCli(['task', 'add', 'Orphan', '--desc', '--sprint=s1'], false, cwd);
+  assert.match(middle.error, /--desc/);
+  const listed = runTeamCli(['task', 'list', '--all', '--json'], false, cwd);
+  assert.equal(listed.rows.length, 0);
+});

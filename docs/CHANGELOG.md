@@ -20,6 +20,12 @@ Full reference: [php-wordpress.md](php-wordpress.md). The `.php` extension reach
 - New dependency: `php-parser` 3.7.0, loaded only when a `.php` file is audited. Config keys `wordpress` and `php.version` are new.
 - Not covered for PHP: Forge, `patterns --forge`, `autofix`, PHP symbol reads, blast radius and trace.
 
+### Team task flags and `task update` statuses (chemx friction plan, epic #6745)
+
+- Every team flag that takes a value now accepts it after a space as well as after an equals sign: `task update 12 --add-dep 3,4` means `--add-dep=3,4`, and likewise `--deps`, `--rm-dep`, `--needs`, `--prio`, `--parent`, `--desc`, `--title`, `--sprint`, `--moscow`, `--reason`, `--repo`, `--limit`, `--agent`, `--status`, `--target`, `--duplicate-of`, `--cancel`, `--as` and the other value flags. One helper (`normalizeValueFlags`, `cli/team/team-flag-values.js`) rewrites the space form to the `=` form before `parseFlags`, the positional split and the repo flags read it. Before, only `--add-dep=ids` parsed: `--add-dep 1555,1556` left `1555,1556` as a positional, which `task update` wrote as the status of seven tasks (#6746).
+- `task update <id> <status>` and `--status` accept only `queued`, `in_progress`, `review`, `blocked`, `done` and `cancelled`. Any other word (including `completed` and `duplicate`, and an empty `--status=`) prints the list, exits 1 and writes nothing, not even a `--deps` edit in the same command. `done` still runs the completion gate (#6746).
+- A value flag with no value (the last word, or followed by another flag) is refused by name before any db opens, with exit 1; a value that starts with `-` must use the `=` form. `--ignore-deps` keeps its `=<reason>` form. Values keep an equals sign inside them (`--as=@a=b`), which `--as=`, `--to=`, `--agent=`, `--target=` and the like used to cut at the second `=` (#6746).
+
 ## Unreleased (feat/job-line, 2026-10-13)
 
 ### Audit rules and gates (review fixes, 2026-10-15, epic #6088)

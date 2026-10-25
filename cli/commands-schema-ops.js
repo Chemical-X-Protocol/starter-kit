@@ -37,7 +37,7 @@ export const OPS_COMMANDS = [
     brief: 'Tasks, file locks, DMs and feed',
     usage: 'chemx team <status|task|lock|unlock|feed|post|inbox|dm|tokens|benchmark> [options]',
     summary: 'Multi-agent coordination layer backed by SQLite (.chemx/index.db).',
-    description: 'Task queues, status transitions, AST verification on completion and file locks. `tokens` and `benchmark` are team subcommands. Run `chemx team task --help` for task detail.',
+    description: 'Task queues, status transitions, AST verification on completion and file locks. `tokens` and `benchmark` are team subcommands. Run `chemx team task --help` for task detail. An option with a value takes it after a space or an equals sign (`--prio 2`, `--prio=2`).',
     flags: [
       { flag: '--as=<@handle>', desc: 'Agent identity handle (e.g. @claude)' },
       { flag: '--target=<path>', desc: 'Target file path for task AST verification' },
