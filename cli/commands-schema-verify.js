@@ -36,7 +36,7 @@ export const VERIFY_COMMANDS = [
       { flag: '--slow', desc: 'Run only the slow lane (docs/test-lanes.md)' },
       { flag: '--all', desc: 'Run both lanes' },
       { flag: '-t <name>', desc: 'Only tests whose name matches (alias --filter); extra words join the name, paths and spec files stay targets' },
-      { flag: '--changed', desc: 'Run specs affected by changed files, by the import graph, plus the meta specs; a clean tree compares with the merge base of origin/main' },
+      { flag: '--changed', desc: 'Run specs affected by changed files, by the import graph, plus the meta specs; a clean tree compares with the merge base of origin/main; a file that loads by a computed path widens the run unless declared open-ok (docs/test-lanes.md)' },
       { flag: '--base=<rev>', desc: 'With --changed: compare from the merge-base with this revision (default HEAD, or the upstream default branch on a clean tree)' },
       { flag: '--related <files...>', desc: 'Run specs affected by the files you name' },
       { flag: '--depth=<n>', desc: 'With --changed or --related: only specs within n import hops (deeper ones are reported as not run)' },
