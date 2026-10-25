@@ -36,8 +36,11 @@ export const resolveNudgePromotion = (root, env = process.env) => {
   }
 };
 
+// A precision nudge (promotable: false) marks a shape chemx covers only in part: the blanket
+// guardNudges: "block" leaves it advisory, and only listing its id in guardNudgeBlock blocks it.
 export const isPromotedNudge = (rule, promotion) => {
   const isNudge = rule.severity === 'nudge';
-  const isPromoted = Boolean(promotion) && (promotion.all || promotion.ids.includes(rule.id));
-  return isNudge && isPromoted;
+  const isListed = Boolean(promotion) && promotion.ids.includes(rule.id);
+  const isBlanketPromoted = Boolean(promotion) && promotion.all && rule.promotable !== false;
+  return isNudge && (isListed || isBlanketPromoted);
 };

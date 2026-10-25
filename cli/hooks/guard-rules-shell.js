@@ -5,6 +5,8 @@
 import { fileOperands, gitSubcommand, stdoutWrites, globToSubstring, optionValue } from './guard-args.js';
 import { isRepoWritePath, isRepoPath, isUnresolvedInRepo } from './guard-paths.js';
 import { interpreterWrites, createdScriptFiles } from './interpreter-writes.js';
+import { findRoots, findShape } from './guard-find.js';
+import { SHOW_SCRIPTING_FLAGS } from './guard-shapes.js';
 
 const IN_PLACE_FLAG = /^-(?![MmIeE])[a-zA-Z]*i(?:\.[\w~]+)?$/;
 const SED_SCRIPT_FLAGS = new Set(['-e', '--expression', '-f', '--file']);
@@ -12,9 +14,6 @@ const PERL_SCRIPT_FLAG = /^-[a-zA-Z]*[eEIMm]$/;
 const SIMPLE_TEXT = /^[^\\[\]*^$.+?(){}|&]*$/;
 const SUBSTITUTION = /^s([/|#,@])(.*?)\1(.*?)\1[gI]*$/;
 const TEST_VALUE_FLAGS = new Set(['--test-name-pattern', '--test-skip-pattern', '--test-reporter', '--test-reporter-destination', '--test-concurrency', '--test-timeout', '--import', '--require', '-r', '--loader', '--experimental-loader']);
-const SHOW_SCRIPTING_FLAGS = /^(?:--(?:format|pretty)(?:=.*)?|--name-only|--name-status|--no-patch|--quiet|-s)$/;
-const FIND_MUTATING_TESTS = /^-(?:delete|exec|execdir|ok|okdir|fprint|fprintf|fls)$/;
-
 const writeHint = (file, isAppend) => (isAppend
   ? `chemx write ${file} --append - <<'EOF'`
   : `chemx write ${file} - <<'EOF' (add --overwrite when the file exists)`);
@@ -148,18 +147,6 @@ const showParts = ({ rest }) => {
   return { rev, paths, hasPatch: rest.includes('-p') || rest.includes('--patch') };
 };
 
-const findRoots = (args) => {
-  const end = args.findIndex((arg) => arg.startsWith('-') || arg === '(' || arg === '!');
-  const roots = end === -1 ? args : args.slice(0, end);
-  return roots.length > 0 ? roots : ['.'];
-};
-
-const isPlainRepoFind = ({ tool, args }, context) => {
-  const isFind = tool === 'find';
-  const isMutating = args.some((arg) => FIND_MUTATING_TESTS.test(arg));
-  return isFind && !isMutating && findRoots(args).some((root) => isRepoPath(root, context));
-};
-
 export const SHELL_REWRITE_RULES = [
   {
     id: 'shell-redirect-write',
@@ -211,6 +198,9 @@ export const SHELL_REWRITE_RULES = [
     use: (invocation) => {
       const { files, name } = nodeTestParts(invocation);
       const target = files.length > 0 ? files.join(' ') : '<file>';
+      const isOneSpec = files.length === 1;
+      // One spec: also name the forms that show one assertion (-t) and the whole node:test output (--raw), K1 #6745.
+      if (isOneSpec) return `chemx test ${target} ${name ? `-t "${name}"` : '-t "<name>"'}  (--raw prints the full node:test output)`;
       return `chemx test ${target}${name ? ` -t "${name}"` : ''}`;
     },
   },
@@ -229,7 +219,7 @@ export const SHELL_REWRITE_RULES = [
   },
   {
     id: 'raw-find',
-    matches: (invocation, command, context) => isPlainRepoFind(invocation, context),
+    matches: (invocation, command, context) => findShape(invocation, context) !== null,
     use: ({ args }) => {
       const name = optionValue(args, ['-name', '-iname', '-path', '-ipath']);
       const needle = name === null ? findRoots(args)[0] : globToSubstring(name);

@@ -89,3 +89,25 @@ test('an unreadable .chemxrc means no allow-list, never a crash', async () => {
     assert.match(advice('node tests/run-tests.mjs', contextAt(repo)), /chemx test/);
   });
 });
+
+// K11 #6756: guard.allow is the general name of the list; test.runners keeps working as its alias.
+test('guard.allow lists the runner too: no nudge, with the call as typed or a path-resolved spelling', async () => {
+  await withHarnessRepo(({ repo }) => {
+    fs.writeFileSync(path.join(repo, '.chemxrc'), JSON.stringify({ guard: { allow: ['node tests/run-tests.mjs'] } }));
+    assert.equal(advice('node tests/run-tests.mjs', contextAt(repo)), null);
+    assert.equal(advice('node ./tests/run-tests.mjs tests/alpha.test.mjs', contextAt(repo)), null);
+    assert.equal(advice('cd tests && node run-tests.mjs', contextAt(repo)), null);
+    assert.equal(decide('node tests/run-tests.mjs', contextAt(repo)).nudged, undefined);
+  });
+});
+
+test('both lists apply together; an entry that names another script leaves the nudge in place', async () => {
+  await withHarnessRepo(({ repo }) => {
+    fs.writeFileSync(path.join(repo, '.chemxrc'), JSON.stringify({ guard: { allow: ['node scripts/other.mjs'] }, test: { runners: ['node tests/run-tests.mjs'] } }));
+    assert.equal(advice('node tests/run-tests.mjs', contextAt(repo)), null);
+  });
+  await withHarnessRepo(({ repo }) => {
+    fs.writeFileSync(path.join(repo, '.chemxrc'), JSON.stringify({ guard: { allow: ['node scripts/other.mjs'] } }));
+    assert.match(advice('node tests/run-tests.mjs', contextAt(repo)), /chemx test/);
+  });
+});

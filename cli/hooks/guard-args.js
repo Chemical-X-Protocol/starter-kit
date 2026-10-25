@@ -12,6 +12,19 @@ export const gitSubcommand = ({ tool, args }) => {
   return { sub: args[index] ?? null, rest: args.slice(index + 1) };
 };
 
+// The git options before the subcommand (`-C dir`, `-c k=v`), and the directory `-C` names (null when absent).
+export const gitGlobalFlags = (invocation) => {
+  const { rest } = gitSubcommand(invocation);
+  return invocation.args.slice(0, invocation.args.length - rest.length - 1);
+};
+
+export const gitDirectory = (invocation) => {
+  const flags = gitGlobalFlags(invocation);
+  const indexes = flags.map((flag, index) => (flag === '-C' ? index : -1)).filter((index) => index !== -1);
+  const last = indexes.at(-1);
+  return last === undefined ? null : flags[last + 1] ?? null;
+};
+
 export const fileOperands = (args, valueFlags) => {
   const operands = [];
   for (let index = 0; index < args.length; index += 1) {

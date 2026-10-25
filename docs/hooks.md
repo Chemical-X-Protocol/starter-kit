@@ -45,6 +45,8 @@ A blocked call is denied before it runs. The denial names the exact chemx call, 
 
 The native-tool rows apply when `nativeFileTools` is `block` (environment `CHEMX_NATIVE_FILE_TOOLS`, then `.chemxrc`). The default is `warn`: the call runs and the model is shown the chemx replacement. Search rules are on unless `CHEMX_GUARD_SEARCH=0`.
 
+A deny is kept only where the chemx call is a strict superset for the exact command (K11, #6756). The plain forms in the project root stay denied: `git log`, `git diff` (piped: `chemx d --full`), `git show <rev>` and `git show <rev>:<path>`, `grep -r`, `grep` on a repo source file, `find` with name tests, `cat`/`head`/`tail`/`sed` on a repo source file, `node --test`, raw runners. A shape chemx covers only in part is a nudge, and a shape it has nothing for runs silently: see [Precision](#precision-deny-only-what-chemx-covers).
+
 ### Shell write coverage
 
 Covered writers: `>`, `>>`, `>|`, `&>` redirects (heredocs included), `tee`, `sed -i`, `perl -i` and `awk -i inplace`. Not covered, and allowed even on repo files: `cp`, `mv`, `install`, `patch`, `git apply`, `git checkout -- <file>`, `dd`, `truncate`, editors, scripts that write on their own, and any target whose path is an unresolved variable, with one exception below. The guard is a nudge toward chemx's logged edits, not a sandbox.
@@ -65,11 +67,42 @@ A nudge lets the call run and shows the model a short note with the replacement 
 | :--- | :--- |
 | `git status` | `chemx status` |
 | `git add`, `git commit` | `chemx commit` |
-| `sleep`, `node -e` with `setTimeout`, `timeout <n> bash -c ...` (polling loops that sleep are caught by the `sleep` inside) | `chemx wait` |
+| `sleep` longer than 120 s, or beside a `chemx team` call or inside an `until`/`while` loop; `node -e` with `setTimeout`; `timeout <n> bash -c ...` | `chemx wait` |
 | `ls` of a repo directory | `chemx f "<dir>"` |
 | `node tests/run-tests.mjs` (a harness runner `chemx test` understands) | `chemx test [tests/<name>.test.mjs]`, unless `.chemxrc` lists the runner (below) |
 
-A nudge is active only while the running chemx has the named command. Until `chemx status`, `chemx commit` or `chemx wait` exist in the kit you run, the matching nudge stays silent rather than pointing at something missing. A native-tool warning (`nativeFileTools=warn`) is also advice only.
+A nudge is active only while the running chemx has the named command. Until `chemx status`, `chemx commit` or `chemx wait` exist in the kit you run, the matching nudge stays silent rather than pointing at something missing. A native-tool warning (`nativeFileTools=warn`) is also advice only. A `sleep` of up to 120 seconds is a pause, not a wait on a task or a lock, and is silent. `guard.plainGit` (below) drops the git status/add/commit nudges.
+
+### Precision: deny only what chemx covers
+
+Task #6756 (K11, from thirteen agents on one epic). A rule denies a tool when chemx replaces it, and a denied compound command never ran, so a wrong deny cost whole command lines. The guard now checks the exact argument shape (`guard-refine.js`, keyed by rule id). If the suggested chemx call is not a strict superset, the call runs and the model is shown the closest chemx form; if chemx has nothing for the shape, it runs silently.
+
+| You ran | Decision | The note says |
+| :--- | :--- | :--- |
+| `git -C <dir> log`, `diff`, `show` (`nudge-git-c`) | nudge | `chemx log --root <dir> ...`, `chemx d --root <dir> ...`, `chemx show --root <dir> <rev>`, `chemx read --root <dir> <rev>:<path>`: `--root` runs the command as if started in that directory |
+| `git log A..B`, `A...B` (`nudge-git-log-range`) | nudge | `chemx log -n 50 A..B`: chemx log shows 10 commits unless `-n` says more |
+| `git show` with two revisions or a flag chemx show lacks, as `-U5` (`nudge-git-show`) | nudge | `chemx show <rev> --patch` or `chemx read <rev>:<path>` |
+| `git diff --name-only`, `--name-status` shown to the terminal (`nudge-git-diff-names`) | nudge | `chemx d --name-only ...`. Piped, in `$(...)` or redirected to a file it is scripting and silent |
+| `grep -c` on a repo source file (`nudge-grep-count`) | nudge | `chemx q -g "<text>" <file>`: the header counts the matches |
+| `grep -o` (`nudge-grep-only`) | nudge | `chemx q -g "<text>" <file> -o --unique` (`--regex` for a pattern) |
+| `grep -r` in a path outside the project that a chemx project owns (`nudge-grep-outside`) | nudge | `chemx q -g "<text>" <absolute path>` |
+| `find` with `-maxdepth`, `-type d`, `-o`, `!` (`nudge-find`) | nudge | `chemx f "<text>"`, which lists files by path text and cannot limit depth or list directories |
+| `grep` with `-v`, `-w`, `-x`, `-L`, `-q`, `-P`, `-z`, `-b` | silent | nothing in `chemx q -g` filters that way |
+| `grep -r` in `node_modules`, `dist`, a path no chemx project owns | silent | chemx q does not search there |
+| `find` with `-mtime`, `-size`, `-newer`, `-perm`, `-empty`, `-regex`, `-printf` | silent | chemx f cannot see those |
+| `tail -f` of a repo file | silent | chemx read cannot follow a file |
+| `command -v tool`, `tool --version`, `-v`, `-h`, `--help` | silent | asks whether a tool exists, runs nothing |
+| `git rev-parse`, `rebase`, `push`, `worktree`, `branch`, `fetch`, `checkout`, `merge`, `cherry-pick` | silent | chemx has no wrapper, and the guard has no rule for them |
+
+Precision nudges mark shapes chemx covers only in part, so `guardNudges: "block"` leaves them advice. Listing one id in `guardNudgeBlock` blocks it. A bypass comment still allows any of them and is still logged.
+
+### A denied compound command
+
+A command line is judged as a whole: one denied segment keeps all of it from running. The denial names that segment and its chemx call, says the other segments did not run, and lists up to three of them (`cd`, `export` and similar are left out), so the line can be sent again without the denied segment:
+
+```
+chemx guard: `git log -3` must go through chemx. Use: chemx log [-n N] [git log args]. The command was denied as a whole, so its other segments did not run: `git worktree add ../wt -b fix/x origin/main`, `pnpm install`. Run them again without the denied segment, or swap in the chemx call above. If chemx truly cannot do this, append `# chemx-bypass: <reason>`; ...
+```
 
 ### Promote nudges to blocks
 
@@ -85,7 +118,20 @@ blocks every nudge, or list rule ids to block only those:
 { "guardNudgeBlock": ["nudge-git-status", "nudge-wait"] }
 ```
 
-Rule ids: `nudge-git-status`, `nudge-git-add`, `nudge-git-commit`, `nudge-project-runner`, `nudge-wait`, `nudge-ls`. `CHEMX_GUARD_NUDGES=block` or `nudge` overrides the config for one process. An unreadable config means no promotion.
+Rule ids: `nudge-git-status`, `nudge-git-add`, `nudge-git-commit`, `nudge-project-runner`, `nudge-wait`, `nudge-ls`, `nudge-git-diff-names`, and the precision nudges `nudge-git-c`, `nudge-git-log-range`, `nudge-git-show`, `nudge-grep-count`, `nudge-grep-only`, `nudge-grep-outside`, `nudge-find` (these only when listed by id). `CHEMX_GUARD_NUDGES=block` or `nudge` overrides the config for one process. An unreadable config means no promotion.
+
+### Commands the guard leaves alone: `guard.allow`
+
+`.chemxrc` can list command prefixes that run with no deny, no nudge and no bypass comment:
+
+```json
+{ "guard": { "allow": ["node tests/run-tests.mjs", "node --test cli/hooks/guard-rewrites.spec.js"], "plainGit": true } }
+```
+
+- An entry matches word by word from the start of a command (`./` is ignored, and env/`timeout`/`nice` wrappers are looked through): `git log` allows `git log -3` but not `git logger`, and `node --test cli/a.spec.js` does not allow another spec. It applies to the segment, so `cd x && git log` is covered.
+- The file is read from the command's directory up to the project root; an unreadable one lists nothing. `test.runners` (below) is the same list under its older name: both keys are read, in every directory.
+- `guard.plainGit: true` drops the `git status`, `git add` and `git commit` nudges, for a repo whose protocol mandates plain git. Nothing else changes.
+- The list is yours to keep short: an allowed prefix skips every rule for that segment, as a bypass comment would, but it is not logged.
 
 ### Runners the guard leaves alone
 
@@ -161,4 +207,4 @@ If chemx truly cannot do the job, file it: `chemx team task add "Friction: <what
 
 ## Where the code lives
 
-`cli/hooks/claude-pre-tool.js` (decision), `native-edit-lock.js` and `declared-identity.js` (native edits and lease ownership), `guard-rules.js`, `guard-rules-shell.js`, `guard-rules-reads.js`, `guard-rules-nudge.js` (rules), `guard-paths.js`, `repo-membership.js`, `native-tool-policy.js` (scope), `guard-config.js` (nudge promotion), `guard-route.js` (launch routing), `bypass-log.js`, `install-hooks-*.js` and `cli/doctor/check-host.js`. Specs sit beside them: `guard-rewrites.spec.js`, `guard-native-bypass.spec.js`, `install-hooks-project.spec.js`, `cli/doctor/doctor-hooks.spec.js`.
+`cli/hooks/claude-pre-tool.js` (decision), `native-edit-lock.js` and `declared-identity.js` (native edits and lease ownership), `guard-rules.js`, `guard-rules-shell.js`, `guard-rules-reads.js`, `guard-rules-nudge.js` (rules), `guard-refine.js`, `guard-shapes.js`, `guard-find.js` (argument shapes: precision), `guard-allow.js` (`guard.allow`, `guard.plainGit`, tool probes), `guard-paths.js`, `repo-membership.js`, `native-tool-policy.js` (scope), `guard-config.js` (nudge promotion), `guard-route.js` (launch routing), `bypass-log.js`, `install-hooks-*.js` and `cli/doctor/check-host.js`. Specs sit beside them: `guard-rewrites.spec.js`, `guard-native-bypass.spec.js`, `install-hooks-project.spec.js`, `cli/doctor/doctor-hooks.spec.js`.

@@ -2,11 +2,13 @@
 // is nudged toward `chemx test`: one file at a time, failures only, one run at a time on the job line.
 // .chemxrc can list runners the guard leaves alone: { "test": { "runners": ["node tests/run-tests.mjs"] } },
 // each entry a `node <script>` call whose script is read relative to the .chemxrc that lists it.
+// `guard.allow` (guard-allow.js) is the same list under its general name: either key works here, and
+// an entry there also matches the call as typed, whatever it runs (K11 #6756).
 import fs from 'node:fs';
 import path from 'node:path';
-import { findAndLoadConfigFile } from '../config/loader.js';
 import { isHarnessRunnerSource } from '../build/detector.js';
-import { isInsideDirectory, isRepoPath } from './guard-paths.js';
+import { isRepoPath } from './guard-paths.js';
+import { directoriesUpTo, guardSettingsAt } from './guard-allow.js';
 
 export const PROJECT_RUNNER_ADVICE = 'chemx test [tests/<name>.test.mjs] (runs this repo\'s own tests/run-tests.mjs on the job line, one file at a time, failures only); '
   + 'to keep calling the runner yourself, list it in .chemxrc: { "test": { "runners": ["node tests/run-tests.mjs"] } }';
@@ -26,15 +28,6 @@ const runnerPathOf = (invocation, context) => {
   return isRunnerInProject ? path.resolve(context.cwd, script) : null;
 };
 
-const runnersListedIn = (dir) => {
-  try {
-    const listed = findAndLoadConfigFile(dir).raw?.test?.runners;
-    return Array.isArray(listed) ? listed.filter((entry) => typeof entry === 'string') : [];
-  } catch { // chemx-allow: best-effort an unreadable config lists nothing, so the nudge stays advisory
-    return [];
-  }
-};
-
 const isEntryForScript = (entry, configDir, scriptAbs) => {
   const [tool, ...rest] = entry.trim().split(/\s+/);
   const entryScript = rest.find((word) => !word.startsWith('-'));
@@ -42,21 +35,8 @@ const isEntryForScript = (entry, configDir, scriptAbs) => {
 };
 
 // The script's directory and every directory above it up to the project root.
-const directoriesUpTo = (start, root) => {
-  const dirs = [];
-  let dir = start;
-  while (isInsideDirectory(dir, root)) {
-    dirs.push(dir);
-    const parent = path.dirname(dir);
-    const isFilesystemRoot = parent === dir;
-    if (isFilesystemRoot) break;
-    dir = parent;
-  }
-  return dirs;
-};
-
 const isListed = (scriptAbs, root) => directoriesUpTo(path.dirname(scriptAbs), root)
-  .some((dir) => runnersListedIn(dir).some((entry) => isEntryForScript(entry, dir, scriptAbs)));
+  .some((dir) => guardSettingsAt(dir).allow.some((entry) => isEntryForScript(entry, dir, scriptAbs)));
 
 export const isUnlistedProjectRunner = (invocation, command, context) => {
   const scriptAbs = runnerPathOf(invocation, context);

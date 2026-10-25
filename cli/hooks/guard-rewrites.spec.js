@@ -91,6 +91,8 @@ const ALLOW_CASES = [
   'chemx q foo | grep bar', 'cat /tmp/x | awk \'{print $1}\'', 'git diff --name-only | grep src', 'echo a b | head -1',
   'grep -n foo /tmp/x.js', 'grep foo build.log', 'awk \'{print $1}\' build.log',
   'echo "git status; sleep 5; find . -name x"',
+  // K11 #6756: a short sleep is a pause, not a wait on a task or a lock.
+  'sleep 5', 'sleep 120',
 ];
 
 for (const command of ALLOW_CASES) {
@@ -113,7 +115,7 @@ const NUDGE_CASES = [
   ['git -C apps/x status --short', /chemx status/],
   ['git add src/a.ts', /chemx commit/],
   ['git commit -m "msg"', /chemx commit/],
-  ['sleep 5', /chemx wait/],
+  ['sleep 300', /chemx wait/],
   ['node -e "setTimeout(() => process.exit(0), 1000)"', /chemx wait/],
   ["timeout 60 bash -c 'until test -f x; do sleep 1; done'", /chemx wait/],
   ['ls src', /chemx f "src"/],

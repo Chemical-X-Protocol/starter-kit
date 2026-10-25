@@ -51,7 +51,9 @@ export const STRUCTURE_CASES = [
   ['(cd apps/x && npm run lint)', 'deny'],
   ['echo "$(git log -3)"', 'deny'],
   ["bash -c 'npm run typecheck'", 'deny'],
-  ['git -C apps/x diff --stat', 'deny'],
+  // K11 #6756: git -C <dir> reads another repo or worktree; the call runs with a `chemx d --root <dir>` nudge.
+  ['git -C apps/x diff --stat', 'allow'],
+  ['cd apps/x && git diff --stat', 'deny'],
   ['git diff --name-only HEAD~1', 'allow'],
   ['git log -1 --format=%H', 'allow'],
   ['pnpm install && pnpm --filter x build:youmeos', 'deny'],

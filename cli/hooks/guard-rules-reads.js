@@ -1,7 +1,7 @@
 // Deny rules for reads and searches that bypass `cat`/`grep`: stdin redirects (`wc -l < file`),
 // `xargs cat < list`, `git grep` and `git cat-file`. Each `use` names the chemx call to make.
 
-import { fileOperands, gitSubcommand, inputRedirectTargets, optionValue, stdoutWrites } from './guard-args.js';
+import { fileOperands, gitDirectory, gitSubcommand, inputRedirectTargets, optionValue, stdoutWrites } from './guard-args.js';
 import { isRepoPath, isRepoSourcePath } from './guard-paths.js';
 
 const STDIN_READERS = new Set(['wc', 'nl', 'sort', 'uniq', 'cut', 'tac', 'rev', 'fold', 'od', 'xxd', 'hexdump', 'strings', 'md5sum', 'sha1sum', 'sha256sum', 'cksum', 'base64', 'diff', 'jq']);
@@ -16,14 +16,9 @@ const baseName = (word) => String(word ?? '').split('/').pop();
 export const stdinSources = (command, context) => inputRedirectTargets(command).filter((target) => isRepoSourcePath(target, context));
 
 // `git -C dir <sub>` runs in dir, else in the command's cwd: only a repo inside the project counts.
-const gitRunsInRepo = (invocation, context) => {
-  const { rest } = gitSubcommand(invocation);
-  const globalFlags = invocation.args.slice(0, invocation.args.length - rest.length - 1);
-  const dir = optionValue(globalFlags, ['-C']) ?? '.';
-  return isRepoPath(dir, context);
-};
+const gitRunsInRepo = (invocation, context) => isRepoPath(gitDirectory(invocation) ?? '.', context);
 
-const gitGrepPattern = ({ rest }) => optionValue(rest, ['-e', '--regexp']) ?? fileOperands(rest, GIT_GREP_VALUE_FLAGS)[0] ?? '<text>';
+export const gitGrepPattern = ({ rest }) => optionValue(rest, ['-e', '--regexp']) ?? fileOperands(rest, GIT_GREP_VALUE_FLAGS)[0] ?? '<text>';
 
 const catFileSpec = ({ rest }) => rest.find((arg) => REV_PATH.test(arg)) ?? null;
 

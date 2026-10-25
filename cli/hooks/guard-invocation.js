@@ -48,7 +48,7 @@ const skipOptions = (argv, start, valueFlags) => {
   return index;
 };
 
-const stripWrappers = (argv) => {
+export const stripWrappers = (argv) => {
   let rest = argv;
   for (let guard = 0; guard < 8; guard += 1) {
     const name = baseName(rest[0]);
