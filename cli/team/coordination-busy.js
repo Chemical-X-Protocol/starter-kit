@@ -14,6 +14,7 @@ import fs from 'node:fs';
 import { isSqliteBusyError } from './team-db-transaction.js';
 
 const PATCHED = Symbol.for('chemx.coordination.busyRetry');
+const NO_RETRY = Symbol.for('chemx.coordination.noBusyRetry');
 const STMT_METHODS = ['run', 'get', 'all'];
 const DEFAULT_DEADLINE_MS = 30_000;
 
@@ -82,10 +83,28 @@ const holderHint = (db) => {
   return holders ? `db open in ${holders}; the writer is not identified` : UNKNOWN_HOLDER;
 };
 
+/**
+ * Runs fn with the busy retry off for this handle: a statement that finds the db busy fails after SQLite's
+ * own busy_timeout, not the 30 s deadline. For work that must never wait on another holder (#6769: seeding
+ * an index from a parent db that another chemx may hold); nested calls keep the flag until the outermost returns.
+ */
+export const withoutBusyRetry = (db, fn) => {
+  const wasOff = db[NO_RETRY] === true;
+  db[NO_RETRY] = true;
+  try {
+    return fn();
+  } finally {
+    const isOutermost = !wasOff;
+    if (isOutermost) delete db[NO_RETRY];
+  }
+};
+
 /** Runs fn, retrying on SQLITE_BUSY with jittered backoff until the deadline. */
 export const retryBusy = (db, fn) => {
   const isInTransaction = db.isTransaction === true;
-  if (isInTransaction) return fn();
+  const isRetryOff = db[NO_RETRY] === true;
+  const isPassedThrough = isInTransaction || isRetryOff;
+  if (isPassedThrough) return fn();
   const start = Date.now();
   const limit = deadlineMs();
   let attempt = 0;

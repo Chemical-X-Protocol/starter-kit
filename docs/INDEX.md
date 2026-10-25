@@ -4,7 +4,7 @@ Reference pages for behavior that specs pin. Design notes and plans live under `
 
 | Page | Covers |
 | :--- | :--- |
-| [agent-workspace.md](agent-workspace.md) | `chemx scratch` (a git-ignored directory per agent), `chemx worktree add/remove` (`--link-modules` builds a real `node_modules` of symlinks, `--install`, squash-aware branch cleanup) and `chemx mutate` (apply a sed substitution or diff, run a command, restore byte for byte; exit codes and what it does not cover) |
+| [agent-workspace.md](agent-workspace.md) | `chemx scratch` (a git-ignored directory per agent), `chemx worktree add/remove` (`--link-modules` builds a real `node_modules` of symlinks, `--install`, the index seeded from the main checkout's rows for unchanged files, squash-aware branch cleanup) and `chemx mutate` (apply a sed substitution or diff, run a command, restore byte for byte; exit codes and what it does not cover) |
 | [audit-gates.md](audit-gates.md) | The one rule every audit gate applies (pre-commit hook, ratchet, `task done`, `patch`/`write`, and the base-ref delta `audit --delta-base` / `verify --changed --base`), what each guarantees and what it does not |
 | [CHANGELOG.md](CHANGELOG.md) | What changed, grouped by area, with task ids, behavior changes and known issues. New entries are written as one file per change in `changelog.d/` (see its README.md) and folded in with `chemx changelog` |
 | [ci.md](ci.md) | `chemx ci`: a pull request's checks and merge state through gh, exit codes 0/1/3/2, `--wait`, and `--protection` (does the default branch require checks; why `gh pr merge --auto` merged kit PR #12 at once; how to protect `main`) |

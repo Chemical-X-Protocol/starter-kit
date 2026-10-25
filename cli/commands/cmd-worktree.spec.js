@@ -64,7 +64,8 @@ const run = (args, cwd, extra = {}) => {
 
 test('parseWorktreeArgs: action, path and every flag in both forms', () => {
   const full = parseWorktreeArgs(['add', '../t/x', '-b', 'fix/x', '--from', 'origin/dev', '--link-modules', '--install']);
-  assert.deepEqual(full, { action: 'add', target: '../t/x', branch: 'fix/x', from: 'origin/dev', linkModules: true, install: true, force: false, error: null });
+  assert.deepEqual(full, { action: 'add', target: '../t/x', branch: 'fix/x', from: 'origin/dev', linkModules: true, install: true, noSeedIndex: false, force: false, error: null });
+  assert.equal(parseWorktreeArgs(['add', '../t/x', '-b', 'fix/x', '--no-seed-index']).noSeedIndex, true);
   const inline = parseWorktreeArgs(['add', '--branch=fix/y', '--from=origin/main', '../t/y']);
   assert.equal(inline.branch, 'fix/y');
   assert.equal(inline.from, 'origin/main');

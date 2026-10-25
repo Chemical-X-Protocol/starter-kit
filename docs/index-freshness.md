@@ -31,3 +31,45 @@ A read-only reader such as q that finds the index write lock held waits instead 
 - Lock still held at the deadline: the rows are served as they were, index status inconclusive with a busy reason, exit 3.
 
 Not guaranteed: any particular wait time, or that a holder releases. Spec: cli/index-freshness.spec.js sets a 1500 ms deadline to test the exit 3 path.
+
+## Measured 2026-10-25: a fresh worktree's first q, seeded from the main checkout (#6769)
+
+A linked worktree starts with no index, and the main checkout's db cannot be copied (it holds the board and is stamped for its root), so its first index-backed command parsed every file. Since #6769 the index is seeded from the main checkout's rows for every file whose bytes match (`docs/agent-workspace.md`, worktree section). Three rounds per case, **interleaved** (before, lazy, eager, repeat) so the other agents' load falls on every case alike; `uptime` load average per round is given. Wall clock is the whole `chemx q <symbol>` process (node start included), stamp is the answer's own `synced ... Tms`. Medians, with the three values.
+
+- **before**: plain `git worktree add --detach HEAD`, then the released chemx (no seed).
+- **lazy**: the same plain worktree, then the first `q` of the #6769 chemx (the seed runs inside the sync).
+- **eager**: `chemx worktree add <path> -b bench/n --from HEAD` of the #6769 chemx (the seed runs in the add), then the first `q`.
+
+### Kit, 1,553 files, main checkout index current (load 4.5-5.0)
+
+| Case | First q wall | Stamp | Re-indexed | Second q wall |
+| :--- | :-: | :-: | :-: | :-: |
+| before | 5854 (5616, 5854, 6843) | 5416 | 1553 | 614 |
+| lazy | 966 (860, 966, 1078) | 422 | 0 | 731 |
+| eager | 680 (643, 680, 805); the add took 648-702 ms, of which the seed 140-188 | 172 | 0 | 589 |
+
+The seed line read `index: seeded 1553 of 1553 files from <main>`. The lazy stamp includes the seed and the one-time hash check of every seeded row (`1553 racy rows hash-checked`): a row synced within 2 s of its file's mtime is racy by the clock (index-row-check.js) and is hashed once, then trusted by mtime and size.
+
+### Kit, main checkout index a few hours behind its disk, 1,390 of 1,553 files (load 7.4-9.9)
+
+| Case | First q wall | Stamp | Re-indexed | Second q wall |
+| :--- | :-: | :-: | :-: | :-: |
+| before | 5832 (5403, 5832, 6204) | 5270 | 1553 | 584 |
+| lazy | 2658 (2377, 2658, 2888) | 1994 | 313 | 827 |
+| eager | 2486 (2228, 2486, 2501); add 705-765, seed 163-202 | 1614 | 313 | 601 |
+
+`seeded 1240 of 1390`: a parent index lends only the files it has, and the first q parses the rest (313 files at about 5 ms each under this load). A `chemx q` in the main checkout before the worktree is made brings its index up to date (the table above).
+
+### do-it-for-the-xp, 1,644 files, main checkout index current (load 7.1-9.0)
+
+| Case | First q wall | Stamp | Re-indexed | Second q wall |
+| :--- | :-: | :-: | :-: | :-: |
+| before | 11293 (11042, 11293, 12519) | 10165 | 1644 | 1760 |
+| lazy | 2014 (1837, 2014, 2118) | 779 | 1 | 1966 |
+| eager | 1995 (1619, 1995, 2831); add 2141-2932 (git checkout of 1,778 files), seed 205-321 | 669 | 1 | 2235 |
+
+`seeded 1643 of 1645`: the main checkout had one uncommitted edit (re-indexed from disk in the worktree, where the file is the committed version) and one untracked file (not in the worktree). The 1.8-2.2 s of a warm q on this repo is that machine's baseline for it (node start, a 16,000-row imports table), not the seed's cost: the first q after a seed costs a warm q plus one hash pass.
+
+### Method
+
+A throwaway script in the session scratchpad: per round, make the worktree under `/home/xopher/www/x/.worktrees/`, time `q syncSearchIndex` (kit) or `q persistUser` (app) twice, remove the worktree (`chemx worktree remove --force` for the eager branch). Nothing was changed in either repository; the app's main checkout was only read (its db attached read-only). Not measured: an idle machine, the MCP server (warm process), a worktree whose branch differs widely from the main checkout.
