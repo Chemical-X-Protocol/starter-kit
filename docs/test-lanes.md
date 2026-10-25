@@ -86,6 +86,8 @@ Not guaranteed: the name filter relies on the harness exposing `harness.suites[]
 
 The guard nudges a raw `node tests/run-tests.mjs` toward `chemx test`; `{ "test": { "runners": ["node tests/run-tests.mjs"] } }` in `.chemxrc` lists runners it leaves alone; `guard.allow` is the same list under its general name (docs/hooks.md). Pinned by `cli/test-project-runner.spec.js`, `cli/build/detector.spec.js`, `cli/hooks/guard-test-runners.spec.js`.
 
+`chemx verify` takes the same path (task #6770): a directory where this runner is recognised needs no `node_modules`, so verify does not refuse for it; it runs `php -l`, the whole runner and the audit instead of a typecheck. The runner step is `chemx test` with no target (`node tests/run-tests.mjs`, on the line, heavy), never narrowed by `--changed`, because the suite shares one database. The three gates, the files `php -l` reads and the exit code are in [audit-gates.md](audit-gates.md#a-repo-with-its-own-runner). Pinned by `cli/verify-harness.spec.js`.
+
 ## pnpm layouts
 
 Task #6754. A jest config names a snapshot serializer, transform or setup file by package name, and jest resolves the name from the project root. Under pnpm only the project's own dependencies are linked at `node_modules/<name>`; the rest sit in `node_modules/.pnpm/node_modules`. A run through a pnpm shim (`pnpm run test`, a `node_modules/.bin` shim) gets that directory on `NODE_PATH` from pnpm; `npx jest` and `node .../jest.js` do not, and die with `Module jest-serializer-vue in the snapshotSerializers option was not found` (do-it-for-the-xp, every checkout and worktree).

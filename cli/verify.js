@@ -1,12 +1,7 @@
 import path from 'node:path';
-import { loadProjectConfig } from './config/index.js';
-import { runAudit as executeAstAudit } from './audit-engine.js';
 import { runBuildAudit } from './build.js';
-import { findProjectRoot } from './build/detector.js';
+import { findProjectRoot, findProjectRunner } from './build/detector.js';
 import { resolveAuditScope } from './audit-scope.js';
-import { computeGateVerdict, evaluateDeltaVerdict } from './audit/gate-verdict.js';
-import { evaluateBaseDelta, summarizeBaseDelta } from './audit/base-delta.js';
-import { ANSI } from './theme.js';
 import { STATUS, toExitCode } from './result-status.js';
 import { parseCliArgs, describeArgErrors, parseTimeoutSeconds } from './cli-args.js';
 import { checkNodeModules } from './verify-helpers.js';
@@ -17,11 +12,13 @@ import {
   combineStepStatuses, architecturalWarningFor
 } from './verify-steps.js';
 import {
-  VERIFY_HELP, stepLine, formatTypecheckStep, formatTestStep, testStepIcon, formatBuildStep, createProgress, formatVerdict, isEmptyAllowed
+  VERIFY_HELP, stepLine, formatTypecheckStep, formatTestStep, testStepIcon, formatBuildStep, createProgress, formatVerdict, isEmptyAllowed, printEarly, verifyBanner
 } from './verify-report.js';
 import { formatAgentJson } from './agent-json.js';
 import { sharedRunNote } from './job-line-text.js';
-import { resolveVerifyChanges, changedAuditOptions, testArgsFor, verifyWorkspace, formatVerifyLine, formatDeltaFailure } from './verify-changed.js';
+import { resolveVerifyChanges, testArgsFor, verifyWorkspace, formatVerifyLine } from './verify-changed.js';
+import { runAuditStep } from './verify-audit-step.js';
+import { runHarnessVerify } from './verify-harness.js';
 import { workspaceAt, emitWorkspace } from './workspace-run.js';
 
 export {
@@ -36,23 +33,18 @@ export { runTypecheckAudit } from './typecheck-audit.js';
 export { runTestAudit } from './test-audit.js';
 
 const VERIFY_ARGS = {
-  booleans: { '--json': 'json', '--build': 'build', '--allow-empty': 'allowEmpty', '--changed': 'changed', '--all-packages': 'allPackages', '--help': 'help', '-h': 'help' },
+  booleans: { '--json': 'json', '--build': 'build', '--allow-empty': 'allowEmpty', '--changed': 'changed', '--all-packages': 'allPackages', '--all': 'all', '--help': 'help', '-h': 'help' },
   values: { '--dir': 'dir', '--timeout': 'timeout', '--profile': 'profile', '--base': 'base' }
 };
 
 // verify takes no positional arguments; `chemx verify src` must not silently verify everything.
 const VERIFY_STRAY_HINT = 'use --dir=<path> to pick a directory';
-const EMPTY_AUDIT = { violations: [], totalViolations: 0, health: { grade: 'A', score: 100 } };
+// --all means "every PHP file" and only a repo with its own harness runner has php -l to run.
+const ALL_NEEDS_RUNNER = '--all lints every PHP file in a repo with its own tests/run-tests.mjs harness runner; this project has none (--all-packages verifies every workspace package)';
 
 const finish = (summary, status, { isCli }) => {
   if (isCli) process.exit(toExitCode(status));
   return summary;
-};
-
-const printEarly = (summary, isJson, shouldPrint) => {
-  if (!shouldPrint) return;
-  const text = isJson ? formatAgentJson(summary) : `\n  ${ANSI.RED}✖${ANSI.RESET} ${ANSI.BOLD}${summary.error}${ANSI.RESET}\n`;
-  process.stdout.write(text + '\n');
 };
 
 export const runProjectVerify = async (rawArgs = [], isCli = false, options = {}) => {
@@ -79,10 +71,25 @@ export const runProjectVerify = async (rawArgs = [], isCli = false, options = {}
   const explicitDir = parsed.values.dir || options.targetDir;
   const baseDir = options.cwd || process.cwd();
   const explicitAbsDir = explicitDir ? path.resolve(baseDir, explicitDir) : null;
+  // A repo with its own tests/run-tests.mjs (the WordPress plugins) is its own project, whatever package.json sits above it.
+  const projectRunner = findProjectRunner(explicitAbsDir ?? baseDir);
+  const base = parsed.values.base || options.base || null;
+  const wantsChanged = Boolean(parsed.flags.changed || options.changed);
+  const hasOwnRunner = projectRunner !== null;
+  if (hasOwnRunner) {
+    const request = { rawArgs, isJson, shouldPrint, timeoutMs, allowEmpty, includeBuild, explicitDir: explicitAbsDir, wantsAll: Boolean(parsed.flags.all), wantsChanged, base, options };
+    const summary = await runHarnessVerify(projectRunner, request);
+    return finish(summary, summary.status, { isCli });
+  }
+  if (parsed.flags.all) {
+    const refused = { status: STATUS.FAIL, success: false, error: ALL_NEEDS_RUNNER };
+    printEarly(refused, isJson, shouldPrint);
+    return finish(refused, STATUS.FAIL, { isCli });
+  }
   const cwd = findProjectRoot(explicitAbsDir ?? baseDir);
   const workspace = options.inWorkspace || explicitDir ? null : workspaceAt(cwd);
   if (workspace) {
-    const flags = { changed: Boolean(parsed.flags.changed || options.changed), base: parsed.values.base || options.base || null, allPackages: Boolean(parsed.flags.allPackages || options.allPackages) };
+    const flags = { changed: wantsChanged, base, allPackages: Boolean(parsed.flags.allPackages || options.allPackages) };
     const packageOptions = { print: false, json: true, inWorkspace: true, timeoutMs, allowEmpty, includeBuild };
     const runInPackage = (pkg, args) => runProjectVerify(args, false, { ...packageOptions, cwd: pkg.dir });
     return emitWorkspace(await verifyWorkspace(workspace, flags, runInPackage), { isJson, isCli, shouldPrint }, formatVerifyLine);
@@ -124,29 +131,13 @@ export const runProjectVerify = async (rawArgs = [], isCli = false, options = {}
   }
 
   // --changed: null when not asked for, or when git cannot list changes (then everything runs).
-  const base = parsed.values.base || options.base || null;
-  const wantsChanged = Boolean(parsed.flags.changed || options.changed);
   const listing = wantsChanged ? resolveVerifyChanges(cwd, base) : null;
   const changes = listing?.ok ? listing : null;
   const isText = !isJson && shouldPrint;
-  if (isText) process.stdout.write(`\n  ${ANSI.BOLD}${ANSI.CYAN}⚡ Chemical X: Token-Conserving Project Verification${ANSI.RESET}\n\n`);
+  if (isText) process.stdout.write(verifyBanner());
   const progress = createProgress(isText);
 
-  progress.start('AST Architecture', { announceOnPipe: true });
-  const projectConfig = options.config || loadProjectConfig(cwd, rawArgs);
-  const hasNoChangedSource = Boolean(changes) && changes.files.length === 0;
-  const auditOptions = changes ? changedAuditOptions(cwd, changes) : {};
-  const auditReport = hasNoChangedSource ? EMPTY_AUDIT : executeAstAudit(scope.dir, { cwd, config: projectConfig, ...auditOptions });
-  // --changed with an explicit --base gates on the change itself: each rule's count against the base, at any severity (#6091).
-  const baseDelta = changes && base ? evaluateBaseDelta(cwd, changes.base, rawArgs, { config: projectConfig }) : null;
-  const gate = baseDelta ? evaluateDeltaVerdict(baseDelta) : computeGateVerdict({ projectRoot: cwd, scope: scope.relDir, violations: auditReport.violations, isPartialScan: Boolean(changes) });
-  const auditStatus = gate.isPassing ? STATUS.PASS : STATUS.FAIL;
-  const auditText = `${auditReport.health.grade} (${auditReport.health.score}/100, ${auditReport.totalViolations} violations)`;
-  const excludedNote = scope.excluded ? `, ${scope.excluded.length} package/submodule dir(s) not audited (--all-packages runs their own audits)` : '';
-  const auditScope = changes ? `${changes.files.length} changed file(s) vs ${changes.base}` : `${scope.relDir}/${excludedNote}`;
-  const gateNote = baseDelta ? `${changes.files.length} changed file(s), delta gate vs ${changes.base}` : `${auditScope}, ${gate.basis} gate`;
-  const deltaFailure = baseDelta && !gate.isPassing ? formatDeltaFailure(baseDelta) : '';
-  progress.finish(stepLine(auditStatus, 'AST Architecture', auditText, gateNote) + deltaFailure);
+  const audit = runAuditStep({ cwd, scope, changes, base, rawArgs, config: options.config, progress });
 
   // Only the audit is scoped; typecheck, tests and build run project-wide, so each line names its command.
   progress.start('TypeScript');
@@ -164,7 +155,7 @@ export const runProjectVerify = async (rawArgs = [], isCli = false, options = {}
     progress.finish(stepLine(build.status, 'Production Build', formatBuildStep(build), build.command) + sharedRunNote(build));
   }
 
-  const stepStatuses = { audit: auditStatus, typecheck: typecheck.status, tests: tests.status, build: build?.status };
+  const stepStatuses = { audit: audit.status, typecheck: typecheck.status, tests: tests.status, build: build?.status };
   const status = combineStepStatuses(stepStatuses);
   const architecturalWarning = architecturalWarningFor(stepStatuses);
   const summary = {
@@ -172,18 +163,7 @@ export const runProjectVerify = async (rawArgs = [], isCli = false, options = {}
     success: status === STATUS.PASS,
     scope: changes ? { dir: scope.relDir, source: 'changed', base: changes.base, files: changes.files, typecheck: 'whole project' } : { dir: scope.relDir, source: scope.source, ...(scope.excluded ? { excluded: scope.excluded } : {}), ...(listing && !listing.ok ? { changedError: listing.error } : {}) },
     architecturalWarning,
-    audit: {
-      status: auditStatus,
-      score: auditReport.health.score,
-      grade: auditReport.health.grade,
-      violationsCount: auditReport.totalViolations,
-      criticalCount: auditReport.violations.filter((v) => v.severity === 'CRITICAL').length,
-      passing: gate.isPassing,
-      basis: gate.basis,
-      regressions: gate.regressions.slice(0, 10),
-      note: gate.note,
-      ...(baseDelta ? { delta: summarizeBaseDelta(baseDelta) } : {})
-    },
+    audit: audit.section,
     typecheck,
     tests,
     ...(build ? { build } : {})

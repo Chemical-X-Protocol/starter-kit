@@ -4,6 +4,7 @@ import { ANSI } from './theme.js';
 import { STATUS, isPass, isInconclusive } from './result-status.js';
 import { isInteractive } from './terminal.js';
 import { SKIPPED } from './verify-steps.js';
+import { formatAgentJson } from './agent-json.js';
 
 export const VERIFY_HELP = [
   `${ANSI.BOLD}USAGE${ANSI.RESET}`,
@@ -18,9 +19,16 @@ export const VERIFY_HELP = [
   '                           (typecheck stays whole-project); --base=<rev> gates each changed file per rule',
   '                           against the merge-base with <rev> (delta gate), not the repo-wide ratchet',
   '  --all-packages           At a monorepo root: verify every workspace package (else refused)',
+  '  --all                    In a repo with its own tests/run-tests.mjs: php -l every PHP file, not only the changed ones',
   '  --profile=<name>         Rule profile for the AST audit',
   '  --json                   Output summary status card as JSON',
   '  -h, --help               Show this help message',
+  '',
+  `${ANSI.BOLD}A REPO WITH ITS OWN RUNNER${ANSI.RESET}`,
+  '  A repo with a tests/run-tests.mjs harness runner and no package.json (the WordPress plugins) needs no',
+  '  node_modules and has no typecheck: verify runs php -l over the changed PHP files (--all: every one;',
+  '  --base=<rev>: changed since <rev>; skipped in one line when php is not on PATH), the runner, and the',
+  '  audit. The exit code is the worst of the three.',
   '',
   `${ANSI.BOLD}THE LINE${ANSI.RESET}`,
   '  The typecheck, the full test run and the build each wait their turn in the heavy line (see',
@@ -38,6 +46,8 @@ const ICONS = {
   [STATUS.INCONCLUSIVE]: `${ANSI.YELLOW}?${ANSI.RESET}`,
   [SKIPPED]: `${ANSI.DIM}-${ANSI.RESET}`
 };
+
+export const verifyBanner = () => `\n  ${ANSI.BOLD}${ANSI.CYAN}⚡ Chemical X: Token-Conserving Project Verification${ANSI.RESET}\n\n`;
 
 const pad = (label) => `${label}:`.padEnd(19);
 
@@ -84,6 +94,29 @@ export const formatTestStep = (section) => {
   return `${section.failed} failed${errorNote}${firstFailureNote(section)}`;
 };
 
+// The dim note of the step line: the command, and why the scope is not the changed files when it is not.
+export const lintScopeNote = (section) => (section.note ? `php -l; ${section.note}` : 'php -l');
+
+// The PHP syntax step of a repo with its own runner (cli/verify-php-lint.js).
+export const formatPhpLintStep = (section) => {
+  const isSkipped = section.status === SKIPPED;
+  if (isSkipped) return `Skipped (${section.note})`;
+  if (!isPass(section.status)) return `${section.failed} syntax error(s) in ${section.checked} PHP file(s) (${section.scope})`;
+  const hasNoFiles = section.checked === 0;
+  if (hasNoFiles) return `No PHP files to check (${section.scope}; --all lints every PHP file)`;
+  return `Clean (${section.checked} PHP file(s), ${section.scope})`;
+};
+
+const lintLocation = (error) => (error.line > 0 ? `${error.file}:${error.line}` : error.file);
+
+// One line per syntax error under the step line, with the count of the ones left out.
+export const formatPhpLintErrors = (section) => {
+  const lines = section.errors.map((error) => `      ${ANSI.RED}${lintLocation(error)} ${error.message}${ANSI.RESET}\n`);
+  const hidden = section.failed - section.errors.length;
+  const more = hidden > 0 ? [`      ${ANSI.DIM}+${hidden} more${ANSI.RESET}\n`] : [];
+  return [...lines, ...more].join('');
+};
+
 export const formatBuildStep = (section) => {
   if (isPass(section.status)) return `Success (${section.totalDiagnostics} diagnostics)`;
   if (isInconclusive(section.status)) return `Inconclusive (${section.executionError || 'timed out'})`;
@@ -120,4 +153,11 @@ export const formatVerdict = (status, warning, options = {}) => {
     : `${ANSI.RED}${ANSI.BOLD}Verification failed. Actionable issues cataloged above.${ANSI.RESET}`;
   const notice = warning ? `\n  ${ANSI.YELLOW}⚠ Notice: ${warning}${ANSI.RESET}` : '';
   return `\n  ${headline}${notice}\n\n`;
+};
+
+// A failure before any step ran: the text card, or the JSON summary, on the output stream.
+export const printEarly = (summary, isJson, shouldPrint) => {
+  if (!shouldPrint) return;
+  const text = isJson ? formatAgentJson(summary) : `\n  ${ANSI.RED}✖${ANSI.RESET} ${ANSI.BOLD}${summary.error}${ANSI.RESET}\n`;
+  process.stdout.write(text + '\n');
 };

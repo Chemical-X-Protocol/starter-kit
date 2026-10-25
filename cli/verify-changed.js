@@ -41,8 +41,12 @@ export const verifyWorkspace = async (workspace, { changed, base, allPackages },
   return runPerPackage(units, (unit) => runInPackage(unit.pkg, unit.args), { base: changes.base, dependents: changes.dependents, rootFiles: changes.rootFiles, notes: changeNotes(changes), extraStatuses });
 };
 
+// The gates a package's verify ran: a repo with its own runner has php -l and no typecheck (task #6770).
+const GATES = { package: ['audit', 'typecheck', 'tests'], harness: ['phpLint', 'tests', 'audit'] };
+
 export const formatVerifyLine = (entry) => {
-  const steps = ['audit', 'typecheck', 'tests'].map((step) => `${step} ${entry[step]?.status ?? '-'}`).join(', ');
+  const gates = entry.phpLint ? GATES.harness : GATES.package;
+  const steps = gates.map((step) => `${step} ${entry[step]?.status ?? '-'}`).join(', ');
   const icon = entry.status === STATUS.PASS ? `${ANSI.LIME}✔` : `${ANSI.RED}✖`;
   const excluded = Array.isArray(entry.scope?.excluded) ? entry.scope.excluded : [];
   const scopeLine = excluded.length > 0 ? `    ${ANSI.DIM}audited ${entry.scope.dir}/; not audited: ${excluded.join(", ")} (--all-packages runs their own audits)${ANSI.RESET}\n` : "";
