@@ -43,6 +43,27 @@ export const isKnownFile = (root, file) => {
 
 export const shortSha = (root) => runGit(root, ['rev-parse', '--short', 'HEAD']).stdout.trim();
 
+const NAMED_DEFAULT_BRANCHES = ['main', 'master'];
+
+// One symbolic ref's short name, or null when it is not set (a detached HEAD, a clone without origin/HEAD).
+const symbolicName = (root, ref) => {
+  const result = runGit(root, ['symbolic-ref', '--short', '-q', ref]);
+  const name = result.status === 0 ? result.stdout.trim() : '';
+  return name || null;
+};
+
+/** The branch HEAD is on, or null when HEAD is detached. */
+export const currentBranch = (root) => symbolicName(root, 'HEAD');
+
+/** Whether HEAD is on the default branch: main, master, or the branch origin/HEAD names. A detached HEAD is not. */
+export const isOnDefaultBranch = (root) => {
+  const branch = currentBranch(root);
+  const isDetached = branch === null;
+  if (isDetached) return false;
+  const remoteDefault = symbolicName(root, 'refs/remotes/origin/HEAD')?.replace(/^origin\//, '') ?? null;
+  return [...NAMED_DEFAULT_BRANCHES, remoteDefault].includes(branch);
+};
+
 /** Whether a pre-commit hook exists in the hooks directory git will use. */
 export const hasPreCommitHook = (root) => {
   const hooksDir = runGit(root, ['rev-parse', '--git-path', 'hooks']).stdout.trim();

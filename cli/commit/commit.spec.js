@@ -26,11 +26,12 @@ const cleanEnv = (overrides = {}) => {
   return { ...env, CHEMX_AGENT_ID: '@spec-a', ...overrides };
 };
 
-const makeRepo = (t, { chemxrc } = {}) => {
+const makeRepo = (t, { chemxrc, branch = 'main' } = {}) => {
   delete process.env.CHEMX_PROJECT_ROOT;
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-commit-')));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   git(root, ['init', '-q']);
+  git(root, ['symbolic-ref', 'HEAD', `refs/heads/${branch}`]);
   git(root, ['config', 'user.name', 'Spec']);
   git(root, ['config', 'user.email', 'spec@example.invalid']);
   git(root, ['config', 'commit.gpgsign', 'false']);
@@ -70,6 +71,7 @@ test('refuses without a task id, with both task forms, and with an unknown task'
   assert.match(none.refusals.join('\n'), /no task id/);
   assert.match(both.refusals.join('\n'), /not both/);
   assert.match(unknown.refusals.join('\n'), /task #9999 was not found/);
+  assert.match(unknown.refusals.join('\n'), new RegExp(`${root.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} \\(this directory\\)`));
   assert.equal(commitCount(root), 1);
   assert.equal(git(root, ['diff', '--cached', '--name-only']).stdout, '');
 });
@@ -187,6 +189,77 @@ test('trailers: [skip ci] from config and Co-Authored-By from CHEMX_COAUTHOR; no
   const without = await run(plain.root, ['b.txt', '-m', `add b (#${plain.taskId})`]);
   assert.equal(without.ok, true, without.lines.join('\n'));
   assert.doesNotMatch(headMessage(plain.root), /Co-Authored-By|skip ci/);
+});
+
+const subjectOf = (root) => headMessage(root).split('\n')[0];
+const skipCiConfig = { chemxrc: { commit: { skipCi: true } } };
+
+test('[skip ci] from config is added on main and master only: a feature branch and a detached HEAD get none', async (t) => {
+  const onMaster = makeRepo(t, { ...skipCiConfig, branch: 'master' });
+  const onFeature = makeRepo(t, { ...skipCiConfig, branch: 'feature/x' });
+  const detached = makeRepo(t, skipCiConfig);
+  git(detached.root, ['checkout', '-q', '--detach']);
+  for (const repo of [onMaster, onFeature, detached]) {
+    write(repo.root, 'a.txt', 'a\n');
+    const result = await run(repo.root, ['a.txt', '-m', `add a (#${repo.taskId})`]);
+    assert.equal(result.ok, true, result.lines.join('\n'));
+  }
+  assert.equal(subjectOf(onMaster.root), `add a (#${onMaster.taskId}) [skip ci]`);
+  assert.equal(subjectOf(onFeature.root), `add a (#${onFeature.taskId})`);
+  assert.equal(subjectOf(detached.root), `add a (#${detached.taskId})`);
+});
+
+test('[skip ci] follows the branch origin/HEAD names as the default', async (t) => {
+  const { root, taskId } = makeRepo(t, { ...skipCiConfig, branch: 'trunk' });
+  write(root, 'a.txt', 'a\n');
+  const before = await run(root, ['a.txt', '-m', `add a (#${taskId})`]);
+  assert.equal(before.ok, true, before.lines.join('\n'));
+  assert.equal(subjectOf(root), `add a (#${taskId})`);
+  git(root, ['symbolic-ref', 'refs/remotes/origin/HEAD', 'refs/remotes/origin/trunk']);
+  write(root, 'b.txt', 'b\n');
+  const after = await run(root, ['b.txt', '-m', `add b (#${taskId})`]);
+  assert.equal(after.ok, true, after.lines.join('\n'));
+  assert.equal(subjectOf(root), `add b (#${taskId}) [skip ci]`);
+});
+
+test('--skip-ci forces the tag on a feature branch with no config; --no-skip-ci drops it on main with config', async (t) => {
+  const forced = makeRepo(t, { branch: 'feature/x' });
+  const dropped = makeRepo(t, skipCiConfig);
+  write(forced.root, 'a.txt', 'a\n');
+  write(dropped.root, 'b.txt', 'b\n');
+  const withFlag = await run(forced.root, ['a.txt', '-m', `add a (#${forced.taskId})`, '--skip-ci']);
+  const withoutFlag = await run(dropped.root, ['b.txt', '-m', `add b (#${dropped.taskId})`, '--no-skip-ci']);
+  assert.equal(withFlag.ok, true, withFlag.lines.join('\n'));
+  assert.equal(withoutFlag.ok, true, withoutFlag.lines.join('\n'));
+  assert.equal(subjectOf(forced.root), `add a (#${forced.taskId}) [skip ci]`);
+  assert.equal(subjectOf(dropped.root), `add b (#${dropped.taskId})`);
+});
+
+test('--skip-ci and --no-skip-ci together are refused', async (t) => {
+  const { root, taskId } = makeRepo(t);
+  write(root, 'a.txt', 'a\n');
+  const result = await run(root, ['a.txt', '-m', `add a (#${taskId})`, '--skip-ci', '--no-skip-ci']);
+  assert.equal(result.ok, false);
+  assert.match(result.refusals.join('\n'), /--skip-ci or --no-skip-ci, not both/);
+  assert.equal(commitCount(root), 1);
+});
+
+test('--board, --skip-ci and --no-skip-ci parse; --board needs a value', () => {
+  const parsed = parseCommitArgs(['f.txt', '--board=/b', '--skip-ci', '-m', 'x']);
+  const negated = parseCommitArgs(['f.txt', '--no-skip-ci', '--board']);
+  assert.deepEqual([parsed.board, parsed.skipCi, parsed.noSkipCi], ['/b', true, false]);
+  assert.deepEqual([negated.noSkipCi, negated.skipCi, negated.missingValue], [true, false, ['--board']]);
+});
+
+test('--no-task never scans the subject: a #id in it is plain text, not a task to check or record on', async (t) => {
+  const { root, db } = makeRepo(t);
+  write(root, 'a.txt', 'a\n');
+  const result = await run(root, ['a.txt', '-m', 'fix: the parser from #9999 (see #1)', '--no-task=cleanup']);
+  assert.equal(result.ok, true, result.lines.join('\n'));
+  assert.equal(subjectOf(root), 'fix: the parser from #9999 (see #1)');
+  assert.equal(result.data.task, 'none (cleanup)');
+  const events = queryFeed(db, {}).filter((event) => event.event_type === 'commit');
+  assert.deepEqual(events.map((event) => event.task_id), [null]);
 });
 
 test('--no-task records the reason in the body and as an unattached feed event', async (t) => {
