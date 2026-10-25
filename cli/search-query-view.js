@@ -32,8 +32,8 @@ const formatInspect = (r) => {
   return lines.join('\n');
 };
 
-export const buildQueryPayload = (page, { query, tier, durationMs, isColumnar, index }) => {
-  const base = { query, tier, count: page.results.length, total: page.total, truncated: page.truncated, limit: page.limit, durationMs };
+export const buildQueryPayload = (page, { query, tier, durationMs, isColumnar, index, literal }) => {
+  const base = { query, tier, count: page.results.length, total: page.total, truncated: page.truncated, limit: page.limit, durationMs, literal };
   if (isColumnar) {
     const columnar = toColumnar(page.results, ['path', 'line', 'match', 'name', 'tier', 'lines'], {
       line: (r) => r.match?.line ?? null,
@@ -42,11 +42,11 @@ export const buildQueryPayload = (page, { query, tier, durationMs, isColumnar, i
     });
     return withIndex({ ...base, format: 'columnar', cols: columnar.cols, rows: columnar.rows }, index);
   }
-  const suggestion = page.total === 0 ? `chemx q -g "${query}"` : undefined;
-  return withIndex({ ...base, suggestion, results: page.results }, index);
+  const suggestion = page.total === 0 && !literal ? `chemx q -g "${query}"` : undefined;
+  return withIndex({ ...base, suggestion, literal, results: page.results }, index);
 };
 
-export const printQueryPage = (page, { query, durationMs, isInspect, index }) => {
+export const printQueryPage = (page, { query, durationMs, isInspect, index, hasFallback = false }) => {
   const out = [];
   const shown = page.results.length;
   const countText = page.truncated ? `showing ${shown} of ${page.total}` : `${page.total} results`;
@@ -54,8 +54,12 @@ export const printQueryPage = (page, { query, durationMs, isInspect, index }) =>
   out.push(`  ${ANSI.DIM}${formatIndexLine(index)}${ANSI.RESET}`);
   const hasNoResults = shown === 0;
   if (hasNoResults) {
-    out.push(`  ${ANSI.DIM}No matching capsules, symbols, or files in this scope for "${query}".${ANSI.RESET}`);
-    out.push(`  ${ANSI.CYAN}Try literal search across the repo: chemx q -g "${query}"${ANSI.RESET}\n`);
+    // With a fallback the labelled literal section follows, so no hint is needed.
+    const shouldHint = !hasFallback;
+    if (shouldHint) {
+      out.push(`  ${ANSI.DIM}No matching capsules, symbols, or files in this scope for "${query}".${ANSI.RESET}`);
+      out.push(`  ${ANSI.CYAN}Try literal search across the repo: chemx q -g "${query}"${ANSI.RESET}\n`);
+    }
     process.stdout.write(out.join('\n') + '\n');
     return;
   }

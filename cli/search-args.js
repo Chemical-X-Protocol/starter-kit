@@ -15,7 +15,7 @@ const BOOLEAN_FLAGS = new Set([
   '-l', '--lines', '--include-internal', '--reindex', '--blast-radius', '--blast', '--impact',
   '--trace', '--backtrace', '--semantic', '--hybrid', '--critical', '--progression', '--failing',
   '--degraded', '--crystalline', '--clean', '--regex', '-F', '--fixed-strings', '--hidden',
-  '--full', '--help', '-h', '--ignore-case', '--bare', '-b'
+  '--full', '--help', '-h', '--ignore-case', '--bare', '-b', '-o', '--only-matching', '--unique', '--files-with-matches'
 ]);
 
 const LITERAL_FLAGS = new Set(['-g', '--literal']);

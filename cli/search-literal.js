@@ -6,6 +6,8 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { listLiteralSearchFiles, classifySearchFile } from './search-literal-files.js';
 import { debugNote } from './search-debug.js';
+import { assertRegexSupported } from './search-regex-guard.js';
+import { buildMatchFinder } from './search-matched-text.js';
 
 const MAX_LINE_CHARS = 1000;
 const MAX_FILE_BYTES = 8 * 1024 * 1024;
@@ -39,6 +41,7 @@ const isBinaryBuffer = (buffer) => buffer.subarray(0, 8000).includes(0);
 const searchWithJs = (root, scopeDirs, options, collect) => {
   const { files } = listLiteralSearchFiles(root, scopeDirs, { isHidden: options.isHidden });
   const matches = buildLineMatcher(options);
+  const findParts = options.isOnlyMatching ? buildMatchFinder(options) : null;
   const stats = { filesSearched: 0, skippedBinary: 0, skippedLarge: 0 };
   for (const rel of files) {
     let buffer;
@@ -62,6 +65,7 @@ const searchWithJs = (root, scopeDirs, options, collect) => {
       const isMatch = matches(line);
       if (isMatch) {
         const item = { path: rel, line: idx + 1, text: clampLine(line) };
+        if (findParts) item.parts = findParts(line);
         if (hasContext) {
           const before = [];
           for (let b = Math.max(0, idx - beforeCount); b < idx; b++) {
@@ -163,6 +167,7 @@ const searchWithRipgrep = (root, scopeDirs, options, collect) => {
       const before = hasContext ? pendingBefore.filter((p) => p.path === rel && p.line < line).map(({ path: _, ...rest }) => rest) : undefined;
       pendingBefore.length = 0;
       currentMatch = { path: rel, line, text };
+      if (options.isOnlyMatching) currentMatch.parts = (event.data.submatches || []).map((sub) => decodeRipgrepText(sub.match));
       if (hasContext) {
         currentMatch.before = before;
         currentMatch.after = [];
@@ -179,24 +184,28 @@ const resolveEngine = (requested) => {
   return isRipgrepAvailable() ? 'rg' : 'js';
 };
 
-// Returns { engine, filesSearched, filesMatched, totalMatches, matches (<= limit), truncated, skipped }.
-export const runLiteralSearch = ({ root, scopeDirs = ['.'], pattern, isRegex = false, isCaseInsensitive = false, isHidden = false, limit = 20, engine = null, context = 0, beforeContext = 0, afterContext = 0 }) => {
-  const options = { pattern, isRegex, isCaseInsensitive, isHidden, context, beforeContext, afterContext };
+// Returns { engine, filesSearched, filesMatched, files (every matched path), totalMatches, matches (<= limit),
+// truncated, distinct (sorted -o texts, only with isOnlyMatching, never cut by the limit), skipped }.
+export const runLiteralSearch = ({ root, scopeDirs = ['.'], pattern, isRegex = false, isCaseInsensitive = false, isHidden = false, isOnlyMatching = false, limit = 20, engine = null, context = 0, beforeContext = 0, afterContext = 0 }) => {
+  const options = { pattern, isRegex, isCaseInsensitive, isHidden, isOnlyMatching, context, beforeContext, afterContext };
   const matches = [];
   const matchedFiles = new Set();
+  const distinct = new Set();
   let totalMatches = 0;
   const collect = (match) => {
     totalMatches += 1;
     matchedFiles.add(match.path);
+    for (const part of match.parts || []) distinct.add(part);
     const hasRoom = matches.length < limit;
     if (hasRoom) matches.push(match);
   };
   const chosen = resolveEngine(engine);
+  if (isRegex) assertRegexSupported(pattern, { isBacktracking: chosen === 'js' });
   const search = chosen === 'rg' ? searchWithRipgrep : searchWithJs;
   const stats = search(root, scopeDirs, options, collect);
   return {
-    engine: chosen, filesSearched: stats.filesSearched, filesMatched: matchedFiles.size, totalMatches,
-    matches, truncated: totalMatches > matches.length,
+    engine: chosen, filesSearched: stats.filesSearched, filesMatched: matchedFiles.size, files: [...matchedFiles], totalMatches,
+    matches, truncated: totalMatches > matches.length, distinct: isOnlyMatching ? [...distinct].sort() : undefined,
     skipped: { binary: stats.skippedBinary, large: stats.skippedLarge, hidden: !isHidden }
   };
 };

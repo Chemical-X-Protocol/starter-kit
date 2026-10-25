@@ -3,6 +3,8 @@ import { toColumnar } from '../columnar.js';
 import { formatIndexLine } from '../search-output.js';
 import { openSyncedIndex } from '../search-session.js';
 import { handleLiteralSearchCommand } from '../search-commands-literal.js';
+import { renderPlain } from '../search-literal-view.js';
+import { FALLBACK_HEADING } from '../search-q-fallback.js';
 import { STATUS, combineStatuses } from '../result-status.js';
 import { resolveTargetCwd } from './tools-search-util.js';
 import {
@@ -53,6 +55,14 @@ const formatTextAnswer = (lines, page, index) => {
   return [...header, ...lines, `# ${formatIndexLine(index)}`].join('\n');
 };
 
+// No symbol and no FTS row: the same call answers with the fixed-string search, labelled like the CLI's.
+const describeLiteralFallback = (query, targetCwd, args) => {
+  const res = handleLiteralSearchCommand(null, query, { isCli: false, isQuiet: true, cwd: targetCwd, dir: args.paths || args.path || null, limit: 20, isBare: true });
+  const hasMatches = res.status !== 'fail' && res.matches.length > 0;
+  if (!hasMatches) return [`No matching symbols or text for "${query}" (fixed-string search ran over ${res.filesSearched ?? 0} files)`];
+  return [`${FALLBACK_HEADING} ${res.totalMatches} in ${res.filesMatched} files`, ...renderPlain(res, { isBare: true }).lines];
+};
+
 export const handleChemxQ = (args = {}, cwd = process.cwd()) => {
   const targetCwd = resolveTargetCwd(args.cwd || cwd);
   const query = args.query || args.symbol;
@@ -63,45 +73,22 @@ export const handleChemxQ = (args = {}, cwd = process.cwd()) => {
     const context = typeof args.context === 'number' ? args.context : 0;
     const beforeContext = typeof args.beforeContext === 'number' ? args.beforeContext : context;
     const afterContext = typeof args.afterContext === 'number' ? args.afterContext : context;
+    const limit = typeof args.limit === 'number' ? args.limit : 50;
+    const isUnique = Boolean(args.unique);
+    const modes = { isFilesOnly: Boolean(args.filesOnly), isUnique, isOnlyMatching: Boolean(args.onlyMatching) || isUnique, isLineOnly: Boolean(args.lines || args.linesOnly) };
     const res = handleLiteralSearchCommand(null, query, {
       isJson: false, isCli: false, cwd: targetCwd, dir: args.paths || args.path || args.dir || null,
-      isRegex: Boolean(args.regex), isCaseInsensitive: Boolean(args.ignoreCase), isLineOnly: Boolean(args.lines || args.linesOnly),
-      isHidden: Boolean(args.hidden), limit: typeof args.limit === 'number' ? args.limit : 50, isQuiet: true,
+      isRegex: Boolean(args.regex), isCaseInsensitive: Boolean(args.ignoreCase), ...modes,
+      isHidden: Boolean(args.hidden), limit, isQuiet: true,
       isBare, context, beforeContext, afterContext
     });
     const isJson = Boolean(args.json);
     const shouldReturnObject = isJson || !isBare;
     if (shouldReturnObject) return res;
-    const hasNoMatches = res.matches.length === 0;
-    if (hasNoMatches) return `no matches for "${query}"`;
-    const lines = [];
-    let lastPath = null;
-    let lastLine = null;
-    for (let i = 0; i < res.matches.length; i++) {
-      const m = res.matches[i];
-      const hasBeforeContext = Boolean(m.before && m.before.length > 0);
-      const hasAfterContext = Boolean(m.after && m.after.length > 0);
-      const hasCtx = hasBeforeContext || hasAfterContext;
-      const isSubsequentMatch = i > 0;
-      const shouldCheckSeparator = hasCtx && isSubsequentMatch;
-      if (shouldCheckSeparator) {
-        const isDifferentPath = lastPath !== m.path;
-        const firstLine = m.before?.[0]?.line ?? m.line;
-        const isLineGap = firstLine > (lastLine + 1);
-        const isNonContiguous = isDifferentPath || isLineGap;
-        if (isNonContiguous) lines.push('--');
-      }
-      if (hasBeforeContext) {
-        for (const b of m.before) lines.push(`${m.path}-${b.line}-${b.text}`);
-      }
-      lines.push(`${m.path}:${m.line}:${m.text}`);
-      if (hasAfterContext) {
-        for (const a of m.after) lines.push(`${m.path}-${a.line}-${a.text}`);
-      }
-      lastPath = m.path;
-      lastLine = m.after?.[m.after.length - 1]?.line ?? m.line;
-    }
-    return lines.join('\n');
+    const hasFailed = res.status === 'fail';
+    if (hasFailed) throw new Error(res.error);
+    const { lines } = renderPlain(res, modes, limit);
+    return lines.length === 0 ? `no matches for "${query}"` : lines.join('\n');
   }
   const session = syncIndexForQuery(targetCwd, args);
   const { db, index } = session;
@@ -152,6 +139,6 @@ export const handleChemxQ = (args = {}, cwd = process.cwd()) => {
   const hasHits = lines.length > 0;
   if (hasHits) return formatTextAnswer(lines, page, index);
   const fts = executeFtsFallback(db, query, index.scopeDirs);
-  const fallbackLines = fts ? [fts] : [`No matching capsules or symbols for "${query}" in scope ${index.scope}`];
+  const fallbackLines = fts ? [fts] : describeLiteralFallback(query, targetCwd, args);
   return formatTextAnswer(fallbackLines, page, index);
 };

@@ -4,7 +4,7 @@ export const ACTION_HELP = {
   help: '{ action? } this table, or one row',
   read: '{ path, rev?, symbol?, outline?, logic?, template?, enrich?, startLine?, endLine?, bare? } (alias r); rev reads the file at a git revision',
   show: '{ args: [rev, --patch?, --full?] } one commit: subject, author, date, body, stat; --patch is -U0 and collapses like d',
-  q: '{ query, literal?, lines?, context?, beforeContext?, afterContext?, bare?, blastRadius?, trace?, backtrace?, semantic?, hybrid?, tier?, limit?, reindex? } (alias search)',
+  q: '{ query, literal?, regex?, filesOnly?, onlyMatching?, unique?, paths?, lines?, context?, beforeContext?, afterContext?, bare?, blastRadius?, trace?, backtrace?, semantic?, hybrid?, tier?, limit?, reindex? } (alias search)',
   patch: '{ path, target|search, replacement|replace, multiple?, dryRun? } writes; needs a declared root',
   write: '{ path, content } writes; needs a declared root',
   check: '{ path } single-file rule check',
