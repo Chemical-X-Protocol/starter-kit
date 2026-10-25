@@ -6,6 +6,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { postFeedEvent } from './team-db-feed.js';
+import { isDerivedHandle, describeDerivedRefusal } from './agent-identity.js';
 import { DEFAULT_TTL_MS, cleanExpiredLeases, promoteNextWaiter, enqueueWaiter, describeLease } from './team-db-lock-promotion.js';
 import { withImmediateTransaction } from './team-db-transaction.js';
 import { resolveLeaseScope, toLeaseKey } from './lease-key.js';
@@ -107,6 +108,8 @@ export const requestFileLock = (db, filePath, agentId, options = {}) => {
   const hasAgent = Boolean(agentId);
   const canRequest = hasDb && hasPath && hasAgent;
   if (!canRequest) return { granted: false, reason: 'missing_args' };
+  const isDerived = isDerivedHandle(agentId);
+  if (isDerived) return { granted: false, reason: 'derived_handle', message: describeDerivedRefusal(agentId) };
 
   const cleanPath = leaseKeyFor(db, filePath, options);
   if (!cleanPath) return { granted: false, reason: 'path_traversal' };

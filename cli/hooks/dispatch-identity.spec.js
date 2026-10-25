@@ -11,7 +11,7 @@ import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { ensureRunTables } from '../team/team-dispatch-runs.js';
 import { decidePreTool, buildPreToolContext } from './claude-pre-tool.js';
-import { everyChemxCallCarriesIdentity, chemxCallIdentities, dispatchAgentFromTranscript, dispatchAgentFromPayload, resolveDispatchHandle } from './dispatch-identity.js';
+import { everyActingChemxCallCarriesIdentity, identityDenyReason, chemxCallIdentities, dispatchAgentFromTranscript, dispatchAgentFromPayload, resolveDispatchHandle } from './dispatch-identity.js';
 import { takeLeaseWhenFree } from '../edit-locks.js';
 import { openIndexDb } from '../search-db.js';
 
@@ -58,18 +58,41 @@ test('resolveDispatchHandle: never guesses (other workflow id, non-build label, 
   assert.equal(resolveDispatchHandle(review.payload, { root: path.join(review.root, 'nodb'), env: ENV }), null);
 });
 
-test('guard denies a chemx call without identity, naming the exact prefix; identity or non-chemx passes', (t) => {
+test('guard denies a chemx call that changes state without identity, naming the exact prefix; identity or non-chemx passes', (t) => {
   const { root, payload } = fixture(t);
   const context = { cwd: root, root, enforceSearch: false, dispatchHandle: '@fixes-1-4510' };
-  const denied = decidePreTool(bash(payload, 'chemx verify --json'), context);
+  const denied = decidePreTool(bash(payload, 'chemx write cli/a.js --stdin'), context);
   assert.equal(denied.decision, 'deny');
   assert.equal(denied.rule, 'dispatch-identity');
   assert.match(denied.reason, /export CHEMX_AGENT_ID=@fixes-1-4510; /);
-  for (const ok of ['CHEMX_AGENT_ID=@fixes-1-4510 chemx verify', 'export CHEMX_AGENT_ID=@fixes-1-4510; chemx verify', 'chemx team task comment 1 "x" --as=@fixes-1-4510', 'echo hi']) {
+  for (const ok of ['CHEMX_AGENT_ID=@fixes-1-4510 chemx write cli/a.js --stdin', 'export CHEMX_AGENT_ID=@fixes-1-4510; chemx commit a.js -m x', 'chemx team task comment 1 "x" --as=@fixes-1-4510', 'echo hi']) {
     assert.equal(decidePreTool(bash(payload, ok), context).decision, 'allow', ok);
   }
-  const noHandle = decidePreTool(bash(payload, 'chemx verify'), { ...context, dispatchHandle: null });
+  const noHandle = decidePreTool(bash(payload, 'chemx write cli/a.js --stdin'), { ...context, dispatchHandle: null });
   assert.equal(noHandle.decision, 'allow', 'a non-dispatched session is never asked for an identity');
+});
+
+test('a dispatched builder runs reads, gates and help with no identity; every write is refused with the same message (K16, #6761)', (t) => {
+  const { root, payload } = fixture(t);
+  const context = { cwd: root, root, enforceSearch: false, dispatchHandle: '@fixes-1-4510' };
+  const reads = [
+    'chemx --help', 'chemx write --help', 'chemx q foo', 'chemx read cli/a.js --outline', 'chemx log -n 3', 'chemx d --stat', 'chemx status',
+    'chemx team task show 4510 --brief', 'chemx team task list', 'chemx team feed --oneline', 'chemx team status', 'chemx tokens',
+    'chemx test cli/a.spec.js', 'chemx test --changed', 'chemx verify --json', 'chemx lint', 'chemx typecheck', 'chemx check cli/a.js', 'chemx audit', 'chemx doctor', 'chemx wait --task=5'
+  ];
+  for (const read of reads) assert.equal(decidePreTool(bash(payload, read), context).decision, 'allow', read);
+  const writes = [
+    'chemx write cli/a.js --stdin', 'chemx patch cli/a.js', 'chemx commit cli/a.js -m x', 'chemx team task claim 4510', 'chemx team task done 4510', 'chemx team task handoff 4510 @b',
+    'chemx team task comment 4510 hi', 'chemx team task update 4510 in_progress', 'chemx team lock acquire cli/a.js', 'chemx team unlock cli/a.js', 'chemx team post hi', 'chemx project init goal',
+    'chemx lint --fix', 'chemx doctor --fix', 'chemx q foo; chemx write cli/a.js --stdin'
+  ];
+  for (const write of writes) {
+    const denied = decidePreTool(bash(payload, write), context);
+    assert.equal(denied.rule, 'dispatch-identity', write);
+    assert.equal(denied.reason, identityDenyReason('@fixes-1-4510'));
+  }
+  assert.equal(decidePreTool(bash(payload, 'chemx q foo --as=@fixes-1-4510; chemx write cli/a.js --stdin'), context).rule, 'dispatch-identity', 'the read does not carry the write');
+  assert.equal(decidePreTool(bash(payload, 'chemx write cli/a.js --stdin --as=@fixes-1-4510; chemx q foo'), context).decision, 'allow', 'the read needs none beside a write that has one');
 });
 
 test('payload agent_id with a main-session transcript_path resolves the dispatch handle (#4598)', (t) => {
@@ -84,13 +107,15 @@ test('payload agent_id with a main-session transcript_path resolves the dispatch
 
 test('guard: agent_id payload without identity text is denied with the dispatch handle (#4598)', (t) => {
   const { root } = fixture(t);
-  const main = { tool_name: 'Bash', agent_id: 'a1', transcript_path: path.join(root, 'proj', 'sess.jsonl'), cwd: root, tool_input: { command: 'chemx verify' } };
+  const main = { tool_name: 'Bash', agent_id: 'a1', transcript_path: path.join(root, 'proj', 'sess.jsonl'), cwd: root, tool_input: { command: 'chemx commit a.js -m x' } };
   const context = { ...buildPreToolContext(main, { CLAUDE_PROJECT_DIR: root }), enforceSearch: false };
   const denied = decidePreTool(main, context);
   assert.equal(denied.rule, 'dispatch-identity');
   assert.match(denied.reason, /export CHEMX_AGENT_ID=@fixes-1-4510; /);
-  const ok = { ...main, tool_input: { command: 'CHEMX_AGENT_ID=@fixes-1-4510 chemx verify' } };
+  const ok = { ...main, tool_input: { command: 'CHEMX_AGENT_ID=@fixes-1-4510 chemx commit a.js -m x' } };
   assert.equal(decidePreTool(ok, context).decision, 'allow');
+  const read = { ...main, tool_input: { command: 'chemx verify' } };
+  assert.equal(decidePreTool(read, context).decision, 'allow', 'a gate is a read');
 });
 
 test('chemxCallIdentities names each chemx call\'s handle: --as beats an inline value beats an earlier export (#6748)', () => {
@@ -118,13 +143,15 @@ test('a dispatched builder\'s native edit counts its dispatch handle as its own 
   assert.match(denied.reason, /locked by @fixes-1-4510/);
 });
 
-test('identity is checked per chemx call, not per command string', () => {
-  assert.equal(everyChemxCallCarriesIdentity('chemx team lock acquire f --as=@x; (time chemx verify --json)'), false);
-  assert.equal(everyChemxCallCarriesIdentity('chemx verify; echo CHEMX_AGENT_ID=x'), false);
-  assert.equal(everyChemxCallCarriesIdentity('chemx q -g "--as "'), false);
-  assert.equal(everyChemxCallCarriesIdentity('chemx q "CHEMX_AGENT_ID"'), false);
-  assert.equal(everyChemxCallCarriesIdentity('chemx team lock release f --as @x'), true);
-  assert.equal(everyChemxCallCarriesIdentity('export CHEMX_AGENT_ID=@x; chemx verify; (time chemx q foo)'), true);
-  assert.equal(everyChemxCallCarriesIdentity('CHEMX_AGENT_ID=@x chemx verify'), true);
-  assert.equal(everyChemxCallCarriesIdentity('echo hi'), true);
+test('identity is checked per acting chemx call, not per command string; reads are not checked', () => {
+  assert.equal(everyActingChemxCallCarriesIdentity('chemx team lock acquire f --as=@x; (time chemx commit a.js -m x)'), false);
+  assert.equal(everyActingChemxCallCarriesIdentity('chemx commit a.js -m x; echo CHEMX_AGENT_ID=x'), false);
+  assert.equal(everyActingChemxCallCarriesIdentity('chemx write a.js --content "--as "'), false);
+  assert.equal(everyActingChemxCallCarriesIdentity('chemx write a.js --content "CHEMX_AGENT_ID"'), false);
+  assert.equal(everyActingChemxCallCarriesIdentity('chemx team lock release f --as @x'), true);
+  assert.equal(everyActingChemxCallCarriesIdentity('export CHEMX_AGENT_ID=@x; chemx commit a.js -m x; (time chemx q foo)'), true);
+  assert.equal(everyActingChemxCallCarriesIdentity('CHEMX_AGENT_ID=@x chemx write a.js'), true);
+  assert.equal(everyActingChemxCallCarriesIdentity('chemx verify; chemx q -g "--as "; chemx team task show 5; chemx --help'), true);
+  assert.equal(everyActingChemxCallCarriesIdentity('chemx q foo | chemx write a.js --stdin'), false);
+  assert.equal(everyActingChemxCallCarriesIdentity('echo hi'), true);
 });

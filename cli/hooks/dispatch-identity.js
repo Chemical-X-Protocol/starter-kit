@@ -12,6 +12,7 @@ import { resolveInvocation, isChemxInvocation } from './guard-invocation.js';
 import { teamRootFor } from '../team/coordination-target.js';
 import { closeQuietly, openExistingTeamDb, safeAll } from '../team/team-db-readonly.js';
 import { findWorkflowRun } from '../team/team-dispatch-runs.js';
+import { isMutatingChemxArgs } from '../team/identity-classification.js';
 
 const TRANSCRIPT = /^agent-(.+)\.jsonl$/;
 const LABEL = /^\s*build\s*:\s*#(\d+)\s*$/i;
@@ -107,15 +108,22 @@ const AS_FLAG = /^--as(?:=\S|$)/;
 const isExport = (argv) => argv[0] === 'export' && argv.slice(1).some((word) => IDENTITY_ASSIGN.test(word));
 const hasAsFlag = (argv) => argv.some((word, i) => AS_FLAG.test(word) && (word.includes('=') || (argv[i + 1] ?? '') !== ''));
 
-/** True when every chemx invocation in the command names its own identity: an inline CHEMX_AGENT_ID=, --as, or an earlier `export CHEMX_AGENT_ID=` in the same command. Mentions in other commands or quoted arguments do not count. */
-export const everyChemxCallCarriesIdentity = (command) => {
+/**
+ * True when every chemx invocation in the command that changes files or shared state (a write in
+ * team/identity-classification.js) names its own identity: an inline CHEMX_AGENT_ID=, --as, or an earlier
+ * `export CHEMX_AGENT_ID=` in the same command. Reads, gates and help need none (K16, #6761). Mentions in
+ * other commands or quoted arguments do not count.
+ */
+export const everyActingChemxCallCarriesIdentity = (command) => {
   let exported = false;
   const hasGap = (parsed) => {
     const isEmpty = parsed.argv.length === 0;
     exported = exported || (!isEmpty && isExport(parsed.argv));
-    const isChemx = !isEmpty && isChemxInvocation(resolveInvocation(parsed.argv));
+    const invocation = isEmpty ? null : resolveInvocation(parsed.argv);
+    const isChemx = invocation !== null && isChemxInvocation(invocation);
+    const isActing = isChemx && isMutatingChemxArgs(invocation.args);
     const carries = exported || parsed.assigns.some((word) => IDENTITY_ASSIGN.test(word)) || hasAsFlag(parsed.argv);
-    return isChemx && !carries;
+    return isActing && !carries;
   };
   return !parseShell(String(command ?? '')).commands.some(hasGap);
 };

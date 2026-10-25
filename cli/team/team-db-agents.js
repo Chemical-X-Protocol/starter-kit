@@ -3,6 +3,8 @@
  * Manages active agent handles, roles, heartbeats, and status in SQLite
  */
 
+import { isDerivedHandle } from './agent-identity.js';
+
 export const getAgent = (db, agentId) => {
   const isMissingInput = !db || !agentId;
   if (isMissingInput) return null;
@@ -18,7 +20,9 @@ export const getAgent = (db, agentId) => {
 
 export const registerAgent = (db, { id, name, role, capabilities = [], metadata = {} }) => {
   const isMissingInput = !db || !id;
-  if (isMissingInput) return null;
+  const isDerived = isDerivedHandle(id);
+  const isRefused = isMissingInput || isDerived;
+  if (isRefused) return null;
   const cleanId = id.startsWith('@') ? id : `@${id}`;
   const stmt = db.prepare(`
     INSERT INTO agents (id, name, role, status, capabilities, heartbeat, metadata)

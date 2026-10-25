@@ -52,15 +52,19 @@ test('a subagent call the guard allows by its identity text is the call that dec
   assert.deepEqual(declaredHandlesIn(orchestrator), ['@claude-3f9a1c7e'], 'the parser reports it; the guard denies the call before anything is recorded');
 });
 
-test('acting calls: claims, locks, writes, commits and gates act; reads do not', () => {
+test('acting calls: claims, locks, writes and commits act; reads, gates and help do not (K16, #6761)', () => {
   assert.equal(isActingChemxArgs(['team', 'task', 'claim', '1']), true);
   assert.equal(isActingChemxArgs(['team', 'lock', 'acquire', 'a.js']), true);
+  assert.equal(isActingChemxArgs(['team', 'lock', 'a.js']), true, 'a path alone is acquired');
+  assert.equal(isActingChemxArgs(['team', 'unlock', 'a.js']), true);
   assert.equal(isActingChemxArgs(['write', 'a.js']), true);
   assert.equal(isActingChemxArgs(['commit', 'a.js']), true);
-  assert.equal(isActingChemxArgs(['verify']), true);
+  assert.equal(isActingChemxArgs(['project', 'init', 'goal']), true);
+  for (const gate of [['verify'], ['test', 'a.spec.js'], ['test', '--changed'], ['lint'], ['typecheck'], ['audit'], ['check', 'a.js'], ['doctor']]) assert.equal(isActingChemxArgs(gate), false, gate.join(' '));
   assert.equal(isActingChemxArgs(['read', 'a.js']), false);
   assert.equal(isActingChemxArgs(['team', 'status']), false);
   assert.equal(isActingChemxArgs(['team', 'task', 'list']), false);
+  assert.equal(isActingChemxArgs(['write', '--help']), false);
 });
 
 test('anonymous acting call: identity inline, --as or exported earlier clears it', () => {
@@ -105,6 +109,20 @@ test('guard: identity in the text, a read-only call, or the main session is allo
   assert.equal(decide(SUB, 'chemx team task claim 1 --as=@sub').decision, 'allow');
   assert.equal(decide(SUB, 'chemx read cli/a.js').decision, 'allow');
   assert.equal(decide(MAIN, 'chemx write cli/a.js --stdin').decision, 'allow');
+});
+
+test('guard: a subagent runs reads, gates and help with no identity text, and a write beside them still needs one (K16, #6761)', () => {
+  for (const read of ['chemx --help', 'chemx q foo', 'chemx team task show 5 --brief', 'chemx team feed --oneline', 'chemx test cli/a.spec.js', 'chemx test --changed', 'chemx verify', 'chemx lint', 'chemx typecheck', 'chemx audit', 'chemx doctor', 'chemx wait --task=5']) {
+    assert.equal(decide(SUB, read).decision, 'allow', read);
+    assert.equal(decide(WORKFLOW, read).decision, 'allow', read);
+  }
+  const reason = decide(SUB, 'chemx write cli/a.js --stdin').reason;
+  for (const write of ['chemx write cli/a.js --stdin', 'chemx team task done 1', 'chemx team lock cli/a.js', 'chemx lint --fix', 'chemx verify; chemx commit a.js -m x']) {
+    const denied = decide(SUB, write);
+    assert.equal(denied.rule, 'inherited-identity', write);
+    assert.equal(denied.reason, reason, 'the refusal text is the same for every write');
+  }
+  assert.equal(decide(SUB, 'chemx team task claim 1 --as=@sub; chemx verify').decision, 'allow');
 });
 
 test('guard: a chemx do batch is acting when any quoted sub-command is', () => {

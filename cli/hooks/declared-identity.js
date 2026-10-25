@@ -51,8 +51,14 @@ export const agentKeyOf = (payload) => {
   return named ? named[1] : '';
 };
 
-// Calls that take, extend or ask about a lease, or change shared state as an identified agent.
-const isDeclaringArgs = (args) => isActingChemxArgs(args) || (args[0] === 'team' && args[1] === 'lock');
+// Calls that take, extend or ask about a lease, or change shared state as an identified agent. The gates renew
+// leases while they run, so a gate that names a handle declares it too, though it needs none (K16, #6761).
+const DECLARING_GATES = new Set(['test', 'verify']);
+const isDeclaringArgs = (args) => {
+  const isLockCall = args[0] === 'team' && args[1] === 'lock';
+  const isGate = DECLARING_GATES.has(args[0]);
+  return isActingChemxArgs(args) || isLockCall || isGate;
+};
 
 /** The handles the chemx calls in a shell command declare, in order and without repeats. */
 export const declaredHandlesIn = (command) => {

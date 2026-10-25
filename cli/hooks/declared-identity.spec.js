@@ -55,6 +55,8 @@ test('declared handles: --as, inline CHEMX_AGENT_ID and an earlier export name t
   assert.deepEqual(declaredHandlesIn('CHEMX_AGENT_ID=$ME chemx write a.js'), [], 'an unresolved variable is not a handle');
   assert.deepEqual(declaredHandlesIn('echo --as=@a'), [], 'not a chemx call');
   assert.deepEqual(declaredHandlesIn('chemx do "write a.js" "verify" --as=@d'), ['@d']);
+  assert.deepEqual(declaredHandlesIn('chemx test a.spec.js --as=@d; chemx verify --as=@e'), ['@d', '@e'], 'a gate that names a handle declares it, though it needs none');
+  assert.deepEqual(declaredHandlesIn('chemx lint --as=@d; chemx team task show 5 --as=@d'), [], 'other reads declare nothing');
 });
 
 test('a declaration is stored per session and agent key, once; a repeat inside the refresh window writes nothing', () => {

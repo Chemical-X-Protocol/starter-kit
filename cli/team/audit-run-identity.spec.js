@@ -69,3 +69,17 @@ test('MCP patch call naming another handle is reported as acted as another handl
 test('read-only chemx calls and plain shell are not reported', () => {
   assert.deepEqual(rows('chemx read cli/a.js', 'chemx team status', 'git status'), []);
 });
+
+test('gates, reads and help with no identity are not reported; the writes beside them are (K16, #6761)', () => {
+  assert.deepEqual(rows('chemx verify', 'chemx test cli/a.spec.js', 'chemx test --changed --base=origin/main', 'chemx lint', 'chemx typecheck', 'chemx audit', 'chemx doctor', 'chemx team task show 5 --brief', 'chemx team feed --oneline', 'chemx --help', 'chemx write --help'), []);
+  assert.equal(rows('chemx verify; chemx write cli/a.js --stdin').length, 1);
+  assert.equal(rows('chemx lint --fix').length, 1);
+  assert.equal(rows('chemx team lock cli/a.js', 'chemx team unlock cli/a.js').length, 2, 'a path alone is acquired');
+});
+
+test('MCP calls: the generic team action and autofix are writes, a gate is not (K16, #6761)', () => {
+  assert.equal(anonymousActingCalls(mcpInvs({ action: 'team', params: { action: 'task', subAction: 'claim', taskId: 5 } })).length, 1);
+  assert.equal(anonymousActingCalls(mcpInvs({ action: 'team', params: { action: 'task', subAction: 'show', taskId: 5 } })).length, 0);
+  assert.equal(anonymousActingCalls(mcpInvs({ action: 'autofix', params: { path: 'a.js' } })).length, 1);
+  assert.equal(anonymousActingCalls(mcpInvs({ action: 'verify' }, { action: 'test', params: { testTarget: 'a.spec.js' } })).length, 0);
+});

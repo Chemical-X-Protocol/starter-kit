@@ -79,7 +79,8 @@ const mcpWords = (input) => {
   const sub = p.subAction ?? p.sub ?? '';
   const id = p.taskId ?? '';
   const isTeam = action === 'team' || action.startsWith('team_');
-  const teamVerb = action === 'team' ? [] : [action.slice(5)];
+  // `team_task` carries the subcommand in its name; the generic `team` action in params.action.
+  const teamVerb = action === 'team' ? [String(p.action ?? '')] : [action.slice(5)];
   const team = isTeam ? ['team', ...teamVerb, sub, id, p.path ?? ''] : [];
   const flags = [p.overwrite ? '--overwrite' : '', p.append ? '--append' : ''];
   const plain = [action, p.path ?? p.query ?? p.testTarget ?? p.dir ?? '', ...flags];

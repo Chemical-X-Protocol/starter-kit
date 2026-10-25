@@ -5,6 +5,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { runTestAudit } from './test-audit.js';
 import { runTypecheckAudit } from './typecheck-audit.js';
 import { runBuildAudit, resolveBuildCommand, BUILD_ARGS } from './build.js';
@@ -27,6 +29,32 @@ const withProject = async (fn) => {
 };
 
 const quiet = (root) => ({ cwd: root, print: false });
+
+const CLI_PATH = fileURLToPath(new URL('./index.js', import.meta.url));
+const IDENTITY_ENV = ['CHEMX_AGENT_ID', 'CHEMX_AGENT', 'CHEMX_SESSION_ID', 'CLAUDE_SESSION_ID', 'CHEMX_PROJECT_ROOT'];
+// The warnings and refusals a missing identity can print; the help text may name --as and CHEMX_AGENT_ID.
+const IDENTITY_LINE = /unique to this process|acting as @|set CHEMX_AGENT_ID|--as=<@\w+> is required|chemx identity:/i;
+
+// A shell with no identity at all: the shape of a Bash call whose export did not carry over (K16, #6761).
+const withoutIdentity = async (fn) => {
+  const saved = Object.fromEntries(IDENTITY_ENV.map((name) => [name, process.env[name]]));
+  for (const name of IDENTITY_ENV) delete process.env[name];
+  try {
+    return await fn();
+  } finally {
+    for (const [name, value] of Object.entries(saved)) {
+      const wasSet = value !== undefined;
+      if (wasSet) process.env[name] = value;
+    }
+  }
+};
+
+const runCliBare = (root, args) => {
+  const env = { ...process.env, FORCE_COLOR: '0', CHEMX_CALL_LOG: '0' };
+  for (const name of IDENTITY_ENV) delete env[name];
+  const res = spawnSync(process.execPath, [CLI_PATH, ...args], { cwd: root, env, encoding: 'utf-8', timeout: 60000 });
+  return { code: res.status, text: `${res.stdout}${res.stderr}` };
+};
 
 test('cli-usage: `chemx test test` targets a directory named test instead of dropping it', { timeout: 60000 }, async () => {
   await withProject(async (root) => {
@@ -123,5 +151,33 @@ test('cli-usage: a --timeout setTimeout cannot honour (overflow or under 1ms) is
     assert.match(overflow.executionError || '', /--timeout/, 'above 2^31-1 ms fires after 1ms');
     const tiny = await runTypecheckAudit(['--timeout=0.0001', '--json'], false, quiet(root));
     assert.equal(tiny.reason, 'USAGE', 'rounds to 0ms, which would disable the timeout');
+  });
+});
+
+test('cli-usage: the gates run with no identity at all, without a refusal or an identity line (K16, #6761)', { timeout: 120000 }, async () => {
+  await withProject(async (root) => {
+    const lines = [];
+    const write = process.stderr.write.bind(process.stderr);
+    process.stderr.write = (chunk, ...rest) => (lines.push(String(chunk)), write(chunk, ...rest));
+    try {
+      const report = await withoutIdentity(() => runTestAudit(['test', '--json'], false, quiet(root)));
+      assert.equal(report.passed, 1);
+      const typecheck = await withoutIdentity(() => runTypecheckAudit(['--json'], false, quiet(root)));
+      assert.equal(typeof typecheck, 'object', 'the typecheck gate answered');
+    } finally {
+      process.stderr.write = write;
+    }
+    assert.doesNotMatch(lines.join(''), IDENTITY_LINE);
+  });
+});
+
+test('cli-usage: reads and help run with no identity: exit 0, no identity line, nothing asked for', { timeout: 120000 }, async () => {
+  await withProject(async (root) => {
+    const reads = [['--help'], ['team', '--help'], ['read', 'test/a.spec.js', '--outline'], ['q', '-g', 'in test dir', '-l'], ['team', 'task', 'list'], ['team', 'status'], ['team', 'feed', '--oneline'], ['write', '--help']];
+    for (const args of reads) {
+      const { code, text } = runCliBare(root, args);
+      assert.equal(code, 0, `chemx ${args.join(' ')}: ${text.slice(0, 300)}`);
+      assert.doesNotMatch(text, IDENTITY_LINE, `chemx ${args.join(' ')} printed an identity line`);
+    }
   });
 });

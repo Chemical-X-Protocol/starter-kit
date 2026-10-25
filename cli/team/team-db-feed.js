@@ -3,6 +3,8 @@
  * Event stream, threads, and @mentions for agent coordination
  */
 
+import { isDerivedHandle } from './agent-identity.js';
+
 const formatHandle = (handle, fallback = null) => {
   const hasHandle = Boolean(handle);
   if (!hasHandle) return fallback;
@@ -17,7 +19,9 @@ export const postFeedEvent = (db, eventData = {}) => {
   const canPost = hasDb && hasMessage;
   if (!canPost) return null;
 
-  const authorId = formatHandle(eventData.author_id, '@system');
+  // A derived handle (a read's name) is no board actor: its event reads as the system's.
+  const isDerivedAuthor = isDerivedHandle(eventData.author_id);
+  const authorId = isDerivedAuthor ? '@system' : formatHandle(eventData.author_id, '@system');
   const recipientId = formatHandle(eventData.recipient_id, null);
 
   const now = Date.now();

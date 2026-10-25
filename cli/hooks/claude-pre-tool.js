@@ -24,7 +24,7 @@ import { isPromotedNudge, resolveNudgePromotion } from './guard-config.js';
 import { NATIVE_EDIT_TOOLS, NATIVE_FILE_TOOLS, decideNativeTool, resolveNativeToolMode } from './native-tool-policy.js';
 import { decideEditLock, resolveHookAgentId } from './native-edit-lock.js';
 import { resolveEditorIdentity } from './declared-identity.js';
-import { everyChemxCallCarriesIdentity, identityDenyReason, resolveDispatchHandle } from './dispatch-identity.js';
+import { everyActingChemxCallCarriesIdentity, identityDenyReason, resolveDispatchHandle } from './dispatch-identity.js';
 import { foreignRunIdentities, foreignIdentityDenyReason } from './foreign-identity.js';
 import { hasAnonymousActingCall, inheritedOrchestratorHandle, orchestratorActingReason } from './session-identity.js';
 
@@ -147,10 +147,11 @@ const decideNativeFileTool = (tool, input, context) => {
 
 const callsChemx = (command) => parseShell(command).commands.some((parsed) => parsed.argv.length > 0 && isChemxInvocation(resolveInvocation(parsed.argv)));
 
-// A dispatched builder (handle resolved from its transcript and the recorded run) must name its identity on every chemx call.
+// A dispatched builder (handle resolved from its transcript and the recorded run) must name its identity on every chemx call
+// that changes files or shared state; reads, gates and help need none (K16, #6761).
 const decideDispatchIdentity = (command, context) => {
   const handle = context.dispatchHandle ?? null;
-  const isMissing = handle !== null && callsChemx(command) && !everyChemxCallCarriesIdentity(command);
+  const isMissing = handle !== null && callsChemx(command) && !everyActingChemxCallCarriesIdentity(command);
   return isMissing ? { decision: 'deny', rule: 'dispatch-identity', segment: command.slice(0, SEGMENT_LIMIT), reason: identityDenyReason(handle) } : null;
 };
 
