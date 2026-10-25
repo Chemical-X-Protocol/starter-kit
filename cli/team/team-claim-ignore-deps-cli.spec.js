@@ -10,6 +10,7 @@ import { openIndexDb } from '../search-schema.js';
 import { getTask } from './team-db-tasks.js';
 import { queryFeed } from './team-db-feed.js';
 import { runTeamCli } from './team-commands.js';
+import { runCliCaptured } from './cli-exit-fixture.js';
 import { handleChemxTeamTask } from '../mcp/tools-team-tasks.js';
 
 delete process.env.CHEMX_PROJECT_ROOT;
@@ -76,4 +77,25 @@ test('mcp claim: a blank or non-string ignoreDeps is refused with a reason-requi
     assert.match(res.error, /reason required/);
   }
   assert.notEqual(getTask(openIndexDb(root), child).status, 'in_progress');
+});
+
+test('on the CLI a claim refused for unmet dependencies, a blank reason or a taken task exits 1; a claim that lands exits 0 (#6765)', (t) => {
+  const { root, child } = makeBoard(t);
+  const claimCli = (id, who, ...extra) => runCliCaptured(root, ['task', 'claim', String(id), `--as=${who}`, ...extra]);
+  const unmet = claimCli(child, '@w1');
+  assert.equal(unmet.exitCode, 1);
+  assert.match(unmet.err, /Claim failed/);
+  assert.equal(unmet.result.reason, 'dependencies_unmet');
+  const asJson = claimCli(child, '@w1', '--json');
+  assert.equal(asJson.exitCode, 1, '--json prints the result and still exits 1');
+  assert.match(asJson.out, /dependencies_unmet/);
+  const bare = claimCli(child, '@w1', '--ignore-deps');
+  assert.equal(bare.exitCode, 1);
+  assert.match(bare.err, /A reason is required/);
+  const landed = claimCli(child, '@w1', '--ignore-deps=landed first');
+  assert.equal(landed.exitCode, 0, landed.err);
+  assert.match(landed.out, /Claimed task/);
+  const taken = claimCli(child, '@w2', '--ignore-deps=landed first');
+  assert.equal(taken.exitCode, 1, 'a task another agent holds is a refusal');
+  assert.match(taken.err, /Claim failed/);
 });

@@ -20,6 +20,7 @@ import { summarizeBrief } from '../team/task-brief-store.js';
 import { checkKindInput } from '../team/task-kind.js';
 import { createFromFile, runBriefAction, readCreateBrief } from './tools-team-task-extras.js';
 import { resolveTaskRef } from '../team/task-ref.js';
+import { checkStatusInput } from '../team/task-update-status.js';
 import { resolveListRepo, prepareTaskTarget, describeShellMangledArg } from '../team/team-commands-repo.js';
 import { repoDir } from '../team/coordination-repos.js';
 
@@ -200,14 +201,14 @@ export const handleChemxTeamTask = async (rawArgs = {}, cwd = process.cwd()) => 
   }
   const isUpdateAction = action === 'update';
   if (isUpdateAction) {
-    const targetStatus = args.status || 'in_progress';
+    const checked = checkStatusInput(args.status); // the CLI's list and text; nothing is written for another word (#6765)
+    const isStatusRefused = Boolean(checked.error);
+    if (isStatusRefused) return { error: checked.error, refused: true };
     const agentHandle = resolveAgentId(args.agentId || args.as);
     registerAgent(db, { id: agentHandle, role: 'executor' });
-    const isDoneStatus = targetStatus === 'done' || targetStatus === 'completed';
-    if (isDoneStatus) {
-      return completeTask(ctx, args, cwd, agentHandle);
-    }
-    return updateTaskStatus(db, args.taskId, targetStatus, { blockedReason: args.blockedReason || '' });
+    const isDoneStatus = checked.status === 'done';
+    if (isDoneStatus) return completeTask(ctx, args, cwd, agentHandle);
+    return updateTaskStatus(db, args.taskId, checked.status, { blockedReason: args.blockedReason || '' });
   }
   const isSetTargetAction = action === 'set-target' || action === 'target';
   if (isSetTargetAction) return setTarget(ctx, args, cwd);

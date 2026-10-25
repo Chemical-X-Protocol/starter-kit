@@ -45,10 +45,15 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
   }
   switch (firstArg) {
     case 'team':
-    case 'swarm':
-    case 'feed': {
+    case 'swarm': {
       const { runTeamCli } = await import('../team/index.js');
       runTeamCli(rawArgs.slice(1), true);
+      break;
+    }
+    case 'feed': {
+      // `chemx feed ...` is `chemx team feed ...`: the subcommand is the word typed, not an argument to drop (K1b, #6765).
+      const { runTeamCli } = await import('../team/index.js');
+      runTeamCli(['feed', ...rawArgs.slice(1)], true);
       break;
     }
     case 'task': {
