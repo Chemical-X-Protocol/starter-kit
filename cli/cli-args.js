@@ -6,6 +6,8 @@ import { shellQuote } from './test-paths.js';
 // Mutating commands (patch, write, explode, fix, add:*) read their flags with the helpers in
 // mutation-args.js; they are re-exported so every caller imports argv helpers from one place.
 export * from './mutation-args.js';
+// --root=<dir> and CHEMX_PROJECT_ROOT apply to every command before its own flags are read (cli-root.js, #6751).
+export { extractRootFlag, resolveCliRoot, applyCliRoot, ROOT_ENV } from './cli-root.js';
 
 // Words the shell already split are re-quoted one by one to reach `sh -c` unchanged. The first
 // word stays verbatim when it is the only word or contains whitespace: that is a whole shell

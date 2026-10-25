@@ -1,6 +1,8 @@
 // chemx do / chemx batch: run several CLI commands in one warm process and report the combined status.
 // Commands that call process.exit() are contained, so a failing item can never end the batch green.
 import { STATUS, combineStatuses, toExitCode } from '../result-status.js';
+import { runInItemRoot } from '../cli-root.js';
+import { schemaValueFlags } from '../cli-root-flags.js';
 
 const STATUS_BY_EXIT = { 0: STATUS.PASS, 3: STATUS.INCONCLUSIVE };
 
@@ -50,7 +52,8 @@ export const runBatch = async (rawArgs = [], isCli = true, dispatchFn = null) =>
   for (const tokens of commands) {
     const label = tokens.join(' ');
     if (isCli) process.stdout.write(`\n--- chemx ${label} ---\n`);
-    const code = await runContained(() => dispatchFn(tokens[0], tokens));
+    const dispatchItem = (args) => dispatchFn(args[0], args);
+    const code = await runContained(() => runInItemRoot(tokens, dispatchItem, { valueFlagsOf: schemaValueFlags }));
     items.push({ label, code, status: statusOfExitCode(code) });
   }
   const status = combineStatuses(items.map((i) => i.status));

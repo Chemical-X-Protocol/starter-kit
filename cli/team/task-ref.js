@@ -19,6 +19,22 @@ const safeAll = (db, sql, params) => {
   }
 };
 
+// `<root>#<id>` names a task together with its board (K6, #6751): the same number is a different task on every board.
+// The left side must look like a directory (a slash, `.`, `..` or `~`) and hold no whitespace, so a title such as "fix a/b #12" is text.
+const BOARD_REF_PATTERN = /^(\S+)#(\d+)$/;
+const PATH_LIKE_PATTERN = /[\\/]|^\.{1,2}$|^~/;
+
+/**
+ * @param {string} raw a task argument: `#12`, `12` or `<root>#12`
+ * @returns {{ board: string|null, ref: string }} board is the directory text (not resolved); ref is what the board's own lookup takes
+ */
+export const splitBoardRef = (raw) => {
+  const text = String(raw ?? '');
+  const match = BOARD_REF_PATTERN.exec(text.trim());
+  const isBoardRef = match !== null && PATH_LIKE_PATTERN.test(match[1]);
+  return isBoardRef ? { board: match[1], ref: `#${match[2]}` } : { board: null, ref: text };
+};
+
 export const parseTaskNumber = (raw) => {
   const match = ID_PATTERN.exec(String(raw ?? '').trim());
   return match ? Number(match[1]) : null;

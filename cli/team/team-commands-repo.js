@@ -9,6 +9,8 @@ import { resolveTaskRef } from './task-ref.js';
 import { normalizeTaskTarget } from './task-target.js';
 
 export const REPO_VALUE_FLAGS = ['--repo', '--from', '--keep-ids', '--into', '--source-repo'];
+// --board=<dir> picks the board of another directory (team-board-target.js, K6 #6751).
+export const BOARD_VALUE_FLAG = '--board';
 
 const readFlagValue = (args, name) => {
   const inline = args.find((arg) => arg.startsWith(`${name}=`));
@@ -23,6 +25,7 @@ const readFlagValue = (args, name) => {
 export const parseRepoFlags = (args = []) => ({
   allRepos: args.includes('--all-repos'),
   repo: readFlagValue(args, '--repo'),
+  board: readFlagValue(args, BOARD_VALUE_FLAG),
   from: readFlagValue(args, '--from'),
   keepIds: readFlagValue(args, '--keep-ids'),
   into: readFlagValue(args, '--into'),
@@ -31,7 +34,7 @@ export const parseRepoFlags = (args = []) => ({
   dropJunk: args.includes('--drop-junk')
 });
 
-const ID_ARG_ACTIONS = new Set(['show', 'view', 'info', 'comment', 'post', 'vds-slot', 'slot', 'trace', 'claim', 'handoff', 'done', 'complete', 'update', 'set-target', 'target']);
+export const ID_ARG_ACTIONS = new Set(['show', 'view', 'info', 'comment', 'post', 'vds-slot', 'slot', 'trace', 'claim', 'handoff', 'done', 'complete', 'update', 'set-target', 'target']);
 
 const writeNotices = (notices, isCli) => {
   if (!isCli) return;

@@ -19,6 +19,8 @@
 | `npm test` / `tsc` | `chemx test` / `chemx verify` | Prints a summary on success and the failing diffs on failure. |
 | `cat .chemx/history.json` | `chemx audit --feed=scopes` / MCP `audit_feed` | Recorded audit results as flat rows (per scope, per run or per pillar) without re-running the audit; `--json` for every row. |
 | Auditing each package by hand | `chemx audit --each=submodules` | One scoped audit per submodule or workspace package, then a one-line-per-package summary. |
+| `cd ../other-repo && <command>` / `git -C ../other-repo log` | `chemx <command> --root=../other-repo` (any command: `log`, `d`, `status`, `q -g`, `read`, `team ...`; or `CHEMX_PROJECT_ROOT=<dir>`) | Runs as if started in that project, from any cwd; the shell never changes directory. `chemx read /abs/path/in/another/chemx/project` picks that project's index too. |
+| `cd ../other-repo && chemx team task show 12` | `chemx team task show ../other-repo#12` or `--board=../other-repo` | A task number belongs to a board; this names it. A `team task list`/`show` footer says when you hold a claim on a different board. |
 | Multiple CLI actions | `chemx do "<cmd1>" "<cmd2>"` | Executes sequentially in a single warm Node process. |
 | Multiple MCP tool calls | `chemx({ commands: [...] })` | Executes multiple sub-operations in a single agent turn. |
 

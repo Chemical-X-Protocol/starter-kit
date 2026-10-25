@@ -95,6 +95,22 @@ const answer = (candidates, chosen, extra = {}) => ({
 });
 
 /**
+ * The handle's live claims on boards other than `board` (a board root), newest first. A claim whose task
+ * is no longer the handle's in_progress task, or whose board is gone, is not listed (same check as above).
+ * @param {string} handle
+ * @param {string} board the root of the board being read
+ * @param {{ env?: object }} [options]
+ * @returns {Array<{ root: string, taskId: number }>}
+ */
+export const claimsOnOtherBoards = (handle, board, options = {}) => {
+  const normalized = handle ? normalizeAgentId(handle) : null;
+  if (!normalized) return [];
+  const isElsewhere = (claim) => claim.root !== board;
+  const isLive = (claim) => isLiveClaim(claim, normalized);
+  return readBoardClaims(normalized, { env: options.env }).filter(isElsewhere).filter(isLive).map(({ root, taskId }) => ({ root, taskId }));
+};
+
+/**
  * @param {string} startDir where the caller runs (the commit's cwd)
  * @param {{ handle?: string, board?: string|null, taskRef?: string|number|null, env?: object }} [options]
  *   handle: the committer; board: --board=<dir>; taskRef: the number typed (#10 or 10), null for none.

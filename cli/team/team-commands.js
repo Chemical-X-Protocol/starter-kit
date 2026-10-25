@@ -22,6 +22,7 @@ import { runTaskCommand } from './team-commands-task.js';
 import { runTriage } from './team-commands-triage.js';
 import { handleMigrateCommand } from './team-commands-migrate.js';
 import { parseRepoFlags, resolveTaskIdArgs } from './team-commands-repo.js';
+import { resolveBoardTarget } from './team-board-target.js';
 import { normalizeValueFlags, describeMissingValue } from './team-flag-values.js';
 import { scopeLockArgs } from './lock-targets.js';
 
@@ -112,21 +113,31 @@ const runTeamCommand = (rawArgs, isCli, cwd) => {
   // audit-run reads transcripts and uses the db only when one opens; it never needs the cwd's silo.
   const isAuditRun = args.subCommand === 'audit-run';
   if (isAuditRun) return runAuditRunCli(args.restArgs, args.flags, isCli, cwd);
-  const ctx = openTeamContext(cwd);
+  // --board=<dir> or a task written <root>#<id> reads another board; the command then runs as if started in that directory (K6, #6751).
+  const board = resolveBoardTarget({ subCommand: args.subCommand, flags: args.flags, positionals: args.positionals, cwd });
+  const isBoardRefused = Boolean(board.error);
+  if (isBoardRefused) {
+    if (isCli) {
+      process.stderr.write(`\x1b[31m✕ ${board.error}\x1b[0m\n`);
+      process.exitCode = 1;
+    }
+    return { error: board.error, refused: true };
+  }
+  const ctx = openTeamContext(board.cwd);
   const isUnavailable = !ctx.db;
   if (isUnavailable) {
     if (isCli) process.stderr.write(`\x1b[31m✕ ${describeTeamDbFailure(ctx)}\x1b[0m\n`);
     return null;
   }
   // Every task-id argument (positional id, --parent, --task, --deps) resolves for the caller's repo.
-  const taskAction = args.subCommand === 'task' ? (args.positionals[0] || 'list') : '';
-  const resolved = resolveTaskIdArgs(ctx.db, ctx, taskAction, args.positionals, args.flags, isCli);
+  const taskAction = args.subCommand === 'task' ? (board.positionals[0] || 'list') : '';
+  const resolved = resolveTaskIdArgs(ctx.db, ctx, taskAction, board.positionals, args.flags, isCli);
   const isRefused = Boolean(resolved.refusal);
   if (isRefused) {
     if (isCli) process.stderr.write(`\x1b[31m✕ ${resolved.refusal}\x1b[0m\n`);
     return { error: resolved.refusal, refused: true };
   }
-  return runSubCommand(ctx, { ...args, positionals: resolved.positionals, flags: resolved.flags }, isCli, cwd);
+  return runSubCommand(ctx, { ...args, positionals: resolved.positionals, flags: resolved.flags }, isCli, board.cwd);
 };
 
 // `lock` and `unlock` take --root=<dir>: they run as if from that directory (lock-targets.js, #6747).

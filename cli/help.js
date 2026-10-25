@@ -23,6 +23,9 @@ const SUBCOMMAND_HELP_OWNERS = new Set(['team', 'swarm', 'feed', 'tokens', 'tele
 // so readers, wrappers and writers never act on a path or revision named "help".
 const LOOKUP_POSITIONAL_COMMANDS = new Set(['search', 'ls', 'pkg', 'trace', 'backtrace']);
 const NAME_COLUMN = 13;
+// The mcp server and help run in no project; every other command takes the global root flag (cli-root.js).
+const NO_ROOT_HELP = new Set(['mcp', 'help', 'version']);
+const ROOT_FLAG_NOTE = '--root=<dir> (or CHEMX_PROJECT_ROOT) runs this in another project from any cwd; relative paths then mean that project\'s.';
 
 const displayName = (entry) => {
   const usageToken = entry.usage.split(' ')[1] ?? entry.name;
@@ -32,7 +35,7 @@ const displayName = (entry) => {
 };
 
 export const formatTopLevelHelp = () => {
-  const lines = ['chemx <command> [options]', 'chemx help <command>   flags and examples'];
+  const lines = ['chemx <command> [options]', 'chemx help <command>   flags and examples', 'chemx <command> --root=<dir>   run in another project'];
   for (const group of COMMAND_GROUPS) {
     lines.push('', GROUP_TITLES[group]);
     for (const entry of COMMANDS_SCHEMA.filter((e) => e.group === group)) {
@@ -59,6 +62,8 @@ export const formatCommandHelp = (entry) => {
   if (hasFlags) lines.push('', 'FLAGS', ...formatFlagRows(entry.flags));
   const note = exemptionNote(entry.name);
   lines.push('', note ?? SHORT_FLAG_NOTE);
+  const takesRoot = !NO_ROOT_HELP.has(entry.name);
+  if (takesRoot) lines.push(ROOT_FLAG_NOTE);
   const hasExamples = entry.examples.length > 0;
   if (hasExamples) lines.push('', 'EXAMPLES', ...entry.examples.map((eg) => `  ${eg}`));
   return `${lines.join('\n')}\n`;

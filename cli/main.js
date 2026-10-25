@@ -12,6 +12,8 @@ import {
 import { printHelp } from './help.js';
 import { ROUTABLE_COMMAND_TOKENS } from './commands-schema.js';
 import { readJsonOr } from './fs-json.js';
+import { applyCliRoot } from './cli-root.js';
+import { schemaValueFlags } from './cli-root-flags.js';
 
 sanitizeOutputStreams();
 exitQuietlyOnClosedPipe();
@@ -115,7 +117,20 @@ const loadCallLedger = async () => {
   }
 };
 
+// --root=<dir> / CHEMX_PROJECT_ROOT start the command in another project (cli-root.js). The flag leaves
+// the arguments (in place, so every holder of rawArgs and process.argv sees the same words) and the process
+// moves into the root before anything reads the cwd. An unusable root is a refusal (runMain prints it, exit 1).
+const enterRoot = () => {
+  const root = applyCliRoot(rawArgs, { valueFlagsOf: schemaValueFlags });
+  const hasError = Boolean(root.error);
+  if (hasError) throw Object.assign(new Error(root.error), { isRefusal: true });
+  if (root.note) process.stderr.write(`${root.note}\n`);
+  rawArgs.splice(0, rawArgs.length, ...root.args);
+  process.argv.splice(2, process.argv.length - 2, ...root.args);
+};
+
 const main = async () => {
+  enterRoot();
   const firstArg = rawArgs[0];
 
   const isHelpRequested = !firstArg || HELP_FLAGS.has(firstArg);

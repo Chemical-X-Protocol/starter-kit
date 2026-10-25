@@ -14,7 +14,8 @@ this page.
 
 `cli/team/coordination-root.js` resolves a root from a start dir. The start dir is the cwd for the
 CLI, the call's `projectRoot` for MCP, and the project dir for hooks. `CHEMX_PROJECT_ROOT` only
-chooses the start dir; it never moves the root.
+chooses the start dir; it never moves the root. For the CLI the start dir can be set with `--root=<dir>`
+or `CHEMX_PROJECT_ROOT` (below).
 
 1. The outermost **git superproject**, climbing only through registered submodules (a `.gitmodules`
    `path` or a `.git/modules` pointer). A linked worktree climbs to its main checkout. An unrelated
@@ -152,6 +153,42 @@ the same meaning: `--add-dep 3,4` and `--add-dep=3,4`, `--prio 2` and `--prio=2`
 write `--title=-x` for that. A value flag with no value (last word, or followed by another flag) is
 refused by name before the db opens. `--ignore-deps` keeps its `=` form (`--ignore-deps=<reason>`); bare,
 it is refused by `task claim` with a request for a reason.
+
+## Other repos and other boards
+
+A task number means a different task on every board (#1553 is one task on the app's board and another
+on the monorepo's), and work crosses repos, so an orchestrator needs to point a command at a project
+without a `cd`. Three pieces (K6, #6751):
+
+- **`--root=<dir>` on every command.** `chemx log --root=/work/app -n 3`, `chemx d`, `status`, `show`,
+  `f`, `p`, `j`, `conflicts`, `q -g x`, `read src/a.ts --outline`, `team ...` and the rest run as if
+  started in `<dir>`: the flag (`--root <dir>` and `--project-root` also work, before or after the
+  command) is removed from the arguments and the process changes directory first, so relative paths,
+  git, the code index and the board all mean that project's. A relative `<dir>` is read against the
+  cwd; a missing one or a file is refused by name (exit 1) before anything runs. `CHEMX_PROJECT_ROOT`
+  does the same when no flag is given (a value that is not a directory is ignored with a one-line
+  note); the flag wins over it. Not covered: the MCP server (it takes `projectRoot` per call), hooks,
+  help and version, and the words after `--` or after the first word of `build`/`run`/`wrap`, which belong to the
+  wrapped tool. `chemx do` takes `--root` on each item as well as on the batch. `doctor`, `install-hooks`
+  and `friction` keep reading `--root` as the project they act on.
+- **A path in another chemx project (`read` and `q`).** An absolute path argument that lies in a
+  different chemx project (a directory with `.chemxrc` or `.chemx/index.db`) than the cwd's selects that
+  project as the root, so `chemx read /work/kit/cli/main.js --outline` works from the app directory and
+  uses the kit's index. It prints `chemx root: <dir> (...)` on stderr unless `--bare` or `--json` is
+  given. Relative paths never change the root, a path no chemx project owns is still refused as outside
+  the project root, and an explicit `--root` or `CHEMX_PROJECT_ROOT` wins.
+- **Boards by name (`team`).** `--board=<dir>` (or `--board <dir>`) and a task written `<dir>#<id>`
+  (`chemx team task show ../kit#6751`; only the id slot of `show`, `comment`, `claim`, `done`, `update`
+  and the other id actions reads it) read or write the board of that directory. The board must already
+  have a team db (nothing is created), `--board` with a `<dir>#<id>` for a different board is refused,
+  and the command's cwd becomes that directory, so `--target` paths resolve against it. This differs
+  from `--root`, which moves the whole command: `--board` moves only which team db a team command uses.
+
+`team task list` and `show` end with `board <db path>` (and `--json` show carries `board`), and a
+`not found` names the board it looked in. When the caller (`--as` or `CHEMX_AGENT_ID`) holds an in_progress
+claim on a board other than the one read, they add one line: `@h also holds #6751 on <root>; this board is
+<root>. --board=<root> or <root>#<id> addresses another board.` The claim comes from the pointer files of
+`board-claims.js`, re-checked in each board's own db, so it is silent for a claim that was finished.
 
 ## Reading the board cheaply
 

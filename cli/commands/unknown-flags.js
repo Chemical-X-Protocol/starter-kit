@@ -81,7 +81,7 @@ const EXTRA_FLAGS = {
     '--reason', '--import', '--model', '--cost', '--since', '--tokens', '--prompt-tokens', '--completion-tokens',
     '--cached-tokens', '--log', '--metadata', '--no-fail', '--strict', '--from', '--keep-ids', '--into', '--source-repo',
     '--drop-junk', '--mark-read', '--thread', '--to', '--append', '--overwrite', '--in-place', '--compact',
-    '--projects', '--url', '--pid', '--force', '--brief', '--oneline', '--full', '--mine', '--blockers'
+    '--projects', '--url', '--pid', '--force', '--brief', '--oneline', '--full', '--mine', '--blockers', '--board'
   ]
 };
 

@@ -16,7 +16,7 @@ const PARSED_VALUE_FLAGS = [
 ];
 
 // Handler-read values: trace --url, the run and projects locators, and the repo/migrate flags (REPO_VALUE_FLAGS).
-const OTHER_VALUE_FLAGS = ['--url', '--run', '--projects', '--repo', '--from', '--keep-ids', '--into', '--source-repo'];
+const OTHER_VALUE_FLAGS = ['--url', '--run', '--projects', '--repo', '--from', '--keep-ids', '--into', '--source-repo', '--board'];
 
 // --ignore-deps is not here: bare it parses to true so `task claim` can refuse it and ask for a reason (#4428).
 export const TEAM_VALUE_FLAGS = Object.freeze([...PARSED_VALUE_FLAGS, ...OTHER_VALUE_FLAGS]);

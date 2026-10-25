@@ -20,6 +20,7 @@ import { buildCompletionOptions, describeCompletion, describeStatusUpdate, write
 import { refuseUnknownTask } from './team-task-guard.js';
 import { checkNeedsInput } from './team-needs.js';
 import { resolveListRepo, prepareTaskTarget, describeBoardScope } from './team-commands-repo.js';
+import { boardFooterLines, describeOtherBoardClaims, describeTaskNotFound } from './board-notice.js';
 import { runTriage } from './team-commands-triage.js';
 import { repoDir } from './coordination-repos.js';
 import { loadModelRouting } from './team-dispatch.js';
@@ -74,6 +75,8 @@ const runList = (ctx, flags, isCli) => {
     const hasMore = total > page.length;
     if (hasMore) process.stdout.write(`\x1b[2mShowing ${page.length} of ${total}. Use --all, --status=, or --limit= for more.\x1b[0m\n`);
     process.stdout.write(`\x1b[2m${describeBoardScope(ctx, repo)} | --all-repos or --repo=<path> widens it\x1b[0m\n`);
+    const claimLine = describeOtherBoardClaims(ctx, flags.as);
+    if (claimLine) process.stdout.write(`\x1b[2m${claimLine}\x1b[0m\n`);
   }
   return page;
 };
@@ -89,15 +92,17 @@ const renderShow = (ctx, shown, flags, output) => {
 const runShow = (ctx, taskId, flags, isCli) => {
   if (!taskId) return fail(isCli, 'Task ID required: chemx team task show <id>', { error: 'taskId required' });
   const task = getTask(ctx.db, taskId);
-  if (!task) return fail(isCli, `Task #${taskId} not found`);
+  if (!task) return fail(isCli, describeTaskNotFound(ctx, taskId, flags.as), { error: `Task #${taskId} not found` });
   const events = queryFeed(ctx.db, { task_id: taskId });
   const dependencyStates = resolveDependencyStates(ctx.db, task);
   const links = duplicateLinks(ctx.db, taskId);
   const view = flags.brief ? buildBriefView(task, events, dependencyStates) : { task, dependencyStates, events, activityCount: events.length };
-  const output = { ...view, ...links };
+  const output = { ...view, ...links, board: ctx.dbPath };
   const returnsOutput = flags.isJson || flags.brief;
   if (!isCli) return returnsOutput ? output : { task, dependencyStates, events, ...links };
   process.stdout.write(renderShow(ctx, { task, events, dependencyStates, links }, flags, output));
+  // A task number is only meaningful with its board; --json carries it in the object instead.
+  if (!flags.isJson) process.stdout.write(boardFooterLines(ctx, flags.as).map((line) => `\x1b[2m${line}\x1b[0m\n`).join(''));
   return returnsOutput ? output : { task, dependencyStates, events };
 };
 
@@ -336,7 +341,7 @@ export const runTaskCommand = (ctx, positionals, flags, titleWords, isCli, cwd) 
     return { help: true, actions: TASK_ACTIONS };
   }
   const taskAction = positionals[0] || 'list';
-  const unknownTask = refuseUnknownTask(ctx.db, taskAction, positionals[1], { isCli, cwd });
+  const unknownTask = refuseUnknownTask(ctx.db, taskAction, positionals[1], { isCli, cwd, hint: () => describeOtherBoardClaims(ctx, flags.as) });
   if (unknownTask) return unknownTask;
   const action = canonicalAction(taskAction);
   const isKnown = action !== null;

@@ -8,6 +8,14 @@ This section was written from the day's commit subjects and their task titles. I
 
 ## Unreleased (main, 2026-10-24)
 
+### One root for every command, and boards by name (epic #6745, K6 #6751)
+
+Full reference: [coordination-db.md](coordination-db.md#other-repos-and-other-boards). Before, `chemx log --root=<dir>` was "unrecognized argument" and `d`, `show`, `status`, `f`, `q` and `read` only looked at the cwd, so an orchestrator working across repos changed directory for every call, and a task number (#1553) named a different task on each board with no hint of which.
+
+- `--root=<dir>` (also `--root <dir>`, `--project-root`, before or after the command) runs any command as if started in `<dir>`: the flag is removed from the arguments and the process changes directory first, so `log`, `d`, `show`, `status`, `f`, `p`, `j`, `conflicts`, `q`, `read`, `team`, `test`, `lint` and the rest resolve relative paths, git, the index and the board there. `CHEMX_PROJECT_ROOT` does the same when no flag is given; the flag wins; a value that is not a directory is an error for the flag and a one-line note for the variable. `chemx do` takes `--root` per item. The words after `--` or after the first word of `build`/`run`/`wrap` are never read as the flag, nor are a search pattern (`q -g --root`) or the value of a flag that takes one. Not changed: the MCP server, hooks, help and version; `doctor`, `install-hooks` and `friction` keep reading `--root` as their own target (cli/cli-root.js, `chemx help` names it).
+- `read` and `q` given an absolute path inside another chemx project (a directory with `.chemxrc` or `.chemx/index.db`) run in that project, with a `chemx root:` line on stderr unless `--bare` or `--json`; a path no chemx project owns is still refused.
+- `team ... --board=<dir>` and `team task <action> <dir>#<id>` read or write the board of that directory (the board must have a team db; nothing is created; two different boards in one command are refused). `team task list` and `show` end with the board, a `--json` show carries `board`, and a `not found` names the board it looked in and, when the caller holds a claim on a different board, says so in one line (`claimsOnOtherBoards`, `cli/team/board-resolve.js`).
+
 ### Board output diet (epic #6745, K4 #6749)
 
 Full reference: [coordination-db.md](coordination-db.md#reading-the-board-cheaply). Measured on the live board (characters): `team feed` 27,290 -> 2,564, `team status` 9,167 -> 3,912, `team task show` of the epic 8,643 -> 4,655, 275 with `--brief`.
