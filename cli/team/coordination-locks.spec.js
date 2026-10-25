@@ -5,6 +5,8 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { buildMonorepo } from './coordination-fixture.js';
 import { runTeamCli } from './team-commands.js';
@@ -43,4 +45,31 @@ test('locks: the edit guard from the package root sees the coordination lease; r
   assert.equal(findForeignLease(repo.pkgA, absolute, '@spec-sub-agent'), null, 'the holder is not blocked');
   const renewed = renewLeasesAfterEdit(repo.pkgA, [absolute], '@spec-sub-agent', { ttlMs: 600000 });
   assert.deepEqual(renewed, [absolute]);
+}));
+
+test('locks: an absolute path in a sibling repo is accepted from another repo directory and keyed from the root (#6747)', () => withFixture((repo) => {
+  const sibling = path.join(repo.pkgB, 'src', 'y.js');
+  const res = runTeamCli(['lock', 'acquire', sibling, '--as=@spec-a'], false, repo.pkgA);
+  assert.equal(res.granted, true);
+  assert.equal(res.lease.file_path, 'packages/b/src/y.js');
+  assert.equal(res.repo, 'packages/b');
+  const relative = runTeamCli(['lock', 'acquire', '../b/src/y.js', '--as=@spec-b'], false, repo.pkgA);
+  assert.equal(relative.queued, true, 'the ../ form names the same file');
+  const own = runTeamCli(['lock', 'acquire', 'src/y.js', '--as=@spec-c'], false, repo.pkgB);
+  assert.equal(own.queued, true, 'locked from its own repo it collides with the sibling-keyed lease');
+  assert.deepEqual(leaseKeys(repo), [{ file_path: 'packages/b/src/y.js', locked_by: '@spec-a' }]);
+}));
+
+test('locks: a path outside every root, the root and the current directory are still refused (#6747)', () => withFixture((repo) => {
+  const elsewhere = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-locks-elsewhere-'));
+  try {
+    fs.writeFileSync(path.join(elsewhere, 'z.js'), '');
+    const refused = [path.join(elsewhere, 'z.js'), '/etc/passwd', '../../../../../../etc/passwd', path.join(repo.root, '..', 'z.js'), repo.root, '.'];
+    for (const target of refused) {
+      assert.equal(runTeamCli(['lock', 'acquire', target, '--as=@spec-a'], false, repo.pkgA).error, 'path_traversal', target);
+    }
+    assert.deepEqual(leaseKeys(repo), []);
+  } finally {
+    fs.rmSync(elsewhere, { recursive: true, force: true });
+  }
 }));

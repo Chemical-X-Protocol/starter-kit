@@ -61,7 +61,7 @@ A lease is keyed by the file's path relative to the root of the db that holds it
 in legacy mode, a lock taken from the monorepo root lands in the coordination db
 (`apps/x/src/a.js`) and a lock taken from the package lands in the package db (`src/a.js`). They still
 collide: `requestFileLock` reads the other db read-only first and refuses with
-`reason: 'held_in_other_db'` (`Lock refused: ... not queued here`) when another handle holds a live
+`reason: 'held_in_other_db'` (`refused: ... not queued here`) when another handle holds a live
 lease on the same file there. The refusal is not queued, because the queue lives in one db; wait with
 `chemx wait --lock-free=<file>`.
 

@@ -1,42 +1,28 @@
-import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { requestFileLock, releaseFileLock } from './team-db.js';
 import { formatLockHelpCard } from './team-format.js';
-import { isPathTraversal } from '../path-scope.js';
 import { resolveAgentIdentity, describeIdentityHint } from './agent-identity.js';
 import { runLockCheck, runLockStatus, runLockList, runLockRenew, missingPathWarning } from './team-commands-lock-views.js';
 import { runLockCheckStaged } from './team-commands-lock-staged.js';
-import { clockTime } from './lease-lapse.js';
-import { DEFAULT_TTL_MS } from './team-db-lock-promotion.js';
+import { checkLockTarget, checkPathList } from './lock-targets.js';
+import { RENEWAL_NOTE, lockLine, summarize } from './lock-lines.js';
 
 const LOCK_ACTIONS = ['acquire', 'release', 'unlock', 'check', 'check-staged', 'status', 'list', 'renew'];
 
-// The first positional names the action when it is one; otherwise it is the file (default acquire).
-// So `lock list` lists, and a file literally named "list" needs `lock acquire list`.
+// The first positional names the action when it is one; otherwise every positional is a file (default
+// acquire). So `lock list` lists, and a file literally named "list" needs `lock acquire list`.
 const parseLockAction = (positionals) => {
   const first = positionals[0];
   const isAction = LOCK_ACTIONS.includes(first);
-  if (!isAction) return { action: 'acquire', file: first };
+  if (!isAction) return { action: 'acquire', files: positionals };
   const isRelease = first === 'unlock';
-  return { action: isRelease ? 'release' : first, file: positionals[1] };
+  return { action: isRelease ? 'release' : first, files: positionals.slice(1) };
 };
 
-const rejectTraversal = (file, isCli, cwd) => {
-  const isTraversal = isPathTraversal(file, cwd);
-  if (!isTraversal) return null;
-  if (isCli) process.stderr.write('\x1b[31m✕ Path traversal rejected: file path must be within workspace\x1b[0m\n');
-  return { error: 'path_traversal' };
-};
-
-// A path with whitespace that does not exist is most likely an unsplit list of files (#2559).
-// Guarantee: only that case is refused; other nonexistent paths (files about to be created) still lock.
-const rejectPathList = (file, isCli, cwd) => {
-  const hasSpace = /\s/.test(file);
-  if (!hasSpace) return null;
-  const isPresent = existsSync(resolve(cwd, file));
-  if (isPresent) return null;
-  if (isCli) process.stderr.write('\x1b[31m✕ Not locked: the path contains spaces and does not exist, so it looks like several files joined together. Pass one path per lock acquire.\x1b[0m\n');
-  return { error: 'path_list' };
+const rejectTraversal = (db, file, isCli, cwd) => {
+  const target = checkLockTarget(db, file, cwd);
+  if (!target.error) return null;
+  if (isCli) process.stderr.write(`\x1b[31m✕ ${file} refused: ${target.message}\x1b[0m\n`);
+  return { error: target.error };
 };
 
 const runFileAction = (db, action, file, flags, isCli, cwd) => {
@@ -62,21 +48,62 @@ export const resolveCliAgent = (flags, isCli) => {
   return identity.id;
 };
 
-const RENEWAL_NOTE = `Any chemx command run as this handle extends it to ${DEFAULT_TTL_MS / 60000} minutes from then; with no chemx activity it lapses. If someone queues for it, renewal stops after the cap (10 minutes by default) since your last edit of the file (docs/team-locks.md).`;
+const SINGLE_PATH_ACTIONS = ['check', 'status', 'renew'];
 
-// The acquire line: when it expires, what keeps it alive, and a lapse it replaces.
-const describeGrant = (file, res) => {
-  const until = clockTime(res.lease.expires_at);
-  const lapse = res.previousLapse ? ` (your earlier lease on it expired at ${clockTime(res.previousLapse.expiredAt)})` : '';
-  return `\x1b[32m✔\x1b[0m Acquired lock on ${file}${lapse}. It expires at ${until}. ${RENEWAL_NOTE}\n`;
+// check, status and renew answer for one file; an extra path is refused, never silently dropped.
+const runSinglePathAction = (db, action, files, flags, isCli, cwd) => {
+  const isExtra = files.length > 1;
+  if (isExtra) {
+    if (isCli) process.stderr.write(`\x1b[31m✕ lock ${action} takes one path, got ${files.length}: run it once per path\x1b[0m\n`);
+    if (isCli) process.exitCode = 1;
+    return { error: 'one_path_only' };
+  }
+  const traversal = rejectTraversal(db, files[0], isCli, cwd);
+  const isRejected = Boolean(traversal);
+  if (isRejected) return traversal;
+  return runFileAction(db, action, files[0], flags, isCli, cwd);
 };
 
-// What the waiter is told about the holder notice (#2566): exact, never more than was sent.
-const describeNotice = (res) => {
-  const isNotified = Boolean(res.holderNotified);
-  if (!isNotified) return `Could not notify ${res.currentHolder}; ask them to release it.`;
-  const wording = res.noticeSent ? 'was notified' : 'was already notified';
-  return `${res.notifiedHolder} ${wording} (they see it when they check their inbox).`;
+const acquireOne = (db, file, agentId, flags, cwd) => {
+  const target = checkLockTarget(db, file, cwd);
+  if (target.error) return { error: target.error, message: target.message };
+  const listLike = checkPathList(file, cwd);
+  if (listLike) return listLike;
+  const res = requestFileLock(db, file, agentId, {
+    purpose: flags.purpose,
+    priority: flags.priority,
+    pid: flags.pid ? Number(flags.pid) : 0,
+    requireExisting: !flags.allowNew,
+    cwd
+  });
+  return target.repo === undefined ? res : { ...res, repo: target.repo };
+};
+
+// One line per path in the order given, the renewal note once when anything was granted; a refused
+// path sets exit 1 (queued is not a refusal). --json prints the whole outcome instead.
+const writeAcquireReport = (files, results, summary, outcome, isJson) => {
+  const hasRefusal = summary.refused > 0;
+  if (hasRefusal) process.exitCode = 1;
+  if (isJson) {
+    process.stdout.write(`${JSON.stringify(outcome, null, 2)}\n`);
+    return;
+  }
+  files.forEach((file, i) => process.stdout.write(`${lockLine(file, results[i])}\n`));
+  const hasGrant = summary.granted > 0;
+  if (hasGrant) process.stdout.write(`${RENEWAL_NOTE}\n`);
+};
+
+// A single path returns the plain result; several return { results: [{ file, ...result }], summary }.
+const runAcquire = (db, requested, flags, isCli, cwd) => {
+  const files = [...new Set(requested)];
+  const identity = resolveAgentIdentity(flags.as);
+  writeIdentityHint(identity, isCli, flags.isJson);
+  const results = files.map((file) => acquireOne(db, file, identity.id, flags, cwd));
+  const summary = summarize(results);
+  const isSingle = files.length === 1;
+  const outcome = isSingle ? results[0] : { results: files.map((file, i) => ({ file, ...results[i] })), summary };
+  if (isCli) writeAcquireReport(files, results, summary, outcome, flags.isJson);
+  return outcome;
 };
 
 export const handleLockCommand = (db, nonFlagPositional, flags, isCli, cwd = process.cwd()) => {
@@ -86,50 +113,50 @@ export const handleLockCommand = (db, nonFlagPositional, flags, isCli, cwd = pro
     return { help: true, actions: ['acquire', 'release', 'check', 'check-staged', 'status', 'list', 'renew'] };
   }
 
-  const { action, file } = parseLockAction(nonFlagPositional);
+  const { action, files } = parseLockAction(nonFlagPositional);
   const isList = action === 'list';
   if (isList) return runLockList(db, flags, isCli);
   const isCheckStaged = action === 'check-staged';
   if (isCheckStaged) return runLockCheckStaged(nonFlagPositional.slice(1), flags, isCli, cwd);
 
-  if (!file) {
-    if (isCli) process.stderr.write('\x1b[31m✕ File path required: chemx team lock [acquire|release|check|status|renew] <filePath> (or: chemx team lock list)\x1b[0m\n');
+  const hasFiles = files.length > 0;
+  if (!hasFiles) {
+    if (isCli) process.stderr.write('\x1b[31m✕ File path required: chemx team lock [acquire|release|check|status|renew] <filePath>... (or: chemx team lock list)\x1b[0m\n');
     return { error: 'filePath required' };
   }
 
   const isRelease = action === 'release';
-  if (isRelease) {
-    return handleUnlockCommand(db, [file], flags, isCli, cwd);
-  }
-
-  const traversal = rejectTraversal(file, isCli, cwd);
-  const isRejected = Boolean(traversal);
-  if (isRejected) return traversal;
-
+  if (isRelease) return handleUnlockCommand(db, files, flags, isCli, cwd);
   const isAcquire = action === 'acquire';
-  if (!isAcquire) return runFileAction(db, action, file, flags, isCli, cwd);
+  if (isAcquire) return runAcquire(db, files, flags, isCli, cwd);
+  return runSinglePathAction(db, action, files, flags, isCli, cwd);
+};
 
-  const listLike = rejectPathList(file, isCli, cwd);
-  const isListLike = Boolean(listLike);
-  if (isListLike) return listLike;
+const releaseOne = (db, file, agentId, cwd) => {
+  const target = checkLockTarget(db, file, cwd);
+  if (target.error) return { error: target.error, message: target.message };
+  const res = releaseFileLock(db, file, agentId, { cwd });
+  const warning = res.success ? null : missingPathWarning(db, file, cwd);
+  return warning ? { ...res, warning } : res;
+};
 
-  const identity = resolveAgentIdentity(flags.as);
-  writeIdentityHint(identity, isCli, flags.isJson);
-  const res = requestFileLock(db, file, identity.id, {
-    purpose: flags.purpose,
-    priority: flags.priority,
-    pid: flags.pid ? Number(flags.pid) : 0,
-    requireExisting: !flags.allowNew,
-    cwd
-  });
+// The line for one released path: stdout when the lease is gone or the queue left, stderr when not.
+const releaseLine = (file, res, isMulti) => {
+  const subject = isMulti ? ` (${file})` : '';
+  const warning = res.warning ? ` ${res.warning}` : '';
+  if (res.error) return { isOk: false, text: `\x1b[31m✕ ${file} refused: ${res.message}\x1b[0m` };
+  if (res.dequeued) return { isOk: true, text: `\x1b[32m✔\x1b[0m Left the queue for ${file} (no lock was held)` };
+  if (res.success) return { isOk: true, text: `\x1b[32m✔\x1b[0m Released lock on ${file}` };
+  return { isOk: false, text: `\x1b[31m✕ Unlock failed${subject}: ${res.message ?? res.reason}${warning}\x1b[0m` };
+};
 
-  if (isCli) {
-    if (flags.isJson) process.stdout.write(`${JSON.stringify(res, null, 2)}\n`);
-    else if (res.granted) process.stdout.write(describeGrant(file, res));
-    else if (res.queued) process.stdout.write(`\x1b[33m⏳\x1b[0m ${res.requeued ? 'Still' : 'Enqueued'} in FIFO lock queue at position ${res.position} (held by ${res.currentHolder}). ${describeNotice(res)}\n`);
-    else process.stderr.write(`\x1b[31m✕ Lock refused: ${res.message || res.reason}\x1b[0m\n`);
+const writeReleaseReport = (files, results, outcome, isJson) => {
+  if (isJson) return process.stdout.write(`${JSON.stringify(outcome, null, 2)}\n`);
+  const isMulti = files.length > 1;
+  for (const [i, file] of files.entries()) {
+    const line = releaseLine(file, results[i], isMulti);
+    (line.isOk ? process.stdout : process.stderr).write(`${line.text}\n`);
   }
-  return res;
 };
 
 export const handleUnlockCommand = (db, nonFlagPositional, flags, isCli, cwd = process.cwd()) => {
@@ -139,27 +166,18 @@ export const handleUnlockCommand = (db, nonFlagPositional, flags, isCli, cwd = p
     return { help: true, actions: ['release'] };
   }
 
-  const file = nonFlagPositional[0];
-  if (!file) {
-    if (isCli) process.stderr.write('\x1b[31m✕ File path required: chemx team unlock <filePath>\x1b[0m\n');
+  const files = [...new Set(nonFlagPositional)];
+  const hasFiles = files.length > 0;
+  if (!hasFiles) {
+    if (isCli) process.stderr.write('\x1b[31m✕ File path required: chemx team unlock <filePath>...\x1b[0m\n');
     return { error: 'filePath required' };
   }
 
-  const traversal = rejectTraversal(file, isCli, cwd);
-  const isRejected = Boolean(traversal);
-  if (isRejected) return traversal;
-
   const identity = resolveAgentIdentity(flags.as);
   writeIdentityHint(identity, isCli, flags.isJson);
-  const res = releaseFileLock(db, file, identity.id, { cwd });
-  const isReleased = Boolean(res.success);
-  const warning = isReleased ? null : missingPathWarning(db, file, cwd);
-  if (warning) res.warning = warning;
-  if (isCli) {
-    if (flags.isJson) process.stdout.write(`${JSON.stringify(res, null, 2)}\n`);
-    else if (res.dequeued) process.stdout.write(`\x1b[32m✔\x1b[0m Left the queue for ${file} (no lock was held)\n`);
-    else if (isReleased) process.stdout.write(`\x1b[32m✔\x1b[0m Released lock on ${file}\n`);
-    else process.stderr.write(`\x1b[31m✕ Unlock failed: ${res.message ?? res.reason}${warning ? ` ${warning}` : ''}\x1b[0m\n`);
-  }
-  return res;
+  const results = files.map((file) => releaseOne(db, file, identity.id, cwd));
+  const isSingle = files.length === 1;
+  const outcome = isSingle ? results[0] : { results: files.map((file, i) => ({ file, ...results[i] })) };
+  if (isCli) writeReleaseReport(files, results, outcome, flags.isJson);
+  return outcome;
 };

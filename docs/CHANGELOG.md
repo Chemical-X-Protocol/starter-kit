@@ -46,6 +46,16 @@ Full reference: [commit.md](commit.md).
 - `--no-task=<reason>` no longer scans the subject for `#<id>`: a number in its text is prose and is neither checked nor recorded on.
 - `[skip ci]` from `commit.skipCi` is added only while HEAD is on the default branch (`main`, `master` or the branch `origin/HEAD` names), so a pull request branch keeps its checks. New flags `--skip-ci` (force) and `--no-skip-ci`.
 
+### Team locks: several paths, one-line acks, paths from any repo (K2, #6747, epic #6745)
+
+Reference: [team-locks.md](team-locks.md#several-paths-and-one-line-each-6747).
+
+- `chemx team lock a b c` (and `lock acquire`, `lock release`, `unlock`) takes several paths. Before, only the first was leased and the rest were dropped silently. Each path now gets one line on stdout, in order: `granted until HH:MM`, `queued behind @x (position N, holder notified)` or `refused: <reason>`. The renewal note (about 270 characters per file before) prints once at the end, and only when something was granted. A refused path sets exit 1; a queued one does not. `--json` prints `{ results, summary }`; a single path keeps its plain result.
+- A space-joined argument that does not exist is still refused as a path list (#2559) and no longer stops the other paths in the call; the refusal names the zsh `${=files}` fix. `check`, `status` and `renew` refuse extra paths (`one_path_only`) instead of ignoring them.
+- A path below the board root is accepted from any directory under it: an absolute path in a sibling repo or submodule, or `../b/x.js`. It was refused as `Path traversal rejected` because it was measured against the current directory. The lease is keyed from the board root, collides with the same file locked from its own repo, and the JSON result carries `repo`. A path outside the root, the root itself and the current directory itself are still refused. `release`, `check` and `status` follow the same rule.
+- `lock` and `unlock` take `--root=<dir>` (or `--root <dir>`): run as if from that directory; a non-directory is refused (`root_not_found`).
+- Not guaranteed: a repo with its own unmerged package board leases only paths below that board's root; other `team` subcommands do not take `--root` yet (K6, #6751).
+
 ## Unreleased (feat/job-line, 2026-10-13)
 
 ### Audit rules and gates (review fixes, 2026-10-15, epic #6088)

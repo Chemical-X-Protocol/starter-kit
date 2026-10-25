@@ -4,18 +4,68 @@ A lock is a lease: a row in `file_leases` in the project's `.chemx/index.db` tha
 working on one file until a stated time. Other handles' `patch`, `write`, `autofix` and `explode` on
 that file are refused while it is live. This page states exactly what holds a lease, what lets it go,
 and what each tool tells you. Every behavior below is covered by a spec in `cli/team/`
-(`lease-activity.spec.js`, `lease-cap.spec.js`, `lease-lapse.spec.js`, `staged-leases.spec.js`, `team-lease-safety.spec.js`).
+(`lease-activity.spec.js`, `lease-cap.spec.js`, `lease-lapse.spec.js`, `lock-multi-path.spec.js`, `staged-leases.spec.js`, `team-lease-safety.spec.js`).
 
 ## Commands
 
 | Command | Does |
 | :--- | :--- |
-| `chemx team lock acquire <file> --as=@me --purpose="#12"` | Takes the lease, or queues you (FIFO) behind the holder. Prints when it expires. |
+| `chemx team lock acquire <file>... --as=@me --purpose="#12"` | Takes the lease on each path, or queues you (FIFO) behind the holder. One line per path (see below). `acquire` may be left out: `chemx team lock a.js b.js`. |
 | `chemx team lock renew <file> --as=@me` | Extends your own live lease to now + TTL. Refused for anyone else's or an expired one. |
-| `chemx team lock release <file> --as=@me` | Deletes your lease and promotes the next waiter. |
+| `chemx team lock release <file>... --as=@me` (or `chemx team unlock <file>...`) | Deletes your lease on each path and promotes the next waiter. |
 | `chemx team lock check <file>` | Read-only: would an edit be refused? Exit 0 clear, 2 locked. |
 | `chemx team lock status <file>`, `chemx team lock list` | One lease and its waiters, or every live lease. |
 | `chemx team lock check-staged [files...] --as=@me` | The commit guard (below). |
+| `--root=<dir>` (or `--root <dir>`) on `lock` and `unlock` | Run as if from `<dir>`: relative paths resolve from it and the board is the one that directory belongs to. A `<dir>` that is not a directory is refused (`root_not_found`, exit 1). |
+
+## Several paths and one line each (#6747)
+
+`lock acquire` (and `release`, `unlock`) take any number of paths, each its own argument; a repeated path is
+handled once. Every path gets exactly one line on stdout, in the order given, so a batch reads as a table:
+
+```
+✔ src/a.js granted until 14:05
+⏳ src/b.js queued behind @sonnet-k1 (position 1, holder notified)
+✕ src/nope.js refused: does not exist (looked for /repo/src/nope.js); no lease was taken. Pass --new to lease a file you are about to create.
+Any chemx command run as this handle extends it to 5 minutes from then; with no chemx activity it lapses. If someone queues ...
+```
+
+- `granted until HH:MM` is the lease expiry. After a lapse of your own lease the line adds
+  `(your earlier lease expired HH:MM:SS)`.
+- `queued behind @x (position N, ...)`: the holder keeps the file; `still queued` on a repeat poll. The
+  parenthesis says whether the holder was told (`holder notified`, `holder already notified`, or
+  `holder not notified: ask them to release it`; see Holder notice below).
+- `refused: <reason>`: path does not exist, outside the board root, held in another db, or a path list (below).
+- The renewal note prints **once**, last, and only when at least one path was granted.
+- **Exit code**: 1 when any path was refused; 0 otherwise. A queued path is not a refusal (exit 0): you
+  do not hold it, so read the line before editing.
+- `--json` prints one object, `{ results: [{ file, ...result }], summary: { granted, queued, refused } }`.
+  A call with a single path keeps the plain single result (`granted`, `lease`, `queued`, `repo`, ...), as
+  before.
+- `check`, `status` and `renew` take one path; extra paths are refused (`one_path_only`) instead of being
+  ignored.
+
+**A space-joined argument is still not a path list.** `lock "a.js b.js"` (a shell that did not split a
+variable; zsh does not split `$files`, use `${=files}`) is refused per argument when it contains whitespace
+and does not exist (`path_list`, #2559). The other paths in the same call are still leased. A real file
+with a space in its name locks normally.
+
+## Paths from any directory under the board root
+
+A lease is keyed by the file's path relative to the board's root (the directory that holds the team db,
+normally the monorepo root), never the caller's directory. So a path is accepted when it names a file below
+that root, whichever directory below it you stand in:
+
+- an absolute path in a sibling repo or submodule (`/repo/apps/youmeos/x.js` from `/repo/apps/chemical-x/starter-kit`);
+- `../b/src/y.js` from a directory that is still inside the root;
+- the same file locked from its own repo and from a sibling collides on one key (`apps/youmeos/x.js`), and the
+  JSON result carries `repo` (the owning repo of the path, `.` for the root repo itself).
+
+Refused (`path_traversal`, line `refused: outside the board root <root> ...`): a path outside the root
+(`/etc/passwd`, a sibling checkout with its own board, a symlink that leaves the root), the root itself, and
+your current directory itself (a directory is not a file). The same rule applies to `release`, `check`,
+`status` and `renew`. Limit: a repo that has its own unmerged board (a `legacy` package db) leases only
+paths below that board's root; a path in a sibling repo is refused there until `chemx team migrate` merges it.
 
 ## TTL
 
@@ -67,8 +117,8 @@ it forever. So the rule while anyone is queued for a lease is:
 - **Holder notice.** The first time a waiter queues behind a lease, the holder gets one direct message
   (`chemx team inbox`): `@w is waiting for <file> since HH:MM; commit and release it when your edit is in`,
   naming `chemx commit <files> -m "..." --release` and `chemx team lock release <file> --as=@me`, plus the
-  cap rule. One per (file, waiter, holder); a re-poll sends nothing. The waiter's `lock acquire` output says
-  `@holder was notified` (or `was already notified`, or that notifying failed). The message sits in the
+  cap rule. One per (file, waiter, holder); a re-poll sends nothing. The waiter's `lock acquire` line says
+  `holder notified` (or `holder already notified`, or `holder not notified: ask them to release it`). The message sits in the
   inbox; it does not interrupt a running agent.
 - **Where it shows.** `chemx team lock list`, `lock status <file>` and `chemx status` print, next to each
   contested lease, `waiting: @w (since HH:MM:SS); renewal stops extending at HH:MM:SS` (`stopped` once
@@ -93,8 +143,8 @@ the next `acquire` or `release` of any file in that database deletes the row and
   `lease on <file> expired at HH:MM:SS (<n> min ago); nobody had taken it, so this edit re-acquired it until HH:MM:SS`.
   If another handle took the file, the edit is refused as for any foreign lease. It is never re-acquired.
   If someone is queued for the file, the edit is refused and the lease is not retaken (see the renewal cap).
-- **Acquire** prints `It expires at HH:MM:SS` and that any chemx activity by the holder extends it; after
-  a lapse it adds when your earlier lease expired (`previousLapse` in JSON).
+- **Acquire** prints `granted until HH:MM` per path and, once, that any chemx activity by the holder extends
+  it; after a lapse it adds when your earlier lease expired (`previousLapse` in JSON).
 
 Limit: the lapse record lives in the feed. A lease cleaned by an older chemx, or hidden by a feed
 archive pass, is reported without the lapse sentence (the shorter "you do not hold a lease" form).
