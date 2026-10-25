@@ -295,6 +295,7 @@ export const formatTaskHelpCard = () => {
     '    \x1b[33m--description\x1b[0m <text>     Alias of --desc',
     '    \x1b[33m--repo\x1b[0m <path>            list: show tasks of this repo (default: your repo)',
     '    \x1b[33m--all-repos\x1b[0m              list: show tasks of every repo',
+    '    \x1b[33m--board\x1b[0m <dir>            Use the board of that directory (also: show <dir>#<id>); it must have a team db',
     '    \x1b[33m--duplicate-of\x1b[0m <id>      close: the task this one duplicates',
     '    \x1b[33m--cancel\x1b[0m <reason>        close: cancel the task with a reason',
     '    \x1b[33m--target\x1b[0m <path>          done: file whose hazards gate completion (set-target stores it)',
