@@ -4,7 +4,8 @@
  * reports on any PHP fixture (bad and good, run straight through the passes with the WordPress
  * context and the project index, so no setting hides a record), and that the reporting pass
  * declares it; (3) every rule-shaped string literal in cli/php/*.js and in the precision specs
- * (cli/php/*.precision.spec.js). Not checked: an id built at runtime from parts, or an id a
+ * (cli/php/*.precision.spec.js; those cases are not run here). Every rule-shaped literal counts unless
+ * it is in NON_RULE_LITERALS, so an id with a new prefix is caught. Not checked: an id built at runtime from parts, or an id a
  * pass reports only for an input none of these cases contains.
  */
 import { test } from 'node:test';
@@ -22,7 +23,8 @@ import { parsePhp } from './php-parse.js';
 const PHP_DIR = new URL('./', import.meta.url).pathname;
 const WP_ROOT = path.join(PHP_DIR, '__no_such_plugin__');
 const RULE_SHAPED = /['"]([A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+)['"]/g;
-const REGISTERED_PREFIXES = new Set(Object.keys(RULE_REGISTRY).map((rule) => rule.split('_')[0]));
+// Upper-case string constants the engine names that are not rule ids.
+const NON_RULE_LITERALS = new Set(['WP_DEBUG', 'DOING_AUTOSAVE', 'HTTP_HOST']);
 const unregistered = (ids) => [...new Set(ids)].filter((rule) => !RULE_REGISTRY[rule]).sort();
 
 test('every pass declares only registered ids, and every family default names a registered id', () => {
@@ -66,7 +68,7 @@ test('auditCode drops no PHP fixture finding as unregistered', () => {
 });
 
 const ruleShapedLiterals = (text) => [...text.matchAll(RULE_SHAPED)].map((m) => m[1])
-  .filter((id) => REGISTERED_PREFIXES.has(id.split('_')[0]));
+  .filter((id) => !NON_RULE_LITERALS.has(id));
 
 test('every rule-shaped literal in the PHP engine and its precision specs is registered', () => {
   const files = fs.readdirSync(PHP_DIR).filter((f) => f.endsWith('.js'))

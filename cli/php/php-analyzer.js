@@ -1,6 +1,7 @@
 // PHP branch of the audit rule runner (design spec 3.4 and 3.5).
 // Parses with php-parser (loaded lazily by php-parse.js), runs the PHP passes and finalizes their
 // reports. Reached only from collectRawViolations for .php files.
+import os from 'node:os';
 import path from 'node:path';
 import { parsePhp } from './php-parse.js';
 import { linkParents } from './php-walk.js';
@@ -66,6 +67,7 @@ export const PASSES = [...DEFAULT_PASSES];
 
 const DEFAULT_PHP_TARGET = '8.3';
 const FALLBACK_SEVERITY = 'MEDIUM';
+const NO_ROOT_DIR = path.join(os.tmpdir(), '__chemx_no_wp_root__');
 const INDEX_CAPPED = 'wp-index-capped';
 
 const unregisteredDrops = new Map();
@@ -113,10 +115,12 @@ const syntaxErrorRecord = (relativePath, error) => finalize({
   hazard: `Parse error: ${error.message}`
 }, relativePath);
 
+const SPANNING_RULES = new Set(['ERROR_SWALLOWED_EXCEPTION', 'AI_SLOP_SHALLOW_CATCH']);
+
 const countUnregistered = (rule) => unregisteredDrops.set(rule, (unregisteredDrops.get(rule) ?? 0) + 1);
 
 // An unregistered id is dropped and counted, never thrown; a rule that is off for this file is dropped.
-// A node's end line becomes endLine (unless the pass supplies one), so chemx-allow anywhere inside it applies.
+// Only a catch finding spans its node (endLine), so chemx-allow inside the catch applies (spec 3.6); other rules anchor to their start line.
 const createReporter = (violations, relativePath, settings) => (rule, nodeOrLine, hazard, extra = {}) => {
   const isRegistered = Boolean(RULE_REGISTRY[rule]);
   if (!isRegistered) {
@@ -128,7 +132,7 @@ const createReporter = (violations, relativePath, settings) => (rule, nodeOrLine
   const loc = isLine ? null : nodeOrLine?.loc;
   const line = isLine ? nodeOrLine : (loc?.start?.line ?? 1);
   const column = loc?.start ? loc.start.column : 0;
-  const span = loc?.end ? { endLine: loc.end.line } : {};
+  const span = SPANNING_RULES.has(rule) && loc?.end ? { endLine: loc.end.line } : {};
   violations.push(finalize({ rule, line, column, ...span, hazard, ...extra }, relativePath));
 };
 
@@ -168,11 +172,12 @@ function wordPressContext(filePath, config, ast, scanRoot) {
  * root, or the scan root when detection found none. The overlay is options.overlay when given (the
  * task-done gate pins its target at HEAD), else the audited content under the path the passes use.
  */
-function projectIndexFor(ctx, scanRoot, overlay) {
+function projectIndexFor(ctx, overlay) {
   const isIndexed = Boolean(ctx.wp) && ctx.crossFile;
   if (!isIndexed) return null;
   const audited = { relativePath: indexPathOf(ctx), content: ctx.content };
-  return getProjectIndex(ctx.wp.root || scanRoot, { overlay: overlay ?? audited });
+  // No detected root: the index holds the audited file only, never a listing of the working directory.
+  return getProjectIndex(ctx.wp.root || NO_ROOT_DIR, { overlay: overlay ?? audited });
 }
 
 const runPasses = (ctx, settings) => {
@@ -222,7 +227,7 @@ export function analyzePhp({ content, filePath, relativePath, options = {}, conf
     overlay: options.overlay ?? null,
     report: createReporter(violations, relativePath, settings)
   };
-  ctx.index = projectIndexFor(ctx, scanRoot, options.overlay);
+  ctx.index = projectIndexFor(ctx, options.overlay);
   runPasses(ctx, settings);
   return {
     kind: 'ast',

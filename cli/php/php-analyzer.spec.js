@@ -105,11 +105,35 @@ test('an unregistered id is dropped and counted, never thrown', () => {
   assert.deepEqual(unregisteredRuleDrops(), { STUB_UNREGISTERED_RULE: 2 });
 });
 
-test('a report on a node carries the node end line as endLine', () => {
-  PASSES.push({ name: 'stub', rules: [], run: (ctx) => ctx.report('COMPLEXITY_CYCLOMATIC_HIGH', ctx.ast.children[0], 'x') });
+test('a catch report on a node carries the node end line as endLine', () => {
+  PASSES.push({ name: 'stub', rules: [], run: (ctx) => ctx.report('ERROR_SWALLOWED_EXCEPTION', ctx.ast.children[0], 'x') });
   const { violations } = run('<?php\nfunction f() {\n  return 1;\n}\n');
-  const v = violations.find((x) => x.rule === 'COMPLEXITY_CYCLOMATIC_HIGH');
+  const v = violations.find((x) => x.rule === 'ERROR_SWALLOWED_EXCEPTION');
   assert.deepEqual([v.line, v.endLine], [2, 4]);
+});
+
+test('only a catch finding spans its node: a rule on a node carries no endLine', () => {
+  PASSES.push({ name: 'stub', rules: [], run: (ctx) => ctx.report('COMPLEXITY_CYCLOMATIC_HIGH', ctx.ast.children[0], 'x') });
+  const v = run('<?php\nfunction f() {\n  return 1;\n}\n').violations.find((x) => x.rule === 'COMPLEXITY_CYCLOMATIC_HIGH');
+  assert.equal(v.endLine, undefined);
+});
+
+test('a chemx-allow above a nested closure does not suppress the outer function finding', () => {
+  usePasses(spiedPasses());
+  const ifs = (n) => Array.from({ length: n }, (_, i) => `if ($a === ${i}) { $b++; }`).join('\n');
+  const src = (note) => `<?php\nfunction outer($a, $b) {\n${ifs(14)}\n${note}$f = function ($a, $b) {\n${ifs(14)}\n};\n}\n`;
+  const lines = (code) => run(code).violations.filter((v) => v.rule === 'COMPLEXITY_CYCLOMATIC_HIGH').map((v) => v.line);
+  assert.equal(lines(src('')).length, 2);
+  assert.deepEqual(lines(src('// chemx-allow: COMPLEXITY_CYCLOMATIC_HIGH generated lookup\n')), [2]);
+});
+
+test('without a detected root the index never lists the working directory', () => {
+  let seen;
+  usePasses([{ name: 'probe', rules: [], run: (ctx) => { seen = ctx; } }]);
+  const config = { rules: {}, overrides: [], wordpress: true };
+  run(PHP_FIXTURES.SECURITY_WP_MISSING_NONCE.bad, { config }, 'wp-content/plugins/demo/demo.php');
+  assert.ok(seen.index);
+  assert.deepEqual(seen.index.files(), ['wp-content/plugins/demo/demo.php']);
 });
 
 test('the pass context carries the full config, target version and null wp and index', () => {
