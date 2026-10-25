@@ -1,7 +1,6 @@
-// Argument repairs for `chemx test`, for the two ways a shell hands over words the user meant
-// differently: an unquoted test name (`-t should do x` arrives as three words) and a list of paths
-// in one quoted string (`"a.spec.js b.spec.js"`, which zsh does not split from a variable). What
-// cannot be repaired is named by args-unsplit-hint.js in the "matched nothing" line (#6773).
+// Argument repair for `chemx test`: an unquoted test name (`-t should do x` arrives as three words)
+// is one name. A list of paths in one quoted string (zsh does not split `$specs`) is not repaired:
+// args-unsplit-hint.js names it in the "matched nothing" line (#6773).
 import fs from 'node:fs';
 import path from 'node:path';
 import { SPEC_FILE } from './test-select.js';
@@ -45,15 +44,3 @@ export const foldFilterWords = (args, cwd = process.cwd()) => {
   }
   return out;
 };
-
-// One argument holding several paths ("a.spec.js b.spec.js", a shell variable that was not split)
-// becomes one argument per path, when the whole string is not a path and every word is.
-export const splitQuotedPaths = (args, cwd = process.cwd()) => args.flatMap((arg) => {
-  const words = arg.split(/\s+/).filter(Boolean);
-  const hasSeveralWords = !isFlagWord(arg) && words.length > 1;
-  const isWholePath = fs.existsSync(path.resolve(cwd, arg));
-  const areAllPaths = hasSeveralWords && !isWholePath && words.every((word) => isTargetWord(word, cwd));
-  return areAllPaths ? words : [arg];
-});
-
-export const repairTestArgs = (args, cwd = process.cwd()) => splitQuotedPaths(foldFilterWords(args, cwd), cwd);

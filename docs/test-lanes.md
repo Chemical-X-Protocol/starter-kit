@@ -122,7 +122,6 @@ Not guaranteed: chemx cannot tell that a run was backgrounded, so the job id is 
 ## Arguments
 
 - `chemx test -t should do x` (a shell that did not keep the name together) runs the name `should do x`: the words after `-t` / `--filter` / `--test-name-pattern` that are not an existing path, a glob or a spec-named file join the name; paths, globs and spec files among them stay targets, so `chemx test -t login a.spec.js b.spec.js` filters two files by `login`. A flag or `--` ends the name.
-- One argument holding several existing paths (`"a.spec.js b.spec.js"`, a zsh variable that was not split) is split into one target per path. When it is not a list of paths, the "matched nothing" line says each path must be its own argument and how to split a variable (`${=var}` or an array).
 - When `rg` is not on PATH, the specs that exercise the ripgrep engine skip with the reason `ripgrep not on PATH`, and the report says `ripgrep is not on PATH: 3 ripgrep-engine specs skipped, so the rg search engine went untested here` (JSON: `skippedRipgrep`). A spec that skips for lack of rg must give that reason (`cli/test-rg-skips.spec.js` checks the three search specs).
 
 ## Profile

@@ -18,7 +18,7 @@ import { checkNodeModules } from './verify-helpers.js';
 import { formatAgentJson } from './agent-json.js';
 import { sharedRunField, queuedFields } from './job-line-text.js';
 import { withUnsplitHint } from './args-unsplit-hint.js';
-import { repairTestArgs } from './test-args.js';
+import { foldFilterWords } from './test-args.js';
 import { writeJobRecord, jobSummary } from './job-record.js';
 
 const TEST_ARGS = {
@@ -129,7 +129,7 @@ const waitTimeoutReport = (error) => earlyReport(STATUS.INCONCLUSIVE, 'test', { 
 const expandRelated = (args) => args.flatMap((arg) => (String(arg).startsWith('--related=') ? ['--related', ...String(arg).slice('--related='.length).split(',').filter(Boolean)] : [arg]));
 
 export const runTestAudit = async (rawArgs = [], isCli = false, options = {}) => {
-  const parsed = parseCliArgs(expandRelated(repairTestArgs(rawArgs, options.cwd || process.cwd())), TEST_ARGS);
+  const parsed = parseCliArgs(expandRelated(foldFilterWords(rawArgs, options.cwd || process.cwd())), TEST_ARGS);
   const isJson = Boolean(parsed.flags.json) || options.json === true;
   const output = { isJson, isCli, shouldPrint: options.print !== false, jobCommand: ['chemx test', ...rawArgs].join(' ') };
   const isHelp = Boolean(parsed.flags.help);

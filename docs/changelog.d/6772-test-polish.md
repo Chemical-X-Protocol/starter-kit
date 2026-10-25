@@ -9,6 +9,6 @@ Eight agents wrote the same complaints about `chemx test`: `--changed` passed lo
 - The job line keeps its last slot for small runs: a light run naming `smallRun` (`test-lanes.json`, default 5) or more spec files, a directory or a glob never takes it, so `chemx test one.spec.js` no longer waits behind a `--changed` run that holds the other slots.
 - The wait notice prints once (to stderr, terminal or not), with `[job <pid>: chemx wait --job=<pid>]`, and again only when the position or a holder changes, at most every 30 s; the age of a holder is not a change.
 - New `chemx wait --job=<pid>`: waits for a backgrounded `chemx test` (`chemx test ... & chemx wait --job=$!`) and exits with its code. A test run that ends the process leaves `os.tmpdir()/chemx-jobs/<pid>.json` (swept after a day).
-- `chemx test -t should do x` joins the extra words into the name; paths, globs and spec files among them stay targets. One quoted argument holding several existing paths is split into one target per path (a string that is not a list of paths still gets the zsh hint of #6773).
+- `chemx test -t should do x` joins the extra words into the name; paths, globs and spec files among them stay targets.
 - When `rg` is not on PATH the run summary says how many ripgrep-engine specs it skipped (JSON: `skippedRipgrep`); the one rg spec that skipped without a reason now gives it.
 - Docs: `docs/test-lanes.md` (base, meta specs, fixtures, small runs, waiting for a backgrounded run, arguments), the `chemx test` and `chemx wait` help and schema, and the AGENTS.md test loop.
