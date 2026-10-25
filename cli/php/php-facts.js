@@ -63,6 +63,10 @@ const TEST_OPS = new Set(['!', '&&', '||', 'and', 'or', 'xor', '===', '==', '!==
 const TEST_HOLDERS = new Set(['if', 'while', 'do', 'retif']);
 const VALUE_STOPS = new Set(['assign', 'expressionstatement', 'echo', 'block', 'program', ...SCOPE_KINDS]);
 
+// Only calls that return an id, not a verdict, can be mere data. A predicate (current_user_can, wp_verify_nonce, ...)
+// in a ternary branch is still a decision once the result is tested.
+const ID_RETURNING = new Set(['get_current_user_id']);
+
 const isTestSlot = (parent, child) => {
   const isOperator = (parent.kind === 'unary' || parent.kind === 'bin') && TEST_OPS.has(parent.type);
   const isHeldTest = TEST_HOLDERS.has(parent.kind) && parent.test === child;
@@ -257,7 +261,7 @@ export function extractFacts(ast, relativePath) {
       const call = callOf(n, env) || newCall(n);
       if (!call) return;
       const { label: named, ...plain } = call;
-      const label = { ...named, auth: named.auth && !isDataOnly(n) };
+      const label = { ...named, auth: named.auth && !(ID_RETURNING.has(call.name) && isDataOnly(n)) };
       const entry = { name: call.name, line: call.line };
       found.calls.push(plain);
       for (const key of ['write', 'outbound', 'auth', 'nonce']) if (label[key]) found[key].push(entry);
