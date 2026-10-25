@@ -59,9 +59,50 @@ export function linkParents(root) {
 export function walk(node, visitor, parent = null) {
   const valid = isNode(node);
   if (!valid) return;
+  const entry = flatEntryOf(node);
+  if (!entry) return walkRecursive(node, visitor, parent);
+  const { start } = entry;
+  const { nodes, parentIndex, ends } = entry.flat;
+  const stop = ends[start];
+  let i = start;
+  while (i < stop) {
+    const skipChildren = visitor(nodes[i], i === start ? parent : nodes[parentIndex[i]]) === false;
+    i = skipChildren ? ends[i] : i + 1;
+  }
+}
+
+function walkRecursive(node, visitor, parent) {
   const skipChildren = visitor(node, parent) === false;
   if (skipChildren) return;
-  for (const child of childNodes(node)) walk(child, visitor, node);
+  for (const child of childNodes(node)) walkRecursive(child, visitor, node);
+}
+
+// Every pass walks the same tree many times. The tree is flattened once into pre-order arrays
+// (nodes, parent index, subtree end), so a walk is a loop over a slice. The flat copy is cached per
+// tree root like CHILD_CACHE: a tree edited after its first walk would keep the stale order.
+const FLAT_INDEX = new WeakMap();
+
+function flatEntryOf(node) {
+  const known = FLAT_INDEX.get(node);
+  if (known) return known;
+  let root = node;
+  while (root.parent) root = root.parent;
+  if (!FLAT_INDEX.has(root)) flatten(root);
+  return FLAT_INDEX.get(node) || null;
+}
+
+function flatten(root) {
+  const flat = { nodes: [], parentIndex: [], ends: [] };
+  const visit = (node, parentAt) => {
+    const at = flat.nodes.length;
+    flat.nodes.push(node);
+    flat.parentIndex.push(parentAt);
+    flat.ends.push(at + 1);
+    FLAT_INDEX.set(node, { flat, start: at });
+    for (const child of childNodes(node)) visit(child, at);
+    flat.ends[at] = flat.nodes.length;
+  };
+  visit(root, -1);
 }
 
 /** Nearest enclosing function/method/closure/arrowfunc, or the program root. Needs linkParents. */
