@@ -67,6 +67,7 @@ A nudge lets the call run and shows the model a short note with the replacement 
 | `git add`, `git commit` | `chemx commit` |
 | `sleep`, `node -e` with `setTimeout`, `timeout <n> bash -c ...` (polling loops that sleep are caught by the `sleep` inside) | `chemx wait` |
 | `ls` of a repo directory | `chemx f "<dir>"` |
+| `node tests/run-tests.mjs` (a harness runner `chemx test` understands) | `chemx test [tests/<name>.test.mjs]`, unless `.chemxrc` lists the runner (below) |
 
 A nudge is active only while the running chemx has the named command. Until `chemx status`, `chemx commit` or `chemx wait` exist in the kit you run, the matching nudge stays silent rather than pointing at something missing. A native-tool warning (`nativeFileTools=warn`) is also advice only.
 
@@ -84,7 +85,17 @@ blocks every nudge, or list rule ids to block only those:
 { "guardNudgeBlock": ["nudge-git-status", "nudge-wait"] }
 ```
 
-Rule ids: `nudge-git-status`, `nudge-git-add`, `nudge-git-commit`, `nudge-wait`, `nudge-ls`. `CHEMX_GUARD_NUDGES=block` or `nudge` overrides the config for one process. An unreadable config means no promotion.
+Rule ids: `nudge-git-status`, `nudge-git-add`, `nudge-git-commit`, `nudge-project-runner`, `nudge-wait`, `nudge-ls`. `CHEMX_GUARD_NUDGES=block` or `nudge` overrides the config for one process. An unreadable config means no promotion.
+
+### Runners the guard leaves alone
+
+`nudge-project-runner` fires for `node <dir>/run-tests.mjs` when that file is a harness runner `chemx test` can run (`docs/test-lanes.md`, "A repo's own runner"). List a runner in `.chemxrc` to keep calling it yourself, for example to see the raw output of the whole suite:
+
+```json
+{ "test": { "runners": ["node tests/run-tests.mjs"] } }
+```
+
+Each entry is a `node <script>` call; the script is read relative to the `.chemxrc` that lists it, and any `.chemxrc` from the script's directory up to the project root counts. The same call spelled `node ./tests/run-tests.mjs`, with an absolute path, or after a `cd` into the repo is the same script. An unreadable config lists nothing.
 
 ## Launch routing guard: Agent and Workflow
 

@@ -5,6 +5,9 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { buildChildEnv, executeBuild, isTestRunEnv, TEST_ISOLATED_ENV_KEYS } from './executor.js';
 import { SLOT_OWNER_ENV } from '../test-slots.js';
 
@@ -44,5 +47,46 @@ test('executeBuild: a test child sees no CHEMX_PROJECT_ROOT, a build child keeps
     assert.deepEqual(JSON.parse(testRun.stdout), { root: null, agent: null });
     const buildRun = await executeBuild(PRINT_ENV, process.cwd(), { timeoutMs: 10000 });
     assert.deepEqual(JSON.parse(buildRun.stdout), { root: '/real/project', agent: '@caller' });
+  });
+});
+
+// A pnpm-looking project whose jest config names a serializer that only the virtual store holds.
+const withPnpmStore = async (body) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-exec-pnpm-'));
+  const store = path.join(root, 'node_modules', '.pnpm', 'node_modules');
+  try {
+    fs.mkdirSync(path.join(store, 'fake-serializer'), { recursive: true });
+    fs.writeFileSync(path.join(store, 'fake-serializer', 'package.json'), '{"name":"fake-serializer","main":"index.js"}');
+    fs.writeFileSync(path.join(store, 'fake-serializer', 'index.js'), '');
+    fs.writeFileSync(path.join(root, 'package.json'), '{}');
+    fs.writeFileSync(path.join(root, 'jest.config.json'), JSON.stringify({ snapshotSerializers: ['fake-serializer'] }));
+    return await body({ root, store });
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+};
+
+const PRINT_NODE_PATH = 'node -e "process.stdout.write(process.env.NODE_PATH || \'\')"';
+
+test('buildChildEnv: a test run in a pnpm project puts the virtual store on NODE_PATH (task #6754)', async () => {
+  await withPnpmStore(({ root, store }) => {
+    const env = buildChildEnv(false, { env: { [SLOT_OWNER_ENV]: '1' } }, root);
+    assert.equal(env.NODE_PATH, store);
+  });
+});
+
+test('buildChildEnv: a build run, or a test run with no project directory, keeps NODE_PATH as it was', async () => {
+  await withPnpmStore(({ root }) => {
+    assert.equal(buildChildEnv(false, {}, root).NODE_PATH, process.env.NODE_PATH);
+    assert.equal(buildChildEnv(false, { env: { [SLOT_OWNER_ENV]: '1' } }).NODE_PATH, process.env.NODE_PATH);
+  });
+});
+
+test('executeBuild: the child of a test run sees the store on NODE_PATH, the child of a build does not', async () => {
+  await withPnpmStore(async ({ root, store }) => {
+    const testRun = await executeBuild(PRINT_NODE_PATH, root, { timeoutMs: 10000, env: { [SLOT_OWNER_ENV]: String(process.pid), NODE_PATH: '' } });
+    assert.equal(testRun.stdout, store);
+    const buildRun = await executeBuild(PRINT_NODE_PATH, root, { timeoutMs: 10000, env: { NODE_PATH: '' } });
+    assert.equal(buildRun.stdout, '');
   });
 });

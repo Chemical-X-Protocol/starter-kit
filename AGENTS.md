@@ -17,6 +17,7 @@
 | `cat <data.json>` | `chemx j <file.json>` | Structural schema shape only; collapses repeating arrays. |
 | `cat <file>` / `head <file>` | `chemx read <file> --outline` | AST signatures only (outline of `cli/reader.js` measured about 300 tokens against about 4,800 for the file, 2026-10-09; other targets in `benchmarks/README.md`). |
 | `npm test` / `tsc` | `chemx test` / `chemx verify` | Prints a summary on success and the failing diffs on failure. |
+| `node tests/run-tests.mjs` (a repo's own harness runner, e.g. the WordPress plugins) | `chemx test` / `chemx test tests/x.test.mjs` | One file through a generated copy of the runner, failures only and one summary line, one run at a time on the machine (shared database). `.chemxrc` `test.runners` lists a raw runner the guard should leave alone. |
 | `cat .chemx/history.json` | `chemx audit --feed=scopes` / MCP `audit_feed` | Recorded audit results as flat rows (per scope, per run or per pillar) without re-running the audit; `--json` for every row. |
 | Auditing each package by hand | `chemx audit --each=submodules` | One scoped audit per submodule or workspace package, then a one-line-per-package summary. |
 | `cd ../other-repo && <command>` / `git -C ../other-repo log` | `chemx <command> --root=../other-repo` (any command: `log`, `d`, `status`, `q -g`, `read`, `team ...`; or `CHEMX_PROJECT_ROOT=<dir>`) | Runs as if started in that project, from any cwd; the shell never changes directory. `chemx read /abs/path/in/another/chemx/project` picks that project's index too. |

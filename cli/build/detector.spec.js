@@ -4,9 +4,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
   findFileUpward,
+  findProjectRunner,
+  isHarnessRunnerSource,
   resolvePackageManager,
   detectProjectBuildCommand
 } from './detector.js';
+import { RUNNER, withHarnessRepo } from '../fixtures/project-runner/harness-repo.js';
 
 test('detector: resolvePackageManager detects packageManager field in package.json', () => {
   const tmpDir = path.resolve(process.cwd(), 'scratch/test-detector-pm-field');
@@ -83,4 +86,51 @@ test('detector: detectProjectBuildCommand falls back to vite when vite.config ex
 test('findProjectRoot: never falls back to another project', async () => {
   const { findProjectRoot } = await import('./detector.js');
   assert.strictEqual(findProjectRoot('/'), '/');
+});
+
+test('isHarnessRunnerSource: a runner that imports harness, registers test files and calls harness.run', () => {
+  assert.equal(isHarnessRunnerSource(RUNNER), true);
+});
+
+test('isHarnessRunnerSource: not a harness runner without the harness binding, a test import or harness.run', () => {
+  const noBinding = RUNNER.replace('{ harness }', '{ other }');
+  const noTests = RUNNER.replace(/^import '\.[^\n]*\n/gm, '');
+  const noRun = RUNNER.replace('harness.run()', 'other.run()');
+  assert.equal(isHarnessRunnerSource(noBinding), false);
+  assert.equal(isHarnessRunnerSource(noTests), false);
+  assert.equal(isHarnessRunnerSource(noRun), false);
+  assert.equal(isHarnessRunnerSource(''), false);
+});
+
+test('findProjectRunner: finds tests/run-tests.mjs from the repo, from tests/ and from a nested dir', async () => {
+  await withHarnessRepo(({ repo, tests }) => {
+    const fromRepo = findProjectRunner(repo);
+    assert.equal(fromRepo.root, repo);
+    assert.equal(fromRepo.file, path.join('tests', 'run-tests.mjs'));
+    assert.equal(findProjectRunner(tests).root, repo);
+    assert.equal(findProjectRunner(path.join(tests, 'sub')).root, repo);
+  });
+});
+
+test('findProjectRunner: stops at the repo boundary, so a parent repo runner is not borrowed', async () => {
+  await withHarnessRepo(({ plugins, repo }) => {
+    const other = path.join(plugins, 'other-plugin');
+    fs.mkdirSync(path.join(other, '.git'), { recursive: true });
+    assert.equal(findProjectRunner(other), null);
+    assert.equal(findProjectRunner(path.join(repo, '..', 'other-plugin')), null);
+  });
+});
+
+test('findProjectRunner: a package.json with a real test script of its own keeps that script as the runner', async () => {
+  const jestPkg = JSON.stringify({ scripts: { test: 'jest' } });
+  const wrapPkg = JSON.stringify({ scripts: { test: 'node tests/run-tests.mjs' } });
+  const placeholder = JSON.stringify({ scripts: { test: 'echo "Error: no test specified" && exit 1' } });
+  await withHarnessRepo(({ repo }) => assert.equal(findProjectRunner(repo), null), { 'package.json': jestPkg });
+  await withHarnessRepo(({ repo }) => assert.equal(findProjectRunner(repo)?.root, repo), { 'package.json': wrapPkg });
+  await withHarnessRepo(({ repo }) => assert.equal(findProjectRunner(repo)?.root, repo), { 'package.json': placeholder });
+});
+
+test('findProjectRunner: a run-tests.mjs that is not a harness runner is left to the normal detection', async () => {
+  await withHarnessRepo(({ repo }) => assert.equal(findProjectRunner(repo), null), { 'tests/run-tests.mjs': 'console.log("hi");\n' });
+  await withHarnessRepo(({ repo }) => assert.equal(findProjectRunner(repo), null), { 'tests/run-tests.mjs': null });
 });

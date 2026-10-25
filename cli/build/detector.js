@@ -81,3 +81,44 @@ export const detectProjectBuildCommand = (customCmd, cwd = process.cwd()) => {
 
   return `${pm} run build`;
 };
+
+// A repo's own test runner: tests/run-tests.mjs written against a shared harness (the WordPress
+// plugins: `import { harness } from '../../xophz-compass/tests/harness/test-framework.mjs'`, then one
+// `import './x.test.mjs'` per file, then `harness.run()`). chemx test runs one file of it by writing a
+// copy of the runner with the imports swapped (cli/test-project-runner.js).
+export const PROJECT_RUNNER_FILE = path.join('tests', 'run-tests.mjs');
+const HARNESS_BINDING = /import\s*\{[^}]*\bharness\b[^}]*\}\s*from\s*['"][^'"]+['"]/;
+const HARNESS_RUN = /\bharness\.run\s*\(/;
+export const TEST_FILE_IMPORT = /^\s*import\s+(['"])(\.{1,2}\/[^'"]+)\1\s*;?\s*$/;
+
+export const isHarnessRunnerSource = (source = '') => {
+  const text = String(source);
+  const registersTestFiles = text.split('\n').some((line) => TEST_FILE_IMPORT.test(line));
+  return HARNESS_BINDING.test(text) && HARNESS_RUN.test(text) && registersTestFiles;
+};
+
+// A package.json with a real `test` script of its own (not the npm placeholder, not a wrapper of
+// run-tests.mjs) decides the runner itself.
+const hasOwnTestScript = (dir) => {
+  const script = loadLocalPackageJson(dir)?.scripts?.test;
+  const isReal = typeof script === 'string' && script.trim().length > 0 && !/no test specified/.test(script);
+  return isReal && !script.includes('run-tests');
+};
+
+const isRepoBoundary = (dir) => ['.git', '.chemx', 'package.json'].some((name) => fs.existsSync(path.join(dir, name)));
+
+// Walks up from startDir to the repo boundary (.git, .chemx or package.json) and returns
+// { root, file, abs, source } for the first dir whose tests/run-tests.mjs is a harness runner, else null.
+export const findProjectRunner = (startDir = process.cwd()) => {
+  let dir = path.resolve(startDir);
+  while (true) {
+    const abs = path.join(dir, PROJECT_RUNNER_FILE);
+    const source = fs.existsSync(abs) ? fs.readFileSync(abs, 'utf-8') : '';
+    const isRunner = isHarnessRunnerSource(source) && !hasOwnTestScript(dir);
+    if (isRunner) return { root: dir, file: PROJECT_RUNNER_FILE, abs, source };
+    const parent = path.dirname(dir);
+    const isEnd = isRepoBoundary(dir) || parent === dir;
+    if (isEnd) return null;
+    dir = parent;
+  }
+};

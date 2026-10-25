@@ -5,6 +5,7 @@
 
 import { fileOperands, gitSubcommand } from './guard-args.js';
 import { isRepoPath } from './guard-paths.js';
+import { isUnlistedProjectRunner, PROJECT_RUNNER_ADVICE } from './guard-test-runners.js';
 
 const SHELL_NAMES = new Set(['bash', 'sh', 'zsh']);
 const baseName = (word) => String(word ?? '').split('/').pop();
@@ -27,6 +28,7 @@ export const NUDGE_RULES = [
   { id: 'nudge-git-status', command: 'status', use: 'chemx status (a compact working-tree summary)', matches: gitIs(['status']) },
   { id: 'nudge-git-add', command: 'commit', use: 'chemx commit (path-limited commit; see chemx commit --help)', matches: gitIs(['add']) },
   { id: 'nudge-git-commit', command: 'commit', use: 'chemx commit (path-limited commit; see chemx commit --help)', matches: gitIs(['commit']) },
+  { id: 'nudge-project-runner', command: 'test', use: PROJECT_RUNNER_ADVICE, matches: isUnlistedProjectRunner },
   { id: 'nudge-wait', command: 'wait', use: 'chemx wait (see chemx wait --help) instead of a hand-rolled sleep, timer or polling loop', matches: isHandRolledWait },
   {
     id: 'nudge-ls',

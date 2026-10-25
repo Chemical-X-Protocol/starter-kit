@@ -1,6 +1,6 @@
 // `chemx test`: run the project's tests silently and report a tri-state verdict.
 import path from 'node:path';
-import { findProjectRoot } from './build/detector.js';
+import { findProjectRoot, findProjectRunner } from './build/detector.js';
 import { STATUS, toExitCode } from './result-status.js';
 import { parseCliArgs, describeArgErrors, parseTimeoutSeconds } from './cli-args.js';
 import { planTestCommand } from './test-command.js';
@@ -138,14 +138,18 @@ export const runTestAudit = async (rawArgs = [], isCli = false, options = {}) =>
   const argError = describeArgErrors(parsed, 'test');
   if (argError) return emit(earlyReport(STATUS.FAIL, customCmd || 'test', { reason: 'USAGE', executionError: argError }), output);
 
-  const cwd = findProjectRoot(options.cwd || process.cwd());
-  const workspace = options.inWorkspace || customCmd ? null : workspaceAt(cwd);
+  const startDir = options.cwd || process.cwd();
+  // A repo with its own tests/run-tests.mjs harness runner is its own project, whatever package.json sits above it.
+  const projectRunner = customCmd ? null : findProjectRunner(startDir);
+  const hasOwnRunner = projectRunner !== null;
+  const cwd = hasOwnRunner ? projectRunner.root : findProjectRoot(startDir);
+  const workspace = options.inWorkspace || customCmd || hasOwnRunner ? null : workspaceAt(cwd);
   if (workspace) {
     const scope = workspaceScope(parsed, options);
     const runInPackage = (args, dir) => runTestAudit([...args, '--json'], false, { ...packageOptions(options), cwd: dir });
     return emitWorkspace(await planWorkspaceTest(workspace, scope, runInPackage, options.cwd || process.cwd()), output, formatTestReport);
   }
-  const nmStatus = checkNodeModules(cwd);
+  const nmStatus = hasOwnRunner ? null : checkNodeModules(cwd);
   if (nmStatus) {
     const friendlyMsg = nmStatus.msg('testing');
     return emit(earlyReport(STATUS.FAIL, customCmd || 'test', { failed: 1, executionError: friendlyMsg, failures: [{ name: 'dependencies', details: [friendlyMsg] }] }), output);
@@ -169,7 +173,7 @@ export const runTestAudit = async (rawArgs = [], isCli = false, options = {}) =>
     const status = allowEmpty ? STATUS.PASS : STATUS.INCONCLUSIVE;
     return emit(earlyReport(status, 'test --changed', { reason: allowEmpty ? null : REASONS.NO_TESTS_RAN, detail: emptyDetail, exitCode: 0, ...selectionField }), output);
   }
-  const plan = planTestCommand(customCmd, cwd, { targets, filter });
+  const plan = planTestCommand(customCmd, cwd, { targets, filter, fromDir: startDir });
   const runDir = path.relative(cwd, plan.cwd) || '.';
   const hasMissingTargets = plan.missingTargets.length > 0;
   if (hasMissingTargets) {

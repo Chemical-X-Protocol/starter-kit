@@ -3,8 +3,9 @@
 // config files are only a fallback. A target inside a sub-package runs from that package.
 import fs from 'node:fs';
 import path from 'node:path';
-import { resolvePackageManager, loadLocalPackageJson } from './build/detector.js';
+import { resolvePackageManager, loadLocalPackageJson, findProjectRunner } from './build/detector.js';
 import { shellQuote, quoteFilter, findOwningPackageDir } from './test-paths.js';
+import { planProjectRunner } from './test-project-runner.js';
 
 const RUNNER_SCRIPTS = ['test', 'test:run', 'test:ci', 'test:unit'];
 const VITEST_CONFIGS = ['vitest.config.ts', 'vitest.config.js', 'vitest.config.mts', 'vitest.config.mjs'];
@@ -174,7 +175,8 @@ export const scriptForwardsArgs = (script = '') => {
 // Returns { command, cwd, runner, missingTargets, targets, forwardsArgs }. missingTargets lists node --test targets
 // that do not exist on disk; the caller reports those as inconclusive instead of running. `targets` are
 // the ones the command runs (a custom command gets them appended), so a scoped run is never taken for
-// the full suite.
+// the full suite. A repo with its own tests/run-tests.mjs harness runner plans through
+// test-project-runner.js (exclusive: the run always takes a ticket in the job line, and may carry prepare()).
 export const planTestCommand = (customCmd, cwd = process.cwd(), options = {}) => {
   const targets = (options.targets || []).map(String).filter(Boolean);
   const filter = options.filter ? String(options.filter).trim() : null;
@@ -182,6 +184,9 @@ export const planTestCommand = (customCmd, cwd = process.cwd(), options = {}) =>
   if (hasCustom) {
     return { command: appendScopeToCustom(customCmd, targets, filter), cwd, runner: detectRunnerFromScript(customCmd), missingTargets: [], targets };
   }
+
+  const project = findProjectRunner(cwd);
+  if (project) return planProjectRunner(project, { targets, filter, fromDir: options.fromDir });
 
   const owner = findOwningPackageDir(cwd, targets, declaresTestRunner);
   const runCwd = owner.dir;

@@ -266,3 +266,31 @@ test('test-output: a missing test script is a failure, not an empty run, when sp
   assert.equal(placeholder.status, 'fail');
   assert.equal(parseTestOutput('', stderr, 1, {}).status, 'inconclusive', 'an unscoped project with no test script ran nothing');
 });
+
+test('test-output: a repo runner (tests/run-tests.mjs) that passes is counted from its summary line', () => {
+  const result = parseTestOutput('Gatekeeper Tests PASSED: 36 passed.\n', '', 0);
+  assert.equal(result.status, STATUS.PASS);
+  assert.deepEqual([result.passed, result.failed, result.totalTests], [36, 0, 36]);
+});
+
+test('test-output: a repo runner that fails lists the failing tests by name and counts both sides', () => {
+  const stderr = [
+    'FAIL xp-pro REST > claim rejects an unknown key',
+    'AssertionError [ERR_ASSERTION]: 403 !== 404',
+    '    at file:///plugins/gatekeeper/tests/xp-pro-rest.test.mjs:41:12',
+    'FAIL xp-pro REST > validate returns the plan',
+    'AssertionError [ERR_ASSERTION]: undefined !== \'pro\'',
+    'Gatekeeper Tests FAILED: 2 failed, 34 passed.'
+  ].join('\n');
+  const result = parseTestOutput('', stderr, 1);
+  assert.equal(result.status, STATUS.FAIL);
+  assert.deepEqual([result.passed, result.failed, result.totalTests], [34, 2, 36]);
+  assert.deepEqual(result.failures.map((failure) => failure.name), ['xp-pro REST > claim rejects an unknown key', 'xp-pro REST > validate returns the plan']);
+  assert.match(result.failures[0].details.join('\n'), /403 !== 404/);
+});
+
+test('test-output: a repo runner that ran no test is inconclusive, not a pass', () => {
+  const result = parseTestOutput('XP Tests PASSED: 0 passed.\n', '', 0);
+  assert.equal(result.status, STATUS.INCONCLUSIVE);
+  assert.equal(result.reason, REASONS.NO_TESTS_RAN);
+});

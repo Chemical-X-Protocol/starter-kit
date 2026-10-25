@@ -33,6 +33,17 @@ const runnerEnv = (options) => {
   return { ...extraEnv, [SLOT_OWNER_ENV]: String(process.pid) };
 };
 
+// A plan may need a file for the length of the run (the generated project runner, see
+// test-project-runner.js): written when the run starts, removed when it ends, even when it fails.
+const withPrepared = async (plan, run) => {
+  const cleanup = plan.prepare ? plan.prepare() : null;
+  try {
+    return await run();
+  } finally {
+    if (cleanup) cleanup();
+  }
+};
+
 const runLight = async (plan, options, { env, budget, signal }) => {
   const want = requestedWorkers({ command: plan.command, cwd: plan.cwd, targets: plan.targets, budget });
   const handle = env.CHEMX_AGENT_ID ?? null;
@@ -46,7 +57,7 @@ const runLight = async (plan, options, { env, budget, signal }) => {
   if (isQueued) return grant;
   const command = withWorkerCount(plan.command, plan.runner, grant.workers, { forwardsArgs: plan.forwardsArgs, cwd: plan.cwd });
   try {
-    const execution = await executeBuild(command, plan.cwd, { raw: options.raw, timeoutMs: options.timeoutMs, env: runnerEnv(options), signal });
+    const execution = await withPrepared(plan, () => executeBuild(command, plan.cwd, { raw: options.raw, timeoutMs: options.timeoutMs, env: runnerEnv(options), signal }));
     return { execution, command, workers: grant.workers, budget, queuedMs: grant.queuedMs, shared: null };
   } finally {
     grant.release();
@@ -64,7 +75,8 @@ const runFullSuite = async (plan, options, { env, budget, signal }) => {
     kind: 'tests', cwd: plan.cwd, keyCommand: fitted(heavy), raw: options.raw, waitTimeoutMs: options.waitTimeoutMs, budget, signal,
     returnQueuedAfterMs: options.returnQueuedAfterMs, retryCommand: options.retryCommand, ...lineOptionsOf(options)
   };
-  const outcome = await runInLine(line, (granted) => executeBuild(fitted(granted), plan.cwd, { raw: options.raw, timeoutMs: options.timeoutMs, env: runnerEnv(options), signal }));
+  const execute = (granted) => executeBuild(fitted(granted), plan.cwd, { raw: options.raw, timeoutMs: options.timeoutMs, env: runnerEnv(options), signal });
+  const outcome = await runInLine(line, (granted) => withPrepared(plan, () => execute(granted)));
   const isQueued = outcome.queued === true;
   if (isQueued) return outcome;
   return { execution: outcome.execution, command: fitted(outcome.workers), workers: outcome.workers, budget, queuedMs: outcome.queuedMs, shared: outcome.shared };
@@ -72,6 +84,7 @@ const runFullSuite = async (plan, options, { env, budget, signal }) => {
 
 // options.heavy says which lane the caller's request belongs to (runTestAudit decides it before test
 // lanes turn an empty scope into a spec list); without it, a plan with no targets is the full suite.
+// A plan marked exclusive (a repo's own runner whose suites share one database) is always heavy.
 // options.env replaces process.env for budget resolution and is added to the runner's env.
 // options.waitTimeoutMs / returnQueuedAfterMs / retryCommand / task go to the lane that waits (a light
 // run's default wait limit is 10 minutes; a full suite waits without one unless waitTimeoutMs is given).
@@ -83,7 +96,7 @@ export const runWithinBudget = async (plan, options = {}) => {
   const env = options.env || process.env;
   const budget = resolveTestBudget(env);
   const signal = options.signal ?? currentRequestSignal();
-  const isFullSuite = options.heavy ?? (plan.targets || []).length === 0;
+  const isFullSuite = plan.exclusive === true || (options.heavy ?? (plan.targets || []).length === 0);
   const lane = { env, budget, signal };
   return isFullSuite ? runFullSuite(plan, options, lane) : runLight(plan, options, lane);
 };

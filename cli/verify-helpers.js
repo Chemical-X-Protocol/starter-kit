@@ -37,13 +37,27 @@ export const parseTypecheckOutput = (stdout = '', stderr = '') => {
 
 export const stripAnsi = (str = '') => String(str).replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
 
+// A linked git worktree's .git is a file ("gitdir: <main>/.git/worktrees/<name>"). Returns the main
+// checkout when it has a node_modules to link, else null (a submodule's .git file does not match).
+const WORKTREE_GITDIR = /^gitdir:\s*(.+?)[\\/]\.git[\\/]worktrees[\\/][^\\/\n]+\s*$/m;
+const mainCheckoutWithModules = (cwd) => {
+  const gitFile = path.join(cwd, '.git');
+  const isLinkedCheckout = fs.statSync(gitFile, { throwIfNoEntry: false })?.isFile() === true;
+  if (!isLinkedCheckout) return null;
+  const main = WORKTREE_GITDIR.exec(fs.readFileSync(gitFile, 'utf-8'))?.[1];
+  const hasModules = Boolean(main) && fs.existsSync(path.join(main, 'node_modules'));
+  return hasModules ? main : null;
+};
+
 export const checkNodeModules = (cwd) => {
   const hasNodeModules = fs.existsSync(path.join(cwd, 'node_modules'));
   if (hasNodeModules) return null;
   const pm = resolvePackageManager(cwd);
+  const main = mainCheckoutWithModules(cwd);
+  const linkHint = main ? ` In a git worktree, link the main checkout's instead: ln -s ${path.join(main, 'node_modules')} ${path.join(cwd, 'node_modules')}` : '';
   return {
     missing: true,
     pm,
-    msg: (action) => `Missing node_modules. Please run '${pm} install' before ${action}.`
+    msg: (action) => `Missing node_modules. Please run '${pm} install' before ${action}.${linkHint}`
   };
 };
