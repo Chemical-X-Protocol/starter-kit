@@ -67,6 +67,15 @@ your current directory itself (a directory is not a file). The same rule applies
 `status` and `renew`. Limit: a repo that has its own unmerged board (a `legacy` package db) leases only
 paths below that board's root; a path in a sibling repo is refused there until `chemx team migrate` merges it.
 
+## Who counts as the holder (native Edit and Write)
+
+`chemx patch`, `write` and the rest take the handle from `--as`, `CHEMX_AGENT_ID` or the session handle, so they know who you are. Claude's built-in `Edit`, `Write`, `MultiEdit` and `NotebookEdit` go through a hook that cannot see your shell, so it learns your handle from your chemx calls instead (details and limits in [hooks.md](hooks.md#native-edits-and-file-locks), #6748):
+
+- A chemx call of yours that names a handle (`--as=@sonnet-g3`, `CHEMX_AGENT_ID=@sonnet-g3 chemx ...`, `export CHEMX_AGENT_ID=@sonnet-g3; chemx ...`) and acts or touches a lock (`lock acquire`, `lock renew`, `task claim`, `patch`, `write`, `commit`, ...) records that handle for your agent in this session. After that, a lease held by that handle is yours: the native edit goes through, silently.
+- Each subagent is told apart by the `agent_id` Claude Code puts in its hook payload, so a sibling's lease, the orchestrator's lease and a lease named in another session still refuse the edit. Where the payload cannot tell agents apart, the agents of that session share what they named.
+- A refusal prints the holder, who you act as, and the commands: `chemx team lock renew <file> --as=<holder>` if the lease is yours (it declares it; chemx refuses the renew for anyone else), and `chemx team lock release <file> --as=<holder>` (or `chemx team task handoff <id> <you> --with-locks --as=<holder>` when the purpose is a task id) from the holder, then `chemx team lock acquire <file> --as=<you>`. A `chemx patch` or `write` refusal prints the same lines.
+- A lease taken through the MCP tool or a script is not seen by the hook; use the `lock renew` line above to declare it.
+
 ## TTL
 
 A lease lasts **5 minutes** from the moment it is granted or last renewed. A lease also stops being

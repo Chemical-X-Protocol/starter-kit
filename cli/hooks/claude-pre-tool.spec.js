@@ -83,6 +83,42 @@ test('expired leases and lookup errors do not block', () => {
   fs.rmSync(root, { recursive: true, force: true });
 });
 
+test('a lease held by another handle the same agent declared is its own; a foreign one is refused (#6748)', () => {
+  const root = lockedProject();
+  const file = path.join(root, 'src', 'a.ts');
+  const as = (...ownHandles) => ({ cwd: root, root, enforceSearch: false, mode: 'allow', agentId: ownHandles[0], ownHandles });
+  for (const tool of ['Edit', 'Write', 'MultiEdit', 'NotebookEdit']) {
+    assert.equal(decidePreTool(native(tool, file), as('@me', '@holder')).decision, 'allow', `${tool} declared @holder`);
+    assert.equal(decidePreTool(native(tool, file), as('@holder', '@claude-3f9a1c7e')).decision, 'allow', `${tool} first handle is the holder`);
+  }
+  const denied = decidePreTool(native('Edit', file), as('@me', '@claude-3f9a1c7e'));
+  assert.deepEqual([denied.decision, denied.rule], ['deny', 'native-edit-lock']);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('the refusal names the holder, who you act as, and the exact declare, release, handoff and acquire commands (#6748)', () => {
+  const root = lockedProject();
+  const file = path.join(root, 'src', 'a.ts');
+  const { reason } = decidePreTool(native('Edit', file), { cwd: root, root, mode: 'allow', agentId: '@me', ownHandles: ['@me'] });
+  assert.match(reason, /src\/a\.ts is locked by @holder \(#2009\) until \d\d:\d\d:\d\d UTC; this edit was refused\. You are acting as @me\./);
+  assert.match(reason, /`chemx team lock renew src\/a\.ts --as=@holder`/);
+  assert.match(reason, /`chemx team lock release src\/a\.ts --as=@holder`/);
+  assert.match(reason, /`chemx team task handoff 2009 @me --with-locks --as=@holder`/);
+  assert.match(reason, /`chemx team lock acquire src\/a\.ts --as=@me`/);
+  const noTask = { cwd: root, root, mode: 'allow', agentId: '@me', findLease: () => ({ file: 'src/a.ts', lockedBy: '@holder', expiresAt: Date.now() + 1000, purpose: '' }) };
+  assert.doesNotMatch(decidePreTool(native('Edit', file), noTask).reason, /handoff/, 'no task id, no handoff command');
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('your own lapsed lease with a waiter queued still refuses, whichever handle you edit as (#6748)', () => {
+  const lapsed = { file: 'src/a.ts', lockedBy: '@waiter', expiresAt: Date.now() - 1000, purpose: '', lapsedOwn: true, queue: ['@waiter'] };
+  const findLease = (_root, _abs, handle) => (handle === '@holder' ? lapsed : null);
+  const denied = decidePreTool(native('Edit', '/repo/src/a.ts'), { cwd: '/repo', root: '/repo', mode: 'allow', agentId: '@me', ownHandles: ['@me', '@holder'], findLease });
+  assert.deepEqual([denied.decision, denied.rule], ['deny', 'native-edit-lock']);
+  assert.match(denied.reason, /your lease on src\/a\.ts lapsed and @waiter is queued for it/);
+  assert.match(denied.reason, /chemx team lock status src\/a\.ts/);
+});
+
 test('context: identity from CHEMX_AGENT_ID, else @claude-<session8>; mode from env', () => {
   const env = { CLAUDE_PROJECT_DIR: '/nonexistent-root', CHEMX_NATIVE_FILE_TOOLS: 'block' };
   assert.equal(buildPreToolContext({ session_id: 'abcdef1234567' }, env).agentId, '@claude-abcdef12');

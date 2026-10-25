@@ -32,6 +32,15 @@ const recordBypassInDb = async (payload, context, result) => {
   return logBypassToDb({ root: context.root, handle: context.agentId, reason: result.bypassReason, rule: result.rule, command, session: payload?.session_id ?? null });
 };
 
+// A chemx call that names an identity tells the next native Edit/Write of the same agent whose leases are its own (#6748).
+// A denied call never runs, so it declares nothing.
+const recordDeclaredIdentity = async (payload, context, result, env) => {
+  const isAllowed = result.decision !== 'deny';
+  if (!isAllowed) return 0;
+  const { recordDeclaredHandles } = await import('./declared-identity.js');
+  return recordDeclaredHandles(payload, { root: context.root, env });
+};
+
 // claude-pre-tool is the heaviest import of the hook chain: load it only for PreToolUse so post hooks skip it.
 const runPreTool = async (payload, env) => {
   const { buildPreToolContext, decidePreTool, toPreToolOutput } = await import('./claude-pre-tool.js');
@@ -39,6 +48,7 @@ const runPreTool = async (payload, env) => {
   const result = decidePreTool(payload, context);
   recordPreToolFriction(payload, context, result, env);
   await recordBypassInDb(payload, context, result);
+  await recordDeclaredIdentity(payload, context, result, env);
   return toPreToolOutput(result);
 };
 

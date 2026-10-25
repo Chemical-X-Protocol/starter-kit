@@ -56,6 +56,13 @@ Reference: [team-locks.md](team-locks.md#several-paths-and-one-line-each-6747).
 - `lock` and `unlock` take `--root=<dir>` (or `--root <dir>`): run as if from that directory; a non-directory is refused (`root_not_found`).
 - Not guaranteed: a repo with its own unmerged package board leases only paths below that board's root; other `team` subcommands do not take `--root` yet (K6, #6751).
 
+### Native Edit/Write lock hook honours the claiming handle (#6748, epic #6745)
+
+- A subagent that leased a file with `--as=@sonnet-g3` was refused by its own lease when it used Claude's `Edit` or `Write` on that file: the hook process never sees the agent's shell export, so every agent of a session resolved to the session handle `@claude-<sid8>`. The Bash guard now records `(session, agent, handle)` for each allowed chemx call that names an identity (`--as`, inline or exported `CHEMX_AGENT_ID`) and acts or touches a lock, in a new `session_agent_handles` table of the project db (created by the hook on first use, rows kept seven days). A native edit counts as its own the handles that agent named, a dispatched builder's recorded handle, and, on the main thread, its session handle. A subagent is told apart by the `agent_id` in its payload (else the id in its `subagents/` transcript name).
+- Still refused: a sibling subagent's lease, the orchestrator's lease for a subagent that named its own handle, a handle named in another session, and the editor's own lapsed lease with a waiter queued. Where the payload cannot tell agents apart they share what they named (the same-session fallback). Not covered: a lease taken through the MCP tool or a script (the hook sees no MCP calls).
+- The refusal (native hook, and `chemx patch` / `write`) names the holder, the purpose and expiry, who you act as and the exact commands: `lock renew ... --as=<holder>` to declare a lease that is yours, the holder's `lock release`, `task handoff <id> <you> --with-locks --as=<holder>` when the purpose is a task id, then `lock acquire ... --as=<you>`.
+- New: `cli/hooks/declared-identity.js`, `cli/team/lock-hints.js`, `chemxCallIdentities` in `cli/hooks/dispatch-identity.js`. Docs: [hooks.md](hooks.md#native-edits-and-file-locks), [team-locks.md](team-locks.md).
+
 ## Unreleased (feat/job-line, 2026-10-13)
 
 ### Audit rules and gates (review fixes, 2026-10-15, epic #6088)

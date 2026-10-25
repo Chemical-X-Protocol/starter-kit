@@ -107,6 +107,35 @@ The default is advice: the call runs and the model sees a note naming the task, 
 - Every `chemx ...` invocation itself, including `node .../cli/index.js`.
 - Writes to non-source files such as `*.log` and `*.txt`.
 
+## Native edits and file locks
+
+`Edit`, `Write`, `MultiEdit` and `NotebookEdit` are refused (rule `native-edit-lock`, in every `nativeFileTools` mode) while another handle holds a live lease on the file ([team-locks.md](team-locks.md)). The hook asks the same read-only question `chemx patch` asks, once for each handle the editor counts as its own, and refuses only when the lease is foreign to all of them.
+
+**Whose lease is yours.** The hook process does not see the shell exports of the agent it judges, so it cannot read `CHEMX_AGENT_ID` from that agent's shell. Left alone, the orchestrator and every subagent of a session would all resolve to the session handle `@claude-<first 8 of session_id>`, and a subagent that leased a file as `@sonnet-g3` would be refused by its own lease. So the hook learns the handle from the agent's chemx calls (#6748):
+
+- A Claude Code payload carries `session_id` (a subagent gets its parent's), `agent_id` and `agent_type` (subagents only) and a `transcript_path` (`.../<session>/subagents/agent-<id>.jsonl` for a subagent). The agent key is `agent_id`, else the id in that transcript name, else empty for the main thread.
+- When the Bash guard allows a command, every chemx call in it that names an identity (`--as=@h`, an inline `CHEMX_AGENT_ID=@h`, or an earlier `export CHEMX_AGENT_ID=@h` in the same command) and acts or touches a lock (`team lock ...`, `team task claim`, `write`, `patch`, `commit`, `test`, `verify` and the other acting calls) is recorded as (session, agent key, handle) in the `session_agent_handles` table of the project's `.chemx/index.db`. A denied call records nothing; a repeat inside a minute writes nothing; rows older than seven days are dropped. The table is created by the hook on first use and the hook never creates the db.
+- A native edit counts as its own: the handles recorded for its (session, agent key), the handle `chemx team dispatch` recorded for a dispatched builder, and, on the main thread, its session handle. A subagent that declared (or was dispatched as) a handle is that handle only, so it no longer passes as the orchestrator's session handle.
+
+| Lease held by | Editor | Native edit |
+| :--- | :--- | :--- |
+| a handle this agent named in an earlier chemx call | that agent | allowed, no message |
+| a handle a sibling subagent named | another subagent of the session | refused |
+| the orchestrator's session handle | a subagent that named its own handle | refused |
+| a handle named in another session | any agent of this session | refused |
+| any handle named in this session | an agent the payload cannot tell apart (no `agent_id`, transcript outside `subagents/`) | allowed: the main thread's declarations are shared, which is the same-session fallback |
+| the editor's own lapsed lease with a waiter queued | the holder | refused, as for `chemx patch` |
+
+A refusal names the holder, the purpose and expiry, who you act as, and the exact commands:
+
+```
+chemx lock: src/a.ts is locked by @sonnet-g3 (#6748) until 12:34:56 UTC; this edit was refused. You are acting as @claude-3f9a1c7e.
+Taken as @sonnet-g3 from this session? Say so with `chemx team lock renew src/a.ts --as=@sonnet-g3` (refused unless it is yours), then edit again.
+Not yours: ask @sonnet-g3 to run `chemx team lock release src/a.ts --as=@sonnet-g3` or hand the task over: `chemx team task handoff 6748 @claude-3f9a1c7e --with-locks --as=@sonnet-g3`, or wait for the expiry, then `chemx team lock acquire src/a.ts --as=@claude-3f9a1c7e`.
+```
+
+Not guaranteed: a lease taken through the MCP tool or from a script is not seen (the PreToolUse matcher has no MCP tools), so the refusal's `lock renew` line is how the agent declares it; naming a handle needs no more trust than `chemx patch --as=<handle>`, which the lock layer already honours; and the hook fails open (no db, no table, an unreadable lease row allow the edit).
+
 ## Escape: `# chemx-bypass: <reason>`
 
 Append the comment to a Bash command to let it through:
@@ -121,4 +150,4 @@ If chemx truly cannot do the job, file it: `chemx team task add "Friction: <what
 
 ## Where the code lives
 
-`cli/hooks/claude-pre-tool.js` (decision), `guard-rules.js`, `guard-rules-shell.js`, `guard-rules-reads.js`, `guard-rules-nudge.js` (rules), `guard-paths.js`, `repo-membership.js`, `native-tool-policy.js` (scope), `guard-config.js` (nudge promotion), `guard-route.js` (launch routing), `bypass-log.js`, `install-hooks-*.js` and `cli/doctor/check-host.js`. Specs sit beside them: `guard-rewrites.spec.js`, `guard-native-bypass.spec.js`, `install-hooks-project.spec.js`, `cli/doctor/doctor-hooks.spec.js`.
+`cli/hooks/claude-pre-tool.js` (decision), `native-edit-lock.js` and `declared-identity.js` (native edits and lease ownership), `guard-rules.js`, `guard-rules-shell.js`, `guard-rules-reads.js`, `guard-rules-nudge.js` (rules), `guard-paths.js`, `repo-membership.js`, `native-tool-policy.js` (scope), `guard-config.js` (nudge promotion), `guard-route.js` (launch routing), `bypass-log.js`, `install-hooks-*.js` and `cli/doctor/check-host.js`. Specs sit beside them: `guard-rewrites.spec.js`, `guard-native-bypass.spec.js`, `install-hooks-project.spec.js`, `cli/doctor/doctor-hooks.spec.js`.
