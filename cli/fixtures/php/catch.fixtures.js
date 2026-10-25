@@ -58,9 +58,10 @@ class Demo_Client {
 }
 `,
   },
+  // Off for PHP until a setting names it (RULE_DEFAULTS in cli/php/php-logging.js), so the config switches it on.
   UNGUARDED_LOGGING: {
     path: 'includes/demo-debug.php',
-    config: CONFIG,
+    config: { ...CONFIG, rules: { UNGUARDED_LOGGING: 'on' } },
     bad: `<?php
 function demo_render( $items ) {
     var_dump( $items );

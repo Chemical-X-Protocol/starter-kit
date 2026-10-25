@@ -2,21 +2,36 @@ import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { auditCodeDetailed } from '../audit/rules.js';
 import { RULE_REGISTRY } from '../audit/rules-registry.js';
-import { PASSES } from './php-analyzer.js';
+import { RULE_REVISIONS } from '../audit/rule-revisions.js';
+import {
+  PASSES, DEFAULT_PASSES, PHP_DEFAULT_OFF, PHP_RULE_DEFAULTS, unregisteredRuleDrops, resetUnregisteredRuleDrops
+} from './php-analyzer.js';
 import { setPhpParserLoader, clearPhpParseCache } from './php-parse.js';
+import { PHP_FIXTURES } from '../fixtures/php/index.js';
 
 const PATH = '/p/plugin/a.php';
 const REL = 'plugin/a.php';
 const run = (src, options = {}, rel = REL) => auditCodeDetailed(src, '/p/' + rel, rel, options);
+const GENERIC = ['php-metrics', 'php-control-flow', 'php-catch', 'php-logging', 'php-dangerous'];
 
+const usePasses = (list) => {
+  PASSES.length = 0;
+  PASSES.push(...list);
+};
+const ranPasses = [];
+const spiedPasses = () => DEFAULT_PASSES.map((pass) => ({ ...pass, run: (ctx) => { ranPasses.push(pass.name); pass.run(ctx); } }));
+
+// Stub tests start from an empty pass list; tests of the shipped passes install spied copies.
 beforeEach(() => {
   setPhpParserLoader(null);
   clearPhpParseCache();
-  PASSES.length = 0;
+  usePasses([]);
+  ranPasses.length = 0;
+  resetUnregisteredRuleDrops();
 });
 afterEach(() => {
   setPhpParserLoader(null);
-  PASSES.length = 0;
+  usePasses(DEFAULT_PASSES);
 });
 
 test('a clean file is ast coverage with language php and no reason', () => {
@@ -76,11 +91,25 @@ test('a stub pass in PASSES gets pillar, directive and registry severity', () =>
   assert.equal(v.severity, RULE_REGISTRY.COMPLEXITY_CYCLOMATIC_HIGH.severity);
 });
 
-test('a pass-supplied severity wins and an unregistered id is kept', () => {
-  PASSES.push({ name: 'stub', rules: [], run: (ctx) => ctx.report('STUB_UNREGISTERED_RULE', 1, 'x', { severity: 'HIGH' }) });
+test('a pass-supplied severity wins', () => {
+  PASSES.push({ name: 'stub', rules: [], run: (ctx) => ctx.report('COMPLEXITY_CYCLOMATIC_HIGH', 1, 'x', { severity: 'LOW' }) });
   const { violations } = run('<?php\nfunction f() {}\n');
-  const v = violations.find((x) => x.rule === 'STUB_UNREGISTERED_RULE');
-  assert.equal(v.severity, 'HIGH');
+  const v = violations.find((x) => x.rule === 'COMPLEXITY_CYCLOMATIC_HIGH');
+  assert.equal(v.severity, 'LOW');
+});
+
+test('an unregistered id is dropped and counted, never thrown', () => {
+  PASSES.push({ name: 'stub', rules: [], run: (ctx) => { ctx.report('STUB_UNREGISTERED_RULE', 1, 'x'); ctx.report('STUB_UNREGISTERED_RULE', 2, 'y'); } });
+  const { violations } = run('<?php\nfunction f() {}\n');
+  assert.ok(!violations.some((x) => x.rule === 'STUB_UNREGISTERED_RULE'));
+  assert.deepEqual(unregisteredRuleDrops(), { STUB_UNREGISTERED_RULE: 2 });
+});
+
+test('a report on a node carries the node end line as endLine', () => {
+  PASSES.push({ name: 'stub', rules: [], run: (ctx) => ctx.report('COMPLEXITY_CYCLOMATIC_HIGH', ctx.ast.children[0], 'x') });
+  const { violations } = run('<?php\nfunction f() {\n  return 1;\n}\n');
+  const v = violations.find((x) => x.rule === 'COMPLEXITY_CYCLOMATIC_HIGH');
+  assert.deepEqual([v.line, v.endLine], [2, 4]);
 });
 
 test('the pass context carries the full config, target version and null wp and index', () => {
@@ -118,4 +147,74 @@ test('PHP never reaches Babel: Babel-invalid PHP is not a Babel parse error', ()
   const { violations, coverage } = run('<?php\necho "hi";\n?>\n<p>text</p>\n');
   assert.deepEqual(violations, []);
   assert.equal(coverage.kind, 'ast');
+});
+
+test('the shipped pass list: the generic passes, then the WordPress passes', () => {
+  const names = DEFAULT_PASSES.map((pass) => pass.name);
+  assert.deepEqual(names.slice(0, GENERIC.length), GENERIC);
+  assert.ok(DEFAULT_PASSES.slice(0, GENERIC.length).every((pass) => pass.isWordPress !== true));
+  const wordpress = DEFAULT_PASSES.slice(GENERIC.length);
+  assert.deepEqual(wordpress.map((pass) => pass.name),
+    ['wp-public-write-route', 'wp-rest-no-permission', 'wp-read-side-effect', 'wp-nonce', 'wp-sql', 'wp-request-flow', 'wp-output']);
+  assert.ok(wordpress.every((pass) => pass.isWordPress === true));
+  assert.deepEqual(DEFAULT_PASSES.flatMap((pass) => pass.rules).sort(), Object.keys(PHP_RULE_DEFAULTS).sort());
+});
+
+test('PHP_DEFAULT_OFF is the reused ids measured under the bar; new ids carry isDefaultOff from RULE_DEFAULTS', () => {
+  assert.deepEqual([...PHP_DEFAULT_OFF].sort(), ['CONTROL_FLOW_CASCADE_GUARDS', 'CONTROL_FLOW_SILENT_GUARD', 'UNGUARDED_LOGGING']);
+  const newIds = Object.keys(RULE_REVISIONS).filter((rule) => RULE_REVISIONS[rule] === 7);
+  assert.equal(newIds.length, 11);
+  for (const rule of newIds) {
+    assert.ok(PHP_RULE_DEFAULTS[rule], `${rule} has no RULE_DEFAULTS entry`);
+    assert.equal(RULE_REGISTRY[rule].isDefaultOff === true, PHP_RULE_DEFAULTS[rule].defaultOn === false, rule);
+  }
+});
+
+test('a non-WordPress PHP file runs only the generic passes whose rules are on', () => {
+  usePasses(spiedPasses());
+  const { coverage } = run('<?php\nfunction f() {\n  return 1;\n}\n');
+  assert.deepEqual(ranPasses, ['php-metrics', 'php-control-flow', 'php-catch', 'php-dangerous']);
+  assert.deepEqual(coverage, { kind: 'ast', language: 'php', reason: null });
+});
+
+const probeAfterPasses = (seen) => [...spiedPasses(), { name: 'probe', rules: [], run: (ctx) => { seen.ctx = ctx; } }];
+
+test('a WordPress fixture runs the WordPress passes with ctx.wp and an index that holds the audited file', () => {
+  const fixture = PHP_FIXTURES.SECURITY_WP_PUBLIC_WRITE_ROUTE;
+  const seen = {};
+  usePasses(probeAfterPasses(seen));
+  const { violations } = auditCodeDetailed(fixture.bad, fixture.path, fixture.path, { config: fixture.config });
+  assert.ok(ranPasses.includes('wp-public-write-route') && ranPasses.includes('wp-nonce'));
+  // Passes whose every rule is default-off stay skipped without a setting.
+  for (const skipped of ['wp-read-side-effect', 'wp-sql', 'wp-request-flow', 'wp-output']) assert.ok(!ranPasses.includes(skipped), skipped);
+  assert.equal(seen.ctx.wp.isWordPress, true);
+  assert.ok(seen.ctx.index.files().includes(fixture.path));
+  assert.ok(violations.some((v) => v.rule === 'SECURITY_WP_PUBLIC_WRITE_ROUTE'));
+});
+
+test('crossFile false keeps ctx.index null: WordPress passes run, the index-backed write-route rule stays silent', () => {
+  const fixture = PHP_FIXTURES.SECURITY_WP_PUBLIC_WRITE_ROUTE;
+  const seen = {};
+  usePasses(probeAfterPasses(seen));
+  const { violations } = auditCodeDetailed(fixture.bad, fixture.path, fixture.path, { config: fixture.config, crossFile: false });
+  assert.ok(ranPasses.includes('wp-public-write-route'));
+  assert.equal(seen.ctx.index, null);
+  assert.equal(seen.ctx.crossFile, false);
+  assert.ok(!violations.some((v) => v.rule === 'SECURITY_WP_PUBLIC_WRITE_ROUTE'));
+});
+
+test('wordpress: false skips every WordPress pass', () => {
+  const fixture = PHP_FIXTURES.SECURITY_WP_PUBLIC_WRITE_ROUTE;
+  usePasses(spiedPasses());
+  const { violations } = auditCodeDetailed(fixture.bad, fixture.path, fixture.path, { config: { ...fixture.config, wordpress: false } });
+  assert.ok(!ranPasses.some((name) => name.startsWith('wp-')));
+  assert.ok(!violations.some((v) => v.rule.startsWith('SECURITY_WP_')));
+});
+
+test('a PHP default-off reused rule is silent without a setting and reported with "on"', () => {
+  usePasses(DEFAULT_PASSES);
+  const fixture = PHP_FIXTURES.CONTROL_FLOW_SILENT_GUARD;
+  const rulesWith = (config) => auditCodeDetailed(fixture.bad, fixture.path, fixture.path, { config }).violations.map((v) => v.rule);
+  assert.ok(!rulesWith({ ...fixture.config, rules: {} }).includes('CONTROL_FLOW_SILENT_GUARD'));
+  assert.ok(rulesWith(fixture.config).includes('CONTROL_FLOW_SILENT_GUARD'));
 });

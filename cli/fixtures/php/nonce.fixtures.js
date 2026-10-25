@@ -57,6 +57,16 @@ function demo_save() {
 `,
 };
 
+// The pair as rule-fixtures.spec.js runs it through auditCode (design spec 8.1 path and config).
+export const NONCE_FIXTURES = {
+  SECURITY_WP_MISSING_NONCE: {
+    path: 'wp-content/plugins/demo/demo.php',
+    config: { rules: {}, overrides: [], wordpress: true },
+    bad: NONCE_FIXTURE.bad,
+    good: NONCE_FIXTURE.good,
+  },
+};
+
 const body = (check) => `{
         ${check}update_option( 'demo_value', 'on' );
     }`;

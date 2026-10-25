@@ -1,9 +1,9 @@
 {
   "version": 2,
-  "ruleset": 6,
+  "ruleset": 7,
   "scopes": {
     ".": {
-      "ruleset": 6,
+      "ruleset": 7,
       "allRules": true,
       "rules": {},
       "revisions": {
@@ -45,9 +45,20 @@
         "SECURITY_DYNAMIC_CODE_EXECUTION": 1,
         "SECURITY_HARDCODED_SECRET": 1,
         "SECURITY_JAVASCRIPT_URL": 1,
+        "SECURITY_PHP_COMMAND_EXECUTION": 7,
+        "SECURITY_PHP_OBJECT_INJECTION": 7,
         "SECURITY_RAW_HTML_INJECTION": 1,
         "SECURITY_REVERSE_TABNABBING": 1,
         "SECURITY_SENSITIVE_LOGGING": 1,
+        "SECURITY_WP_MISSING_NONCE": 7,
+        "SECURITY_WP_OPEN_REDIRECT": 7,
+        "SECURITY_WP_PUBLIC_READ_SIDE_EFFECT": 7,
+        "SECURITY_WP_PUBLIC_WRITE_ROUTE": 7,
+        "SECURITY_WP_REST_NO_PERMISSION_CALLBACK": 7,
+        "SECURITY_WP_SSRF": 7,
+        "SECURITY_WP_UNESCAPED_OUTPUT": 7,
+        "SECURITY_WP_UNPREPARED_SQL": 7,
+        "SECURITY_WP_UNSANITIZED_INPUT": 7,
         "STRUCTURAL_WEIGHT_EXCEEDED": 1,
         "SYNTAX_PARSE_ERROR": 3,
         "SYNTHETIC_MOCK_DATA": 1,
@@ -87,7 +98,7 @@
       ]
     },
     "cli": {
-      "ruleset": 6,
+      "ruleset": 7,
       "allRules": true,
       "rules": {
         "CONTROL_FLOW_INLINE_BOOLEAN": 804
@@ -131,9 +142,20 @@
         "SECURITY_DYNAMIC_CODE_EXECUTION": 1,
         "SECURITY_HARDCODED_SECRET": 1,
         "SECURITY_JAVASCRIPT_URL": 1,
+        "SECURITY_PHP_COMMAND_EXECUTION": 7,
+        "SECURITY_PHP_OBJECT_INJECTION": 7,
         "SECURITY_RAW_HTML_INJECTION": 1,
         "SECURITY_REVERSE_TABNABBING": 1,
         "SECURITY_SENSITIVE_LOGGING": 1,
+        "SECURITY_WP_MISSING_NONCE": 7,
+        "SECURITY_WP_OPEN_REDIRECT": 7,
+        "SECURITY_WP_PUBLIC_READ_SIDE_EFFECT": 7,
+        "SECURITY_WP_PUBLIC_WRITE_ROUTE": 7,
+        "SECURITY_WP_REST_NO_PERMISSION_CALLBACK": 7,
+        "SECURITY_WP_SSRF": 7,
+        "SECURITY_WP_UNESCAPED_OUTPUT": 7,
+        "SECURITY_WP_UNPREPARED_SQL": 7,
+        "SECURITY_WP_UNSANITIZED_INPUT": 7,
         "STRUCTURAL_WEIGHT_EXCEEDED": 1,
         "SYNTAX_PARSE_ERROR": 3,
         "SYNTHETIC_MOCK_DATA": 1,
@@ -145,7 +167,32 @@
         "TYPOGRAPHY_EM_DASH": 1,
         "UNGUARDED_LOGGING": 1,
         "VIEW_MONOLITH": 3
-      }
+      },
+      "languages": [
+        ".c",
+        ".cc",
+        ".cjs",
+        ".cpp",
+        ".cs",
+        ".cxx",
+        ".go",
+        ".h",
+        ".hh",
+        ".hpp",
+        ".hxx",
+        ".inl",
+        ".java",
+        ".js",
+        ".jsx",
+        ".kt",
+        ".mjs",
+        ".py",
+        ".rs",
+        ".svelte",
+        ".ts",
+        ".tsx",
+        ".vue"
+      ]
     }
   }
 }

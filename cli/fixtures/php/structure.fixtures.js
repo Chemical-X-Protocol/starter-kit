@@ -2,6 +2,9 @@
 // Snippets are generic (demo_ names), never real project code. Not shipped to npm.
 
 const CONFIG = { rules: {}, overrides: [], wordpress: true };
+// The cascade and silent guard rules are off for PHP until a setting names them (RULE_DEFAULTS in
+// cli/php/php-control-flow.js), so their fixtures switch them on.
+const configOn = (rule) => ({ ...CONFIG, rules: { [rule]: 'on' } });
 const CLASS_PATH = 'includes/class-demo.php';
 
 const repeat = (count, make) => Array.from({ length: count }, (_, i) => make(i)).join('\n');
@@ -80,7 +83,7 @@ function demo_pick( $a, $b, $c ) {
   },
   CONTROL_FLOW_CASCADE_GUARDS: {
     path: CLASS_PATH,
-    config: CONFIG,
+    config: configOn('CONTROL_FLOW_CASCADE_GUARDS'),
     bad: `<?php
 function demo_run( $post_id ) {
 	if ( ! isset( $_POST['demo_nonce'] ) ) {
@@ -121,7 +124,7 @@ function demo_load( $post_id ) {
   },
   CONTROL_FLOW_SILENT_GUARD: {
     path: CLASS_PATH,
-    config: CONFIG,
+    config: configOn('CONTROL_FLOW_SILENT_GUARD'),
     bad: `<?php
 function save_demo( $result ) {
 	if ( is_wp_error( $result ) ) {
@@ -145,5 +148,25 @@ function save_demo( $result ) {
     config: CONFIG,
     bad: partialRows(207),
     good: partialRows(3),
+  },
+  LINE_BUDGET_FILE: {
+    path: 'includes/demo-codes.php',
+    config: CONFIG,
+    bad: `<?php\n${repeat(500, (i) => `define( 'DEMO_CODE_${i}', ${i} );`)}\n`,
+    good: `<?php\n${repeat(499, (i) => `define( 'DEMO_CODE_${i}', ${i} );`)}\n`,
+  },
+  SYNTAX_PARSE_ERROR: {
+    path: CLASS_PATH,
+    config: CONFIG,
+    bad: `<?php
+function demo_label( $a {
+	return $a;
+}
+`,
+    good: `<?php
+function demo_label( $a ) {
+	return $a;
+}
+`,
   },
 };

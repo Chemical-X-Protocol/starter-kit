@@ -72,6 +72,81 @@ export const RULE_REGISTRY = {
     directive: 'Never log sensitive credentials, tokens, or passwords to console diagnostics'
   },
 
+  // Pillar 9, PHP and WordPress (ruleset 7, design spec 4). isDefaultOff follows each family's
+  // measured RULE_DEFAULTS in cli/php/: off when corpus or held-out precision is under 80%.
+  SECURITY_WP_PUBLIC_WRITE_ROUTE: {
+    pillar: PILLARS.PILLAR_9,
+    severity: 'MEDIUM',
+    needs: 'standard',
+    directive: 'Give a REST route that writes state or calls out a permission_callback that checks the user or a token, not __return_true (Directive 9.D)'
+  },
+  SECURITY_WP_REST_NO_PERMISSION_CALLBACK: {
+    pillar: PILLARS.PILLAR_9,
+    severity: 'HIGH',
+    needs: 'standard',
+    directive: 'Add a permission_callback to every register_rest_route endpoint; use __return_true only for a route that is public by design (Directive 9.D)'
+  },
+  SECURITY_WP_PUBLIC_READ_SIDE_EFFECT: {
+    pillar: PILLARS.PILLAR_9,
+    severity: 'HIGH',
+    needs: 'standard',
+    isDefaultOff: true,
+    directive: 'Keep a public read route free of writes and outbound requests, or give it a permission_callback that checks the user (Directive 9.D)'
+  },
+  SECURITY_WP_UNPREPARED_SQL: {
+    pillar: PILLARS.PILLAR_9,
+    severity: 'HIGH',
+    needs: 'standard',
+    isDefaultOff: true,
+    directive: 'Pass SQL that holds runtime values through $wpdb->prepare() with placeholders; cast or allowlist table and column names (Directive 9.B)'
+  },
+  SECURITY_WP_UNESCAPED_OUTPUT: {
+    pillar: PILLARS.PILLAR_9,
+    severity: 'MEDIUM',
+    needs: 'standard',
+    isDefaultOff: true,
+    directive: 'Escape echoed values at output with esc_html, esc_attr, esc_url or wp_kses (Directive 9.B)'
+  },
+  SECURITY_WP_UNSANITIZED_INPUT: {
+    pillar: PILLARS.PILLAR_9,
+    severity: 'HIGH',
+    needs: 'standard',
+    isDefaultOff: true,
+    directive: 'Sanitize request input (sanitize_text_field( wp_unslash( ... ) ), absint or an allowlist) before it reaches output, SQL, options, headers or files (Directive 9.B)'
+  },
+  SECURITY_WP_MISSING_NONCE: {
+    pillar: PILLARS.PILLAR_9,
+    severity: 'HIGH',
+    needs: 'standard',
+    directive: 'Verify a nonce (check_ajax_referer, check_admin_referer or wp_verify_nonce) in admin-ajax and admin-post handlers that change state (Directive 9.D)'
+  },
+  SECURITY_WP_SSRF: {
+    pillar: PILLARS.PILLAR_9,
+    severity: 'HIGH',
+    needs: 'standard',
+    isDefaultOff: true,
+    directive: 'Validate a request-controlled URL with wp_http_validate_url, or fetch it with wp_safe_remote_*, before the request (Directive 9.B)'
+  },
+  SECURITY_WP_OPEN_REDIRECT: {
+    pillar: PILLARS.PILLAR_9,
+    severity: 'MEDIUM',
+    needs: 'standard',
+    isDefaultOff: true,
+    directive: 'Redirect with wp_safe_redirect, or check the target with wp_validate_redirect, when the request chooses it (Directive 9.B)'
+  },
+  SECURITY_PHP_OBJECT_INJECTION: {
+    pillar: PILLARS.PILLAR_9,
+    severity: 'HIGH',
+    needs: 'standard',
+    directive: 'Pass allowed_classes to unserialize(), or store JSON instead of serialized PHP (Directive 9.B)'
+  },
+  SECURITY_PHP_COMMAND_EXECUTION: {
+    pillar: PILLARS.PILLAR_9,
+    severity: 'CRITICAL',
+    needs: 'standard',
+    directive: 'Do not run shell commands; use a PHP API, or allowlist the command and escapeshellarg every argument (Directive 9.B)'
+  },
+
   // Pillar 10: Testing Discipline
   TEST_FAKE_GREEN: {
     pillar: PILLARS.PILLAR_10,

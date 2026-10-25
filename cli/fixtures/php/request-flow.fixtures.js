@@ -10,13 +10,14 @@ import { writePlugin } from './nonce.fixtures.js';
 export { writePlugin };
 
 const PATH = 'wp-content/plugins/demo/demo.php';
-const CONFIG = { rules: {}, overrides: [], wordpress: true };
-const OUTPUT_CONFIG = { rules: { SECURITY_WP_UNESCAPED_OUTPUT: 'on' }, overrides: [], wordpress: true };
+// Every rule of this family ships default-off (RULE_DEFAULTS in wp-request-flow.js and wp-output.js),
+// so each fixture's config switches its own rule on.
+const configOn = (rule) => ({ rules: { [rule]: 'on' }, overrides: [], wordpress: true });
 
 export const REQUEST_FLOW_FIXTURES = {
   SECURITY_WP_UNSANITIZED_INPUT: {
     path: PATH,
-    config: CONFIG,
+    config: configOn('SECURITY_WP_UNSANITIZED_INPUT'),
     bad: `<?php
 function demo_save() {
 	update_option( 'demo_value', wp_unslash( $_POST['v'] ) );
@@ -30,7 +31,7 @@ function demo_save() {
   },
   SECURITY_WP_SSRF: {
     path: PATH,
-    config: CONFIG,
+    config: configOn('SECURITY_WP_SSRF'),
     bad: `<?php
 function demo_probe( $request ) {
 	$url = $request->get_param( 'url' );
@@ -49,7 +50,7 @@ function demo_probe( $request ) {
   },
   SECURITY_WP_OPEN_REDIRECT: {
     path: PATH,
-    config: CONFIG,
+    config: configOn('SECURITY_WP_OPEN_REDIRECT'),
     bad: `<?php
 function demo_go( $request ) {
 	$target = esc_url_raw( $request->get_param( 'fallback_url' ) );
@@ -67,7 +68,7 @@ function demo_go( $request ) {
   },
   SECURITY_WP_UNESCAPED_OUTPUT: {
     path: PATH,
-    config: OUTPUT_CONFIG,
+    config: configOn('SECURITY_WP_UNESCAPED_OUTPUT'),
     bad: `<?php
 function demo_show( $label ) {
 	echo $label;

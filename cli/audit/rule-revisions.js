@@ -12,7 +12,7 @@
  * a rule without a bump fails the suite. At runtime a baseline also records every
  * registered rule's revision, so a rule it never saw is adopted, not a regression.
  */
-export const RULESET_VERSION = 6;
+export const RULESET_VERSION = 7;
 
 export const RULE_REVISIONS = Object.freeze({
   // Ruleset 2: the 40-year canon rules (a3a1ac9, 9461ed2).
@@ -38,7 +38,20 @@ export const RULE_REVISIONS = Object.freeze({
   // Ruleset 5: cascading guard detection and domain validator extraction (Directive 3.H).
   CONTROL_FLOW_CASCADE_GUARDS: 5,
   // Ruleset 6: Tailwind content-glob coverage (review 2026-10-15).
-  TAILWIND_UNSCANNED_CLASS_STRING: 6
+  TAILWIND_UNSCANNED_CLASS_STRING: 6,
+  // Ruleset 7: the PHP and WordPress rule ids (PHP audit design spec 5.1). Reused ids keep their
+  // revisions; the files they now see are handled by the language-aware ratchet.
+  SECURITY_WP_PUBLIC_WRITE_ROUTE: 7,
+  SECURITY_WP_REST_NO_PERMISSION_CALLBACK: 7,
+  SECURITY_WP_PUBLIC_READ_SIDE_EFFECT: 7,
+  SECURITY_WP_UNPREPARED_SQL: 7,
+  SECURITY_WP_UNESCAPED_OUTPUT: 7,
+  SECURITY_WP_UNSANITIZED_INPUT: 7,
+  SECURITY_WP_MISSING_NONCE: 7,
+  SECURITY_WP_SSRF: 7,
+  SECURITY_WP_OPEN_REDIRECT: 7,
+  SECURITY_PHP_OBJECT_INJECTION: 7,
+  SECURITY_PHP_COMMAND_EXECUTION: 7
 });
 
 export const resolveRuleRevision = (rule) => RULE_REVISIONS[rule] ?? 1;

@@ -100,6 +100,9 @@ test('a LOW hazard already at HEAD does not refuse task done', () => {
 const PLUGIN_A = (extra = '') => `<?php\n/* Plugin Name: Demo */\nadd_action('init', array('Demo_B', 'run'));\n${extra}`;
 const CLASS_B = (extra = '') => `<?php\nclass Demo_B {\n  public static function run() { return 1; }\n}\n${extra}`;
 const PHP_BASE = { 'demo.php': PLUGIN_A(), 'b.php': CLASS_B() };
+// Stub passes report registered ids: the analyzer drops (and counts) reports of unregistered ids.
+const STUB_LOCAL = 'STRUCTURAL_WEIGHT_EXCEEDED';
+const STUB_XFILE = 'SECURITY_WP_MISSING_NONCE';
 
 const stubLocalPass = {
   name: 'stub-local',
@@ -107,7 +110,7 @@ const stubLocalPass = {
   run: (ctx) => {
     const at = ctx.content.indexOf('LOCALBAD');
     const hasMarker = at >= 0;
-    if (hasMarker) ctx.report('STUB_LOCAL', ctx.content.slice(0, at).split('\n').length, 'stub local hazard', { severity: 'MEDIUM' });
+    if (hasMarker) ctx.report(STUB_LOCAL, ctx.content.slice(0, at).split('\n').length, 'stub local hazard', { severity: 'MEDIUM' });
   }
 };
 
@@ -122,7 +125,7 @@ const stubCrossFilePass = {
     const hasOverlay = ctx.overlay && path.basename(ctx.overlay.relativePath) === 'b.php';
     const bText = hasOverlay ? ctx.overlay.content : fs.readFileSync(path.join(path.dirname(ctx.filePath), 'b.php'), 'utf-8');
     const isDanger = bText.includes('DANGER');
-    if (isDanger) ctx.report('STUB_XFILE', 3, 'stub cross-file hazard', { severity: 'HIGH', crossFile: true, evidence: 'b.php:1' });
+    if (isDanger) ctx.report(STUB_XFILE, 3, 'stub cross-file hazard', { severity: 'HIGH', crossFile: true, evidence: 'b.php:1' });
   }
 };
 
@@ -186,7 +189,7 @@ test('php: a hazard added over HEAD refuses task done', () => {
   withPhpRepo({ working: { 'b.php': CLASS_B('// LOCALBAD\n') } }, (root) => {
     const refusal = completePhp(root, 'b.php');
     assert.equal(refusal?.refused, true, JSON.stringify(refusal));
-    assert.equal(refusal.violations[0].rule, 'STUB_LOCAL');
+    assert.equal(refusal.violations[0].rule, STUB_LOCAL);
   });
 });
 
@@ -206,7 +209,7 @@ test('php: editing B raises a cross-file finding in A, so B task done is refused
     const refusal = completePhp(root, 'b.php');
     assert.equal(refusal?.refused, true, JSON.stringify(refusal));
     assert.equal(refusal.reason, 'cross-file-regression');
-    assert.deepEqual(refusal.files, [{ file: 'demo.php', rules: ['STUB_XFILE'] }]);
+    assert.deepEqual(refusal.files, [{ file: 'demo.php', rules: [STUB_XFILE] }]);
     assert.match(refusal.message, /demo\.php/);
   });
 });

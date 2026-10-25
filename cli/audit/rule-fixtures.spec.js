@@ -12,6 +12,8 @@ import path from 'node:path';
 import { auditCode } from './rules.js';
 import { RULE_REGISTRY } from './rules-registry.js';
 import { getProfileDefaults } from '../config/profiles.js';
+import { PHP_FIXTURES, PHP_FIXTURE_FAMILIES } from '../fixtures/php/index.js';
+import { PHP_DEFAULT_OFF } from '../php/php-analyzer.js';
 
 const lines = (n, make = (i) => `export const v${i} = ${i};`) => Array.from({ length: n }, (_, i) => make(i)).join('\n') + '\n';
 const hooks = (n) => Array.from({ length: n }, (_, i) => `  const h${i} = useThing${i}();`).join('\n');
@@ -98,10 +100,10 @@ const auditFixture = (rule, fixture, variant) => {
   }
 };
 
-test('registry completeness: every rule has a fixture pair or a recorded reason', () => {
-  const missing = Object.keys(RULE_REGISTRY).filter((rule) => !FIXTURES[rule]);
+test('registry completeness: every rule has a fixture pair (JS or PHP) or a recorded reason', () => {
+  const missing = Object.keys(RULE_REGISTRY).filter((rule) => !FIXTURES[rule] && !PHP_FIXTURES[rule]);
   assert.deepEqual(missing, []);
-  const stale = Object.keys(FIXTURES).filter((rule) => !RULE_REGISTRY[rule]);
+  const stale = [...Object.keys(FIXTURES), ...Object.keys(PHP_FIXTURES)].filter((rule) => !RULE_REGISTRY[rule]);
   assert.deepEqual(stale, []);
 });
 
@@ -114,6 +116,12 @@ test('registry completeness: the engine only emits registered rule ids', () => {
   for (const file of sources) {
     const text = fs.readFileSync(path.join(auditDir, file), 'utf-8');
     for (const [, rule] of text.matchAll(/rule:\s*['"]([A-Z0-9_]+)['"]/g)) emitted.add(rule);
+  }
+  // PHP passes report through ctx.report('RULE_ID', ...); ids held in constants are checked by cli/php/php-rule-ids.spec.js.
+  const phpDir = new URL('../php/', import.meta.url).pathname;
+  for (const file of fs.readdirSync(phpDir).filter((f) => f.endsWith('.js') && !f.endsWith('.spec.js'))) {
+    const text = fs.readFileSync(path.join(phpDir, file), 'utf-8');
+    for (const [, rule] of text.matchAll(/report\(\s*['"]([A-Z0-9_]+)['"]/g)) emitted.add(rule);
   }
   const unregistered = [...emitted].filter((rule) => !RULE_REGISTRY[rule]);
   assert.deepEqual(unregistered, []);
@@ -147,3 +155,90 @@ for (const [rule, fixture] of Object.entries(FIXTURES)) {
     assert.deepEqual(good.map((v) => `${v.rule}@${v.line}`), []);
   });
 }
+
+/**
+ * PHP fixture pairs (design spec 8.1): every pair runs through auditCode with its own config.
+ * A default-off rule's fixture config sets it "on"; without that setting its bad fixture is silent.
+ */
+const isPhpDefaultOff = (rule) => RULE_REGISTRY[rule]?.isDefaultOff === true || PHP_DEFAULT_OFF.has(rule);
+const auditPhp = (fixture, variant, config = fixture.config) => auditCode(fixture[variant], fixture.path, fixture.path, { config });
+const withoutSetting = (config, rule) => {
+  const rules = { ...(config.rules || {}) };
+  delete rules[rule];
+  return { ...config, rules };
+};
+const PHP_DEFAULT_OFF_ON = Object.fromEntries(Object.keys(RULE_REGISTRY).filter(isPhpDefaultOff).map((rule) => [rule, 'on']));
+// A good fixture stays clean with every default-off PHP rule switched on, so cross-family conflicts surface here.
+const withEveryRuleOn = (config) => ({ ...config, rules: { ...(config.rules || {}), ...PHP_DEFAULT_OFF_ON } });
+
+test('PHP fixture families never define the same rule twice', () => {
+  const seen = new Map();
+  const doubled = [];
+  for (const [family, fixtures] of PHP_FIXTURE_FAMILIES) {
+    for (const rule of Object.keys(fixtures)) {
+      if (seen.has(rule)) doubled.push(`${rule}: ${seen.get(rule)} and ${family}`);
+      seen.set(rule, family);
+    }
+  }
+  assert.deepEqual(doubled, []);
+});
+
+for (const [rule, fixture] of Object.entries(PHP_FIXTURES)) {
+  test(`PHP ${rule}: good fixture reports zero violations under every rule`, () => {
+    assert.deepEqual(auditPhp(fixture, 'good').map((v) => `${v.rule}@${v.line}`), []);
+    assert.deepEqual(auditPhp(fixture, 'good', withEveryRuleOn(fixture.config)).map((v) => `${v.rule}@${v.line}`), []);
+  });
+  test(`PHP ${rule}: bad fixture reports it, good fixture does not`, () => {
+    const bad = auditPhp(fixture, 'bad').filter((v) => v.rule === rule);
+    assert.ok(bad.length > 0, `${rule} not reported for its PHP bad fixture`);
+    const good = auditPhp(fixture, 'good').filter((v) => v.rule === rule);
+    assert.deepEqual(good.map((v) => `${v.rule}@${v.line}`), []);
+  });
+}
+
+for (const [rule, fixture] of Object.entries(PHP_FIXTURES).filter(([id]) => isPhpDefaultOff(id))) {
+  test(`PHP ${rule}: default-off bad fixture is silent without a setting and fires with "on"`, () => {
+    assert.equal(fixture.config?.rules?.[rule], 'on', `${rule} fixture config must switch the rule on`);
+    const silent = auditPhp(fixture, 'bad', withoutSetting(fixture.config, rule)).filter((v) => v.rule === rule);
+    assert.deepEqual(silent.map((v) => `${v.rule}@${v.line}`), []);
+    const fired = auditPhp(fixture, 'bad').filter((v) => v.rule === rule);
+    assert.ok(fired.length > 0, `${rule} not reported with "on"`);
+  });
+}
+
+const PHP_CATCH_ALLOWED = `<?php
+class Demo_Client {
+    public function demo_fetch( $id ) {
+        try {
+            return $this->remote( $id );
+        } catch ( Exception $e ) {
+            // chemx-allow: best-effort the remote copy is optional; the caller falls back to null
+        }
+        return null;
+    }
+}
+`;
+
+const PHP_HEADER_ALLOWED = `<?php
+/**
+ * Demo lookup table, generated from the demo schema.
+ *
+ * chemx-allow: LINE_BUDGET_FILE generated lookup table, regenerated rather than edited
+ */
+${Array.from({ length: 520 }, (_, i) => `define( 'DEMO_CODE_${i}', ${i} );`).join('\n')}
+`;
+
+test('PHP chemx-allow: a best-effort annotation inside a catch suppresses the catch finding end to end', () => {
+  const fixture = PHP_FIXTURES.ERROR_SWALLOWED_EXCEPTION;
+  const rulesOf = (code) => auditCode(code, fixture.path, fixture.path, { config: fixture.config }).map((v) => v.rule);
+  assert.ok(rulesOf(fixture.bad).includes('ERROR_SWALLOWED_EXCEPTION'));
+  assert.deepEqual(rulesOf(PHP_CATCH_ALLOWED).filter((rule) => rule === 'ERROR_SWALLOWED_EXCEPTION' || rule === 'AI_SLOP_SHALLOW_CATCH'), []);
+});
+
+test('PHP chemx-allow: an annotation in the file header block covers a line-1 finding end to end', () => {
+  const config = { rules: {}, overrides: [], wordpress: true };
+  const rulesOf = (code) => auditCode(code, 'includes/demo-codes.php', 'includes/demo-codes.php', { config }).map((v) => v.rule);
+  const unannotated = PHP_HEADER_ALLOWED.replace(/^ \* chemx-allow:.*\n/m, '');
+  assert.ok(rulesOf(unannotated).includes('LINE_BUDGET_FILE'));
+  assert.ok(!rulesOf(PHP_HEADER_ALLOWED).includes('LINE_BUDGET_FILE'));
+});
