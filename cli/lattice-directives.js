@@ -23,5 +23,12 @@ export const JARVIS_OPERATIONS = [
   { cmd: 'npx chemx scratch <name>', desc: 'Path of a file in your own git-ignored scratch directory (.chemx/scratch/<handle>/); never write one-off scripts to a shared scratchpad' },
   { cmd: 'npx chemx worktree add <path> -b <branch> --link-modules', desc: 'Make a worktree with node_modules ready; remove it later with chemx worktree remove <path>' },
   { cmd: 'npx chemx mutate <file> --apply "s/a/b/" --then "<command>"', desc: 'Run a command against a temporarily changed file; the original is always restored byte for byte' },
+  { cmd: 'npx chemx run -- <command>', desc: 'Run a long non-chemx command (a plugin test runner, a script) while your file leases are renewed every minute' },
+  { cmd: 'npx chemx wait --task=<id> | --lock-free=<file> | --verify-idle', desc: 'Block until a task is done, a file lease is free or no verify runs; never sleep-poll' },
+  { cmd: 'npx chemx wait --job=<pid> | --post-matching=<text> [--from=@handle]', desc: 'Block until a backgrounded chemx process ends (chemx test ... & chemx wait --job=$!; exits with its code) or a feed post matches' },
+  { cmd: 'npx chemx task add --from <file.json|yaml> [--dry-run]', desc: 'File an epic and its children in one transaction (chemx task is chemx team task); a long brief: chemx team brief <id> --file <md>' },
+  { cmd: 'npx chemx commit <files> -m "<subject> (#<id>)" [--board=<dir>] [--no-skip-ci]', desc: 'Commit only the listed files, lease-checked and recorded on the task; --board names the board when you commit from a worktree' },
+  { cmd: 'npx chemx ci <pr> --wait', desc: 'Poll a pull request\'s checks and merge state; exit 0 all passed, 1 a check failed, 3 pending or none reported yet' },
+  { cmd: 'npx chemx changelog --check', desc: 'Validate your docs/changelog.d/<ticket>.md fragment; chemx changelog folds the fragments into Unreleased' },
   { cmd: 'npx chemx verify --json', desc: 'Execute silent full AST audit + typecheck + test suite' }
 ];
