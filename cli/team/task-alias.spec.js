@@ -43,14 +43,18 @@ test('chemx task add / list / show print what chemx team task prints', (t) => {
   }
 });
 
-test('chemx task --help and chemx task help print the task help card; an unknown action is named', (t) => {
+test('chemx task --help prints the team entry that names the alias; chemx task show --help prints the task help card; an unknown action is named', (t) => {
   const root = makeBoard(t);
   for (const args of [['task', '--help'], ['task', 'help']]) {
     const help = run(root, args);
     assert.equal(help.status, 0, help.err);
-    assert.match(help.out, /Task Coordination Commands \(team task\)/);
-    assert.match(help.out, /chemx task <action> is the same/);
+    assert.match(help.out, /^USAGE\n  chemx team </);
+    assert.match(help.out, /`chemx task <action>` is the same as `chemx team task <action>`/);
   }
+  const card = run(root, ['task', 'show', '--help']);
+  assert.equal(card.status, 0, card.err);
+  assert.match(card.out, /Task Coordination Commands \(team task\)/);
+  assert.match(card.out, /chemx task <action> is the same/);
   const bad = run(root, ['task', 'frobnicate']);
   assert.notEqual(bad.status, 0);
   assert.match(bad.err, /Unknown task action: "frobnicate"/);

@@ -222,7 +222,7 @@ edit history); the groups name the event types chemx writes today.
 
 What an orchestrator needs to file, read and wait on a whole project without a shell loop. All of it is
 `chemx team ...`; `chemx task <action>` is the same command spelled shorter (`chemx task show 12`,
-`chemx task add --from tasks.yaml`), and `chemx task --help` prints the task help card.
+`chemx task add --from tasks.yaml`), and `chemx task show --help` (like `chemx team task --help`) prints the task help card.
 
 **A file of tasks: `task add --from <file.json|yaml>`.** One call files an epic and its children. The
 file is a list of rows (or a mapping with a `tasks:` list), `.json`, `.yaml` / `.yml` or sniffed by its
