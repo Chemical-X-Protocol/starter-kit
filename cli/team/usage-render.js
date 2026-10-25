@@ -3,8 +3,8 @@
  * Every total names its method: usage deduped by message id; prices from <source>.
  */
 
-const fmtInt = (n) => Number(n || 0).toLocaleString('en-US');
-const fmtUsd = (n) => `$${Number(n || 0).toFixed(2)}`;
+export const fmtInt = (n) => Number(n || 0).toLocaleString('en-US');
+export const fmtUsd = (n) => `$${Number(n || 0).toFixed(2)}`;
 const pad = (text, width) => String(text).padEnd(width);
 const padL = (text, width) => String(text).padStart(width);
 

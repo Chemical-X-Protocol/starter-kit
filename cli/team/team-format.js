@@ -232,7 +232,7 @@ export const formatTeamHelpCard = () => {
     '    \x1b[32mpost\x1b[0m <message>           Post broadcast message to swarm feed',
     '    \x1b[32minbox\x1b[0m [@agent]           View agent mailbox and notifications',
     '    \x1b[32mdm\x1b[0m <@agent> <msg>        Send direct message to another agent',
-    '    \x1b[32mtokens\x1b[0m                   Inspect token consumption and telemetry breakdown',
+    '    \x1b[32mtokens\x1b[0m [--epic <id>]     Inspect token consumption and telemetry breakdown; --epic rolls up one epic\'s children',
     '    \x1b[32mroute\x1b[0m <ids...>          Show the model and effort chemx routes for each stage of tasks',
     '    \x1b[32mtriage\x1b[0m                   Generate tasks automatically from AST audit hazards',
     '    \x1b[32mbenchmark\x1b[0m                Run memory and token reduction ablation benchmark',

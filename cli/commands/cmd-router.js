@@ -102,6 +102,11 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
       await runCommitCli(rawArgs.slice(1));
       break;
     }
+    case 'ci': {
+      const { runCiCli } = await import('../ci-command.js');
+      process.exitCode = await runCiCli(rawArgs.slice(1));
+      break;
+    }
     case 'status': {
       const { runStatus } = await import('../status-command.js');
       setExitCodeFrom(runStatus(rawArgs.slice(1), true));
