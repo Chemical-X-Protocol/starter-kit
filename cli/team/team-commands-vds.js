@@ -9,7 +9,12 @@ import { postFeedEvent } from './team-db-feed.js';
 
 export const handleTaskSlotCommand = (db, taskId, moscow = 'must', priority = 'critical', isCli = false, isJson = false) => {
   const result = enforceSingleSlot(db, taskId, moscow, priority);
-  if (isCli) {
+  const isRefused = result.success === false;
+  const isCliRefusal = isCli && isRefused;
+  if (isCliRefusal) {
+    process.exitCode = 1;
+    process.stderr.write('\x1b[31m✕ Task ID required: chemx team task vds-slot <id> [moscow] [priority]\x1b[0m\n');
+  } else if (isCli) {
     if (isJson) {
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     } else {
@@ -28,7 +33,10 @@ export const handleTaskTraceCommand = (db, taskId, rawUrl, isCli = false, isJson
   const check = verifyTraceability(permalink);
   const isValid = check.valid;
   if (!isValid) {
-    if (isCli) process.stderr.write(`\x1b[31m✕ Invalid traceability permalink: ${check.error}\x1b[0m\n`);
+    if (isCli) {
+      process.exitCode = 1;
+      process.stderr.write(`\x1b[31m✕ Invalid traceability permalink: ${check.error}\x1b[0m\n`);
+    }
     return { success: false, error: check.error };
   }
 

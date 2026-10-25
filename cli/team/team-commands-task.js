@@ -34,16 +34,17 @@ import { describeUnknownStatus } from './task-update-status.js';
 
 export const TASK_ACTIONS = ['list', 'show', 'add', 'brief', 'claim', 'handoff', 'close', 'done', 'update', 'comment', 'triage', 'reconcile', 'set-target', 'set-files', 'vds-slot', 'trace'];
 
+// Every failure of a task action is a refusal: the reason on stderr and exit 1 on the CLI (K1b, #6765).
 const fail = (isCli, message, result = { error: message }) => {
-  if (isCli) process.stderr.write(`\x1b[31m✕ ${message}\x1b[0m\n`);
+  if (isCli) {
+    process.exitCode = 1;
+    process.stderr.write(`\x1b[31m✕ ${message}\x1b[0m\n`);
+  }
   return result;
 };
 
-// A refusal for input that must write nothing: stderr, a non-zero exit and { refused } for callers.
-const refuse = (isCli, message) => {
-  if (isCli) process.exitCode = 1;
-  return fail(isCli, message, { error: message, refused: true });
-};
+// A refusal for input that must write nothing: fail() with { refused } for callers.
+const refuse = (isCli, message) => fail(isCli, message, { error: message, refused: true });
 
 const writeJsonOr = (value, flags, isCli, line) => {
   if (!isCli) return value;
@@ -156,6 +157,7 @@ const runClaim = (ctx, taskId, flags, isCli) => {
   if (isReasonMissing) return fail(isCli, 'A reason is required: chemx team task claim <id> --ignore-deps=<reason>', { error: 'ignore-deps reason required' });
   if (!isCli) return res;
   const didClaim = Boolean(res.success);
+  if (!didClaim) process.exitCode = 1;
   if (flags.isJson) process.stdout.write(`${JSON.stringify(res, null, 2)}\n`);
   else if (didClaim) process.stdout.write(`\x1b[32m✔\x1b[0m Claimed task #${taskId}\n`);
   else process.stderr.write(`\x1b[31m✕ Claim failed: ${res.message || res.reason}\x1b[0m\n`);

@@ -10,6 +10,7 @@ import path from 'node:path';
 import { openIndexDb } from '../search-schema.js';
 import { getTask } from './team-db-tasks.js';
 import { runTeamCli } from './team-commands.js';
+import { runCliCaptured } from './cli-exit-fixture.js';
 
 delete process.env.CHEMX_PROJECT_ROOT;
 
@@ -149,4 +150,27 @@ test('on the CLI a refused status and a missing value print the reason and exit 
   assert.deepEqual(exitCodes, [1, 1]);
   assert.match(errors[0], /Unknown status "bogus"/);
   assert.match(errors[1], /--add-dep needs a value/);
+});
+
+test('on the CLI every dependency refusal prints the reason and exits 1, and a good edit exits 0 (#6765)', (t) => {
+  const { root, db, ids: [a, b] } = makeBoard(t);
+  const cli = (args) => runCliCaptured(root, ['task', 'update', ...args.map(String), '--as=@orch']);
+  const good = cli([b, `--deps=${a}`]);
+  assert.equal(good.exitCode, 0, good.err);
+  assert.equal(good.err, '');
+  const refusals = [
+    { args: [a, `--deps=${b}`], text: /would form a cycle/ },
+    { args: [b, '--deps=abc'], text: /not a task id: abc/ },
+    { args: [b, '--deps=9999'], text: /#9999 is this task or does not exist/ },
+    { args: [b, `--add-dep=${b}`], text: /#\d+ is this task or does not exist/ }
+  ];
+  for (const { args, text } of refusals) {
+    const refused = cli(args);
+    assert.equal(refused.exitCode, 1, `${args.join(' ')} exits 1`);
+    assert.match(refused.err, /Dependencies refused/);
+    assert.match(refused.err, text);
+    assert.equal(refused.result.refused, true);
+  }
+  assert.deepEqual(getTask(db, a).dependencies, []);
+  assert.deepEqual(getTask(db, b).dependencies, [a]);
 });

@@ -144,6 +144,17 @@ word is refused with this list, exit code 1, and nothing is written: not the sta
 is not a status (use `done`). With no status and no dependency flag, `update` sets `in_progress`;
 `update <id> --add-dep <ids>` alone edits the dependencies and leaves the status untouched.
 
+The MCP tool refuses the same way (K1b, #6765): `chemx_team_task` `action: "update"` takes `status` from the
+same list, and any other word (including `completed`, which is no longer mapped to `done`) returns
+`{ error, refused: true }` with the CLI's text and writes nothing. No `status` means `in_progress`.
+
+**Exit codes of `chemx team task`.** Every refusal exits 1 after printing its reason to stderr: an unknown
+status, a bad `--deps` edit (not an id, unknown id, a cycle), a claim refused for unmet dependencies, a
+blank `--ignore-deps`, or a task another agent holds, a missing id or message, a bad `--needs`, `--kind` or
+`--target`, a bad `trace` permalink, and an unknown action. A command that lands exits 0 and writes nothing
+to stderr. The library and MCP callers get the same `{ error }` or `{ refused: true }` value and no exit code.
+`chemx feed ...` is `chemx team feed ...` (it used to print the status panel).
+
 **Value flags.** Every team flag that takes a value accepts it after a space or an equals sign, with
 the same meaning: `--add-dep 3,4` and `--add-dep=3,4`, `--prio 2` and `--prio=2`. This covers `--as`,
 `--to`, `--agent`, `--status`, `--target`, `--tier`, `--rule`, `--parent`, `--prio` / `--priority`,

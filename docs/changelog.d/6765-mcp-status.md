@@ -1,0 +1,5 @@
+### Fixed (K1b #6765)
+
+- The MCP tool `chemx_team_task` `action: "update"` validates `status` like `chemx team task update`: only `queued`, `in_progress`, `review`, `blocked`, `done` and `cancelled` are written. Any other word returns `{ error, refused: true }` with the CLI's text and writes nothing. `completed` is no longer mapped to `done`. No `status` still means `in_progress` (#6765).
+- Every refusal of a `chemx team task` action exits 1 (it printed the reason and exited 0 for a bad `--deps` edit, a claim refused for unmet dependencies or a task another agent holds, a missing id or message, a bad `--needs`, `--kind` or `--target`, a bad `trace` permalink and `vds-slot` with no id). A command that lands still exits 0 (#6765).
+- `chemx feed [flags]` runs `chemx team feed [flags]`: the router dropped the word `feed`, so a bare `chemx feed` printed the status panel and `chemx feed --oneline` lost its flag (found by K14, #6759; fixed in #6765). `chemx team` and `chemx swarm` with no subcommand still print the status panel.
