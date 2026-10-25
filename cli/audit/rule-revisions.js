@@ -12,7 +12,7 @@
  * a rule without a bump fails the suite. At runtime a baseline also records every
  * registered rule's revision, so a rule it never saw is adopted, not a regression.
  */
-export const RULESET_VERSION = 8;
+export const RULESET_VERSION = 9;
 
 export const RULE_REVISIONS = Object.freeze({
   // Ruleset 2: the 40-year canon rules (a3a1ac9, 9461ed2).
@@ -53,7 +53,9 @@ export const RULE_REVISIONS = Object.freeze({
   SECURITY_PHP_OBJECT_INJECTION: 7,
   SECURITY_PHP_COMMAND_EXECUTION: 7,
   // Ruleset 8: a rest_authentication_errors callback that clears the error (task #6708).
-  SECURITY_WP_AUTH_ERROR_CLEARED: 8
+  SECURITY_WP_AUTH_ERROR_CLEARED: 8,
+  // Ruleset 9: a public route that creates a user without reading users_can_register (task #6709).
+  SECURITY_WP_PUBLIC_REGISTRATION_ROUTE: 9
 });
 
 export const resolveRuleRevision = (rule) => RULE_REVISIONS[rule] ?? 1;

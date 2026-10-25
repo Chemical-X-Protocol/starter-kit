@@ -124,7 +124,15 @@ export const RULE_REGISTRY = {
     pillar: PILLARS.PILLAR_9,
     severity: 'MEDIUM',
     needs: 'standard',
+    isDefaultOff: true,
     directive: 'Return the incoming error from a rest_authentication_errors callback, or authenticate the request with a real credential check; returning null or true for a failed request lets it through (Directive 9.D)'
+  },
+  SECURITY_WP_PUBLIC_REGISTRATION_ROUTE: {
+    pillar: PILLARS.PILLAR_9,
+    severity: 'HIGH',
+    needs: 'standard',
+    isDefaultOff: true,
+    directive: 'Check get_option( "users_can_register" ) or your plugin registration setting before a public REST route creates a user; a captcha does not decide whether registration is open (Directive 9.D)'
   },
   SECURITY_WP_SSRF: {
     pillar: PILLARS.PILLAR_9,

@@ -1,9 +1,9 @@
 {
   "version": 2,
-  "ruleset": 8,
+  "ruleset": 9,
   "scopes": {
     ".": {
-      "ruleset": 8,
+      "ruleset": 9,
       "allRules": true,
       "rules": {},
       "revisions": {
@@ -54,6 +54,7 @@
         "SECURITY_WP_MISSING_NONCE": 7,
         "SECURITY_WP_OPEN_REDIRECT": 7,
         "SECURITY_WP_PUBLIC_READ_SIDE_EFFECT": 7,
+        "SECURITY_WP_PUBLIC_REGISTRATION_ROUTE": 9,
         "SECURITY_WP_PUBLIC_WRITE_ROUTE": 7,
         "SECURITY_WP_REST_NO_PERMISSION_CALLBACK": 7,
         "SECURITY_WP_SSRF": 7,
@@ -99,7 +100,7 @@
       ]
     },
     "cli": {
-      "ruleset": 8,
+      "ruleset": 9,
       "allRules": true,
       "rules": {
         "CONTROL_FLOW_INLINE_BOOLEAN": 804
@@ -152,6 +153,7 @@
         "SECURITY_WP_MISSING_NONCE": 7,
         "SECURITY_WP_OPEN_REDIRECT": 7,
         "SECURITY_WP_PUBLIC_READ_SIDE_EFFECT": 7,
+        "SECURITY_WP_PUBLIC_REGISTRATION_ROUTE": 9,
         "SECURITY_WP_PUBLIC_WRITE_ROUTE": 7,
         "SECURITY_WP_REST_NO_PERMISSION_CALLBACK": 7,
         "SECURITY_WP_SSRF": 7,
