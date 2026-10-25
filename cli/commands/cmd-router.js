@@ -209,6 +209,21 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
       process.exitCode = await runLeasedCommand(rawArgs.slice(1));
       break;
     }
+    case 'scratch': {
+      const { runScratchCommand } = await import('./cmd-scratch.js');
+      process.exitCode = runScratchCommand(rawArgs.slice(1));
+      break;
+    }
+    case 'worktree': {
+      const { runWorktreeCommand } = await import('./cmd-worktree.js');
+      process.exitCode = await runWorktreeCommand(rawArgs.slice(1));
+      break;
+    }
+    case 'mutate': {
+      const { runMutateCommand } = await import('./cmd-mutate.js');
+      process.exitCode = await runMutateCommand(rawArgs.slice(1));
+      break;
+    }
     case 'audit': {
       const isStagedDelta = rawArgs.includes('--staged-delta');
       if (isStagedDelta) {

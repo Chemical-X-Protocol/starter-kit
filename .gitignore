@@ -3,3 +3,5 @@ node_modules
 .chemx/
 .agents/
 scratch/
+# Chemical X per-agent scratch space (chemx scratch); already inside .chemx/, listed so it survives a narrower .chemx rule
+.chemx/scratch/

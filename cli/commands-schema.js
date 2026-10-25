@@ -14,13 +14,14 @@ import { OPS_COMMANDS } from './commands-schema-ops.js';
 import { SETUP_COMMANDS } from './commands-schema-setup.js';
 import { COMMIT_COMMANDS } from './commands-schema-commit.js';
 import { CI_COMMANDS } from './commands-schema-ci.js';
+import { WORKSPACE_COMMANDS } from './commands-schema-workspace.js';
 import { PATTERNS_COMMANDS } from './commands-schema-patterns.js';
 import { HOST_COMMANDS } from './commands-schema-host.js';
 import { REPORT_COMMANDS } from './commands-schema-report.js';
 
 export const COMMAND_GROUPS = ['search', 'edit', 'verify', 'wrappers', 'agents', 'setup'];
 
-export const COMMANDS_SCHEMA = [...SEARCH_COMMANDS, ...EDIT_COMMANDS, ...VERIFY_COMMANDS, ...VERIFY_MORE_COMMANDS, ...WRAPPER_COMMANDS, ...OPS_COMMANDS, ...SETUP_COMMANDS, ...COMMIT_COMMANDS, ...CI_COMMANDS, ...PATTERNS_COMMANDS, ...REPORT_COMMANDS, ...HOST_COMMANDS];
+export const COMMANDS_SCHEMA = [...SEARCH_COMMANDS, ...EDIT_COMMANDS, ...VERIFY_COMMANDS, ...VERIFY_MORE_COMMANDS, ...WRAPPER_COMMANDS, ...OPS_COMMANDS, ...SETUP_COMMANDS, ...COMMIT_COMMANDS, ...CI_COMMANDS, ...WORKSPACE_COMMANDS, ...PATTERNS_COMMANDS, ...REPORT_COMMANDS, ...HOST_COMMANDS];
 
 const COMMAND_INDEX = new Map(
   COMMANDS_SCHEMA.flatMap((entry) => [entry.name, ...entry.aliases].map((token) => [token, entry]))

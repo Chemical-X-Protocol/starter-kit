@@ -20,5 +20,8 @@ export const JARVIS_OPERATIONS = [
   { cmd: 'npx chemx q <target> --blast-radius', desc: 'Calculate transitive blast radius before modifying any capsule' },
   { cmd: 'npx chemx read <file> --symbol=<name> --connections', desc: 'Read target symbol with caller and dependent graph' },
   { cmd: 'npx chemx team task list --as=@agent', desc: 'Inspect active swarm tasks and milestones assigned to you' },
+  { cmd: 'npx chemx scratch <name>', desc: 'Path of a file in your own git-ignored scratch directory (.chemx/scratch/<handle>/); never write one-off scripts to a shared scratchpad' },
+  { cmd: 'npx chemx worktree add <path> -b <branch> --link-modules', desc: 'Make a worktree with node_modules ready; remove it later with chemx worktree remove <path>' },
+  { cmd: 'npx chemx mutate <file> --apply "s/a/b/" --then "<command>"', desc: 'Run a command against a temporarily changed file; the original is always restored byte for byte' },
   { cmd: 'npx chemx verify --json', desc: 'Execute silent full AST audit + typecheck + test suite' }
 ];
