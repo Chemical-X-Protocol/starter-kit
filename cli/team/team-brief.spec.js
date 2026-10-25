@@ -75,3 +75,14 @@ test('brief: long titles, many locks and a huge handoff stay inside the cap', ()
   assert.ok(text.length <= TEAM_BRIEF_MAX_CHARS, `brief is ${text.length} chars`);
   assert.ok(text.split('\n').length <= 3);
 });
+
+// K14 (#6759): a task's long brief (agent_tasks.brief, chemx team brief <id>) is a different thing from this card.
+test('brief: a claimed task with a 7 KB task brief leaves the SessionStart card at three short lines', (t) => {
+  const { root, db } = makeTeamProject(t, ['a.js']);
+  const task = createTask(db, { title: 'Has a design contract', brief: 'Contract text. '.repeat(500) });
+  claimTask(db, task.id, '@me');
+  const text = formatTeamBrief(collectTeamBrief({ root, agentId: 'me' }));
+  assert.ok(text.length <= TEAM_BRIEF_MAX_CHARS, `brief is ${text.length} chars`);
+  assert.doesNotMatch(text, /Contract text/);
+  assert.match(text, new RegExp(`claims 1 \\(#${task.id}\\)`));
+});

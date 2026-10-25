@@ -12,16 +12,21 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { setTimeout as sleepFor } from 'node:timers/promises';
 import { liveLeases, taskStatus } from './lease-view.js';
+import { checkPost, latestEventId } from './wait-post.js';
 
 export const POLL_MS = 3000;
 export const DEFAULT_TIMEOUT_MS = 30 * 60 * 1000;
 
 export const WAIT_HELP = [
-  'chemx wait --task=<id> [--status=done] | --lock-free=<file> | --verify-idle  [--timeout=30m]',
+  'chemx wait --task=<id> [--status=done] | --lock-free=<file> | --verify-idle | --post-matching=<text> [--from=@h] [--since=<id>]  [--timeout=30m]',
   '  --task=<id>        until the task reaches --status (default done)',
   '  --lock-free=<f>   until no unexpired lease exists on the file',
   '  --verify-idle      until no chemx verify/test process is running for this project',
+  '  --post-matching=<text>  until a feed post contains the text (any case); lock events never match',
+  '  --from=@handle     with --post-matching: only posts by that handle',
+  '  --since=<event id> with --post-matching: count posts after this event id, existing ones too (default: only posts made after the wait starts)',
   '  --timeout=<dur>    30s, 5m, 2h or plain seconds; default 30m',
+  '  A value may follow its flag after a space or an equals sign (a value that starts with "-" needs the = form).',
   '  Polls every 3 seconds. Exit 0 = condition held at the last poll (it can change right after),',
   '  2 = timed out, 1 = bad arguments.'
 ].join('\n');
@@ -35,9 +40,34 @@ export const parseDuration = (text) => {
   return Number(match[1]) * UNITS[match[2] || 's'];
 };
 
+// A value follows its flag after an equals sign or a space; a value that starts with a dash needs the equals form.
 const flagValue = (args, name) => {
   const inline = args.find((arg) => arg.startsWith(`--${name}=`));
-  return inline ? inline.slice(name.length + 3) : undefined;
+  const hasInline = inline !== undefined;
+  if (hasInline) return inline.slice(name.length + 3);
+  const at = args.indexOf(`--${name}`);
+  const next = args[at + 1];
+  const hasNext = at !== -1 && typeof next === 'string' && !next.startsWith('-');
+  return hasNext ? next : undefined;
+};
+
+const hasFlag = (args, name) => args.some((arg) => arg === `--${name}` || arg.startsWith(`--${name}=`));
+
+const USAGE_ERROR = 'give exactly one of --task=<id>, --lock-free=<file>, --verify-idle, --post-matching=<text>, and a valid --timeout and task id (--from=@handle and --since=<event id> go with --post-matching)';
+
+/** The --post-matching group: its text, the handle filter and the cursor, with whether they are usable together. */
+const parsePostArgs = (args) => {
+  const postMatching = flagValue(args, 'post-matching');
+  const wantsPost = hasFlag(args, 'post-matching');
+  const fromText = flagValue(args, 'from');
+  const sinceText = flagValue(args, 'since');
+  const since = sinceText === undefined ? null : Number(sinceText);
+  const isBadSince = hasFlag(args, 'since') && !(Number.isInteger(since) && since >= 0);
+  const isBadFrom = hasFlag(args, 'from') && !fromText;
+  const isBadText = wantsPost && (postMatching === undefined || postMatching.trim() === '');
+  const isStray = !wantsPost && (hasFlag(args, 'from') || hasFlag(args, 'since'));
+  const from = fromText ? `@${fromText.replace(/^@/, '')}` : undefined;
+  return { postMatching: wantsPost ? postMatching : undefined, wantsPost, from, since, isBad: isBadSince || isBadFrom || isBadText || isStray };
 };
 
 export const parseWaitArgs = (args) => {
@@ -46,11 +76,12 @@ export const parseWaitArgs = (args) => {
   const task = flagValue(args, 'task');
   const lockFree = flagValue(args, 'lock-free');
   const verifyIdle = args.includes('--verify-idle');
-  const modes = [task !== undefined, lockFree !== undefined, verifyIdle].filter(Boolean).length;
+  const post = parsePostArgs(args);
+  const modes = [task !== undefined, lockFree !== undefined, verifyIdle, post.wantsPost].filter(Boolean).length;
   const taskId = task === undefined ? null : Number(task);
   const isBadTask = task !== undefined && !Number.isInteger(taskId);
-  const error = modes === 1 && timeoutMs !== null && !isBadTask ? null : 'give exactly one of --task=<id>, --lock-free=<file>, --verify-idle, and a valid --timeout and task id';
-  return { error, timeoutMs, taskId, status: flagValue(args, 'status') || 'done', lockFree, verifyIdle };
+  const isUsable = modes === 1 && timeoutMs !== null && !isBadTask && !post.isBad;
+  return { error: isUsable ? null : USAGE_ERROR, timeoutMs, taskId, status: flagValue(args, 'status') || 'done', lockFree, verifyIdle, postMatching: post.postMatching, from: post.from, since: post.since };
 };
 
 const RUNNING = /(^|[\s/])(chemx|cli\/index\.js)\s+(verify|test|check:all)(\s|$)/;
@@ -107,9 +138,11 @@ export const checkOnce = (opts, cwd, env = {}) => {
   const now = env.now || Date.now();
   const waitsOnTask = opts.taskId !== null;
   const waitsOnLock = opts.lockFree !== undefined;
+  const waitsOnPost = opts.postMatching !== undefined;
   const checks = [
     [waitsOnTask, () => checkTask(opts, cwd)],
-    [waitsOnLock, () => checkLock(opts, cwd, now)]
+    [waitsOnLock, () => checkLock(opts, cwd, now)],
+    [waitsOnPost, () => checkPost(opts, cwd)]
   ];
   const match = checks.find(([applies]) => applies);
   return match ? match[1]() : checkVerify(cwd, env);
@@ -128,8 +161,11 @@ export const runWait = async (args, deps = {}) => {
   const isUsageError = Boolean(opts.error);
   if (isUsageError) return { code: 1, message: `chemx wait: ${opts.error}\n${WAIT_HELP}` };
   const started = clock();
+  // The post condition counts posts after the newest event of the moment the wait starts, unless --since says otherwise.
+  const needsCursor = opts.postMatching !== undefined && opts.since === null;
+  const polled = needsCursor ? { ...opts, since: latestEventId(cwd) } : opts;
   while (true) {
-    const result = checkOnce(opts, cwd, env);
+    const result = checkOnce(polled, cwd, env);
     const elapsed = clock() - started;
     const seconds = (elapsed / 1000).toFixed(1);
     const isMet = result.done;

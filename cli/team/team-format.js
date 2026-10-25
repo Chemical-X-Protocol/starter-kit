@@ -1,6 +1,8 @@
 import { formatTaskBriefLines, formatTelemetryLines } from './task-detail-sections.js';
 import { describeCreationNote } from './task-brief-view.js';
 import { clipText } from './team-feed-view.js';
+import { kindTag } from './task-kind.js';
+import { formatClaimLine } from './task-claim-age.js';
 import { END_OF_CARD, sectionTitle } from './help/shared.js';
 import { teamCardHead, teamCardGlobalOptions } from './help/team-card.js';
 import { TEAM_CARD_ROWS } from './help/card-rows.js';
@@ -98,10 +100,11 @@ export const formatTaskListCard = (tasks = []) => {
   const renderNodes = (parentId, depth) => {
     for (const t of (childrenMap.get(parentId) || [])) {
       const indent = depth > 0 ? '  '.repeat(depth) + '└── ' : '  ';
-      const assignee = t.assigned_agent_id ? `(${t.assigned_agent_id})` : '(unassigned)';
+      const idle = Number.isInteger(t.idle_hours) ? ` idle ${t.idle_hours}h` : '';
+      const assignee = t.assigned_agent_id ? `(${t.assigned_agent_id}${idle})` : '(unassigned)';
       const target = t.target_path ? ` [${t.target_path}]` : '';
       const needs = t.needs ? ` <${t.needs}>` : '';
-      lines.push(`${indent}#${t.id} [${t.status}]${needs} ${assignee}${target}: ${t.title}`);
+      lines.push(`${indent}#${t.id}${kindTag(t)} [${t.status}]${needs} ${assignee}${target}: ${t.title}`);
       renderNodes(t.id, depth + 1);
     }
   };
@@ -155,7 +158,7 @@ export const formatMailboxCard = (mailbox) => {
   return lines.join('\n');
 };
 
-export const formatTaskDetailCard = (task, events = [], dependencyStates = [], routeLabel = null) => {
+export const formatTaskDetailCard = (task, events = [], dependencyStates = [], routeLabel = null, claim = null, options = {}) => {
   const hasNoTask = !task;
   if (hasNoTask) return '  (Task not found)\n';
   const lines = [''];
@@ -171,10 +174,11 @@ export const formatTaskDetailCard = (task, events = [], dependencyStates = [], r
   const pStr = `P${task.priority || 2}`;
   const tierStr = task.tier ? `[${task.tier}]` : '';
 
-  lines.push(`\x1b[1m\x1b[36m📋 [Chemical X Task #${task.id}]\x1b[0m \x1b[1m${task.title}\x1b[0m`);
+  lines.push(`\x1b[1m\x1b[36m📋 [Chemical X Task #${task.id}]${kindTag(task)}\x1b[0m \x1b[1m${task.title}\x1b[0m`);
   lines.push(`\x1b[90m${'─'.repeat(58)}\x1b[0m`);
   lines.push(`  \x1b[1mStatus:\x1b[0m   ${statusStr} │ \x1b[1mPriority:\x1b[0m ${pStr} │ \x1b[1mTier:\x1b[0m ${tierStr || '(none)'}`);
   lines.push(`  \x1b[1mAssignee:\x1b[0m ${task.assigned_agent_id || '(unassigned)'} │ \x1b[1mOrigin:\x1b[0m ${task.origin_type || 'manual'}`);
+  if (claim) lines.push(`  ${formatClaimLine(claim)}`);
 
   const hasTargetPath = Boolean(task.target_path);
   if (hasTargetPath) {
@@ -184,7 +188,7 @@ export const formatTaskDetailCard = (task, events = [], dependencyStates = [], r
   if (hasBlockedReason) {
     lines.push(`  \x1b[1m\x1b[31mBlocker:\x1b[0m  \x1b[33m${task.blocked_reason}\x1b[0m`);
   }
-  lines.push(...formatTaskBriefLines(task, dependencyStates, routeLabel));
+  lines.push(...formatTaskBriefLines(task, dependencyStates, routeLabel, options));
 
   lines.push(...formatTelemetryLines(task));
 

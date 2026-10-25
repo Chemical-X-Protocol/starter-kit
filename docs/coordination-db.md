@@ -218,6 +218,111 @@ flags: `chemx_team_feed` takes `from`, `type`, `full` and returns 20 clipped eve
 Not guaranteed: "newer than the description" is "after the `task_created` event" (descriptions have no
 edit history); the groups name the event types chemx writes today.
 
+## Running a project from the board (K14, #6759)
+
+What an orchestrator needs to file, read and wait on a whole project without a shell loop. All of it is
+`chemx team ...`; `chemx task <action>` is the same command spelled shorter (`chemx task show 12`,
+`chemx task add --from tasks.yaml`), and `chemx task show --help` (like `chemx team task --help`) prints the task help card.
+
+**A file of tasks: `task add --from <file.json|yaml>`.** One call files an epic and its children. The
+file is a list of rows (or a mapping with a `tasks:` list), `.json`, `.yaml` / `.yml` or sniffed by its
+first character; `--from=-` reads standard input. A row has these keys and no others (an unknown key,
+a typo, is a problem and not dropped):
+
+| Key | Meaning |
+| --- | --- |
+| `title` | required |
+| `ref` | a name other rows use for this one: starts with a letter, letters digits `_` `-` `.`, unique in the file |
+| `needs`, `prio` (or `priority`), `kind` | as the flags: `light|standard|deep`, 1-5, `task|decision|epic` |
+| `parent` / `parent_ref` | the parent: a task id on this board, or the `ref` of another row (not both) |
+| `deps` | dependencies: a list or `a, b` text of task ids (`12`, `#12`) and refs |
+| `desc` (or `description`) | the short description |
+| `brief` / `brief_file` | the long brief as text, or a path relative to the task file (not both) |
+
+```yaml
+- ref: epic
+  title: "EPIC: quieter chemx"
+  kind: epic
+  needs: deep
+  prio: 1
+- ref: flags
+  title: K1 flags take a space or an equals sign
+  parent_ref: epic
+  needs: standard
+- ref: lock
+  title: K2 lock leases several paths
+  parent_ref: epic
+  deps: [flags, 1]
+  brief_file: k2-brief.md
+```
+
+```
+$ chemx task add --from tasks.yaml --dry-run
+dry run: 3 task(s) would be added, nothing was written
+would add: EPIC: quieter chemx (ref epic, epic, needs deep, P1)
+would add: K1 flags take a space or an equals sign (ref flags, needs standard, parent epic)
+would add: K2 lock leases several paths (ref lock, parent epic, deps flags, #1)
+$ chemx task add --from tasks.yaml
+#2 added: EPIC: quieter chemx
+#3 added: K1 flags take a space or an equals sign
+#4 added: K2 lock leases several paths
+refs: epic=#2 flags=#3 lock=#4
+```
+
+Ids follow the file order. Every problem of every row is reported in one pass (`<file>: 3 problem(s).
+Nothing was written.` and one line each, e.g. `row 2 (B): parent #999 is not a task on this board`,
+`parent_ref loop: a -> b -> a`), exit code 1. The rows are written in one transaction with a `task_created`
+feed event each; a row the database refuses rolls all of them back (`Nothing was written: <reason>`).
+`--json` prints `{ added: [...], refs: { epic: 2 } }` (or `{ dryRun: true, plan }`). The file replaces the
+per-task flags, so a title or `--needs`, `--prio`, `--kind`, `--parent`, `--desc`, `--deps`, `--target`
+beside `--from` is refused. At most 500 rows. YAML is a subset (`cli/team/task-yaml-lite.js`): block lists
+of mappings, plain and quoted scalars, `[a, b]` lists, `|` and `>` text, comments; anchors, aliases, tags,
+`{}` mappings and tabs are errors that name the line. MCP: `chemx_team_task` `create` with `fromFile`
+(and `dryRun`).
+
+**Briefs: `team brief <id>`.** A description is the short ask that every list and card carries; a brief is
+the design contract of many KB that a builder reads once. It is stored on the task (`agent_tasks.brief`),
+not in the description. `chemx team brief <id> --file design.md` (or `--stdin`) replaces it, `--clear`
+removes it, `chemx team brief <id>` prints it (exit 1 when there is none). `task show` prints only
+`Brief: 7,214 chars (task show 12 --full prints it)`, `--brief` says `brief stored (N chars)`, and
+`task show <id> --full` prints the text with its line breaks (`--json` carries `briefChars`, and `brief` only
+with `--full`). A brief is at most 200,000 characters, non-empty and end-trimmed, and setting one posts
+`Brief set on #<id>: N chars` to the feed. MCP: `chemx_team_task` `action: "brief"` with `briefText`,
+`briefFile` or `clear` (no source reads it), `show` with `full: true`, and `create` with `briefText` or
+`briefFile`. `cli/team/team-brief.js` is the SessionStart card and has nothing to do with it. Not
+guaranteed: briefs are not versioned and `list --search` does not look in them.
+
+**Kinds: `--kind=task|decision|epic`.** `task add --kind=epic` (a row's `kind:` too); the default is `task`
+and every existing task is one. `list`, `show` and the brief card print `[decision]` or `[epic]` after the
+id (`#12 [epic] [queued] ...`; the JSON list gains a `kind` column only when a listed task is not a
+plain task). A decision or epic with no target file completes with `task done` or `task update <id> done`
+without `--no-target-confirm` and prints `Completed task #12 (epic: nothing to verify)` instead of the
+`Unverified: no target_path` warning; a task with a target is verified as ever, and a plain task is still
+refused without a target or the flag. A blocked decision prints no warning. A kind does not change claim
+rules, and dispatch already skips a task with no target.
+
+**Searching the board: `task list --search <text> [--titles]`.** `--search` keeps the tasks whose title or
+description contains the text (any case; `%` and `_` are literal). It looks in every status unless
+`--status` narrows it, and the 20-row cap stays (`--limit`, `--all`). `--titles` prints one line per task,
+`#<id> [<kind>] [<status>] <whole title>`, with no tree, assignee, target or description (`--json`: columns
+`id`, `status`, `title`). MCP: `list` takes `search` and `titles`.
+
+**How old is a claim.** The task row records `claimed_at` (a claim, or a handoff, sets it; a task claimed
+before this change has none and shows `(time not recorded)`). `task show` adds
+`Claimed:  2026-10-25 12:40 (3h ago) │ Last active: 2026-10-25 15:31 (12m ago)` and `--brief` the same on one
+line; `--json` carries `claim: { handle, claimedAt, lastActiveAt, idleHours }`. The assignee's last activity is the
+freshest of its heartbeat, its latest feed post and its live leases (any chemx call by a lease holder renews the
+lease, so a live lease means active); `task list` prints `(@sonnet-k9 idle 9h)` for an in-progress claim whose
+freshest sign of life (those, the task's `claimed_at` and `updated_at`) is more than 6 hours old, and the
+JSON list gains an `idle_hours` column. Not guaranteed: an agent that works for hours without calling chemx
+or posting looks idle.
+
+**Waiting for a peer: `wait --post-matching`.** `chemx wait --post-matching "K9 merged" --from=@sonnet-k9
+--timeout=1h` resolves (exit 0) when a feed post whose message contains the text, in any case, is made by that
+handle; `--since=<event id>` counts posts after that id, existing ones too, and without it only posts made
+after the wait started count. Lock events never match, 2 means the timeout, 1 bad arguments. A value follows
+its flag after a space or an equals sign. The result is true as of the last poll.
+
 ## Live runbook
 
 Run from the monorepo root (`/home/xopher/www/x/Xophz-COMPASS`) as one handle (`--as=@<you>`). Order

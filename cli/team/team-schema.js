@@ -33,6 +33,14 @@ const migrateTelemetrySource = (db) => {
   db.exec("UPDATE agent_tasks SET telemetry_source = 'legacy' WHERE total_tokens > 0 OR cost_usd > 0;");
 };
 
+// kind: 'task' | 'decision' | 'epic' (an existing row is a task); brief: a long design text kept apart from the
+// description; claimed_at: when the current assignee took the task (NULL = not recorded, e.g. claimed before K14).
+const migrateTaskPlanColumns = (db) => {
+  migrateCols(db, 'agent_tasks', [
+    ['kind', "TEXT NOT NULL DEFAULT 'task'"], ['brief', "TEXT NOT NULL DEFAULT ''"], ['claimed_at', 'INTEGER']
+  ]);
+};
+
 export const migrateTelemetryColumns = (db) => {
   if (!db) return;
   migrateTelemetrySource(db);
@@ -43,6 +51,7 @@ export const migrateTelemetryColumns = (db) => {
     ['rule_id', "TEXT NOT NULL DEFAULT ''"], ['violation_snapshot', "TEXT NOT NULL DEFAULT '{}'"], ['diff_receipt', "TEXT NOT NULL DEFAULT '{}'"]
   ]);
   migrateCols(db, 'agent_tasks', [['extra_files', "TEXT NOT NULL DEFAULT '[]'"]]);
+  migrateTaskPlanColumns(db);
   migrateCols(db, 'agents', [
     ['total_prompt_tokens', 'INTEGER NOT NULL DEFAULT 0'], ['total_completion_tokens', 'INTEGER NOT NULL DEFAULT 0'],
     ['total_tokens', 'INTEGER NOT NULL DEFAULT 0'], ['total_cost_usd', 'REAL NOT NULL DEFAULT 0.0']

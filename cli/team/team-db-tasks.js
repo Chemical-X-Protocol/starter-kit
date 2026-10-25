@@ -10,6 +10,7 @@ import {
 import { withImmediateTransaction } from './team-db-transaction.js';
 import { generateTaskPermalink } from './team-vds.js';
 import { parseNeedsInput } from './team-needs.js';
+import { DEFAULT_TASK_KIND } from './task-kind.js';
 
 export const getTask = (db, taskId) => {
   const canGet = Boolean(db) && Boolean(taskId);
@@ -29,8 +30,10 @@ export const createTask = (db, taskData) => {
   const sql = `INSERT INTO agent_tasks (
     title, description, tier, target_path, target_symbol, status, priority, assigned_agent_id,
     blocked_reason, parent_id, dependencies, created_at, updated_at, result_payload, origin_type,
-    rule_id, violation_snapshot, diff_receipt, moscow, vds_priority, vds_phase, vds_status, task_url, sprint_tag, needs, repo, extra_files
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+    rule_id, violation_snapshot, diff_receipt, moscow, vds_priority, vds_phase, vds_status, task_url, sprint_tag, needs, repo, extra_files,
+    kind, brief, claimed_at
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+  const isAssigned = Boolean(taskData.assigned_agent_id) && (taskData.status || 'queued') === 'in_progress';
   const info = db.prepare(sql).run(
     taskData.title, taskData.description || '', taskData.tier || '',
     taskData.target_path || null, taskData.target_symbol || '', taskData.status || 'queued',
@@ -44,7 +47,8 @@ export const createTask = (db, taskData) => {
     taskData.moscow || 'must', taskData.vds_priority || 'medium',
     taskData.vds_phase || 'planning', taskData.vds_status || 'ready',
     taskData.task_url || '', taskData.sprint_tag || '', needs, taskData.repo || '.',
-    JSON.stringify(Array.isArray(taskData.extra_files) ? taskData.extra_files : [])
+    JSON.stringify(Array.isArray(taskData.extra_files) ? taskData.extra_files : []),
+    taskData.kind || DEFAULT_TASK_KIND, taskData.brief || '', isAssigned ? now : null
   );
   const createdId = info.lastInsertRowid;
   const isTaskUrlMissing = !taskData.task_url;
@@ -71,8 +75,8 @@ export const claimTask = (db, taskId, agentId, options = {}) => {
     }
 
     const now = Date.now();
-    const sql = "UPDATE agent_tasks SET assigned_agent_id = ?, status = 'in_progress', updated_at = ? WHERE id = ? AND status = 'queued' AND (assigned_agent_id IS NULL OR assigned_agent_id = ?);";
-    const info = db.prepare(sql).run(cleanId, now, Number(taskId), cleanId);
+    const sql = "UPDATE agent_tasks SET assigned_agent_id = ?, status = 'in_progress', updated_at = ?, claimed_at = ? WHERE id = ? AND status = 'queued' AND (assigned_agent_id IS NULL OR assigned_agent_id = ?);";
+    const info = db.prepare(sql).run(cleanId, now, now, Number(taskId), cleanId);
     const isAlreadyClaimed = info.changes !== 1;
     if (isAlreadyClaimed) return { success: false, reason: 'already_claimed' };
     db.prepare("UPDATE agents SET current_task_id = ?, status = 'busy' WHERE id = ?").run(Number(taskId), cleanId);

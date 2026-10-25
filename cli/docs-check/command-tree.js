@@ -5,12 +5,12 @@
  */
 
 export const TEAM_SUBCOMMANDS = [
-  'status', 'task', 'tokens', 'telemetry', 'feed', 'post', 'lock', 'unlock', 'triage', 'inbox',
+  'status', 'task', 'brief', 'tokens', 'telemetry', 'feed', 'post', 'lock', 'unlock', 'triage', 'inbox',
   'dm', 'train', 'benchmark', 'ablation', 'memory', 'profile', 'handoff', 'dispatch', 'route', 'migrate', 'audit-run', 'help'
 ];
 
 export const TEAM_TASK_ACTIONS = [
-  'list', 'show', 'view', 'info', 'comment', 'post', 'vds-slot', 'slot', 'trace', 'claim', 'handoff', 'close',
+  'list', 'show', 'view', 'info', 'comment', 'post', 'brief', 'vds-slot', 'slot', 'trace', 'claim', 'handoff', 'close',
   'done', 'complete', 'update', 'create', 'add', 'new', 'triage', 'reconcile', 'prune', 'set-target', 'target', 'set-files'
 ];
 
@@ -19,6 +19,9 @@ export const TEAM_LOCK_ACTIONS = ['acquire', 'release', 'unlock', 'check', 'chec
 
 // Commands that hand their words to runTeamCli as the subcommand.
 export const TEAM_FRONT_DOORS = ['team', 'swarm'];
+
+// `chemx task <action>` is `chemx team task <action>`: the docs check reads it as the team command.
+export const TEAM_TASK_ALIAS = 'task';
 
 // Prefixes cli/main.js treats as capsule generators (`chemx m-card`).
 export const CAPSULE_PREFIXES = ['m-', 'a-', 'o-', 't-', 'use-', 'v-'];

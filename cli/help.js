@@ -17,7 +17,7 @@ const GROUP_TITLES = {
   setup: 'Setup'
 };
 const HELP_TOKENS = new Set(['help', '--help', '-h']);
-const SUBCOMMAND_HELP_OWNERS = new Set(['team', 'swarm', 'feed', 'tokens', 'telemetry', 'benchmark', 'ablation', 'memory']);
+const SUBCOMMAND_HELP_OWNERS = new Set(['team', 'swarm', 'feed', 'tokens', 'telemetry', 'benchmark', 'ablation', 'memory', 'task']);
 // Commands whose positional is a search pattern or lookup key: `chemx f help` lists
 // paths containing "help". Every other command reads a lone `help` as a help request,
 // so readers, wrappers and writers never act on a path or revision named "help".

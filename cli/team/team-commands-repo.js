@@ -34,7 +34,7 @@ export const parseRepoFlags = (args = []) => ({
   dropJunk: args.includes('--drop-junk')
 });
 
-export const ID_ARG_ACTIONS = new Set(['show', 'view', 'info', 'comment', 'post', 'vds-slot', 'slot', 'trace', 'claim', 'handoff', 'done', 'complete', 'update', 'set-target', 'target']);
+export const ID_ARG_ACTIONS = new Set(['show', 'view', 'info', 'comment', 'post', 'vds-slot', 'slot', 'trace', 'claim', 'handoff', 'done', 'complete', 'update', 'set-target', 'target', 'brief']);
 
 const writeNotices = (notices, isCli) => {
   if (!isCli) return;

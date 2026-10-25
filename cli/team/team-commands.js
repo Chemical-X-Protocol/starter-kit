@@ -27,7 +27,7 @@ import { resolveBoardTarget } from './team-board-target.js';
 import { normalizeValueFlags, describeMissingValue } from './team-flag-values.js';
 import { scopeLockArgs } from './lock-targets.js';
 
-const TEAM_COMMANDS = ['status', 'task', 'lock', 'unlock', 'feed', 'post', 'inbox', 'dm', 'tokens', 'audit-run', 'triage', 'benchmark', 'train', 'migrate', 'route'];
+const TEAM_COMMANDS = ['status', 'task', 'brief', 'lock', 'unlock', 'feed', 'post', 'inbox', 'dm', 'tokens', 'audit-run', 'triage', 'benchmark', 'train', 'migrate', 'route'];
 
 // Subcommands whose handlers do not parse --help themselves; the others print their own help.
 const HELPLESS_SUBCOMMANDS = ['post', 'dm', 'inbox', 'feed', 'tokens', 'telemetry', 'profile', 'handoff', 'train', 'triage', 'audit-run'];
@@ -74,16 +74,22 @@ const runSubCommand = (ctx, args, isCli, cwd) => {
   const isKnown = Object.hasOwn(SUB_COMMANDS, subCommand);
   if (isKnown) return SUB_COMMANDS[subCommand](ctx, args, isCli, cwd);
   if (isCli) {
-    process.stderr.write(`\x1b[31m✕ Unknown team command: "${subCommand}". Available commands: status, task, feed, post, lock, unlock, triage, inbox, dm, profile, handoff, dispatch, route, benchmark, migrate, tokens, audit-run\x1b[0m\n`);
+    process.stderr.write(`\x1b[31m✕ Unknown team command: "${subCommand}". Available commands: status, task, brief, feed, post, lock, unlock, triage, inbox, dm, profile, handoff, dispatch, route, benchmark, migrate, tokens, audit-run\x1b[0m\n`);
   }
   return { error: `Unknown team command: ${subCommand}` };
+};
+
+// `team brief <id> ...` is `team task brief <id> ...`: one handler, two spellings (K14, #6759).
+const asTaskArgs = (args) => {
+  const isBriefAlias = args.subCommand === 'brief';
+  return isBriefAlias ? { ...args, subCommand: 'task', positionals: ['brief', ...args.positionals] } : args;
 };
 
 const runTeamCommand = (rawArgs, isCli, cwd) => {
   // The commit guard reads leases read-only and must not open (create, migrate) a team db first.
   const isStagedCheck = rawArgs[0] === 'lock' && rawArgs[1] === 'check-staged';
   if (isStagedCheck) return runCheckStagedArgs(rawArgs.slice(2), isCli, cwd);
-  const args = parseArgs(rawArgs);
+  const args = asTaskArgs(parseArgs(rawArgs));
   const isTeamHelp = ['--help', '-h', 'help'].includes(args.subCommand) || (args.subCommand === 'status' && args.flags.help);
   if (isTeamHelp) {
     if (isCli) process.stdout.write(formatTeamHelpCard());

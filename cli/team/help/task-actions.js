@@ -2,9 +2,11 @@
 // A new action adds its row here.
 
 export const taskCardActions = [
-  '    \x1b[32mlist\x1b[0m                         List open tasks, newest 20 (default action)',
-  '    \x1b[32mshow\x1b[0m <taskId> [--brief]     Display full details and activity stream for a task (creation event on one line)',
+  '    \x1b[32mlist\x1b[0m                         List open tasks, newest 20 (default action); --search <text> looks in title and description, --titles prints one bare line per task',
+  '    \x1b[32mshow\x1b[0m <taskId> [--brief]     Display full details and activity stream for a task (creation event on one line); --full also prints the long brief',
   '    \x1b[32madd\x1b[0m "<title>"                Create a new task in the queue; prints "#<id> added: <title>"',
+  '    \x1b[32madd\x1b[0m --from <file.json|yaml>  Create many tasks in one transaction from a file of rows (ref, title, needs, prio, kind, parent, parent_ref, deps, desc, brief, brief_file); one "#<id> added" line per row and a refs line; --dry-run checks only',
+  '    \x1b[32mbrief\x1b[0m <taskId>               Print the long brief; with --file <path>, --stdin or --clear it sets or removes it (also: chemx team brief <id>)',
   '    \x1b[32mclaim\x1b[0m <taskId>              Claim an unassigned task for an agent',
   '    \x1b[32mhandoff\x1b[0m <taskId> <@to>      Pass a task to another agent (assignee or creator only); --with-locks also moves your live leases naming the task',
   '    \x1b[32mdone\x1b[0m <taskId>               Complete a task with automatic verification audit',

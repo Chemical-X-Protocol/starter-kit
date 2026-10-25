@@ -10,7 +10,7 @@ import { findCommandSchema } from '../commands-schema.js';
 import { findUnknownFlag } from '../commands/unknown-flags.js';
 import { MCP_TOOLS } from '../mcp/tools.js';
 import {
-  TEAM_SUBCOMMANDS, TEAM_TASK_ACTIONS, TEAM_LOCK_ACTIONS, TEAM_FRONT_DOORS, CAPSULE_PREFIXES, BUILTIN_TOKENS
+  TEAM_SUBCOMMANDS, TEAM_TASK_ACTIONS, TEAM_LOCK_ACTIONS, TEAM_FRONT_DOORS, TEAM_TASK_ALIAS, CAPSULE_PREFIXES, BUILTIN_TOKENS
 } from './command-tree.js';
 
 const MCP_ACTIONS = MCP_TOOLS[0].inputSchema.properties.action.enum;
@@ -66,9 +66,10 @@ const checkCli = (words, rawWords) => {
   const isOpen = first === undefined || isPlaceholder(first);
   if (isOpen) return null;
   if (!isKnownCommand(first)) return `unknown command "${first}" (chemx help lists commands)`;
-  const isTeam = TEAM_FRONT_DOORS.includes(first);
+  const isTaskAlias = first === TEAM_TASK_ALIAS;
+  const isTeam = TEAM_FRONT_DOORS.includes(first) || isTaskAlias;
   const isHelp = first === 'help';
-  const nameReason = isTeam ? checkTeam(words) : null;
+  const nameReason = isTeam ? checkTeam(isTaskAlias ? ['team', ...words] : words) : null;
   const helpReason = isHelp ? checkHelpTarget(words) : null;
   return nameReason ?? helpReason ?? checkFlags(words, rawWords);
 };

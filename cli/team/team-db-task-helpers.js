@@ -67,8 +67,8 @@ export const evaluateClaim = (task, cleanId, isDepsMet, ignoreDepsReason = '') =
 
 export const executeTaskClaim = (db, taskId, cleanId) => {
   const now = Date.now();
-  db.prepare("UPDATE agent_tasks SET assigned_agent_id = ?, status = 'in_progress', updated_at = ? WHERE id = ?")
-    .run(cleanId, now, Number(taskId));
+  db.prepare("UPDATE agent_tasks SET assigned_agent_id = ?, status = 'in_progress', updated_at = ?, claimed_at = ? WHERE id = ?")
+    .run(cleanId, now, now, Number(taskId));
   db.prepare('UPDATE agents SET current_task_id = ?, status = ? WHERE id = ?')
     .run(Number(taskId), 'busy', cleanId);
 };
@@ -152,6 +152,13 @@ export const buildTaskListQuery = (filter = {}) => {
   if (hasRepoFilter) {
     conditions.push('repo = ?');
     params.push(filter.repo);
+  }
+  // search: text in the title or the description, any case; % and _ in the text are literal (K14, #6759).
+  const hasSearchFilter = typeof filter.search === 'string' && filter.search.trim() !== '';
+  if (hasSearchFilter) {
+    const pattern = `%${filter.search.trim().replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
+    conditions.push("(title LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\')");
+    params.push(pattern, pattern);
   }
   const hasSprintTagFilter = Boolean(filter.sprint_tag);
   if (hasSprintTagFilter) {

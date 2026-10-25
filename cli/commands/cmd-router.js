@@ -51,6 +51,12 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
       runTeamCli(rawArgs.slice(1), true);
       break;
     }
+    case 'task': {
+      // `chemx task ...` is `chemx team task ...`: the spelling agents reach for first (K14, #6759).
+      const { runTeamCli } = await import('../team/index.js');
+      runTeamCli(['task', ...rawArgs.slice(1)], true);
+      break;
+    }
     case 'project':
     case 'coordinator': {
       const { runProjectCli } = await import('./cmd-project.js');

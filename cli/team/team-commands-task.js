@@ -8,7 +8,8 @@ import { openIndexDb } from '../search-db.js';
 import { listTasks, getTask, createTask, updateTaskStatus, registerAgent, postFeedEvent, queryFeed } from './team-db.js';
 import { completeTaskWithAudit, reconcileAuditTasks } from './team-triage.js';
 import { formatTaskListCard, formatTaskDetailCard, formatTaskHelpCard } from './team-format.js';
-import { resolveListOptions, selectTaskPage, buildTaskListView } from './task-list-view.js';
+import { resolveListOptions, selectTaskPage, buildTaskListView, formatTitleLines } from './task-list-view.js';
+import { markIdleClaims, claimInfoFor } from './task-claim-age.js';
 import { handleTaskHandoffCommand } from './team-task-handoff.js';
 import { handleTaskCloseCommand, duplicateLinks, formatDuplicateLinks } from './team-task-close.js';
 import { handleTaskSlotCommand, handleTaskTraceCommand } from './team-commands-vds.js';
@@ -19,6 +20,9 @@ import { describeTaskAdded, describeCommentPosted, taskAckFields, buildBriefView
 import { buildCompletionOptions, describeCompletion, describeStatusUpdate, writeTaskResult } from './task-completion-output.js';
 import { refuseUnknownTask } from './team-task-guard.js';
 import { checkNeedsInput } from './team-needs.js';
+import { checkKindInput } from './task-kind.js';
+import { runAddFromFile } from './task-add-from-file.js';
+import { runBriefRequest, describeBriefResult, summarizeBrief } from './task-brief-store.js';
 import { resolveListRepo, prepareTaskTarget, describeBoardScope } from './team-commands-repo.js';
 import { boardFooterLines, describeOtherBoardClaims, describeTaskNotFound } from './board-notice.js';
 import { runTriage } from './team-commands-triage.js';
@@ -28,7 +32,7 @@ import { claimWithIgnoreDeps } from './claim-ignore-deps.js';
 import { buildLabelFor } from './team-route.js';
 import { describeUnknownStatus } from './task-update-status.js';
 
-export const TASK_ACTIONS = ['list', 'show', 'add', 'claim', 'handoff', 'close', 'done', 'update', 'comment', 'triage', 'reconcile', 'set-target', 'set-files', 'vds-slot', 'trace'];
+export const TASK_ACTIONS = ['list', 'show', 'add', 'brief', 'claim', 'handoff', 'close', 'done', 'update', 'comment', 'triage', 'reconcile', 'set-target', 'set-files', 'vds-slot', 'trace'];
 
 const fail = (isCli, message, result = { error: message }) => {
   if (isCli) process.stderr.write(`\x1b[31m✕ ${message}\x1b[0m\n`);
@@ -59,19 +63,21 @@ const runList = (ctx, flags, isCli) => {
   const hasListNeedsError = Boolean(listNeeds.error);
   if (hasListNeedsError) return fail(isCli, listNeeds.error);
   const repo = resolveListRepo(flags, ctx);
-  const listOptions = resolveListOptions({ status: flags.status, all: flags.all, limit: flags.limit });
+  const listOptions = resolveListOptions({ status: flags.status, all: flags.all, limit: flags.limit, search: flags.search });
   const tasks = listTasks(ctx.db, {
     status: listOptions.status, assigned_agent_id: flags.agent, parentId: flags.parent, rule: flags.rule,
-    priority: flags.priority, sprint_tag: flags.sprint, moscow: flags.moscow, needs: listNeeds.needs, repo
+    priority: flags.priority, sprint_tag: flags.sprint, moscow: flags.moscow, needs: listNeeds.needs, repo, search: flags.search
   });
-  const { page, total } = selectTaskPage(tasks, listOptions);
+  const selected = selectTaskPage(tasks, listOptions);
+  const { total } = selected;
+  const page = markIdleClaims(ctx.db, selected.page);
   if (flags.isJson) {
-    const view = { ...buildTaskListView(page, total), repo: repo ?? null, board: ctx.dbPath };
+    const view = { ...buildTaskListView(page, total, { titles: flags.titles }), repo: repo ?? null, board: ctx.dbPath };
     if (isCli) process.stdout.write(`${JSON.stringify(view)}\n`);
     return view;
   }
   if (isCli) {
-    process.stdout.write(formatTaskListCard(page));
+    process.stdout.write(flags.titles ? formatTitleLines(page) : formatTaskListCard(page));
     const hasMore = total > page.length;
     if (hasMore) process.stdout.write(`\x1b[2mShowing ${page.length} of ${total}. Use --all, --status=, or --limit= for more.\x1b[0m\n`);
     process.stdout.write(`\x1b[2m${describeBoardScope(ctx, repo)} | --all-repos or --repo=<path> widens it\x1b[0m\n`);
@@ -83,9 +89,10 @@ const runList = (ctx, flags, isCli) => {
 
 // --brief: title, status, tier, assignee, dependencies, parent and only the events after the creation event.
 const renderShow = (ctx, shown, flags, output) => {
-  const { task, events, dependencyStates, links } = shown;
+  const { task, events, dependencyStates, links, claim } = shown;
   if (flags.isJson) return `${JSON.stringify(output, null, 2)}\n`;
-  const card = flags.brief ? formatTaskBriefCard(task, events, dependencyStates) : formatTaskDetailCard(task, events, dependencyStates, buildLabelFor(task, loadModelRouting(ctx.root)));
+  const routeLabel = buildLabelFor(task, loadModelRouting(ctx.root));
+  const card = flags.brief ? formatTaskBriefCard(task, events, dependencyStates, claim) : formatTaskDetailCard(task, events, dependencyStates, routeLabel, claim, { full: flags.full });
   return card + formatDuplicateLinks(links);
 };
 
@@ -96,14 +103,36 @@ const runShow = (ctx, taskId, flags, isCli) => {
   const events = queryFeed(ctx.db, { task_id: taskId });
   const dependencyStates = resolveDependencyStates(ctx.db, task);
   const links = duplicateLinks(ctx.db, taskId);
-  const view = flags.brief ? buildBriefView(task, events, dependencyStates) : { task, dependencyStates, events, activityCount: events.length };
+  const claim = claimInfoFor(ctx.db, task);
+  const jsonTask = summarizeBrief(task, { full: flags.full });
+  const view = flags.brief ? buildBriefView(task, events, dependencyStates, claim) : { task: jsonTask, dependencyStates, events, activityCount: events.length, ...(claim ? { claim } : {}) };
   const output = { ...view, ...links, board: ctx.dbPath };
   const returnsOutput = flags.isJson || flags.brief;
   if (!isCli) return returnsOutput ? output : { task, dependencyStates, events, ...links };
-  process.stdout.write(renderShow(ctx, { task, events, dependencyStates, links }, flags, output));
+  process.stdout.write(renderShow(ctx, { task, events, dependencyStates, links, claim }, flags, output));
   // A task number is only meaningful with its board; --json carries it in the object instead.
   if (!flags.isJson) process.stdout.write(boardFooterLines(ctx, flags.as).map((line) => `\x1b[2m${line}\x1b[0m\n`).join(''));
   return returnsOutput ? output : { task, dependencyStates, events };
+};
+
+// `team brief <id>` / `task brief <id>`: read, set (--file | --stdin) or clear (--clear) the long brief of a task.
+const runBrief = (ctx, positionals, flags, isCli, cwd) => {
+  const taskId = positionals[1];
+  const hasTaskId = Boolean(taskId);
+  if (!hasTaskId) return fail(isCli, 'Task ID required: chemx team brief <id> [--file <path> | --stdin | --clear]', { error: 'taskId required' });
+  const task = getTask(ctx.db, taskId);
+  if (!task) return fail(isCli, describeTaskNotFound(ctx, taskId, flags.as), { error: `Task #${taskId} not found` });
+  const isWrite = Boolean(flags.clear) || Boolean(flags.file) || Boolean(flags.stdin);
+  const authorId = isWrite ? resolveCliAgent(flags, isCli) : flags.as || '@agent';
+  if (isWrite) registerAgent(ctx.db, { id: authorId, role: 'contributor' });
+  const result = runBriefRequest(ctx.db, task, { clear: flags.clear, file: flags.file, stdin: flags.stdin, authorId }, { cwd });
+  if (result.error) return refuse(isCli, result.error);
+  const isRead = result.action === 'read';
+  const hasNothingToRead = isRead && result.chars === 0;
+  if (hasNothingToRead) return refuse(isCli, `Task #${taskId} has no brief: chemx team brief ${taskId} --file <path> stores one`);
+  const ack = { task_id: Number(taskId), chars: result.chars, ...(isRead ? { brief: result.brief } : { action: result.action }) };
+  writeAck(ack, flags, isCli, isRead ? result.brief : describeBriefResult(result));
+  return { ...result, task_id: Number(taskId) };
 };
 
 const runComment = (ctx, positionals, flags, isCli) => {
@@ -237,9 +266,14 @@ const runUpdate = (ctx, positionals, flags, isCli, cwd) => {
 };
 
 const runCreate = (ctx, positionals, flags, titleWords, isCli, cwd) => {
+  const isFromFile = flags.from !== undefined;
+  if (isFromFile) return runAddFromFile(ctx, { positionals, flags, titleWords, isCli, cwd });
   const createNeeds = checkNeedsInput(flags.needs);
   const hasCreateNeedsError = Boolean(createNeeds.error);
   if (hasCreateNeedsError) return fail(isCli, createNeeds.error);
+  const createKind = checkKindInput(flags.kind);
+  const hasKindError = Boolean(createKind.error);
+  if (hasKindError) return refuse(isCli, createKind.error);
   const placed = prepareTaskTarget(ctx, cwd, flags.target);
   const isRefused = Boolean(placed.error);
   if (isRefused) return fail(isCli, placed.error, { error: placed.error, refused: true });
@@ -256,7 +290,7 @@ const runCreate = (ctx, positionals, flags, titleWords, isCli, cwd) => {
     target_path: placed.target_path, repo: placed.repo, priority: flags.priority || 2,
     assigned_agent_id: flags.agent || null, parent_id: flags.parent ?? null, dependencies: flags.dependencies || [],
     sprint_tag: flags.sprint || '', moscow: flags.moscow, needs: createNeeds.needs, rule_id: flags.rule || '',
-    extra_files: extras.files
+    extra_files: extras.files, kind: createKind.kind
   });
   if (task) postFeedEvent(ctx.db, { author_id: authorHandle, task_id: task.id, event_type: 'task_created', message: `Created task #${task.id}: ${task.title}` });
   writeAck(taskAckFields(task), flags, isCli, describeTaskAdded(task));
@@ -312,6 +346,7 @@ const ACTIONS = {
   list: (ctx, p, flags, words, isCli) => runList(ctx, flags, isCli),
   show: (ctx, p, flags, words, isCli) => runShow(ctx, p[1], flags, isCli),
   comment: (ctx, p, flags, words, isCli) => runComment(ctx, p, flags, isCli),
+  brief: (ctx, p, flags, words, isCli, cwd) => runBrief(ctx, p, flags, isCli, cwd),
   'vds-slot': (ctx, p, flags, words, isCli) => handleTaskSlotCommand(ctx.db, p[1], p[2] || flags.moscow || 'must', p[3] || flags.priority || 'critical', isCli, flags.isJson),
   trace: (ctx, p, flags, words, isCli) => handleTaskTraceCommand(ctx.db, p[1], p[2] || flags.url, isCli, flags.isJson),
   claim: (ctx, p, flags, words, isCli) => runClaim(ctx, p[1], flags, isCli),
@@ -346,5 +381,5 @@ export const runTaskCommand = (ctx, positionals, flags, titleWords, isCli, cwd) 
   const action = canonicalAction(taskAction);
   const isKnown = action !== null;
   if (isKnown) return ACTIONS[action](ctx, positionals, flags, titleWords, isCli, cwd);
-  return fail(isCli, `Unknown task action: "${taskAction}". Available actions: list, show, view, add, claim, done, update, comment, triage, reconcile, set-target`, { error: `Unknown task action: ${taskAction}` });
+  return refuse(isCli, `Unknown task action: "${taskAction}". Available actions: list, show, view, add, brief, claim, done, update, comment, triage, reconcile, set-target`);
 };
