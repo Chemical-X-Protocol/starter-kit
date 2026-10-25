@@ -1,9 +1,9 @@
 {
   "version": 2,
-  "ruleset": 10,
+  "ruleset": 11,
   "scopes": {
     ".": {
-      "ruleset": 10,
+      "ruleset": 11,
       "allRules": true,
       "rules": {},
       "revisions": {
@@ -59,6 +59,7 @@
         "SECURITY_WP_REST_NO_PERMISSION_CALLBACK": 7,
         "SECURITY_WP_SHADOWED_ROUTE": 10,
         "SECURITY_WP_SSRF": 7,
+        "SECURITY_WP_UNBOUNDED_REQUEST_ARRAY": 11,
         "SECURITY_WP_UNESCAPED_OUTPUT": 7,
         "SECURITY_WP_UNPREPARED_SQL": 7,
         "SECURITY_WP_UNSANITIZED_INPUT": 7,
@@ -101,7 +102,7 @@
       ]
     },
     "cli": {
-      "ruleset": 10,
+      "ruleset": 11,
       "allRules": true,
       "rules": {
         "CONTROL_FLOW_INLINE_BOOLEAN": 804
@@ -159,6 +160,7 @@
         "SECURITY_WP_REST_NO_PERMISSION_CALLBACK": 7,
         "SECURITY_WP_SHADOWED_ROUTE": 10,
         "SECURITY_WP_SSRF": 7,
+        "SECURITY_WP_UNBOUNDED_REQUEST_ARRAY": 11,
         "SECURITY_WP_UNESCAPED_OUTPUT": 7,
         "SECURITY_WP_UNPREPARED_SQL": 7,
         "SECURITY_WP_UNSANITIZED_INPUT": 7,
