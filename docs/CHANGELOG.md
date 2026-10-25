@@ -4,6 +4,8 @@ All notable changes to the Chemical X starter-kit are recorded here, in the styl
 
 The package version is minute-precision CalVer and is bumped by CI. It is not edited by hand, so changes are grouped under Unreleased until CI cuts a version.
 
+This file is not edited by hand either: a change adds `docs/changelog.d/<ticket-or-slug>.md`, and `chemx changelog` folds the fragments in here under Unreleased (see `docs/changelog.d/README.md`).
+
 This section was written from the day's commit subjects and their task titles. It states what each change does and, where known, what it does not guarantee. It is a summary, not a complete list: about 490 commits landed on 2026-10-09, and many of them are mechanical audit-hazard cleanups (for example "name inline conditions" per file) that change no behavior and are not listed one by one.
 
 ## Unreleased (main, 2026-10-24)

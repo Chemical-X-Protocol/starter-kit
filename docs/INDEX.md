@@ -5,7 +5,7 @@ Reference pages for behavior that specs pin. Design notes and plans live under `
 | Page | Covers |
 | :--- | :--- |
 | [audit-gates.md](audit-gates.md) | The one rule every audit gate applies (pre-commit hook, ratchet, `task done`, `patch`/`write`, and the base-ref delta `audit --delta-base` / `verify --changed --base`), what each guarantees and what it does not |
-| [CHANGELOG.md](CHANGELOG.md) | What changed, grouped by area, with task ids, behavior changes and known issues |
+| [CHANGELOG.md](CHANGELOG.md) | What changed, grouped by area, with task ids, behavior changes and known issues. New entries are written as one file per change in `changelog.d/` (see its README.md) and folded in with `chemx changelog` |
 | [ci.md](ci.md) | `chemx ci`: a pull request's checks and merge state through gh, exit codes 0/1/3/2, `--wait`, and `--protection` (does the default branch require checks; why `gh pr merge --auto` merged kit PR #12 at once; how to protect `main`) |
 | [commit.md](commit.md) | `chemx commit`: path-limited commits, lease and task checks |
 | [coordination-db.md](coordination-db.md) | The one team db per monorepo: how it is chosen (never the temp dir or `/`), what reads which db, repo attribution, `task list --all-repos/--repo`, `chemx team migrate` and the live runbook |

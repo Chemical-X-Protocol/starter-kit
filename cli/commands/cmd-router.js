@@ -406,6 +406,11 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
       setExitCodeFrom(runDocsCli(rawArgs.slice(1), process.cwd()));
       break;
     }
+    case 'changelog': {
+      const { runChangelogCli } = await import('../docs-check/changelog-run.js');
+      setExitCodeFrom(runChangelogCli(rawArgs.slice(1), process.cwd()));
+      break;
+    }
     case 'patterns': {
       const { runPatternsCli } = await import('../mcp/patterns-cli.js');
       runPatternsCli(rawArgs.slice(1));
