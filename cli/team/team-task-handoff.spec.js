@@ -105,11 +105,15 @@ test('handoff: a refused claim names the handoff path', (t) => {
 
 const leaseOwners = (db) => Object.fromEntries(listActiveLeases(db).map((lease) => [lease.file_path, lease.locked_by]));
 
+// Backdate the row like lease-lapse.spec.js: a tiny ttlMs is still live when the clock has not ticked yet (K22 #6775).
+const lapse = (db, file) => db.prepare('UPDATE file_leases SET expires_at = ? WHERE file_path = ?').run(Date.now() - 60000, file);
+
 test('handoff --with-locks: moves live leases naming the task, not other tasks or expired ones (#5740)', (t) => {
   const { root, db, id } = makeBoard(t);
   requestFileLock(db, 'cli/a.js', '@alice', { purpose: `#${id}` });
   requestFileLock(db, 'cli/other.js', '@alice', { purpose: `#${id}9` });
-  requestFileLock(db, 'cli/old.js', '@alice', { purpose: `#${id}`, ttlMs: 1 });
+  requestFileLock(db, 'cli/old.js', '@alice', { purpose: `#${id}` });
+  lapse(db, 'cli/old.js');
   const res = runTeamCli(['task', 'handoff', String(id), '@bob', '--as=@alice', '--with-locks'], false, root);
   assert.equal(res.success, true);
   assert.deepEqual(res.movedLeases.map((lease) => lease.file_path), ['cli/a.js']);

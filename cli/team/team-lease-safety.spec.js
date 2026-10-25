@@ -48,7 +48,7 @@ test('lease reads: getSwarmStatus counts expired leases separately and deletes n
 
 test('lease cleanup: a lease granted between the scan and the delete survives', (t) => {
   const { root, db } = makeProject(t);
-  requestFileLock(db, 'src/a.js', '@a', { cwd: root, ttlMs: 1 });
+  requestFileLock(db, 'src/a.js', '@a', { cwd: root });
   expireLease(db, 'src/a.js');
 
   // A second connection whose scan is interleaved with process B acquiring the same file.
