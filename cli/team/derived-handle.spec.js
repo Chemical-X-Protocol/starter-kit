@@ -14,6 +14,8 @@ import { postFeedEvent } from './team-db-feed.js';
 import { createTask, claimTask, getTask } from './team-db-tasks.js';
 import { resolveReadIdentity, DERIVED_PREFIX } from './agent-identity.js';
 
+delete process.env.CHEMX_PROJECT_ROOT;
+
 const DERIVED = resolveReadIdentity(undefined, {}).id;
 
 const makeDb = (t) => {
