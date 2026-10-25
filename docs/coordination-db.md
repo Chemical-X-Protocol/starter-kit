@@ -167,8 +167,8 @@ without a `cd`. Three pieces (K6, #6751):
   git, the code index and the board all mean that project's. A relative `<dir>` is read against the
   cwd; a missing one or a file is refused by name (exit 1) before anything runs. `CHEMX_PROJECT_ROOT`
   does the same when no flag is given (a value that is not a directory is ignored with a one-line
-  note); the flag wins over it. Not covered: the MCP server (it takes `projectRoot` per call), help and
-  version, and the words after `--` or after the first word of `build`/`run`/`wrap`, which belong to the
+  note); the flag wins over it. Not covered: the MCP server (it takes `projectRoot` per call), hooks,
+  help and version, and the words after `--` or after the first word of `build`/`run`/`wrap`, which belong to the
   wrapped tool. `chemx do` takes `--root` on each item as well as on the batch. `doctor`, `install-hooks`
   and `friction` keep reading `--root` as the project they act on.
 - **A path in another chemx project (`read` and `q`).** An absolute path argument that lies in a

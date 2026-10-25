@@ -6,7 +6,8 @@
  * all resolve against that root. Order: the flag, then CHEMX_PROJECT_ROOT, then (read and q only) an
  * absolute path that lies inside another chemx project. A bad flag is an error; a bad env value is a
  * note and the cwd stays.
- * Not covered: the MCP server (it has its own root rules), help and version, and the words after
+ * Not covered: the MCP server (it has its own root rules), hooks (they run where their host puts them),
+ * help and version, and the words after
  * `--` or after the first word of build/run/wrap, which belong to the wrapped tool.
  * Dependencies are node: built-ins and project-markers.js only, so the boot shim can load it for the
  * early conflict commands.
@@ -20,8 +21,9 @@ export const ROOT_ENV = 'CHEMX_PROJECT_ROOT';
 const ROOT_FLAGS = new Set(['--root', '--project-root']);
 const NO_FLAGS = new Set();
 
-// The server picks its root per call; help and version run nothing in a project.
-const OWN_ROOT_COMMANDS = new Set(['mcp', 'mcp-server', 'server', 'help', '--help', '-h', 'version', '--version', '-v']);
+// The server picks its root per call, a hook runs in the directory its host gives it, and help and version
+// run nothing in a project.
+const OWN_ROOT_COMMANDS = new Set(['mcp', 'mcp-server', 'server', 'hook', 'help', '--help', '-h', 'version', '--version', '-v']);
 // These read --root themselves (as the project to install into, report on or write to), so they keep it, made absolute.
 const KEEP_FLAG_COMMANDS = new Set(['doctor', 'install-hooks', 'friction']);
 // After their first word the rest is the wrapped command (parseCliArgs positionalCommand).
@@ -228,14 +230,17 @@ export const applyCliRoot = (rawArgs = [], options = {}) => {
  */
 export const runInItemRoot = async (tokens, run, options = {}) => {
   const prior = process.cwd();
-  const resolved = applyCliRoot(tokens, { ...options, env: { ...process.env } });
-  const hasError = Boolean(resolved.error);
-  if (hasError) throw new Error(resolved.error);
-  const isFlagOnly = resolved.args.length === 0;
-  if (isFlagOnly) throw new Error(`${tokens.join(' ')}: a root flag needs a command after it.`);
+  const priorEnvRoot = process.env[ROOT_ENV];
   try {
+    const resolved = applyCliRoot(tokens, options);
+    const hasError = Boolean(resolved.error);
+    if (hasError) throw new Error(resolved.error);
+    const isFlagOnly = resolved.args.length === 0;
+    if (isFlagOnly) throw new Error(`${tokens.join(' ')}: a root flag needs a command after it.`);
     return await run(resolved.args);
   } finally {
     process.chdir(prior);
+    const hadEnvRoot = priorEnvRoot !== undefined;
+    if (hadEnvRoot) process.env[ROOT_ENV] = priorEnvRoot;
   }
 };

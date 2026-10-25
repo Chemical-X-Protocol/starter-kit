@@ -105,7 +105,7 @@ test('resolveCliRoot: CHEMX_PROJECT_ROOT is the default, the flag wins, an empty
 
 test('resolveCliRoot: the MCP server, help and version keep the cwd but still lose the flag', (t) => {
   const base = tempDir(t);
-  for (const command of ['mcp', 'server', 'help', 'version', '--version']) {
+  for (const command of ['mcp', 'server', 'hook', 'help', 'version', '--version']) {
     const resolved = resolveCliRoot([command, `--root=${base}`], { cwd: path.dirname(base), env: { [ROOT_ENV]: base } });
     assert.deepEqual([resolved.root, resolved.args], [null, [command]], command);
   }
