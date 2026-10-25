@@ -147,7 +147,7 @@ export const RULE_REGISTRY = {
     severity: 'HIGH',
     needs: 'standard',
     isDefaultOff: true,
-    directive: 'Validate a request-controlled URL with wp_http_validate_url, or fetch it with wp_safe_remote_*, before the request (Directive 9.B)'
+    directive: 'Fetch a request-controlled URL with wp_safe_remote_*, or validate it with wp_http_validate_url and also pass "redirection" => 0 or "reject_unsafe_urls" => true, because the validator checks only the first URL and a redirect can lead elsewhere (Directive 9.B)'
   },
   SECURITY_WP_OPEN_REDIRECT: {
     pillar: PILLARS.PILLAR_9,
