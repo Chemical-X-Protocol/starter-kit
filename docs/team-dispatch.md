@@ -132,13 +132,13 @@ Since K16 (#6761) the first two rules apply to a call that **changes files or sh
 | :--- | :--- |
 | **Read**: no identity | `read`, `q` (`search`), `trace`, `backtrace`, `check`, `f`, `p`, `j`, `log`, `d`, `show`, `status`, `conflicts`, `wait`, `docs`, `trend`, `report`, `tesseract`, `patterns`, `blueprint`, `friction`, `ci`, `mcp`, `ui`, `hook claude-*` |
 | | the gates `test`, `typecheck`, `lint`, `build`, `verify`, `audit`, `doctor` |
-| | `team status`, `team feed`, `team tokens`, `team benchmark`, `team route`, `team audit-run`, `team task list\|show\|view\|info`, `team lock status\|list\|check-staged` |
+| | `team status`, `team feed`, `team tokens`, `team benchmark`, `team route`, `team audit-run`, `team task list\|show\|view\|info`, `team brief <id>`, `team lock status\|list\|check-staged` (`chemx task ...` is `chemx team task ...`) |
 | | `project` (no word, `status`, `learnings`), `changelog --check\|--dry-run`, `help`, `version`, and any call with `--help` or `-h` before a `--` |
 | **Write**: a named handle | files: `write`, `patch`, `add`, `explode`, `generate` (and a capsule generator such as `chemx m-card`), `heal`, `badge`, `changelog` |
-| | `commit`, and `run` (it renews your leases) |
+| | `commit`, `run` (it renews your leases), `mutate` (it edits a file for a moment), `scratch` (a directory per handle), `worktree` |
 | | setup: `init`, `create`, `pillars`, `install-mcp`, `hook` (`install-hooks`, `setup-ci`), `project init\|step\|chat\|pause\|resume` |
 | | `team task` `claim`, `done`, `handoff`, `close`, `comment`, `update`, `add`, `triage`, `reconcile`, `set-target`, `set-files`, `slot`, `trace`; `team lock` `acquire`, `release`, `renew`, `check` or a path alone; `team unlock`, `post`, `dm`, `inbox`, `triage`, `train`, `profile`, `handoff`, `dispatch`, `migrate` |
-| Read, but a write with | `lint --fix`, `audit --fix\|--triage\|--triage-all\|--rebaseline`, `doctor --fix`, `mcp --install`, `friction add\|export`, `patterns reject`, `blueprint fill` |
+| Read, but a write with | `lint --fix`, `audit --fix\|--triage\|--triage-all\|--rebaseline`, `doctor --fix`, `mcp --install`, `friction add\|export`, `patterns reject`, `blueprint fill`, `team brief <id> --file\|--stdin\|--clear` |
 | Write, but a read with | `project status\|learnings`, `hook claude-*`, `changelog --check\|--dry-run` |
 
 Rules of thumb. `chemx do "<call>" "<call>"` is a write when any quoted call is. `--root=<dir>` and `--project-root` never change the class. After `--` every word belongs to the wrapped command or the title, so `chemx run -- node --help` is a write. A token chemx does not know is a read: the router refuses it. The same list drives the `audit-run` section "subagent acted as orchestrator" and the handles the native-edit guard learns ([hooks.md](hooks.md#native-edits-and-file-locks)).

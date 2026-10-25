@@ -9,7 +9,7 @@ import { COMMANDS_SCHEMA } from '../commands-schema.js';
 import { TEAM_SUBCOMMANDS, TEAM_TASK_ACTIONS, TEAM_LOCK_ACTIONS } from '../docs-check/command-tree.js';
 import {
   READ_COMMANDS, WRITE_COMMANDS, ALIASES, WRITE_WHEN, READ_WHEN, TEAM_FRONT_DOORS,
-  TEAM_READS, TEAM_WRITES, TEAM_BY_ACTION, TASK_READS, TASK_WRITES, LOCK_READS, LOCK_WRITES,
+  TEAM_READS, TEAM_WRITES, TEAM_BY_ACTION, TASK_READS, TASK_WRITES, TASK_BY_FLAG, LOCK_READS, LOCK_WRITES,
   classifyChemxArgs, isMutatingChemxArgs
 } from './identity-classification.js';
 
@@ -46,7 +46,7 @@ test('every team subcommand, task action and lock action is classified once', ()
     assert.equal(count, 1, `team subcommand "${name}" is in ${count} lists (cli/team/identity-classification.js)`);
   }
   for (const name of TEAM_TASK_ACTIONS) {
-    const count = inLists(name, TASK_READS, TASK_WRITES);
+    const count = inLists(name, TASK_READS, TASK_WRITES, TASK_BY_FLAG);
     assert.equal(count, 1, `team task action "${name}" is in ${count} lists`);
   }
   for (const name of TEAM_LOCK_ACTIONS) {
@@ -55,7 +55,7 @@ test('every team subcommand, task action and lock action is classified once', ()
   }
   const known = new Set([...TEAM_SUBCOMMANDS]);
   for (const name of [...TEAM_READS, ...TEAM_WRITES, ...TEAM_BY_ACTION]) assert.ok(known.has(name), `team subcommand "${name}" is not in command-tree.js`);
-  for (const name of [...TASK_READS, ...TASK_WRITES]) assert.ok(TEAM_TASK_ACTIONS.includes(name), `task action "${name}" is not in command-tree.js`);
+  for (const name of [...TASK_READS, ...TASK_WRITES, ...TASK_BY_FLAG]) assert.ok(TEAM_TASK_ACTIONS.includes(name), `task action "${name}" is not in command-tree.js`);
   for (const name of [...LOCK_READS, ...LOCK_WRITES]) assert.ok(TEAM_LOCK_ACTIONS.includes(name), `lock action "${name}" is not in command-tree.js`);
 });
 
@@ -69,7 +69,7 @@ test('reads: look, search, gates, board reads and help need no identity', () => 
     'audit', 'audit --json', 'doctor', 'wait --task=5', 'docs check', 'trend', 'report savings', 'tesseract', 'conflicts', 'patterns', 'blueprint 01c90f0e',
     'team status', 'team', 'team --help', 'team task list', 'team task show 5 --brief', 'team task view 5', 'team feed --oneline', 'team tokens', 'tokens --epic=5', 'telemetry',
     'benchmark', 'team route 5', 'team audit-run --run=wf_1', 'team lock status a.js', 'team lock list', 'team lock check-staged', 'project status', 'project', 'project learnings',
-    'ci 12', 'ci 12 --wait', 'ci --protection', 'changelog --check', 'changelog --dry-run', 'mcp', 'ui', 'hook claude-pre-tool', 'friction', 'friction --usage dir', 'do "read a.js" "verify"', 'write --help', 'patch a.js -h', 'team task claim 5 --help', 'm-card-nonsense --help', 'nonsense'
+    'task list --search foo', 'task show 5', 'team task list --titles', 'team brief 5', 'task brief 5', 'team task brief 5', 'wait --post-matching=done --from=@a', 'ci 12', 'ci 12 --wait', 'ci --protection', 'changelog --check', 'changelog --dry-run', 'mcp', 'ui', 'hook claude-pre-tool', 'friction', 'friction --usage dir', 'do "read a.js" "verify"', 'write --help', 'patch a.js -h', 'team task claim 5 --help', 'm-card-nonsense --help', 'nonsense'
   ];
   for (const line of reads) assert.equal(classifyChemxArgs(split(line)), 'read', `chemx ${line}`);
 });
@@ -77,6 +77,7 @@ test('reads: look, search, gates, board reads and help need no identity', () => 
 test('writes: edits, commits, claims, locks, posts and project changes keep needing a handle', () => {
   const writes = [
     'write a.js --stdin', 'patch a.js', 'edit a.js', 'add prop X', 'explode a.js', 'generate m-card', 'g m-card', 'm-card', 'commit a.js -m x', 'run -- node t.js', 'heal bp_1', 'badge',
+    'task claim 5', 'task add --from tasks.json', 'task done 5', 'team brief 5 --file b.md', 'team brief 5 --clear', 'task brief 5 --stdin', 'scratch', 'scratch probe.mjs', 'mutate a.js --apply s/a/b/ --then "node t.js"', 'worktree add ../w -b x', 'worktree remove ../w',
     'changelog', 'changelog --json', 'init', 'create app', 'pillars --write', 'install-mcp', 'install-hooks --host=claude', 'hook --host=claude', 'project init goal', 'project step', 'coordinator chat hi',
     'team task claim 5', 'team task done 5', 'team task handoff 5 @b', 'team task comment 5 hi', 'team task update 5 done', 'team task add Title', 'team task create Title', 'team task close 5',
     'team task triage', 'team task set-target 5 a.js', 'team lock acquire a.js', 'team lock a.js', 'team lock release a.js', 'team lock check a.js', 'team lock renew a.js', 'team unlock a.js',

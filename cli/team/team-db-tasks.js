@@ -10,14 +10,8 @@ import {
 import { withImmediateTransaction } from './team-db-transaction.js';
 import { generateTaskPermalink } from './team-vds.js';
 import { parseNeedsInput } from './team-needs.js';
-import { isDerivedHandle, describeDerivedRefusal } from './agent-identity.js';
->>>>>>> 9fdaed9 (feat(identity): reads, gates and help need no identity; every write keeps the same refusal (#6761))
-=======
 import { DEFAULT_TASK_KIND } from './task-kind.js';
 import { isDerivedHandle, describeDerivedRefusal } from './agent-identity.js';
-=======
-import { isDerivedHandle, describeDerivedRefusal } from './agent-identity.js';
->>>>>>> 9fdaed9 (feat(identity): reads, gates and help need no identity; every write keeps the same refusal (#6761))
 
 export const getTask = (db, taskId) => {
   const canGet = Boolean(db) && Boolean(taskId);

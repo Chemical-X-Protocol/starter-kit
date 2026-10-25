@@ -27,7 +27,7 @@ export const READ_COMMANDS = [
   'mcp', 'team', 'ui', 'tesseract', 'patterns', 'blueprint', 'report', 'friction'
 ];
 export const WRITE_COMMANDS = [
-  'patch', 'write', 'add', 'explode', 'generate', 'commit', 'run', 'heal', 'badge', 'changelog',
+  'patch', 'write', 'add', 'explode', 'generate', 'commit', 'run', 'heal', 'badge', 'changelog', 'scratch', 'mutate', 'worktree',
   'project', 'init', 'create', 'pillars', 'hook', 'install-mcp'
 ];
 
@@ -60,7 +60,7 @@ export const ALIASES = {
   tests: 'test', 'check:test': 'test', 'check:types': 'typecheck', tsc: 'typecheck', 'check:lint': 'lint', eslint: 'lint',
   wrap: 'build', trends: 'trend', badges: 'badge', d: 'diff', p: 'pkg', f: 'ls', j: 'json', do: 'batch',
   server: 'mcp', 'mcp-server': 'mcp', 'setup-mcp': 'install-mcp',
-  swarm: 'team', feed: 'team', tokens: 'team', telemetry: 'team', benchmark: 'team', ablation: 'team', memory: 'team',
+  swarm: 'team', feed: 'team', task: 'team', tokens: 'team', telemetry: 'team', benchmark: 'team', ablation: 'team', memory: 'team',
   coordinator: 'project', scaffold: 'create', 'config:pillars': 'pillars', rules: 'pillars',
   dashboard: 'ui', preview: 'ui', cube: 'tesseract', matrix: 'tesseract',
   hooks: 'hook', 'install-hooks': 'hook', 'setup-ci': 'hook'
@@ -69,14 +69,16 @@ export const ALIASES = {
 // The tokens that hand their words to `chemx team` (cmd-router.js), with the subcommand they stand for.
 export const TEAM_FRONT_DOORS = {
   team: [], swarm: [], feed: [],
-  tokens: ['tokens'], telemetry: ['tokens'], benchmark: ['benchmark'], ablation: ['benchmark'], memory: ['benchmark']
+  task: ['task'], tokens: ['tokens'], telemetry: ['tokens'], benchmark: ['benchmark'], ablation: ['benchmark'], memory: ['benchmark']
 };
 
 // `chemx team <sub>`: task and lock depend on their action; every other word below is listed by what it does.
 export const TEAM_READS = ['status', 'tokens', 'telemetry', 'feed', 'benchmark', 'ablation', 'memory', 'route', 'audit-run', 'help'];
 export const TEAM_WRITES = ['post', 'unlock', 'triage', 'inbox', 'dm', 'train', 'profile', 'handoff', 'dispatch', 'migrate'];
-export const TEAM_BY_ACTION = ['task', 'lock'];
+export const TEAM_BY_ACTION = ['task', 'lock', 'brief'];
 export const TASK_READS = ['list', 'show', 'view', 'info'];
+// `brief <id>` prints the long brief; --file, --stdin or --clear sets or removes it.
+export const TASK_BY_FLAG = ['brief'];
 export const TASK_WRITES = [
   'comment', 'post', 'vds-slot', 'slot', 'trace', 'claim', 'handoff', 'close', 'done', 'complete', 'update',
   'create', 'add', 'new', 'triage', 'reconcile', 'prune', 'set-target', 'target', 'set-files'
@@ -128,7 +130,15 @@ const matchesRule = (words, rule) => {
 
 const positionalsOf = (words) => normalizeValueFlags(beforeTerminator(words)).args.filter((word) => !word.startsWith('-'));
 
-const classifyTask = (words) => (TASK_WRITES.includes(positionalsOf(words)[0] ?? 'list') ? WRITE : READ);
+const BRIEF_WRITE_FLAGS = ['--file', '--stdin', '--clear'];
+const classifyBrief = (words) => (BRIEF_WRITE_FLAGS.some((flag) => hasFlag(words, flag)) ? WRITE : READ);
+
+const classifyTask = (words) => {
+  const action = positionalsOf(words)[0] ?? 'list';
+  const isBrief = TASK_BY_FLAG.includes(action);
+  if (isBrief) return classifyBrief(words);
+  return TASK_WRITES.includes(action) ? WRITE : READ;
+};
 
 const classifyLock = (words) => {
   const first = positionalsOf(words)[0];
@@ -137,7 +147,7 @@ const classifyLock = (words) => {
   return isBare || isListedRead ? READ : WRITE;
 };
 
-const TEAM_BY_ACTION_CLASSIFIERS = { task: classifyTask, lock: classifyLock };
+const TEAM_BY_ACTION_CLASSIFIERS = { task: classifyTask, lock: classifyLock, brief: classifyBrief };
 
 // `words` are the words after `team`. The router takes the first word as the subcommand ('status' when none).
 const classifyTeam = (words) => {
