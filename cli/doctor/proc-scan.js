@@ -1,5 +1,6 @@
 // Read-only /proc scan for running chemx MCP servers (Linux). For each: pid, script, kit version,
-// project root (CHEMX_PROJECT_ROOT or cwd) and whether the kit code changed after the process started.
+// project root (CHEMX_PROJECT_ROOT or cwd), whether the kit code changed after the process started,
+// and which client launched it (Claude session id from CLAUDE_CODE_SESSION_ID, parent pid).
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -31,6 +32,23 @@ const kitCodeMtime = (kitRoot) => Math.max(0, ...KIT_CODE_FILES.map((rel) => {
   return fs.existsSync(file) ? fs.statSync(file).mtimeMs : 0;
 }));
 
+const parseEnviron = (text) => new Map(text.split('\0').filter((entry) => entry.includes('=')).map((entry) => {
+  const at = entry.indexOf('=');
+  return [entry.slice(0, at), entry.slice(at + 1)];
+}));
+
+const readParentPid = (procRoot, pid) => {
+  const status = readOrNull(path.join(procRoot, pid, 'status')) ?? '';
+  const match = status.match(/^PPid:\s*(\d+)/m);
+  return match ? Number(match[1]) : null;
+};
+
+const clientOf = (env) => {
+  if (env.has('CLAUDE_CODE_SESSION_ID')) return 'claude';
+  if (env.has('ANTIGRAVITY_EDITOR_APP_ROOT')) return 'antigravity';
+  return null;
+};
+
 const readProcess = (procRoot, pid) => {
   const cmdline = readOrNull(path.join(procRoot, pid, 'cmdline'));
   if (!cmdline) return null;
@@ -39,13 +57,13 @@ const readProcess = (procRoot, pid) => {
   if (!match) return null;
   const cwdLink = path.join(procRoot, pid, 'cwd');
   const cwd = fs.existsSync(cwdLink) ? fs.readlinkSync(cwdLink) : null;
-  const environ = readOrNull(path.join(procRoot, pid, 'environ')) ?? '';
-  const envRoot = environ.split('\0').find((entry) => entry.startsWith('CHEMX_PROJECT_ROOT='))?.slice('CHEMX_PROJECT_ROOT='.length);
+  const env = parseEnviron(readOrNull(path.join(procRoot, pid, 'environ')) ?? '');
   const script = path.isAbsolute(match.script) || !cwd ? match.script : path.resolve(cwd, match.script);
   const kit = locateKit(script);
   const startedAt = fs.statSync(path.join(procRoot, pid)).ctimeMs;
   const isStale = kit ? kitCodeMtime(kit.root) > startedAt : false;
-  return { pid: Number(pid), script, version: kit?.version ?? null, root: envRoot ?? cwd, startedAt, isStale };
+  const sessionId = env.get('CLAUDE_CODE_SESSION_ID') ?? null;
+  return { pid: Number(pid), script, version: kit?.version ?? null, root: env.get('CHEMX_PROJECT_ROOT') ?? cwd, startedAt, isStale, sessionId, client: clientOf(env), ppid: readParentPid(procRoot, pid) };
 };
 
 // A process can exit between readdir and stat; treat it as gone rather than failing the scan.

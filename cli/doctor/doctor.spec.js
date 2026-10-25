@@ -72,7 +72,8 @@ test('mcp servers: reads version and root from /proc, flags stale code, ignores 
   fs.utimesSync(path.join(kit, 'package.json'), future, future);
   const stale = checkMcpProcesses({ cliVersion: '1.0.0', procRoot: proc });
   assert.equal(stale.status, 'fail');
-  assert.match(stale.summary, /code changed since start.*doctor never kills/);
+  assert.match(stale.summary, /1 running, 1 stale in 1 project root; doctor never kills/);
+  assert.match(stale.lines[0], /^1x \/repo: code changed since start; no session id exposed/);
   assert.equal(checkMcpProcesses({ cliVersion: '1.0.0', procRoot: path.join(proc, 'missing') }).status, 'inconclusive');
 });
 

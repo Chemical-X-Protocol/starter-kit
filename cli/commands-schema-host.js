@@ -32,15 +32,16 @@ export const HOST_COMMANDS = [
     aliases: [],
     group: 'setup',
     brief: 'Diagnose install, PATH, MCP and hooks',
-    usage: 'chemx doctor [--fix] [--json] [--root=<dir>]',
-    summary: 'Diagnose how this machine runs chemx: PATH bins, MCP launch and running servers, index, hooks, shims, node.',
-    description: 'Reports each check as ok, FAIL or ?? (inconclusive). Running MCP servers are read from /proc with their version, root and whether the kit code changed after they started. --fix repairs only hooks and the .mcp.json launch (idempotent, backed up); it never edits shims and never kills processes.',
+    usage: 'chemx doctor [--fix] [--fetch] [--json] [--root=<dir>]',
+    summary: 'Diagnose how this machine runs chemx: PATH bins, the kit commit and CI pin, MCP launch and running servers, index, hooks, shims, node, jest layout.',
+    description: 'Reports each check as ok, FAIL or ?? (inconclusive). kit: the local kit version and commit; kit-origin: ahead/behind of origin/main (the local ref, no network); ci-pin: the CHEMX_VERSION pin in .github/workflows/*.yml, FAIL when it differs from this kit. Stale MCP servers are read from /proc and grouped by project root, naming the Claude session id (and its transcript) behind each with one restart hint per group. jest-deps: in a pnpm project, ?? when a bare jest serializer or transform resolves only under node_modules/.pnpm/node_modules and NODE_PATH does not cover it (chemx test sets it itself; a raw jest run needs it). --fix repairs only hooks and the .mcp.json launch (idempotent, backed up); it never edits shims and never kills processes.',
     flags: [
       { flag: '--fix', desc: 'Repair hooks and the MCP launch via install-hooks' },
+      { flag: '--fetch', desc: 'git fetch origin main in the kit first so kit-origin is current (the only network use; a failed fetch is reported, not failed)' },
       { flag: '--json', desc: 'Machine-readable report' },
       { flag: '--root=<dir>', desc: 'Project root (default: git toplevel)' }
     ],
-    examples: ['chemx doctor', 'chemx doctor --fix']
+    examples: ['chemx doctor', 'chemx doctor --fetch', 'chemx doctor --fix']
   },
   {
     name: 'friction',
