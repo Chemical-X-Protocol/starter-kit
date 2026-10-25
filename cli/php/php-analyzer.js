@@ -94,7 +94,9 @@ const runPasses = (ctx, settings) => {
 /**
  * Analyzes one PHP file. Pushes findings onto `violations` and returns
  * { kind, reason, commentRegions, fileHeaderEndLine }: the coverage kind ('ast', 'parse-error' or
- * 'text-only') with its reason, and the comment data for applyAuditPostFilters. Guarantees only what
+ * 'text-only') with its reason, and the comment data for applyAuditPostFilters. options.overlay
+ * ({ relativePath, content }) reaches passes as ctx.overlay: the task-done gate uses it to audit a
+ * dependent with its target at HEAD. Guarantees only what
  * ran: with options.fast, an unavailable parser or a minified file no pass runs (text-only), and
  * comment regions are null so the line scanner is used.
  */
@@ -123,6 +125,7 @@ export function analyzePhp({ content, filePath, relativePath, options = {}, conf
     wp: null,
     index: null,
     crossFile: options.crossFile !== false,
+    overlay: options.overlay ?? null,
     report: createReporter(violations, relativePath)
   };
   runPasses(ctx, settings);

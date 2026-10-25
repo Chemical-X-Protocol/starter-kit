@@ -1,7 +1,9 @@
 /**
  * `chemx check <file...> [--profile=X] [--json]`: single-file micro-audits with the
  * same config resolution as `chemx audit` (.chemxrc plus an explicit --profile).
- * Every path is checked; any dirty or missing path fails the command (#1674).
+ * Every path is checked; any dirty or missing path fails the command (#1674). `--fast` skips the
+ * AST rules; a file whose language has an AST parser is then reported "inconclusive: <reason>",
+ * never clean (a language without one is unaffected).
  */
 import { handleCheckCommand } from '../search-commands.js';
 import { loadProjectConfig } from '../config/index.js';
@@ -22,8 +24,8 @@ const collectTargets = (args) => {
 
 const normalizeProfileArgs = (args) => args.map((arg, i) => (arg === '--profile' ? `--profile=${args[i + 1] ?? ''}` : arg));
 
-const checkMany = (targets, { isJson, config }) => {
-  const files = targets.map((target) => handleCheckCommand(target, { isJson, isCli: false, config }));
+const checkMany = (targets, { isJson, config, isFast }) => {
+  const files = targets.map((target) => handleCheckCommand(target, { isJson, isCli: false, config, isFast }));
   const failed = files.filter((f) => f.error);
   for (const f of failed) {
     if (!isJson) process.stderr.write(`\x1b[31m✕ ${f.error}\x1b[0m\n`);
@@ -47,13 +49,13 @@ export const toCompact = (files) => {
       rules[v.rule] ??= { hazard: v.hazard, directive: v.directive, pillar: v.pillar };
       return [v.rule, v.line, v.severity];
     });
-    return { file: f.file, isClean: f.isClean, hazards };
+    return { file: f.file, isClean: f.isClean, ...(f.inconclusive ? { inconclusive: f.inconclusive } : {}), hazards };
   });
   return { files: out, rules };
 };
 
-const checkCompact = (targets, config) => {
-  const files = targets.map((t) => handleCheckCommand(t, { isJson: true, isCli: false, config }));
+const checkCompact = (targets, config, isFast) => {
+  const files = targets.map((t) => handleCheckCommand(t, { isJson: true, isCli: false, config, isFast }));
   const isClean = files.length > 0 && files.every((f) => f.isClean === true);
   const result = { success: files.every((f) => !f.error), isClean, ...toCompact(files) };
   process.stdout.write(JSON.stringify(result) + '\n');
@@ -66,9 +68,10 @@ export const runCheckCommand = (args = [], cwd = process.cwd()) => {
   const config = loadProjectConfig(cwd, normalizeProfileArgs(args));
   const targets = collectTargets(args);
   const isCompact = isJson && args.includes('--compact');
+  const isFast = args.includes('--fast');
   const shouldCompact = isCompact;
-  if (shouldCompact) return checkCompact(targets, config);
+  if (shouldCompact) return checkCompact(targets, config, isFast);
   const isSingleTarget = targets.length <= 1;
-  if (isSingleTarget) return handleCheckCommand(targets[0], { isJson, isCli: true, config });
-  return checkMany(targets, { isJson, config });
+  if (isSingleTarget) return handleCheckCommand(targets[0], { isJson, isCli: true, config, isFast });
+  return checkMany(targets, { isJson, config, isFast });
 };

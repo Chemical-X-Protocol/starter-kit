@@ -3,8 +3,8 @@
  * (so a dry run audits the patched text, not the file still on disk).
  */
 import path from 'node:path';
-import { auditCode } from './audit/rules.js';
-import { isSourceFile } from './languages.js';
+import { auditCodeDetailed } from './audit/rules.js';
+import { isAuditableSource, inconclusiveReason } from './audit/inconclusive.js';
 import { countLines } from './line-count.js';
 import { lineLimitFor, resolveFileTier } from './audit/line-budgets.js';
 import { loadProjectConfig } from './config/index.js';
@@ -28,13 +28,16 @@ const rawDomViolation = (relPath, content) => {
   };
 };
 
+const NOT_AUDITED = { violations: [], coverage: null };
+
+/** crossFile false: PHP passes report nothing whose cause lies in another file (design spec 3.8). */
 const auditInMemory = (absPath, relPath, content, config) => {
-  const isAuditable = isSourceFile(path.basename(absPath), { includeTests: true });
-  if (!isAuditable) return [];
+  const isAuditable = isAuditableSource(path.basename(absPath));
+  if (!isAuditable) return NOT_AUDITED;
   try {
-    return auditCode(content, absPath, relPath, { config });
+    return auditCodeDetailed(content, absPath, relPath, { config, crossFile: false });
   } catch {
-    return [];
+    return NOT_AUDITED;
   }
 };
 
@@ -43,7 +46,9 @@ const auditInMemory = (absPath, relPath, content, config) => {
  * (molecules: 250 pragmatic soft budget, 100 atomic-strict; other files: 500).
  *
  * @param {object} params { absPath, relPath, content, skipCheck, cwd }
- * @returns {{ lineBudget: object, isClean: boolean, violationsCount: number, criticalCount: number, highCount: number, violations: object[] }}
+ * @returns {{ lineBudget: object, isClean: boolean, violationsCount: number, criticalCount: number, highCount: number, violations: object[], inconclusive?: string, isVerified?: false }}
+ *   `inconclusive` (the reason) and `isVerified: false` appear only when the file's language has an
+ *   AST parser that did not run to completion; such an edit is never reported clean.
  */
 export const evaluateGuardrails = ({ absPath, relPath, content, skipCheck = false, cwd = process.cwd() }) => {
   const lines = countLines(content);
@@ -61,17 +66,22 @@ export const evaluateGuardrails = ({ absPath, relPath, content, skipCheck = fals
       : null
   };
 
-  const violations = skipCheck ? [] : auditInMemory(absPath, relPath, content, config);
+  const audited = skipCheck ? NOT_AUDITED : auditInMemory(absPath, relPath, content, config);
+  const violations = audited.violations;
+  const unverifiedReason = inconclusiveReason(audited.coverage);
+  const isInconclusiveEdit = unverifiedReason !== null;
+  const verification = isInconclusiveEdit ? { inconclusive: unverifiedReason, isVerified: false } : {};
   const domViolation = !skipCheck && isMolecule ? rawDomViolation(relPath, content) : null;
   const hasDomViolation = Boolean(domViolation);
   if (hasDomViolation) violations.push(domViolation);
 
   return {
     lineBudget,
-    isClean: violations.length === 0 && !isBudgetExceeded,
+    isClean: violations.length === 0 && !isBudgetExceeded && !isInconclusiveEdit,
     violationsCount: violations.length,
     criticalCount: violations.filter(isSevere('CRITICAL')).length,
     highCount: violations.filter(isSevere('HIGH')).length,
-    violations
+    violations,
+    ...verification
   };
 };

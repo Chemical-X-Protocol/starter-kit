@@ -2,7 +2,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { isSourceFile as isPolyglotSourceFile } from './languages.js';
-import { auditCode } from './audit/rules.js';
+import { auditCode, auditCodeDetailed } from './audit/rules.js';
+import { isAuditableSource } from './audit/inconclusive.js';
 import { ANY_DEPTH_IGNORED_DIRS } from './search-scan.js';
 import { loadProjectConfig } from './config/index.js';
 import { countLines, getLineBudgets, resolveFileTier } from './audit/line-budgets.js';
@@ -54,14 +55,24 @@ export const resolveAuditConfig = (cwd = process.cwd()) => {
  * Audits one file with the project config (.chemxrc profile, per-rule settings,
  * overrides). options: { config, cwd } to override the config or its root.
  */
-export const auditFile = (filePath, relativePath, options = {}) => {
-  if (!isSourceFile(path.basename(filePath), { includeTests: true })) return [];
+export const auditFile = (filePath, relativePath, options = {}) => auditFileDetailed(filePath, relativePath, options).violations;
+
+/**
+ * Like auditFile, but also returns the file's coverage record: { violations, coverage }.
+ * coverage is null when the file was not audited (not a source file, or a merge conflict).
+ * Extra options reach the rules: fast, crossFile (false: PHP passes report nothing from other
+ * files) and overlay ({ relativePath, content }: that file's content replaces the disk in the
+ * per-plugin PHP index).
+ */
+export const auditFileDetailed = (filePath, relativePath, options = {}) => {
+  if (!isAuditableSource(path.basename(filePath))) return { violations: [], coverage: null };
   const content = fs.readFileSync(filePath, 'utf-8');
   const fileHunks = conflictHunksOf(content);
   const hasConflictHunks = fileHunks.length > 0;
-  if (hasConflictHunks) return [conflictViolation(relativePath || filePath, fileHunks)];
+  if (hasConflictHunks) return { violations: [conflictViolation(relativePath || filePath, fileHunks)], coverage: null };
   const config = options.config || resolveAuditConfig(options.cwd || process.cwd());
-  return auditCode(content, filePath, relativePath, { config, coverage: options.coverage });
+  const { fast, crossFile, overlay } = options;
+  return auditCodeDetailed(content, filePath, relativePath, { config, coverage: options.coverage, fast, crossFile, overlay });
 };
 
 const auditFileEntry = (fullPath, relPath, scanOptions) => {

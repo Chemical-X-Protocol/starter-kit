@@ -6,7 +6,10 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { auditFile } from '../audit-engine.js';
+import { auditFileDetailed } from '../audit-scan.js';
+import { inconclusiveReason } from '../audit/inconclusive.js';
+import { loadProjectConfig } from '../config/index.js';
+import { dependentRegressions } from './team-dependents-gate.js';
 import { calculateMolecularHealthScore, SCORE_MODEL } from '../audit/metrics.js';
 import { triageLog } from './team-triage-log.js';
 import { hazardsAddedSinceHead } from '../audit/staged-delta.js';
@@ -58,6 +61,9 @@ const buildBlockingFilter = (options) => {
   const isStrict = Boolean(options.strict);
   return (v) => {
     if (isStrict) return true;
+    // A cross-file finding's cause may lie in a file this task did not touch: the delta gates it.
+    const isCrossFile = v.crossFile === true;
+    if (isCrossFile) return false;
     const isDeprecated = v.deprecated === true;
     if (isDeprecated) return false;
     const isDeprecatedDirective = typeof v.directive === 'string' && v.directive.includes('Deprecated');
@@ -93,10 +99,38 @@ const storeRemainingHazards = (db, targetPath, remainingHazards) => {
   }
 };
 
+/** Refusal for a target whose AST rules did not run: a hazard count from the text rules alone proves nothing. */
+const inconclusiveRefusal = (task, taskId, reason) => ({
+  refused: true,
+  verified: false,
+  reason: 'inconclusive-coverage',
+  taskId: Number(taskId),
+  taskTitle: task.title,
+  targetPath: task.target_path,
+  message: `Cannot complete task #${taskId}: the audit of ${task.target_path} is inconclusive (${reason}), so no hazard count can be trusted. Make the file auditable (for example fix the parse error) or pass --force to complete anyway.`
+});
+
+/** Refusal when editing the target raised a rule count in a file that depends on it. */
+const dependentRefusal = (task, taskId, regressions) => {
+  const names = regressions.map((r) => r.file).join(', ');
+  return {
+    refused: true,
+    verified: false,
+    reason: 'cross-file-regression',
+    taskId: Number(taskId),
+    taskTitle: task.title,
+    targetPath: task.target_path,
+    files: regressions.map((r) => ({ file: r.file, rules: r.increases.map((i) => i.rule) })),
+    message: `Cannot complete task #${taskId}: editing ${task.target_path} raised hazards in ${names}, which depends on it. Fix them or pass --force to complete anyway.`
+  };
+};
+
 /** Re-audits the file on disk; throws when the audit itself fails so the caller can fall back. */
 const verifyFromAudit = (db, task, taskId, options, resultPayload, fullPath, cwd) => {
-  const auditRes = auditFile(fullPath, task.target_path, { cwd });
-  const remainingHazards = Array.isArray(auditRes) ? auditRes : (auditRes?.fileViolations || auditRes?.violations || []);
+  const { violations: remainingHazards, coverage } = auditFileDetailed(fullPath, task.target_path, { cwd });
+  const unverifiedReason = inconclusiveReason(coverage);
+  const isInconclusiveTarget = unverifiedReason !== null && options.force !== true;
+  if (isInconclusiveTarget) return inconclusiveRefusal(task, taskId, unverifiedReason);
   const hazardCount = remainingHazards.length;
   const healthScore = calculateMolecularHealthScore(remainingHazards, 1).score;
   const blockingHazards = collectBlockingHazards(remainingHazards, options, cwd, task.target_path);
@@ -125,7 +159,11 @@ const verifyFromAudit = (db, task, taskId, options, resultPayload, fullPath, cwd
     };
   }
 
-  resultPayload.forced = blockingCount > 0 && options.force === true;
+  const regressions = dependentRegressions({ cwd, targetPath: task.target_path, fullPath, config: loadProjectConfig(cwd) });
+  const hasDependentRegression = regressions.length > 0 && options.force !== true;
+  if (hasDependentRegression) return dependentRefusal(task, taskId, regressions);
+
+  resultPayload.forced = (blockingCount > 0 || regressions.length > 0 || unverifiedReason !== null) && options.force === true;
 
   // Update database files and violations state
   storeRemainingHazards(db, task.target_path, remainingHazards);
