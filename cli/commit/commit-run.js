@@ -14,7 +14,7 @@ import { parseCommitArgs } from './commit-args.js';
 import { buildCommitMessage } from './commit-message.js';
 import { collectRefusals } from './commit-validate.js';
 import { gatherFacts } from './commit-facts.js';
-import { recordCommit, releaseLeases } from './commit-record.js';
+import { openCommitDb, recordCommit, releaseLeases } from './commit-record.js';
 import { snapshotIndex, restoreIndex } from './commit-index.js';
 import {
   gitRoot, stagedAmong, shortSha, hasPreCommitHook, gitWithRetry, compactFailure
@@ -67,18 +67,27 @@ const peerStagedLines = (paths) => (paths.length ? [`warning: left alone, staged
 // Everything that happens after git accepted the commit.
 const afterCommit = (root, cwd, facts, message, hasHook) => {
   const sha = shortSha(root);
-  const { db, committer, taskId, boardTaskId, rel, parsed } = facts;
+  const { db, committer, taskId, boardTaskId, rel, parsed, board } = facts;
   const recorded = recordCommit(db, { committer, taskId: boardTaskId, noTask: parsed.noTask, sha, subject: message.subject, files: rel });
-  const released = parsed.release ? releaseLeases(db, committer, parsed.files, cwd) : [];
+  const released = parsed.release ? releaseLeases(leaseDbFor(facts, cwd), committer, parsed.files, cwd) : [];
   const gate = hasHook ? 'pre-commit hook passed' : 'no pre-commit hook is installed in this repository';
-  return { sha, subject: message.subject, files: rel, gate, task: taskId ? `#${taskId}` : `none (${parsed.noTask})`, recorded, released, warnings: facts.leaseWarnings, peerLines: peerStagedLines(facts.unrelatedStaged) };
+  return {
+    sha, subject: message.subject, files: rel, gate, task: taskId ? `#${taskId}` : `none (${parsed.noTask})`,
+    board: board?.root ?? null, boardSource: board?.source ?? null, recorded, released,
+    warnings: facts.leaseWarnings, peerLines: peerStagedLines(facts.unrelatedStaged)
+  };
 };
+
+// Leases live on the board cwd resolves to; the event may have gone to the committer's claimed board.
+const leaseDbFor = (facts, cwd) => (facts.board?.source === 'cwd' ? facts.db : openCommitDb(cwd));
 
 export const formatSuccessLines = (data, isReleaseAsked) => {
   const recordLine = data.recorded ? 'recorded: activity event posted' : 'recorded: no (team db unavailable)';
   const releaseLine = isReleaseAsked ? [`leases released: ${data.released.length ? data.released.join(', ') : 'none held'}`] : [];
   const warnLines = data.warnings.map((warning) => `warning: your lease on ${warning.file} had expired before this commit`);
-  return [`sha: ${data.sha}`, `subject: ${data.subject}`, `files: ${data.files.join(', ')}`, `gate: ${data.gate}`, `task: ${data.task}`, recordLine, ...releaseLine, ...warnLines, ...data.peerLines];
+  const isOtherBoard = Boolean(data.board) && data.boardSource !== 'cwd';
+  const boardLine = isOtherBoard ? [`board: ${data.board} (${data.boardSource})`] : [];
+  return [`sha: ${data.sha}`, `subject: ${data.subject}`, `files: ${data.files.join(', ')}`, `gate: ${data.gate}`, `task: ${data.task}`, ...boardLine, recordLine, ...releaseLine, ...warnLines, ...data.peerLines];
 };
 
 const isDirectory = (dir) => fs.existsSync(dir) && fs.statSync(dir).isDirectory();
@@ -150,7 +159,7 @@ const commitInRepo = async (parsed, cwd, options) => {
   const reasons = [...preflight, ...staging.reasons];
   const isRefused = reasons.length > 0;
   if (isRefused) return refused([...reasons, ...(isPreflightClean ? restoreLines(root, facts.rel, snapshot) : [])], parsed);
-  const message = buildCommitMessage({ messages: parsed.messages, taskId: facts.taskId, noTask: parsed.noTask, config: facts.config, env });
+  const message = buildCommitMessage({ messages: parsed.messages, taskId: facts.taskId, noTask: parsed.noTask, config: facts.config, env, isSkipCi: facts.isSkipCi });
   const hasHook = hasPreCommitHook(root);
   const outcome = await gitWithRetry(root, commitArgsFor(message, facts.rel), retry);
   const isCommitFailed = outcome.status !== 0;

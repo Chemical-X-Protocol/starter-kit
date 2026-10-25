@@ -26,6 +26,16 @@ Full reference: [php-wordpress.md](php-wordpress.md). The `.php` extension reach
 - `task update <id> <status>` and `--status` accept only `queued`, `in_progress`, `review`, `blocked`, `done` and `cancelled`. Any other word (including `completed` and `duplicate`, and an empty `--status=`) prints the list, exits 1 and writes nothing, not even a `--deps` edit in the same command. `done` still runs the completion gate (#6746).
 - A value flag with no value (the last word, or followed by another flag) is refused by name before any db opens, with exit 1; a value that starts with `-` must use the `=` form. `--ignore-deps` keeps its `=<reason>` form. Values keep an equals sign inside them (`--as=@a=b`), which `--as=`, `--to=`, `--agent=`, `--target=` and the like used to cut at the second `=` (#6746).
 
+### chemx commit: the task's board, no subject scan, [skip ci] only on the default branch (K5, #6750, epic #6745)
+
+Full reference: [commit.md](commit.md).
+
+- `chemx commit` checks the task id and records the commit on the board in this order: `--board=<dir>`; the board where the committer claimed that task; the directory's own board. Before, a repo whose directory resolved to another board (a plugin under the monorepo, while the tasks lived on the app's board) checked `#1553` against an unrelated task there and recorded events on it; later agents were refused with "not found".
+- `chemx team task claim` (CLI and MCP) records the board root on the task (`result_payload.board_root`), on the agent row (`metadata.boardRoot`) and in a per-handle pointer file under `~/.local/state/chemx/board-claims` (`CHEMX_BOARD_CLAIMS_DIR` moves it). The pointer is a hint: the commit re-checks the task in that board's own db, and a task that is no longer the handle's `in_progress` task is ignored. Not guaranteed: a claim made on another machine or before this change has no pointer, so pass `--board`.
+- The refusal for an unknown id names every board it looked in; a commit recorded on a board other than the directory's prints a `board:` line. New exported lookup: `resolveHandleBoard(startDir, { handle, board, taskRef, env })` in `cli/team/board-resolve.js`.
+- `--no-task=<reason>` no longer scans the subject for `#<id>`: a number in its text is prose and is neither checked nor recorded on.
+- `[skip ci]` from `commit.skipCi` is added only while HEAD is on the default branch (`main`, `master` or the branch `origin/HEAD` names), so a pull request branch keeps its checks. New flags `--skip-ci` (force) and `--no-skip-ci`.
+
 ## Unreleased (feat/job-line, 2026-10-13)
 
 ### Audit rules and gates (review fixes, 2026-10-15, epic #6088)

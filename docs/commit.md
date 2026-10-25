@@ -6,6 +6,7 @@
 chemx commit cli/a.js cli/b.js -m "fix(a): handle empty input (#42)"
 chemx commit docs/x.md -m "docs: x" --task=42 --release
 chemx commit notes.txt -m "chore: notes" --no-task="one-off cleanup"
+chemx commit plugin/a.php -m "fix: a (#42)" --board=../app
 ```
 
 ## What it guarantees
@@ -25,19 +26,34 @@ chemx commit notes.txt -m "chore: notes" --no-task="one-off cleanup"
 | No message | `a message is required` |
 | No task id: no `#<id>` in the message, no `--task`, no `--no-task=<reason>` | `no task id` |
 | `--task` and `--no-task` together | `give --task or --no-task, not both` |
-| Task id not in the team db | `task #<id> was not found` |
+| Task id on none of the boards searched (every board is named) | `task #<id> was not found on` |
+| `--board` naming a path that does not exist or has no team db | `--board=<dir>:` |
+| `--skip-ci` and `--no-skip-ci` together | `give --skip-ci or --no-skip-ci, not both` |
 | A listed file that is neither tracked nor on disk, or outside the repository | `not tracked and not on disk`, `outside this repository` |
 | A listed file under another handle's live lease (holder and purpose named) | `leased by another handle` |
 | Nothing changed in the listed files | `nothing to commit` |
 
 The committer is `--as=@handle`, else `CHEMX_AGENT_ID`, else a session handle. With none of these, any live agent lease on a listed file refuses (same rule as `chemx team lock check-staged`). A lease the committer held and lost to expiry is a warning, and the commit goes ahead.
 
+## Which board checks the task id
+
+A directory resolves to one board (`<root>/.chemx/index.db`), but work crosses repos: an agent claims `#1553` on the app's board and then commits from a plugin directory under another board. Without a rule, the id is checked against the wrong board and the event lands there (#6750). The id is looked up, and the commit recorded, on:
+
+1. `--board=<dir>`: the board of that directory, and only that one.
+2. The board where the committer claimed that task. `chemx team task claim` (CLI and MCP) writes the board root on the task (`result_payload.board_root`), on the agent row (`metadata.boardRoot`) and in a per-handle pointer file; the commit re-checks in that board's own db that the task is still the committer's `in_progress` task, so a stale pointer is ignored.
+3. The directory's own board, when it has the id.
+4. A claim board that has the id although it is not the claimed task (an id the directory's board lacks is accepted there).
+
+With a claim board and a directory board that both have the number, the claimed task wins; any other number stays on the directory's board. The refusal for an unknown id names every board it looked in (`/app (your claim) or /plugin (this directory)`). A `--no-task` commit has no number to look up: its event goes to the first board with a team db in the same order. When the event is recorded on a board other than the directory's, the output adds a `board:` line; `--release` still releases leases on the directory's own board.
+
+The pointer files live in `$XDG_STATE_HOME/chemx/board-claims` (default `~/.local/state/chemx/board-claims`), one `<handle>.json` per handle with its 12 newest claims; `CHEMX_BOARD_CLAIMS_DIR` moves them, and a spec process has no default directory. A pointer is local to the machine and is only a hint.
+
 ## Message and trailers
 
 - The first `-m` is the subject; later `-m` values are body paragraphs.
 - `(#<id>)` is added to the subject when `--task` is given and the subject has no reference to it.
-- `--no-task=<reason>` adds a `No-Task: <reason>` line to the body and records the reason in the feed.
-- `[skip ci]` is added to the subject when the chemx config has `"commit": { "skipCi": true }`. The kit's `.chemxrc` sets this while #1948 is open.
+- `--no-task=<reason>` adds a `No-Task: <reason>` line to the body and records the reason in the feed. The message is never scanned for `#<id>` with `--no-task`: a number in its text is prose, not a task to check or record on.
+- `[skip ci]` is added to the subject when the chemx config has `"commit": { "skipCi": true }` and HEAD is on the default branch (`main`, `master`, or the branch `origin/HEAD` names; a detached HEAD is not). On a pull request branch it is not added, because the tag would skip the checks that gate the merge. `--skip-ci` adds it on any branch; `--no-skip-ci` never does. The kit's `.chemxrc` sets `skipCi` while #1948 is open.
 - A `Co-Authored-By:` line is added only when `CHEMX_COAUTHOR` (for example `Name <email>`) or `commit.coAuthor` in the config names one. Nothing is invented; with neither set there is no trailer.
 
 ## index.lock
@@ -58,12 +74,13 @@ On success a `commit` event is posted to the feed through the team db API: on th
 
 ## Output
 
-One line per fact: `sha`, `subject`, `files`, `gate` (`pre-commit hook passed`, or `no pre-commit hook is installed in this repository`), `task`, `recorded`, and with `--release` `leases released`. `--json` prints the same facts as one object (`ok`, `sha`, `subject`, `files`, `gate`, `task`, `recorded`, `released`, `warnings`); a refusal prints `{ ok: false, refusals, message }`.
+One line per fact: `sha`, `subject`, `files`, `gate` (`pre-commit hook passed`, or `no pre-commit hook is installed in this repository`), `task`, `board` (only when the commit was recorded on a board other than the directory's: `<root> (claim)` or `<root> (flag)`), `recorded`, and with `--release` `leases released`. `--json` prints the same facts as one object (`ok`, `sha`, `subject`, `files`, `gate`, `task`, `board`, `boardSource`, `recorded`, `released`, `warnings`); a refusal prints `{ ok: false, refusals, message }`.
 
 ## Limits
 
 - Leases are checked at the start. A lease taken by someone else after the check is not seen.
+- The claim pointer is per machine. A task claimed on another machine, or before this feature, has no pointer: pass `--board=<dir>`.
 - Only index.lock failures are retried. Other git errors fail at once.
 - The `gate` line reports that a hook exists and exited 0; it does not say what the hook checks.
 
-Code: `cli/commit/`. Spec: `cli/commit/commit.spec.js` (temp git repos and temp team dbs only).
+Code: `cli/commit/`, the board lookup in `cli/team/board-resolve.js` (`resolveHandleBoard`) and `cli/team/board-claims.js`. Specs: `cli/commit/commit.spec.js`, `commit-coordination.spec.js`, `cli/team/board-resolve.spec.js`, `cli/team/board-claims.spec.js` (temp git repos, temp boards and a temp pointer directory only).

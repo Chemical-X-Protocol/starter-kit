@@ -98,7 +98,7 @@ const runComment = (ctx, positionals, flags, isCli) => {
 const runClaim = (ctx, taskId, flags, isCli) => {
   const agentHandle = resolveCliAgent(flags, isCli);
   registerAgent(ctx.db, { id: agentHandle, role: 'executor' });
-  const res = claimWithIgnoreDeps(ctx.db, taskId, agentHandle, flags.ignoreDeps);
+  const res = claimWithIgnoreDeps(ctx.db, taskId, agentHandle, flags.ignoreDeps, { root: ctx.root, env: process.env });
   const isReasonMissing = Boolean(res.error);
   if (isReasonMissing) return fail(isCli, 'A reason is required: chemx team task claim <id> --ignore-deps=<reason>', { error: 'ignore-deps reason required' });
   if (!isCli) return res;

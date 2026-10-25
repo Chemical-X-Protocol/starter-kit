@@ -10,6 +10,18 @@ const formatLease = (refusal) => {
   return `${refusal.file}: leased by ${refusal.holder}${purpose}`;
 };
 
+const BOARD_LABELS = { flag: '--board', claim: 'your claim', cwd: 'this directory' };
+
+// "/a (your claim) or /b (this directory)": every board the task number was looked up on.
+const describeBoards = (looked) => looked.map((board) => `${board.root} (${BOARD_LABELS[board.source] ?? board.source})`).join(' or ');
+
+const unknownTaskMessage = (ctx) => {
+  const where = describeBoards(ctx.boardLooked ?? []);
+  const isOnlyOwnBoard = (ctx.boardLooked ?? []).length === 1 && ctx.boardLooked[0].source === 'cwd';
+  const hint = isOnlyOwnBoard ? ' If the task is on another board, claim it there first or pass --board=<dir>.' : '';
+  return `Refused: task #${ctx.taskId} was not found on ${where || 'the team db'}.${hint}`;
+};
+
 // Rule key -> message. A rule fails when its test in buildRules returns true.
 const MESSAGES = {
   'args.all': () => 'Refused: -a/--all commits everything. List the files to commit.',
@@ -19,9 +31,11 @@ const MESSAGES = {
   'args.noFiles': () => 'Refused: no files listed. Usage: chemx commit <files...> -m <message> [--task=<id>]',
   'args.noMessage': () => 'Refused: a message is required (-m <message>).',
   'args.bothTaskForms': () => 'Refused: give --task or --no-task, not both.',
+  'args.bothSkipCi': () => 'Refused: give --skip-ci or --no-skip-ci, not both.',
   'task.missing': () => 'Refused: no task id. Put #<id> in the message, pass --task=<id>, or pass --no-task=<reason>.',
   'task.emptyReason': () => 'Refused: --no-task needs a non-empty reason.',
-  'task.unknown': (ctx) => `Refused: task #${ctx.taskId} was not found in the team db.`,
+  'task.unknown': unknownTaskMessage,
+  'board.unusable': (ctx) => `Refused: ${ctx.boardError}`,
   'files.unknown': (ctx) => `Refused: not tracked and not on disk: ${ctx.unknownFiles.join(', ')}.`,
   'files.outsideRepo': (ctx) => `Refused: outside this repository: ${ctx.outsideFiles.join(', ')}.`,
   'leases.foreign': (ctx) => `Refused: leased by another handle: ${ctx.leaseRefusals.map(formatLease).join('; ')}.`
@@ -40,8 +54,10 @@ const buildRules = (ctx) => {
       missingValue: parsed.missingValue.length > 0,
       noFiles: parsed.files.length === 0,
       noMessage: parsed.messages.length === 0 || parsed.messages[0].trim() === '',
-      bothTaskForms: hasNoTask && parsed.taskId !== null
+      bothTaskForms: hasNoTask && parsed.taskId !== null,
+      bothSkipCi: parsed.skipCi && parsed.noSkipCi
     },
+    board: { unusable: Boolean(ctx.boardError) },
     task: {
       missing: !hasTask && !hasNoTask,
       emptyReason: hasNoTask && parsed.noTask.trim() === '',

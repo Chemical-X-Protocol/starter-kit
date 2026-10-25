@@ -1,19 +1,19 @@
 /**
  * Chemical X Protocol: what `chemx commit` records in the team db (#2564).
- * The db is the one the coordination resolver picks for cwd (openTeamContext), the same db the
+ * The db is the one the coordination resolver picks for a directory (openTeamContext), the same db the
  * `chemx team` commands use, so a commit never writes team rows into a package db the resolver
- * would not read. Recording is best effort: a commit that already landed is never undone
+ * would not read. Which directory that is comes from board-resolve.js (#6750): the committer's claimed
+ * board or --board, else cwd. Recording is best effort: a commit that already landed is never undone
  * because the db was unavailable; the result says whether the event was recorded.
  */
 import fs from 'node:fs';
 import { openTeamContext, resolveTeamDbTarget } from '../team/coordination-db.js';
-import { getTask, postFeedEvent, registerAgent } from '../team/team-db.js';
+import { postFeedEvent, registerAgent } from '../team/team-db.js';
 import { releaseFileLock } from '../team/team-db-locks.js';
-import { resolveTaskRef } from '../team/task-ref.js';
 
 const hasResolvedDb = (target) => !target.refused && fs.existsSync(target.dbPath);
 
-/** The team db for cwd, or null when sqlite is unavailable, the call is refused (spec process) or the resolved db file does not exist (never creates one). */
+/** The team db for a directory (a cwd or a board root), or null when sqlite is unavailable, the call is refused (spec process) or the resolved db file does not exist (never creates one). */
 export const openCommitDb = (cwd) => {
   const target = resolveTeamDbTarget(cwd);
   if (!hasResolvedDb(target)) return null;
@@ -23,17 +23,6 @@ export const openCommitDb = (cwd) => {
     return null;
   }
 };
-
-/** The repo ('.' = the coordination root) cwd belongs to, for resolving task ids. */
-export const repoOf = (cwd) => resolveTeamDbTarget(cwd).repo;
-
-/** The board task id that a typed #N means in repo (aliases first), or null when the board has no such task. */
-export const boardTaskId = (db, taskId, repo) => {
-  const resolved = resolveTaskRef(db, taskId, { repo });
-  return getTask(db, resolved.id) ? resolved.id : null;
-};
-
-export const taskExists = (db, taskId, repo = '.') => boardTaskId(db, taskId, repo) !== null;
 
 const eventAuthor = (committer) => committer || '@system';
 
