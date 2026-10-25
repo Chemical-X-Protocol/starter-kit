@@ -23,6 +23,9 @@ export const SANITIZER_PATTERN = /^(intval|absint|floatval|doubleval|boolval|abs
 // APIs whose results are ids, objects, stored data or remote responses: taint stops there.
 export const TAINT_STOP_PATTERN = /^(wp_insert_\w+|wp_update_\w+|wp_create_user|get_user_by|get_userdata|get_post|get_posts|get_term|get_term_by|get_current_user_id|wp_get_current_user|get_option|get_site_option|get_transient|get_(post|user|term|comment)_meta|wp_remote_\w+|wp_safe_remote_\w+)$/;
 
+// Opt-in source 'payload': a parameter named like a hook or webhook payload. The caller (a hook, a bridge,
+// a REST route) is not visible here, so this is a name heuristic that only applies where a rule asks for it.
+const PAYLOAD_PARAMS = new Set(['payload']);
 const VALIDATORS = new Set(['wp_http_validate_url', 'wp_validate_redirect']);
 const HOST_SAFE = /^(home_url|admin_url|site_url|get_permalink|get_home_url|get_site_url|get_admin_url|network_\w+_url|rest_url|get_rest_url|plugins_url|content_url|includes_url|wp_login_url|get_term_link|get_author_posts_url)$/;
 const HOST_PASS = /^(esc_url_raw|esc_url|trim|ltrim|rtrim|urldecode|rawurldecode|sanitize_text_field|sanitize_url|wp_unslash|stripslashes|strval|html_entity_decode|htmlspecialchars_decode|wp_specialchars_decode|strtolower|untrailingslashit|trailingslashit|wp_sanitize_redirect|set_url_scheme)$/;
@@ -215,7 +218,7 @@ function makeEval(idx, opts, host) {
   const mode = opts.mode === 'last' ? 'last' : 'union';
   const key = `${host ? 'host' : 'value'}|${mode}|${[...list].sort().join(',')}`;
   if (!idx.caches.has(key)) idx.caches.set(key, new Map());
-  return { idx, mode, superglobal: list.includes('superglobal'), request: list.includes('request'), cache: idx.caches.get(key) };
+  return { idx, mode, superglobal: list.includes('superglobal'), request: list.includes('request'), payload: list.includes('payload'), cache: idx.caches.get(key) };
 }
 
 function isSourceNode(node, ev) {
@@ -239,7 +242,9 @@ function memoDef(def, ev, compute) {
 function variableTaint(node, ev) {
   const name = varName(node);
   if (!name) return false;
-  return reachingDefs(ev.idx, name, posOf(node), ev.mode).some((def) => memoDef(def, ev, (expr) => derived(expr, ev)));
+  const defs = reachingDefs(ev.idx, name, posOf(node), ev.mode);
+  const isPayload = ev.payload && PAYLOAD_PARAMS.has(name) && defs.some((def) => def.kind === 'param');
+  return isPayload || defs.some((def) => memoDef(def, ev, (expr) => derived(expr, ev)));
 }
 
 function isWpdbReceiver(inner) {

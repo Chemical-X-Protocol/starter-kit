@@ -180,6 +180,24 @@ test('the callee file alone reports nothing: its parameter is not a request valu
   assert.deepEqual(hits, []);
 });
 
+// Task #6710: a parameter named $payload is a hook or webhook payload source for file_put_contents()
+// (INPUT) and for URL sinks (SSRF, and the redirect rule shares that source list). Other input sinks and other parameter names are not widened.
+const withPayload = (body) => run(`<?php\nfunction demo_handle( array $payload ) {\n${body}\n}\n`).map((record) => record.rule);
+
+test('payload parameter: decoded bytes written to disk fire the input rule', () => {
+  const rule = 'SECURITY_WP_UNSANITIZED_INPUT';
+  assert.deepEqual(withPayload(`$raw = base64_decode( preg_replace( '#^data:#', '', $payload['img'] ) );\nfile_put_contents( '/tmp/x.png', $raw );`), [rule]);
+  assert.deepEqual(withPayload(`file_put_contents( '/tmp/x.txt', 'fixed' );`), []);
+  assert.deepEqual(withPayload(`update_option( 'k', $payload['v'] );`), []);
+  assert.deepEqual(withPayload(`$payload = array( 'a' => 1 );\nfile_put_contents( '/tmp/x', $payload['a'] );`), []);
+});
+
+test('payload parameter: a URL taken from the payload fires the SSRF rule, a local payload does not', () => {
+  const url = `$u = ! empty( $payload['download_url'] ) ? esc_url_raw( $payload['download_url'] ) : null;\nwp_remote_get( $u, array( 'timeout' => 5 ) );`;
+  assert.deepEqual(withPayload(url), ['SECURITY_WP_SSRF']);
+  assert.deepEqual(withPayload(`$payload = array( 'url' => 'https://example.com' );\nwp_remote_get( $payload['url'] );`), []);
+});
+
 test('findings are anchored on the sink line', () => {
   const [hit] = run(`<?php\n\nfunction demo( $r ) {\n\nwp_redirect( $_GET['t'] );\n}\n`);
   assert.equal(hit.line, 5);

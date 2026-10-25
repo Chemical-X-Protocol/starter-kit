@@ -36,6 +36,13 @@ const REDIRECT = 'SECURITY_WP_OPEN_REDIRECT';
 // held-out third-party plugins 1 SSRF hit (no validator involved, 0 new), card vault a708d6a gains
 // class-card-vault-catalog-rest.php:640 (true, review #18). The rule stays default-off. Not covered:
 // an inline wp_remote_get( wp_http_validate_url( $u ) ) and options built outside an array literal.
+// Task #6710 (2026-10-25): a function parameter named $payload (a hook, webhook or bridge handler argument) is
+// now a source for URL sinks and, for file_put_contents() only, for the input rule. It is a name heuristic;
+// other input sinks (update_option, echo, ...) were left out because it added 6 corpus input hits, 0 true.
+// Remeasured, same method as above, one reader: corpus input 0 new hits, SSRF 1 new (hookshot-bridges.php:665,
+// a release-asset URL from an HMAC-verified webhook, counted false: corpus SSRF 8/9); held-out third-party
+// plugins 0 new input, SSRF or redirect hits (figures below unchanged); card vault a708d6a gains
+// products.php:169 (review #66) and hookshot-bridge.php:120,138 (review #72), all true. Still default-off.
 export const RULE_DEFAULTS = {
   [INPUT]: { defaultOn: false, corpus: '8/9', heldOut: '7/31', measured: '2026-10-24' },
   [SSRF]: { defaultOn: false, corpus: '8/8', heldOut: '1/3', measured: '2026-10-24' },
@@ -67,8 +74,10 @@ const POST_WRITERS = new Set(['wp_insert_post', 'wp_update_post']);
 // $wpdb insert, update, replace and delete bind their values, so only the SQL-text methods are sinks.
 const WPDB_TEXT_METHODS = new Set(['query', 'get_results', 'get_var', 'get_row', 'get_col']);
 
-const BOTH_SOURCES = { sources: ['superglobal', 'request'], mode: 'union' };
+const BOTH_SOURCES = { sources: ['superglobal', 'request', 'payload'], mode: 'union' };
 const INPUT_OPTIONS = { sources: ['superglobal'], mode: 'last' };
+// file_put_contents() only: a hook or webhook payload parameter also counts as a source (task #6710).
+const FILE_WRITE_OPTIONS = { sources: ['superglobal', 'payload'], mode: 'last' };
 // A stand-in for `$_GET['x']`, planted as a parameter's definition to ask whether the parameter reaches a sink.
 const SEED = Object.freeze({
   kind: 'offsetlookup',
@@ -109,7 +118,7 @@ function functionSink(node, name) {
   const positions = FUNCTION_SINK_ARGS.get(name);
   if (POST_WRITERS.has(name)) return { label: `${name}() content`, args: postContentArgs(node) };
   const args = positions ? positions.map((i) => node.arguments[i]).filter(Boolean) : [];
-  return positions ? { label: `${name}()`, args } : null;
+  return positions ? { label: `${name}()`, args, fileWrite: name === 'file_put_contents' } : null;
 }
 
 function callSink(node) {
@@ -371,7 +380,8 @@ function checkInput(ctx, state, node) {
   if (!hasArgs) return;
   const data = state.dataFor(node);
   const parts = sink.args.flatMap(concatParts).filter((part) => !isJsonEncode(part));
-  const tainted = parts.some((part) => isRequestDerived(part, data.input(), INPUT_OPTIONS));
+  const options = sink.fileWrite ? FILE_WRITE_OPTIONS : INPUT_OPTIONS;
+  const tainted = parts.some((part) => isRequestDerived(part, data.input(), options));
   if (tainted) ctx.report(INPUT, node, HAZARDS.input(sink.label));
 }
 
