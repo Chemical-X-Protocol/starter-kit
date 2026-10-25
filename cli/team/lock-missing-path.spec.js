@@ -65,3 +65,14 @@ test('check and release warn on a missing path with the suggestion, without refu
   const fine = handleLockCommand(db, ['check', 'lanes.json'], { as: '@spec' }, false, cwd);
   assert.equal(fine.warning, undefined);
 });
+
+test('a missing path in a list is refused alone and the existing paths are leased (#6747)', (t) => {
+  const { root, db } = makeProject(t);
+  fs.writeFileSync(path.join(root, 'kit', 'other.json'), '{}\n');
+  const cwd = path.join(root, 'kit');
+  const res = handleLockCommand(db, ['lanes.json', 'kit/lanes.json', 'other.json'], { as: '@spec' }, false, cwd);
+  assert.deepEqual(res.results.map((one) => one.granted === true), [true, false, true]);
+  assert.equal(res.results[1].reason, 'path_not_found');
+  assert.equal(res.results[1].suggestion, 'lanes.json');
+  assert.equal(leaseCount(db), 2);
+});

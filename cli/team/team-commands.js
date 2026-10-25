@@ -23,6 +23,7 @@ import { runTriage } from './team-commands-triage.js';
 import { handleMigrateCommand } from './team-commands-migrate.js';
 import { parseRepoFlags, resolveTaskIdArgs } from './team-commands-repo.js';
 import { normalizeValueFlags, describeMissingValue } from './team-flag-values.js';
+import { scopeLockArgs } from './lock-targets.js';
 
 const TEAM_COMMANDS = ['status', 'task', 'lock', 'unlock', 'feed', 'post', 'inbox', 'dm', 'tokens', 'audit-run', 'triage', 'benchmark', 'train', 'migrate', 'route'];
 
@@ -74,7 +75,7 @@ const runSubCommand = (ctx, args, isCli, cwd) => {
   return { error: `Unknown team command: ${subCommand}` };
 };
 
-export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => {
+const runTeamCommand = (rawArgs, isCli, cwd) => {
   // The commit guard reads leases read-only and must not open (create, migrate) a team db first.
   const isStagedCheck = rawArgs[0] === 'lock' && rawArgs[1] === 'check-staged';
   if (isStagedCheck) return runCheckStagedArgs(rawArgs.slice(2), isCli, cwd);
@@ -126,4 +127,14 @@ export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => 
     return { error: resolved.refusal, refused: true };
   }
   return runSubCommand(ctx, { ...args, positionals: resolved.positionals, flags: resolved.flags }, isCli, cwd);
+};
+
+// `lock` and `unlock` take --root=<dir>: they run as if from that directory (lock-targets.js, #6747).
+export const runTeamCli = (rawArgs = [], isCli = false, cwd = process.cwd()) => {
+  const scoped = scopeLockArgs(rawArgs, cwd);
+  const isRefused = Boolean(scoped.error);
+  if (!isRefused) return runTeamCommand(scoped.args, isCli, scoped.cwd);
+  if (isCli) process.stderr.write(`\x1b[31m✕ ${scoped.message}\x1b[0m\n`);
+  if (isCli) process.exitCode = 1;
+  return { error: scoped.error };
 };

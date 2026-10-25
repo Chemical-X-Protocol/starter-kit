@@ -59,6 +59,7 @@ export const OPS_COMMANDS = [
       'chemx team task add "Implement dark mode toggle" --prio=1',
       'chemx team task claim 1 --as=@coder',
       'chemx team task show 12 --brief',
+      'chemx team lock src/a.js src/b.js --as=@coder',
       'chemx team task done 1 --as=@coder',
       'chemx team feed --from=@coder --type=lock',
       'chemx team status --mine'

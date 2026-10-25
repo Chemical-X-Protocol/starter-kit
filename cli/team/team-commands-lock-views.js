@@ -6,7 +6,7 @@
  *   renew <file>   extend the caller's own lease by one TTL; refused for anyone else
  */
 import { findForeignLease } from '../edit-locks.js';
-import { resolveSafePath } from '../path-scope.js';
+import { resolveLockTarget } from './lock-targets.js';
 import { getFileLockStatus, listActiveLeases, renewFileLock, adviseMissingPath } from './team-db-locks.js';
 import { contentionOf } from './lease-cap.js';
 import { clockTime } from './lease-lapse.js';
@@ -51,7 +51,7 @@ const describeHeld = (status, agentId) => {
 };
 
 export const runLockCheck = (db, file, agentId, flags, isCli, cwd) => {
-  const absPath = resolveSafePath(file, cwd);
+  const absPath = resolveLockTarget(db, file, cwd);
   const lease = findForeignLease(cwd, absPath, agentId);
   const isLocked = Boolean(lease);
   const held = isLocked ? null : describeHeld(getFileLockStatus(db, file, { cwd }), agentId);

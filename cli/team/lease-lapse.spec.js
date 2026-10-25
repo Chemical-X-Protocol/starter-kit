@@ -114,7 +114,7 @@ test('acquire prints the expiry time and that chemx activity renews it', (t) => 
   const out = captureStdout(() => handleLockCommand(db, ['acquire', 'src/a.js'], { as: '@spec-a' }, true, root));
   const expiresAt = db.prepare('SELECT expires_at FROM file_leases WHERE file_path = ?').get('src/a.js').expires_at;
 
-  assert.ok(out.includes(`It expires at ${clockTime(expiresAt)}.`), out);
+  assert.ok(out.includes(`src/a.js granted until ${clockTime(expiresAt).slice(0, 5)}`), out);
   assert.match(out, /Any chemx command run as this handle extends it to 5 minutes from then; with no chemx activity it lapses\./);
 });
 
@@ -129,7 +129,7 @@ test('acquire after a lapse says the earlier lease expired', (t) => {
   assert.ok(res.previousLapse.expiredAt < Date.now());
 
   const text = captureStdout(() => handleLockCommand(db, ['acquire', 'src/a.js'], { as: '@spec-a' }, true, root));
-  assert.ok(text.includes('Acquired lock'), 'a renewed acquire by the holder still succeeds');
+  assert.ok(text.includes('src/a.js granted until'), 'a renewed acquire by the holder still succeeds');
 });
 
 test('an edit by the former holder of a lapsed lease whose row is still there re-acquires it and says so', (t) => {
