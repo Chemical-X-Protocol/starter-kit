@@ -74,6 +74,7 @@ export const RULE_REGISTRY = {
 
   // Pillar 9, PHP and WordPress (ruleset 7, design spec 4). isDefaultOff follows each family's
   // measured RULE_DEFAULTS in cli/php/: off when corpus or held-out precision is under 80%.
+  // Severity here is the floor: a hit whose callback reaches a record or session write is reported HIGH (task #6712).
   SECURITY_WP_PUBLIC_WRITE_ROUTE: {
     pillar: PILLARS.PILLAR_9,
     severity: 'MEDIUM',

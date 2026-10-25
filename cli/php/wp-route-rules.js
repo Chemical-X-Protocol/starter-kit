@@ -20,6 +20,11 @@ export const RULE_DEFAULTS = {
   // Task #6696 (2026-10-25) narrowed the guard: an auth-like call used only as data, and verify_/validate_ methods
   // named for business data, no longer count. That added 3 real corpus hits (card vault a708d6a /pos/checkout and
   // /pos/verify-payment, quests contact log) and no held-out hit.
+  // Task #6712: severity is HIGH when any effect within 2 hops is a record or session write by name (wp_insert_*,
+  // wp_update_*, wp_delete_*, wp_create_user, login cookie calls, $wpdb insert/update/delete/replace), else MEDIUM.
+  // On the 25 corpus shapes 8 weigh HIGH (6 real, 2 intentional) and 17 MEDIUM. Not lifted: card vault a708d6a
+  // /pos/checkout and /pos/verify-payment (order writes are WooCommerce $order->save() calls, no named write) and
+  // /scan-card, /grade-card (outbound requests only). Precision figures below are unchanged by the split.
   [WRITE_ROUTE]: { defaultOn: true, corpus: '22/25 directive, 14/25 real holes', heldOut: '1/1', measured: '2026-10-25' },
   [NO_PERMISSION]: { defaultOn: true, corpus: '0 hits of 570 endpoints', heldOut: '0 hits on 281 endpoints (akismet, WooCommerce controllers and API)', measured: '2026-10-24' },
   [READ_EFFECT]: { defaultOn: false, corpus: '5/8', heldOut: 'not labelled (5 hits unlabelled: card vault 4, WooCommerce 1)', measured: '2026-10-24' },
@@ -49,6 +54,10 @@ function inspectCallback(ctx, rel, target) {
   return { effects, guards };
 }
 
+// Task #6712: a record or session write (new post, user or table row, login cookie) is HIGH; options, meta,
+// transients, mail and outbound requests stay MEDIUM. A name match only: update_post_meta( 'paid' ) stays MEDIUM.
+const RECORD_WRITE = /^wp_(insert|update|delete)_(?!option|site_option)|^(wp_create_user|wp_set_auth_cookie|wp_set_current_user|wp_signon|insert|update|delete|replace)$/;
+const severityOf = (effects) => (effects.some((e) => RECORD_WRITE.test(String(e.name).toLowerCase())) ? 'HIGH' : 'MEDIUM');
 const isLogoutOnly = (effects) => effects.every((e) => String(e.name).toLowerCase() === 'wp_logout');
 const where = (effect) => `${effect.name}() at ${effect.file}:${effect.line}`;
 const verbList = (endpoint) => endpoint.methods.verbs.join(', ');
@@ -76,7 +85,7 @@ function checkWrite(ctx, rel, seen, route, endpoint) {
   const [effect] = effects;
   const hazard = `REST route ${routeName(route)} accepts ${verbList(endpoint)} with a public permission_callback (${endpoint.permission.kind}), and its callback ${target.id} reaches ${where(effect)} with no auth-like call found within ${HOPS} hops (a name match, not a proof). Check a capability, nonce or signature, or mark the route intentionally public with chemx-allow and a reason.`;
   reportOnce(seen, ctx, WRITE_ROUTE, endpoint.permission.line, hazard, {
-    severity: 'MEDIUM',
+    severity: severityOf(effects),
     crossFile: crossFileOf(rel, endpoint, effect),
     evidence: `callback ${target.id} at ${target.file}:${target.line}; ${where(effect)}`,
   });

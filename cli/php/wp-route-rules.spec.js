@@ -33,6 +33,16 @@ test('the write rule is MEDIUM, names the effect, and is not crossFile in one fi
   assert.match(hit.evidence, /demo_save at demo\.php:/);
 });
 
+test('write severity: record and session writes are HIGH, option, meta, transient, mail and outbound writes MEDIUM', () => {
+  const severity = (body) => hits(post(), `function demo_cb() { ${body} }`).filter((r) => r.rule === WRITE).map((r) => r.severity);
+  for (const body of ["wp_insert_post( array() );", "wp_create_user( 'a', 'b' );", "wp_delete_post( 1 );", "global $wpdb; $wpdb->insert( 't', array() );", "update_option( 'a', 1 ); wp_insert_post( array() );"]) {
+    assert.deepEqual(severity(body), ['HIGH'], body);
+  }
+  for (const body of ["update_option( 'a', 1 );", "update_post_meta( 1, 'a', 1 );", "set_transient( 'a', 1 );", "wp_mail( 'a@example.test', 's', 'b' );", "wp_remote_post( 'https://api.example.test' );"]) {
+    assert.deepEqual(severity(body), ['MEDIUM'], body);
+  }
+});
+
 test('write verbs from constants and arrays fire; read verbs and a missing methods key do not', () => {
   const write = (methods) => hits(post("'demo_cb'", "'__return_true'", methods), "function demo_cb() { update_option( 'a', 1 ); }").filter((r) => r.rule === WRITE);
   for (const methods of ["WP_REST_Server::CREATABLE", "'PUT'", "'GET, DELETE'", 'WP_REST_Server::ALLMETHODS', "array( WP_REST_Server::READABLE, 'PATCH' )"]) {
