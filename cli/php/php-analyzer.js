@@ -21,6 +21,7 @@ import { wpNonceRegistration, RULE_DEFAULTS as NONCE_DEFAULTS } from './wp-nonce
 import { wpSqlRegistration, RULE_DEFAULTS as SQL_DEFAULTS } from './wp-sql.js';
 import { wpRequestFlowRegistration, RULE_DEFAULTS as REQUEST_FLOW_DEFAULTS } from './wp-request-flow.js';
 import { wpOutputRegistration, RULE_DEFAULTS as OUTPUT_DEFAULTS } from './wp-output.js';
+import { wpAuthFiltersRegistration, RULE_DEFAULTS as AUTH_FILTER_DEFAULTS } from './wp-auth-filters.js';
 
 /**
  * AI_SLOP_ECHO_COMMENT matched 7 of 12 labelled PHP hits (58% precision, spec section 2.4),
@@ -31,7 +32,7 @@ export const PHP_DROPPED_TEXT_RULES = Object.freeze(['AI_SLOP_ECHO_COMMENT']);
 /** Every PHP rule family's measured default (spec 3.3): { RULE_ID: { defaultOn, corpus, heldOut, measured } }. */
 export const PHP_RULE_DEFAULTS = Object.freeze({
   ...METRICS_DEFAULTS, ...CONTROL_FLOW_DEFAULTS, ...CATCH_DEFAULTS, ...LOGGING_DEFAULTS, ...DANGEROUS_DEFAULTS,
-  ...ROUTE_DEFAULTS, ...NONCE_DEFAULTS, ...SQL_DEFAULTS, ...REQUEST_FLOW_DEFAULTS, ...OUTPUT_DEFAULTS,
+  ...ROUTE_DEFAULTS, ...NONCE_DEFAULTS, ...SQL_DEFAULTS, ...REQUEST_FLOW_DEFAULTS, ...OUTPUT_DEFAULTS, ...AUTH_FILTER_DEFAULTS,
 });
 
 const isOffForPhpOnly = ([rule, measured]) => measured.defaultOn === false && RULE_REGISTRY[rule]?.isDefaultOff !== true;
@@ -57,6 +58,7 @@ const GENERIC_PASSES = [
 /** Passes that run only when ctx.wp.isWordPress (each registration sets isWordPress: true). */
 const WORDPRESS_PASSES = [
   ...wpRouteRegistrations, wpNonceRegistration, wpSqlRegistration, wpRequestFlowRegistration, wpOutputRegistration,
+  wpAuthFiltersRegistration,
 ];
 
 /** The shipped pass list, in run order. A pass is { name, rules: [ids it can emit], isWordPress?: true, run(ctx) }. */

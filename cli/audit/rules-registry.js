@@ -120,6 +120,12 @@ export const RULE_REGISTRY = {
     needs: 'standard',
     directive: 'Verify a nonce (check_ajax_referer, check_admin_referer or wp_verify_nonce) in admin-ajax and admin-post handlers that change state (Directive 9.D)'
   },
+  SECURITY_WP_AUTH_ERROR_CLEARED: {
+    pillar: PILLARS.PILLAR_9,
+    severity: 'MEDIUM',
+    needs: 'standard',
+    directive: 'Return the incoming error from a rest_authentication_errors callback, or authenticate the request with a real credential check; returning null or true for a failed request lets it through (Directive 9.D)'
+  },
   SECURITY_WP_SSRF: {
     pillar: PILLARS.PILLAR_9,
     severity: 'HIGH',

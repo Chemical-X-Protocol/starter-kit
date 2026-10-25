@@ -179,7 +179,7 @@ test('the shipped pass list: the generic passes, then the WordPress passes', () 
   assert.ok(DEFAULT_PASSES.slice(0, GENERIC.length).every((pass) => pass.isWordPress !== true));
   const wordpress = DEFAULT_PASSES.slice(GENERIC.length);
   assert.deepEqual(wordpress.map((pass) => pass.name),
-    ['wp-public-write-route', 'wp-rest-no-permission', 'wp-read-side-effect', 'wp-nonce', 'wp-sql', 'wp-request-flow', 'wp-output']);
+    ['wp-public-write-route', 'wp-rest-no-permission', 'wp-read-side-effect', 'wp-nonce', 'wp-sql', 'wp-request-flow', 'wp-output', 'wp-auth-filters']);
   assert.ok(wordpress.every((pass) => pass.isWordPress === true));
   assert.deepEqual(DEFAULT_PASSES.flatMap((pass) => pass.rules).sort(), Object.keys(PHP_RULE_DEFAULTS).sort());
 });

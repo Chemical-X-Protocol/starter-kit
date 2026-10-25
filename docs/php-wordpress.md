@@ -41,6 +41,7 @@ A path segment `wp-content/(plugins|mu-plugins|themes)/<name>/` also marks `<nam
 | `SECURITY_WP_REST_NO_PERMISSION_CALLBACK` | HIGH | on | A REST endpoint with no `permission_callback`, using WordPress core's own endpoint-array rules. |
 | `SECURITY_WP_PUBLIC_READ_SIDE_EFFECT` | HIGH | off | A public read-only route whose callback reaches a write or outbound request. 5 of 8 labelled hits were real. |
 | `SECURITY_WP_MISSING_NONCE` | HIGH | on | A `wp_ajax_*` or `admin_post_*` handler that reaches a state write with no nonce check within 2 hops. |
+| `SECURITY_WP_AUTH_ERROR_CLEARED` | MEDIUM | on | A callback on the `rest_authentication_errors` filter (closure, arrow function, `array( $this, name )` or a function name in the same file) that returns `null` or `true` and calls no credential check or `wp_set_current_user( 0 )`. A shape match: callbacks in other files or classes are not followed and which routes it affects is not checked. Corpus 6/6, held-out 2/2 (2 hits only). |
 | `SECURITY_WP_UNPREPARED_SQL` | HIGH, CRITICAL when request-derived | off | `$wpdb` queries whose SQL is not prepared and holds an unsafe value. |
 | `SECURITY_WP_UNSANITIZED_INPUT` | HIGH | off | A superglobal value reaching a sink in the same function with no sanitizer. |
 | `SECURITY_WP_SSRF` | HIGH | off | A request-controlled URL reaching an outbound HTTP or file function. |

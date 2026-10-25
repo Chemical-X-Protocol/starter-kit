@@ -8,6 +8,7 @@ import { ROUTES_FIXTURES } from './routes.fixtures.js';
 import { NONCE_FIXTURES } from './nonce.fixtures.js';
 import { SQL_FIXTURES } from './sql.fixtures.js';
 import { REQUEST_FLOW_FIXTURES } from './request-flow.fixtures.js';
+import { AUTH_FILTER_FIXTURES } from './auth-filters.fixtures.js';
 
 /** [familyName, fixtures] in merge order. */
 export const PHP_FIXTURE_FAMILIES = Object.freeze([
@@ -18,6 +19,7 @@ export const PHP_FIXTURE_FAMILIES = Object.freeze([
   ['nonce', NONCE_FIXTURES],
   ['sql', SQL_FIXTURES],
   ['request-flow', REQUEST_FLOW_FIXTURES],
+  ['auth-filters', AUTH_FILTER_FIXTURES],
 ]);
 
 export const PHP_FIXTURES = Object.freeze(Object.assign({}, ...PHP_FIXTURE_FAMILIES.map(([, fixtures]) => fixtures)));
