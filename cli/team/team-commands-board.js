@@ -6,6 +6,9 @@ import { toColumnar } from '../columnar.js';
 import { getSwarmStatus, queryFeed, postFeedEvent } from './team-db.js';
 import { getAgentMailbox, sendDirectMessage } from './team-db-mailbox.js';
 import { formatSwarmStatusCard, formatFeedTimeline, formatMailboxCard } from './team-format.js';
+import { DEFAULT_FEED_LIMIT, buildFeedFilter, formatFeedOneLines, clipEvents } from './team-feed-view.js';
+import { scopeStatusToAgent, buildStatusView } from './team-status-view.js';
+import { resolveAgentId } from './agent-identity.js';
 import { getSwarmTokenBreakdown, formatTokenBreakdownCard } from './team-tokens.js';
 import { runAblationComparison, formatAblationCard } from './team-memory.js';
 
@@ -19,34 +22,24 @@ const writeJsonOrCard = (value, flags, isCli, formatCard) => {
   return value;
 };
 
+// The blocked-task list prints only with --blockers; --mine scopes the board to the caller's handle.
 const runStatus = (db, flags, isCli) => {
-  const status = getSwarmStatus(db);
-  if (!flags.isJson) return writeJsonOrCard(status, flags, isCli, formatSwarmStatusCard);
-  const output = {
-    agents: status.agents,
-    tasks: status.tasks,
-    locks: {
-      active: status.locks.active,
-      waiting: status.locks.waiting,
-      leases: toColumnar(status.locks.leases, ['file_path', 'locked_by', 'expires_at'])
-    },
-    tokens: status.tokens,
-    blockedTasks: toColumnar(status.blockedTasks, ['id', 'title', 'assigned_agent_id', 'blocked_reason']),
-    recentFeed: toColumnar(status.recentFeed, ['id', 'timestamp', 'author_id', 'event_type', 'message'])
-  };
-  return writeJsonOrCard(output, flags, isCli, null);
+  const swarm = getSwarmStatus(db);
+  const status = flags.mine ? scopeStatusToAgent(db, swarm, resolveAgentId(flags.as)) : swarm;
+  const options = { blockers: Boolean(flags.blockers) };
+  if (!flags.isJson) return writeJsonOrCard(status, flags, isCli, (value) => formatSwarmStatusCard(value, options));
+  return writeJsonOrCard(buildStatusView(status, options), flags, isCli, null);
 };
 
+// Text is the newest 20 events as one line each (--full: whole messages); --json stays whole unless --oneline.
 const runFeed = (db, flags, isCli) => {
-  const events = queryFeed(db, {
-    since_id: flags.since,
-    thread_id: flags.thread,
-    task_id: flags.task,
-    event_type: flags.type,
-    agent_id: flags.agent
-  });
-  if (!flags.isJson) return writeJsonOrCard(events, flags, isCli, formatFeedTimeline);
-  const col = toColumnar(events, ['id', 'timestamp', 'author_id', 'recipient_id', 'event_type', 'file_path', 'message']);
+  const wantsText = !flags.isJson;
+  const defaultLimit = wantsText ? DEFAULT_FEED_LIMIT : undefined;
+  const filter = buildFeedFilter({ since: flags.since, thread: flags.thread, task: flags.task, type: flags.type, agent: flags.agent, from: flags.fromAgent, limit: flags.limit }, defaultLimit);
+  const events = queryFeed(db, filter);
+  if (wantsText) return writeJsonOrCard(events, flags, isCli, flags.full ? formatFeedTimeline : (list) => formatFeedOneLines(list, filter.limit));
+  const shown = flags.oneline ? clipEvents(events) : events;
+  const col = toColumnar(shown, ['id', 'timestamp', 'author_id', 'recipient_id', 'event_type', 'file_path', 'message']);
   return writeJsonOrCard(col, flags, isCli, null);
 };
 

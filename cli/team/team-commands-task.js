@@ -15,6 +15,7 @@ import { handleTaskSlotCommand, handleTaskTraceCommand } from './team-commands-v
 import { resolveCliAgent } from './team-commands-lock.js';
 import { resolveTaskTier } from './task-tier.js';
 import { resolveDependencyStates } from './task-detail-sections.js';
+import { describeTaskAdded, describeCommentPosted, taskAckFields, buildBriefView, formatTaskBriefCard } from './task-brief-view.js';
 import { buildCompletionOptions, describeCompletion, describeStatusUpdate, writeTaskResult } from './task-completion-output.js';
 import { refuseUnknownTask } from './team-task-guard.js';
 import { checkNeedsInput } from './team-needs.js';
@@ -46,6 +47,12 @@ const writeJsonOr = (value, flags, isCli, line) => {
   return value;
 };
 
+// The one-line acks of add and comment: --json prints a compact object of ids and short fields, not the text sent.
+const writeAck = (value, flags, isCli, line) => {
+  if (!isCli) return;
+  process.stdout.write(flags.isJson ? `${JSON.stringify(value)}\n` : `${line}\n`);
+};
+
 const runList = (ctx, flags, isCli) => {
   const listNeeds = checkNeedsInput(flags.needs);
   const hasListNeedsError = Boolean(listNeeds.error);
@@ -71,6 +78,14 @@ const runList = (ctx, flags, isCli) => {
   return page;
 };
 
+// --brief: title, status, tier, assignee, dependencies, parent and only the events after the creation event.
+const renderShow = (ctx, shown, flags, output) => {
+  const { task, events, dependencyStates, links } = shown;
+  if (flags.isJson) return `${JSON.stringify(output, null, 2)}\n`;
+  const card = flags.brief ? formatTaskBriefCard(task, events, dependencyStates) : formatTaskDetailCard(task, events, dependencyStates, buildLabelFor(task, loadModelRouting(ctx.root)));
+  return card + formatDuplicateLinks(links);
+};
+
 const runShow = (ctx, taskId, flags, isCli) => {
   if (!taskId) return fail(isCli, 'Task ID required: chemx team task show <id>', { error: 'taskId required' });
   const task = getTask(ctx.db, taskId);
@@ -78,10 +93,12 @@ const runShow = (ctx, taskId, flags, isCli) => {
   const events = queryFeed(ctx.db, { task_id: taskId });
   const dependencyStates = resolveDependencyStates(ctx.db, task);
   const links = duplicateLinks(ctx.db, taskId);
-  const output = { task, dependencyStates, events, activityCount: events.length, ...links };
-  if (!isCli) return flags.isJson ? output : { task, dependencyStates, events, ...links };
-  process.stdout.write(flags.isJson ? `${JSON.stringify(output, null, 2)}\n` : formatTaskDetailCard(task, events, dependencyStates, buildLabelFor(task, loadModelRouting(ctx.root))) + formatDuplicateLinks(links));
-  return flags.isJson ? output : { task, dependencyStates, events };
+  const view = flags.brief ? buildBriefView(task, events, dependencyStates) : { task, dependencyStates, events, activityCount: events.length };
+  const output = { ...view, ...links };
+  const returnsOutput = flags.isJson || flags.brief;
+  if (!isCli) return returnsOutput ? output : { task, dependencyStates, events, ...links };
+  process.stdout.write(renderShow(ctx, { task, events, dependencyStates, links }, flags, output));
+  return returnsOutput ? output : { task, dependencyStates, events };
 };
 
 const runComment = (ctx, positionals, flags, isCli) => {
@@ -92,7 +109,9 @@ const runComment = (ctx, positionals, flags, isCli) => {
   const authorHandle = flags.as || '@agent';
   registerAgent(ctx.db, { id: authorHandle, role: 'contributor' });
   const ev = postFeedEvent(ctx.db, { author_id: authorHandle, task_id: Number(taskId), event_type: flags.type || 'status_update', message: msg });
-  return writeJsonOr(ev, flags, isCli, `\x1b[32m✔\x1b[0m Posted update to task #${taskId}: ${msg}\n`);
+  const ack = { id: ev.id, task_id: ev.task_id, author_id: ev.author_id, event_type: ev.event_type };
+  writeAck(ack, flags, isCli, describeCommentPosted(taskId, ev));
+  return ev;
 };
 
 const runClaim = (ctx, taskId, flags, isCli) => {
@@ -235,7 +254,8 @@ const runCreate = (ctx, positionals, flags, titleWords, isCli, cwd) => {
     extra_files: extras.files
   });
   if (task) postFeedEvent(ctx.db, { author_id: authorHandle, task_id: task.id, event_type: 'task_created', message: `Created task #${task.id}: ${task.title}` });
-  return writeJsonOr(task, flags, isCli, `\x1b[32m✔\x1b[0m Created task #${task.id}: ${task.title} (repo ${task.repo})\n`);
+  writeAck(taskAckFields(task), flags, isCli, describeTaskAdded(task));
+  return task;
 };
 
 const runReconcile = (ctx, flags, isCli, cwd) => {

@@ -8,6 +8,7 @@
 import { openTeamContext, describeTeamDbFailure } from './coordination-db.js';
 import { formatTeamHelpCard } from './team-format.js';
 import { parseFlags } from './team-flags.js';
+import { parseViewFlags } from './team-view-flags.js';
 import { handleTrainCommand } from './team-commands-vds.js';
 import { handleLockCommand, handleUnlockCommand } from './team-commands-lock.js';
 import { runCheckStagedArgs } from './team-commands-lock-staged.js';
@@ -42,7 +43,7 @@ const parseArgs = (rawArgs) => {
   const titleWords = hasTerminator ? rawArgs.slice(terminatorIndex + 1) : [];
   const restArgs = optionArgs.slice(1);
   const { args: normalized, missing: missingValues } = normalizeValueFlags(restArgs);
-  const flags = { ...parseFlags(normalized), ...parseRepoFlags(normalized) };
+  const flags = { ...parseFlags(normalized), ...parseRepoFlags(normalized), ...parseViewFlags(normalized) };
   return { subCommand: optionArgs[0] || 'status', restArgs, flags, positionals: splitPositionals(normalized), titleWords, missingValues };
 };
 

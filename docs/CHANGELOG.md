@@ -8,6 +8,16 @@ This section was written from the day's commit subjects and their task titles. I
 
 ## Unreleased (main, 2026-10-24)
 
+### Board output diet (epic #6745, K4 #6749)
+
+Full reference: [coordination-db.md](coordination-db.md#reading-the-board-cheaply). Measured on the live board (characters): `team feed` 27,290 -> 2,564, `team status` 9,167 -> 3,912, `team task show` of the epic 8,643 -> 4,655, 275 with `--brief`.
+
+- `team task add` prints `#<id> added: <title>` (title cut at 100 characters, repo named when it is not the root) and never the description; `--json` prints a compact `{id, title, status, ...}` without it. `team task comment` prints `#<id>: comment <N> posted` (N is the feed event id) instead of echoing the comment; `--json` prints ids only. The MCP `create` and `comment` actions return the same fields plus an `ack` line instead of the whole row or event.
+- `team task show` renders the creation event as one line (it repeated the title, which was the whole brief on tasks filed with the text in the title). `--brief` prints title, status, tier, needs, priority, assignee, dependencies, parent and only the events after the creation event, with the description's length instead of its text. MCP `chemx_team_task` `show` takes `brief`, and its `action` enum now lists `show` and `comment`.
+- `team feed` prints the newest 20 events as one line each (message folded and cut at 120 characters) and gains `--from=@handle` and `--type=lock|status|post|task` (groups, or an exact event type, comma-separated), `--full` for whole messages and `--oneline` for `--json`; `--since=<event id>` and `--limit` already existed. `--json` keeps whole messages and its default of 50 rows. MCP `chemx_team_feed` takes `from`, `type` and `full`, and returns 20 clipped events by default.
+- `team status` counts blocked tasks but lists them only with `--blockers`; `--mine` keeps your open tasks, your leases and your own events. `team status --json` carries `blockedTasks` only with `--blockers` (a change for scripts that read it). MCP `chemx_team_status` takes `blockers` and `mine`.
+- New flags `--brief`, `--oneline`, `--full`, `--mine`, `--blockers` and `--from` are read by `cli/team/team-view-flags.js` (merged next to the repo flags in `team-commands.js`) and added to the team typo list in `cli/commands/unknown-flags.js`.
+
 ### PHP and WordPress audit (ruleset 7, epic #6429)
 
 Full reference: [php-wordpress.md](php-wordpress.md). The `.php` extension reaches every audit caller only once the language registration step (T16) is on `main`; until then the PHP modules are inert.

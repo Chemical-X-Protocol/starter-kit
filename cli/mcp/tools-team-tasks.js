@@ -12,6 +12,7 @@ import { claimWithIgnoreDeps } from '../team/claim-ignore-deps.js';
 import { resolveAgentId } from '../team/agent-identity.js';
 import { resolveTaskTier } from '../team/task-tier.js';
 import { resolveDependencyStates } from '../team/task-detail-sections.js';
+import { describeTaskAdded, describeCommentPosted, taskAckFields, buildBriefView, formatTaskBriefCard } from '../team/task-brief-view.js';
 import { checkNeedsInput } from '../team/team-needs.js';
 import { openTeamContext } from '../team/coordination-db.js';
 import { resolveTaskRef } from '../team/task-ref.js';
@@ -99,6 +100,8 @@ export const handleChemxTeamTask = async (rawArgs = {}, cwd = process.cwd()) => 
     if (!task) return { error: `Task #${args.taskId || args.id} not found`, ambiguity: notice };
     const events = queryFeed(db, { task_id: args.taskId || args.id });
     const dependencyStates = resolveDependencyStates(db, task);
+    // brief: header facts, the comments after the creation event, no description.
+    if (args.brief) return { ...buildBriefView(task, events, dependencyStates), ambiguity: notice, card: formatTaskBriefCard(task, events, dependencyStates) };
     return {
       task,
       dependencyStates,
@@ -112,12 +115,14 @@ export const handleChemxTeamTask = async (rawArgs = {}, cwd = process.cwd()) => 
   if (isCommentAction) {
     const authorHandle = args.agentId || '@agent';
     registerAgent(db, { id: authorHandle, role: 'contributor' });
-    return postFeedEvent(db, {
+    const posted = postFeedEvent(db, {
       author_id: authorHandle,
       task_id: Number(args.taskId || args.id),
       event_type: args.type || 'status_update',
       message: args.message || 'Status update'
     });
+    // The text sent is not echoed back: ids and a one-line ack.
+    return { id: posted.id, task_id: posted.task_id, author_id: posted.author_id, event_type: posted.event_type, ack: describeCommentPosted(posted.task_id, posted) };
   }
   const isCreateAction = action === 'create' || action === 'add';
   if (isCreateAction) {
@@ -154,7 +159,7 @@ export const handleChemxTeamTask = async (rawArgs = {}, cwd = process.cwd()) => 
         message: `Created task #${task.id}: ${task.title}`
       });
     }
-    return task;
+    return hasTask ? { ...taskAckFields(task), ack: describeTaskAdded(task) } : task;
   }
   const isClaimAction = action === 'claim';
   if (isClaimAction) {

@@ -66,6 +66,20 @@ test('queryFeed and status: archived rows are kept in the table but not listed',
   assert.equal(db.prepare('SELECT COUNT(*) as c FROM agent_feed').get().c, 3);
 });
 
+test('queryFeed: author and type filters keep archived rows hidden and read the newest rows first', () => {
+  const db = createDb();
+  const events = [
+    postFeedEvent(db, { author_id: '@a', event_type: 'lock_acquired', message: 'one' }),
+    postFeedEvent(db, { author_id: '@a', event_type: 'lock_released', message: 'two' }),
+    postFeedEvent(db, { author_id: '@b', event_type: 'lock_acquired', message: 'three' }),
+    postFeedEvent(db, { author_id: '@a', event_type: 'lock_acquired', message: 'four' })
+  ];
+  archive(db, events[3].id);
+  const mine = queryFeed(db, { author_id: '@a', event_type_prefixes: ['lock_'], limit: 1 });
+  assert.deepEqual(mine.map((e) => e.message), ['two'], 'newest visible row of the author, not the oldest');
+  assert.deepEqual(queryFeed(db, { event_types: ['lock_acquired'] }).map((e) => e.message), ['one', 'three']);
+});
+
 test('mailbox: archived DMs are neither listed nor counted unread', () => {
   const db = createDb();
   const kept = sendDirectMessage(db, { author_id: '@a', recipient_id: '@inbox-owner', message: 'real' });

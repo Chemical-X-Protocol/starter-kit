@@ -1,10 +1,23 @@
 import { formatTaskBriefLines, formatTelemetryLines } from './task-detail-sections.js';
+import { describeCreationNote } from './task-brief-view.js';
+import { clipText } from './team-feed-view.js';
 
-export const formatSwarmStatusCard = (status) => {
+// The caller's own slice of the board (team status --mine): open tasks and live leases.
+const formatMineLines = (mine) => {
+  const lines = ['', `  \x1b[1mMine (${mine.agentId}):\x1b[0m`];
+  const hasNothing = mine.tasks.length === 0 && mine.leases.length === 0;
+  if (hasNothing) lines.push('    \x1b[90m(no open tasks, no leases)\x1b[0m');
+  for (const task of mine.tasks) lines.push(`    \x1b[36m#${task.id}\x1b[0m [${task.status}] ${clipText(task.title)}`);
+  for (const lease of mine.leases) lines.push(`    \x1b[35mlease\x1b[0m ${lease.file_path}`);
+  return lines;
+};
+
+export const formatSwarmStatusCard = (status, { blockers = false } = {}) => {
   const a = status.agents;
   const t = status.tasks;
   const l = status.locks;
-  const blockedStr = t.blocked > 0 ? `\x1b[31m${t.blocked} blocked\x1b[0m` : '0 blocked';
+  const blockedHint = blockers ? '' : ' (--blockers lists them)';
+  const blockedStr = t.blocked > 0 ? `\x1b[31m${t.blocked} blocked\x1b[0m${blockedHint}` : '0 blocked';
   const waiterStr = l.waiting > 0 ? `\x1b[33m${l.waiting} in FIFO queue\x1b[0m` : '0 waiting';
   const lines = [
     '',
@@ -22,7 +35,9 @@ export const formatSwarmStatusCard = (status) => {
     const tok = status.tokens;
     lines.push(`  \x1b[1mTokens:\x1b[0m   ${tok.prompt.toLocaleString()} prompt │ ${tok.completion.toLocaleString()} comp │ ${tok.cached.toLocaleString()} cached │ \x1b[32m$${tok.cost_usd.toFixed(4)} est\x1b[0m`);
   }
-  const hasBlockedTasks = Boolean(status.blockedTasks?.length > 0);
+  const hasMine = Boolean(status.mine);
+  if (hasMine) lines.push(...formatMineLines(status.mine));
+  const hasBlockedTasks = blockers && Boolean(status.blockedTasks?.length > 0);
   if (hasBlockedTasks) {
     lines.push('', '  \x1b[1m\x1b[31m⚠ Active Blockers:\x1b[0m');
     for (const bt of status.blockedTasks) {
@@ -34,7 +49,7 @@ export const formatSwarmStatusCard = (status) => {
     lines.push('', '  \x1b[1mRecent Activity Feed:\x1b[0m');
     for (const ev of status.recentFeed.slice(0, 4)) {
       const timeStr = new Date(ev.timestamp).toLocaleTimeString();
-      lines.push(`    \x1b[90m[${timeStr}]\x1b[0m \x1b[36m${ev.author_id}\x1b[0m \x1b[90m(${ev.event_type})\x1b[0m: ${ev.message}`);
+      lines.push(`    \x1b[90m[${timeStr}]\x1b[0m \x1b[36m${ev.author_id}\x1b[0m \x1b[90m(${ev.event_type})\x1b[0m: ${clipText(ev.message)}`);
     }
   }
   lines.push(`\x1b[90m${'─'.repeat(54)}\x1b[0m\n`);
@@ -189,8 +204,10 @@ export const formatTaskDetailCard = (task, events = [], dependencyStates = [], r
       else if (ev.event_type === 'task_completed') { icon = '✅'; tag = 'completed'; }
       else if (ev.event_type === 'comment' || ev.event_type === 'status_update') { icon = '💬'; tag = 'update'; }
 
-      lines.push(`    \x1b[90m[${timeStr}]\x1b[0m ${icon} \x1b[36m${ev.author_id}\x1b[0m \x1b[90m(${tag})\x1b[0m`);
-      lines.push(`      ${ev.message}`);
+      const isCreation = ev.event_type === 'task_created';
+      const creationNote = isCreation ? describeCreationNote(ev, task) : '';
+      lines.push(`    \x1b[90m[${timeStr}]\x1b[0m ${icon} \x1b[36m${ev.author_id}\x1b[0m \x1b[90m(${tag})\x1b[0m${creationNote}`);
+      if (!isCreation) lines.push(`      ${ev.message}`);
     }
   }
 
@@ -206,11 +223,12 @@ export const formatTeamHelpCard = () => {
     '  \x1b[1mUsage:\x1b[0m chemx team <command> [options]',
     '',
     '  \x1b[1mCommands:\x1b[0m',
-    '    \x1b[32mstatus\x1b[0m                   Display swarm agent, task, and lock status card',
+    '    \x1b[32mstatus\x1b[0m [--mine] [--blockers]  Swarm card: --mine shows your tasks and leases, --blockers lists blocked tasks',
     '    \x1b[32mtask\x1b[0m [action]            Manage agent tasks (list, show, add, claim, done, update)',
     '    \x1b[32mlock\x1b[0m [acquire|release]   Acquire or release a mutual exclusion file lock',
     '    \x1b[32munlock\x1b[0m <file>            Release a file lock held by an agent',
-    '    \x1b[32mfeed\x1b[0m                     View swarm feed event timeline',
+    '    \x1b[32mfeed\x1b[0m [filters]            Newest 20 events, one line each (messages cut at 120 chars)',
+    '                                 --from=@h --type=lock|status|post|task --since=<id> --limit=<n> --oneline --full',
     '    \x1b[32mpost\x1b[0m <message>           Post broadcast message to swarm feed',
     '    \x1b[32minbox\x1b[0m [@agent]           View agent mailbox and notifications',
     '    \x1b[32mdm\x1b[0m <@agent> <msg>        Send direct message to another agent',
@@ -238,14 +256,14 @@ export const formatTaskHelpCard = () => {
     '',
     '  \x1b[1mActions:\x1b[0m',
     '    \x1b[32mlist\x1b[0m                         List open tasks, newest 20 (default action)',
-    '    \x1b[32mshow\x1b[0m <taskId>                Display full details and activity stream for a task',
-    '    \x1b[32madd\x1b[0m "<title>"                Create a new task in the queue',
+    '    \x1b[32mshow\x1b[0m <taskId> [--brief]     Display full details and activity stream for a task (creation event on one line)',
+    '    \x1b[32madd\x1b[0m "<title>"                Create a new task in the queue; prints "#<id> added: <title>"',
     '    \x1b[32mclaim\x1b[0m <taskId>              Claim an unassigned task for an agent',
     '    \x1b[32mhandoff\x1b[0m <taskId> <@to>      Pass a task to another agent (assignee or creator only); --with-locks also moves your live leases naming the task',
     '    \x1b[32mdone\x1b[0m <taskId>               Complete a task with automatic verification audit',
     '    \x1b[32mclose\x1b[0m <taskId>              End a task that will not be completed: --duplicate-of=<id> or --cancel=<reason>',
     '    \x1b[32mupdate\x1b[0m <taskId> [status]    Update task status: queued, in_progress, review, blocked, done or cancelled (anything else is refused)',
-    '    \x1b[32mcomment\x1b[0m <taskId> <msg>       Post a comment or status update to a task',
+    '    \x1b[32mcomment\x1b[0m <taskId> <msg>       Post a comment or status update; prints "#<id>: comment N posted" (N = feed event id)',
     '    \x1b[32mtriage\x1b[0m                    Generate tasks from AST architectural hazards',
     '    \x1b[32mreconcile\x1b[0m                 Auto-resolve tasks whose hazards have been fixed',
     '    \x1b[32mset-target\x1b[0m <id> <path>     Assign target file path to a task',
@@ -257,6 +275,7 @@ export const formatTaskHelpCard = () => {
     '    \x1b[90mAn option with a value takes it after a space or an equals sign: --prio 2 or --prio=2 (a value starting with - needs the = form)\x1b[0m',
     '    \x1b[33m--as\x1b[0m <@agent>            Agent handle (e.g. @agent-1)',
     '    \x1b[33m--status\x1b[0m <status>        Filter by status (queued, in_progress, review, blocked, done)',
+    '    \x1b[33m--brief\x1b[0m                  show: title, status, tier, assignee, deps, parent and only the comments after the description',
     '    \x1b[33m--all\x1b[0m                    List every status with no row cap',
     '    \x1b[33m--limit\x1b[0m <n>             Rows to show (default 20)',
     '    \x1b[33m--agent\x1b[0m <@agent>         Filter tasks assigned to agent',

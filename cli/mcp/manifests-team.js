@@ -10,7 +10,10 @@ export const TEAM_SUB_TOOLS = [
     inputSchema: {
       type: 'object',
       properties: {
-        compact: { type: 'boolean', description: 'Return minimal token summary' }
+        compact: { type: 'boolean', description: 'Return minimal token summary' },
+        blockers: { type: 'boolean', description: 'Also list the blocked tasks (default: only the blocked count)' },
+        mine: { type: 'boolean', description: 'Scope to agentId (default: the caller): its open tasks, leases and own events' },
+        agentId: { type: 'string', description: 'Agent handle for mine (default: the caller)' }
       }
     }
   },
@@ -24,7 +27,10 @@ export const TEAM_SUB_TOOLS = [
         threadId: { type: 'number', description: 'Filter events by parent discussion thread ID' },
         taskId: { type: 'number', description: 'Filter events by linked task ID' },
         agentId: { type: 'string', description: 'Filter events where agent is author, recipient, or public' },
-        limit: { type: 'number', description: 'Maximum number of feed events to return (default: 50)' }
+        from: { type: 'string', description: 'Only events authored by this agent handle' },
+        type: { type: 'string', description: 'lock, task, status or post (a group), or an exact event type; comma-separated for several' },
+        full: { type: 'boolean', description: 'Return whole messages (default: each message cut to 120 characters on one line)' },
+        limit: { type: 'number', description: 'Maximum number of feed events to return (default: 20, newest)' }
       }
     }
   },
@@ -52,8 +58,10 @@ export const TEAM_SUB_TOOLS = [
       type: 'object',
       required: ['action'],
       properties: {
-        action: { type: 'string', enum: ['list', 'create', 'claim', 'done', 'block'], description: 'Task action' },
-        taskId: { type: 'number', description: 'Target task ID for claim, done, or block' },
+        action: { type: 'string', enum: ['list', 'show', 'create', 'comment', 'claim', 'done', 'block'], description: 'Task action. create and comment return ids and a one-line ack, not the text sent' },
+        taskId: { type: 'number', description: 'Target task ID for show, comment, claim, done, or block' },
+        brief: { type: 'boolean', description: 'show: title, status, tier, assignee, dependencies, parent and only the comments after the description (no description)' },
+        message: { type: 'string', description: 'Comment text (for comment)' },
         agentId: { type: 'string', description: 'Agent handle performing the action' },
         title: { type: 'string', description: 'Task title (for create)' },
         targetPath: { type: 'string', description: 'Target file path (for create)' },
