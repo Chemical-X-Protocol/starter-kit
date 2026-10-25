@@ -3,16 +3,56 @@
 // through the dependency graph (test-graph.js). A file the graph cannot pin down (computed
 // import(name), an unresolvable specifier) may load any changed file, so it and its dependents
 // are selected for every change, with that reason. When the graph cannot prove the selection
-// (manifests, lockfiles, runner/compiler configs, shared spec support or fixtures, deleted
-// modules, directories) the whole suite runs and `reason` says why: never a silent subset.
+// (manifests, lockfiles, runner/compiler configs, shared spec support, deleted modules,
+// directories) the whole suite runs and `reason` says why: never a silent subset. A changed fixture
+// narrows to the specs that read it (or list its directory) while every reader is a spec; a fixture
+// a shared helper reads, or nothing names, still runs the whole suite.
 import path from 'node:path';
 import { walkDependents } from './test-graph.js';
 
 export const SPEC_FILE = /\.(?:spec|test)\.[cm]?[jt]sx?$/;
 const MANIFEST = /(?:^|\/)(?:package\.json|package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|yarn\.lock|bun\.lockb?|\.npmrc|\.nvmrc|\.node-version)$/;
 const CONFIG = /(?:^|\/)(?:tsconfig[^/]*\.json|jsconfig\.json|[^/]+\.config\.[cm]?[jt]s|\.babelrc[^/]*|\.swcrc)$/;
-const SPEC_SUPPORT = /(?:^|\/)(?:spec-support|test-support|test-utils|__mocks__|fixtures|__fixtures__)\//;
+const SPEC_SUPPORT = /(?:^|\/)(?:spec-support|test-support|test-utils|__mocks__)\//;
+const FIXTURE_PATH = /(?:^|\/)(fixtures|__fixtures__)\/(.+)$/;
+const LISTS_DIRECTORY = /\b(?:readdirSync|readdir|opendirSync|globSync)\s*\(/;
 const SETUP_FILE = /(?:^|\/)(?:setup-?tests?|test-?setup|vitest\.setup|jest\.setup)\.[cm]?[jt]sx?$/;
+
+// Files that name `file` (by basename) in their text: readers of non-module files.
+export const readersOf = (file, graph) => {
+  const name = path.posix.basename(file);
+  return [...graph.texts.entries()].filter(([reader, text]) => reader !== file && text.includes(name)).map(([reader]) => reader);
+};
+
+// The folder a reader would name for a fixture: the one right under fixtures/, else "fixtures" itself.
+const fixtureFolder = (file) => {
+  const [, root, below] = file.match(FIXTURE_PATH);
+  const parts = below.split('/');
+  return parts.length > 1 ? parts[0] : root;
+};
+
+// Specs that list the directory a fixture sits in (readdir or glob, and the folder's name): they may
+// pick the file up without ever naming it.
+const sweepersOf = (file, graph) => {
+  const folder = fixtureFolder(file);
+  const sweeps = ([reader, text]) => reader !== file && SPEC_FILE.test(reader) && LISTS_DIRECTORY.test(text) && text.includes(folder);
+  return [...graph.texts.entries()].filter(sweeps).map(([reader]) => reader);
+};
+
+// Why a changed fixture cannot be narrowed to the specs that read it, or null when it can: someone
+// reads it and every reader is a spec or another fixture. A helper that reads it may serve any spec.
+const fixtureBlocker = (change, graph) => {
+  const file = change.path;
+  const isFixture = FIXTURE_PATH.test(file);
+  if (!isFixture) return null;
+  const isDeleted = change.status === 'D';
+  if (isDeleted) return `${file} was deleted (the specs that load it can no longer be told apart)`;
+  const readers = graph.files.has(file) ? [...walkDependents(graph, file).keys()] : readersOf(file, graph);
+  const helper = readers.find((reader) => !SPEC_FILE.test(reader) && !FIXTURE_PATH.test(reader));
+  if (helper) return `${file} changed (read by ${helper}, which any spec may use)`;
+  const hasReaders = readers.length > 0 || sweepersOf(file, graph).length > 0;
+  return hasReaders ? null : `${file} changed (no spec names it, so the specs that load it cannot be told apart)`;
+};
 
 const unprovableReason = (change, graph) => {
   const file = change.path;
@@ -22,6 +62,8 @@ const unprovableReason = (change, graph) => {
   if (isRunnerConfig) return `${file} changed (runner/compiler config applies to every spec)`;
   const isSharedSupport = SPEC_SUPPORT.test(file) || SETUP_FILE.test(file);
   if (isSharedSupport) return `${file} changed (shared spec support/fixtures)`;
+  const fixtureReason = fixtureBlocker(change, graph);
+  if (fixtureReason) return fixtureReason;
   const isDeletedModule = change.status === 'D' && !SPEC_FILE.test(file) && /\.(?:[cm]?[jt]sx?|vue|svelte)$/.test(file);
   if (isDeletedModule) return `${file} was deleted (its importers can no longer be resolved)`;
   const isDirectory = change.status !== 'D' && !graph.files.has(file) && !graph.isFile(file);
@@ -35,10 +77,11 @@ const colocatedSpecs = (file, suite) => {
   return [...suite].filter((spec) => path.posix.dirname(spec) === dir && path.posix.basename(spec).startsWith(`${stem}.`));
 };
 
-// Files that name `file` (by basename) in their text: readers of non-module files.
-const readersOf = (file, graph) => {
-  const name = path.posix.basename(file);
-  return [...graph.texts.entries()].filter(([reader, text]) => reader !== file && text.includes(name)).map(([reader]) => reader);
+// A fixture is also picked up by the specs that list its folder; returns how many it selected.
+const selectSweepers = (file, graph, select) => {
+  const isFixture = FIXTURE_PATH.test(file);
+  const sweepers = isFixture ? sweepersOf(file, graph) : [];
+  return sweepers.filter((sweeper) => select(sweeper, `lists the folder of ${file}`)).length;
 };
 
 const selectOpenDependents = (graph, select) => {
@@ -97,6 +140,7 @@ export const selectAffectedSpecs = ({ changes, graph, suite }) => {
         if (wasDependentSelected) hits++;
       }
     }
+    hits += selectSweepers(file, graph, select);
     const hasNoHits = hits === 0;
     if (hasNoHits) unaffected.push({ path: file, reason: isModule ? 'no spec in the suite depends on it through a resolved import' : 'no module imports or names it' });
   }

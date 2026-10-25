@@ -13,14 +13,18 @@ export const TEST_HELP = [
   '  file-name filter for vitest/jest). A target that matches nothing is inconclusive.',
   '',
   `${ANSI.BOLD}OPTIONS${ANSI.RESET}`,
-  '  -t <name>, -t=<name>     Only run tests whose name matches (alias: --filter)',
+  '  -t <name>, -t=<name>     Only run tests whose name matches (alias: --filter); extra words after it join the',
+  '                           name, paths and spec files among them stay targets (-t login a.spec.js)',
   '  --target=<path>          Explicit target (same as a positional)',
   '  --changed                Run only the specs affected by files changed vs HEAD (staged,',
-  '                           unstaged, untracked); --base=<rev> compares from merge-base',
+  '                           unstaged, untracked), plus the meta specs that scan the whole repo; on a clean',
+  '                           tree it compares with the merge base of origin/main (or origin/master) and says',
+  '                           so; --base=<rev> compares from the merge base with that revision instead',
   '  --related <files...>     Run only the specs affected by these files (specs or sources)',
   '  --depth=<n>              With --changed/--related: keep only specs within n import hops of the',
   '                           change (fast inner loop; deeper specs are listed as NOT run)',
-  '  --all                    Run both lanes (fast + slow): everything the test script runs',
+  '  --all                    Run both lanes (fast + slow): everything the test script runs; with --changed, the',
+  '                           affected set in both lanes (what CI runs for a pull request)',
   '  --slow                   Run only the slow lane (specs that spawn the CLI/MCP server,',
   '                           stress and timing specs), as declared in test-lanes.json',
   '  --profile [--top=<n>]    Wall time per spec file, slowest first (lane: default, --all, --slow)',
@@ -38,8 +42,9 @@ export const TEST_HELP = [
   `${ANSI.BOLD}WORKER BUDGET${ANSI.RESET}`,
   '  All chemx test runs on this machine share floor(cores/2) workers (CHEMX_TEST_CONCURRENCY',
   '  overrides). A light run takes free slots from os.tmpdir()/chemx-test-slots, passes the count to',
-  '  the runner (--test-concurrency / --maxWorkers) and waits when none is free, printing a status',
-  '  line to stderr every 30s (holders, queue position). Holders refresh a heartbeat every 10s; one',
+  '  the runner (--test-concurrency / --maxWorkers) and waits when none is free, printing one status line',
+  '  to stderr (holders, queue position, "[job <pid>: chemx wait --job=<pid>]") and again only when that',
+  '  changes. Holders refresh a heartbeat every 10s; one',
   '  silent for 60s is reclaimed even if its pid is alive. Over MCP, a call that finds no free slot',
   '  returns {queued:true, position, retryCommand} after about 1.5s instead of blocking; run the',
   '  retryCommand later. A light run that waited 60s+ posts a "test-queue" feed event when a team db resolves.',
@@ -49,9 +54,11 @@ export const TEST_HELP = [
   '  takes free slots at once and never waits behind a full suite. A run with no named targets (the full',
   '  suite), a typecheck and a build are heavy: each takes a ticket and runs one at a time, first come',
   '  first served, holding the budget less CHEMX_LIGHT_RESERVE slots (default 2; at least 1 each way when',
-  '  the budget is 2 or more) and telling the runner that many workers. The reserve stays free for light runs.',
+  '  the budget is 2 or more) and telling the runner that many workers. The reserve stays free for light runs, and',
+  '  its last slot for small ones: a light run naming smallRun (test-lanes.json, default 5) or more spec files, a',
+  '  directory or a glob never takes it, so a run naming one spec does not queue behind another agent\'s --changed.',
   '  Waiting prints "chemx: in line #<n> for <kind> (budget <b>, heavy <h>): running <kind> for <who> <age>;',
-  '  ahead: <kinds>" to stderr. A heavy request for the same project and command as a ticket that has',
+  '  ahead: <kinds>" to stderr once (again only when the line changes). A heavy request for the same project and command as a ticket that has',
   '  not started joins it: one run serves every caller, and each prints "chemx: shared run (owner <who>,',
   '  <n> joined)" (JSON: sharedRun {owner, joined, seq}). A request that comes after the run started',
   '  takes a ticket of its own. A chemx run inside a heavy run is covered by its slots and does not wait.',
@@ -115,15 +122,28 @@ export const describeSelection = (selection) => {
   const depthNote = hasDepth ? `; --depth=${selection.depth}: ${beyondCount} deeper spec(s) NOT run, so this is not proof (rerun without --depth before merging)` : '';
   const deferredCount = (selection.deferred || []).length;
   const deferredNote = deferredCount > 0 ? `; ${deferredCount} affected slow-lane spec(s) NOT run (add --all or use --slow)` : '';
-  return `Affected specs: ${selection.specs.length} of ${selection.suiteSize ?? '?'} for ${changedCount} changed file(s)${graph}${unpinnedNote}${depthNote}${deferredNote}`;
+  const metaCount = (selection.meta || []).length;
+  const metaNote = metaCount > 0 ? `; ${metaCount} meta spec(s) always run` : '';
+  return `Affected specs: ${selection.specs.length} of ${selection.suiteSize ?? '?'} for ${changedCount} changed file(s)${graph}${unpinnedNote}${metaNote}${depthNote}${deferredNote}`;
+};
+
+// One line when specs that need ripgrep were skipped because rg is not on PATH.
+export const describeRipgrepSkips = (count) => (count > 0 ? `ripgrep is not on PATH: ${plural(count, 'ripgrep-engine spec')} skipped, so the rg search engine went untested here` : null);
+
+// One line when chemx chose the base itself (a clean tree compares with the upstream default branch).
+export const describeBase = (selection) => {
+  const isDefaulted = Boolean(selection?.baseDefaulted);
+  return isDefaulted ? `Base: ${selection.base} (merge base ${selection.mergeBase}); the tree is clean, so --changed compares with it. Pass --base=<rev> to pick another` : null;
 };
 
 export const formatTestReport = (report) => {
   const isProfile = Boolean(report.profile);
   if (isProfile) return formatProfile(report.profile, report.top);
-  const selectionLine = describeSelection(report.selection);
-  const out = selectionLine ? [`  ${ANSI.DIM}${selectionLine}${ANSI.RESET}`] : [];
+  const dimLines = [describeBase(report.selection), describeSelection(report.selection)].filter(Boolean);
+  const out = dimLines.map((line) => `  ${ANSI.DIM}${line}${ANSI.RESET}`);
   out.push(`  ${formatTestHeadline(report)}`);
+  const rgNote = describeRipgrepSkips(report.skippedRipgrep);
+  if (rgNote) out.push(`  ${ANSI.DIM}${rgNote}${ANSI.RESET}`);
   const isFailure = report.status === STATUS.FAIL;
   if (isFailure) {
     for (const failure of report.failures.slice(0, 5)) {

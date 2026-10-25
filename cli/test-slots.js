@@ -10,14 +10,16 @@
 // This is the light lane. Heavy jobs (a full suite, a typecheck, a build) take turns in the line of
 // job-line.js and hold slots 0..heavy-1 while they run. A light run takes the reserve slots
 // heavy..budget-1 first and spills into the heavy slots only while no heavy ticket is live, so a
-// heavy job rarely waits for single-file runs. A slot file without `seq` is a light holder (old
-// chemx writes only those, lowest index first).
+// heavy job rarely waits for single-file runs. A big light run (many specs, a directory or a glob)
+// never takes the last slot, so a run naming a few specs always finds one. A slot file without
+// `seq` is a light holder (old chemx writes only those, lowest index first).
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { SLOT_OWNER_ENV, SLOT_DEFAULTS, defaultSlotsDir, resolveTestBudget, withMutex, isLive, readHolder, identityOf, slotFile, delay, everyBeat } from './slot-files.js';
 import { resolveLanes, liveTickets, currentLine } from './job-line-tickets.js';
 import { ticketLine } from './job-line-text.js';
+import { makeNotice } from './wait-notice.js';
 
 // The shared helpers moved to slot-files.js; re-exported so every existing import keeps working.
 export { SLOT_OWNER_ENV, defaultSlotsDir, resolveTestBudget, withMutex, isLive, readHolder } from './slot-files.js';
@@ -36,19 +38,26 @@ const describeHolder = (holder) => {
 
 const indicesFrom = (start, end) => Array.from({ length: Math.max(0, end - start) }, (_, offset) => start + offset);
 
+// The slot a big run leaves free (the last one) so a run naming a few specs never queues behind
+// full runs. A budget of 1 has none.
+const keptSlot = (budget) => (budget >= 2 ? budget - 1 : null);
+
 // Light runs look at the reserve (heavy..budget-1) first, so the heavy slots stay free for the next
-// heavy job, and only then at the heavy slots 0..heavy-1.
-const lightScanOrder = (budget, heavy) => [...indicesFrom(heavy, budget), ...indicesFrom(0, heavy)];
+// heavy job, and only then at the heavy slots 0..heavy-1. A big run (test-run-size.js) skips the kept slot.
+const lightScanOrder = (budget, heavy, isBig) => {
+  const order = [...indicesFrom(heavy, budget), ...indicesFrom(0, heavy)];
+  return isBig ? order.filter((index) => index !== keptSlot(budget)) : order;
+};
 
 // Claims up to `want` free slots, reserve first; a heavy slot only while no heavy ticket is live.
 // Returns the claimed files and the live records holding the rest.
-const claimFreeSlots = (dir, { budget, heavy }, want, identity, staleMs) => withMutex(dir, () => {
+const claimFreeSlots = (dir, { budget, heavy }, want, identity, staleMs, isBig) => withMutex(dir, () => {
   const taken = [];
   const holders = [];
   const now = Date.now();
   const token = randomUUID();
   const isLineLive = liveTickets(dir, now, staleMs).length > 0;
-  for (const index of lightScanOrder(budget, heavy)) {
+  for (const index of lightScanOrder(budget, heavy, isBig)) {
     const hasEnough = taken.length >= want;
     if (hasEnough) break;
     const file = slotFile(dir, index);
@@ -154,20 +163,24 @@ export const formatTestSlots = (snapshot) => {
   return `${lines.join('\n')}\n`;
 };
 
-// With no holder to name, the free slots are being kept for the heavy line.
-const holderList = (holders) => [...new Set(holders.map(describeHolder))].join('; ') || 'the heavy line';
+// With no holder to name, the free slots are being kept for the heavy line (and, for a big run, the last
+// one for small runs).
+const holderList = (holders, isBig = false) => [...new Set(holders.map(describeHolder))].join('; ') || (isBig ? 'the heavy line and the slot kept for small runs' : 'the heavy line');
 
-const waitLine = (budget, holders, position, waitedMs) => `chemx test: waiting for a test slot (budget ${budget} worker(s), queue position about ${position}, waited ${Math.round(waitedMs / 1000)}s, held by ${holderList(holders)}; set CHEMX_TEST_CONCURRENCY to change)\n`;
+const waitLine = (budget, holders, position, waitedMs, isBig) => `chemx test: waiting for a test slot (budget ${budget} worker(s), queue position about ${position}, waited ${Math.round(waitedMs / 1000)}s, held by ${holderList(holders, isBig)}; set CHEMX_TEST_CONCURRENCY to change)\n`;
 
 // Resolves to { workers, budget, queuedMs, nested, queued, release } once at least one slot is free.
-// A run takes min(want, free slots) workers. While queued it reports itself through onWait once,
-// then every statusMs (default 30s). Options:
+// A run takes min(want, free slots) workers. Options:
+//   onWait               the waiting line (default stderr, a terminal or not): said once with the job's
+//                        id, then only when the position or a holder changes, at most every statusMs
 //   waitTimeoutMs        give up after this long (default 10 min; 0 disables) with an error whose
 //                        code is SLOT_WAIT_TIMEOUT_CODE and whose message names the holders
 //   returnQueuedAfterMs  for hosts with a call timeout: after this long, resolve with
 //                        { queued: true, position, holders, retryCommand, workers: 0 } instead
 //                        of waiting; nothing is held and the caller must run retryCommand
 //   onLongWait           called with { queuedMs, budget, holders } after a grant that waited 60s+
+//   bigRun               true for a run naming many specs, a directory or a glob: it never takes the last
+//                        slot, which stays free for runs naming a few specs (test-run-size.js)
 export const acquireTestSlots = async (options = {}) => {
   const env = options.env || process.env;
   const budget = options.budget ?? resolveTestBudget(env);
@@ -183,8 +196,9 @@ export const acquireTestSlots = async (options = {}) => {
   const statusMs = options.statusMs ?? SLOT_DEFAULTS.statusMs;
   const waitTimeoutMs = options.waitTimeoutMs ?? DEFAULT_WAIT_TIMEOUT_MS;
   const identity = identityOf(options, env);
+  const isBig = options.bigRun === true;
   const start = Date.now();
-  let lastStatus = null;
+  const notice = makeNotice(statusMs, onWait);
   let lastBeat = 0;
   let lastHolders = [];
   const clearWaiter = () => fs.rmSync(waiterFile(dir), { force: true });
@@ -195,7 +209,7 @@ export const acquireTestSlots = async (options = {}) => {
   };
   try {
     for (;;) {
-      const { taken, holders } = claimFreeSlots(dir, lanes, want, identity, staleMs);
+      const { taken, holders } = claimFreeSlots(dir, lanes, want, identity, staleMs, isBig);
       lastHolders = holders;
       const hasTakenSlots = taken.length > 0;
       if (hasTakenSlots) {
@@ -213,14 +227,11 @@ export const acquireTestSlots = async (options = {}) => {
         lastBeat = now;
       }
       const position = liveWaiters(dir, now, staleMs).findIndex((record) => record.pid === process.pid) + 1 || 1;
-      const isStatusDue = lastStatus === null || now - lastStatus >= statusMs;
-      if (isStatusDue) {
-        onWait(waitLine(budget, holders, position, waitedMs));
-        lastStatus = now;
-      }
+      const situation = [position, ...holders.map((holder) => holder.token ?? holder.pid)].join('|');
+      notice(situation, () => waitLine(budget, holders, position, waitedMs, isBig), now);
       const hasTimedOut = waitTimeoutMs > 0 && waitedMs >= waitTimeoutMs;
       if (hasTimedOut) {
-        const error = new Error(`chemx test: queued too long (${Math.round(waitedMs / 1000)}s), held by ${holderList(holders)}`);
+        const error = new Error(`chemx test: queued too long (${Math.round(waitedMs / 1000)}s), held by ${holderList(holders, isBig)}`);
         error.code = SLOT_WAIT_TIMEOUT_CODE;
         throw error;
       }

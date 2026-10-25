@@ -9,6 +9,7 @@ import { acquireTestSlots, resolveTestBudget, SLOT_OWNER_ENV } from './test-slot
 import { resolveLanes } from './job-line.js';
 import { runInLine, lineOptionsOf } from './job-line-run.js';
 import { withWorkerCount, requestedWorkers } from './test-workers.js';
+import { isBigRun } from './test-run-size.js';
 
 // Best effort: a run that waited 60s+ for a slot leaves a feed event, so load shows in triage.
 // Never throws; the event is skipped when no coordination db resolves.
@@ -48,8 +49,9 @@ const runLight = async (plan, options, { env, budget, signal }) => {
   const want = requestedWorkers({ command: plan.command, cwd: plan.cwd, targets: plan.targets, budget });
   const handle = env.CHEMX_AGENT_ID ?? null;
   const onLongWait = options.onLongWait ?? ((info) => { void postLongWait(info, plan.cwd, handle); });
+  const bigRun = isBigRun({ cwd: plan.cwd, targets: plan.targets || [] });
   const grant = await acquireTestSlots({
-    env, budget, want, onWait: options.onWait, signal, onLongWait,
+    env, budget, want, bigRun, onWait: options.onWait, signal, onLongWait,
     task: options.task, waitTimeoutMs: options.waitTimeoutMs,
     returnQueuedAfterMs: options.returnQueuedAfterMs, retryCommand: options.retryCommand
   });

@@ -150,7 +150,7 @@ test('test-slots: a held slot records the handle and task, and its heartbeat is 
   }
 });
 
-test('test-slots: a queued run prints periodic status naming the holder, then fails at the wait timeout', async () => {
+test('test-slots: a queued run prints one status line naming the holder (not a repeat), then fails at the wait timeout', async () => {
   const dir = tempDir('chemx-slots-');
   const lines = [];
   try {
@@ -159,7 +159,7 @@ test('test-slots: a queued run prints periodic status naming the holder, then fa
       acquireTestSlots({ dir, budget: 1, env: {}, pollMs: 10, statusMs: 40, waitTimeoutMs: 200, onWait: (line) => lines.push(line) }),
       (error) => error.code === SLOT_WAIT_TIMEOUT_CODE && /queued too long.*@holder/.test(error.message)
     );
-    assert.ok(lines.length >= 2, `expected repeated status lines, got ${lines.length}`);
+    assert.equal(lines.length, 1, 'the situation never changed in 200 ms of 40 ms status periods, so the line is said once');
     assert.match(lines[0], /@holder task 9/);
     assert.equal(fs.readdirSync(dir).filter((name) => name.startsWith('wait-')).length, 0, 'the waiter file is cleaned up');
     first.release();

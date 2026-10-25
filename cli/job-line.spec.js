@@ -202,14 +202,15 @@ test('job-line: a nested run (SLOT_OWNER_ENV set) runs at once on one worker and
   }
 });
 
-test('job-line: the wait line names the running job and the line ahead, once and then every statusMs', withDir(async (dir) => {
+test('job-line: the wait line names the running job and the line ahead, once with the job id, and does not repeat while nothing changes', withDir(async (dir) => {
   const job = heldRun('x');
   const first = runHeavy({ kind: 'tests', key: 'k:a', ...options(dir, { env: { ...ENV, CHEMX_AGENT_ID: '@a' } }) }, job.run);
   await job.started;
   const lines = [];
   const second = runHeavy({ kind: 'build', key: 'k:b', ...options(dir, { onWait: (line) => lines.push(line) }) }, async () => 'b');
-  assert.deepEqual(lines, ['chemx: in line #2 for build (budget 6, heavy 4): running tests for @a 0s; ahead: tests\n']);
-  await until(() => lines.length >= 2, 'the wait line to repeat after statusMs');
+  assert.deepEqual(lines, [`chemx: in line #2 for build (budget 6, heavy 4): running tests for @a 0s; ahead: tests [job ${process.pid}: chemx wait --job=${process.pid}]\n`]);
+  await delay(FAST.statusMs * 5);
+  assert.equal(lines.length, 1, 'five status periods later the line has not changed, so it is not said again');
   job.finish();
   await Promise.all([first, second]);
 }));

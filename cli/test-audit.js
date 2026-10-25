@@ -18,6 +18,8 @@ import { checkNodeModules } from './verify-helpers.js';
 import { formatAgentJson } from './agent-json.js';
 import { sharedRunField, queuedFields } from './job-line-text.js';
 import { withUnsplitHint } from './args-unsplit-hint.js';
+import { foldFilterWords } from './test-args.js';
+import { writeJobRecord, jobSummary } from './job-record.js';
 
 const TEST_ARGS = {
   booleans: { '--json': 'json', '--raw': 'raw', '--allow-empty': 'allowEmpty', '--changed': 'changed', '--related': 'related', '--all-packages': 'allPackages', '--all': 'all', '--slow': 'slow', '--profile': 'profile', '--slots': 'slots', '--help': 'help', '-h': 'help' },
@@ -31,9 +33,14 @@ const earlyReport = (status, command, fields) => ({
   ...emptyCounts, executionError: null, failures: [], ...fields
 });
 
-const emit = (report, { isJson, isCli, shouldPrint }) => {
+// A run that ends the process leaves a record `chemx wait --job=<pid>` reads (job-record.js).
+const emit = (report, { isJson, isCli, shouldPrint, jobCommand }) => {
   if (shouldPrint) process.stdout.write(isJson ? `${formatAgentJson(report)}\n` : formatTestReport(report));
-  if (isCli) process.exit(toExitCode(report.status));
+  if (isCli) {
+    const exitCode = toExitCode(report.status);
+    writeJobRecord({ command: jobCommand, status: report.status, exitCode, summary: jobSummary(report) });
+    process.exit(exitCode);
+  }
   return report;
 };
 
@@ -122,9 +129,9 @@ const waitTimeoutReport = (error) => earlyReport(STATUS.INCONCLUSIVE, 'test', { 
 const expandRelated = (args) => args.flatMap((arg) => (String(arg).startsWith('--related=') ? ['--related', ...String(arg).slice('--related='.length).split(',').filter(Boolean)] : [arg]));
 
 export const runTestAudit = async (rawArgs = [], isCli = false, options = {}) => {
-  const parsed = parseCliArgs(expandRelated(rawArgs), TEST_ARGS);
+  const parsed = parseCliArgs(expandRelated(foldFilterWords(rawArgs, options.cwd || process.cwd())), TEST_ARGS);
   const isJson = Boolean(parsed.flags.json) || options.json === true;
-  const output = { isJson, isCli, shouldPrint: options.print !== false };
+  const output = { isJson, isCli, shouldPrint: options.print !== false, jobCommand: ['chemx test', ...rawArgs].join(' ') };
   const isHelp = Boolean(parsed.flags.help);
   if (isHelp) {
     if (output.shouldPrint) process.stdout.write(isJson ? `${JSON.stringify({ help: true, success: true })}\n` : TEST_HELP);
@@ -216,6 +223,7 @@ export const runTestAudit = async (rawArgs = [], isCli = false, options = {}) =>
     skipped: result.skipped,
     todo: result.todo,
     todoFailing: result.todoFailing,
+    ...(result.skippedRipgrep > 0 ? { skippedRipgrep: result.skippedRipgrep } : {}),
     errors: result.errors,
     executionError: result.executionError,
     failures: result.failures,

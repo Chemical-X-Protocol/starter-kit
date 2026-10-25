@@ -1,0 +1,14 @@
+### Test polish: `--changed` covers CI, the merge base, meta specs, small runs (epic #6745, K9c #6772)
+
+Eight agents wrote the same complaints about `chemx test`: `--changed` passed locally and CI failed on the slow lane or on a repo-scanning spec, a clean committed tree said "no changed files", a one-spec run queued for minutes behind other agents' `--changed` runs, and the wait notice repeated for a minute.
+
+- `chemx test --changed --all` runs the affected set in both lanes (what CI runs for a pull request); `--changed --slow` runs only its slow-lane part. Run `--changed --all` before a PR. (`--all` with `--changed` already worked in the code; it is now pinned by `cli/test-changed-scope.spec.js` and documented.)
+- On a clean tree with no `--base`, `--changed` compares with the merge base of `HEAD` and the upstream default branch (`origin/HEAD`, else `origin/main`, else `origin/master`) and prints `Base: origin/main (merge base 1a2b3c4); ...` in one line (JSON: `selection.baseDefaulted`, `selection.mergeBase`). A dirty tree and an explicit `--base` behave as before.
+- Meta specs always run on `--changed`: `test-lanes.json` has a new `meta` list (`{ glob, why }`), and a `// chemx: meta` comment in the first 30 lines of a spec does the same. The kit lists `team-spec-hygiene`, `team-help-golden`, `team-commands-help`, `docs-drift`, `package-hygiene`, `test-lanes-coverage`, `schema-flag-coverage` and `help`. A change no spec imports (a doc) still runs them.
+- A changed fixture under `fixtures/` or `__fixtures__/` selects the specs that import it, name it, or list its folder, instead of the whole lane, unless a non-spec file (a shared helper) reads it, nobody names it, or it was deleted.
+- The job line keeps its last slot for small runs: a light run naming `smallRun` (`test-lanes.json`, default 5) or more spec files, a directory or a glob never takes it, so `chemx test one.spec.js` no longer waits behind a `--changed` run that holds the other slots.
+- The wait notice prints once (to stderr, terminal or not), with `[job <pid>: chemx wait --job=<pid>]`, and again only when the position or a holder changes, at most every 30 s; the age of a holder is not a change.
+- New `chemx wait --job=<pid>`: waits for a backgrounded `chemx test` (`chemx test ... & chemx wait --job=$!`) and exits with its code. A test run that ends the process leaves `os.tmpdir()/chemx-jobs/<pid>.json` (swept after a day).
+- `chemx test -t should do x` joins the extra words into the name; paths, globs and spec files among them stay targets.
+- When `rg` is not on PATH the run summary says how many ripgrep-engine specs it skipped (JSON: `skippedRipgrep`); the one rg spec that skipped without a reason now gives it.
+- Docs: `docs/test-lanes.md` (base, meta specs, fixtures, small runs, waiting for a backgrounded run, arguments), the `chemx test` and `chemx wait` help and schema, and the AGENTS.md test loop.

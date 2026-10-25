@@ -31,6 +31,17 @@
     {"glob":"**/*.perf.spec.js","why":"naming convention: wall-clock or CPU budget specs are named *.perf.spec.js","convention":true},
     {"glob":"**/*.e2e.spec.js","why":"naming convention: end-to-end specs that start the UI or MCP server","convention":true}
   ],
+  "meta": [
+    {"glob":"cli/team/team-spec-hygiene.spec.js","why":"scans the source of every team and UI spec, so no import ever selects it"},
+    {"glob":"cli/team/team-help-golden.spec.js","why":"pins the assembled team help byte for byte against a golden file"},
+    {"glob":"cli/team/team-commands-help.spec.js","why":"checks every team command's help against the schema"},
+    {"glob":"cli/docs-drift.spec.js","why":"compares the docs, the help and the MCP manifest with the code"},
+    {"glob":"cli/package-hygiene.spec.js","why":"reads package.json, the lockfile and the published file list"},
+    {"glob":"cli/test-lanes-coverage.spec.js","why":"every spec file must sit in exactly one lane, so any new spec can break it"},
+    {"glob":"cli/commands/schema-flag-coverage.spec.js","why":"every flag a command handler reads must be in its schema entry"},
+    {"glob":"cli/help.spec.js","why":"runs every command's help against the schemas (slow lane: --changed --all runs it)"}
+  ],
+  "smallRun": 5,
   "excluded": [
     {"glob":"app/**/*.spec.ts","why":"vitest specs for the studio UI; the kit has no vitest runner configured"},
     {"glob":"blueprints/**/*.spec.ts","why":"vitest specs shipped as generator blueprints, not kit tests"},

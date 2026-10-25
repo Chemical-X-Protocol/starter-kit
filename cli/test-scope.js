@@ -6,6 +6,8 @@ import { listChangedFiles } from './test-changes.js';
 import { buildDependencyGraph } from './test-graph.js';
 import { selectAffectedSpecs, SPEC_FILE } from './test-select.js';
 import { suiteGlobs } from './test-command.js';
+import { loadLaneManifest } from './test-lanes.js';
+import { findMetaSpecs, withMetaSpecs } from './test-meta.js';
 
 const FIXTURE_DIR = /(?:^|\/)(?:fixtures|__fixtures__)\//;
 const toPosix = (p) => p.split(path.sep).join('/');
@@ -25,6 +27,9 @@ const relatedChanges = (root, files, cwd) => files.map((file) => {
   return { path: rel, status: fs.existsSync(path.join(root, rel)) ? 'M' : 'D' };
 });
 
+// The fields that say which base a listing compared with, and whether chemx chose it.
+const baseFields = (listing) => (listing.defaultedBase ? { base: listing.base, baseDefaulted: true, mergeBase: listing.mergeBase.slice(0, 7) } : { base: listing.base });
+
 const fullRun = (reason, extra = {}) => ({ targets: [], selection: { mode: 'full', reason, specs: [], unaffected: [], ...extra } });
 
 // Returns { targets, selection, emptyDetail? }. targets is [] for a full run; emptyDetail is set
@@ -38,14 +43,16 @@ export const resolveChangeScope = (root, { changed = false, base = null, related
   const label = changed ? `vs ${listing.base}` : 'in --related';
   const isUnchanged = changes.length === 0;
   if (isUnchanged) {
-    const hint = changed && !base ? '; pass --base=<rev> to include committed work' : '';
-    return { targets: [], selection: { mode: 'affected', reason: null, base: listing.base, changed: [], specs: [], unaffected: [] }, emptyDetail: `no changed files ${label}${hint}` };
+    const hint = changed && !base && !listing.defaultedBase ? '; pass --base=<rev> to include committed work' : '';
+    return { targets: [], selection: { mode: 'affected', reason: null, ...baseFields(listing), changed: [], specs: [], unaffected: [] }, emptyDetail: `no changed files ${label}${hint}` };
   }
   const graph = buildDependencyGraph(root, { useIndex });
   const suite = suiteOf(root, graph);
-  const result = selectAffectedSpecs({ changes, graph, suite });
+  const picked = selectAffectedSpecs({ changes, graph, suite });
+  const metaSpecs = changed ? findMetaSpecs(suite, graph.texts, loadLaneManifest(root)?.meta) : [];
+  const result = withMetaSpecs(picked, metaSpecs);
   const selection = {
-    ...result, base: listing.base, graph: graph.source, ...(graph.note ? { graphNote: graph.note } : {}),
+    ...result, ...baseFields(listing), graph: graph.source, ...(graph.note ? { graphNote: graph.note } : {}),
     changed: changes.map((c) => c.path), suiteSize: suite.size
   };
   const targets = result.mode === 'full' ? [] : result.specs.map((spec) => spec.path);

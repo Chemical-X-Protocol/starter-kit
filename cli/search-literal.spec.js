@@ -123,7 +123,7 @@ test('chemx q -g treats a dash-prefixed pattern as the pattern, not a flag value
   }
 });
 
-test('q -g: rg and js engines count searched, binary and large files the same way', { skip: !isRipgrepAvailable() }, () => {
+test('q -g: rg and js engines count searched, binary and large files the same way', { skip: isRipgrepAvailable() ? false : 'ripgrep not on PATH; the rg engine is not compared with the js one' }, () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-literal-parity-'));
   try {
     fs.mkdirSync(path.join(root, 'src'));

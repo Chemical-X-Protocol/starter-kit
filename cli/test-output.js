@@ -20,6 +20,11 @@ export const REASONS = Object.freeze({
   EMPTY_ALLOWED: 'EMPTY_ALLOWED'
 });
 
+// A spec that needs ripgrep says so in its skip reason (`skip: isRipgrepAvailable() ? false : 'ripgrep not on
+// PATH; ...'`), so a run on a machine without rg can say how many ripgrep-engine specs it did not run.
+export const RG_SKIP_REASON = 'ripgrep not on PATH';
+const RG_SKIP_LINE = /#\s*(?:SKIP\s+)?ripgrep not on PATH/;
+
 const TEST_FILE_NAME = /\.(?:test|spec)\.(?:c|m)?[jt]sx?$|\.(?:c|m)?[jt]sx?$/;
 
 // node --test reports a file that ran no tests (for example a name pattern matched nothing)
@@ -174,5 +179,6 @@ export const parseTestOutput = (stdout = '', stderr = '', exitCode = 0, options 
   });
 
   const todoFailing = findFailingTodos(lines).length;
-  return { success: verdict.status === STATUS.PASS, ...verdict, ...counts, todoFailing, failures };
+  const skippedRipgrep = cleanLines.filter((line) => RG_SKIP_LINE.test(line)).length;
+  return { success: verdict.status === STATUS.PASS, ...verdict, ...counts, todoFailing, skippedRipgrep, failures };
 };
