@@ -232,6 +232,9 @@ chemx write <file> --content=$'\nexport const b = 2;\n' --append
 
 # Literal text search; add paths to scope it. A missing path is an error, not an empty result.
 chemx q -g "useCardController" src/components docs
+# `a|b` is literal text: --regex searches a regular expression (RE2 subset). -l prints each matching file
+# once; -o --unique prints the distinct matched text. `chemx q <text>` with no symbol hit runs this search itself.
+chemx q -g "--gs-[a-z0-9-]+" --regex -o --unique
 
 # Check that every chemx command named in your markdown exists (names only: flags and arguments are
 # not checked, and nothing is run). Exits 1 with file:line for each failure.

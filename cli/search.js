@@ -16,11 +16,15 @@ import {
   handleHybridCommand,
   handleLiteralSearchCommand
 } from './search-commands.js';
+import { failWith } from './search-commands-literal.js';
 import { resolveTargetDir } from './path-scope.js';
 import { syncSearchIndex, syncSingleFileIndex } from './search-sync.js';
 import { parseSearchArgs, hasAnyFlag, readIntValue } from './search-args.js';
 import { resolveIndexRoot, resolveDefaultScopeDir } from './search-root.js';
 import { applyExitStatus, indexStatusOf, printIndexLine } from './search-output.js';
+import { readLiteralArgs } from './search-literal-argv.js';
+import { resolveSearchScope } from './search-scope-check.js';
+import { shouldFallBack, runLiteralFallback } from './search-q-fallback.js';
 import { ensureFresh } from './index-freshness.js';
 import { buildQueryPayload, printQueryPage } from './search-query-view.js';
 import { STATUS } from './result-status.js';
@@ -53,37 +57,35 @@ const failNoSqlite = (isJson, isCli) => {
   return [];
 };
 
-// --dir is relative to where chemx was started; the default scope is the project's own.
-const resolveScopeTarget = (parsed, cwd, root) => {
+// --dir is relative to where chemx was started; the default scope is the project's own. Positional
+// paths after a plain query are the same thing as --dir.
+const resolveScopeTarget = (parsed, cwd, root, pathArgs) => {
   const hasDirFlag = parsed.values.dir !== undefined;
   if (hasDirFlag) return parsed.values.dir === '' ? cwd : parsed.values.dir;
-  return path.resolve(root, resolveDefaultScopeDir(root));
-};
-
-// Positionals no mode reads: the pattern (or query) is one token, subcommands read two.
-const countUsedPositionals = (parsed, isLiteral) => {
-  const hasLiteralPattern = parsed.pattern !== null;
-  if (isLiteral) return parsed.positionals.length;
-  const isSubcommand = Boolean(SUBCOMMAND_MODES[parsed.positionals[0]]);
-  return isSubcommand ? 2 : 1;
+  const hasPathArgs = pathArgs.length > 0;
+  return hasPathArgs ? pathArgs : path.resolve(root, resolveDefaultScopeDir(root));
 };
 
 const PASSTHROUGH_PATTERN = /^(check|verify|fix|add(:.*)?|gen|g|generate)$/;
 
-const describeExtraArgs = (parsed, isLiteral) => {
+// Positionals no mode reads: a subcommand reads two (name and target), the other modes one. Words after
+// a plain query are paths (the scope check names a missing one), so only subcommand and flag modes ignore extras.
+const describeExtraArgs = (parsed, { isLiteral, isPathScoped }) => {
   const isPassthrough = !isLiteral && PASSTHROUGH_PATTERN.test(parsed.positionals[0] || '');
-  if (isPassthrough) return [];
-  const extra = parsed.positionals.slice(countUsedPositionals(parsed, isLiteral));
+  const isRead = isLiteral || isPassthrough || isPathScoped;
+  if (isRead) return [];
+  const isSubcommand = Boolean(SUBCOMMAND_MODES[parsed.positionals[0]]);
+  const extra = parsed.positionals.slice(isSubcommand ? 2 : 1);
   const hasExtra = extra.length > 0;
   return hasExtra ? [`ignored extra argument(s) ${extra.join(' ')} (quote a multi-word pattern)`] : [];
 };
 
-const reportArgProblems = (parsed, isJson, isLiteral) => {
+const reportArgProblems = (parsed, isJson, scopeKind) => {
   const problems = [
     ...parsed.unknownFlags.map((f) => `ignored unknown flag ${f}`),
     ...parsed.missingValues.map((f) => `missing value for ${f}`),
     ...parsed.invalidValues.map((v) => `ignored invalid ${v}`),
-    ...describeExtraArgs(parsed, isLiteral)
+    ...describeExtraArgs(parsed, scopeKind)
   ];
   const hasProblems = problems.length > 0;
   const shouldReportProblems = hasProblems && !isJson;
@@ -151,36 +153,16 @@ export const runSearch = async (rawArgs = [], isCli = true) => {
   const isJson = hasAnyFlag(parsed, ['--json', '-j', '--columnar']);
   const isColumnar = isJson && !isRawJson;
   const isLiteral = hasAnyFlag(parsed, ['-g', '--literal']);
-  const argProblems = reportArgProblems(parsed, isJson, isLiteral);
   const first = parsed.positionals[0] || '';
   const second = parsed.positionals[1] || '';
+  const { mode, isSubcommand } = resolveMode(parsed, first);
+  const isPathScoped = !isLiteral && mode === 'query' && !PASSTHROUGH_PATTERN.test(first);
+  const argProblems = reportArgProblems(parsed, isJson, { isLiteral, isPathScoped });
   const cwd = process.cwd();
 
   if (isLiteral) {
-    const pattern = parsed.pattern ?? first;
-    const pathArgs = parsed.pattern ? parsed.positionals : parsed.positionals.slice(1);
-    const hasPathArgs = pathArgs.length > 0;
-    const dir = parsed.values.dir ?? (hasPathArgs ? pathArgs : null);
-    const isLineOnly = hasAnyFlag(parsed, ['-l', '--lines']);
-    const isBare = hasAnyFlag(parsed, ['--bare', '-b']);
-    const context = parsed.values.context !== undefined ? readIntValue(parsed, 'context', 0) : 0;
-    const beforeContext = parsed.values.beforeContext !== undefined ? readIntValue(parsed, 'beforeContext', 0) : context;
-    const afterContext = parsed.values.afterContext !== undefined ? readIntValue(parsed, 'afterContext', 0) : context;
-    const defaultLimit = (isLineOnly || isBare) ? Number.MAX_SAFE_INTEGER : 20;
-    const limit = parsed.values.limit !== undefined ? readIntValue(parsed, 'limit', 20) : defaultLimit;
-
-    return handleLiteralSearchCommand(null, pattern, {
-      isCaseInsensitive: hasAnyFlag(parsed, ['-i', '--ignore-case']),
-      isLineOnly,
-      isBare,
-      context,
-      beforeContext,
-      afterContext,
-      isRegex: parsed.flags.has('--regex'),
-      isHidden: parsed.flags.has('--hidden'),
-      limit, isJson, isCli, cwd,
-      dir, argProblems
-    });
+    const { pattern, options } = readLiteralArgs(parsed);
+    return handleLiteralSearchCommand(null, pattern, { ...options, isJson, isCli, cwd, argProblems });
   }
 
   const passthrough = runPassthroughCommand(parsed, rawArgs, first, second, isJson, isCli);
@@ -189,9 +171,12 @@ export const runSearch = async (rawArgs = [], isCli = true) => {
 
   const startTime = Date.now();
   const root = resolveIndexRoot(cwd);
-  const { mode, isSubcommand } = resolveMode(parsed, first);
+  const pathArgs = isPathScoped ? parsed.positionals.slice(1) : [];
+  const hasPathArgs = pathArgs.length > 0;
+  const pathScope = hasPathArgs ? resolveSearchScope({ dir: pathArgs, query: first, root, cwd, quoteExample: 'chemx q' }) : {};
+  if (pathScope.error) return failWith(pathScope.error, { isJson, isCli, isQuiet: false, label: 'chemx q' });
   const session = ensureFresh(cwd, {
-    scope: resolveScopeTarget(parsed, cwd, root),
+    scope: resolveScopeTarget(parsed, cwd, root, pathArgs),
     reindex: parsed.flags.has('--reindex'),
     includeInternal: parsed.flags.has('--include-internal'),
     includeHeldScopes: mode !== 'query'
@@ -212,16 +197,21 @@ export const runSearch = async (rawArgs = [], isCli = true) => {
   }
 
   const query = first.trim();
-  const page = queryIndexPage(db, { query, tier: parsed.values.tier || null, limit, scopeDirs: index.scopeDirs });
+  const tier = parsed.values.tier || null;
+  const page = queryIndexPage(db, { query, tier, limit, scopeDirs: index.scopeDirs });
   const durationMs = Date.now() - startTime;
+  const hasFallback = shouldFallBack(page, query, tier);
+  const fallbackOptions = { cwd, dir: parsed.values.dir ?? (hasPathArgs ? pathArgs : null), limit: parsed.values.limit !== undefined ? limit : undefined, isJson };
   if (isJson) {
-    const payload = buildQueryPayload(page, { query, tier: parsed.values.tier || null, durationMs, isColumnar, index });
+    const literal = hasFallback ? runLiteralFallback(query, fallbackOptions) : undefined;
+    const payload = buildQueryPayload(page, { query, tier, durationMs, isColumnar, index, literal });
     process.stdout.write(JSON.stringify(payload) + '\n');
     if (isCli) process.exit();
     return isColumnar ? payload : page.results;
   }
   const isInspect = hasAnyFlag(parsed, ['--inspect', '-i']);
-  printQueryPage(page, { query, durationMs, isInspect, index });
+  printQueryPage(page, { query, durationMs, isInspect, index, hasFallback });
+  if (hasFallback) runLiteralFallback(query, fallbackOptions);
   if (isCli) process.exit();
   return page.results;
 };

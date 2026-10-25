@@ -172,7 +172,7 @@ export const suggestFlag = (unknown, candidates) => {
 
 const isKnownSearchFlag = (token, known) => {
   const name = token.split('=')[0];
-  const isShortKnown = ['-n', '-i', '-l', '-j', '-F', '-d', '-h'].includes(name);
+  const isShortKnown = ['-n', '-i', '-l', '-o', '-j', '-F', '-d', '-h'].includes(name);
   return isShortKnown || known.has(name) || GLOBAL_FLAGS.has(name);
 };
 

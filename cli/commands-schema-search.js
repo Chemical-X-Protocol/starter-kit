@@ -7,7 +7,7 @@ export const SEARCH_COMMANDS = [
     brief: 'Search symbols, components or text',
     usage: 'chemx q <query|symbol|file> [options]',
     summary: 'Architecture-aware AST codebase query engine powered by SQLite (.chemx/index.db).',
-    description: 'Indexes component tiers, exported symbols, props and hooks. Subcommands: refs <symbol>, deps <symbol|file>, context <target>. AST answers cover the printed index scope only (--dir to change it); exit 3 / status inconclusive means a stale or out-of-scope index, or no audit data.',
+    description: 'Indexes component tiers, exported symbols, props and hooks. Subcommands: refs <symbol>, deps <symbol|file>, context <target>. AST answers cover the printed index scope only (--dir to change it); exit 3 / status inconclusive means a stale or out-of-scope index, or no audit data. A query with no symbol hit runs the fixed-string search in the same call under "no symbols; fixed-string matches:". Paths after the query scope the answer (q useTheme src/hooks).',
     flags: [
       { flag: '--json', desc: 'Minified JSON format for LLM agents' },
       { flag: '--columnar', desc: 'Token-compact columnar format (cols/rows) for agent pipelines' },
@@ -21,11 +21,15 @@ export const SEARCH_COMMANDS = [
       { flag: '--hybrid', desc: 'BM25 keyword + feature-hash similarity, fused by RRF' },
       { flag: '--hazards', desc: 'Query architectural rule violations (with --rule=<id>, --critical)' },
       { flag: '--pack', desc: 'Assemble a token-packed context bundle for a target symbol or file' },
-      { flag: '-g, --literal', desc: 'Repo-wide fixed-string search (.gitignore honoured, submodules, docs), full path:line:text; --regex, --hidden, -- <pattern>' },
-      { flag: '-g <pattern> <path>...', desc: 'Scope a literal search to files or directories (relative to the project root); a missing path is an error, and with no path the whole project is searched. Quote a multi-word phrase: -g "foo bar"' },
-      { flag: '-n, --limit <N>', desc: 'Max results (q default 50, -g default 20); truncation is always stated' },
+      { flag: '-g, --literal', desc: 'Repo-wide fixed-string search (.gitignore honoured, submodules, docs), full path:line:text; "a|b" is literal text, add --regex for alternation; --hidden, -- <pattern>' },
+      { flag: '--regex', desc: 'With -g: the pattern is a regular expression in the RE2 subset (alternation, classes, anchors, counted repeats; no lookaround or backreferences, same answer with or without ripgrep)' },
+      { flag: '-l, --files-with-matches', desc: 'With -g: print each matching file once, nothing else (like rg -l)' },
+      { flag: '--lines', desc: 'With -g: path:line records, no text' },
+      { flag: '-o, --only-matching', desc: 'With -g: print only the matched text, one path:line:text record per match (--regex captures a token such as --gs-[a-z-]+)' },
+      { flag: '--unique', desc: 'With -g -o: print each distinct matched text once, sorted (implies -o); -n caps the list' },
+      { flag: '-g <pattern> <path>...', desc: 'Scope a literal search to files or directories (relative to where chemx runs); a missing path is an error, and with no path the whole project is searched. Quote a multi-word phrase: -g "foo bar". A plain query takes the same paths: q <symbol> <path>...' },
+      { flag: '-n, --limit <N>', desc: 'Max results (q default 50, -g default 20, none for --bare -l --lines -o --unique); truncation is always stated' },
       { flag: '--dir=<path>', desc: 'Scope to search (default: the project default, src/ or .)' },
-      { flag: '-l, --lines', desc: 'Line-only output (path:line)' },
       { flag: '--failing, --clean', desc: 'Filter capsules by architectural health status' },
       { flag: '--reindex', desc: 'Force re-index before running query' },
       { flag: '--bare, -b', desc: 'Raw match lines without headers, banners, ANSI, or tips' },
@@ -38,11 +42,13 @@ export const SEARCH_COMMANDS = [
       { flag: '--rule=<id>', desc: 'Rule id for --hazards' },
       { flag: '--critical', desc: 'Only critical hazards (with --hazards)' },
       { flag: '--progression, --degraded, --crystalline', desc: 'Accepted by the q argument parser (cli/search-args.js); effect set by the query mode' },
-      { flag: '--regex, --hidden, --full, --ignore-case, --fixed-strings', desc: 'Accepted by the q argument parser (cli/search-args.js); -F is --fixed-strings' }
+      { flag: '--hidden, --full, --ignore-case, --fixed-strings', desc: 'Accepted by the q argument parser (cli/search-args.js); -F is --fixed-strings' }
     ],
     examples: [
       'chemx q "badge"',
       'chemx q -g "useTheme" -l',
+      'chemx q -g "--gs-[a-z0-9-]+" --regex -o --unique',
+      'chemx q useTheme src/hooks',
       'chemx q a-button --blast-radius --json',
       'chemx q handleAction --backtrace',
       'chemx q "card" --tier=molecule'

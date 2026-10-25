@@ -15,6 +15,7 @@ Reference pages for behavior that specs pin. Design notes and plans live under `
 | [hooks.md](hooks.md) | Claude Code hooks |
 | [index-freshness.md](index-freshness.md) | Measured index sync timings (cold, warm, file at hand, after edits), with date, load and method |
 | [php-wordpress.md](php-wordpress.md) | PHP and WordPress auditing: parse version vs `php.version`, `wordpress` key and detection, rule table with shipped defaults and `"on"`, annotations, the per-plugin index and its caps, coverage reasons, cross-file gate behavior, performance budgets, what does not cover PHP |
+| [search.md](search.md) | `chemx q`: the text fallback when no symbol matches, path scoping, `--regex` (the RE2 subset), `-l` files only, `-o --unique` distinct matched text, JSON and MCP fields |
 | [team-audit-run.md](team-audit-run.md) | `chemx team audit-run` |
 | [team-dispatch.md](team-dispatch.md) | `chemx team dispatch --workflow`: task selection, routing per stage, the rendered build/review/repair/gate script (chemx renders it; the host runs it), run records |
 | [team-locks.md](team-locks.md) | File locks and leases: TTL, renewal, lapse, the commit guard |

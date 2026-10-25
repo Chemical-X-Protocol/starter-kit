@@ -35,6 +35,19 @@ Full reference: [test-lanes.md](test-lanes.md#a-repos-own-runner). Measured on g
 - A project without `node_modules` says so in one line; in a linked git worktree whose main checkout has one it names the `ln -s` fix.
 - New guard nudge `nudge-project-runner`: `node tests/run-tests.mjs` is nudged toward `chemx test` unless `.chemxrc` has `{ "test": { "runners": ["node tests/run-tests.mjs"] } }`. Promotable with `guardNudges` like the others (`docs/hooks.md`).
 
+### `chemx q`: text fallback, regex, files, distinct text, paths (epic #6745, K8 #6753)
+
+Full reference: [search.md](search.md). Measured on the kit (characters): `q <text>` with no symbol hit, 508 over two calls (the miss, then `q -g`) -> 401 in one; the distinct `STATUS.*` names under `cli/` through `q -g "STATUS\.[A-Z]+" --regex --bare`, 29,648 (270 rows) -> 44 with `--regex -o --unique`.
+
+- `q <text>` with zero symbol hits runs the fixed-string search in the same call under `no symbols; fixed-string matches:` instead of printing "Try chemx q -g"; `--json` carries it as `literal`; `--tier` keeps the empty answer; MCP `chemx_q` appends the same section when no symbol or FTS row matched.
+- `q -g` headers say `(fixed string)` or `(regex)`. A fixed-string search that finds nothing for a pattern shaped like a regex (`a|b`, `a\|b`, `.*`, `[a-z]`, `\d`, an anchor) says so and names `--regex` (`hint` in json, stderr in the pipe modes).
+- `--regex` is the RE2 subset on both engines: lookaround and backreferences are refused with the reason whether or not `rg` is installed; the JS engine (no `rg`) also refuses a quantified group holding a quantifier (`(a+)+`), which ripgrep runs in linear time.
+- `-l` now prints each matching file once (like `rg -l`); the old `path:line` output is `--lines`. This changes scripts that parsed `q -g -l` as `path:line`.
+- `-o`/`--only-matching` prints `path:line:matched` per match; `--unique` (implies `-o`) prints each distinct matched text once, sorted. MCP: `filesOnly`, `onlyMatching`, `unique`.
+- The pipe modes (`--bare`, `-l`, `--lines`, `-o`, `--unique`) print `no matches` and `showing N of M` on stderr, never on stdout. The MCP bare renderer is the CLI's (`cli/search-literal-view.js`); an MCP bare search with a missing path now raises the error instead of answering `no matches`.
+- Paths after a plain query scope the symbol answer and the fallback, as they already did for `-g`; a missing path is an error that shows how to quote a phrase (it used to be "ignored extra argument(s)").
+- Not done: a fresh worktree's first `q` still re-indexes every file (1,406 files, 4.8 s idle and 7.0 s under load, 0.13 s warm). The index and the team board share one db that refuses to be copied to a worktree, so seeding it needs its own design: filed as #6769 with the measurements.
+
 ### Board output diet (epic #6745, K4 #6749)
 
 Full reference: [coordination-db.md](coordination-db.md#reading-the-board-cheaply). Measured on the live board (characters): `team feed` 27,290 -> 2,564, `team status` 9,167 -> 3,912, `team task show` of the epic 8,643 -> 4,655, 275 with `--brief`.

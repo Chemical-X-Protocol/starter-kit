@@ -77,3 +77,46 @@ test('MCP chemx_q honours the advertised trace and backtrace params', async () =
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+const makeTokenRoot = () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-mcp-modes-'));
+  fs.mkdirSync(path.join(root, '.chemx'));
+  fs.mkdirSync(path.join(root, 'src'));
+  fs.writeFileSync(path.join(root, 'src', 'a.scss'), '.x { color: var(--gs-blue); border: var(--gs-edge-1) var(--gs-blue); }\n');
+  fs.writeFileSync(path.join(root, 'src', 'b.scss'), 'a { color: var(--gs-green) }\n');
+  return root;
+};
+
+test('MCP chemx_q literal: filesOnly, onlyMatching and unique answer the way q -g -l / -o --unique do', async () => {
+  const root = makeTokenRoot();
+  const handler = createMcpHandler();
+  try {
+    const files = JSON.parse(await callQ(handler, { query: '--gs-', literal: true, filesOnly: true, projectRoot: root }));
+    assert.deepEqual(files.files, ['src/a.scss', 'src/b.scss']);
+    const plainFiles = await callQ(handler, { query: '--gs-', literal: true, filesOnly: true, bare: true, projectRoot: root });
+    assert.equal(plainFiles, 'src/a.scss\nsrc/b.scss');
+    const unique = await callQ(handler, { query: '--gs-[a-z0-9-]+', literal: true, regex: true, unique: true, bare: true, projectRoot: root });
+    assert.equal(unique, '--gs-blue\n--gs-edge-1\n--gs-green');
+    const only = JSON.parse(await callQ(handler, { query: '--gs-[a-z0-9-]+', literal: true, regex: true, onlyMatching: true, projectRoot: root }));
+    assert.deepEqual(only.matches[0].parts, ['--gs-blue', '--gs-edge-1', '--gs-blue']);
+    assert.match(await callQ(handler, { query: 'a(?=b)', literal: true, regex: true, projectRoot: root }), /lookaround/);
+  } finally {
+    clearDbCache();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('MCP chemx_q with no symbol and no FTS row answers with the labelled fixed-string search', async () => {
+  const root = makeTokenRoot();
+  const handler = createMcpHandler();
+  try {
+    const text = await callQ(handler, { query: 'var(--gs-green)', projectRoot: root });
+    assert.match(text, /no symbols; fixed-string matches: 1 in 1 files/);
+    assert.match(text, /src\/b\.scss:1:a \{ color: var\(--gs-green\) \}/);
+    const miss = await callQ(handler, { query: 'zzNoSuchTokenzz', projectRoot: root });
+    assert.match(miss, /No matching symbols or text for "zzNoSuchTokenzz"/);
+  } finally {
+    clearDbCache();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});

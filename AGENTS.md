@@ -8,7 +8,7 @@
 ## ⚡ Quick Agent Reflex Table (Token-Bounded Commands)
 | Standard Reflex | `chemx` Equivalent | Token & Architecture Advantage |
 | :--- | :--- | :--- |
-| `grep -rn "pattern" .` | `chemx q -g "pattern" --bare` or `chemx q -g "pattern" -C 3 --bare` | Fixed-string search matching rg token-for-token (57 chars / 14 tokens per hit); add `-C <N>` to inspect surrounding code in a single turn without a second read call. |
+| `grep -rn "pattern" .` | `chemx q -g "pattern" --bare` or `chemx q -g "pattern" -C 3 --bare` | Fixed-string search matching rg token-for-token (57 chars / 14 tokens per hit); add `-C <N>` to inspect surrounding code in a single turn without a second read call. `a\|b` is literal text: add `--regex` for alternation (RE2 subset). `-l` prints the matching files once, `-o --unique` prints the distinct matched text (a `--gs-[a-z-]+` token list in one call), paths after the pattern scope it, and `chemx q <text>` with no symbol hit runs this search for you. See [docs/search.md](docs/search.md). |
 | `sed -n 'N,Mp' <file>` | `chemx read <file>:N-M --bare` | Verbatim slice matching sed byte-for-byte; 0 header, box or line number tokens. |
 | `git diff` | `chemx d` | Zero-context (`-U0`), auto-collapses to `--stat` if > 80 lines, micro-syncs index. |
 | `git log` | `chemx log -n 5` | One-line commit history (5 commits measured about 140 tokens on 2026-10-09, roughly 28 per commit). |
