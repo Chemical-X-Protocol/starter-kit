@@ -11,6 +11,7 @@ import { REQUEST_FLOW_FIXTURES } from './request-flow.fixtures.js';
 import { AUTH_FILTER_FIXTURES } from './auth-filters.fixtures.js';
 import { REGISTRATION_FIXTURES } from './registration.fixtures.js';
 import { SHADOW_FIXTURES } from './shadow.fixtures.js';
+import { BOUNDS_FIXTURES } from './bounds.fixtures.js';
 
 /** [familyName, fixtures] in merge order. */
 export const PHP_FIXTURE_FAMILIES = Object.freeze([
@@ -24,6 +25,7 @@ export const PHP_FIXTURE_FAMILIES = Object.freeze([
   ['auth-filters', AUTH_FILTER_FIXTURES],
   ['registration', REGISTRATION_FIXTURES],
   ['shadow', SHADOW_FIXTURES],
+  ['bounds', BOUNDS_FIXTURES],
 ]);
 
 export const PHP_FIXTURES = Object.freeze(Object.assign({}, ...PHP_FIXTURE_FAMILIES.map(([, fixtures]) => fixtures)));

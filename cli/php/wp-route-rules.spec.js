@@ -185,7 +185,7 @@ test('passes stay silent outside WordPress; without an index only the missing-pe
 });
 
 test('registrations: one WordPress-only entry per rule, defaults declared, and read side effect ships off', () => {
-  assert.deepEqual(wpRouteRegistrations.map((r) => r.rules), [[WRITE], [NO_PERMISSION], [READ], ['SECURITY_WP_SHADOWED_ROUTE']]);
+  assert.deepEqual(wpRouteRegistrations.map((r) => r.rules), [[WRITE], [NO_PERMISSION], [READ], ['SECURITY_WP_SHADOWED_ROUTE'], ['SECURITY_WP_UNBOUNDED_REQUEST_ARRAY']]);
   assert.ok(wpRouteRegistrations.every((r) => r.isWordPress === true && typeof r.run === 'function'));
   assert.equal(RULE_DEFAULTS[READ].defaultOn, false);
   assert.ok([WRITE, NO_PERMISSION, READ].every((id) => id in RULE_DEFAULTS));

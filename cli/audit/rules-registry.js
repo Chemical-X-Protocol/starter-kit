@@ -135,6 +135,13 @@ export const RULE_REGISTRY = {
     isDefaultOff: true,
     directive: 'Register a literal REST route before any regex route in the same namespace that matches its path for the same verb; WordPress runs the first match, so the later route never runs (Directive 9.D)'
   },
+  SECURITY_WP_UNBOUNDED_REQUEST_ARRAY: {
+    pillar: PILLARS.PILLAR_9,
+    severity: 'MEDIUM',
+    needs: 'standard',
+    isDefaultOff: true,
+    directive: 'Reject a request array above a fixed size (count() against a limit, or array_slice) before a REST callback loops over it or hands it to a loop, or declare maxItems in the route args schema; an unbounded array lets one authenticated request do unlimited work (Directive 9.D)'
+  },
   SECURITY_WP_PUBLIC_REGISTRATION_ROUTE: {
     pillar: PILLARS.PILLAR_9,
     severity: 'HIGH',
