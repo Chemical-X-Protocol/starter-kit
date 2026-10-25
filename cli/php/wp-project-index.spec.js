@@ -289,3 +289,26 @@ test('cap: more than 8 MB of PHP source also caps the index', () => {
   put('b.php', big);
   assert.equal(getProjectIndex(root).capped, true);
 });
+
+test('callable: [$this->prop, m] and a loader $this->prop component resolve through the property type', () => {
+  put('p.php', "<?php\nclass Admin { public function m() {} }\nclass P {\n  private $admin;\n  function __construct() { $this->admin = new Admin(); }\n  function boot() {\n    add_action('init', [$this->admin, 'm']);\n    $this->loader->add_action('x', $this->admin, 'm');\n  }\n}\n");
+  const index = getProjectIndex(root);
+  const regs = index.registrations();
+  assert.equal(regs.length, 2);
+  for (const reg of regs) assert.equal(index.resolveCallable(reg.callback, reg.file).id, 'Admin::m');
+});
+
+test('prefilter: a class declared on the <?php line is recorded', () => {
+  assert.deepEqual(prefilterPhp('<?php class Same_Line { public function m() { return 1; } }').classes, ['Same_Line']);
+});
+
+test('a root that does not exist yields an index holding only the overlay', () => {
+  const index = getProjectIndex(path.join(root, 'missing'), { overlay: { relativePath: 'a.php', content: '<?php\n' } });
+  assert.deepEqual(index.files(), ['a.php']);
+});
+
+test('overlay: a ./-prefixed relative path replaces the disk entry instead of adding a second one', () => {
+  put('inc/a.php', '<?php\nclass A1 {}\n');
+  const index = getProjectIndex(root, { overlay: { relativePath: './inc/a.php', content: '<?php\nclass A2 {}\n' } });
+  assert.deepEqual(index.files(), ['inc/a.php']);
+});

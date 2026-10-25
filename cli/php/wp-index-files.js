@@ -14,7 +14,7 @@ const RELIST_MS = 30_000;
 const OVERLAY_CACHE_SIZE = 8;
 const REGISTERS = /register_rest_route|add_action|add_filter|wp_ajax_|admin_post_/;
 const PREFILTER = new RegExp(
-  '^[ \\t]*(?:namespace[ \\t]*([A-Za-z_][\\w\\\\]*)?[ \\t]*[;{]' +
+  '^[ \\t]*(?:<\\?php[ \\t]+)?(?:namespace[ \\t]*([A-Za-z_][\\w\\\\]*)?[ \\t]*[;{]' +
     '|(?:(?:abstract|final|readonly)[ \\t]+)*(?:class|interface|trait|enum)[ \\t]+([A-Za-z_]\\w*)' +
     '|function[ \\t]+&?[ \\t]*([A-Za-z_]\\w*)[ \\t]*\\()',
   'gm',
@@ -38,6 +38,9 @@ function hasIgnoredSegment(rel) {
 }
 
 function walkFiles(root, dir = root, out = []) {
+  const stat = statOrNull(dir);
+  const isReadable = Boolean(stat) && stat.isDirectory();
+  if (!isReadable) return out;
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
     const isDir = entry.isDirectory();
@@ -202,7 +205,7 @@ export function readOrEmpty(full) {
 /** The entry for the audited file with the given content (disk content when omitted); small LRU per root. */
 export function overlayEntry(state, overlay) {
   const given = overlay.relativePath;
-  const rel = path.isAbsolute(given) ? toPosix(path.relative(state.root, given)) : toPosix(given);
+  const rel = toPosix(path.relative(state.root, path.resolve(state.root, given)));
   const content = typeof overlay.content === 'string' ? overlay.content : readOrEmpty(path.join(state.root, rel));
   const cached = state.overlays.get(rel);
   const isSame = Boolean(cached) && cached.content === content;

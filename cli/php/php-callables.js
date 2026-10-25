@@ -63,7 +63,19 @@ function classOfClassConstant(node, env) {
   return (word && { fqn: relativeClass(word, env), viaThis: false }) || (isName && { fqn: nameToClass(target, env), viaThis: false }) || null;
 }
 
-/** Class named by an expression: 'C', X::class, self::class, __CLASS__, $this, or a variable known to hold `new C`. */
+const PROP_LOOKUPS = new Set(['propertylookup', 'nullsafepropertylookup']);
+
+function thisPropClass(node, env) {
+  const isLookup = Boolean(node) && PROP_LOOKUPS.has(node.kind);
+  const onThis = isLookup && node.what && node.what.kind === 'variable' && node.what.name === 'this';
+  const offset = node && node.offset;
+  const inner = offset && typeof offset.name === 'object' ? offset.name : null;
+  const prop = inner ? inner.name : offset && offset.name;
+  const fqn = onThis && env.props && typeof prop === 'string' ? env.props.get(prop) : null;
+  return fqn ? { fqn, viaThis: false } : null;
+}
+
+/** Class named by an expression: 'C', X::class, self::class, __CLASS__, $this, `$this->prop = new C`, or a variable known to hold `new C`. */
 export function classOfExpr(node, env) {
   const literal = literalString(node);
   const isMagic = isNamed(node, 'magic') && node.value === '__CLASS__';
@@ -75,6 +87,7 @@ export function classOfExpr(node, env) {
     [isMagic, () => ({ fqn: env.classFqn, viaThis: false })],
     [isThis, () => ({ fqn: env.classFqn, viaThis: true })],
     [Boolean(local), () => ({ fqn: local, viaThis: false })],
+    [Boolean(thisPropClass(node, env)), () => thisPropClass(node, env)],
     [Boolean(node) && isClassConstant(node), () => classOfClassConstant(node, env)],
   ];
   const rule = byRule.find(([applies]) => applies);

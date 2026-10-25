@@ -150,7 +150,8 @@ export function extractFacts(ast, relativePath) {
   const envFor = (node, scope) => {
     const { classFqn, parentFqn, classNode } = classContextOf(node);
     const locals = scope ? localsOf(scope) : new Map();
-    return { ctx: ctxOf(node), classFqn, parentFqn, locals, idOf, classNode };
+    const props = classNode ? propsOf(classNode) : new Map();
+    return { ctx: ctxOf(node), classFqn, parentFqn, locals, props, idOf, classNode };
   };
 
   const callFact = (node, receiver, name, target, extra = {}) => {
