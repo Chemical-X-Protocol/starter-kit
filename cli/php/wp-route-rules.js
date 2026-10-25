@@ -24,7 +24,8 @@ export const RULE_DEFAULTS = {
   // Task #6712: severity is HIGH when any effect within 2 hops is a record or session write by name (wp_insert_*,
   // wp_update_*, wp_delete_*, wp_create_user, login cookie calls, $wpdb insert/update/delete/replace), else MEDIUM.
   // On the 25 corpus shapes 8 weigh HIGH (6 real, 2 intentional) and 17 MEDIUM. Not lifted: card vault a708d6a
-  // /pos/checkout and /pos/verify-payment (order writes are WooCommerce $order->save() calls, no named write) and
+  // Task #6718: calls to set_status, update_status or payment_complete on an unresolved variable also weigh HIGH
+  // (WooCommerce order state), which lifts card vault a708d6a /pos/checkout and /pos/verify-payment. Not lifted:
   // /scan-card, /grade-card (outbound requests only). Precision figures below are unchanged by the split.
   [WRITE_ROUTE]: { defaultOn: true, corpus: '22/25 directive, 14/25 real holes', heldOut: '1/1', measured: '2026-10-25' },
   [NO_PERMISSION]: { defaultOn: true, corpus: '0 hits of 570 endpoints', heldOut: '0 hits on 281 endpoints (akismet, WooCommerce controllers and API)', measured: '2026-10-24' },
@@ -40,26 +41,35 @@ const hasWriteVerb = (endpoint) => endpoint.methods.verbs.some((v) => WRITE_VERB
 // 23 third-party plugins. Far under the 10 hits the bar names, so no rule acts on it yet.
 const isPublic = (endpoint) => PUBLIC_KINDS.has(endpoint.permission.kind);
 
-/** Every state write and outbound request, and the first auth-like call, within HOPS of a callback. */
+// Task #6718: WooCommerce order state changes are method calls on an unresolved variable ($order->set_status(),
+// update_status(), payment_complete()). Name match on those three only, so a generic save() never counts. Used for
+// severity only: it never makes a route a candidate, and no other rule reads it.
+const ORDER_STATE_METHODS = new Set(['set_status', 'update_status', 'payment_complete']);
+const isOrderStateCall = (call) => call.receiver === 'var' && ORDER_STATE_METHODS.has(String(call.name).toLowerCase());
+
+/** Every state write and outbound request, order state call, and the first auth-like call, within HOPS of a callback. */
 function inspectCallback(ctx, rel, target) {
   const effects = [];
   const guards = [];
+  const orderWrites = [];
   const collect = (fact, { file }) => {
     const hidden = ctx.crossFile === false && file !== rel;
     const own = hidden ? [] : [...fact.stateWrites, ...fact.outboundRequests];
     for (const e of own) effects.push({ name: e.name, line: e.line, file });
+    const orderCalls = hidden ? [] : fact.calls.filter(isOrderStateCall);
+    for (const c of orderCalls) orderWrites.push({ name: c.name, line: c.line, file });
     const hasGuard = !hidden && fact.authChecks.length > 0;
     if (hasGuard) guards.push({ name: fact.authChecks[0].name, line: fact.authChecks[0].line, file });
     return false;
   };
   ctx.index.reaches(target, collect, { hops: HOPS });
-  return { effects, guards };
+  return { effects, guards, orderWrites };
 }
 
 // Task #6712: a record or session write (new post, user or table row, login cookie) is HIGH; options, meta,
 // transients, mail and outbound requests stay MEDIUM. A name match only: update_post_meta( 'paid' ) stays MEDIUM.
 const RECORD_WRITE = /^wp_(insert|update|delete)_(?!option|site_option)|^(wp_create_user|wp_set_auth_cookie|wp_set_current_user|wp_signon|insert|update|delete|replace)$/;
-const severityOf = (effects) => (effects.some((e) => RECORD_WRITE.test(String(e.name).toLowerCase())) ? 'HIGH' : 'MEDIUM');
+const severityOf = (effects, orderWrites) => (orderWrites.length > 0 || effects.some((e) => RECORD_WRITE.test(String(e.name).toLowerCase())) ? 'HIGH' : 'MEDIUM');
 const isLogoutOnly = (effects) => effects.every((e) => String(e.name).toLowerCase() === 'wp_logout');
 const where = (effect) => `${effect.name}() at ${effect.file}:${effect.line}`;
 const verbList = (endpoint) => endpoint.methods.verbs.join(', ');
@@ -81,13 +91,13 @@ function checkWrite(ctx, rel, seen, route, endpoint) {
   const target = endpoint.callback.target;
   const isCandidate = Boolean(target) && hasWriteVerb(endpoint) && isPublic(endpoint);
   if (!isCandidate) return;
-  const { effects, guards } = inspectCallback(ctx, rel, target);
+  const { effects, guards, orderWrites } = inspectCallback(ctx, rel, target);
   const isFlagged = effects.length > 0 && !isLogoutOnly(effects) && guards.length === 0;
   if (!isFlagged) return;
   const [effect] = effects;
   const hazard = `REST route ${routeName(route)} accepts ${verbList(endpoint)} with a public permission_callback (${endpoint.permission.kind}), and its callback ${target.id} reaches ${where(effect)} with no auth-like call found within ${HOPS} hops (a name match, not a proof). Check a capability, nonce or signature, or mark the route intentionally public with chemx-allow and a reason.`;
   reportOnce(seen, ctx, WRITE_ROUTE, endpoint.permission.line, hazard, {
-    severity: severityOf(effects),
+    severity: severityOf(effects, orderWrites),
     crossFile: crossFileOf(rel, endpoint, effect),
     evidence: `callback ${target.id} at ${target.file}:${target.line}; ${where(effect)}`,
   });

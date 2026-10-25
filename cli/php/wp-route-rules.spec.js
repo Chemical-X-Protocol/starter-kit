@@ -43,6 +43,14 @@ test('write severity: record and session writes are HIGH, option, meta, transien
   }
 });
 
+test('write severity: WooCommerce order state calls on a variable are HIGH, a generic save() is not', () => {
+  const severity = (body) => hits(post(), `function demo_cb() { ${body} }`).filter((r) => r.rule === WRITE).map((r) => r.severity);
+  for (const body of ["$o = wc_get_order( 1 ); $o->set_status( 'completed' ); wp_remote_post( 'https://api.example.test' );", "$o = wc_get_order( 1 ); $o->payment_complete(); wp_remote_get( 'https://api.example.test' );", "$o->update_status( 'paid' ); wp_remote_post( 'https://api.example.test' );"]) {
+    assert.deepEqual(severity(body), ['HIGH'], body);
+  }
+  assert.deepEqual(severity("$o = wc_get_order( 1 ); $o->save(); wp_remote_post( 'https://api.example.test' );"), ['MEDIUM']);
+});
+
 test('write verbs from constants and arrays fire; read verbs and a missing methods key do not', () => {
   const write = (methods) => hits(post("'demo_cb'", "'__return_true'", methods), "function demo_cb() { update_option( 'a', 1 ); }").filter((r) => r.rule === WRITE);
   for (const methods of ["WP_REST_Server::CREATABLE", "'PUT'", "'GET, DELETE'", 'WP_REST_Server::ALLMETHODS', "array( WP_REST_Server::READABLE, 'PATCH' )"]) {
