@@ -120,7 +120,9 @@ test('held-out false positives are all silent (8 labelled)', () => {
   assert.deepEqual(heldOut.filter(({ fired }) => fired), []);
 });
 
-test('the three default-on ids reach 80% weighted precision on corpus and held-out labels', () => {
+// The 80% bar is only measured on the corpus. No held-out hit fires, so the held-out check passes
+// vacuously (RULE_DEFAULTS heldOut is 0/0); it guards silent false-positive shapes, not third-party precision.
+test('the three default-on ids reach 80% weighted precision on corpus labels (held-out is vacuous, 0/0)', () => {
   for (const rule of [INPUT, SSRF, REDIRECT]) {
     assert.equal(RULE_DEFAULTS[rule].defaultOn, true, rule);
     assert.ok(precision(rule, 'corpus') >= 0.8, `${rule} corpus`);
