@@ -18,13 +18,22 @@ const REDIRECT = 'SECURITY_WP_OPEN_REDIRECT';
 // Section 2.6. Corpus figures are the labelled hits of the 2026-10-24 u2 run (8 URL-sink hits, 9 input hits,
 // one input hit a known false positive); weights are in wp-request-flow.precision.spec.js. A rerun of this
 // pass over the corpus on the same day reported 6 URL-sink findings (all judged true) and 10 input findings:
-// the 9 labelled ones plus magic-wand-admin.php:346, which is unlabelled and not counted. Held-out: the 8
-// false-positive shapes in the precision spec stay silent; no held-out hit fires, so held-out precision is
-// vacuous ("0/0", not measured on third-party plugins that exceed the project index cap).
+// the 9 labelled ones plus magic-wand-admin.php:346, which is unlabelled and not counted.
+// Held-out figures (task #6673, 2026-10-24) are hand-labelled hits of this pass run file by file, without the
+// project index (so the hop through a callee was not exercised), over H1 = the card vault plugin at HEAD
+// (26 files, 0 hits) and H2 = 30 git-ignored third-party plugins under wp-content/plugins, vendor/ excluded
+// (57 input, 3 SSRF and 4 redirect hits). 31 input hits were labelled by reading the code (7 true: unescaped
+// $_REQUEST echoes, an unsanitized option write, a request-chosen method name, SQL built from a request
+// host; 24 false: values already passed through a sanitizer the pass does not know, an allowlist or a
+// same-site redirect). All 3 SSRF and all 4 redirect hits were labelled (1 and 3 true). One redirect hit,
+// WooCommerce's OAuth return_url, is counted false because the arbitrary return URL is by design; counted
+// true it would read 4/4. The samples are small and labelled by one reader.
+// A rule ships on only when both corpus and held-out precision are 80% or better: none does, so all three
+// default to off.
 export const RULE_DEFAULTS = {
-  [INPUT]: { defaultOn: true, corpus: '8/9', heldOut: '0/0', measured: '2026-10-24' },
-  [SSRF]: { defaultOn: true, corpus: '8/8', heldOut: '0/0', measured: '2026-10-24' },
-  [REDIRECT]: { defaultOn: true, corpus: '8/8', heldOut: '0/0', measured: '2026-10-24' },
+  [INPUT]: { defaultOn: false, corpus: '8/9', heldOut: '7/31', measured: '2026-10-24' },
+  [SSRF]: { defaultOn: false, corpus: '8/8', heldOut: '1/3', measured: '2026-10-24' },
+  [REDIRECT]: { defaultOn: false, corpus: '8/8', heldOut: '3/4', measured: '2026-10-24' },
 };
 
 // ---- sink tables -------------------------------------------------------------------------

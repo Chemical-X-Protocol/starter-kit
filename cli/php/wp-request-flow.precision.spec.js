@@ -120,12 +120,24 @@ test('held-out false positives are all silent (8 labelled)', () => {
   assert.deepEqual(heldOut.filter(({ fired }) => fired), []);
 });
 
-// The 80% bar is only measured on the corpus. No held-out hit fires, so the held-out check passes
-// vacuously (RULE_DEFAULTS heldOut is 0/0); it guards silent false-positive shapes, not third-party precision.
-test('the three default-on ids reach 80% weighted precision on corpus labels (held-out is vacuous, 0/0)', () => {
+// The case table above keeps its corpus labels and silent held-out shapes. The measured third-party figures
+// live in RULE_DEFAULTS.heldOut (task #6673); a rule is default-on only when corpus and held-out both reach 80%.
+const ratio = (text) => {
+  const [hit, total] = text.split('/').map(Number);
+  return total === 0 ? 1 : hit / total;
+};
+
+test('defaultOn follows the 80% bar on both the corpus and the measured held-out figures', () => {
   for (const rule of [INPUT, SSRF, REDIRECT]) {
-    assert.equal(RULE_DEFAULTS[rule].defaultOn, true, rule);
-    assert.ok(precision(rule, 'corpus') >= 0.8, `${rule} corpus`);
-    assert.ok(precision(rule, 'held-out') >= 0.8, `${rule} held-out`);
+    const { defaultOn, corpus, heldOut } = RULE_DEFAULTS[rule];
+    assert.ok(precision(rule, 'corpus') >= 0.8, `${rule} corpus labels`);
+    assert.equal(defaultOn, ratio(corpus) >= 0.8 && ratio(heldOut) >= 0.8, rule);
   }
+});
+
+test('the measured held-out figures leave all three ids default-off', () => {
+  assert.deepEqual(
+    [INPUT, SSRF, REDIRECT].map((rule) => [RULE_DEFAULTS[rule].defaultOn, RULE_DEFAULTS[rule].heldOut]),
+    [[false, '7/31'], [false, '1/3'], [false, '3/4']],
+  );
 });
