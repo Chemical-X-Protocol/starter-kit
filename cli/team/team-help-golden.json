@@ -7,7 +7,8 @@
     "",
     "  \u001b[1mCommands:\u001b[0m",
     "    \u001b[32mstatus\u001b[0m [--mine] [--blockers]  Swarm card: --mine shows your tasks and leases, --blockers lists blocked tasks",
-    "    \u001b[32mtask\u001b[0m [action]            Manage agent tasks (list, show, add, claim, done, update)",
+    "    \u001b[32mtask\u001b[0m [action]            Manage agent tasks (list, show, add, claim, done, update); also spelled: chemx task <action>",
+    "    \u001b[32mbrief\u001b[0m <taskId>            Print, set (--file <path> | --stdin) or clear (--clear) the long brief of a task",
     "    \u001b[32mlock\u001b[0m [acquire|release]   Acquire or release mutual exclusion file locks (several paths per call)",
     "    \u001b[32munlock\u001b[0m <file>...         Release file locks held by an agent",
     "    \u001b[32mfeed\u001b[0m [filters]            Newest 20 events, one line each (messages cut at 120 chars)",
@@ -32,12 +33,14 @@
     "",
     "\u001b[1m\u001b[36m⚡ [Chemical X] Task Coordination Commands (team task)\u001b[0m",
     "\u001b[90m──────────────────────────────────────────────────────────\u001b[0m",
-    "  \u001b[1mUsage:\u001b[0m chemx team task <action> [arguments] [options]",
+    "  \u001b[1mUsage:\u001b[0m chemx team task <action> [arguments] [options]      (chemx task <action> is the same)",
     "",
     "  \u001b[1mActions:\u001b[0m",
-    "    \u001b[32mlist\u001b[0m                         List open tasks, newest 20 (default action)",
-    "    \u001b[32mshow\u001b[0m <taskId> [--brief]     Display full details and activity stream for a task (creation event on one line)",
+    "    \u001b[32mlist\u001b[0m                         List open tasks, newest 20 (default action); --search <text> looks in title and description, --titles prints one bare line per task",
+    "    \u001b[32mshow\u001b[0m <taskId> [--brief]     Display full details and activity stream for a task (creation event on one line); --full also prints the long brief",
     "    \u001b[32madd\u001b[0m \"<title>\"                Create a new task in the queue; prints \"#<id> added: <title>\"",
+    "    \u001b[32madd\u001b[0m --from <file.json|yaml>  Create many tasks in one transaction from a file of rows (ref, title, needs, prio, kind, parent, parent_ref, deps, desc, brief, brief_file); one \"#<id> added\" line per row and a refs line; --dry-run checks only",
+    "    \u001b[32mbrief\u001b[0m <taskId>               Print the long brief; with --file <path>, --stdin or --clear it sets or removes it (also: chemx team brief <id>)",
     "    \u001b[32mclaim\u001b[0m <taskId>              Claim an unassigned task for an agent",
     "    \u001b[32mhandoff\u001b[0m <taskId> <@to>      Pass a task to another agent (assignee or creator only); --with-locks also moves your live leases naming the task",
     "    \u001b[32mdone\u001b[0m <taskId>               Complete a task with automatic verification audit",
@@ -56,6 +59,13 @@
     "    \u001b[33m--as\u001b[0m <@agent>            Agent handle (e.g. @agent-1)",
     "    \u001b[33m--status\u001b[0m <status>        Filter by status (queued, in_progress, review, blocked, done)",
     "    \u001b[33m--brief\u001b[0m                  show: title, status, tier, assignee, deps, parent and only the comments after the description",
+    "    \u001b[33m--full\u001b[0m                   show: also the long brief (the card prints only its length)",
+    "    \u001b[33m--search\u001b[0m <text>          list: tasks whose title or description contains the text (any case; every status unless --status)",
+    "    \u001b[33m--titles\u001b[0m                 list: one line per task, \"#id [status] title\"",
+    "    \u001b[33m--kind\u001b[0m <kind>            add: task (default), decision or epic; a decision or epic completes without a target and shows as [decision] / [epic] after the id",
+    "    \u001b[33m--from\u001b[0m <file>            add: file of task rows (.json, .yaml/.yml; --from=- reads stdin); nothing is written if any row is wrong",
+    "    \u001b[33m--dry-run\u001b[0m                add --from: check the file and print what would be added",
+    "    \u001b[33m--file\u001b[0m <path>            brief: store this file as the task's brief (--stdin: standard input; --clear: remove it)",
     "    \u001b[33m--all\u001b[0m                    List every status with no row cap",
     "    \u001b[33m--limit\u001b[0m <n>             Rows to show (default 20)",
     "    \u001b[33m--agent\u001b[0m <@agent>         Filter tasks assigned to agent",
@@ -137,13 +147,14 @@
       "telemetry",
       "benchmark",
       "ablation",
-      "memory"
+      "memory",
+      "task"
     ],
     "group": "agents",
     "brief": "Tasks, file locks, DMs and feed",
-    "usage": "chemx team <status|task|lock|unlock|feed|post|inbox|dm|tokens|benchmark> [options]",
+    "usage": "chemx team <status|task|brief|lock|unlock|feed|post|inbox|dm|tokens|benchmark> [options]",
     "summary": "Multi-agent coordination layer backed by SQLite (.chemx/index.db).",
-    "description": "Task queues, status transitions, AST verification on completion and file locks. `tokens` and `benchmark` are team subcommands. Run `chemx team task --help` for task detail. An option with a value takes it after a space or an equals sign (`--prio 2`, `--prio=2`).",
+    "description": "Task queues, status transitions, AST verification on completion and file locks. `tokens` and `benchmark` are team subcommands. `chemx task <action>` is the same as `chemx team task <action>`; run `chemx team task --help` (or `chemx task show --help`) for task detail. `chemx team brief <id>` stores or prints a task's long brief. An option with a value takes it after a space or an equals sign (`--prio 2`, `--prio=2`).",
     "flags": [
       {
         "flag": "--as=<@handle>",
@@ -174,8 +185,8 @@
         "desc": "tokens: tokens, cost and wall time over an epic's children, recursively (see docs/team-tokens.md)"
       },
       {
-        "flag": "--from=<@handle>",
-        "desc": "feed: only events authored by this handle"
+        "flag": "--from=<@handle|file>",
+        "desc": "feed: only events authored by this handle; task add: a .json/.yaml file of task rows (--from=- reads stdin)"
       },
       {
         "flag": "--type=<lock|status|post|task>",
@@ -187,7 +198,35 @@
       },
       {
         "flag": "--full",
-        "desc": "feed: whole messages (default: the newest 20, one line each)"
+        "desc": "feed: whole messages (default: the newest 20, one line each); task show: also the brief"
+      },
+      {
+        "flag": "--dry-run",
+        "desc": "task add --from: check the file and print what would be added, write nothing"
+      },
+      {
+        "flag": "--kind=<task|decision|epic>",
+        "desc": "task add: the kind of task (default task); decision and epic finish without a target file"
+      },
+      {
+        "flag": "--search=<text>",
+        "desc": "task list: tasks whose title or description contains the text (any case, every status)"
+      },
+      {
+        "flag": "--titles",
+        "desc": "task list: one line per task, id, status and title only"
+      },
+      {
+        "flag": "--file=<path>",
+        "desc": "brief: store the file as the task's brief"
+      },
+      {
+        "flag": "--stdin",
+        "desc": "brief: store standard input as the task's brief"
+      },
+      {
+        "flag": "--clear",
+        "desc": "brief: remove the task's brief"
       },
       {
         "flag": "--brief",
@@ -210,7 +249,10 @@
       "chemx team task list",
       "chemx team task add \"Implement dark mode toggle\" --prio=1",
       "chemx team task claim 1 --as=@coder",
+      "chemx task add --from tasks.yaml --dry-run",
+      "chemx task list --search \"test runner\" --titles",
       "chemx team task show 12 --brief",
+      "chemx team brief 12 --file design.md",
       "chemx team lock src/a.js src/b.js --as=@coder",
       "chemx team task done 1 --as=@coder",
       "chemx team feed --from=@coder --type=lock",
@@ -219,11 +261,11 @@
   },
   "teamCommandHelp": [
     "USAGE",
-    "  chemx team <status|task|lock|unlock|feed|post|inbox|dm|tokens|benchmark> [options]",
-    "  aliases: swarm, feed, tokens, telemetry, benchmark, ablation, memory",
+    "  chemx team <status|task|brief|lock|unlock|feed|post|inbox|dm|tokens|benchmark> [options]",
+    "  aliases: swarm, feed, tokens, telemetry, benchmark, ablation, memory, task",
     "",
     "Multi-agent coordination layer backed by SQLite (.chemx/index.db).",
-    "Task queues, status transitions, AST verification on completion and file locks. `tokens` and `benchmark` are team subcommands. Run `chemx team task --help` for task detail. An option with a value takes it after a space or an equals sign (`--prio 2`, `--prio=2`).",
+    "Task queues, status transitions, AST verification on completion and file locks. `tokens` and `benchmark` are team subcommands. `chemx task <action>` is the same as `chemx team task <action>`; run `chemx team task --help` (or `chemx task show --help`) for task detail. `chemx team brief <id>` stores or prints a task's long brief. An option with a value takes it after a space or an equals sign (`--prio 2`, `--prio=2`).",
     "",
     "FLAGS",
     "  --as=<@handle>            Agent identity handle (e.g. @claude)",
@@ -233,10 +275,17 @@
     "  --tokens=<N>              Prompt tokens consumed by task",
     "  --cost=<USD>              Estimated dollar cost for task",
     "  --epic=<id>               tokens: tokens, cost and wall time over an epic's children, recursively (see docs/team-tokens.md)",
-    "  --from=<@handle>          feed: only events authored by this handle",
+    "  --from=<@handle|file>     feed: only events authored by this handle; task add: a .json/.yaml file of task rows (--from=- reads stdin)",
     "  --type=<lock|status|post|task>feed: an event-type group (or an exact event type, comma-separated)",
     "  --since=<id>              feed: only events after this event id",
-    "  --full                    feed: whole messages (default: the newest 20, one line each)",
+    "  --full                    feed: whole messages (default: the newest 20, one line each); task show: also the brief",
+    "  --dry-run                 task add --from: check the file and print what would be added, write nothing",
+    "  --kind=<task|decision|epic>task add: the kind of task (default task); decision and epic finish without a target file",
+    "  --search=<text>           task list: tasks whose title or description contains the text (any case, every status)",
+    "  --titles                  task list: one line per task, id, status and title only",
+    "  --file=<path>             brief: store the file as the task's brief",
+    "  --stdin                   brief: store standard input as the task's brief",
+    "  --clear                   brief: remove the task's brief",
     "  --brief                   task show: header facts and only the comments after the description",
     "  --mine                    status: only your open tasks, leases and own events",
     "  --blockers                status: also list the blocked tasks",
@@ -249,7 +298,10 @@
     "  chemx team task list",
     "  chemx team task add \"Implement dark mode toggle\" --prio=1",
     "  chemx team task claim 1 --as=@coder",
+    "  chemx task add --from tasks.yaml --dry-run",
+    "  chemx task list --search \"test runner\" --titles",
     "  chemx team task show 12 --brief",
+    "  chemx team brief 12 --file design.md",
     "  chemx team lock src/a.js src/b.js --as=@coder",
     "  chemx team task done 1 --as=@coder",
     "  chemx team feed --from=@coder --type=lock",
