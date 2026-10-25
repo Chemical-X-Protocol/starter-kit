@@ -49,19 +49,20 @@ export const WRAPPER_COMMANDS = [
     aliases: [],
     group: 'wrappers',
     brief: 'Wait for a task, lock, idle verify or a feed post',
-    usage: 'chemx wait --task=<id> [--status=done] | --lock-free=<file> | --verify-idle | --post-matching=<text> [--from=@h] [--since=<id>] [--timeout=30m]',
-    summary: 'Polls every 3 seconds until the condition holds. Exit 0 when met, 2 on timeout, 1 on bad arguments.',
+    usage: 'chemx wait --task=<id> [--status=done] | --lock-free=<file> | --verify-idle | --job=<pid> | --post-matching=<text> [--from=@h] [--since=<id>] [--timeout=30m]',
+    summary: 'Polls every 3 seconds until the condition holds. Exit 0 when met, 2 on timeout, 1 on bad arguments (with --job the exit code is the job\'s own).',
     description: 'The condition is true as of the last poll; it can change right after. --verify-idle reads the process table for chemx verify/test (on Linux only those running inside this project). A task id no db knows keeps waiting until the timeout.',
     flags: [
       { flag: '--task=<id>', desc: 'Until the task reaches --status (default done)' },
       { flag: '--lock-free=<file>', desc: 'Until no unexpired lease exists on the file' },
       { flag: '--verify-idle', desc: 'Until no chemx verify/test process runs for this project' },
+      { flag: '--job=<pid>', desc: 'Until that chemx process has ended (a backgrounded test run: `chemx test ... & chemx wait --job=$!`); exits with the job\'s own code (0 pass, 1 fail, 3 inconclusive)' },
       { flag: '--post-matching=<text>', desc: 'Until a feed post contains the text (any case); lock events never match' },
       { flag: '--from=<@handle>', desc: 'With --post-matching: only posts by that handle' },
       { flag: '--since=<id>', desc: 'With --post-matching: count posts after this event id, existing ones too (default: only posts made after the wait starts)' },
       { flag: '--timeout=<dur>', desc: '30s, 5m, 2h or plain seconds; default 30m' }
     ],
-    examples: ['chemx wait --task=2565', 'chemx wait --lock-free=cli/main.js --timeout=10m', 'chemx wait --verify-idle', 'chemx wait --post-matching "K9 merged" --from=@sonnet-k9 --timeout=1h']
+    examples: ['chemx wait --task=2565', 'chemx wait --lock-free=cli/main.js --timeout=10m', 'chemx wait --verify-idle', 'chemx test --changed & chemx wait --job=$!', 'chemx wait --post-matching "K9 merged" --from=@sonnet-k9 --timeout=1h']
   },
   {
     name: 'conflicts',

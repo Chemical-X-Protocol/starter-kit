@@ -12,7 +12,7 @@ Task #2529. This page says what each `chemx test` mode guarantees and what it do
 | slow | `chemx test --slow` | specs that spawn the CLI or the MCP server for many seconds, stress specs, end-to-end UI specs, and specs asserting wall-clock or CPU budgets |
 | both | `chemx test --all`, `npm test` | the whole suite (CI uses this) |
 
-Manifest format: `slow` and `excluded` are lists of `{ "glob", "why" }`. `why` is required. A `convention: true` rule is a naming pattern that may match nothing yet (`**/*.slow.spec.js`, `**/*.perf.spec.js`, `**/*.e2e.spec.js`). `excluded` lists spec-named files the test script deliberately never runs (templates, scratch, specs for a runner the kit does not have).
+Manifest format: `slow`, `meta` and `excluded` are lists of `{ "glob", "why" }`. `why` is required. A `convention: true` rule is a naming pattern that may match nothing yet (`**/*.slow.spec.js`, `**/*.perf.spec.js`, `**/*.e2e.spec.js`). `excluded` lists spec-named files the test script deliberately never runs (templates, scratch, specs for a runner the kit does not have). `meta` lists the specs that scan the whole repo (see "Meta specs"). `smallRun` is a number: a run that names fewer spec files than that may use the slot the line keeps for it (default 5, see "The line").
 
 Guarantees:
 - Every `*.spec.*` file is in exactly one of fast, slow or excluded. `cli/test-lanes-coverage.spec.js` fails otherwise, so adding a spec directory without a test glob cannot silently drop its tests.
@@ -25,11 +25,19 @@ Not guaranteed: the slow lane being short, or the fast lane being free of specs 
 
 | Command | Selects | Proof |
 | :--- | :--- | :--- |
-| `chemx test --changed [--base=<rev>]` | specs affected by changed files, by the import graph | yes, within the graph's limits; full-suite fallback with the reason when it cannot prove (manifests, configs, deleted modules) |
+| `chemx test --changed [--base=<rev>]` | specs affected by changed files, by the import graph, plus the meta specs (below); fast lane | yes, within the graph's limits; full-suite fallback with the reason when it cannot prove (manifests, configs, shared spec support, deleted modules, a fixture a helper reads) |
+| `chemx test --changed --all` | the same set, both lanes: what CI runs for a pull request, so run it before you push | same |
+| `chemx test --changed --slow` | only the affected slow-lane specs | same |
 | `chemx test --related <files...>` (or `--related=<file>`) | the same, for files you name | same |
 | add `--depth=<n>` | only specs within n import hops of a changed file (0 = the spec itself or its colocated spec) | no: deeper specs are counted and reported as not run; rerun without `--depth` before merging |
 
 Both honour the lanes: affected slow-lane specs are listed in the report as not run, and a selection made only of slow specs is `inconclusive` (exit 3) with the spec names, never a silent pass. Add `--all` or `--slow` to run them.
+
+The base. Without `--base`, `--changed` compares the working tree (staged, unstaged, untracked) with `HEAD`. When that tree is clean it would find nothing, so it compares with the merge base of `HEAD` and the upstream default branch instead (`origin/HEAD`'s target, else `origin/main`, else `origin/master`, whichever exists locally) and says so in one line: `Base: origin/main (merge base 1a2b3c4); the tree is clean, so --changed compares with it. Pass --base=<rev> to pick another` (JSON: `selection.base`, `selection.baseDefaulted`, `selection.mergeBase`). A dirty tree still compares with `HEAD`, so uncommitted edits are the whole change set, as before; an explicit `--base` always wins. With no upstream ref, or `HEAD` at the tip of it, a clean tree is still "no changed files".
+
+Meta specs. Some specs read the whole repository instead of importing what they check (every spec file, every help card, the docs), so the import graph never selects them and a change breaks them without any local run noticing until CI. `--changed` therefore always adds them to an affected selection, even when nothing else is affected (a docs-only change) and whatever `--depth` says. A spec is meta when `test-lanes.json` lists it under `meta` or when one of its first 30 lines is `// chemx: meta`. They follow the lanes like any spec: a fast meta spec runs on `--changed`, a slow one on `--changed --all`. The report says `N meta spec(s) always run` and JSON lists them in `selection.meta`. `--related` does not add them. A clean tree with nothing to compare runs none.
+
+Fixtures. A changed file under a `fixtures/` or `__fixtures__/` directory used to run the whole lane. Now it selects the specs that import it (a module fixture) or name it by file name, and the specs that list its folder (`readdirSync` or a glob, plus the folder's name), when every one of those readers is a spec or another fixture. Still the whole lane: a fixture a non-spec file reads (a shared helper may serve any spec), a fixture nobody names, and a deleted fixture. The report names which. `spec-support/`, `test-support/`, `test-utils/` and `__mocks__/` still run the whole lane.
 
 Why `--depth` exists: the CLI entry imports nearly every command module, and every spec that runs the CLI depends on the entry, so a change deep in the tree reaches over a hundred specs even though most only exercise it incidentally. Import hops are the closest cheap proxy for "tests that are about this change".
 
@@ -44,11 +52,15 @@ Epic #1324. Design: [2026-10-13-chemx-job-line-design.md](superpowers/specs/2026
 
 The lane is decided by what the caller asked for, before `test-lanes.json` turns an empty scope into the lane's spec list, so `chemx test` in a project with lanes is heavy even though it ends up naming hundreds of specs.
 
+Small runs. The last slot (`budget - 1`, in the reserve) is kept for runs that name a few specs. A big light run, one that names `smallRun` or more spec files (`test-lanes.json`, default 5), any directory, or any glob, never takes it, so `chemx test one.spec.js` starts at once even while another agent's `--changed` run holds every other slot. A budget of 1 has no kept slot. A big run that waits says `held by the heavy line and the slot kept for small runs` when nobody holds the slots it may use.
+
 Slots `0 .. heavy-1` are the heavy slots, the rest the light reserve. `heavy = budget - CHEMX_LIGHT_RESERVE`; the reserve defaults to 2 and is at least 1 each way when the budget is 2 or more (a budget of 1 is all heavy). With budget 6 a heavy job holds 4 slots and light runs keep 2. A heavy test run tells the runner that many workers (`--maxWorkers`, `--test-concurrency`); a typecheck or build is told nothing, its slots only keep the line. A light run takes reserve slots first and spills into the heavy slots only while no heavy ticket is live, so a single-file run does not make the next heavy job wait. While a heavy ticket is live (waiting or running), light runs take only reserve slots, and any heavy slot a light run still holds is handed back when that run ends.
 
-Waiting. A heavy caller prints once, then every 30 s, to stderr:
+Waiting. A caller that has to wait, in the heavy line or for a light slot, prints one line to stderr (a terminal or not, so `| tail` does not hide it), with its job id:
 
-`chemx: in line #3 for build (budget 6, heavy 4): running tests for @sonnet-oh2 (task 1317) 2m10s; ahead: typecheck`
+`chemx: in line #3 for build (budget 6, heavy 4): running tests for @sonnet-oh2 (task 1317) 2m10s; ahead: typecheck [job 4242: chemx wait --job=4242]`
+
+It does not print it again while nothing changes. A later line appears only when the situation changed (a new queue position, a different job running or ahead, a different slot holder), and then at most once every 30 s; the seconds waited and a holder's age do not count as a change. The job id is the pid of the waiting chemx process, the number `chemx test --slots` shows for each holder.
 
 A heavy job has no wait limit by default (a dead holder is reclaimed by its heartbeat). `chemx test --wait-timeout=<seconds>` gives up with `QUEUE_TIMEOUT` (inconclusive, exit 3, nothing ran; `0` removes the limit); a job that has started is never cut short, a caller that joined a run stops counting once that run starts, and a job's own `--timeout` counts from the start of the run, not from the wait. Light runs keep the 10 minute default. Over MCP, `chemx_test`, `chemx_typecheck` and `chemx_audit_build` calls that cannot start within about 1.5 s return `{ queued: true, position, ahead, holders, retryCommand }` with status `inconclusive` instead of blocking; no ticket and no slot stays held, run `retryCommand` later. `chemx_verify` over MCP is not given that early return: it waits its turn as long as it takes (it does not return `queued`).
 
@@ -95,6 +107,23 @@ Task #6754. A jest config names a snapshot serializer, transform or setup file b
 For a test run in a directory that has `node_modules/.pnpm/node_modules` and a jest config (`jest.config.json`, `.js`, `.cjs` or the `jest` key of `package.json`), chemx loads that config and its preset chain in a child process (`cli/build/jest-config-modules.js`, about 0.1 s) and reads `snapshotSerializers`, `transform` and `setupFiles` / `setupFilesAfterEnv`. When a bare name there does not resolve from the project root but exists in the store, the run's `NODE_PATH` gets the store in front of whatever it had. Nothing is added otherwise, to a build or typecheck run, or when the store is already on `NODE_PATH`. `storeOnlyModules(root)` in `cli/build/pnpm-store-path.js` returns `{ names, error }` for `chemx doctor` to report (K10). A config that throws, or is `.mjs` or `.ts`, adds nothing. Pinned by `cli/build/pnpm-store-path.spec.js` and `cli/build/executor-env.spec.js`.
 
 A directory with no `node_modules` at all gets one line: `Missing node_modules. Please run 'pnpm install' before testing.` and, in a linked git worktree whose main checkout has a `node_modules`, `... In a git worktree, link the main checkout's instead: ln -s <main>/node_modules <worktree>/node_modules`. A repo with its own `tests/run-tests.mjs` runner needs no `node_modules`.
+
+## Waiting for a backgrounded run
+
+Task #6772. A `chemx test` that ends the process (the command line, not MCP) leaves a record of how it ended under `os.tmpdir()/chemx-jobs/<pid>.json` (`CHEMX_JOBS_DIR` moves it; records older than a day are swept): command, status, exit code and a one-line summary. `chemx wait --job=<pid>` waits until that process is gone, prints the record and exits with the job's own code (0 pass, 1 fail, 3 inconclusive); 2 is still a timeout and 1 a usage error. A pid with no record counts as ended (`it left no result`). A finished child its shell has not collected (a zombie on Linux) is treated as ended.
+
+```
+chemx test --changed --all > /tmp/run.log 2>&1 &
+chemx wait --job=$! --timeout=20m      # exit code = the run's verdict
+```
+
+Not guaranteed: chemx cannot tell that a run was backgrounded, so the job id is printed in the wait notice (the runs that queue) and `--slots`, not at the start of every run; a record is not written when the process is killed, or when chemx runs inside an MCP server (the call returns its report instead).
+
+## Arguments
+
+- `chemx test -t should do x` (a shell that did not keep the name together) runs the name `should do x`: the words after `-t` / `--filter` / `--test-name-pattern` that are not an existing path, a glob or a spec-named file join the name; paths, globs and spec files among them stay targets, so `chemx test -t login a.spec.js b.spec.js` filters two files by `login`. A flag or `--` ends the name.
+- One argument holding several existing paths (`"a.spec.js b.spec.js"`, a zsh variable that was not split) is split into one target per path. When it is not a list of paths, the "matched nothing" line says each path must be its own argument and how to split a variable (`${=var}` or an array).
+- When `rg` is not on PATH, the specs that exercise the ripgrep engine skip with the reason `ripgrep not on PATH`, and the report says `ripgrep is not on PATH: 3 ripgrep-engine specs skipped, so the rg search engine went untested here` (JSON: `skippedRipgrep`). A spec that skips for lack of rg must give that reason (`cli/test-rg-skips.spec.js` checks the three search specs).
 
 ## Profile
 

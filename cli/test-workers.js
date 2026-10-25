@@ -51,6 +51,9 @@ export const withWorkerCount = (command, runner, workers, options = {}) => {
   return usesMaxWorkers ? setMaxWorkers(command, workers, runner, options) : command;
 };
 
+// A target that is one existing file (no glob characters, not a directory).
+export const isFileTarget = (cwd, target) => !/[*?[{]/.test(target) && Boolean(fs.statSync(path.resolve(cwd, target), { throwIfNoEntry: false })?.isFile());
+
 // The workers a run asks for: the budget, capped by the script's own --test-concurrency and,
 // when every target is a plain spec file, by the number of files (one file never needs more).
 export const requestedWorkers = ({ command, cwd, targets = [], budget }) => {
@@ -58,8 +61,7 @@ export const requestedWorkers = ({ command, cwd, targets = [], budget }) => {
   const scriptConcurrency = Number([...command.matchAll(NODE_CONCURRENCY)].at(-1)?.[1]);
   const hasScriptConcurrency = Boolean(Number.isInteger(scriptConcurrency) && scriptConcurrency > 0);
   if (hasScriptConcurrency) caps.push(scriptConcurrency);
-  const isFileTarget = (target) => !/[*?[{]/.test(target) && fs.statSync(path.resolve(cwd, target), { throwIfNoEntry: false })?.isFile();
-  const areAllFiles = targets.length > 0 && targets.every(isFileTarget);
+  const areAllFiles = targets.length > 0 && targets.every((target) => isFileTarget(cwd, target));
   if (areAllFiles) caps.push(targets.length);
   return Math.max(1, Math.min(...caps));
 };

@@ -12,6 +12,7 @@ import { SLOT_OWNER_ENV, SLOT_DEFAULTS, defaultSlotsDir, resolveTestBudget, with
 import { resolveLanes, writeTicket, readTicket, writeJoin, liveJoins, leaveJoin, writeResult, readResult, clearTicket } from './job-line-tickets.js';
 import { enterLine, recordOf, ticketOf, slotRecordOf, TURNS } from './job-line-turns.js';
 import { ownerOf, waitLine } from './job-line-text.js';
+import { makeNotice } from './wait-notice.js';
 
 export { resolveLanes } from './job-line-tickets.js';
 export const HEAVY_KINDS = ['tests', 'typecheck', 'build'];
@@ -31,7 +32,7 @@ const createJob = (kind, key, options, env, budget) => {
     onWait: options.onWait || ((line) => process.stderr.write(line)), onWarn: options.onWarn || ((line) => process.stderr.write(line)), signal: options.signal,
     onStart: options.onStart || (() => {}), hasSeenStart: false,
     returnQueuedAfterMs: options.returnQueuedAfterMs, retryCommand: options.retryCommand || RETRY_BY_KIND[kind],
-    start: Date.now(), since: Date.now(), startedAt: null, lastStatus: null, role: 'none', seq: 0, slotFiles: [], hasWarned: false
+    start: Date.now(), since: Date.now(), startedAt: null, notice: null, role: 'none', seq: 0, slotFiles: [], hasWarned: false
   };
 };
 
@@ -40,14 +41,12 @@ const queuedOutcome = (job, view, queuedMs) => {
   return { queued: true, position: view.position, ahead, retryCommand: job.retryCommand, workers: 0, budget: job.budget, queuedMs };
 };
 
-// Rule 5: the wait line once, then every statusMs.
+// Rule 5: the wait line once, then only when the position, the running job or the line ahead changed
+// (at most every statusMs). The job's age is not a change.
 const reportWait = (job, view) => {
-  const now = Date.now();
-  const isStatusDue = job.lastStatus === null || now - job.lastStatus >= job.statusMs;
-  if (isStatusDue) {
-    job.onWait(waitLine(view, now));
-    job.lastStatus = now;
-  }
+  job.notice ??= makeNotice(job.statusMs, job.onWait);
+  const situation = [view.position, view.running?.seq ?? '', view.ahead.map((entry) => entry.seq).join(','), view.heldSlots].join('|');
+  job.notice(situation, () => waitLine(view, Date.now()));
 };
 
 // Fires options.onStart once, when the run this caller waits for starts (its own, or the one it joined).

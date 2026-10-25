@@ -35,14 +35,15 @@ export const VERIFY_COMMANDS = [
       { flag: '--raw', desc: 'Do not suppress passing test output' },
       { flag: '--slow', desc: 'Run only the slow lane (docs/test-lanes.md)' },
       { flag: '--all', desc: 'Run both lanes' },
-      { flag: '--changed', desc: 'Run specs affected by changed files, by the import graph' },
-      { flag: '--base=<rev>', desc: 'With --changed: gate each changed file per rule against the merge-base with this revision (delta gate)' },
+      { flag: '-t <name>', desc: 'Only tests whose name matches (alias --filter); extra words join the name, paths and spec files stay targets' },
+      { flag: '--changed', desc: 'Run specs affected by changed files, by the import graph, plus the meta specs; a clean tree compares with the merge base of origin/main' },
+      { flag: '--base=<rev>', desc: 'With --changed: compare from the merge-base with this revision (default HEAD, or the upstream default branch on a clean tree)' },
       { flag: '--related <files...>', desc: 'Run specs affected by the files you name' },
       { flag: '--depth=<n>', desc: 'With --changed or --related: only specs within n import hops (deeper ones are reported as not run)' },
       { flag: '--profile', desc: 'Time each spec file in its own process, slowest first' },
       { flag: '--top=<n>', desc: 'With --profile: show the n slowest' }
     ],
-    examples: ['chemx test', 'chemx test src/store.spec.ts --json']
+    examples: ['chemx test', 'chemx test src/store.spec.ts --json', 'chemx test --changed --all', 'chemx test -t should do x a.spec.js']
   },
   {
     name: 'typecheck',

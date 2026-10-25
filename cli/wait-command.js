@@ -1,6 +1,7 @@
 /**
- * chemx wait --task=<id> [--status=done] | --lock-free=<file> | --verify-idle  [--timeout=30m]
- * Polls every 3 seconds. Exit 0 when the condition holds, 2 on timeout, 1 on a usage error.
+ * chemx wait --task=<id> [--status=done] | --lock-free=<file> | --verify-idle | --job=<pid>  [--timeout=30m]
+ * Polls every 3 seconds. Exit 0 when the condition holds, 2 on timeout, 1 on a usage error; with --job
+ * the exit code is the finished job's own.
  * Guarantees: the condition was true at the moment of the last poll. Not guaranteed: it still holds
  * afterwards (another agent can lock the file or start a verify right after). --verify-idle looks at
  * the process table for chemx verify/test commands; on Linux it only counts ones whose working
@@ -13,15 +14,18 @@ import { execFileSync } from 'node:child_process';
 import { setTimeout as sleepFor } from 'node:timers/promises';
 import { liveLeases, taskStatus } from './lease-view.js';
 import { checkPost, latestEventId } from './wait-post.js';
+import { isJobRunning, readJobRecord } from './job-record.js';
 
 export const POLL_MS = 3000;
 export const DEFAULT_TIMEOUT_MS = 30 * 60 * 1000;
 
 export const WAIT_HELP = [
-  'chemx wait --task=<id> [--status=done] | --lock-free=<file> | --verify-idle | --post-matching=<text> [--from=@h] [--since=<id>]  [--timeout=30m]',
+  'chemx wait --task=<id> [--status=done] | --lock-free=<file> | --verify-idle | --job=<pid> | --post-matching=<text> [--from=@h] [--since=<id>]  [--timeout=30m]',
   '  --task=<id>        until the task reaches --status (default done)',
   '  --lock-free=<f>   until no unexpired lease exists on the file',
   '  --verify-idle      until no chemx verify/test process is running for this project',
+  '  --job=<pid>        until that chemx process (a backgrounded chemx test: `chemx test ... & chemx wait --job=$!`, or the pid in',
+  '                     a wait notice or `chemx test --slots`) has ended; the exit code is the job\'s own (0 pass, 1 fail, 3 inconclusive)',
   '  --post-matching=<text>  until a feed post contains the text (any case); lock events never match',
   '  --from=@handle     with --post-matching: only posts by that handle',
   '  --since=<event id> with --post-matching: count posts after this event id, existing ones too (default: only posts made after the wait starts)',
@@ -53,7 +57,7 @@ const flagValue = (args, name) => {
 
 const hasFlag = (args, name) => args.some((arg) => arg === `--${name}` || arg.startsWith(`--${name}=`));
 
-const USAGE_ERROR = 'give exactly one of --task=<id>, --lock-free=<file>, --verify-idle, --post-matching=<text>, and a valid --timeout and task id (--from=@handle and --since=<event id> go with --post-matching)';
+const USAGE_ERROR = 'give exactly one of --task=<id>, --lock-free=<file>, --verify-idle, --job=<pid>, --post-matching=<text>, and a valid --timeout and task id (--from=@handle and --since=<event id> go with --post-matching)';
 
 /** The --post-matching group: its text, the handle filter and the cursor, with whether they are usable together. */
 const parsePostArgs = (args) => {
@@ -76,12 +80,15 @@ export const parseWaitArgs = (args) => {
   const task = flagValue(args, 'task');
   const lockFree = flagValue(args, 'lock-free');
   const verifyIdle = args.includes('--verify-idle');
+  const jobText = flagValue(args, 'job');
+  const jobId = jobText === undefined ? null : Number(jobText);
+  const isBadJob = hasFlag(args, 'job') && !(Number.isInteger(jobId) && jobId > 0);
   const post = parsePostArgs(args);
-  const modes = [task !== undefined, lockFree !== undefined, verifyIdle, post.wantsPost].filter(Boolean).length;
+  const modes = [task !== undefined, lockFree !== undefined, verifyIdle, hasFlag(args, 'job'), post.wantsPost].filter(Boolean).length;
   const taskId = task === undefined ? null : Number(task);
   const isBadTask = task !== undefined && !Number.isInteger(taskId);
-  const isUsable = modes === 1 && timeoutMs !== null && !isBadTask && !post.isBad;
-  return { error: isUsable ? null : USAGE_ERROR, timeoutMs, taskId, status: flagValue(args, 'status') || 'done', lockFree, verifyIdle, postMatching: post.postMatching, from: post.from, since: post.since };
+  const isUsable = modes === 1 && timeoutMs !== null && !isBadTask && !isBadJob && !post.isBad;
+  return { error: isUsable ? null : USAGE_ERROR, timeoutMs, taskId, jobId, status: flagValue(args, 'status') || 'done', lockFree, verifyIdle, postMatching: post.postMatching, from: post.from, since: post.since };
 };
 
 const RUNNING = /(^|[\s/])(chemx|cli\/index\.js)\s+(verify|test|check:all)(\s|$)/;
@@ -128,6 +135,16 @@ const checkLock = (opts, cwd, now) => {
   return { done: !lease, note };
 };
 
+// A job is a chemx process by pid. Once it is gone, the record it left says how it ended; the wait
+// then exits with the job's own code. A pid with no record counts as ended (it may have been swept).
+const checkJob = (opts, env) => {
+  const isRunning = (env.isJobRunning ?? isJobRunning)(opts.jobId);
+  if (isRunning) return { done: false, note: `job ${opts.jobId} is still running` };
+  const record = readJobRecord(opts.jobId, { dir: env.jobsDir });
+  if (!record) return { done: true, code: 0, note: `job ${opts.jobId} is not running (it left no result)` };
+  return { done: true, code: record.exitCode ?? 0, note: `job ${opts.jobId} ended: ${record.status} (${record.summary}) [${record.command}]` };
+};
+
 const checkVerify = (cwd, env) => {
   const psText = env.ps === undefined ? readPs() : env.ps;
   const running = verifyProcesses(psText, cwd, process.pid);
@@ -139,7 +156,9 @@ export const checkOnce = (opts, cwd, env = {}) => {
   const waitsOnTask = opts.taskId !== null;
   const waitsOnLock = opts.lockFree !== undefined;
   const waitsOnPost = opts.postMatching !== undefined;
+  const waitsOnJob = opts.jobId !== null;
   const checks = [
+    [waitsOnJob, () => checkJob(opts, env)],
     [waitsOnTask, () => checkTask(opts, cwd)],
     [waitsOnLock, () => checkLock(opts, cwd, now)],
     [waitsOnPost, () => checkPost(opts, cwd)]
@@ -169,7 +188,7 @@ export const runWait = async (args, deps = {}) => {
     const elapsed = clock() - started;
     const seconds = (elapsed / 1000).toFixed(1);
     const isMet = result.done;
-    if (isMet) return { code: 0, message: `condition met after ${seconds}s: ${result.note}` };
+    if (isMet) return { code: result.code ?? 0, message: `condition met after ${seconds}s: ${result.note}` };
     const isOut = elapsed + pollMs > opts.timeoutMs;
     if (isOut) return { code: 2, message: `timed out after ${seconds}s (limit ${opts.timeoutMs / 1000}s): ${result.note}` };
     await sleep(pollMs);

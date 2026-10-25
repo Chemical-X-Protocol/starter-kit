@@ -542,9 +542,10 @@ Raw inline `style="..."` attributes are strictly prohibited. Visual styling flow
 - Strictly prohibit executing verbose raw `npm test` or `pnpm test` in the shell: hundreds of passing test markers pollute context. If tests pass, agents get a short green summary; if tests fail, they get the failing test names, assertion messages, and diffs.
 - **Test loop, in order of cost** (details: `docs/test-lanes.md`):
   1. `chemx test --changed --depth=3`: only the specs within 3 import hops of your change. Fastest, and NOT proof: the report lists how many deeper specs were skipped.
-  2. `chemx test --changed`: every spec the import graph says your change can reach, fast lane only. Slow-lane specs that it reaches are named as not run.
-  3. `chemx test`: the whole fast lane. `chemx test --all` adds the slow lane (specs that spawn the CLI or MCP server, stress and timing specs); that is what CI's `npm test` runs. `chemx test --slow` runs only the slow lane.
-  4. `chemx test --profile [--all] [--top=<n>]`: per-spec-file wall time, slowest first, with the measuring method printed beside the numbers.
+  2. `chemx test --changed`: every spec the import graph says your change can reach, plus the meta specs that scan the whole repo (`test-lanes.json` `meta`), fast lane only. On a clean tree it compares with the merge base of origin/main (or origin/master) and prints the base it chose. Slow-lane specs that it reaches are named as not run.
+  3. `chemx test --changed --all`: the same affected set, both lanes. CI runs both lanes, so run this (not step 2) before you push.
+  4. `chemx test`: the whole fast lane. `chemx test --all` adds the slow lane (specs that spawn the CLI or MCP server, stress and timing specs); that is what CI's `npm test` runs. `chemx test --slow` runs only the slow lane.
+  5. `chemx test --profile [--all] [--top=<n>]`: per-spec-file wall time, slowest first, with the measuring method printed beside the numbers.
 - Lane membership lives in `test-lanes.json`, not in `package.json`. A new spec is fast unless the manifest (or a `*.slow.spec.js`, `*.perf.spec.js`, `*.e2e.spec.js` file name) says otherwise. A spec file that no test glob collects fails `cli/test-lanes-coverage.spec.js`.
 - A spec that asserts a wall-clock or CPU budget belongs in the slow lane (name it `*.perf.spec.js`), or its margin must hold on a machine running many agents.
 
