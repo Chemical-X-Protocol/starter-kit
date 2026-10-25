@@ -56,9 +56,28 @@ const loadMain = async () => {
   }
 };
 
+// The early commands run before main.js, so --root / CHEMX_PROJECT_ROOT are applied here. The module loads
+// dynamically: a chemx whose own sources are mid-merge must still report its conflicts in the cwd.
+const earlyArgs = async () => {
+  try {
+    const { applyCliRoot, mentionsRootFlag, ROOT_ENV } = await import('./cli-root.js');
+    const usesRoot = mentionsRootFlag(ARGS) || Boolean(process.env[ROOT_ENV]);
+    if (!usesRoot) return ARGS;
+    const root = applyCliRoot(ARGS);
+    if (root.error) {
+      process.stderr.write(`✕ ${root.error}\n`);
+      return null;
+    }
+    return root.args;
+  } catch {
+    return ARGS; // chemx-allow: best-effort cli-root.js may itself be mid-merge; the conflicts report must still run in the cwd
+  }
+};
+
 if (EARLY) {
   const run = EARLY === 'conflicts' ? runConflictsCli : runConflictDiff;
-  process.exitCode = run(ARGS, process.cwd());
+  const args = await earlyArgs();
+  process.exitCode = args ? run(args, process.cwd()) : 1;
 }
 
 const main = EARLY ? {} : await loadMain();
