@@ -9,8 +9,8 @@ import { looksLikeRegex } from './search-regex-guard.js';
 import { renderPlain, isListMode } from './search-literal-view.js';
 
 const describeScope = (res, root, scopeKey) => {
-  const hiddenNote = res.skipped.hidden ? 'hidden paths skipped (--hidden)' : 'hidden paths included';
-  return `searched ${res.filesSearched} files in ${scopeKey} under ${root} via ${res.engine}; ${hiddenNote}; .gitignore honoured`;
+  const hiddenNote = res.skipped.hidden ? 'dot-directories searched; git-ignored paths skipped (--hidden includes them)' : 'git-ignored paths included';
+  return `searched ${res.filesSearched} files in ${scopeKey} under ${root} via ${res.engine}; ${hiddenNote}`;
 };
 
 const finish = (status, isCli) => {

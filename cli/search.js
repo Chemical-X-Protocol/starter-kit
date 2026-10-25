@@ -201,7 +201,7 @@ export const runSearch = async (rawArgs = [], isCli = true) => {
   const page = queryIndexPage(db, { query, tier, limit, scopeDirs: index.scopeDirs });
   const durationMs = Date.now() - startTime;
   const hasFallback = shouldFallBack(page, query, tier);
-  const fallbackOptions = { cwd, dir: parsed.values.dir ?? (hasPathArgs ? pathArgs : null), limit: parsed.values.limit !== undefined ? limit : undefined, isJson };
+  const fallbackOptions = { cwd, dir: parsed.values.dir ?? (hasPathArgs ? pathArgs : null), limit: parsed.values.limit !== undefined ? limit : undefined, isJson, isHidden: parsed.flags.has('--hidden') };
   if (isJson) {
     const literal = hasFallback ? runLiteralFallback(query, fallbackOptions) : undefined;
     const payload = buildQueryPayload(page, { query, tier, durationMs, isColumnar, index, literal });
