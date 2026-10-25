@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { formatTestStep, testStepIcon, formatVerdict, createProgress } from './verify-report.js';
+import { formatTestStep, testStepIcon, formatVerdict, createProgress, formatPhpLintStep, formatPhpLintErrors, lintScopeNote } from './verify-report.js';
 import { formatTestHeadline } from './test-report.js';
 import { stripAnsi } from './terminal.js';
 import { STATUS } from './result-status.js';
@@ -67,4 +67,28 @@ test('verify-report: a failed test step names the first failing test', () => {
   assert.equal(formatTestStep(failed), '1 failed: cli/ui-*.js under 100 lines: ui-server.js 103');
   assert.match(formatTestStep({ ...failed, failed: 3 }), /\(\+2 more\)$/);
   assert.equal(formatTestStep({ ...failed, failures: [] }), '1 failed');
+});
+
+const lint = { status: STATUS.PASS, command: 'php -l', checked: 3, failed: 0, scope: 'changed vs HEAD', note: null, errors: [] };
+
+test('verify-report: the php -l step says what it checked, or that there was nothing to check', () => {
+  assert.equal(formatPhpLintStep(lint), 'Clean (3 PHP file(s), changed vs HEAD)');
+  assert.equal(formatPhpLintStep({ ...lint, checked: 0 }), 'No PHP files to check (changed vs HEAD; --all lints every PHP file)');
+});
+
+test('verify-report: a skipped php -l step is one line with the reason, a failed one counts the errors', () => {
+  assert.equal(formatPhpLintStep({ ...lint, status: SKIPPED, checked: 0, scope: null, note: 'php is not on PATH, so php -l did not run' }), 'Skipped (php is not on PATH, so php -l did not run)');
+  assert.equal(formatPhpLintStep({ ...lint, status: STATUS.FAIL, failed: 2 }), '2 syntax error(s) in 3 PHP file(s) (changed vs HEAD)');
+});
+
+test('verify-report: syntax errors print under the step as file:line message, with the count of the ones left out', () => {
+  const errors = [{ file: 'a.php', line: 2, message: 'syntax error' }, { file: 'b.php', line: 0, message: 'php -l timed out' }];
+  assert.equal(stripAnsi(formatPhpLintErrors({ failed: 2, errors })), '      a.php:2 syntax error\n      b.php php -l timed out\n');
+  assert.match(stripAnsi(formatPhpLintErrors({ failed: 9, errors })), /\+7 more\n$/);
+  assert.equal(formatPhpLintErrors(lint), '');
+});
+
+test('verify-report: the php -l step note names why the scope is not the changed files', () => {
+  assert.equal(lintScopeNote(lint), 'php -l');
+  assert.equal(lintScopeNote({ ...lint, note: 'not a git repository; linted every PHP file' }), 'php -l; not a git repository; linted every PHP file');
 });

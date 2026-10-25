@@ -42,6 +42,26 @@ Details and defaults are in [php-wordpress.md](php-wordpress.md). What changes f
 - `task done` refuses a PHP target with `inconclusive-coverage` when its coverage is not `ast` (parser missing, minified, `--fast`, parse error). A low count for such a file says nothing.
 - The delta gates run `git diff` in the current directory and do not enter submodules, so PHP delta gating applies only with the working directory inside the plugin repository. Only the kit has a chemx pre-commit hook; a plugin needs `chemx hook` to get one.
 
+## A repo with its own runner
+
+Task #6770. A repo whose `tests/run-tests.mjs` is a harness runner (see "A repo's own runner" in [test-lanes.md](test-lanes.md)) and that has no `package.json` of its own (the WordPress plugins `xophz-compass-gatekeeper` and `xophz-compass-xp`) has no `node_modules` to install and nothing to typecheck. `chemx verify` finds the runner from the directory you run it in (or `--dir`), also from `tests/` and under a parent that has a `package.json`, and runs three gates instead of the package pipeline. The summary prints one line per gate, in this order, and carries `phpLint`, `tests` and `audit` in `--json`; there is no `typecheck` entry.
+
+| Gate | Runs | Pass | Fail |
+| :--- | :--- | :--- | :--- |
+| PHP syntax | `php -l` on each PHP file | every file parses, or there is no file to check | a file does not parse: the first five are listed as `file:line message` under the step line, with the count of the rest |
+| Test Suite | `node tests/run-tests.mjs`, the whole runner, on the job line | the runner's verdict | a failing test; a run that registered no test is inconclusive (exit 3) |
+| AST Architecture | the audit, as in any other project | the severity gate (or the ratchet, when `chemx-ratchet.json` exists) | the same rules as anywhere |
+
+The exit code is the worst of the gates: 0 all passed, 1 any failed, 3 none failed but one could not prove its result. A gate that did not apply does not count.
+
+Which PHP files. By default the `.php` files that differ from `HEAD` in the working tree (changed, staged and new), deleted files left out. `--base=<rev>` compares with the merge-base of `<rev>` and `HEAD` instead, as `chemx verify --changed --base=<rev>` does elsewhere. `--all` reads every `.php` file below the repo root. Files under `vendor/` and `node_modules/`, the `.git` and `.chemx` directories and nested repositories (a directory with a `.git` of its own, such as a submodule) are never read. When git cannot list the changes (not a repository, unknown base) every PHP file is read and the step line says why. Each file runs through `php -d display_errors=1 -d log_errors=0 -d html_errors=0 -l <file>` with a 30 second limit.
+
+Without `php` on `PATH` the step is skipped in one line (`Skipped (php is not on PATH, so php -l did not run)`, `phpLint.status` `skipped`, `reason` `PHP_NOT_FOUND`). A skipped gate neither passes nor fails the run, so install PHP where the run is meant to prove syntax.
+
+`--changed` narrows the audit to the changed source files, as everywhere; it does not narrow the runner or `php -l`. `--build` adds the build step as in other projects. `--all` is refused in a project that has no such runner, since it would do nothing.
+
+Not guaranteed: `php -l` proves syntax only. PHP audit rules (security, WordPress, structure) are the PHP audit epic's (see [php-wordpress.md](php-wordpress.md)); until `.php` is registered for every audit caller, the audit gate of a PHP-only plugin sees no PHP. A runner that is not `tests/run-tests.mjs`, or that has a `test` script in a `package.json` of its own, is not recognised and the repo verifies as a package (and needs `node_modules`). Pinned by `cli/verify-harness.spec.js` and `cli/verify-php-lint.spec.js`.
+
 ## Using the base delta
 
 - `chemx audit --delta-base=<ref>` (or `--delta-base <ref>`) prints `Delta vs <ref>: ...` and exits 1 when a rule rises in a changed file or the ref is unknown; `--json` prints the result object (`isPassing`, `base`, `rev`, `checked`, `files`).

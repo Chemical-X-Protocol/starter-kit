@@ -6,6 +6,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 
 const HARNESS = `import assert from 'node:assert';
 class TestHarness {
@@ -67,12 +68,16 @@ const FRAMEWORK = 'xophz-compass/tests/harness/test-framework.mjs';
 
 // One test file: `count` passing tests, plus one failing test when `failing`. `depth` is how many
 // directories below tests/ it sits (the harness import climbs out of the repo).
-const suiteOf = (name, count, { failing = false, depth = 0 } = {}) => {
+export const suiteOf = (name, count, { failing = false, depth = 0 } = {}) => {
   const up = '../'.repeat(2 + depth);
   const passing = Array.from({ length: count }, (_, index) => `  it('${name} case ${index + 1}', () => { assert.equal(1 + 1, 2); });`);
   const breaking = failing ? [`  it('${name} breaks', () => { assert.equal(1, 2); });`] : [];
   return [`import { describe, it, assert } from '${up}${FRAMEWORK}';`, '', `describe('${name}', () => {`, ...passing, ...breaking, '});', ''].join('\n');
 };
+
+// Plugin PHP for the verify specs (task #6770): one file that lints clean, one with a syntax error on line 2.
+export const PHP_CLEAN = '<?php\nfunction chemx_fixture_ok() { return 1; }\n';
+export const PHP_BROKEN = '<?php\nfunction chemx_fixture_broken( {\n';
 
 const FILES = {
   'tests/run-tests.mjs': RUNNER,
@@ -101,4 +106,19 @@ export const withHarnessRepo = async (body, extra = {}) => {
   } finally {
     fs.rmSync(plugins, { recursive: true, force: true });
   }
+};
+
+// Turns the fixture repo into a real git repository with everything committed, so "changed" has a
+// HEAD to compare with (the tree's own `.git` is an empty directory). Returns git(...args) for the spec.
+export const commitAll = (repo, message = 'fixture') => {
+  const git = (...args) => {
+    const run = spawnSync('git', ['-c', 'user.name=fixture', '-c', 'user.email=fixture@example.test', '-c', 'commit.gpgsign=false', ...args], { cwd: repo, encoding: 'utf8' });
+    const hasFailed = run.status !== 0;
+    if (hasFailed) throw new Error(`git ${args.join(' ')} failed: ${run.stderr}`);
+    return run.stdout.trim();
+  };
+  git('init', '-q', '-b', 'main');
+  git('add', '-A');
+  git('commit', '-q', '-m', message);
+  return git;
 };

@@ -8,7 +8,7 @@ import { sharedRunField } from './job-line-text.js';
 export const DEFAULT_STEP_TIMEOUT_MS = 10 * 60 * 1000;
 export const SKIPPED = 'skipped';
 
-const LABELS = { audit: 'AST audit', typecheck: 'typecheck', tests: 'tests', build: 'build' };
+const LABELS = { audit: 'AST audit', phpLint: 'php -l', typecheck: 'typecheck', tests: 'tests', build: 'build' };
 
 export const typecheckStepStatus = (report) => {
   const isNotApplicable = report.reason === TYPECHECK_REASONS.NOT_APPLICABLE;
