@@ -69,5 +69,20 @@ export const VERIFY_MORE_COMMANDS = [
       { flag: '--json', desc: 'Print { files, checked, failures } as JSON' }
     ],
     examples: ['chemx docs check', 'chemx docs check AGENTS.md docs --exclude=docs/superpowers/']
+  },
+  {
+    name: 'changelog',
+    aliases: [],
+    group: 'verify',
+    brief: 'Fold changelog fragments into CHANGELOG.md',
+    usage: 'chemx changelog [--check] [--dry-run] [--json]',
+    summary: 'Fold the fragments in docs/changelog.d/ into docs/CHANGELOG.md under Unreleased, then delete them.',
+    description: 'Write one file per change, docs/changelog.d/<ticket-or-slug>.md, and never edit docs/CHANGELOG.md by hand: two tickets then never touch the same lines. A fragment\'s first line is its section heading (`### Fixed`, `### Added`, or a title with the ticket id), then the text; one section per fragment, no other #, ## or ### heading (use #### or bold). Fragments fold in file name order above the sections Unreleased already has; fragments with the same heading become one section, and a heading Unreleased already has gets the text at the end of that section. Every other line of CHANGELOG.md stays as it was. A malformed fragment (no heading, no text, a second heading, a stray non-.md file) or a CHANGELOG.md with no `## Unreleased` section refuses the whole fold: nothing is written and nothing is deleted. docs/changelog.d/README.md is not a fragment. Paths are relative to the current directory (use --root=<dir> for another project).',
+    flags: [
+      { flag: '--check', desc: 'Validate the fragments and that they would fold; change nothing; exit 1 on a problem' },
+      { flag: '--dry-run', desc: 'Say what would be folded; write and delete nothing' },
+      { flag: '--json', desc: 'Print { fragments, problems, sections, folded } as JSON' }
+    ],
+    examples: ['chemx changelog --check', 'chemx changelog --dry-run', 'chemx changelog']
   }
 ];
