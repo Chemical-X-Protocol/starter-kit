@@ -2,6 +2,12 @@
 // Facts record what one file says. They do not prove a callee exists, that a call is reachable,
 // or that a registration runs. Flow is not tracked: a variable holds the class of any `new C`
 // assigned to it in the same function, and `$this->prop` the class of any `new C` assigned to it in the class.
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { PHP_PARSE_VERSION } from './php-parse.js';
 import { linkParents, walk, walkScope, literalString, nodeLine, endLine } from './php-walk.js';
 import { createNameResolver } from './php-names.js';
 import { describeCallable, returnsTrueOnly } from './php-callables.js';
@@ -319,4 +325,72 @@ export function extractFacts(ast, relativePath) {
     idOf,
   });
   return { file: relativePath, classes: classNodes.map(classFact), functions, registrations };
+}
+
+// Environment variable chemx_php_facts_cache (upper case): "off" disables the cache, a path moves it.
+const FACTS_CACHE_ENV = ['CHEMX', 'PHP', 'FACTS', 'CACHE'].join('_');
+let codeKey = null;
+
+/** Hash of the analyzer sources (cli/php/php-*.js minus specs); a change in any of them retires every cached entry. */
+function analyzerCodeKey() {
+  if (codeKey) return codeKey;
+  const dir = path.dirname(fileURLToPath(import.meta.url));
+  const hash = crypto.createHash('sha1');
+  try {
+    const names = fs.readdirSync(dir).filter((n) => /^php-.*\.js$/.test(n) && !n.endsWith('.spec.js')).sort();
+    names.forEach((n) => hash.update(n).update(fs.readFileSync(path.join(dir, n))));
+  } catch {
+    hash.update(String(Math.random()));
+  }
+  hash.update(PHP_PARSE_VERSION);
+  codeKey = hash.digest('hex').slice(0, 16);
+  return codeKey;
+}
+
+function factsCachePath(content, relativePath) {
+  const override = process.env[FACTS_CACHE_ENV];
+  const disabled = override === 'off';
+  if (disabled) return null;
+  const dir = override || path.join(os.tmpdir(), 'chemx-php-facts');
+  const key = crypto.createHash('sha1').update(analyzerCodeKey()).update('\0').update(relativePath).update('\0').update(content).digest('hex');
+  return path.join(dir, `${key}.json`);
+}
+
+/**
+ * Facts for one file through an on-disk cache keyed by the content hash, the relative path and a hash of
+ * the analyzer sources. parse() runs only on a miss and returns the tree or null. Guarantees: a hit
+ * returns what extractFacts built from the same content with the same analyzer sources. Not guaranteed:
+ * the cache exists (CHEMX_PHP_FACTS_CACHE=off, an unwritable temp dir or a corrupt entry all fall back
+ * to parsing), or that entries are ever pruned. Unparsable files are not cached.
+ */
+export function extractFactsCached(content, relativePath, parse) {
+  const file = factsCachePath(content, relativePath);
+  const cached = file === null ? null : readCachedFacts(file);
+  const hit = cached !== null;
+  if (hit) return cached;
+  const ast = parse();
+  const facts = ast ? extractFacts(ast, relativePath) : null;
+  const cacheable = file !== null && facts !== null;
+  if (cacheable) writeCachedFacts(file, facts);
+  return facts;
+}
+
+function readCachedFacts(file) {
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch {
+    // chemx-allow: best-effort a missing or corrupt entry is a miss and the caller parses
+    return null;
+  }
+}
+
+function writeCachedFacts(file, facts) {
+  try {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const tmp = `${file}.${process.pid}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(facts));
+    fs.renameSync(tmp, file);
+  } catch {
+    // chemx-allow: best-effort the cache is optional; a failed write only costs a later parse
+  }
 }

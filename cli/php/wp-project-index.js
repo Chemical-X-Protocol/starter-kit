@@ -8,7 +8,7 @@
 // Paths in and out are posix paths relative to the index root.
 import path from 'node:path';
 import { parsePhp } from './php-parse.js';
-import { extractFacts } from './php-facts.js';
+import { extractFactsCached } from './php-facts.js';
 import { createRootState, refreshRootState, overlayEntry, readOrEmpty, lc, toPosix } from './wp-index-files.js';
 
 export { INDEX_MAX_FILES, INDEX_MAX_BYTES, prefilterPhp } from './wp-index-files.js';
@@ -76,8 +76,8 @@ function makeView(state, overlay) {
   };
 
   const buildFacts = (entry) => {
-    const parsed = parsePhp(contentOf(entry), { filePath: entry.rel });
-    entry.facts = parsed.ast ? extractFacts(parsed.ast, entry.rel) : null;
+    const content = contentOf(entry);
+    entry.facts = extractFactsCached(content, entry.rel, () => parsePhp(content, { filePath: entry.rel }).ast || null);
     entry.byId = new Map(((entry.facts && entry.facts.functions) || []).map((f) => [lc(f.id), f]));
     state.factsBuilt += 1;
     state.parsed.add(entry.rel);
