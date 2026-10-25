@@ -17,8 +17,8 @@ export const RULE_DEFAULTS = {
   // card vault callback in the corpus (HEAD) sets the current user to 0 first and is skipped. Held-out: card vault
   // a708d6a 1 hit (TP, the reported bypass), card vault ae81b02 0 hits (same callback, already skipped), and over
   // 15917 files under wp-content/plugins (vendor/ excluded) 1 hit outside the corpus (super-nerd-bros-dodo-air, TP) and
-  // 0 hits in third-party plugins. The held-out figure rests on 2 hits, under the 10 the bar names.
-  [RULE]: { defaultOn: true, corpus: '6/6', heldOut: '2/2', measured: '2026-10-25' },
+  // 0 hits in third-party plugins. The held-out figure rests on 2 hits, under the 10 the bar names, so the rule ships default-off until 10 held-out hits are labelled.
+  [RULE]: { defaultOn: false, corpus: '6/6', heldOut: '2/2', measured: '2026-10-25' },
 };
 
 const CREDENTIAL_CALLS = new Set([
@@ -52,10 +52,23 @@ function ownNodes(fn) {
   return out;
 }
 
+/** True when the node sits in the body of an if ( ! is_wp_error( ... ) ) branch: the argument is not an error there, so nothing is cleared. */
+const isGuardedByNonError = (node, fn) => {
+  const chain = [];
+  for (let cur = node; cur && cur !== fn; cur = cur.parent) chain.push(cur);
+  return chain.some((cur) => {
+    const owner = cur.parent;
+    const test = owner && owner.kind === 'if' && owner.body === cur ? owner.test : null;
+    const negated = isKind(test, 'unary') && test.type === '!' ? test.what : null;
+    const callee = negated ? callName(negated) : null;
+    return callee !== null && callee.kind === 'function' && lower(callee.name) === 'is_wp_error';
+  });
+};
+
 /** The return (or arrow body) that clears the error, or null. */
 const clearingNode = (nodes, fn) => {
   const arrowValue = [fn.body].filter((b) => isKind(fn, 'arrowfunc') && isClearing(b));
-  const returned = nodes.filter((n) => isKind(n, 'return') && isClearing(n.expr)).map((n) => n.expr);
+  const returned = nodes.filter((n) => isKind(n, 'return') && isClearing(n.expr) && !isGuardedByNonError(n, fn)).map((n) => n.expr);
   return [...arrowValue, ...returned][0] || null;
 };
 

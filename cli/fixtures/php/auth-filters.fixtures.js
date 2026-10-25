@@ -80,6 +80,13 @@ export const AUTH_FILTER_SILENT = {
 	return $error;
 } );
 `,
+  nullOnlyWhenNotError: `${HEADER}add_filter( 'rest_authentication_errors', function ( $e ) {
+	if ( ! is_wp_error( $e ) ) {
+		return null;
+	}
+	return $e;
+} );
+`,
   callbackInOtherClass: `${HEADER}add_filter( 'rest_authentication_errors', array( 'Demo_Elsewhere', 'demo_bypass' ) );
 `,
 };
@@ -87,7 +94,7 @@ export const AUTH_FILTER_SILENT = {
 export const AUTH_FILTER_FIXTURES = {
   SECURITY_WP_AUTH_ERROR_CLEARED: {
     path: AUTH_FILTER_PATH,
-    config: { rules: {}, overrides: [], wordpress: true },
+    config: { rules: { SECURITY_WP_AUTH_ERROR_CLEARED: 'on' }, overrides: [], wordpress: true },
     bad: AUTH_FILTER_SHAPES.methodNull,
     good: AUTH_FILTER_SILENT.returnsOwnError,
   },
