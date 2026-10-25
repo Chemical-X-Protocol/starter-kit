@@ -1,0 +1,37 @@
+// Help text of `chemx team task`: the Options rows of the `chemx team task --help` card, in the order they print.
+// A new option adds its row here.
+
+export const taskCardOptions = [
+  '    \x1b[90mAn option with a value takes it after a space or an equals sign: --prio 2 or --prio=2 (a value starting with - needs the = form)\x1b[0m',
+  '    \x1b[33m--as\x1b[0m <@agent>            Agent handle (e.g. @agent-1)',
+  '    \x1b[33m--status\x1b[0m <status>        Filter by status (queued, in_progress, review, blocked, done)',
+  '    \x1b[33m--brief\x1b[0m                  show: title, status, tier, assignee, deps, parent and only the comments after the description',
+  '    \x1b[33m--all\x1b[0m                    List every status with no row cap',
+  '    \x1b[33m--limit\x1b[0m <n>             Rows to show (default 20)',
+  '    \x1b[33m--agent\x1b[0m <@agent>         Filter tasks assigned to agent',
+  '    \x1b[33m--prio\x1b[0m <1-5>             Task priority filter or setting',
+  '    \x1b[33m--needs\x1b[0m <tier>           Capability tier the task needs: light, standard, deep (add sets it, list filters)',
+  '    \x1b[33m--parent\x1b[0m <id>            add: make the new task a child of this task',
+  '    \x1b[33m--desc\x1b[0m <text>            add: description for the new task',
+  '    \x1b[33m--deps\x1b[0m <ids>             add: comma-separated task ids the new task depends on',
+  '    \x1b[33m--add-dep\x1b[0m <ids>          update: add dependencies (ids, comma-separated)',
+  '    \x1b[33m--rm-dep\x1b[0m <ids>           update: remove dependencies (ids, comma-separated)',
+  '    \x1b[33m--ignore-deps\x1b[0m            claim: claim even if dependencies are unfinished',
+  '    \x1b[33m--reason\x1b[0m <text>          update blocked: why the task is blocked',
+  '    \x1b[33m--sprint\x1b[0m <name>          Sprint label on add or filter',
+  '    \x1b[33m--moscow\x1b[0m <slot>          MoSCoW slot (must, should, could, wont)',
+  '    \x1b[33m--title\x1b[0m <text>           Title (alternative to the positional title)',
+  '    \x1b[33m--priority\x1b[0m <1-5>         Alias of --prio',
+  '    \x1b[33m--description\x1b[0m <text>     Alias of --desc',
+  '    \x1b[33m--repo\x1b[0m <path>            list: show tasks of this repo (default: your repo)',
+  '    \x1b[33m--all-repos\x1b[0m              list: show tasks of every repo',
+  '    \x1b[33m--board\x1b[0m <dir>            Use the board of that directory (also: show <dir>#<id>); it must have a team db',
+  '    \x1b[33m--duplicate-of\x1b[0m <id>      close: the task this one duplicates',
+  '    \x1b[33m--cancel\x1b[0m <reason>        close: cancel the task with a reason',
+  '    \x1b[33m--target\x1b[0m <path>          done: file whose hazards gate completion (set-target stores it)',
+  '    \x1b[33m--no-target-confirm\x1b[0m      done: skip the target confirmation prompt',
+  '    \x1b[33m--new\x1b[0m                    lock acquire: lease a file that does not exist yet',
+  '    \x1b[33m--force, -f\x1b[0m              Force complete task even with remaining hazards',
+  '    \x1b[33m--json\x1b[0m                   Output machine-readable JSON format',
+  '    \x1b[33m--help, -h\x1b[0m               Show this help message'
+];
