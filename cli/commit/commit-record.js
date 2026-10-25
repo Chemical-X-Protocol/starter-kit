@@ -3,7 +3,8 @@
  * The db is the one the coordination resolver picks for a directory (openTeamContext), the same db the
  * `chemx team` commands use, so a commit never writes team rows into a package db the resolver
  * would not read. Which directory that is comes from board-resolve.js (#6750): the committer's claimed
- * board or --board, else cwd. Recording is best effort: a commit that already landed is never undone
+ * board or --board, else cwd; a --no-task commit has no number to look up, so its event goes to cwd's
+ * own board (#6766). Recording is best effort: a commit that already landed is never undone
  * because the db was unavailable; the result says whether the event was recorded.
  */
 import fs from 'node:fs';

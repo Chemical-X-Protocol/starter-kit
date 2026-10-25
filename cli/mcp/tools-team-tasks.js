@@ -9,6 +9,7 @@ import { enforceSingleSlot, verifyTraceability, generateTaskPermalink } from '..
 import { freezeReleaseTrain } from '../team/team-release-train.js';
 import { resolveListOptions, selectTaskPage, buildTaskListView } from '../team/task-list-view.js';
 import { claimWithIgnoreDeps } from '../team/claim-ignore-deps.js';
+import { handoffTask, HANDOFF_USAGE } from '../team/team-task-handoff.js';
 import { resolveAgentId } from '../team/agent-identity.js';
 import { resolveTaskTier } from '../team/task-tier.js';
 import { resolveDependencyStates } from '../team/task-detail-sections.js';
@@ -66,6 +67,15 @@ const setTarget = (ctx, args, cwd) => {
   if (isRefused) return { error: placed.error, refused: true };
   storeTarget(ctx, args.taskId, placed);
   return ctx.db.prepare('SELECT * FROM agent_tasks WHERE id = ?').get(Number(args.taskId));
+};
+
+// handoff: agentId (or as) hands the task to `to`; the board lets the new owner's commit find it (#6766).
+const handoffFromArgs = (ctx, args) => {
+  const by = resolveAgentId(args.agentId || args.as);
+  const to = args.to ?? args.toAgent;
+  const hasTo = typeof to === 'string' && to.trim() !== '';
+  if (!hasTo) return { success: false, reason: 'missing_args', message: `to (the new owner) is required. Usage: ${HANDOFF_USAGE}` };
+  return handoffTask(ctx.db, args.taskId, to, by, { withLocks: args.withLocks === true, board: { root: ctx.root, env: process.env } });
 };
 
 export const handleChemxTeamTask = async (rawArgs = {}, cwd = process.cwd()) => {
@@ -188,6 +198,8 @@ export const handleChemxTeamTask = async (rawArgs = {}, cwd = process.cwd()) => 
     registerAgent(db, { id: agentHandle, role: 'executor' });
     return claimWithIgnoreDeps(db, args.taskId, agentHandle, args.ignoreDeps, { root: ctx.root, env: process.env });
   }
+  const isHandoffAction = action === 'handoff';
+  if (isHandoffAction) return handoffFromArgs(ctx, args);
   const isDoneAction = action === 'done' || action === 'complete';
   if (isDoneAction) {
     const agentHandle = resolveAgentId(args.agentId || args.as);

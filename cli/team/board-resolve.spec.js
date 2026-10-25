@@ -142,15 +142,36 @@ test('--board naming a missing path or a directory with no team db reports an er
   assert.equal(noDb.root, null);
 });
 
-test('without a task number the handle\'s claim board still takes the record, then the directory board', (t) => {
+test('without a task number the directory\'s own board answers, claim or not (#6766)', (t) => {
   const env = makeEnv(t);
   const app = makeBoard(t, 3);
   const plugin = makeBoard(t, 3);
   const before = resolveHandleBoard(plugin.root, { handle: '@h', env });
   claim(app, 1, '@h', env);
   const after = resolveHandleBoard(plugin.root, { handle: '@h', env });
-  assert.deepEqual([before.source, before.root], ['cwd', plugin.root]);
-  assert.deepEqual([after.source, after.root, after.found], ['claim', app.root, false]);
+  assert.deepEqual([before.source, before.root, before.found], ['cwd', plugin.root, false]);
+  assert.deepEqual([after.source, after.root, after.found], ['cwd', plugin.root, false]);
+  assert.deepEqual(after.looked, [{ root: plugin.root, source: 'cwd' }]);
+});
+
+test('without a task number and a directory with no team db, the handle\'s claim board answers (#6766)', (t) => {
+  const env = makeEnv(t);
+  const app = makeBoard(t, 3);
+  const bare = buildStandalone('chemx-bare-');
+  t.after(() => bare.cleanup());
+  claim(app, 1, '@h', env);
+  const resolved = resolveHandleBoard(bare.root, { handle: '@h', env });
+  assert.deepEqual([resolved.source, resolved.root, resolved.found], ['claim', app.root, false]);
+});
+
+test('without a task number --board is still the override (#6766)', (t) => {
+  const env = makeEnv(t);
+  const app = makeBoard(t, 3);
+  const other = makeBoard(t, 3);
+  const plugin = makeBoard(t, 3);
+  claim(app, 1, '@h', env);
+  const resolved = resolveHandleBoard(plugin.root, { handle: '@h', board: other.root, env });
+  assert.deepEqual([resolved.source, resolved.root], ['flag', other.root]);
 });
 
 test('a directory with no team db and no claim has no board', (t) => {

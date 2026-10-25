@@ -58,8 +58,10 @@ export const TEAM_SUB_TOOLS = [
       type: 'object',
       required: ['action'],
       properties: {
-        action: { type: 'string', enum: ['list', 'show', 'create', 'comment', 'claim', 'done', 'block', 'brief'], description: 'Task action. create and comment return ids and a one-line ack, not the text sent. brief reads, sets or clears the long brief of a task' },
-        taskId: { type: 'number', description: 'Target task ID for show, comment, claim, done, block or brief' },
+        action: { type: 'string', enum: ['list', 'show', 'create', 'comment', 'claim', 'handoff', 'done', 'block', 'brief'], description: 'Task action. create and comment return ids and a one-line ack, not the text sent. brief reads, sets or clears the long brief of a task' },
+        taskId: { type: 'number', description: 'Target task ID for show, comment, claim, handoff, done, block or brief' },
+        to: { type: 'string', description: 'Agent handle taking the task over (for handoff; agentId is who hands off)' },
+        withLocks: { type: 'boolean', description: 'Also move the live leases whose purpose names the task (for handoff)' },
         brief: { type: 'boolean', description: 'show: title, status, tier, assignee, dependencies, parent and only the comments after the description (no description)' },
         full: { type: 'boolean', description: 'show: also return the long brief text (default: only its length, briefChars)' },
         search: { type: 'string', description: 'list: only tasks whose title or description contains this text (any case); looks in every status unless status is given' },
