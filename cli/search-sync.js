@@ -14,6 +14,7 @@ import { isSqliteBusyError } from './team/team-db-transaction.js';
 import { debugNote } from './search-debug.js';
 import { parseIndexRecord, collectRecords, revalidateOtherRows, findDroppedRows } from './search-sync-rows.js';
 import { planWalkedScope, hasPlannedChanges, commitSyncPlan } from './search-sync-plan.js';
+import { seedIndexFromParent } from './index-seed.js';
 
 export { parseIndexRecord };
 
@@ -44,6 +45,10 @@ export const syncSearchIndex = (targetDir = 'src', cwd = process.cwd(), options 
   const hasOutsideDirs = requested.outside.length > 0;
   if (hasOutsideDirs) return staleResult(db, root, requested, `outside project root ${root}: ${requested.outside.join(', ')}`);
   if (state.isReadOnly) return staleResult(db, root, requested, 'index db is read-only; rows were not refreshed');
+  // An empty index in a linked worktree starts from the parent checkout's rows (#6769): a copy for each
+  // file whose bytes match, the rest parsed below. 'none' (rows already, no parent) says nothing.
+  const seeded = seedIndexFromParent(db, root);
+  const seed = seeded.status === 'none' ? null : seeded;
 
   // Rows before meta: a scope merged in between shows up as a key with no rows (re-walked
   // later), never as rows with no covering key (which would read as orphans).
@@ -94,7 +99,7 @@ export const syncSearchIndex = (targetDir = 'src', cwd = process.cwd(), options 
     status: isEmptyScope ? 'empty' : 'fresh',
     staleReason: isEmptyScope ? `no indexable source files in scope ${requested.scopeKey}` : null,
     updatedCount: plan.records.length, removedCount: committed.removedCount, totalFiles: files.length, skippedFiles, versionNotice,
-    indexedScopes: committed.scopeKey,
+    indexedScopes: committed.scopeKey, seed,
     // Files compared with disk (walked scope plus re-stat'd rows outside it) and racy rows hashed.
     checkedCount: inScope.checked + outScope.checked, hashedCount: inScope.hashed + outScope.hashed
   };

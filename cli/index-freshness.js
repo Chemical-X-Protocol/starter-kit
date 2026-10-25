@@ -37,6 +37,8 @@ const toFreshness = (tally, syncRes, ms) => ({
   removed: tally.removed + Number(syncRes?.removedCount || 0),
   hashed: tally.hashed + Number(syncRes?.hashedCount || 0),
   notIndexed: tally.notIndexed,
+  // A linked worktree's first sync may have started from the parent checkout's rows (index-seed.js).
+  seed: syncRes?.seed ?? null,
   ms
 });
 

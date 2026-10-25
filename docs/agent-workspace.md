@@ -6,7 +6,7 @@ the file changed.
 
 ```
 chemx scratch [name] [--as=@handle]
-chemx worktree add <path> -b <branch> [--from <ref>] [--link-modules] [--install]
+chemx worktree add <path> -b <branch> [--from <ref>] [--link-modules] [--install] [--no-seed-index]
 chemx worktree remove <path> [--force]
 chemx mutate <file> --apply <patch-file|s/old/new/[g]> [--apply ...] --then "<command>" [--keep]
 ```
@@ -36,13 +36,14 @@ $ node "$(chemx scratch probe.mjs)"
 ## worktree: add and remove
 
 The two steps every agent repeated by hand (and the ones the raw-git nudges kept interrupting): create the
-worktree with `node_modules` ready, and take it away with its merged branch.
+worktree with `node_modules` and an index ready, and take it away with its merged branch.
 
 ```
 $ chemx worktree add ../trees/fix-a -b fix/a --link-modules
 /work/trees/fix-a
 branch fix/a from origin/main (26fdd70)
 node_modules linked (212 entries) from /work/app
+index: seeded 1389 of 1390 files from /work/app (412ms)
 board commands (chemx team ...) run from the main checkout /work/app unless you pass --board=/work
 ```
 
@@ -60,6 +61,21 @@ board commands (chemx team ...) run from the main checkout /work/app unless you 
 - `--install` runs the package manager the lockfile names (`pnpm-lock.yaml`: pnpm, `yarn.lock`: yarn, else npm)
   in the worktree and prints one line, or on failure its last 20 lines (exit 1; the worktree stays). With both
   flags it links first and installs what is missing: the way to give a worktree a new devDependency.
+- `add` then seeds the worktree's **index** from the main checkout's (#6769). A worktree has its own
+  `.chemx/index.db`, and the main checkout's cannot be copied (it holds the board too, and it is stamped for its
+  root), so a fresh worktree's first `chemx q` used to parse every file: 4.8 s idle, 7 s under load, for 1,400
+  files. The seed attaches the main checkout's db read-only and copies, in one transaction, the index rows
+  (files, symbols, props, hooks, imports, embeddings, full-text) of every file whose bytes hash to the content
+  the parent indexed; the first sync parses the rest as usual, so an edited or new file is indexed from disk and
+  a deleted one has no rows. Board, lock, lease, feed, agent, audit and stamp rows never move. The line reads
+  `index: seeded N of M files from <main> (Tms)`. A parent index built by another extractor version, one without
+  content hashes, a busy parent db (the seed waits at most 500 ms, never the 30 s busy retry) or an unreadable
+  one gives `index: seed from parent skipped: <reason>` and the first q indexes from disk; a main checkout
+  without an index says nothing. `--no-seed-index` skips the step and creates no `.chemx`.
+- A worktree made by plain `git worktree add` gets the same seed on its first index-backed command (`q`,
+  `read`, `audit`, the MCP tools): that answer's index line ends with `; seeded N of M files from <main>`. The
+  seeded rows are hash-checked once on that first sync (by the clock they are racy, like any row synced within
+  2 s of its file) and trusted by mtime and size after that. Numbers: [index-freshness.md](index-freshness.md).
 - A failed `add` (path taken, unknown base, branch exists) leaves no branch behind that this call created.
 - `remove <path>` removes the worktree, then deletes its local branch when the branch is **merged into the default
   branch**: an ancestor of it, or squash-merged (merging the branch into the base would change nothing; asked of
@@ -112,6 +128,8 @@ mutate: command exited 1; gate.js restored byte for byte
 ## Where the code is
 
 `cli/scratch-dir.js`, `cli/commands/cmd-scratch.js`; `cli/worktree-git.js`, `cli/worktree-modules.js`,
-`cli/commands/cmd-worktree.js`; `cli/mutate-edit.js`, `cli/commands/cmd-mutate.js`; schema entries in
-`cli/commands-schema-workspace.js`. Specs use temporary git repos with a local bare origin; nothing touches the
-network, and `--install` is replaced by a recording stub.
+`cli/worktree-index.js`, `cli/commands/cmd-worktree.js`; the index seed in `cli/index-seed-parent.js` (which
+checkout is the parent) and `cli/index-seed.js` (the copy), called from `cli/search-sync.js` on an empty index;
+`cli/mutate-edit.js`, `cli/commands/cmd-mutate.js`; schema entries in `cli/commands-schema-workspace.js`. Specs
+use temporary git repos with a local bare origin; nothing touches the network, and `--install` is replaced by a
+recording stub. `cli/index-seed-e2e.spec.js` is the end-to-end seed: a parent repo, a real worktree, one edited file.

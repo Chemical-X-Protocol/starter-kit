@@ -6,7 +6,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { DatabaseSync } from 'node:sqlite';
-import { withBusyRetry, openHolders } from './coordination-busy.js';
+import { withBusyRetry, withoutBusyRetry, openHolders } from './coordination-busy.js';
 import { openIndexDb, clearDbCache } from '../search-db.js';
 
 // Spec hygiene (#4520): a bare node --test must not inherit a shell's CHEMX_PROJECT_ROOT.
@@ -131,6 +131,29 @@ test('openHolders names another process that has the db file open, and nothing f
     assert.match(openHolders(dbPath), new RegExp(`pid ${child.pid} `));
     assert.equal(openHolders(path.join(dir, 'missing.db')), '');
   } finally {
+    child.kill();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('withoutBusyRetry: a busy statement fails after busy_timeout, not the deadline, and the retry is back afterwards (#6769)', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-busy-6769-'));
+  const dbPath = path.join(dir, 'index.db');
+  const setup = new DatabaseSync(dbPath);
+  setup.exec('PRAGMA journal_mode = WAL; CREATE TABLE t (v TEXT);');
+  setup.close();
+  const child = await holder(dbPath, 2500);
+  const db = withBusyRetry(new DatabaseSync(dbPath));
+  db.exec('PRAGMA busy_timeout = 200;');
+  try {
+    const start = Date.now();
+    assert.throws(() => withoutBusyRetry(db, () => db.prepare('INSERT INTO t VALUES (?)').run('fast')), /locked|busy/i);
+    const failedAfter = Date.now() - start;
+    assert.ok(failedAfter < 1500, `failed after ${failedAfter} ms, which is a deadline wait, not a busy_timeout`);
+    db.prepare('INSERT INTO t VALUES (?)').run('team');
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM t').get().n, 2, 'the retried write waited the holder out');
+  } finally {
+    db.close();
     child.kill();
     fs.rmSync(dir, { recursive: true, force: true });
   }

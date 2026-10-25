@@ -1,9 +1,11 @@
 /**
  * Chemical X Protocol: `chemx worktree add|remove` (#6762, K17).
  * add: `git worktree add -b <branch> <path> <base>`, then node_modules (--link-modules: a real directory
- * of symlinks into the main checkout's, --install: the lockfile's package manager), then the output: the
- * path first (so `cd "$(chemx worktree add ... | head -1)"` works), the branch and base, the node_modules
- * line, and the reminder that board commands run from the main checkout. remove: removes the worktree and
+ * of symlinks into the main checkout's, --install: the lockfile's package manager), then the worktree's
+ * index seeded from the main checkout's rows for unchanged files (#6769; --no-seed-index skips it), then
+ * the output: the path first (so `cd "$(chemx worktree add ... | head -1)"` works), the branch and base,
+ * the node_modules line, the index line, and the reminder that board commands run from the main
+ * checkout. remove: removes the worktree and
  * deletes its local branch when it is merged into the default branch (a squash merge counts); refuses an
  * unmerged branch, a dirty worktree, the main checkout and the directory you stand in unless --force.
  * Exit: 0 done, 1 refused or git failed, 2 misused. Git and install details: cli/worktree-git.js,
@@ -13,21 +15,22 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { resolveCoordinationRoot } from '../team/coordination-root.js';
 import { linkNodeModules, installCommandFor, runInstall } from '../worktree-modules.js';
+import { seedWorktreeIndex, formatSeedLine } from '../worktree-index.js';
 import { addWorktree, removeWorktree, deleteBranch, branchExists, listWorktrees, defaultBaseRef, resolvesToCommit, shortRef, mergeState } from '../worktree-git.js';
 
 const EXIT_FAILED = 1;
 const EXIT_MISUSE = 2;
-const USAGE = 'usage: chemx worktree add <path> -b <branch> [--from <ref>] [--link-modules] [--install]\n       chemx worktree remove <path> [--force]\n';
+const USAGE = 'usage: chemx worktree add <path> -b <branch> [--from <ref>] [--link-modules] [--install] [--no-seed-index]\n       chemx worktree remove <path> [--force]\n';
 const TAIL_LINES = 20;
 const VALUE_FLAGS = { '-b': 'branch', '--branch': 'branch', '--from': 'from', '--as': null };
-const SWITCH_FLAGS = { '--link-modules': 'linkModules', '--install': 'install', '--force': 'force' };
+const SWITCH_FLAGS = { '--link-modules': 'linkModules', '--install': 'install', '--no-seed-index': 'noSeedIndex', '--force': 'force' };
 
 const splitFlag = (word) => {
   const isValued = word.startsWith('-') && word.includes('=');
   return isValued ? [word.slice(0, word.indexOf('=')), word.slice(word.indexOf('=') + 1)] : [word, undefined];
 };
 
-const emptyParse = () => ({ action: undefined, target: undefined, branch: undefined, from: undefined, linkModules: false, install: false, force: false, error: null });
+const emptyParse = () => ({ action: undefined, target: undefined, branch: undefined, from: undefined, linkModules: false, install: false, noSeedIndex: false, force: false, error: null });
 
 // Reads one flag at words[at]; returns the index of the last word it used, or an error.
 const readFlag = (parsed, words, at) => {
@@ -57,7 +60,7 @@ const checkParsed = (parsed, positional) => {
   return lacksBranch ? 'add needs the new branch: -b <branch>' : null;
 };
 
-/** @returns {{ action: string|undefined, target: string|undefined, branch: string|undefined, from: string|undefined, linkModules: boolean, install: boolean, force: boolean, error: string|null }} */
+/** @returns {{ action: string|undefined, target: string|undefined, branch: string|undefined, from: string|undefined, linkModules: boolean, install: boolean, noSeedIndex: boolean, force: boolean, error: string|null }} */
 export const parseWorktreeArgs = (args = []) => {
   const words = args.map(String);
   const parsed = emptyParse();
@@ -128,7 +131,8 @@ const runAdd = (parsed, cwd, env, io) => {
   if (!isAdded) return failure(io, tail(added.output));
   const linkText = parsed.linkModules ? linkLine(main, target) : '';
   const install = parsed.install ? installStep(target, io, env) : { line: '' };
-  io.out(`${target}\nbranch ${parsed.branch} from ${base} (${shortRef(cwd, base)})\n${linkText}${install.line ?? ''}${boardReminder(main)}`);
+  const seedText = parsed.noSeedIndex ? '' : formatSeedLine(seedWorktreeIndex(target));
+  io.out(`${target}\nbranch ${parsed.branch} from ${base} (${shortRef(cwd, base)})\n${linkText}${install.line ?? ''}${seedText}${boardReminder(main)}`);
   return install.problem ? failure(io, install.problem) : 0;
 };
 

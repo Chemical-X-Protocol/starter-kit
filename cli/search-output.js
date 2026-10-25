@@ -4,6 +4,7 @@ import { STATUS, toExitCode, combineStatuses } from './result-status.js';
 import { INDEX_VERSION } from './search-index-meta.js';
 import { scopeSqlFilter } from './search-root.js';
 import { describeSkipped } from './conflicts.js';
+import { describeSeed } from './index-seed.js';
 
 export const describeIndexFromSync = (syncRes) => {
   const hasSync = Boolean(syncRes);
@@ -42,7 +43,9 @@ export const formatFreshness = (freshness) => {
   const hashed = freshness.hashed > 0 ? `, ${freshness.hashed} racy rows hash-checked` : '';
   const notIndexed = (freshness.notIndexed || []).map((n) => `${n.path} not indexed: ${n.reason}`);
   const notes = notIndexed.length > 0 ? `; ${notIndexed.join('; ')}` : '';
-  return `synced ${freshness.checked} files, ${freshness.reindexed} re-indexed, ${freshness.removed} removed${hashed}, ${freshness.ms}ms${notes}`;
+  const seed = describeSeed(freshness.seed);
+  const seedNote = seed !== '' ? `; ${seed}` : '';
+  return `synced ${freshness.checked} files, ${freshness.reindexed} re-indexed, ${freshness.removed} removed${hashed}, ${freshness.ms}ms${notes}${seedNote}`;
 };
 
 const formatConflictNote = (index) => {
