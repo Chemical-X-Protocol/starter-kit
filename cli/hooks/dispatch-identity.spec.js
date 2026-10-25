@@ -15,6 +15,8 @@ import { everyChemxCallCarriesIdentity, chemxCallIdentities, dispatchAgentFromTr
 import { takeLeaseWhenFree } from '../edit-locks.js';
 import { openIndexDb } from '../search-db.js';
 
+delete process.env.CHEMX_PROJECT_ROOT;
+
 const WF = 'wf_abc123';
 const ENV = {};
 
