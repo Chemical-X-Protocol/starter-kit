@@ -112,6 +112,17 @@ Reference: [team-locks.md](team-locks.md#several-paths-and-one-line-each-6747).
 - The refusal (native hook, and `chemx patch` / `write`) names the holder, the purpose and expiry, who you act as and the exact commands: `lock renew ... --as=<holder>` to declare a lease that is yours, the holder's `lock release`, `task handoff <id> <you> --with-locks --as=<holder>` when the purpose is a task id, then `lock acquire ... --as=<you>`.
 - New: `cli/hooks/declared-identity.js`, `cli/team/lock-hints.js`, `chemxCallIdentities` in `cli/hooks/dispatch-identity.js`. Docs: [hooks.md](hooks.md#native-edits-and-file-locks), [team-locks.md](team-locks.md).
 
+### Leases survive a non-chemx runner (K13, #6758, epic #6745)
+
+Full reference: [team-locks.md](team-locks.md#what-renews-a-lease). The 5-minute TTL stays the base rule.
+
+- New `chemx run [--as=@me] -- <command...>`: runs the command with inherited stdin, stdout and stderr, renews the caller's leases every 60 seconds while it runs (and once at the end), and exits with the command's code (signal: 128 + n; 127 not found, 126 cannot run, 125 misused). SIGINT, SIGTERM and SIGHUP reach the command. One quoted word with spaces is a shell command. Without a handle it still runs and says on stderr that nothing is renewed. **Changed:** `run` used to be an alias of `chemx build` (the build audit); `chemx build` and `chemx wrap` keep that, `run` is now the pass-through wrapper.
+- Renewal now also reaches the board of every task the handle has in_progress (the claim pointer of #6750, checked against the board's db), so a builder in a git worktree outside the board root keeps its leases alive from there; it did not before, whatever it ran. A done or reassigned task ends it. New: `cli/team/lease-claim-roots.js`.
+- The activity window: a lease of the holder's own that lapsed at most 10 minutes ago (last chemx call at most 15 minutes ago) comes back at the holder's next chemx command of any kind (test, check, read, q, claim included) when the holder has a task in_progress on that board and nobody took, holds or queued for the file; purpose kept, full TTL, a `lock_acquired` feed event records it. Past the window, or without an in_progress task, a lapse stays visible as before. New: `cli/team/lease-grace.js`.
+- `chemx team task claim` renews the claimer's leases on that board once the claim is recorded (CLI and MCP).
+- `lock renew` by a handle queued for the file says `you are queued behind it (position N, it expires HH:MM)` and the JSON carries `queued` and `position`. The acquire and poll lines of #6747 already said `queued behind @holder`.
+- Confirmed, not changed: `read`, `q`, `check` and `test` already renewed at their start; the lapses seen during them were leases on a board the worktree command could not see.
+
 ## Unreleased (feat/job-line, 2026-10-13)
 
 ### Audit rules and gates (review fixes, 2026-10-15, epic #6088)

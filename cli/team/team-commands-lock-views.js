@@ -124,9 +124,21 @@ const RENEW_REFUSALS = {
   expired: 'your lease expired; acquire it again with chemx team lock acquire'
 };
 
+// A waiter's renew is refused as a non-holder; say where it stands in the queue (the acquire line's wording).
+const queuePlace = (db, file, agentId, cwd) => {
+  const status = getFileLockStatus(db, file, { cwd });
+  const at = (status?.waiters ?? []).findIndex((waiter) => waiter.agent_id === agentId);
+  const isQueued = at >= 0 && Boolean(status.lease);
+  return isQueued ? { position: at + 1, expiresAt: status.lease.expires_at } : null;
+};
+
+const queueNote = (place) => (place ? `; you are queued behind it (position ${place.position}, it expires ${clockTime(place.expiresAt).slice(0, 5)})` : '');
+
 export const runLockRenew = (db, file, agentId, flags, isCli, cwd) => {
-  const res = renewFileLock(db, file, agentId, { cwd });
-  const isRenewed = Boolean(res.renewed);
+  const renewal = renewFileLock(db, file, agentId, { cwd });
+  const isRenewed = Boolean(renewal.renewed);
+  const place = renewal.reason === 'not_holder' ? queuePlace(db, file, agentId, cwd) : null;
+  const res = place ? { ...renewal, queued: true, position: place.position } : renewal;
   setExit(isCli, isRenewed ? 0 : EXIT_ERROR);
   const isQuiet = !isCli;
   if (isQuiet) return res;
@@ -139,6 +151,6 @@ export const runLockRenew = (db, file, agentId, flags, isCli, cwd) => {
     return res;
   }
   const holderNote = res.lease?.locked_by ? ` (held by ${res.lease.locked_by})` : '';
-  process.stderr.write(`\x1b[31m✕ Renew refused: ${RENEW_REFUSALS[res.reason] ?? res.reason}${holderNote}\x1b[0m\n`);
+  process.stderr.write(`\x1b[31m✕ Renew refused: ${RENEW_REFUSALS[res.reason] ?? res.reason}${holderNote}${queueNote(place)}\x1b[0m\n`);
   return res;
 };

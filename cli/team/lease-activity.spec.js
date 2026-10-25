@@ -7,11 +7,14 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { openIndexDb } from '../search-schema.js';
 import { requestFileLock } from './team-db-locks.js';
+import { createTask, updateTaskStatus } from './team-db-tasks.js';
+import { registerAgent } from './team-db-agents.js';
+import { claimWithIgnoreDeps } from './claim-ignore-deps.js';
 import { executeMcpTool } from '../mcp/tools.js';
 import {
   renewHolderLeases, startLeaseKeepalive, trackLeaseActivity, agentFromArgs, activityHolder, LONG_RUNNING_COMMANDS
@@ -152,4 +155,76 @@ test('the keepalive timer is unref\'d so it never holds a process open', (t) => 
   execFileSync('node', ['--input-type=module', '-e', script], { timeout: 20000, stdio: 'ignore' });
   assert.ok(Date.now() - started < 15000, 'the process exited without waiting for the timer');
   t.diagnostic('unref check ok');
+});
+
+// A board where `handle` holds a lease and a claimed task in_progress, plus a directory outside every board.
+const makeClaimedProject = (t, handle = '@spec-a') => {
+  const project = makeProject(t);
+  const claims = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-lease-claims-'));
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-lease-outside-'));
+  t.after(() => fs.rmSync(claims, { recursive: true, force: true }));
+  t.after(() => fs.rmSync(outside, { recursive: true, force: true }));
+  const env = { ...process.env, CHEMX_BOARD_CLAIMS_DIR: claims };
+  registerAgent(project.db, { id: handle, role: 'executor' });
+  const task = createTask(project.db, { title: 'work' });
+  claimWithIgnoreDeps(project.db, task.id, handle, undefined, { root: project.root, env });
+  requestFileLock(project.db, 'src/a.js', handle, { cwd: project.root, ttlMs: 60000 });
+  return { ...project, env, outside, taskId: task.id };
+};
+
+test('outside the board (a git worktree), the board of the holder\'s in_progress claim is still renewed', (t) => {
+  const { db, env, outside } = makeClaimedProject(t);
+  const before = expiryOf(db, 'src/a.js');
+
+  const renewed = renewHolderLeases(outside, '@spec-a', { ttlMs: FIVE_MINUTES, env });
+
+  assert.equal(renewed, 1);
+  assert.ok(expiryOf(db, 'src/a.js') > before + FIVE_MINUTES - 120000, 'extended from a directory that is under no board');
+});
+
+test('outside the board, a finished task stops the renewal: forgotten locks are not kept alive from elsewhere', (t) => {
+  const { db, env, outside, taskId } = makeClaimedProject(t);
+  updateTaskStatus(db, taskId, 'done');
+  const before = expiryOf(db, 'src/a.js');
+
+  assert.equal(renewHolderLeases(outside, '@spec-a', { ttlMs: FIVE_MINUTES, env }), 0);
+  assert.equal(expiryOf(db, 'src/a.js'), before);
+});
+
+test('CLI path: read, q and check renew a lease like any other chemx command', (t) => {
+  const { root, db } = makeProject(t);
+  fs.mkdirSync(path.join(root, 'src'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'src', 'a.js'), 'export const a = 1;\n');
+  requestFileLock(db, 'src/a.js', '@spec-a', { cwd: root, ttlMs: 60000 });
+  const env = { ...process.env, CHEMX_AGENT_ID: '@spec-a' };
+
+  for (const args of [['read', 'src/a.js', '--bare'], ['q', '-g', 'export'], ['check', 'src/a.js']]) {
+    db.prepare('UPDATE file_leases SET expires_at = ? WHERE file_path = ?').run(Date.now() + 60000, 'src/a.js');
+    spawnSync('node', [CLI, ...args], { cwd: root, env, stdio: 'ignore' });
+    assert.ok(expiryOf(db, 'src/a.js') > Date.now() + FIVE_MINUTES - 120000, `chemx ${args[0]} extended the lease`);
+  }
+});
+
+test('CLI path: a read run from a worktree outside the board renews the claimed board\'s lease', (t) => {
+  const { db, env, outside } = makeClaimedProject(t);
+  fs.writeFileSync(path.join(outside, 'note.txt'), 'x\n');
+  const before = expiryOf(db, 'src/a.js');
+
+  spawnSync('node', [CLI, 'read', 'note.txt', '--bare', '--as=@spec-a'], { cwd: outside, env, stdio: 'ignore' });
+
+  assert.ok(expiryOf(db, 'src/a.js') > before + FIVE_MINUTES - 120000);
+});
+
+test('a task claim renews the claimer\'s leases and brings back one that lapsed a few minutes ago', (t) => {
+  const { root, db, env } = makeClaimedProject(t);
+  requestFileLock(db, 'src/b.js', '@spec-a', { cwd: root, ttlMs: 60000 });
+  db.prepare('UPDATE file_leases SET expires_at = ? WHERE file_path = ?').run(Date.now() - 4 * 60000, 'src/b.js');
+  const second = createTask(db, { title: 'more' });
+  const before = expiryOf(db, 'src/a.js');
+
+  const res = claimWithIgnoreDeps(db, second.id, '@spec-a', undefined, { root, env });
+
+  assert.equal(res.success, true);
+  assert.ok(expiryOf(db, 'src/a.js') > before + FIVE_MINUTES - 120000, 'the live lease is extended');
+  assert.ok(expiryOf(db, 'src/b.js') > Date.now() + FIVE_MINUTES - 120000, 'the lease that lapsed 4 minutes ago is back');
 });

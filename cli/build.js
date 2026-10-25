@@ -23,7 +23,7 @@ export const BUILD_ARGS = {
 const BUILD_HELP = [
   'USAGE',
   '  chemx build [options] [-- <command>]',
-  '  chemx run|wrap [options] <command> [args...]',
+  '  chemx wrap [options] <command> [args...]',
   '',
   '  Options go before the command: every word from the first command word on is passed to it.',
   '',

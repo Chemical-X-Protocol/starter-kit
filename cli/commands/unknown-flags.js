@@ -18,6 +18,7 @@ import { findCommandSchema } from '../commands-schema.js';
 /** Commands whose handler forwards args to another tool or owns its own subcommand parser. */
 export const PASSTHROUGH_COMMANDS = {
   build: 'passes args after the command through to the wrapped tool',
+  run: 'passes args after the command through to the command it runs',
   test: 'passes args through to the test runner',
   typecheck: 'passes args through to the type checker',
   lint: 'passes args through to the linter',
