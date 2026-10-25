@@ -5,6 +5,8 @@
 
 import { isRepoSourcePath } from './guard-paths.js';
 import { fileOperands, gitSubcommand, hasInPlaceFlag, inputRedirectTargets, optionValue, stdoutWrites } from './guard-args.js';
+import { DIFF_SCRIPTING_FLAGS, LOG_SCRIPTING_FLAGS, grepParts } from './guard-shapes.js';
+import { PLAIN_GIT_NUDGES, guardSettings } from './guard-allow.js';
 import { READ_GAP_RULES, GIT_GREP_RULE } from './guard-rules-reads.js';
 import { SHELL_REWRITE_RULES } from './guard-rules-shell.js';
 import { NUDGE_RULES } from './guard-rules-nudge.js';
@@ -15,12 +17,9 @@ try {
   ({ findCommandSchema } = await import('../commands-schema.js'));
 } catch { /* chemx-allow: best-effort the schema only hides nudges for commands chemx lacks */ }
 
-const DIFF_SCRIPTING_FLAGS = /^--(?:quiet|exit-code|name-only|name-status|numstat|check|raw)$/;
-const LOG_SCRIPTING_FLAGS = /^--(?:format|pretty=(?:format|tformat):)|^--pretty=format|^--format=/;
 const READ_TOOLS = new Set(['cat', 'head', 'tail', 'less', 'more', 'bat']);
 const READ_VALUE_FLAGS = new Set(['-n', '-c', '--lines', '--bytes']);
 const GREP_TOOLS = new Set(['grep', 'egrep', 'fgrep']);
-const GREP_VALUE_FLAGS = new Set(['-e', '-f', '-m', '-A', '-B', '-C', '--regexp', '--file', '--max-count', '--include', '--exclude', '--exclude-dir', '--context', '--after-context', '--before-context']);
 const AWK_VALUE_FLAGS = new Set(['-F', '-v', '-f']);
 
 const isScript = (name, base) => name === base || name.startsWith(`${base}:`);
@@ -46,14 +45,6 @@ const isRecursiveGrep = ({ tool, args }) => {
   const isGrep = GREP_TOOLS.has(tool);
   if (!isGrep) return false;
   return args.some((arg) => arg === '--recursive' || /^-[a-zA-Z]*[rR]/.test(arg));
-};
-
-// A grep with no file operand filters stdin (a pipe filter) and stays free.
-const grepParts = ({ args }) => {
-  const operands = fileOperands(args, GREP_VALUE_FLAGS);
-  const patternFlag = optionValue(args, ['-e', '--regexp']);
-  const hasPatternFlag = patternFlag !== null;
-  return hasPatternFlag ? { pattern: patternFlag, files: operands } : { pattern: operands[0] ?? '<text>', files: operands.slice(1) };
 };
 
 const awkParts = ({ args }) => {
@@ -107,8 +98,16 @@ const hasChemxCommand = (context, name) => {
   return probe(name);
 };
 
+// A nudge with no `command` points at something every chemx has (a flag of d, log, show, q, f, wait).
+const isNudgeActive = (rule, context, isPlainGit) => {
+  const isSilencedByPlainGit = isPlainGit && PLAIN_GIT_NUDGES.has(rule.id);
+  const hasReplacement = rule.command === undefined || hasChemxCommand(context, rule.command);
+  return hasReplacement && !isSilencedByPlainGit;
+};
+
 export const activeRules = (context) => {
-  const nudges = NUDGE_RULES.filter((rule) => hasChemxCommand(context, rule.command));
+  const isPlainGit = guardSettings(context).plainGit;
+  const nudges = NUDGE_RULES.filter((rule) => isNudgeActive(rule, context, isPlainGit));
   const base = context.enforceSearch ? [...RUNNER_RULES, ...SEARCH_RULES] : RUNNER_RULES;
   return [...base, ...nudges];
 };

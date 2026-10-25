@@ -84,7 +84,7 @@ These runs are always heavy, even for one file: they take a ticket and run one a
 
 Not guaranteed: the name filter relies on the harness exposing `harness.suites[].tests[]` with `name` fields (the error says so when it does not); a runner that is not named `tests/run-tests.mjs`, or reads its test list from somewhere other than side-effect imports, is not recognised and `chemx test` falls back to the package script. `chemx test -- <command>` runs the command as given and never uses the generated runner.
 
-The guard nudges a raw `node tests/run-tests.mjs` toward `chemx test`; `{ "test": { "runners": ["node tests/run-tests.mjs"] } }` in `.chemxrc` lists runners it leaves alone (docs/hooks.md). Pinned by `cli/test-project-runner.spec.js`, `cli/build/detector.spec.js`, `cli/hooks/guard-test-runners.spec.js`.
+The guard nudges a raw `node tests/run-tests.mjs` toward `chemx test`; `{ "test": { "runners": ["node tests/run-tests.mjs"] } }` in `.chemxrc` lists runners it leaves alone; `guard.allow` is the same list under its general name (docs/hooks.md). Pinned by `cli/test-project-runner.spec.js`, `cli/build/detector.spec.js`, `cli/hooks/guard-test-runners.spec.js`.
 
 ## pnpm layouts
 

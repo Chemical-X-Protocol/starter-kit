@@ -16,6 +16,8 @@
 import { parseShell } from './shell-parse.js';
 import { resolveInvocation, isChemxInvocation } from './guard-invocation.js';
 import { activeRules } from './guard-rules.js';
+import { refineRule } from './guard-refine.js';
+import { guardSettings, isAllowListed, isToolProbe } from './guard-allow.js';
 import { scriptFilesOf } from './guard-rules-shell.js';
 import { contextForCommand } from './guard-paths.js';
 import { isPromotedNudge, resolveNudgePromotion } from './guard-config.js';
@@ -53,7 +55,25 @@ const segmentOf = (parsed) => {
 
 const useOf = (rule, invocation, parsed, context) => (typeof rule.use === 'function' ? rule.use(invocation, parsed, context) : rule.use);
 
-const collectHits = (parsedCommands, context) => {
+// The hit a matched rule makes once the argument shape is checked (guard-refine.js): null when chemx
+// has nothing for the shape, a nudge when it covers part of it, the deny itself when it covers all.
+const hitFor = (rule, invocation, parsed, context) => {
+  const refined = refineRule(rule, invocation, parsed, context);
+  const isAllowed = refined?.severity === 'allow';
+  if (isAllowed) return null;
+  const isNudge = refined?.severity === 'nudge';
+  if (isNudge) {
+    const use = refined.use ?? `${useOf(rule, invocation, parsed, context)}  (${refined.note})`;
+    return { rule: { id: refined.id, severity: 'nudge', promotable: false }, use };
+  }
+  return { rule, use: refined?.use ?? useOf(rule, invocation, parsed, context) };
+};
+
+// Segments the guard never judges: the repo's guard.allow entries and tool existence probes.
+const isSilentSegment = (parsed, invocation, context) => isToolProbe(parsed, invocation) || isAllowListed(parsed, guardSettings(context).allow);
+
+const collectHits = (parsedCommands, rootContext, rawCommand) => {
+  const context = { ...rootContext, settingsCache: new Map() };
   const rules = activeRules(context);
   const hits = [];
   const scriptFiles = scriptFilesOf(parsedCommands);
@@ -63,34 +83,56 @@ const collectHits = (parsedCommands, context) => {
     const invocation = resolveInvocation(parsed.argv);
     const isOwnedByChemx = isChemxInvocation(invocation);
     if (isOwnedByChemx) continue;
-    const commandContext = { ...contextForCommand(context, parsed.dir), scriptFiles };
+    const commandContext = { ...contextForCommand(context, parsed.dir), scriptFiles, siblings: parsedCommands, rawCommand };
+    if (isSilentSegment(parsed, invocation, commandContext)) continue;
     const rule = rules.find((candidate) => candidate.matches(invocation, parsed, commandContext));
-    if (rule) hits.push({ rule, segment: segmentOf(parsed), use: useOf(rule, invocation, parsed, commandContext) });
+    const hit = rule ? hitFor(rule, invocation, parsed, commandContext) : null;
+    if (hit) hits.push({ ...hit, segment: segmentOf(parsed) });
   }
   return hits;
 };
 
-// { rule, segment, use } of the first blocking hit (null when none), the advisory nudges, and the bypass reason.
+const TRIVIAL_SEGMENTS = new Set(['cd', 'pushd', 'popd', 'export', 'set', 'unset', 'true', ':']);
+const LISTED_SEGMENTS = 3;
+
+// For a denied command line with other top-level segments: the whole line was refused, so none of it ran.
+const compoundNote = (commands, hitSegment) => {
+  const topLevel = commands.filter((parsed) => parsed.depth === 0 && parsed.argv.length > 0);
+  const isCompound = topLevel.length > 1;
+  if (!isCompound) return '';
+  const others = topLevel.filter((parsed) => !TRIVIAL_SEGMENTS.has(parsed.argv[0])).map(segmentOf).filter((segment) => !segment.includes(hitSegment));
+  const hasNoOthers = others.length === 0;
+  if (hasNoOthers) return ' The command was denied as a whole, so none of it ran.';
+  const listed = others.slice(0, LISTED_SEGMENTS).map((segment) => `\`${segment}\``).join(', ');
+  const more = others.length > LISTED_SEGMENTS ? ` (+${others.length - LISTED_SEGMENTS} more)` : '';
+  return ` The command was denied as a whole, so its other segments did not run: ${listed}${more}. Run them again without the denied segment, or swap in the chemx call above.`;
+};
+
+// { rule, segment, use, note } of the first blocking hit (null when none), the advisory nudges, and the bypass reason.
 export const findViolation = (command, context) => {
   const { commands, comments } = parseShell(command);
   const bypassReason = findBypassReason(comments);
-  const hits = collectHits(commands, context);
+  const hits = collectHits(commands, context, command);
   const isAdvisory = (hit) => hit.rule.severity === 'nudge' && !isPromotedNudge(hit.rule, context.nudgePromotion);
   const blocking = hits.find((hit) => !isAdvisory(hit)) ?? null;
   const nudges = hits.filter(isAdvisory);
-  return { rule: blocking?.rule ?? null, segment: blocking?.segment ?? null, use: blocking?.use ?? null, bypassReason, nudges };
+  const note = blocking ? compoundNote(commands, blocking.segment) : '';
+  return { rule: blocking?.rule ?? null, segment: blocking?.segment ?? null, use: blocking?.use ?? null, note, bypassReason, nudges };
 };
 
-const denyReason = (segment, use, isPromoted) => {
+const denyReason = (segment, use, isPromoted, note = '') => {
   const lead = isPromoted ? 'chemx guard (nudge promoted to a block by guardNudges)' : 'chemx guard';
-  return `${lead}: \`${segment}\` must go through chemx. Use: ${use}. `
+  return `${lead}: \`${segment}\` must go through chemx. Use: ${use}.${note} `
     + 'If chemx truly cannot do this, append `# chemx-bypass: <reason>`; the bypass is logged as chemx friction.';
 };
 
 const nudgeContext = (nudges) => {
   const lines = nudges.map((nudge) => `- \`${nudge.segment}\`: ${nudge.use}`);
+  // A shape-specific note (promotable: false) is not turned into a block by guardNudges: "block".
+  const canBlock = nudges.some((nudge) => nudge.rule.promotable !== false);
+  const blockHint = canBlock ? 'To make these blocks, set "guardNudges": "block" in .chemxrc. ' : '';
   return ['chemx guard (advice only, the call was not blocked): chemx has a replacement for:', ...lines,
-    'To make these blocks, set "guardNudges": "block" in .chemxrc. To skip a hint, append `# chemx-bypass: <reason>` (logged).'].join('\n');
+    `${blockHint}To skip a hint, append \`# chemx-bypass: <reason>\` (logged).`].join('\n');
 };
 
 const decideNativeFileTool = (tool, input, context) => {
@@ -131,11 +173,11 @@ const decideBash = (input, context) => {
   const command = String(input.command ?? '');
   const missingIdentity = decideDispatchIdentity(command, context) ?? decideForeignIdentity(command, context) ?? decideInheritedIdentity(command, context);
   if (missingIdentity) return missingIdentity;
-  const { rule, segment, use, bypassReason, nudges } = findViolation(command, context);
+  const { rule, segment, use, note, bypassReason, nudges } = findViolation(command, context);
   const hasBypass = bypassReason !== null;
   const overrodeRule = rule?.id ?? nudges[0]?.rule.id ?? null;
   if (hasBypass) return allow({ bypassReason, rule: overrodeRule, overrode: overrodeRule !== null });
-  if (rule) return { decision: 'deny', rule: rule.id, segment, reason: denyReason(segment, use, rule.severity === 'nudge') };
+  if (rule) return { decision: 'deny', rule: rule.id, segment, reason: denyReason(segment, use, rule.severity === 'nudge', note) };
   const hasNudges = nudges.length > 0;
   if (hasNudges) return allow({ rule: nudges[0].rule.id, nudged: nudges.map((nudge) => nudge.rule.id), additionalContext: nudgeContext(nudges) });
   return allow();

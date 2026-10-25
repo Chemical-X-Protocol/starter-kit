@@ -43,16 +43,24 @@ export const contextForCommand = (context, dir) => {
   return { ...context, cwd, cwdUnknown };
 };
 
-// Absolute path of a shell word inside the project and outside free locations, else null.
-const repoPathOf = (word, context) => {
+// Where a shell word points: 'unknown' (a variable, or relative to a directory the guard cannot place),
+// 'outside' (beyond the project root), 'free' (vendored, generated or scratch space inside it) or 'repo'.
+export const locateWord = (word, context) => {
   const hasUnknownVariable = UNRESOLVED_VARIABLE.test(word);
-  if (hasUnknownVariable) return null;
+  if (hasUnknownVariable) return { kind: 'unknown', absolute: null };
   const expanded = expandKnownVariables(word, context);
   const isRelativeToUnknown = context.cwdUnknown && (!path.isAbsolute(expanded) || /\$\{?PWD/.test(word));
-  if (isRelativeToUnknown) return null;
+  if (isRelativeToUnknown) return { kind: 'unknown', absolute: null };
   const absolute = path.resolve(context.cwd, expanded);
-  const isRouted = isInsideDirectory(absolute, context.root) && !isFreeLocation(absolute, context);
-  return isRouted ? absolute : null;
+  const isOutside = !isInsideDirectory(absolute, context.root);
+  if (isOutside) return { kind: 'outside', absolute };
+  return { kind: isFreeLocation(absolute, context) ? 'free' : 'repo', absolute };
+};
+
+// Absolute path of a shell word inside the project and outside free locations, else null.
+const repoPathOf = (word, context) => {
+  const located = locateWord(word, context);
+  return located.kind === 'repo' ? located.absolute : null;
 };
 
 const isRepoFileWithExtension = (word, context, extensions) => {

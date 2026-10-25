@@ -136,3 +136,24 @@ test('wrappers: p -s and p -d name an empty section instead of printing nothing'
   assert.match(scripts.output, /no scripts/);
   assert.match(deps.output, /no dependencies/);
 });
+
+// K11 #6756: the guard's replacement for `git diff --name-only` and `git log A..B`.
+test('wrappers: d --name-only prints only the changed file names, with revisions and paths', async () => {
+  const repo = makeRepo({ 'a.txt': 'one\n', 'b.txt': 'one\n' });
+  fs.writeFileSync(path.join(repo, 'a.txt'), 'two\n');
+  git(repo, 'commit', '-aqm', 'second');
+  fs.writeFileSync(path.join(repo, 'b.txt'), 'two\n');
+  assert.strictEqual((await runDiff(['--name-only', 'HEAD~1', 'HEAD'], false, repo)).output, 'a.txt\n');
+  assert.strictEqual((await runDiff(['--name-only'], false, repo)).output, 'b.txt\n');
+  assert.strictEqual((await runDiff(['--name-only', 'HEAD~1', '--', 'b.txt'], false, repo)).output, 'b.txt\n');
+});
+
+test('wrappers: log passes a revision range through and stops at the limit', async () => {
+  const repo = makeRepo({ 'a.txt': 'one\n' });
+  for (const body of ['two\n', 'three\n']) {
+    fs.writeFileSync(path.join(repo, 'a.txt'), body);
+    git(repo, 'commit', '-aqm', `set ${body.trim()}`);
+  }
+  assert.strictEqual((await runLog(['HEAD~2..HEAD'], false, repo)).output.trim().split('\n').length, 2);
+  assert.strictEqual((await runLog(['-n', '1', 'HEAD~2..HEAD'], false, repo)).output.trim().split('\n').length, 1);
+});
