@@ -19,8 +19,20 @@ function pushNodes(out, values) {
   }
 }
 
+const CHILD_CACHE = new WeakMap();
+
 // Hot path for every PHP pass: own keys in insertion order, no per-key pair or filter arrays.
+// The list is cached per node (every pass re-walks the same tree); callers must not mutate it, and
+// a node whose keys change after its first walk would keep the stale list.
 function childNodes(node) {
+  const cached = CHILD_CACHE.get(node);
+  if (cached) return cached;
+  const out = collectChildNodes(node);
+  CHILD_CACHE.set(node, out);
+  return out;
+}
+
+function collectChildNodes(node) {
   const out = [];
   for (const key of Object.keys(node)) {
     const value = SKIPPED_KEYS.has(key) ? null : node[key];
