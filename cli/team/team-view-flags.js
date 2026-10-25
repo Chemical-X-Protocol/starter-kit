@@ -6,8 +6,10 @@
  * taken). Not guaranteed: unknown spellings are ignored here, the typo check lives in unknown-flags.js.
  */
 
+// --titles (list: one line per task) is a view; --stdin and --clear are the bare switches of `team brief` (K14, #6759).
 const SWITCHES = Object.freeze({
-  '--brief': 'brief', '--oneline': 'oneline', '--full': 'full', '--mine': 'mine', '--blockers': 'blockers'
+  '--brief': 'brief', '--oneline': 'oneline', '--full': 'full', '--mine': 'mine', '--blockers': 'blockers',
+  '--titles': 'titles', '--stdin': 'stdin', '--clear': 'clear'
 });
 
 /** Long flags this module reads; the typo check treats them as known (cli/commands/unknown-flags.js). */
@@ -23,7 +25,7 @@ const readFrom = (args) => {
   return hasValue ? next : undefined;
 };
 
-/** @returns {{brief?: boolean, oneline?: boolean, full?: boolean, mine?: boolean, blockers?: boolean, fromAgent?: string}} */
+/** @returns {{brief?: boolean, oneline?: boolean, full?: boolean, mine?: boolean, blockers?: boolean, titles?: boolean, stdin?: boolean, clear?: boolean, fromAgent?: string}} */
 export const parseViewFlags = (args = []) => {
   const flags = {};
   for (const [token, key] of Object.entries(SWITCHES)) {

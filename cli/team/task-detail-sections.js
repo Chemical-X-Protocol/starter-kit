@@ -5,6 +5,7 @@
  */
 
 import { getTask } from './team-db-tasks.js';
+import { briefChars, groupedChars } from './task-brief-store.js';
 
 const WRAP_WIDTH = 76;
 const INDENT = '    ';
@@ -42,7 +43,17 @@ export const resolveDependencyStates = (db, task) => {
   });
 };
 
-export const formatTaskBriefLines = (task, dependencyStates = [], routeLabel = null) => {
+// The long brief: its length on a plain card, the whole text (line breaks kept, no re-wrapping) with --full.
+const briefLines = (task, options) => {
+  const chars = briefChars(task);
+  const hasBrief = chars > 0;
+  if (!hasBrief) return [];
+  if (!options.full) return ['', `  \x1b[1mBrief:\x1b[0m    ${groupedChars(chars)} chars (task show ${task.id} --full prints it)`];
+  const body = String(task.brief).trim().split('\n').map((line) => (line ? `${INDENT}${line}` : ''));
+  return ['', `  \x1b[1mBrief (${groupedChars(chars)} chars):\x1b[0m`, ...body];
+};
+
+export const formatTaskBriefLines = (task, dependencyStates = [], routeLabel = null, options = {}) => {
   const lines = [];
   const sprint = task.sprint_tag || '(none)';
   const moscow = task.moscow || '(none)';
@@ -71,6 +82,7 @@ export const formatTaskBriefLines = (task, dependencyStates = [], routeLabel = n
     lines.push('', '  \x1b[1mDescription:\x1b[0m');
     for (const line of wrapText(task.description.trim())) lines.push(line ? `${INDENT}${line}` : '');
   }
+  lines.push(...briefLines(task, options));
   return lines;
 };
 

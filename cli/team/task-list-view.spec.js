@@ -84,3 +84,62 @@ test('task list view: default includes blocked and pending approval tasks', asyn
     assert.strictEqual(view.total, 37);
   });
 });
+
+// K14 (#6759): list --search looks in the title and the description of every status; --titles is one bare line per task.
+const seedSearchable = () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-task-search-'));
+  const db = openIndexDb(cwd);
+  createTask(db, { title: 'K9 test runner', description: 'runs a repo own runner per file' });
+  createTask(db, { title: 'K10 doctor', description: 'MCP lines grouped; mentions the TEST runner' });
+  createTask(db, { title: 'Finished lint work', description: 'done long ago', status: 'done' });
+  createTask(db, { title: '100% sure_thing', description: 'literal percent and underscore' });
+  createTask(db, { title: 'Unrelated', description: 'nothing here' });
+  return cwd;
+};
+
+const titlesOf = (view) => view.rows.map((row) => row[view.cols.indexOf('title')]);
+
+test('task list --search: title and description, case-insensitive, every status, narrowed by --status', async () => {
+  const cwd = seedSearchable();
+  try {
+    const hits = runTeamCli(['task', 'list', '--search', 'test runner', '--json'], false, cwd);
+    assert.deepEqual(titlesOf(hits).sort(), ['K10 doctor', 'K9 test runner']);
+    const inDone = runTeamCli(['task', 'list', '--search=LINT', '--json'], false, cwd);
+    assert.deepEqual(titlesOf(inDone), ['Finished lint work'], 'a search also looks at done tasks');
+    const narrowed = runTeamCli(['task', 'list', '--search=lint', '--status=queued', '--json'], false, cwd);
+    assert.equal(narrowed.rows.length, 0);
+    const literal = runTeamCli(['task', 'list', '--search=%', '--json'], false, cwd);
+    assert.deepEqual(titlesOf(literal), ['100% sure_thing'], 'a % is text, not a wildcard');
+    const underscore = runTeamCli(['task', 'list', '--search=s_r', '--json'], false, cwd);
+    assert.equal(underscore.rows.length, 0, 'an _ is text, not a wildcard');
+    const mcp = await handleChemxTeamTask({ action: 'list', search: 'doctor' }, cwd);
+    assert.deepEqual(titlesOf(mcp), ['K10 doctor']);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test('task list --titles: one line per task with the id, status and whole title, no tree, assignee or target', async () => {
+  const cwd = seedSearchable();
+  try {
+    const db = openIndexDb(cwd);
+    createTask(db, { title: LONG_TITLE, target_path: 'cli/a.js', status: 'in_progress', assigned_agent_id: '@someone' });
+    const out = [];
+    const original = process.stdout.write;
+    process.stdout.write = (chunk) => { out.push(String(chunk)); return true; };
+    try {
+      runTeamCli(['task', 'list', '--titles', '--search=work'], true, cwd);
+    } finally {
+      process.stdout.write = original;
+    }
+    const lines = out.join('').split('\n').filter((line) => line.startsWith('#'));
+    assert.deepEqual(lines, ['#3 [done] Finished lint work']);
+    const all = runTeamCli(['task', 'list', '--titles', '--json'], false, cwd);
+    assert.deepEqual(all.cols, ['id', 'status', 'title']);
+    assert.ok(titlesOf(all).includes(LONG_TITLE), 'the --titles view does not cut the title');
+    const mcp = await handleChemxTeamTask({ action: 'list', titles: true }, cwd);
+    assert.deepEqual(mcp.cols, ['id', 'status', 'title']);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});

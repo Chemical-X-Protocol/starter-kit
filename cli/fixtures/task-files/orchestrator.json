@@ -1,0 +1,8 @@
+{
+  "tasks": [
+    { "ref": "epic", "title": "EPIC: quieter chemx", "kind": "epic", "needs": "deep", "prio": 1, "desc": "The friction plan.\nChildren are filed from this file." },
+    { "ref": "flags", "title": "K1 flags take a space or an equals sign", "parent_ref": "epic", "needs": "standard", "prio": 2, "desc": "Value flags take both forms." },
+    { "ref": "lock", "title": "K2 lock leases several paths", "parent_ref": "epic", "deps": ["flags", 1], "needs": "light", "brief_file": "orchestrator-brief.md" },
+    { "title": "Pick the default for idle claims", "kind": "decision", "parent": 1, "deps": ["lock"] }
+  ]
+}

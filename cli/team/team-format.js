@@ -1,6 +1,8 @@
 import { formatTaskBriefLines, formatTelemetryLines } from './task-detail-sections.js';
 import { describeCreationNote } from './task-brief-view.js';
 import { clipText } from './team-feed-view.js';
+import { kindTag } from './task-kind.js';
+import { formatClaimLine } from './task-claim-age.js';
 
 // The caller's own slice of the board (team status --mine): open tasks and live leases.
 const formatMineLines = (mine) => {
@@ -91,10 +93,11 @@ export const formatTaskListCard = (tasks = []) => {
   const renderNodes = (parentId, depth) => {
     for (const t of (childrenMap.get(parentId) || [])) {
       const indent = depth > 0 ? '  '.repeat(depth) + '└── ' : '  ';
-      const assignee = t.assigned_agent_id ? `(${t.assigned_agent_id})` : '(unassigned)';
+      const idle = Number.isInteger(t.idle_hours) ? ` idle ${t.idle_hours}h` : '';
+      const assignee = t.assigned_agent_id ? `(${t.assigned_agent_id}${idle})` : '(unassigned)';
       const target = t.target_path ? ` [${t.target_path}]` : '';
       const needs = t.needs ? ` <${t.needs}>` : '';
-      lines.push(`${indent}#${t.id} [${t.status}]${needs} ${assignee}${target}: ${t.title}`);
+      lines.push(`${indent}#${t.id}${kindTag(t)} [${t.status}]${needs} ${assignee}${target}: ${t.title}`);
       renderNodes(t.id, depth + 1);
     }
   };
@@ -148,7 +151,7 @@ export const formatMailboxCard = (mailbox) => {
   return lines.join('\n');
 };
 
-export const formatTaskDetailCard = (task, events = [], dependencyStates = [], routeLabel = null) => {
+export const formatTaskDetailCard = (task, events = [], dependencyStates = [], routeLabel = null, claim = null, options = {}) => {
   const hasNoTask = !task;
   if (hasNoTask) return '  (Task not found)\n';
   const lines = [''];
@@ -164,10 +167,11 @@ export const formatTaskDetailCard = (task, events = [], dependencyStates = [], r
   const pStr = `P${task.priority || 2}`;
   const tierStr = task.tier ? `[${task.tier}]` : '';
 
-  lines.push(`\x1b[1m\x1b[36m📋 [Chemical X Task #${task.id}]\x1b[0m \x1b[1m${task.title}\x1b[0m`);
+  lines.push(`\x1b[1m\x1b[36m📋 [Chemical X Task #${task.id}]${kindTag(task)}\x1b[0m \x1b[1m${task.title}\x1b[0m`);
   lines.push(`\x1b[90m${'─'.repeat(58)}\x1b[0m`);
   lines.push(`  \x1b[1mStatus:\x1b[0m   ${statusStr} │ \x1b[1mPriority:\x1b[0m ${pStr} │ \x1b[1mTier:\x1b[0m ${tierStr || '(none)'}`);
   lines.push(`  \x1b[1mAssignee:\x1b[0m ${task.assigned_agent_id || '(unassigned)'} │ \x1b[1mOrigin:\x1b[0m ${task.origin_type || 'manual'}`);
+  if (claim) lines.push(`  ${formatClaimLine(claim)}`);
 
   const hasTargetPath = Boolean(task.target_path);
   if (hasTargetPath) {
@@ -177,7 +181,7 @@ export const formatTaskDetailCard = (task, events = [], dependencyStates = [], r
   if (hasBlockedReason) {
     lines.push(`  \x1b[1m\x1b[31mBlocker:\x1b[0m  \x1b[33m${task.blocked_reason}\x1b[0m`);
   }
-  lines.push(...formatTaskBriefLines(task, dependencyStates, routeLabel));
+  lines.push(...formatTaskBriefLines(task, dependencyStates, routeLabel, options));
 
   lines.push(...formatTelemetryLines(task));
 
@@ -224,7 +228,8 @@ export const formatTeamHelpCard = () => {
     '',
     '  \x1b[1mCommands:\x1b[0m',
     '    \x1b[32mstatus\x1b[0m [--mine] [--blockers]  Swarm card: --mine shows your tasks and leases, --blockers lists blocked tasks',
-    '    \x1b[32mtask\x1b[0m [action]            Manage agent tasks (list, show, add, claim, done, update)',
+    '    \x1b[32mtask\x1b[0m [action]            Manage agent tasks (list, show, add, claim, done, update); also spelled: chemx task <action>',
+    '    \x1b[32mbrief\x1b[0m <taskId>            Print, set (--file <path> | --stdin) or clear (--clear) the long brief of a task',
     '    \x1b[32mlock\x1b[0m [acquire|release]   Acquire or release mutual exclusion file locks (several paths per call)',
     '    \x1b[32munlock\x1b[0m <file>...         Release file locks held by an agent',
     '    \x1b[32mfeed\x1b[0m [filters]            Newest 20 events, one line each (messages cut at 120 chars)',
@@ -252,12 +257,14 @@ export const formatTaskHelpCard = () => {
     '',
     '\x1b[1m\x1b[36m⚡ [Chemical X] Task Coordination Commands (team task)\x1b[0m',
     `\x1b[90m${'─'.repeat(58)}\x1b[0m`,
-    '  \x1b[1mUsage:\x1b[0m chemx team task <action> [arguments] [options]',
+    '  \x1b[1mUsage:\x1b[0m chemx team task <action> [arguments] [options]      (chemx task <action> is the same)',
     '',
     '  \x1b[1mActions:\x1b[0m',
-    '    \x1b[32mlist\x1b[0m                         List open tasks, newest 20 (default action)',
-    '    \x1b[32mshow\x1b[0m <taskId> [--brief]     Display full details and activity stream for a task (creation event on one line)',
+    '    \x1b[32mlist\x1b[0m                         List open tasks, newest 20 (default action); --search <text> looks in title and description, --titles prints one bare line per task',
+    '    \x1b[32mshow\x1b[0m <taskId> [--brief]     Display full details and activity stream for a task (creation event on one line); --full also prints the long brief',
     '    \x1b[32madd\x1b[0m "<title>"                Create a new task in the queue; prints "#<id> added: <title>"',
+    '    \x1b[32madd\x1b[0m --from <file.json|yaml>  Create many tasks in one transaction from a file of rows (ref, title, needs, prio, kind, parent, parent_ref, deps, desc, brief, brief_file); one "#<id> added" line per row and a refs line; --dry-run checks only',
+    '    \x1b[32mbrief\x1b[0m <taskId>               Print the long brief; with --file <path>, --stdin or --clear it sets or removes it (also: chemx team brief <id>)',
     '    \x1b[32mclaim\x1b[0m <taskId>              Claim an unassigned task for an agent',
     '    \x1b[32mhandoff\x1b[0m <taskId> <@to>      Pass a task to another agent (assignee or creator only); --with-locks also moves your live leases naming the task',
     '    \x1b[32mdone\x1b[0m <taskId>               Complete a task with automatic verification audit',
@@ -276,6 +283,13 @@ export const formatTaskHelpCard = () => {
     '    \x1b[33m--as\x1b[0m <@agent>            Agent handle (e.g. @agent-1)',
     '    \x1b[33m--status\x1b[0m <status>        Filter by status (queued, in_progress, review, blocked, done)',
     '    \x1b[33m--brief\x1b[0m                  show: title, status, tier, assignee, deps, parent and only the comments after the description',
+    '    \x1b[33m--full\x1b[0m                   show: also the long brief (the card prints only its length)',
+    '    \x1b[33m--search\x1b[0m <text>          list: tasks whose title or description contains the text (any case; every status unless --status)',
+    '    \x1b[33m--titles\x1b[0m                 list: one line per task, "#id [status] title"',
+    '    \x1b[33m--kind\x1b[0m <kind>            add: task (default), decision or epic; a decision or epic completes without a target and shows as [decision] / [epic] after the id',
+    '    \x1b[33m--from\x1b[0m <file>            add: file of task rows (.json, .yaml/.yml; --from=- reads stdin); nothing is written if any row is wrong',
+    '    \x1b[33m--dry-run\x1b[0m                add --from: check the file and print what would be added',
+    '    \x1b[33m--file\x1b[0m <path>            brief: store this file as the task\'s brief (--stdin: standard input; --clear: remove it)',
     '    \x1b[33m--all\x1b[0m                    List every status with no row cap',
     '    \x1b[33m--limit\x1b[0m <n>             Rows to show (default 20)',
     '    \x1b[33m--agent\x1b[0m <@agent>         Filter tasks assigned to agent',

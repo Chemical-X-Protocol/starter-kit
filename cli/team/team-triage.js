@@ -22,6 +22,7 @@ import { uncommittedTargets, buildUncommittedRefusal } from './team-task-uncommi
 import { backfillAuditTaskNeeds } from './team-needs.js';
 import { generateTriageTasks } from './team-triage-generate.js';
 import { repoDir } from './coordination-repos.js';
+import { isPlanningKind } from './task-kind.js';
 
 export { ingestTaskTelemetry, queryUnassignedHazards };
 
@@ -183,7 +184,9 @@ export const completeTaskWithAudit = (db, taskId, agentId, options = {}) => {
 
   const hasTargetPath = Boolean(task.target_path);
   if (!hasTargetPath) {
-    const isUnconfirmedNoTarget = options.noTargetConfirm !== true && options.force !== true;
+    // A decision or epic has no file to verify: it finishes without --no-target-confirm and says so (K14, #6759).
+    const isPlanning = isPlanningKind(task.kind);
+    const isUnconfirmedNoTarget = options.noTargetConfirm !== true && options.force !== true && !isPlanning;
     if (isUnconfirmedNoTarget) {
       return {
         refused: true,
@@ -196,7 +199,8 @@ export const completeTaskWithAudit = (db, taskId, agentId, options = {}) => {
     }
     resultPayload.verificationApplicable = false;
     resultPayload.verified = false;
-    resultPayload.noTargetConfirmed = true;
+    if (isPlanning) resultPayload.verificationSkipped = task.kind;
+    else resultPayload.noTargetConfirmed = true;
   } else {
     const refusal = verifyTaskTarget(indexDb, task, taskId, options, resultPayload);
     if (refusal) return refusal;

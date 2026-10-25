@@ -15,6 +15,10 @@ import { resolveDependencyStates } from '../team/task-detail-sections.js';
 import { describeTaskAdded, describeCommentPosted, taskAckFields, buildBriefView, formatTaskBriefCard } from '../team/task-brief-view.js';
 import { checkNeedsInput } from '../team/team-needs.js';
 import { openTeamContext } from '../team/coordination-db.js';
+import { markIdleClaims, claimInfoFor } from '../team/task-claim-age.js';
+import { summarizeBrief } from '../team/task-brief-store.js';
+import { checkKindInput } from '../team/task-kind.js';
+import { createFromFile, runBriefAction, readCreateBrief } from './tools-team-task-extras.js';
 import { resolveTaskRef } from '../team/task-ref.js';
 import { resolveListRepo, prepareTaskTarget, describeShellMangledArg } from '../team/team-commands-repo.js';
 import { repoDir } from '../team/coordination-repos.js';
@@ -86,11 +90,13 @@ export const handleChemxTeamTask = async (rawArgs = {}, cwd = process.cwd()) => 
     const hasListNeedsError = Boolean(listNeeds.error);
     if (hasListNeedsError) return { error: listNeeds.error };
     const repo = resolveListRepo({ allRepos: args.allRepos, repo: args.repo }, ctx);
-    const listOptions = resolveListOptions({ status: args.status, all: args.all, limit: args.limit });
-    const tasks = listTasks(db, { status: listOptions.status, assigned_agent_id: args.agentId, parentId, rule, priority: args.priority, needs: listNeeds.needs, repo });
-    const { page, total } = selectTaskPage(tasks, listOptions);
+    const listOptions = resolveListOptions({ status: args.status, all: args.all, limit: args.limit, search: args.search });
+    const tasks = listTasks(db, { status: listOptions.status, assigned_agent_id: args.agentId, parentId, rule, priority: args.priority, needs: listNeeds.needs, repo, search: args.search });
+    const selected = selectTaskPage(tasks, listOptions);
+    const { total } = selected;
+    const page = markIdleClaims(db, selected.page);
     // The compact wire view stays as before; repo and board are added only on request (args.scope).
-    const baseView = buildTaskListView(page, total);
+    const baseView = buildTaskListView(page, total, { titles: args.titles });
     const view = args.scope ? { ...baseView, repo: repo ?? null, board: ctx.dbPath } : baseView;
     return args.card ? { ...view, card: formatTaskListCard(page) } : view;
   }
@@ -100,15 +106,17 @@ export const handleChemxTeamTask = async (rawArgs = {}, cwd = process.cwd()) => 
     if (!task) return { error: `Task #${args.taskId || args.id} not found`, ambiguity: notice };
     const events = queryFeed(db, { task_id: args.taskId || args.id });
     const dependencyStates = resolveDependencyStates(db, task);
+    const claim = claimInfoFor(db, task);
     // brief: header facts, the comments after the creation event, no description.
-    if (args.brief) return { ...buildBriefView(task, events, dependencyStates), ambiguity: notice, card: formatTaskBriefCard(task, events, dependencyStates) };
+    if (args.brief) return { ...buildBriefView(task, events, dependencyStates, claim), ambiguity: notice, card: formatTaskBriefCard(task, events, dependencyStates, claim) };
     return {
-      task,
+      task: summarizeBrief(task, { full: args.full }),
       dependencyStates,
       events,
       activityCount: events.length,
+      ...(claim ? { claim } : {}),
       ambiguity: notice,
-      card: formatTaskDetailCard(task, events, dependencyStates)
+      card: formatTaskDetailCard(task, events, dependencyStates, null, claim, { full: args.full })
     };
   }
   const isCommentAction = action === 'comment' || action === 'post';
@@ -124,11 +132,21 @@ export const handleChemxTeamTask = async (rawArgs = {}, cwd = process.cwd()) => 
     // The text sent is not echoed back: ids and a one-line ack.
     return { id: posted.id, task_id: posted.task_id, author_id: posted.author_id, event_type: posted.event_type, ack: describeCommentPosted(posted.task_id, posted) };
   }
+  const isBriefAction = action === 'brief';
+  if (isBriefAction) return runBriefAction(ctx, args, cwd);
   const isCreateAction = action === 'create' || action === 'add';
+  const isFileCreate = isCreateAction && Boolean(args.fromFile);
+  if (isFileCreate) return createFromFile(ctx, args, cwd);
   if (isCreateAction) {
     const createNeeds = checkNeedsInput(args.needs);
     const hasCreateNeedsError = Boolean(createNeeds.error);
     if (hasCreateNeedsError) return { error: createNeeds.error };
+    const createKind = checkKindInput(args.kind);
+    const hasKindError = Boolean(createKind.error);
+    if (hasKindError) return { error: createKind.error, refused: true };
+    const createBrief = readCreateBrief(args, cwd);
+    const hasBriefError = Boolean(createBrief.error);
+    if (hasBriefError) return { error: createBrief.error, refused: true };
     const placed = prepareTaskTarget(ctx, cwd, args.targetPath || args.target);
     const isRefused = Boolean(placed.error);
     if (isRefused) return { error: placed.error, refused: true };
@@ -142,6 +160,9 @@ export const handleChemxTeamTask = async (rawArgs = {}, cwd = process.cwd()) => 
     const resolvedParent = parentId === undefined || parentId === null ? parentId : (resolveTaskRef(db, parentId, { repo: ctx.repo }).id ?? parentId);
     const task = createTask(db, {
       title: args.title,
+      description: args.description || '',
+      kind: createKind.kind,
+      brief: createBrief.text,
       target_path: placed.target_path,
       repo: placed.repo,
       tier: resolveTaskTier(args.tier, placed.target_path),

@@ -18,6 +18,8 @@ const GROUP_TITLES = {
 };
 const HELP_TOKENS = new Set(['help', '--help', '-h']);
 const SUBCOMMAND_HELP_OWNERS = new Set(['team', 'swarm', 'feed', 'tokens', 'telemetry', 'benchmark', 'ablation', 'memory']);
+// `chemx task --help` prints the task help card (formatTaskHelpCard) from the team handler, not the team entry's help.
+const HANDLER_HELP_COMMANDS = new Set(['task']);
 // Commands whose positional is a search pattern or lookup key: `chemx f help` lists
 // paths containing "help". Every other command reads a lone `help` as a help request,
 // so readers, wrappers and writers never act on a path or revision named "help".
@@ -96,6 +98,8 @@ export const printHelp = async (topicArgs = []) => {
  * Commands that own subcommand help (team family) keep it unless the help flag directly follows the command.
  */
 export const resolveCommandHelpTopic = (command, rawArgs) => {
+  const handlerPrintsHelp = HANDLER_HELP_COMMANDS.has(command);
+  if (handlerPrintsHelp) return null;
   const options = optionsBeforeSeparator(rawArgs.slice(1));
   const isLookupCommand = LOOKUP_POSITIONAL_COMMANDS.has(findCommandSchema(command)?.name);
   const isBareHelpWord = options.length === 1 && options[0] === 'help' && !isLookupCommand;

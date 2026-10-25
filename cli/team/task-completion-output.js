@@ -46,6 +46,9 @@ export const describeCompletion = (res, taskId, lead) => {
   const payload = res.result_payload || {};
   const remaining = payload.hazardCountAfter || 0;
   const target = res.target_path || 'target';
+  const skippedFor = payload.verificationSkipped;
+  const wasSkippedByKind = Boolean(skippedFor);
+  if (wasSkippedByKind) return pass(`${lead} (${skippedFor}: nothing to verify)`);
   const isUnverified = payload.verificationApplicable === false;
   if (isUnverified) return warn(`${lead} (Unverified: no target_path specified; completed with --no-target-confirm)`);
   const isForced = Boolean(payload.forced);

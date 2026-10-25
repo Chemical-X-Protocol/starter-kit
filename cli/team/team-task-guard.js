@@ -5,7 +5,7 @@
  */
 import { getTask } from './team-db.js';
 
-const ID_ACTIONS = new Set(['done', 'complete', 'comment', 'post', 'update', 'claim', 'set-target']);
+const ID_ACTIONS = new Set(['done', 'complete', 'comment', 'post', 'update', 'claim', 'set-target', 'brief']);
 
 /**
  * @param {{ isCli?: boolean, cwd?: string, hint?: () => string|null }} [options] hint: extra text for the refusal (read only when the task is missing)

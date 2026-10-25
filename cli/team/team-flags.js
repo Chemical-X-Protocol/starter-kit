@@ -26,7 +26,7 @@ export const PARSED_TEAM_FLAGS = Object.freeze([
   '--status', '--all', '--agent', '--target', '--tier', '--rule', '--prio', '--priority', '--new', '--purpose',
   '--pid', '--tokens', '--prompt-tokens', '--completion-tokens', '--cached-tokens', '--cost', '--model', '--desc',
   '--description', '--deps', '--add-dep', '--rm-dep', '--sprint', '--moscow', '--needs', '--reason',
-  '--duplicate-of', '--ignore-deps', '--cancel', '--log', '--title', '--metadata'
+  '--duplicate-of', '--ignore-deps', '--cancel', '--log', '--title', '--metadata', '--kind', '--search', '--file'
 ]);
 
 /** @returns {boolean} whether parseFlags reads this long flag (the part before any `=`) */
@@ -182,6 +182,15 @@ export const parseFlags = (rawArgs = []) => {
 
     const isTitleEquals = arg.startsWith('--title=');
     if (isTitleEquals) flags.title = valueAfterEquals;
+
+    const isKindEquals = arg.startsWith('--kind=');
+    if (isKindEquals) flags.kind = valueAfterEquals;
+
+    const isSearchEquals = arg.startsWith('--search=');
+    if (isSearchEquals) flags.search = valueAfterEquals;
+
+    const isFileEquals = arg.startsWith('--file=');
+    if (isFileEquals) flags.file = valueAfterEquals;
 
     const isMetadataEquals = arg.startsWith('--metadata=');
     if (isMetadataEquals) {

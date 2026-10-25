@@ -12,7 +12,7 @@ const PARSED_VALUE_FLAGS = [
   '--parent', '--type', '--status', '--agent', '--target', '--tier', '--rule', '--prio', '--priority', '--purpose',
   '--pid', '--tokens', '--prompt-tokens', '--completion-tokens', '--cached-tokens', '--cost', '--model', '--desc',
   '--description', '--deps', '--add-dep', '--rm-dep', '--sprint', '--moscow', '--needs', '--reason', '--duplicate-of',
-  '--cancel', '--log', '--title', '--metadata'
+  '--cancel', '--log', '--title', '--metadata', '--kind', '--search', '--file'
 ];
 
 // Handler-read values: trace --url, the run and projects locators, and the repo/migrate flags (REPO_VALUE_FLAGS).

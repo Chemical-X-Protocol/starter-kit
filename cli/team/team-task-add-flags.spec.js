@@ -95,3 +95,15 @@ test('task add: a value flag with no value is refused by name and creates nothin
   const listed = runTeamCli(['task', 'list', '--all', '--json'], false, cwd);
   assert.equal(listed.rows.length, 0);
 });
+
+test('task add and list: --kind and --search take their value after a space or an equals sign (K14, #6759)', () => {
+  const cwd = makeTempProject();
+  const spaced = runTeamCli(['task', 'add', 'Plan', 'the', 'move', '--kind', 'epic'], false, cwd);
+  const joined = runTeamCli(['task', 'add', 'Pick', 'a', 'date', '--kind=decision'], false, cwd);
+  assert.equal(spaced.title, 'Plan the move', 'the value of --kind does not leak into the title');
+  assert.deepEqual([spaced.kind, joined.kind], ['epic', 'decision']);
+  const hits = (args) => runTeamCli(['task', 'list', ...args, '--json'], false, cwd).rows.length;
+  assert.equal(hits(['--search', 'date']), 1);
+  assert.equal(hits(['--search=date']), 1);
+  assert.equal(runTeamCli(['task', 'add', 'Via', 'file', '--from', '/nonexistent/rows.json'], false, cwd).refused, true, '--from beside a title is refused');
+});

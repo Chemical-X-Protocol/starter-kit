@@ -67,7 +67,8 @@ export const handoffTask = (db, taskId, toHandle, byHandle, options = {}) => {
 
     const from = task.assigned_agent_id || null;
     const hasPreviousOwner = Boolean(from);
-    db.prepare("UPDATE agent_tasks SET assigned_agent_id = ?, status = 'in_progress', updated_at = ? WHERE id = ?").run(to, Date.now(), Number(taskId));
+    const movedAt = Date.now();
+    db.prepare("UPDATE agent_tasks SET assigned_agent_id = ?, status = 'in_progress', updated_at = ?, claimed_at = ? WHERE id = ?").run(to, movedAt, movedAt, Number(taskId));
     if (hasPreviousOwner) db.prepare("UPDATE agents SET current_task_id = NULL, status = 'idle' WHERE id = ? AND current_task_id = ?").run(from, Number(taskId));
     db.prepare("UPDATE agents SET current_task_id = ?, status = 'busy' WHERE id = ?").run(Number(taskId), to);
     const movedLeases = options.withLocks === true ? transferLeases(db, taskId, to) : [];

@@ -78,6 +78,34 @@ For each task it prints the build, review and repair route and why (the tier, an
 - `chemx team task show <id>` prints the routed build model next to Needs, and the session brief adds it to each claimed task that has a tier.
 - The Claude Code hook warns, or blocks with `routeGuard: "block"`, when an `Agent` or `Workflow` launch that names task ids has no model or a heavier one than routed. See [hooks](hooks.md#launch-routing-guard-agent-and-workflow). Existing installs need `chemx install-hooks --host=claude` again.
 
+## Filing the tasks, and waiting for the builders (K14, #6759)
+
+Dispatch picks up tasks that exist, so filing them is the first step. One call files an epic and its
+children from a file instead of a shell loop of `task add`:
+
+```sh
+chemx task add --from tasks.yaml --dry-run   # checks every row, writes nothing
+chemx task add --from tasks.yaml             # one transaction; "#<id> added: <title>" per row, then "refs: epic=#12 k1=#13"
+chemx team brief 13 --file design.md         # a long design contract, stored apart from the description
+```
+
+Rows may name each other (`parent_ref`, `deps` by ref) and a task id already on the board; each row needs a
+`target_path` set afterwards (`chemx team task set-target`) before dispatch will take it (`needs_scoping`).
+`--kind=epic` and `--kind=decision` rows are for the plan, not for builders: they finish without a target.
+A builder reads its brief with `chemx team task show <id> --full`. Full reference:
+[coordination-db.md](coordination-db.md#running-a-project-from-the-board-k14-6759).
+
+While the builders run, the orchestrator can wait on their report instead of polling the feed:
+
+```sh
+chemx wait --post-matching "K9 merged" --from=@sonnet-k9 --timeout=1h   # exit 0 on a match, 2 on timeout
+chemx task list --search "k9" --titles                                   # find a task by words in its title or description
+```
+
+`chemx task list` marks a claim `(@handle idle 9h)` once nothing from its assignee has been seen for 6 hours,
+and `chemx task show <id>` says when the claim was made and when the assignee was last active. The
+post-matching wait counts only posts made after it started unless `--since=<event id>` says otherwise.
+
 ## Run it in Claude Code
 
 Start the rendered file with the Workflow tool's `scriptPath`. While it runs, follow the log lines. Every prompt names its run (the marker text is "dispatch run: " followed by the run name), which is what `--find-run` searches for.

@@ -8,6 +8,9 @@
  */
 
 import { clipText } from './team-feed-view.js';
+import { kindTag } from './task-kind.js';
+import { briefChars, groupedChars } from './task-brief-store.js';
+import { formatClaimBriefLine } from './task-claim-age.js';
 
 const BRIEF_TITLE_CHARS = 160;
 const ACK_TITLE_CHARS = 100;
@@ -26,13 +29,13 @@ export const describeTaskAdded = (task) => {
 /** `#<task>: comment <event id> posted`: the event id works as a `team feed --since=` cursor. */
 export const describeCommentPosted = (taskId, ev) => `#${taskId}: comment ${ev.id} posted`;
 
-/** The task row without its description: what an ack or a brief needs. */
+/** The task row without its description or brief text: what an ack or a brief needs. */
 export const slimTask = (task) => {
-  const { description, ...rest } = task;
-  return { ...rest, descriptionChars: String(description ?? '').trim().length };
+  const { description, brief, ...rest } = task;
+  return { ...rest, descriptionChars: String(description ?? '').trim().length, briefChars: briefChars(task) };
 };
 
-const SLIM_ACK_FIELDS = ['id', 'title', 'status', 'priority', 'needs', 'tier', 'repo', 'target_path', 'parent_id', 'assigned_agent_id'];
+const SLIM_ACK_FIELDS = ['id', 'title', 'kind', 'status', 'priority', 'needs', 'tier', 'repo', 'target_path', 'parent_id', 'assigned_agent_id'];
 
 /** The fields a `task add` ack prints for --json and returns over MCP. */
 export const taskAckFields = (task) => Object.fromEntries(SLIM_ACK_FIELDS.map((field) => [field, task[field]]));
@@ -51,9 +54,9 @@ export const eventsAfterCreation = (events = []) => {
   return events.filter((ev) => ev.event_type !== 'task_created' && ev.id > createdId);
 };
 
-export const buildBriefView = (task, events = [], dependencyStates = []) => {
+export const buildBriefView = (task, events = [], dependencyStates = [], claim = null) => {
   const newer = eventsAfterCreation(events);
-  return { task: slimTask(task), dependencyStates, events: newer, activityCount: events.length };
+  return { task: slimTask(task), dependencyStates, events: newer, activityCount: events.length, ...(claim ? { claim } : {}) };
 };
 
 const factsLine = (task) => {
@@ -73,8 +76,9 @@ const commentLines = (newer) => {
 };
 
 /** Title, status, tier, assignee, dependencies, parent and the comments after the description. */
-export const formatTaskBriefCard = (task, events = [], dependencyStates = []) => {
-  const lines = [`#${task.id} [${task.status}] ${clipText(task.title, BRIEF_TITLE_CHARS)}`, factsLine(task)];
+export const formatTaskBriefCard = (task, events = [], dependencyStates = [], claim = null) => {
+  const lines = [`#${task.id}${kindTag(task)} [${task.status}] ${clipText(task.title, BRIEF_TITLE_CHARS)}`, factsLine(task)];
+  if (claim) lines.push(`  ${formatClaimBriefLine(claim)}`);
   const hasTarget = Boolean(task.target_path);
   if (hasTarget) lines.push(`  target: ${task.target_path}`);
   const hasBlocker = Boolean(task.blocked_reason);
@@ -84,6 +88,8 @@ export const formatTaskBriefCard = (task, events = [], dependencyStates = []) =>
   const descriptionChars = String(task.description ?? '').trim().length;
   const hasDescription = descriptionChars > 0;
   if (hasDescription) lines.push(`  description hidden (${descriptionChars} chars): drop --brief to read it`);
+  const hasBrief = briefChars(task) > 0;
+  if (hasBrief) lines.push(`  brief stored (${groupedChars(briefChars(task))} chars): task show ${task.id} --full prints it`);
   lines.push(...commentLines(eventsAfterCreation(events)));
   return `${lines.join('\n')}\n`;
 };
