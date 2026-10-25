@@ -11,6 +11,7 @@ import { withImmediateTransaction } from './team-db-transaction.js';
 import { generateTaskPermalink } from './team-vds.js';
 import { parseNeedsInput } from './team-needs.js';
 import { DEFAULT_TASK_KIND } from './task-kind.js';
+import { isDerivedHandle, describeDerivedRefusal } from './agent-identity.js';
 
 export const getTask = (db, taskId) => {
   const canGet = Boolean(db) && Boolean(taskId);
@@ -62,6 +63,8 @@ export const createTask = (db, taskData) => {
 export const claimTask = (db, taskId, agentId, options = {}) => {
   const canClaim = Boolean(db) && Boolean(taskId) && Boolean(agentId);
   if (!canClaim) return { success: false, reason: 'missing_args' };
+  const isDerived = isDerivedHandle(agentId);
+  if (isDerived) return { success: false, reason: 'derived_handle', message: describeDerivedRefusal(agentId) };
 
   const cleanId = normalizeAgentId(agentId);
   return withImmediateTransaction(db, () => {

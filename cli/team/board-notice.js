@@ -4,22 +4,23 @@
  * they read, and with one line when the caller holds a claim on a different board (the usual cause of a
  * "task not found": the claim was made from the app's directory, the read ran from a plugin's).
  */
-import { resolveAgentIdentity } from './agent-identity.js';
+import { resolveReadIdentity, isStableIdentity } from './agent-identity.js';
 import { claimsOnOtherBoards } from './board-resolve.js';
 
 const MAX_LISTED_CLAIMS = 3;
 
 /**
  * One line naming the caller's live claims on boards other than ctx.root, or null when there are none.
- * A caller with no stable handle (no --as, no CHEMX_AGENT_ID) holds nothing, so it gets no line.
+ * A caller with no stable handle (no --as, no CHEMX_AGENT_ID) holds nothing, so it gets no line: a read runs under
+ * a derived handle then, which holds no claim (K16, #6761).
  * @param {{ root: string }} ctx the board being read
  * @param {string|undefined} asFlag the --as value
  * @param {{ env?: object }} [options]
  */
 export const describeOtherBoardClaims = (ctx, asFlag, options = {}) => {
   const env = options.env ?? process.env;
-  const identity = resolveAgentIdentity(asFlag, env);
-  const hasStableHandle = identity.source !== 'process';
+  const identity = resolveReadIdentity(asFlag, env);
+  const hasStableHandle = isStableIdentity(identity);
   if (!hasStableHandle) return null;
   const claims = claimsOnOtherBoards(identity.id, ctx.root, { env });
   const hasClaims = claims.length > 0;

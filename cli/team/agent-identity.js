@@ -3,6 +3,9 @@
  * An explicit handle wins, then CHEMX_AGENT_ID, then a session handle derived from
  * CHEMX_SESSION_ID or CLAUDE_SESSION_ID ('@claude-<first 8 chars>'), then a handle unique to this process.
  * A shared fallback such as '@agent' would let every anonymous caller pass as the same lock holder.
+ * A read (identity-classification.js) that finds none of those runs under a derived handle, '@session-<id8>'
+ * (K16, #6761): a name for telemetry and for output that must say whose view it is, never a holder. The prefix is
+ * reserved: the lease, claim, agent-row and feed primitives refuse it, so a read cannot become a board actor.
  */
 
 import crypto from 'node:crypto';
@@ -10,6 +13,10 @@ import crypto from 'node:crypto';
 export const AGENT_ID_ENV = 'CHEMX_AGENT_ID';
 export const SESSION_ID_ENVS = ['CHEMX_SESSION_ID', 'CLAUDE_SESSION_ID'];
 const SESSION_PREFIX_LENGTH = 8;
+
+export const DERIVED_PREFIX = '@session-';
+const DERIVED_LENGTH = 8;
+const STABLE_SOURCES = new Set(['explicit', 'env', 'session']);
 
 let processAgentId = null;
 
@@ -39,6 +46,18 @@ export const getProcessAgentId = () => {
   return processAgentId;
 };
 
+/** True for a handle in the reserved derived namespace, with or without its '@'. */
+export const isDerivedHandle = (handle) => {
+  const hasHandle = isNonEmptyString(handle);
+  return hasHandle && toHandle(handle).startsWith(DERIVED_PREFIX);
+};
+
+/** Why a derived handle was refused a lease or a claim. */
+export const describeDerivedRefusal = (handle) => `${handle} is a derived handle (the name a read runs under, reserved prefix ${DERIVED_PREFIX}); it holds no lease and claims no task. Name your handle with --as=<@handle> or CHEMX_AGENT_ID.`;
+
+// Stable within a process, and not the process handle writes fall back to.
+const getDerivedHandle = () => `${DERIVED_PREFIX}${crypto.createHash('sha256').update(getProcessAgentId()).digest('hex').slice(0, DERIVED_LENGTH)}`;
+
 export const resolveAgentIdentity = (explicitId, env = process.env) => {
   if (isNonEmptyString(explicitId)) return { id: toHandle(explicitId), source: 'explicit' };
   const envId = env[AGENT_ID_ENV];
@@ -50,6 +69,20 @@ export const resolveAgentIdentity = (explicitId, env = process.env) => {
 };
 
 export const resolveAgentId = (explicitId, env = process.env) => resolveAgentIdentity(explicitId, env).id;
+
+/** The identity a read runs under: the stable tiers of resolveAgentIdentity, else a derived handle in place of the process handle. */
+export const resolveReadIdentity = (explicitId, env = process.env) => {
+  const identity = resolveAgentIdentity(explicitId, env);
+  const isAnonymous = identity.source === 'process';
+  return isAnonymous ? { id: getDerivedHandle(), source: 'derived' } : identity;
+};
+
+/** True for an identity that may hold leases and claims: named by --as, CHEMX_AGENT_ID or the session, and outside the derived namespace. */
+export const isStableIdentity = (identity) => {
+  const isStableSource = STABLE_SOURCES.has(identity?.source);
+  const hasId = isNonEmptyString(identity?.id);
+  return isStableSource && hasId && !isDerivedHandle(identity.id);
+};
 
 export const describeIdentityHint = (identity) => {
   const isProcessScoped = identity?.source === 'process';

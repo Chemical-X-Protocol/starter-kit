@@ -122,6 +122,33 @@ chemx team audit-run --run=<wf id>                               # the post-run 
 
 `--find-run` returns a recorded id first. Otherwise it scans the newest 200 workflow directories under `~/.claude/projects/*/*/subagents/workflows/` for the run marker in the first 64 KB of each agent transcript. A match is evidence, not proof: a transcript that quotes another run's prompt would match too.
 
+## Identity: which calls need a handle
+
+A Bash shell inherits the orchestrator's `CHEMX_AGENT_ID`, so a subagent's `chemx team lock` or `chemx commit` would be attributed to the orchestrator. Two Claude Code hook rules ([hooks.md](hooks.md)) refuse a chemx call that names no identity of its own: `dispatch-identity` for a dispatched builder (the refusal names its `@<run>-<id>` handle) and `inherited-identity` for any other subagent (it names the orchestrator handle the call would act as). A third, `foreign-identity`, refuses a call that names another handle of the builder's own run. A call names its identity with `--as=@you`, an inline `CHEMX_AGENT_ID=@you chemx ...`, or an `export CHEMX_AGENT_ID=@you;` earlier in the same Bash command.
+
+Since K16 (#6761) the first two rules apply to a call that **changes files or shared state** (a write below). A read, a gate or a help request runs with no export and no `--as`, and prints no identity line. The refusal text is unchanged.
+
+| Class | Calls |
+| :--- | :--- |
+| **Read**: no identity | `read`, `q` (`search`), `trace`, `backtrace`, `check`, `f`, `p`, `j`, `log`, `d`, `show`, `status`, `conflicts`, `wait`, `docs`, `trend`, `report`, `tesseract`, `patterns`, `blueprint`, `friction`, `ci`, `mcp`, `ui`, `hook claude-*` |
+| | the gates `test`, `typecheck`, `lint`, `build`, `verify`, `audit`, `doctor` |
+| | `team status`, `team feed`, `team tokens`, `team benchmark`, `team route`, `team audit-run`, `team task list\|show\|view\|info`, `team brief <id>`, `team lock status\|list\|check-staged` (`chemx task ...` is `chemx team task ...`) |
+| | `project` (no word, `status`, `learnings`), `changelog --check\|--dry-run`, `help`, `version`, and any call with `--help` or `-h` before a `--` |
+| **Write**: a named handle | files: `write`, `patch`, `add`, `explode`, `generate` (and a capsule generator such as `chemx m-card`), `heal`, `badge`, `changelog` |
+| | `commit`, `run` (it renews your leases), `mutate` (it edits a file for a moment), `scratch` (a directory per handle), `worktree` |
+| | setup: `init`, `create`, `pillars`, `install-mcp`, `hook` (`install-hooks`, `setup-ci`), `project init\|step\|chat\|pause\|resume` |
+| | `team task` `claim`, `done`, `handoff`, `close`, `comment`, `update`, `add`, `triage`, `reconcile`, `set-target`, `set-files`, `slot`, `trace`; `team lock` `acquire`, `release`, `renew`, `check` or a path alone; `team unlock`, `post`, `dm`, `inbox`, `triage`, `train`, `profile`, `handoff`, `dispatch`, `migrate` |
+| Read, but a write with | `lint --fix`, `audit --fix\|--triage\|--triage-all\|--rebaseline`, `doctor --fix`, `mcp --install`, `friction add\|export`, `patterns reject`, `blueprint fill`, `team brief <id> --file\|--stdin\|--clear` |
+| Write, but a read with | `project status\|learnings`, `hook claude-*`, `changelog --check\|--dry-run` |
+
+Rules of thumb. `chemx do "<call>" "<call>"` is a write when any quoted call is. `--root=<dir>` and `--project-root` never change the class. After `--` every word belongs to the wrapped command or the title, so `chemx run -- node --help` is a write. A token chemx does not know is a read: the router refuses it. The same list drives the `audit-run` section "subagent acted as orchestrator" and the handles the native-edit guard learns ([hooks.md](hooks.md#native-edits-and-file-locks)).
+
+**What a read runs as.** `--as`, then `CHEMX_AGENT_ID`, then the session handle `@claude-<first 8 of the session id>`, as for a write. With none of them a read runs under a derived handle, `@session-<id8>`, a name for output and telemetry and not a holder: the lease, claim, agent-row and feed primitives refuse the reserved `@session-` prefix (`derived_handle`; an event it would author reads as `@system`), and a read that looks for the caller's claims on other boards finds none. A write keeps its tiers: the fourth is a per-process handle with a one-line hint, and `team task done`, `handoff` and `close` still refuse without `--as`.
+
+**How the table stays complete.** The lists are in `cli/team/identity-classification.js`. `identity-classification.spec.js` walks the command schema, the schema aliases and the team subcommands, task actions and lock actions of `cli/docs-check/command-tree.js` and fails until each is in exactly one list, so a new command cannot go unclassified: add it to `READ_COMMANDS` or `WRITE_COMMANDS` (and to `READ_WHEN` or `WRITE_WHEN` if some flags flip it) and to this table.
+
+Not guaranteed: a command whose class depends on config (`audit` with `autoTriage: true` files tasks with no flag), an identity or a subcommand held in a shell variable, and MCP calls, which carry their identity in `params.agentId` / `params.as` and are only checked after the fact by `audit-run`.
+
 ## Not guaranteed
 
 - That agents follow the prompts. The review, the retry guard and audit-run catch some failures; read their output.
