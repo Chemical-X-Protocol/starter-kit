@@ -59,7 +59,32 @@
         "TYPOGRAPHY_EM_DASH": 1,
         "UNGUARDED_LOGGING": 1,
         "VIEW_MONOLITH": 3
-      }
+      },
+      "languages": [
+        ".c",
+        ".cc",
+        ".cjs",
+        ".cpp",
+        ".cs",
+        ".cxx",
+        ".go",
+        ".h",
+        ".hh",
+        ".hpp",
+        ".hxx",
+        ".inl",
+        ".java",
+        ".js",
+        ".jsx",
+        ".kt",
+        ".mjs",
+        ".py",
+        ".rs",
+        ".svelte",
+        ".ts",
+        ".tsx",
+        ".vue"
+      ]
     },
     "cli": {
       "ruleset": 6,
