@@ -153,6 +153,34 @@ write `--title=-x` for that. A value flag with no value (last word, or followed 
 refused by name before the db opens. `--ignore-deps` keeps its `=` form (`--ignore-deps=<reason>`); bare,
 it is refused by `task claim` with a request for a reason.
 
+## Reading the board cheaply
+
+The board commands print the least that answers the question; a flag widens the view. Sizes measured on
+the live board (characters, colours stripped): `team feed` 27,290 -> 2,564, `team status` 9,167 -> 3,912,
+`team task show` on the epic #6745 8,643 -> 4,655 (275 with `--brief`).
+
+| Command | Default | Widen or narrow it |
+| --- | --- | --- |
+| `team task add "<title>"` | one line, `#<id> added: <title>` (title cut at 100 characters, repo named when it is not the root) | `--json` prints a compact object of ids and short fields; the description is never echoed |
+| `team task comment <id> <msg>` | one line, `#<id>: comment <N> posted`, where N is the feed event id (a `team feed --since=` cursor) | `--json` prints ids only, never the text |
+| `team task show <id>` | the full card; the creation event is one line and never repeats the title | `--brief`: title, status, tier, needs, priority, assignee, target, blocker, dependencies, parent, and only the events after the creation event; the description is not printed, only its length |
+| `team feed` | the newest 20 events, one line each (`#id HH:MM @author [type] message`, the message folded to one line and cut at 120 characters) | `--limit=<n>`, `--since=<event id>` (events after it, oldest first), `--from=@handle` (author), `--type=` (below), `--full` (whole messages), `--oneline` with `--json` (cut the messages) |
+| `team status` | counters, leases, tokens and the last 4 events; blocked tasks are only counted | `--blockers` lists them, `--mine` keeps only your open tasks, your leases and your own events (the board totals stay board-wide) |
+
+`--type=` takes a group or an exact event type, comma-separated for several. `lock` is every `lock_*`
+event, `task` every `task_*` event, `status` is `status`, `status_update` (task comments),
+`task_status_updated`, `progress` and `heartbeat`, and `post` is `broadcast`, `mention`, `decision`,
+`blocker` and `dm`. Any other word matches that event type exactly (`--type=commit`).
+
+`--json` keeps its old shape (feed: 50 rows, whole messages) except that `team status --json` carries
+`blockedTasks` only with `--blockers` and adds a `mine` object with `--mine`. The MCP tools mirror the
+flags: `chemx_team_feed` takes `from`, `type`, `full` and returns 20 clipped events by default;
+`chemx_team_status` takes `blockers` and `mine`; `chemx_team_task` `show` takes `brief`, and `create` and
+`comment` return ids and an `ack` line instead of the whole row or event.
+
+Not guaranteed: "newer than the description" is "after the `task_created` event" (descriptions have no
+edit history); the groups name the event types chemx writes today.
+
 ## Live runbook
 
 Run from the monorepo root (`/home/xopher/www/x/Xophz-COMPASS`) as one handle (`--as=@<you>`). Order

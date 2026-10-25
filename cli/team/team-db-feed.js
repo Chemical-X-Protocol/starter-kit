@@ -50,6 +50,21 @@ export const NOT_ARCHIVED_SQL = "COALESCE(json_extract(CASE WHEN json_valid(meta
 
 const parseRow = (r) => ({ ...r, metadata: JSON.parse(r.metadata || '{}') });
 
+// Event-type groups (K4): exact names in event_types, name prefixes in event_type_prefixes; either matches.
+// A prefix is matched literally: its _ and % are escaped, so lock_ never matches lockXacquired.
+const likePrefix = (prefix) => `${String(prefix).replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
+
+const buildTypeClause = (filter) => {
+  const types = filter.event_types ?? [];
+  const prefixes = filter.event_type_prefixes ?? [];
+  const parts = [
+    ...(types.length ? [`event_type IN (${types.map(() => '?').join(', ')})`] : []),
+    ...prefixes.map(() => "event_type LIKE ? ESCAPE '\\'")
+  ];
+  const hasParts = parts.length > 0;
+  return hasParts ? { sql: `(${parts.join(' OR ')})`, params: [...types, ...prefixes.map(likePrefix)] } : null;
+};
+
 // With since_id the feed reads forward in id order (a cursor). Without it, it returns the newest
 // `limit` rows, still in chronological order, so status cards show recent activity, not the oldest rows.
 export const queryFeed = (db, filter = {}) => {
@@ -83,6 +98,17 @@ export const queryFeed = (db, filter = {}) => {
     const cleanId = formatHandle(filter.agent_id);
     conditions.push('(recipient_id IS NULL OR recipient_id = ? OR author_id = ?)');
     params.push(cleanId, cleanId);
+  }
+  const hasAuthor = Boolean(filter.author_id);
+  if (hasAuthor) {
+    conditions.push('author_id = ?');
+    params.push(formatHandle(filter.author_id));
+  }
+  const typeClause = buildTypeClause(filter);
+  const hasTypeClause = typeClause !== null;
+  if (hasTypeClause) {
+    conditions.push(typeClause.sql);
+    params.push(...typeClause.params);
   }
 
   query += ` WHERE ${conditions.join(' AND ')}`;
