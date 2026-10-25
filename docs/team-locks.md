@@ -163,6 +163,18 @@ it forever. So the rule while anyone is queued for a lease is:
 
 The last-edit times live in a `lease_edit_marks` table in the same database, created on first use.
 
+## `chemx status` in a linked worktree (#6777)
+
+`chemx status` marks a changed file with no live lease `[unleased: someone may be mid-edit]`, which is true in the
+shared main checkout and noise in a private git worktree, where no other handle edits. Inside a **linked
+worktree** (git's own answer: the worktree's git dir, reached through the `.git` pointer file, differs from the
+common git dir; a main checkout, a submodule and any subdirectory of a checkout are not) it prints no hint for
+an unleased file, `flagged` is `false` in `--json`, and the counts line reads `N unleased (linked worktree: not
+flagged)`. A live lease by another handle is still shown and flagged
+(`[leased by another handle: do not edit]`), and so is your own lease, without a flag. `--json` carries
+`linkedWorktree`. A worktree outside the board root sees no board, so there it has no leases to show; leases
+are keyed from the board root and a main-checkout key never names a worktree's file.
+
 ## What happens on a lapse
 
 A lease with no chemx activity from its holder for 5 minutes lapses (the activity window above can undo it for up to 10 more minutes while the file stays untaken): the file is free to anyone, and

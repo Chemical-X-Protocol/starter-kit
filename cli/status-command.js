@@ -4,10 +4,13 @@
  * "#<id>" in the purpose) the coordination db shows for that file right now.
  * Not guaranteed: a flag is a hint, not proof. "unleased" can be a finished edit that was released;
  * "leased by another" needs a known handle (--as or CHEMX_AGENT_ID). It never changes any file or lease.
+ * In a linked git worktree (#6777) no other handle edits the files, so "unleased" is not flagged there;
+ * a live lease by another handle still is.
  */
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { liveLeases } from './lease-view.js';
+import { isLinkedWorktree } from './worktree-git.js';
 import { activityHolder, agentFromArgs } from './team/lease-activity.js';
 import { contentionByPath, describeContention } from './team/lease-contention.js';
 
@@ -17,6 +20,7 @@ export const STATUS_HELP = [
   '  holder, purpose, task (#id from the purpose) and minutes left.',
   '  Flags: "unleased" = changed and no live lease (someone may be mid-edit, or the edit is finished);',
   '  "leased by another" = a different handle holds it (needs --as or CHEMX_AGENT_ID).',
+  '  In a linked git worktree "unleased" is not flagged (the files are private there, and the counts line says so); "leased by another" still is.',
   '  Reads only; never changes files or leases. Always exits 0 unless git fails.'
 ].join('\n');
 
@@ -44,30 +48,32 @@ const stateOf = (lease, me) => {
   return isOther ? 'other' : 'held';
 };
 
-/** Pure: joins entries with leases. */
-export const annotate = (entries, leases, top, me, now = Date.now()) => entries.map((entry) => {
+/** Pure: joins entries with leases. In a linked worktree (isPrivate) an unleased file is not flagged. */
+export const annotate = (entries, leases, top, me, now = Date.now(), isPrivate = false) => entries.map((entry) => {
   const abs = path.join(top, entry.file);
   const lease = leases.find((item) => item.abs === abs);
   const state = stateOf(lease, me);
-  const base = { code: entry.code, file: entry.file, state, flagged: state === 'unleased' || state === 'other' };
+  const isUnleasedFlag = state === 'unleased' && !isPrivate;
+  const base = { code: entry.code, file: entry.file, state, flagged: isUnleasedFlag || state === 'other' };
   if (!lease) return base;
   const minutesLeft = Math.round((lease.expires_at - now) / 60000);
   return { ...base, holder: lease.locked_by, purpose: lease.purpose, task: taskOf(lease.purpose), minutesLeft };
 });
 
-export const countLine = (rows) => {
+export const countLine = (rows, isPrivate = false) => {
   const count = (state) => rows.filter((row) => row.state === state).length;
-  const parts = [`${rows.length} changed`, `${count('yours')} leased by you`, `${count('other')} leased by another`, `${count('held')} leased (handle unknown)`, `${count('unleased')} unleased`];
+  const unleased = `${count('unleased')} unleased${isPrivate ? ' (linked worktree: not flagged)' : ''}`;
+  const parts = [`${rows.length} changed`, `${count('yours')} leased by you`, `${count('other')} leased by another`, `${count('held')} leased (handle unknown)`, unleased];
   return parts.join(', ');
 };
 
 const FLAG_TEXT = { unleased: '  [unleased: someone may be mid-edit]', other: '  [leased by another handle: do not edit]' };
 
-const rowText = (row) => {
+export const rowText = (row) => {
   const task = row.task ? ` task #${row.task}` : '';
   const lease = row.holder ? `  ${row.holder} "${row.purpose}"${task} ${row.minutesLeft}m left` : '';
   const queue = row.queue ? `  ${row.queue}` : '';
-  return `${row.code} ${row.file}${lease}${queue}${FLAG_TEXT[row.state] || ''}`;
+  return `${row.code} ${row.file}${lease}${queue}${row.flagged ? FLAG_TEXT[row.state] || '' : ''}`;
 };
 
 // Rows of contested leases also carry who waits and when renewal stops extending (#2566).
@@ -97,11 +103,12 @@ export const runStatus = (args = [], isCli = true, cwd = process.cwd()) => {
     return { code: 1, error: 'git failed' };
   }
   const me = activityHolder(agentFromArgs(args));
-  const rows = withContention(annotate(parsePorcelain(raw), liveLeases(cwd), top, me), top, cwd);
-  const summary = countLine(rows);
+  const linkedWorktree = isLinkedWorktree(top);
+  const rows = withContention(annotate(parsePorcelain(raw), liveLeases(cwd), top, me, Date.now(), linkedWorktree), top, cwd);
+  const summary = countLine(rows, linkedWorktree);
   if (isCli) {
     const isJson = args.includes('--json');
-    process.stdout.write(isJson ? `${JSON.stringify({ rows, summary }, null, 2)}\n` : `${rows.map(rowText).concat(summary).join('\n')}\n`);
+    process.stdout.write(isJson ? `${JSON.stringify({ rows, summary, linkedWorktree }, null, 2)}\n` : `${rows.map(rowText).concat(summary).join('\n')}\n`);
   }
-  return { code: 0, rows, summary };
+  return { code: 0, rows, summary, linkedWorktree };
 };

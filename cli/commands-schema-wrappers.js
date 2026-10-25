@@ -37,7 +37,7 @@ export const WRAPPER_COMMANDS = [
     brief: 'git status with live leases',
     usage: 'chemx status [path] [--json] [--as=@you]',
     summary: 'Changed files (git status --porcelain) with each file\'s live lease: holder, purpose, task, minutes left.',
-    description: 'Flags a changed file with no live lease (someone may be mid-edit, or the edit is finished) and one leased by a different handle (needs --as or CHEMX_AGENT_ID). Reads only; ends with one line of counts. Matches leases by root-relative key, so a legacy cwd-relative lease in a nested db is not shown.',
+    description: 'Flags a changed file with no live lease (someone may be mid-edit, or the edit is finished) and one leased by a different handle (needs --as or CHEMX_AGENT_ID). Reads only; ends with one line of counts. Matches leases by root-relative key, so a legacy cwd-relative lease in a nested db is not shown. In a linked git worktree (found through git\'s gitdir pointer, not the path) the files are private, so "unleased" is not flagged there and the counts line says so; a live lease by another handle still is, and --json carries linkedWorktree.',
     flags: [
       { flag: '--json', desc: 'Output { rows, summary }' },
       { flag: '--as=@you', desc: 'Your handle, to tell your leases from others' }
