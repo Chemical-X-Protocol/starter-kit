@@ -67,7 +67,7 @@ export const MASTER_MCP_TOOL = {
           search: { type: 'string', description: 'Alias for target text block to replace (for patch)' },
           replacement: { type: 'string', description: 'New replacement content (for patch)' },
           replace: { type: 'string', description: 'Alias for replacement content (for patch)' },
-          blocks: { type: 'array', items: { type: 'object', properties: { search: { type: 'string' }, replace: { type: 'string' } }, required: ['search', 'replace'] }, description: 'patch: several { search, replace } edits applied in order, all-or-nothing (one unmatched block writes nothing). A SEARCH/REPLACE heredoc string is accepted too.' },
+          blocks: { type: 'array', items: { type: 'object', properties: { search: { type: 'string' }, replace: { type: 'string' } }, required: ['search', 'replace'] }, description: 'patch: several { search, replace } edits applied in order, all-or-nothing (one unmatched or guard-refused block writes nothing and is named: "Block 2 of 3"). A SEARCH/REPLACE heredoc string is accepted too.' },
           multiple: { type: 'boolean', description: 'Allow replacing multiple occurrences (for patch)' },
           dryRun: { type: 'boolean', description: 'Preview change without writing to disk; returns a unified diff (for patch, write, autofix, generate)' },
           allowRemoved: { type: 'array', items: { type: 'string' }, description: 'Top-level declarations a patch/write may remove. Any removal not named here is refused, renames included (removing A while adding B)' },

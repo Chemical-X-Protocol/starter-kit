@@ -9,7 +9,7 @@ export const EDIT_COMMANDS = [
     brief: 'Replace exact text in a file',
     usage: "chemx patch <file> [options] <<'EOF' (SEARCH/REPLACE blocks on stdin)",
     summary: 'Surgically patch a target file using exact search and replacement blocks.',
-    description: 'Reads one or more SEARCH/REPLACE blocks from a heredoc (all-or-nothing), or one --target/--replacement pair; then re-indexes and audits the file.',
+    description: 'Reads one or more SEARCH/REPLACE blocks from a heredoc, or one --target/--replacement pair; then re-indexes and audits the file. Blocks apply in order and all-or-nothing: a block that does not match, or that trips a guard (parse, declaration removal, missing import), fails the call, is named ("Block 2 of 3") and writes nothing.',
     flags: [
       { flag: '<<\'EOF\' ... EOF', desc: 'Blocks: "<<<<<<< SEARCH", old lines, "=======", new lines, ">>>>>>> REPLACE"' },
       { flag: '--target="<old>"', desc: 'Exact text block to replace' },

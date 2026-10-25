@@ -12,6 +12,7 @@ import { introducedViolationsOf } from './audit/gate-delta.js';
 import { noteCounterfactual } from './telemetry/call-ledger.js';
 import { newMissingImports, missingImportMessage } from './missing-imports.js';
 import { recordEditSha } from './team/edit-shas.js';
+import { explainBlockRefusal } from './patch-block-blame.js';
 
 export { runPatcherCli, runWriterCli } from './patcher-cli.js';
 
@@ -51,7 +52,25 @@ const refuseMissingImports = (resolvedPath, beforeText, afterText, params) => {
   const isAllowed = Boolean(params.allowMissingImport);
   const missing = isAllowed ? [] : newMissingImports(resolvedPath, beforeText, afterText);
   const hasMissing = missing.length > 0;
-  if (hasMissing) throw new Error(missingImportMessage(params.relPath, missing));
+  if (hasMissing) throw Object.assign(new Error(missingImportMessage(params.relPath, missing)), { isRefusal: true });
+};
+
+// Every guard on the final text, then the write. A refusal of a multi-block patch names the first
+// block after which the guards refuse (cli/patch-block-blame.js); the file is untouched either way.
+const applyGuarded = ({ resolvedPath, original, replaced, params }) => {
+  const { cwd, dryRun, allowRemoved, agentId } = params;
+  const importOptions = { allowMissingImport: params.allowMissingImport, relPath: params.relPath };
+  const editOf = (content) => [{ path: resolvedPath, content, allowRemoved }];
+  const check = (content) => {
+    refuseMissingImports(resolvedPath, original, content, importOptions);
+    applyEdits(editOf(content), { cwd, dryRun: true, agentId });
+  };
+  try {
+    refuseMissingImports(resolvedPath, original, replaced.content, importOptions);
+    return applyEdits(editOf(replaced.content), { cwd, dryRun, agentId });
+  } catch (err) {
+    throw explainBlockRefusal(err, { check, original, buffers: replaced.buffers ?? [] });
+  }
 };
 
 const validatePatchParams = (params, targetContent, replacementContent) => {
@@ -115,8 +134,8 @@ export const patchFile = (targetPath, params = {}) => {
   const replaced = hasBlocks
     ? applySearchReplaceBlocks(fileContent, params.blocks, replaceOptions)
     : replaceLiteral(fileContent, targetContent, replacementContent, replaceOptions);
-  refuseMissingImports(resolvedPath, fileContent, replaced.content, { allowMissingImport: params.allowMissingImport, relPath: targetPath });
-  const applied = applyEdits([{ path: resolvedPath, content: replaced.content, allowRemoved }], { cwd, dryRun, agentId });
+  const guardParams = { cwd, dryRun, allowRemoved, agentId, allowMissingImport: params.allowMissingImport, relPath: targetPath };
+  const applied = applyGuarded({ resolvedPath, original: fileContent, replaced, params: guardParams });
   const fileResult = applied.files[0];
   if (!dryRun) recordEditSha(resolvedPath, { cwd, handle: agentId ?? process.env.CHEMX_AGENT_ID ?? null });
   const shouldIndex = !skipIndex && !dryRun;

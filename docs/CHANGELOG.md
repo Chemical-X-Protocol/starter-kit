@@ -8,6 +8,15 @@ This section was written from the day's commit subjects and their task titles. I
 
 ## Unreleased (main, 2026-10-24)
 
+### A refused patch block is named, and nothing is written (epic #6745, K19 #6768)
+
+Reference: README.md (`chemx patch`), `chemx patch --help`. Reported: a later block was applied although an earlier one was refused by the removes-a-declaration guard. Checked: one multi-block `chemx patch` call already builds the result in one in-memory buffer and runs the guards once on the final text, so a refusal in one call never wrote part of the file (this change pins that with specs); what the refusal lacked was the block. A guard refusal (parse, V8 syntax, a removed top-level declaration, a missing import) named only the file. Two patch commands in one shell line are two transactions, and the shell runs the second after the first was refused: that is the likeliest way to see a half-applied file, which is why the help now says to keep every edit to a file in one call.
+
+- A refusal of a patch with two or more blocks now begins `Block 2 of 3: <file>: <reason> Nothing was written.` (CLI exit 1, MCP `patch` with `blocks[]`, `--dry-run` too). The blamed block is the first one after which the guards refuse every later buffer, found by replaying the guards on each intermediate buffer (`cli/patch-block-blame.js`, only on the refusal path): a block that removes a declaration a later block puts back is not blamed, and the reason still lists everything the whole patch would remove (`--allow-remove=b,c` in one retry). A refusal that holds before any block runs (a lease held by another agent, a file V8 already rejects) names no block. A single block, `--target/--replacement` and `chemx write` keep their plain text.
+- `applySearchReplaceBlocks` also returns `buffers` (the text after each block); `EditRefusedError` issues may carry `{ block, blocks }`; the missing-import refusal is flagged `isRefusal`.
+- Pinned by specs: a three-block patch whose second block removes a declaration, or breaks the syntax, or adds a missing import leaves the file byte-identical, writes no backup and names block 2; a non-matching third block applies nothing and names block 3; `--allow-remove` applies all three; the same through the MCP `patch` and `write` tools and `chemx write --overwrite`.
+- Help: `chemx patch --help` and the schema entry say which refusals are all-or-nothing and to keep every edit to a file in one call; `chemx write --help` says a refused write leaves the file as it was; the MCP `blocks` description and AGENTS.md carry the same line.
+
 ### One root for every command, and boards by name (epic #6745, K6 #6751)
 
 Full reference: [coordination-db.md](coordination-db.md#other-repos-and-other-boards). Before, `chemx log --root=<dir>` was "unrecognized argument" and `d`, `show`, `status`, `f`, `q` and `read` only looked at the cwd, so an orchestrator working across repos changed directory for every call, and a task number (#1553) named a different task on each board with no hint of which.

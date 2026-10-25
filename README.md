@@ -204,7 +204,9 @@ chemx read src/components/m-card.vue --start=10 --end=40
 
 # Surgical file patching without full-file rewrites (literal replace, written through a temp file and rename, backup kept).
 # Multi-line edits: SEARCH/REPLACE blocks in a quoted heredoc ($, quotes and backticks stay literal).
-# Repeat the block for several edits; they apply in order and all-or-nothing. To edit text that
+# Repeat the block for several edits; they apply in order and all-or-nothing: a block that does not
+# match, or that the guards refuse (parse, a removed declaration, a missing import), fails the call,
+# is named ("Block 2 of 3") and writes nothing. Keep every edit to a file in one call. To edit text that
 # itself contains these markers, use 8 or more characters on all three marker lines.
 chemx patch <file> [--dry-run] <<'PATCH'
 <<<<<<< SEARCH
