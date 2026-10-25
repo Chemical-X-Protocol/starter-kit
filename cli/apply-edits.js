@@ -21,9 +21,12 @@ import { findForeignLease } from './edit-locks.js';
 import { syncLeasesAfterEdit } from './team/lease-renew.js';
 import { countLines } from './line-count.js';
 
+// A refusal caused by one block of a multi-block patch carries { block, blocks } (cli/patch-block-blame.js).
+const issueLine = (issue) => `${issue.block ? `Block ${issue.block} of ${issue.blocks}: ` : ''}${issue.file}: ${issue.reason}`;
+
 export class EditRefusedError extends Error {
   constructor(issues) {
-    super(issues.map((i) => `${i.file}: ${i.reason}`).join('\n'));
+    super(issues.map(issueLine).join('\n'));
     this.name = 'EditRefusedError';
     this.issues = issues;
   }

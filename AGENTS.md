@@ -154,6 +154,8 @@ Use same-name shorthand across all languages; eliminate redundant `key: key` dup
   // Preview first: dryRun returns the unified diff and writes nothing (CLI: --dry-run or -n)
   chemx({ action: 'patch', params: { path: 'src/...', target: 'oldCode', replacement: 'newCode', dryRun: true } });
   chemx({ action: 'patch', params: { path: 'src/...', target: 'oldCode', replacement: 'newCode' } });
+  // Several edits to one file go in ONE call (CLI: SEARCH/REPLACE blocks in a heredoc; API: blocks: [{ search, replace }]): all-or-nothing,
+  // and a block that does not match or trips a guard fails the call as "Block 2 of 3: ..." with the file untouched
   // Removing a top-level declaration (renames included) is refused unless named (CLI: --allow-remove=oldName)
   chemx({ action: 'patch', params: { path: 'src/...', target: 'oldName', replacement: 'newName', allowRemoved: ['oldName'] } });
   // write creates; replacing an existing file needs overwrite (CLI: --overwrite)

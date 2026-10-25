@@ -99,14 +99,17 @@ const applyOne = (content, block, options) => {
  * @param {string} content File content.
  * @param {{ search: string, replace: string }[]} blocks Parsed blocks.
  * @param {object} [options] { allowMultiple, filePath }
- * @returns {{ content: string, count: number, lines: number[], changedLines: object, eol: string, blocks: number }}
+ * @returns {{ content: string, count: number, lines: number[], changedLines: object, eol: string, blocks: number, buffers: string[] }}
+ * buffers[k] is the text after block k + 1, so a guard that refuses the final text can be replayed per block.
  */
 export const applySearchReplaceBlocks = (content, blocks, options = {}) => {
   let current = content;
+  const buffers = [];
   const results = blocks.map((block, i) => {
     try {
       const res = applyOne(current, block, options);
       current = res.content;
+      buffers.push(current);
       return res;
     } catch (err) {
       const near = closestLine(current, String(block.search ?? ''));
@@ -116,5 +119,5 @@ export const applySearchReplaceBlocks = (content, blocks, options = {}) => {
   });
   const first = results[0];
   const count = results.reduce((sum, r) => sum + r.count, 0);
-  return { content: current, count, lines: first.lines, changedLines: first.changedLines, eol: first.eol, blocks: blocks.length };
+  return { content: current, count, lines: first.lines, changedLines: first.changedLines, eol: first.eol, blocks: blocks.length, buffers };
 };
