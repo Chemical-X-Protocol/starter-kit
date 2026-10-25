@@ -24,12 +24,19 @@ import { repoDir } from './coordination-repos.js';
 import { loadModelRouting } from './team-dispatch.js';
 import { claimWithIgnoreDeps } from './claim-ignore-deps.js';
 import { buildLabelFor } from './team-route.js';
+import { describeUnknownStatus } from './task-update-status.js';
 
 export const TASK_ACTIONS = ['list', 'show', 'add', 'claim', 'handoff', 'close', 'done', 'update', 'comment', 'triage', 'reconcile', 'set-target', 'set-files', 'vds-slot', 'trace'];
 
 const fail = (isCli, message, result = { error: message }) => {
   if (isCli) process.stderr.write(`\x1b[31m✕ ${message}\x1b[0m\n`);
   return result;
+};
+
+// A refusal for input that must write nothing: stderr, a non-zero exit and { refused } for callers.
+const refuse = (isCli, message) => {
+  if (isCli) process.exitCode = 1;
+  return fail(isCli, message, { error: message, refused: true });
 };
 
 const writeJsonOr = (value, flags, isCli, line) => {
@@ -182,14 +189,20 @@ const runSetDependencies = (ctx, taskId, flags, isCli) => {
 
 const runUpdate = (ctx, positionals, flags, isCli, cwd) => {
   const taskId = positionals[1];
+  // Checked before any write, so a refused status leaves a dependency edit in the same command unapplied too.
+  const hasStatusFlag = flags.status !== undefined;
+  const requestedStatus = hasStatusFlag ? flags.status : positionals[2];
+  const unknownStatus = describeUnknownStatus(requestedStatus);
+  const isStatusRefused = Boolean(unknownStatus);
+  if (isStatusRefused) return refuse(isCli, unknownStatus);
   const isDepsEdit = hasDependencyEdit(flags);
   const depsResult = isDepsEdit ? runSetDependencies(ctx, taskId, flags, isCli) : null;
   const isDepsRefused = Boolean(depsResult?.refused);
   if (isDepsRefused) return depsResult;
   const isDepsOnly = isDepsEdit && !flags.status && !positionals[2];
   if (isDepsOnly) return depsResult;
-  const targetStatus = flags.status || positionals[2] || 'in_progress';
-  const isCompletion = targetStatus === 'done' || targetStatus === 'completed';
+  const targetStatus = requestedStatus || 'in_progress';
+  const isCompletion = targetStatus === 'done';
   if (isCompletion) return runComplete(ctx, taskId, flags, isCli, cwd, `Updated task #${taskId} to status "done"`);
   const agentHandle = resolveCliAgent(flags, isCli);
   registerAgent(ctx.db, { id: agentHandle, role: 'executor' });

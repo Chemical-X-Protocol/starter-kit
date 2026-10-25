@@ -133,6 +133,26 @@ Not done:
   source tasks updated since the previous merge. This is why the live run needs a write freeze.
 - The per-package db is not deleted or emptied. Retire it by hand after the run is verified.
 
+## Task statuses and value flags
+
+**Statuses `task update` writes.** `queued`, `in_progress`, `review`, `blocked`, `done`, `cancelled`,
+given as the word after the id (`task update 12 blocked --reason="..."`) or as `--status`. Any other
+word is refused with this list, exit code 1, and nothing is written: not the status, and not a
+`--deps` / `--add-dep` / `--rm-dep` edit in the same command. `done` runs the completion gate like
+`task done`. `duplicate` is reached only through `task close --duplicate-of=<id>`, and `completed`
+is not a status (use `done`). With no status and no dependency flag, `update` sets `in_progress`;
+`update <id> --add-dep <ids>` alone edits the dependencies and leaves the status untouched.
+
+**Value flags.** Every team flag that takes a value accepts it after a space or an equals sign, with
+the same meaning: `--add-dep 3,4` and `--add-dep=3,4`, `--prio 2` and `--prio=2`. This covers `--as`,
+`--to`, `--agent`, `--status`, `--target`, `--tier`, `--rule`, `--parent`, `--prio` / `--priority`,
+`--needs`, `--sprint`, `--moscow`, `--title`, `--desc` / `--description`, `--deps`, `--add-dep`,
+`--rm-dep`, `--reason`, `--duplicate-of`, `--cancel`, `--limit`, `--since`, `--thread`, `--task`,
+`--repo` and the other value flags in `cli/team/team-flag-values.js`. A value never starts with `-`:
+write `--title=-x` for that. A value flag with no value (last word, or followed by another flag) is
+refused by name before the db opens. `--ignore-deps` keeps its `=` form (`--ignore-deps=<reason>`); bare,
+it is refused by `task claim` with a request for a reason.
+
 ## Live runbook
 
 Run from the monorepo root (`/home/xopher/www/x/Xophz-COMPASS`) as one handle (`--as=@<you>`). Order
