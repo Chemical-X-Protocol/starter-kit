@@ -28,7 +28,7 @@ export const SEARCH_COMMANDS = [
       { flag: '-o, --only-matching', desc: 'With -g: print only the matched text, one path:line:text record per match (--regex captures a token such as --gs-[a-z-]+)' },
       { flag: '--unique', desc: 'With -g -o: print each distinct matched text once, sorted (implies -o); -n caps the list' },
       { flag: '-g <pattern> <path>...', desc: 'Scope a literal search to files or directories (relative to where chemx runs); a missing path is an error, and with no path the whole project is searched. Quote a multi-word phrase: -g "foo bar". A plain query takes the same paths: q <symbol> <path>...' },
-      { flag: '-n, --limit <N>', desc: 'Max results (q default 50, -g default 20); truncation is always stated' },
+      { flag: '-n, --limit <N>', desc: 'Max results (q default 50, -g default 20, none for --bare -l --lines -o --unique); truncation is always stated' },
       { flag: '--dir=<path>', desc: 'Scope to search (default: the project default, src/ or .)' },
       { flag: '--failing, --clean', desc: 'Filter capsules by architectural health status' },
       { flag: '--reindex', desc: 'Force re-index before running query' },
