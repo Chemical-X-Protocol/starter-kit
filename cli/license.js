@@ -33,6 +33,22 @@ export const URL_MASTER = 'https://mycompassconsulting.com/buy/chemical-x/master
 export const LICENSE_CANCELLED = Object.freeze({ cancelled: true });
 export const isLicenseCancelled = (value) => value === LICENSE_CANCELLED;
 
+// A WordPress site that is up but has no gatekeeper route answers 404 { code: 'rest_no_route' }.
+const GATEKEEPER_NO_ROUTE_CODE = 'rest_no_route';
+
+const describeGatekeeperUnreachable = (url) => `License server not reachable at ${url} (set COMPASS_GATEKEEPER_URL)`;
+
+// The parsed JSON body, or null when the response is not JSON.
+const readJsonBody = async (res) => {
+  try {
+    return await res.json();
+  } catch {
+    return null;
+  }
+};
+
+// { valid: false, unreachable: true, url } means the license check never ran: the key was not judged.
+// A server that answered with a JSON verdict (a 401 for a bad key) stays { valid: false }.
 export const verifyWithGatekeeper = async (keyOrUser, deviceId = null) => {
   const isOffline = isOfflineMode();
   if (isOffline) return { valid: false, offline: true, error: describeOffline('Gatekeeper license check') };
@@ -41,17 +57,23 @@ export const verifyWithGatekeeper = async (keyOrUser, deviceId = null) => {
   if (isEndpointRefused) return { valid: false, error: endpoint.error };
   announceOverride(endpoint);
   const effectiveDeviceId = deviceId || getOrCreateDeviceId();
+  const unreachable = { valid: false, unreachable: true, url: endpoint.url };
   try {
     const res = await fetch(`${endpoint.url}/licenses/validate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ key: keyOrUser, deviceId: effectiveDeviceId })
     });
+    const body = await readJsonBody(res);
+    const hasJsonBody = body !== null && typeof body === 'object';
+    const isRouteMissing = hasJsonBody && body.code === GATEKEEPER_NO_ROUTE_CODE;
+    const isVerdictMissing = !hasJsonBody || isRouteMissing;
+    if (isVerdictMissing) return unreachable;
     const isResponseOk = res.ok;
     if (!isResponseOk) return { valid: false };
-    return await res.json();
+    return body;
   } catch {
-    return { valid: false };
+    return unreachable;
   }
 };
 
@@ -390,7 +412,10 @@ const verifyViaGatekeeperFallback = async (licenseKey, deviceId, networkError) =
     const hasLocalFiles = Object.keys(localFiles).length > 0;
     if (hasLocalFiles) return { status: STATUS.PASS, files: localFiles, reason: null };
   }
-  return failDownload(`Network Error: Failed to reach edge server (${networkError.message}).`);
+  const edgeError = `Network Error: Failed to reach edge server (${networkError.message}).`;
+  const isGatekeeperUnreachable = Boolean(gatekeeperCheck.unreachable);
+  if (isGatekeeperUnreachable) return failDownload(`${edgeError} ${describeGatekeeperUnreachable(gatekeeperCheck.url)}`);
+  return failDownload(edgeError);
 };
 
 // Returns { status, files, reason }; never exits. Offline mode falls back to the bundled blueprints.

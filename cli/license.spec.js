@@ -3,6 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert';
 import fs from 'node:fs';
 import {
+  DEFAULT_GATEKEEPER_URL,
   verifyWithGatekeeper,
   fetchStarterKitFiles,
   getCachedLicenseKey,
@@ -42,6 +43,12 @@ const withHarness = async (env, respond, fn) => {
 
 const jsonResponse = (status, payload) => new Response(JSON.stringify(payload), { status, headers: { 'Content-Type': 'application/json' } });
 const validDownload = () => jsonResponse(200, { valid: true, githubUser: 'octo', files: { 'AGENTS.md': '# rules' } });
+const textResponse = (status, text) => new Response(text, { status, headers: { 'Content-Type': 'text/html' } });
+const refuseConnection = () => { throw new Error('connect ECONNREFUSED'); };
+const NO_ROUTE_BODY = { code: 'rest_no_route', message: 'No route was found matching the URL and request method.', data: { status: 404 } };
+const UNREACHABLE_REASON = new RegExp(
+  `License server not reachable at ${DEFAULT_GATEKEEPER_URL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} \\(set COMPASS_GATEKEEPER_URL\\)`
+);
 
 test('license spec isolates HOME', () => {
   assert.ok(process.env.HOME === ISOLATED_HOME);
@@ -116,5 +123,69 @@ test('CHEMX_LICENSE_KEY: used for CI and never written to disk, even after verif
     const result = await fetchStarterKitFiles('CX-CI00-CI00-CI00');
     assert.strictEqual(result.status, STATUS.PASS);
     assert.strictEqual(fs.existsSync(configFile), false);
+  });
+});
+
+test('gatekeeper: a fetch error is unreachable, not an invalid key', async () => {
+  await withHarness({}, refuseConnection, async () => {
+    const result = await verifyWithGatekeeper('CX-1111-2222-3333');
+    assert.deepStrictEqual(result, { valid: false, unreachable: true, url: DEFAULT_GATEKEEPER_URL });
+  });
+});
+
+test('gatekeeper: a non-2xx response without a JSON body is unreachable', async () => {
+  await withHarness({}, () => textResponse(502, '<html>Bad Gateway</html>'), async () => {
+    const result = await verifyWithGatekeeper('CX-1111-2222-3333');
+    assert.deepStrictEqual(result, { valid: false, unreachable: true, url: DEFAULT_GATEKEEPER_URL });
+  });
+});
+
+test('gatekeeper: a rest_no_route body (the route is not there) is unreachable', async () => {
+  await withHarness({}, () => jsonResponse(404, NO_ROUTE_BODY), async () => {
+    const result = await verifyWithGatekeeper('CX-1111-2222-3333');
+    assert.deepStrictEqual(result, { valid: false, unreachable: true, url: DEFAULT_GATEKEEPER_URL });
+  });
+});
+
+test('gatekeeper: the unreachable url follows the COMPASS_GATEKEEPER_URL override', async () => {
+  await withHarness({ COMPASS_GATEKEEPER_URL: 'http://127.0.0.1:8787/' }, refuseConnection, async () => {
+    const result = await verifyWithGatekeeper('CX-1111-2222-3333');
+    assert.strictEqual(result.unreachable, true);
+    assert.strictEqual(result.url, 'http://127.0.0.1:8787');
+  });
+});
+
+test('gatekeeper: a 401 with a JSON error body stays a plain invalid key', async () => {
+  await withHarness({}, () => jsonResponse(401, { code: 'invalid_key', message: 'Unknown key' }), async () => {
+    const result = await verifyWithGatekeeper('CX-0000-0000-0000');
+    assert.deepStrictEqual(result, { valid: false });
+  });
+});
+
+test('gatekeeper: a valid 200 answer is returned untouched', async () => {
+  await withHarness({}, () => jsonResponse(200, { valid: true, github_user: 'octo', tier: 'standard' }), async () => {
+    const result = await verifyWithGatekeeper('CX-1111-2222-3333');
+    assert.deepStrictEqual(result, { valid: true, github_user: 'octo', tier: 'standard' });
+  });
+});
+
+test('fetchStarterKitFiles: edge down and license server unreachable says so, never Invalid key', async () => {
+  const respond = (url) => (url.includes('/api/starter-kit/download') ? refuseConnection() : jsonResponse(404, NO_ROUTE_BODY));
+  await withHarness({}, respond, async ({ output }) => {
+    const result = await fetchStarterKitFiles('CX-1111-2222-3333');
+    assert.strictEqual(result.status, STATUS.FAIL);
+    assert.match(result.reason, UNREACHABLE_REASON);
+    assert.match(result.reason, /Failed to reach edge server/);
+    assert.doesNotMatch(output.join(''), /Invalid key/);
+  });
+});
+
+test('fetchStarterKitFiles: edge down and the license server rejects the key keeps the network error', async () => {
+  const respond = (url) => (url.includes('/api/starter-kit/download') ? refuseConnection() : jsonResponse(401, { code: 'invalid_key', message: 'Unknown key' }));
+  await withHarness({}, respond, async () => {
+    const result = await fetchStarterKitFiles('CX-0000-0000-0000');
+    assert.strictEqual(result.status, STATUS.FAIL);
+    assert.match(result.reason, /Network Error: Failed to reach edge server/);
+    assert.doesNotMatch(result.reason, /License server not reachable/);
   });
 });
