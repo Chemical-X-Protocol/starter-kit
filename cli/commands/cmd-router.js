@@ -188,10 +188,14 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
       break;
     }
     case 'build':
-    case 'run':
     case 'wrap': {
       const { runBuildAudit } = await import('../build.js');
       await runBuildAudit(rawArgs.slice(1), true);
+      break;
+    }
+    case 'run': {
+      const { runLeasedCommand } = await import('./cmd-run.js');
+      process.exitCode = await runLeasedCommand(rawArgs.slice(1));
       break;
     }
     case 'audit': {

@@ -74,7 +74,7 @@ export const VERIFY_COMMANDS = [
   },
   {
     name: 'build',
-    aliases: ['run', 'wrap'],
+    aliases: ['wrap'],
     group: 'verify',
     brief: 'Run the build, show grouped errors',
     usage: 'chemx build [options] [-- <command>]',

@@ -4,18 +4,19 @@ A lock is a lease: a row in `file_leases` in the project's `.chemx/index.db` tha
 working on one file until a stated time. Other handles' `patch`, `write`, `autofix` and `explode` on
 that file are refused while it is live. This page states exactly what holds a lease, what lets it go,
 and what each tool tells you. Every behavior below is covered by a spec in `cli/team/`
-(`lease-activity.spec.js`, `lease-cap.spec.js`, `lease-lapse.spec.js`, `lock-multi-path.spec.js`, `staged-leases.spec.js`, `team-lease-safety.spec.js`).
+(`lease-activity.spec.js`, `lease-cap.spec.js`, `lease-grace.spec.js`, `lease-claim-roots.spec.js`, `lease-lapse.spec.js`, `lock-multi-path.spec.js`, `lock-renew-queued.spec.js`, `staged-leases.spec.js`, `team-lease-safety.spec.js`, and `cli/commands/cmd-run.spec.js`).
 
 ## Commands
 
 | Command | Does |
 | :--- | :--- |
 | `chemx team lock acquire <file>... --as=@me --purpose="#12"` | Takes the lease on each path, or queues you (FIFO) behind the holder. One line per path (see below). `acquire` may be left out: `chemx team lock a.js b.js`. |
-| `chemx team lock renew <file> --as=@me` | Extends your own live lease to now + TTL. Refused for anyone else's or an expired one. |
+| `chemx team lock renew <file> --as=@me` | Extends your own live lease to now + TTL. Refused for anyone else's or an expired one; a handle that is queued for the file is told so (`you are queued behind it (position 2, it expires 14:05)`). |
 | `chemx team lock release <file>... --as=@me` (or `chemx team unlock <file>...`) | Deletes your lease on each path and promotes the next waiter. |
 | `chemx team lock check <file>` | Read-only: would an edit be refused? Exit 0 clear, 2 locked. |
 | `chemx team lock status <file>`, `chemx team lock list` | One lease and its waiters, or every live lease. |
 | `chemx team lock check-staged [files...] --as=@me` | The commit guard (below). |
+| `chemx run [--as=@me] -- <command...>` | Runs the command with your own terminal and renews your leases every 60 seconds while it runs (see below). |
 | `--root=<dir>` (or `--root <dir>`) on `lock` and `unlock` | Run as if from `<dir>`: relative paths resolve from it and the board is the one that directory belongs to. A `<dir>` that is not a directory is refused (`root_not_found`, exit 1). |
 
 ## Several paths and one line each (#6747)
@@ -83,27 +84,54 @@ live when the process id recorded with `--pid` is dead.
 
 ## What renews a lease
 
-Three things, all extending only the caller's own live leases to now + 5 minutes. None of them can
-shorten a lease, extend another handle's, or revive an expired one.
+The base rule does not change: a lease lasts **5 minutes** from the holder's last chemx call, and to every
+other handle the file is free after that. Five things extend or restore the caller's own leases (to now + 5
+minutes). None of them can shorten a lease, extend another handle's, or take a file back from a handle that
+holds or awaits it.
 
-1. **Any chemx command run as the holder.** The CLI renews at the start of every command; the MCP
-   server renews at the start of every tool call. The holder is `--as=@x`, else `params.agentId` or
-   `params.as` (MCP), else `CHEMX_AGENT_ID`, else the session handle. A caller with none of those has
-   only a per-process anonymous id, which cannot hold a lease across commands, so nothing is renewed.
-   The cost is one read of the lease table and, only if you hold a live lease, one `UPDATE`.
-2. **A long command, while it runs.** `test`, `verify`, `typecheck`, `build`, `run`, `audit` (and the
-   aliases `check:all`, `check:types`, `tsc`, `wrap`) renew every 2.5 minutes until they finish, so a
-   10-minute test run does not lapse a 5-minute lease. The timer does not keep the process alive.
-   Limit: it runs on the event loop, so a command that blocks the loop for longer than the TTL (a
-   synchronous child process) is not covered.
-3. **An edit** by the holder of a file they lease (`patch`, `write`, and the rest), as before.
+1. **Any chemx command run as the holder.** `test`, `check`, `read`, `q`, `status`, `commit`, `team ...`, all
+   of them: the CLI renews at the start of every command and the MCP server at the start of every tool
+   call. (Read-style commands have always counted; a lease that seemed to lapse during them was under a board
+   the command could not see, see 2.) The holder is `--as=@x`, else `params.agentId` or `params.as` (MCP),
+   else `CHEMX_AGENT_ID`, else the session handle. A caller with none of those has only a per-process
+   anonymous id, which cannot hold a lease across commands, so nothing is renewed. The cost is one read of
+   the lease table per board and, only if you hold a live lease, one `UPDATE`.
+2. **Which boards.** The lock dbs from the command's directory upward, plus the board of every task the
+   handle **has in_progress** (`chemx team task claim` leaves a pointer, `board-claims.js`; the pointer is a
+   hint and the board's own db is checked). So a builder in a git worktree outside the board root
+   (`/x/.worktrees/kit-foo` with the board at `/x/Xophz-COMPASS`) keeps its leases alive from the worktree.
+   A task that is done or handed to someone else ends this at once: a handle that forgot to release its
+   locks does not keep them alive by running commands elsewhere.
+3. **`chemx team task claim`** renews the claimer's leases on that board once the claim is recorded, and, the
+   task now being in_progress, brings back a lease that lapsed a few minutes ago (5 below).
+4. **A long command, while it runs.** `test`, `verify`, `typecheck`, `build`, `audit` (and the aliases
+   `check:all`, `check:types`, `tsc`, `wrap`) renew every 2.5 minutes until they finish, so a 10-minute test
+   run does not lapse a 5-minute lease. **`chemx run -- <command...>`** does the same for anything else, every
+   **60 seconds**, and once more when the command ends: `chemx run -- node tests/run-tests.mjs`. It passes
+   stdin, stdout and stderr through untouched and exits with the command's code (a signal is 128 + n; 127 = not
+   found, 126 = cannot run, 125 = `chemx run` misused). SIGINT, SIGTERM and SIGHUP sent to chemx reach the
+   command. One quoted word with spaces (`chemx run -- "make a && make b"`) is a whole shell command. Without
+   a handle it still runs the command, renews nothing and says so on stderr. The timers do not keep a process
+   alive. Limit: they run on the event loop, so a command that blocks the loop for longer than the TTL (a
+   synchronous child process inside chemx) is not covered; wrap such a command in `chemx run`.
+5. **The activity window.** A lease of yours that **lapsed no more than 10 minutes ago**, which means your
+   last chemx call was at most **15 minutes ago**, comes back at your next chemx command of any kind, with its
+   purpose and a full TTL, when all of these hold: you have a task **in_progress** on that board; nobody took
+   the file meanwhile (a lease of another handle, or a grant from the queue); nobody is queued for it (a live
+   waiter owns it next, see the cap below); the lapse was the TTL and not a dead holder process. A `lock_acquired`
+   feed event (`@x revived lock on <file>; it had lapsed N min ago and nobody took it`) records it and clears
+   the lapse from every later message, so a commit no longer warns that the lease expired. It covers the
+   builder that was quiet for a few minutes (a long spec being written, a non-chemx runner); past 15 minutes,
+   or without an in_progress task, a lapse stays a lapse. Another handle that acquired or edited the file in the
+   gap is not undone: the base rule held, the file was free.
+6. **An edit** by the holder of a file they lease (`patch`, `write`, and the rest), as before.
 
 Renewal fails open: if the database is busy or missing, the command still runs and the lease simply
 isn't extended. `lock renew` remains for an explicit extension.
 
 ## When others are waiting: the renewal cap
 
-Activity renewal (item 1 and 2 above) would let a holder who stays busy but stopped editing a file keep
+Activity renewal (items 1 to 5 above, `chemx run` included) would let a holder who stays busy but stopped editing a file keep
 it forever. So the rule while anyone is queued for a lease is:
 
 - **With no waiter**, a lease renews on activity exactly as above, however long since the holder edited it.
@@ -137,7 +165,7 @@ The last-edit times live in a `lease_edit_marks` table in the same database, cre
 
 ## What happens on a lapse
 
-A lease with no chemx activity from its holder for 5 minutes lapses: the file is free to anyone, and
+A lease with no chemx activity from its holder for 5 minutes lapses (the activity window above can undo it for up to 10 more minutes while the file stays untaken): the file is free to anyone, and
 the next `acquire` or `release` of any file in that database deletes the row and records a
 `lock_expired` event (holder, original expiry) in the feed. That record is what makes the lapse visible.
 

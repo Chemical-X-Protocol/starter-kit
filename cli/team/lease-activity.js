@@ -9,21 +9,31 @@
  * - startLeaseKeepalive: for commands longer than a lease TTL (test, verify, typecheck, build,
  *   audit), renews every TTL/2 while the command runs. The timer is unref'd, so it never keeps a
  *   process alive.
- * Guarantees and limits: only the identity's own LIVE leases are extended, never an expired one
- * (a lapse stays visible), never another handle's. The keepalive runs on the event loop, so a command
- * that blocks the loop for longer than the TTL (a synchronous child process) is not covered. Every
- * failure is swallowed (fail open): a renewal problem never fails the command.
+ * - Boards: the lock dbs from the command's directory upward, plus the boards where the handle still has
+ *   a task in_progress (lease-claim-roots.js), so a builder in a git worktree outside the board root
+ *   keeps its leases alive too (#6758).
+ * - The activity window (lease-grace.js): a lease of the holder's own that lapsed at most 10 minutes ago
+ *   (last chemx call at most 15 minutes ago) comes back when nobody took or queued for the file and the
+ *   holder has a task in_progress. Any command counts, test, check, read and q included.
+ * Guarantees and limits: only the identity's own leases are extended, never another handle's; an
+ * expired one is revived only inside the window above, with a feed event, otherwise a lapse stays
+ * visible. The keepalive runs on the event loop, so a command that blocks the loop for longer than the
+ * TTL (a synchronous child process) is not covered; `chemx run -- <command>` is the wrapper for that.
+ * Every failure is swallowed (fail open): a renewal problem never fails the command.
  */
 import { ancestorLockRoots } from './lease-roots.js';
 import { openTeamDbReadOnly, openExistingTeamDb, closeQuietly, safeGet } from './team-db-readonly.js';
 import { DEFAULT_TTL_MS } from './team-db-lock-promotion.js';
 import { renewalTarget, leaseCapMs } from './lease-cap.js';
 import { resolveAgentIdentity } from './agent-identity.js';
+import { claimedBoardRoots } from './lease-claim-roots.js';
+import { findGraceCandidates, reviveLapsed } from './lease-grace.js';
 
-// Commands that can outlast a lease TTL, with their CLI aliases.
+// Commands that can outlast a lease TTL, with their CLI aliases. `run` is not listed: it renews every
+// minute itself (cli/commands/cmd-run.js).
 export const LONG_RUNNING_COMMANDS = new Set([
   'test', 'tests', 'check:test', 'lint', 'check:lint', 'eslint',
-  'verify', 'check:all', 'typecheck', 'check:types', 'tsc', 'build', 'run', 'wrap', 'audit'
+  'verify', 'check:all', 'typecheck', 'check:types', 'tsc', 'build', 'wrap', 'audit'
 ]);
 
 /** The explicit handle in CLI args: --as=@x or --as @x. */
@@ -42,38 +52,50 @@ export const activityHolder = (explicitId, env = process.env) => {
   return isAnonymous ? null : identity.id;
 };
 
-const holdsLiveLease = (lockRoot, holder, now) => {
+// One read-only look per board: does the holder hold a live lease, and did any of its leases lapse inside the window?
+const readHolderState = (lockRoot, holder, now, ttlMs) => {
   const db = openTeamDbReadOnly(lockRoot);
   const hasDb = Boolean(db);
-  if (!hasDb) return false;
+  if (!hasDb) return { isHolding: false, graced: [] };
   const row = safeGet(db, 'SELECT 1 AS held FROM file_leases WHERE locked_by = ? AND expires_at > ? LIMIT 1', [holder, now]);
+  const graced = findGraceCandidates(db, holder, now, ttlMs);
   closeQuietly(db);
-  return Boolean(row);
+  return { isHolding: Boolean(row), graced };
 };
 
 // Each live lease is extended to now + TTL, or only to its cap deadline while someone waits for it (lease-cap.js).
+const extendLive = (db, holder, now, ttlMs, capMs) => {
+  const live = db.prepare('SELECT * FROM file_leases WHERE locked_by = ? AND expires_at > ?').all(holder, now);
+  const sql = 'UPDATE file_leases SET expires_at = MAX(expires_at, ?) WHERE file_path = ? AND locked_by = ? AND expires_at > ?';
+  const update = db.prepare(sql);
+  return live.reduce((total, lease) => total + Number(update.run(renewalTarget(db, lease, now, ttlMs, capMs), lease.file_path, holder, now).changes), 0);
+};
+
 const renewInRoot = (lockRoot, holder, now, ttlMs, capMs) => {
-  const isHolding = holdsLiveLease(lockRoot, holder, now);
-  if (!isHolding) return 0;
+  const { isHolding, graced } = readHolderState(lockRoot, holder, now, ttlMs);
+  const needsWrite = isHolding || graced.length > 0;
+  if (!needsWrite) return 0;
   const db = openExistingTeamDb(lockRoot);
   const hasDb = Boolean(db);
   if (!hasDb) return 0;
   try {
-    const live = db.prepare('SELECT * FROM file_leases WHERE locked_by = ? AND expires_at > ?').all(holder, now);
-    const sql = 'UPDATE file_leases SET expires_at = MAX(expires_at, ?) WHERE file_path = ? AND locked_by = ? AND expires_at > ?';
-    const update = db.prepare(sql);
-    return live.reduce((total, lease) => total + Number(update.run(renewalTarget(db, lease, now, ttlMs, capMs), lease.file_path, holder, now).changes), 0);
+    const extended = extendLive(db, holder, now, ttlMs, capMs);
+    return extended + reviveLapsed(db, holder, graced, now, ttlMs);
   } finally {
     closeQuietly(db);
   }
 };
 
+// The boards from the directory upward, then the boards of the holder's in_progress claims (a worktree is outside them).
+const renewalRoots = (startDir, holder, env) => [...new Set([...ancestorLockRoots(startDir), ...claimedBoardRoots(holder, { env })])];
+
 /**
- * Extends every live lease the caller holds, in every lock db from startDir upward, to now + TTL.
+ * Extends every live lease the caller holds, in every lock db from startDir upward and on every board of
+ * its in_progress claims, to now + TTL, and revives the ones that lapsed inside the activity window.
  * @param {string} startDir Directory the command runs in (or the project root of an MCP call).
  * @param {string} [agentId] Explicit handle; else $CHEMX_AGENT_ID, else the session handle.
  * @param {{ now?: number, ttlMs?: number, env?: object }} [options]
- * @returns {number} Leases extended (0 when anonymous, no lock db, or on any error).
+ * @returns {number} Leases extended or revived (0 when anonymous, no lock db, or on any error).
  */
 export const renewHolderLeases = (startDir, agentId, options = {}) => {
   try {
@@ -82,7 +104,7 @@ export const renewHolderLeases = (startDir, agentId, options = {}) => {
     const now = options.now ?? Date.now();
     const ttlMs = options.ttlMs || DEFAULT_TTL_MS;
     const capMs = leaseCapMs(options, options.env);
-    return ancestorLockRoots(startDir).reduce((total, lockRoot) => total + renewInRoot(lockRoot, holder, now, ttlMs, capMs), 0);
+    return renewalRoots(startDir, holder, options.env).reduce((total, lockRoot) => total + renewInRoot(lockRoot, holder, now, ttlMs, capMs), 0);
   } catch (err) {
     const isDebug = Boolean(process.env.CHEMX_DEBUG);
     if (isDebug) process.stderr.write(`[lease-activity] renewal skipped: ${err.message}\n`);

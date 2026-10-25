@@ -13,6 +13,10 @@ import { handleLockCommand, handleUnlockCommand } from './team-commands-lock.js'
 import { applyEdits, EditRefusedError } from '../apply-edits.js';
 import { clockTime } from './lease-lapse.js';
 import { patchFile, writeFile } from '../patcher.js';
+import { createTask } from './team-db-tasks.js';
+import { registerAgent } from './team-db-agents.js';
+import { claimTask } from './team-db.js';
+import { renewHolderLeases } from './lease-activity.js';
 
 const CLOCK = '\\d\\d:\\d\\d:\\d\\d';
 
@@ -201,4 +205,38 @@ test('an edit by a handle that never held the file adds no lease note', (t) => {
 
   assert.equal(result.leaseNotes, undefined);
   assert.equal(db.prepare('SELECT COUNT(*) AS c FROM file_leases').get().c, 0);
+});
+
+// The activity window (#6758, lease-grace.js): a lapse inside it is undone by the holder's next chemx
+// command, so release and the commit guard see a live lease; a lapse outside it stays visible.
+const startTask = (db, handle) => {
+  registerAgent(db, { id: handle, role: 'executor' });
+  claimTask(db, createTask(db, { title: 'work' }).id, handle);
+};
+
+test('a lapse inside the activity window is gone after the holder\'s next chemx command: release succeeds', (t) => {
+  const { root, db } = makeProject(t);
+  startTask(db, '@spec-a');
+  requestFileLock(db, 'src/a.js', '@spec-a', { cwd: root });
+  lapse(db, 'src/a.js', 6);
+  cleanExpiredLeases(db);
+
+  renewHolderLeases(root, '@spec-a');
+  const res = releaseFileLock(db, 'src/a.js', '@spec-a', { cwd: root });
+
+  assert.equal(res.success, true);
+});
+
+test('a lapse outside the activity window stays visible: release still says when it expired', (t) => {
+  const { root, db } = makeProject(t);
+  startTask(db, '@spec-a');
+  requestFileLock(db, 'src/a.js', '@spec-a', { cwd: root });
+  lapse(db, 'src/a.js', 12);
+  cleanExpiredLeases(db);
+
+  renewHolderLeases(root, '@spec-a');
+  const res = releaseFileLock(db, 'src/a.js', '@spec-a', { cwd: root });
+
+  assert.equal(res.success, false);
+  assert.match(res.message, /^lease on src\/a\.js expired at \d\d:\d\d:\d\d \(12 min ago\); nobody holds it now$/);
 });

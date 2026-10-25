@@ -66,6 +66,17 @@ export const OPS_COMMANDS = [
     ]
   },
   {
+    name: 'run',
+    aliases: [],
+    group: 'agents',
+    brief: 'Run a command, keeping your file leases alive',
+    usage: 'chemx run [--as=@handle] -- <command> [args...]',
+    summary: 'Run a command with your own terminal and renew your file leases every minute while it runs.',
+    description: 'For anything long that is not a chemx call (a plugin test runner, a build script): a lease lapses 5 minutes after your last chemx call, and while this runs it is renewed every 60 seconds, from any directory (a git worktree included) once you have claimed a task. stdin, stdout and stderr are yours, untouched. The exit code is the command\'s (a signal is 128 + n); 127 = not found, 126 = cannot run, 125 = chemx run misused. SIGINT, SIGTERM and SIGHUP are passed to the command. One quoted word with spaces is a whole shell command. Without a handle (--as or CHEMX_AGENT_ID) nothing is renewed and stderr says so. Not for chemx\'s own long commands: test, verify, typecheck, build and audit already renew while they run.',
+    flags: [{ flag: '--as=<@handle>', desc: 'Whose leases to renew (default: CHEMX_AGENT_ID)' }],
+    examples: ['chemx run -- node tests/run-tests.mjs', 'chemx run --as=@sonnet-k13 -- docker exec u-wordpress php tests/suite.php']
+  },
+  {
     name: 'project',
     aliases: ['coordinator'],
     group: 'agents',
