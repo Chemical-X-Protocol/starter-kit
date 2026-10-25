@@ -36,6 +36,15 @@ test('listGitFiles: honours .gitignore and drops .claude / .chemx trees', () => 
   });
 });
 
+test('listGitFiles: isSkipped replaces the default skip, so a caller can keep .claude and .chemx', () => {
+  withTempDir((root) => {
+    execSync('git init -q', { cwd: root });
+    for (const rel of ['src/a.js', '.claude/w/c.js', '.chemx/d.js']) write(root, rel);
+    const keepsTools = listGitFiles(root, { isSkipped: (rel) => rel.split('/').includes('.git') });
+    assert.deepStrictEqual(keepsTools.sort(), ['.chemx/d.js', '.claude/w/c.js', 'src/a.js']);
+  });
+});
+
 test('listGitFiles: includeIgnored opts in to ignored paths', () => {
   withTempDir((root) => {
     execSync('git init -q', { cwd: root });

@@ -5,6 +5,7 @@ import { parse } from './babel-lazy.js';
 import { ANSI } from './theme.js';
 import { resolveSafePath } from './path-scope.js';
 import { isBabelParsable } from './languages.js';
+import { hasOutlineExtractor, isEmptyOutline } from './reader-outline-kind.js';
 import { extractAstMetadata } from './search-ast.js';
 import { isPhpPath } from './php/php-parse.js';
 import { generatePhpOutline } from './php/php-outline.js';
@@ -328,10 +329,13 @@ export const readTokenOptimized = (targetPath, options = {}) => {
 
   // Read window: files longer than autoThreshold read without a symbol or slice return an AST
   // outline to protect context. A tool budget, not an architecture rule (AGENTS.md owns those).
+  // A file with no outline to give (yaml, json, txt) falls through to the first window of text.
   const isOverWindow = !hasLineRange && totalLines > autoThreshold;
-  const shouldAutoOutline = isOverWindow && !conflictNote;
+  const canAutoOutline = isOverWindow && !conflictNote && hasOutlineExtractor(rawPath);
+  const autoOutline = canAutoOutline ? generateAstOutline(rawContent, rawPath) : '';
+  const shouldAutoOutline = !isEmptyOutline(autoOutline);
   if (shouldAutoOutline) {
-    const outlineText = generateAstOutline(rawContent, rawPath);
+    const outlineText = autoOutline;
     const isCliHint = options.hintSyntax === 'cli';
     const symbolHint = isCliHint
       ? `chemx read ${rawPath} --symbol=<name>`

@@ -3,7 +3,8 @@
 // starts with a dash (`q -g --x-glass`). Unknown flags are reported, never silently dropped.
 
 const VALUE_FLAGS = new Map([
-  ['-n', 'limit'], ['--limit', 'limit'], ['--dir', 'dir'], ['--tier', 'tier'],
+  ['-n', 'limit'], ['--limit', 'limit'], ['--max', 'limit'],
+  ['--dir', 'dir'], ['--glob', 'dir'], ['--tier', 'tier'],
   ['--max-depth', 'maxDepth'], ['--rule', 'rule'], ['-d', 'maxDepth'],
   ['-C', 'context'], ['--context', 'context'],
   ['-B', 'beforeContext'], ['--before-context', 'beforeContext'],

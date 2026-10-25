@@ -47,7 +47,7 @@ const collect = (dir, root, out, options, depth) => {
   if (!hasListing) return false;
   for (const entry of entries) {
     const cleaned = entry.replace(/\/$/, '');
-    const isSkippedEntry = isSkippedPath(cleaned);
+    const isSkippedEntry = options.isSkipped(cleaned);
     if (isSkippedEntry) continue;
     const abs = path.join(dir, cleaned);
     const kind = classifyEntry(abs);
@@ -61,9 +61,12 @@ const collect = (dir, root, out, options, depth) => {
   return true;
 };
 
-/** Files under `root` as posix paths relative to `root`, or null when `root` is not in a git repo. */
-export const listGitFiles = (root, { includeIgnored = false } = {}) => {
+/**
+ * Files under `root` as posix paths relative to `root`, or null when `root` is not in a git repo.
+ * `isSkipped(relPath)` replaces the default skip (.git, .claude, .chemx at any depth); text search passes its own.
+ */
+export const listGitFiles = (root, { includeIgnored = false, isSkipped = isSkippedPath } = {}) => {
   const out = [];
-  const usedGit = collect(root, root, out, { includeIgnored }, 0);
+  const usedGit = collect(root, root, out, { includeIgnored, isSkipped }, 0);
   return usedGit ? Array.from(new Set(out)) : null;
 };

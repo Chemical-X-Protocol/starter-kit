@@ -1,10 +1,10 @@
 // `chemx q -g`: a repo-wide literal search that can stand in for `grep -rn`.
 // Fixed-string by default (--regex opts in), every text file .gitignore allows (submodules,
-// docs, styles, json, php), full lines as path:line. System `rg` when present, else JS.
+// docs, styles, json, php, dot-directories such as .github), full lines as path:line. System `rg` when present, else JS.
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { listLiteralSearchFiles, classifySearchFile } from './search-literal-files.js';
+import { listLiteralSearchFiles, classifySearchFile, NEVER_SEARCHED_DIRS } from './search-literal-files.js';
 import { debugNote } from './search-debug.js';
 import { assertRegexSupported } from './search-regex-guard.js';
 import { buildMatchFinder } from './search-matched-text.js';
@@ -85,7 +85,12 @@ const searchWithJs = (root, scopeDirs, options, collect) => {
   return stats;
 };
 
-const RG_FILTER_ARGS = ['--no-config', '--glob', '!.git', '--glob', '!.claude', '--glob', '!.chemx'];
+// The same scope the JS engine lists (search-literal-files.js): dot-directories are searched, the git store and
+// node_modules never, the chemx index dir and Claude's worktree copies unless --hidden, which also lifts the ignore files.
+const rgFilterArgs = ({ isHidden }) => {
+  const base = ['--no-config', '--hidden', ...NEVER_SEARCHED_DIRS.flatMap((dir) => ['--glob', `!${dir}`])];
+  return isHidden ? [...base, '--no-ignore'] : [...base, '--glob', '!.chemx', '--glob', '!**/.claude/worktrees'];
+};
 
 const runRipgrep = (root, args) => {
   const res = spawnSync('rg', args, { cwd: root, encoding: 'utf-8', maxBuffer: 512 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -98,9 +103,7 @@ const runRipgrep = (root, args) => {
 // its own way. So rg lists the files (`rg --files`, same filters), each is classified exactly as
 // the JS engine would, and rg searches with --text, keeping only matches in text files.
 const classifyRipgrepFiles = (root, scopeDirs, options) => {
-  const args = ['--files', ...RG_FILTER_ARGS];
-  if (options.isHidden) args.push('--hidden');
-  args.push('--', ...scopeDirs);
+  const args = ['--files', ...rgFilterArgs(options), '--', ...scopeDirs];
   const textFiles = new Set();
   const stats = { filesSearched: 0, skippedBinary: 0, skippedLarge: 0 };
   for (const listed of runRipgrep(root, args).split('\n').filter(Boolean)) {
@@ -128,9 +131,8 @@ const searchWithRipgrep = (root, scopeDirs, options, collect) => {
   const beforeCount = options.beforeContext || options.context || 0;
   const afterCount = options.afterContext || options.context || 0;
   const hasContext = beforeCount > 0 || afterCount > 0;
-  const args = ['--json', ...RG_FILTER_ARGS, '--text', '--max-filesize', String(MAX_FILE_BYTES), options.isCaseInsensitive ? '--ignore-case' : '--case-sensitive', '--sort', 'path'];
+  const args = ['--json', ...rgFilterArgs(options), '--text', '--max-filesize', String(MAX_FILE_BYTES), options.isCaseInsensitive ? '--ignore-case' : '--case-sensitive', '--sort', 'path'];
   if (!options.isRegex) args.push('--fixed-strings');
-  if (options.isHidden) args.push('--hidden');
   const hasLeadingContext = beforeCount > 0;
   if (hasLeadingContext) args.push('-B', String(beforeCount));
   const hasTrailingContext = afterCount > 0;

@@ -7,6 +7,7 @@ import path from 'node:path';
 import { normalizeScope } from './search-root.js';
 
 const WHOLE_PROJECT = Object.freeze({ scopeDirs: ['.'], scopeKey: '.', outside: [] });
+const GLOB_CHARS = /[*?[\]{}]/;
 
 // -> { scope } or { error }. `quoteExample` is the command a phrase would be quoted for, e.g. `chemx q -g`.
 export const resolveSearchScope = ({ dir, query, root, cwd, quoteExample }) => {
@@ -20,6 +21,8 @@ export const resolveSearchScope = ({ dir, query, root, cwd, quoteExample }) => {
   const missing = scope.scopeDirs.filter((relDir) => !fs.existsSync(path.join(root, relDir)));
   const hasMissing = missing.length > 0;
   const phraseHint = Array.isArray(dir) ? `. To search for a phrase, quote it: ${quoteExample} "${[query, ...missing].join(' ')}"` : '';
-  if (hasMissing) return { error: `path not found: ${missing.join(', ')}${phraseHint} (relative to ${root}); nothing was searched` };
+  const hasPattern = missing.some((relDir) => GLOB_CHARS.test(relDir));
+  const patternHint = hasPattern ? '. A path filter (positional paths, --dir, --glob) takes paths, not patterns: name the directory, or leave the pattern unquoted so the shell expands it (q -g foo cli/*.js)' : '';
+  if (hasMissing) return { error: `path not found: ${missing.join(', ')}${phraseHint}${patternHint} (relative to ${root}); nothing was searched` };
   return { scope };
 };
