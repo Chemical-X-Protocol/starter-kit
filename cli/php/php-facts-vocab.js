@@ -25,6 +25,9 @@ const AUTH_FUNCTIONS = new Set([
   'get_current_user_id', 'check_admin_referer', 'check_ajax_referer',
 ]);
 const AUTH_METHOD = /verify|validat|auth|signature|token|guard|permission|can_|handle_registration/i;
+// verify_<noun> / validate_<noun> where the noun names business data checks that data, not the caller
+// (card vault verify_payment, task #6696). A name match only, like AUTH_METHOD.
+const DATA_CHECK = /^(?:verify|validate)_(?:payment|order|checkout|cart|amount|price|total|stock|sku|item|email|address|url|field|param|data|input|schema|format|file|image|upload)s?$/i;
 
 const NONCE_FUNCTIONS = new Set(['check_admin_referer', 'check_ajax_referer', 'wp_verify_nonce']);
 const NONCE_NAME = /nonce|referer|csrf|sanity_check/i;
@@ -40,7 +43,8 @@ export function labelCall({ kind, name, wpdb }) {
   const wpdbWrite = wpdb && WPDB_WRITE_METHODS.has(lower);
   const write = (isFunction && (WRITE_FUNCTIONS.has(lower) || WRITE_PREFIX.test(lower))) || wpdbWrite;
   const outbound = isFunction && OUTBOUND_FUNCTIONS.has(lower);
-  const auth = (isFunction && AUTH_FUNCTIONS.has(lower)) || (isMethodLike && AUTH_METHOD.test(lower));
+  const isAuthMethod = isMethodLike && AUTH_METHOD.test(lower) && !DATA_CHECK.test(lower);
+  const auth = (isFunction && AUTH_FUNCTIONS.has(lower)) || isAuthMethod;
   const nonce = (isFunction && NONCE_FUNCTIONS.has(lower)) || (lower !== '' && NONCE_NAME.test(lower));
   return { write: Boolean(write), outbound, auth, nonce };
 }

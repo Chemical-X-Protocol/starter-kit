@@ -107,6 +107,43 @@ function h() {
   assert.deepEqual(h.nonceChecks.map((w) => w.name), ['check_ajax_referer', 'sanity_check']);
 });
 
+test('an auth-like call whose value only becomes data is not an auth check; a tested, returned or bare one is (#6696)', () => {
+  const f = facts(`<?php
+function data_uses($p) {
+  $cashier = isset($p['c']) ? intval($p['c']) : get_current_user_id();
+  $owner = $p['o'] ?? get_current_user_id();
+  $row = array('created_by' => get_current_user_id());
+}
+function gates($p) {
+  if (!is_user_logged_in()) { return null; }
+  $uid = get_current_user_id();
+  $ok = current_user_can('edit_posts') ? 1 : 0;
+  validate_it($p) && current_user_can('a');
+  return $p ? current_user_can('b') : false;
+}
+`);
+  assert.deepEqual(fn(f, 'data_uses').authChecks.map((w) => w.name), []);
+  assert.deepEqual(fn(f, 'gates').authChecks.map((w) => w.name),
+    ['is_user_logged_in', 'get_current_user_id', 'current_user_can', 'current_user_can', 'current_user_can']);
+});
+
+test('verify_<data noun> and validate_<data noun> methods are not auth checks; credential names still are (#6696)', () => {
+  const f = facts(`<?php
+class P {
+  function h() {
+    Stripe::verify_payment(1, 's');
+    $this->validate_email('a');
+    $this->validate_fields([]);
+    $this->verify_signature();
+    $this->validate_token();
+    $this->verify_request();
+    $this->verify();
+  }
+}
+`);
+  assert.deepEqual(fn(f, 'P::h').authChecks.map((w) => w.name), ['verify_signature', 'validate_token', 'verify_request', 'verify']);
+});
+
 test('returnsTrueOnly is set for a body that is only `return true`, including closures and arrow functions', () => {
   const f = facts(`<?php
 function open_perm() { return true; }

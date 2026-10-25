@@ -16,7 +16,10 @@ export const RULE_DEFAULTS = {
   // snapshot-backups, code-snippets and wp-hummingbird gave 0. wp-defender, forminator, hustle, wpmu-dev-seo and
   // wp-smush-pro exceed the project index cap, so only callbacks in the audited file resolved there (0 hits).
   // The held-out figure rests on one hit, well under the 10 the bar names.
-  [WRITE_ROUTE]: { defaultOn: true, corpus: '19/22 directive, 11/22 real holes', heldOut: '1/1', measured: '2026-10-24' },
+  // Task #6696 (2026-10-25) narrowed the guard: an auth-like call used only as data, and verify_/validate_ methods
+  // named for business data, no longer count. That added 3 real corpus hits (card vault a708d6a /pos/checkout and
+  // /pos/verify-payment, quests contact log) and no held-out hit.
+  [WRITE_ROUTE]: { defaultOn: true, corpus: '22/25 directive, 14/25 real holes', heldOut: '1/1', measured: '2026-10-25' },
   [NO_PERMISSION]: { defaultOn: true, corpus: '0 hits of 570 endpoints', heldOut: '0 hits on 281 endpoints (akismet, WooCommerce controllers and API)', measured: '2026-10-24' },
   [READ_EFFECT]: { defaultOn: false, corpus: '5/8', heldOut: 'not labelled (5 hits unlabelled: card vault 4, WooCommerce 1)', measured: '2026-10-24' },
 };

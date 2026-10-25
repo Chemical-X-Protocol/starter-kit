@@ -1,6 +1,6 @@
 // Precision spec for the WordPress route rules (design spec 2.4, 2.6, 8.3). Each case is a corpus or held-out hit
 // reduced to its distinct form with generic names. weight = labelled hits that form stands for (the weights sum to
-// the labelled count: 22 for SECURITY_WP_PUBLIC_WRITE_ROUTE, 8 for SECURITY_WP_PUBLIC_READ_SIDE_EFFECT).
+// the labelled count: 25 for SECURITY_WP_PUBLIC_WRITE_ROUTE, 8 for SECURITY_WP_PUBLIC_READ_SIDE_EFFECT).
 // kind (write rule): 'real' = a real security hole, 'intentional' = public on purpose and should carry a chemx-allow
 // reason, 'known FP' = a hit judged false that still fires. Directive precision counts real and intentional.
 // label SILENT = a shape the pass must not report; those carry weight 0.
@@ -64,9 +64,15 @@ const WRITE_CASES = [
     knownFp: 'the write stores the value it just read, a no-op, but the pass sees a state write',
     files: post("update_option( 'demo_seen', get_option( 'demo_seen' ) );") },
   { rule: WRITE, name: 'public bid on a showcase, throttled with a transient (card vault HEAD aa27938, the only held-out hit)', origin: 'held-out H1 includes/class-card-vault-api.php:142', label: 'TP', kind: 'intentional', weight: 1, files: post("set_transient( 'demo_bid_limit', 1, 60 );") },
+  // Task #6696: misses on the card vault before its security fixes (a708d6a), and the one hit the fix added on the corpus.
+  real('cashier id falls back to get_current_user_id() in a ternary branch (data, not a guard)', 1, 'corpus card vault a708d6a class-card-vault-api.php:181', post("$cashier = isset( $request['c'] ) ? intval( $request['c'] ) : get_current_user_id();\n\twp_insert_post( array( 'post_author' => $cashier ) );")),
+  real('payment marked paid through a verify_payment() method (checks data, not the caller)', 1, 'corpus card vault a708d6a class-card-vault-api.php:187', {
+    'demo.php': `${HEADER}class Demo_Rest {\n\tpublic function register() {\n\t\tregister_rest_route( 'demo/v1', '/confirm', array( 'methods' => 'POST', 'callback' => array( $this, 'confirm' ), 'permission_callback' => '__return_true' ) );\n\t}\n\tpublic function confirm( $request ) {\n\t\treturn Demo_Pay::verify_payment( (int) $request['id'], 's' );\n\t}\n}\nclass Demo_Pay {\n\tpublic static function verify_payment( $id, $session ) {\n\t\tupdate_post_meta( $id, 'demo_paid', 1 );\n\t}\n}\n`,
+  }),
+  real('contact log row whose created_by is get_current_user_id() (array value)', 1, 'corpus class-xophz-compass-quests-rest.php:145', post("global $wpdb;\n\t$data = array( 'created_by' => get_current_user_id() );\n\t$wpdb->insert( $wpdb->prefix . 'demo_logs', $data );")),
 ];
 
-// Write-rule corpus weights: 11 real (one case stands for 2), 8 intentional, 3 known FP: 22 labelled.
+// Write-rule corpus weights: 14 real (one case stands for 2), 8 intentional, 3 known FP: 25 labelled.
 const READ_CASES = [
   { rule: READ, name: 'public verify route that also stores the session', origin: 'corpus class-xophz-compass-modules-api.php:77', label: 'TP', weight: 1, files: get("update_option( 'demo_session', 1 );") },
   { rule: READ, name: 'listing route creating a post two hops down', origin: 'corpus class-yellow-links-api.php:33', label: 'TP', weight: 1,
@@ -87,6 +93,7 @@ const wpLogout = classFile("register_rest_route( 'demo/v1', '/logout', array( 'm
 const SILENT_CASES = [
   { rule: WRITE, name: 'auth-like call in the callback: user id check', origin: 'corpus class-xophz-compass-push-api.php:34', files: post("if ( ! get_current_user_id() ) {\n\t\treturn null;\n\t}\n\tupdate_user_meta( get_current_user_id(), 'demo_push', 1 );") },
   { rule: WRITE, name: 'auth-like call in the callback: capability check', origin: 'corpus class-xophz-compass-push-api.php:42', files: post("if ( ! current_user_can( 'edit_posts' ) ) {\n\t\treturn null;\n\t}\n\tupdate_option( 'demo_push', 1 );") },
+  { rule: WRITE, name: 'auth-like call assigned, then tested (#6696 keeps assignments as guards)', origin: 'corpus shape', files: post("$uid = get_current_user_id();\n\tif ( ! $uid ) {\n\t\treturn null;\n\t}\n\tupdate_user_meta( $uid, 'demo_push', 1 );") },
   { rule: WRITE, name: 'auth-like call in the callback: token validator method', origin: 'corpus class-diego-lawfirm-api.php:65', files: classFile("register_rest_route( 'demo/v1', '/up', array( 'methods' => 'POST', 'callback' => array( $this, 'upload' ), 'permission_callback' => '__return_true' ) );", "\tpublic function upload() {\n\t\t$this->validate_token();\n\t\tupdate_option( 'demo_up', 1 );\n\t}\n") },
   { rule: WRITE, name: 'card vault /auth/logout: wp_logout only', origin: 'held-out H1 includes/class-card-vault-api.php:245', files: wpLogout },
   { rule: WRITE, name: 'produce /dock: public POST, callback only reads', origin: 'held-out H1', files: post("$items = get_option( 'demo_dock', array() );\n\treturn rest_ensure_response( $items );") },
@@ -130,11 +137,11 @@ test('every TP shape fires, every SILENT shape does not, every known FP is tagge
   }
 });
 
-test('write rule, corpus: 22 labelled hits, directive precision 19/22 (86%), real holes 11/22 (50%)', () => {
+test('write rule, corpus: 25 labelled hits, directive precision 22/25 (88%), real holes 14/25 (56%)', () => {
   const directive = ratio(results, WRITE, 'corpus', (c) => c.label === 'TP');
   const holes = ratio(results, WRITE, 'corpus', (c) => c.kind === 'real');
-  assert.deepEqual([directive.correct, directive.total], [19, 22]);
-  assert.deepEqual([holes.correct, holes.total], [11, 22]);
+  assert.deepEqual([directive.correct, directive.total], [22, 25]);
+  assert.deepEqual([holes.correct, holes.total], [14, 25]);
   assert.ok(directive.ratio >= 0.8, `${directive.correct}/${directive.total}`);
 });
 

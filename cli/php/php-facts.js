@@ -55,6 +55,40 @@ function paramsOf(fn) {
   }));
 }
 
+// Where an auth-like call's value goes (task #6696). A value that only becomes data (a ternary branch, the right
+// side of ??, an array value) on its way to an assignment or a statement decides nothing: card vault's
+// `isset( $p['cashierId'] ) ? intval( ... ) : get_current_user_id()` is not a guard. A value that reaches a test
+// (if, while, a ternary test, !, a logical or comparison operator) or a return still counts. Syntax only.
+const TEST_OPS = new Set(['!', '&&', '||', 'and', 'or', 'xor', '===', '==', '!==', '!=', '<', '>', '<=', '>=', '<=>']);
+const TEST_HOLDERS = new Set(['if', 'while', 'do', 'retif']);
+const VALUE_STOPS = new Set(['assign', 'expressionstatement', 'echo', 'block', 'program', ...SCOPE_KINDS]);
+
+const isTestSlot = (parent, child) => {
+  const isOperator = (parent.kind === 'unary' || parent.kind === 'bin') && TEST_OPS.has(parent.type);
+  const isHeldTest = TEST_HOLDERS.has(parent.kind) && parent.test === child;
+  return parent.kind === 'return' || isOperator || isHeldTest;
+};
+
+const isDataSlot = (parent, child) => {
+  const isBranch = parent.kind === 'retif' && parent.test !== child;
+  const isFallback = parent.kind === 'bin' && parent.type === '??' && parent.right === child;
+  const isArrayValue = parent.kind === 'entry' && parent.value === child;
+  return isBranch || isFallback || isArrayValue;
+};
+
+function isDataOnly(node) {
+  let child = node;
+  let parent = node.parent;
+  let sawData = false;
+  while (parent && !VALUE_STOPS.has(parent.kind)) {
+    if (isTestSlot(parent, child)) return false;
+    sawData = sawData || isDataSlot(parent, child);
+    child = parent;
+    parent = parent.parent;
+  }
+  return sawData;
+}
+
 function pick(rules, otherwise) {
   const rule = rules.find(([applies]) => applies);
   return rule ? rule[1]() : otherwise();
@@ -222,7 +256,8 @@ export function extractFacts(ast, relativePath) {
     walkScope(scope, (n) => {
       const call = callOf(n, env) || newCall(n);
       if (!call) return;
-      const { label, ...plain } = call;
+      const { label: named, ...plain } = call;
+      const label = { ...named, auth: named.auth && !isDataOnly(n) };
       const entry = { name: call.name, line: call.line };
       found.calls.push(plain);
       for (const key of ['write', 'outbound', 'auth', 'nonce']) if (label[key]) found[key].push(entry);
