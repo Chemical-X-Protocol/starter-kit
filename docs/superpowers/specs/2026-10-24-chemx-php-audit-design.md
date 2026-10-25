@@ -381,7 +381,7 @@ Budgets are CPU time (`process.cpuUsage`, or `%U + %S` from `/usr/bin/time`) bec
 | Memory | parse cache 2 MB of source (about 60 MB of trees); the index keeps facts, not trees |
 | Minified or vendored files | not parsed |
 
-Every taint and assignment lookup uses a per-scope index built in one pass; no rule rescans a scope per use (the prototype's 34 s outlier came from a quadratic scan). If the cold gate path misses its budget, a facts cache on disk keyed by content hash is the follow-up; it is not built in this epic. Budgets are checked by T8b (gate path), T-preflip (corpus and plugin, before the flip) and T18 (after), never inside `node --test`.
+Every taint and assignment lookup uses a per-scope index built in one pass; no rule rescans a scope per use (the prototype's 34 s outlier came from a quadratic scan). If the cold gate path misses its budget, a facts cache on disk keyed by content hash (extractFactsCached in cli/php/php-facts.js, in a per-user temp dir, off with CHEMX_PHP_FACTS_CACHE=off) cuts a repeat run to roughly 130 ms CPU on the card vault single-file case. The 1,000 ms single-file budget is only measured to hold with a warm cache: a cache miss costs about the same as no cache (900 to 1,350 ms CPU at load average about 10 on 4 parsed files), and a fresh machine or a changed analyzer source starts cold. The 16-file hops-2 case of #6476 was not reproduced. Budgets are checked by T8b (gate path), T-preflip (corpus and plugin, before the flip) and T18 (after), never inside `node --test`.
 
 ## 8. Testing
 

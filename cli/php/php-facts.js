@@ -351,7 +351,8 @@ function factsCachePath(content, relativePath) {
   const override = process.env[FACTS_CACHE_ENV];
   const disabled = override === 'off';
   if (disabled) return null;
-  const dir = override || path.join(os.tmpdir(), 'chemx-php-facts');
+  const uid = typeof process.getuid === 'function' ? process.getuid() : 'user';
+  const dir = override || path.join(os.tmpdir(), `chemx-php-facts-${uid}`);
   const key = crypto.createHash('sha1').update(analyzerCodeKey()).update('\0').update(relativePath).update('\0').update(content).digest('hex');
   return path.join(dir, `${key}.json`);
 }
@@ -377,7 +378,9 @@ export function extractFactsCached(content, relativePath, parse) {
 
 function readCachedFacts(file) {
   try {
-    return JSON.parse(fs.readFileSync(file, 'utf8'));
+    const facts = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const shaped = facts !== null && typeof facts === 'object' && typeof facts.file === 'string';
+    return shaped ? facts : null;
   } catch {
     // chemx-allow: best-effort a missing or corrupt entry is a miss and the caller parses
     return null;
@@ -386,7 +389,7 @@ function readCachedFacts(file) {
 
 function writeCachedFacts(file, facts) {
   try {
-    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
     const tmp = `${file}.${process.pid}.tmp`;
     fs.writeFileSync(tmp, JSON.stringify(facts));
     fs.renameSync(tmp, file);
