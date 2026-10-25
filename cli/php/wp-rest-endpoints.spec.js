@@ -131,6 +131,11 @@ test('permission kind callable_fail_open: not set when a denial is outside the c
   assert.equal(failOpenKind("switch ( $request->get_param( 'a' ) ) {\n\t\tcase 'x':\n\t\t\treturn false;\n\t}\n\treturn true;"), 'other');
   assert.equal(failOpenKind("$result = demo_decide( $request );\n\tif ( null !== $result ) {\n\t\treturn $result;\n\t}\n\treturn true;"), 'other');
   assert.equal(failOpenKind("return demo_check( $request );"), 'other');
+  // a plain comparison or a numeric guard is not a credential-present test
+  assert.equal(failOpenKind("if ( $request->get_param( 'role' ) !== 'admin' ) {\n\t\treturn false;\n\t}\n\treturn true;"), 'other');
+  assert.equal(failOpenKind("$x = $request->get_param( 'n' );\n\tif ( $x > 0 ) {\n\t\tif ( ! current_user_can( 'edit_posts' ) ) {\n\t\t\treturn false;\n\t\t}\n\t}\n\treturn true;"), 'other');
+  // a comparison against an empty string is a presence test
+  assert.equal(failOpenKind("$k = $request->get_header( 'authorization' );\n\tif ( $k !== '' ) {\n\t\tif ( ! demo_valid( $k ) ) {\n\t\t\treturn false;\n\t\t}\n\t}\n\treturn true;"), 'callable_fail_open');
 });
 test('permission kind callable_true: a resolvable callable whose body is only return true (quests style)', () => {
   const rest = `class Demo_Rest {

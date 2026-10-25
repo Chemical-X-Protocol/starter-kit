@@ -6,7 +6,8 @@ import { walk } from './php-walk.js';
 
 const DENIAL_CALLS = new Set(['wp_die', 'die', 'exit']);
 const PRESENCE_CALLS = new Set(['strlen', 'mb_strlen', 'is_string']);
-const PRESENCE_OPS = new Set(['!==', '!=', '>']);
+const PRESENCE_OPS = new Set(['!==', '!=']);
+const isEmptyLiteral = (node) => (isKind(node, 'string') && node.value === '') || isKind(node, 'nullkeyword');
 const NESTED = new Set(['function', 'closure', 'arrowfunc', 'class']);
 
 const isKind = (node, kind) => Boolean(node) && node.kind === kind;
@@ -21,11 +22,11 @@ function isDenial(node) {
 
 const isExplicit = (node) => isDenial(node) && !(isKind(node, 'return') && isKind(node.expr, 'variable'));
 
-/** A test that is true when something was sent: $k, isset($k), !empty($k), strlen($k), $k !== '', and any && with one. */
+/** A test that is true when something was sent: $k, isset($k), !empty($k), strlen($k), $k !== '' or $k != null (only against an empty string or null), and any && with one. */
 function isPresence(test) {
   const inner = isKind(test, 'parenthesis') ? test.inner : test;
   const isNotEmpty = isKind(inner, 'unary') && inner.type === '!' && isKind(inner.what, 'empty');
-  const isCompare = isKind(inner, 'bin') && PRESENCE_OPS.has(inner.type);
+  const isCompare = isKind(inner, 'bin') && PRESENCE_OPS.has(inner.type) && (isEmptyLiteral(inner.left) || isEmptyLiteral(inner.right));
   const isAnd = isKind(inner, 'bin') && (inner.type === '&&' || inner.type === 'and');
   const byRule = [
     [isKind(inner, 'variable') || isKind(inner, 'isset') || isNotEmpty || isCompare, () => true],
