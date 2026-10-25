@@ -16,6 +16,16 @@ Full reference: [coordination-db.md](coordination-db.md#other-repos-and-other-bo
 - `read` and `q` given an absolute path inside another chemx project (a directory with `.chemxrc` or `.chemx/index.db`) run in that project, with a `chemx root:` line on stderr unless `--bare` or `--json`; a path no chemx project owns is still refused.
 - `team ... --board=<dir>` and `team task <action> <dir>#<id>` read or write the board of that directory (the board must have a team db; nothing is created; two different boards in one command are refused). `team task list` and `show` end with the board, a `--json` show carries `board`, and a `not found` names the board it looked in and, when the caller holds a claim on a different board, says so in one line (`claimsOnOtherBoards`, `cli/team/board-resolve.js`).
 
+### Test: a repo's own runner, NODE_PATH for pnpm, runner allow-list (epic #6745, K9 #6754)
+
+Full reference: [test-lanes.md](test-lanes.md#a-repos-own-runner). Measured on gatekeeper and xp: `chemx test tests/xp-pro-rest.test.mjs` runs 27 tests in 4 s (the whole runner is 189 tests in 87 s), failures only and one summary line.
+
+- A repo whose `tests/run-tests.mjs` imports a `harness`, registers test files with side-effect imports and calls `harness.run()` is its own project (no `package.json` or `node_modules` needed). `chemx test` runs the runner whole; `chemx test <file | dir>` and `-t <name>` run a generated copy of it (`tests/.chemx-run-<hash>.mjs`, written for the run and removed after) that registers only those files; `--related` selection works as elsewhere. Its `... Tests PASSED/FAILED: N passed.` summary and `FAIL <suite> > <test>` lines are parsed into the usual verdict (a run with zero tests is inconclusive).
+- These runs are always heavy: one ticket on the machine at a time even for one file, because the plugin suites share a database. New plan field `exclusive`, `prepare()` for a plan that needs a file for the length of its run (`cli/test-run.js`).
+- A test run puts `node_modules/.pnpm/node_modules` on `NODE_PATH` when the jest config (and its preset chain) names a serializer, transform or setup file that resolves only there, so `npx jest` works in the app's checkouts and worktrees without a manual `NODE_PATH` (`cli/build/pnpm-store-path.js`, `jest-config-modules.js`; `storeOnlyModules(root)` for `chemx doctor`, K10).
+- A project without `node_modules` says so in one line; in a linked git worktree whose main checkout has one it names the `ln -s` fix.
+- New guard nudge `nudge-project-runner`: `node tests/run-tests.mjs` is nudged toward `chemx test` unless `.chemxrc` has `{ "test": { "runners": ["node tests/run-tests.mjs"] } }`. Promotable with `guardNudges` like the others (`docs/hooks.md`).
+
 ### Board output diet (epic #6745, K4 #6749)
 
 Full reference: [coordination-db.md](coordination-db.md#reading-the-board-cheaply). Measured on the live board (characters): `team feed` 27,290 -> 2,564, `team status` 9,167 -> 3,912, `team task show` of the epic 8,643 -> 4,655, 275 with `--brief`.

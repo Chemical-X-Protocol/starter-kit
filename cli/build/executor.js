@@ -4,6 +4,7 @@ import { currentRequestSignal } from '../request-context.js';
 import { scheduleTimeout } from '../timers.js';
 import { canSignalGroups, killTree, trackChild, untrackChild } from './child-registry.js';
 import { SLOT_OWNER_ENV } from '../test-slots.js';
+import { withPnpmStorePath } from './pnpm-store-path.js';
 
 const DEFAULT_TIMEOUT_MS = 15 * 60 * 1000;
 const KILL_GRACE_MS = 2000;
@@ -49,11 +50,14 @@ export const isolateTestEnv = (env) => {
   return isolated;
 };
 
-export const buildChildEnv = (isRawStream, options = {}) => {
+// A test run also gets the pnpm virtual store on NODE_PATH when the jest config in `cwd` names a
+// serializer or transform that only the store holds (pnpm-store-path.js).
+export const buildChildEnv = (isRawStream, options = {}, cwd = null) => {
   const env = childEnv(isRawStream, options.env);
   const isTestRun = isTestRunEnv(options);
   if (!isTestRun) return env;
-  return isolateTestEnv(env);
+  const isolated = isolateTestEnv(env);
+  return cwd ? withPnpmStorePath(isolated, cwd) : isolated;
 };
 
 // Runs a shell command with stdin closed (no runner can enter watch mode, wait on a prompt or
@@ -72,7 +76,7 @@ export const executeBuild = (command, cwd = process.cwd(), options = {}) => new 
   let stopReason = null;
   let isSettled = false;
 
-  const child = spawn(command, { shell: true, cwd, detached: canSignalGroups, stdio: ['ignore', 'pipe', 'pipe'], env: buildChildEnv(isRawStream, options) });
+  const child = spawn(command, { shell: true, cwd, detached: canSignalGroups, stdio: ['ignore', 'pipe', 'pipe'], env: buildChildEnv(isRawStream, options, cwd) });
   trackChild(child);
 
   const stop = (reason) => {

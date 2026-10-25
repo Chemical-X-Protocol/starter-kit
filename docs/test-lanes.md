@@ -40,7 +40,7 @@ Epic #1324. Design: [2026-10-13-chemx-job-line-design.md](superpowers/specs/2026
 | Lane | Runs | Behaviour |
 | :--- | :--- | :--- |
 | light | a test run whose caller names specs: `chemx test <targets>` (a spec file or directory, also with `-- <cmd>`), `chemx_test` over MCP with `testTarget`, and `--changed` / `--related` runs that select affected specs | claims free slots at once, reserve slots first; never waits behind a heavy job |
-| heavy | a test run that names nothing: `chemx test` (with test lanes: the whole fast lane), `--slow`, `--all`, a `--changed` run that falls back to the full suite, verify's test step when it names no specs; plus `chemx typecheck`, `chemx build` and verify's typecheck and (with `--build`) build steps (its audit step is not in the line) | takes a ticket and runs one at a time, first come first served |
+| heavy | a test run in a repo with its own `tests/run-tests.mjs` runner (even for one file, see "A repo's own runner"); a test run that names nothing: `chemx test` (with test lanes: the whole fast lane), `--slow`, `--all`, a `--changed` run that falls back to the full suite, verify's test step when it names no specs; plus `chemx typecheck`, `chemx build` and verify's typecheck and (with `--build`) build steps (its audit step is not in the line) | takes a ticket and runs one at a time, first come first served |
 
 The lane is decided by what the caller asked for, before `test-lanes.json` turns an empty scope into the lane's spec list, so `chemx test` in a project with lanes is heavy even though it ends up naming hundreds of specs.
 
@@ -63,6 +63,36 @@ Files in the slot directory: `slot-<n>` (`{ pid, token, since, heartbeat, handle
 The worker cap reaches the runner for a package script that ends with `exec jest|vitest|node ... "$@"` (do-it-for-the-xp's `test` script), not only for a script that is one plain command. A script that does neither is left alone and the run holds its slots.
 
 Not guaranteed: raw `pnpm test` / `pnpm build` (not through chemx) are not in the line; neither are dev servers and Cypress. The line caps the workers a runner is told, not what a build tool (webpack, terser) spawns itself. Two callers share a run only when the key matches exactly. Pinned by `cli/job-line*.spec.js`, `cli/test-slots.spec.js` and `cli/test-command.spec.js`.
+
+## A repo's own runner
+
+Task #6754. The WordPress plugins (`xophz-compass-gatekeeper`, `xophz-compass-xp`) have no `package.json` and no `node_modules`; their tests are run by `tests/run-tests.mjs` against a shared harness, and the PHP under test runs inside the `u-wordpress` container against one shared database. `chemx test` recognises such a runner and runs it instead of a package script.
+
+Recognised when `tests/run-tests.mjs` (a) imports a named `harness`, (b) registers test files with side-effect imports (`import './x.test.mjs';`) and (c) calls `harness.run()`, and the directory has no `package.json` `test` script of its own (a script that wraps `run-tests.mjs`, or the npm placeholder, does not count). The search starts at the directory you run from and climbs to the repo boundary (`.git`, `.chemx` or `package.json`), so it works from `tests/` and under a parent that has its own `package.json`.
+
+| Command | Runs |
+| :--- | :--- |
+| `chemx test` | `node tests/run-tests.mjs`, as it is |
+| `chemx test tests/x.test.mjs` | only that file, through a generated copy of the runner |
+| `chemx test tests/` or a sub-directory | every `*.test.mjs` / `*.test.js` below it |
+| `chemx test tests/x.test.mjs -t <name>` or `chemx test -t <name>` | the tests whose `<suite> <test>` name matches the regular expression (plain text when it is not one) |
+| `chemx test --related <file>` | the same import-graph selection as in any repo, then the file runs as above |
+
+The generated runner is the repo's own `run-tests.mjs` with its side-effect test imports replaced by the targets, written next to it as `tests/.chemx-run-<hash>.mjs` (so its relative imports of the harness keep working), run, and deleted when the run ends, also when it fails. A leftover from a killed chemx is swept by the next run once it is ten minutes old. The name is a hash of the targets and filter, so two callers asking for the same thing share one run (see "Sharing a run"). The output is the runner's: failing tests as `FAIL <suite> > <test>` with the first lines of the error, then one summary line (`<Name> Tests PASSED: 36 passed.` or `... FAILED: 2 failed, 34 passed.`), which chemx reads into the usual verdict. A run that registered no test is `inconclusive`, never a pass. A target that does not exist is `inconclusive` with the name, nothing runs.
+
+These runs are always heavy, even for one file: they take a ticket and run one at a time on the machine, because two suites that share a database flake when they overlap (a counter spec did). They hold the heavy slots while they run, so a one-file run queues behind a full jest suite and the other way round; `chemx test --slots` shows who is ahead. The runner is not told a worker count (the harness runs its tests in order).
+
+Not guaranteed: the name filter relies on the harness exposing `harness.suites[].tests[]` with `name` fields (the error says so when it does not); a runner that is not named `tests/run-tests.mjs`, or reads its test list from somewhere other than side-effect imports, is not recognised and `chemx test` falls back to the package script. `chemx test -- <command>` runs the command as given and never uses the generated runner.
+
+The guard nudges a raw `node tests/run-tests.mjs` toward `chemx test`; `{ "test": { "runners": ["node tests/run-tests.mjs"] } }` in `.chemxrc` lists runners it leaves alone (docs/hooks.md). Pinned by `cli/test-project-runner.spec.js`, `cli/build/detector.spec.js`, `cli/hooks/guard-test-runners.spec.js`.
+
+## pnpm layouts
+
+Task #6754. A jest config names a snapshot serializer, transform or setup file by package name, and jest resolves the name from the project root. Under pnpm only the project's own dependencies are linked at `node_modules/<name>`; the rest sit in `node_modules/.pnpm/node_modules`. A run through a pnpm shim (`pnpm run test`, a `node_modules/.bin` shim) gets that directory on `NODE_PATH` from pnpm; `npx jest` and `node .../jest.js` do not, and die with `Module jest-serializer-vue in the snapshotSerializers option was not found` (do-it-for-the-xp, every checkout and worktree).
+
+For a test run in a directory that has `node_modules/.pnpm/node_modules` and a jest config (`jest.config.json`, `.js`, `.cjs` or the `jest` key of `package.json`), chemx loads that config and its preset chain in a child process (`cli/build/jest-config-modules.js`, about 0.1 s) and reads `snapshotSerializers`, `transform` and `setupFiles` / `setupFilesAfterEnv`. When a bare name there does not resolve from the project root but exists in the store, the run's `NODE_PATH` gets the store in front of whatever it had. Nothing is added otherwise, to a build or typecheck run, or when the store is already on `NODE_PATH`. `storeOnlyModules(root)` in `cli/build/pnpm-store-path.js` returns `{ names, error }` for `chemx doctor` to report (K10). A config that throws, or is `.mjs` or `.ts`, adds nothing. Pinned by `cli/build/pnpm-store-path.spec.js` and `cli/build/executor-env.spec.js`.
+
+A directory with no `node_modules` at all gets one line: `Missing node_modules. Please run 'pnpm install' before testing.` and, in a linked git worktree whose main checkout has a `node_modules`, `... In a git worktree, link the main checkout's instead: ln -s <main>/node_modules <worktree>/node_modules`. A repo with its own `tests/run-tests.mjs` runner needs no `node_modules`.
 
 ## Profile
 

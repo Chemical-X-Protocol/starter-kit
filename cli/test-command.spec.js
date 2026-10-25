@@ -6,6 +6,7 @@ import path from 'node:path';
 import { planTestCommand, detectTestRunner, detectRunnerFromScript, scriptForwardsArgs } from './test-command.js';
 import { withWorkerCount } from './test-workers.js';
 import { parseCliArgs } from './cli-args.js';
+import { withHarnessRepo } from './fixtures/project-runner/harness-repo.js';
 
 const makeProject = (files) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-test-cmd-'));
@@ -212,4 +213,27 @@ test('test-command: a custom command returns the targets it runs, so a scoped ru
   assert.deepEqual(plan.targets, ['a.spec.js', 'b.spec.js']);
   assert.match(plan.command, /^npx jest a\.spec\.js b\.spec\.js$/);
   assert.deepEqual(planTestCommand('npx jest', process.cwd()).targets, [], 'no targets: the full suite');
+});
+
+test('test-command: a repo with its own tests/run-tests.mjs plans through that runner, a custom command does not', async () => {
+  await withHarnessRepo(({ repo }) => {
+    const whole = planTestCommand(null, repo, {});
+    assert.equal(whole.command, 'node tests/run-tests.mjs');
+    assert.equal(whole.runner, 'harness');
+    assert.equal(whole.exclusive, true);
+    const one = planTestCommand(null, repo, { targets: ['tests/alpha.test.mjs'] });
+    assert.match(one.command, /^node tests\/\.chemx-run-[0-9a-f]{8}\.mjs$/);
+    assert.deepEqual(one.targets, ['tests/alpha.test.mjs']);
+    const custom = planTestCommand('node my-runner.mjs', repo, { targets: ['tests/alpha.test.mjs'] });
+    assert.equal(custom.runner, null);
+    assert.equal(custom.exclusive, undefined);
+  });
+});
+
+test('test-command: a project runner never changes how a repo with a package.json test script plans', async () => {
+  await withHarnessRepo(({ repo }) => {
+    const plan = planTestCommand(null, repo, { targets: ['tests/alpha.test.mjs'] });
+    assert.equal(plan.runner, 'node');
+    assert.equal(plan.exclusive, undefined);
+  }, { 'package.json': JSON.stringify({ scripts: { test: 'node --test tests/*.test.mjs' } }) });
 });

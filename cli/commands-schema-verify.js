@@ -28,7 +28,7 @@ export const VERIFY_COMMANDS = [
     brief: 'Run tests, show failures only',
     usage: 'chemx test [target] [options] [-- <command>]',
     summary: 'Run the project test suite and report only failures.',
-    description: 'Detects the test runner and suppresses passing output.',
+    description: 'Detects the test runner and suppresses passing output. A repo with its own tests/run-tests.mjs harness runner runs one file through a generated copy of it, on the job line.',
     flags: [
       { flag: '--json', desc: 'Output test summary as minified JSON' },
       { flag: '--raw', desc: 'Do not suppress passing test output' },

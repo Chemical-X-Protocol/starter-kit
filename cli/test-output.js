@@ -55,12 +55,24 @@ const readNumber = (line, pattern) => {
 // failed to load ran no test, so without this it would be a FAIL verdict with 0 failed tests.
 const FAILED_FILES_LINE = /^Test (?:Files|Suites):?\s+(\d+)\s+failed/i;
 
+// The summary line of a repo's own harness runner (tests/run-tests.mjs): "Gatekeeper Tests PASSED: 36 passed."
+// or "Gatekeeper Tests FAILED: 2 failed, 34 passed." Its FAIL lines are read like vitest's.
+const HARNESS_SUMMARY = /\b(?:PASSED|FAILED):\s*(?:(\d+)\s+failed,\s*)?(\d+)\s+passed\.?$/;
+
 const parseCounts = (cleanLines) => {
   const counts = { totalTests: 0, passed: 0, failed: 0, skipped: 0, errors: 0, todo: 0 };
   let hasRunnerSummary = false;
   let failedFiles = 0;
   for (const line of cleanLines) {
     failedFiles = readNumber(line, FAILED_FILES_LINE) ?? failedFiles;
+    const harnessSummary = line.match(HARNESS_SUMMARY);
+    if (harnessSummary) {
+      counts.failed = Number(harnessSummary[1] ?? 0);
+      counts.passed = Number(harnessSummary[2]);
+      counts.totalTests = counts.failed + counts.passed;
+      hasRunnerSummary = true;
+      continue;
+    }
     const isRunnerSummary = /^Tests:?\s+/i.test(line);
     if (isRunnerSummary) {
       counts.passed = readNumber(line, /(\d+)\s+passed/i) ?? 0;
