@@ -6,6 +6,7 @@ Reference pages for behavior that specs pin. Design notes and plans live under `
 | :--- | :--- |
 | [audit-gates.md](audit-gates.md) | The one rule every audit gate applies (pre-commit hook, ratchet, `task done`, `patch`/`write`, and the base-ref delta `audit --delta-base` / `verify --changed --base`), what each guarantees and what it does not |
 | [CHANGELOG.md](CHANGELOG.md) | What changed, grouped by area, with task ids, behavior changes and known issues |
+| [ci.md](ci.md) | `chemx ci`: a pull request's checks and merge state through gh, exit codes 0/1/3/2, `--wait`, and `--protection` (does the default branch require checks; why `gh pr merge --auto` merged kit PR #12 at once; how to protect `main`) |
 | [commit.md](commit.md) | `chemx commit`: path-limited commits, lease and task checks |
 | [coordination-db.md](coordination-db.md) | The one team db per monorepo: how it is chosen (never the temp dir or `/`), what reads which db, repo attribution, `task list --all-repos/--repo`, `chemx team migrate` and the live runbook |
 | [doctor.md](doctor.md) | `chemx doctor`: the kit commit, origin drift and CI pin lines, stale MCP servers grouped by project root with the Claude session behind each, the pnpm jest layout check, `--fetch` and exit codes |
@@ -20,4 +21,5 @@ Reference pages for behavior that specs pin. Design notes and plans live under `
 | [team-audit-run.md](team-audit-run.md) | `chemx team audit-run` |
 | [team-dispatch.md](team-dispatch.md) | `chemx team dispatch --workflow`: task selection, routing per stage, the rendered build/review/repair/gate script (chemx renders it; the host runs it), run records |
 | [team-locks.md](team-locks.md) | File locks and leases: TTL, renewal, lapse, the commit guard |
+| [team-tokens.md](team-tokens.md) | `chemx team tokens --epic`: cost, tokens and wall time per epic over its children, where each child's figures come from, and what unknown means |
 | [test-lanes.md](test-lanes.md) | Test lanes and the agent test loop; the line heavy jobs (full suite, typecheck, build) take turns in, light test runs, shared runs, `CHEMX_LIGHT_RESERVE` and `chemx test --slots` |

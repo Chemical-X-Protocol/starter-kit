@@ -16,6 +16,7 @@ import { handleProfileCommand, handleHandoffCommand } from './team-commands-prof
 import { handleDispatchCommand } from './team-commands-dispatch.js';
 import { handleRouteCommand } from './team-route.js';
 import { handleRunTokens, parseRunArgs } from './team-commands-tokens.js';
+import { handleEpicTokens, parseEpicArgs } from './team-tokens-epic.js';
 import { runAuditRunCli } from './audit-run.js';
 import { isBoardCommand, runBoardCommand } from './team-commands-board.js';
 import { runTaskCommand } from './team-commands-task.js';
@@ -64,6 +65,8 @@ const SUB_COMMANDS = {
 const runSubCommand = (ctx, args, isCli, cwd) => {
   const { subCommand } = args;
   const isTokens = subCommand === 'tokens' || subCommand === 'telemetry';
+  const epicOptions = isTokens ? parseEpicArgs(args.restArgs) : null;
+  if (epicOptions) return handleEpicTokens(ctx.db, epicOptions, args.flags.isJson, isCli);
   const runOptions = isTokens ? parseRunArgs(args.restArgs) : null;
   if (runOptions) return handleRunTokens(ctx.db, runOptions, args.flags.isJson, isCli, cwd);
   const isBoard = isBoardCommand(subCommand);

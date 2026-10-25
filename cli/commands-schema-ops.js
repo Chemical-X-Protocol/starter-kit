@@ -45,6 +45,7 @@ export const OPS_COMMANDS = [
       { flag: '--force, -f', desc: 'Force complete task even if hazards remain' },
       { flag: '--tokens=<N>', desc: 'Prompt tokens consumed by task' },
       { flag: '--cost=<USD>', desc: 'Estimated dollar cost for task' },
+      { flag: '--epic=<id>', desc: 'tokens: tokens, cost and wall time over an epic\'s children, recursively (see docs/team-tokens.md)' },
       { flag: '--from=<@handle>', desc: 'feed: only events authored by this handle' },
       { flag: '--type=<lock|status|post|task>', desc: 'feed: an event-type group (or an exact event type, comma-separated)' },
       { flag: '--since=<id>', desc: 'feed: only events after this event id' },

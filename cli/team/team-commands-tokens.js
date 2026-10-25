@@ -2,6 +2,7 @@
  * Chemical X Protocol: `chemx team tokens --run=<wf_id|dir> [--json] [--import] [--alt=<family>] [--top=<n>]`.
  * Measures a Claude Code workflow run from its transcripts (see usage-reader.js). Without --run the
  * older swarm token breakdown runs instead. --projects=<dir> overrides ~/.claude/projects for lookup.
+ * `--epic <id>` rolls an epic's children up instead (team-tokens-epic.js, #6760).
  */
 import { readRun } from './usage-reader.js';
 import { priceRun } from './usage-compute.js';
@@ -9,7 +10,7 @@ import { loadPricing } from './usage-pricing.js';
 import { importPricedRun } from './usage-store.js';
 import { renderRunCard } from './usage-render.js';
 
-const TOKENS_USAGE = 'Usage: chemx team tokens --run=<wf_id|run dir> [--json] [--import] [--alt=opus|sonnet|haiku|fable] [--top=<n>]';
+const TOKENS_USAGE = 'Usage: chemx team tokens --run=<wf_id|run dir> [--json] [--import] [--alt=opus|sonnet|haiku|fable] [--top=<n>] | --epic <id> [--json]';
 
 export const optionOf = (args, name) => {
   const prefix = `--${name}=`;
