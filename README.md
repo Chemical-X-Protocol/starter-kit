@@ -266,9 +266,10 @@ chemx use-task-filter
 ### 4. Database-Driven Multi-Agent Swarm Coordination
 Coordinate multi-agent swarms using the local SQLite store (`.chemx/index.db`) without multi-thousand-token markdown specification bloat:
 ```bash
-# Auto-triage: a full-scope `chemx audit` converts hazards into assignable team tasks by default.
-# Partial runs (--git, --fast, --staged, --no-index) never triage; `--no-triage` opts out.
-chemx audit
+# Triage is opt-in: `chemx audit --triage` (or `autoTriage: true` in .chemxrc) converts hazards into
+# assignable team tasks, at most 50 per run. A plain `chemx audit` files nothing.
+# Partial runs (--git, --fast, --staged, --no-index) never triage.
+chemx audit --triage
 chemx team task triage   # triage on demand
 
 # List tasks assigned to a specific agent
@@ -312,16 +313,17 @@ All reference pages: [docs/INDEX.md](docs/INDEX.md).
 
 ## Language-Agnostic Polyglot Architecture
 
-Chemical X audits more than one language. The table below lists the extensions it parses and the checks each gets; any other file type is not audited. Depth differs by language: TypeScript, JavaScript, Vue and Svelte use a real parser, and C#, Python, Go and Rust use structural patterns, so they get fewer checks.
+Chemical X audits more than one language. The table below lists the extensions it parses and the checks each gets; any other file type is not audited. Depth differs by language: TypeScript, JavaScript, Vue and Svelte use the Babel parser, PHP uses `php-parser`, C# uses structural patterns, and Python, Go and Rust get the universal text passes only, so they get fewer checks.
 
 ### Supported Language Ecosystems
 
 | Language / Framework | Extensions | Parser Engine | Capabilities |
 | :--- | :--- | :--- | :--- |
 | **C# / .NET 10** | `.cs` | Structural Regex / AST | Line budgets, MediatR handlers, shallow catch detection, fake in-memory stubs (`UseInMemoryDatabase`), `using` namespace indexing |
-| **Python** | `.py` | Structural Regex / AST | Line budgets, AI slop text patterns, fake assertions (`assert True`), `def`/`class` and `import` indexing |
-| **Go** | `.go` | Structural Regex / AST | Line budgets, mock data scanning, tautological assertions, `func`/`type` package indexing |
-| **Rust** | `.rs` | Structural Regex / AST | Line budgets, AI slop text patterns, secret scanning, struct and fn indexing |
+| **Python** | `.py` | Universal text passes | Line budgets, AI slop text patterns, mock data and secret scanning, fake assertions (`assert True`), `def`/`class` and `import` indexing |
+| **Go** | `.go` | Universal text passes | Line budgets, mock data scanning, tautological assertions, `func`/`type` package indexing |
+| **Rust** | `.rs` | Universal text passes | Line budgets, AI slop text patterns, secret scanning, struct and fn indexing |
+| **PHP / WordPress** | `.php` | `php-parser` AST (loaded only when a PHP file is audited) | Complexity, structural weight, nested ternary, swallowed catches, dynamic code and command execution, and in a WordPress plugin, theme or core tree: REST route permissions, missing nonces, and opt-in SQL, input, output, SSRF and redirect rules. See [docs/php-wordpress.md](docs/php-wordpress.md) |
 | **TypeScript / JavaScript** | `.ts`, `.tsx`, `.js`, `.jsx` | `@babel/parser` AST (`.vue` via `@vue/compiler-sfc`: every script block plus the template) | AST visitors across 11 audit categories, mapped to the 7 pillars; hook contracts, 2-stage booleans, lazy rule trees |
 | **Vue & Svelte** | `.vue`, `.svelte` | Babel + Template Registry | SFC template clone detection, reactive state verification |
 
@@ -334,6 +336,7 @@ Chemical X audits more than one language. The table below lists the extensions i
    * **Polyglot Fake Green Tests:** Catches tautological assertions in C# (`Assert.True(true)`), Python (`assert True`), and Go (`assert.True(t, true)`).
 2. **Tier 2: Deep Language-Specific Analyzers**
    * **Babel Engine:** Deep AST inspection for JS/TS/Vue/Svelte (runs on JS, TS, Vue and Svelte files only).
+   * **PHP Engine:** `php-parser` AST passes for `.php` files, plus WordPress passes (REST permissions, nonces, SQL, input flow) when a plugin, theme or core tree is detected. Some rules are default-off; `docs/php-wordpress.md` lists the shipped defaults, the per-plugin index and its caps.
    * **Control Flow & Guard Disciplines (`CONTROL_FLOW_CASCADE_GUARDS`, `CONTROL_FLOW_SILENT_GUARD`):** Flags silent bare returns in side-effecting code, and detects cascading early-return clusters (>= 3 guards), recommending extraction into `ruleTree` with 1-line callback aborts (Directive 3.H).
    * **Tailwind content coverage (`TAILWIND_UNSCANNED_CLASS_STRING`):** In a Tailwind v3 project, flags a string literal of 3 or more utility classes (2 or more of them Tailwind-shaped) in a `.js`, `.ts`, `.mjs` or `.cjs` file that no `content` glob of `tailwind.config` covers, since Tailwind purges classes it never scans. The config is read as text and never imported; Tailwind v4, a missing config or a non-literal `content` list keep the rule silent. HIGH, Directive 5.B. `options.tailwindContent` overrides the globs for tests.
    * **C# / Clean Architecture Analyzer:** Flags empty `catch (Exception) {}` blocks, simulated delays (`Task.Delay`), and monolithic controllers.

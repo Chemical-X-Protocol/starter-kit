@@ -6,6 +6,20 @@ The package version is minute-precision CalVer and is bumped by CI. It is not ed
 
 This section was written from the day's commit subjects and their task titles. It states what each change does and, where known, what it does not guarantee. It is a summary, not a complete list: about 490 commits landed on 2026-10-09, and many of them are mechanical audit-hazard cleanups (for example "name inline conditions" per file) that change no behavior and are not listed one by one.
 
+## Unreleased (main, 2026-10-24)
+
+### PHP and WordPress audit (ruleset 7, epic #6429)
+
+Full reference: [php-wordpress.md](php-wordpress.md). The `.php` extension reaches every audit caller only once the language registration step (T16) is on `main`; until then the PHP modules are inert.
+
+- New rule ids at revision 7 (11): `SECURITY_WP_PUBLIC_WRITE_ROUTE`, `SECURITY_WP_REST_NO_PERMISSION_CALLBACK`, `SECURITY_WP_PUBLIC_READ_SIDE_EFFECT`, `SECURITY_WP_UNPREPARED_SQL`, `SECURITY_WP_UNESCAPED_OUTPUT`, `SECURITY_WP_UNSANITIZED_INPUT`, `SECURITY_WP_MISSING_NONCE`, `SECURITY_WP_SSRF`, `SECURITY_WP_OPEN_REDIRECT`, `SECURITY_PHP_OBJECT_INJECTION`, `SECURITY_PHP_COMMAND_EXECUTION`. `RULESET_VERSION` is 7. Existing rules keep their revisions; what changes for them is the set of files they see. Of the new ids, `SECURITY_WP_PUBLIC_READ_SIDE_EFFECT`, `SECURITY_WP_UNPREPARED_SQL`, `SECURITY_WP_UNSANITIZED_INPUT`, `SECURITY_WP_SSRF`, `SECURITY_WP_OPEN_REDIRECT` and `SECURITY_WP_UNESCAPED_OUTPUT` are default-off (precision under the default-on bar on the held-out set).
+- Rule setting `"on"` (or `true`) enables a default-off rule and keeps the engine's per-violation severities; a severity value still enables it and overwrites every severity.
+- Ratchet adoption cost: each ratchet scope now records the extensions it scanned (`languages`). A baseline without that field is read as the extensions audited at ruleset 6, which exclude `.php`, and the first scan that includes PHP adopts the PHP counts as baseline once instead of failing. JS regressions keep being gated. The kit's `chemx-ratchet.json` moved to ruleset 7. Other effects of PHP files counting: plugin health and AI-slop scores fall, and plugin-level `chemx verify` goes red for a plugin with CRITICAL or HIGH PHP findings.
+- Root `chemx audit` and the MCP audit narrow to the workspace sources when no directory is given, as `verify` does; `--dir=.` keeps the full scan. This also narrows the root JS audit scope (T-root-scope).
+- `chemx team task done` and the edit guardrails treat PHP coverage that is not `ast` as inconclusive; `task done` refuses with `inconclusive-coverage`. Findings marked `crossFile: true` are gated by delta only, and a PHP target in a WordPress root also re-audits its dependent files.
+- New dependency: `php-parser` 3.7.0, loaded only when a `.php` file is audited. Config keys `wordpress` and `php.version` are new.
+- Not covered for PHP: Forge, `patterns --forge`, `autofix`, PHP symbol reads, blast radius and trace.
+
 ## Unreleased (feat/job-line, 2026-10-13)
 
 ### Audit rules and gates (review fixes, 2026-10-15, epic #6088)

@@ -30,7 +30,17 @@ This is the rule the audit ratchet (`chemx-ratchet.json`) applies repo-wide, whe
 - `introducedViolations` covers the one file an edit touched, not the repo; it does not include the line-budget warning, which is reported separately as `lineBudget`.
 - The base delta judges the diff only: it does not make the repo-wide ratchet green, and `chemx verify` without `--base` still fails on a red ratchet. `verify --changed` without `--base` keeps the severity gate.
 - An unstaged rename (a plain `mv`, not `git mv`) reaches the base delta as an untracked file with no base, so its inherited hazards count as new. `git mv` first and the old path is the base.
-- Files that `isSourceFilePath` rejects are not audited by the hook or the base delta.
+- Files that `isSourceFilePath` rejects are not audited by the hook or the base delta. That list (`cli/audit-preflight-git.js`) is separate from the full audit list in `cli/languages.js`: it is `.tsx`, `.ts`, `.jsx`, `.js`, `.vue`, `.svelte` and, with PHP support, `.php`. It deliberately does not include `.mjs`, `.cjs`, `.cs`, `.py`, `.go`, `.rs`, `.java`, `.kt` or the C and C++ extensions, which `chemx audit` scans but the hook, `--delta-base`, `verify --changed` and `audit --git` skip.
+
+## PHP in the gates
+
+Details and defaults are in [php-wordpress.md](php-wordpress.md). What changes for the gates:
+
+- PHP complexity, structural weight and nested-ternary findings are MEDIUM. They do not trip the absolute CRITICAL/HIGH filter, but a rise in their count still fails every per-rule delta gate and `task done`.
+- A finding with `crossFile: true` (its evidence is in another file of the plugin) is exempt from the absolute CRITICAL/HIGH filter of `task done` and is gated by delta only.
+- When the `task done` target is a PHP file inside a WordPress root, the gate also re-audits each file that depends on the target (at disk and at HEAD, with the target pinned to HEAD) and refuses when any rule count rises in one of them. Other files are read from disk, so this is a check, not a full pin of the plugin at HEAD.
+- `task done` refuses a PHP target with `inconclusive-coverage` when its coverage is not `ast` (parser missing, minified, `--fast`, parse error). A low count for such a file says nothing.
+- The delta gates run `git diff` in the current directory and do not enter submodules, so PHP delta gating applies only with the working directory inside the plugin repository. Only the kit has a chemx pre-commit hook; a plugin needs `chemx hook` to get one.
 
 ## Using the base delta
 
