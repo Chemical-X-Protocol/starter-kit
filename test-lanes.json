@@ -41,6 +41,18 @@
     {"glob":"cli/commands/schema-flag-coverage.spec.js","why":"every flag a command handler reads must be in its schema entry"},
     {"glob":"cli/help.spec.js","why":"runs every command's help against the schemas (slow lane: --changed --all runs it)"}
   ],
+  "openImports": [
+    {"glob":"cli/hooks/run-hook.js","why":"lazyHook() loads only ./claude-post-edit.js, ./session-start.js and ./statusline.js, each named as a literal in this file"},
+    {"glob":"cli/hooks/entry.spec.js","why":"imports a broken temp module it writes itself; the real hook it probes, ./claude-pre-tool.js, is a quoted literal"},
+    {"glob":"cli/php/php-control-flow.spec.js","why":"imports the php-* and wp-* passes it finds by listing its own directory","loads":["cli/php"]},
+    {"glob":"cli/search-index-busy.spec.js","why":"a child process imports cli/search-sync.js through a path built from CLI_DIR; the file name is a quoted literal"},
+    {"glob":"cli/search-sync.spec.js","why":"a child process imports search-schema.js and search-db.js through paths built from CLI_DIR; both names are quoted literals"},
+    {"glob":"cli/sqlite-memory-paths.spec.js","why":"a child process imports each entry point it checks by a quoted name under CLI_DIR"},
+    {"glob":"cli/team/team-dispatch-render.spec.js","why":"imports a Workflow script it renders into a temp dir; the renderer is a static import"},
+    {"glob":"cli/team/team-dispatch-v2.spec.js","why":"imports a run script it renders into a temp dir; the renderer is a static import"},
+    {"glob":"src/ui/atoms/a-text/a-text.vue","why":"the index records its <component :is> as an unresolved import (#component:component); it renders the tag its parent passes, and a parent that passes a component imports it"},
+    {"glob":"plugins/claude-code/bin/chemx-launch.mjs","why":"runs cli/hooks/entry.js or cli/index.js of the kit it finds; both file names are quoted literals"}
+  ],
   "smallRun": 5,
   "excluded": [
     {"glob":"app/**/*.spec.ts","why":"vitest specs for the studio UI; the kit has no vitest runner configured"},

@@ -11,10 +11,11 @@ import { scanScope } from './search-scan.js';
 import { ensureFresh } from './index-freshness.js';
 import { resolveIndexRoot } from './search-root.js';
 import { moduleKeysFor } from './search-resolve.js';
-import { findOpenFiles } from './test-graph-open.js';
+import { findOpenFiles, isProseAt } from './test-graph-open.js';
+import { addEdge, addNamedFiles, byBasename } from './test-graph-names.js';
+import { findOpenOk, pinEntryLoads } from './test-open-ok.js';
 
 const SPECIFIER = /(?:\bfrom\s*|\bimport\s*\(\s*|\brequire\s*\(\s*|\bimport\s+)(['"`])([^'"`\n]+)\1/g;
-const FILE_LITERAL = /['"`]([^'"`\n]*?\b([\w.-]+\.(?:[cm]?[jt]sx?|vue|svelte)))['"`]/g;
 const STARTS_PROCESS = /\b(?:spawn|spawnSync|exec|execSync|execFile|execFileSync|fork)\s*\(|process\.execPath|new\s+Worker\s*\(/;
 const EXTENSIONS = ['', '.js', '.mjs', '.cjs', '.ts', '.tsx', '.mts', '.cts', '.jsx', '.vue', '.svelte'];
 const JS_EXT = /\.([cm]?)js$/;
@@ -24,29 +25,27 @@ const candidatesFor = (base) => {
   return [...EXTENSIONS.map((ext) => base + ext), ...swapped, ...EXTENSIONS.slice(1).map((ext) => `${base}/index${ext}`)];
 };
 
-// Relative specifiers only; bare and aliased ones are the index's job.
-const resolveSpecifier = (fromFile, specifier, files) => {
+// Relative specifiers only; bare and aliased ones are the index's job. A template specifier fans
+// out to every file under its static prefix when it is real code (templateIsReal: an import() or
+// require() call, not on a comment line or inside a string). One after `from` or a bare `import`,
+// or quoted in prose, is a code generator's output text or documentation, so it pins nothing.
+const resolveSpecifier = (fromFile, specifier, files, templateIsReal) => {
   const isRelative = specifier.startsWith('./') || specifier.startsWith('../');
   if (!isRelative) return [];
   const templateAt = specifier.indexOf('${');
   const hasTemplate = templateAt >= 0;
+  const isGeneratedText = hasTemplate && !templateIsReal;
+  if (isGeneratedText) return [];
   if (hasTemplate) {
-    const prefix = path.posix.join(path.posix.dirname(fromFile), specifier.slice(0, templateAt));
-    const dirPrefix = specifier.slice(0, templateAt).endsWith('/') ? `${prefix}/` : prefix;
-    return [...files].filter((file) => file.startsWith(dirPrefix));
+    const staticPart = specifier.slice(0, templateAt);
+    const joined = path.posix.join(path.posix.dirname(fromFile), staticPart);
+    const needsSlash = staticPart.endsWith('/') && !joined.endsWith('/');
+    const prefix = needsSlash ? `${joined}/` : joined;
+    return [...files].filter((file) => file.startsWith(prefix));
   }
   const base = path.posix.join(path.posix.dirname(fromFile), specifier);
   const hit = candidatesFor(base).find((candidate) => files.has(candidate));
   return hit ? [hit] : [];
-};
-
-const addEdge = (importers, from, to) => {
-  const isSelfEdge = from === to;
-  if (isSelfEdge) return false;
-  const hasImporters = importers.has(to);
-  if (!hasImporters) importers.set(to, new Set());
-  importers.get(to).add(from);
-  return true;
 };
 
 // [text, error]: an unreadable file is reported in graph.unreadable, never skipped silently.
@@ -58,19 +57,7 @@ const readText = (file) => {
   }
 };
 
-const byBasename = (files) => {
-  const map = new Map();
-  for (const file of files) {
-    const name = path.posix.basename(file);
-    const hasEntry = map.has(name);
-    if (!hasEntry) map.set(name, []);
-    map.get(name).push(file);
-  }
-  return map;
-};
-
-const scanStatically = (root, files, importers, texts, unreadable, bare) => {
-  const named = byBasename(files);
+const scanStatically = (root, files, named, importers, texts, unreadable, bare) => {
   for (const file of files) {
     const [text, error] = readText(path.join(root, file));
     if (error) {
@@ -79,32 +66,16 @@ const scanStatically = (root, files, importers, texts, unreadable, bare) => {
     }
     texts.set(file, text);
     for (const match of text.matchAll(SPECIFIER)) {
-      for (const target of resolveSpecifier(file, match[2], files)) addEdge(importers, file, target);
+      const isCall = /^(?:import|require)\s*\(/.test(match[0]);
+      const templateIsReal = isCall && match[2].includes('${') && !isProseAt(text, match.index);
+      for (const target of resolveSpecifier(file, match[2], files, templateIsReal)) addEdge(importers, file, target);
       const isBare = !match[2].startsWith('.');
-      if (isBare) bare.push({ file, specifier: match[2], isCall: /^(?:import|require)\s*\(/.test(match[0]), at: match.index });
+      if (isBare) bare.push({ file, specifier: match[2], isCall, at: match.index });
     }
     const startsProcesses = STARTS_PROCESS.test(text);
     if (!startsProcesses) continue;
-    for (const match of text.matchAll(FILE_LITERAL)) {
-      for (const target of spawnedTargets(file, match[1], named.get(match[2]) || [])) addEdge(importers, file, target);
-    }
+    addNamedFiles(importers, file, text, named);
   }
-};
-
-const isAncestorDir = (dir, file) => dir === '.' || file.startsWith(`${dir}/`);
-
-// A name in a process-starting file ('index.js', '../index.js', `${dir}/team-db.js`) is meant
-// relative to that file, so files with that name in its own directory or an ancestor win
-// (path.join(here, '..', 'index.js') is never cli/team/index.js from cli/). With none there,
-// every file of that name is a candidate: unsure means more specs, never fewer.
-const spawnedTargets = (fromFile, literal, sameName) => {
-  const isPlainPath = literal.includes('/') && !literal.includes('${');
-  const fromDir = path.posix.dirname(fromFile);
-  const exact = isPlainPath ? sameName.filter((f) => f === path.posix.join(fromDir, literal) || f === path.posix.normalize(literal)) : [];
-  const hasExact = exact.length > 0;
-  if (hasExact) return exact;
-  const nearby = sameName.filter((f) => isAncestorDir(path.posix.dirname(f), fromFile));
-  return nearby.length > 0 ? nearby : sameName;
 };
 
 // Index rows store resolved_path as a module key (path, path without extension, or the dir of
@@ -149,21 +120,26 @@ const readIndex = (root, files, importers, index) => {
 };
 
 // Returns { files: Set, importers: Map<file, Set<importer>>, texts: Map, open: Map<file, why>,
-// source, note, isFile, unreadable }. A file that could not be read has no outgoing edges, so
-// selection treats any unreadable file as unprovable.
-export const buildDependencyGraph = (root, { useIndex = true } = {}) => {
+// openOk: Map<file, { source, loads }>, source, note, isFile, unreadable }. open lists every file
+// whose loads cannot be pinned; openOk those of them (or any file) declared entry points, whose
+// loads test-open-ok.js drew as edges. openRules are the manifest's openImports rules. A file that
+// could not be read has no outgoing edges, so selection treats any unreadable file as unprovable.
+export const buildDependencyGraph = (root, { useIndex = true, openRules = [] } = {}) => {
   const files = new Set(scanScope(root, ['.']).files.map((f) => f.relPath));
   const importers = new Map();
   const texts = new Map();
   const unreadable = [];
   const bare = [];
   const index = { indexed: new Set(), resolved: new Set(), unresolved: [] };
-  scanStatically(root, files, importers, texts, unreadable, bare);
+  const named = byBasename(files);
+  scanStatically(root, files, named, importers, texts, unreadable, bare);
   const indexNote = useIndex ? readIndex(root, files, importers, index) : 'index not used';
   const source = indexNote ? 'static' : 'index+static';
   const open = findOpenFiles({ root, texts, bare, index: indexNote ? null : index, indexNote });
+  const openOk = findOpenOk(texts, openRules);
+  pinEntryLoads({ openOk, texts, files, importers, named });
   const isFile = (rel) => Boolean(fs.statSync(path.join(root, rel), { throwIfNoEntry: false })?.isFile());
-  return { files, importers, texts, open, source, note: indexNote, isFile, unreadable };
+  return { files, importers, texts, open, openOk, source, note: indexNote, isFile, unreadable };
 };
 
 // Breadth-first walk from a changed file to everything that depends on it.

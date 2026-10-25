@@ -3,6 +3,8 @@
 //   slow:     [{ glob, why }]  specs that spawn the CLI or MCP server, stress/timing/perf specs
 //   excluded: [{ glob, why }]  spec-named files the suite script never runs (templates, scratch)
 //   meta:     [{ glob, why }]  specs that scan the whole repo; `chemx test --changed` always runs them
+//   openImports: [{ glob, why, loads? }]  files that load modules by a computed path but are entry points:
+//             `--changed` does not run their dependents for every change (test-open-ok.js)
 //   smallRun: n                a run naming fewer than n specs may use the slot the line keeps for it
 // The suite itself is the project's `test` script (suiteGlobs); the default lane is the suite
 // minus the slow lane, so a new spec is in the default lane unless the manifest says otherwise.
@@ -36,7 +38,7 @@ const walkSpecs = (root, dir = '') => {
 const readRules = (value) => (Array.isArray(value) ? value.filter((rule) => typeof rule?.glob === 'string') : []);
 const readCount = (value) => (Number.isInteger(value) && value > 0 ? value : null);
 
-// { slow, excluded, meta, smallRun } or null when the project declares no lanes. A manifest that is not valid
+// { slow, excluded, meta, openImports, smallRun } or null when the project declares no lanes. A manifest that is not valid
 // JSON is an error the caller reports; lanes never fall back silently.
 export const loadLaneManifest = (root) => {
   const file = path.join(root, LANES_FILE);
@@ -44,9 +46,9 @@ export const loadLaneManifest = (root) => {
   if (!exists) return null;
   try {
     const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
-    return { slow: readRules(parsed.slow), excluded: readRules(parsed.excluded), meta: readRules(parsed.meta), smallRun: readCount(parsed.smallRun) };
+    return { slow: readRules(parsed.slow), excluded: readRules(parsed.excluded), meta: readRules(parsed.meta), openImports: readRules(parsed.openImports), smallRun: readCount(parsed.smallRun) };
   } catch (error) {
-    return { error: `${LANES_FILE} is not valid JSON: ${error.message}`, slow: [], excluded: [], meta: [], smallRun: null };
+    return { error: `${LANES_FILE} is not valid JSON: ${error.message}`, slow: [], excluded: [], meta: [], openImports: [], smallRun: null };
   }
 };
 
@@ -71,7 +73,7 @@ export const planLanes = (root) => {
   const excluded = outside.filter((file) => matchesAny(file, manifest.excluded));
   const uncollected = outside.filter((file) => !excluded.includes(file));
   const staleRules = [...manifest.slow, ...manifest.excluded, ...manifest.meta].filter((rule) => !rule.convention).filter((rule) => !all.some((file) => path.matchesGlob(file, rule.glob))).map((rule) => rule.glob);
-  const unexplained = [...manifest.slow, ...manifest.excluded, ...manifest.meta].filter((rule) => !String(rule.why || '').trim()).map((rule) => rule.glob);
+  const unexplained = [...manifest.slow, ...manifest.excluded, ...manifest.meta, ...manifest.openImports].filter((rule) => !String(rule.why || '').trim()).map((rule) => rule.glob);
   return { suite, fast, slow, excluded, uncollected, staleRules, unexplained, ...(manifest.error ? { error: manifest.error } : {}) };
 };
 

@@ -2,20 +2,23 @@
 // changed, sits next to a changed source (x.js -> x.spec.js), or depends on a changed file
 // through the dependency graph (test-graph.js). A file the graph cannot pin down (computed
 // import(name), an unresolvable specifier) may load any changed file, so it and its dependents
-// are selected for every change, with that reason. When the graph cannot prove the selection
-// (manifests, lockfiles, runner/compiler configs, shared spec support, deleted modules,
-// directories) the whole suite runs and `reason` says why: never a silent subset. A changed fixture
+// are selected for every change, with that reason, unless it is declared open-ok (test-open-ok.js),
+// and each such widening is reported. When the graph cannot prove the selection (manifests,
+// lockfiles, runner/compiler configs, shared spec support, deleted modules, directories) the whole
+// suite runs and `reason` says why: never a silent subset. A changed fixture
 // narrows to the specs that read it (or list its directory) while every reader is a spec; a fixture
 // a shared helper reads, or nothing names, still runs the whole suite.
 import path from 'node:path';
 import { walkDependents } from './test-graph.js';
+import { COMPUTED_LOAD } from './test-graph-open.js';
+import { LISTS_DIRECTORY, SPEC_FILE } from './test-graph-names.js';
 
-export const SPEC_FILE = /\.(?:spec|test)\.[cm]?[jt]sx?$/;
+export { SPEC_FILE };
+
 const MANIFEST = /(?:^|\/)(?:package\.json|package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|yarn\.lock|bun\.lockb?|\.npmrc|\.nvmrc|\.node-version)$/;
 const CONFIG = /(?:^|\/)(?:tsconfig[^/]*\.json|jsconfig\.json|[^/]+\.config\.[cm]?[jt]s|\.babelrc[^/]*|\.swcrc)$/;
 const SPEC_SUPPORT = /(?:^|\/)(?:spec-support|test-support|test-utils|__mocks__)\//;
 const FIXTURE_PATH = /(?:^|\/)(fixtures|__fixtures__)\/(.+)$/;
-const LISTS_DIRECTORY = /\b(?:readdirSync|readdir|opendirSync|globSync)\s*\(/;
 const SETUP_FILE = /(?:^|\/)(?:setup-?tests?|test-?setup|vitest\.setup|jest\.setup)\.[cm]?[jt]sx?$/;
 
 // Files that name `file` (by basename) in their text: readers of non-module files.
@@ -84,16 +87,27 @@ const selectSweepers = (file, graph, select) => {
   return sweepers.filter((sweeper) => select(sweeper, `lists the folder of ${file}`)).length;
 };
 
-const selectOpenDependents = (graph, select) => {
+// A widening: an open file that is not declared open-ok makes its dependents ride along on every
+// change. Returns [{ file, kind, why, specs }], specs being the ones this file alone added.
+const selectOpenDependents = (graph, select, reasons) => {
+  const widened = [];
   for (const [file, why] of graph.open || []) {
+    const isDeclared = Boolean(graph.openOk?.has(file));
+    if (isDeclared) continue;
     const reason = `may load any changed file: ${file} ${why}`;
+    const before = reasons.size;
     const isOpenSpec = SPEC_FILE.test(file);
     if (isOpenSpec) select(file, reason);
     for (const [dependent, chain] of walkDependents(graph, file)) {
       const isDependentSpec = SPEC_FILE.test(dependent);
       if (isDependentSpec) select(dependent, `${reason}; depends on ${chain}`);
     }
+    const added = reasons.size - before;
+    const kind = why.startsWith(COMPUTED_LOAD) ? 'computed-import' : 'unresolved-import';
+    const hasAdded = added > 0;
+    if (hasAdded) widened.push({ file, kind, why, specs: added });
   }
+  return widened;
 };
 
 // changes: [{ path, status }] root-relative. suite: Set of spec paths the full run would execute.
@@ -145,7 +159,7 @@ export const selectAffectedSpecs = ({ changes, graph, suite }) => {
     if (hasNoHits) unaffected.push({ path: file, reason: isModule ? 'no spec in the suite depends on it through a resolved import' : 'no module imports or names it' });
   }
   const hasLiveChange = changes.some((change) => change.status !== 'D');
-  if (hasLiveChange) selectOpenDependents(graph, select);
+  const widened = hasLiveChange ? selectOpenDependents(graph, select, reasons) : [];
   const specs = [...reasons.entries()].map(([spec, list]) => ({ path: spec, reasons: list })).sort((a, b) => a.path.localeCompare(b.path));
-  return { mode: 'affected', reason: null, specs, unaffected };
+  return { mode: 'affected', reason: null, specs, unaffected, ...(widened.length > 0 ? { widened } : {}) };
 };

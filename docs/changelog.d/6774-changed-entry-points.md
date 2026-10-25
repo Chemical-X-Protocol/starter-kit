@@ -1,0 +1,9 @@
+### `--changed` stops paying for computed imports (epic #6745, K9d #6774)
+
+A file that loads modules by a computed path (`import(modulePath)`) was treated as depending on every change, so its dependents rode along on every run: one comment appended to a leaf spec selected 155 specs and ran for 2m38s, 141 of them because `cli/hooks/run-hook.js` loads three hook modules by `lazyHook('./session-start.js', ...)`.
+
+- A file declared an entry point with `// chemx: open-ok` in its first 30 lines (also in a `/* */` or `<!-- -->` comment) or an `openImports` rule in `test-lanes.json` (`{ glob, why, loads? }`) no longer widens the run. It depends on the files its text names in quotes and on the directories its `loads` lists (`loads=./hooks` in a comment, root-relative paths in a rule), so a change to one of those still selects its dependents (#6774).
+- The report prints one line per widening, `widened by cli/x.js (computed import without open-ok): +N specs`, then how to fix it; JSON has `selection.widened` (`file`, `kind`, `why`, `specs`).
+- The kit declares its nine entry points in `test-lanes.json` (`run-hook.js`, the plugin launcher, seven specs that import a rendered temp file or a path built from a quoted name) and the one `<component :is>` in `src/ui` the index reads as an unresolved import. The same one-spec change now selects 9 specs (itself and the 8 meta specs) and runs in about 4 s (7.7 s with `--all`), instead of 155 specs in 159 s.
+- Fixed: a relative template in an `import()` or `require()` call whose static prefix ends in a slash (`import(`./hooks/${name}.js`)`) fanned out to nothing (`path.join` keeps the slash, the code added another). It now pins every file under `./hooks`. Template text after `from`, on a comment line or inside a string (a code generator's output) pins nothing.
+- Docs: `docs/test-lanes.md` ("Open files", the measurement), the `--changed` help line, the AGENTS.md test loop. Specs: `cli/test-open-ok.spec.js`.

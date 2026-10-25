@@ -15,6 +15,7 @@ const BUILTINS = new Set(builtinModules);
 const COMMENT_LINE = /^\s*(?:\/\/|\/\*|\*)/;
 const QUOTES = new Set(["'", '"', '`']);
 const OPEN_EXPR = '${';
+export const COMPUTED_LOAD = 'loads modules by a computed path';
 
 // True when `index` sits on a comment line, after // on its line, or inside a string literal
 // opened earlier on its line (template ${...} expressions count as code).
@@ -129,7 +130,7 @@ export const findOpenFiles = ({ root, texts, bare, index, indexNote }) => {
   const open = new Map();
   for (const [file, text] of texts) {
     const load = findComputedLoad(text);
-    if (load) open.set(file, `loads modules by a computed path: ${load}`);
+    if (load) open.set(file, `${COMPUTED_LOAD}: ${load}`);
   }
   const isExternal = externalSpecifierCheck(root);
   const unresolvedBy = index ? 'not resolved by the index' : `static scan only: ${indexNote}`;
