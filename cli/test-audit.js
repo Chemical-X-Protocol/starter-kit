@@ -17,6 +17,7 @@ import { formatTestReport, TEST_HELP } from './test-report.js';
 import { checkNodeModules } from './verify-helpers.js';
 import { formatAgentJson } from './agent-json.js';
 import { sharedRunField, queuedFields } from './job-line-text.js';
+import { withUnsplitHint } from './args-unsplit-hint.js';
 
 const TEST_ARGS = {
   booleans: { '--json': 'json', '--raw': 'raw', '--allow-empty': 'allowEmpty', '--changed': 'changed', '--related': 'related', '--all-packages': 'allPackages', '--all': 'all', '--slow': 'slow', '--profile': 'profile', '--slots': 'slots', '--help': 'help', '-h': 'help' },
@@ -177,7 +178,7 @@ export const runTestAudit = async (rawArgs = [], isCli = false, options = {}) =>
   const runDir = path.relative(cwd, plan.cwd) || '.';
   const hasMissingTargets = plan.missingTargets.length > 0;
   if (hasMissingTargets) {
-    const detail = `target(s) matched nothing: ${plan.missingTargets.join(', ')}`;
+    const detail = withUnsplitHint(`target(s) matched nothing: ${plan.missingTargets.join(', ')}`, plan.missingTargets, { exists: () => false });
     return emit(earlyReport(STATUS.INCONCLUSIVE, plan.command, { reason: REASONS.NO_TESTS_RAN, detail, runner: plan.runner, runDir, ...selectionField }), output);
   }
 

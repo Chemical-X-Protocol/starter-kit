@@ -72,3 +72,20 @@ test('check fails when any of several paths is missing', () => {
     assert.ok(payload.files.some((f) => /File not found: src\/missing\.ts/.test(f.error ?? '')));
   });
 });
+
+test('check names an unsplit shell variable when one argument joins several paths (#6773)', () => {
+  withProject({ 'src/a.ts': 'export const a = 1;\n', 'src/b.ts': 'export const b = 2;\n' }, (root) => {
+    const { status, payload } = runCheck(root, ['src/a.ts src/b.ts']);
+    assert.equal(status, 1);
+    assert.equal(payload.success, false);
+    assert.match(payload.error, /File not found: src\/a\.ts src\/b\.ts/);
+    assert.match(payload.error, /one argument contains spaces: did a zsh variable not split\? use an array or \$\{=var\}/);
+  });
+});
+
+test('check keeps the plain message for a missing path with no spaces (#6773)', () => {
+  withProject({ 'src/a.ts': 'export const a = 1;\n' }, (root) => {
+    const { payload } = runCheck(root, ['src/nope.ts']);
+    assert.equal(payload.error, 'File not found: src/nope.ts');
+  });
+});

@@ -29,7 +29,7 @@ chemx commit plugin/a.php -m "fix: a (#42)" --board=../app
 | Task id on none of the boards searched (every board is named) | `task #<id> was not found on` |
 | `--board` naming a path that does not exist or has no team db | `--board=<dir>:` |
 | `--skip-ci` and `--no-skip-ci` together | `give --skip-ci or --no-skip-ci, not both` |
-| A listed file that is neither tracked nor on disk, or outside the repository | `not tracked and not on disk`, `outside this repository` |
+| A listed file that is neither tracked nor on disk, or outside the repository (a name with spaces between words adds `one argument contains spaces: did a zsh variable not split? use an array or ${=var}`: zsh passes an unquoted `$files` as one argument) | `not tracked and not on disk`, `outside this repository` |
 | A listed file under another handle's live lease (holder and purpose named) | `leased by another handle` |
 | Nothing changed in the listed files | `nothing to commit` |
 

@@ -6,11 +6,11 @@ import { resolveIndexRoot } from './search-root.js';
 import { resolveSearchScope } from './search-scope-check.js';
 import { STATUS, toExitCode } from './result-status.js';
 import { looksLikeRegex } from './search-regex-guard.js';
-import { renderPlain, isListMode } from './search-literal-view.js';
+import { renderPlain, isListMode, describeScopePaths } from './search-literal-view.js';
 
-const describeScope = (res, root, scopeKey) => {
+const describeScope = (res, root, scopeDirs) => {
   const hiddenNote = res.skipped.hidden ? 'dot-directories searched; git-ignored paths skipped (--hidden includes them)' : 'git-ignored paths included';
-  return `searched ${res.filesSearched} files in ${scopeKey} under ${root} via ${res.engine}; ${hiddenNote}`;
+  return `searched ${res.filesSearched} files in ${describeScopePaths(scopeDirs)} under ${root} via ${res.engine}; ${hiddenNote}`;
 };
 
 const finish = (status, isCli) => {
@@ -73,13 +73,13 @@ const writeContextRows = (matches) => {
   }
 };
 
-const writeReport = (res, payload, { root, scopeKey, heading, hint }) => {
+const writeReport = (res, payload, { root, scopeDirs, heading, hint }) => {
   const plural = res.totalMatches === 1 ? '' : 'es';
   const counts = `${res.totalMatches} match${plural} in ${res.filesMatched} files`;
   const modeNote = `${payload.mode === 'regex' ? 'regex' : 'fixed string'}${payload.isCaseInsensitive ? ', ignore-case' : ''}`;
   const title = heading ? `${ANSI.BOLD}${ANSI.CYAN}${heading}${ANSI.RESET} ${ANSI.DIM}${counts}${ANSI.RESET}` : `${ANSI.BOLD}${ANSI.CYAN}Literal search${ANSI.RESET} "${payload.query}" ${ANSI.DIM}(${modeNote}): ${counts}${ANSI.RESET}`;
   process.stdout.write(`\n${title}\n`);
-  process.stdout.write(`  ${ANSI.DIM}${describeScope(res, root, scopeKey)}${ANSI.RESET}\n`);
+  process.stdout.write(`  ${ANSI.DIM}${describeScope(res, root, scopeDirs)}${ANSI.RESET}\n`);
   if (hint) process.stdout.write(`  ${ANSI.GOLD}${hint}${ANSI.RESET}\n`);
   writeContextRows(res.matches);
   const isTruncated = Boolean(res.truncated);
@@ -139,7 +139,7 @@ export const handleLiteralSearchCommand = (_db, query, {
     // stderr keeps stdout as bare records for pipes.
     writePlain(res, modes, limit, hint);
   } else {
-    writeReport(res, payload, { root, scopeKey: scope.scopeKey, heading, hint });
+    writeReport(res, payload, { root, scopeDirs: scope.scopeDirs, heading, hint });
   }
   finish(status, isCli);
   return payload;

@@ -36,6 +36,16 @@ const DEFAULT_MODE = { unit: 'matches', isList: false, records: (res) => context
 
 export const isListMode = (modes) => MODES.some((mode) => mode.isList && modes[mode.flag]);
 
+// The report header names the scoped paths; a shell-expanded glob can scope hundreds, so it lists a few and counts the rest.
+export const HEADER_PATH_CAP = 5;
+
+export const describeScopePaths = (scopeDirs, cap = HEADER_PATH_CAP) => {
+  const listed = scopeDirs.slice(0, cap).join(',');
+  const hiddenCount = scopeDirs.length - cap;
+  const hasHidden = hiddenCount > 0;
+  return hasHidden ? `${listed} (+${hiddenCount} more)` : listed;
+};
+
 // -> { lines, shown, total, unit }: shown of total is what the "showing N of M" notice quotes.
 export const renderPlain = (res, modes = {}, limit = Number.MAX_SAFE_INTEGER) => {
   const mode = MODES.find((candidate) => modes[candidate.flag]) || DEFAULT_MODE;

@@ -207,7 +207,8 @@ chemx read src/components/m-card.vue --start=10 --end=40
 # Repeat the block for several edits; they apply in order and all-or-nothing: a block that does not
 # match, or that the guards refuse (parse, a removed declaration, a missing import), fails the call,
 # is named ("Block 2 of 3") and writes nothing. Keep every edit to a file in one call. To edit text that
-# itself contains these markers, use 8 or more characters on all three marker lines.
+# itself contains these markers, use 8 or more characters on all three marker lines (a SEARCH holding a
+# conflict left by a botched rebase works with 7: the file decides which divider ends the SEARCH, longest match).
 chemx patch <file> [--dry-run] <<'PATCH'
 <<<<<<< SEARCH
 const total = items.length;
@@ -221,8 +222,8 @@ chemx patch <file> --target="oldCode" --replacement="newCode"
 # Removing a top-level declaration (renames included) is refused unless named
 chemx patch <file> --target="oldName" --replacement="newName" --allow-remove=oldName
 
-# write creates files; replacing an existing one needs --overwrite. Unknown flags refuse.
-chemx write <file> - [--overwrite] [--dry-run] <<'EOF'
+# write creates files (replacing one needs --overwrite; unknown flags refuse). Piped stdin is the content; `-` is optional.
+chemx write <file> [--overwrite] [--dry-run] <<'EOF'
 export const a = 1;
 EOF
 chemx write <file> --content="export const a = 1;" [--overwrite] [--dry-run]

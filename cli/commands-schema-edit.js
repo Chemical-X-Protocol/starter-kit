@@ -34,11 +34,11 @@ export const EDIT_COMMANDS = [
     aliases: [],
     group: 'edit',
     brief: 'Write a whole file, then re-index it',
-    usage: "chemx write <file> - [options] <<'EOF' (content on stdin)",
+    usage: "chemx write <file> [options] <<'EOF' (content on stdin)",
     summary: 'Write a file, then re-index and audit it.',
-    description: 'Creates (or with --overwrite replaces) one file inside the project root.',
+    description: 'Creates (or with --overwrite replaces) one file inside the project root. With no --content, --content-file or --stdin, a piped or redirected stdin is the content; an empty pipe is refused.',
     flags: [
-      { flag: '-, --stdin', desc: 'Read the whole content from stdin (heredoc)' },
+      { flag: '-, --stdin', desc: 'Read the whole content from stdin (heredoc); optional when no content argument is given' },
       { flag: '--content="<text>"', desc: 'File content to write' },
       { flag: '--content-file=<path>', desc: 'Read the file content from a file' },
       { flag: '--allow-remove=<a,b>', desc: 'Top-level declarations an overwrite may remove' },
@@ -47,7 +47,7 @@ export const EDIT_COMMANDS = [
       { flag: '--append', desc: 'Add the content to the end of the file (created if missing), with the same parse check, audit, index sync and lock checks; refused with --overwrite; no newline is inserted for you' },
       { flag: '--json', desc: 'Output result as minified JSON' }
     ],
-    examples: ["chemx write src/keep.ts - <<'EOF'\nexport const keep = true;\nEOF", 'chemx write src/keep.ts --content="export const keep = true;\\n"']
+    examples: ["chemx write src/keep.ts <<'EOF'\nexport const keep = true;\nEOF", 'chemx write src/keep.ts --content="export const keep = true;\\n"']
   },
   {
     name: 'add',

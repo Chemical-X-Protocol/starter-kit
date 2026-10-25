@@ -10,6 +10,11 @@
  * Blocks apply in order to one in-memory copy; any failure throws before anything is written,
  * so a multi-block patch is all-or-nothing. CRLF input is read as LF (replaceLiteral re-applies
  * CRLF on CRLF files). An empty REPLACE deletes the SEARCH lines including their newline.
+ *
+ * Conflict markers (#6773): a block may hold more than one divider line (SEARCH text from a botched
+ * merge has its own divider). The first divider is the default split; every divider is kept as an
+ * alternative, and when the block is applied the file decides: the split whose SEARCH text occurs in
+ * it, the longest one first. A block with one divider is exactly { search, replace }.
  */
 import { replaceLiteral } from './literal-replace.js';
 
@@ -39,9 +44,20 @@ const nextOpen = (lines, from) => {
   return null;
 };
 
+const splitAt = (lines, open, divider, close) => ({ search: lines.slice(open + 1, divider).join('\n'), replace: lines.slice(divider + 1, close).join('\n') });
+
+// Every divider line between the first one and the close marker is another place the SEARCH text may end.
+const blockFrom = (lines, { open, mid, close, midMarker }) => {
+  const extra = lines.slice(mid + 1, close).flatMap((line, i) => (line.trimEnd() === midMarker ? [mid + 1 + i] : []));
+  const dividers = [mid, ...extra];
+  const hasConflictDividers = dividers.length > 1;
+  const first = splitAt(lines, open, mid, close);
+  return hasConflictDividers ? { ...first, alternatives: dividers.map((divider) => splitAt(lines, open, divider, close)) } : first;
+};
+
 /**
  * @param {string} text Raw stdin text.
- * @returns {{ search: string, replace: string }[]}
+ * @returns {{ search: string, replace: string, alternatives?: { search: string, replace: string }[] }[]}
  */
 export const parseSearchReplaceBlocks = (text) => {
   const lines = String(text ?? '').split(/\r?\n/);
@@ -57,7 +73,7 @@ export const parseSearchReplaceBlocks = (text) => {
     const close = nextMarker(lines, mid + 1, closeMarker);
     const isMissingClose = close === -1;
     if (isMissingClose) throw new Error(`Block ${n}: no "${closeMarker}" after the divider (input line ${mid + 1}); ${FORMAT_HINT}.`);
-    blocks.push({ search: lines.slice(open.index + 1, mid).join('\n'), replace: lines.slice(mid + 1, close).join('\n') });
+    blocks.push(blockFrom(lines, { open: open.index, mid, close, midMarker }));
     open = nextOpen(lines, close + 1);
   }
   const hasNoBlocks = blocks.length === 0;
@@ -89,10 +105,20 @@ export const closestLine = (content, search) => {
   return best ? { line: best.line, text: best.text } : null;
 };
 
+const occursIn = (content, search) => content.includes(search) || content.replace(/\r\n/g, '\n').includes(search);
+
+// The split a file really contains: the longest non-empty SEARCH that occurs in it, else the default (first) split.
+const chooseSplit = (content, block) => {
+  const found = (block.alternatives ?? []).filter((split) => split.search.trim() !== '' && occursIn(content, split.search));
+  const longest = found.reduce((best, split) => (best && best.search.length >= split.search.length ? best : split), null);
+  return longest ?? block;
+};
+
 const applyOne = (content, block, options) => {
-  const isDeletion = block.replace === '' && content.includes(`${block.search}\n`);
-  const search = isDeletion ? `${block.search}\n` : block.search;
-  return replaceLiteral(content, search, block.replace, options);
+  const chosen = chooseSplit(content, block);
+  const isDeletion = chosen.replace === '' && content.includes(`${chosen.search}\n`);
+  const search = isDeletion ? `${chosen.search}\n` : chosen.search;
+  return replaceLiteral(content, search, chosen.replace, options);
 };
 
 /**
