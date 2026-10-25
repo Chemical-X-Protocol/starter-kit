@@ -98,7 +98,7 @@ const peersFor = (plan, task) => fillTemplate(PEERS, {
 const scratchDirFor = (plan, handle) => `${plan.scratchDir}${handle}/`;
 
 const WAITING_SCRATCH = (scratchDir) => [
-  'WAITING: to wait for a task, a lock or a verify run, use chemx wait --task=<id> | --lock-free=<file> | --verify-idle --timeout=<t>; check state with chemx status. Do not use Monitor, sleep, until or setTimeout loops.',
+  'WAITING: to wait for a task, a lock, a verify run, a background job or a peer\'s post, use chemx wait --task=<id> | --lock-free=<file> | --verify-idle | --job=<pid> | --post-matching=<text> [--from=@<handle>] with --timeout=<t>; check state with chemx status. Do not use Monitor, sleep, until or setTimeout loops.',
   `SCRATCH: put temporary files only under ${scratchDir} (never the user's home or tracked repo paths) and delete them when done. This is a policy, not enforced by chemx.`
 ].join('\n');
 
