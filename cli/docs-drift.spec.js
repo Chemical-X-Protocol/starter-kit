@@ -14,7 +14,7 @@ const read = (rel) => fs.readFileSync(path.join(KIT_ROOT, rel), 'utf8');
 const GUIDANCE_FILES = [
   'README.md', 'AGENTS.md', 'STANDARDS.md', 'llms.txt', 'CLAUDE.md', '.cursorrules', '.github/copilot-instructions.md',
   'cli/commands-schema-search.js', 'cli/commands-schema-edit.js', 'cli/commands-schema-verify.js',
-  'cli/commands-schema-wrappers.js', 'cli/commands-schema-ops.js',
+  'cli/commands-schema-wrappers.js', 'cli/commands-schema-ops.js', 'cli/commands-schema-team.js',
   'cli/help.js', 'cli/host-shims.js', 'cli/generator-help.js', 'cli/generator.js',
   'cli/navigator-guide.js', 'cli/navigator-conversion.js', 'cli/tesseract-manifesto.js', 'cli/lattice-directives.js',
   'cli/commands/cmd-wrappers.js', 'cli/commands/cmd-wrappers-git.js', 'cli/commands/cmd-wrappers-files.js',

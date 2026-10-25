@@ -1,4 +1,6 @@
-// Command schema entries for the agents group (the setup group lives in commands-schema-setup.js). Assembled in commands-schema.js.
+// Command schema entries for the agents and setup groups. Assembled in commands-schema.js.
+import { TEAM_COMMANDS } from './commands-schema-team.js';
+
 export const OPS_COMMANDS = [
   {
     name: 'mcp',
@@ -30,52 +32,7 @@ export const OPS_COMMANDS = [
     ],
     examples: ['chemx install-mcp']
   },
-  {
-    name: 'team',
-    aliases: ['swarm', 'feed', 'tokens', 'telemetry', 'benchmark', 'ablation', 'memory', 'task'],
-    group: 'agents',
-    brief: 'Tasks, file locks, DMs and feed',
-    usage: 'chemx team <status|task|brief|lock|unlock|feed|post|inbox|dm|tokens|benchmark> [options]',
-    summary: 'Multi-agent coordination layer backed by SQLite (.chemx/index.db).',
-    description: 'Task queues, status transitions, AST verification on completion and file locks. `tokens` and `benchmark` are team subcommands. `chemx task <action>` is the same as `chemx team task <action>`; run `chemx team task --help` (or `chemx task show --help`) for task detail. `chemx team brief <id>` stores or prints a task\'s long brief. An option with a value takes it after a space or an equals sign (`--prio 2`, `--prio=2`).',
-    flags: [
-      { flag: '--as=<@handle>', desc: 'Agent identity handle (e.g. @claude)' },
-      { flag: '--target=<path>', desc: 'Target file path for task AST verification' },
-      { flag: '--no-target-confirm', desc: 'Complete a task that has no target file without verification' },
-      { flag: '--force, -f', desc: 'Force complete task even if hazards remain' },
-      { flag: '--tokens=<N>', desc: 'Prompt tokens consumed by task' },
-      { flag: '--cost=<USD>', desc: 'Estimated dollar cost for task' },
-      { flag: '--epic=<id>', desc: 'tokens: tokens, cost and wall time over an epic\'s children, recursively (see docs/team-tokens.md)' },
-      { flag: '--from=<@handle|file>', desc: 'feed: only events authored by this handle; task add: a .json/.yaml file of task rows (--from=- reads stdin)' },
-      { flag: '--dry-run', desc: 'task add --from: check the file and print what would be added, write nothing' },
-      { flag: '--kind=<task|decision|epic>', desc: 'task add: the kind of task (default task); decision and epic finish without a target file' },
-      { flag: '--search=<text>', desc: 'task list: tasks whose title or description contains the text (any case, every status)' },
-      { flag: '--titles', desc: 'task list: one line per task, id, status and title only' },
-      { flag: '--file=<path>', desc: 'brief: store the file as the task\'s brief' },
-      { flag: '--stdin', desc: 'brief: store standard input as the task\'s brief' },
-      { flag: '--clear', desc: 'brief: remove the task\'s brief' },
-      { flag: '--type=<lock|status|post|task>', desc: 'feed: an event-type group (or an exact event type, comma-separated)' },
-      { flag: '--since=<id>', desc: 'feed: only events after this event id' },
-      { flag: '--full', desc: 'feed: whole messages (default: the newest 20, one line each); task show: also the brief' },
-      { flag: '--brief', desc: 'task show: header facts and only the comments after the description' },
-      { flag: '--mine', desc: 'status: only your open tasks, leases and own events' },
-      { flag: '--blockers', desc: 'status: also list the blocked tasks' },
-      { flag: '--json', desc: 'Output data as JSON' }
-    ],
-    examples: [
-      'chemx team task list',
-      'chemx team task add "Implement dark mode toggle" --prio=1',
-      'chemx team task claim 1 --as=@coder',
-      'chemx team task show 12 --brief',
-      'chemx task add --from tasks.yaml --dry-run',
-      'chemx task list --search "test runner" --titles',
-      'chemx team brief 12 --file design.md',
-      'chemx team lock src/a.js src/b.js --as=@coder',
-      'chemx team task done 1 --as=@coder',
-      'chemx team feed --from=@coder --type=lock',
-      'chemx team status --mine'
-    ]
-  },
+  ...TEAM_COMMANDS,
   {
     name: 'run',
     aliases: [],
@@ -97,5 +54,64 @@ export const OPS_COMMANDS = [
     description: 'Starts and tracks a goal-driven project session in the index.',
     flags: [{ flag: '--json', desc: 'Output as JSON' }],
     examples: ['chemx project init "ship dark mode"', 'chemx project status']
+  },
+  {
+    name: 'init',
+    aliases: [],
+    group: 'setup',
+    brief: 'Unpack blueprints into an existing codebase',
+    usage: 'chemx init [directory] [options]',
+    summary: 'Unpack blueprints and molecular architecture drop-in files into an existing codebase.',
+    description: 'Installs blueprints, domain hooks and foundation capsules (default: src/chemical-x).',
+    flags: [
+      { flag: '--license=<key>', desc: 'Commercial license key for enterprise starter kit assets' },
+      { flag: '--yes, -y', desc: 'Skip interactive prompts' },
+      { flag: '--headless', desc: 'Headless mode for CI and agents' },
+      { flag: '--ci', desc: 'Same as --headless' },
+      { flag: '--non-interactive', desc: 'Same as --headless' },
+      { flag: '--no-interactive', desc: 'Same as --headless' },
+      { flag: '--framework=<id>', desc: 'Framework flavor: react, vue, svelte' },
+      { flag: '--install', desc: 'Install dependencies after unpacking' }
+    ],
+    examples: ['chemx init', 'chemx init src/chemical-x']
+  },
+  {
+    name: 'create',
+    aliases: ['scaffold'],
+    group: 'setup',
+    brief: 'Scaffold a complete new app',
+    usage: 'npm create chemx [directory] [options]',
+    summary: 'Scaffold a complete new Chemical X application.',
+    description: 'Also available as `chemx create [directory]`.',
+    flags: [
+      { flag: '--framework=<id>', desc: 'Framework flavor: react (default), vue, svelte' },
+      { flag: '--yes, -y', desc: 'Skip interactive prompts' },
+      { flag: '--install', desc: 'Install dependencies after scaffolding' },
+      { flag: '--headless', desc: 'Headless mode for CI and agents' },
+      { flag: '--ci', desc: 'Same as --headless' },
+      { flag: '--non-interactive', desc: 'Same as --headless' },
+      { flag: '--no-interactive', desc: 'Same as --headless' },
+      { flag: '--preset=<name>', desc: 'Apply a named preset' }
+    ],
+    examples: ['npm create chemx my-app --framework=react', 'chemx create my-app --framework=svelte --install']
+  },
+  {
+    name: 'pillars',
+    aliases: ['config:pillars', 'rules'],
+    group: 'setup',
+    brief: 'Configure architecture pillars and shims',
+    usage: 'chemx pillars [options]',
+    summary: 'Configure architectural pillars and agent steering shims.',
+    description: 'Writes host shims (CLAUDE.md, .cursorrules, llms.txt) that point at AGENTS.md. Seeds AGENTS.md if absent; otherwise leaves it alone. With --protocol or --protocol-only it also writes coordination-protocol rules for hosts without Claude Code hooks: GEMINI.md, .agent/rules/chemx-protocol.md, and a marked block in AGENTS.md and .cursorrules. Those hosts are told the steps; nothing blocks them if they ignore them.',
+    flags: [
+      { flag: '--yes, -y', desc: 'Skip prompts' },
+      { flag: '--force', desc: 'Overwrite hand-authored files (a backup is written first)' },
+      { flag: '--preset=<recommended|strict|minimal|none>', desc: 'Apply a predefined pillar preset' },
+      { flag: '--write', desc: 'Write the files (default is a dry run)' },
+      { flag: '--protocol', desc: 'Also write the coordination protocol files, between chemx:protocol markers in AGENTS.md and .cursorrules' },
+      { flag: '--protocol-only', desc: 'Write only the protocol files; config, CLAUDE.md and llms.txt are not touched' },
+      { flag: '--json', desc: 'Output configuration as JSON' }
+    ],
+    examples: ['chemx pillars', 'chemx pillars --preset=recommended --write', 'chemx pillars --protocol-only --write']
   }
 ];

@@ -3,6 +3,13 @@ import { describeCreationNote } from './task-brief-view.js';
 import { clipText } from './team-feed-view.js';
 import { kindTag } from './task-kind.js';
 import { formatClaimLine } from './task-claim-age.js';
+import { END_OF_CARD, sectionTitle } from './help/shared.js';
+import { teamCardHead, teamCardGlobalOptions } from './help/team-card.js';
+import { TEAM_CARD_ROWS } from './help/card-rows.js';
+import { taskCardHead } from './help/task.js';
+import { taskCardActions } from './help/task-actions.js';
+import { taskCardOptions } from './help/task-options.js';
+import { lockCardHead, lockCardActions, lockCardNotes, lockCardOptions } from './help/lock.js';
 
 // The caller's own slice of the board (team status --mine): open tasks and live leases.
 const formatMineLines = (mine) => {
@@ -218,151 +225,38 @@ export const formatTaskDetailCard = (task, events = [], dependencyStates = [], r
   lines.push(`\x1b[90m${'─'.repeat(58)}\x1b[0m\n`);
   return lines.join('\n');
 };
+/** `chemx team --help`: each subcommand's rows come from its module in ./help/ (see card-rows.js). */
+export const formatTeamHelpCard = () => [
+  ...teamCardHead,
+  sectionTitle('Commands'),
+  ...TEAM_CARD_ROWS,
+  '',
+  sectionTitle('Global Options'),
+  ...teamCardGlobalOptions,
+  END_OF_CARD
+].join('\n');
 
-export const formatTeamHelpCard = () => {
-  const lines = [
-    '',
-    '\x1b[1m\x1b[36m⚡ [Chemical X] Multi-Agent Swarm Orchestration (team)\x1b[0m',
-    `\x1b[90m${'─'.repeat(58)}\x1b[0m`,
-    '  \x1b[1mUsage:\x1b[0m chemx team <command> [options]',
-    '',
-    '  \x1b[1mCommands:\x1b[0m',
-    '    \x1b[32mstatus\x1b[0m [--mine] [--blockers]  Swarm card: --mine shows your tasks and leases, --blockers lists blocked tasks',
-    '    \x1b[32mtask\x1b[0m [action]            Manage agent tasks (list, show, add, claim, done, update); also spelled: chemx task <action>',
-    '    \x1b[32mbrief\x1b[0m <taskId>            Print, set (--file <path> | --stdin) or clear (--clear) the long brief of a task',
-    '    \x1b[32mlock\x1b[0m [acquire|release]   Acquire or release mutual exclusion file locks (several paths per call)',
-    '    \x1b[32munlock\x1b[0m <file>...         Release file locks held by an agent',
-    '    \x1b[32mfeed\x1b[0m [filters]            Newest 20 events, one line each (messages cut at 120 chars)',
-    '                                 --from=@h --type=lock|status|post|task --since=<id> --limit=<n> --oneline --full',
-    '    \x1b[32mpost\x1b[0m <message>           Post broadcast message to swarm feed',
-    '    \x1b[32minbox\x1b[0m [@agent]           View agent mailbox and notifications',
-    '    \x1b[32mdm\x1b[0m <@agent> <msg>        Send direct message to another agent',
-    '    \x1b[32mtokens\x1b[0m [--epic <id>]     Inspect token consumption and telemetry breakdown; --epic rolls up one epic\'s children',
-    '    \x1b[32mroute\x1b[0m <ids...>          Show the model and effort chemx routes for each stage of tasks',
-    '    \x1b[32mtriage\x1b[0m                   Generate tasks automatically from AST audit hazards',
-    '    \x1b[32mbenchmark\x1b[0m                Run memory and token reduction ablation benchmark',
-    '    \x1b[32mtrain\x1b[0m                    Train/evaluate vector and pattern indices',
-    '',
-    '  \x1b[1mGlobal Options:\x1b[0m',
-    '    \x1b[33m--as\x1b[0m <@agent>            Execute action as specified agent handle',
-    '    \x1b[33m--json\x1b[0m                   Output machine-readable JSON format',
-    '    \x1b[33m--help, -h\x1b[0m               Show help for team or specific subcommands',
-    `\x1b[90m${'─'.repeat(58)}\x1b[0m\n`
-  ];
-  return lines.join('\n');
-};
+/** `chemx team task --help`: the head, Actions and Options rows are in ./help/task.js, task-actions.js and task-options.js. */
+export const formatTaskHelpCard = () => [
+  ...taskCardHead,
+  sectionTitle('Actions'),
+  ...taskCardActions,
+  '',
+  sectionTitle('Options'),
+  ...taskCardOptions,
+  END_OF_CARD
+].join('\n');
 
-export const formatTaskHelpCard = () => {
-  const lines = [
-    '',
-    '\x1b[1m\x1b[36m⚡ [Chemical X] Task Coordination Commands (team task)\x1b[0m',
-    `\x1b[90m${'─'.repeat(58)}\x1b[0m`,
-    '  \x1b[1mUsage:\x1b[0m chemx team task <action> [arguments] [options]      (chemx task <action> is the same)',
-    '',
-    '  \x1b[1mActions:\x1b[0m',
-    '    \x1b[32mlist\x1b[0m                         List open tasks, newest 20 (default action); --search <text> looks in title and description, --titles prints one bare line per task',
-    '    \x1b[32mshow\x1b[0m <taskId> [--brief]     Display full details and activity stream for a task (creation event on one line); --full also prints the long brief',
-    '    \x1b[32madd\x1b[0m "<title>"                Create a new task in the queue; prints "#<id> added: <title>"',
-    '    \x1b[32madd\x1b[0m --from <file.json|yaml>  Create many tasks in one transaction from a file of rows (ref, title, needs, prio, kind, parent, parent_ref, deps, desc, brief, brief_file); one "#<id> added" line per row and a refs line; --dry-run checks only',
-    '    \x1b[32mbrief\x1b[0m <taskId>               Print the long brief; with --file <path>, --stdin or --clear it sets or removes it (also: chemx team brief <id>)',
-    '    \x1b[32mclaim\x1b[0m <taskId>              Claim an unassigned task for an agent',
-    '    \x1b[32mhandoff\x1b[0m <taskId> <@to>      Pass a task to another agent (assignee or creator only); --with-locks also moves your live leases naming the task',
-    '    \x1b[32mdone\x1b[0m <taskId>               Complete a task with automatic verification audit',
-    '    \x1b[32mclose\x1b[0m <taskId>              End a task that will not be completed: --duplicate-of=<id> or --cancel=<reason>',
-    '    \x1b[32mupdate\x1b[0m <taskId> [status]    Update task status: queued, in_progress, review, blocked, done or cancelled (anything else is refused)',
-    '    \x1b[32mcomment\x1b[0m <taskId> <msg>       Post a comment or status update; prints "#<id>: comment N posted" (N = feed event id)',
-    '    \x1b[32mtriage\x1b[0m                    Generate tasks from AST architectural hazards',
-    '    \x1b[32mreconcile\x1b[0m                 Auto-resolve tasks whose hazards have been fixed',
-    '    \x1b[32mset-target\x1b[0m <id> <path>     Assign target file path to a task',
-    '    \x1b[32mset-files\x1b[0m <id> [<file...>] Set extra files for a task (no files clears the list)',
-    '    \x1b[32mvds-slot\x1b[0m <id> <moscow> <p> Set MoSCoW slot and priority on a task',
-    '    \x1b[32mtrace\x1b[0m <id> <url>            Attach provenance trace URL to a task',
-    '',
-    '  \x1b[1mOptions:\x1b[0m',
-    '    \x1b[90mAn option with a value takes it after a space or an equals sign: --prio 2 or --prio=2 (a value starting with - needs the = form)\x1b[0m',
-    '    \x1b[33m--as\x1b[0m <@agent>            Agent handle (e.g. @agent-1)',
-    '    \x1b[33m--status\x1b[0m <status>        Filter by status (queued, in_progress, review, blocked, done)',
-    '    \x1b[33m--brief\x1b[0m                  show: title, status, tier, assignee, deps, parent and only the comments after the description',
-    '    \x1b[33m--full\x1b[0m                   show: also the long brief (the card prints only its length)',
-    '    \x1b[33m--search\x1b[0m <text>          list: tasks whose title or description contains the text (any case; every status unless --status)',
-    '    \x1b[33m--titles\x1b[0m                 list: one line per task, "#id [status] title"',
-    '    \x1b[33m--kind\x1b[0m <kind>            add: task (default), decision or epic; a decision or epic completes without a target and shows as [decision] / [epic] after the id',
-    '    \x1b[33m--from\x1b[0m <file>            add: file of task rows (.json, .yaml/.yml; --from=- reads stdin); nothing is written if any row is wrong',
-    '    \x1b[33m--dry-run\x1b[0m                add --from: check the file and print what would be added',
-    '    \x1b[33m--file\x1b[0m <path>            brief: store this file as the task\'s brief (--stdin: standard input; --clear: remove it)',
-    '    \x1b[33m--all\x1b[0m                    List every status with no row cap',
-    '    \x1b[33m--limit\x1b[0m <n>             Rows to show (default 20)',
-    '    \x1b[33m--agent\x1b[0m <@agent>         Filter tasks assigned to agent',
-    '    \x1b[33m--prio\x1b[0m <1-5>             Task priority filter or setting',
-    '    \x1b[33m--needs\x1b[0m <tier>           Capability tier the task needs: light, standard, deep (add sets it, list filters)',
-    '    \x1b[33m--parent\x1b[0m <id>            add: make the new task a child of this task',
-    '    \x1b[33m--desc\x1b[0m <text>            add: description for the new task',
-    '    \x1b[33m--deps\x1b[0m <ids>             add: comma-separated task ids the new task depends on',
-    '    \x1b[33m--add-dep\x1b[0m <ids>          update: add dependencies (ids, comma-separated)',
-    '    \x1b[33m--rm-dep\x1b[0m <ids>           update: remove dependencies (ids, comma-separated)',
-    '    \x1b[33m--ignore-deps\x1b[0m            claim: claim even if dependencies are unfinished',
-    '    \x1b[33m--reason\x1b[0m <text>          update blocked: why the task is blocked',
-    '    \x1b[33m--sprint\x1b[0m <name>          Sprint label on add or filter',
-    '    \x1b[33m--moscow\x1b[0m <slot>          MoSCoW slot (must, should, could, wont)',
-    '    \x1b[33m--title\x1b[0m <text>           Title (alternative to the positional title)',
-    '    \x1b[33m--priority\x1b[0m <1-5>         Alias of --prio',
-    '    \x1b[33m--description\x1b[0m <text>     Alias of --desc',
-    '    \x1b[33m--repo\x1b[0m <path>            list: show tasks of this repo (default: your repo)',
-    '    \x1b[33m--all-repos\x1b[0m              list: show tasks of every repo',
-    '    \x1b[33m--board\x1b[0m <dir>            Use the board of that directory (also: show <dir>#<id>); it must have a team db',
-    '    \x1b[33m--duplicate-of\x1b[0m <id>      close: the task this one duplicates',
-    '    \x1b[33m--cancel\x1b[0m <reason>        close: cancel the task with a reason',
-    '    \x1b[33m--target\x1b[0m <path>          done: file whose hazards gate completion (set-target stores it)',
-    '    \x1b[33m--no-target-confirm\x1b[0m      done: skip the target confirmation prompt',
-    '    \x1b[33m--new\x1b[0m                    lock acquire: lease a file that does not exist yet',
-    '    \x1b[33m--force, -f\x1b[0m              Force complete task even with remaining hazards',
-    '    \x1b[33m--json\x1b[0m                   Output machine-readable JSON format',
-    '    \x1b[33m--help, -h\x1b[0m               Show this help message',
-    `\x1b[90m${'─'.repeat(58)}\x1b[0m\n`
-  ];
-  return lines.join('\n');
-};
-
-export const formatLockHelpCard = () => {
-  const lines = [
-    '',
-    '\x1b[1m\x1b[36m⚡ [Chemical X] Mutual Exclusion File Locking (team lock)\x1b[0m',
-    `\x1b[90m${'─'.repeat(58)}\x1b[0m`,
-    '  \x1b[1mUsage:\x1b[0m chemx team lock [acquire] <filePath>... [options]      (several paths, one line each)',
-    '         chemx team lock release <filePath>... | chemx team unlock <filePath>...',
-    '         chemx team lock renew|check|status <filePath> [options]',
-    '         chemx team lock list | check-staged [files...]',
-    '',
-    '  \x1b[1mActions:\x1b[0m',
-    '    \x1b[32macquire\x1b[0m <path>...           Acquire a lease for 5 minutes (or enqueue in FIFO); one line per path:',
-    '                                 granted until HH:MM | queued behind @x | refused: reason',
-    '    \x1b[32mrelease\x1b[0m <path>...           Release the lease and promote the next FIFO waiter;',
-    '                                 if it lapsed, says when and who holds the file now',
-    '    \x1b[32mrenew\x1b[0m <path>                Extend your own live lease to 5 minutes from now',
-    '    \x1b[32mcheck\x1b[0m <path>                Would an edit be refused? exit 0 clear, 2 locked',
-    '    \x1b[32mstatus\x1b[0m <path> | \x1b[32mlist\x1b[0m        Show one lease and its waiters, or every live lease',
-    '    \x1b[32mcheck-staged\x1b[0m [files]        Pre-commit guard: exit 1 if a staged file is under another',
-    '                                 handle\'s live lease (default: the files in git diff --cached)',
-    '',
-    '  \x1b[1mPaths:\x1b[0m relative to the current directory, or absolute; a path anywhere below the board root',
-    '  works from any directory under it (a sibling repo, a submodule). One argument per path: a quoted',
-    '  "a.js b.js" is refused. Outside the root, or the root itself, is refused (exit 1 on any refusal).',
-    '',
-    '  \x1b[1mLeases:\x1b[0m any chemx command run as the holder (--as, CHEMX_AGENT_ID or session) extends',
-    '  all of the holder\'s live leases to 5 minutes from then; test, verify, typecheck, build and',
-    '  audit keep extending every 2.5 minutes while they run. A lease with no chemx activity',
-    '  lapses and the file is free. Details: docs/team-locks.md',
-    '',
-    '  \x1b[1mOptions:\x1b[0m',
-    '    \x1b[33m--as\x1b[0m <@agent>            Agent handle (default: CHEMX_AGENT_ID, then the session handle)',
-    '    \x1b[33m--root\x1b[0m <dir>             Run as if from <dir>: relative paths and the board come from it',
-    '    \x1b[33m--purpose\x1b[0m "<reason>"      Reason or intent for acquiring lock',
-    '    \x1b[33m--new\x1b[0m                    acquire: lease a file that does not exist yet',
-    '    \x1b[33m--priority\x1b[0m <1-5>         Priority in FIFO wait queue (1 = highest, default: 2)',
-    '    \x1b[33m--pid\x1b[0m <pid>              Optional process PID for crash-recovery lease reclamation',
-    '    \x1b[33m--json\x1b[0m                   Output machine-readable JSON format',
-    '    \x1b[33m--help, -h\x1b[0m               Show this help message',
-    `\x1b[90m${'─'.repeat(58)}\x1b[0m\n`
-  ];
-  return lines.join('\n');
-};
+/** `chemx team lock --help`: every piece is in ./help/lock.js. */
+export const formatLockHelpCard = () => [
+  ...lockCardHead,
+  '',
+  sectionTitle('Actions'),
+  ...lockCardActions,
+  '',
+  ...lockCardNotes,
+  '',
+  sectionTitle('Options'),
+  ...lockCardOptions,
+  END_OF_CARD
+].join('\n');

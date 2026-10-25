@@ -7,13 +7,14 @@ export const WRAPPER_COMMANDS = [
     brief: 'git diff, summarized when long',
     usage: 'chemx d [git diff args] [options]',
     summary: 'Zero-context git diff (-U0) that collapses to --stat past 80 lines.',
-    description: 'Runs git diff -U0 --no-color. Micro-syncs dirty files to an existing .chemx/index.db.',
+    description: 'Runs git diff -U0 --no-color. Micro-syncs dirty files to an existing .chemx/index.db. Every other git diff argument passes through, so revisions and paths work: chemx d --stat A B -- <paths>. --root=<dir> diffs another repo or worktree (what git -C <dir> diff does).',
     flags: [
       { flag: '--stat', desc: 'Show the diff stat only' },
+      { flag: '--name-only', desc: 'The changed file names only (also --name-status); a summary format, never collapsed or given -U0' },
       { flag: '--full', desc: 'Never collapse to --stat' },
       { flag: '--conflicts', desc: 'Combined diff of unmerged files only (works mid-merge, even of chemx itself)' }
     ],
-    examples: ['chemx d', 'chemx d --stat', 'chemx d HEAD~1 --full', 'chemx d --conflicts']
+    examples: ['chemx d', 'chemx d --stat', 'chemx d --name-only HEAD~1', 'chemx d --stat origin/main HEAD -- cli', 'chemx d --root ../worktree --name-only', 'chemx d HEAD~1 --full', 'chemx d --conflicts']
   },
   {
     name: 'show',
@@ -78,11 +79,11 @@ export const WRAPPER_COMMANDS = [
     aliases: [],
     group: 'wrappers',
     brief: 'git log --oneline',
-    usage: 'chemx log [options]',
+    usage: 'chemx log [-n N] [git log args]',
     summary: 'Compact single-line git commit history.',
-    description: 'Runs git log --oneline with a commit limit.',
+    description: 'Runs git log --oneline with a commit limit. Every other git log argument passes through: a revision range (A..B, A...B), paths after --, --author, --grep. A range still stops at the limit, so raise -n for a long one. --root=<dir> logs another repo or worktree (what git -C <dir> log does).',
     flags: [{ flag: '-n <N>', desc: 'Number of commits to show (default: 10)' }],
-    examples: ['chemx log', 'chemx log -n 5']
+    examples: ['chemx log', 'chemx log -n 5', 'chemx log -n 50 origin/main..HEAD', 'chemx log --root ../worktree -n 3']
   },
   {
     name: 'pkg',
