@@ -127,6 +127,18 @@ export const describeSelection = (selection) => {
   return `Affected specs: ${selection.specs.length} of ${selection.suiteSize ?? '?'} for ${changedCount} changed file(s)${graph}${unpinnedNote}${metaNote}${depthNote}${deferredNote}`;
 };
 
+const WIDENING_LABELS = { 'computed-import': 'computed import without open-ok', 'unresolved-import': 'unresolved import without open-ok' };
+const WIDENING_FIX = 'fix: declare a real entry point with "// chemx: open-ok" in its first 30 lines or an openImports rule in test-lanes.json (docs/test-lanes.md)';
+
+// One line per file that widened a --changed run (an open file not declared open-ok), then how to fix it.
+export const describeWidenings = (selection) => {
+  const widened = selection?.widened || [];
+  const hasWidenings = widened.length > 0;
+  if (!hasWidenings) return [];
+  const lines = widened.map((entry) => `widened by ${entry.file} (${WIDENING_LABELS[entry.kind] || entry.kind}): +${plural(entry.specs, 'spec')}`);
+  return [...lines, WIDENING_FIX];
+};
+
 // One line when specs that need ripgrep were skipped because rg is not on PATH.
 export const describeRipgrepSkips = (count) => (count > 0 ? `ripgrep is not on PATH: ${plural(count, 'ripgrep-engine spec')} skipped, so the rg search engine went untested here` : null);
 
@@ -139,7 +151,7 @@ export const describeBase = (selection) => {
 export const formatTestReport = (report) => {
   const isProfile = Boolean(report.profile);
   if (isProfile) return formatProfile(report.profile, report.top);
-  const dimLines = [describeBase(report.selection), describeSelection(report.selection)].filter(Boolean);
+  const dimLines = [describeBase(report.selection), describeSelection(report.selection), ...describeWidenings(report.selection)].filter(Boolean);
   const out = dimLines.map((line) => `  ${ANSI.DIM}${line}${ANSI.RESET}`);
   out.push(`  ${formatTestHeadline(report)}`);
   const rgNote = describeRipgrepSkips(report.skippedRipgrep);

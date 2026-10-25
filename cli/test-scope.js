@@ -46,10 +46,11 @@ export const resolveChangeScope = (root, { changed = false, base = null, related
     const hint = changed && !base && !listing.defaultedBase ? '; pass --base=<rev> to include committed work' : '';
     return { targets: [], selection: { mode: 'affected', reason: null, ...baseFields(listing), changed: [], specs: [], unaffected: [] }, emptyDetail: `no changed files ${label}${hint}` };
   }
-  const graph = buildDependencyGraph(root, { useIndex });
+  const manifest = loadLaneManifest(root);
+  const graph = buildDependencyGraph(root, { useIndex, openRules: manifest?.openImports });
   const suite = suiteOf(root, graph);
   const picked = selectAffectedSpecs({ changes, graph, suite });
-  const metaSpecs = changed ? findMetaSpecs(suite, graph.texts, loadLaneManifest(root)?.meta) : [];
+  const metaSpecs = changed ? findMetaSpecs(suite, graph.texts, manifest?.meta) : [];
   const result = withMetaSpecs(picked, metaSpecs);
   const selection = {
     ...result, ...baseFields(listing), graph: graph.source, ...(graph.note ? { graphNote: graph.note } : {}),
