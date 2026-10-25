@@ -52,6 +52,24 @@ test('an edit by @b after that is refused while @a holds the lease', (t) => {
   assert.equal(fs.readFileSync(path.join(root, 'src/a.js'), 'utf-8'), 'export const a = 2;\n');
 });
 
+test('a refusal names the holder, who you act as, and the exact release, handoff and acquire commands (#6748)', (t) => {
+  const { root, db } = makeProject(t);
+  const now = Date.now();
+  db.prepare("INSERT INTO agent_tasks (title, status, assigned_agent_id, created_at, updated_at) VALUES ('t', 'in_progress', '@a', ?, ?)").run(now, now);
+  const id = db.prepare('SELECT id FROM agent_tasks').get().id;
+  handleChemxPatch({ ...patchArgs, agentId: '@a' }, root);
+  const second = { path: 'src/a.js', targetContent: '2', replacementContent: '3' };
+  assert.throws(() => handleChemxPatch({ ...second, agentId: '@b' }, root), (err) => {
+    assert.equal(err.code, 'CHEMX_FILE_LOCKED');
+    assert.match(err.message, new RegExp(`locked by @a for "#${id}" until`));
+    assert.match(err.message, /You are acting as @b\./);
+    assert.match(err.message, /`chemx team lock release src\/a\.js --as=@a`/);
+    assert.match(err.message, new RegExp(`\`chemx team task handoff ${id} @b --with-locks --as=@a\``));
+    assert.match(err.message, /`chemx team lock acquire src\/a\.js --as=@b`/);
+    return true;
+  });
+});
+
 test('anonymous callers take no lease', (t) => {
   const { root, db } = makeProject(t);
   const res = takeLeaseWhenFree(root, path.join(root, 'src/a.js'), undefined, {});

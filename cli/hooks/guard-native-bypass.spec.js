@@ -11,6 +11,7 @@ import { logBypassToDb, BYPASS_EVENT_TYPE } from './bypass-log.js';
 import { runHook } from './run-hook.js';
 import { openIndexDb } from '../search-db.js';
 import { queryFeed } from '../team/team-db-feed.js';
+import { takeLeaseWhenFree } from '../edit-locks.js';
 
 delete process.env.CHEMX_PROJECT_ROOT;
 
@@ -154,4 +155,78 @@ test('the hook logs a bypass that overrode a rule, and nothing for idle bypasses
   assert.equal(result.output, null);
   const [row] = feedOf(root);
   assert.deepEqual([row.author_id, row.metadata.rule, row.metadata.reason, row.metadata.session], ['@hook-agent', 'raw-test-runner', 'kitchen config', 's9']);
+});
+
+// #6748: a subagent that leased a file as its own handle may edit it natively; nobody else may.
+const SESSION = '3f9a1c7e-55b2-4d1e-9c0a-0d6b2e8f4a11';
+const transcriptOf = (agentId) => `/p/proj/${SESSION}/subagents/agent-${agentId}.jsonl`;
+const subagentPayload = (root, agentId, tool, input, session = SESSION) => ({ tool_name: tool, session_id: session, agent_id: agentId, transcript_path: transcriptOf(agentId), cwd: root, tool_input: input });
+const mainPayload = (root, tool, input) => ({ tool_name: tool, session_id: SESSION, transcript_path: `/p/proj/${SESSION}.jsonl`, cwd: root, tool_input: input });
+const hookEnv = (root) => ({ CLAUDE_PROJECT_DIR: root, CHEMX_NATIVE_FILE_TOOLS: 'allow', CHEMX_FRICTION_LOG: path.join(root, 'friction.jsonl'), CHEMX_GUARD_SEARCH: '' });
+const runPayload = (root, payload) => runHook('claude-pre-tool', JSON.stringify(payload), hookEnv(root));
+const reasonOf = (result) => result.output?.hookSpecificOutput?.permissionDecisionReason ?? null;
+const declareCommand = 'export CHEMX_AGENT_ID=@sonnet-g3; chemx team lock acquire src/a.ts --as=@sonnet-g3';
+
+const declaredRowCount = (root) => {
+  const db = openIndexDb(root);
+  const hasTable = db.prepare("SELECT 1 AS one FROM sqlite_master WHERE name = 'session_agent_handles'").get();
+  return hasTable ? db.prepare('SELECT COUNT(*) AS n FROM session_agent_handles').get().n : 0;
+};
+
+const leasedProject = (handle) => {
+  const root = makeDbRoot('declared');
+  fs.mkdirSync(path.join(root, 'src'));
+  const file = path.join(root, 'src', 'a.ts');
+  fs.writeFileSync(file, 'export const a = 1;\n');
+  assert.equal(takeLeaseWhenFree(root, file, handle, {}).taken, true);
+  const edit = { file_path: file, old_string: 'a', new_string: 'b' };
+  return { root, edit };
+};
+
+test('a subagent that declared its handle in a chemx call may edit the file it leased; before that its edit is refused', async () => {
+  const { root, edit } = leasedProject('@sonnet-g3');
+  const before = await runPayload(root, subagentPayload(root, 'a1b2', 'Edit', edit));
+  assert.match(reasonOf(before), /src\/a\.ts is locked by @sonnet-g3/);
+  assert.equal((await runPayload(root, subagentPayload(root, 'a1b2', 'Bash', { command: declareCommand }))).output, null, 'the declaring call itself is allowed');
+  for (const tool of ['Edit', 'Write', 'MultiEdit']) {
+    assert.equal((await runPayload(root, subagentPayload(root, 'a1b2', tool, edit))).output, null, `${tool} after the declaration`);
+  }
+});
+
+test('a declaration is for that agent only: a sibling subagent, the orchestrator and another session are still refused', async () => {
+  const { root, edit } = leasedProject('@sonnet-g3');
+  await runPayload(root, subagentPayload(root, 'a1b2', 'Bash', { command: declareCommand }));
+  const sibling = await runPayload(root, subagentPayload(root, 'c3d4', 'Edit', edit));
+  assert.match(reasonOf(sibling), /locked by @sonnet-g3.*You are acting as @claude-3f9a1c7e\./s);
+  assert.match(reasonOf(sibling), /chemx team lock release src\/a\.ts --as=@sonnet-g3/);
+  assert.match(reasonOf(await runPayload(root, mainPayload(root, 'Edit', edit))), /locked by @sonnet-g3/);
+  const otherSession = await runPayload(root, subagentPayload(root, 'a1b2', 'Edit', edit, '9e8d7c6b-0000-4000-8000-000000000000'));
+  assert.match(reasonOf(otherSession), /locked by @sonnet-g3.*You are acting as @claude-9e8d7c6b\./s);
+});
+
+test('a subagent that declared a handle no longer counts as the orchestrator session handle', async () => {
+  const { root, edit } = leasedProject('@claude-3f9a1c7e');
+  assert.equal((await runPayload(root, subagentPayload(root, 'a1b2', 'Edit', edit))).output, null, 'undeclared: it inherits the session handle, as before');
+  await runPayload(root, subagentPayload(root, 'a1b2', 'Bash', { command: 'chemx team lock acquire src/b.ts --as=@sonnet-g3' }));
+  assert.match(reasonOf(await runPayload(root, subagentPayload(root, 'a1b2', 'Edit', edit))), /locked by @claude-3f9a1c7e.*You are acting as @sonnet-g3\./s);
+  assert.equal((await runPayload(root, mainPayload(root, 'Edit', edit))).output, null, 'the orchestrator keeps its own lease');
+});
+
+test('the main thread keeps its session handle next to the handle it declared', async () => {
+  const { root, edit } = leasedProject('@fable-gatekeeper');
+  assert.match(reasonOf(await runPayload(root, mainPayload(root, 'Edit', edit))), /locked by @fable-gatekeeper/);
+  await runPayload(root, mainPayload(root, 'Bash', { command: 'chemx team lock acquire src/a.ts --as=@fable-gatekeeper' }));
+  assert.equal((await runPayload(root, mainPayload(root, 'Edit', edit))).output, null);
+  const sessionLeased = leasedProject('@claude-3f9a1c7e');
+  await runPayload(sessionLeased.root, mainPayload(sessionLeased.root, 'Bash', { command: 'chemx team lock acquire src/b.ts --as=@fable-gatekeeper' }));
+  assert.equal((await runPayload(sessionLeased.root, mainPayload(sessionLeased.root, 'Edit', sessionLeased.edit))).output, null);
+});
+
+test('a denied chemx call declares nothing, and a call that names no identity declares nothing', async () => {
+  const { root, edit } = leasedProject('@sonnet-g3');
+  const inherited = await runPayload(root, subagentPayload(root, 'a1b2', 'Bash', { command: 'chemx team lock acquire src/a.ts --as=@claude-3f9a1c7e' }));
+  assert.equal(inherited.output.hookSpecificOutput.permissionDecision, 'deny');
+  await runPayload(root, subagentPayload(root, 'a1b2', 'Bash', { command: 'chemx team lock acquire src/a.ts' }));
+  assert.equal(declaredRowCount(root), 0);
+  assert.match(reasonOf(await runPayload(root, subagentPayload(root, 'a1b2', 'Edit', edit))), /locked by @sonnet-g3/);
 });

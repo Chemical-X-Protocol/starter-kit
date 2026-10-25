@@ -11,7 +11,11 @@ import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { ensureRunTables } from '../team/team-dispatch-runs.js';
 import { decidePreTool, buildPreToolContext } from './claude-pre-tool.js';
-import { everyChemxCallCarriesIdentity, dispatchAgentFromTranscript, dispatchAgentFromPayload, resolveDispatchHandle } from './dispatch-identity.js';
+import { everyChemxCallCarriesIdentity, chemxCallIdentities, dispatchAgentFromTranscript, dispatchAgentFromPayload, resolveDispatchHandle } from './dispatch-identity.js';
+import { takeLeaseWhenFree } from '../edit-locks.js';
+import { openIndexDb } from '../search-db.js';
+
+delete process.env.CHEMX_PROJECT_ROOT;
 
 const WF = 'wf_abc123';
 const ENV = {};
@@ -87,6 +91,31 @@ test('guard: agent_id payload without identity text is denied with the dispatch 
   assert.match(denied.reason, /export CHEMX_AGENT_ID=@fixes-1-4510; /);
   const ok = { ...main, tool_input: { command: 'CHEMX_AGENT_ID=@fixes-1-4510 chemx verify' } };
   assert.equal(decidePreTool(ok, context).decision, 'allow');
+});
+
+test('chemxCallIdentities names each chemx call\'s handle: --as beats an inline value beats an earlier export (#6748)', () => {
+  const handles = (command) => chemxCallIdentities(command).map((call) => call.handle);
+  assert.deepEqual(handles('export CHEMX_AGENT_ID=@e; chemx verify; CHEMX_AGENT_ID=@i chemx test; chemx test --as=@f'), ['@e', '@i', '@f']);
+  assert.deepEqual(handles('chemx verify; echo hi'), [null]);
+  assert.deepEqual(handles('export CHEMX_AGENT_ID=@e; chemx verify --as=$ME'), [null], 'an unresolved --as does not fall back to the export');
+  assert.deepEqual(handles('chemx team lock acquire f --as @spaced'), ['@spaced']);
+  assert.deepEqual(chemxCallIdentities('npx chemx team lock renew f --as=@n')[0].args.slice(0, 3), ['team', 'lock', 'renew']);
+});
+
+test('a dispatched builder\'s native edit counts its dispatch handle as its own (#6748)', (t) => {
+  const { root, payload } = fixture(t);
+  const file = path.join(root, 'src', 'a.ts');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, 'x\n');
+  openIndexDb(root);
+  assert.equal(takeLeaseWhenFree(root, file, '@fixes-1-4510', {}).taken, true);
+  const edit = { ...payload, tool_name: 'Edit', session_id: 'sess-1234567', cwd: root, tool_input: { file_path: file, old_string: 'x', new_string: 'y' } };
+  const env = { CLAUDE_PROJECT_DIR: root, CHEMX_NATIVE_FILE_TOOLS: 'allow' };
+  assert.equal(decidePreTool(edit, buildPreToolContext(edit, env)).decision, 'allow');
+  const otherBuilder = { ...edit, transcript_path: path.join(root, 'proj', 'sess.jsonl') };
+  const denied = decidePreTool(otherBuilder, buildPreToolContext(otherBuilder, env));
+  assert.equal(denied.rule, 'native-edit-lock');
+  assert.match(denied.reason, /locked by @fixes-1-4510/);
 });
 
 test('identity is checked per chemx call, not per command string', () => {

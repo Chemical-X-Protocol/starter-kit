@@ -5,7 +5,8 @@
  * so patch/write and autofix/explode/mutators can never disagree about a lease.
  */
 
-import { findForeignLease, takeLeaseWhenFree } from '../edit-locks.js';
+import { findForeignLease, resolveAgentId, takeLeaseWhenFree } from '../edit-locks.js';
+import { takeoverHint } from './lock-hints.js';
 
 export const findBlockingLease = (resolvedPath, cwd = process.cwd(), agentId) => {
   const lease = findForeignLease(cwd, resolvedPath, agentId);
@@ -37,9 +38,11 @@ export const assertWriteLockClear = (resolvedPath, cwd = process.cwd(), agentId)
     throw err;
   }
   const purpose = lease.purpose ? ` for "${lease.purpose}"` : '';
+  const actor = resolveAgentId(agentId);
+  const hint = takeoverHint({ file: lease.file_path, holder: lease.locked_by, purpose: lease.purpose, actor });
   const err = new Error(
-    `Refusing to modify ${lease.file_path}: locked by ${lease.locked_by}${purpose} until ${until}. ` +
-    `Wait for the release, or pass your own identity (--as / agentId) if you hold the lock.`
+    `Refusing to modify ${lease.file_path}: locked by ${lease.locked_by}${purpose} until ${until}. You are acting as ${actor}. ` +
+    `If you hold the lock, pass your own identity (--as=${lease.locked_by} / agentId); otherwise ${hint}`
   );
   err.code = 'CHEMX_FILE_LOCKED';
   err.isRefusal = true;

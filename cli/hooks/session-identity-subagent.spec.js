@@ -7,6 +7,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { isSubagentTranscript, isActingChemxArgs, hasAnonymousActingCall, inheritedOrchestratorHandle } from './session-identity.js';
 import { buildPreToolContext, decidePreTool } from './claude-pre-tool.js';
+import { agentKeyOf, declaredHandlesIn } from './declared-identity.js';
 
 const SESSION = '3f9a1c7e-55b2-4d1e-9c0a-0d6b2e8f4a11';
 const SUB = '/p/proj/sess/subagents/agent-a1.jsonl';
@@ -29,6 +30,26 @@ test('inherited handle: only for a subagent payload with a safe session id', () 
   assert.equal(inheritedOrchestratorHandle({ session_id: SESSION, transcript_path: SUB }), '@claude-3f9a1c7e');
   assert.equal(inheritedOrchestratorHandle({ session_id: SESSION, transcript_path: MAIN }), null);
   assert.equal(inheritedOrchestratorHandle({ session_id: 'a;b', transcript_path: SUB }), null);
+});
+
+test('every payload the guard treats as a subagent has an agent key, the main thread has none (#6748)', () => {
+  const subagents = [{ session_id: SESSION, transcript_path: SUB }, { session_id: SESSION, transcript_path: WORKFLOW }, { session_id: SESSION, agent_id: 'a9', transcript_path: MAIN }];
+  for (const payload of subagents) {
+    assert.notEqual(inheritedOrchestratorHandle(payload), null);
+    assert.notEqual(agentKeyOf(payload), '', JSON.stringify(payload));
+  }
+  assert.notEqual(agentKeyOf(subagents[0]), agentKeyOf(subagents[2]), 'two subagents of one session are told apart');
+  assert.equal(inheritedOrchestratorHandle({ session_id: SESSION, transcript_path: MAIN }), null);
+  assert.equal(agentKeyOf({ session_id: SESSION, transcript_path: MAIN }), '');
+});
+
+test('a subagent call the guard allows by its identity text is the call that declares that handle (#6748)', () => {
+  const command = 'export CHEMX_AGENT_ID=@sonnet-g3; chemx team lock acquire cli/a.js --purpose="#1"';
+  assert.equal(decide(SUB, command).decision, 'allow');
+  assert.deepEqual(declaredHandlesIn(command), ['@sonnet-g3']);
+  const orchestrator = 'chemx team lock acquire cli/a.js --as=@claude-3f9a1c7e';
+  assert.equal(decide(SUB, orchestrator).rule, 'inherited-identity');
+  assert.deepEqual(declaredHandlesIn(orchestrator), ['@claude-3f9a1c7e'], 'the parser reports it; the guard denies the call before anything is recorded');
 });
 
 test('acting calls: claims, locks, writes, commits and gates act; reads do not', () => {

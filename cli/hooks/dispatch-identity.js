@@ -120,6 +120,43 @@ export const everyChemxCallCarriesIdentity = (command) => {
   return !parseShell(String(command ?? '')).commands.some(hasGap);
 };
 
+const SAFE_HANDLE = /^@?[A-Za-z0-9][A-Za-z0-9_.-]*$/;
+const ASSIGN_PREFIX = 'CHEMX_AGENT_ID=';
+const toHandle = (raw) => {
+  const text = String(raw);
+  const isSafe = SAFE_HANDLE.test(text);
+  if (!isSafe) return null;
+  return text.startsWith('@') ? text : `@${text}`;
+};
+const rawAssigned = (words) => words.find((word) => IDENTITY_ASSIGN.test(word))?.slice(ASSIGN_PREFIX.length);
+const rawAsFlag = (argv) => {
+  const at = argv.findIndex((word) => AS_FLAG.test(word));
+  const hasFlag = at !== -1;
+  if (!hasFlag) return undefined;
+  const word = argv[at];
+  return word.includes('=') ? word.slice(word.indexOf('=') + 1) : argv[at + 1];
+};
+
+/**
+ * Every chemx invocation in the command with the handle it names, in order: [{ args, handle }], args being the
+ * words after the chemx binary and handle '@name' or null. The handle comes from --as, else an inline
+ * CHEMX_AGENT_ID=, else an earlier `export CHEMX_AGENT_ID=` in the same command; a value the shell would expand
+ * ($VAR, `cmd`) is not a handle (#6748).
+ */
+export const chemxCallIdentities = (command) => {
+  let exported;
+  const calls = [];
+  for (const parsed of parseShell(String(command ?? '')).commands) {
+    const isEmpty = parsed.argv.length === 0;
+    if (isEmpty) continue;
+    if (isExport(parsed.argv)) exported = rawAssigned(parsed.argv.slice(1));
+    const invocation = resolveInvocation(parsed.argv);
+    const raw = [rawAsFlag(parsed.argv), rawAssigned(parsed.assigns), exported].find((value) => value !== undefined);
+    if (isChemxInvocation(invocation)) calls.push({ args: invocation.args, handle: raw === undefined ? null : toHandle(raw) });
+  }
+  return calls;
+};
+
 export const identityDenyReason = (handle) => `chemx identity: this agent is dispatched as ${handle}, but this chemx call names no identity, so locks, leases and verify would not be attributed to you. `
   + `Prefix the command: \`export CHEMX_AGENT_ID=${handle}; \` (or pass --as=${handle} to chemx team commands). `
   + 'Resolved from this agent\'s dispatch record; the hook cannot set it for you.';

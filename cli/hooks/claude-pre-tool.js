@@ -19,8 +19,9 @@ import { activeRules } from './guard-rules.js';
 import { scriptFilesOf } from './guard-rules-shell.js';
 import { contextForCommand } from './guard-paths.js';
 import { isPromotedNudge, resolveNudgePromotion } from './guard-config.js';
-import { NATIVE_FILE_TOOLS, decideNativeTool, resolveNativeToolMode } from './native-tool-policy.js';
+import { NATIVE_EDIT_TOOLS, NATIVE_FILE_TOOLS, decideNativeTool, resolveNativeToolMode } from './native-tool-policy.js';
 import { decideEditLock, resolveHookAgentId } from './native-edit-lock.js';
+import { resolveEditorIdentity } from './declared-identity.js';
 import { everyChemxCallCarriesIdentity, identityDenyReason, resolveDispatchHandle } from './dispatch-identity.js';
 import { foreignRunIdentities, foreignIdentityDenyReason } from './foreign-identity.js';
 import { hasAnonymousActingCall, inheritedOrchestratorHandle, orchestratorActingReason } from './session-identity.js';
@@ -93,13 +94,13 @@ const nudgeContext = (nudges) => {
 };
 
 const decideNativeFileTool = (tool, input, context) => {
-  const { root, cwd, mode, agentId, scratchDir } = context;
+  const { root, cwd, mode, agentId, ownHandles, scratchDir } = context;
   const isGrepEnforced = tool === 'Grep' && context.enforceSearch;
   const effectiveMode = isGrepEnforced ? 'block' : mode;
   const policy = decideNativeTool({ tool, input, root, cwd, mode: effectiveMode, scratchDir });
   const isPolicyDeny = policy.decision === 'deny';
   if (isPolicyDeny) return policy;
-  return decideEditLock({ tool, input, root, cwd, agentId, findLease: context.findLease }) ?? policy;
+  return decideEditLock({ tool, input, root, cwd, agentId, ownHandles, findLease: context.findLease }) ?? policy;
 };
 
 const callsChemx = (command) => parseShell(command).commands.some((parsed) => parsed.argv.length > 0 && isChemxInvocation(resolveInvocation(parsed.argv)));
@@ -156,15 +157,19 @@ export const buildPreToolContext = (payload, env = process.env) => {
   const cwd = payload?.cwd || process.cwd();
   const root = env.CLAUDE_PROJECT_DIR || cwd;
   const mode = resolveNativeToolMode(root, env);
-  const agentId = resolveHookAgentId(payload, env);
+  const sessionHandle = resolveHookAgentId(payload, env);
   const nudgePromotion = resolveNudgePromotion(root, env);
   const scratchDir = payload?.scratchpad_dir ?? null;
   const isBash = payload?.tool_name === 'Bash';
+  const isNativeEdit = NATIVE_EDIT_TOOLS.has(payload?.tool_name);
   // The identity must be in the command text: an inherited CHEMX_AGENT_ID is the orchestrator's (#4562).
-  const dispatchHandle = isBash ? resolveDispatchHandle(payload, { root, env }) : null;
+  const dispatchHandle = isBash || isNativeEdit ? resolveDispatchHandle(payload, { root, env }) : null;
   const inheritedHandle = isBash ? inheritedOrchestratorHandle(payload) : null;
   const routeGuardMode = routeGuard === null ? 'off' : routeGuard.resolveRouteGuardMode(root, env);
-  return { cwd, root, enforceSearch: env.CHEMX_GUARD_SEARCH !== '0', mode, agentId, nudgePromotion, scratchDir, routeGuard: routeGuardMode, dispatchHandle, inheritedHandle };
+  // A native edit acts as the handles its own agent declared in chemx calls, not only as the session handle (#6748).
+  const plain = { agentId: sessionHandle, ownHandles: sessionHandle ? [sessionHandle] : [] };
+  const editor = isNativeEdit ? resolveEditorIdentity(payload, { root, env, base: sessionHandle, dispatchHandle }) : plain;
+  return { cwd, root, enforceSearch: env.CHEMX_GUARD_SEARCH !== '0', mode, agentId: editor.agentId, ownHandles: editor.ownHandles, nudgePromotion, scratchDir, routeGuard: routeGuardMode, dispatchHandle, inheritedHandle };
 };
 
 // Deny carries permissionDecision; an advisory allow carries only additionalContext, so it never
