@@ -118,6 +118,7 @@ export const SEARCH_COMMANDS = [
     description: 'Runs the AST rules on one file and reports its hazards.',
     flags: [
       { flag: '--profile=<name>', desc: 'Audit profile to apply (e.g. atomic-strict)' },
+      { flag: '--fast', desc: 'Skip the slower cross-file checks (PHP files report this when used)' },
       { flag: '--json', desc: 'Output hazards as JSON' },
       { flag: '--compact', desc: 'With --json: [rule,line,severity] rows and one rules map' }
     ],
