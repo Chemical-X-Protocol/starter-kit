@@ -12,13 +12,22 @@ function isNode(value) {
   return Boolean(value) && typeof value === 'object' && typeof value.kind === 'string';
 }
 
+function pushNodes(out, values) {
+  for (const value of values) {
+    const isChild = isNode(value);
+    if (isChild) out.push(value);
+  }
+}
+
+// Hot path for every PHP pass: own keys in insertion order, no per-key pair or filter arrays.
 function childNodes(node) {
   const out = [];
-  for (const [key, value] of Object.entries(node)) {
-    const isMetadata = SKIPPED_KEYS.has(key);
-    if (isMetadata) continue;
-    const candidates = Array.isArray(value) ? value : [value];
-    out.push(...candidates.filter(isNode));
+  for (const key of Object.keys(node)) {
+    const value = SKIPPED_KEYS.has(key) ? null : node[key];
+    const isList = Array.isArray(value);
+    const isChild = !isList && isNode(value);
+    if (isList) pushNodes(out, value);
+    if (isChild) out.push(value);
   }
   return out;
 }
