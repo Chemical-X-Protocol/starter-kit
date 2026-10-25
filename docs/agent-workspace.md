@@ -77,12 +77,25 @@ board commands (chemx team ...) run from the main checkout /work/app unless you 
   seeded rows are hash-checked once on that first sync (by the clock they are racy, like any row synced within
   2 s of its file) and trusted by mtime and size after that. Numbers: [index-freshness.md](index-freshness.md).
 - A failed `add` (path taken, unknown base, branch exists) leaves no branch behind that this call created.
+- `add` records the branch it cut from (#6777): the `--from` value, else the resolved default; `HEAD` is written as
+  its branch name, and a detached `HEAD` or a bare commit id as the full commit id. The record is
+  `chemx-worktree.json` (`{ "branch", "base" }`) in the worktree's own git dir, `<main>/.git/worktrees/<name>/`,
+  the directory the worktree's `.git` pointer file names. That directory is not part of the working tree, so the
+  record is never in `git status`, never committed, and `git worktree remove` or `prune` deletes it with the
+  worktree. A write that fails prints `base not recorded (...)` and the add still succeeds. A worktree made by
+  plain `git worktree add` has no record.
 - `remove <path>` removes the worktree, then deletes its local branch when the branch is **merged into the default
-  branch**: an ancestor of it, or squash-merged (merging the branch into the base would change nothing; asked of
-  `git merge-tree --write-tree`, git 2.38+). Squash is the kit's merge style, and a squash leaves the branch's
-  commits out of the base's history, so `git branch -d` alone would refuse every one. An unmerged branch is
-  refused (exit 1, nothing removed) and a conflict with the base counts as unmerged. A recent merge needs a
-  `git fetch` first.
+  branch or into the branch it was cut from** (the record `add` wrote): an ancestor of it, or squash-merged
+  (merging the branch into the base would change nothing; asked of `git merge-tree --write-tree`, git 2.38+).
+  Squash is the kit's merge style, and a squash leaves the branch's commits out of the base's history, so
+  `git branch -d` alone would refuse every one. The default branch is judged first, and the output says which base
+  the branch reached (`squash-merged into main`). A branch cut `--from` a local branch that is ahead of origin
+  (benchmarks and stacked work do this) is therefore removable once it is merged there, without `--force`. An
+  unmerged branch is refused (exit 1, nothing removed) and a conflict with a base counts as unmerged; the refusal
+  names both bases (`not merged into origin/main or main`), says when the recorded base no longer exists, and
+  says when the record cannot be read. A record belongs to the branch it names: a worktree switched to another
+  branch is judged against the default branch only, like one with no record. A recent merge needs a `git fetch`
+  first.
 - `remove` also refuses the main checkout, a path git does not list, and the directory you are standing in; git
   itself refuses a worktree with uncommitted or untracked files. `--force` overrides the merge check and the dirty
   check, and deletes the branch anyway.

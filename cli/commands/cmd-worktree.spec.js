@@ -9,58 +9,11 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { parseWorktreeArgs, runWorktreeCommand } from './cmd-worktree.js';
+import { parseWorktreeArgs } from './cmd-worktree.js';
 import { installCommandFor } from '../worktree-modules.js';
+import { GIT_ENV, git, makeProject, run, addWithCommit } from './worktree-fixture.js';
 
 const CLI = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'index.js');
-const GIT_ENV = {
-  ...process.env,
-  GIT_AUTHOR_NAME: 'spec', GIT_AUTHOR_EMAIL: 'spec@localhost', GIT_COMMITTER_NAME: 'spec', GIT_COMMITTER_EMAIL: 'spec@localhost',
-  GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_SYSTEM: '/dev/null'
-};
-
-const git = (cwd, ...args) => {
-  const result = spawnSync('git', args, { cwd, env: GIT_ENV, encoding: 'utf8' });
-  assert.equal(result.status, 0, `git ${args.join(' ')}: ${result.stderr}`);
-  return result.stdout.trim();
-};
-
-// A clone of a local bare origin with one commit on main, node_modules ignored, and a small node_modules.
-const makeProject = (t) => {
-  delete process.env.CHEMX_PROJECT_ROOT;
-  const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-wt-')));
-  t.after(() => fs.rmSync(base, { recursive: true, force: true }));
-  const origin = path.join(base, 'origin.git');
-  const main = path.join(base, 'main');
-  fs.mkdirSync(main);
-  git(base, 'init', '-q', '--bare', '-b', 'main', origin);
-  git(main, 'init', '-q', '-b', 'main');
-  git(main, 'remote', 'add', 'origin', origin);
-  fs.writeFileSync(path.join(main, '.gitignore'), 'node_modules\n.chemx/\n');
-  fs.writeFileSync(path.join(main, 'package.json'), '{"name":"p"}\n');
-  fs.writeFileSync(path.join(main, 'a.txt'), 'one\n');
-  fs.mkdirSync(path.join(main, 'node_modules', 'left-pad'), { recursive: true });
-  fs.writeFileSync(path.join(main, 'node_modules', 'left-pad', 'index.js'), 'module.exports = 1;\n');
-  fs.mkdirSync(path.join(main, 'node_modules', '@scope', 'pkg'), { recursive: true });
-  fs.writeFileSync(path.join(main, 'node_modules', '@scope', 'pkg', 'index.js'), 'module.exports = 2;\n');
-  fs.mkdirSync(path.join(main, 'node_modules', '.bin'));
-  fs.writeFileSync(path.join(main, 'node_modules', '.package-lock.json'), '{}');
-  git(main, 'add', '.');
-  git(main, 'commit', '-q', '-m', 'init');
-  git(main, 'push', '-q', '-u', 'origin', 'main');
-  git(main, 'remote', 'set-head', 'origin', 'main');
-  return { base, main, trees: path.join(base, 'trees') };
-};
-
-const capture = () => {
-  const seen = { out: [], err: [] };
-  return { seen, io: { out: (text) => seen.out.push(text), err: (text) => seen.err.push(text) } };
-};
-
-const run = (args, cwd, extra = {}) => {
-  const { seen, io } = capture();
-  return runWorktreeCommand(args, { cwd, env: { CHEMX_AGENT_ID: '@spec-a' }, ...io, ...extra }).then((code) => ({ code, out: seen.out.join(''), err: seen.err.join('') }));
-};
 
 test('parseWorktreeArgs: action, path and every flag in both forms', () => {
   const full = parseWorktreeArgs(['add', '../t/x', '-b', 'fix/x', '--from', 'origin/dev', '--link-modules', '--install']);
@@ -227,17 +180,6 @@ test('add refuses a missing -b (2), an unknown base (1) and an existing path (1)
   assert.equal(taken.code, 1);
   assert.equal(git(main, 'branch', '--list', 'fix/t'), '');
 });
-
-const addWithCommit = async (project, name, file = 'new.txt') => {
-  const target = path.join(project.trees, name);
-  const branch = `fix/${name}`;
-  const added = await run(['add', target, '-b', branch], project.main);
-  assert.equal(added.code, 0, added.err);
-  fs.writeFileSync(path.join(target, file), `${name}\n`);
-  git(target, 'add', file);
-  git(target, 'commit', '-q', '-m', `change ${name}`);
-  return { target, branch };
-};
 
 test('remove: a worktree whose branch was merged is removed and so is the branch', async (t) => {
   const project = makeProject(t);

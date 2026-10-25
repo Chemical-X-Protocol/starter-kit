@@ -7,6 +7,8 @@
  * with `git merge-tree --write-tree` (git 2.38+), which merges in memory and prints the resulting tree;
  * an older git, or a conflict, answers "not merged" and the caller asks for --force.
  */
+import fs from 'node:fs';
+import path from 'node:path';
 import { runGit } from './commit/commit-git.js';
 
 const DEFAULT_REFS = ['origin/main', 'origin/master', 'main', 'master'];
@@ -37,9 +39,39 @@ export const defaultBaseRef = (cwd) => {
 
 export const resolvesToCommit = refExists;
 
+const realpathOr = (target) => (fs.existsSync(target) ? fs.realpathSync(target) : path.resolve(target));
+
+/** The absolute git dir of the checkout at cwd (`<main>/.git/worktrees/<name>` in a linked worktree); null outside git. */
+export const gitDirOf = (cwd) => {
+  const asked = runGit(cwd, ['rev-parse', '--absolute-git-dir']);
+  const isAsked = asked.status === 0;
+  return isAsked ? asked.stdout.trim() : null;
+};
+
+/**
+ * Whether cwd is inside a linked worktree rather than the main checkout. A linked worktree's `.git` is a
+ * file holding a `gitdir:` pointer into `<main>/.git/worktrees/<name>`; git follows it, so the worktree's
+ * own git dir differs from the common dir it shares with the main checkout (a main checkout, a
+ * submodule and a subdirectory of either have the two equal). False outside git.
+ */
+export const isLinkedWorktree = (cwd) => {
+  const dirs = runGit(cwd, ['rev-parse', '--git-dir', '--git-common-dir']);
+  const isAsked = dirs.status === 0;
+  if (!isAsked) return false;
+  const [gitDir, commonDir] = dirs.stdout.trim().split('\n').map((dir) => realpathOr(path.resolve(cwd, dir)));
+  return gitDir !== commonDir;
+};
+
 export const branchExists = (cwd, branch) => runGit(cwd, ['show-ref', '--verify', '--quiet', `refs/heads/${branch}`]).status === 0;
 
 export const shortRef = (cwd, ref) => runGit(cwd, ['rev-parse', '--short', ref]).stdout.trim();
+
+/** A name for `ref` that means the same later: HEAD becomes its branch; a detached HEAD or a bare commit id becomes the full commit id. */
+export const durableRef = (cwd, ref) => {
+  const named = runGit(cwd, ['rev-parse', '--abbrev-ref', '--symbolic-full-name', ref]).stdout.trim();
+  const isNamed = named !== '' && named !== 'HEAD';
+  return isNamed ? named : runGit(cwd, ['rev-parse', ref]).stdout.trim();
+};
 
 /**
  * @returns {'merged'|'squash-merged'|'unmerged'} how the branch stands against `base`

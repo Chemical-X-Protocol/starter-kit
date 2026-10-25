@@ -5,9 +5,10 @@
  * index seeded from the main checkout's rows for unchanged files (#6769; --no-seed-index skips it), then
  * the output: the path first (so `cd "$(chemx worktree add ... | head -1)"` works), the branch and base,
  * the node_modules line, the index line, and the reminder that board commands run from the main
- * checkout. remove: removes the worktree and
- * deletes its local branch when it is merged into the default branch (a squash merge counts); refuses an
- * unmerged branch, a dirty worktree, the main checkout and the directory you stand in unless --force.
+ * checkout. add also records the branch it cut from (cli/worktree-base.js, #6777). remove: removes the
+ * worktree and deletes its local branch when it is merged into the default branch or into the branch it was
+ * cut from (a squash merge counts); refuses an unmerged branch, a dirty worktree, the main checkout and the
+ * directory you stand in unless --force.
  * Exit: 0 done, 1 refused or git failed, 2 misused. Git and install details: cli/worktree-git.js,
  * cli/worktree-modules.js.
  */
@@ -16,7 +17,8 @@ import path from 'node:path';
 import { resolveCoordinationRoot } from '../team/coordination-root.js';
 import { linkNodeModules, installCommandFor, runInstall } from '../worktree-modules.js';
 import { seedWorktreeIndex, formatSeedLine } from '../worktree-index.js';
-import { addWorktree, removeWorktree, deleteBranch, branchExists, listWorktrees, defaultBaseRef, resolvesToCommit, shortRef, mergeState } from '../worktree-git.js';
+import { recordWorktreeBase, readWorktreeBase } from '../worktree-base.js';
+import { addWorktree, removeWorktree, deleteBranch, branchExists, listWorktrees, defaultBaseRef, resolvesToCommit, shortRef, mergeState, durableRef } from '../worktree-git.js';
 
 const EXIT_FAILED = 1;
 const EXIT_MISUSE = 2;
@@ -129,10 +131,12 @@ const runAdd = (parsed, cwd, env, io) => {
   const leftBranch = !isAdded && !branchWasThere && branchExists(cwd, parsed.branch);
   if (leftBranch) deleteBranch(cwd, parsed.branch);
   if (!isAdded) return failure(io, tail(added.output));
+  const recorded = recordWorktreeBase(target, parsed.branch, durableRef(cwd, base));
+  const recordText = recorded.ok ? '' : `base not recorded (${recorded.problem}): remove will judge merged against the default branch only\n`;
   const linkText = parsed.linkModules ? linkLine(main, target) : '';
   const install = parsed.install ? installStep(target, io, env) : { line: '' };
   const seedText = parsed.noSeedIndex ? '' : formatSeedLine(seedWorktreeIndex(target));
-  io.out(`${target}\nbranch ${parsed.branch} from ${base} (${shortRef(cwd, base)})\n${linkText}${install.line ?? ''}${seedText}${boardReminder(main)}`);
+  io.out(`${target}\nbranch ${parsed.branch} from ${base} (${shortRef(cwd, base)})\n${recordText}${linkText}${install.line ?? ''}${seedText}${boardReminder(main)}`);
   return install.problem ? failure(io, install.problem) : 0;
 };
 
@@ -143,24 +147,47 @@ const refusalFor = (entry, target, cwd) => {
   return isStandingIn ? `you are standing in ${entry.path}; cd out of it first` : null;
 };
 
+const reachedBase = (cwd, branch, bases) => {
+  for (const ref of bases) {
+    const state = mergeState(cwd, branch, ref);
+    const isReached = state !== 'unmerged';
+    if (isReached) return { ref, state };
+  }
+  return null;
+};
+
+// The bases a branch may have reached: the default branch, then the one the worktree was cut from.
+const mergeBases = (cwd, entry) => {
+  const record = readWorktreeBase(entry.path, entry.branch);
+  const wanted = [defaultBaseRef(cwd), record.base].filter((ref, at, all) => Boolean(ref) && all.indexOf(ref) === at);
+  const bases = wanted.filter((ref) => resolvesToCommit(cwd, ref));
+  return { bases, record, isRecordedGone: Boolean(record.base) && !bases.includes(record.base) };
+};
+
+const unmergedText = (entry, judged) => {
+  const names = judged.bases.length > 0 ? judged.bases.join(' or ') : 'any default branch (none found)';
+  const goneNote = judged.isRecordedGone ? ` The base recorded at add, ${judged.record.base}, no longer exists.` : '';
+  const problemNote = judged.record.problem ? ` ${judged.record.problem}.` : '';
+  return `${entry.branch} is not merged into ${names} (git fetch first if it was merged lately); nothing was removed.${goneNote}${problemNote} --force removes the worktree and deletes the branch anyway.`;
+};
+
 const runRemove = (parsed, cwd, io) => {
   const target = realpathOr(path.resolve(cwd, parsed.target));
   const entry = listWorktrees(cwd).find((candidate) => realpathOr(candidate.path) === target);
   const refusal = refusalFor(entry, target, cwd);
   if (refusal) return failure(io, refusal);
-  const base = defaultBaseRef(cwd);
-  const canJudge = Boolean(entry.branch) && Boolean(base);
-  const state = canJudge ? mergeState(cwd, entry.branch, base) : 'unmerged';
-  const isUnmergedBranch = Boolean(entry.branch) && state === 'unmerged';
+  const judged = entry.branch ? mergeBases(cwd, entry) : null;
+  const reached = judged ? reachedBase(cwd, entry.branch, judged.bases) : null;
+  const isUnmergedBranch = Boolean(judged) && !reached;
   const isRefused = isUnmergedBranch && !parsed.force;
-  if (isRefused) return failure(io, `${entry.branch} is not merged into ${base ?? 'any default branch (none found)'} (git fetch first if it was merged lately); nothing was removed. --force removes the worktree and deletes the branch anyway.`);
+  if (isRefused) return failure(io, unmergedText(entry, judged));
   const removed = removeWorktree(cwd, entry.path, parsed.force);
   const isRemoved = removed.status === 0;
   if (!isRemoved) return failure(io, tail(removed.output));
   const deleted = entry.branch ? deleteBranch(cwd, entry.branch) : { status: 0, output: '' };
   const isDeleted = deleted.status === 0;
   if (!isDeleted) return failure(io, `removed ${entry.path}, but the branch stays: ${tail(deleted.output)}`);
-  const why = state === 'unmerged' ? 'not merged, --force' : `${state} into ${base}`;
+  const why = reached ? `${reached.state} into ${reached.ref}` : 'not merged, --force';
   io.out(entry.branch ? `removed ${entry.path}; deleted branch ${entry.branch} (${why})\n` : `removed ${entry.path}\n`);
   return 0;
 };
