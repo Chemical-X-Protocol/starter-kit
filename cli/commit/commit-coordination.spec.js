@@ -13,6 +13,7 @@ import { openIndexDb } from '../search-schema.js';
 import { createTask } from '../team/team-db-tasks.js';
 import { registerAgent } from '../team/team-db-agents.js';
 import { claimWithIgnoreDeps } from '../team/claim-ignore-deps.js';
+import { handoffTask } from '../team/team-task-handoff.js';
 import { queryFeed } from '../team/team-db-feed.js';
 import { resolveTeamDbTarget } from '../team/coordination-db.js';
 import { buildMonorepo } from '../team/coordination-fixture.js';
@@ -170,15 +171,45 @@ test('--board naming a directory with no team db is refused before anything is s
   assert.equal(git(plugin.root, ['diff', '--cached', '--name-only']).stdout, '');
 });
 
-test('--no-task with a #id in the subject neither scans nor refuses; the unattached event lands on the claim board', async (t) => {
+test('--no-task with a #id in the subject neither scans nor refuses; the unattached event lands on the directory board (#6766)', async (t) => {
   useClaimsDir(t);
   const app = makeBoardRepo(t, 10);
   const plugin = makeBoardRepo(t, 3);
   claimOn(app, 10, '@h');
   const result = await commitFile(plugin, ['-m', 'chore: move the #99 notes', '--no-task=notes', '--as=@h']);
   assert.equal(result.ok, true, result.lines.join('\n'));
+  assert.equal(result.data.board, plugin.root);
+  assert.deepEqual(commitEvents(plugin.db).map((event) => event.task_id), [null]);
+  assert.equal(commitEvents(app.db).length, 0);
+  assert.doesNotMatch(result.lines.join('\n'), /board: /);
+});
+
+test('--no-task with --board=<dir> still records on the named board (#6766)', async (t) => {
+  useClaimsDir(t);
+  const app = makeBoardRepo(t, 10);
+  const plugin = makeBoardRepo(t, 3);
+  claimOn(app, 10, '@h');
+  const result = await commitFile(plugin, ['-m', 'chore: notes', '--no-task=notes', '--as=@h', `--board=${app.root}`]);
+  assert.equal(result.ok, true, result.lines.join('\n'));
+  assert.equal(result.data.board, app.root);
   assert.deepEqual(commitEvents(app.db).map((event) => event.task_id), [null]);
   assert.equal(commitEvents(plugin.db).length, 0);
+});
+
+test('after a handoff the new owner\'s commit finds the task\'s board without --board, the old owner\'s does not (#6766)', async (t) => {
+  useClaimsDir(t);
+  const app = makeBoardRepo(t, 10);
+  const plugin = makeBoardRepo(t, 3);
+  claimOn(app, 10, '@from');
+  const handed = handoffTask(app.db, 10, '@h', '@from', { board: { root: app.root, env: process.env } });
+  assert.equal(handed.success, true);
+  const mine = await commitFile(plugin, ['-m', 'x (#10)', '--as=@h']);
+  assert.equal(mine.ok, true, mine.lines.join('\n'));
+  assert.equal(mine.data.board, app.root);
+  assert.deepEqual(commitEvents(app.db).map((event) => event.task_id), [10]);
+  const theirs = await commitFile(plugin, ['-m', 'y (#10)', '--as=@from']);
+  assert.equal(theirs.ok, false);
+  assert.match(theirs.refusals.join('\n'), /task #10 was not found/);
 });
 
 test('--release still releases the committer\'s leases on the directory board when the event goes to another board', async (t) => {

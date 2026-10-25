@@ -20,6 +20,7 @@ const unrelatedOf = (root, inside) => stagedPaths(root).filter((staged) => !insi
 
 // The board that checks the task number and receives the commit event (board-resolve.js): --board, the
 // committer's claimed board, else cwd's. The number typed is read in the caller's repo there (aliases first).
+// A --no-task commit has no number: its event goes to --board, else cwd's board.
 const taskFacts = (parsed, cwd, committer, env) => {
   const taskId = resolveTaskId(parsed);
   const needsDb = Boolean(taskId) || parsed.noTask !== null;

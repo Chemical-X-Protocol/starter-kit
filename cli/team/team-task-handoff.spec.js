@@ -14,6 +14,8 @@ import { queryFeed } from './team-db-feed.js';
 import { completeTaskWithAudit } from './team-triage.js';
 import { runTeamCli } from './team-commands.js';
 import { formatTaskHelpCard } from './team-format.js';
+import { handoffTask } from './team-task-handoff.js';
+import { recordBoardClaim, readBoardClaims } from './board-claims.js';
 
 delete process.env.CHEMX_PROJECT_ROOT;
 
@@ -128,4 +130,38 @@ test('handoff without --with-locks leaves every lease with the old holder (#5740
 
 test('handoff: the task help card lists it', () => {
   assert.match(formatTaskHelpCard(), /handoff.*<taskId> <@to>/);
+});
+
+const useClaimsDir = (t) => {
+  const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-handoff-claims-')));
+  process.env.CHEMX_BOARD_CLAIMS_DIR = dir;
+  t.after(() => {
+    delete process.env.CHEMX_BOARD_CLAIMS_DIR;
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+  return { ...process.env };
+};
+
+const claimsOf = (handle, env) => readBoardClaims(handle, { env }).map((claim) => [claim.root, claim.taskId]);
+
+test('handoff --with-locks still moves the leases and also leaves the new owner\'s board pointer (#6766)', (t) => {
+  const env = useClaimsDir(t);
+  const { root, db, id } = makeBoard(t);
+  recordBoardClaim({ handle: '@alice', taskId: id, root }, { env });
+  requestFileLock(db, 'cli/a.js', '@alice', { purpose: `#${id}` });
+  const res = runTeamCli(['task', 'handoff', String(id), '@bob', '--as=@alice', '--with-locks'], false, root);
+  assert.equal(res.success, true);
+  assert.equal(leaseOwners(db)['cli/a.js'], '@bob');
+  assert.deepEqual(claimsOf('@bob', env), [[root, id]]);
+  assert.deepEqual(claimsOf('@alice', env), []);
+  assert.equal(res.task.result_payload.board_root, root);
+});
+
+test('handoff through the library without a board writes no pointer, and its result is unchanged (#6766)', (t) => {
+  const env = useClaimsDir(t);
+  const { db, id } = makeBoard(t);
+  const res = handoffTask(db, id, '@bob', '@alice');
+  assert.equal(res.success, true);
+  assert.deepEqual(claimsOf('@bob', env), []);
+  assert.equal(res.task.result_payload?.board_root, undefined);
 });

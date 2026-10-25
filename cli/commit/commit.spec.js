@@ -11,6 +11,8 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { openIndexDb } from '../search-schema.js';
 import { createTask } from '../team/team-db-tasks.js';
+import { registerAgent } from '../team/team-db-agents.js';
+import { claimWithIgnoreDeps } from '../team/claim-ignore-deps.js';
 import { queryFeed } from '../team/team-db-feed.js';
 import { requestFileLock, getFileLockStatus } from '../team/team-db-locks.js';
 import { runCommit } from './commit-run.js';
@@ -271,6 +273,22 @@ test('--no-task records the reason in the body and as an unattached feed event',
   const events = queryFeed(db, {}).filter((event) => event.event_type === 'commit');
   assert.equal(events.length, 1);
   assert.match(events[0].message, /no task: one-off cleanup/);
+});
+
+test('--no-task records on the directory board even when the committer holds a task on another board (#6766)', async (t) => {
+  const claimsDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-commit-claims-')));
+  process.env.CHEMX_BOARD_CLAIMS_DIR = claimsDir;
+  t.after(() => { delete process.env.CHEMX_BOARD_CLAIMS_DIR; fs.rmSync(claimsDir, { recursive: true, force: true }); });
+  const app = makeRepo(t);
+  const here = makeRepo(t);
+  registerAgent(app.db, { id: '@spec-a', role: 'executor' });
+  claimWithIgnoreDeps(app.db, app.taskId, '@spec-a', undefined, { root: app.root, env: process.env });
+  write(here.root, 'a.txt', 'a\n');
+  const result = await run(here.root, ['a.txt', '-m', 'chore: add a', '--no-task=one-off']);
+  assert.equal(result.ok, true, result.lines.join('\n'));
+  assert.deepEqual([result.data.board, result.data.boardSource], [here.root, 'cwd']);
+  assert.equal(queryFeed(here.db, {}).filter((event) => event.event_type === 'commit').length, 1);
+  assert.equal(queryFeed(app.db, {}).filter((event) => event.event_type === 'commit').length, 0);
 });
 
 test('records the commit on the task: sha, subject and files', async (t) => {

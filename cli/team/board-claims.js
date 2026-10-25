@@ -11,6 +11,8 @@
  * ~/.local/state/chemx/board-claims. A spec process (node --test) has no default directory, so a spec
  * never writes the real home. Writes go through a temp file and a rename; a failed write loses only
  * the hint, never the claim.
+ * A handoff moves the pointer with the task (#6766): `recordBoardClaim` for the new owner and
+ * `forgetBoardClaim` for the old one.
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -91,6 +93,33 @@ export const recordBoardClaim = ({ handle, taskId, root }, options = {}) => {
   } catch (err) {
     const isDebug = Boolean(env.CHEMX_DEBUG);
     if (isDebug) process.stderr.write(`[board-claims] pointer not written: ${err.message}\n`);
+    return false;
+  }
+};
+
+/**
+ * Forgets that handle claimed taskId on the board at root (the task moved to someone else, #6766).
+ * Removes only that board and task; the handle's file goes away with its last claim.
+ * @returns {boolean} whether a pointer was removed (false when pointers are off, there was none, or the write failed)
+ */
+export const forgetBoardClaim = ({ handle, taskId, root }, options = {}) => {
+  const env = options.env ?? process.env;
+  const dir = boardClaimsDir(env);
+  const canForget = Boolean(dir) && Boolean(handle) && Boolean(root) && Number.isInteger(Number(taskId));
+  if (!canForget) return false;
+  const file = fileFor(dir, handle);
+  const claims = readFileClaims(file);
+  const kept = claims.filter((claim) => !(claim.root === root && claim.taskId === Number(taskId)));
+  const hasRemoved = kept.length < claims.length;
+  if (!hasRemoved) return false;
+  const isLastClaim = kept.length === 0;
+  try {
+    if (isLastClaim) fs.rmSync(file, { force: true });
+    else writeAtomically(file, `${JSON.stringify({ handle, claims: kept }, null, 2)}\n`);
+    return true;
+  } catch (err) {
+    const isDebug = Boolean(env.CHEMX_DEBUG);
+    if (isDebug) process.stderr.write(`[board-claims] pointer not removed: ${err.message}\n`);
     return false;
   }
 };

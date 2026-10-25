@@ -100,7 +100,7 @@ holds or awaits it.
    handle **has in_progress** (`chemx team task claim` leaves a pointer, `board-claims.js`; the pointer is a
    hint and the board's own db is checked). So a builder in a git worktree outside the board root
    (`/x/.worktrees/kit-foo` with the board at `/x/Xophz-COMPASS`) keeps its leases alive from the worktree.
-   A task that is done or handed to someone else ends this at once: a handle that forgot to release its
+   A task that is done or handed to someone else ends this at once (a handoff leaves the new owner a pointer of their own): a handle that forgot to release its
    locks does not keep them alive by running commands elsewhere.
 3. **`chemx team task claim`** renews the claimer's leases on that board once the claim is recorded, and, the
    task now being in_progress, brings back a lease that lapsed a few minutes ago (5 below).
@@ -193,6 +193,8 @@ The wording only ever says less, never more.
 live lease whose purpose names `#<id>` (not `#<id>` followed by another digit) to the new owner; each move is a
 `lock_transferred` feed event. Expired leases and leases whose purpose does not name the task stay as they are.
 Not guaranteed: a lease taken with a purpose that omits the task id is not moved.
+
+The handoff also moves the board pointer (#6766, `board-claim-record.js`): the new owner gets the pointer a claim would have left and the old owner's pointer for the task is removed, with or without `--with-locks`. So the new owner's lease renewal reaches the task's board from a worktree, and their next `chemx commit` finds it without `--board` (`docs/commit.md`). The MCP `chemx_team_task` takes `action: "handoff"` with `taskId`, `to` and `agentId` (the one handing off), and optional `withLocks`.
 
 A dispatched agent whose handle the hook resolved is denied a chemx call that names another handle of its own run
 (`--as=`, or `CHEMX_AGENT_ID=`) as its identity (rule `foreign-identity`). Handles outside the run, variable

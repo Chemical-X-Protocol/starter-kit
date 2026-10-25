@@ -1,19 +1,6 @@
-import { claimTask, postFeedEvent, getTask, getAgent } from './team-db.js';
-import { recordBoardClaim } from './board-claims.js';
+import { claimTask, postFeedEvent, getTask } from './team-db.js';
+import { recordClaimBoard } from './board-claim-record.js';
 import { renewHolderLeases } from './lease-activity.js';
-
-// Writes the board root where the claim lives (#6750): the task's result_payload, the agent row's
-// metadata, and the per-handle pointer a commit made from another board's directory follows.
-// Not guaranteed: the pointer needs a writable state directory; the two db writes always happen.
-const recordClaimBoard = (db, taskId, agentHandle, board) => {
-  const task = getTask(db, taskId);
-  const payload = { ...(task?.result_payload || {}), board_root: board.root };
-  db.prepare('UPDATE agent_tasks SET result_payload = ? WHERE id = ?').run(JSON.stringify(payload), Number(taskId));
-  const agent = getAgent(db, agentHandle);
-  const metadata = { ...(agent?.metadata || {}), boardRoot: board.root, boardTaskId: Number(taskId) };
-  db.prepare('UPDATE agents SET metadata = ? WHERE id = ?').run(JSON.stringify(metadata), agent?.id ?? agentHandle);
-  recordBoardClaim({ handle: agentHandle, taskId, root: board.root }, { env: board.env });
-};
 
 // Shared by the CLI and MCP claim paths (#4428). Guarantees: ignoreDeps, when given, must be a non-blank string;
 // the feed event is posted only when this claim actually recorded a deps_override; a successful claim made with

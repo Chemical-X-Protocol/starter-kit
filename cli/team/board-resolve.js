@@ -8,7 +8,8 @@
  *      re-checked in that board's own db), when the typed task number IS that claimed task.
  *   3. the directory's own board, when it has the typed number.
  *   4. a claim board that has the typed number although it is not the claimed task.
- * With no task number (a --no-task commit) the first board with a team db wins in the same order.
+ * With no task number (a --no-task commit) there is nothing to look up, so the event lands on the
+ * directory's own board (#6766); only a directory with no team db falls back to the newest claim board.
  * Read-only: every db is opened read-only, none is created or changed. The caller opens the chosen
  * board for writing.
  */
@@ -94,6 +95,14 @@ const answer = (candidates, chosen, extra = {}) => ({
   ...extra
 });
 
+// No number to look up: --board, else the directory's own board; a claim board only when the directory has none.
+// The claim boards are read lazily, so a --no-task commit in a directory with a board opens no other db.
+const answerWithoutTask = (flagged, ownCandidate, claimsOf) => {
+  const named = flagged ? [flagged.candidate] : ownCandidate;
+  const candidates = named.length > 0 ? named : claimsOf();
+  return answer(candidates, candidates[0] ?? null);
+};
+
 /**
  * The handle's live claims on boards other than `board` (a board root), newest first. A claim whose task
  * is no longer the handle's in_progress task, or whose board is gone, is not listed (same check as above).
@@ -126,9 +135,9 @@ export const resolveHandleBoard = (startDir, options = {}) => {
   if (flagged?.error) return answer([], null, { error: flagged.error });
   const cwdBoard = boardAt(startDir);
   const ownCandidate = cwdBoard && hasDb(cwdBoard.root) ? [{ ...cwdBoard, source: 'cwd' }] : [];
-  const candidates = flagged ? [flagged.candidate] : [...claimCandidates(handle, startDir, cwdBoard, env), ...ownCandidate];
   const hasTaskRef = taskRef !== null && taskRef !== undefined;
-  if (!hasTaskRef) return answer(candidates, candidates[0] ?? null);
+  if (!hasTaskRef) return answerWithoutTask(flagged, ownCandidate, () => claimCandidates(handle, startDir, cwdBoard, env));
+  const candidates = flagged ? [flagged.candidate] : [...claimCandidates(handle, startDir, cwdBoard, env), ...ownCandidate];
   const picked = pickByTask(candidates, taskRef, handle);
   if (!picked) return answer(candidates, ownCandidate[0] ?? candidates[0] ?? null);
   return answer(candidates, picked.candidate, { taskId: picked.taskId, found: true });

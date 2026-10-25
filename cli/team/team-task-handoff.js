@@ -3,6 +3,9 @@
  * `chemx team task handoff <taskId> <@to> --as=<@from>` moves a task between agents.
  * The current assignee or the task creator (the author of its task_created event) may hand off.
  * The task stays in_progress, and the move is recorded as a task_handoff feed event.
+ * Given the board it ran on ({ root, env }), the handoff also moves the board pointer (#6766): the new
+ * owner's next `chemx commit` resolves the task's board without --board, and the old owner's pointer
+ * and agent-row board note for the task are removed (board-claim-record.js).
  */
 
 import { resolveAgentIdentity } from './agent-identity.js';
@@ -12,6 +15,7 @@ import { registerAgent } from './team-db-agents.js';
 import { postFeedEvent } from './team-db-feed.js';
 import { withImmediateTransaction } from './team-db-transaction.js';
 import { findRunAuthority } from './team-dispatcher-authority.js';
+import { recordClaimBoard, forgetClaimBoard } from './board-claim-record.js';
 
 export const HANDOFF_USAGE = 'chemx team task handoff <taskId> <@to> --as=<@from> [--with-locks]';
 
@@ -50,6 +54,12 @@ const transferLeases = (db, taskId, to) => {
   return named.map((lease) => ({ file_path: lease.file_path, from: lease.locked_by }));
 };
 
+// The pointer follows the task: cleared for the previous owner, written for the new one.
+const moveBoardPointer = (db, taskId, { from, to }, board) => {
+  if (from) forgetClaimBoard(db, taskId, from, board);
+  recordClaimBoard(db, taskId, to, board);
+};
+
 export const handoffTask = (db, taskId, toHandle, byHandle, options = {}) => {
   const to = normalizeAgentId(toHandle);
   const by = normalizeAgentId(byHandle);
@@ -77,6 +87,8 @@ export const handoffTask = (db, taskId, toHandle, byHandle, options = {}) => {
   const isRefused = !result.success;
   if (isRefused) return result;
 
+  const hasBoard = Boolean(options.board?.root);
+  if (hasBoard) moveBoardPointer(db, taskId, result, options.board);
   const label = result.from || 'unassigned';
   postFeedEvent(db, {
     author_id: by,
@@ -97,7 +109,7 @@ export const handoffTask = (db, taskId, toHandle, byHandle, options = {}) => {
       metadata: { from: lease.from, to, by }
     });
   }
-  return result;
+  return hasBoard ? { ...result, task: getTask(db, taskId) } : result;
 };
 
 const printHandoffResult = (res, taskId, isJson) => {
@@ -111,13 +123,13 @@ const printHandoffResult = (res, taskId, isJson) => {
   process.exitCode = res.success ? 0 : 1;
 };
 
-export const handleTaskHandoffCommand = (db, positional, flags, isCli) => {
+export const handleTaskHandoffCommand = (db, positional, flags, isCli, board = null) => {
   const [, taskId, toHandle] = positional;
   const identity = resolveAgentIdentity(flags.as);
   const isAnonymous = identity.source === 'process';
   const res = isAnonymous
     ? { success: false, reason: 'as_required', message: `--as=<@from> is required. Usage: ${HANDOFF_USAGE}` }
-    : handoffTask(db, taskId, toHandle, identity.id, { withLocks: flags.withLocks === true });
+    : handoffTask(db, taskId, toHandle, identity.id, { withLocks: flags.withLocks === true, board });
   if (isCli) printHandoffResult(res, taskId, flags.isJson);
   return res;
 };
