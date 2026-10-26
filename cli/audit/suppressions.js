@@ -14,7 +14,8 @@
 import { scanCommentRegions, INITIAL_SCAN_STATE } from './comment-regions.js';
 
 const ALLOW_MARKER = 'chemx-allow:';
-const ANNOTATION_BODY = /^\s*([A-Za-z_-]+)(?=\s|$)\s*(.*)$/;
+// A colon may follow the token (`best-effort: reason`); a token that runs into another word still fails.
+const ANNOTATION_BODY = /^\s*([A-Za-z_-]+)(?=:?(?:\s|$)):?\s*(.*)$/;
 const COMMENT_CLOSERS = /\*\/|-->/;
 const COMMENT_ONLY_LINE = /^\s*(?:\/\/|\/\*|\*|<!--|#)/;
 const BLOCK_GUTTER = /^[\s*]+/;

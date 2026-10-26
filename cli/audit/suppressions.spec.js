@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parsePhp } from '../php/php-parse.js';
 import { buildPhpCommentRegions, phpHeaderEndLine } from '../php/php-comments.js';
-import { applyAuditPostFilters } from './suppressions.js';
+import { applyAuditPostFilters, parseAllowAnnotation } from './suppressions.js';
 
 const filter = (src, violations) => {
   const parsed = parsePhp(src);
@@ -35,4 +35,18 @@ test('a header annotation suppresses a line-1 LINE_BUDGET_FILE', () => {
   const src = '<?php\n// chemx-allow: LINE_BUDGET_FILE generated file\nclass A {}\n';
   const out = filter(src, [v(1, 'LINE_BUDGET_FILE')]);
   assert.equal(out.filter((x) => x.rule === 'LINE_BUDGET_FILE').length, 0);
+});
+
+test('an annotation token may be followed by a colon before its reason', () => {
+  const plain = parseAllowAnnotation('} // chemx-allow: best-effort optional telemetry');
+  const colon = parseAllowAnnotation('} // chemx-allow: best-effort: optional telemetry');
+  assert.equal(colon.token, 'best-effort');
+  assert.equal(colon.reason, plain.reason);
+  assert.equal(colon.hasReason, true);
+});
+
+test('a colon with no letter or digit after it is not a reason, and a token that runs into a word is not the token', () => {
+  assert.equal(parseAllowAnnotation('// chemx-allow: best-effort: -').hasReason, false);
+  assert.equal(parseAllowAnnotation('// chemx-allow: best-effort:').hasReason, false);
+  assert.equal(parseAllowAnnotation('// chemx-allow: best-effort-ish: because').token, 'best-effort-ish');
 });
