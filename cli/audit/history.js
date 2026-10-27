@@ -198,7 +198,8 @@ export const saveAuditSnapshot = (report, cwd = process.cwd(), scopeInfo = {}) =
   const history = getAuditHistory(cwd);
 
   // Prevent duplicate snapshots if the same scope is saved again within 5 seconds with same metrics
-  const last = history.findLast((s) => scopeKey(s) === scopeKey(snapshot));
+  const targetScope = scopeKey(snapshot);
+  const last = [...history].reverse().find((s) => scopeKey(s) === targetScope);
   if (last) {
     const timeDiff = Math.abs(Date.now() - new Date(last.timestamp).getTime());
     const isSameMetrics = hasMatchingAuditMetrics(last, snapshot);
