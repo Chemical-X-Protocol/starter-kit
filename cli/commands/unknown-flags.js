@@ -207,8 +207,9 @@ export const findUnknownFlag = (command, rawArgs) => {
       if (isPattern) i++;
       continue;
     }
+    const rangeNote = entry.name === 'read' ? ' Range forms: <file>:N-M, --lines a-b, or --start=N --end=M.' : '';
     const isBadShort = shorts !== null && /^-[A-Za-z](=.*)?$/.test(arg) && !shorts.has(arg.slice(0, 2));
-    if (isBadShort) return `chemx ${entry.name}: unknown flag ${arg.slice(0, 2)}. Run \`chemx ${entry.name} --help\`.`;
+    if (isBadShort) return `chemx ${entry.name}: unknown flag ${arg.slice(0, 2)}.${rangeNote} Run \`chemx ${entry.name} --help\`.`;
     const isLongFlag = arg.startsWith('--') && arg.length > 2;
     if (!isLongFlag) continue;
     const hasInlineValue = arg.includes('=');
@@ -223,8 +224,13 @@ export const findUnknownFlag = (command, rawArgs) => {
     const closest = suggestFlag(name, candidates);
     const isPassedOn = isTypoOnly && !closest;
     if (isPassedOn) continue;
-    const hint = closest ? `; did you mean ${closest}?` : '';
-    return `chemx ${entry.name}: unknown flag ${name}${hint} Run \`chemx ${entry.name} --help\`.`;
+    let hint = '';
+    if (closest) {
+      hint = `; did you mean ${closest}?`;
+    } else if (rangeNote) {
+      hint = '.';
+    }
+    return `chemx ${entry.name}: unknown flag ${name}${hint}${rangeNote} Run \`chemx ${entry.name} --help\`.`;
   }
   return null;
 };

@@ -3,7 +3,7 @@
  * content, and a header that states where the slice sits in the file.
  */
 
-const VERBATIM_MODES = new Set(['range', 'symbol', 'template']);
+const VERBATIM_MODES = new Set(['range', 'symbol', 'template', 'full']);
 
 export const isVerbatimMode = (mode) => VERBATIM_MODES.has(mode);
 
