@@ -64,4 +64,56 @@ describe('Reader Shorthand Syntax', () => {
     assert.ok(output.includes('package.json'));
     assert.ok(output.includes('"name":'));
   });
+
+  describe('K7 read improvements (#6752)', () => {
+    it('supports --lines a-b and --lines=a-b in runReaderCli and readTokenOptimized', () => {
+      const resSpaced = runReaderCli(['package.json', '--lines', '2-5'], false);
+      assert.ok(resSpaced);
+      assert.equal(resSpaced.startLine, 2);
+      assert.equal(resSpaced.endLine, 5);
+      assert.equal(resSpaced.lineCount, 4);
+
+      const resEquals = runReaderCli(['package.json', '--lines=3-6'], false);
+      assert.ok(resEquals);
+      assert.equal(resEquals.startLine, 3);
+      assert.equal(resEquals.endLine, 6);
+      assert.equal(resEquals.lineCount, 4);
+
+      const resLeadingFlag = runReaderCli(['--lines', '2-5', 'package.json'], false);
+      assert.ok(resLeadingFlag);
+      assert.equal(resLeadingFlag.startLine, 2);
+      assert.equal(resLeadingFlag.endLine, 5);
+
+      const resDirect = readTokenOptimized('package.json', { lines: '2-5' });
+      assert.equal(resDirect.startLine, 2);
+      assert.equal(resDirect.endLine, 5);
+    });
+
+    it('--full returns the whole file without truncation and without cap', () => {
+      const res = readTokenOptimized('AGENTS.md', { full: true, autoOutlineThreshold: 20 });
+      assert.equal(res.startLine, 1);
+      assert.equal(res.endLine, res.totalLines);
+      assert.equal(res.lineCount, res.totalLines);
+      assert.equal(res.trailer, undefined);
+      assert.ok(res.totalLines > 20, 'AGENTS.md has more than 20 lines');
+    });
+
+    it('--bare never substitutes an outline on long files, prints remaining lines and next range', () => {
+      const res = readTokenOptimized('AGENTS.md', { bare: true, autoOutlineThreshold: 20, hintSyntax: 'cli' });
+      assert.notEqual(res.mode, 'auto-outline');
+      assert.equal(res.mode, 'range');
+      assert.equal(res.startLine, 1);
+      assert.equal(res.endLine, 20);
+      assert.match(res.trailer, /Truncated at the 20-line chemx read window/);
+      assert.match(res.trailer, /remain/i);
+      assert.match(res.trailer, /AGENTS\.md:21-/);
+    });
+
+    it('names the three range forms in unknown flag error text for read', async () => {
+      const { findUnknownFlag } = await import('./commands/unknown-flags.js');
+      const msg = findUnknownFlag('read', ['read', 'package.json', '--unknown-opt']);
+      assert.ok(msg);
+      assert.match(msg, /Range forms: <file>:N-M, --lines a-b, or --start=N --end=M\./);
+    });
+  });
 });

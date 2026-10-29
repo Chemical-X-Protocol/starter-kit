@@ -64,7 +64,7 @@ export const SEARCH_COMMANDS = [
     brief: 'Read a file by outline, symbol or lines',
     usage: 'chemx read <file>|<rev>:<file>[:N-M] [options]',
     summary: 'Token-minified file reader with AST outline and logic extraction.',
-    description: 'Extracts structural outlines, logic skeletons, line ranges, or targeted symbol declarations, from the working tree or (rev:file) at a git revision. A file over the 100-line window reads as an outline; one with nothing to outline (yaml, json, txt, shell) reads as its first 100 lines of text with the next range named.',
+    description: 'Extracts structural outlines, logic skeletons, line ranges, or targeted symbol declarations, from the working tree or (rev:file) at a git revision. A file over the 100-line window reads as an outline; --full returns the whole file; --bare reads text without substituting an outline; range forms are <file>:N-M, --lines a-b, or --start=N --end=M.',
     flags: [
       { flag: '--outline, -o', desc: 'Signatures only' },
       { flag: '--logic, -l', desc: 'AST logic skeleton: control flow, guards and mutations' },
@@ -76,6 +76,8 @@ export const SEARCH_COMMANDS = [
       { flag: '--connections', desc: 'Include caller graph and dependent references alongside symbol' },
       { flag: '--strip-comments', desc: 'Remove all code comments' },
       { flag: '--compact', desc: 'Remove blank lines and indentation' },
+      { flag: '--lines=<range>', desc: 'Line range a-b (alias of :a-b)' },
+      { flag: '--full', desc: 'Read the whole file without truncation' },
       { flag: '--start=<N>', desc: 'Starting line number (1-indexed)' },
       { flag: '--end=<N>', desc: 'Ending line number (1-indexed)' },
       { flag: '--bare, -b', desc: 'Raw content without headers or line numbers' },
@@ -83,6 +85,8 @@ export const SEARCH_COMMANDS = [
     ],
     examples: [
       'chemx read src/store.ts --outline',
+      'chemx read src/store.ts --lines 10-50',
+      'chemx read src/store.ts --full',
       'chemx read HEAD~1:src/store.ts --symbol=save',
       'chemx read src/controller.ts --logic',
       'chemx read api.ts --symbol=login',

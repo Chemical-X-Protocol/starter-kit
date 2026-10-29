@@ -222,6 +222,21 @@ export const readTokenOptimized = (targetPath, options = {}) => {
   let startLine = options.startLine;
   let endLine = options.endLine;
 
+  const hasOptionsLines = Boolean(options.lines);
+  const isStartLineMissing = startLine === undefined;
+  const isEndLineMissing = endLine === undefined;
+  const shouldParseOptionsLines = hasOptionsLines && (isStartLineMissing || isEndLineMissing);
+  if (shouldParseOptionsLines) {
+    const linesMatch = String(options.lines).match(/^(\d+)(?:[-:](\d+))?$/);
+    if (linesMatch) {
+      const needsStart = startLine === undefined;
+      if (needsStart) startLine = parseInt(linesMatch[1], 10);
+      const hasEndMatch = Boolean(linesMatch[2]);
+      const needsEnd = endLine === undefined && hasEndMatch;
+      if (needsEnd) endLine = parseInt(linesMatch[2], 10);
+    }
+  }
+
   const colonMatch = typeof targetPath === 'string' && targetPath.match(/^([^:]+):(\d+)(?:[-:](\d+))?$/);
   if (colonMatch) {
     rawPath = colonMatch[1];
@@ -326,12 +341,15 @@ export const readTokenOptimized = (targetPath, options = {}) => {
 
   const hasLineRange = typeof startLine === 'number' || typeof endLine === 'number';
   const autoThreshold = typeof options.autoOutlineThreshold === 'number' ? options.autoOutlineThreshold : 100;
+  const isFull = Boolean(options.full);
+  const isBare = Boolean(options.bare);
 
   // Read window: files longer than autoThreshold read without a symbol or slice return an AST
   // outline to protect context. A tool budget, not an architecture rule (AGENTS.md owns those).
   // A file with no outline to give (yaml, json, txt) falls through to the first window of text.
+  // --full and --bare (without explicit --outline) never substitute an outline.
   const isOverWindow = !hasLineRange && totalLines > autoThreshold;
-  const canAutoOutline = isOverWindow && !conflictNote && hasOutlineExtractor(rawPath);
+  const canAutoOutline = isOverWindow && !conflictNote && !isFull && (!isBare || wantsOutline) && hasOutlineExtractor(rawPath);
   const autoOutline = canAutoOutline ? generateAstOutline(rawContent, rawPath) : '';
   const shouldAutoOutline = !isEmptyOutline(autoOutline);
   if (shouldAutoOutline) {
@@ -374,7 +392,7 @@ export const readTokenOptimized = (targetPath, options = {}) => {
 
   // Cap each slice to the read window (a tool budget, not an architecture rule)
   const maxLines = autoThreshold;
-  const isCapped = (endIdx - startIdx) > maxLines;
+  const isCapped = !isFull && (endIdx - startIdx) > maxLines;
   if (isCapped) {
     endIdx = startIdx + maxLines;
   }
@@ -382,19 +400,21 @@ export const readTokenOptimized = (targetPath, options = {}) => {
   const slice = sliceWithTransforms(rawContent, resolvedPath, startIdx, endIdx, options);
   const isCliHint = options.hintSyntax === 'cli';
   const nextEnd = Math.min(totalLines, endIdx + maxLines);
+  const remaining = totalLines - endIdx;
   const formatTruncationHint = () => {
     if (!isCapped) return null;
+    const remainMsg = `${remaining} ${remaining === 1 ? 'line remains' : 'lines remain'}`;
     if (isCliHint) {
-      return `// [Truncated at the ${maxLines}-line chemx read window. Use chemx read ${rawPath}:${endIdx + 1}-${nextEnd} to inspect subsequent lines]`;
+      return `// [Truncated at the ${maxLines}-line chemx read window. ${remainMsg}; use chemx read ${rawPath}:${endIdx + 1}-${nextEnd} to inspect subsequent lines]`;
     }
-    return `// [Truncated at the ${maxLines}-line chemx read window. Use startLine=${endIdx + 1} to inspect subsequent lines]`;
+    return `// [Truncated at the ${maxLines}-line chemx read window. ${remainMsg}; use startLine=${endIdx + 1} to inspect subsequent lines]`;
   };
   const trailer = formatTruncationHint();
 
   return {
     file: rawPath,
     totalLines,
-    mode: 'range',
+    mode: isFull ? 'full' : 'range',
     startLine: startIdx + 1,
     endLine: endIdx,
     lineCount: slice.lines.length,

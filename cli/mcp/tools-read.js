@@ -17,6 +17,20 @@ export const handleChemxRead = (args = {}, cwd = process.cwd()) => {
   let startLine = args.startLine;
   let endLine = args.endLine;
 
+  const hasArgsLines = Boolean(args.lines);
+  const isStartLineMissing = startLine === undefined;
+  const isEndLineMissing = endLine === undefined;
+  const shouldParseLinesArg = hasArgsLines && (isStartLineMissing || isEndLineMissing);
+  if (shouldParseLinesArg) {
+    const linesMatch = String(args.lines).match(/^(\d+)(?:[-:](\d+))?$/);
+    if (linesMatch) {
+      if (isStartLineMissing) startLine = parseInt(linesMatch[1], 10);
+      const hasEndInMatch = Boolean(linesMatch[2]);
+      const shouldSetEnd = isEndLineMissing && hasEndInMatch;
+      if (shouldSetEnd) endLine = parseInt(linesMatch[2], 10);
+    }
+  }
+
   const colonMatch = typeof rawPath === 'string' && rawPath.match(/^([^:]+):(\d+)(?:[-:](\d+))?$/);
   const hasColonRange = Boolean(colonMatch);
   if (hasColonRange) {
@@ -39,7 +53,10 @@ export const handleChemxRead = (args = {}, cwd = process.cwd()) => {
     compact: args.compact === true,
     startLine,
     endLine,
-    rev: args.rev
+    full: args.full === true,
+    bare: Boolean(args.bare),
+    rev: args.rev,
+    hintSyntax: 'mcp'
   });
   const relFile = path.relative(targetCwd, targetPath) || res.file;
   res.file = args.rev ? `${args.rev}:${relFile}` : relFile;
@@ -54,7 +71,7 @@ export const handleChemxRead = (args = {}, cwd = process.cwd()) => {
 
   const isBare = Boolean(args.bare);
   if (isBare) {
-    return res.content;
+    return res.trailer ? `${res.content}\n${res.trailer}` : res.content;
   }
 
   const ext = path.extname(targetPath).toLowerCase();
