@@ -221,6 +221,37 @@ test('a block annotation on a continuation line covers the code below when its c
   assert.equal(emDash(title.replace('chemx-allow: ', '')).length, 1);
 });
 
+// A rule outside the catch family has no revision for C4 or SC-4, so it keeps the reading
+// 4ea6eb2 gave the first marker on a line, and each row here is [] there too: the reason runs
+// past a later marker, and an empty one comes from a block comment still open at the line end.
+const FLAGGED_LINES = Object.freeze({
+  TYPOGRAPHY_EM_DASH: `export const t = 'Foo ${EM_DASH} Bar';`,
+  UNGUARDED_LOGGING: "export const f = () => console.log('x');",
+  AI_SLOP_LAZY_ANY: 'try { a(); } catch (e: any) { h(e); }'
+});
+const MAIN_READINGS = [
+  (rule, line, other) => `${line} // chemx-allow: ${rule} chemx-allow: ${other} quoting\n`,
+  (rule, line) => `/* chemx-allow: ${rule} */ x(); /* still\n open reason */\n${line}\n`,
+  (rule, line) => `${line} /* chemx-allow: ${rule} */ /* tail\n reason here */\n`
+];
+
+test('a rule outside the catch family keeps main\'s reading of the first marker on a line (C4, SC-4)', () => {
+  for (const [rule, line] of Object.entries(FLAGGED_LINES)) {
+    const hits = (code) => rulesAt(audit(code, 'src/x.ts'), rule);
+    assert.equal(hits(`${line}\n`).length, 1, rule);
+    const other = rule === 'UNGUARDED_LOGGING' ? 'TYPOGRAPHY_EM_DASH' : 'UNGUARDED_LOGGING';
+    for (const shape of MAIN_READINGS) assert.deepEqual(hits(shape(rule, line, other)), [], shape(rule, line, other));
+    const [reasonless] = hits(`/* chemx-allow: ${rule} */ x(); /* still\n */\n${line}\n`);
+    assert.ok(reasonless.hazard.includes('needs a reason'), reasonless.hazard);
+  }
+});
+
+test('the catch family reads each marker on a line alone, as its revisions record (C4)', () => {
+  const twoMarkers = assertFlagged('try { a(); } catch {} // chemx-allow: best-effort chemx-allow: UNGUARDED_LOGGING quoting\n');
+  assert.ok(twoMarkers.hazard.includes('needs a reason'), twoMarkers.hazard);
+  assertFlagged('/* chemx-allow: best-effort */ x(); /* still\n open reason */\ntry { a(); } catch {}\n');
+});
+
 // C4: an annotation is owned by the catch it is written for, by column as well as by line.
 const catchColumns = (code) => catchHits(code).map((hit) => [hit.line, hit.column]);
 

@@ -118,6 +118,18 @@ test('a block annotation covers at least the lines 4ea6eb2 covered, whatever lin
   }
 });
 
+test('a finding outside the catch family keeps main\'s reading of the first marker on a line (C4, SC-4)', () => {
+  assert.equal(scanned('code(); // chemx-allow: X_RULE chemx-allow: Y_RULE quoting\n', 1), 0);
+  assert.equal(scanned('/* chemx-allow: X_RULE */ x(); /* still\n open reason */\ncode();\n', 3), 0);
+  assert.equal(scanned('code(); /* chemx-allow: X_RULE */ /* tail\n reason here */\n', 1), 0);
+  assert.equal(scanned('/* chemx-allow: X_RULE */ x(); /* still\n open reason */\ncode();\nmore();\n', 4), 1);
+  const catchFamily = (src, line) => applyAuditPostFilters([v(line, 'ERROR_SWALLOWED_EXCEPTION')], src.split('\n')).length;
+  assert.equal(catchFamily('code(); // chemx-allow: best-effort chemx-allow: Y_RULE quoting\n', 1), 1);
+  assert.equal(catchFamily('/* chemx-allow: best-effort */ x(); /* still\n open reason */\ncode();\n', 3), 1);
+  const listed = parseAllowAnnotations(['code(); // chemx-allow: X_RULE chemx-allow: Y_RULE quoting']);
+  assert.deepEqual(listed.map((a) => [a.token, a.reason]), [['X_RULE', ''], ['Y_RULE', 'quoting']]);
+});
+
 test('a PHP block annotation with its reason on the marker line lasts to its closer (SC-4)', () => {
   const shared = '<?php\n/* chemx-allow: X_RULE legacy api\n */ $a = 1;\n$b = 2;\n$c = 3;\n';
   assert.deepEqual([3, 4, 5].map((line) => filter(shared, [v(line)]).length), [0, 0, 1]);

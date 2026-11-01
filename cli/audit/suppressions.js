@@ -18,6 +18,11 @@
  *   through the line below its closer (so the rest of its comment and a closer line that code
  *   shares count, whatever line opened the comment), and the text after a try brace on the line
  *   above (`tryBraceLine`). A covering annotation without a reason leaves a note that says so.
+ * - Rules outside the catch family have no revision for per-marker reading, so they also keep
+ *   the line reading 4ea6eb2 gave: one annotation at a line's first marker, whose reason runs
+ *   past any later marker to the comment closer and, when that leaves it empty, comes from the
+ *   following lines of a block comment still open at the end of the line. Either reading
+ *   suppresses such a finding, so its count never rises over main's.
  * - duplicate reports of one finding (same file, line, column and rule), plus the
  *   AI_SLOP_SHALLOW_CATCH twin of an ERROR_SWALLOWED_EXCEPTION at the same catch.
  */
@@ -49,10 +54,11 @@ const listMarkerIndexes = (lineText) => {
   return indexes;
 };
 
-// `<token> <reason>` after the marker at markerIndex, up to the next marker or comment closer.
-const parseMarkerAt = (lineText, markerIndex) => {
+// `<token> <reason>` after the marker at markerIndex, up to the next marker (unless
+// readsPastMarkers) or the comment closer.
+const parseMarkerAt = (lineText, markerIndex, { readsPastMarkers = false } = {}) => {
   const bodyStart = markerIndex + ALLOW_MARKER.length;
-  const nextMarker = lineText.indexOf(ALLOW_MARKER, bodyStart);
+  const nextMarker = readsPastMarkers ? -1 : lineText.indexOf(ALLOW_MARKER, bodyStart);
   const bodyEnd = nextMarker === -1 ? lineText.length : nextMarker;
   const body = lineText.slice(bodyStart, bodyEnd).split(COMMENT_CLOSERS)[0].trim();
   const match = ANNOTATION_BODY.exec(body);
@@ -97,12 +103,27 @@ const continueBlock = (annotation, lines, idx, closer) => {
 
 const findRegion = (regions, index) => regions.find(([start, end]) => index >= start && index < end);
 
+const placeAnnotation = (parsed, idx, region) => ({ ...parsed, line: idx + 1, lastLine: idx + 1, lastEnd: region[1], commentStart: region[0], commentEnd: region[1] });
+
 // Every annotation on line idx whose marker sits in one of its comment regions.
 const annotateLine = (lines, idx, regions, finish) => listMarkerIndexes(lines[idx]).flatMap((markerIndex) => {
   const region = findRegion(regions, markerIndex);
   const parsed = region ? parseMarkerAt(lines[idx], markerIndex) : null;
   if (!parsed) return [];
-  return [finish({ ...parsed, line: idx + 1, lastLine: idx + 1, lastEnd: region[1], commentStart: region[0], commentEnd: region[1] })];
+  return [finish(placeAnnotation(parsed, idx, region))];
+});
+
+// The line readings: per line, the first marker when it sits in a comment, with its
+// reason read past later markers. An empty reason is read from the block comment closerAt
+// names (the closer of a block still open at the end of the line, or null for none).
+const collectLineReadings = (lines, regionsByLine, closerAt) => lines.flatMap((lineText, idx) => {
+  const [markerIndex] = listMarkerIndexes(lineText);
+  const region = markerIndex === undefined ? null : findRegion(regionsByLine[idx], markerIndex);
+  const parsed = region ? parseMarkerAt(lineText, markerIndex, { readsPastMarkers: true }) : null;
+  if (!parsed) return [];
+  const annotation = placeAnnotation(parsed, idx, region);
+  const closer = parsed.reason === '' ? closerAt(annotation, idx) : null;
+  return [closer ? continueBlock(annotation, lines, idx, closer) : annotation];
 });
 
 // Line-scanner regions per line, plus the block comment each line carries in from above
@@ -135,7 +156,9 @@ const collectWithScanner = (lines) => {
       return annotation.markerIndex >= scan.openFrom ? continueBlock(located, lines, idx, scan.closer) : located;
     });
   });
-  return { annotations, regionsByLine: scans.map((scan) => scan.regions) };
+  const regionsByLine = scans.map((scan) => scan.regions);
+  const lineReadings = collectLineReadings(lines, regionsByLine, (_, idx) => scans[idx].closer);
+  return { annotations, lineReadings, regionsByLine };
 };
 
 // An annotation whose comment region runs to the end of its line with no closer after the marker.
@@ -158,7 +181,9 @@ const collectWithRegions = (lines, commentRegions) => {
     const isContinued = isOpen && (annotation.reason === '' || !isLineCommentAt(lineText, region));
     return isContinued ? continueBlock(annotation, lines, idx, '*/') : annotation;
   }));
-  return { annotations, regionsByLine };
+  const isOpenAt = (annotation, idx) => isOpenBlockAt(lines[idx], annotation, [annotation.commentStart, annotation.commentEnd]);
+  const lineReadings = collectLineReadings(lines, regionsByLine, (annotation, idx) => (isOpenAt(annotation, idx) ? '*/' : null));
+  return { annotations, lineReadings, regionsByLine };
 };
 
 /**
@@ -264,10 +289,17 @@ const isAnnotationInRange = (annotation, violation, context) => {
   return isInHeader || isInWindow;
 };
 
-const listCoveringAnnotations = (violation, context) => context.annotations
+// The catch family reads each marker alone (C4, under its rule revisions); any other rule also
+// keeps the line readings, so an annotation main honoured for it still counts.
+const listCandidateAnnotations = (violation, context) => {
+  const isCatchFamily = CATCH_FAMILY.has(violation.rule);
+  return isCatchFamily ? context.annotations : [...context.annotations, ...context.lineReadings];
+};
+
+const listCoveringAnnotations = (violation, context) => listCandidateAnnotations(violation, context)
   .filter((annotation) => doesTokenCover(annotation.token, violation.rule) && isAnnotationInRange(annotation, violation, context));
 
-/** context: { annotations, lines, regionsByLine, headerEndLine }, as applyAuditPostFilters builds it. */
+/** context: { annotations, lineReadings, lines, regionsByLine, headerEndLine }, as applyAuditPostFilters builds it. */
 export const isSuppressedByAnnotation = (violation, context) =>
   listCoveringAnnotations(violation, context).some((annotation) => annotation.hasReason);
 
@@ -299,7 +331,7 @@ export const dedupeViolations = (violations) => {
 export const applyAuditPostFilters = (violations, lines, { commentRegions = null, fileHeaderEndLine = 0 } = {}) => {
   const collected = commentRegions ? collectWithRegions(lines, commentRegions) : collectWithScanner(lines);
   const context = { ...collected, lines, headerEndLine: fileHeaderEndLine };
-  const hasAnnotations = collected.annotations.length > 0;
+  const hasAnnotations = collected.annotations.length > 0 || collected.lineReadings.length > 0;
   const allowed = hasAnnotations
     ? violations.filter((v) => !isSuppressedByAnnotation(v, context)).map((v) => withMissingReasonNote(v, context))
     : violations;
