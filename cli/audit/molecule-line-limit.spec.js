@@ -36,6 +36,14 @@ describe('runAudit molecule line limit', () => {
     });
   });
 
+  it('counts a 250-line molecule compliant and a 251-line one over the pragmatic budget', () => {
+    withMoleculeProject({ 'm-a.ts': 250, 'm-b.ts': 251 }, null, (root) => {
+      const report = runAudit('src', { cwd: root, fast: true });
+      assert.equal(report.metrics.moleculeLineLimit, 250);
+      assert.deepEqual([report.metrics.moleculeCount, report.metrics.moleculeCompliantCount, report.metrics.moleculeCompliantPct], [2, 1, 50]);
+    });
+  });
+
   it('exposes 100 under atomic-strict and counts a 180-line molecule over budget', () => {
     withMoleculeProject({ 'm-a.ts': 180, 'm-b.ts': 80 }, '{"profile":"atomic-strict"}', (root) => {
       const report = runAudit('src', { cwd: root, fast: true });

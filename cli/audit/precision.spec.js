@@ -236,6 +236,23 @@ test('a console-only catch next to an empty catch on the same line keeps its own
   assert.deepEqual(hits, [['ERROR_SWALLOWED_EXCEPTION', code.indexOf('catch')], ['AI_SLOP_SHALLOW_CATCH', code.lastIndexOf('catch')]]);
 });
 
+test('AI_SLOP_LAZY_ANY still fires on a handled catch and on an annotated shallow catch (SC-12)', () => {
+  const lazyAny = (code) => rulesAt(audit(code, 'src/x.ts'), 'AI_SLOP_LAZY_ANY');
+  assert.equal(lazyAny('try { a(); } catch (e: any) { handle(e); }\n').length, 1);
+  const annotated = 'try { a(); } catch (e: any) { /* chemx-allow: best-effort optional */ }\n';
+  assert.equal(lazyAny(annotated).length, 1);
+  assert.deepEqual(catchHits(annotated, 'src/x.ts'), []);
+});
+
+test('an annotation in a Vue SFC script keeps its file line number (SC-14)', () => {
+  const sfc = (body) => `<template>\n  <section />\n</template>\n\n<script setup>\ntry {\n  load();\n} catch {\n${body}}\n</script>\n`;
+  const plain = catchHits(sfc(''), 'src/x.vue');
+  assert.deepEqual(plain.map((hit) => [hit.rule, hit.line]), [['ERROR_SWALLOWED_EXCEPTION', 8]]);
+  assert.deepEqual(catchHits(sfc('  // chemx-allow: best-effort optional preload\n'), 'src/x.vue'), []);
+  const aboveCatch = '<template>\n  <section />\n</template>\n\n<script setup>\ntry {\n  load();\n// chemx-allow: best-effort optional preload\n} catch {}\n</script>\n';
+  assert.deepEqual(catchHits(aboveCatch, 'src/x.vue'), []);
+});
+
 test('the AI_SLOP_SHALLOW_CATCH directive names the best-effort annotation (SC-8)', () => {
   assert.match(RULE_REGISTRY.AI_SLOP_SHALLOW_CATCH.directive, /chemx-allow: best-effort <reason>/);
   assert.match(RULE_REGISTRY.ERROR_SWALLOWED_EXCEPTION.directive, /chemx-allow: best-effort <reason>/);

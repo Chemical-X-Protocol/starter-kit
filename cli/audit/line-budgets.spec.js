@@ -88,18 +88,20 @@ test('a molecule warning is read as a whole Number: exponent strings count, bool
   }
 });
 
-// Same pattern as main's cli/docs-drift.spec.js flatCap; these files join its GUIDANCE_FILES on merge
-// (ported from 2b58305 and b0c0213).
+// Report and funnel text outside docs-drift's GUIDANCE_FILES (ported from 2b58305 and b0c0213).
 const PROFILE_BUDGET_TEXT_FILES = [
-  'app/components/molecules/funnel/funnel-system-layers-core.data.ts',
+  'app/components/molecules/funnel/funnel-system-layers-core.data.ts', 'app/components/molecules/funnel/funnel-system-layers.data.ts',
   'cli/audit/reporter-grades.js', 'cli/audit/reporter-sections.js', 'cli/audit/reporter-summary.js', 'cli/audit/social.js'
 ];
+// The FLAT_CAP of cli/docs-drift.spec.js, which self-tests it; the first assertion below keeps them equal.
+const FLAT_CAP = /<\s*100\s*(lines?|LOC|L\b)|\b100[\s-]*(lines?|LOC|L)\b|\b(under|approaching|exceeding)\s+100\b/i;
 
 test('guidance and report text name the profile molecule budget, not a flat 100-line cap', () => {
-  const flatCap = /(<\s*100\s*(lines?|LOC|L\b)|under 100 lines|100 lines is an outer bound|100-line budget|max(imum)? 100 lines)/i;
+  const docsDrift = fs.readFileSync(new URL('../docs-drift.spec.js', import.meta.url), 'utf-8');
+  assert.ok(docsDrift.includes(`const FLAT_CAP = /${FLAT_CAP.source}/i;`), 'same FLAT_CAP as cli/docs-drift.spec.js');
   const hits = PROFILE_BUDGET_TEXT_FILES.flatMap((rel) =>
     fs.readFileSync(new URL(`../../${rel}`, import.meta.url), 'utf-8').split('\n').flatMap((line, index) => {
-      const isHit = flatCap.test(line) && !/atomic-strict/.test(line);
+      const isHit = FLAT_CAP.test(line) && !/atomic-strict/.test(line);
       return isHit ? [`${rel}:${index + 1}: ${line.trim().slice(0, 120)}`] : [];
     }));
   assert.deepEqual(hits, []);

@@ -69,7 +69,7 @@ const isSummaryOnlyRequest = (gitArgs) => {
   return isSummaryFormat && !wantsPatch;
 };
 
-// Outside a work tree git diff silently becomes --no-index and prints ~100 lines of usage.
+// Outside a work tree git diff silently becomes --no-index and prints its whole usage text.
 export const isInsideWorkTree = (cwd) => runGit(['rev-parse', '--is-inside-work-tree'], cwd).stdout.trim() === 'true';
 
 export const runDiff = async (rawArgs = [], isCli = true, cwd = process.cwd()) => {

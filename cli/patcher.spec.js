@@ -129,6 +129,18 @@ test('patchFile: the molecule line limit follows the profile via line-budgets.js
   assert.ok(strict.lineBudget.warning.includes('Directive 1.A'));
 });
 
+test('patchFile: a 260-line molecule fails the 250-line pragmatic budget (ported from 98c65c0)', () => {
+  const result = patchMoleculeTo(260);
+  assert.deepStrictEqual([result.lineBudget.passed, result.lineBudget.limit], [false, 250]);
+  assert.ok(result.lineBudget.warning.includes('250-line limit'), result.lineBudget.warning);
+});
+
+test('patchFile: a max-line-count-warning of 800 is capped at the 500-line file bound (ported from 98c65c0)', () => {
+  const result = patchMoleculeTo(600, { rules: { 'max-line-count-warning': 800 } });
+  assert.deepStrictEqual([result.lineBudget.passed, result.lineBudget.limit], [false, 500]);
+  assert.ok(result.lineBudget.warning.includes('500-line limit'), result.lineBudget.warning);
+});
+
 test('patchFile: detects Directive 1.G raw DOM violations in molecule files', () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-patch-rawdom-'));
   const moleculeFile = path.join(tmpDir, 'm-bad-button.vue');

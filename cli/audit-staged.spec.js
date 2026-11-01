@@ -57,3 +57,17 @@ test('#1716: the kit pre-commit script and the hook template gate on the staged 
   }
   assert.match(buildPreCommitHookScript(), /AUDIT_BIN="\$CHEMX_BIN"/);
 });
+
+// H3 (8a4668c) guarded the minGrade sed line, which #255 removed. A template-literal escape slip
+// (a `\(` that renders as `(`) now shows first in the printf and label lines both hooks share.
+test('H3: every printf and gate label the hook template renders is byte-identical in scripts/pre-commit.sh', () => {
+  const trimmedLines = (text) => text.split('\n').map((line) => line.trim());
+  const scriptLines = trimmedLines(fs.readFileSync(path.join(KIT, 'scripts', 'pre-commit.sh'), 'utf-8'));
+  const renderedLines = trimmedLines(buildPreCommitHookScript());
+  const shared = renderedLines.filter((line) => /^(printf |GATE_LABEL=)/.test(line));
+  assert.ok(shared.length >= 10, `the template still renders its printf and label lines (${shared.length})`);
+  assert.deepEqual(shared.filter((line) => !scriptLines.includes(line)), []);
+  const gradeFloors = '--git --default-min-grade=B --default-min-score=80';
+  assert.ok(renderedLines.some((line) => line.startsWith('AUDIT_GATE_ARGS=') && line.includes(gradeFloors)), 'template grade gate');
+  assert.ok(scriptLines.some((line) => line.startsWith('AUDIT_CMD=') && line.includes(gradeFloors)), 'pre-commit.sh grade gate');
+});
