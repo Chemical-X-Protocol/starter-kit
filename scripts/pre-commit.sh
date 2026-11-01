@@ -76,6 +76,18 @@ fi
 MIN_GRADE="${CHEMX_MIN_GRADE:-${CONF_MIN_GRADE:-B}}"
 MIN_SCORE="${CHEMX_MIN_SCORE:-${CONF_MIN_SCORE:-80}}"
 
+# Both floors end up in the eval-ed audit command below, so only a known grade (any case)
+# and an integer 0-100 get through; anything else, a shell payload included, falls back (#254).
+MIN_GRADE="$(printf '%s' "$MIN_GRADE" | tr '[:lower:]' '[:upper:]')"
+case "$MIN_GRADE" in
+  A+|A|B|C|D|F) ;;
+  *) MIN_GRADE="B" ;;
+esac
+case "$MIN_SCORE" in
+  [0-9]|[1-9][0-9]|100) ;;
+  *) MIN_SCORE="80" ;;
+esac
+
 # Nothing added, copied, modified or renamed: nothing to gate. The audit itself
 # decides which staged paths are source files.
 if git diff --cached --quiet -M --diff-filter=ACMR; then

@@ -1,5 +1,18 @@
 import { defaultTemplateLauncher } from './hooks/launcher.js';
 
+const HOOK_GRADES = ['A+', 'A', 'B', 'C', 'D', 'F'];
+const HOOK_SCORE = /^(?:100|[1-9]?\d)$/;
+
+// The floors are rendered into shell text, so anything but a known grade or a 0-100 integer becomes the default (#254).
+const toHookGrade = (value) => {
+  const grade = String(value).trim().toUpperCase();
+  return HOOK_GRADES.includes(grade) ? grade : 'B';
+};
+const toHookScore = (value) => {
+  const score = String(value).trim();
+  return HOOK_SCORE.test(score) ? Number(score) : 80;
+};
+
 // launcher pins the chemx this hook and the CI workflow run (GAP-4): { version, cliPath, ciBin }.
 export const buildPreCommitHookScript = (minGrade = 'B', minScore = 80, launcher = defaultTemplateLauncher()) => `#!/bin/sh
 # Chemical X Protocol: Pre-Commit Architecture Gatekeeper
@@ -86,8 +99,20 @@ if [ -f "\$CONFIG_FILE" ]; then
   CONF_MIN_SCORE=\$(grep -o '"minScore"[[:space:]]*:[[:space:]]*[0-9]*' "\$CONFIG_FILE" 2>/dev/null | grep -o '[0-9]*\$')
 fi
 
-MIN_GRADE="\${CHEMX_MIN_GRADE:-\${CONF_MIN_GRADE:-${minGrade}}}"
-MIN_SCORE="\${CHEMX_MIN_SCORE:-\${CONF_MIN_SCORE:-${minScore}}}"
+MIN_GRADE="\${CHEMX_MIN_GRADE:-\${CONF_MIN_GRADE:-${toHookGrade(minGrade)}}}"
+MIN_SCORE="\${CHEMX_MIN_SCORE:-\${CONF_MIN_SCORE:-${toHookScore(minScore)}}}"
+
+# Both floors end up in the eval-ed audit command below, so only a known grade (any case) and
+# an integer 0-100 get through; anything else falls back to the defaults rendered above.
+MIN_GRADE="\$(printf '%s' "\$MIN_GRADE" | tr '[:lower:]' '[:upper:]')"
+case "\$MIN_GRADE" in
+  A+|A|B|C|D|F) ;;
+  *) MIN_GRADE="${toHookGrade(minGrade)}" ;;
+esac
+case "\$MIN_SCORE" in
+  [0-9]|[1-9][0-9]|100) ;;
+  *) MIN_SCORE="${toHookScore(minScore)}" ;;
+esac
 
 # Nothing added, copied, modified or renamed: nothing to gate.
 git diff --cached --quiet -M --diff-filter=ACMR && exit 0
@@ -171,7 +196,7 @@ jobs:
           fi
 
       - name: Run Chemical X Architectural Audit
-        run: ${launcher.ciBin} audit --min-grade=\${{ vars.CHEMX_MIN_GRADE || '${minGrade}' }} --min-score=\${{ vars.CHEMX_MIN_SCORE || ${minScore} }} --markdown --output=AUDIT_REPORT.md
+        run: ${launcher.ciBin} audit --min-grade=\${{ vars.CHEMX_MIN_GRADE || '${toHookGrade(minGrade)}' }} --min-score=\${{ vars.CHEMX_MIN_SCORE || ${toHookScore(minScore)} }} --markdown --output=AUDIT_REPORT.md
       - name: Upload Audit Scorecard Artifact
         if: always()
         uses: actions/upload-artifact@v4

@@ -71,4 +71,8 @@ Not guaranteed: `php -l` proves syntax only. PHP audit rules (security, WordPres
 ## Related env switches
 
 - `CHEMX_PRECOMMIT_GATE=grade` replaces the delta gate with the absolute grade gate on changed files (`--min-grade`, `--min-score`).
+  - The hook takes the floors from `CHEMX_MIN_GRADE`/`CHEMX_MIN_SCORE`, else `minGrade`/`minScore` in `.chemx/config.json`.
+  - It accepts only `A+`, `A`, `B`, `C`, `D` or `F` (any case) and an integer from 0 to 100.
+  - Anything else falls back to `B` and `80`, or for the installed hook to the defaults it was rendered with, so a value never runs as shell (#254).
+  - Pinned by `cli/audit/precommit-hook-injection.spec.js`.
 - `CHEMX_SKIP_PRECOMMIT=1` or `CHEMX_FORCE_COMMIT=1` skips the hook entirely.
