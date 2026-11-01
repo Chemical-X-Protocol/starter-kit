@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { parsePhp } from '../php/php-parse.js';
 import { buildPhpCommentRegions, phpHeaderEndLine } from '../php/php-comments.js';
 import { auditCode } from './rules.js';
-import { applyAuditPostFilters, parseAllowAnnotation, parseAllowAnnotations } from './suppressions.js';
+import { applyAuditPostFilters } from './suppressions.js';
 
 const filter = (src, violations) => {
   const parsed = parsePhp(src);
@@ -38,50 +38,55 @@ test('a header annotation suppresses a line-1 LINE_BUDGET_FILE', () => {
   assert.equal(out.filter((x) => x.rule === 'LINE_BUDGET_FILE').length, 0);
 });
 
+// What the post-filters make of a finding of rule on line (no columns, line scanner): dropped by
+// an annotation with a reason, kept with the "reason is mandatory" note, or kept as it was.
+const verdict = (src, line = 1, rule = 'ERROR_SWALLOWED_EXCEPTION') => {
+  const [finding] = applyAuditPostFilters([v(line, rule)], src.split('\n'));
+  if (!finding) return 'suppressed';
+  return /reason is mandatory/.test(finding.hazard) ? 'noted' : 'flagged';
+};
+const catchColumns = (code) => auditCode(code, 'src/x.ts', 'src/x.ts', { config: {} })
+  .filter((x) => x.rule === 'ERROR_SWALLOWED_EXCEPTION')
+  .map((x) => [x.line, x.column]);
+
 test('an annotation token may be followed by a colon before its reason', () => {
-  const plain = parseAllowAnnotation('} // chemx-allow: best-effort optional telemetry');
-  const colon = parseAllowAnnotation('} // chemx-allow: best-effort: optional telemetry');
-  assert.equal(colon.token, 'best-effort');
-  assert.equal(colon.reason, plain.reason);
-  assert.equal(colon.hasReason, true);
+  assert.equal(verdict('} // chemx-allow: best-effort optional telemetry'), 'suppressed');
+  assert.equal(verdict('} // chemx-allow: best-effort: optional telemetry'), 'suppressed');
 });
 
 test('a colon with no letter or digit after it is not a reason, and a token that runs into a word is not the token', () => {
-  assert.equal(parseAllowAnnotation('// chemx-allow: best-effort: -').hasReason, false);
-  assert.equal(parseAllowAnnotation('// chemx-allow: best-effort:').hasReason, false);
-  assert.equal(parseAllowAnnotation('// chemx-allow: best-effort-ish: because').token, 'best-effort-ish');
+  assert.equal(verdict('// chemx-allow: best-effort: -'), 'noted');
+  assert.equal(verdict('// chemx-allow: best-effort:'), 'noted');
+  assert.equal(verdict('// chemx-allow: best-effort-ish: because'), 'flagged');
 });
 
 test('any non-word separator ends the token and leading separators leave the reason (C1)', () => {
   for (const separator of [', ', '. ', '(', '/', ': ', '-- ', ' - ', ';']) {
-    const annotation = parseAllowAnnotation(`// chemx-allow: best-effort${separator}warm cache`);
-    assert.equal(annotation.token, 'best-effort', separator);
-    assert.equal(annotation.reason.startsWith('warm cache'), true, `${separator} gave ${annotation.reason}`);
+    assert.equal(verdict(`// chemx-allow: best-effort${separator}warm cache`), 'suppressed', separator);
+    assert.equal(verdict(`// chemx-allow: best-effort${separator}`), 'noted', separator);
   }
   for (const token of ['best-effort-ish', 'best-effort_x', 'best-effort2']) {
-    assert.equal(parseAllowAnnotation(`// chemx-allow: ${token} reason`).token, token);
+    assert.equal(verdict(`// chemx-allow: ${token} reason`), 'flagged', token);
   }
-  assert.equal(parseAllowAnnotation('// chemx-allow: A11Y_CLICKABLE_NON_SEMANTIC legacy markup').token, 'A11Y_CLICKABLE_NON_SEMANTIC');
+  assert.equal(verdict('// chemx-allow: A11Y_CLICKABLE_NON_SEMANTIC legacy markup', 1, 'A11Y_CLICKABLE_NON_SEMANTIC'), 'suppressed');
+  assert.equal(verdict('/* chemx-allow: X_RULE: */ x(); /* still\n open reason */\ncode();\n', 3, 'X_RULE'), 'suppressed');
 });
 
 test('every marker on a line is its own annotation, with the reason ending at the next marker (C4)', () => {
   const line = 'f(); /* chemx-allow: best-effort one */ g(); /* chemx-allow: X_RULE two */';
-  const annotations = parseAllowAnnotations([line]);
-  assert.deepEqual(annotations.map((a) => [a.line, a.token, a.reason, a.commentStart]), [
-    [1, 'best-effort', 'one', line.indexOf('/*')],
-    [1, 'X_RULE', 'two', line.lastIndexOf('/*')]
-  ]);
-  const shared = parseAllowAnnotations(['// chemx-allow: best-effort first chemx-allow: X_RULE second']);
-  assert.deepEqual(shared.map((a) => [a.token, a.reason]), [['best-effort', 'first'], ['X_RULE', 'second']]);
+  assert.deepEqual([verdict(line), verdict(line, 1, 'X_RULE')], ['suppressed', 'suppressed']);
+  const shared = '// chemx-allow: best-effort first chemx-allow: X_RULE second';
+  assert.deepEqual([verdict(shared), verdict(shared, 1, 'X_RULE')], ['suppressed', 'suppressed']);
+  const twoTries = 'try { a(); } catch {} /* chemx-allow: best-effort one */ try { b(); } catch {}';
+  assert.deepEqual(catchColumns(`${twoTries}\n`), [[1, 70]]);
+  assert.deepEqual(catchColumns(`${twoTries} /* chemx-allow: best-effort two */\n`), []);
 });
 
 test('a block annotation open at the end of its marker line lasts to the closer, keeping its own reason (SC-4)', () => {
-  const [annotation] = parseAllowAnnotations(['/* chemx-allow: best-effort warm cache', ' * still the same comment', ' */', 'x();']);
-  assert.deepEqual([annotation.reason, annotation.lastLine], ['warm cache', 3]);
-  const [trailingCode] = parseAllowAnnotations(['f(); /*', ' * chemx-allow: best-effort reason', ' */']);
-  assert.deepEqual([trailingCode.lastLine, trailingCode.isCommentOnly, trailingCode.opensCommentOnly], [3, true, false]);
-  const [jsdoc] = parseAllowAnnotations(['/**', ' * chemx-allow: best-effort reason', ' */']);
-  assert.deepEqual([jsdoc.lastLine, jsdoc.isCommentOnly, jsdoc.opensCommentOnly], [3, true, true]);
+  const open = '/* chemx-allow: best-effort warm cache\n * still the same comment\n */\nx();\ny();';
+  assert.deepEqual([verdict(open, 4), verdict(open, 5)], ['suppressed', 'flagged']);
+  assert.deepEqual(catchColumns('f(); /*\n * chemx-allow: best-effort reason\n */\ntry { a(); } catch {}\n'), [[4, 13]]);
+  assert.deepEqual(catchColumns('/**\n * chemx-allow: best-effort reason\n */\ntry { a(); } catch {}\n'), []);
 });
 
 // The line scanner path (JS, TS, C#): a synthetic finding on one line, filtered with no PHP regions.
@@ -126,8 +131,7 @@ test('a finding outside the catch family keeps main\'s reading of the first mark
   const catchFamily = (src, line) => applyAuditPostFilters([v(line, 'ERROR_SWALLOWED_EXCEPTION')], src.split('\n')).length;
   assert.equal(catchFamily('code(); // chemx-allow: best-effort chemx-allow: Y_RULE quoting\n', 1), 1);
   assert.equal(catchFamily('/* chemx-allow: best-effort */ x(); /* still\n open reason */\ncode();\n', 3), 1);
-  const listed = parseAllowAnnotations(['code(); // chemx-allow: X_RULE chemx-allow: Y_RULE quoting']);
-  assert.deepEqual(listed.map((a) => [a.token, a.reason]), [['X_RULE', ''], ['Y_RULE', 'quoting']]);
+  assert.equal(verdict('code(); // chemx-allow: X_RULE chemx-allow: Y_RULE quoting', 1, 'Y_RULE'), 'suppressed');
 });
 
 test('a PHP block annotation with its reason on the marker line lasts to its closer (SC-4)', () => {

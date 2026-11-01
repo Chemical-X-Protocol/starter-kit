@@ -79,16 +79,6 @@ const parseMarkerAt = (lineText, markerIndex, { readsPastMarkers = false } = {})
   return buildAnnotation(match[1], reason, { isCommentOnly, opensCommentOnly: isCommentOnly, markerIndex });
 };
 
-/**
- * Parses `<token> <reason>` after the first marker on one line of comment text; null when
- * there is no marker or no token. A token that runs into another word (best-effort-ish) is
- * returned as that token. The reason may be empty.
- */
-export const parseAllowAnnotation = (lineText) => {
-  const [markerIndex] = listMarkerIndexes(lineText);
-  return markerIndex === undefined ? null : parseMarkerAt(lineText, markerIndex);
-};
-
 // The following lines of a block comment, each without its leading `*` gutter, up to the closer,
 // with the index of the closer's line and the column just past the closer.
 const readBlockContinuation = (lines, startIdx, closer) => {
@@ -163,6 +153,11 @@ const scanLines = (lines) => {
   });
 };
 
+// Every allow annotation written in a comment, in line order, each with its 1-based line,
+// lastLine (the closer of its block comment), lastEnd (the column just past that closer),
+// markerIndex and commentStart columns, isCommentOnly (its marker line starts with a comment) and
+// opensCommentOnly (so does the line where its comment opened), plus the line readings.
+// collectWithRegions builds the same from per-line [start, end) comment regions.
 const collectWithScanner = (lines) => {
   const scans = scanLines(lines);
   const annotations = lines.flatMap((_, idx) => {
@@ -202,16 +197,6 @@ const collectWithRegions = (lines, commentRegions) => {
   const lineReadings = collectLineReadings(lines, regionsByLine, (annotation, idx) => (isOpenAt(annotation, idx) ? '*/' : null));
   return { annotations, lineReadings };
 };
-
-/**
- * Every allow annotation written in a comment, in line order, each with its 1-based `line`,
- * `lastLine` (the closer of its block comment), `lastEnd` (the column just past that closer),
- * `markerIndex` and `commentStart` columns, `isCommentOnly` (its marker line starts with a
- * comment) and `opensCommentOnly` (so does the line where its comment opened).
- * `commentRegions` (per-line [start, end) column pairs) replaces the line scanner when given.
- */
-export const parseAllowAnnotations = (lines, commentRegions = null) =>
-  (commentRegions ? collectWithRegions(lines, commentRegions) : collectWithScanner(lines)).annotations;
 
 const doesTokenCover = (token, rule) => {
   const isBestEffort = token === BEST_EFFORT_TOKEN;
