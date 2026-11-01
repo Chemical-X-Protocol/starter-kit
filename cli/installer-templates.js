@@ -90,10 +90,11 @@ fi
 # RULE@file:line. Grade floors only apply to the opt-in absolute gate
 # (CHEMX_PRECOMMIT_GATE=grade), and the audit resolves them itself: CHEMX_MIN_GRADE/
 # CHEMX_MIN_SCORE, then minGrade/minScore in .chemx/config.json (comments allowed), then the
-# defaults rendered below as --default-min-grade/--default-min-score. This hook parses no
-# config, so no config or env value reaches the eval-ed command. Line budgets come from
-# chemx's line-budgets.js through the staged-delta audit, so this hook and \`chemx check\`
-# never disagree.
+# defaults rendered below and exported as CHEMX_DEFAULT_MIN_GRADE/CHEMX_DEFAULT_MIN_SCORE. Env,
+# not flags, so a chemx from before them ignores the defaults instead of refusing a flag. This
+# hook parses no config, so no config or env value reaches the eval-ed command. Line budgets
+# come from chemx's line-budgets.js through the staged-delta audit, so this hook and
+# \`chemx check\` never disagree.
 
 # Nothing added, copied, modified or renamed: nothing to gate.
 git diff --cached --quiet -M --diff-filter=ACMR && exit 0
@@ -115,7 +116,8 @@ if [ -n "\$AUDIT_BIN" ]; then
   AUDIT_GATE_ARGS="--staged-delta"
   GATE_LABEL="staged delta"
   if [ "\$CHEMX_PRECOMMIT_GATE" = "grade" ]; then
-    AUDIT_GATE_ARGS="--git --default-min-grade=${toHookGrade(minGrade)} --default-min-score=${toHookScore(minScore)}"
+    export CHEMX_DEFAULT_MIN_GRADE=${toHookGrade(minGrade)} CHEMX_DEFAULT_MIN_SCORE=${toHookScore(minScore)}
+    AUDIT_GATE_ARGS="--git"
     GATE_LABEL="grade gate; floors from CHEMX_MIN_GRADE/CHEMX_MIN_SCORE or .chemx/config.json, else ${toHookGrade(minGrade)}/${toHookScore(minScore)}"
   fi
   if [ "\$CHEMX_VERBOSE" = "1" ]; then

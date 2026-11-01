@@ -44,8 +44,8 @@ export const resolveGitHooksDir = (targetDir = '.') => {
   return null;
 };
 
-// The floors a chemx hook was rendered with, from its grade-gate arguments (#255).
-const HOOK_THRESHOLDS = /--default-min-grade=([^ "]*) --default-min-score=([^ "]*)"/;
+// The floors a chemx hook was rendered with, from the defaults its grade gate exports (#255, #253).
+const HOOK_THRESHOLDS = /\n {4}export CHEMX_DEFAULT_MIN_GRADE=([^ \n]*) CHEMX_DEFAULT_MIN_SCORE=([^ \n]*)\n/;
 
 /**
  * True only when a hook is byte-for-byte what chemx generates (for its own thresholds),

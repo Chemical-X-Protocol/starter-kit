@@ -47,10 +47,9 @@ const withHookRepo = (variant, files, fn) => {
     VARIANTS[variant](root);
     fs.mkdirSync(bin);
     fs.writeFileSync(path.join(bin, 'chemx'), `#!/bin/sh\nexec "${process.execPath}" "${CLI}" "$@"\n`, { mode: 0o755 });
-    const env = { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH}`, NO_COLOR: '1' };
-    delete env.CHEMX_SKIP_PRECOMMIT;
-    delete env.CHEMX_FORCE_COMMIT;
-    delete env.CHEMX_PRECOMMIT_GATE;
+    // The runner's own CHEMX_* and GIT_* never reach the hook; each row sets only what it tests (#253).
+    const kept = Object.entries(process.env).filter(([key]) => !/^(CHEMX_|GIT_)/.test(key));
+    const env = { ...Object.fromEntries(kept), PATH: `${bin}${path.delimiter}${process.env.PATH}`, NO_COLOR: '1' };
     const commit = (extra = {}) => spawnSync('git', ['commit', '-q', '-m', 'change'], { cwd: root, encoding: 'utf-8', env: { ...env, ...extra } });
     fn(root, commit);
   } finally {
@@ -109,3 +108,14 @@ for (const variant of Object.keys(VARIANTS)) {
     });
   });
 }
+
+// #253: the hook hands its rendered floors to the real audit as CHEMX_DEFAULT_MIN_*, not as flags.
+test('template: with no config the grade gate applies the floors the hook was rendered with', () => {
+  withHookRepo('template', { 'src/svc.js': lines(20) }, (root, commit) => {
+    fs.writeFileSync(path.join(root, '.git', 'hooks', 'pre-commit'), buildPreCommitHookScript('A+', 100), { mode: 0o755 });
+    append(root, 'src/svc.js', NESTED);
+    const result = commit({ CHEMX_PRECOMMIT_GATE: 'grade' });
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.match(result.stdout + result.stderr, /Grade B is below required minimum tier A\+/);
+  });
+});

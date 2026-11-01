@@ -67,7 +67,11 @@ test('H3: every printf and gate label the hook template renders is byte-identica
   const shared = renderedLines.filter((line) => /^(printf |GATE_LABEL=)/.test(line));
   assert.ok(shared.length >= 10, `the template still renders its printf and label lines (${shared.length})`);
   assert.deepEqual(shared.filter((line) => !scriptLines.includes(line)), []);
-  const gradeFloors = '--git --default-min-grade=B --default-min-score=80';
-  assert.ok(renderedLines.some((line) => line.startsWith('AUDIT_GATE_ARGS=') && line.includes(gradeFloors)), 'template grade gate');
-  assert.ok(scriptLines.some((line) => line.startsWith('AUDIT_CMD=') && line.includes(gradeFloors)), 'pre-commit.sh grade gate');
+  // #253: the grade gate's defaults travel by env, which a chemx from before #255 ignores.
+  const gradeFloors = 'export CHEMX_DEFAULT_MIN_GRADE=B CHEMX_DEFAULT_MIN_SCORE=80';
+  assert.ok(renderedLines.includes(gradeFloors), 'template grade gate floors');
+  assert.ok(scriptLines.includes(gradeFloors), 'pre-commit.sh grade gate floors');
+  assert.ok(renderedLines.includes('AUDIT_GATE_ARGS="--git"'), 'template grade gate');
+  assert.ok(scriptLines.some((line) => line.startsWith('AUDIT_CMD=') && line.endsWith(' audit --git --non-interactive"')), 'pre-commit.sh grade gate');
+  assert.deepEqual([...renderedLines, ...scriptLines].filter((line) => line.includes('--default-min-')), []);
 });

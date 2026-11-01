@@ -66,8 +66,17 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
   const outputFlag = rawArgs.find((arg) => arg.startsWith('--output=') || arg.startsWith('-o='));
   const outputFile = outputFlag ? outputFlag.split('=')[1] : null;
 
-  // Flag, then env, then .chemx/config.json, then the caller's --default-min-* (audit-floors.js).
-  const { minGrade, minScore } = resolveAuditFloors(rawArgs, process.env, projectConfig);
+  // Flag, then env, then .chemx/config.json, then the caller's defaults (audit-floors.js).
+  const floors = resolveAuditFloors(rawArgs, process.env, projectConfig);
+  for (const warning of floors.warnings) process.stderr.write(`⚠ ${warning}\n`);
+  if (floors.usageError) {
+    const refusal = { success: false, error: floors.usageError, reason: 'usage' };
+    process.stderr.write(`${floors.usageError}\n`);
+    if (isJson) process.stdout.write(`${JSON.stringify(refusal)}\n`);
+    if (isCli) process.exit(1);
+    return refusal;
+  }
+  const { minGrade, minScore } = floors;
 
   const modelFlag = rawArgs.find((arg) => arg.startsWith('--model='));
   const model = modelFlag ? modelFlag.split('=')[1] : (projectConfig.model || 'blended');

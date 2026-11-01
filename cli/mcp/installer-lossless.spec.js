@@ -30,7 +30,9 @@ test('install lossless: re-installing the hook with new options keeps the user h
     quietly(() => installer.installPreCommitHook(dir, { minGrade: 'B', minScore: 80 }));
     quietly(() => installer.installPreCommitHook(dir, { minGrade: 'A', minScore: 90 }));
     assert.strictEqual(fs.readFileSync(path.join(hooksDir, 'pre-commit.bak'), 'utf-8'), USER_HOOK);
-    assert.match(fs.readFileSync(path.join(hooksDir, 'pre-commit'), 'utf-8'), /--default-min-grade=A --default-min-score=90"/);
+    assert.match(fs.readFileSync(path.join(hooksDir, 'pre-commit'), 'utf-8'), /\n {4}export CHEMX_DEFAULT_MIN_GRADE=A CHEMX_DEFAULT_MIN_SCORE=90\n/);
+    // The B/80 hook was chemx's own (isChemxHook read its floors back), so it was replaced, not backed up.
+    assert.deepStrictEqual(hookFilesContaining(hooksDir, 'Chemical X Protocol'), ['pre-commit']);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 

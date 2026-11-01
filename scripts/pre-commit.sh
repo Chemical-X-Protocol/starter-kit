@@ -63,11 +63,12 @@ fi
 
 # Grade floors only apply to the opt-in absolute gate (CHEMX_PRECOMMIT_GATE=grade), and the
 # audit resolves them itself (cli/audit/audit-floors.js): CHEMX_MIN_GRADE/CHEMX_MIN_SCORE, then
-# minGrade/minScore in .chemx/config.json (comments allowed), then the B/80 passed below as
-# --default-min-grade/--default-min-score. It accepts only a known grade and an integer 0-100.
-# This script parses no config, so no config or env value reaches the eval-ed command (#254,
-# #255). Line budgets are not checked here: they come from cli/audit/line-budgets.js through
-# the staged-delta audit, so the hook and `chemx check` never disagree (#1476, #1716).
+# minGrade/minScore in .chemx/config.json (comments allowed), then the B/80 exported below as
+# CHEMX_DEFAULT_MIN_GRADE/CHEMX_DEFAULT_MIN_SCORE. Env, not flags, so a chemx from before them
+# ignores the defaults instead of refusing a flag (#253). This script parses no config, so no
+# config or env value reaches the eval-ed command (#254, #255). Line budgets are not checked
+# here: they come from cli/audit/line-budgets.js through the staged-delta audit, so the hook
+# and `chemx check` never disagree (#1476, #1716).
 
 # Nothing added, copied, modified or renamed: nothing to gate. The audit itself
 # decides which staged paths are source files.
@@ -93,7 +94,8 @@ if [ -n "$AUDIT_BIN" ]; then
   # gate's failure output lists each new hazard as RULE@file:line.
   # CHEMX_PRECOMMIT_GATE=grade restores the absolute grade gate on changed files.
   if [ "$CHEMX_PRECOMMIT_GATE" = "grade" ]; then
-    AUDIT_CMD="$AUDIT_BIN audit --git --default-min-grade=B --default-min-score=80 --non-interactive"
+    export CHEMX_DEFAULT_MIN_GRADE=B CHEMX_DEFAULT_MIN_SCORE=80
+    AUDIT_CMD="$AUDIT_BIN audit --git --non-interactive"
     GATE_LABEL="grade gate; floors from CHEMX_MIN_GRADE/CHEMX_MIN_SCORE or .chemx/config.json, else B/80"
   else
     AUDIT_CMD="$AUDIT_BIN audit --staged-delta --non-interactive"

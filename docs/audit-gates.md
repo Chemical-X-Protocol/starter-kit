@@ -71,9 +71,10 @@ Not guaranteed: `php -l` proves syntax only. PHP audit rules (security, WordPres
 ## Related env switches
 
 - `CHEMX_PRECOMMIT_GATE=grade` replaces the delta gate with the absolute grade gate on changed files (`audit --git`).
-  - `chemx audit` resolves the floors itself (`cli/audit/audit-floors.js`). For each floor the first usable source wins: `--min-grade`/`--min-score`, then `CHEMX_MIN_GRADE`/`CHEMX_MIN_SCORE`, then `minGrade`/`minScore` in `.chemx/config.json` (read through `cli/config/loader.js`, so comments are allowed), then `--default-min-grade`/`--default-min-score`.
-  - The hooks pass only those defaults: `B` and `80`, or for the installed hook the floors it was rendered with.
-  - A usable floor is `A+`, `A`, `B`, `C`, `D` or `F` (any case), or an integer from 0 to 100. Any other value is skipped and the next source applies.
+  - `chemx audit` resolves the floors itself (`cli/audit/audit-floors.js`). For each floor the first usable source wins: `--min-grade`/`--min-score`, then `CHEMX_MIN_GRADE`/`CHEMX_MIN_SCORE`, then `minGrade`/`minScore` in `.chemx/config.json` (read through `cli/config/loader.js`, so comments are allowed), then `--default-min-grade`/`--default-min-score`, then `CHEMX_DEFAULT_MIN_GRADE`/`CHEMX_DEFAULT_MIN_SCORE`.
+  - The hooks set only those defaults, and only as the `CHEMX_DEFAULT_MIN_*` env pair: `B` and `80`, or for the installed hook the floors it was rendered with. A chemx from before #255 ignores the env pair, where it would refuse `--default-min-*` as an unknown flag and block the commit (#253).
+  - A usable floor is `A+`, `A`, `B`, `C`, `D` or `F` (any case), or an integer from 0 to 100. A decimal with only zeros after the point counts as that integer, so `100.0` is `100`; `95.5`, `150` and `1e2` are not usable. An empty value is unset.
+  - An unusable `--min-grade`, `--min-score` or `--default-min-*` value is a usage error: `chemx audit` names the flag and the value, audits nothing and exits 1. An unusable env or config value is skipped with a one-line warning on stderr that names the source and the value, and the next source applies (#253).
   - The hooks parse no config and put no config or env value into the command they run, so a value never runs as shell (#254, #255).
   - Without node: the hooks read nothing themselves, so nothing changes there. When they find no chemx to run (no `CHEMX_BIN` or pinned CLI, no `./cli/index.js`, `node_modules/.bin/chemx`, `chemx` or `npx`), the audit is skipped and the commit goes on. When they find one that cannot start because node is missing, the audit call fails and the commit is blocked, under either gate.
   - Pinned by `cli/audit/audit-floors.spec.js`, `cli/audit/precommit-hook-injection.spec.js` and `cli/audit/precommit-hook.spec.js`.
