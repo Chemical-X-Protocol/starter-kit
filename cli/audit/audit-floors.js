@@ -9,9 +9,11 @@
  *
  * A usable grade is A+, A, B, C, D or F in any case. A usable score is an integer from 0 to 100;
  * an integer-valued decimal (100.0, 85.00) counts as that integer, and 95.5, 150 or 1e2 do not.
- * An empty value is unset. An unusable flag value is a usage error, since it was typed for this
- * run; an unusable env or config value gets a one-line warning and the next source applies. No
- * floor at all is { minGrade: '', minScore: null }.
+ * A flag takes its value as --min-score=90 or as the next word, --min-score 90; the first
+ * occurrence wins. An empty value is unset. An unusable flag value, or a flag with no word after
+ * it (or with a long flag next), is a usage error, since it was typed for this run; an unusable
+ * env or config value gets a one-line warning and the next source applies. No floor at all is
+ * { minGrade: '', minScore: null }.
  */
 import { isKnownGrade } from './rules-predicates.js';
 
@@ -19,10 +21,17 @@ const SCORE_TEXT = /^\d{1,3}(?:\.0+)?$/;
 const MAX_SCORE = 100;
 const CONFIG_FILE = '.chemx/config.json';
 
-const flagValue = (rawArgs, name) => {
-  const prefix = `${name}=`;
-  const arg = rawArgs.find((candidate) => String(candidate).startsWith(prefix));
-  return arg === undefined ? undefined : String(arg).slice(prefix.length);
+// One flag source: --name=value, or --name value as two words (#253). A bare --name is missing its value.
+const flagSource = (rawArgs, name) => {
+  const args = rawArgs.map(String);
+  const at = args.findIndex((arg) => arg === name || arg.startsWith(`${name}=`));
+  const isAbsent = at === -1;
+  if (isAbsent) return { name, value: undefined, isFlag: true };
+  const isInline = args[at] !== name;
+  if (isInline) return { name, value: args[at].slice(name.length + 1), isFlag: true };
+  const next = args[at + 1];
+  const isMissing = next === undefined || next.startsWith('--');
+  return { name, value: next, isFlag: true, isMissing };
 };
 
 const toGrade = (value) => {
@@ -45,10 +54,10 @@ const FLOORS = {
 const sourcesOf = (key, rawArgs, env, projectConfig) => {
   const floor = FLOORS[key];
   return [
-    { name: floor.flag, value: flagValue(rawArgs, floor.flag), isFlag: true },
+    flagSource(rawArgs, floor.flag),
     { name: floor.env, value: env?.[floor.env] },
     { name: key, value: projectConfig?.[key], where: ` in ${CONFIG_FILE}` },
-    { name: floor.defaultFlag, value: flagValue(rawArgs, floor.defaultFlag), isFlag: true },
+    flagSource(rawArgs, floor.defaultFlag),
     { name: floor.defaultEnv, value: env?.[floor.defaultEnv] }
   ];
 };
@@ -58,11 +67,15 @@ const isUnset = (value) => value === undefined || value === null || String(value
 // JSON quoting keeps a value with a newline or an escape code on one line of plain text.
 const quoted = (source) => `${source.name} value ${JSON.stringify(String(source.value))}${source.where ?? ''}`;
 
+const refusal = (usageError) => ({ value: null, warnings: [], usageError });
+
 const resolveFloor = (key, rawArgs, env, projectConfig) => {
   const floor = FLOORS[key];
-  const sources = sourcesOf(key, rawArgs, env, projectConfig).filter((source) => !isUnset(source.value));
+  const sources = sourcesOf(key, rawArgs, env, projectConfig).filter((source) => source.isMissing || !isUnset(source.value));
+  const bareFlag = sources.find((source) => source.isMissing);
+  if (bareFlag) return refusal(`chemx audit: ${bareFlag.name} needs a value (${floor.hint}).`);
   const badFlag = sources.find((source) => source.isFlag && floor.parse(source.value) === null);
-  if (badFlag) return { value: null, warnings: [], usageError: `chemx audit: ${quoted(badFlag)} is not a usable floor (${floor.hint}).` };
+  if (badFlag) return refusal(`chemx audit: ${quoted(badFlag)} is not a usable floor (${floor.hint}).`);
   const warnings = [];
   for (const source of sources) {
     const parsed = floor.parse(source.value);

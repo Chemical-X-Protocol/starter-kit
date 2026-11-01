@@ -64,6 +64,49 @@ test('resolveAuditFloors: an unusable --default-min-* flag is a usage error even
   assert.match(floors.usageError ?? '', /--default-min-grade value "Q"/);
 });
 
+// #253: `--min-score 100` used to set no floor without a word. The value may be the next word, as
+// the router reads it: 'audit' first, then a positional directory before the flags.
+const SPACED_ROWS = [
+  ['--min-score 100 is a floor of 100', ['audit', '--min-score', '100'], {}, {}, { minGrade: '', minScore: 100 }],
+  ['--min-grade a is a floor of A', ['audit', '--min-grade', 'a'], {}, {}, { minGrade: 'A', minScore: null }],
+  ['--default-min-grade C --default-min-score 60 apply when nothing else sets a floor', ['audit', '--default-min-grade', 'C', '--default-min-score', '60'], {}, {}, { minGrade: 'C', minScore: 60 }],
+  ['the spaced default flags yield to the config', ['audit', '--default-min-grade', 'C', '--default-min-score', '60'], {}, { minGrade: 'A', minScore: 90 }, { minGrade: 'A', minScore: 90 }],
+  ['the spaced flag beats env', ['audit', '--min-grade', 'd', '--min-score', '10'], { CHEMX_MIN_GRADE: 'A', CHEMX_MIN_SCORE: '90' }, {}, { minGrade: 'D', minScore: 10 }],
+  ['100.0 as the next word is 100', ['audit', '--min-score', '100.0'], {}, {}, { minGrade: '', minScore: 100 }],
+  ['a positional directory before the flag stays a directory', ['audit', 'src', '--min-score', '85', '--json'], {}, {}, { minGrade: '', minScore: 85 }],
+  ['an empty next word is unset, as --min-score= is', ['audit', '--min-score', '', '--min-grade', ''], {}, { minGrade: 'C', minScore: 60 }, { minGrade: 'C', minScore: 60 }],
+  ['the first occurrence wins across both forms', ['audit', '--min-score', '50', '--min-score=90'], {}, {}, { minGrade: '', minScore: 50 }]
+];
+
+for (const [label, rawArgs, env, config, expected] of SPACED_ROWS) {
+  test(`resolveAuditFloors: ${label}`, () => {
+    const floors = resolveAuditFloors(rawArgs, env, config);
+    assert.equal(floors.usageError, null);
+    assert.deepEqual(floorsOf(floors), expected);
+  });
+}
+
+const UNUSABLE_SPACED = [['--min-score', '95.5'], ['--min-score', '-1'], ['--min-score', 'src'], ['--min-grade', 'B+'], ['--default-min-score', '100.5'], ['--default-min-grade', 'Z']];
+
+for (const [name, value] of UNUSABLE_SPACED) {
+  test(`resolveAuditFloors: ${name} ${value} is a usage error, as ${name}=${value} is`, () => {
+    const spaced = resolveAuditFloors(['audit', name, value, ...DEFAULTS], ENV_DEFAULTS, { minGrade: 'A', minScore: 90 });
+    const inline = resolveAuditFloors(['audit', `${name}=${value}`, ...DEFAULTS], ENV_DEFAULTS, { minGrade: 'A', minScore: 90 });
+    assert.ok(spaced.usageError?.includes(`${name} value ${JSON.stringify(value)}`), spaced.usageError ?? 'no usage error');
+    assert.equal(spaced.usageError, inline.usageError);
+  });
+}
+
+// A flag with no word after it, or with another flag next, has no value: a usage error, never no floor.
+const MISSING_VALUES = [['--min-score last', ['audit', '--min-score'], '--min-score'], ['--min-grade before --json', ['audit', '--min-grade', '--json'], '--min-grade'], ['--default-min-score last', ['audit', '--default-min-score'], '--default-min-score']];
+
+for (const [label, rawArgs, name] of MISSING_VALUES) {
+  test(`resolveAuditFloors: ${label} is a usage error naming the flag`, () => {
+    const floors = resolveAuditFloors(rawArgs, ENV_DEFAULTS, { minGrade: 'A', minScore: 90 });
+    assert.match(floors.usageError ?? 'no usage error', new RegExp(`^chemx audit: ${name} needs a value \\(use `));
+  });
+}
+
 // [label, env, config, expected floors, warnings]: each warning names the source and the value.
 const WARNING_ROWS = [
   ['an unusable env score warns and the config floor applies', { CHEMX_MIN_SCORE: '95.5' }, { minScore: 90 }, { minGrade: '', minScore: 90 }, [/^chemx audit: ignoring CHEMX_MIN_SCORE value "95\.5" .*integer from 0 to 100/]],
@@ -89,7 +132,8 @@ for (const [label, env, config, expected, warnings] of WARNING_ROWS) {
 const FIXTURE = 'export const pick = (a, b) => (a ? 1 : b ? 2 : 3);\n';
 
 // `chemx audit --json` through cli/main.js, in a temp project, with the runner's CHEMX_* stripped.
-const auditJson = (config, args = [], extraEnv = {}) => {
+// scope comes first, so a positional directory is the word right after `audit`.
+const auditJson = (config, args = [], extraEnv = {}, scope = ['--dir=src']) => {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-floors-')));
   try {
     fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ name: 'floors-fixture' }));
@@ -99,7 +143,7 @@ const auditJson = (config, args = [], extraEnv = {}) => {
     fs.writeFileSync(path.join(root, '.chemx', 'config.json'), config);
     const kept = Object.entries(process.env).filter(([key]) => !key.startsWith('CHEMX_'));
     const env = { ...Object.fromEntries(kept), NO_COLOR: '1', ...extraEnv };
-    const result = spawnSync(process.execPath, [CLI, 'audit', '--json', '--dir=src', ...args], { cwd: root, encoding: 'utf-8', env });
+    const result = spawnSync(process.execPath, [CLI, 'audit', ...scope, '--json', ...args], { cwd: root, encoding: 'utf-8', env });
     return { status: result.status, summary: JSON.parse(result.stdout), stderr: result.stderr, output: result.stdout + result.stderr };
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
@@ -145,6 +189,29 @@ test('chemx audit: --min-score=95.5 is refused as a usage error and nothing is a
   assert.equal(run.summary.success, false, run.output);
   assert.match(run.summary.error, /--min-score value "95\.5"/);
   assert.match(run.stderr, /--min-score value "95\.5"/);
+  assert.equal(run.summary.health, undefined, 'no audit ran');
+});
+
+test('chemx audit: --min-score 100 and --default-min-grade A+ as two words are floors', () => {
+  const score = auditJson('{}', ['--min-score', '100']);
+  assert.match(score.summary.gate.note ?? '', /below minimum 100/, score.output);
+  assert.equal(score.status, 1);
+  const grade = auditJson('{}', ['--default-min-grade', 'A+']);
+  assert.match(grade.summary.gate.note ?? '', /below minimum A\+/, grade.output);
+  assert.equal(grade.status, 1);
+});
+
+test('chemx audit src --min-score 100: the positional directory is audited with the floor', () => {
+  const run = auditJson('{}', ['--min-score', '100'], {}, ['src']);
+  assert.deepEqual([run.summary.scope, run.summary.files], ['src', 1], run.output);
+  assert.match(run.summary.gate.note ?? '', /below minimum 100/, run.output);
+  assert.equal(run.status, 1);
+});
+
+test('chemx audit: --min-score 95.5 is refused like --min-score=95.5 and nothing is audited', () => {
+  const run = auditJson('{}', ['--min-score', '95.5']);
+  assert.equal(run.status, 1, run.output);
+  assert.match(run.summary.error ?? '', /--min-score value "95\.5"/, run.output);
   assert.equal(run.summary.health, undefined, 'no audit ran');
 });
 
