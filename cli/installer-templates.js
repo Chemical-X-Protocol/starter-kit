@@ -87,32 +87,13 @@ fi
 
 # Default gate: any rule whose violation count rises in a staged file vs HEAD, at any
 # severity (the audit ratchet's rule). The failure output lists each new hazard as
-# RULE@file:line. Grade thresholds only apply to the opt-in absolute gate
-# (CHEMX_PRECOMMIT_GATE=grade). Line budgets come from chemx's line-budgets.js through
-# the staged-delta audit, so this hook and \`chemx check\` never disagree.
-CONF_MIN_GRADE=""
-CONF_MIN_SCORE=""
-CONFIG_FILE="\$REPO_ROOT/.chemx/config.json"
-
-if [ -f "\$CONFIG_FILE" ]; then
-  CONF_MIN_GRADE=\$(grep -o '"minGrade"[[:space:]]*:[[:space:]]*"[^"]*"' "\$CONFIG_FILE" 2>/dev/null | sed 's/.*"minGrade"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/')
-  CONF_MIN_SCORE=\$(grep -o '"minScore"[[:space:]]*:[[:space:]]*[0-9]*' "\$CONFIG_FILE" 2>/dev/null | grep -o '[0-9]*\$')
-fi
-
-MIN_GRADE="\${CHEMX_MIN_GRADE:-\${CONF_MIN_GRADE:-${toHookGrade(minGrade)}}}"
-MIN_SCORE="\${CHEMX_MIN_SCORE:-\${CONF_MIN_SCORE:-${toHookScore(minScore)}}}"
-
-# Both floors end up in the eval-ed audit command below, so only a known grade (any case) and
-# an integer 0-100 get through; anything else falls back to the defaults rendered above.
-MIN_GRADE="\$(printf '%s' "\$MIN_GRADE" | tr '[:lower:]' '[:upper:]')"
-case "\$MIN_GRADE" in
-  A+|A|B|C|D|F) ;;
-  *) MIN_GRADE="${toHookGrade(minGrade)}" ;;
-esac
-case "\$MIN_SCORE" in
-  [0-9]|[1-9][0-9]|100) ;;
-  *) MIN_SCORE="${toHookScore(minScore)}" ;;
-esac
+# RULE@file:line. Grade floors only apply to the opt-in absolute gate
+# (CHEMX_PRECOMMIT_GATE=grade), and the audit resolves them itself: CHEMX_MIN_GRADE/
+# CHEMX_MIN_SCORE, then minGrade/minScore in .chemx/config.json (comments allowed), then the
+# defaults rendered below as --default-min-grade/--default-min-score. This hook parses no
+# config, so no config or env value reaches the eval-ed command. Line budgets come from
+# chemx's line-budgets.js through the staged-delta audit, so this hook and \`chemx check\`
+# never disagree.
 
 # Nothing added, copied, modified or renamed: nothing to gate.
 git diff --cached --quiet -M --diff-filter=ACMR && exit 0
@@ -131,11 +112,15 @@ elif command -v npx >/dev/null 2>&1; then
 fi
 
 if [ -n "\$AUDIT_BIN" ]; then
-  if [ "\$CHEMX_VERBOSE" = "1" ]; then
-    printf "%s[Chemical X] Verifying architectural health (Min Grade: %s, Min Score: %s)...%s\\n" "\$C_BLUE" "\$MIN_GRADE" "\$MIN_SCORE" "\$C_RESET"
-  fi
   AUDIT_GATE_ARGS="--staged-delta"
-  if [ "\$CHEMX_PRECOMMIT_GATE" = "grade" ]; then AUDIT_GATE_ARGS="--git --min-grade=\$MIN_GRADE --min-score=\$MIN_SCORE"; fi
+  GATE_LABEL="staged delta"
+  if [ "\$CHEMX_PRECOMMIT_GATE" = "grade" ]; then
+    AUDIT_GATE_ARGS="--git --default-min-grade=${toHookGrade(minGrade)} --default-min-score=${toHookScore(minScore)}"
+    GATE_LABEL="grade gate; floors from CHEMX_MIN_GRADE/CHEMX_MIN_SCORE or .chemx/config.json, else ${toHookGrade(minGrade)}/${toHookScore(minScore)}"
+  fi
+  if [ "\$CHEMX_VERBOSE" = "1" ]; then
+    printf "%s[Chemical X] Verifying architectural health (%s)...%s\\n" "\$C_BLUE" "\$GATE_LABEL" "\$C_RESET"
+  fi
   if ! AUDIT_OUT=\$(eval "\$AUDIT_BIN audit \$AUDIT_GATE_ARGS --non-interactive" < /dev/null 2>&1); then
     printf "\\n%s%s[Chemical X] Commit Blocked: Architectural health verification failed%s\\n" "\$C_BOLD" "\$C_RED" "\$C_RESET"
     printf "%s\\n\\n" "\$AUDIT_OUT"

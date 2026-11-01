@@ -97,4 +97,15 @@ for (const variant of Object.keys(VARIANTS)) {
       assert.equal(result.status, 0, result.stdout + result.stderr);
     });
   });
+
+  // #255: the audit reads the config through the shared loader, so a commented-out line is no floor.
+  test(`${variant}: the grade gate takes minGrade from a commented .chemx/config.json`, () => {
+    const config = '{\n  // "minGrade": "F",\n  "minGrade": "A+"\n}\n';
+    withHookRepo(variant, { 'src/svc.js': lines(20), '.chemx/config.json': config }, (root, commit) => {
+      append(root, 'src/svc.js', NESTED);
+      const result = commit({ CHEMX_PRECOMMIT_GATE: 'grade' });
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.match(result.stdout + result.stderr, /Grade B is below required minimum tier A\+/);
+    });
+  });
 }

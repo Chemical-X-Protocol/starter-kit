@@ -34,6 +34,7 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
   const { writeRatchet, RATCHET_FILE } = await import('../audit/ratchet.js');
   const { writeAuditStatus } = await import('../audit/status-file.js');
   const { loadProjectConfig: loadSharedConfig } = await import('../config/index.js');
+  const { resolveAuditFloors } = await import('../audit/audit-floors.js');
   const { triageFromIndex } = await import('../team/team-commands-triage.js');
   const loadNavigator = () => import('../navigator.js');
   const formatTerminalReport = async (r) => (await import('../audit/reporter.js')).formatTerminalReport(r);
@@ -65,12 +66,8 @@ export const runAudit = async (customDir, isCli, rawArgs, loadProjectConfig) => 
   const outputFlag = rawArgs.find((arg) => arg.startsWith('--output=') || arg.startsWith('-o='));
   const outputFile = outputFlag ? outputFlag.split('=')[1] : null;
 
-  const minGradeFlag = rawArgs.find((arg) => arg.startsWith('--min-grade='));
-  const minGrade = (minGradeFlag ? minGradeFlag.split('=')[1] : (process.env.CHEMX_MIN_GRADE || projectConfig.minGrade || '')).toUpperCase();
-
-  const minScoreFlag = rawArgs.find((arg) => arg.startsWith('--min-score='));
-  const minScoreRaw = minScoreFlag ? minScoreFlag.split('=')[1] : (process.env.CHEMX_MIN_SCORE || projectConfig.minScore || null);
-  const minScore = minScoreRaw !== null && minScoreRaw !== undefined ? parseInt(String(minScoreRaw), 10) : null;
+  // Flag, then env, then .chemx/config.json, then the caller's --default-min-* (audit-floors.js).
+  const { minGrade, minScore } = resolveAuditFloors(rawArgs, process.env, projectConfig);
 
   const modelFlag = rawArgs.find((arg) => arg.startsWith('--model='));
   const model = modelFlag ? modelFlag.split('=')[1] : (projectConfig.model || 'blended');

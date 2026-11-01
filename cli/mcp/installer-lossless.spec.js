@@ -30,7 +30,7 @@ test('install lossless: re-installing the hook with new options keeps the user h
     quietly(() => installer.installPreCommitHook(dir, { minGrade: 'B', minScore: 80 }));
     quietly(() => installer.installPreCommitHook(dir, { minGrade: 'A', minScore: 90 }));
     assert.strictEqual(fs.readFileSync(path.join(hooksDir, 'pre-commit.bak'), 'utf-8'), USER_HOOK);
-    assert.match(fs.readFileSync(path.join(hooksDir, 'pre-commit'), 'utf-8'), /MIN_SCORE:-90/);
+    assert.match(fs.readFileSync(path.join(hooksDir, 'pre-commit'), 'utf-8'), /--default-min-grade=A --default-min-score=90"/);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
