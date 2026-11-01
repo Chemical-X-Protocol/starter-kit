@@ -33,19 +33,29 @@ export const isCurrentIndexVersion = (meta) => meta.version === INDEX_VERSION;
 
 const countIndexedFiles = (db) => Number(db.prepare('SELECT COUNT(*) AS c FROM files').get()?.c || 0);
 
-// Wipes index rows (never team, audit or violation tables) when the stamp differs.
-// Returns { reset: boolean, previousVersion, droppedFiles }.
+// A stamp newer than this build's INDEX_VERSION means a newer chemx wrote the rows.
+const isForeignIndexVersion = (meta) => meta.version !== null && meta.version > INDEX_VERSION;
+
+// Wipes index rows (never team, audit or violation tables) when the stored version is LOWER.
+// A HIGHER stored version belongs to a newer chemx sharing this index.db: it is left untouched
+// and reported as { reset: false, foreign: true } so callers skip the sync instead of fighting it.
+// Policy: schema growth ships as additive COLUMN_MIGRATIONS with no INDEX_VERSION bump, so older
+// and newer chemx builds can share one index.db; only an extractor meaning change bumps the version.
+// Returns { reset: boolean, previousVersion, droppedFiles, foreign? }.
 export const ensureIndexVersion = (db) => {
   const preCheck = readIndexMeta(db);
   const isAlreadyCurrent = isCurrentIndexVersion(preCheck);
   if (isAlreadyCurrent) return { reset: false, previousVersion: preCheck.version, droppedFiles: 0 };
+  if (isForeignIndexVersion(preCheck)) return { reset: false, foreign: true, previousVersion: preCheck.version, droppedFiles: 0 };
   db.exec('BEGIN IMMEDIATE;');
   try {
     const meta = readIndexMeta(db);
     const isCurrent = isCurrentIndexVersion(meta);
-    if (isCurrent) {
+    const isForeign = isForeignIndexVersion(meta);
+    const isLeftAlone = isCurrent || isForeign;
+    if (isLeftAlone) {
       db.exec('COMMIT;');
-      return { reset: false, previousVersion: meta.version, droppedFiles: 0 };
+      return isForeign ? { reset: false, foreign: true, previousVersion: meta.version, droppedFiles: 0 } : { reset: false, previousVersion: meta.version, droppedFiles: 0 };
     }
     const droppedFiles = countIndexedFiles(db);
     for (const table of INDEX_ROW_TABLES) db.exec(`DELETE FROM ${table};`);
@@ -61,6 +71,7 @@ export const ensureIndexVersion = (db) => {
 };
 
 export const describeVersionReset = (reset) => {
+  if (reset.foreign) return `index written by a newer chemx (v${reset.previousVersion}, this build is v${INDEX_VERSION}): sync skipped, rows left untouched`;
   const previous = reset.previousVersion === null ? 'unversioned' : `v${reset.previousVersion}`;
   return `index rebuilt: ${previous} rows (${reset.droppedFiles} files) replaced by extractor v${INDEX_VERSION}`;
 };
