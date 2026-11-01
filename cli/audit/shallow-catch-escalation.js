@@ -7,8 +7,9 @@
  * is a default only when it always runs, so not inside a nested function or under a branch,
  * loop, switch case or catch that may skip it, unless that part runs whenever the binding is
  * unset (if (!v) v = d) or the if, conditional, switch or invoked function around it writes on
- * every path (if (c) v = 1; else v = 2, see shallow-catch-writes.js). A for-in or for-of head
- * writes only for a non-empty iterable, so it is a default only inside its own loop.
+ * every path that can still reach the read, leaving instead on the others (if (c) v = 1; else
+ * v = 2, or else return; see shallow-catch-writes.js). A for-in or for-of head writes only for
+ * a non-empty iterable, so it is a default only inside its own loop.
  */
 import * as t from '@babel/types';
 import { isShallowCatchClause } from './rules-predicates.js';
@@ -113,26 +114,25 @@ const isSkippableStep = (childPath, binding) => {
   return readUnsetOutcome(test, binding) !== runsOn;
 };
 
-// The node whose every path must write for a skippable step to be covered: the switch around a
-// case, the call around a function (shallow-catch-writes.js checks that it calls it), otherwise
-// the parent itself.
-const readCoverNode = (parentPath) => {
-  if (parentPath.isSwitchCase()) return parentPath.parent;
-  if (parentPath.isFunction()) return t.isCallExpression(parentPath.parent) ? parentPath.parent : null;
-  return parentPath.node;
+// The node whose every path must write for a skippable step to be covered, as a path: the switch
+// around a case, the call around a function (shallow-catch-writes.js checks that it calls it),
+// otherwise the parent itself.
+const readCoverPath = (parentPath) => {
+  if (parentPath.isSwitchCase()) return parentPath.parentPath;
+  if (parentPath.isFunction()) return parentPath.parentPath.isCallExpression() ? parentPath.parentPath : null;
+  return parentPath;
 };
 
 // A skippable step still leads to a default when the node around it writes the binding on every
-// path (if (c) v = 1; else v = 2) and no anchor sits inside that node, where it could run first.
-// Each cover is worked out once per binding (context.covers).
+// path that can reach the last anchor, the read (or for an earlier write the try), as in
+// if (c) v = 1; else v = 2 or else return, and no anchor sits inside that node, where it could
+// run first. Each cover's unwritten paths are worked out once per binding (context.paths).
 const isCoveredStep = (childPath, context, anchors) => {
-  const cover = readCoverNode(childPath.parentPath);
-  if (!cover) return false;
-  const holdsAnchor = anchors.some((anchor) => isWithinNode(anchor, cover));
+  const coverPath = readCoverPath(childPath.parentPath);
+  if (!coverPath) return false;
+  const holdsAnchor = anchors.some((anchor) => isWithinNode(anchor, coverPath.node));
   if (holdsAnchor) return false;
-  const isKnown = context.covers.has(cover);
-  if (!isKnown) context.covers.set(cover, writesOnEveryPath(cover, context.writeNodes));
-  return context.covers.get(cover);
+  return writesOnEveryPath(coverPath, anchors.at(-1), context);
 };
 
 // The for-in or for-of loop whose head writes the binding (for (v of xs), for (var v in o)).
@@ -203,7 +203,7 @@ const isReadUnsetAfterTry = (binding, tryNode, fnScope) => {
   if (!isCandidate) return false;
 
   const writes = listValueWrites(binding, tryNode);
-  const context = { binding, writeNodes: collectDefaultingNodes(writes), covers: new Map() };
+  const context = { binding, writeNodes: collectDefaultingNodes(writes), paths: new Map() };
   const isEarlierValue = (write) => write.start < tryNode.start && isGuaranteedWrite(write.path, context, [tryNode]);
   const hasEarlierValue = writes.some(isEarlierValue);
   if (hasEarlierValue) return false;

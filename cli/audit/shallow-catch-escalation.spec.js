@@ -224,6 +224,37 @@ test('a path left unwritten, or a function body that may not run when called, is
   assertOne(writeThenRead('(function* () { v = d; })();'), 'HIGH');
 });
 
+// A function whose try may leave v unset, the given lines, then a read of v.x.
+const exitThenRead = (lines) => `export const g = (c, k, xs, items) => {\n  let v;\n  try { v = f(); } catch {}\n  ${lines}\n  return v.x;\n};\n`;
+// The same function with the read inside a loop that follows the try.
+const loopRead = (exit) => `export const g = (xs) => {\n  let v;\n  try { v = f(); } catch {}\n  for (const x of xs) {\n    if (x) v = x; else ${exit};\n    use(v.x);\n  }\n};\n`;
+
+test('a branch that exits instead of writing leaves no unwritten path to the read (C2)', () => {
+  assertOne(exitThenRead('if (c) v = 1; else return;'), 'MEDIUM');
+  assertOne(exitThenRead('if (c) v = 1; else throw new Error("x");'), 'MEDIUM');
+  assertOne(exitThenRead('switch (k) { case 1: v = 1; break; default: throw new Error("x"); }'), 'MEDIUM');
+  assertOne(exitThenRead('if (k) v = 2; else { if (c) return; v = 1; }'), 'MEDIUM');
+  assertOne(loopRead('continue'), 'MEDIUM');
+  assertOne(loopRead('break'), 'MEDIUM');
+});
+
+test('an exit in a nested function or aimed at an inner loop does not leave the branch (C2)', () => {
+  assertOne(exitThenRead('if (c) { items.forEach((x) => { return; }); v = 1; } else { v = 2; }'), 'MEDIUM');
+  assertOne(exitThenRead('if (c) { for (const x of xs) { if (x) break; } v = 1; } else { v = 2; }'), 'MEDIUM');
+  assertOne(exitThenRead('(() => { const h = () => { return 1; }; v = h(); })();'), 'MEDIUM');
+});
+
+test('an exit that can still reach the read leaves an unwritten path (C2)', () => {
+  assertOne(exitThenRead('(() => { if (c) v = 1; else return; })();'), 'HIGH');
+  assertOne(exitThenRead('out: { if (c) v = 1; else break out; }'), 'HIGH');
+  assertOne(exitThenRead('while (!v) { if (c) v = 1; else break; }'), 'HIGH');
+  assertOne(exitThenRead('do { if (c) v = 1; else break; } while (k);'), 'HIGH');
+  assertOne(exitThenRead('switch (k) { case 1: if (c) { v = 1; } else break; break; default: v = 2; }'), 'HIGH');
+  assertOne(exitThenRead('try { if (c) v = 1; else throw new Error("x"); } catch (e) { report(e); }'), 'HIGH');
+  assertOne(exitThenRead('try { if (c) v = 1; else return; } finally { use(v.x); }'), 'HIGH');
+  assertOne('export const g = (c) => {\n  let v;\n  try { v = f(); } catch {}\n  do { if (c) v = 1; else continue; } while (use(v.x));\n};\n', 'HIGH');
+});
+
 test('a write that runs only while the binding is set, or in a loop head, is not a default (C2)', () => {
   assertOne(writeThenRead('if (v) v = v.trim();'), 'HIGH');
   assertOne(writeThenRead('if (v != null) v = norm(v);'), 'HIGH');

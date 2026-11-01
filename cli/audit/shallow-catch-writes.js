@@ -1,14 +1,21 @@
 /**
  * Path coverage for shallow-catch escalation (truth spec 4.2): whether running a node always
- * writes a binding, so that a write one branch alone may skip still counts as a default when
- * the if, conditional, switch or immediately invoked function around it writes on every path
- * (if (c) v = 1; else v = 2). writeNodes holds the binding's defaulting writes (=, ??=, ||=);
- * a statement that may break, continue, return or throw before a write leaves a path unwritten.
+ * writes a binding before any path out of it can reach the read, so that a write one branch alone
+ * may skip still counts as a default when the if, conditional, switch or immediately invoked
+ * function around it writes on every other path (if (c) v = 1; else v = 2) or leaves there
+ * instead (if (c) v = 1; else return). writeNodes holds the binding's defaulting writes (=, ??=,
+ * ||=). readUnwrittenPaths says how a node can be left with the binding unwritten: by running off
+ * its end, or by a return, throw, break or continue; exitsPastAnchor says whether such an exit
+ * skips the read, so the read is reachable only through a write.
  */
 import * as t from '@babel/types';
-import { EXIT_TYPES } from './shallow-catch-reads.js';
+import { EXIT_TYPES, isWithinNode } from './shallow-catch-reads.js';
 
 const FUNCTION_EXPRESSION_TYPES = new Set(['FunctionExpression', 'ArrowFunctionExpression']);
+const JUMP_TYPES = new Set(['BreakStatement', 'ContinueStatement']);
+const WRITTEN = Object.freeze({ falls: false, exits: [] });
+const FALLS = Object.freeze({ falls: true, exits: [] });
+const OUTSIDE_TARGETS = Object.freeze({ loops: 0, breakables: 0, labels: [] });
 
 // A plain function expression or arrow called where it is written runs its body there, as
 // (() => { v = d; })() does. An async or generator body may pause or never start.
@@ -18,64 +25,153 @@ const isImmediatelyInvoked = (fnNode, parent) => {
   return isCallee && runsAtOnce;
 };
 
-const containsExit = (node) => {
-  let hasExit = false;
-  t.traverseFast(node, (inner) => {
-    hasExit = hasExit || EXIT_TYPES.has(inner.type);
-  });
-  return hasExit;
+const listChildNodes = (node) => (t.VISITOR_KEYS[node.type] ?? [])
+  .flatMap((key) => [node[key]].flat())
+  .filter((child) => Boolean(child?.type));
+
+// Whether a break or continue lands on a loop, switch or label inside the node being read.
+const isAimedInside = (jump, inside) => {
+  if (jump.label) return inside.labels.includes(jump.label.name);
+  const targets = t.isBreakStatement(jump) ? inside.breakables : inside.loops;
+  return targets > 0;
 };
 
-// How a statement list ends for the binding: 'writes' at a statement that always writes it,
-// 'exits' at one that may break, continue, return or throw first, and 'falls' off its end.
-const readListOutcome = (statements, writeNodes) => {
-  for (const statement of statements) {
-    const doesWrite = writesOnEveryPath(statement, writeNodes);
-    if (doesWrite) return 'writes';
-    const mayExit = containsExit(statement);
-    if (mayExit) return 'exits';
+// The return, throw, break and continue statements in node that leave it: none in a nested
+// function, and no break or continue that lands on a loop, switch or label inside node.
+const collectEscapingExits = (node, inside = OUTSIDE_TARGETS) => {
+  if (t.isFunction(node)) return [];
+  const isJump = JUMP_TYPES.has(node.type);
+  if (isJump) return isAimedInside(node, inside) ? [] : [node];
+  if (EXIT_TYPES.has(node.type)) return [node];
+  const isLoop = t.isLoop(node);
+  const isBreakable = isLoop || t.isSwitchStatement(node);
+  const nested = {
+    loops: inside.loops + Number(isLoop),
+    breakables: inside.breakables + Number(isBreakable),
+    labels: t.isLabeledStatement(node) ? [...inside.labels, node.label.name] : inside.labels
+  };
+  return listChildNodes(node).flatMap((child) => collectEscapingExits(child, nested));
+};
+
+const joinPaths = (outcomes) => ({
+  falls: outcomes.some((paths) => paths.falls),
+  exits: outcomes.flatMap((paths) => paths.exits)
+});
+
+// A statement list or sequence runs each part in turn: it collects the exits of every part that
+// runs before one no unwritten path gets past, and runs off its end when every part may.
+const readListPaths = (parts, writeNodes) => {
+  const exits = [];
+  for (const part of parts) {
+    const paths = readUnwrittenPaths(part, writeNodes);
+    exits.push(...paths.exits);
+    if (!paths.falls) return { falls: false, exits };
   }
-  return 'falls';
+  return { falls: true, exits };
 };
 
-const writesOnBothBranches = (node, writeNodes) => writesOnEveryPath(node.consequent, writeNodes) && writesOnEveryPath(node.alternate, writeNodes);
+const readBranchPaths = (node, writeNodes) => joinPaths([node.consequent, node.alternate].map((branch) => readUnwrittenPaths(branch, writeNodes)));
 
-// A switch writes on every path when it has a default and each case writes, or falls through to
-// a case that does. A case that may break first, or a last case that runs off its end, does not.
-const writesOnEveryCase = (node, writeNodes) => {
+const isOwnBreak = (exit) => t.isBreakStatement(exit) && !exit.label;
+
+// Entering a switch at a case runs it and falls through the cases after it. With no default a
+// value may match no case, and a break of the switch's own ends it unwritten.
+const readSwitchPaths = (node, writeNodes) => {
   const hasDefault = node.cases.some((switchCase) => !switchCase.test);
-  if (!hasDefault) return false;
-  let fallsIntoWrite = false;
-  for (let index = node.cases.length - 1; index >= 0; index -= 1) {
-    const outcome = readListOutcome(node.cases[index].consequent, writeNodes);
-    fallsIntoWrite = outcome === 'writes' || (outcome === 'falls' && fallsIntoWrite);
-    if (!fallsIntoWrite) return false;
+  const entries = node.cases.map((_, index) => readListPaths(node.cases.slice(index).flatMap((switchCase) => switchCase.consequent), writeNodes));
+  const paths = joinPaths(hasDefault ? entries : [...entries, FALLS]);
+  return { falls: paths.falls || paths.exits.some(isOwnBreak), exits: paths.exits.filter((exit) => !isOwnBreak(exit)) };
+};
+
+// An invoked function runs its body at the call: a return there ends the call unwritten, and
+// only a throw leaves past it.
+const readCallPaths = (node, writeNodes) => {
+  const isInvoked = isImmediatelyInvoked(node.callee, node);
+  if (!isInvoked) return FALLS;
+  const paths = readUnwrittenPaths(node.callee.body, writeNodes);
+  const hasReturn = paths.exits.some((exit) => t.isReturnStatement(exit));
+  return { falls: paths.falls || hasReturn, exits: paths.exits.filter((exit) => !t.isReturnStatement(exit)) };
+};
+
+// Node types whose paths readUnwrittenPaths follows; any other node may run off its end unwritten.
+const PATH_READERS = Object.freeze({
+  ExpressionStatement: (node, writeNodes) => readUnwrittenPaths(node.expression, writeNodes),
+  SequenceExpression: (node, writeNodes) => readListPaths(node.expressions, writeNodes),
+  BlockStatement: (node, writeNodes) => readListPaths(node.body, writeNodes),
+  IfStatement: readBranchPaths,
+  ConditionalExpression: readBranchPaths,
+  SwitchStatement: readSwitchPaths,
+  CallExpression: readCallPaths
+});
+
+/**
+ * How running node can leave the binding unwritten: { falls, exits }. falls is true when a path
+ * may run off its end before any write in writeNodes; exits lists the return, throw, break and
+ * continue statements that may leave it before one. The write itself, a statement list holding one
+ * before anything that may leave it, an if or a conditional, a switch through its cases and an
+ * immediately invoked function are followed; any other node may run off its end, with the exits
+ * inside it that leave it.
+ */
+export const readUnwrittenPaths = (node, writeNodes) => {
+  if (!node) return FALLS;
+  if (writeNodes.has(node)) return WRITTEN;
+  const isExit = EXIT_TYPES.has(node.type);
+  if (isExit) return { falls: false, exits: [node] };
+  const reader = Object.hasOwn(PATH_READERS, node.type) ? PATH_READERS[node.type] : null;
+  return reader ? reader(node, writeNodes) : { falls: true, exits: collectEscapingExits(node) };
+};
+
+// The statement an exit leaves, above coverPath: the function (or the program) for a return or a
+// throw, the body of its label for a labeled break or continue, otherwise the nearest loop, or for
+// a break the nearest loop or switch.
+const findExitTarget = (exit, coverPath) => {
+  const label = exit.label?.name;
+  if (label) {
+    const labeled = coverPath.findParent((p) => p.isLabeledStatement() && p.node.label.name === label);
+    return labeled ? labeled.get('body') : null;
+  }
+  const isJump = JUMP_TYPES.has(exit.type);
+  if (!isJump) return coverPath.findParent((p) => p.isFunction() || p.isProgram());
+  const isBreak = t.isBreakStatement(exit);
+  return coverPath.findParent((p) => p.isLoop() || (isBreak && p.isSwitchStatement()));
+};
+
+// A try between an exit and its target catches a throw from its block, and on the way out runs its
+// finally, which reads the binding unwritten when it holds the anchor.
+const isStoppedByTry = (tryPath, exit, coverNode, anchor) => {
+  const { block, handler, finalizer } = tryPath.node;
+  const isCaught = t.isThrowStatement(exit) && Boolean(handler) && isWithinNode(coverNode, block);
+  const runsReadingFinally = Boolean(finalizer) && !isWithinNode(coverNode, finalizer) && isWithinNode(anchor, finalizer);
+  return isCaught || runsReadingFinally;
+};
+
+/**
+ * Whether an exit that leaves coverPath's node unwritten also skips anchor (the read, or for an
+ * earlier write the try): its target holds the anchor, so the exit leaves the rest of the target
+ * with it, no try on the way catches it or reads the anchor in a finally, and it is not a continue
+ * into a do-while, whose test runs after the body.
+ */
+export const exitsPastAnchor = (exit, coverPath, anchor) => {
+  const target = findExitTarget(exit, coverPath);
+  const skipsAnchor = Boolean(target) && isWithinNode(anchor, target.node);
+  if (!skipsAnchor) return false;
+  const isDoWhileContinue = t.isContinueStatement(exit) && target.isDoWhileStatement();
+  if (isDoWhileContinue) return false;
+  for (let p = coverPath.parentPath; p && p.node !== target.node; p = p.parentPath) {
+    const isStopped = p.isTryStatement() && isStoppedByTry(p, exit, coverPath.node, anchor);
+    if (isStopped) return false;
   }
   return true;
 };
 
-const writesThroughCall = (node, writeNodes) => isImmediatelyInvoked(node.callee, node) && writesOnEveryPath(node.callee.body, writeNodes);
-
-// Node types that can write the binding on every path through them (see writesOnEveryPath).
-const PATH_WRITERS = Object.freeze({
-  ExpressionStatement: (node, writeNodes) => writesOnEveryPath(node.expression, writeNodes),
-  SequenceExpression: (node, writeNodes) => node.expressions.some((part) => writesOnEveryPath(part, writeNodes)),
-  BlockStatement: (node, writeNodes) => readListOutcome(node.body, writeNodes) === 'writes',
-  IfStatement: writesOnBothBranches,
-  ConditionalExpression: writesOnBothBranches,
-  SwitchStatement: writesOnEveryCase,
-  CallExpression: writesThroughCall
-});
-
 /**
- * Whether running node always writes the binding (one of writeNodes): the write itself, an
- * expression statement, sequence or block holding one before anything that may leave it, an if
- * or a conditional whose branches both do, a switch whose every case does, or an immediately
- * invoked function whose body does.
+ * Whether every path through coverPath's node that can still reach anchor writes the binding
+ * first: none runs off its end unwritten, and each exit that leaves it unwritten skips anchor.
+ * context holds the binding's writeNodes and paths, a cache of readUnwrittenPaths per node.
  */
-export const writesOnEveryPath = (node, writeNodes) => {
-  if (!node) return false;
-  if (writeNodes.has(node)) return true;
-  const writer = Object.hasOwn(PATH_WRITERS, node.type) ? PATH_WRITERS[node.type] : null;
-  return writer ? writer(node, writeNodes) : false;
+export const writesOnEveryPath = (coverPath, anchor, context) => {
+  const isKnown = context.paths.has(coverPath.node);
+  if (!isKnown) context.paths.set(coverPath.node, readUnwrittenPaths(coverPath.node, context.writeNodes));
+  const { falls, exits } = context.paths.get(coverPath.node);
+  return !falls && exits.every((exit) => exitsPastAnchor(exit, coverPath, anchor));
 };
