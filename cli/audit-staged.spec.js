@@ -21,8 +21,10 @@ const makeRepo = () => {
   fs.writeFileSync(path.join(root, 'src', 'dirty.js'), 'export const poll = (fn) => { setInterval(fn, 1); };\n');
   return root;
 };
+// The runner's own CHEMX_* and GIT_* never reach the audit, so an exported floor cannot pass a staged hazard (#253).
+const AUDIT_ENV = Object.fromEntries(Object.entries(process.env).filter(([key]) => !/^(CHEMX_|GIT_)/.test(key)));
 const audit = (root, extra = []) => {
-  const result = spawnSync(process.execPath, [CLI, 'audit', '--staged', '--json', '--non-interactive', ...extra], { cwd: root, encoding: 'utf-8', input: '' });
+  const result = spawnSync(process.execPath, [CLI, 'audit', '--staged', '--json', '--non-interactive', ...extra], { cwd: root, encoding: 'utf-8', input: '', env: AUDIT_ENV });
   return { status: result.status, report: JSON.parse(result.stdout.trim().split('\n').pop()) };
 };
 
