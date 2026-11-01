@@ -1,11 +1,11 @@
 /**
  * Truth spec 4.2 escalation, writes (C2): a write of the binding before the try, or after it and
  * before the read, is a default as on main, except where a path provably reaches the read without
- * it. The proven shapes are a write in a function that never runs or that a deferring API runs
- * later, a write in the branch of an if with no else whose test may fail, and a write in a part
- * that runs only while the binding is set, each in the simple position of
- * shallow-catch-writes.js. Every other shape keeps main's result. A try whose block writes the
- * binding and whose catch ends in an exit, or whose finally writes it, guards the reads after it.
+ * it. The proven shapes are a write in a function that never runs or that a timer or listener API
+ * runs later, and a write in a part that runs only while the binding is set, each in the simple
+ * position of shallow-catch-writes.js. Every other shape keeps main's result, an if with no else
+ * and a promise's then, catch or finally among them. A try whose block writes the binding and
+ * whose catch ends in an exit, or whose finally writes it, guards the reads after it.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -50,13 +50,11 @@ test('a write in a function that never runs, or that a deferring API runs later,
     "el.addEventListener('load', () => { v = d; });",
     "emitter.on('data', (x) => { v = x; });",
     "emitter.once('data', (x) => { v = x; });",
-    'p.then((x) => { v = x; });',
-    'p.catch(() => { v = d; });',
-    'p.finally(() => { v = d; });',
-    'fetch(u).then((r) => { v = r; }).catch(report);'
+    'const id = setTimeout(() => { v = d; });'
   ]) {
     assertOne(writeThenRead(deferred), 'HIGH');
   }
+  assertOne(afterTryInFunction('  setTimeout(() => { v = d; }, await k);\n  return v.x;', 'async (a, k)'), 'HIGH');
   assertOne('let v;\nconst reset = () => { v = d; };\ntry { v = f(); } catch {}\nuse(v);\n', 'HIGH');
   assertOne(afterTryInFunction('  function neverCalled() { v = d; }\n  return v.x;'), 'HIGH');
   assertOne(afterTryInFunction('  return v.x;\n  function neverCalled() { v = d; }'), 'HIGH');
@@ -71,7 +69,12 @@ test('a closure that may run before the read is a default, as on main (C2)', () 
     'const o = { m() { v = d; } };',
     'setTimeout(() => { v = d; });\njest.runAllTimers();',
     "emitter.on('x', () => { v = d; });\nemitter.emit('x');",
-    'const setTimeout = (fn) => fn();\nsetTimeout(() => { v = d; });'
+    'const setTimeout = (fn) => fn();\nsetTimeout(() => { v = d; });',
+    'p.then((x) => { v = x; });',
+    'p.catch(() => { v = d; });',
+    'p.finally(() => { v = d; });',
+    'fetch(u).then((r) => { v = r; }).catch(report);',
+    'p.then((x) => { v = x; }, report);'
   ]) {
     assertOne(writeThenRead(lines), 'MEDIUM');
   }
@@ -80,18 +83,55 @@ test('a closure that may run before the read is a default, as on main (C2)', () 
   assertOne(afterTryInFunction('  function set() { v = d; }\n  set();\n  return v.x;'), 'MEDIUM');
   assertOne(afterTryInFunction('  const set = () => { v = d; };\n  later(set);\n  return v.x;'), 'MEDIUM');
   assertOne(afterTryInFunction('  function h() { v = d; use(v.x); }'), 'MEDIUM');
+  // In sloppy code a function declared in an inner block is also the enclosing function's (Annex B).
+  for (const file of ['src/x.js', 'src/x.cjs']) {
+    assertOne(afterTryInFunction('  { function h() { v = d; } }\n  h();\n  return v.x;'), 'MEDIUM', file);
+    assertOne('let v;\ntry { v = f(); } catch {}\n{ function h() { v = d; } }\nh();\nuse(v.x);\n', 'MEDIUM', file);
+  }
+  assertOne(afterTryInFunction('  switch (k) {\n    case 1:\n      function h() { v = d; }\n  }\n  h();\n  return v.x;', '(a, k)'), 'MEDIUM', 'src/x.cjs');
   assertOne(afterTryInFunction('  setTimeout(() => { v = d; });\n  await tick();\n  return v.x;', 'async (a)'), 'MEDIUM');
   const vue = '<template>\n  <button @click="refresh">{{ show() }}</button>\n</template>\n<script setup>\nlet v;\ntry { v = load(); } catch {}\nfunction refresh() { v = load(); }\nfunction show() { return v.x; }\n</script>\n';
   assert.deepEqual(catchSeverities(vue, 'src/X.vue'), [[6, 'MEDIUM']]);
 });
 
-test('a write under an if with no else whose test may fail, or that runs only while the binding is set, is not a default (C2)', () => {
+// Every row the seventh review gives for an awaited promise method, verbatim: the callback has
+// run before the read, or the await threw.
+test('a callback passed to a promise\'s then, catch or finally is a default, as on main (C2)', () => {
+  const frame = (params, mid) => `export const g = async (${params}) => {\n  let v;\n  try { v = f(); } catch {}\n  ${mid}\n  return v.x;\n};`;
+  for (const mid of ['await p.then(() => { v = 1; });', 'await p.finally(() => { v = 1; });', 'const r = await p.then((x) => { v = x; });', 'await Promise.all([p.then(() => { v = 1; })]);']) {
+    assertOne(frame('c, k, xs, p, el, em', mid), 'MEDIUM', 'src/x.ts');
+  }
+  for (const mid of ['await Promise.resolve().then(() => { v = 1; });', 'await p.then(() => { v = 1; }).then(() => {});', 'const [r] = await Promise.all([p.then((x) => { v = x; })]);']) {
+    assertOne(frame('c, k, xs, p', mid), 'MEDIUM', 'src/x.ts');
+  }
+  for (const mid of ['await p.catch(() => { v = 1; });', 'await p.then(() => { v = 1; }).catch(noop);', 'await p.then(() => { v = 1; }, noop);']) {
+    assertOne(frame('c, k, xs, p', mid), 'MEDIUM', 'src/x.ts');
+  }
+  assertOne('export const load = async (cache, refresh) => {\n  let data;\n  try { data = JSON.parse(cache); } catch {}\n  await refresh().then((r) => { data = r; });\n  return data.items;\n};\n', 'MEDIUM', 'src/x.ts');
+  const vue = '<template>\n  <p />\n</template>\n<script setup>\nlet data;\ntry { data = JSON.parse(localStorage.cache); } catch {}\nawait refresh().then((r) => { data = r; });\nconst items = data.items;\n</script>\n';
+  assert.deepEqual(catchSeverities(vue, 'src/C.vue'), [[6, 'MEDIUM']]);
+});
+
+// Anything else in the deferring call's statement may run after the call and before the read: a
+// microtask or nextTick callback runs during an await on it, an emit chained on a listener calls it.
+test('a deferring call that is not the whole of its statement keeps main\'s MEDIUM (C2)', () => {
+  for (const mid of [
+    'await queueMicrotask(() => { v = 1; });',
+    'await process.nextTick(() => { v = 1; });',
+    'queueMicrotask(() => { v = 1; }), await tick();',
+    'const id = setTimeout(() => { v = 1; }), r = await tick();',
+    'const { a = await tick() } = setTimeout(() => { v = 1; });',
+    "em.on('x', () => { v = 1; }).emit('x');",
+    'for (setTimeout(() => { v = 1; }); await more(); ) {}',
+    'if (setTimeout(() => { v = 1; })) await tick();',
+    'void setTimeout(() => { v = 1; });'
+  ]) {
+    assertOne(`export const g = async (c, k, xs, p, el, em) => {\n  let v;\n  try { v = f(); } catch {}\n  ${mid}\n  return v.x;\n};`, 'MEDIUM', 'src/x.ts');
+  }
+});
+
+test('a write that runs only while the binding is set is not a default (C2)', () => {
   for (const lines of [
-    'if (cond) { v = d; }',
-    'if (cond) v = d;',
-    'if (cond) { log(); v = d; }',
-    'if (false) v = d;',
-    'if (v == null && ok) v = d;',
     'if (v) v = v.trim();',
     'if (v != null) v = norm(v);',
     'if (!v) skip();\nelse v = d;',
@@ -101,11 +141,64 @@ test('a write under an if with no else whose test may fail, or that runs only wh
   ]) {
     assertOne(writeThenRead(lines), 'HIGH');
   }
-  assertOne('let v;\nif (cond) v = {};\ntry { v = f(); } catch {}\nuse(v);\n', 'HIGH');
   assertOne('let v;\nif (v) v = 1;\ntry { v = f(); } catch {}\nuse(v.x);\n', 'HIGH');
-  assertOne('for (const k of ks) {\n  let v;\n  try { v = f(k); } catch {}\n  if (c) v = 1;\n  use(v.x);\n}\n', 'HIGH');
-  assertOne(afterTryInFunction('  if (c) v = 1;\n  log(k);\n  return v.x;', '(a, c, k)'), 'HIGH');
-  assertOne(afterTryInFunction('  if (c) v = 1;\n  if (k) v = 2;\n  return v.x;', '(a, c, k)'), 'HIGH');
+});
+
+test('a write under an if with no else is a default, as on main, whatever its test (C2)', () => {
+  for (const lines of [
+    'if (cond) { v = d; }',
+    'if (cond) v = d;',
+    'if (cond) { log(); v = d; }',
+    'if (false) v = d;',
+    'if (true) v = d;',
+    'if (v == null && ok) v = d;'
+  ]) {
+    assertOne(writeThenRead(lines), 'MEDIUM');
+  }
+  for (const condition of ['true as boolean', '<boolean>true', 'true!', '1n', '!0n']) {
+    assertOne(writeThenRead(`if (${condition}) v = d;`), 'MEDIUM', 'src/x.ts');
+  }
+  assertOne('let v;\nif (cond) v = {};\ntry { v = f(); } catch {}\nuse(v);\n', 'MEDIUM');
+  assertOne('for (const k of ks) {\n  let v;\n  try { v = f(k); } catch {}\n  if (c) v = 1;\n  use(v.x);\n}\n', 'MEDIUM');
+  assertOne(afterTryInFunction('  if (c) v = 1;\n  log(k);\n  return v.x;', '(a, c, k)'), 'MEDIUM');
+  assertOne(afterTryInFunction('  if (c) v = 1;\n  if (k) v = 2;\n  return v.x;', '(a, c, k)'), 'MEDIUM');
+  assertOne(afterTryInFunction('  if (c) v = 1;\n  if (!c) return;\n  return v.x;', '(a, c)'), 'MEDIUM');
+  assertOne(afterTryInFunction('  if (c) v = 1;\n  if (!c) throw new Error("x");\n  return v.x;', '(a, c)'), 'MEDIUM');
+  assertOne(afterTryInFunction('  if (c) v = 1;\n  if (c) use(v.x);', '(a, c)'), 'MEDIUM');
+  assertOne(afterTryInFunction('  if (c) v = 1;\n  if (!c) v = 2;\n  return v.x;', '(a, c)'), 'MEDIUM');
+  assertOne(afterTryInFunction('  if (c) v = 1;\n  log(c);\n  return v.x;', '(a, c)'), 'MEDIUM');
+  assertOne(afterTryInFunction('  assert(c);\n  if (c) v = 1;\n  return v.x;', '(a, c)'), 'MEDIUM');
+  assertOne('export const g = (c) => {\n  if (!c) return;\n  let v;\n  try { v = f(); } catch {}\n  if (c) v = 1;\n  return v.x;\n};\n', 'MEDIUM');
+  assertOne(afterTryInFunction('  if (c) v = 1;\n  return c ? v.x : 0;', '(a, c)'), 'MEDIUM');
+  assertOne(afterTryInFunction('  if (c) v = 1;\n  await tick();\n  return v.x;', 'async (a, c)'), 'MEDIUM');
+  assertOne(afterTryInFunction('  if (c) v = 1;\n  init();\n  return v.x;\n  function init() { v = 2; }', '(a, c)'), 'MEDIUM');
+  assertOne('export const g = () => {\n  let v;\n  let ok = false;\n  try { v = f(); ok = true; } catch {}\n  if (!ok) v = d;\n  return v.x;\n};\n', 'MEDIUM');
+  assertOne('export const g = (xs) => {\n  let v;\n  for (const x of xs) {\n    try { v = f(x); } catch {}\n    if (x === xs[0]) v = d;\n    use(v.x);\n  }\n};\n', 'MEDIUM');
+  assertOne('let v;\nif (x) {\n  try { v = f(); } catch {}\n  if (c) v = d;\n}\nuse(v.x);\n', 'MEDIUM');
+});
+
+// Every row the seventh review gives for a test name declared outside the if, verbatim: v is set
+// at the read, or the test always holds.
+test('a write under an if whose test reads a flag, a helper or an object is a default, as on main (C2)', () => {
+  const parsed = (mid) => `export const g = (c, k, s) => {\n  let v;\n  try { v = JSON.parse(s); } catch {}\n  ${mid}\n  return v.x;\n};`;
+  for (const mid of [
+    'const missing = v === undefined;\n  if (missing) v = {};',
+    'const isSet = v != null;\n  if (!isSet) v = {};',
+    'const bad = !v;\n  if (bad) v = {};',
+    'let bad = !v;\n  if (bad) v = {};',
+    "const t = typeof v;\n  if (t === 'undefined') v = {};",
+    'const [bad] = [!v];\n  if (bad) v = {};',
+    'const opts = { retry: true };\n  if (opts.retry) v = {};'
+  ]) {
+    assertOne(parsed(mid), 'MEDIUM', 'src/x.ts');
+  }
+  const config = (mid) => `export const g = (raw) => {\n  let cfg;\n  try { cfg = JSON.parse(raw); } catch {}\n  ${mid}\n  return cfg.x;\n};`;
+  for (const mid of ['function bad() { return !cfg; }\n  if (bad()) cfg = {};', 'const bad = () => !cfg;\n  if (bad()) cfg = {};', 'const missing = !cfg;\n  if (missing) cfg = {};']) {
+    assertOne(config(mid), 'MEDIUM', 'src/x.ts');
+  }
+  assertOne('export const readConfig = (raw) => {\n  let cfg;\n  try { cfg = JSON.parse(raw); } catch {}\n  const missing = cfg === undefined;\n  if (missing) cfg = { retries: 3 };\n  return cfg.retries;\n};\n', 'MEDIUM', 'src/x.ts');
+  assertOne('export const g = (c, k, xs, p) => {\n  let v;\n  try { v = f(); } catch {}\n  const st = { ok: false }; if (!st.ok) v = 1;\n  return v.x;\n};', 'MEDIUM', 'src/x.ts');
+  assertOne('export const g = (c, k, xs) => {\n  let v;\n  try { v = f(); } catch {}\n  if (!xs.length) return;\n  const has = xs.length > 0;\n  if (has) v = xs[0];\n  return v.x;\n};', 'MEDIUM', 'src/x.ts');
 });
 
 test('a write in any other shape is a default, as on main (C2)', () => {
@@ -136,32 +229,20 @@ test('a write in any other shape is a default, as on main (C2)', () => {
   }
   assertOne('let v;\ntry { v = f(); } catch {}\nif (c) v = 1;\nelse { use(v.x); v = 2; }\n', 'MEDIUM');
   assertOne('function g() {\n  for (var v of xs) {}\n  try { v = f(); } catch {}\n  return v.x;\n}\n', 'MEDIUM');
-  for (const condition of ['true as boolean', '<boolean>true', 'true!', '1n', '!0n']) {
-    assertOne(writeThenRead(`if (${condition}) v = d;`), 'MEDIUM', 'src/x.ts');
-  }
 });
 
-test('the simple position needs nothing between the if and the read that leaves, pauses or shares its test (C2)', () => {
-  assertOne(afterTryInFunction('  if (c) v = 1;\n  if (!c) return;\n  return v.x;', '(a, c)'), 'MEDIUM');
-  assertOne(afterTryInFunction('  if (c) v = 1;\n  if (!c) throw new Error("x");\n  return v.x;', '(a, c)'), 'MEDIUM');
-  assertOne(afterTryInFunction('  if (c) v = 1;\n  if (c) use(v.x);', '(a, c)'), 'MEDIUM');
-  assertOne(afterTryInFunction('  if (c) v = 1;\n  if (!c) v = 2;\n  return v.x;', '(a, c)'), 'MEDIUM');
-  assertOne(afterTryInFunction('  if (c) v = 1;\n  log(c);\n  return v.x;', '(a, c)'), 'MEDIUM');
-  assertOne(afterTryInFunction('  assert(c);\n  if (c) v = 1;\n  return v.x;', '(a, c)'), 'MEDIUM');
-  assertOne('export const g = (c) => {\n  if (!c) return;\n  let v;\n  try { v = f(); } catch {}\n  if (c) v = 1;\n  return v.x;\n};\n', 'MEDIUM');
-  assertOne(afterTryInFunction('  if (c) v = 1;\n  return c ? v.x : 0;', '(a, c)'), 'MEDIUM');
-  assertOne(afterTryInFunction('  if (c) v = 1;\n  await tick();\n  return v.x;', 'async (a, c)'), 'MEDIUM');
-  assertOne(afterTryInFunction('  if (c) v = 1;\n  init();\n  return v.x;\n  function init() { v = 2; }', '(a, c)'), 'MEDIUM');
-  assertOne('export const g = () => {\n  let v;\n  let ok = false;\n  try { v = f(); ok = true; } catch {}\n  if (!ok) v = d;\n  return v.x;\n};\n', 'MEDIUM');
-  assertOne('export const g = (xs) => {\n  let v;\n  for (const x of xs) {\n    try { v = f(x); } catch {}\n    if (x === xs[0]) v = d;\n    use(v.x);\n  }\n};\n', 'MEDIUM');
-  assertOne('let v;\nif (x) {\n  try { v = f(); } catch {}\n  if (c) v = d;\n}\nuse(v.x);\n', 'MEDIUM');
+test('a write that runs only while the binding is set needs nothing between it and the read that leaves or pauses (C2)', () => {
+  assertOne(afterTryInFunction('  if (v) v = v.trim();\n  if (c) return;\n  return v.x;', '(a, c)'), 'MEDIUM');
+  assertOne(afterTryInFunction('  if (v) v = v.trim();\n  await tick();\n  return v.x;', 'async (a)'), 'MEDIUM');
+  assertOne(afterTryInFunction('  if (v) v = v.trim();\n  return c ? v.x : 0;', '(a, c)'), 'MEDIUM');
+  assertOne('export const g = (xs) => {\n  let v;\n  try { v = f(); } catch {}\n  for (const x of xs) {\n    if (v) v = v.trim();\n    use(v.x);\n  }\n};\n', 'MEDIUM');
 });
 
 // main does not count a write inside another swallowed try even when it always runs (a finally),
 // so a proven skip beside one could rest on that undercount.
 test('a read after a write main leaves uncounted in another swallowed try keeps main\'s result (C2)', () => {
   const nested = '  try { try { g(); } finally { v = 3; } } catch {}';
-  for (const lines of [`${nested}\n  if (c) v = 1;`, `${nested}\n  function neverCalled() { v = 1; }`, `${nested}\n  setTimeout(() => { v = 1; });`]) {
+  for (const lines of [`${nested}\n  if (c) v = 1;`, `${nested}\n  if (v) v = 1;`, `${nested}\n  function neverCalled() { v = 1; }`, `${nested}\n  setTimeout(() => { v = 1; });`]) {
     const code = `export const g = (c) => {\n  let v;\n  try { v = f(); } catch {}\n${lines}\n  return v.x;\n};\n`;
     assert.deepEqual(catchSeverities(code), [[3, 'MEDIUM'], [4, 'MEDIUM']], lines);
   }
