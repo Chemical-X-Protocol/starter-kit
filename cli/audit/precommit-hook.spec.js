@@ -107,6 +107,25 @@ for (const variant of Object.keys(VARIANTS)) {
       assert.match(result.stdout + result.stderr, /Grade B is below required minimum tier A\+/);
     });
   });
+
+  // #253: the hook captures the audit's output and prints it only when it blocks, so a skipped
+  // floor went unseen on a passing commit. Its warning lines now reach stderr either way.
+  const FLOOR_WARNINGS = [
+    ['minGrade "Q" in .chemx/config.json', { '.chemx/config.json': '{"minGrade":"Q"}\n' }, {}, 'minGrade value "Q" in .chemx/config.json'],
+    ['CHEMX_MIN_SCORE=85.5', {}, { CHEMX_MIN_SCORE: '85.5' }, 'CHEMX_MIN_SCORE value "85.5"']
+  ];
+  for (const [label, config, extra, named] of FLOOR_WARNINGS) {
+    test(`${variant}: a passing grade gate still shows the warning for an unusable ${label}`, () => {
+      withHookRepo(variant, { 'src/svc.js': lines(20), ...config }, (root, commit) => {
+        append(root, 'src/svc.js', 'export const extra = 1;\n');
+        const result = commit({ CHEMX_PRECOMMIT_GATE: 'grade', ...extra });
+        assert.equal(result.status, 0, result.stdout + result.stderr);
+        const shown = result.stderr.split('\n').filter(Boolean);
+        assert.equal(shown.length, 1, result.stderr);
+        assert.ok(shown[0].startsWith(`⚠ chemx audit: ignoring ${named} (`), result.stderr);
+      });
+    });
+  }
 }
 
 // #253: the hook hands its rendered floors to the real audit as CHEMX_DEFAULT_MIN_*, not as flags.

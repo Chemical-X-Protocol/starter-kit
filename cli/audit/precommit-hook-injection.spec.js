@@ -17,6 +17,7 @@ import os from 'node:os';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { buildGitHubWorkflowScript, buildPreCommitHookScript } from '../installer-templates.js';
+import { resolveAuditFloors } from './audit-floors.js';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const LAUNCHER = { version: '0.0.0-test', cliPath: '', ciBin: 'chemx' };
@@ -167,6 +168,21 @@ test('the hook template renders only a whitelisted grade and a 0-100 score as it
   const lowered = buildPreCommitHookScript('a', '75', LAUNCHER);
   assert.match(lowered, /\n {4}export CHEMX_DEFAULT_MIN_GRADE=A CHEMX_DEFAULT_MIN_SCORE=75\n/);
 });
+
+// #253: the templates read a score as `chemx audit` does, so '100.0' renders 100 where the audit
+// enforces 100, and an unusable one falls back to 80. [minScore given to the installer, rendered]
+const SCORE_FORMS = [['100', 100], ['100.0', 100], ['85.00', 85], [85, 85], ['000', 0], ['0.0', 0], ['100.5', 80], ['95.5', 80], ['150', 80], ['1e2', 80], ['+80', 80], ['-0', 80], ['0100', 80], ['', 80], [100.5, 80]];
+
+for (const [given, rendered] of SCORE_FORMS) {
+  test(`the hook and CI templates render minScore ${JSON.stringify(given)} as ${rendered}, as chemx audit reads it`, () => {
+    const audited = resolveAuditFloors([], {}, { minScore: given }).minScore ?? 80;
+    assert.equal(audited, rendered, 'the audit reads the same value');
+    const hook = buildPreCommitHookScript('B', given, LAUNCHER);
+    assert.ok(hook.includes(`\n    export CHEMX_DEFAULT_MIN_GRADE=B CHEMX_DEFAULT_MIN_SCORE=${rendered}\n`), 'hook default');
+    const workflow = buildGitHubWorkflowScript('B', given, LAUNCHER);
+    assert.ok(workflow.includes(`--min-score=\${{ vars.CHEMX_MIN_SCORE || ${rendered} }}`), 'CI default');
+  });
+}
 
 test('the CI workflow template renders only a whitelisted grade and a 0-100 score', () => {
   const workflow = buildGitHubWorkflowScript("B' }}$(touch x)", 250, LAUNCHER);

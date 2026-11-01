@@ -1,7 +1,9 @@
 import { defaultTemplateLauncher } from './hooks/launcher.js';
 
 const HOOK_GRADES = ['A+', 'A', 'B', 'C', 'D', 'F'];
-const HOOK_SCORE = /^(?:100|[1-9]?\d)$/;
+// The score forms cli/audit/audit-floors.js accepts: 0 to 100, with only zeros after a point (100.0 is 100).
+const HOOK_SCORE = /^\d{1,3}(?:\.0+)?$/;
+const MAX_HOOK_SCORE = 100;
 
 // The floors are rendered into shell text, so anything but a known grade or a 0-100 integer becomes the default (#254).
 const toHookGrade = (value) => {
@@ -10,7 +12,8 @@ const toHookGrade = (value) => {
 };
 const toHookScore = (value) => {
   const score = String(value).trim();
-  return HOOK_SCORE.test(score) ? Number(score) : 80;
+  const isUsable = HOOK_SCORE.test(score) && Number(score) <= MAX_HOOK_SCORE;
+  return isUsable ? Number(score) : 80;
 };
 
 // launcher pins the chemx this hook and the CI workflow run (GAP-4): { version, cliPath, ciBin }.
@@ -141,6 +144,15 @@ if [ -n "\$AUDIT_BIN" ]; then
     printf "   That skips only this hook. chemx verify fails on these only when a chemx-ratchet.json baseline exists and the rule is above it; without a ratchet, verify gates CRITICAL/HIGH only.\\n\\n"
     exit 1
   fi
+  # A passing audit's output stays hidden, but a floor it skipped (an unusable CHEMX_MIN_* or
+  # config value) is still named on stderr.
+  printf "%s\\n" "\$AUDIT_OUT" | while IFS= read -r AUDIT_LINE; do
+    case "\$AUDIT_LINE" in
+      "⚠ chemx audit: ignoring "*)
+        printf "%s\\n" "\$AUDIT_LINE" >&2
+        ;;
+    esac
+  done
 fi
 
 if [ "\$CHEMX_VERBOSE" = "1" ]; then
