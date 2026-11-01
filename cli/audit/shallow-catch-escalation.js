@@ -6,17 +6,19 @@
  * check the binding first (shallow-catch-reads.js) do not escalate. A later or earlier write
  * is a default only when it always runs, so not inside a nested function or under a branch,
  * loop, switch case or catch that may skip it, unless that part runs whenever the binding is
- * unset (if (!v) v = d) or the if, conditional, switch, loop that always runs its body or
- * invoked function around it writes on every path that can still reach the read, leaving instead
- * on the others (if (c) v = 1; else v = 2, or else return, or while (true) { v = f(); break; };
- * see shallow-catch-writes.js). A for-in or for-of head writes only for
+ * unset (if (!v) v = d) or a node around it writes on every path that can still reach the read,
+ * leaving instead on the others: the if, conditional, switch or invoked function around it
+ * (if (c) v = 1; else v = 2, or else return), or further out a loop that always runs its body
+ * (for (;;) { if (c) { v = 1; break; } }; see shallow-catch-writes.js). A write in a try whose
+ * catch swallows but never runs off its end (catch { return; }) is a default where that try
+ * covers it, and such a try guards its own reads. A for-in or for-of head writes only for
  * a non-empty iterable, so it is a default only inside its own loop.
  */
 import * as t from '@babel/types';
 import { isShallowCatchClause } from './rules-predicates.js';
 import { isSwallowedCatch } from './catch-predicates.js';
 import { isCoveredRead, isUndefinedValue, isWithinNode, readUnsetOutcome } from './shallow-catch-reads.js';
-import { writesOnEveryPath } from './shallow-catch-writes.js';
+import { mayRunOffEnd, writesOnEveryPath } from './shallow-catch-writes.js';
 
 const SWALLOWABLE_KINDS = new Set(['let', 'var']);
 const DEFAULTING_ASSIGNMENTS = new Set(['=', '??=', '||=']);
@@ -78,15 +80,20 @@ const hasSwallowingHandler = (tryPath) => {
   return isShallowCatchClause(handler, t) || isSwallowedCatch(tryPath.get('handler'));
 };
 
-// A write inside the block of another try whose catch swallows may never have run, so it
-// cannot count as a default. A try that also encloses this one does not qualify: reaching
-// this try means the statements before it in that shared block already ran.
+// A try whose catch swallows, other than one that also encloses this try: reaching this try
+// means the statements before it in that shared block already ran.
+const isOtherSwallowingTry = (p, tryNode) => p.isTryStatement() && hasSwallowingHandler(p) && !isWithinNode(tryNode, p.node);
+
+// A catch that never runs off its end (catch { return; }) lets the code after its try run only
+// once the block ran, so a write there may still be a default (isSkippableStep).
+const hasLeavingCatch = (tryPath) => !mayRunOffEnd(tryPath.get('handler.body'));
+
+// A write inside the block of another try whose catch swallows and may run off its end may never
+// have run, so it cannot count as a default.
 const isInOtherSwallowedTry = (writePath, tryNode) => {
   const swallowingTry = writePath.findParent((p) => {
-    if (!p.isTryStatement()) return false;
-    if (!hasSwallowingHandler(p)) return false;
-    if (isWithinNode(tryNode, p.node)) return false;
-    return isWithinNode(writePath.node, p.node.block);
+    const isOther = isOtherSwallowingTry(p, tryNode);
+    return isOther && isWithinNode(writePath.node, p.node.block) && !hasLeavingCatch(p);
   });
   return Boolean(swallowingTry);
 };
@@ -101,39 +108,38 @@ const readPartCondition = (node, key) => {
 };
 
 // Whether stepping from childPath up to its parent leaves a part that may not run. A function
-// body runs only when called. A branch or loop part that runs whenever the binding is unset
+// body runs only when called, and the catch of another swallowing try may start before a write
+// in its block. A branch or loop part that runs whenever the binding is unset
 // (if (!v) v = d, v || (v = d)) is there to supply the value, so it still counts as a default;
 // one that runs only while the binding is set (if (v) v = v.trim()) does not.
-const isSkippableStep = (childPath, binding) => {
+const isSkippableStep = (childPath, context) => {
   const parentPath = childPath.parentPath;
   const isSkippableNode = parentPath.isFunction() || SKIPPABLE_NODES.has(parentPath.type);
   if (isSkippableNode) return true;
+  const isSwallowedBlock = childPath.key === 'block' && isOtherSwallowingTry(parentPath, context.tryNode);
+  if (isSwallowedBlock) return true;
   const parts = Object.hasOwn(SKIPPABLE_PARTS, parentPath.type) ? SKIPPABLE_PARTS[parentPath.type] : [];
   const isSkippablePart = parts.includes(childPath.key);
   if (!isSkippablePart) return false;
   const { test, runsOn } = readPartCondition(parentPath.node, childPath.key);
-  return readUnsetOutcome(test, binding) !== runsOn;
+  return readUnsetOutcome(test, context.binding) !== runsOn;
 };
 
-// The node whose every path must write for a skippable step to be covered, as a path: the switch
-// around a case, the call around a function (shallow-catch-writes.js checks that it calls it),
-// otherwise the parent itself.
-const readCoverPath = (parentPath) => {
-  if (parentPath.isSwitchCase()) return parentPath.parentPath;
-  if (parentPath.isFunction()) return parentPath.parentPath.isCallExpression() ? parentPath.parentPath : null;
-  return parentPath;
-};
-
-// A skippable step still leads to a default when the node around it writes the binding on every
-// path that can reach the last anchor, the read (or for an earlier write the try), as in
-// if (c) v = 1; else v = 2 or else return, and no anchor sits inside that node, where it could
-// run first. Each cover's unwritten paths are worked out once per binding (context.paths).
-const isCoveredStep = (childPath, context, anchors) => {
-  const coverPath = readCoverPath(childPath.parentPath);
-  if (!coverPath) return false;
-  const holdsAnchor = anchors.some((anchor) => isWithinNode(anchor, coverPath.node));
-  if (holdsAnchor) return false;
-  return writesOnEveryPath(coverPath, anchors.at(-1), context);
+// A skippable step still leads to a default when a node around it writes the binding on every
+// path that can reach the last anchor, the read (or for an earlier write the try), and holds no
+// anchor, which could run first. The nearest such node is the cover, as a path: the if in
+// if (c) v = 1; else v = 2 or else return, the switch around a case, the call that invokes a
+// function, the try whose catch returns, or a loop that always runs around
+// if (c) { v = 1; break; }. Null when the walk reaches an anchor first. Each node's unwritten
+// paths are worked out once per binding (context.paths).
+const findCover = (childPath, context, anchors) => {
+  for (let coverPath = childPath.parentPath; coverPath; coverPath = coverPath.parentPath) {
+    const holdsAnchor = anchors.some((anchor) => isWithinNode(anchor, coverPath.node));
+    if (holdsAnchor) return null;
+    const isCover = writesOnEveryPath(coverPath, anchors.at(-1), context);
+    if (isCover) return coverPath;
+  }
+  return null;
 };
 
 // The for-in or for-of loop whose head writes the binding (for (v of xs), for (var v in o)).
@@ -148,16 +154,19 @@ const findHeadLoop = (writePath) => {
 // and for a later write the read). Climbing from the write, the first ancestor that holds an
 // anchor ends the walk; a function, branch, loop, switch case or catch crossed before it may
 // skip the write (setTimeout(() => { v = d; }), if (cond) v = d, while (false) v = d) unless
-// the node around it covers every path. A loop head runs only for an item, so it guards only
-// anchors inside its own body.
+// a node around it covers every path, from which the walk goes on. A loop head runs only for an
+// item, so it guards only anchors inside its own body.
 const isGuaranteedWrite = (writePath, context, anchors) => {
   const headLoop = findHeadLoop(writePath);
   if (headLoop) return anchors.some((anchor) => isWithinNode(anchor, headLoop.node.body));
-  for (let childPath = writePath; childPath.parentPath; childPath = childPath.parentPath) {
+  let childPath = writePath;
+  while (childPath.parentPath) {
     const holdsAnchor = anchors.some((anchor) => isWithinNode(anchor, childPath.node));
     if (holdsAnchor) return true;
-    const isSkippable = isSkippableStep(childPath, context.binding) && !isCoveredStep(childPath, context, anchors);
-    if (isSkippable) return false;
+    const isSkippable = isSkippableStep(childPath, context);
+    const nextPath = isSkippable ? findCover(childPath, context, anchors) : childPath.parentPath;
+    if (!nextPath) return false;
+    childPath = nextPath;
   }
   return true;
 };
@@ -199,12 +208,13 @@ const isSwallowableBinding = (binding, fnScope) => {
   return isLetOrVar && isDeclarator && isSameFunction;
 };
 
-const isReadUnsetAfterTry = (binding, tryNode, fnScope) => {
+const isReadUnsetAfterTry = (binding, tryPath, fnScope) => {
   const isCandidate = isSwallowableBinding(binding, fnScope);
   if (!isCandidate) return false;
 
+  const tryNode = tryPath.node;
   const writes = listValueWrites(binding, tryNode);
-  const context = { binding, writeNodes: collectDefaultingNodes(writes), paths: new Map() };
+  const context = { binding, tryNode, writeNodes: collectDefaultingNodes(writes), paths: new Map() };
   const isEarlierValue = (write) => write.start < tryNode.start && isGuaranteedWrite(write.path, context, [tryNode]);
   const hasEarlierValue = writes.some(isEarlierValue);
   if (hasEarlierValue) return false;
@@ -214,12 +224,15 @@ const isReadUnsetAfterTry = (binding, tryNode, fnScope) => {
     const isPastGuard = ref.node.start >= write.guardedFrom;
     return isPastGuard && isGuaranteedWrite(write.path, context, [tryNode, ref.node]);
   });
+  // The try itself guards a read that every path out of it writes first, as when its catch
+  // leaves past the read (try { v = g(); } catch { return; }).
+  const isGuardedByTry = (ref) => writesOnEveryPath(tryPath, ref.node, context);
 
   return binding.referencePaths.some((ref) => {
     if (isLoopHeadTarget(ref)) return false;
     const isAfterTry = ref.node.start > tryNode.end;
     if (!isAfterTry) return false;
-    const isGuarded = isGuardedByWrite(ref) || isCoveredRead(ref, binding, tryNode);
+    const isGuarded = isGuardedByWrite(ref) || isGuardedByTry(ref) || isCoveredRead(ref, binding, tryNode);
     return !isGuarded;
   });
 };
@@ -233,7 +246,7 @@ export const findSwallowedBinding = (catchPath) => {
   const tryPath = catchPath.parentPath;
   const fnScope = resolveFunctionScope(tryPath.scope);
   const writes = collectTryWrites(tryPath.get('block'));
-  const swallowed = writes.find(({ name, scope }) => isReadUnsetAfterTry(scope.getBinding(name), tryPath.node, fnScope));
+  const swallowed = writes.find(({ name, scope }) => isReadUnsetAfterTry(scope.getBinding(name), tryPath, fnScope));
   const result = swallowed?.name || null;
   swallowedBindingCache.set(catchPath.node, result);
   return result;

@@ -292,6 +292,89 @@ test('a loop that may stop before the write, or a throw caught before the read, 
   }
 });
 
+// The exit-coverage evidence frame, verbatim: an async (or plain) function whose try may leave v
+// unset, the given lines, then a read of v.x.
+const evidenceFrame = (lines, isAsync = true) => `export const g = ${isAsync ? 'async ' : ''}(c, k, xs) => {\n  let v;\n  try { v = f(); } catch {}\n  ${lines}\n  return v.x;\n};`;
+const catchSeverities = (code, file) => catches(code, file).map((hit) => [hit.line, hit.severity]);
+
+test('a guarded write in a loop that always runs, a constant truthy test, an invoked function in any form and an async body before its first await cover every path (EXT-2)', () => {
+  for (const lines of [
+    'for (;;) { if (c) { v = 1; break; } }',
+    'while (true) { if (c) { v = 1; break; } }',
+    '(() => { while (true) { if (c) { v = 1; break; } } })();',
+    'do { if (c) { v = 1; break; } } while (true);',
+    'for (;;) { if (c) { if (k) { v = 1; break; } } }',
+    'out: for (;;) { for (;;) { if (c) { v = 1; break out; } } }',
+    'while (!0) { v = f(); if (v) break; }',
+    'while (-1) { v = f(); if (v) break; }',
+    "while ('x') { v = f(); if (v) break; }",
+    'while (Infinity) { v = f(); if (v) break; }',
+    '(() => { v = 1; }).call(this);',
+    '(function () { v = 1; }).call(this);',
+    '(function () { v = 1; }).apply(this, []);',
+    '(() => { v = 1; }).apply(this, []);',
+    "(function () { if (c) v = 1; else throw new Error('x'); }).call(this);",
+    'new (function () { v = 1; })();',
+    '(() => { v = 1; })?.();',
+    '(function () { v = 1; }).call?.(this);',
+    '(function () { v = 1; }).bind(this)();',
+    '(async () => { v = 1; })();',
+    '(async function () { v = 1; })();',
+    '(async () => { v = 1; await x; })();',
+    '(async () => { while (true) { v = 1; await x; break; } })();'
+  ]) {
+    assertOne(evidenceFrame(lines), 'MEDIUM');
+    assertOne(evidenceFrame(lines, false), 'MEDIUM');
+  }
+  assertOne(evidenceFrame('await (async () => { v = 1; })();'), 'MEDIUM');
+  const vue = '<template>\n  <div>{{ x }}</div>\n</template>\n<script setup lang="ts">\nconst g = async (c, k, xs) => {\n  let v;\n  try { v = f(); } catch {}\n  for (;;) { if (c) { v = 1; break; } }\n  return v.x;\n};\n</script>\n';
+  assert.deepEqual(catchSeverities(vue, 'src/X.vue'), [[7, 'MEDIUM']]);
+});
+
+test('a try whose catch always leaves past the read writes on every path that reaches it (EXT-2)', () => {
+  for (const isAsync of [true, false]) {
+    assert.deepEqual(catchSeverities(evidenceFrame('if (c) { try { v = g2(); } catch { return; } } else v = 2;', isAsync)), [[3, 'MEDIUM'], [4, 'MEDIUM']]);
+    assert.deepEqual(catchSeverities(evidenceFrame('try { v = g2(); } catch (e) { return; }', isAsync)), [[3, 'MEDIUM'], [4, 'MEDIUM']]);
+  }
+  assertOne('export const g = () => {\n  let v;\n  try { v = f(); } catch { return; }\n  return v.x;\n};\n', 'MEDIUM');
+  assertOne('export const g = () => {\n  let v;\n  try { v = f(); } catch {} finally { v = d; }\n  return v.x;\n};\n', 'MEDIUM');
+  for (const exit of ['break', 'continue']) {
+    assertOne(`export const g = (xs) => {\n  let v;\n  for (const x of xs) {\n    try { v = f(x); } catch { ${exit}; }\n    use(v.x);\n  }\n};\n`, 'MEDIUM');
+  }
+  assertOne('export const g = () => {\n  let v;\n  try { if (c) v = f(); } catch { return; }\n  return v.x;\n};\n', 'HIGH');
+});
+
+test('an always-running loop left before the write, an await before it and a catch that can reach the read stay HIGH (EXT-2)', () => {
+  for (const lines of [
+    'for (;;) { if (k) break; if (c) { v = 1; break; } }',
+    'for (;;) { if (c) { v = 1; break; } use(v.x); }',
+    'if (k) { for (;;) { if (c) { v = 1; break; } } }',
+    'while (k) { if (c) { v = 1; break; } }',
+    '(() => { while (k) { if (c) { v = 1; break; } } })();',
+    '(async () => { v = await g2(); })();',
+    '(async () => { if (c) return; v = 1; })();',
+    '(async () => { if (c) { await x; v = 1; } else v = 2; })();',
+    '(async () => { g(await x); v = 1; })();',
+    '(async () => { if (await c) v = 1; else v = 2; })();',
+    '(async () => { for await (const x of xs) { v = x; break; } })();',
+    '(async () => { await x; v = 1; }).call(this);',
+    '(function* () { v = 1; }).call(this);',
+    '(function () { if (c) return; v = 1; }).call(this);',
+    '(function () { v = 1; }).bind(this);',
+    'h.call(this, () => { v = 1; });'
+  ]) {
+    assertOne(evidenceFrame(lines), 'HIGH');
+  }
+  for (const lines of [
+    'if (c) { try { v = g2(); } catch { if (k) return; } } else v = 2;',
+    'for (const x of xs) { try { v = g2(); } catch { break; } }',
+    'out: { try { v = g2(); } catch { break out; } }'
+  ]) {
+    assert.deepEqual(catchSeverities(evidenceFrame(lines)).map(([, severity]) => severity), ['HIGH', 'HIGH'], lines);
+  }
+  assert.deepEqual(catchSeverities(evidenceFrame('(() => { try { v = g2(); } catch { return; } })();')), [[3, 'HIGH'], [4, 'MEDIUM']]);
+});
+
 test('a write that runs only while the binding is set, or in a loop head, is not a default (C2)', () => {
   assertOne(writeThenRead('if (v) v = v.trim();'), 'HIGH');
   assertOne(writeThenRead('if (v != null) v = norm(v);'), 'HIGH');
