@@ -141,17 +141,66 @@ export const resolveCatchEscalation = (catchPath) => {
   return { severity: binding ? 'HIGH' : 'MEDIUM', binding };
 };
 
+const tryStartsCache = new WeakMap();
+
+// Start positions of every try statement in the program. A plain node walk, so the visitor
+// traversal that is running meanwhile keeps its path state.
+const listTryStarts = (program) => {
+  const isCached = tryStartsCache.has(program);
+  if (isCached) return tryStartsCache.get(program);
+  const starts = [];
+  t.traverseFast(program, (node) => {
+    const isLocatedTry = t.isTryStatement(node) && Boolean(node.loc);
+    if (isLocatedTry) starts.push(node.loc.start);
+  });
+  tryStartsCache.set(program, starts);
+  return starts;
+};
+
+const TRY_PARTS = new Set(['block', 'handler', 'finalizer']);
+
+// The end of the innermost try block, catch clause or finally of another try that holds this one.
+const findEnclosingTryPartEnd = (tryPath) => {
+  const part = tryPath.findParent((p) => TRY_PARTS.has(p.key) && p.parentPath.isTryStatement());
+  return part?.node.loc?.end;
+};
+
+// Column on the catch's last line where a trailing annotation stops being this catch's: where
+// a later try starts, or the brace of an enclosing try part that closes on that line.
+const resolveTrailEndColumn = (catchPath) => {
+  const end = catchPath.node.loc.end;
+  const programPath = catchPath.findParent((p) => p.isProgram());
+  const tryStarts = programPath ? listTryStarts(programPath.node) : [];
+  const laterTryColumns = tryStarts
+    .filter((start) => start.line === end.line && start.column >= end.column)
+    .map((start) => start.column);
+  const enclosingEnd = findEnclosingTryPartEnd(catchPath.parentPath);
+  const closesOnLine = enclosingEnd?.line === end.line;
+  const limits = closesOnLine ? [...laterTryColumns, enclosingEnd.column - 1] : laterTryColumns;
+  return limits.length > 0 ? Math.min(...limits) : undefined;
+};
+
 /**
- * Where a catch's annotation window lies: its own lines, plus (Stroustrup style, the catch
- * keyword below the try block's closing brace) the text after that brace.
+ * Where a catch's annotations may sit (suppressions.js): its own lines, 0-based columns of the
+ * catch keyword (catchColumn), its closing brace (endColumn), its try keyword (tryLine,
+ * tryColumn) and the end of the try block (tryBraceLine, tryBraceColumn), and trailEndColumn.
  */
 export const resolveCatchSpan = (catchPath) => {
   const node = catchPath.node;
   const line = node.loc?.start.line || 1;
   const span = { line, endLine: node.loc?.end.line || line, column: node.loc?.start.column || 1 };
-  const tryBlockLoc = catchPath.parent.block.loc;
-  const tryBlockEnd = tryBlockLoc && tryBlockLoc.end;
-  const isBraceAbove = Boolean(tryBlockEnd) && tryBlockEnd.line < line;
-  if (isBraceAbove) Object.assign(span, { tryBraceLine: tryBlockEnd.line, tryBraceColumn: tryBlockEnd.column });
-  return span;
+  const tryNode = catchPath.parent;
+  const tryBlockEnd = tryNode.block.loc?.end;
+  const hasLocations = Boolean(node.loc) && Boolean(tryNode.loc) && Boolean(tryBlockEnd);
+  if (!hasLocations) return span;
+  return {
+    ...span,
+    catchColumn: node.loc.start.column,
+    endColumn: node.loc.end.column,
+    tryLine: tryNode.loc.start.line,
+    tryColumn: tryNode.loc.start.column,
+    tryBraceLine: tryBlockEnd.line,
+    tryBraceColumn: tryBlockEnd.column,
+    trailEndColumn: resolveTrailEndColumn(catchPath)
+  };
 };

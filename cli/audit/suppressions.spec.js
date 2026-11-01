@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parsePhp } from '../php/php-parse.js';
 import { buildPhpCommentRegions, phpHeaderEndLine } from '../php/php-comments.js';
-import { applyAuditPostFilters, parseAllowAnnotation } from './suppressions.js';
+import { applyAuditPostFilters, parseAllowAnnotation, parseAllowAnnotations } from './suppressions.js';
 
 const filter = (src, violations) => {
   const parsed = parsePhp(src);
@@ -49,4 +49,36 @@ test('a colon with no letter or digit after it is not a reason, and a token that
   assert.equal(parseAllowAnnotation('// chemx-allow: best-effort: -').hasReason, false);
   assert.equal(parseAllowAnnotation('// chemx-allow: best-effort:').hasReason, false);
   assert.equal(parseAllowAnnotation('// chemx-allow: best-effort-ish: because').token, 'best-effort-ish');
+});
+
+test('any non-word separator ends the token and leading separators leave the reason (C1)', () => {
+  for (const separator of [', ', '. ', '(', '/', ': ', '-- ', ' - ', ';']) {
+    const annotation = parseAllowAnnotation(`// chemx-allow: best-effort${separator}warm cache`);
+    assert.equal(annotation.token, 'best-effort', separator);
+    assert.equal(annotation.reason.startsWith('warm cache'), true, `${separator} gave ${annotation.reason}`);
+  }
+  for (const token of ['best-effort-ish', 'best-effort_x', 'best-effort2']) {
+    assert.equal(parseAllowAnnotation(`// chemx-allow: ${token} reason`).token, token);
+  }
+  assert.equal(parseAllowAnnotation('// chemx-allow: A11Y_CLICKABLE_NON_SEMANTIC legacy markup').token, 'A11Y_CLICKABLE_NON_SEMANTIC');
+});
+
+test('every marker on a line is its own annotation, with the reason ending at the next marker (C4)', () => {
+  const line = 'f(); /* chemx-allow: best-effort one */ g(); /* chemx-allow: X_RULE two */';
+  const annotations = parseAllowAnnotations([line]);
+  assert.deepEqual(annotations.map((a) => [a.line, a.token, a.reason, a.commentStart]), [
+    [1, 'best-effort', 'one', line.indexOf('/*')],
+    [1, 'X_RULE', 'two', line.lastIndexOf('/*')]
+  ]);
+  const shared = parseAllowAnnotations(['// chemx-allow: best-effort first chemx-allow: X_RULE second']);
+  assert.deepEqual(shared.map((a) => [a.token, a.reason]), [['best-effort', 'first'], ['X_RULE', 'second']]);
+});
+
+test('a block annotation open at the end of its marker line lasts to the closer, keeping its own reason (SC-4)', () => {
+  const [annotation] = parseAllowAnnotations(['/* chemx-allow: best-effort warm cache', ' * still the same comment', ' */', 'x();']);
+  assert.deepEqual([annotation.reason, annotation.lastLine], ['warm cache', 3]);
+  const [trailingCode] = parseAllowAnnotations(['f(); /*', ' * chemx-allow: best-effort reason', ' */']);
+  assert.deepEqual([trailingCode.lastLine, trailingCode.isCommentOnly], [3, false]);
+  const [jsdoc] = parseAllowAnnotations(['/**', ' * chemx-allow: best-effort reason', ' */']);
+  assert.deepEqual([jsdoc.lastLine, jsdoc.isCommentOnly], [3, true]);
 });

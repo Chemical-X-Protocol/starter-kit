@@ -287,3 +287,37 @@ test("csharp-analyzer: a reasonless or punctuation-only annotation is flagged an
   assert.equal(ish.length, 1);
   assert.equal(ish[0].hazard.includes("needs a reason"), false, ish[0].hazard);
 });
+
+test("csharp-analyzer: punctuation after best-effort still reads as the annotation (C1)", () => {
+  assert.deepEqual(csharpCatchHits(wrapCSharpCatch("        catch (Exception) { } // chemx-allow: best-effort, warmup is optional")), []);
+  const bare = csharpCatchHits(wrapCSharpCatch("        catch (Exception) { } // chemx-allow: best-effort."));
+  assert.equal(bare.length, 1);
+  assert.ok(bare[0].hazard.includes("needs a reason"), bare[0].hazard);
+});
+
+const wrapCSharpMethod = (body) => `public class CacheWarmer\n{\n    public void Run()\n    {\n${body}\n    }\n}\n`;
+
+test("csharp-analyzer: a block annotation above a one-line try counts when its closer is on a later line (SC-4)", () => {
+  for (const above of [
+    "        /* chemx-allow: best-effort warmup is optional\n         */",
+    "        /*\n         * chemx-allow: best-effort warmup is optional\n         */"
+  ]) {
+    const code = wrapCSharpMethod(`${above}\n        try { Warm(); } catch { }`);
+    assert.deepEqual(csharpCatchHits(code), [], code);
+  }
+});
+
+// C4 for C#: annotation ownership by column; catchColumn is the 0-based column of the catch keyword.
+const csharpCatchColumns = (code) => csharpCatchHits(code).map((hit) => [hit.line, hit.catchColumn]);
+
+test("csharp-analyzer: a one-line nested try annotated after the outer try brace exempts only the outer catch (C4)", () => {
+  const code = "try { try { X(); } catch { } } // chemx-allow: best-effort outer reason\ncatch { }\n";
+  assert.deepEqual(csharpCatchColumns(code), [[1, code.indexOf("catch")]]);
+});
+
+test("csharp-analyzer: two tries on one line are owned by column, not by line (C4)", () => {
+  const trailing = "try { X(); } catch { } try { Y(); } catch { } // chemx-allow: best-effort second is optional\n";
+  assert.deepEqual(csharpCatchColumns(trailing), [[1, trailing.indexOf("catch")]]);
+  const above = "// chemx-allow: best-effort first is optional\ntry { X(); } catch { } try { Y(); } catch { }\n";
+  assert.deepEqual(csharpCatchColumns(above), [[2, above.split("\n")[1].lastIndexOf("catch")]]);
+});

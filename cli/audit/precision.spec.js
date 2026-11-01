@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { auditCode } from './rules.js';
+import { RULE_REGISTRY } from './rules-registry.js';
 
 const rulesAt = (violations, rule) => violations.filter((v) => v.rule === rule);
 const audit = (code, rel = 'src/lib/sample.ts') => auditCode(code, rel, rel);
@@ -163,4 +164,79 @@ test('a reasonless annotation on an escalated catch keeps HIGH and both notes', 
 
 test('an annotation inside a multi-line console-only catch body exempts it', () => {
   assertExempt('try {\n  a();\n} catch (e) {\n  // chemx-allow: best-effort logged elsewhere\n  console.error(e);\n}\n');
+});
+
+// Built from its code point: TYPOGRAPHY_EM_DASH holds this file at zero em dashes.
+const EM_DASH = String.fromCharCode(0x2014);
+
+test('any non-word separator after best-effort still reads as the annotation (C1)', () => {
+  for (const separator of [', ', '. ', '(', '/', ': ', '-- ', EM_DASH, ' - ']) {
+    assertExempt(`try { a(); } catch {} // chemx-allow: best-effort${separator}warm cache is optional\n`);
+  }
+  for (const bare of ['best-effort,', 'best-effort.', 'best-effort:', 'best-effort--', 'best-effort()']) {
+    const hit = assertFlagged(`try { a(); } catch {} // chemx-allow: ${bare}\n`);
+    assert.ok(hit.hazard.includes('needs a reason'), hit.hazard);
+  }
+});
+
+test('a block annotation whose marker line carries the reason counts when its closer is on a later line (SC-4)', () => {
+  assertExempt('/* chemx-allow: best-effort warm cache is optional\n */\ntry { a(); } catch {}\n');
+  assertExempt('/*\n * chemx-allow: best-effort warm cache is optional\n */\ntry { a(); } catch {}\n');
+  assertExempt('/**\n * chemx-allow: best-effort warm cache is optional\n */\ntry { a(); } catch {}\n');
+  assertExempt('/*\r\n * chemx-allow: best-effort warm cache is optional\r\n */\r\ntry { a(); } catch {}\r\n');
+  assertFlagged('doThing(); /*\n * chemx-allow: best-effort the comment trails code\n */\ntry { b(); } catch {}\n');
+});
+
+// C4: an annotation is owned by the catch it is written for, by column as well as by line.
+const catchColumns = (code) => catchHits(code).map((hit) => [hit.line, hit.column]);
+
+test('two tries on one line: the annotated first one is exempt and the second is flagged (C4)', () => {
+  const inside = 'try { a(); } catch { /* chemx-allow: best-effort first is optional */ } try { b(); } catch {}\n';
+  assert.deepEqual(catchColumns(inside), [[1, inside.lastIndexOf('catch')]]);
+  const above = '// chemx-allow: best-effort first is optional\ntry { a(); } catch {} try { b(); } catch {}\n';
+  assert.deepEqual(catchColumns(above), [[2, above.split('\n')[1].lastIndexOf('catch')]]);
+  const trailing = 'try { a(); } catch {} try { b(); } catch {} // chemx-allow: best-effort second is optional\n';
+  assert.deepEqual(catchColumns(trailing), [[1, trailing.indexOf('catch')]]);
+});
+
+test('two annotated tries on one line are each exempt by their own annotation (C4)', () => {
+  assertExempt('try { a(); } catch { /* chemx-allow: best-effort one */ } try { b(); } catch { /* chemx-allow: best-effort two */ }\n');
+  const code = 'try { a(); } catch { /* chemx-allow: best-effort one */ } try { b(); } catch { /* chemx-allow: best-effort */ }\n';
+  const hit = assertFlagged(code);
+  assert.equal(hit.column, code.lastIndexOf('catch'));
+  assert.ok(hit.hazard.includes('needs a reason'), hit.hazard);
+});
+
+test('a one-line nested try annotated after the outer try brace exempts only the outer catch (C4)', () => {
+  const code = 'try { try { a(); } catch {} } // chemx-allow: best-effort outer reason\ncatch {}\n';
+  assert.deepEqual(catchColumns(code), [[1, code.indexOf('catch')]]);
+  const handledOuter = 'try { try { a(); } catch {} } catch (e) { report(e); } // chemx-allow: best-effort inner\n';
+  assert.deepEqual(catchColumns(handledOuter), [[1, handledOuter.indexOf('catch')]]);
+});
+
+test('a trailing annotation still owns its catch past code, a callback brace or a comment before catch (C4)', () => {
+  assertExempt('try { a(); } catch {} const s = "x"; // chemx-allow: best-effort after a sibling statement\n');
+  assertExempt('items.forEach((item) => { try { item(); } catch {} }); // chemx-allow: best-effort per-item failures are optional\n');
+  assertExempt('try { a(); } /* chemx-allow: best-effort between the try brace and catch */ catch {}\n');
+});
+
+test('a comment before the catch keyword on its own line counts unless another try or catch sits between (C4)', () => {
+  assertExempt('try { /* chemx-allow: best-effort inside the one-line try */ a(); } catch {}\n');
+  assertExempt('/* chemx-allow: best-effort leading the one-line try */ try { a(); } catch {}\n');
+  assertExempt('const warm = () => { /* chemx-allow: best-effort leading the try */ try { a(); } catch {} };\n');
+  const afterInner = 'try { try { a(); } catch {} /* chemx-allow: best-effort the inner catch */ } catch {}\n';
+  assert.deepEqual(catchColumns(afterInner), [[1, afterInner.lastIndexOf('catch')]]);
+  const between = 'try { a(); } catch {} /* chemx-allow: best-effort the first catch */ try { b(); } catch {}\n';
+  assert.deepEqual(catchColumns(between), [[1, between.lastIndexOf('catch')]]);
+});
+
+test('a console-only catch next to an empty catch on the same line keeps its own finding (C4)', () => {
+  const code = 'try { a(); } catch {} try { b(); } catch (e) { console.error(e); }\n';
+  const hits = catchHits(code).map((hit) => [hit.rule, hit.column]);
+  assert.deepEqual(hits, [['ERROR_SWALLOWED_EXCEPTION', code.indexOf('catch')], ['AI_SLOP_SHALLOW_CATCH', code.lastIndexOf('catch')]]);
+});
+
+test('the AI_SLOP_SHALLOW_CATCH directive names the best-effort annotation (SC-8)', () => {
+  assert.match(RULE_REGISTRY.AI_SLOP_SHALLOW_CATCH.directive, /chemx-allow: best-effort <reason>/);
+  assert.match(RULE_REGISTRY.ERROR_SWALLOWED_EXCEPTION.directive, /chemx-allow: best-effort <reason>/);
 });
