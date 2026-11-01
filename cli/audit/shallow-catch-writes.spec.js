@@ -157,6 +157,16 @@ test('the simple position needs nothing between the if and the read that leaves,
   assertOne('let v;\nif (x) {\n  try { v = f(); } catch {}\n  if (c) v = d;\n}\nuse(v.x);\n', 'MEDIUM');
 });
 
+// main does not count a write inside another swallowed try even when it always runs (a finally),
+// so a proven skip beside one could rest on that undercount.
+test('a read after a write main leaves uncounted in another swallowed try keeps main\'s result (C2)', () => {
+  const nested = '  try { try { g(); } finally { v = 3; } } catch {}';
+  for (const lines of [`${nested}\n  if (c) v = 1;`, `${nested}\n  function neverCalled() { v = 1; }`, `${nested}\n  setTimeout(() => { v = 1; });`]) {
+    const code = `export const g = (c) => {\n  let v;\n  try { v = f(); } catch {}\n${lines}\n  return v.x;\n};\n`;
+    assert.deepEqual(catchSeverities(code), [[3, 'MEDIUM'], [4, 'MEDIUM']], lines);
+  }
+});
+
 test('a write that always runs before the read is a default, even inside a branch', () => {
   assertOne('if (x) {\n  let v;\n  try { v = f(); } catch {}\n  v = d;\n  use(v);\n}\n', 'MEDIUM');
   assertOne('let v;\nif (x) {\n  try { v = f(); } catch {}\n  v = d;\n}\nuse(v);\n', 'MEDIUM');

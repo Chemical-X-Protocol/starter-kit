@@ -5,8 +5,10 @@
  * a swallowed error silently propagates as undefined. Reads that supply their own default or
  * check the binding first (shallow-catch-reads.js) do not escalate. A write before the try, or
  * after it and before the read, is a default as on main unless shallow-catch-writes.js proves
- * that a path to the read skips it, and a try that writes the binding before every way out that
- * goes on to the read guards that read.
+ * that a path to the read skips it. No proof holds for a read after a write that main leaves
+ * uncounted because it sits in another swallowed try, since that write may still always run
+ * (try { try { g(); } finally { v = d; } } catch {}). A try that writes the binding before every
+ * way out that goes on to the read guards that read.
  */
 import * as t from '@babel/types';
 import { isShallowCatchClause } from './rules-predicates.js';
@@ -80,15 +82,17 @@ const isValueWrite = (writePath) => !writePath.isVariableDeclarator() || hasReal
 
 // Every write that gives the binding a value: each reassignment, plus a declared initialiser
 // that is not undefined, or a for-in/for-of head that assigns it.
-const listValueWrites = (binding, tryNode) => {
+const listValueWritePaths = (binding) => {
   const writePaths = binding.constantViolations.filter(isValueWrite);
   const isLoopHead = Boolean(binding.path.parentPath?.parentPath?.isForXStatement());
   const isDeclarationWrite = hasRealInit(binding.path) || isLoopHead;
   if (isDeclarationWrite) writePaths.push(binding.path);
-  return writePaths
-    .filter((writePath) => !isInOtherSwallowedTry(writePath, tryNode))
-    .map((writePath) => ({ path: writePath, start: writePath.node.start, guardedFrom: resolveGuardedFrom(writePath) }));
+  return writePaths;
 };
+
+const listValueWrites = (writePaths, tryNode) => writePaths
+  .filter((writePath) => !isInOtherSwallowedTry(writePath, tryNode))
+  .map((writePath) => ({ path: writePath, start: writePath.node.start, guardedFrom: resolveGuardedFrom(writePath) }));
 
 // Babel lists the bare head of for (v of xs) among the references, but it is the write.
 const isLoopHeadTarget = (refPath) => refPath.parentPath.isForXStatement() && refPath.key === 'left';
@@ -106,13 +110,18 @@ const isReadUnsetAfterTry = (binding, tryNode, fnScope) => {
   const isCandidate = isSwallowableBinding(binding, fnScope);
   if (!isCandidate) return false;
 
-  const writes = listValueWrites(binding, tryNode);
+  const writePaths = listValueWritePaths(binding);
+  const writes = listValueWrites(writePaths, tryNode);
   const context = createSkipContext(binding, tryNode, fnScope);
   const earlierWrites = writes.filter((write) => write.start < tryNode.start);
   const laterWrites = writes.filter((write) => write.start > tryNode.end);
-  // An earlier write, or a later one the read follows, gives it a value unless it is proven skipped.
+  // Writes in another swallowed try, which count for nothing even when they always run (a finally).
+  const uncountedStarts = writePaths.filter((writePath) => isInOtherSwallowedTry(writePath, tryNode)).map((writePath) => writePath.node.start);
+  // An earlier write, or a later one the read follows, gives it a value unless it is proven
+  // skipped. A proof needs every write before the read counted, or it could rest on that gap.
   const isGuardedByWrite = (ref) => {
-    const isDefault = (write) => !isSkippedBeforeRead(write.path, ref, context);
+    const hasUncountedWrite = uncountedStarts.some((start) => start < ref.node.start);
+    const isDefault = (write) => hasUncountedWrite || !isSkippedBeforeRead(write.path, ref, context);
     const isBeforeRead = (write) => ref.node.start >= write.guardedFrom;
     return earlierWrites.some(isDefault) || laterWrites.some((write) => isBeforeRead(write) && isDefault(write));
   };
