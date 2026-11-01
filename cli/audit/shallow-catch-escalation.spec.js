@@ -255,6 +255,43 @@ test('an exit that can still reach the read leaves an unwritten path (C2)', () =
   assertOne('export const g = (c) => {\n  let v;\n  try { v = f(); } catch {}\n  do { if (c) v = 1; else continue; } while (use(v.x));\n};\n', 'HIGH');
 });
 
+test('an endless loop, a try whose catch rethrows and a throw out of an invoked function leave no unwritten path (C2)', () => {
+  for (const lines of [
+    'while (true) { v = f(); if (v) break; }',
+    'for (;;) { v = f(); if (v) break; }',
+    'while (1) { v = f(); if (v) break; }',
+    'while (true) { v = f(); break; }',
+    'while (true) { if (c) continue; v = f(); break; }',
+    'if (c) { while (true) { v = f(); if (v) break; } } else { v = 2; }',
+    'if (c) { do { v = f(); } while (!v); } else { v = 2; }',
+    'if (c) { try { v = g2(); } catch (e) { throw e; } } else { v = 2; }',
+    'switch (k) { case 1: try { v = g2(); } catch (e) { throw e; } break; default: v = 2; }',
+    'if (c) { try { g3(); } finally { v = 1; } } else { v = 2; }',
+    '(() => { if (c) v = 1; else throw new Error("x"); })();',
+    '(function () { if (c) v = 1; else throw new Error("x"); })();',
+    '(() => { switch (k) { case 1: v = 1; break; default: throw new Error("x"); } })();',
+    '(() => { (() => { if (c) v = 1; else throw new Error("x"); })(); })();'
+  ]) {
+    assertOne(exitThenRead(lines), 'MEDIUM');
+    assertOne(exitThenRead(lines).replace('= (c,', '= async (c,'), 'MEDIUM');
+  }
+});
+
+test('a loop that may stop before the write, or a throw caught before the read, still leaves one (C2)', () => {
+  for (const lines of [
+    'while (true) { if (c) break; v = f(); }',
+    'while (k) { v = f(); break; }',
+    'while (0) { v = f(); break; }',
+    'if (c) { do { if (k) break; v = f(); } while (!v); } else { v = 2; }',
+    'if (c) { try { v = g2(); } catch (e) { report(e); } } else { v = 2; }',
+    '(() => { try { if (c) v = 1; else throw new Error("x"); } catch (e) { report(e); } })();',
+    'try { (() => { if (c) v = 1; else throw new Error("x"); })(); } catch (e) { report(e); }',
+    '(async () => { if (c) v = 1; else throw new Error("x"); })();'
+  ]) {
+    assertOne(exitThenRead(lines), 'HIGH');
+  }
+});
+
 test('a write that runs only while the binding is set, or in a loop head, is not a default (C2)', () => {
   assertOne(writeThenRead('if (v) v = v.trim();'), 'HIGH');
   assertOne(writeThenRead('if (v != null) v = norm(v);'), 'HIGH');

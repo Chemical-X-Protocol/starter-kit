@@ -6,9 +6,10 @@
  * check the binding first (shallow-catch-reads.js) do not escalate. A later or earlier write
  * is a default only when it always runs, so not inside a nested function or under a branch,
  * loop, switch case or catch that may skip it, unless that part runs whenever the binding is
- * unset (if (!v) v = d) or the if, conditional, switch or invoked function around it writes on
- * every path that can still reach the read, leaving instead on the others (if (c) v = 1; else
- * v = 2, or else return; see shallow-catch-writes.js). A for-in or for-of head writes only for
+ * unset (if (!v) v = d) or the if, conditional, switch, loop that always runs its body or
+ * invoked function around it writes on every path that can still reach the read, leaving instead
+ * on the others (if (c) v = 1; else v = 2, or else return, or while (true) { v = f(); break; };
+ * see shallow-catch-writes.js). A for-in or for-of head writes only for
  * a non-empty iterable, so it is a default only inside its own loop.
  */
 import * as t from '@babel/types';

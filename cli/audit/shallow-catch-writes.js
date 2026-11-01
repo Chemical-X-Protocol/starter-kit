@@ -6,7 +6,9 @@
  * instead (if (c) v = 1; else return). writeNodes holds the binding's defaulting writes (=, ??=,
  * ||=). readUnwrittenPaths says how a node can be left with the binding unwritten: by running off
  * its end, or by a return, throw, break or continue; exitsPastAnchor says whether such an exit
- * skips the read, so the read is reachable only through a write.
+ * skips the read, so the read is reachable only through a write. A loop that always runs its
+ * body (while (true), for (;;), do-while), a try with its catch and finally, and a labeled
+ * statement are followed too, and a throw in an invoked function leaves through its call.
  */
 import * as t from '@babel/types';
 import { EXIT_TYPES, isWithinNode } from './shallow-catch-reads.js';
@@ -73,6 +75,48 @@ const readListPaths = (parts, writeNodes) => {
 const readBranchPaths = (node, writeNodes) => joinPaths([node.consequent, node.alternate].map((branch) => readUnwrittenPaths(branch, writeNodes)));
 
 const isOwnBreak = (exit) => t.isBreakStatement(exit) && !exit.label;
+const isOwnJump = (exit) => JUMP_TYPES.has(exit.type) && !exit.label;
+
+// A loop test that always holds: none (for (;;)), true, or a number other than 0.
+const isAlwaysTrue = (test) => {
+  const isTrueLiteral = t.isBooleanLiteral(test, { value: true });
+  const isNonZeroNumber = t.isNumericLiteral(test) && test.value !== 0;
+  return !test || isTrueLiteral || isNonZeroNumber;
+};
+
+// A loop whose test always holds leaves only through a break of its own: running off the body's
+// end or a continue of its own runs the body again. A do-while runs its body once, then its own
+// continue or the end of the body reaches a test that may end it. Any other loop may not run its
+// body at all. A for loop runs its init first.
+const readLoopPaths = (node, writeNodes) => {
+  const runsForever = isAlwaysTrue(node.test);
+  const runsBody = runsForever || t.isDoWhileStatement(node);
+  if (!runsBody) return { falls: true, exits: collectEscapingExits(node) };
+  const init = readUnwrittenPaths(node.init, writeNodes);
+  if (!init.falls) return init;
+  const body = readUnwrittenPaths(node.body, writeNodes);
+  const endsUnwritten = runsForever ? body.exits.some(isOwnBreak) : body.falls || body.exits.some(isOwnJump);
+  return { falls: endsUnwritten, exits: [...init.exits, ...body.exits.filter((exit) => !isOwnJump(exit))] };
+};
+
+// A try may throw anywhere in its block, so its catch may start before any write there: a throw
+// in the block lands in the catch, and the try leaves as the block or the catch does. A finally
+// runs on every way out, so one that never runs off its end unwritten decides alone.
+const readTryPaths = (node, writeNodes) => {
+  const block = readUnwrittenPaths(node.block, writeNodes);
+  const uncaught = { falls: block.falls, exits: block.exits.filter((exit) => !t.isThrowStatement(exit)) };
+  const tried = node.handler ? joinPaths([uncaught, readUnwrittenPaths(node.handler.body, writeNodes)]) : block;
+  if (!node.finalizer) return tried;
+  const final = readUnwrittenPaths(node.finalizer, writeNodes);
+  return final.falls ? { falls: tried.falls, exits: [...tried.exits, ...final.exits] } : final;
+};
+
+// A labeled statement runs its body; a break or continue to its label may end it unwritten.
+const readLabeledPaths = (node, writeNodes) => {
+  const paths = readUnwrittenPaths(node.body, writeNodes);
+  const isToLabel = (exit) => exit.label?.name === node.label.name;
+  return { falls: paths.falls || paths.exits.some(isToLabel), exits: paths.exits.filter((exit) => !isToLabel(exit)) };
+};
 
 // Entering a switch at a case runs it and falls through the cases after it. With no default a
 // value may match no case, and a break of the switch's own ends it unwritten.
@@ -101,16 +145,21 @@ const PATH_READERS = Object.freeze({
   IfStatement: readBranchPaths,
   ConditionalExpression: readBranchPaths,
   SwitchStatement: readSwitchPaths,
-  CallExpression: readCallPaths
+  CallExpression: readCallPaths,
+  WhileStatement: readLoopPaths,
+  ForStatement: readLoopPaths,
+  DoWhileStatement: readLoopPaths,
+  TryStatement: readTryPaths,
+  LabeledStatement: readLabeledPaths
 });
 
 /**
  * How running node can leave the binding unwritten: { falls, exits }. falls is true when a path
  * may run off its end before any write in writeNodes; exits lists the return, throw, break and
  * continue statements that may leave it before one. The write itself, a statement list holding one
- * before anything that may leave it, an if or a conditional, a switch through its cases and an
- * immediately invoked function are followed; any other node may run off its end, with the exits
- * inside it that leave it.
+ * before anything that may leave it, an if or a conditional, a switch through its cases, an
+ * immediately invoked function, a loop, a try and a labeled statement are followed; any other
+ * node may run off its end, with the exits inside it that leave it.
  */
 export const readUnwrittenPaths = (node, writeNodes) => {
   if (!node) return FALLS;
@@ -121,15 +170,23 @@ export const readUnwrittenPaths = (node, writeNodes) => {
   return reader ? reader(node, writeNodes) : { falls: true, exits: collectEscapingExits(node) };
 };
 
-// The statement an exit leaves, above coverPath: the function (or the program) for a return or a
-// throw, the body of its label for a labeled break or continue, otherwise the nearest loop, or for
-// a break the nearest loop or switch.
-const findExitTarget = (exit, coverPath) => {
+// A throw leaves an immediately invoked function for the code around its call, unless that
+// function holds the anchor, whose rest it then skips.
+const isThrowTarget = (p, anchor) => {
+  const isPassedThrough = p.isFunction() && isImmediatelyInvoked(p.node, p.parent) && !isWithinNode(anchor, p.node);
+  return p.isProgram() || (p.isFunction() && !isPassedThrough);
+};
+
+// The statement an exit leaves, above coverPath: the function (or the program) for a return, and
+// for a throw the first one it does not leave through a call, the body of its label for a labeled
+// break or continue, otherwise the nearest loop, or for a break the nearest loop or switch.
+const findExitTarget = (exit, coverPath, anchor) => {
   const label = exit.label?.name;
   if (label) {
     const labeled = coverPath.findParent((p) => p.isLabeledStatement() && p.node.label.name === label);
     return labeled ? labeled.get('body') : null;
   }
+  if (t.isThrowStatement(exit)) return coverPath.findParent((p) => isThrowTarget(p, anchor));
   const isJump = JUMP_TYPES.has(exit.type);
   if (!isJump) return coverPath.findParent((p) => p.isFunction() || p.isProgram());
   const isBreak = t.isBreakStatement(exit);
@@ -152,7 +209,7 @@ const isStoppedByTry = (tryPath, exit, coverNode, anchor) => {
  * into a do-while, whose test runs after the body.
  */
 export const exitsPastAnchor = (exit, coverPath, anchor) => {
-  const target = findExitTarget(exit, coverPath);
+  const target = findExitTarget(exit, coverPath, anchor);
   const skipsAnchor = Boolean(target) && isWithinNode(anchor, target.node);
   if (!skipsAnchor) return false;
   const isDoWhileContinue = t.isContinueStatement(exit) && target.isDoWhileStatement();
