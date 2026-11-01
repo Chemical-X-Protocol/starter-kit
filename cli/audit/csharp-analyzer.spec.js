@@ -11,6 +11,25 @@ test("csharp-analyzer: maskCommentsAndStrings preserves layout and line count", 
   assert.equal(masked.includes("hello"), false);
 });
 
+test("csharp-analyzer: maskCommentsAndStrings blanks an interpolated or raw string whole, quotes in its holes included", () => {
+  const blank = (text) => text.replace(/[^\n]/g, " ");
+  for (const literal of [
+    '$"{(c ? "try {" : "catch (")}"',
+    '$"{{try}} {(c ? \'"\' : "catch {")} }}"',
+    '$@"{(c ? "a" : "b")}\n  {d} ""q"""',
+    '@$"{(c ? @"x""y" : "}")}"',
+    '$"{(c ? $"{(d ? "try {" : "x")}" : "y")}"',
+    '$"""\n  {(c ? "try {" : """catch""")}\n  """',
+    '$$"""{x} {{(c ? "}" : "catch (")}}"""',
+    '"""\n  try { } catch { }\n  """'
+  ]) {
+    const code = `var s = ${literal}; try { A(); } catch { }\n`;
+    assert.equal(maskCommentsAndStrings(code), `var s = ${blank(literal)}; try { A(); } catch { }\n`, literal);
+  }
+  const unterminated = 'var s = $"{(c ? "a" : "b")}\ntry { A(); } catch { }\n';
+  assert.equal(maskCommentsAndStrings(unterminated).split("\n")[1], "try { A(); } catch { }");
+});
+
 test("csharp-analyzer: flags global simulation switches with isAiSlop: true", () => {
   const code = `
 namespace Nadena.Domain;
@@ -331,6 +350,23 @@ test("csharp-analyzer: two shallow catches on one line are two findings at their
   assert.deepEqual(columns(firstAnnotated), [[5, firstAnnotated.split("\n")[4].lastIndexOf("catch")]]);
   const multiLine = wrapCSharpCatch("        catch (Exception)\n        {\n        }");
   assert.deepEqual(columns(multiLine), [[10, "        ".length]]);
+});
+
+test("csharp-analyzer: try or catch text in an interpolated string's holes neither ends ownership nor limits a trailing annotation (C4)", () => {
+  const reason = "best-effort warm cache is optional";
+  const csharp = (...statements) => `class S\n{\n    void M()\n    {\n${statements.map((statement) => `        ${statement}\n`).join("")}    }\n}`;
+  const interpolated = 'var s = $"{(c ? "try {" : "catch (")}";';
+  for (const code of [
+    csharp(`// chemx-allow: ${reason}`, `${interpolated} try { A(); } catch { }`),
+    csharp(`${interpolated} /* chemx-allow: ${reason} */ try { A(); } catch { }`),
+    csharp(`try { A(); } catch { } ${interpolated} // chemx-allow: ${reason}`),
+    csharp(`// chemx-allow: ${reason}`, 'var s = $"{(c ? "try {" : "b")}"; try { A(); } catch { }')
+  ]) {
+    assert.deepEqual(csharpCatchHits(code), [], code);
+    assert.equal(csharpCatchHits(code.replace("chemx-allow: ", "")).length, 1, code);
+  }
+  const twoTries = csharp(`${interpolated} try { A(); } catch { } try { B(); } catch { } // chemx-allow: ${reason}`);
+  assert.deepEqual(csharpCatchColumns(twoTries), [[5, twoTries.split("\n")[4].indexOf("catch { }")]]);
 });
 
 test("csharp-analyzer: a catch at the start of its line reports column 1 as the JS catch rules do, apart from a second catch there", () => {
