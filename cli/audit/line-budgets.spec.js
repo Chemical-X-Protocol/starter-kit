@@ -77,6 +77,17 @@ test('a non-positive or non-numeric molecule warning falls back to the profile d
   assert.equal(getLineBudgets({ ...getProfileDefaults('pragmatic'), maxLineCountWarning: '180' }).molecule, 180);
 });
 
+test('a molecule warning is read as a whole Number: exponent strings count, booleans, fractions and suffixes fall back', () => {
+  const pragmaticWith = (value) => getLineBudgets({ ...getProfileDefaults('pragmatic'), maxLineCountWarning: value }).molecule;
+  assert.equal(pragmaticWith('1.8e2'), 180);
+  assert.equal(pragmaticWith('2e2'), 200);
+  assert.equal(pragmaticWith('1e3'), FILE_BUDGET.warn);
+  assert.equal(pragmaticWith(' 180 '), 180);
+  for (const bad of [true, false, '180px', '180.5', 180.5, '  ', Infinity, Number.NaN, [200], {}]) {
+    assert.equal(pragmaticWith(bad), 250, `${typeof bad} ${String(bad)}`);
+  }
+});
+
 // Same pattern as main's cli/docs-drift.spec.js flatCap; these files join its GUIDANCE_FILES on merge
 // (ported from 2b58305 and b0c0213).
 const PROFILE_BUDGET_TEXT_FILES = [

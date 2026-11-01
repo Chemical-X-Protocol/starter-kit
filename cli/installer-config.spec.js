@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { buildInstallerProjectConfig, saveInstallerProjectConfig, readExistingProjectConfig } from './installer.js';
+import { buildInstallerProjectConfig, saveInstallerProjectConfig, readExistingProjectConfig, formatInstallOutcome } from './installer.js';
 
 const captureStdout = (fn) => {
   const originalWrite = process.stdout.write;
@@ -69,6 +69,25 @@ test('an unparsable config is kept byte for byte and the installer warns', () =>
     assert.equal(result, false);
     assert.equal(fs.readFileSync(configPath, 'utf-8'), broken);
     assert.match(output, /Kept \.chemx\/config\.json unchanged/);
+  });
+});
+
+test('the install outcome claims success only when the config was saved', () => {
+  assert.match(formatInstallOutcome(true), /✔ Chemical X configuration installed successfully!/);
+  const kept = formatInstallOutcome(false);
+  assert.doesNotMatch(kept, /successfully|✔/);
+  assert.match(kept, /⚠ .*\.chemx\/config\.json was kept unchanged/);
+  assert.match(kept, /minGrade and minScore were not saved/);
+});
+
+test('a kept config gives the warning outcome, a saved one the success outcome', () => {
+  withSavedConfig('{nope', (tmpDir) => {
+    const { result } = captureStdout(() => saveInstallerProjectConfig(tmpDir, OPTS));
+    assert.equal(formatInstallOutcome(result), formatInstallOutcome(false));
+  });
+  withSavedConfig(null, (tmpDir) => {
+    const { result } = captureStdout(() => saveInstallerProjectConfig(tmpDir, OPTS));
+    assert.equal(formatInstallOutcome(result), formatInstallOutcome(true));
   });
 });
 

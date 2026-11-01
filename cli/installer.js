@@ -119,6 +119,11 @@ export const saveInstallerProjectConfig = (targetDir = '.', opts = {}) => {
   return true;
 };
 
+/** The wizard's closing line: success only when saveInstallerProjectConfig saved the config. */
+export const formatInstallOutcome = (isConfigSaved) => isConfigSaved
+  ? '\n\x1b[1m\x1b[32m✔ Chemical X configuration installed successfully!\x1b[0m\n\n'
+  : '\n\x1b[1m\x1b[33m⚠ Chemical X guardrails installed, but .chemx/config.json was kept unchanged, so minGrade and minScore were not saved.\x1b[0m\n\n';
+
 export const areGuardrailsInstalled = (targetDir = '.') => {
   const resolvedTarget = path.resolve(targetDir);
   const wfPath = path.join(resolvedTarget, '.github', 'workflows', 'chemx-audit.yml');
@@ -298,6 +303,6 @@ export const runInstallWizard = async (targetDir = '.') => {
   if (shouldQuery) await installAgentSearchConfig(targetDir);
 
   // Line budgets are not written here: they follow the profile via cli/audit/line-budgets.js.
-  saveInstallerProjectConfig(targetDir, opts);
-  process.stdout.write('\n\x1b[1m\x1b[32m✔ Chemical X configuration installed successfully!\x1b[0m\n\n');
+  const isConfigSaved = saveInstallerProjectConfig(targetDir, opts);
+  process.stdout.write(formatInstallOutcome(isConfigSaved));
 };

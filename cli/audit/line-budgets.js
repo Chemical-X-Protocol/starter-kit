@@ -81,10 +81,15 @@ const resolveProfileName = (config = {}) => {
   return config.profile || DEFAULT_PROFILE;
 };
 
-/** A positive integer molecule warning from config, or null ('abc', 0 and -5 are ignored). */
+/**
+ * A positive integer molecule warning from config, or null. The whole value is read with
+ * Number(), so '1e3' is 1000; true, '', 'abc', '180px', 2.5, 0 and -5 are ignored.
+ */
 const parseMoleculeWarning = (value) => {
-  const parsed = Number.parseInt(value, 10);
-  return parsed > 0 ? parsed : null;
+  const isNumberLike = typeof value === 'number' || typeof value === 'string';
+  const parsed = isNumberLike ? Number(value) : Number.NaN;
+  const isPositiveInteger = Number.isInteger(parsed) && parsed > 0;
+  return isPositiveInteger ? parsed : null;
 };
 
 /**
