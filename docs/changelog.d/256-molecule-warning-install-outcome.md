@@ -1,0 +1,4 @@
+### Fixed
+
+- `max-line-count-warning` (`maxLineCountWarning`) reads exponent text as its value, cut to an integer: `1.8e2` is a 180-line molecule budget and `1e3` is 1000, capped at the 500-line file bound. Before, the value was cut at its first non-digit, so `1e3` became a 1-line budget that flagged every complex molecule. Every other value keeps its old reading: `300px` is 300, `250.5` is 250, and hex, octal or binary text (`0x64`, `0o144`, `0b1100100`), booleans, `''`, 0 and negative values fall back to the profile default. No molecule budget is lower than before, so `LINE_BUDGET_MOLECULE` can only report fewer files and keeps its revision (#256, #253).
+- The install wizard (`chemx setup-ci`, `chemx install-hooks` without `--host`) prints its green success line only when it saved `.chemx/config.json`. When it kept an unparsable config, so `minGrade` and `minScore` were not saved, it ends with a yellow warning that says so instead (#256).
