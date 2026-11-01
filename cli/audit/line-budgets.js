@@ -81,15 +81,19 @@ const resolveProfileName = (config = {}) => {
   return config.profile || DEFAULT_PROFILE;
 };
 
+// Decimal exponent text with a nonzero integer part and no minus sign, such as '1.8e2'.
+const EXPONENT_TEXT = /^\s*\+?[1-9]\d*(?:\.\d+)?e\+?\d+\s*$/i;
+
 /**
- * A positive integer molecule warning from config, or null. The whole value is read with
- * Number(), so '1e3' is 1000; true, '', 'abc', '180px', 2.5, 0 and -5 are ignored.
+ * A positive molecule warning from config, or null. Exponent text reads as its value, cut
+ * to an integer ('1e3' is 1000, '1.8e2' is 180), never below its leading digits. Anything
+ * else keeps parseInt's leading-integer reading: '300px' is 300, '250.5' is 250, and
+ * '0x64', true, '', 'abc', 0 and -5 are ignored. So a budget only rises against parseInt.
  */
 const parseMoleculeWarning = (value) => {
-  const isNumberLike = typeof value === 'number' || typeof value === 'string';
-  const parsed = isNumberLike ? Number(value) : Number.NaN;
-  const isPositiveInteger = Number.isInteger(parsed) && parsed > 0;
-  return isPositiveInteger ? parsed : null;
+  const isExponentText = typeof value === 'string' && EXPONENT_TEXT.test(value);
+  const parsed = isExponentText ? Math.trunc(Number(value)) : Number.parseInt(value, 10);
+  return parsed > 0 ? parsed : null;
 };
 
 /**

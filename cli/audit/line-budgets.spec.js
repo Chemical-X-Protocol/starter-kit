@@ -77,14 +77,54 @@ test('a non-positive or non-numeric molecule warning falls back to the profile d
   assert.equal(getLineBudgets({ ...getProfileDefaults('pragmatic'), maxLineCountWarning: '180' }).molecule, 180);
 });
 
-test('a molecule warning is read as a whole Number: exponent strings count, booleans, fractions and suffixes fall back', () => {
-  const pragmaticWith = (value) => getLineBudgets({ ...getProfileDefaults('pragmatic'), maxLineCountWarning: value }).molecule;
-  assert.equal(pragmaticWith('1.8e2'), 180);
-  assert.equal(pragmaticWith('2e2'), 200);
-  assert.equal(pragmaticWith('1e3'), FILE_BUDGET.warn);
-  assert.equal(pragmaticWith(' 180 '), 180);
-  for (const bad of [true, false, '180px', '180.5', 180.5, '  ', Infinity, Number.NaN, [200], {}]) {
-    assert.equal(pragmaticWith(bad), 250, `${typeof bad} ${String(bad)}`);
+const moleculeWith = (profile, value) => getLineBudgets({ profile, maxLineCountWarning: value }).molecule;
+// The molecule budget main's parseInt reading gives, before exponent text was read as a value.
+const mainMoleculeWith = (profile, value) => {
+  const leadingInteger = Number.parseInt(value, 10);
+  const configured = leadingInteger > 0 ? leadingInteger : moleculeWith(profile, null);
+  return Math.min(configured, FILE_BUDGET.warn);
+};
+
+test('exponent text reads as its value instead of its leading digit', () => {
+  assert.equal(moleculeWith('loose', '1.8e2'), 180);
+  assert.equal(moleculeWith('loose', '2e2'), 200);
+  assert.equal(moleculeWith('loose', '2E+2'), 200);
+  assert.equal(moleculeWith('loose', '1.855e2'), 185);
+  assert.equal(moleculeWith('pragmatic', '1e3'), FILE_BUDGET.warn);
+  assert.equal(moleculeWith('pragmatic', ' 180 '), 180);
+});
+
+test('hex, octal and binary text falls back to the profile default, as parseInt did', () => {
+  for (const radixText of ['0x64', '0X64', '0o144', '0b1100100']) {
+    assert.equal(moleculeWith('pragmatic', radixText), 250, `pragmatic ${radixText}`);
+    assert.equal(moleculeWith('atomic-strict', radixText), 100, `atomic-strict ${radixText}`);
+  }
+});
+
+test('suffixed and fractional values keep the leading-integer reading', () => {
+  assert.equal(moleculeWith('atomic-strict', '300px'), 300);
+  assert.equal(moleculeWith('atomic-strict', '250.5'), 250);
+  assert.equal(moleculeWith('pragmatic', '180px'), 180);
+  assert.equal(moleculeWith('pragmatic', '180.5'), 180);
+  assert.equal(moleculeWith('pragmatic', 180.5), 180);
+  assert.equal(moleculeWith('pragmatic', '400.5'), 400);
+});
+
+test('booleans, blanks, zero and negatives fall back to the profile default', () => {
+  for (const bad of [true, false, '', '  ', 0, -5, '-5', 'abc', {}, Infinity, Number.NaN]) {
+    assert.equal(moleculeWith('pragmatic', bad), 250, `pragmatic ${typeof bad} ${String(bad)}`);
+    assert.equal(moleculeWith('atomic-strict', bad), 100, `atomic-strict ${typeof bad} ${String(bad)}`);
+  }
+});
+
+test('no molecule budget falls below the one main read, so LINE_BUDGET_MOLECULE can only drop', () => {
+  const values = ['1e3', '1.8e2', '0.5e2', '0.1e3', '500e-1', '5e-1', '1e999', '0x64', '0o144', '0b1100100', '300px',
+    '250.5', '1e3px', true, false, '', 0, -5, 180.5, 1e21, [200], {}];
+  for (const profile of ['pragmatic', 'atomic-strict', 'loose']) {
+    for (const value of values) {
+      const label = `${profile} ${typeof value} ${String(value)}`;
+      assert.ok(moleculeWith(profile, value) >= mainMoleculeWith(profile, value), label);
+    }
   }
 });
 
