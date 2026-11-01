@@ -3,6 +3,7 @@ import path from 'node:path';
 import { RULESET_VERSION, resolveRuleRevision } from './rule-revisions.js';
 import { RULE_REGISTRY } from './rules-registry.js';
 import { LANGUAGE_DEFINITIONS } from '../languages.js';
+import { LEGACY_LANGUAGES } from '../lang/legacy-extensions.js';
 
 /**
  * chemx-ratchet.json, format version 2:
@@ -17,13 +18,14 @@ import { LANGUAGE_DEFINITIONS } from '../languages.js';
  * read as the extensions scanned before PHP support (LEGACY_LANGUAGES). Counts from
  * violations in a file whose extension is not in that set are adopted, not gated, and the
  * extension is then recorded; violations without a file path are always gated.
+ * `byExtension` ({ '.py': { RULE: n } }) is the per-extension split of the counts that became
+ * the baseline. It is written with the baseline (writeRatchet) and with every rewrite that
+ * happens anyway (upgradeScope); it never makes a scan rewrite the file by itself.
  */
 export const RATCHET_FILE = 'chemx-ratchet.json';
 const RATCHET_VERSION = 2;
 
-const PRE_PHP_EXCLUDED = new Set(['.php']);
 const allExtensions = () => Object.values(LANGUAGE_DEFINITIONS).flatMap((lang) => [...lang.extensions]);
-const LEGACY_LANGUAGES = allExtensions().filter((ext) => !PRE_PHP_EXCLUDED.has(ext)).sort();
 
 /** The extensions a full scan covers now (what a scope records). */
 const currentLanguages = () => allExtensions().sort();
@@ -49,6 +51,19 @@ export const countViolationsByRule = (violations = []) => {
   const counts = {};
   for (const v of violations) counts[v.rule] = (counts[v.rule] ?? 0) + 1;
   return counts;
+};
+
+/** { '.ts': { RULE: n } } for violations that carry a file path; others have no extension to split by. */
+const countByExtension = (violations = []) => {
+  const split = {};
+  for (const v of violations) {
+    const ext = extensionOf(v);
+    const hasNoPath = ext === '';
+    if (hasNoPath) continue;
+    split[ext] ??= {};
+    split[ext][v.rule] = (split[ext][v.rule] ?? 0) + 1;
+  }
+  return Object.fromEntries(Object.entries(split).sort(([a], [b]) => a.localeCompare(b)).map(([ext, rules]) => [ext, sortKeys(rules)]));
 };
 
 const sortKeys = (record) => Object.fromEntries(Object.entries(record).sort(([a], [b]) => a.localeCompare(b)));
@@ -98,7 +113,7 @@ const readExistingOrEmpty = (projectRoot) => {
 export const writeRatchet = (projectRoot, { scope, violations }) => {
   const ratchet = readExistingOrEmpty(projectRoot);
   const rules = sortKeys(countViolationsByRule(violations));
-  ratchet.scopes[scope] = { ruleset: RULESET_VERSION, allRules: true, rules, revisions: currentRevisions(rules), languages: currentLanguages() };
+  ratchet.scopes[scope] = { ruleset: RULESET_VERSION, allRules: true, rules, revisions: currentRevisions(rules), languages: currentLanguages(), byExtension: countByExtension(violations) };
   persistRatchet(projectRoot, ratchet);
   return ratchet.scopes[scope];
 };
@@ -111,19 +126,42 @@ export const writeRatchet = (projectRoot, { scope, violations }) => {
 const upgradeScope = (entry, adopted) => {
   const rules = { ...entry.rules };
   for (const { rule, current } of adopted) rules[rule] = current;
-  return {
+  const upgraded = {
     ruleset: Math.max(entry.ruleset ?? 1, RULESET_VERSION),
     allRules: true,
     rules: sortKeys(rules),
     revisions: currentRevisions(rules),
     languages: mergeLanguages(entry, adopted)
   };
+  const byExtension = adoptSnapshot(entry.byExtension, adopted);
+  return byExtension ? { ...upgraded, byExtension } : upgraded;
+};
+
+/**
+ * Folds the adopted rules' per-extension counts into the snapshot. A rule adopted for a new
+ * revision is re-split over every extension; a language adoption only adds its new extensions.
+ * A scope with no snapshot gets one only for the adopted rules, so it stays partial.
+ */
+const adoptSnapshot = (existing, adopted) => {
+  const withSplit = adopted.filter((item) => isRecord(item.byExtension));
+  const hasNoSplit = withSplit.length === 0;
+  if (hasNoSplit) return isRecord(existing) ? existing : null;
+  const snapshot = Object.fromEntries(Object.entries(existing ?? {}).map(([ext, rules]) => [ext, { ...rules }]));
+  for (const { rule, byExtension, reason } of withSplit) {
+    const isRevision = reason !== 'language';
+    if (isRevision) {
+      for (const rules of Object.values(snapshot)) delete rules[rule];
+    }
+    for (const [ext, count] of Object.entries(byExtension)) (snapshot[ext] ??= {})[rule] = count;
+  }
+  const populated = Object.entries(snapshot).filter(([, rules]) => Object.keys(rules).length > 0);
+  return Object.fromEntries(populated.sort(([a], [b]) => a.localeCompare(b)).map(([ext, rules]) => [ext, sortKeys(rules)]));
 };
 
 /** True when the scope must be rewritten after this scan (adoptions or an older rule set). */
 export const needsScopeUpgrade = (entry, adopted = []) => {
   if (!entry) return false;
-  const upgraded = upgradeScope(entry, adopted);
+  const { byExtension: _snapshot, ...upgraded } = upgradeScope(entry, adopted);
   const stored = { ruleset: entry.ruleset, allRules: entry.allRules, rules: entry.rules, revisions: entry.revisions, languages: entry.languages };
   const isSame = JSON.stringify(upgraded) === JSON.stringify(stored);
   return !isSame;
@@ -146,7 +184,14 @@ const recordedRevision = (entry, rule) => {
   return isNewRegisteredRule ? 0 : (entry.ruleset ?? 1);
 };
 
+/** The adopted rule's count per extension: all of them for a revision, only the outside ones for a language. */
+const splitFor = (split, rule, only) => {
+  const entries = Object.entries(split).filter(([ext, rules]) => rules[rule] && (!only || only.includes(ext)));
+  return Object.fromEntries(entries.map(([ext, rules]) => [ext, rules[rule]]));
+};
+
 const compareToBaseline = (entry, violations) => {
+  const split = countByExtension(violations);
   const languages = new Set(recordedLanguages(entry));
   const current = countViolationsByRule(violations);
   const outsideViolations = violations.filter((v) => isOutsideLanguages(v, languages));
@@ -162,9 +207,9 @@ const compareToBaseline = (entry, violations) => {
     const outsideCount = outside[rule] ?? 0;
     const gatedCount = count - outsideCount;
     const extensions = [...new Set(outsideViolations.filter((v) => v.rule === rule).map(extensionOf))];
-    if (isNewerRevision) adopted.push({ rule, baseline, current: count, revision, extensions });
+    if (isNewerRevision) adopted.push({ rule, baseline, current: count, revision, extensions, byExtension: splitFor(split, rule) });
     const isLanguageAdoption = !isNewerRevision && outsideCount > 0;
-    if (isLanguageAdoption) adopted.push({ rule, baseline, current: baseline + outsideCount, revision, reason: 'language', extensions });
+    if (isLanguageAdoption) adopted.push({ rule, baseline, current: baseline + outsideCount, revision, reason: 'language', extensions, byExtension: splitFor(split, rule, extensions) });
     const isRegression = !isNewerRevision && gatedCount > baseline;
     if (isRegression) regressions.push({ rule, baseline, current: gatedCount });
   }
