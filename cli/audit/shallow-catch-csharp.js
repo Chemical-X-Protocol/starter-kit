@@ -9,17 +9,22 @@
  * column is the same, except that a catch at the line start reports 1 as the JS catch rules do,
  * so the reporter keeps it and two catches on one line stay two findings), its closing brace
  * (endColumn), the try that owns it (tryLine, tryColumn, and tryBraceLine/tryBraceColumn just
- * past the try block's closing brace) and where a trailing annotation stops being this catch's
- * (trailEndColumn). Severity stays at the registry MEDIUM with no escalation, because C#
+ * past the try block's closing brace), where a trailing annotation stops being this catch's
+ * (trailEndColumn), and where every try and catch keyword on the catch's line starts
+ * (keywordColumns). Severity stays at the registry MEDIUM with no escalation, because C#
  * definite assignment (CS0165) already rejects reading an unset local.
  */
 const BRACE_DEPTH_STEP = Object.freeze({ '}': 1, '{': -1 });
 const FORWARD_DEPTH_STEP = Object.freeze({ '{': 1, '}': -1 });
 const PAREN_DEPTH_STEP = Object.freeze({ '(': 1, ')': -1 });
-const TRY_KEYWORD = /\btry\b/;
 const CATCH_KEYWORD = /\bcatch\b/g;
-// What opens a try block, a finally or a catch clause (with its type and when-filter).
-const TRY_PART_OPENER = /\b(?:try|finally)$|\bcatch\b[^{};]*$/;
+// What opens a try block, a finally or a catch clause (with its type and when-filter); a keyword
+// here, as below, is a whole word that is not a member (o.catch) or a verbatim identifier (@catch).
+const TRY_PART_OPENER = /(?<![.@\p{L}\p{N}_])(?:try|finally)$|(?<![.@\p{L}\p{N}_])catch(?![\p{L}\p{N}_])[^{};]*$/u;
+const KEYWORD_CANDIDATE = /(?<![.@\p{L}\p{N}_])(?:try|catch)(?![\p{L}\p{N}_])/gu;
+// What a keyword is followed by, past whitespace: a try block, or a catch's type, filter or body.
+const KEYWORD_FOLLOWER = Object.freeze({ try: /^\{/, catch: /^(?:[({]|when(?![\p{L}\p{N}_]))/u });
+const KEYWORD_FOLLOWER_LENGTH = 'when'.length + 1;
 
 // Backward brace match over masked content (comments and strings blanked, same offsets), so
 // braces quoted in strings never shift it.
@@ -37,6 +42,34 @@ const findOpeningBrace = (maskedContent, closeIndex) => {
 
 const lineAt = (content, index) => (content.slice(0, index).match(/\n/g) || []).length + 1;
 const columnAt = (content, index) => index - (content.lastIndexOf('\n', index - 1) + 1);
+
+const skipSpace = (text, index) => {
+  let cursor = index;
+  while (cursor < text.length && /\s/.test(text[cursor])) cursor += 1;
+  return cursor;
+};
+
+const isKeywordAt = (maskedContent, index, keyword) => {
+  const followerStart = skipSpace(maskedContent, index + keyword.length);
+  return KEYWORD_FOLLOWER[keyword].test(maskedContent.slice(followerStart, followerStart + KEYWORD_FOLLOWER_LENGTH));
+};
+
+// The try and catch keywords in masked content (comments and strings blanked) from offset from
+// up to to, as { index, keyword }, so a quoted, member or verbatim name is not one.
+const findKeywords = (maskedContent, from, to) => [...maskedContent.slice(from, to).matchAll(KEYWORD_CANDIDATE)]
+  .map((candidate) => ({ index: from + candidate.index, keyword: candidate[0] }))
+  .filter(({ index, keyword }) => isKeywordAt(maskedContent, index, keyword));
+
+const findLineEnd = (maskedContent, index) => {
+  const newline = maskedContent.indexOf('\n', index);
+  return newline === -1 ? maskedContent.length : newline;
+};
+
+// 0-based columns of every try and catch keyword on the line that holds index.
+const listKeywordColumns = (maskedContent, index) => {
+  const lineStart = maskedContent.lastIndexOf('\n', index - 1) + 1;
+  return findKeywords(maskedContent, lineStart, findLineEnd(maskedContent, index)).map((found) => found.index - lineStart);
+};
 
 // The closing brace right before the catch keyword, past masked comments and blank lines.
 const findBraceBefore = (maskedContent, index) => {
@@ -65,10 +98,9 @@ const closesTryPart = (maskedContent, closeIndex) => {
 // Offset on the catch's last line where a trailing annotation stops being this catch's: a later
 // try keyword, or the brace of an enclosing try block, catch or finally; -1 when neither occurs.
 const findTrailEnd = (maskedContent, endIndex) => {
-  const newline = maskedContent.indexOf('\n', endIndex);
-  const lineEnd = newline === -1 ? maskedContent.length : newline;
-  const tryAt = maskedContent.slice(endIndex, lineEnd).search(TRY_KEYWORD);
-  const limit = tryAt === -1 ? lineEnd : endIndex + tryAt;
+  const lineEnd = findLineEnd(maskedContent, endIndex);
+  const laterTry = findKeywords(maskedContent, endIndex, lineEnd).find((found) => found.keyword === 'try');
+  const limit = laterTry ? laterTry.index : lineEnd;
   let depth = 0;
   for (let i = endIndex; i < limit; i += 1) {
     const isUnmatchedClose = maskedContent[i] === '}' && depth === 0;
@@ -76,13 +108,7 @@ const findTrailEnd = (maskedContent, endIndex) => {
     if (isTryPartClose) return i;
     depth = Math.max(0, depth + (FORWARD_DEPTH_STEP[maskedContent[i]] ?? 0));
   }
-  return tryAt === -1 ? -1 : limit;
-};
-
-const skipSpace = (text, index) => {
-  let cursor = index;
-  while (cursor < text.length && /\s/.test(text[cursor])) cursor += 1;
-  return cursor;
+  return laterTry ? limit : -1;
 };
 
 // Index just past the ')' that balances a '(' at index; index itself when no '(' is there, and
@@ -132,7 +158,9 @@ export const resolveCSharpCatchSpan = (match, { content, maskedContent }, lineNu
   const matchEnd = match.index + match.text.length;
   const endLine = lineNum + (match.text.match(/\n/g) || []).length;
   const catchColumn = columnAt(content, match.index);
-  const span = { endLine, column: catchColumn || 1, catchColumn, endColumn: columnAt(content, matchEnd) };
+  const endColumn = columnAt(content, matchEnd);
+  const keywordColumns = listKeywordColumns(maskedContent, match.index);
+  const span = { endLine, column: catchColumn || 1, catchColumn, endColumn, keywordColumns };
   const trailEnd = findTrailEnd(maskedContent, matchEnd);
   const hasTrailEnd = trailEnd !== -1;
   if (hasTrailEnd) span.trailEndColumn = columnAt(content, trailEnd);

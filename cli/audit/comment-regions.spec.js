@@ -17,13 +17,3 @@ test('comment regions skip quoted text and carry an open block comment', () => {
   assert.deepEqual(second.regions, [[0, 9], [15, 22]]);
   assert.equal(second.state.inBlock, false);
 });
-
-test('string literals are listed with their quotes, a template literal carried across lines', () => {
-  const line = `log('try'); f("catch"); /* 'not a string' */ g(\`x\`);`;
-  const [scan] = scanAll([line]);
-  assert.deepEqual(scan.strings.map(([start, end]) => line.slice(start, end)), ["'try'", '"catch"', '`x`']);
-  const [open, carried] = scanAll(['const s = `a', 'try` + b;']);
-  assert.deepEqual([open.strings, carried.strings], [[[10, 12]], [[0, 4]]]);
-  const [unterminated] = scanAll(["it's markup"]);
-  assert.deepEqual(unterminated.strings, [[2, 11]]);
-});

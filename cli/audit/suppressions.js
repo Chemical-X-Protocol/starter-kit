@@ -14,7 +14,10 @@
  *   before the catch keyword on its line (a block comment may open above) with no other try
  *   or catch keyword in between, and one ending on the line above when its comment opened on
  *   a comment-only line and no other try or catch precedes its try on that line. Those keyword
- *   tests read code only: a comment, a string and a member such as p.catch(h) hold no keyword.
+ *   tests read where the finding's keywordColumns say a try or catch keyword starts on its line
+ *   (the parser's try statements and catch clauses for JS, masked code for C#), so a comment, a
+ *   string, a member, an object or type key, a method, a $, # or @ name, a regex or JSX text
+ *   spelled try or catch holds none. The post-filters drop keywordColumns from what they return.
  *   Any other finding (and PHP) uses its lines (line..endLine), an annotation on a
  *   comment-only line through the line below its closer (so the rest of its comment and a
  *   closer line that code shares count, whatever line opened the comment), and the text after
@@ -40,8 +43,6 @@ const COMMENT_ONLY_LINE = /^\s*(?:\/\/|\/\*|\*|<!--|#)/;
 const LINE_COMMENT_OPENER = /^(?:\/\/|#)/;
 const BLOCK_GUTTER = /^[\s*]+/;
 const MEANINGFUL_REASON = /[\p{L}\p{N}]/u;
-// A try or catch keyword; one after a dot (p.catch(h), p?.catch(h)) names a member instead.
-const TRY_OR_CATCH = /(?<!\.\s*)\b(?:try|catch)\b/;
 const CATCH_FAMILY = new Set(['ERROR_SWALLOWED_EXCEPTION', 'AI_SLOP_SHALLOW_CATCH']);
 const BEST_EFFORT_TOKEN = 'best-effort';
 
@@ -129,9 +130,9 @@ const collectLineReadings = (lines, regionsByLine, closerAt) => lines.flatMap((l
   return [closer ? continueBlock(annotation, lines, idx, closer) : annotation];
 });
 
-// Line-scanner regions and string literals per line, plus the block comment each line carries
-// in from above (it ends at carriedEnd, and carriedCommentOnly says whether the line that
-// opened it is comment-only) and the start of the block comment still open at its end (openFrom).
+// Line-scanner regions per line, plus the block comment each line carries in from above
+// (it ends at carriedEnd, and carriedCommentOnly says whether the line that opened it is
+// comment-only) and the start of the block comment still open at its end (openFrom).
 const scanLines = (lines) => {
   let state = INITIAL_SCAN_STATE;
   let isOpenerCommentOnly = false;
@@ -145,7 +146,7 @@ const scanLines = (lines) => {
     if (opensBlock) isOpenerCommentOnly = COMMENT_ONLY_LINE.test(lineText);
     const carriedEnd = isCarried ? scan.regions[0][1] : 0;
     const openFrom = scan.state.inBlock ? scan.regions.at(-1)[0] : Infinity;
-    return { regions: scan.regions, strings: scan.strings, carriedEnd, carriedCommentOnly, openFrom, closer: scan.state.blockCloser };
+    return { regions: scan.regions, carriedEnd, carriedCommentOnly, openFrom, closer: scan.state.blockCloser };
   });
 };
 
@@ -161,8 +162,7 @@ const collectWithScanner = (lines) => {
   });
   const regionsByLine = scans.map((scan) => scan.regions);
   const lineReadings = collectLineReadings(lines, regionsByLine, (_, idx) => scans[idx].closer);
-  const maskedByLine = scans.map((scan) => [...scan.regions, ...scan.strings]);
-  return { annotations, lineReadings, regionsByLine, maskedByLine };
+  return { annotations, lineReadings };
 };
 
 // An annotation whose comment region runs to the end of its line with no closer after the marker.
@@ -187,7 +187,7 @@ const collectWithRegions = (lines, commentRegions) => {
   }));
   const isOpenAt = (annotation, idx) => isOpenBlockAt(lines[idx], annotation, [annotation.commentStart, annotation.commentEnd]);
   const lineReadings = collectLineReadings(lines, regionsByLine, (annotation, idx) => (isOpenAt(annotation, idx) ? '*/' : null));
-  return { annotations, lineReadings, regionsByLine, maskedByLine: regionsByLine };
+  return { annotations, lineReadings };
 };
 
 /**
@@ -208,12 +208,12 @@ const doesTokenCover = (token, rule) => {
 
 const comparePosition = (lineA, columnA, lineB, columnB) => (lineA === lineB ? columnA - columnB : lineA - lineB);
 
-// Code on one line between two columns, with its comments and string literals left out
-// (maskedByLine; the PHP regions path has no catch columns, so it masks comments only).
-const codeBetween = (context, line, from, to) => {
-  const lineText = context.lines[line - 1] ?? '';
-  const masked = context.maskedByLine[line - 1] ?? [];
-  return lineText.slice(from, to).split('').filter((_, offset) => !findRegion(masked, from + offset)).join('');
+// Whether a try or catch keyword other than this catch's own try starts on the catch's line at a
+// column in [from, to). The PHP regions path has no catch columns, so it never asks.
+const hasOtherKeywordBetween = (violation, from, to) => {
+  const ownTryColumn = violation.tryLine === violation.line ? violation.tryColumn : -1;
+  const keywordColumns = violation.keywordColumns ?? [];
+  return keywordColumns.some((column) => column >= from && column < to && column !== ownTryColumn);
 };
 
 // From the try block's closing brace (else the catch keyword) to the catch's closing brace.
@@ -237,12 +237,12 @@ const isTrailingCatch = (annotation, violation) => {
 // An annotation ending right above the catch's line counts when its comment opened on a
 // comment-only line (one that trails code there belongs to that code) and no other try or
 // catch keyword comes before this catch's try on the catch's line.
-const isAboveOwnTry = (annotation, violation, context) => {
+const isAboveOwnTry = (annotation, violation) => {
   const isLineAbove = annotation.opensCommentOnly && annotation.lastLine === violation.line - 1;
   if (!isLineAbove) return false;
   const isTryOnCatchLine = violation.tryLine === violation.line;
   if (!isTryOnCatchLine) return true;
-  return !TRY_OR_CATCH.test(codeBetween(context, violation.tryLine, 0, violation.tryColumn));
+  return !hasOtherKeywordBetween(violation, 0, violation.tryColumn);
 };
 
 // A comment that ends before the catch keyword on the catch's own line (in or before a one-line
@@ -250,29 +250,24 @@ const isAboveOwnTry = (annotation, violation, context) => {
 // no other try or catch keyword sits between it and this catch's try or the line start, or
 // between it and the catch keyword. A block opened above must open on a comment-only line: one
 // that trails code there (try { a(); } catch {} /* ...) belongs to that code.
-const isBeforeCatchOnItsLine = (annotation, violation, context) => {
+const isBeforeCatchOnItsLine = (annotation, violation) => {
   const isOnCatchLine = annotation.lastLine === violation.line && annotation.lastEnd <= violation.catchColumn;
   if (!isOnCatchLine) return false;
   const opensAbove = annotation.line !== violation.line;
   const trailsCodeAbove = opensAbove && !annotation.opensCommentOnly;
   if (trailsCodeAbove) return false;
   const commentStart = opensAbove ? 0 : annotation.commentStart;
-  const commentEnd = annotation.lastEnd;
-  const isTryOnLine = violation.tryLine === violation.line;
-  const tryEnd = violation.tryColumn + 'try'.length;
-  const isTryBefore = isTryOnLine && tryEnd <= commentStart;
-  const isTryAfter = isTryOnLine && !isTryBefore;
-  const lead = codeBetween(context, violation.line, isTryBefore ? tryEnd : 0, commentStart);
-  const tailFrom = isTryAfter ? tryEnd : commentEnd;
-  const gapToTry = isTryAfter ? codeBetween(context, violation.line, commentEnd, violation.tryColumn) : '';
-  const tail = `${gapToTry} ${codeBetween(context, violation.line, tailFrom, violation.catchColumn)}`;
-  return !TRY_OR_CATCH.test(lead) && !TRY_OR_CATCH.test(tail);
+  const isTryBefore = violation.tryLine === violation.line && violation.tryColumn < commentStart;
+  const leadFrom = isTryBefore ? violation.tryColumn : 0;
+  const hasKeywordInLead = hasOtherKeywordBetween(violation, leadFrom, commentStart);
+  const hasKeywordInTail = hasOtherKeywordBetween(violation, annotation.lastEnd, violation.catchColumn);
+  return !hasKeywordInLead && !hasKeywordInTail;
 };
 
-const isOwnedByCatch = (annotation, violation, context) => isInOwnClause(annotation, violation)
+const isOwnedByCatch = (annotation, violation) => isInOwnClause(annotation, violation)
   || isTrailingCatch(annotation, violation)
-  || isBeforeCatchOnItsLine(annotation, violation, context)
-  || isAboveOwnTry(annotation, violation, context);
+  || isBeforeCatchOnItsLine(annotation, violation)
+  || isAboveOwnTry(annotation, violation);
 
 // An annotation on a comment-only line covers every line after it through the line below its
 // closer: the rest of its own comment, a closer line that code shares (`*/ code`), the line below.
@@ -290,7 +285,7 @@ const isInLineWindow = (annotation, violation) => {
 const isAnnotationInRange = (annotation, violation, context) => {
   const isInHeader = violation.line === 1 && annotation.line >= 1 && annotation.line <= context.headerEndLine;
   const hasColumns = Number.isInteger(violation.catchColumn);
-  const isInWindow = hasColumns ? isOwnedByCatch(annotation, violation, context) : isInLineWindow(annotation, violation);
+  const isInWindow = hasColumns ? isOwnedByCatch(annotation, violation) : isInLineWindow(annotation, violation);
   return isInHeader || isInWindow;
 };
 
@@ -304,7 +299,7 @@ const listCandidateAnnotations = (violation, context) => {
 const listCoveringAnnotations = (violation, context) => listCandidateAnnotations(violation, context)
   .filter((annotation) => doesTokenCover(annotation.token, violation.rule) && isAnnotationInRange(annotation, violation, context));
 
-/** context: { annotations, lineReadings, lines, regionsByLine, maskedByLine, headerEndLine }, as applyAuditPostFilters builds it. */
+/** context: { annotations, lineReadings, headerEndLine }, as applyAuditPostFilters builds it. */
 export const isSuppressedByAnnotation = (violation, context) =>
   listCoveringAnnotations(violation, context).some((annotation) => annotation.hasReason);
 
@@ -332,13 +327,21 @@ export const dedupeViolations = (violations) => {
   });
 };
 
+// keywordColumns serve catch ownership only, so a returned finding leaves them out.
+const withoutKeywordColumns = (violation) => {
+  const hasKeywordColumns = Object.hasOwn(violation, 'keywordColumns');
+  if (!hasKeywordColumns) return violation;
+  const { keywordColumns, ...finding } = violation;
+  return finding;
+};
+
 /** Applies annotations (suppression and missing-reason notes) and dedup; returns a new array. */
 export const applyAuditPostFilters = (violations, lines, { commentRegions = null, fileHeaderEndLine = 0 } = {}) => {
   const collected = commentRegions ? collectWithRegions(lines, commentRegions) : collectWithScanner(lines);
-  const context = { ...collected, lines, headerEndLine: fileHeaderEndLine };
+  const context = { ...collected, headerEndLine: fileHeaderEndLine };
   const hasAnnotations = collected.annotations.length > 0 || collected.lineReadings.length > 0;
   const allowed = hasAnnotations
     ? violations.filter((v) => !isSuppressedByAnnotation(v, context)).map((v) => withMissingReasonNote(v, context))
     : violations;
-  return dedupeViolations(allowed);
+  return dedupeViolations(allowed).map(withoutKeywordColumns);
 };

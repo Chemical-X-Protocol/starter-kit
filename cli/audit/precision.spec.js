@@ -319,6 +319,48 @@ test('try or catch in a string, a template or a member name keeps the annotation
   assert.deepEqual(catchHits(csharp, 'src/Svc.cs'), []);
 });
 
+// EXT-1: ownership reads the try and catch keywords themselves (TryStatement and CatchClause
+// positions, C# keywords in masked code), so no other token spelled try or catch ends it.
+test('try or catch as a key, method, $/#/@ name, regex, type member or JSX text keeps the annotation its catch\'s (C4)', () => {
+  const reason = 'best-effort warm cache is optional';
+  const above = `// chemx-allow: ${reason}\n`;
+  const shapes = [
+    `${above}const o = { catch: h }; try { a(); } catch {}`,
+    `${above}const o = { try: 1 }; try { a(); } catch {}`,
+    `${above}const t = { then() {}, catch() {} }; try { a(); } catch {}`,
+    `${above}class P { catch(h) { return this; } m() { try { a(); } catch {} } }`,
+    `${above}const $catch = 1; try { a(); } catch {}`,
+    `${above}const try$ = 1; try { a(); } catch {}`,
+    `${above}if (/try/.test(s)) { try { a(); } catch {} }`,
+    `class K {\n  #catch() {}\n  m() {\n    // chemx-allow: ${reason}\n    this.#catch(); try { a(); } catch {}\n  }\n}`,
+    `try { o.x = { catch: 1 }; /* chemx-allow: ${reason} */ } catch {}`,
+    `try { s.replace(/catch/g, ""); /* chemx-allow: ${reason} */ } catch {}`,
+    `try { if (/catch/.test(s)) a(); /* chemx-allow: ${reason} */ } catch {}`,
+    `try { $try(); /* chemx-allow: ${reason} */ } catch {}`,
+    `const o = { catch: h }; /* chemx-allow: ${reason} */ try { a(); } catch {}`
+  ];
+  for (const code of shapes) {
+    assertExempt(code);
+    assert.deepEqual(catchHits(code, 'src/x.js'), [], code);
+    assertExempt(code.replace(/\n/g, '\r\n'));
+    assert.deepEqual(catchHits(`<template>\n  <p />\n</template>\n<script setup>\n${code}\n</script>\n`, 'src/C.vue'), [], code);
+  }
+  assertExempt(`${above}type P = { catch: () => void }; try { a(); } catch {}`);
+  const jsx = `export const C = () => {\n  // chemx-allow: ${reason}\n  const el = <p>try</p>; try { a(); } catch {}\n  return el;\n};`;
+  assert.deepEqual(catchHits(jsx, 'src/C.tsx'), []);
+  const csharp = (...statements) => `class S\n{\n    void M()\n    {\n${statements.map((statement) => `        ${statement}\n`).join('')}    }\n}`;
+  const annotation = `// chemx-allow: ${reason}`;
+  for (const statement of ['var @catch = 1; try { A(); } catch { }', 'var @try = 1; try { A(); } catch { }']) {
+    assert.deepEqual(catchHits(csharp(annotation, statement), 'src/Svc.cs'), [], statement);
+  }
+  assert.deepEqual(catchHits(csharp(`if (@catch) { try { A(); } catch { } } ${annotation}`), 'src/Svc.cs'), []);
+  const columns = (code) => catchHits(code, 'src/Svc.cs').map((hit) => [hit.line, hit.column]);
+  const trailing = csharp(`try { A(); } catch { } var @try = 1; /* chemx-allow: ${reason} */ try { B(); } catch { }`);
+  assert.deepEqual(columns(trailing), [[5, trailing.split('\n')[4].lastIndexOf('catch')]]);
+  const twoTries = csharp(annotation, 'try { A(); } catch when (x) { } try { B(); } catch (E e) { }');
+  assert.deepEqual(columns(twoTries), [[6, twoTries.split('\n')[5].lastIndexOf('catch')]]);
+});
+
 test('AI_SLOP_LAZY_ANY still fires on a handled catch and on an annotated shallow catch (SC-12)', () => {
   const lazyAny = (code) => rulesAt(audit(code, 'src/x.ts'), 'AI_SLOP_LAZY_ANY');
   assert.equal(lazyAny('try { a(); } catch (e: any) { handle(e); }\n').length, 1);

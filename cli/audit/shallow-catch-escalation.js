@@ -245,21 +245,35 @@ export const resolveCatchEscalation = (catchPath) => {
   return { severity: binding ? 'HIGH' : 'MEDIUM', binding };
 };
 
-const tryStartsCache = new WeakMap();
+const keywordStartsCache = new WeakMap();
+const KEYWORD_OF_NODE = new Map([['TryStatement', 'try'], ['CatchClause', 'catch']]);
+const NO_KEYWORD_STARTS = Object.freeze({ try: [], catch: [] });
 
-// Start positions of every try statement in the program. A plain node walk, so the visitor
-// traversal that is running meanwhile keeps its path state.
-const listTryStarts = (program) => {
-  const isCached = tryStartsCache.has(program);
-  if (isCached) return tryStartsCache.get(program);
-  const starts = [];
+// Start positions of every try keyword (a TryStatement) and catch keyword (a CatchClause) in
+// the program, by keyword. A plain node walk, so the visitor traversal that is running meanwhile
+// keeps its path state.
+const listKeywordStarts = (program) => {
+  const isCached = keywordStartsCache.has(program);
+  if (isCached) return keywordStartsCache.get(program);
+  const starts = { try: [], catch: [] };
   t.traverseFast(program, (node) => {
-    const isLocatedTry = t.isTryStatement(node) && Boolean(node.loc);
-    if (isLocatedTry) starts.push(node.loc.start);
+    const keyword = KEYWORD_OF_NODE.get(node.type);
+    const isLocatedKeyword = Boolean(keyword) && Boolean(node.loc);
+    if (isLocatedKeyword) starts[keyword].push(node.loc.start);
   });
-  tryStartsCache.set(program, starts);
+  keywordStartsCache.set(program, starts);
   return starts;
 };
+
+const readKeywordStarts = (catchPath) => {
+  const programPath = catchPath.findParent((p) => p.isProgram());
+  return programPath ? listKeywordStarts(programPath.node) : NO_KEYWORD_STARTS;
+};
+
+// 0-based columns of every try and catch keyword on a line, this catch's own included.
+const listKeywordColumns = (keywordStarts, line) => [...keywordStarts.try, ...keywordStarts.catch]
+  .filter((start) => start.line === line)
+  .map((start) => start.column);
 
 const TRY_PARTS = new Set(['block', 'handler', 'finalizer']);
 
@@ -271,11 +285,9 @@ const findEnclosingTryPartEnd = (tryPath) => {
 
 // Column on the catch's last line where a trailing annotation stops being this catch's: where
 // a later try starts, or the brace of an enclosing try part that closes on that line.
-const resolveTrailEndColumn = (catchPath) => {
+const resolveTrailEndColumn = (catchPath, keywordStarts) => {
   const end = catchPath.node.loc.end;
-  const programPath = catchPath.findParent((p) => p.isProgram());
-  const tryStarts = programPath ? listTryStarts(programPath.node) : [];
-  const laterTryColumns = tryStarts
+  const laterTryColumns = keywordStarts.try
     .filter((start) => start.line === end.line && start.column >= end.column)
     .map((start) => start.column);
   const enclosingEnd = findEnclosingTryPartEnd(catchPath.parentPath);
@@ -287,7 +299,9 @@ const resolveTrailEndColumn = (catchPath) => {
 /**
  * Where a catch's annotations may sit (suppressions.js): its own lines, 0-based columns of the
  * catch keyword (catchColumn), its closing brace (endColumn), its try keyword (tryLine,
- * tryColumn) and the end of the try block (tryBraceLine, tryBraceColumn), and trailEndColumn.
+ * tryColumn) and the end of the try block (tryBraceLine, tryBraceColumn), trailEndColumn, and
+ * keywordColumns: where every try and catch keyword on the catch's line starts, read from the
+ * AST, so a key, method, name, regex, type member or JSX text spelled try or catch is not one.
  */
 export const resolveCatchSpan = (catchPath) => {
   const node = catchPath.node;
@@ -297,6 +311,7 @@ export const resolveCatchSpan = (catchPath) => {
   const tryBlockEnd = tryNode.block.loc?.end;
   const hasLocations = Boolean(node.loc) && Boolean(tryNode.loc) && Boolean(tryBlockEnd);
   if (!hasLocations) return span;
+  const keywordStarts = readKeywordStarts(catchPath);
   return {
     ...span,
     catchColumn: node.loc.start.column,
@@ -305,6 +320,7 @@ export const resolveCatchSpan = (catchPath) => {
     tryColumn: tryNode.loc.start.column,
     tryBraceLine: tryBlockEnd.line,
     tryBraceColumn: tryBlockEnd.column,
-    trailEndColumn: resolveTrailEndColumn(catchPath)
+    trailEndColumn: resolveTrailEndColumn(catchPath, keywordStarts),
+    keywordColumns: listKeywordColumns(keywordStarts, line)
   };
 };
