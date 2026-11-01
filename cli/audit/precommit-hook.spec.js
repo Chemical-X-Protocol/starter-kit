@@ -109,23 +109,37 @@ for (const variant of Object.keys(VARIANTS)) {
   });
 
   // #253: the hook captures the audit's output and prints it only when it blocks, so a skipped
-  // floor went unseen on a passing commit. Its warning lines now reach stderr either way.
+  // floor went unseen on a passing commit. Its warning lines now reach stderr either way. A value
+  // from a cloned repo's config prints as printable ASCII, C1 controls and bidi overrides included.
   const FLOOR_WARNINGS = [
-    ['minGrade "Q" in .chemx/config.json', { '.chemx/config.json': '{"minGrade":"Q"}\n' }, {}, 'minGrade value "Q" in .chemx/config.json'],
-    ['CHEMX_MIN_SCORE=85.5', {}, { CHEMX_MIN_SCORE: '85.5' }, 'CHEMX_MIN_SCORE value "85.5"']
+    ['minGrade "Q"', '{"minGrade":"Q"}\n', 'minGrade value "Q" in .chemx/config.json'],
+    ['minScore "85.5"', '{"minScore":"85.5"}\n', 'minScore value "85.5" in .chemx/config.json'],
+    ['minGrade with a C1 CSI and a bidi override', '{"minGrade":"Q\u009b2J‮X"}\n', 'minGrade value "Q\\u009b2J\\u202eX" in .chemx/config.json']
   ];
-  for (const [label, config, extra, named] of FLOOR_WARNINGS) {
-    test(`${variant}: a passing grade gate still shows the warning for an unusable ${label}`, () => {
-      withHookRepo(variant, { 'src/svc.js': lines(20), ...config }, (root, commit) => {
+  for (const [label, config, named] of FLOOR_WARNINGS) {
+    test(`${variant}: a passing grade gate still shows the warning for an unusable ${label} in .chemx/config.json`, () => {
+      withHookRepo(variant, { 'src/svc.js': lines(20), '.chemx/config.json': config }, (root, commit) => {
         append(root, 'src/svc.js', 'export const extra = 1;\n');
-        const result = commit({ CHEMX_PRECOMMIT_GATE: 'grade', ...extra });
+        const result = commit({ CHEMX_PRECOMMIT_GATE: 'grade' });
         assert.equal(result.status, 0, result.stdout + result.stderr);
         const shown = result.stderr.split('\n').filter(Boolean);
         assert.equal(shown.length, 1, result.stderr);
         assert.ok(shown[0].startsWith(`⚠ chemx audit: ignoring ${named} (`), result.stderr);
+        assert.match(shown[0].slice(1), /^[\x20-\x7e]*$/, 'only printable ASCII after the warning sign');
       });
     });
   }
+
+  // #253: CHEMX_MIN_SCORE is the committer's own setting, so an unusable one blocks the grade gate
+  // as --min-score=85.5 would. 4ea6eb2 enforced it as 85; skipping it fell back to B/80.
+  test(`${variant}: an unusable CHEMX_MIN_SCORE blocks the grade gate with a usage error naming it`, () => {
+    withHookRepo(variant, { 'src/svc.js': lines(20) }, (root, commit) => {
+      append(root, 'src/svc.js', 'export const extra = 1;\n');
+      const result = commit({ CHEMX_PRECOMMIT_GATE: 'grade', CHEMX_MIN_SCORE: '85.5' });
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.match(result.stdout + result.stderr, /CHEMX_MIN_SCORE value "85\.5" is not a usable floor/);
+    });
+  });
 }
 
 // #253: the hook hands its rendered floors to the real audit as CHEMX_DEFAULT_MIN_*, not as flags.

@@ -7,7 +7,9 @@
  * grade and a 0-100 integer. A shell payload in either source therefore never runs. The defaults
  * travel by env, not as flags, so a chemx from before #255 ignores them instead of refusing an
  * unknown flag and blocking the commit (#253). Each row runs the installed hook under /bin/sh in
- * a temp repo, with a stub chemx that logs its arguments.
+ * a temp repo, with a stub chemx that logs its arguments; the stub passes whatever it inherits.
+ * The real audit refuses an unusable CHEMX_MIN_GRADE/CHEMX_MIN_SCORE as a usage error, so a
+ * payload there blocks the commit and still never runs (#253).
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -40,6 +42,8 @@ const hookEnv = (bin, extra) => {
 
 // The stub logs every call's arguments, and for the audit call the floors and defaults it inherited.
 const stubChemx = (log) => `#!/bin/sh\nprintf '%s\\n' "$*" >> '${log}'\nif [ "$1" = audit ]; then printf 'env %s|%s\\ndefaults %s|%s\\n' "$CHEMX_MIN_GRADE" "$CHEMX_MIN_SCORE" "$CHEMX_DEFAULT_MIN_GRADE" "$CHEMX_DEFAULT_MIN_SCORE" >> '${log}'; fi\n`;
+// The real chemx, so the audit resolves the floors itself.
+const realChemx = () => `#!/bin/sh\nexec "${process.execPath}" "${path.join(KIT, 'cli', 'index.js')}" "$@"\n`;
 // A chemx from before #255: its strict audit flag check refuses --default-min-grade/--default-min-score.
 const olderChemx = (log) => `#!/bin/sh\nprintf '%s\\n' "$*" >> '${log}'\nfor arg in "$@"; do case "$arg" in --default-min-*) echo "chemx audit: unknown flag $arg"; exit 1;; esac; done\n`;
 
@@ -137,6 +141,14 @@ for (const variant of VARIANTS) {
       assert.equal(run.audit, AUDIT_LINE, run.output);
       assert.equal(run.auditEnv, inherited, run.output);
       assert.equal(run.auditDefaults, defaultsLine('B', 80), run.output);
+    });
+  }
+  for (const [name, payload] of [['CHEMX_MIN_GRADE', PAYLOADS[1][1]], ['CHEMX_MIN_SCORE', SCORE_PAYLOADS[0][1]]]) {
+    test(`${variant}: the real audit refuses a payload in ${name}, so the commit is blocked and it never runs`, () => {
+      const run = runGradeHook(variant, { env: { [name]: payload }, stub: realChemx });
+      assert.equal(run.isInjected, false, run.output);
+      assert.equal(run.status, 1, run.output);
+      assert.match(run.output, new RegExp(`chemx audit: ${name} value ".+" is not a usable floor`));
     });
   }
   test(`${variant}: a chemx from before #255, which refuses --default-min-*, still passes the grade gate`, () => {

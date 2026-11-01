@@ -11,9 +11,11 @@
  * an integer-valued decimal (100.0, 85.00) counts as that integer, and 95.5, 150 or 1e2 do not.
  * A flag takes its value as --min-score=90 or as the next word, --min-score 90; the first
  * occurrence wins. An empty value is unset. An unusable flag value, or a flag with no word after
- * it (or with a long flag next), is a usage error, since it was typed for this run; an unusable
- * env or config value gets a one-line warning and the next source applies. No floor at all is
- * { minGrade: '', minScore: null }.
+ * it (or with a long flag next), is a usage error, since it was typed for this run. So is an
+ * unusable CHEMX_MIN_GRADE / CHEMX_MIN_SCORE, the operator's own setting: skipping it could leave
+ * no floor where 4ea6eb2 read 98.5 as 98 (#253). An unusable config or CHEMX_DEFAULT_MIN_* value
+ * gets a one-line warning and the next source applies. No floor at all is
+ * { minGrade: '', minScore: null }. A quoted value prints only printable ASCII.
  */
 import { isKnownGrade } from './rules-predicates.js';
 
@@ -22,16 +24,17 @@ const MAX_SCORE = 100;
 const CONFIG_FILE = '.chemx/config.json';
 
 // One flag source: --name=value, or --name value as two words (#253). A bare --name is missing its value.
+// A flag is strict: an unusable value refuses the run instead of falling through.
 const flagSource = (rawArgs, name) => {
   const args = rawArgs.map(String);
   const at = args.findIndex((arg) => arg === name || arg.startsWith(`${name}=`));
   const isAbsent = at === -1;
-  if (isAbsent) return { name, value: undefined, isFlag: true };
+  if (isAbsent) return { name, value: undefined, isStrict: true };
   const isInline = args[at] !== name;
-  if (isInline) return { name, value: args[at].slice(name.length + 1), isFlag: true };
+  if (isInline) return { name, value: args[at].slice(name.length + 1), isStrict: true };
   const next = args[at + 1];
   const isMissing = next === undefined || next.startsWith('--');
-  return { name, value: next, isFlag: true, isMissing };
+  return { name, value: next, isStrict: true, isMissing };
 };
 
 const toGrade = (value) => {
@@ -51,11 +54,12 @@ const FLOORS = {
 };
 
 // One floor's sources in precedence order: flag, env, config, default flag, default env.
+// CHEMX_MIN_* is strict like a flag (#253); the config and CHEMX_DEFAULT_MIN_* fall through.
 const sourcesOf = (key, rawArgs, env, projectConfig) => {
   const floor = FLOORS[key];
   return [
     flagSource(rawArgs, floor.flag),
-    { name: floor.env, value: env?.[floor.env] },
+    { name: floor.env, value: env?.[floor.env], isStrict: true },
     { name: key, value: projectConfig?.[key], where: ` in ${CONFIG_FILE}` },
     flagSource(rawArgs, floor.defaultFlag),
     { name: floor.defaultEnv, value: env?.[floor.defaultEnv] }
@@ -64,8 +68,13 @@ const sourcesOf = (key, rawArgs, env, projectConfig) => {
 
 const isUnset = (value) => value === undefined || value === null || String(value).trim() === '';
 
-// JSON quoting keeps a value with a newline or an escape code on one line of plain text.
-const quoted = (source) => `${source.name} value ${JSON.stringify(String(source.value))}${source.where ?? ''}`;
+// JSON quoting keeps a value with a newline or an escape code on one line of plain text, and every
+// code unit outside printable ASCII becomes a \u escape, so a C1 control (U+0080 to U+009F) or a
+// bidi override from a cloned repo's config never reaches the terminal raw (#253).
+const OUTSIDE_PRINTABLE_ASCII = /[^\x20-\x7e]/g;
+const toUnicodeEscape = (unit) => `\\u${unit.charCodeAt(0).toString(16).padStart(4, '0')}`;
+const toPrintable = (value) => JSON.stringify(String(value)).replace(OUTSIDE_PRINTABLE_ASCII, toUnicodeEscape);
+const quoted = (source) => `${source.name} value ${toPrintable(source.value)}${source.where ?? ''}`;
 
 const refusal = (usageError) => ({ value: null, warnings: [], usageError });
 
@@ -74,8 +83,8 @@ const resolveFloor = (key, rawArgs, env, projectConfig) => {
   const sources = sourcesOf(key, rawArgs, env, projectConfig).filter((source) => source.isMissing || !isUnset(source.value));
   const bareFlag = sources.find((source) => source.isMissing);
   if (bareFlag) return refusal(`chemx audit: ${bareFlag.name} needs a value (${floor.hint}).`);
-  const badFlag = sources.find((source) => source.isFlag && floor.parse(source.value) === null);
-  if (badFlag) return refusal(`chemx audit: ${quoted(badFlag)} is not a usable floor (${floor.hint}).`);
+  const badStrict = sources.find((source) => source.isStrict && floor.parse(source.value) === null);
+  if (badStrict) return refusal(`chemx audit: ${quoted(badStrict)} is not a usable floor (${floor.hint}).`);
   const warnings = [];
   for (const source of sources) {
     const parsed = floor.parse(source.value);

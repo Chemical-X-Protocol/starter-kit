@@ -5,8 +5,9 @@
  * cli/main.js through cli/config/loader.js, so comments are allowed), the low-precedence
  * --default-min-grade / --default-min-score, then CHEMX_DEFAULT_MIN_GRADE / CHEMX_DEFAULT_MIN_SCORE,
  * which the hooks set so an older chemx ignores them instead of rejecting a flag (#253).
- * #253: an unusable flag value is a usage error; an unusable env or config value is skipped
- * with a one-line stderr warning. An integer-valued decimal score such as 100.0 is that integer.
+ * #253: an unusable flag or CHEMX_MIN_GRADE / CHEMX_MIN_SCORE value is a usage error; an unusable
+ * config or CHEMX_DEFAULT_MIN_* value is skipped with a one-line stderr warning. An integer-valued
+ * decimal score such as 100.0 is that integer. A quoted value prints only printable ASCII.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -33,7 +34,7 @@ const ROWS = [
   ['the lowest floors count: F and 0 from config', DEFAULTS, {}, { minGrade: 'F', minScore: 0 }, { minGrade: 'F', minScore: 0 }],
   ['an empty env value is unset', [], { CHEMX_MIN_GRADE: '', CHEMX_MIN_SCORE: '' }, { minGrade: 'a', minScore: '75' }, { minGrade: 'A', minScore: 75 }],
   ['an empty flag value is unset', ['--min-grade=', '--min-score='], {}, { minGrade: 'C', minScore: 60 }, { minGrade: 'C', minScore: 60 }],
-  ['an unusable value is skipped, so the next source applies', DEFAULTS, { CHEMX_MIN_GRADE: 'B+', CHEMX_MIN_SCORE: '101' }, { minGrade: '$(touch x)', minScore: '85.5' }, { minGrade: 'B', minScore: 80 }],
+  ['an unusable config value is skipped, so the next source applies', DEFAULTS, {}, { minGrade: '$(touch x)', minScore: '85.5' }, { minGrade: 'B', minScore: 80 }],
   ['CHEMX_DEFAULT_MIN_* applies when nothing else sets a floor', [], { CHEMX_DEFAULT_MIN_GRADE: 'a', CHEMX_DEFAULT_MIN_SCORE: '75' }, {}, { minGrade: 'A', minScore: 75 }],
   ['config beats CHEMX_DEFAULT_MIN_*', [], ENV_DEFAULTS, { minGrade: 'A+', minScore: 95 }, { minGrade: 'A+', minScore: 95 }],
   ['the default flags beat CHEMX_DEFAULT_MIN_*', ['--default-min-grade=C', '--default-min-score=60'], ENV_DEFAULTS, {}, { minGrade: 'C', minScore: 60 }],
@@ -62,6 +63,29 @@ for (const flag of UNUSABLE_FLAGS) {
 test('resolveAuditFloors: an unusable --default-min-* flag is a usage error even beside a usable --min-*', () => {
   const floors = resolveAuditFloors(['--min-grade=A', '--default-min-grade=Q'], {}, {});
   assert.match(floors.usageError ?? '', /--default-min-grade value "Q"/);
+});
+
+// #253: CHEMX_MIN_GRADE / CHEMX_MIN_SCORE are the operator's own setting, so an unusable one refuses
+// the run as the flag does. 4ea6eb2 read CHEMX_MIN_SCORE=98.5 as 98; skipping it set no floor at all.
+const UNUSABLE_ENV = [['CHEMX_MIN_SCORE', '98.5'], ['CHEMX_MIN_SCORE', '+98'], ['CHEMX_MIN_SCORE', '98abc'], ['CHEMX_MIN_SCORE', '150'], ['CHEMX_MIN_GRADE', 'B+'], ['CHEMX_MIN_GRADE', 'Q']];
+
+for (const [name, value] of UNUSABLE_ENV) {
+  test(`resolveAuditFloors: ${name}=${value} is a usage error naming the variable and its value`, () => {
+    const floors = resolveAuditFloors(DEFAULTS, { ...ENV_DEFAULTS, [name]: value }, { minGrade: 'A', minScore: 90 });
+    const isGrade = name === 'CHEMX_MIN_GRADE';
+    const hint = isGrade ? 'use A+, A, B, C, D or F' : 'use an integer from 0 to 100';
+    assert.equal(floors.usageError, `chemx audit: ${name} value ${JSON.stringify(value)} is not a usable floor (${hint}).`);
+  });
+}
+
+test('resolveAuditFloors: an unusable CHEMX_MIN_SCORE is a usage error even beside a usable --min-score', () => {
+  const floors = resolveAuditFloors(['--min-score=90'], { CHEMX_MIN_SCORE: '98.5' }, {});
+  assert.match(floors.usageError ?? 'no usage error', /CHEMX_MIN_SCORE value "98\.5"/);
+});
+
+test('resolveAuditFloors: an unusable flag is named before an unusable CHEMX_MIN_*', () => {
+  const floors = resolveAuditFloors(['--min-score=95.5'], { CHEMX_MIN_SCORE: '95.5' }, {});
+  assert.match(floors.usageError ?? 'no usage error', /^chemx audit: --min-score value "95\.5"/);
 });
 
 // #253: `--min-score 100` used to set no floor without a word. The value may be the next word, as
@@ -109,10 +133,10 @@ for (const [label, rawArgs, name] of MISSING_VALUES) {
 
 // [label, env, config, expected floors, warnings]: each warning names the source and the value.
 const WARNING_ROWS = [
-  ['an unusable env score warns and the config floor applies', { CHEMX_MIN_SCORE: '95.5' }, { minScore: 90 }, { minGrade: '', minScore: 90 }, [/^chemx audit: ignoring CHEMX_MIN_SCORE value "95\.5" .*integer from 0 to 100/]],
+  ['an unusable config score warns and the env default applies', ENV_DEFAULTS, { minScore: '95.5' }, { minGrade: 'B', minScore: 80 }, [/^chemx audit: ignoring minScore value "95\.5" in \.chemx\/config\.json .*integer from 0 to 100/]],
   ['an unusable config grade warns and the env default applies', ENV_DEFAULTS, { minGrade: 'B+' }, { minGrade: 'B', minScore: 80 }, [/ignoring minGrade value "B\+" in \.chemx\/config\.json .*A\+, A, B, C, D or F/]],
   ['an unusable CHEMX_DEFAULT_MIN_GRADE warns and sets no floor', { CHEMX_DEFAULT_MIN_GRADE: 'Q' }, {}, NO_FLOORS, [/ignoring CHEMX_DEFAULT_MIN_GRADE value "Q"/]],
-  ['one warning per skipped source, in precedence order', { CHEMX_MIN_SCORE: '150' }, { minScore: 85.5 }, { minGrade: '', minScore: null }, [/CHEMX_MIN_SCORE value "150"/, /minScore value "85\.5" in \.chemx\/config\.json/]],
+  ['one warning per skipped source, in precedence order', { CHEMX_DEFAULT_MIN_SCORE: '150' }, { minScore: 85.5 }, { minGrade: '', minScore: null }, [/minScore value "85\.5" in \.chemx\/config\.json/, /CHEMX_DEFAULT_MIN_SCORE value "150"/]],
   ['a value with a newline stays on one line', {}, { minGrade: 'A\n$(x)' }, NO_FLOORS, [/^[^\n]*minGrade value "A\\n\$\(x\)"[^\n]*$/]],
   ['a source below the winning one is never read, so it never warns', { CHEMX_MIN_GRADE: 'A', CHEMX_MIN_SCORE: '90' }, { minGrade: 'bogus', minScore: 'bogus' }, { minGrade: 'A', minScore: 90 }, []],
   ['usable sources give no warning', ENV_DEFAULTS, { minGrade: 'C', minScore: 0 }, { minGrade: 'C', minScore: 0 }, []]
@@ -125,6 +149,36 @@ for (const [label, env, config, expected, warnings] of WARNING_ROWS) {
     assert.equal(floors.usageError, null);
     assert.equal(floors.warnings.length, warnings.length, floors.warnings.join('\n'));
     warnings.forEach((pattern, index) => assert.match(floors.warnings[index], pattern));
+  });
+}
+
+// #253: the hooks print these warnings on a passing commit, so a value from a cloned repo's
+// .chemx/config.json reaches the committer's terminal. JSON quoting left C1 controls and bidi
+// overrides raw, so everything outside printable ASCII is a \u escape. [label, value, as quoted]
+const HOSTILE_VALUES = [
+  ['an ESC sequence', 'B\u001b[2J', '"B\\u001b[2J"'],
+  ['a C1 CSI (U+009B)', 'B\u009b2J', '"B\\u009b2J"'],
+  ['C1 controls at both ends of the range', '\u0080B\u009f', '"\\u0080B\\u009f"'],
+  ['a right-to-left override (U+202E)', 'B‮X', '"B\\u202eX"'],
+  ['the bidi embeddings U+202A to U+202D', '‪‫‬‭B', '"\\u202a\\u202b\\u202c\\u202dB"'],
+  ['the bidi isolates U+2066 to U+2069', '⁦⁧⁨B⁩', '"\\u2066\\u2067\\u2068B\\u2069"'],
+  ['DEL', 'B\u007f', '"B\\u007f"'],
+  ['a letter outside ASCII', 'Bé', '"B\\u00e9"'],
+  ['an astral character', 'B\u{1F600}', '"B\\ud83d\\ude00"'],
+  ['a quote, a backslash and a newline, as JSON writes them', 'A"\\\n', '"A\\"\\\\\\n"']
+];
+const PRINTABLE_ASCII = /^[\x20-\x7e]*$/;
+
+for (const [label, value, asQuoted] of HOSTILE_VALUES) {
+  test(`resolveAuditFloors: ${label} in a quoted value prints as printable ASCII`, () => {
+    const config = resolveAuditFloors([], {}, { minGrade: value });
+    assert.equal(config.warnings.length, 1);
+    assert.ok(config.warnings[0].includes(`minGrade value ${asQuoted} in .chemx/config.json`), config.warnings[0]);
+    const refusals = [resolveAuditFloors([], { CHEMX_MIN_GRADE: value }, {}), resolveAuditFloors([`--min-grade=${value}`], {}, {})];
+    for (const text of [...config.warnings, ...refusals.map((floors) => floors.usageError)]) {
+      assert.match(text, PRINTABLE_ASCII, JSON.stringify(text));
+      assert.ok(text.includes(` value ${asQuoted}`), text);
+    }
   });
 }
 
@@ -215,9 +269,26 @@ test('chemx audit: --min-score 95.5 is refused like --min-score=95.5 and nothing
   assert.equal(run.summary.health, undefined, 'no audit ran');
 });
 
-test('chemx audit: an unusable CHEMX_MIN_SCORE warns on stderr and the config floor applies', () => {
-  const run = auditJson('{ "minScore": 100 }', [], { CHEMX_MIN_SCORE: '95.5' });
-  assert.match(run.stderr, /ignoring CHEMX_MIN_SCORE value "95\.5"/);
+// #253: 4ea6eb2 enforced CHEMX_MIN_SCORE=98.5 as 98, so this fixture (score 88) failed. Skipping the
+// value left no floor and the audit passed; the env form now refuses as the flag form does.
+const REFUSED_ENV = [['CHEMX_MIN_SCORE', '98.5'], ['CHEMX_MIN_SCORE', '98abc'], ['CHEMX_MIN_GRADE', 'Q']];
+
+for (const [name, value] of REFUSED_ENV) {
+  test(`chemx audit: ${name}=${value} is refused as a usage error and nothing is audited`, () => {
+    const run = auditJson('{}', [], { [name]: value });
+    const named = `${name} value ${JSON.stringify(value)} is not a usable floor`;
+    assert.equal(run.status, 1, run.output);
+    assert.equal(run.summary.success, false, run.output);
+    assert.ok(run.summary.error?.includes(named), run.output);
+    assert.ok(run.stderr.includes(named), run.output);
+    assert.doesNotMatch(run.stderr, /ignoring/);
+    assert.equal(run.summary.health, undefined, 'no audit ran');
+  });
+}
+
+test('chemx audit: an unusable config minScore warns on stderr and CHEMX_DEFAULT_MIN_SCORE applies', () => {
+  const run = auditJson('{ "minScore": 95.5 }', [], { CHEMX_DEFAULT_MIN_SCORE: '100' });
+  assert.match(run.stderr, /ignoring minScore value "95\.5" in \.chemx\/config\.json/);
   assert.match(run.summary.gate.note ?? '', /below minimum 100/, run.output);
   assert.equal(run.status, 1);
 });

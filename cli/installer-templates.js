@@ -144,8 +144,8 @@ if [ -n "\$AUDIT_BIN" ]; then
     printf "   That skips only this hook. chemx verify fails on these only when a chemx-ratchet.json baseline exists and the rule is above it; without a ratchet, verify gates CRITICAL/HIGH only.\\n\\n"
     exit 1
   fi
-  # A passing audit's output stays hidden, but a floor it skipped (an unusable CHEMX_MIN_* or
-  # config value) is still named on stderr.
+  # A passing audit's output stays hidden, but a floor it skipped (an unusable config value; an
+  # unusable CHEMX_MIN_* blocks instead) is still named on stderr.
   printf "%s\\n" "\$AUDIT_OUT" | while IFS= read -r AUDIT_LINE; do
     case "\$AUDIT_LINE" in
       "⚠ chemx audit: ignoring "*)
