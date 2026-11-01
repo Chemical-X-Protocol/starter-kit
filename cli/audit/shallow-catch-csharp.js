@@ -5,11 +5,12 @@
  * catch text inside a string or a comment never does.
  *
  * Annotation window for a C# shallow catch, in the shape suppressions.js reads: the catch's
- * own lines (line..endLine) and 0-based columns of the catch keyword (catchColumn), its closing
- * brace (endColumn), the try that owns it (tryLine, tryColumn, and tryBraceLine/tryBraceColumn
- * just past the try block's closing brace) and where a trailing annotation stops being this
- * catch's (trailEndColumn). Severity stays at the registry MEDIUM with no escalation, because
- * C# definite assignment (CS0165) already rejects reading an unset local.
+ * own lines (line..endLine) and 0-based columns of the catch keyword (catchColumn, which is
+ * also the finding's column, so two catches on one line are two findings), its closing brace
+ * (endColumn), the try that owns it (tryLine, tryColumn, and tryBraceLine/tryBraceColumn just
+ * past the try block's closing brace) and where a trailing annotation stops being this catch's
+ * (trailEndColumn). Severity stays at the registry MEDIUM with no escalation, because C#
+ * definite assignment (CS0165) already rejects reading an unset local.
  */
 const BRACE_DEPTH_STEP = Object.freeze({ '}': 1, '{': -1 });
 const FORWARD_DEPTH_STEP = Object.freeze({ '{': 1, '}': -1 });
@@ -129,7 +130,8 @@ export const findCSharpShallowCatches = (maskedContent) => [...maskedContent.mat
 export const resolveCSharpCatchSpan = (match, { content, maskedContent }, lineNum) => {
   const matchEnd = match.index + match.text.length;
   const endLine = lineNum + (match.text.match(/\n/g) || []).length;
-  const span = { endLine, catchColumn: columnAt(content, match.index), endColumn: columnAt(content, matchEnd) };
+  const catchColumn = columnAt(content, match.index);
+  const span = { endLine, column: catchColumn, catchColumn, endColumn: columnAt(content, matchEnd) };
   const trailEnd = findTrailEnd(maskedContent, matchEnd);
   const hasTrailEnd = trailEnd !== -1;
   if (hasTrailEnd) span.trailEndColumn = columnAt(content, trailEnd);

@@ -144,6 +144,29 @@ test('a check on another binding, or a read after the branch, still escalates', 
   assertOne('let v;\ntry { v = f(); } catch {}\nconst x = v.x;\n', 'HIGH');
 });
 
+// C3: the consequent of an if or a conditional and the right side of && run once the test held,
+// so only a test that fails while the binding is unset guards them.
+test('an unset check guards nothing that runs once it held (C3)', () => {
+  assertOne('let v;\ntry { v = f(); } catch {}\nuse(a && !v && v.x);\n', 'HIGH');
+  assertOne('let v;\ntry { v = f(); } catch {}\nif (a && !v) use(v.x);\n', 'HIGH');
+  assertOne('let v;\ntry { v = f(); } catch {}\nif (a && v == null) use(v.x);\n', 'HIGH');
+  assertOne('let v;\ntry { v = f(); } catch {}\nif (!v) use(v.x);\n', 'HIGH');
+  assertOne('let v;\ntry { v = f(); } catch {}\nuse(!v && v.x);\n', 'HIGH');
+  assertOne('let v;\ntry { v = f(); } catch {}\nconst x = v === undefined ? v.x : d;\n', 'HIGH');
+  assertOne('let v;\ntry { v = f(); } catch {}\nif (typeof v === "undefined") use(v.x);\n', 'HIGH');
+  assertOne('let v;\ntry { v = f(); } catch {}\nif (v) skip();\nelse use(v.x);\n', 'HIGH');
+});
+
+test('a set check guards what runs once it held, and an unset check what runs once it failed (C3)', () => {
+  assertOne('let v;\ntry { v = f(); } catch {}\nuse(a && !!v && v.x);\n', 'MEDIUM');
+  assertOne('let v;\ntry { v = f(); } catch {}\nif (a && v != null) use(v.x);\n', 'MEDIUM');
+  assertOne('let v;\ntry { v = f(); } catch {}\nif (v !== undefined && a) use(v.x);\n', 'MEDIUM');
+  assertOne('let v;\ntry { v = f(); } catch {}\nif (typeof v !== "undefined") use(v.x);\n', 'MEDIUM');
+  assertOne('let v;\ntry { v = f(); } catch {}\nif (!v) skip();\nelse use(v.x);\n', 'MEDIUM');
+  assertOne('let v;\ntry { v = f(); } catch {}\nconst x = v === undefined ? d : v.x;\n', 'MEDIUM');
+  assertOne('let v;\ntry { v = f(); } catch {}\nif (!v || a) skip();\nelse use(v.x);\n', 'MEDIUM');
+});
+
 test('a write inside a nested function is not a default, before or after the try', () => {
   assertOne(writeThenRead('run(() => { v = d; });'), 'HIGH');
   assertOne(writeThenRead('setTimeout(() => { v = d; });'), 'HIGH');
@@ -176,6 +199,49 @@ test('a write that always runs before the read is a default, even inside a branc
   assertOne(writeThenRead('while (!v) v = next();'), 'MEDIUM');
   assertOne(writeThenRead('v ?? (v = d);'), 'MEDIUM');
   assertOne(writeThenRead('try { g(); } finally { v = d; }'), 'MEDIUM');
+});
+
+test('writes that together cover every path are a default (C2)', () => {
+  assertOne(writeThenRead('if (c) v = 1;\nelse v = 2;'), 'MEDIUM');
+  assertOne(writeThenRead('if (a) v = 1;\nelse if (b) { log(); v = 2; }\nelse v = 3;'), 'MEDIUM');
+  assertOne(writeThenRead('c ? (v = 1) : (v = 2);'), 'MEDIUM');
+  assertOne(writeThenRead('switch (k) {\n  case 1:\n    v = 1;\n    break;\n  default:\n    v = 2;\n}'), 'MEDIUM');
+  assertOne(writeThenRead('switch (k) {\n  case 1:\n  case 2:\n    v = 1;\n    break;\n  default:\n    v = 2;\n}'), 'MEDIUM');
+  assertOne(writeThenRead('(() => { v = d; })();'), 'MEDIUM');
+  assertOne(writeThenRead('(function () { v = d; })();'), 'MEDIUM');
+  assertOne('let v;\nif (c) v = 1;\nelse v = 2;\ntry { v = f(); } catch {}\nuse(v);\n', 'MEDIUM');
+});
+
+test('a path left unwritten, or a function body that may not run when called, is still no default (C2)', () => {
+  assertOne(writeThenRead('switch (k) {\n  case 1:\n    v = 1;\n    break;\n  case 2:\n    v = 2;\n}'), 'HIGH');
+  assertOne(writeThenRead('switch (k) {\n  case 1:\n    break;\n  default:\n    v = 2;\n}'), 'HIGH');
+  assertOne(writeThenRead('switch (k) {\n  case 1:\n    v = 1;\n  default:\n}'), 'HIGH');
+  assertOne(writeThenRead('if (a) v = 1;\nelse if (b) v = 2;'), 'HIGH');
+  assertOne(writeThenRead('c ? (v = 1) : (v += 2);'), 'HIGH');
+  assertOne('let v;\ntry { v = f(); } catch {}\nif (c) v = 1;\nelse { use(v.x); v = 2; }\n', 'HIGH');
+  assertOne(writeThenRead('(() => { if (c) v = d; })();'), 'HIGH');
+  assertOne(writeThenRead('(async () => { await x; v = d; })();'), 'HIGH');
+  assertOne(writeThenRead('(function* () { v = d; })();'), 'HIGH');
+});
+
+test('a write that runs only while the binding is set, or in a loop head, is not a default (C2)', () => {
+  assertOne(writeThenRead('if (v) v = v.trim();'), 'HIGH');
+  assertOne(writeThenRead('if (v != null) v = norm(v);'), 'HIGH');
+  assertOne(writeThenRead('if (!v) skip();\nelse v = d;'), 'HIGH');
+  assertOne(writeThenRead('v && (v = d);'), 'HIGH');
+  assertOne(writeThenRead('for (v of xs) {}'), 'HIGH');
+  assertOne(writeThenRead('for (v in o) {}'), 'HIGH');
+  assertOne('let v;\nif (v) v = 1;\ntry { v = f(); } catch {}\nuse(v.x);\n', 'HIGH');
+  assertOne('function g() {\n  for (var v of xs) {}\n  try { v = f(); } catch {}\n  return v.x;\n}\n', 'HIGH');
+});
+
+test('a write that runs whenever the binding is unset is a default (C2)', () => {
+  assertOne(writeThenRead('if (v) keep();\nelse v = d;'), 'MEDIUM');
+  assertOne(writeThenRead('if (v == null) v = d;'), 'MEDIUM');
+  assertOne(writeThenRead('v || (v = d);'), 'MEDIUM');
+  assertOne(writeThenRead('!v && (v = d);'), 'MEDIUM');
+  assertOne(writeThenRead('if (v != null && ok) keep();\nelse v = d;'), 'MEDIUM');
+  assertOne(writeThenRead('if (v == null && ok) v = d;'), 'HIGH');
 });
 
 test('a real initializer or an assignment before the try keeps it MEDIUM', () => {

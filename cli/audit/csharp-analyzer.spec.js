@@ -322,6 +322,17 @@ test("csharp-analyzer: two tries on one line are owned by column, not by line (C
   assert.deepEqual(csharpCatchColumns(above), [[2, above.split("\n")[1].lastIndexOf("catch")]]);
 });
 
+test("csharp-analyzer: two shallow catches on one line are two findings at their catch columns (C4)", () => {
+  const twoOnOneLine = wrapCSharpMethod("        try { A(); } catch { } try { B(); } catch { }");
+  const line = twoOnOneLine.split("\n")[4];
+  const columns = (code) => csharpCatchHits(code).map((hit) => [hit.line, hit.column]);
+  assert.deepEqual(columns(twoOnOneLine), [[5, line.indexOf("catch")], [5, line.lastIndexOf("catch")]]);
+  const firstAnnotated = wrapCSharpMethod("        try { A(); } catch { } /* chemx-allow: best-effort a */ try { B(); } catch { }");
+  assert.deepEqual(columns(firstAnnotated), [[5, firstAnnotated.split("\n")[4].lastIndexOf("catch")]]);
+  const multiLine = wrapCSharpCatch("        catch (Exception)\n        {\n        }");
+  assert.deepEqual(columns(multiLine), [[10, "        ".length]]);
+});
+
 // C5: the scan reads masked content (comments and strings blanked, offsets kept), so a body that
 // holds only comments is empty, a when filter may sit before it, and quoted catch text never counts.
 test("csharp-analyzer: a comment-only body or a when filter is still a shallow catch (C5)", () => {

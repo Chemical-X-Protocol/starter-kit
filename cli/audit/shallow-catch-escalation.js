@@ -5,12 +5,16 @@
  * a swallowed error silently propagates as undefined. Reads that supply their own default or
  * check the binding first (shallow-catch-reads.js) do not escalate. A later or earlier write
  * is a default only when it always runs, so not inside a nested function or under a branch,
- * loop, switch case or catch that may skip it.
+ * loop, switch case or catch that may skip it, unless that part runs whenever the binding is
+ * unset (if (!v) v = d) or the if, conditional, switch or invoked function around it writes on
+ * every path (if (c) v = 1; else v = 2, see shallow-catch-writes.js). A for-in or for-of head
+ * writes only for a non-empty iterable, so it is a default only inside its own loop.
  */
 import * as t from '@babel/types';
 import { isShallowCatchClause } from './rules-predicates.js';
 import { isSwallowedCatch } from './catch-predicates.js';
-import { isCheckOfBinding, isCoveredRead, isUndefinedValue, isWithinNode } from './shallow-catch-reads.js';
+import { isCoveredRead, isUndefinedValue, isWithinNode, readUnsetOutcome } from './shallow-catch-reads.js';
+import { writesOnEveryPath } from './shallow-catch-writes.js';
 
 const SWALLOWABLE_KINDS = new Set(['let', 'var']);
 const DEFAULTING_ASSIGNMENTS = new Set(['=', '??=', '||=']);
@@ -85,13 +89,19 @@ const isInOtherSwallowedTry = (writePath, tryNode) => {
   return Boolean(swallowingTry);
 };
 
-// The test that decides whether a skippable part runs: the left side of a logical, otherwise
-// the test of the branch or loop (none for for-in and for-of).
-const readSkipTest = (node) => (t.isLogicalExpression(node) ? node.left : node.test);
+// The test that decides whether a skippable part runs, and the outcome it runs on: the right
+// side of && once the left held, of || and ?? once it failed (an unset binding is nullish as
+// well as falsy), an alternate once its test failed, and any other part while its test holds.
+// A for-in or for-of body has no test.
+const readPartCondition = (node, key) => {
+  if (t.isLogicalExpression(node)) return { test: node.left, runsOn: node.operator === '&&' };
+  return { test: node.test ?? null, runsOn: key !== 'alternate' };
+};
 
 // Whether stepping from childPath up to its parent leaves a part that may not run. A function
-// body runs only when called. A branch or loop part whose test checks the binding (if (!v)
-// v = d) is there to supply the value, so it still counts as a default.
+// body runs only when called. A branch or loop part that runs whenever the binding is unset
+// (if (!v) v = d, v || (v = d)) is there to supply the value, so it still counts as a default;
+// one that runs only while the binding is set (if (v) v = v.trim()) does not.
 const isSkippableStep = (childPath, binding) => {
   const parentPath = childPath.parentPath;
   const isSkippableNode = parentPath.isFunction() || SKIPPABLE_NODES.has(parentPath.type);
@@ -99,18 +109,53 @@ const isSkippableStep = (childPath, binding) => {
   const parts = Object.hasOwn(SKIPPABLE_PARTS, parentPath.type) ? SKIPPABLE_PARTS[parentPath.type] : [];
   const isSkippablePart = parts.includes(childPath.key);
   if (!isSkippablePart) return false;
-  return !isCheckOfBinding(readSkipTest(parentPath.node), binding);
+  const { test, runsOn } = readPartCondition(parentPath.node, childPath.key);
+  return readUnsetOutcome(test, binding) !== runsOn;
+};
+
+// The node whose every path must write for a skippable step to be covered: the switch around a
+// case, the call around a function (shallow-catch-writes.js checks that it calls it), otherwise
+// the parent itself.
+const readCoverNode = (parentPath) => {
+  if (parentPath.isSwitchCase()) return parentPath.parent;
+  if (parentPath.isFunction()) return t.isCallExpression(parentPath.parent) ? parentPath.parent : null;
+  return parentPath.node;
+};
+
+// A skippable step still leads to a default when the node around it writes the binding on every
+// path (if (c) v = 1; else v = 2) and no anchor sits inside that node, where it could run first.
+// Each cover is worked out once per binding (context.covers).
+const isCoveredStep = (childPath, context, anchors) => {
+  const cover = readCoverNode(childPath.parentPath);
+  if (!cover) return false;
+  const holdsAnchor = anchors.some((anchor) => isWithinNode(anchor, cover));
+  if (holdsAnchor) return false;
+  const isKnown = context.covers.has(cover);
+  if (!isKnown) context.covers.set(cover, writesOnEveryPath(cover, context.writeNodes));
+  return context.covers.get(cover);
+};
+
+// The for-in or for-of loop whose head writes the binding (for (v of xs), for (var v in o)).
+const findHeadLoop = (writePath) => {
+  if (writePath.isForXStatement()) return writePath;
+  const declaration = writePath.parentPath;
+  const isHeadDeclarator = writePath.isVariableDeclarator() && declaration.key === 'left' && declaration.parentPath.isForXStatement();
+  return isHeadDeclarator ? declaration.parentPath : null;
 };
 
 // A write supplies a default only if nothing can skip it on the way to its anchors (the try,
 // and for a later write the read). Climbing from the write, the first ancestor that holds an
 // anchor ends the walk; a function, branch, loop, switch case or catch crossed before it may
-// skip the write (setTimeout(() => { v = d; }), if (cond) v = d, while (false) v = d).
-const isGuaranteedWrite = (writePath, binding, anchors) => {
+// skip the write (setTimeout(() => { v = d; }), if (cond) v = d, while (false) v = d) unless
+// the node around it covers every path. A loop head runs only for an item, so it guards only
+// anchors inside its own body.
+const isGuaranteedWrite = (writePath, context, anchors) => {
+  const headLoop = findHeadLoop(writePath);
+  if (headLoop) return anchors.some((anchor) => isWithinNode(anchor, headLoop.node.body));
   for (let childPath = writePath; childPath.parentPath; childPath = childPath.parentPath) {
     const holdsAnchor = anchors.some((anchor) => isWithinNode(anchor, childPath.node));
     if (holdsAnchor) return true;
-    const isSkippable = isSkippableStep(childPath, binding);
+    const isSkippable = isSkippableStep(childPath, context.binding) && !isCoveredStep(childPath, context, anchors);
     if (isSkippable) return false;
   }
   return true;
@@ -136,6 +181,11 @@ const listValueWrites = (binding, tryNode) => {
     .map((writePath) => ({ path: writePath, start: writePath.node.start, guardedFrom: resolveGuardedFrom(writePath) }));
 };
 
+// Writes that leave the binding set however it started (=, ??=, ||=), the ones that can cover a path.
+const collectDefaultingNodes = (writes) => new Set(writes
+  .filter((write) => write.path.isAssignmentExpression() && Number.isFinite(write.guardedFrom))
+  .map((write) => write.path.node));
+
 // Babel lists the bare head of for (v of xs) among the references, but it is the write.
 const isLoopHeadTarget = (refPath) => refPath.parentPath.isForXStatement() && refPath.key === 'left';
 
@@ -153,14 +203,15 @@ const isReadUnsetAfterTry = (binding, tryNode, fnScope) => {
   if (!isCandidate) return false;
 
   const writes = listValueWrites(binding, tryNode);
-  const isEarlierValue = (write) => write.start < tryNode.start && isGuaranteedWrite(write.path, binding, [tryNode]);
+  const context = { binding, writeNodes: collectDefaultingNodes(writes), covers: new Map() };
+  const isEarlierValue = (write) => write.start < tryNode.start && isGuaranteedWrite(write.path, context, [tryNode]);
   const hasEarlierValue = writes.some(isEarlierValue);
   if (hasEarlierValue) return false;
   const laterWrites = writes.filter((write) => write.start > tryNode.end);
   // A later write guards a read from its guardedFrom offset on, if it always runs before it.
   const isGuardedByWrite = (ref) => laterWrites.some((write) => {
     const isPastGuard = ref.node.start >= write.guardedFrom;
-    return isPastGuard && isGuaranteedWrite(write.path, binding, [tryNode, ref.node]);
+    return isPastGuard && isGuaranteedWrite(write.path, context, [tryNode, ref.node]);
   });
 
   return binding.referencePaths.some((ref) => {

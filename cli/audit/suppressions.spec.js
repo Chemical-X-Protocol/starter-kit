@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parsePhp } from '../php/php-parse.js';
 import { buildPhpCommentRegions, phpHeaderEndLine } from '../php/php-comments.js';
+import { auditCode } from './rules.js';
 import { applyAuditPostFilters, parseAllowAnnotation, parseAllowAnnotations } from './suppressions.js';
 
 const filter = (src, violations) => {
@@ -81,4 +82,29 @@ test('a block annotation open at the end of its marker line lasts to the closer,
   assert.deepEqual([trailingCode.lastLine, trailingCode.isCommentOnly], [3, false]);
   const [jsdoc] = parseAllowAnnotations(['/**', ' * chemx-allow: best-effort reason', ' */']);
   assert.deepEqual([jsdoc.lastLine, jsdoc.isCommentOnly], [3, true]);
+});
+
+// The line scanner path (JS, TS, C#): a synthetic finding on one line, filtered with no PHP regions.
+const scanned = (src, line) => applyAuditPostFilters([v(line)], src.split('\n')).filter((x) => x.rule === 'X_RULE').length;
+
+test('a comment-only block annotation covers its own lines, a closer line shared with code and the line below (SC-4)', () => {
+  const shared = '/* chemx-allow: X_RULE legacy api\n */ code();\nmore();\nlast();\n';
+  assert.deepEqual([1, 2, 3, 4].map((line) => scanned(shared, line)), [0, 0, 0, 1]);
+  const below = '/* chemx-allow: X_RULE legacy api\n * still the comment\n */\ncode();\nmore();\n';
+  assert.deepEqual([2, 3, 4, 5].map((line) => scanned(below, line)), [0, 0, 0, 1]);
+  assert.equal(scanned('f(); /* chemx-allow: X_RULE legacy api\n */ code();\n', 2), 1);
+});
+
+test('a PHP block annotation with its reason on the marker line lasts to its closer (SC-4)', () => {
+  const shared = '<?php\n/* chemx-allow: X_RULE legacy api\n */ $a = 1;\n$b = 2;\n$c = 3;\n';
+  assert.deepEqual([3, 4, 5].map((line) => filter(shared, [v(line)]).length), [0, 0, 1]);
+  const below = '<?php\n/* chemx-allow: X_RULE legacy api\n * still the comment */\n$a = 1;\n';
+  assert.equal(filter(below, [v(4)]).length, 0);
+  const lineComment = '<?php\n// chemx-allow: X_RULE legacy api\n$a = 1;\n$b = 2;\n';
+  assert.deepEqual([filter(lineComment, [v(3)]).length, filter(lineComment, [v(4)]).length], [0, 1]);
+  const catchFamily = '<?php\nfunction g() {\n  /* chemx-allow: best-effort warm\n   * more */\n  try { a(); } catch (Exception $e) {}\n}\n';
+  const hits = auditCode(catchFamily, 'src/x.php', 'src/x.php', { config: {} }).filter((x) => x.rule === 'ERROR_SWALLOWED_EXCEPTION');
+  assert.deepEqual(hits, []);
+  const unannotated = auditCode(catchFamily.replace('chemx-allow: ', ''), 'src/x.php', 'src/x.php', { config: {} });
+  assert.equal(unannotated.filter((x) => x.rule === 'ERROR_SWALLOWED_EXCEPTION').length, 1);
 });

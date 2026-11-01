@@ -187,6 +187,28 @@ test('a block annotation whose marker line carries the reason counts when its cl
   assertFlagged('doThing(); /*\n * chemx-allow: best-effort the comment trails code\n */\ntry { b(); } catch {}\n');
 });
 
+test('a block annotation whose closer shares a line with the flagged code still covers it (SC-4)', () => {
+  const lazyAny = (code) => rulesAt(audit(code, 'src/x.ts'), 'AI_SLOP_LAZY_ANY');
+  assert.deepEqual(lazyAny('/* chemx-allow: AI_SLOP_LAZY_ANY legacy api\n */ try { a(); } catch (e: any) { handle(e); }\n'), []);
+  assert.deepEqual(lazyAny('/* chemx-allow: AI_SLOP_LAZY_ANY\n * legacy api */ try { a(); } catch (e: any) { handle(e); }\n'), []);
+  assert.equal(lazyAny('/* chemx-allow: AI_SLOP_LAZY_ANY legacy api\n */\nconst ok = 1;\ntry { a(); } catch (e: any) { handle(e); }\n').length, 1);
+  assertExempt('export const g = () => {\n  /* chemx-allow: best-effort warm\n     more */ try { a(); } catch {}\n};\n');
+  assertExempt('/* chemx-allow: best-effort warm cache is optional\n */ try { a(); } catch {}\n');
+  assertExempt('/*\n * chemx-allow: best-effort warm cache is optional\n */ try { a(); } catch {}\n');
+  const later = '/* chemx-allow: best-effort the first catch\n */ try { a(); } catch {} try { b(); } catch {}\n';
+  assert.deepEqual(catchColumns(later), [[2, later.split('\n')[1].lastIndexOf('catch')]]);
+  const trailing = 'try { a(); } catch {} /* chemx-allow: best-effort the first catch\n */ try { b(); } catch {}\n';
+  assert.deepEqual(catchColumns(trailing), [[2, trailing.split('\n')[1].indexOf('catch')]]);
+  assertFlagged('doThing(); /*\n * chemx-allow: best-effort the comment trails code\n */ try { b(); } catch {}\n');
+});
+
+test('a block annotation covers a finding on any of its own comment lines (SC-4)', () => {
+  const emDash = (code) => rulesAt(audit(code, 'src/x.ts'), 'TYPOGRAPHY_EM_DASH');
+  const comment = `/* chemx-allow: TYPOGRAPHY_EM_DASH quoting a title\n * Foo ${EM_DASH} Bar\n */\nexport const a = 1;\n`;
+  assert.equal(emDash(comment.replace(/chemx-allow: TYPOGRAPHY_EM_DASH quoting a title/, 'plain')).length, 1);
+  assert.deepEqual(emDash(comment), []);
+});
+
 // C4: an annotation is owned by the catch it is written for, by column as well as by line.
 const catchColumns = (code) => catchHits(code).map((hit) => [hit.line, hit.column]);
 

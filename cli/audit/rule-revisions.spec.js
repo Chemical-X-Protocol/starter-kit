@@ -188,7 +188,8 @@ const REGISTRY_SNAPSHOT = Object.freeze({
     'TAILWIND_UNSCANNED_CLASS_STRING', 'TEST_FAKE_GREEN', 'TEST_MISSING_COLOCATED', 'TIMER_DISCIPLINE', 'TYPE_COLOCATION',
     'TYPOGRAPHY_EM_DASH', 'UNGUARDED_LOGGING', 'VIEW_MONOLITH'
   ],
-  // Ruleset 13 widened C# shallow-catch detection only (task #259); the registry ids are unchanged.
+  // Ruleset 13 widened C# shallow-catch detection and gave each C# catch its own column (tasks
+  // #259, #253); the registry ids are unchanged.
   13: [
     'A11Y_CLICKABLE_NON_SEMANTIC', 'A11Y_IMAGE_MISSING_ALT', 'AI_SLOP_CONVERSATIONAL_ARTIFACT', 'AI_SLOP_ECHO_COMMENT',
     'AI_SLOP_LAZY_ANY', 'AI_SLOP_LAZY_PLACEHOLDER', 'AI_SLOP_REDUNDANT_PASSTHROUGH', 'AI_SLOP_SHALLOW_CATCH',
@@ -218,7 +219,7 @@ test('ruleset 12 keeps ERROR_SWALLOWED_EXCEPTION at revision 12 (AI_SLOP_SHALLOW
   assert.deepEqual([...REGISTRY_SNAPSHOT[12]].sort(), [...REGISTRY_SNAPSHOT[11]].sort());
 });
 
-test('ruleset 13 moves exactly AI_SLOP_SHALLOW_CATCH to revision 13 (.cs comment-only bodies and when filters)', () => {
+test('ruleset 13 moves exactly AI_SLOP_SHALLOW_CATCH to revision 13 (.cs comment-only bodies, when filters, catch columns)', () => {
   const atThirteen = Object.entries(RULE_REVISIONS).filter(([, rev]) => rev === 13).map(([rule]) => rule).sort();
   assert.deepEqual(atThirteen, ['AI_SLOP_SHALLOW_CATCH']);
   assert.deepEqual([...REGISTRY_SNAPSHOT[13]].sort(), [...REGISTRY_SNAPSHOT[12]].sort());

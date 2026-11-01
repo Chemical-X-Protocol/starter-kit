@@ -1,17 +1,21 @@
 /**
  * Read classification for shallow-catch escalation (truth spec 4.2): whether a read of a
  * binding that a swallowed try may leave unset is already covered, either by a default the
- * read supplies itself, by an explicit check of the binding, or by an early exit after the
- * try that only an unset binding takes.
+ * read supplies itself, by an explicit check of the binding, by a branch whose test rules
+ * out the unset binding, or by an early exit after the try that only an unset binding takes.
  */
 import * as t from '@babel/types';
 
 const DEFAULTING_OPERATORS = new Set(['??', '||']);
 const EQUALITY_OPERATORS = new Set(['==', '===', '!=', '!==']);
-const UNSET_EQUALITY_OPERATORS = new Set(['==', '===']);
+const NEGATED_EQUALITY_OPERATORS = new Set(['!=', '!==']);
+const LOOSE_EQUALITY_OPERATORS = new Set(['==', '!=']);
 const CHECKING_UNARIES = new Set(['typeof', '!']);
 const BRANCHING_TYPES = new Set(['IfStatement', 'ConditionalExpression']);
-const EXIT_TYPES = new Set(['ReturnStatement', 'ThrowStatement', 'ContinueStatement', 'BreakStatement']);
+export const EXIT_TYPES = new Set(['ReturnStatement', 'ThrowStatement', 'ContinueStatement', 'BreakStatement']);
+// The outcome that settles a chain on its own: one failing link fails an && chain, and one
+// holding link holds an || chain.
+const SETTLING_OUTCOMES = Object.freeze({ '&&': false, '||': true });
 
 export const isUndefinedValue = (node) => {
   const isUndefinedId = t.isIdentifier(node, { name: 'undefined' });
@@ -86,70 +90,78 @@ const isCheckRead = (refPath) => {
   return isCheckOperand && readCheckedIdentifier(parent) === refPath.node;
 };
 
-// The identifier a comparison is true for while it is unset: == with null, undefined or void 0,
-// === with undefined or void 0, or typeof compared with 'undefined'. v === null and v != null
-// are false for an unset v, so they check nothing here.
-const readUnsetComparedIdentifier = (node) => {
-  const sides = [node.left, node.right];
-  const typeofSide = sides.find((side) => t.isUnaryExpression(side, { operator: 'typeof' }));
-  const comparesUndefinedType = sides.some((side) => t.isStringLiteral(side, { value: 'undefined' }));
-  if (typeofSide) return comparesUndefinedType ? typeofSide.argument : null;
-  const isLooseEquality = node.operator === '==';
-  const matchesUnset = isLooseEquality ? isNullishValue : isUndefinedValue;
-  const comparesUnset = sides.some(matchesUnset);
-  if (!comparesUnset) return null;
-  return sides.find((side) => t.isIdentifier(side) && !isNullishValue(side)) || null;
-};
-
-// The identifier a test checks for being unset: !v, or a comparison that holds for an unset v.
-const readUnsetCheckedIdentifier = (node) => {
-  const isNegatedIdentifier = t.isUnaryExpression(node, { operator: '!' }) && t.isIdentifier(node.argument);
-  if (isNegatedIdentifier) return node.argument;
-  const isUnsetComparison = t.isBinaryExpression(node) && UNSET_EQUALITY_OPERATORS.has(node.operator);
-  return isUnsetComparison ? readUnsetComparedIdentifier(node) : null;
-};
-
 const isReferenceOf = (node, binding) => Boolean(node) && binding.referencePaths.some((ref) => ref.node === node);
 
-/** Whether a test checks the binding itself (v, !v, typeof v, v == null), for either outcome. */
-export const isCheckOfBinding = (test, binding) => isReferenceOf(readCheckedIdentifier(test), binding);
+const isTypeofOf = (node, binding) => t.isUnaryExpression(node, { operator: 'typeof' }) && isReferenceOf(node.argument, binding);
 
-// A check of the binding anywhere in an && chain: every later link, and the branches the
-// chain tests, run only once that check passed (v && v.a && v.b).
-const isGuardOfBinding = (test, binding) => {
-  const isAndChain = t.isLogicalExpression(test, { operator: '&&' });
-  if (isAndChain) return isGuardOfBinding(test.left, binding) || isGuardOfBinding(test.right, binding);
-  return isCheckOfBinding(test, binding);
+// The operand across a comparison from the side isMatch picks, or undefined when neither side matches.
+const readOtherSide = (node, isMatch) => {
+  if (isMatch(node.left)) return node.right;
+  return isMatch(node.right) ? node.left : undefined;
 };
 
-// A test that holds while the binding is unset, alone or as any operand of an || chain. Code
-// that runs only once it failed (the right side of ||, the block after an early exit) sees a
-// value, so v || v.x and ok || v.x still escalate.
-const isUnsetCheckOfBinding = (test, binding) => {
-  const isOrChain = t.isLogicalExpression(test, { operator: '||' });
-  if (isOrChain) return isUnsetCheckOfBinding(test.left, binding) || isUnsetCheckOfBinding(test.right, binding);
-  return isReferenceOf(readUnsetCheckedIdentifier(test), binding);
+// What v == x or v === x gives while v is unset: typeof v against a string literal, or v against
+// undefined, void 0 or null (where only the loose == holds). Any other comparison gives null.
+const readUnsetEquality = (node, binding) => {
+  const typeofOther = readOtherSide(node, (side) => isTypeofOf(side, binding));
+  if (typeofOther) return t.isStringLiteral(typeofOther) ? typeofOther.value === 'undefined' : null;
+  const other = readOtherSide(node, (side) => isReferenceOf(side, binding));
+  if (!other) return null;
+  if (isUndefinedValue(other)) return true;
+  return t.isNullLiteral(other) ? LOOSE_EQUALITY_OPERATORS.has(node.operator) : null;
 };
 
-const LOGICAL_GUARDS = Object.freeze({ '&&': isGuardOfBinding, '||': isUnsetCheckOfBinding });
+const negateOutcome = (outcome) => (outcome === null ? null : !outcome);
 
-// The parts of a node that run only once its test has been evaluated, and the check of the
-// binding that test must make: both branches of an if or a conditional and the right side of
-// && run after any check, the right side of || only after a check for unset failed.
+const readComparisonOutcome = (node, binding) => {
+  const equality = readUnsetEquality(node, binding);
+  return NEGATED_EQUALITY_OPERATORS.has(node.operator) ? negateOutcome(equality) : equality;
+};
+
+const isChain = (node) => t.isLogicalExpression(node) && Object.hasOwn(SETTLING_OUTCOMES, node.operator);
+
+// An && or || chain settles on one link's settling outcome, takes the other outcome only when
+// every link has it, and depends on something else otherwise.
+const readChainOutcome = (node, binding) => {
+  const settling = SETTLING_OUTCOMES[node.operator];
+  const outcomes = [readUnsetOutcome(node.left, binding), readUnsetOutcome(node.right, binding)];
+  if (outcomes.includes(settling)) return settling;
+  const isEveryOther = outcomes.every((outcome) => outcome === !settling);
+  return isEveryOther ? !settling : null;
+};
+
+/**
+ * What a test gives while the binding is unset: true for an unset check (!v, v == null,
+ * v === undefined, typeof v === 'undefined'), false for a set check (v, !!v, v != null,
+ * v !== undefined, typeof v !== 'undefined'), combined through ! and && or || chains, and null
+ * when it depends on anything else.
+ */
+export const readUnsetOutcome = (test, binding) => {
+  if (isChain(test)) return readChainOutcome(test, binding);
+  const isNegation = t.isUnaryExpression(test, { operator: '!' });
+  if (isNegation) return negateOutcome(readUnsetOutcome(test.argument, binding));
+  if (isReferenceOf(test, binding)) return false;
+  return isEqualityComparison(test) ? readComparisonOutcome(test, binding) : null;
+};
+
+// The parts of a node that run on one outcome of its test, with that outcome: the right side of
+// && and the consequent of an if or a conditional once the test held, the right side of || and
+// the alternate once it failed.
 const readGuardShape = (node) => {
-  const isGuardingLogical = t.isLogicalExpression(node) && Object.hasOwn(LOGICAL_GUARDS, node.operator);
-  if (isGuardingLogical) return { test: node.left, branches: [node.right], isGuard: LOGICAL_GUARDS[node.operator] };
+  if (isChain(node)) return { test: node.left, parts: [{ node: node.right, runsOn: node.operator === '&&' }] };
   const isBranching = BRANCHING_TYPES.has(node.type);
   if (!isBranching) return null;
-  return { test: node.test, branches: [node.consequent, node.alternate].filter(Boolean), isGuard: isGuardOfBinding };
+  return { test: node.test, parts: [{ node: node.consequent, runsOn: true }, { node: node.alternate, runsOn: false }] };
 };
 
+// A read in a part that never runs while the binding is unset, because its test then has the
+// other outcome: v && v.a, if (v != null) use(v.a), v == null || v.a, but not !v && v.a.
 const isInCheckedBranch = (refPath, binding) => {
   const guard = refPath.findParent((ancestor) => {
     const shape = readGuardShape(ancestor.node);
     if (!shape) return false;
-    const isInBranch = shape.branches.some((branch) => isWithinNode(refPath.node, branch));
-    return isInBranch && shape.isGuard(shape.test, binding);
+    const part = shape.parts.find((candidate) => Boolean(candidate.node) && isWithinNode(refPath.node, candidate.node));
+    return Boolean(part) && readUnsetOutcome(shape.test, binding) === !part.runsOn;
   });
   return Boolean(guard);
 };
@@ -166,7 +178,7 @@ const isExitStatement = (node) => {
 const isExitGuardOf = (statement, binding) => {
   const isIf = t.isIfStatement(statement);
   if (!isIf) return false;
-  return isExitStatement(statement.consequent) && isUnsetCheckOfBinding(statement.test, binding);
+  return isExitStatement(statement.consequent) && readUnsetOutcome(statement.test, binding) === true;
 };
 
 // Whether an early exit after the try sits before the read in the read's own block or in a

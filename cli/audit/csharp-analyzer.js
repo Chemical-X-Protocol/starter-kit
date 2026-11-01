@@ -355,7 +355,6 @@ export const analyzeCSharpCode = (content, relativePath, violations, config = {}
       filePath: relativePath,
       line: lineNum,
       ...resolveCSharpCatchSpan(m, { content, maskedContent }, lineNum),
-      column: 1,
       hazard: 'Empty or shallow catch block detected in C# handler/service',
       rule: 'AI_SLOP_SHALLOW_CATCH',
       severity: meta.severity,

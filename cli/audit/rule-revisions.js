@@ -63,7 +63,8 @@ export const RULE_REVISIONS = Object.freeze({
   // AI_SLOP_SHALLOW_CATCH moved on to ruleset 13, below.
   ERROR_SWALLOWED_EXCEPTION: 12,
   // Ruleset 13: C# shallow catches include comment-only bodies and when filters, read from
-  // masked content, so counts can rise (task #259).
+  // masked content (task #259), and report the catch keyword's column, so two on one line are
+  // two findings (task #253); counts can rise.
   AI_SLOP_SHALLOW_CATCH: 13
 });
 
