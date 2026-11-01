@@ -1,0 +1,6 @@
+### Fixed
+
+- `chemx audit --min-score 100`, `--min-grade A` and the `--default-min-*` pair now take their value from the next word too, exactly as the `=` form does: an unusable value is the same usage error, and a floor flag with no value after it (last, or followed by another `--` flag) is a usage error that names the flag. Before, the two-word form set no floor and said nothing. A positional directory before the flags (`chemx audit src --min-score 100`) is still the directory (#253).
+- Pre-commit hooks (`scripts/pre-commit.sh` and the installed hook) print the audit's `⚠ chemx audit: ignoring ...` floor warnings on stderr when the commit passes, not only inside a blocked commit's output, so a skipped `CHEMX_MIN_SCORE=85.5` or `{"minGrade":"Q"}` in `.chemx/config.json` is never silent (#253).
+- `buildPreCommitHookScript` and `buildGitHubWorkflowScript` read a score as `chemx audit` does, so `100.0` and `85.00` render as `100` and `85` instead of the fallback `80`, and the hook and the CI workflow agree with the audit (#253).
+- Behaviour change: a `--min-score` value with a sign, more than three digits or a bare point (`+80`, `-0`, `0100`, `100.`, `.5`) is now a usage error that exits 1. Before, `parseInt` read `+80` as `80`, so a CI variable such as `CHEMX_MIN_SCORE=+80` now fails the audit step until it is written `80` (#253).
