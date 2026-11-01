@@ -53,7 +53,7 @@
     "ui": "node cli/index.js ui",
     "dev:ui": "node cli/index.js ui --dev",
     "dev:ui:watch": "node --watch --watch-path=cli cli/index.js ui --dev",
-    "test": "node --test cli/audit/*.spec.js cli/sfc/*.spec.js cli/mcp/*.spec.js cli/build/*.spec.js cli/hooks/*.spec.js cli/doctor/*.spec.js cli/team/*.spec.js cli/errors/*.spec.js cli/commands/*.spec.js cli/config/*.spec.js cli/patterns/*.spec.js cli/forge/*.spec.js cli/library/*.spec.js cli/docs-check/*.spec.js cli/friction/*.spec.js cli/telemetry/*.spec.js cli/commit/*.spec.js cli/generator-templates/archetypes/*.spec.js library/*/*/piece.spec.js cli/php/*.spec.js cli/*.spec.js",
+    "test": "node --test cli/audit/*.spec.js cli/sfc/*.spec.js cli/mcp/*.spec.js cli/build/*.spec.js cli/hooks/*.spec.js cli/doctor/*.spec.js cli/team/*.spec.js cli/errors/*.spec.js cli/commands/*.spec.js cli/config/*.spec.js cli/patterns/*.spec.js cli/forge/*.spec.js cli/library/*.spec.js cli/docs-check/*.spec.js cli/friction/*.spec.js cli/telemetry/*.spec.js cli/commit/*.spec.js cli/generator-templates/archetypes/*.spec.js library/*/*/piece.spec.js cli/php/*.spec.js cli/lang/*.spec.js cli/lang/specs/*.spec.js cli/lang/fallback/*.spec.js cli/lang/parity/*.spec.js cli/treesitter/*.spec.js cli/resolve/*.spec.js cli/frameworks/*.spec.js cli/toolchain/*.spec.js cli/toolchain/ecosystems/*.spec.js cli/toolchain/formats/*.spec.js cli/toolchain/manifest/*.spec.js grammars/scripts/*.spec.js cli/*.spec.js",
     "check:frameworks": "node scripts/check-framework-generation.mjs",
     "prepublishOnly": "node scripts/check-framework-generation.mjs",
     "typecheck": "tsc --noEmit",
