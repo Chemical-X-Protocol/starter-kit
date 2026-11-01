@@ -211,18 +211,21 @@ const resolveTrailEndColumn = (catchPath, keywordStarts) => {
  * Where a catch's annotations may sit (suppressions.js): its own lines, 0-based columns of the
  * catch keyword (catchColumn), its closing brace (endColumn), its try keyword (tryLine,
  * tryColumn) and the end of the try block (tryBraceLine, tryBraceColumn), trailEndColumn, and
- * keywordColumns: where every try and catch keyword on the catch's line starts, read from the
- * AST, so a key, method, name, regex, type member or JSX text spelled try or catch is not one.
+ * where every try and catch keyword starts on the catch's line (keywordColumns) and on its last
+ * line when that is another (endKeywordColumns), read from the AST, so a key, method, name,
+ * regex, type member or JSX text spelled try or catch is not one.
  */
 export const resolveCatchSpan = (catchPath) => {
   const node = catchPath.node;
   const line = node.loc?.start.line || 1;
-  const span = { line, endLine: node.loc?.end.line || line, column: node.loc?.start.column || 1 };
+  const endLine = node.loc?.end.line || line;
+  const span = { line, endLine, column: node.loc?.start.column || 1 };
   const tryNode = catchPath.parent;
   const tryBlockEnd = tryNode.block.loc?.end;
   const hasLocations = Boolean(node.loc) && Boolean(tryNode.loc) && Boolean(tryBlockEnd);
   if (!hasLocations) return span;
   const keywordStarts = readKeywordStarts(catchPath);
+  const isOneLine = endLine === line;
   return {
     ...span,
     catchColumn: node.loc.start.column,
@@ -232,6 +235,7 @@ export const resolveCatchSpan = (catchPath) => {
     tryBraceLine: tryBlockEnd.line,
     tryBraceColumn: tryBlockEnd.column,
     trailEndColumn: resolveTrailEndColumn(catchPath, keywordStarts),
-    keywordColumns: listKeywordColumns(keywordStarts, line)
+    keywordColumns: listKeywordColumns(keywordStarts, line),
+    endKeywordColumns: isOneLine ? [] : listKeywordColumns(keywordStarts, endLine)
   };
 };

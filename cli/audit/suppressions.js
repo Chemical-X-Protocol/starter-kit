@@ -8,17 +8,24 @@
  *   comment may carry it on its following lines, and it lasts to its closer either way.
  * - Where an annotation applies. A catch-family finding with columns (JS and C#: catchColumn,
  *   endColumn, tryLine, tryColumn, tryBraceLine/tryBraceColumn at the end of the try block,
- *   trailEndColumn) owns the annotations between its try block's closing brace and its own
- *   closing brace, one after that brace on the same line up to trailEndColumn (where a later
- *   try starts or an enclosing try block, catch or finally closes), one whose comment ends
- *   before the catch keyword on its line (a block comment may open above) with no other try
- *   or catch keyword in between, and one ending on the line above when its comment opened on
- *   a comment-only line and no other try or catch precedes its try on that line. Those keyword
- *   tests read where the finding's keywordColumns say a try or catch keyword starts on its line
- *   (the parser's try statements and catch clauses for JS, masked code for C#), so a comment, a
- *   string, a member, an object or type key, a method, a $, # or @ name, a regex or JSX text
- *   spelled try or catch holds none. The post-filters drop keywordColumns from what they return.
- *   Any other finding (and PHP) uses its lines (line..endLine), an annotation on a
+ *   trailEndColumn, and keywordColumns/endKeywordColumns, where a try or catch keyword starts
+ *   on its first and last line) is read by column (C4) only when one of those lines holds a try
+ *   or catch keyword other than its own and its try's. Then it owns the annotations between its
+ *   try block's closing brace and its own closing brace, one after that brace on the same line
+ *   up to trailEndColumn (where a later try starts or an enclosing try block, catch or finally
+ *   closes), one whose comment ends before the catch keyword on its line (a block comment may
+ *   open above) with no other try or catch keyword in between, and one ending on the line above
+ *   when its comment opened on a comment-only line and no other try or catch precedes its try
+ *   on that line. The keywords are the parser's try statements and catch clauses for JS and
+ *   masked code for C#, so a comment, a string, a member, a key, a method, a $, # or @ name, a
+ *   regex or JSX text spelled try or catch is none. For JS, TS, JSX and Vue the comment
+ *   positions come from the parser's comments (parserComments), so code the line scanner reads
+ *   as a comment (a # name, a regex holding // or /*, JSX text) cannot move them. Every other
+ *   catch, and an annotation no parser comment holds, keeps 4ea6eb2's window: its own lines, a
+ *   comment-only marker line whose reading ends on the line above (reasonEndLine), and the text
+ *   after its try brace. SC-4 adds a block comment opened on a comment-only line that closes on
+ *   the line above or on the catch's line. The post-filters drop the keyword columns from what
+ *   they return. Any other finding (and PHP) uses its lines (line..endLine), an annotation on a
  *   comment-only line through the line below its closer (so the rest of its comment and a
  *   closer line that code shares count, whatever line opened the comment), and the text after
  *   a try brace on the line above (`tryBraceLine`). A covering annotation without a reason
@@ -98,16 +105,22 @@ const readBlockContinuation = (lines, startIdx, closer) => {
 
 // A block comment still open at the end of the marker line lasts to its closer; its later lines
 // give the reason only when the marker line has none.
+// reasonEndLine is where 4ea6eb2's reading of the annotation ended: the marker line when that
+// carries the reason, else the closer's line.
 const continueBlock = (annotation, lines, idx, closer) => {
   const continuation = readBlockContinuation(lines, idx + 1, closer);
-  const reason = annotation.reason === '' ? continuation.reason : annotation.reason;
-  const end = { lastLine: continuation.lastIdx + 1, lastEnd: continuation.lastEnd };
+  const isReasonBelow = annotation.reason === '';
+  const reason = isReasonBelow ? continuation.reason : annotation.reason;
+  const lastLine = continuation.lastIdx + 1;
+  const end = { lastLine, lastEnd: continuation.lastEnd, reasonEndLine: isReasonBelow ? lastLine : annotation.line };
   return { ...buildAnnotation(annotation.token, reason, annotation), ...end };
 };
 
 const findRegion = (regions, index) => regions.find(([start, end]) => index >= start && index < end);
 
-const placeAnnotation = (parsed, idx, region) => ({ ...parsed, line: idx + 1, lastLine: idx + 1, lastEnd: region[1], commentStart: region[0], commentEnd: region[1] });
+const placeAnnotation = (parsed, idx, region) => ({
+  ...parsed, line: idx + 1, lastLine: idx + 1, reasonEndLine: idx + 1, lastEnd: region[1], commentStart: region[0], commentEnd: region[1]
+});
 
 // Every annotation on line idx whose marker sits in one of its comment regions.
 const annotateLine = (lines, idx, regions, finish) => listMarkerIndexes(lines[idx]).flatMap((markerIndex) => {
@@ -208,10 +221,13 @@ const doesTokenCover = (token, rule) => {
 
 const comparePosition = (lineA, columnA, lineB, columnB) => (lineA === lineB ? columnA - columnB : lineA - lineB);
 
+// The column of this catch's own try keyword when it shares the catch's line, else -1.
+const ownTryColumnOf = (violation) => (violation.tryLine === violation.line ? violation.tryColumn : -1);
+
 // Whether a try or catch keyword other than this catch's own try starts on the catch's line at a
 // column in [from, to). The PHP regions path has no catch columns, so it never asks.
 const hasOtherKeywordBetween = (violation, from, to) => {
-  const ownTryColumn = violation.tryLine === violation.line ? violation.tryColumn : -1;
+  const ownTryColumn = ownTryColumnOf(violation);
   const keywordColumns = violation.keywordColumns ?? [];
   return keywordColumns.some((column) => column >= from && column < to && column !== ownTryColumn);
 };
@@ -269,6 +285,76 @@ const isOwnedByCatch = (annotation, violation) => isInOwnClause(annotation, viol
   || isBeforeCatchOnItsLine(annotation, violation)
   || isAboveOwnTry(annotation, violation);
 
+// Whether a try or catch keyword other than this catch's own and its try's starts on the catch's
+// line or on its last line. Only there can another catch claim one of its annotations, so only
+// there is ownership read by column (C4).
+const sharesLineWithOtherKeyword = (violation) => {
+  const ownTryColumn = ownTryColumnOf(violation);
+  const isOtherKeyword = (column) => column !== violation.catchColumn && column !== ownTryColumn;
+  const hasOtherOnCatchLine = (violation.keywordColumns ?? []).some(isOtherKeyword);
+  const hasKeywordOnEndLine = (violation.endKeywordColumns ?? []).length > 0;
+  return hasOtherOnCatchLine || hasKeywordOnEndLine;
+};
+
+// 4ea6eb2's window for a catch that no other try or catch shares a line with: its own lines, a
+// comment-only marker line whose reading ends right above it, and the text after its try brace.
+// SC-4 adds the placed comment (null when there is none) when it opened on a comment-only line
+// and closes on the line above or on the catch's line.
+const isInCatchLineWindow = (annotation, violation, placed) => {
+  const endLine = violation.endLine ?? violation.line;
+  const isWithin = annotation.line >= violation.line && annotation.line <= endLine;
+  const isMarkerAbove = annotation.isCommentOnly && annotation.reasonEndLine === violation.line - 1;
+  const closesAboveOrOnLine = placed?.lastLine === violation.line - 1 || placed?.lastLine === violation.line;
+  const isBlockAbove = Boolean(placed?.opensCommentOnly) && closesAboveOrOnLine;
+  const isAfterTryBrace = annotation.line === violation.tryBraceLine && annotation.markerIndex >= violation.tryBraceColumn;
+  return isWithin || isMarkerAbove || isBlockAbove || isAfterTryBrace;
+};
+
+const holdsPosition = (span, line, column) => comparePosition(span.start.line, span.start.column, line, column) <= 0
+  && comparePosition(line, column, span.end.line, span.end.column) < 0;
+
+// Whether the first code on a line sits in a parser comment, as COMMENT_ONLY_LINE asks of the text.
+const startsWithParserComment = (lines, spans, line) => {
+  const firstColumn = (lines[line - 1] ?? '').search(/\S/);
+  return firstColumn !== -1 && spans.some((span) => holdsPosition(span, line, firstColumn));
+};
+
+// The annotation with its comment's positions as the parser reads them (commentStart is 0 when the
+// comment opened above the marker line), or null when no parser comment holds its marker.
+const placeByParser = (annotation, spans, lines) => {
+  const span = spans.find((candidate) => holdsPosition(candidate, annotation.line, annotation.markerIndex));
+  if (!span) return null;
+  const opensOnMarkerLine = span.start.line === annotation.line;
+  return {
+    ...annotation,
+    commentStart: opensOnMarkerLine ? span.start.column : 0,
+    lastLine: span.end.line,
+    lastEnd: span.end.column,
+    opensCommentOnly: startsWithParserComment(lines, spans, span.start.line)
+  };
+};
+
+// Where an annotation's comment sits for catch ownership and SC-4: the parser's comment when the
+// file has parser comments (JS, TS, JSX, Vue), else the line scanner's region (C#).
+const buildPlacer = (lines, parserComments) => {
+  if (!parserComments) return (annotation) => annotation;
+  const placements = new Map();
+  return (annotation) => {
+    const isPlaced = placements.has(annotation);
+    if (!isPlaced) placements.set(annotation, placeByParser(annotation, parserComments, lines));
+    return placements.get(annotation);
+  };
+};
+
+// A catch is read by column only where another try or catch shares its lines, and only with an
+// annotation it can place; an annotation the parser does not see as a comment keeps main's window.
+const isInCatchWindow = (annotation, violation, context) => {
+  const placed = context.place(annotation);
+  const isReadByColumn = Boolean(placed) && sharesLineWithOtherKeyword(violation);
+  if (isReadByColumn) return isOwnedByCatch(placed, violation);
+  return isInCatchLineWindow(annotation, violation, placed);
+};
+
 // An annotation on a comment-only line covers every line after it through the line below its
 // closer: the rest of its own comment, a closer line that code shares (`*/ code`), the line below.
 // That holds when its comment opened after code on an earlier line too, as on 4ea6eb2, which
@@ -285,7 +371,7 @@ const isInLineWindow = (annotation, violation) => {
 const isAnnotationInRange = (annotation, violation, context) => {
   const isInHeader = violation.line === 1 && annotation.line >= 1 && annotation.line <= context.headerEndLine;
   const hasColumns = Number.isInteger(violation.catchColumn);
-  const isInWindow = hasColumns ? isOwnedByCatch(annotation, violation) : isInLineWindow(annotation, violation);
+  const isInWindow = hasColumns ? isInCatchWindow(annotation, violation, context) : isInLineWindow(annotation, violation);
   return isInHeader || isInWindow;
 };
 
@@ -299,7 +385,7 @@ const listCandidateAnnotations = (violation, context) => {
 const listCoveringAnnotations = (violation, context) => listCandidateAnnotations(violation, context)
   .filter((annotation) => doesTokenCover(annotation.token, violation.rule) && isAnnotationInRange(annotation, violation, context));
 
-/** context: { annotations, lineReadings, headerEndLine }, as applyAuditPostFilters builds it. */
+/** context: { annotations, lineReadings, headerEndLine, place }, as applyAuditPostFilters builds it. */
 export const isSuppressedByAnnotation = (violation, context) =>
   listCoveringAnnotations(violation, context).some((annotation) => annotation.hasReason);
 
@@ -327,18 +413,22 @@ export const dedupeViolations = (violations) => {
   });
 };
 
-// keywordColumns serve catch ownership only, so a returned finding leaves them out.
+// The keyword columns serve catch ownership only, so a returned finding leaves them out.
 const withoutKeywordColumns = (violation) => {
-  const hasKeywordColumns = Object.hasOwn(violation, 'keywordColumns');
+  const hasKeywordColumns = Object.hasOwn(violation, 'keywordColumns') || Object.hasOwn(violation, 'endKeywordColumns');
   if (!hasKeywordColumns) return violation;
-  const { keywordColumns, ...finding } = violation;
+  const { keywordColumns, endKeywordColumns, ...finding } = violation;
   return finding;
 };
 
-/** Applies annotations (suppression and missing-reason notes) and dedup; returns a new array. */
-export const applyAuditPostFilters = (violations, lines, { commentRegions = null, fileHeaderEndLine = 0 } = {}) => {
+/**
+ * Applies annotations (suppression and missing-reason notes) and dedup; returns a new array.
+ * parserComments: the parser's comments as { start, end } positions (1-based lines, 0-based
+ * columns), which place annotations for catch ownership where tries share a line.
+ */
+export const applyAuditPostFilters = (violations, lines, { commentRegions = null, fileHeaderEndLine = 0, parserComments = null } = {}) => {
   const collected = commentRegions ? collectWithRegions(lines, commentRegions) : collectWithScanner(lines);
-  const context = { ...collected, headerEndLine: fileHeaderEndLine };
+  const context = { ...collected, headerEndLine: fileHeaderEndLine, place: buildPlacer(lines, parserComments) };
   const hasAnnotations = collected.annotations.length > 0 || collected.lineReadings.length > 0;
   const allowed = hasAnnotations
     ? violations.filter((v) => !isSuppressedByAnnotation(v, context)).map((v) => withMissingReasonNote(v, context))

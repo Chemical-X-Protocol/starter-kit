@@ -78,6 +78,10 @@ const describeSfcCoverage = (sfc) => (sfc ? {
 
 const describeTextOnlyReason = (options) => (options.fast ? 'fast mode: AST rules skipped' : 'no AST parser for this language');
 
+// Where the parser found each comment (1-based lines, 0-based columns in the file, since an SFC
+// script overlay keeps file offsets), for catch ownership in suppressions.js.
+const listParserComments = (asts) => asts.flatMap((ast) => (ast.comments ?? []).map((comment) => ({ start: comment.loc.start, end: comment.loc.end })));
+
 /** PHP never reaches the Babel, SFC or Tailwind passes; analyzePhp owns parsing and its passes. */
 const collectPhpViolations = (content, filePath, relativePath, options, config, violations) => {
   const analysis = analyzePhp({ content, filePath, relativePath, options, config, violations });
@@ -97,6 +101,7 @@ const collectRawViolations = (content, filePath, relativePath, options, config) 
   const ruleConfig = config.rules;
   const violations = [];
   let coverageReason = null;
+  let parserComments = null;
   const lines = content.split('\n');
   runTextPasses(content, lines, filePath, relativePath, ruleConfig, violations);
   const isPhp = isPhpPath(filePath);
@@ -124,6 +129,7 @@ const collectRawViolations = (content, filePath, relativePath, options, config) 
     } else {
       runAstPasses(parsed.asts, { relativePath, violations, ruleConfig, options, code });
       runTailwindUnscannedPass(parsed.asts, { filePath, relativePath, violations, options });
+      parserComments = listParserComments(parsed.asts);
     }
   }
 
@@ -131,7 +137,7 @@ const collectRawViolations = (content, filePath, relativePath, options, config) 
   violations.push(...checkLineBudgets({ content, relativePath, config: ruleConfig, sfc, hasHighComplexity }));
   const record = { relativePath, kind: coverageKind, sfc: describeSfcCoverage(sfc), language: getLanguageForFile(filePath)?.id ?? null, reason: coverageReason };
   recordFileCoverage(options.coverage, record);
-  return { violations, coverage: { kind: record.kind, language: record.language, reason: record.reason } };
+  return { violations, coverage: { kind: record.kind, language: record.language, reason: record.reason }, parserComments };
 };
 
 /**
@@ -150,8 +156,8 @@ export const auditCode = (content, filePath, relativePath, options = {}) =>
  */
 export function auditCodeDetailed(content, filePath, relativePath, options = {}) {
   const config = normalizeConfig(options.config);
-  const { violations: raw, coverage, commentRegions = null, fileHeaderEndLine = 0 } = collectRawViolations(content, filePath, relativePath, options, config);
-  const filtered = applyAuditPostFilters(raw, content.split('\n'), { commentRegions, fileHeaderEndLine });
+  const { violations: raw, coverage, commentRegions = null, fileHeaderEndLine = 0, parserComments = null } = collectRawViolations(content, filePath, relativePath, options, config);
+  const filtered = applyAuditPostFilters(raw, content.split('\n'), { commentRegions, fileHeaderEndLine, parserComments });
   const violations = applyRuleOverrides(filtered, relativePath, config).map(withTaxonomy);
   return { violations, coverage };
 }

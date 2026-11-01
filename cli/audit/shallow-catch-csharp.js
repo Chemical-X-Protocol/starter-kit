@@ -10,9 +10,10 @@
  * so the reporter keeps it and two catches on one line stay two findings), its closing brace
  * (endColumn), the try that owns it (tryLine, tryColumn, and tryBraceLine/tryBraceColumn just
  * past the try block's closing brace), where a trailing annotation stops being this catch's
- * (trailEndColumn), and where every try and catch keyword on the catch's line starts
- * (keywordColumns). Severity stays at the registry MEDIUM with no escalation, because C#
- * definite assignment (CS0165) already rejects reading an unset local.
+ * (trailEndColumn), and where every try and catch keyword starts on the catch's line
+ * (keywordColumns) and on its last line when that is another (endKeywordColumns). Severity
+ * stays at the registry MEDIUM with no escalation, because C# definite assignment (CS0165)
+ * already rejects reading an unset local.
  */
 const BRACE_DEPTH_STEP = Object.freeze({ '}': 1, '{': -1 });
 const FORWARD_DEPTH_STEP = Object.freeze({ '{': 1, '}': -1 });
@@ -160,7 +161,9 @@ export const resolveCSharpCatchSpan = (match, { content, maskedContent }, lineNu
   const catchColumn = columnAt(content, match.index);
   const endColumn = columnAt(content, matchEnd);
   const keywordColumns = listKeywordColumns(maskedContent, match.index);
-  const span = { endLine, column: catchColumn || 1, catchColumn, endColumn, keywordColumns };
+  const isOneLine = endLine === lineNum;
+  const endKeywordColumns = isOneLine ? [] : listKeywordColumns(maskedContent, matchEnd - 1);
+  const span = { endLine, column: catchColumn || 1, catchColumn, endColumn, keywordColumns, endKeywordColumns };
   const trailEnd = findTrailEnd(maskedContent, matchEnd);
   const hasTrailEnd = trailEnd !== -1;
   if (hasTrailEnd) span.trailEndColumn = columnAt(content, trailEnd);
