@@ -35,12 +35,16 @@ const skipString = (line, index, quote) => {
 };
 
 /**
- * Comment regions on one line as [start, end) column pairs, and the state for the next line.
+ * Comment regions on one line as [start, end) column pairs, the string literals outside them
+ * (strings, quotes included; one carried in from the line above starts at 0, and one still open
+ * runs to the line end), and the state for the next line.
  */
 export const scanCommentRegions = (line, state = INITIAL_SCAN_STATE) => {
   const regions = [];
+  const strings = [];
   let { inBlock, blockCloser, quote } = state;
   let regionStart = 0;
+  let stringStart = 0;
   let index = 0;
   while (index < line.length) {
     if (inBlock) {
@@ -56,6 +60,7 @@ export const scanCommentRegions = (line, state = INITIAL_SCAN_STATE) => {
       const afterString = skipString(line, index, quote);
       const isUnterminated = afterString === -1;
       if (isUnterminated) break;
+      strings.push([stringStart, afterString]);
       quote = null;
       index = afterString;
       continue;
@@ -74,10 +79,14 @@ export const scanCommentRegions = (line, state = INITIAL_SCAN_STATE) => {
       continue;
     }
     const isQuote = QUOTES.has(line[index]);
-    if (isQuote) quote = line[index];
+    if (isQuote) {
+      quote = line[index];
+      stringStart = index;
+    }
     index += 1;
   }
   if (inBlock) regions.push([regionStart, line.length]);
+  if (quote) strings.push([stringStart, line.length]);
   const carriedQuote = quote === CARRIED_QUOTE ? quote : null;
-  return { regions, state: { inBlock, blockCloser: inBlock ? blockCloser : null, quote: carriedQuote } };
+  return { regions, strings, state: { inBlock, blockCloser: inBlock ? blockCloser : null, quote: carriedQuote } };
 };

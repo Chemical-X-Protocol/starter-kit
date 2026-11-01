@@ -301,6 +301,24 @@ test('a console-only catch next to an empty catch on the same line keeps its own
   assert.deepEqual(hits, [['ERROR_SWALLOWED_EXCEPTION', code.indexOf('catch')], ['AI_SLOP_SHALLOW_CATCH', code.lastIndexOf('catch')]]);
 });
 
+test('try or catch in a string, a template or a member name keeps the annotation its catch\'s (C4)', () => {
+  const reason = 'best-effort warm cache is optional';
+  for (const code of [
+    `// chemx-allow: ${reason}\np.catch(h); try { a(); } catch {}\n`,
+    `// chemx-allow: ${reason}\np?.catch(h); try { a(); } catch {}\n`,
+    `// chemx-allow: ${reason}\nlog('try'); try { a(); } catch {}\n`,
+    `// chemx-allow: ${reason}\nlog(\`catch\`); try { a(); } catch {}\n`,
+    `log('catch'); /* chemx-allow: ${reason} */ try { a(); } catch {}\n`,
+    `try { a('catch'); /* chemx-allow: ${reason} */ } catch {}\n`,
+    `try { p.catch(h); /* chemx-allow: ${reason} */ } catch {}\n`,
+    `const s = \`x\ntry catch\`; /* chemx-allow: ${reason} */ try { a(); } catch {}\n`
+  ]) {
+    assertExempt(code);
+  }
+  const csharp = `class S\n{\n    void M()\n    {\n        // chemx-allow: ${reason}\n        Log("catch"); try { A(); } catch { }\n    }\n}\n`;
+  assert.deepEqual(catchHits(csharp, 'src/Svc.cs'), []);
+});
+
 test('AI_SLOP_LAZY_ANY still fires on a handled catch and on an annotated shallow catch (SC-12)', () => {
   const lazyAny = (code) => rulesAt(audit(code, 'src/x.ts'), 'AI_SLOP_LAZY_ANY');
   assert.equal(lazyAny('try { a(); } catch (e: any) { handle(e); }\n').length, 1);
