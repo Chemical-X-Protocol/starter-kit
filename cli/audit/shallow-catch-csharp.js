@@ -1,4 +1,9 @@
 /**
+ * C# shallow catches. findCSharpShallowCatches scans masked content (comments and strings
+ * blanked, offsets and newlines kept) for a catch clause, with an optional (type) and an optional
+ * when (filter), whose body is empty once comments are blanked, so a comment-only body counts and
+ * catch text inside a string or a comment never does.
+ *
  * Annotation window for a C# shallow catch, in the shape suppressions.js reads: the catch's
  * own lines (line..endLine) and 0-based columns of the catch keyword (catchColumn), its closing
  * brace (endColumn), the try that owns it (tryLine, tryColumn, and tryBraceLine/tryBraceColumn
@@ -8,7 +13,9 @@
  */
 const BRACE_DEPTH_STEP = Object.freeze({ '}': 1, '{': -1 });
 const FORWARD_DEPTH_STEP = Object.freeze({ '{': 1, '}': -1 });
+const PAREN_DEPTH_STEP = Object.freeze({ '(': 1, ')': -1 });
 const TRY_KEYWORD = /\btry\b/;
+const CATCH_KEYWORD = /\bcatch\b/g;
 // What opens a try block, a finally or a catch clause (with its type and when-filter).
 const TRY_PART_OPENER = /\b(?:try|finally)$|\bcatch\b[^{};]*$/;
 
@@ -70,10 +77,58 @@ const findTrailEnd = (maskedContent, endIndex) => {
   return tryAt === -1 ? -1 : limit;
 };
 
-/** Span fields for one regex catch match starting at lineNum (see the header for each one). */
+const skipSpace = (text, index) => {
+  let cursor = index;
+  while (cursor < text.length && /\s/.test(text[cursor])) cursor += 1;
+  return cursor;
+};
+
+// Index just past the ')' that balances a '(' at index; index itself when no '(' is there, and
+// -1 when it never closes.
+const skipParens = (text, index) => {
+  const isParen = text[index] === '(';
+  if (!isParen) return index;
+  let depth = 0;
+  for (let i = index; i < text.length; i += 1) {
+    depth += PAREN_DEPTH_STEP[text[i]] ?? 0;
+    const isBalanced = depth === 0;
+    if (isBalanced) return i + 1;
+  }
+  return -1;
+};
+
+// Index just past a when (filter) at index, index itself when there is none, or -1 when its
+// parentheses never close.
+const skipFilter = (text, index) => {
+  const filter = /when\s*(?=\()/y;
+  filter.lastIndex = index;
+  const hasFilter = filter.test(text);
+  return hasFilter ? skipParens(text, filter.lastIndex) : index;
+};
+
+// Offset just past the body's closing brace of a catch clause at catchIndex whose type, filter
+// and body are balanced and whose body is blank in masked content; -1 for any other clause.
+const findEmptyClauseEnd = (maskedContent, catchIndex) => {
+  const afterType = skipParens(maskedContent, skipSpace(maskedContent, catchIndex + 'catch'.length));
+  const afterFilter = afterType === -1 ? -1 : skipFilter(maskedContent, skipSpace(maskedContent, afterType));
+  const isUnclosed = afterFilter === -1;
+  if (isUnclosed) return -1;
+  const openIndex = skipSpace(maskedContent, afterFilter);
+  const closeIndex = skipSpace(maskedContent, openIndex + 1);
+  const isBlankBody = maskedContent[openIndex] === '{' && maskedContent[closeIndex] === '}';
+  return isBlankBody ? closeIndex + 1 : -1;
+};
+
+/** Empty or comment-only catch clauses in masked content, as { index, text } spans of the keyword through its closing brace. */
+export const findCSharpShallowCatches = (maskedContent) => [...maskedContent.matchAll(CATCH_KEYWORD)].flatMap((match) => {
+  const end = findEmptyClauseEnd(maskedContent, match.index);
+  return end === -1 ? [] : [{ index: match.index, text: maskedContent.slice(match.index, end) }];
+});
+
+/** Span fields for one findCSharpShallowCatches clause starting at lineNum (see the header for each one). */
 export const resolveCSharpCatchSpan = (match, { content, maskedContent }, lineNum) => {
-  const matchEnd = match.index + match[0].length;
-  const endLine = lineNum + (match[0].match(/\n/g) || []).length;
+  const matchEnd = match.index + match.text.length;
+  const endLine = lineNum + (match.text.match(/\n/g) || []).length;
   const span = { endLine, catchColumn: columnAt(content, match.index), endColumn: columnAt(content, matchEnd) };
   const trailEnd = findTrailEnd(maskedContent, matchEnd);
   const hasTrailEnd = trailEnd !== -1;

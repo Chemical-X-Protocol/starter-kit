@@ -321,3 +321,59 @@ test("csharp-analyzer: two tries on one line are owned by column, not by line (C
   const above = "// chemx-allow: best-effort first is optional\ntry { X(); } catch { } try { Y(); } catch { }\n";
   assert.deepEqual(csharpCatchColumns(above), [[2, above.split("\n")[1].lastIndexOf("catch")]]);
 });
+
+// C5: the scan reads masked content (comments and strings blanked, offsets kept), so a body that
+// holds only comments is empty, a when filter may sit before it, and quoted catch text never counts.
+test("csharp-analyzer: a comment-only body or a when filter is still a shallow catch (C5)", () => {
+  for (const catchBlock of [
+    "        catch (Exception) { /* swallow */ }",
+    "        catch (Exception)\n        {\n            // swallow\n            // and log nothing\n        }",
+    "        catch (Exception ex) when (ex is IOException) { }",
+    "        catch (Exception ex) when (Check(ex, \")\")) { }",
+    "        catch when (ShouldSwallow()) { /* swallow */ }",
+    "        catch (Exception ex)\n            when (ex is IOException)\n        {\n        }"
+  ]) {
+    for (const code of [wrapCSharpCatch(catchBlock), wrapCSharpCatch(catchBlock).replace(/\n/g, "\r\n")]) {
+      const hits = csharpCatchHits(code);
+      const lastLine = 10 + (catchBlock.match(/\n/g) || []).length;
+      assert.deepEqual(hits.map((hit) => [hit.line, hit.endLine, hit.tryLine, hit.severity]), [[10, lastLine, 6, "MEDIUM"]], code);
+    }
+  }
+});
+
+test("csharp-analyzer: a filtered catch with a statement, or catch text in a string or comment, is not shallow (C5)", () => {
+  for (const catchBlock of [
+    "        catch (Exception ex) when (ex is IOException) { Log(ex); }",
+    "        catch (Exception) { /* swallow */ Log(); }",
+    "        finally { Log(\"catch {}\"); } // catch (Exception) { }"
+  ]) {
+    assert.deepEqual(csharpCatchHits(wrapCSharpCatch(catchBlock)), [], catchBlock);
+  }
+});
+
+test("csharp-analyzer: comment-only and filtered catches honour a best-effort annotation (C5)", () => {
+  const placements = [
+    wrapCSharpCatch("        catch (Exception) { /* chemx-allow: best-effort warmup is optional */ }"),
+    wrapCSharpCatch("        catch (Exception ex) when (ex is IOException) { } // chemx-allow: best-effort warmup is optional"),
+    wrapCSharpCatch("        catch (Exception ex) when (ex is IOException)\n        {\n            // chemx-allow: best-effort warmup is optional\n        }"),
+    wrapCSharpCatch("        catch (Exception ex) when (ex is IOException) { }", "        // chemx-allow: best-effort warmup is optional\n"),
+    "try {\n    X();\n} // chemx-allow: best-effort reason\ncatch (Exception ex) when (ex is IOException) { }\n"
+  ];
+  for (const code of placements) {
+    assert.deepEqual(csharpCatchHits(code), [], code);
+    assert.deepEqual(csharpCatchHits(code.replace(/\n/g, "\r\n")), [], code);
+  }
+});
+
+test("csharp-analyzer: a reasonless annotation in a comment-only body is flagged and says so (C5)", () => {
+  for (const catchBlock of [
+    "        catch (Exception) { /* chemx-allow: best-effort */ }",
+    "        catch (Exception ex) when (ex is IOException)\n        {\n            /* chemx-allow: best-effort */\n        }"
+  ]) {
+    for (const code of [wrapCSharpCatch(catchBlock), wrapCSharpCatch(catchBlock).replace(/\n/g, "\r\n")]) {
+      const hits = csharpCatchHits(code);
+      assert.equal(hits.length, 1, code);
+      assert.ok(hits[0].hazard.includes("needs a reason"), hits[0].hazard);
+    }
+  }
+});

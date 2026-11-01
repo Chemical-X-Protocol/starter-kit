@@ -4,7 +4,7 @@
  * cyclomatic complexity, control flow nesting depth, and AI slop.
  */
 import { RULE_REGISTRY } from './rules-registry.js';
-import { resolveCSharpCatchSpan } from './shallow-catch-csharp.js';
+import { findCSharpShallowCatches, resolveCSharpCatchSpan } from './shallow-catch-csharp.js';
 
 const IN_MEMORY_DB_PATTERN = /\bUseInMemoryDatabase\s*\(/;
 const SQLITE_PROVIDER_PATTERN = /\b(?:UseSqlite|SqliteConnection|DataSource\s*=\s*:memory:)\b/;
@@ -348,8 +348,7 @@ export const analyzeCSharpCode = (content, relativePath, violations, config = {}
   const lines = content.split('\n');
   const maskedContent = maskCommentsAndStrings(content);
 
-  const catchMatches = content.matchAll(/catch\s*(?:\([^)]*\))?\s*\{(?:\s*|\s*\/\/[^\n]*\s*)\}/g);
-  for (const m of catchMatches) {
+  for (const m of findCSharpShallowCatches(maskedContent)) {
     const lineNum = content.slice(0, m.index).split('\n').length;
     const meta = RULE_REGISTRY.AI_SLOP_SHALLOW_CATCH;
     violations.push({
