@@ -14,7 +14,8 @@ import { createTask, claimTask } from './team-db-tasks.js';
 import { completeTaskWithAudit } from './team-triage.js';
 import { hazardsAddedSinceHead } from '../audit/staged-delta.js';
 import { auditCode } from '../audit/rules.js';
-import { LANGUAGE_DEFINITIONS } from '../languages.js';
+import { registerTestLanguage, resetTestLanguages } from '../lang/registry.js';
+import php from '../lang/records/php.js';
 import { PASSES } from '../php/php-analyzer.js';
 import { setPhpParserLoader, clearPhpParseCache } from '../php/php-parse.js';
 import { resetProjectIndexCache } from '../php/wp-project-index.js';
@@ -130,10 +131,10 @@ const stubCrossFilePass = {
 };
 
 before(() => {
-  LANGUAGE_DEFINITIONS.php = { id: 'php', name: 'PHP', extensions: new Set(['.php']), parser: 'php' };
+  registerTestLanguage({ ...php, stages: { ...php.stages, source: 'on' } });
 });
 after(() => {
-  delete LANGUAGE_DEFINITIONS.php;
+  resetTestLanguages();
 });
 beforeEach(() => {
   PASSES.length = 0;

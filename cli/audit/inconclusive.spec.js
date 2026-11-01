@@ -1,14 +1,16 @@
 /**
  * Inconclusive coverage (design spec 3.5): a file whose language has an AST parser but whose AST
  * rules did not run is not reported clean by check, not verified by the edit guardrails.
- * PHP is registered for the run in LANGUAGE_DEFINITIONS (the flip task adds it for good).
+ * PHP is registered as a source language for the run through the registry's test seam (the
+ * flip task turns its record on for good).
  */
 import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { LANGUAGE_DEFINITIONS } from '../languages.js';
+import { registerTestLanguage, resetTestLanguages } from '../lang/registry.js';
+import php from '../lang/records/php.js';
 import { isInconclusive, inconclusiveReason } from './inconclusive.js';
 import { evaluateGuardrails } from '../edit-guardrails.js';
 import { handleCheckCommand } from '../search-commands.js';
@@ -17,11 +19,12 @@ import { setPhpParserLoader, clearPhpParseCache } from '../php/php-parse.js';
 import { PASSES } from '../php/php-analyzer.js';
 
 const CLEAN_PHP = '<?php\nfunction f() { return 1; }\n';
+const PHP_AS_SOURCE = { ...php, stages: { ...php.stages, source: 'on' } };
 const ORIGINAL_CWD = process.cwd();
 let dir;
 
 beforeEach(() => {
-  LANGUAGE_DEFINITIONS.php = { id: 'php', name: 'PHP', extensions: new Set(['.php']), parser: 'php' };
+  registerTestLanguage(PHP_AS_SOURCE);
   dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-inconclusive-')));
   fs.writeFileSync(path.join(dir, 'a.php'), CLEAN_PHP);
   process.chdir(dir);
@@ -31,7 +34,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   process.chdir(ORIGINAL_CWD);
-  delete LANGUAGE_DEFINITIONS.php;
+  resetTestLanguages();
   setPhpParserLoader(null);
   clearPhpParseCache();
   fs.rmSync(dir, { recursive: true, force: true });
