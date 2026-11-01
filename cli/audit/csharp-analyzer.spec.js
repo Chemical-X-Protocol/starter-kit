@@ -333,6 +333,15 @@ test("csharp-analyzer: two shallow catches on one line are two findings at their
   assert.deepEqual(columns(multiLine), [[10, "        ".length]]);
 });
 
+test("csharp-analyzer: a catch at the start of its line reports column 1 as the JS catch rules do, apart from a second catch there", () => {
+  const jsHits = auditCode("try { a(); }\ncatch {}\n", "src/x.js", "src/x.js", { config: {} }).filter((v) => v.rule === "ERROR_SWALLOWED_EXCEPTION");
+  assert.deepEqual(jsHits.map((hit) => [hit.line, hit.column]), [[2, 1]]);
+  const code = "try { A(); }\ncatch { } try { B(); } catch { }\n";
+  const hits = csharpCatchHits(code);
+  assert.deepEqual(hits.map((hit) => [hit.line, hit.column]), [[2, 1], [2, code.split("\n")[1].lastIndexOf("catch")]]);
+  assert.deepEqual(hits.map((hit) => hit.catchColumn), [0, code.split("\n")[1].lastIndexOf("catch")]);
+});
+
 // C5: the scan reads masked content (comments and strings blanked, offsets kept), so a body that
 // holds only comments is empty, a when filter may sit before it, and quoted catch text never counts.
 test("csharp-analyzer: a comment-only body or a when filter is still a shallow catch (C5)", () => {

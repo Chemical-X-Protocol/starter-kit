@@ -5,8 +5,9 @@
  * catch text inside a string or a comment never does.
  *
  * Annotation window for a C# shallow catch, in the shape suppressions.js reads: the catch's
- * own lines (line..endLine) and 0-based columns of the catch keyword (catchColumn, which is
- * also the finding's column, so two catches on one line are two findings), its closing brace
+ * own lines (line..endLine) and 0-based columns of the catch keyword (catchColumn; the finding's
+ * column is the same, except that a catch at the line start reports 1 as the JS catch rules do,
+ * so the reporter keeps it and two catches on one line stay two findings), its closing brace
  * (endColumn), the try that owns it (tryLine, tryColumn, and tryBraceLine/tryBraceColumn just
  * past the try block's closing brace) and where a trailing annotation stops being this catch's
  * (trailEndColumn). Severity stays at the registry MEDIUM with no escalation, because C#
@@ -131,7 +132,7 @@ export const resolveCSharpCatchSpan = (match, { content, maskedContent }, lineNu
   const matchEnd = match.index + match.text.length;
   const endLine = lineNum + (match.text.match(/\n/g) || []).length;
   const catchColumn = columnAt(content, match.index);
-  const span = { endLine, column: catchColumn, catchColumn, endColumn: columnAt(content, matchEnd) };
+  const span = { endLine, column: catchColumn || 1, catchColumn, endColumn: columnAt(content, matchEnd) };
   const trailEnd = findTrailEnd(maskedContent, matchEnd);
   const hasTrailEnd = trailEnd !== -1;
   if (hasTrailEnd) span.trailEndColumn = columnAt(content, trailEnd);
