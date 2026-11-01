@@ -12,12 +12,12 @@
  *   closing brace, one after that brace on the same line up to trailEndColumn (where a later
  *   try starts or an enclosing try block, catch or finally closes), one whose comment ends
  *   before the catch keyword on its line (a block comment may open above) with no other try
- *   or catch keyword in between, and a comment-only one ending on the line above when no
- *   other try or catch precedes its try on that line. Any other finding (and PHP) uses its
- *   lines (line..endLine), a comment-only annotation through the line below its closer (so
- *   the rest of its comment and a closer line that code shares count), and the text after a
- *   try brace on the line above (`tryBraceLine`). A covering annotation without a reason
- *   leaves a note that says so.
+ *   or catch keyword in between, and one ending on the line above when its comment opened on
+ *   a comment-only line and no other try or catch precedes its try on that line. Any other
+ *   finding (and PHP) uses its lines (line..endLine), an annotation on a comment-only line
+ *   through the line below its closer (so the rest of its comment and a closer line that code
+ *   shares count, whatever line opened the comment), and the text after a try brace on the line
+ *   above (`tryBraceLine`). A covering annotation without a reason leaves a note that says so.
  * - duplicate reports of one finding (same file, line, column and rule), plus the
  *   AI_SLOP_SHALLOW_CATCH twin of an ERROR_SWALLOWED_EXCEPTION at the same catch.
  */
@@ -58,7 +58,8 @@ const parseMarkerAt = (lineText, markerIndex) => {
   const match = ANNOTATION_BODY.exec(body);
   if (!match) return null;
   const reason = match[2].replace(REASON_SEPARATORS, '').trim();
-  return buildAnnotation(match[1], reason, { isCommentOnly: COMMENT_ONLY_LINE.test(lineText), markerIndex });
+  const isCommentOnly = COMMENT_ONLY_LINE.test(lineText);
+  return buildAnnotation(match[1], reason, { isCommentOnly, opensCommentOnly: isCommentOnly, markerIndex });
 };
 
 /**
@@ -105,8 +106,8 @@ const annotateLine = (lines, idx, regions, finish) => listMarkerIndexes(lines[id
 });
 
 // Line-scanner regions per line, plus the block comment each line carries in from above
-// (it ends at carriedEnd, and the line that opened it decides isCommentOnly) and the start
-// of the block comment still open at its end (openFrom).
+// (it ends at carriedEnd, and carriedCommentOnly says whether the line that opened it is
+// comment-only) and the start of the block comment still open at its end (openFrom).
 const scanLines = (lines) => {
   let state = INITIAL_SCAN_STATE;
   let isOpenerCommentOnly = false;
@@ -130,7 +131,7 @@ const collectWithScanner = (lines) => {
     const scan = scans[idx];
     return annotateLine(lines, idx, scan.regions, (annotation) => {
       const isInCarriedBlock = annotation.markerIndex < scan.carriedEnd;
-      const located = isInCarriedBlock ? { ...annotation, isCommentOnly: scan.carriedCommentOnly } : annotation;
+      const located = isInCarriedBlock ? { ...annotation, opensCommentOnly: scan.carriedCommentOnly } : annotation;
       return annotation.markerIndex >= scan.openFrom ? continueBlock(located, lines, idx, scan.closer) : located;
     });
   });
@@ -163,7 +164,8 @@ const collectWithRegions = (lines, commentRegions) => {
 /**
  * Every allow annotation written in a comment, in line order, each with its 1-based `line`,
  * `lastLine` (the closer of its block comment), `lastEnd` (the column just past that closer),
- * `markerIndex` and `commentStart` columns.
+ * `markerIndex` and `commentStart` columns, `isCommentOnly` (its marker line starts with a
+ * comment) and `opensCommentOnly` (so does the line where its comment opened).
  * `commentRegions` (per-line [start, end) column pairs) replaces the line scanner when given.
  */
 export const parseAllowAnnotations = (lines, commentRegions = null) =>
@@ -202,10 +204,11 @@ const isTrailingCatch = (annotation, violation) => {
   return isOnEndLine && isAfterEnd && isBeforeLimit;
 };
 
-// A comment-only annotation ending right above the catch's line counts when no other try or
-// catch keyword comes before this catch's try on that line.
+// An annotation ending right above the catch's line counts when its comment opened on a
+// comment-only line (one that trails code there belongs to that code) and no other try or
+// catch keyword comes before this catch's try on the catch's line.
 const isAboveOwnTry = (annotation, violation, context) => {
-  const isLineAbove = annotation.isCommentOnly && annotation.lastLine === violation.line - 1;
+  const isLineAbove = annotation.opensCommentOnly && annotation.lastLine === violation.line - 1;
   if (!isLineAbove) return false;
   const isTryOnCatchLine = violation.tryLine === violation.line;
   if (!isTryOnCatchLine) return true;
@@ -221,7 +224,7 @@ const isBeforeCatchOnItsLine = (annotation, violation, context) => {
   const isOnCatchLine = annotation.lastLine === violation.line && annotation.lastEnd <= violation.catchColumn;
   if (!isOnCatchLine) return false;
   const opensAbove = annotation.line !== violation.line;
-  const trailsCodeAbove = opensAbove && !annotation.isCommentOnly;
+  const trailsCodeAbove = opensAbove && !annotation.opensCommentOnly;
   if (trailsCodeAbove) return false;
   const commentStart = opensAbove ? 0 : annotation.commentStart;
   const commentEnd = annotation.lastEnd;
@@ -241,8 +244,10 @@ const isOwnedByCatch = (annotation, violation, context) => isInOwnClause(annotat
   || isBeforeCatchOnItsLine(annotation, violation, context)
   || isAboveOwnTry(annotation, violation, context);
 
-// A comment-only annotation covers every line after its marker line through the line below its
+// An annotation on a comment-only line covers every line after it through the line below its
 // closer: the rest of its own comment, a closer line that code shares (`*/ code`), the line below.
+// That holds when its comment opened after code on an earlier line too, as on 4ea6eb2, which
+// tested the marker line itself; only catch ownership asks where the comment opened.
 const isInLineWindow = (annotation, violation) => {
   const endLine = violation.endLine ?? violation.line;
   const isWithin = annotation.line >= violation.line && annotation.line <= endLine;

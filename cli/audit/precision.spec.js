@@ -209,6 +209,18 @@ test('a block annotation covers a finding on any of its own comment lines (SC-4)
   assert.deepEqual(emDash(comment), []);
 });
 
+test('a block annotation on a continuation line covers the code below when its comment opened after code (SC-4)', () => {
+  const lazyAny = (code) => rulesAt(audit(code, 'src/x.ts'), 'AI_SLOP_LAZY_ANY');
+  const below = 'doThing(); /* first\n * chemx-allow: AI_SLOP_LAZY_ANY legacy api */\ntry { a(); } catch (e: any) { h(e); }\n';
+  assert.deepEqual(lazyAny(below), []);
+  assert.deepEqual(lazyAny('doThing(); /* first\n * chemx-allow: AI_SLOP_LAZY_ANY legacy api\n */ try { a(); } catch (e: any) { h(e); }\n'), []);
+  assert.equal(lazyAny(below.replace('chemx-allow: ', '')).length, 1);
+  const emDash = (code) => rulesAt(audit(code, 'src/x.ts'), 'TYPOGRAPHY_EM_DASH');
+  const title = `export const a = 1; /* first\n * chemx-allow: TYPOGRAPHY_EM_DASH quoting a title */\nexport const t = 'Foo ${EM_DASH} Bar';\n`;
+  assert.deepEqual(emDash(title), []);
+  assert.equal(emDash(title.replace('chemx-allow: ', '')).length, 1);
+});
+
 // C4: an annotation is owned by the catch it is written for, by column as well as by line.
 const catchColumns = (code) => catchHits(code).map((hit) => [hit.line, hit.column]);
 

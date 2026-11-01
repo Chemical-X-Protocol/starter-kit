@@ -79,9 +79,9 @@ test('a block annotation open at the end of its marker line lasts to the closer,
   const [annotation] = parseAllowAnnotations(['/* chemx-allow: best-effort warm cache', ' * still the same comment', ' */', 'x();']);
   assert.deepEqual([annotation.reason, annotation.lastLine], ['warm cache', 3]);
   const [trailingCode] = parseAllowAnnotations(['f(); /*', ' * chemx-allow: best-effort reason', ' */']);
-  assert.deepEqual([trailingCode.lastLine, trailingCode.isCommentOnly], [3, false]);
+  assert.deepEqual([trailingCode.lastLine, trailingCode.isCommentOnly, trailingCode.opensCommentOnly], [3, true, false]);
   const [jsdoc] = parseAllowAnnotations(['/**', ' * chemx-allow: best-effort reason', ' */']);
-  assert.deepEqual([jsdoc.lastLine, jsdoc.isCommentOnly], [3, true]);
+  assert.deepEqual([jsdoc.lastLine, jsdoc.isCommentOnly, jsdoc.opensCommentOnly], [3, true, true]);
 });
 
 // The line scanner path (JS, TS, C#): a synthetic finding on one line, filtered with no PHP regions.
@@ -93,6 +93,29 @@ test('a comment-only block annotation covers its own lines, a closer line shared
   const below = '/* chemx-allow: X_RULE legacy api\n * still the comment\n */\ncode();\nmore();\n';
   assert.deepEqual([2, 3, 4, 5].map((line) => scanned(below, line)), [0, 0, 0, 1]);
   assert.equal(scanned('f(); /* chemx-allow: X_RULE legacy api\n */ code();\n', 2), 1);
+});
+
+// Block-comment shapes for a rule outside the catch family, one mark per line: S where a finding
+// on that line is suppressed, . where it stays. `main` is what 4ea6eb2 gave; the window may widen
+// it but never drop a line, whatever line opened the comment.
+const BLOCK_SHAPES = [
+  ['opened after code, marker on a continuation line, closer alone', 'f(); /* first\n * chemx-allow: X_RULE legacy api\n */\ncode();\nmore();', '.SS..', '.SSS.'],
+  ['opened after code, marker on a continuation line that closes it', 'f(); /* first\n * chemx-allow: X_RULE legacy api */\ncode();\nmore();', '.SS.', '.SS.'],
+  ['opened after code, marker on a continuation line, closer with code after', 'f(); /* first\n * chemx-allow: X_RULE legacy api\n */ code();\nmore();', '.SS.', '.SSS'],
+  ['opened after code, reasonless marker on a continuation line', 'f(); /* first\n * chemx-allow: X_RULE\n * legacy api\n */\ncode();\nmore();', '.S..S.', '.SSSS.'],
+  ['opened after code, marker on the opener, closer alone', 'f(); /* chemx-allow: X_RULE legacy api\n */\ncode();', 'S..', 'S..'],
+  ['opened after code, marker on the opener, closer with code after', 'f(); /* chemx-allow: X_RULE legacy api\n */ code();\nmore();', 'S..', 'S..'],
+  ['opened alone, marker on a continuation line, closer with code after', '/* first\n * chemx-allow: X_RULE legacy api\n */ code();\nmore();', '.SS.', '.SSS'],
+  ['opened alone, marker on the opener, closer alone', '/* chemx-allow: X_RULE legacy api\n */\ncode();\nmore();', 'SS..', 'SSS.']
+];
+
+test('a block annotation covers at least the lines 4ea6eb2 covered, whatever line opened its comment (SC-4)', () => {
+  for (const [shape, src, main, expected] of BLOCK_SHAPES) {
+    const marks = src.split('\n').map((_, idx) => (scanned(src, idx + 1) === 0 ? 'S' : '.')).join('');
+    assert.equal(marks, expected, shape);
+    const keepsMain = [...main].every((mark, idx) => mark === '.' || expected[idx] === 'S');
+    assert.ok(keepsMain, `${shape}: ${expected} drops a line of main's ${main}`);
+  }
 });
 
 test('a PHP block annotation with its reason on the marker line lasts to its closer (SC-4)', () => {
