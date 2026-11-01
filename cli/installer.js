@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { ruleTree } from './rules.js';
 import { hasGum, gumChoose, gumInput, promptQuestion } from './terminal.js';
 import { buildPreCommitHookScript, buildGitHubWorkflowScript } from './installer-templates.js';
@@ -47,15 +48,28 @@ export const resolveGitHooksDir = (targetDir = '.') => {
 // The floors a chemx hook was rendered with, from the defaults its grade gate exports (#255, #253).
 const HOOK_THRESHOLDS = /\n {4}export CHEMX_DEFAULT_MIN_GRADE=([^ \n]*) CHEMX_DEFAULT_MIN_SCORE=([^ \n]*)\n/;
 
+// The hook 4ea6eb2 rendered: the --min-grade=$MIN_GRADE form that grepped .chemx/config.json and
+// eval-ed its floors (#254). Its rendered slots (the pin, the pinned CLI, both floors and the npx
+// pin) are blanked, and what is left must hash to that template's own text, so an edited one still
+// gets a backup (#253). cli/mcp/installer-lossless.spec.js renders the template from git to check it.
+const MAIN_ERA_HOOK_SLOTS = [/(# chemx-pin: )[^\n]*(\n)/, /(PINNED_CLI=')[^'\n]*('\n)/, /(CONF_MIN_GRADE:-)[^}\n]*(\}\}"\n)/, /(CONF_MIN_SCORE:-)[^}\n]*(\}\}"\n)/, /(npx --yes chemx@)[^"\n]*("\n)/];
+const MAIN_ERA_HOOK_SHA256 = '64912603a75113717cc2a9ea04c50d9e77d0aa375e15c977862ac06e004f4af8';
+
+const isMainEraHook = (normalized) => {
+  const skeleton = MAIN_ERA_HOOK_SLOTS.reduce((text, slot) => text.replace(slot, '$1$2'), normalized);
+  return createHash('sha256').update(skeleton).digest('hex') === MAIN_ERA_HOOK_SHA256;
+};
+
 /**
  * True only when a hook is byte-for-byte what chemx generates (for its own thresholds),
  * so replacing it loses nothing. A chemx hook the user edited is not "own" and gets a backup.
+ * A hook 4ea6eb2 rendered, at any floors and pin, is own too, so no copy of it is kept (#253).
  */
 export const isChemxHook = (text = '') => {
   const normalized = String(text).replace(/\r\n/g, '\n');
   const thresholds = normalized.match(HOOK_THRESHOLDS);
   const hasThresholds = Boolean(thresholds);
-  if (!hasThresholds) return false;
+  if (!hasThresholds) return isMainEraHook(normalized);
   return normalized === buildPreCommitHookScript(thresholds[1], thresholds[2]);
 };
 
