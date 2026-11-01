@@ -2,6 +2,33 @@ import { PROFILES, DEFAULT_PROFILE, getProfileDefaults } from './profiles.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { findAndLoadConfigFile } from './loader.js';
+import { CAPABILITIES, STAGES } from '../lang/vocab.js';
+
+const isPlainObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+const stringList = (value) => (Array.isArray(value) ? value.filter((v) => typeof v === 'string') : []);
+
+/**
+ * The `.chemxrc` `languages` block (design spec 4.4), reduced to valid entries: stages per
+ * language and capability, the shadow-logging flag, requireGrammars (true or language ids),
+ * disable (language ids), map (path glob to language id) and grammars (passed through).
+ */
+export const normalizeLanguagesConfig = (raw) => {
+  const input = isPlainObject(raw) ? raw : {};
+  const stages = {};
+  for (const [lang, caps] of Object.entries(isPlainObject(input.stages) ? input.stages : {})) {
+    const valid = Object.entries(isPlainObject(caps) ? caps : {}).filter(([cap, stage]) => CAPABILITIES.includes(cap) && STAGES.includes(stage));
+    if (valid.length) stages[lang] = Object.fromEntries(valid);
+  }
+  const map = Object.fromEntries(Object.entries(isPlainObject(input.map) ? input.map : {}).filter(([, id]) => typeof id === 'string'));
+  return {
+    stages,
+    shadow: input.shadow === true,
+    requireGrammars: input.requireGrammars === true ? true : stringList(input.requireGrammars),
+    disable: stringList(input.disable),
+    map,
+    grammars: isPlainObject(input.grammars) ? input.grammars : {}
+  };
+};
 
 /** The product pillar selection written by `chemx pillars` (null when never chosen). */
 const readPillarSelection = (cwd, fileConfig) => {
@@ -76,6 +103,7 @@ export const loadProjectConfig = (cwd = process.cwd(), rawArgs = []) => {
     pillars: readPillarSelection(cwd, fileConfig),
     wordpress: fileConfig.raw?.wordpress,
     php: fileConfig.raw?.php,
+    languages: normalizeLanguagesConfig(fileConfig.raw?.languages),
     raw: fileConfig.raw || {},
     stage: fileConfig.raw?.stage || 'strict'
   };
