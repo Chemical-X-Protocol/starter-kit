@@ -5,7 +5,7 @@
  */
 import { RULE_REGISTRY } from './rules-registry.js';
 import { findCSharpShallowCatches, resolveCSharpCatchSpan } from './shallow-catch-csharp.js';
-import { maskCommentsAndStrings } from './csharp-mask.js';
+import { maskCommentsAndStrings, maskWholeStrings } from './csharp-mask.js';
 
 export { maskCommentsAndStrings };
 
@@ -348,7 +348,9 @@ export const analyzeCSharpCode = (content, relativePath, violations, config = {}
     }
   });
 
-  const methods = extractMethods(maskedContent);
+  // The method scans read no interpolation-hole code, so operators and keywords there never raise
+  // their counts.
+  const methods = extractMethods(maskWholeStrings(content));
   for (const method of methods) {
     evaluateMethodComplexityAndNesting(method, relativePath, violations, config);
   }

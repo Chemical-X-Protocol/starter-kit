@@ -11,23 +11,43 @@ test("csharp-analyzer: maskCommentsAndStrings preserves layout and line count", 
   assert.equal(masked.includes("hello"), false);
 });
 
-test("csharp-analyzer: maskCommentsAndStrings blanks an interpolated or raw string whole, quotes in its holes included", () => {
-  const blank = (text) => text.replace(/[^\n]/g, " ");
-  for (const literal of [
-    '$"{(c ? "try {" : "catch (")}"',
-    '$"{{try}} {(c ? \'"\' : "catch {")} }}"',
-    '$@"{(c ? "a" : "b")}\n  {d} ""q"""',
-    '@$"{(c ? @"x""y" : "}")}"',
-    '$"{(c ? $"{(d ? "try {" : "x")}" : "y")}"',
-    '$"""\n  {(c ? "try {" : """catch""")}\n  """',
-    '$$"""{x} {{(c ? "}" : "catch (")}}"""',
-    '"""\n  try { } catch { }\n  """'
+test("csharp-analyzer: maskCommentsAndStrings blanks an interpolated or raw string's text and the literals in its holes, keeping the hole code", () => {
+  const isBlankedOnly = (code, masked) => [...code].every((char, i) => masked[i] === char || (masked[i] === " " && char !== "\n"));
+  for (const [literal, holeCode] of [
+    ['$"{(c ? "try {" : "catch (")}"', "(c ? : )"],
+    ['$"{{try}} {(c ? \'"\' : "catch {")} }}"', "(c ? : )"],
+    ['$@"{(c ? "a" : "b")}\n  {d} ""q"""', "(c ? : ) d"],
+    ['@$"{(c ? @"x""y" : "}")}"', "(c ? : )"],
+    ['$"{(c ? $"{(d ? "try {" : "x")}" : "y")}"', "(c ? (d ? : ) : )"],
+    ['$"""\n  {(c ? "try {" : """catch""")}\n  """', "(c ? : )"],
+    ['$$"""{x} {{(c ? "}" : "catch (")}}"""', "(c ? : )"],
+    ['"""\n  try { } catch { }\n  """', ""],
+    ['$"{x:N2} {(c ? "try {" : "y")} {d,8:try}"', "x (c ? : ) d,8"],
+    ['$@"{x /* catch { } */} {F(() => { try { A(); } catch { } return 1; })}"', "x F(() => { try { A(); } catch { } return 1; })"]
   ]) {
     const code = `var s = ${literal}; try { A(); } catch { }\n`;
-    assert.equal(maskCommentsAndStrings(code), `var s = ${blank(literal)}; try { A(); } catch { }\n`, literal);
+    const masked = maskCommentsAndStrings(code);
+    assert.equal(masked.length, code.length, literal);
+    assert.ok(isBlankedOnly(code, masked), literal);
+    assert.equal(masked.replace(/\s+/g, " ").trim(), `var s = ${holeCode} ; try { A(); } catch { }`.replace(/\s+/g, " "), literal);
   }
   const unterminated = 'var s = $"{(c ? "a" : "b")}\ntry { A(); } catch { }\n';
   assert.equal(maskCommentsAndStrings(unterminated).split("\n")[1], "try { A(); } catch { }");
+});
+
+test("csharp-analyzer: a try/catch in a lambda inside an interpolation hole is still a shallow catch (C5)", () => {
+  const code = 'class S\n{\n    void M()\n    {\n        var s = $"{F(() => { try { A(); } catch { } return 1; })}";\n    }\n}\n';
+  assert.deepEqual(csharpCatchHits(code).map((hit) => [hit.line, hit.catchColumn]), [[5, code.split("\n")[4].indexOf("catch")]]);
+  const quoted = code.replace("try { A(); } catch { }", 'Log("try { A(); } catch { }");');
+  assert.deepEqual(csharpCatchHits(quoted), []);
+});
+
+test("csharp-analyzer: hole code does not count toward method complexity or nesting, as before the masker kept it", () => {
+  const conditions = Array.from({ length: 11 }, (_, i) => `        if (a${i}) { }`).join("\n");
+  const code = `public class Report\n{\n    public string Build()\n    {\n${conditions}\n        return $"{(name ?? "anonymous")} {(ok && done ? "y" : "n")}";\n    }\n}\n`;
+  const violations = [];
+  analyzeCSharpCode(code, "Services/Report.cs", violations);
+  assert.deepEqual(violations.filter((v) => v.rule === "COMPLEXITY_CYCLOMATIC_HIGH"), []);
 });
 
 test("csharp-analyzer: flags global simulation switches with isAiSlop: true", () => {
