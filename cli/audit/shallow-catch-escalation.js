@@ -160,16 +160,17 @@ const keywordStartsCache = new WeakMap();
 const KEYWORD_OF_NODE = new Map([['TryStatement', 'try'], ['CatchClause', 'catch']]);
 const NO_KEYWORD_STARTS = Object.freeze({ try: [], catch: [] });
 
-// Start positions of every try keyword (a TryStatement) and catch keyword (a CatchClause) in
-// the program, by keyword. A plain node walk, so the visitor traversal that is running meanwhile
-// keeps its path state.
+// Start positions of every try keyword (a TryStatement with a catch clause; a try with none takes
+// no part in ownership) and catch keyword (a CatchClause) in the program, by keyword. A plain node
+// walk, so the visitor traversal that is running meanwhile keeps its path state.
 const listKeywordStarts = (program) => {
   const isCached = keywordStartsCache.has(program);
   if (isCached) return keywordStartsCache.get(program);
   const starts = { try: [], catch: [] };
   t.traverseFast(program, (node) => {
     const keyword = KEYWORD_OF_NODE.get(node.type);
-    const isLocatedKeyword = Boolean(keyword) && Boolean(node.loc);
+    const isCatchlessTry = node.type === 'TryStatement' && !node.handler;
+    const isLocatedKeyword = Boolean(keyword) && Boolean(node.loc) && !isCatchlessTry;
     if (isLocatedKeyword) starts[keyword].push(node.loc.start);
   });
   keywordStartsCache.set(program, starts);
@@ -188,32 +189,46 @@ const listKeywordColumns = (keywordStarts, line) => [...keywordStarts.try, ...ke
 
 const TRY_PARTS = new Set(['block', 'handler', 'finalizer']);
 
-// The end of the innermost try block, catch clause or finally of another try that holds this one.
-const findEnclosingTryPartEnd = (tryPath) => {
-  const part = tryPath.findParent((p) => TRY_PARTS.has(p.key) && p.parentPath.isTryStatement());
-  return part?.node.loc?.end;
-};
+const isTryPartWithCatch = (p) => TRY_PARTS.has(p.key) && p.parentPath.isTryStatement() && Boolean(p.parentPath.node.handler);
 
-// Column on the catch's last line where a trailing annotation stops being this catch's: where
+// The end of the innermost try block, catch clause or finally of another try with a catch that
+// holds this one.
+const findEnclosingTryPartEnd = (tryPath) => tryPath.findParent(isTryPartWithCatch)?.node.loc?.end;
+
+// Column on line, from fromColumn on, where a trailing annotation stops being this catch's: where
 // a later try starts, or the brace of an enclosing try part that closes on that line.
-const resolveTrailEndColumn = (catchPath, keywordStarts) => {
-  const end = catchPath.node.loc.end;
+const findTrailLimit = (keywordStarts, enclosingEnd, line, fromColumn) => {
   const laterTryColumns = keywordStarts.try
-    .filter((start) => start.line === end.line && start.column >= end.column)
+    .filter((start) => start.line === line && start.column >= fromColumn)
     .map((start) => start.column);
-  const enclosingEnd = findEnclosingTryPartEnd(catchPath.parentPath);
-  const closesOnLine = enclosingEnd?.line === end.line;
+  const closesOnLine = enclosingEnd?.line === line;
   const limits = closesOnLine ? [...laterTryColumns, enclosingEnd.column - 1] : laterTryColumns;
   return limits.length > 0 ? Math.min(...limits) : undefined;
+};
+
+// The trailing window on the catch's last line: up to trailEndColumn, and, when a try nested in
+// the catch's own try statement (in its finally) stops it before that statement ends on the line,
+// again from the statement's end (statementEndColumn) up to statementTrailEndColumn.
+const resolveTrail = (catchPath, keywordStarts) => {
+  const end = catchPath.node.loc.end;
+  const enclosingEnd = findEnclosingTryPartEnd(catchPath.parentPath);
+  const trailEndColumn = findTrailLimit(keywordStarts, enclosingEnd, end.line, end.column);
+  const statementEnd = catchPath.parent.loc.end;
+  const hasTrailEnd = trailEndColumn !== undefined;
+  const isStoppedInStatement = hasTrailEnd && statementEnd.line === end.line && trailEndColumn < statementEnd.column;
+  if (!isStoppedInStatement) return { trailEndColumn };
+  const statementTrailEndColumn = findTrailLimit(keywordStarts, enclosingEnd, end.line, statementEnd.column);
+  return { trailEndColumn, statementEndColumn: statementEnd.column, statementTrailEndColumn };
 };
 
 /**
  * Where a catch's annotations may sit (suppressions.js): its own lines, 0-based columns of the
  * catch keyword (catchColumn), its closing brace (endColumn), its try keyword (tryLine,
- * tryColumn) and the end of the try block (tryBraceLine, tryBraceColumn), trailEndColumn, and
- * where every try and catch keyword starts on the catch's line (keywordColumns) and on its last
- * line when that is another (endKeywordColumns), read from the AST, so a key, method, name,
- * regex, type member or JSX text spelled try or catch is not one.
+ * tryColumn) and the end of the try block (tryBraceLine, tryBraceColumn), the trailing window
+ * (trailEndColumn, and statementEndColumn with statementTrailEndColumn), and where every try and
+ * catch keyword starts on the catch's line (keywordColumns) and on its last line when that is
+ * another (endKeywordColumns), read from the AST, so a key, method, name, regex, type member or
+ * JSX text spelled try or catch is not one.
  */
 export const resolveCatchSpan = (catchPath) => {
   const node = catchPath.node;
@@ -234,7 +249,7 @@ export const resolveCatchSpan = (catchPath) => {
     tryColumn: tryNode.loc.start.column,
     tryBraceLine: tryBlockEnd.line,
     tryBraceColumn: tryBlockEnd.column,
-    trailEndColumn: resolveTrailEndColumn(catchPath, keywordStarts),
+    ...resolveTrail(catchPath, keywordStarts),
     keywordColumns: listKeywordColumns(keywordStarts, line),
     endKeywordColumns: isOneLine ? [] : listKeywordColumns(keywordStarts, endLine)
   };

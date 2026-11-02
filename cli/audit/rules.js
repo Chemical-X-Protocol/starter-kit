@@ -6,6 +6,7 @@ import { recordTemplatePatterns } from './pattern-detector.js';
 import { createHookShapeRegistry } from './hook-shape-validator.js';
 import { isBabelParsable, getLanguageForFile } from '../languages.js';
 import { analyzeCSharpCode } from './csharp-analyzer.js';
+import { listCommentPositions } from './csharp-mask.js';
 import { applyAuditPostFilters } from './suppressions.js';
 import { applyRuleOverrides } from './rule-overrides.js';
 import { withTaxonomy } from './rule-pillars.js';
@@ -47,13 +48,17 @@ const parseErrorViolation = (relativePath, line, message) => {
   };
 };
 
+// Returns, for C#, the comments as its masker reads them, which place annotations for catch
+// ownership in suppressions.js; null for any other language.
 const runTextPasses = (content, lines, filePath, relativePath, ruleConfig, violations) => {
   checkTypographyEmDash(content, lines, relativePath, violations);
   checkMockDataPatterns(content, lines, relativePath, violations);
   checkSlopTextPatterns(content, lines, relativePath, violations);
   checkExtendedTextPatterns(content, lines, relativePath, filePath, violations, ruleConfig);
   const isCSharp = getLanguageForFile(filePath)?.id === 'csharp';
-  if (isCSharp) analyzeCSharpCode(content, relativePath, violations, ruleConfig);
+  if (!isCSharp) return null;
+  analyzeCSharpCode(content, relativePath, violations, ruleConfig);
+  return listCommentPositions(content);
 };
 
 const runSfcTemplatePasses = (sfc, relativePath, options, ruleConfig, violations) => {
@@ -103,7 +108,7 @@ const collectRawViolations = (content, filePath, relativePath, options, config) 
   let coverageReason = null;
   let parserComments = null;
   const lines = content.split('\n');
-  runTextPasses(content, lines, filePath, relativePath, ruleConfig, violations);
+  const maskedComments = runTextPasses(content, lines, filePath, relativePath, ruleConfig, violations);
   const isPhp = isPhpPath(filePath);
   if (isPhp) return collectPhpViolations(content, filePath, relativePath, options, config, violations);
 
@@ -137,7 +142,7 @@ const collectRawViolations = (content, filePath, relativePath, options, config) 
   violations.push(...checkLineBudgets({ content, relativePath, config: ruleConfig, sfc, hasHighComplexity }));
   const record = { relativePath, kind: coverageKind, sfc: describeSfcCoverage(sfc), language: getLanguageForFile(filePath)?.id ?? null, reason: coverageReason };
   recordFileCoverage(options.coverage, record);
-  return { violations, coverage: { kind: record.kind, language: record.language, reason: record.reason }, parserComments };
+  return { violations, coverage: { kind: record.kind, language: record.language, reason: record.reason }, parserComments, maskedComments };
 };
 
 /**
@@ -156,8 +161,8 @@ export const auditCode = (content, filePath, relativePath, options = {}) =>
  */
 export function auditCodeDetailed(content, filePath, relativePath, options = {}) {
   const config = normalizeConfig(options.config);
-  const { violations: raw, coverage, commentRegions = null, fileHeaderEndLine = 0, parserComments = null } = collectRawViolations(content, filePath, relativePath, options, config);
-  const filtered = applyAuditPostFilters(raw, content.split('\n'), { commentRegions, fileHeaderEndLine, parserComments });
+  const { violations: raw, coverage, commentRegions = null, fileHeaderEndLine = 0, parserComments = null, maskedComments = null } = collectRawViolations(content, filePath, relativePath, options, config);
+  const filtered = applyAuditPostFilters(raw, content.split('\n'), { commentRegions, fileHeaderEndLine, parserComments, maskedComments });
   const violations = applyRuleOverrides(filtered, relativePath, config).map(withTaxonomy);
   return { violations, coverage };
 }

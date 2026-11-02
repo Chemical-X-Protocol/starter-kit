@@ -8,28 +8,32 @@
  *   comment may carry it on its following lines, and it lasts to its closer either way.
  * - Where an annotation applies. A catch-family finding with columns (JS and C#: catchColumn,
  *   endColumn, tryLine, tryColumn, tryBraceLine/tryBraceColumn at the end of the try block,
- *   trailEndColumn, and keywordColumns/endKeywordColumns, where a try or catch keyword starts
- *   on its first and last line) is read by column (C4) only when one of those lines holds a try
- *   or catch keyword other than its own and its try's. Then it owns the annotations between its
- *   try block's closing brace and its own closing brace, one after that brace on the same line
- *   up to trailEndColumn (where a later try starts or an enclosing try block, catch or finally
- *   closes), one whose comment ends before the catch keyword on its line (a block comment may
- *   open above) with no other try or catch keyword in between, and one ending on the line above
- *   when its comment opened on a comment-only line and no other try or catch precedes its try
- *   on that line. The keywords are the parser's try statements and catch clauses for JS and
- *   masked code for C#, so a comment, a string, a member, a key, a method, a $, # or @ name, a
- *   regex or JSX text spelled try or catch is none. For JS, TS, JSX and Vue the comment
- *   positions come from the parser's comments (parserComments), so code the line scanner reads
- *   as a comment (a # name, a regex holding // or /*, JSX text) cannot move them. Every other
- *   catch, and an annotation no parser comment holds, keeps 4ea6eb2's window: its own lines, a
- *   comment-only marker line whose reading ends on the line above (reasonEndLine), and the text
- *   after its try brace. SC-4 adds a block comment opened on a comment-only line that closes on
- *   the line above or on the catch's line. The post-filters drop the keyword columns from what
- *   they return. Any other finding (and PHP) uses its lines (line..endLine), an annotation on a
- *   comment-only line through the line below its closer (so the rest of its comment and a
- *   closer line that code shares count, whatever line opened the comment), and the text after
- *   a try brace on the line above (`tryBraceLine`). A covering annotation without a reason
- *   leaves a note that says so.
+ *   trailEndColumn, statementEndColumn/statementTrailEndColumn, and keywordColumns and
+ *   endKeywordColumns, where a try or catch keyword starts on its first and last line) is read by
+ *   column (C4) only when one of those lines holds a try or catch keyword other than its own and
+ *   its try's. Then it owns the annotations between its try block's closing brace and its own
+ *   closing brace, one after that brace on the same line up to trailEndColumn (where a later try
+ *   starts or an enclosing try block, catch or finally closes) or, when a try nested in its own
+ *   try statement comes first, after that statement's end up to statementTrailEndColumn, one
+ *   whose comment ends before the catch keyword on its line (a block comment may open above) with
+ *   no other try or catch keyword in between, and one ending on the line above when its comment
+ *   opened on a comment-only line and no other try or catch precedes its try on that line. The
+ *   keywords are the parser's try statements and catch clauses for JS and masked code for C#, so
+ *   a comment, a string, a member, a key, a method, a $, # or @ name, a regex or JSX text spelled
+ *   try or catch is none, and a try with no catch clause takes no part. The comment positions
+ *   come from the parser's comments for JS, TS, JSX and Vue (parserComments) and from the C#
+ *   masker for C# (maskedComments), so code the line scanner reads as a comment (a # name, a
+ *   regex holding // or /*, JSX text, "//" in a string inside a C# interpolation hole) cannot
+ *   move them. Every other catch, and an annotation no parser or masker comment holds, keeps
+ *   4ea6eb2's window: its own lines, a comment-only marker line whose reading ends on the line
+ *   above (reasonEndLine), and the text after its try brace. SC-4 adds a block comment opened on
+ *   a comment-only line that closes on the line above or on the catch's line (placed by the
+ *   parser for JS, TS, JSX and Vue, and by the line scanner for C#). The post-filters drop the
+ *   keyword columns from what they return. Any other finding (and PHP) uses its lines
+ *   (line..endLine), an annotation on a comment-only line through the line below its closer (so
+ *   the rest of its comment and a closer line that code shares count, whatever line opened the
+ *   comment), and the text after a try brace on the line above (`tryBraceLine`). A covering
+ *   annotation without a reason leaves a note that says so.
  * - Rules outside the catch family have no revision for per-marker reading, so they also keep
  *   the line reading 4ea6eb2 gave: one annotation at a line's first marker, whose reason runs
  *   past any later marker to the comment closer and, when that leaves it empty, comes from the
@@ -227,12 +231,18 @@ const isInOwnClause = (annotation, violation) => {
   return isAfterStart && isBeforeEnd;
 };
 
-// After the catch's closing brace on its last line, stopping at trailEndColumn when one is set.
+const isInColumns = (column, from, to) => column >= from && column < (to ?? Infinity);
+
+// After the catch's closing brace on its last line, stopping at trailEndColumn when one is set,
+// and after its own try statement's end (statementEndColumn) up to statementTrailEndColumn when a
+// try nested in that statement stopped it first.
 const isTrailingCatch = (annotation, violation) => {
   const isOnEndLine = annotation.line === violation.endLine;
-  const isAfterEnd = annotation.commentStart >= violation.endColumn;
-  const isBeforeLimit = annotation.commentStart < (violation.trailEndColumn ?? Infinity);
-  return isOnEndLine && isAfterEnd && isBeforeLimit;
+  if (!isOnEndLine) return false;
+  const isInTrail = isInColumns(annotation.commentStart, violation.endColumn, violation.trailEndColumn);
+  const hasStatementTrail = Number.isInteger(violation.statementEndColumn);
+  const isAfterStatement = hasStatementTrail && isInColumns(annotation.commentStart, violation.statementEndColumn, violation.statementTrailEndColumn);
+  return isInTrail || isAfterStatement;
 };
 
 // An annotation ending right above the catch's line counts when its comment opened on a
@@ -319,25 +329,36 @@ const placeByParser = (annotation, spans, lines) => {
   };
 };
 
-// Where an annotation's comment sits for catch ownership and SC-4: the parser's comment when the
-// file has parser comments (JS, TS, JSX, Vue), else the line scanner's region (C#).
-const buildPlacer = (lines, parserComments) => {
-  if (!parserComments) return (annotation) => annotation;
+const keepPlace = (annotation) => annotation;
+
+// The annotation as the comments given place it (each placement made once), or the line scanner's
+// region when there are none.
+const buildPlacer = (lines, comments) => {
+  if (!comments) return keepPlace;
   const placements = new Map();
   return (annotation) => {
     const isPlaced = placements.has(annotation);
-    if (!isPlaced) placements.set(annotation, placeByParser(annotation, parserComments, lines));
+    if (!isPlaced) placements.set(annotation, placeByParser(annotation, comments, lines));
     return placements.get(annotation);
   };
 };
 
+// Where an annotation's comment sits: for catch ownership by column the parser's comment (JS, TS,
+// JSX, Vue) or the C# masker's, and for SC-4's window the parser's comment, with C# keeping the
+// line scanner's region there.
+const buildPlacers = (lines, { parserComments, maskedComments }) => {
+  const placeByColumn = buildPlacer(lines, parserComments ?? maskedComments);
+  const hasParserComments = Boolean(parserComments);
+  return { placeByColumn, placeInLineWindow: hasParserComments ? placeByColumn : keepPlace };
+};
+
 // A catch is read by column only where another try or catch shares its lines, and only with an
-// annotation it can place; an annotation the parser does not see as a comment keeps main's window.
+// annotation it can place; an annotation no parser or masker comment holds keeps main's window.
 const isInCatchWindow = (annotation, violation, context) => {
-  const placed = context.place(annotation);
+  const placed = context.placeByColumn(annotation);
   const isReadByColumn = Boolean(placed) && sharesLineWithOtherKeyword(violation);
   if (isReadByColumn) return isOwnedByCatch(placed, violation);
-  return isInCatchLineWindow(annotation, violation, placed);
+  return isInCatchLineWindow(annotation, violation, context.placeInLineWindow(annotation));
 };
 
 // An annotation on a comment-only line covers every line after it through the line below its
@@ -370,7 +391,7 @@ const listCandidateAnnotations = (violation, context) => {
 const listCoveringAnnotations = (violation, context) => listCandidateAnnotations(violation, context)
   .filter((annotation) => doesTokenCover(annotation.token, violation.rule) && isAnnotationInRange(annotation, violation, context));
 
-/** context: { annotations, lineReadings, headerEndLine, place }, as applyAuditPostFilters builds it. */
+/** context: { annotations, lineReadings, headerEndLine, placeByColumn, placeInLineWindow }, as applyAuditPostFilters builds it. */
 export const isSuppressedByAnnotation = (violation, context) =>
   listCoveringAnnotations(violation, context).some((annotation) => annotation.hasReason);
 
@@ -409,11 +430,13 @@ const withoutKeywordColumns = (violation) => {
 /**
  * Applies annotations (suppression and missing-reason notes) and dedup; returns a new array.
  * parserComments: the parser's comments as { start, end } positions (1-based lines, 0-based
- * columns), which place annotations for catch ownership where tries share a line.
+ * columns), which place annotations for catch ownership where tries share a line and for SC-4.
+ * maskedComments: C#'s comments as its masker reads them, in the same shape, which place them for
+ * catch ownership where tries share a line.
  */
-export const applyAuditPostFilters = (violations, lines, { commentRegions = null, fileHeaderEndLine = 0, parserComments = null } = {}) => {
+export const applyAuditPostFilters = (violations, lines, { commentRegions = null, fileHeaderEndLine = 0, parserComments = null, maskedComments = null } = {}) => {
   const collected = commentRegions ? collectWithRegions(lines, commentRegions) : collectWithScanner(lines);
-  const context = { ...collected, headerEndLine: fileHeaderEndLine, place: buildPlacer(lines, parserComments) };
+  const context = { ...collected, headerEndLine: fileHeaderEndLine, ...buildPlacers(lines, { parserComments, maskedComments }) };
   const hasAnnotations = collected.annotations.length > 0 || collected.lineReadings.length > 0;
   const allowed = hasAnnotations
     ? violations.filter((v) => !isSuppressedByAnnotation(v, context)).map((v) => withMissingReasonNote(v, context))
