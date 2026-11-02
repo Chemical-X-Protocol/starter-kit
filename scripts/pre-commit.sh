@@ -66,7 +66,7 @@ fi
 # minGrade/minScore in .chemx/config.json (comments allowed), then the B/80 exported below as
 # CHEMX_DEFAULT_MIN_GRADE/CHEMX_DEFAULT_MIN_SCORE. Env, not flags, so a chemx from before them
 # ignores the defaults instead of refusing a flag (#253). This script parses no config, so no
-# config or env value reaches the eval-ed command (#254, #255). Line budgets are not checked
+# config value or floor variable reaches the eval-ed command (#254, #255). Line budgets are not checked
 # here: they come from cli/audit/line-budgets.js through the staged-delta audit, so the hook
 # and `chemx check` never disagree (#1476, #1716).
 

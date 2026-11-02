@@ -95,7 +95,7 @@ fi
 # CHEMX_MIN_SCORE, then minGrade/minScore in .chemx/config.json (comments allowed), then the
 # defaults rendered below and exported as CHEMX_DEFAULT_MIN_GRADE/CHEMX_DEFAULT_MIN_SCORE. Env,
 # not flags, so a chemx from before them ignores the defaults instead of refusing a flag. This
-# hook parses no config, so no config or env value reaches the eval-ed command. Line budgets
+# hook parses no config, so no config value or floor variable reaches the eval-ed command. Line budgets
 # come from chemx's line-budgets.js through the staged-delta audit, so this hook and
 # \`chemx check\` never disagree.
 
