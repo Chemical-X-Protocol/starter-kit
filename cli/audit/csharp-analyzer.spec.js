@@ -11,6 +11,45 @@ test("csharp-analyzer: maskCommentsAndStrings preserves layout and line count", 
   assert.equal(masked.includes("hello"), false);
 });
 
+test("csharp-analyzer: maskCommentsAndStrings blanks an interpolated or raw string's text and the literals in its holes, keeping the hole code", () => {
+  const isBlankedOnly = (code, masked) => [...code].every((char, i) => masked[i] === char || (masked[i] === " " && char !== "\n"));
+  for (const [literal, holeCode] of [
+    ['$"{(c ? "try {" : "catch (")}"', "(c ? : )"],
+    ['$"{{try}} {(c ? \'"\' : "catch {")} }}"', "(c ? : )"],
+    ['$@"{(c ? "a" : "b")}\n  {d} ""q"""', "(c ? : ) d"],
+    ['@$"{(c ? @"x""y" : "}")}"', "(c ? : )"],
+    ['$"{(c ? $"{(d ? "try {" : "x")}" : "y")}"', "(c ? (d ? : ) : )"],
+    ['$"""\n  {(c ? "try {" : """catch""")}\n  """', "(c ? : )"],
+    ['$$"""{x} {{(c ? "}" : "catch (")}}"""', "(c ? : )"],
+    ['"""\n  try { } catch { }\n  """', ""],
+    ['$"{x:N2} {(c ? "try {" : "y")} {d,8:try}"', "x (c ? : ) d,8"],
+    ['$@"{x /* catch { } */} {F(() => { try { A(); } catch { } return 1; })}"', "x F(() => { try { A(); } catch { } return 1; })"]
+  ]) {
+    const code = `var s = ${literal}; try { A(); } catch { }\n`;
+    const masked = maskCommentsAndStrings(code);
+    assert.equal(masked.length, code.length, literal);
+    assert.ok(isBlankedOnly(code, masked), literal);
+    assert.equal(masked.replace(/\s+/g, " ").trim(), `var s = ${holeCode} ; try { A(); } catch { }`.replace(/\s+/g, " "), literal);
+  }
+  const unterminated = 'var s = $"{(c ? "a" : "b")}\ntry { A(); } catch { }\n';
+  assert.equal(maskCommentsAndStrings(unterminated).split("\n")[1], "try { A(); } catch { }");
+});
+
+test("csharp-analyzer: a try/catch in a lambda inside an interpolation hole is still a shallow catch (C5)", () => {
+  const code = 'class S\n{\n    void M()\n    {\n        var s = $"{F(() => { try { A(); } catch { } return 1; })}";\n    }\n}\n';
+  assert.deepEqual(csharpCatchHits(code).map((hit) => [hit.line, hit.catchColumn]), [[5, code.split("\n")[4].indexOf("catch")]]);
+  const quoted = code.replace("try { A(); } catch { }", 'Log("try { A(); } catch { }");');
+  assert.deepEqual(csharpCatchHits(quoted), []);
+});
+
+test("csharp-analyzer: hole code does not count toward method complexity or nesting, as before the masker kept it", () => {
+  const conditions = Array.from({ length: 11 }, (_, i) => `        if (a${i}) { }`).join("\n");
+  const code = `public class Report\n{\n    public string Build()\n    {\n${conditions}\n        return $"{(name ?? "anonymous")} {(ok && done ? "y" : "n")}";\n    }\n}\n`;
+  const violations = [];
+  analyzeCSharpCode(code, "Services/Report.cs", violations);
+  assert.deepEqual(violations.filter((v) => v.rule === "COMPLEXITY_CYCLOMATIC_HIGH"), []);
+});
+
 test("csharp-analyzer: flags global simulation switches with isAiSlop: true", () => {
   const code = `
 namespace Nadena.Domain;
@@ -286,4 +325,131 @@ test("csharp-analyzer: a reasonless or punctuation-only annotation is flagged an
   const ish = csharpCatchHits(wrapCSharpCatch("        catch (Exception) { } // chemx-allow: best-effort-ish reason"));
   assert.equal(ish.length, 1);
   assert.equal(ish[0].hazard.includes("needs a reason"), false, ish[0].hazard);
+});
+
+test("csharp-analyzer: punctuation after best-effort still reads as the annotation (C1)", () => {
+  assert.deepEqual(csharpCatchHits(wrapCSharpCatch("        catch (Exception) { } // chemx-allow: best-effort, warmup is optional")), []);
+  const bare = csharpCatchHits(wrapCSharpCatch("        catch (Exception) { } // chemx-allow: best-effort."));
+  assert.equal(bare.length, 1);
+  assert.ok(bare[0].hazard.includes("needs a reason"), bare[0].hazard);
+});
+
+const wrapCSharpMethod = (body) => `public class CacheWarmer\n{\n    public void Run()\n    {\n${body}\n    }\n}\n`;
+
+test("csharp-analyzer: a block annotation above a one-line try counts when its closer is on a later line (SC-4)", () => {
+  for (const above of [
+    "        /* chemx-allow: best-effort warmup is optional\n         */",
+    "        /*\n         * chemx-allow: best-effort warmup is optional\n         */"
+  ]) {
+    const code = wrapCSharpMethod(`${above}\n        try { Warm(); } catch { }`);
+    assert.deepEqual(csharpCatchHits(code), [], code);
+  }
+});
+
+// C4 for C#: annotation ownership by column; catchColumn is the 0-based column of the catch keyword.
+const csharpCatchColumns = (code) => csharpCatchHits(code).map((hit) => [hit.line, hit.catchColumn]);
+
+test("csharp-analyzer: a one-line nested try annotated after the outer try brace exempts only the outer catch (C4)", () => {
+  const code = "try { try { X(); } catch { } } // chemx-allow: best-effort outer reason\ncatch { }\n";
+  assert.deepEqual(csharpCatchColumns(code), [[1, code.indexOf("catch")]]);
+});
+
+test("csharp-analyzer: two tries on one line are owned by column, not by line (C4)", () => {
+  const trailing = "try { X(); } catch { } try { Y(); } catch { } // chemx-allow: best-effort second is optional\n";
+  assert.deepEqual(csharpCatchColumns(trailing), [[1, trailing.indexOf("catch")]]);
+  const above = "// chemx-allow: best-effort first is optional\ntry { X(); } catch { } try { Y(); } catch { }\n";
+  assert.deepEqual(csharpCatchColumns(above), [[2, above.split("\n")[1].lastIndexOf("catch")]]);
+});
+
+test("csharp-analyzer: two shallow catches on one line are two findings at their catch columns (C4)", () => {
+  const twoOnOneLine = wrapCSharpMethod("        try { A(); } catch { } try { B(); } catch { }");
+  const line = twoOnOneLine.split("\n")[4];
+  const columns = (code) => csharpCatchHits(code).map((hit) => [hit.line, hit.column]);
+  assert.deepEqual(columns(twoOnOneLine), [[5, line.indexOf("catch")], [5, line.lastIndexOf("catch")]]);
+  const firstAnnotated = wrapCSharpMethod("        try { A(); } catch { } /* chemx-allow: best-effort a */ try { B(); } catch { }");
+  assert.deepEqual(columns(firstAnnotated), [[5, firstAnnotated.split("\n")[4].lastIndexOf("catch")]]);
+  const multiLine = wrapCSharpCatch("        catch (Exception)\n        {\n        }");
+  assert.deepEqual(columns(multiLine), [[10, "        ".length]]);
+});
+
+test("csharp-analyzer: try or catch text in an interpolated string's holes neither ends ownership nor limits a trailing annotation (C4)", () => {
+  const reason = "best-effort warm cache is optional";
+  const csharp = (...statements) => `class S\n{\n    void M()\n    {\n${statements.map((statement) => `        ${statement}\n`).join("")}    }\n}`;
+  const interpolated = 'var s = $"{(c ? "try {" : "catch (")}";';
+  for (const code of [
+    csharp(`// chemx-allow: ${reason}`, `${interpolated} try { A(); } catch { }`),
+    csharp(`${interpolated} /* chemx-allow: ${reason} */ try { A(); } catch { }`),
+    csharp(`try { A(); } catch { } ${interpolated} // chemx-allow: ${reason}`),
+    csharp(`// chemx-allow: ${reason}`, 'var s = $"{(c ? "try {" : "b")}"; try { A(); } catch { }')
+  ]) {
+    assert.deepEqual(csharpCatchHits(code), [], code);
+    assert.equal(csharpCatchHits(code.replace("chemx-allow: ", "")).length, 1, code);
+  }
+  const twoTries = csharp(`${interpolated} try { A(); } catch { } try { B(); } catch { } // chemx-allow: ${reason}`);
+  assert.deepEqual(csharpCatchColumns(twoTries), [[5, twoTries.split("\n")[4].indexOf("catch { }")]]);
+});
+
+test("csharp-analyzer: a catch at the start of its line reports column 1 as the JS catch rules do, apart from a second catch there", () => {
+  const jsHits = auditCode("try { a(); }\ncatch {}\n", "src/x.js", "src/x.js", { config: {} }).filter((v) => v.rule === "ERROR_SWALLOWED_EXCEPTION");
+  assert.deepEqual(jsHits.map((hit) => [hit.line, hit.column]), [[2, 1]]);
+  const code = "try { A(); }\ncatch { } try { B(); } catch { }\n";
+  const hits = csharpCatchHits(code);
+  assert.deepEqual(hits.map((hit) => [hit.line, hit.column]), [[2, 1], [2, code.split("\n")[1].lastIndexOf("catch")]]);
+  assert.deepEqual(hits.map((hit) => hit.catchColumn), [0, code.split("\n")[1].lastIndexOf("catch")]);
+});
+
+// C5: the scan reads masked content (comments and strings blanked, offsets kept), so a body that
+// holds only comments is empty, a when filter may sit before it, and quoted catch text never counts.
+test("csharp-analyzer: a comment-only body or a when filter is still a shallow catch (C5)", () => {
+  for (const catchBlock of [
+    "        catch (Exception) { /* swallow */ }",
+    "        catch (Exception)\n        {\n            // swallow\n            // and log nothing\n        }",
+    "        catch (Exception ex) when (ex is IOException) { }",
+    "        catch (Exception ex) when (Check(ex, \")\")) { }",
+    "        catch when (ShouldSwallow()) { /* swallow */ }",
+    "        catch (Exception ex)\n            when (ex is IOException)\n        {\n        }"
+  ]) {
+    for (const code of [wrapCSharpCatch(catchBlock), wrapCSharpCatch(catchBlock).replace(/\n/g, "\r\n")]) {
+      const hits = csharpCatchHits(code);
+      const lastLine = 10 + (catchBlock.match(/\n/g) || []).length;
+      assert.deepEqual(hits.map((hit) => [hit.line, hit.endLine, hit.tryLine, hit.severity]), [[10, lastLine, 6, "MEDIUM"]], code);
+    }
+  }
+});
+
+test("csharp-analyzer: a filtered catch with a statement, or catch text in a string or comment, is not shallow (C5)", () => {
+  for (const catchBlock of [
+    "        catch (Exception ex) when (ex is IOException) { Log(ex); }",
+    "        catch (Exception) { /* swallow */ Log(); }",
+    "        finally { Log(\"catch {}\"); } // catch (Exception) { }"
+  ]) {
+    assert.deepEqual(csharpCatchHits(wrapCSharpCatch(catchBlock)), [], catchBlock);
+  }
+});
+
+test("csharp-analyzer: comment-only and filtered catches honour a best-effort annotation (C5)", () => {
+  const placements = [
+    wrapCSharpCatch("        catch (Exception) { /* chemx-allow: best-effort warmup is optional */ }"),
+    wrapCSharpCatch("        catch (Exception ex) when (ex is IOException) { } // chemx-allow: best-effort warmup is optional"),
+    wrapCSharpCatch("        catch (Exception ex) when (ex is IOException)\n        {\n            // chemx-allow: best-effort warmup is optional\n        }"),
+    wrapCSharpCatch("        catch (Exception ex) when (ex is IOException) { }", "        // chemx-allow: best-effort warmup is optional\n"),
+    "try {\n    X();\n} // chemx-allow: best-effort reason\ncatch (Exception ex) when (ex is IOException) { }\n"
+  ];
+  for (const code of placements) {
+    assert.deepEqual(csharpCatchHits(code), [], code);
+    assert.deepEqual(csharpCatchHits(code.replace(/\n/g, "\r\n")), [], code);
+  }
+});
+
+test("csharp-analyzer: a reasonless annotation in a comment-only body is flagged and says so (C5)", () => {
+  for (const catchBlock of [
+    "        catch (Exception) { /* chemx-allow: best-effort */ }",
+    "        catch (Exception ex) when (ex is IOException)\n        {\n            /* chemx-allow: best-effort */\n        }"
+  ]) {
+    for (const code of [wrapCSharpCatch(catchBlock), wrapCSharpCatch(catchBlock).replace(/\n/g, "\r\n")]) {
+      const hits = csharpCatchHits(code);
+      assert.equal(hits.length, 1, code);
+      assert.ok(hits[0].hazard.includes("needs a reason"), hits[0].hazard);
+    }
+  }
 });

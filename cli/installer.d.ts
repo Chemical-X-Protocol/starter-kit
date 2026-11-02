@@ -21,6 +21,7 @@ export declare function saveProjectConfig(targetDir?: string, config?: Record<st
 export declare function readExistingProjectConfig(targetDir?: string): Record<string, unknown> | null;
 export declare function buildInstallerProjectConfig(opts?: InstallOptions, existing?: Record<string, unknown>): Record<string, unknown>;
 export declare function saveInstallerProjectConfig(targetDir?: string, opts?: InstallOptions): boolean;
+export declare function formatInstallOutcome(isConfigSaved: boolean): string;
 export declare function areGuardrailsInstalled(targetDir?: string): boolean;
 export declare function isQueryMachineInstalled(targetDir?: string): boolean;
 export declare function ensurePackageScripts(targetDir?: string): boolean;

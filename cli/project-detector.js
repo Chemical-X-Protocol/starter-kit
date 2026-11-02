@@ -1,13 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { readJsonOr } from './fs-json.js';
+import { readExistingProjectConfig } from './config/loader.js';
 
-export const loadProjectConfig = (cwd = process.cwd()) => {
-  const cfgPath = path.resolve(cwd, '.chemx', 'config.json');
-  const hasConfig = fs.existsSync(cfgPath);
-  if (!hasConfig) return {};
-  return readJsonOr(cfgPath, {});
-};
+// Read through the shared loader, so comments are allowed; a config that is not a JSON object reads as {}.
+export const loadProjectConfig = (cwd = process.cwd()) => readExistingProjectConfig(cwd) ?? {};
 
 export const normalizeFramework = (val) => {
   if (!val) return null;

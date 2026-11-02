@@ -3,7 +3,8 @@
  * 40098d0): a swallowed catch is MEDIUM by default and HIGH only when a let/var assigned in
  * its try is read after the try with no default in between. Each site reports one surviving
  * catch-family rule: ERROR_SWALLOWED_EXCEPTION for an empty catch, AI_SLOP_SHALLOW_CATCH for
- * a console-only one.
+ * a console-only one. The rows for writes that do or do not count as a default (C2) are in
+ * shallow-catch-writes.spec.js.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -19,6 +20,9 @@ const assertOne = (code, severity, file) => {
   assert.equal(hits[0].severity, severity, `expected ${severity} for:\n${code}`);
   return hits[0];
 };
+
+// A function whose try may leave v unset, followed by the given lines.
+const afterTryInFunction = (lines) => `export const g = (a) => {\n  let v;\n  try { v = a(); } catch {}\n${lines}\n};\n`;
 
 test('an empty catch with no read binding is MEDIUM', () => {
   const hit = assertOne('try { a(); } catch {}\n', 'MEDIUM');
@@ -49,9 +53,11 @@ test('escalates for destructuring assignments', () => {
   assert.ok(hit.hazard.includes('"a"'));
 });
 
-test('the gate-coherence fixture stays HIGH', () => {
+test('an && chain guards every later link and the branch it tests', () => {
   const code = 'export const p = (r) => { let v; try { v = JSON.parse(r); } catch {} if (v && v.a && v.b && v.c) return v; return null; };\n';
-  assertOne(code, 'HIGH');
+  assertOne(code, 'MEDIUM');
+  assertOne('let v;\ntry { v = f(); } catch {}\nuse(v && v.a && v.b);\n', 'MEDIUM');
+  assertOne('let v;\ntry { v = f(); } catch {}\nif (v.a && v && v.b) use(v.c);\n', 'HIGH');
 });
 
 test('an undefined initializer is not a default', () => {
@@ -67,6 +73,45 @@ test('a && read after the try is still a read unless its left side checks the bi
   assertOne('let v;\ntry { v = f(); } catch {}\nuse(ok && v);\n', 'HIGH');
   assertOne('let v;\ntry { v = f(); } catch {}\nuse(v.a && v);\n', 'HIGH');
   assertOne('let v;\ntry { v = f(); } catch {}\nuse(v && v.a);\n', 'MEDIUM');
+});
+
+test('an || whose left side is true while the binding is unset guards its right side', () => {
+  assertOne(afterTryInFunction('  return v == null || v.length;'), 'MEDIUM');
+  assertOne(afterTryInFunction('  return !v || v.x;'), 'MEDIUM');
+  assertOne('let v;\ntry { v = f(); } catch {}\nuse(v === undefined || v.x);\n', 'MEDIUM');
+  assertOne('let v;\ntry { v = f(); } catch {}\nuse(typeof v === "undefined" || v.x);\n', 'MEDIUM');
+  assertOne('let v;\ntry { v = f(); } catch {}\nuse(ok || v == null || v.x);\n', 'MEDIUM');
+});
+
+test('an || whose left side may be false while the binding is unset still escalates', () => {
+  assertOne('let v;\ntry { v = f(); } catch {}\nuse(v || v.x);\n', 'HIGH');
+  assertOne('let v;\ntry { v = f(); } catch {}\nuse(ok || v.x);\n', 'HIGH');
+  assertOne('let v;\ntry { v = f(); } catch {}\nuse(v != null || v.x);\n', 'HIGH');
+  assertOne('let v;\ntry { v = f(); } catch {}\nuse(v === null || v.x);\n', 'HIGH');
+  assertOne('let v;\ntry { v = f(); } catch {}\nuse(typeof v === "string" || v.x);\n', 'HIGH');
+  assertOne('let v;\ntry { v = f(); } catch {}\nuse((!v && ok) || v.x);\n', 'HIGH');
+});
+
+test('an early exit while the binding is unset guards the later reads in its block', () => {
+  assertOne(afterTryInFunction('  if (!v) return;\n  use(v);'), 'MEDIUM');
+  assertOne(afterTryInFunction('  if (typeof v === "undefined") return 0;\n  return v.x;'), 'MEDIUM');
+  assertOne(afterTryInFunction('  if (v == null) throw new Error("no v");\n  return v.x;'), 'MEDIUM');
+  assertOne(afterTryInFunction('  if (!v) {\n    log();\n    return;\n  }\n  return v.x;'), 'MEDIUM');
+  assertOne(afterTryInFunction('  if (!v) {\n    return;\n    log();\n  }\n  return v.x;'), 'MEDIUM');
+  assertOne(afterTryInFunction('  if (other || v === undefined) return;\n  return v.x;'), 'MEDIUM');
+  assertOne(afterTryInFunction('  if (!v) return;\n  if (ok) use(v.x);'), 'MEDIUM');
+  assertOne('for (const k of ks) {\n  let v;\n  try { v = f(k); } catch {}\n  if (!v) continue;\n  use(v.x);\n}\n', 'MEDIUM');
+  assertOne('for (const k of ks) {\n  let v;\n  try { v = f(k); } catch {}\n  if (!v) break;\n  use(v.x);\n}\n', 'MEDIUM');
+});
+
+test('an early exit that may let the unset binding through still escalates', () => {
+  assertOne(afterTryInFunction('  if (other) return;\n  use(v);'), 'HIGH');
+  assertOne(afterTryInFunction('  if (!v && x) return;\n  use(v);'), 'HIGH');
+  assertOne(afterTryInFunction('  if (v) return;\n  return v.x;'), 'HIGH');
+  assertOne(afterTryInFunction('  if (!v) log();\n  return v.x;'), 'HIGH');
+  assertOne(afterTryInFunction('  if (!v) {\n    if (x) return;\n  }\n  return v.x;'), 'HIGH');
+  assertOne(afterTryInFunction('  if (ok) {\n    if (!v) return;\n  }\n  return v.x;'), 'HIGH');
+  assertOne('export const g = (a) => {\n  let v;\n  if (!v) return;\n  try { v = a(); } catch {}\n  return v.x;\n};\n', 'HIGH');
 });
 
 test('an explicit default that checks the binding first keeps it MEDIUM', () => {
@@ -98,10 +143,27 @@ test('a check on another binding, or a read after the branch, still escalates', 
   assertOne('let v;\ntry { v = f(); } catch {}\nconst x = v.x;\n', 'HIGH');
 });
 
-test('known false negative: a write inside a closure counts as a guard', () => {
-  // The closure may never run, so v can still be unset at use(v), but any write is trusted.
-  assertOne('let v;\ntry { v = f(); } catch {}\nrun(() => { v = d; });\nuse(v);\n', 'MEDIUM');
-  assertOne('let v;\nconst reset = () => { v = d; };\ntry { v = f(); } catch {}\nuse(v);\n', 'MEDIUM');
+// C3: the consequent of an if or a conditional and the right side of && run once the test held,
+// so only a test that fails while the binding is unset guards them.
+test('an unset check guards nothing that runs once it held (C3)', () => {
+  assertOne('let v;\ntry { v = f(); } catch {}\nuse(a && !v && v.x);\n', 'HIGH');
+  assertOne('let v;\ntry { v = f(); } catch {}\nif (a && !v) use(v.x);\n', 'HIGH');
+  assertOne('let v;\ntry { v = f(); } catch {}\nif (a && v == null) use(v.x);\n', 'HIGH');
+  assertOne('let v;\ntry { v = f(); } catch {}\nif (!v) use(v.x);\n', 'HIGH');
+  assertOne('let v;\ntry { v = f(); } catch {}\nuse(!v && v.x);\n', 'HIGH');
+  assertOne('let v;\ntry { v = f(); } catch {}\nconst x = v === undefined ? v.x : d;\n', 'HIGH');
+  assertOne('let v;\ntry { v = f(); } catch {}\nif (typeof v === "undefined") use(v.x);\n', 'HIGH');
+  assertOne('let v;\ntry { v = f(); } catch {}\nif (v) skip();\nelse use(v.x);\n', 'HIGH');
+});
+
+test('a set check guards what runs once it held, and an unset check what runs once it failed (C3)', () => {
+  assertOne('let v;\ntry { v = f(); } catch {}\nuse(a && !!v && v.x);\n', 'MEDIUM');
+  assertOne('let v;\ntry { v = f(); } catch {}\nif (a && v != null) use(v.x);\n', 'MEDIUM');
+  assertOne('let v;\ntry { v = f(); } catch {}\nif (v !== undefined && a) use(v.x);\n', 'MEDIUM');
+  assertOne('let v;\ntry { v = f(); } catch {}\nif (typeof v !== "undefined") use(v.x);\n', 'MEDIUM');
+  assertOne('let v;\ntry { v = f(); } catch {}\nif (!v) skip();\nelse use(v.x);\n', 'MEDIUM');
+  assertOne('let v;\ntry { v = f(); } catch {}\nconst x = v === undefined ? d : v.x;\n', 'MEDIUM');
+  assertOne('let v;\ntry { v = f(); } catch {}\nif (!v || a) skip();\nelse use(v.x);\n', 'MEDIUM');
 });
 
 test('a real initializer or an assignment before the try keeps it MEDIUM', () => {

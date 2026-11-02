@@ -1,7 +1,6 @@
 // The CLI proper and the public API, loaded by the conflict-safe boot shim in cli/index.js.
 import './silence-warnings.js';
 import fs from 'node:fs';
-import path from 'node:path';
 import { sanitizeOutputStreams, exitQuietlyOnClosedPipe } from './terminal.js';
 import {
   handleError,
@@ -11,7 +10,7 @@ import {
 } from './errors/index.js';
 import { printHelp } from './help.js';
 import { ROUTABLE_COMMAND_TOKENS } from './commands-schema.js';
-import { readJsonOr } from './fs-json.js';
+import { readExistingProjectConfig } from './config/loader.js';
 import { applyCliRoot } from './cli-root.js';
 import { schemaValueFlags } from './cli-root-flags.js';
 
@@ -37,12 +36,8 @@ const rawArgs = process.argv.slice(2);
 const CAPSULE_PREFIXES = ['m-', 'a-', 'o-', 't-', 'use-', 'v-'];
 const isCapsulePrefix = (arg) => CAPSULE_PREFIXES.some((p) => arg.startsWith(p));
 
-const loadProjectConfig = () => {
-  const cfgPath = path.resolve(process.cwd(), '.chemx', 'config.json');
-  const isMissing = Boolean(!fs.existsSync(cfgPath));
-  if (isMissing) return {};
-  return readJsonOr(cfgPath, {});
-};
+// .chemx/config.json through the shared loader, so a commented config still sets the audit's floors and stage.
+const loadProjectConfig = () => readExistingProjectConfig(process.cwd()) ?? {};
 
 // ---------------------------------------------------------------------------
 // Public API: lazy proxy exports (zero startup cost for consumers)

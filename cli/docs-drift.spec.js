@@ -41,9 +41,51 @@ test('docs drift: guidance names the published chemx binary, never cx or cmx', (
   assert.deepStrictEqual(scan(aliasPattern), []);
 });
 
+// A flat 100-line claim in any wording guidance used to carry. cli/audit/line-budgets.spec.js
+// scans its report files with this same pattern (matcher ported from 15dabc9).
+const FLAT_CAP = /<\s*100\s*(lines?|LOC|L\b)|\b100[\s-]*(lines?|LOC|L)\b|\b(under|approaching|exceeding)\s+100\b/i;
+// atomic-strict really caps capsules at 100 lines, and the read window is a tool budget (AGENTS.md 1.N).
+const isLegitimate100 = (line) => /atomic-strict|read window|100-line window/.test(line);
+const isFlatCapClaim = (line) => FLAT_CAP.test(line) && !isLegitimate100(line);
+
+test('docs drift: the flat-cap matcher catches the 100-line wording guidance used to carry', () => {
+  const historicalClaims = [
+    '* **Sliding-Scale Line Budgets:** Flags files exceeding 100, 500, or 1,000 lines (`LINE_BUDGET_FILE`).',
+    '1. **Strict Molecular Line Budgets (< 100 Lines)**: Single-purpose files.',
+    'Approaching 100 lines is a decomposition trigger.',
+    '| `chemx_check` | Quality | Verify a single file against molecular boundary rules (< 100L, 2-stage booleans). |',
+    '- Enforces the < 100 line molecule capsule limit, Two-Stage Booleans (Directive 3.A).',
+    'Chemical X Standards verified: < 100 lines per file, granular domain types, co-located spec tests.',
+    '2. Molecular Capsule Limit: Maximum 100 lines per molecule capsule file.',
+    '2. Every new molecule component must stay under 100 lines.',
+    'Invariants:    Guarantees <100 LOC limits, Result tuples, 2-stage booleans',
+    "summary: 'Scaffold crystalline molecular capsules under 100 lines.',",
+    'Raw DOM in molecules and files exceeding the 100-line budget',
+    '100 lines is an outer bound per capsule file. Never write monoliths.',
+    'Molecules have a 100-line cap.',
+    "description: 'Scaffolds complete crystalline capsules containing SFC (<100 LOC), reactive controller hook, mixin SCSS, and types.',"
+  ];
+  assert.deepStrictEqual(historicalClaims.filter((claim) => !isFlatCapClaim(claim)), [], 'every historical claim is caught');
+});
+
+test('docs drift: the flat-cap matcher spares scores, atomic-strict lines and the read window', () => {
+  const legitimateLines = [
+    '✔ AST Architecture:  A+ (100/100, 0 violations)',
+    'All 7 Chemical X Molecular Architecture Pillars are 100% Compliant.',
+    "description: 'Minimum acceptable score out of 100.'",
+    'Any file above 500 lines is a monolith warning (HIGH at 1,000, CRITICAL at 2,000).',
+    'Wait up to 100ms between polls.',
+    'molecules use `LINE_BUDGET_MOLECULE` at the active profile budget (250 pragmatic, 100 atomic-strict)',
+    '`--profile=atomic-strict` enforces a 100-line capsule cap.',
+    'Each jig file stays <100 LOC (passes even atomic-strict), Result tuples, 2-stage booleans,',
+    'Files longer than the chemx read window (100 lines by default) render an AST outline.',
+    'A file over the 100-line window reads as an outline; --full returns the whole file.'
+  ];
+  assert.deepStrictEqual(legitimateLines.filter(isFlatCapClaim), [], 'no legitimate line is flagged');
+});
+
 test('docs drift: line budgets state the canonical AGENTS.md policy, not a flat 100-line cap', () => {
-  const flatCap = /(<\s*100\s*(lines?|LOC|L\b)|under 100 lines|100 lines is an outer bound|100-line budget|max(imum)? 100 lines)/i;
-  const hits = scan(flatCap, { allow: (line) => /atomic-strict/.test(line) });
+  const hits = scan(FLAT_CAP, { allow: isLegitimate100 });
   assert.deepStrictEqual(hits, []);
   const policy = describeLineBudgetPolicy();
   assert.match(policy, /250 lines/);

@@ -142,6 +142,9 @@ export const matchesDiscussionTitle = (titleLower, targetLower) => {
   return patterns.some((p) => titleLower.includes(p));
 };
 
+/** True for a grade the audit ranks: A+, A, B, C, D or F (upper case). */
+export const isKnownGrade = (grade) => Object.hasOwn(GRADE_RANKS, grade);
+
 export const isGradeBelowMinimum = (currentGrade, minGrade) => {
   if (!minGrade) return false;
   const currentRank = GRADE_RANKS[currentGrade];

@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import * as installer from '../installer.js';
 import { installProjectMcpConfig } from './installer.js';
 
@@ -30,7 +30,63 @@ test('install lossless: re-installing the hook with new options keeps the user h
     quietly(() => installer.installPreCommitHook(dir, { minGrade: 'B', minScore: 80 }));
     quietly(() => installer.installPreCommitHook(dir, { minGrade: 'A', minScore: 90 }));
     assert.strictEqual(fs.readFileSync(path.join(hooksDir, 'pre-commit.bak'), 'utf-8'), USER_HOOK);
-    assert.match(fs.readFileSync(path.join(hooksDir, 'pre-commit'), 'utf-8'), /MIN_SCORE:-90/);
+    assert.match(fs.readFileSync(path.join(hooksDir, 'pre-commit'), 'utf-8'), /\n {4}export CHEMX_DEFAULT_MIN_GRADE=A CHEMX_DEFAULT_MIN_SCORE=90\n/);
+    // The B/80 hook was chemx's own (isChemxHook read its floors back), so it was replaced, not backed up.
+    assert.deepStrictEqual(hookFilesContaining(hooksDir, 'Chemical X Protocol'), ['pre-commit']);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+// #253: a hook that 4ea6eb2 rendered (the --min-grade=$MIN_GRADE form that grepped .chemx/config.json
+// and eval-ed its floors, #254) is chemx's own, so a reinstall replaces it and keeps no backup copy
+// of that injectable hook. The template is 4ea6eb2's own text from git; a clone without it skips.
+const MAIN_ERA_REV = '4ea6eb2';
+const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+const loadMainEraTemplate = async () => {
+  const shown = spawnSync('git', ['show', `${MAIN_ERA_REV}:cli/installer-templates.js`], { cwd: KIT, encoding: 'utf-8' });
+  const isMissing = shown.status !== 0;
+  if (isMissing) return null;
+  const launcherUrl = pathToFileURL(path.join(KIT, 'cli', 'hooks', 'launcher.js')).href;
+  const dir = tmp('chemx-main-era-');
+  const file = path.join(dir, 'installer-templates.mjs');
+  fs.writeFileSync(file, shown.stdout.replace("from './hooks/launcher.js'", `from '${launcherUrl}'`));
+  try { return await import(pathToFileURL(file).href); } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+};
+const mainEra = await loadMainEraTemplate();
+const MAIN_ERA_SKIP = mainEra ? false : `${MAIN_ERA_REV} is not in this clone`;
+const OLDER_LAUNCHER = { version: '26.1.1-1', cliPath: '/opt/chemx/cli/index.js', ciBin: 'chemx' };
+// [label, minGrade, minScore, launcher]: 4ea6eb2 rendered the floors raw, a shell payload included.
+const MAIN_ERA_HOOKS = [
+  ['the B/80 default', 'B', 80, undefined],
+  ['A+/100 pinned to an older release', 'A+', 100, OLDER_LAUNCHER],
+  ['a payload it rendered raw', 'B"; touch x; "', '80;touch y #', undefined]
+];
+
+for (const [label, minGrade, minScore, launcher] of MAIN_ERA_HOOKS) {
+  test(`install lossless: a ${MAIN_ERA_REV} hook (${label}) is chemx's own, so it is replaced with no backup`, { skip: MAIN_ERA_SKIP }, () => {
+    const dir = tmp('chemx-hook-main-era-');
+    try {
+      const hooksDir = path.join(dir, '.git', 'hooks');
+      const old = mainEra.buildPreCommitHookScript(minGrade, minScore, launcher);
+      assert.ok(old.includes('--min-grade=$MIN_GRADE'), 'the old --min-grade form');
+      assert.strictEqual(installer.isChemxHook(old), true);
+      assert.strictEqual(installer.isChemxHook(old.replace(/\n/g, '\r\n')), true, 'with CRLF line endings too');
+      writeFile(path.join(hooksDir, 'pre-commit'), old);
+      quietly(() => installer.installPreCommitHook(dir, { minGrade: 'A', minScore: 90 }));
+      assert.deepStrictEqual(fs.readdirSync(hooksDir), ['pre-commit']);
+      assert.strictEqual(fs.readFileSync(path.join(hooksDir, 'pre-commit'), 'utf-8'), installer.buildPreCommitHookScript('A', 90));
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  });
+}
+
+test(`install lossless: a ${MAIN_ERA_REV} hook the user edited still gets its backup`, { skip: MAIN_ERA_SKIP }, () => {
+  const dir = tmp('chemx-hook-main-era-edited-');
+  try {
+    const hooksDir = path.join(dir, '.git', 'hooks');
+    const edited = mainEra.buildPreCommitHookScript('B', 80).replace('# Documented bypass', '# MY-TEAM-NOTE\n# Documented bypass');
+    assert.strictEqual(installer.isChemxHook(edited), false);
+    writeFile(path.join(hooksDir, 'pre-commit'), edited);
+    quietly(() => installer.installPreCommitHook(dir, {}));
+    assert.deepStrictEqual(hookFilesContaining(hooksDir, 'MY-TEAM-NOTE'), ['pre-commit.bak']);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 

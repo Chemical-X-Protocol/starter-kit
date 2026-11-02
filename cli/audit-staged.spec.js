@@ -21,8 +21,10 @@ const makeRepo = () => {
   fs.writeFileSync(path.join(root, 'src', 'dirty.js'), 'export const poll = (fn) => { setInterval(fn, 1); };\n');
   return root;
 };
+// The runner's own CHEMX_* and GIT_* never reach the audit, so an exported floor cannot pass a staged hazard (#253).
+const AUDIT_ENV = Object.fromEntries(Object.entries(process.env).filter(([key]) => !/^(CHEMX_|GIT_)/.test(key)));
 const audit = (root, extra = []) => {
-  const result = spawnSync(process.execPath, [CLI, 'audit', '--staged', '--json', '--non-interactive', ...extra], { cwd: root, encoding: 'utf-8', input: '' });
+  const result = spawnSync(process.execPath, [CLI, 'audit', '--staged', '--json', '--non-interactive', ...extra], { cwd: root, encoding: 'utf-8', input: '', env: AUDIT_ENV });
   return { status: result.status, report: JSON.parse(result.stdout.trim().split('\n').pop()) };
 };
 
@@ -56,4 +58,22 @@ test('#1716: the kit pre-commit script and the hook template gate on the staged 
     assert.doesNotMatch(text, /audit --staged /);
   }
   assert.match(buildPreCommitHookScript(), /AUDIT_BIN="\$CHEMX_BIN"/);
+});
+
+// H3 (8a4668c) guarded the minGrade sed line, which #255 removed. A template-literal escape slip
+// (a `\(` that renders as `(`) now shows first in the printf and label lines both hooks share.
+test('H3: every printf and gate label the hook template renders is byte-identical in scripts/pre-commit.sh', () => {
+  const trimmedLines = (text) => text.split('\n').map((line) => line.trim());
+  const scriptLines = trimmedLines(fs.readFileSync(path.join(KIT, 'scripts', 'pre-commit.sh'), 'utf-8'));
+  const renderedLines = trimmedLines(buildPreCommitHookScript());
+  const shared = renderedLines.filter((line) => /^(printf |GATE_LABEL=)/.test(line));
+  assert.ok(shared.length >= 10, `the template still renders its printf and label lines (${shared.length})`);
+  assert.deepEqual(shared.filter((line) => !scriptLines.includes(line)), []);
+  // #253: the grade gate's defaults travel by env, which a chemx from before #255 ignores.
+  const gradeFloors = 'export CHEMX_DEFAULT_MIN_GRADE=B CHEMX_DEFAULT_MIN_SCORE=80';
+  assert.ok(renderedLines.includes(gradeFloors), 'template grade gate floors');
+  assert.ok(scriptLines.includes(gradeFloors), 'pre-commit.sh grade gate floors');
+  assert.ok(renderedLines.includes('AUDIT_GATE_ARGS="--git"'), 'template grade gate');
+  assert.ok(scriptLines.some((line) => line.startsWith('AUDIT_CMD=') && line.endsWith(' audit --git --non-interactive"')), 'pre-commit.sh grade gate');
+  assert.deepEqual([...renderedLines, ...scriptLines].filter((line) => line.includes('--default-min-')), []);
 });

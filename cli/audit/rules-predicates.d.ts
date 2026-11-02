@@ -18,6 +18,7 @@ export declare function hasMatchingAuditMetrics(a: Record<string, any>, b: Recor
 export declare function isZeroDelayTimeout(callee: unknown, delayArg: unknown, t: typeof babelTypes): boolean;
 export declare function isUnguardedConsoleCall(callee: unknown, t: typeof babelTypes): boolean;
 export declare function matchesDiscussionTitle(titleLower: string, targetLower: string): boolean;
+export declare function isKnownGrade(grade: string): boolean;
 export declare function isGradeBelowMinimum(currentGrade: string, minGrade?: string | null): boolean;
 export declare function evaluateAuditFailure(conditions?: readonly boolean[]): boolean;
 export declare function isNonInteractiveSession(rawArgs: readonly string[], env?: Record<string, string | undefined>): boolean;

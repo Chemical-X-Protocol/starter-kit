@@ -4,113 +4,16 @@
  * cyclomatic complexity, control flow nesting depth, and AI slop.
  */
 import { RULE_REGISTRY } from './rules-registry.js';
-import { resolveCSharpCatchSpan } from './shallow-catch-csharp.js';
+import { findCSharpShallowCatches, resolveCSharpCatchSpan } from './shallow-catch-csharp.js';
+import { maskCommentsAndStrings, maskWholeStrings } from './csharp-mask.js';
+
+export { maskCommentsAndStrings };
 
 const IN_MEMORY_DB_PATTERN = /\bUseInMemoryDatabase\s*\(/;
 const SQLITE_PROVIDER_PATTERN = /\b(?:UseSqlite|SqliteConnection|DataSource\s*=\s*:memory:)\b/;
 const SIMULATED_DELAY_PATTERN = /\bTask\.Delay\s*\(\s*\d+\s*\)/;
 const HARDCODED_LIST_MOCK_PATTERN = /new\s+List<[A-Za-z0-9_]+>\s*\{\s*new\s+[A-Za-z0-9_]+\s*\{/;
 const SIMULATION_SWITCH_PATTERN = /(?:public|private|protected|internal)?\s*(?:static\s+)?(?:readonly\s+)?(?:const\s+)?bool\s+(?:Simulate|UseSimulation|Mock|Fake|Stub)[A-Za-z0-9_]*\s*(?:\{\s*get;\s*(?:set|init)?;\s*\}\s*)?=\s*true\b/i;
-
-const isVerbatimStringPrefix = (code, i) => {
-  const ch = code[i];
-  const next = code[i + 1];
-  const isVerbatim = ch === '@' && next === '"';
-  const isInterpVerbatim = (ch === '$' && next === '@') || (ch === '@' && next === '$');
-  const hasQuote = code[i + 2] === '"';
-  return isVerbatim || (isInterpVerbatim && hasQuote);
-};
-
-export const maskCommentsAndStrings = (code) => {
-  let out = '';
-  let i = 0;
-  const len = code.length;
-  while (i < len) {
-    const ch = code[i];
-    const next = code[i + 1];
-
-    if (ch === '/' && next === '/') {
-      out += '  ';
-      i += 2;
-      while (i < len && code[i] !== '\n') {
-        out += ' ';
-        i++;
-      }
-    } else if (ch === '/' && next === '*') {
-      out += '  ';
-      i += 2;
-      while (i < len && !(code[i] === '*' && code[i + 1] === '/')) {
-        out += code[i] === '\n' ? '\n' : ' ';
-        i++;
-      }
-      const hasCommentEnd = i < len;
-      if (hasCommentEnd) {
-        out += '  ';
-        i += 2;
-      }
-    } else if (isVerbatimStringPrefix(code, i)) {
-      const isVerbatim = ch === '@' && next === '"';
-      const skip = isVerbatim ? 2 : 3;
-      out += ' '.repeat(skip);
-      i += skip;
-      while (i < len) {
-        const isEscapedQuote = code[i] === '"' && code[i + 1] === '"';
-        const isClosingQuote = code[i] === '"';
-        if (isEscapedQuote) {
-          out += '  ';
-          i += 2;
-        } else if (isClosingQuote) {
-          out += ' ';
-          i++;
-          break;
-        } else {
-          out += code[i] === '\n' ? '\n' : ' ';
-          i++;
-        }
-      }
-    } else if (ch === '"') {
-      out += ' ';
-      i++;
-      while (i < len && code[i] !== '"' && code[i] !== '\n') {
-        const isEscapeChar = code[i] === '\\';
-        if (isEscapeChar) {
-          out += '  ';
-          i += 2;
-        } else {
-          out += ' ';
-          i++;
-        }
-      }
-      const hasClosingDoubleQuote = i < len && code[i] === '"';
-      if (hasClosingDoubleQuote) {
-        out += ' ';
-        i++;
-      }
-    } else if (ch === "'") {
-      out += ' ';
-      i++;
-      while (i < len && code[i] !== "'" && code[i] !== '\n') {
-        const isEscapeChar = code[i] === '\\';
-        if (isEscapeChar) {
-          out += '  ';
-          i += 2;
-        } else {
-          out += ' ';
-          i++;
-        }
-      }
-      const hasClosingSingleQuote = i < len && code[i] === "'";
-      if (hasClosingSingleQuote) {
-        out += ' ';
-        i++;
-      }
-    } else {
-      out += ch;
-      i++;
-    }
-  }
-  return out;
-};
 
 const extractMethods = (maskedContent) => {
   const methods = [];
@@ -348,15 +251,13 @@ export const analyzeCSharpCode = (content, relativePath, violations, config = {}
   const lines = content.split('\n');
   const maskedContent = maskCommentsAndStrings(content);
 
-  const catchMatches = content.matchAll(/catch\s*(?:\([^)]*\))?\s*\{(?:\s*|\s*\/\/[^\n]*\s*)\}/g);
-  for (const m of catchMatches) {
+  for (const m of findCSharpShallowCatches(maskedContent)) {
     const lineNum = content.slice(0, m.index).split('\n').length;
     const meta = RULE_REGISTRY.AI_SLOP_SHALLOW_CATCH;
     violations.push({
       filePath: relativePath,
       line: lineNum,
       ...resolveCSharpCatchSpan(m, { content, maskedContent }, lineNum),
-      column: 1,
       hazard: 'Empty or shallow catch block detected in C# handler/service',
       rule: 'AI_SLOP_SHALLOW_CATCH',
       severity: meta.severity,
@@ -447,7 +348,9 @@ export const analyzeCSharpCode = (content, relativePath, violations, config = {}
     }
   });
 
-  const methods = extractMethods(maskedContent);
+  // The method scans read no interpolation-hole code, so operators and keywords there never raise
+  // their counts.
+  const methods = extractMethods(maskWholeStrings(content));
   for (const method of methods) {
     evaluateMethodComplexityAndNesting(method, relativePath, violations, config);
   }

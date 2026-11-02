@@ -1,5 +1,21 @@
 import { defaultTemplateLauncher } from './hooks/launcher.js';
 
+const HOOK_GRADES = ['A+', 'A', 'B', 'C', 'D', 'F'];
+// The score forms cli/audit/audit-floors.js accepts: 0 to 100, with only zeros after a point (100.0 is 100).
+const HOOK_SCORE = /^\d{1,3}(?:\.0+)?$/;
+const MAX_HOOK_SCORE = 100;
+
+// The floors are rendered into shell text, so anything but a known grade or a 0-100 integer becomes the default (#254).
+const toHookGrade = (value) => {
+  const grade = String(value).trim().toUpperCase();
+  return HOOK_GRADES.includes(grade) ? grade : 'B';
+};
+const toHookScore = (value) => {
+  const score = String(value).trim();
+  const isUsable = HOOK_SCORE.test(score) && Number(score) <= MAX_HOOK_SCORE;
+  return isUsable ? Number(score) : 80;
+};
+
 // launcher pins the chemx this hook and the CI workflow run (GAP-4): { version, cliPath, ciBin }.
 export const buildPreCommitHookScript = (minGrade = 'B', minScore = 80, launcher = defaultTemplateLauncher()) => `#!/bin/sh
 # Chemical X Protocol: Pre-Commit Architecture Gatekeeper
@@ -74,20 +90,14 @@ fi
 
 # Default gate: any rule whose violation count rises in a staged file vs HEAD, at any
 # severity (the audit ratchet's rule). The failure output lists each new hazard as
-# RULE@file:line. Grade thresholds only apply to the opt-in absolute gate
-# (CHEMX_PRECOMMIT_GATE=grade). Line budgets come from chemx's line-budgets.js through
-# the staged-delta audit, so this hook and \`chemx check\` never disagree.
-CONF_MIN_GRADE=""
-CONF_MIN_SCORE=""
-CONFIG_FILE="\$REPO_ROOT/.chemx/config.json"
-
-if [ -f "\$CONFIG_FILE" ]; then
-  CONF_MIN_GRADE=\$(grep -o '"minGrade"[[:space:]]*:[[:space:]]*"[^"]*"' "\$CONFIG_FILE" 2>/dev/null | sed 's/.*"minGrade"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/')
-  CONF_MIN_SCORE=\$(grep -o '"minScore"[[:space:]]*:[[:space:]]*[0-9]*' "\$CONFIG_FILE" 2>/dev/null | grep -o '[0-9]*\$')
-fi
-
-MIN_GRADE="\${CHEMX_MIN_GRADE:-\${CONF_MIN_GRADE:-${minGrade}}}"
-MIN_SCORE="\${CHEMX_MIN_SCORE:-\${CONF_MIN_SCORE:-${minScore}}}"
+# RULE@file:line. Grade floors only apply to the opt-in absolute gate
+# (CHEMX_PRECOMMIT_GATE=grade), and the audit resolves them itself: CHEMX_MIN_GRADE/
+# CHEMX_MIN_SCORE, then minGrade/minScore in .chemx/config.json (comments allowed), then the
+# defaults rendered below and exported as CHEMX_DEFAULT_MIN_GRADE/CHEMX_DEFAULT_MIN_SCORE. Env,
+# not flags, so a chemx from before them ignores the defaults instead of refusing a flag. This
+# hook parses no config, so no config value or floor variable reaches the eval-ed command. Line budgets
+# come from chemx's line-budgets.js through the staged-delta audit, so this hook and
+# \`chemx check\` never disagree.
 
 # Nothing added, copied, modified or renamed: nothing to gate.
 git diff --cached --quiet -M --diff-filter=ACMR && exit 0
@@ -106,11 +116,16 @@ elif command -v npx >/dev/null 2>&1; then
 fi
 
 if [ -n "\$AUDIT_BIN" ]; then
-  if [ "\$CHEMX_VERBOSE" = "1" ]; then
-    printf "%s[Chemical X] Verifying architectural health (Min Grade: %s, Min Score: %s)...%s\\n" "\$C_BLUE" "\$MIN_GRADE" "\$MIN_SCORE" "\$C_RESET"
-  fi
   AUDIT_GATE_ARGS="--staged-delta"
-  if [ "\$CHEMX_PRECOMMIT_GATE" = "grade" ]; then AUDIT_GATE_ARGS="--git --min-grade=\$MIN_GRADE --min-score=\$MIN_SCORE"; fi
+  GATE_LABEL="staged delta"
+  if [ "\$CHEMX_PRECOMMIT_GATE" = "grade" ]; then
+    export CHEMX_DEFAULT_MIN_GRADE=${toHookGrade(minGrade)} CHEMX_DEFAULT_MIN_SCORE=${toHookScore(minScore)}
+    AUDIT_GATE_ARGS="--git"
+    GATE_LABEL="grade gate; floors from CHEMX_MIN_GRADE/CHEMX_MIN_SCORE or .chemx/config.json, else ${toHookGrade(minGrade)}/${toHookScore(minScore)}"
+  fi
+  if [ "\$CHEMX_VERBOSE" = "1" ]; then
+    printf "%s[Chemical X] Verifying architectural health (%s)...%s\\n" "\$C_BLUE" "\$GATE_LABEL" "\$C_RESET"
+  fi
   if ! AUDIT_OUT=\$(eval "\$AUDIT_BIN audit \$AUDIT_GATE_ARGS --non-interactive" < /dev/null 2>&1); then
     printf "\\n%s%s[Chemical X] Commit Blocked: Architectural health verification failed%s\\n" "\$C_BOLD" "\$C_RED" "\$C_RESET"
     printf "%s\\n\\n" "\$AUDIT_OUT"
@@ -129,6 +144,15 @@ if [ -n "\$AUDIT_BIN" ]; then
     printf "   That skips only this hook. chemx verify fails on these only when a chemx-ratchet.json baseline exists and the rule is above it; without a ratchet, verify gates CRITICAL/HIGH only.\\n\\n"
     exit 1
   fi
+  # A passing audit's output stays hidden, but a floor it skipped (an unusable config value; an
+  # unusable CHEMX_MIN_* blocks instead) is still named on stderr.
+  printf "%s\\n" "\$AUDIT_OUT" | while IFS= read -r AUDIT_LINE; do
+    case "\$AUDIT_LINE" in
+      "⚠ chemx audit: ignoring "*)
+        printf "%s\\n" "\$AUDIT_LINE" >&2
+        ;;
+    esac
+  done
 fi
 
 if [ "\$CHEMX_VERBOSE" = "1" ]; then
@@ -171,7 +195,7 @@ jobs:
           fi
 
       - name: Run Chemical X Architectural Audit
-        run: ${launcher.ciBin} audit --min-grade=\${{ vars.CHEMX_MIN_GRADE || '${minGrade}' }} --min-score=\${{ vars.CHEMX_MIN_SCORE || ${minScore} }} --markdown --output=AUDIT_REPORT.md
+        run: ${launcher.ciBin} audit --min-grade=\${{ vars.CHEMX_MIN_GRADE || '${toHookGrade(minGrade)}' }} --min-score=\${{ vars.CHEMX_MIN_SCORE || ${toHookScore(minScore)} }} --markdown --output=AUDIT_REPORT.md
       - name: Upload Audit Scorecard Artifact
         if: always()
         uses: actions/upload-artifact@v4
