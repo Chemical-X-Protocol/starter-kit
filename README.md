@@ -1,4 +1,4 @@
-# Chemical X Protocol: Starter Kit
+# chemx: the toolkit between AI coding agents and your codebase
 
 <p align="center">
   <img src="./assets/chemx-starter-kit-logo.gif" alt="Chemical X Starter Kit Comic Logo" width="380" />
@@ -8,492 +8,165 @@
 [![Parent Repo](https://img.shields.io/badge/Repository-awesome--secret--sauce-8b5cf6?style=for-the-badge)](https://github.com/Chemical-X-Protocol/awesome-secret-sauce)
 [![Benchmarks](https://img.shields.io/badge/Benchmarks-Agent%20Evaluations-10b981?style=for-the-badge)](https://github.com/Chemical-X-Protocol/benchmarks)
 
-`chemx` is a command line tool and MCP server that sits between AI coding agents and a codebase. It gives agents an indexed way to read and edit code, short results instead of raw tool output, quality gates that run the same rule everywhere, and a SQLite coordination layer so several agents can work in one checkout without stepping on each other. This package also ships the molecular architecture blueprints and capsule generators the audit is built around. Everything below says what is guaranteed and what is not; reference pages are in [docs/INDEX.md](docs/INDEX.md) and release notes are in [docs/CHANGELOG.md](docs/CHANGELOG.md).
+`chemx` is a command line tool and MCP server. AI coding agents call it instead of raw `cat`, `grep`, `git`, `npm test` and `tsc`, and get short, structured answers back. Several agents can share one checkout without overwriting each other.
 
-## What it does: four pillars
+> **If you are an AI agent:** jump to [For AI agents](#for-ai-agents). The rules are in [AGENTS.md](AGENTS.md) and the machine-readable index is [llms.txt](llms.txt).
 
-1. **Index, read, patch, write.** `chemx q`, `read`, `patch` and `write` answer from an AST index of the project (`.chemx/index.db`). Every index-backed answer ends with a freshness stamp saying how many files were synced. `patch` and `write` check that the result parses, report new audit violations (`introducedViolations`) and re-index the file. See [index freshness](#index-freshness-what-an-index-backed-answer-guarantees) and [docs/index-freshness.md](docs/index-freshness.md).
-2. **Quality gates.** The audit ratchet fails a change when any rule's violation count rises in a file. One gate rule is shared by the pre-commit hook, `chemx verify`, `chemx team task done` and `patch`/`write`, so a commit one accepts cannot turn another red. See [docs/audit-gates.md](docs/audit-gates.md).
-3. **Multi-agent coordination.** One coordination db at the monorepo root, with the repo recorded per task ([docs/coordination-db.md](docs/coordination-db.md)). File locks are leases that renew on chemx activity and stop renewing after a cap when others are waiting ([docs/team-locks.md](docs/team-locks.md)). Tasks can be handed off. `chemx commit` makes path-limited commits that check leases and task ids ([docs/commit.md](docs/commit.md)), `chemx status` shows who holds what, `chemx wait` blocks on a lock or task. Claude Code guard hooks send raw shell tools to chemx and can hard-block the native file tools ([docs/hooks.md](docs/hooks.md)).
-4. **Swarm orchestration.** `chemx team route` picks a model and effort per task tier. `chemx team dispatch --workflow` renders a Claude Code Workflow script that runs each task through build, review, repair and a gate ([docs/team-dispatch.md](docs/team-dispatch.md)). `chemx team audit-run` checks a finished run, `chemx report savings` prices it, and `chemx team tokens` totals token use ([docs/team-audit-run.md](docs/team-audit-run.md)). chemx renders and checks; the host (Claude Code) runs the agents.
+## Why it exists
 
-**Forge** (duplicate-pattern detection, `chemx patterns --forge`) is in development. Its measured recall is 65% on the labeled set, below its target. `chemx blueprint` plans one group's extraction (name, module, call sites, rejected members, holes) and edits nothing. `chemx heal` applies a blueprint and rolls it back when any check fails, but today only for groups matched to a library piece; it has healed one group on this kit (A7, 7 sites). See [Limitations](#limitations), [docs/forge-patterns.md](docs/forge-patterns.md), [docs/forge-blueprints.md](docs/forge-blueprints.md) and [docs/forge-heal.md](docs/forge-heal.md).
-
----
+| Without chemx | With chemx |
+| :--- | :--- |
+| An agent reads whole files to find one function. | `chemx read file --symbol=name` returns that function. `--outline` returns the shape of the file. |
+| `npm test` and `tsc` print every passing line. | `chemx verify` prints one status card, and only the failing lines when something fails. |
+| Each agent decides for itself whether its change is good. | One audit rule runs in the editor, the commit hook and the task gate. A change that adds violations to a file fails everywhere. |
+| Two agents edit the same file. | File locks and tasks live in a shared SQLite db (`.chemx/index.db`). `chemx commit` refuses a file you do not hold. |
+| Duplicate code piles up unnoticed. | `chemx patterns` finds repeated code worth extracting (see [Limitations](#limitations): early stage). |
 
 ## Quickstart
 
 ```bash
-# 1. Install (package.json engines: Node 22.13.0 or later)
-npm install -g chemx          # or: npx chemx <command>
+npm install -g chemx          # Node 22.13.0 or later. Or: npx chemx <command>
+chemx doctor                  # read-only check of install, PATH, MCP, hooks and index
 
-# 2. Check the install in your project
-chemx doctor                  # read-only; kit commit vs CI pin, stale MCP servers by session, index, hooks, coverage
-
-# 3. Wire Claude Code to chemx (writes .claude/settings.json; --dry-run shows the change first)
-chemx install-hooks --host=claude --dry-run
-chemx install-hooks --host=claude
-
-# 4. Find, read, edit
-chemx q "useCardController"                       # symbol search from the index
-chemx read src/card.ts --outline                  # shape of a file, not the whole file
+chemx q "useCardController"                 # find a symbol from the index
+chemx read src/card.ts --outline            # the shape of a file, not the whole file
 chemx patch src/card.ts --target="oldCode" --replacement="newCode" --dry-run
-
-# 5. Verify
-chemx verify                                      # audit + typecheck + tests, one short card
-
-# 6. Team basics
-chemx team status
-chemx team task add "Fix card total" --needs=light --as=@you
-chemx team task claim <id> --as=@you
-chemx team lock acquire src/card.ts --as=@you --purpose="#<id>"
-chemx commit src/card.ts -m "fix(card): total (#<id>)" --release
+chemx verify                                # audit + typecheck + tests, one short card
 ```
 
-`chemx install-hooks` takes effect in the next Claude Code session, and Claude Code may ask you to review the hooks with `/hooks` first.
+Using Claude Code? `chemx install-hooks --host=claude --dry-run` shows what would be written to `.claude/settings.json`. Drop `--dry-run` to apply it. It takes effect in the next session. Using Cursor, VS Code or Antigravity? `npx chemx install-mcp` registers the MCP server (see [MCP server](#mcp-server)).
 
-### A swarm in five commands
+Starting a new project instead? `npm create chemx my-app -- --framework=vue` scaffolds one (`react`, `vue` or `svelte`).
 
-```bash
-# 1. Queue a task with a model tier and a target file
-chemx team task add "Rename helper" --needs=light --as=@you
-chemx team task set-target <id> src/helpers.ts
+## What it can do
 
-# 2. See which model and effort chemx would use
-chemx team route <id>
+Run `chemx help` for the live list and `chemx help <command>` for flags and examples. The groups below match that list.
 
-# 3. Render the Workflow script (chemx writes it; it starts no agents)
-chemx team dispatch --workflow=dispatch.js --tasks=<id> --run-name=demo --as=@you
+| Group | Commands | What you get |
+| :--- | :--- | :--- |
+| **Search and read** | `q`, `read`, `trace`, `backtrace`, `check` | AST index search (`--hybrid`, `--blast-radius`, `--inspect`, literal `-g`), reads by outline, symbol or line range, call graphs both ways, a one-file rule check. Every index answer ends with a freshness stamp. |
+| **Edit** | `patch`, `write`, `add`, `explode`, `generate` | Exact-text patches and whole-file writes that check the result parses, report new audit violations (`introducedViolations`) and re-index. `add` adds a prop, state or action to a capsule. `explode` splits a large file. `generate` scaffolds a capsule. |
+| **Verify** | `verify`, `test`, `typecheck`, `lint`, `build`, `audit`, `trend`, `badge`, `docs` | Failures only. `verify` is audit + typecheck + tests. `audit` grades the code against the 7 pillars. `trend` shows score history, `badge` writes an SVG, `docs` checks that chemx commands named in docs exist. |
+| **Refactor** | `patterns`, `blueprint`, `heal` | Find repeated code, plan one extraction, apply it and roll back if any check fails. In development. |
+| **Git and shell wrappers** | `d`, `show`, `status`, `log`, `conflicts`, `commit`, `ci`, `wait`, `p`, `f`, `j`, `do` | Token-bounded diff, log and `package.json`, file finder, JSON shape, path-limited lease-checked commits, a PR's checks, and batching several commands in one process. |
+| **Agents and swarm** | `team`, `run`, `project`, `scratch`, `worktree`, `mutate`, `report`, `friction` | Tasks, file locks, DMs and a feed. Model routing per task tier and a rendered Claude Code Workflow for build, review, repair and gate. Per-agent scratch dirs and worktrees. Cost reports. A log of guard denials. |
+| **Setup** | `init`, `create`, `pillars`, `install-mcp`, `hook`, `doctor`, `ui`, `tesseract` | Unpack blueprints, scaffold apps, configure rules, install MCP and hooks, diagnose problems, a local web dashboard, and the agent onboarding briefing. |
 
-# 4. Run dispatch.js in Claude Code with the Workflow tool (scriptPath), then store the run id:
-chemx team dispatch --record-run=demo --workflow-run=<wf id>
-
-# 5. Check and price the finished run
-chemx team audit-run --run=<wf id>
-chemx report savings --run=<wf id>
-```
-
-Selection, routing, the build/review/repair/gate stages and what is not guaranteed are in [docs/team-dispatch.md](docs/team-dispatch.md).
-
----
-
-## Measured results
-
-Each figure comes from one recorded run or measurement, not from a benchmark suite, and none predicts your project. "Feed #N" is a post in the coordination db: `chemx team feed` prints recent posts.
-
-| Result | Date | Method | n | Source and how to reproduce |
-| :--- | :--- | :--- | :--- | :--- |
-| Dispatch run `wf_afacbbe8-24c` (validation-1): 11 tasks, 29 agents, $5.65, 15 min. `audit-run`: 0 lease lapses, 0 unleased edits, 0 commits without a task id, 1 native Read (a read-only reviewer) | 2026-10-09 | `chemx team dispatch --workflow` rendered the prompts; `chemx team audit-run` checked the transcripts | 1 run | Feed #7240 and #7241. Re-run `chemx team audit-run --run=wf_afacbbe8-24c` on a machine that has the run's transcripts |
-| Routing price of that run: $5.65 actual against $8.51 priced at Opus (1.5x cheaper) | 2026-10-09 | Same tokens (14,949,327 over 29 agents, counted once per message id) priced per model used against Opus list prices | 29 agents | `chemx report savings --run=wf_afacbbe8-24c` printed this line when re-run for this README |
-| Tooling savings on that run: test summaries 18,937 tokens against 359,682 for the native counterfactual (49 runs), reads 34,106 against 111,604 (54 reads), 80 `check` calls avoided, 385,324 tokens saved net | 2026-10-09 | Counterfactual sizes chemx recorded when each call ran, summed per agent | 49 test runs, 54 reads, 80 checks | Net figure and the 19x and 3.3x ratios are in feed #7241; the four raw counts are in the brief of task #4444. A re-run of `chemx report savings` on 2026-10-09 attributed 0 tooling calls to the run, so it did not reproduce them |
-| Haiku hazard swarm (run #2507): 171 of 172 files fixed. Runs #2451 and #2507 together cost $3.48, against $77.84 priced at Opus (22.4x, model routing on the same tokens) | 2026-10-09 | `chemx team tokens --run=<id>`, field-wise max of repeated usage entries | 2 runs | Feed #6190 (cost) and #7499 (171 of 172). Run `chemx team tokens --run=<id>` |
-| Adoption: 85.8% of tool calls in the validation-1 run went through chemx | 2026-10-09 | `audit-run` adoption count; stdin pipe filters such as `chemx ... \| grep` are plumbing, not natives | 1 run | Task #2597. `chemx team audit-run --run=wf_afacbbe8-24c` |
-| Reading as an outline or one symbol instead of the whole file saved 25% to 97% per target, 75% in aggregate | 2026-10-09 | `pnpm bench`, tokens estimated as characters / 3.8 | 10 targets in this kit | [benchmarks/README.md](benchmarks/README.md) |
-| Full ledger tooling totals: across all recorded tool calls in `.chemx/index.db`, `read` returned 5,251,559 chars vs 17,782,430 native counterfactual (70.5% character reduction), and `test` returned 879,165 chars vs 20,134,243 (95.6% character reduction). Net: 6.13M returned vs 37.92M counterfactual (83.8% reduction) | 2026-10-09 | `SELECT sum(result_chars), sum(cf_chars) FROM tool_calls` in `.chemx/index.db` | 10,053 tool calls across 1,046 completed tasks | SQLite query in `.chemx/index.db` |
-| Index sync timings (cold, warm, file at hand, after edits) | 2026-10-09 | Stamp-only and wall-clock figures, with run counts and load | see page | [docs/index-freshness.md](docs/index-freshness.md) |
-| Test lanes: what `chemx test`, `--slow`, `--all`, `--changed` and `--profile` run | 2026-10-09 | `chemx test --profile` times each spec file | see page | [docs/test-lanes.md](docs/test-lanes.md). A full-suite run took 135 s under load (feed #7241) |
-
-Tooling counterfactuals: the `tool_calls` table in `.chemx/index.db` logs `result_chars` and `cf_chars` whenever a chemx command substitutes for a native equivalent (such as reading the full file or running raw tests). As of 2026-10-09, 10,053 calls across 1,046 completed tasks are recorded. The benchmark's verification row uses a sample log written in the script, so it is an illustration.
-
----
-
-## Limitations
-
-- **Forge is not finished.** Recall on the labeled ground truth is 17 of 26 (65%) against a 70% target, and it surfaced 0 of 11 in set B and 0 of 7 in set C (feed #7332, measured 2026-10-09). Blueprints and heal are still landing. The Forge warm run was measured at 5.7 to 6.7 s, so its 1 s target is not met.
-- **MCP reconnect after an upgrade.** A running MCP server keeps the code it loaded. After you upgrade chemx it reports `stale chemx MCP server` and runs each call in a fresh, slower process until you reconnect once with `/mcp`.
-- **Short flags are not validated.** `chemx report savings --help` says so: a mistyped `-x` is not caught.
-- **npm lags main.** CI publishing is blocked (task #1948), so the `chemx` on npm can be behind this repository. Installed behavior may differ from these docs; `chemx --version` tells you which build you have.
-- **Package databases still hold their code index.** The coordination rows live in the monorepo root db, but a package's own `.chemx/index.db` keeps its code index until it is rebuilt, and a package db keeps serving team rows until `chemx team migrate` merges it ([docs/coordination-db.md](docs/coordination-db.md)).
-- **Hooks are advice with limits.** The guard reads command text; it does not sandbox a script that writes files itself ([docs/hooks.md](docs/hooks.md)).
-- **Dispatch proves little by itself.** chemx renders the script and checks the run afterwards; it cannot show that an agent did its task.
-
----
-
-## Scaffolding a new project
-
-```bash
-npm create chemx my-molecular-app                                      # interactive
-npm create chemx my-molecular-app -- --framework=react --install --yes # headless, Community Edition
-pnpm create chemx my-molecular-app --framework=vue                     # also yarn, bun, npx create-chemx
-```
-
-* `--framework=<react|vue|svelte>` (or `-f <name>`) picks the templates. `pnpm check:frameworks` generates capsules for React, Vue and Svelte and type-checks them; it does not scan for cross-framework leakage.
-* `--install` installs dependencies; `--skip-install` (the default) does not. `--yes` (`-y`, `--ci`, `--headless`) skips prompts for CI, Cursor Agent, Windsurf, Claude Code and Antigravity.
-* Two packages: **`create-chemx`** scaffolds a project; **`chemx`** is the CLI, query engine and MCP server described here. They publish together.
-
-The kit itself holds `blueprints/` (view, molecule and composable templates), `hooks/` (async data, timer and decision hooks) and `cli/` (router, `verify.js`, `audit.js`, `mcp/`).
-
----
-
-## Compact verification output
-
-`chemx test`, `typecheck`, `build` and `verify` print a summary when everything passes and the failing lines when something fails, through the CLI and the MCP tool. You can rely on that shape; output size varies with the project and with how much fails.
+The shape of the output matters as much as the list. These are real results:
 
 ```
-$ npx chemx typecheck --json   # one minified line; `errors` is an array of "file:line:col CODE message"
-{"success":false,"exitCode":2,"command":"npm run typecheck","durationMs":1009,"errorCount":1,"errors":["src/a.ts:1:7 TS2322 Type 'string' is not assignable to type 'number'."]}
-
-$ npx chemx verify --dir=blueprints
-
-  ⚡ Chemical X: Token-Conserving Project Verification
-
+$ chemx verify
   ✔ AST Architecture:  A+ (100/100, 0 violations)
   ✔ TypeScript:        Clean (0 errors)
   ✔ Test Suite:        Passed (143/143)
 
-  All verification checks passed.
+$ chemx typecheck --json     # one minified line when it fails
+{"success":false,"exitCode":2,"errorCount":1,"errors":["src/a.ts:1:7 TS2322 Type 'string' is not assignable to type 'number'."]}
 ```
 
-`chemx build` groups failures into TypeScript, Rollup and style-budget diagnostics; `--silent` prints nothing on success (the exit code still reports the result).
+## How it works
 
----
-
-## CLI command reference
-
-### 1. Verification & Quality
-```bash
-# Full verification pipeline (AST Audit + Typecheck + Tests) -> one short status card
-chemx verify
-chemx verify --json
-
-# Run 7-Pillar static AST audit
-chemx audit
-chemx audit --unroll        # Inspect individual hazard lines and explanations
-chemx audit --strict        # Fail on any violation, including minor style warnings
-chemx audit --json          # Machine-readable format for agent pipelines
-chemx audit --each=submodules   # Audit every submodule (or =workspaces) as its own scope
-chemx audit --feed=scopes       # Recorded results per scope; also =history, =pillars (no audit runs)
-chemx audit --feed --json       # Every recorded run as rows, ready for a dashboard
-
-# Silent TypeScript compilation check (suppresses passing noise, returns error lines)
-chemx typecheck
-chemx typecheck --json
-
-# Silent test runner (suppresses passing tests, extracts only failing assertions & stack diffs)
-chemx test
-chemx test --json
-
-# Silent build audit (categorizes diagnostics into TypeScript, Rollup, and style budgets)
-chemx build
-chemx build --json
+```
+ agent / human ──► chemx CLI or MCP tool
+                        │
+        ┌───────────────┼────────────────┐
+        ▼               ▼                ▼
+   AST index        audit rules     team tables
+   (symbols,        (7 pillars,     (tasks, locks,
+   imports,          one gate        feed, token
+   call graph)       rule)           costs)
+        └───────────────┴────────────────┘
+                 .chemx/index.db  (SQLite, one per monorepo)
 ```
 
-#### One gate rule
+- **One gate rule.** The pre-commit hook, `chemx verify`, `chemx team task done` and `patch`/`write` all fail a change when any rule's violation count rises in a file. A commit one accepts cannot turn another red. See [docs/audit-gates.md](docs/audit-gates.md).
+- **Locks are leases.** They renew while an agent uses chemx and stop renewing after a cap when others wait. See [docs/team-locks.md](docs/team-locks.md).
+- **chemx renders and checks; the host runs agents.** `chemx team dispatch --workflow` writes a script. Claude Code's Workflow tool runs it. `chemx team audit-run` checks the result afterwards.
 
-The pre-commit hook (`chemx audit --staged-delta`), the base delta gate (`chemx audit --delta-base=<ref>`, `chemx verify --changed --base=<ref>`), the ratchet step of `chemx verify` (`chemx-ratchet.json`), `chemx team task done` and the `introducedViolations` list in `patch`/`write` results share one rule: a change fails when any rule's violation count rises in a file, at any severity. A commit the hook accepts therefore cannot turn the ratchet step red. The base delta gate scores only the files a branch changed against their merge-base, so a branch that fixes one rule stays green even while the trunk is over the ratchet on other rules. `CHEMX_SKIP_PRECOMMIT=1` skips only the hook; `chemx verify` still applies the rule. On failure the hook prints each new hazard as `RULE@file:line`. Guarantees, non-guarantees and the specs that prove parity are in [docs/audit-gates.md](docs/audit-gates.md).
+## For AI agents
 
-#### Interactive audit navigator
+- **Read first:** [AGENTS.md](AGENTS.md) is the canonical rulebook (thresholds, pillars, coordination protocol). `CLAUDE.md` and `GEMINI.md` are generated pointers to it. Regenerate with `chemx pillars --write`, do not hand-edit.
+- **Onboarding briefing:** `chemx tesseract` prints project metrics, the 7 directives and the commands to start with.
+- **One MCP tool:** `chemx({ action, params })`. `{ "action": "help" }` lists every action. Mutating actions (`write`, `patch`, `autofix`, `generate`, team claims and posts) need `params.projectRoot` set to the absolute repo path.
+- **Default loop:** `chemx q` to find, `chemx read --outline` or `--symbol` to look, `chemx patch` to edit, `chemx test --changed --depth=3` while working, `chemx verify` before you finish.
+- **Shared workspace:** claim a task, lock each file, commit small with `chemx commit`, release locks, then `chemx team task done`. Details in [docs/coordination-db.md](docs/coordination-db.md) and [docs/team-locks.md](docs/team-locks.md).
+- **Guard hooks:** in Claude Code, hooks steer raw shell tools toward chemx and can block the native file tools. To bypass one, append `# chemx-bypass: <reason>`. The bypass is logged as friction. See [docs/hooks.md](docs/hooks.md).
 
-`chemx audit` in a terminal opens a menu after the scorecard (fix, grades, setup, track). It asks first whether to publish the report to GitHub Discussions; the default is **Skip to Menu**, so pressing Enter never posts anything.
+### MCP server
 
-### 2. AST Query Engine & Surgical Inspection
-```bash
-# Hybrid search (BM25 keyword + feature-hash name similarity via Reciprocal Rank Fusion; lexical, not a learned embedding)
-chemx q "useAttentionCardController" --hybrid --json
-
-# Transitive blast radius analysis before refactoring foundational capsules
-chemx q "a-button" --blast-radius --json
-
-# Inspect component props, hooks, and types without reading entire files
-chemx q "m-task-list" --inspect
-
-# Surgical token-optimized file reader (AST outlines, specific symbols, N| line numbers; verbatim unless --strip-comments)
-chemx read src/components/m-card.vue --symbol=useCardController
-chemx read src/components/m-card.vue --outline
-chemx read src/components/m-card.vue --start=10 --end=40
-
-# Surgical file patching without full-file rewrites (literal replace, written through a temp file and rename, backup kept).
-# Multi-line edits: SEARCH/REPLACE blocks in a quoted heredoc ($, quotes and backticks stay literal).
-# Repeat the block for several edits; they apply in order and all-or-nothing: a block that does not
-# match, or that the guards refuse (parse, a removed declaration, a missing import), fails the call,
-# is named ("Block 2 of 3") and writes nothing. Keep every edit to a file in one call. To edit text that
-# itself contains these markers, use 8 or more characters on all three marker lines (a SEARCH holding a
-# conflict left by a botched rebase works with 7: the file decides which divider ends the SEARCH, longest match).
-chemx patch <file> [--dry-run] <<'PATCH'
-<<<<<<< SEARCH
-const total = items.length;
-=======
-const total = items.filter(Boolean).length;
->>>>>>> REPLACE
-PATCH
-# One-pair form
-chemx patch <file> --target="oldCode" --replacement="newCode" --dry-run   # preview the unified diff
-chemx patch <file> --target="oldCode" --replacement="newCode"
-# Removing a top-level declaration (renames included) is refused unless named
-chemx patch <file> --target="oldName" --replacement="newName" --allow-remove=oldName
-
-# write creates files (replacing one needs --overwrite; unknown flags refuse). Piped stdin is the content; `-` is optional.
-chemx write <file> [--overwrite] [--dry-run] <<'EOF'
-export const a = 1;
-EOF
-chemx write <file> --content="export const a = 1;" [--overwrite] [--dry-run]
-# --append adds to the end of the file (created if missing) with the same parse check, audit, index sync
-# and lock checks. It inserts no newline for you and is refused together with --overwrite.
-chemx write <file> --content=$'\nexport const b = 2;\n' --append
-
-# Literal text search; add paths to scope it. A missing path is an error, not an empty result.
-chemx q -g "useCardController" src/components docs
-# `a|b` is literal text: --regex searches a regular expression (RE2 subset). -l prints each matching file
-# once; -o --unique prints the distinct matched text. `chemx q <text>` with no symbol hit runs this search itself.
-chemx q -g "--gs-[a-z0-9-]+" --regex -o --unique
-
-# Check that every chemx command named in your markdown exists (names only: flags and arguments are
-# not checked, and nothing is run). Exits 1 with file:line for each failure.
-chemx docs check README.md docs
-```
-
-#### Index freshness: what an index-backed answer guarantees
-Every reader of `.chemx/index.db` (q in every index mode; `q -g` reads files, not the index; trace, backtrace, read `--connections`/`--trace`/`--backtrace`, test `--changed`, the studio codebase view, tesseract, patch/write re-indexing) syncs before it answers, through one primitive (`cli/index-freshness.js`):
-
-- **Files at hand first.** A read of `X`, or a patch/write of `X`, re-checks `X`'s row with one stat. Graph answers then sync their whole scope.
-- **Scope.** The default scope is the project scope: the `scope` key of `.chemx/config.json`, else the whole root. In a git repo it holds the git-tracked source files plus untracked files `.gitignore` allows; git-ignored files are indexed only through an explicit `--dir`.
-- **Row check.** A row is trusted on mtime + size only when its file's mtime is more than 2s older than the row's sync time. Otherwise the row is racy (git's racily-clean rule) and its stored sha1 decides, so a same-size rewrite inside the same clock tick is caught. Deleted and renamed files lose their rows.
-- **Stamp.** The answer's index line ends with `synced N files, k re-indexed, r removed, Tms` (JSON: `index.freshness`). When the db is read-only, another process holds the write lock past `busy_timeout` (5s), or a scope dir is missing, the answer is `inconclusive` (exit 3) and says why: it came from the rows as they were.
-- **Not covered.** Files outside the scope, files the parsers do not handle, and edits made after the stamp was printed. `chemx doctor` reports stale rows (on stat, every row) and coverage (scope files with no row) without changing anything.
-- **Cost.** Stamp-only sync time on this kit (971 git-scoped files): warm no-change sync 32ms, one file at hand 1ms, cold build about 3s. Whole-process wall-clock medians on a loaded machine over a 1151-file non-git copy: 1450ms warm, 1052ms file at hand, 10251ms cold. Method, run counts and maxima: [docs/index-freshness.md](docs/index-freshness.md). Neither set predicts other machines or loads.
-
-### 3. Crystalline Capsule Generator
-Scaffold production-ready component capsules matching strict zero-raw-DOM standards:
-```bash
-# Molecule capsule (component, controller, glass styling, types, spec)
-chemx m-task-card
-chemx m-task-card --framework=react       # Explicit framework (react, vue, or svelte)
-
-# Atom foundation (the only tier permitted raw HTML elements)
-chemx a-status-pill --framework=vue
-
-# Organism module (complex grouping of molecules and atoms)
-chemx o-workspace-header --framework=svelte
-
-# Pure reactive hook / domain composable
-chemx use-task-filter
-```
-
-### 4. Database-Driven Multi-Agent Swarm Coordination
-Coordinate multi-agent swarms using the local SQLite store (`.chemx/index.db`) without multi-thousand-token markdown specification bloat:
-```bash
-# Triage is opt-in: `chemx audit --triage` (or `autoTriage: true` in .chemxrc) converts hazards into
-# assignable team tasks, at most 50 per run. A plain `chemx audit` files nothing.
-# Partial runs (--git, --fast, --staged, --no-index) never triage.
-chemx audit --triage
-chemx team task triage   # triage on demand
-
-# List tasks assigned to a specific agent
-chemx team task list --agent=@agent-alpha
-
-# Claim an open task
-chemx team task claim 1 --as=@agent-alpha
-
-# Pass a task to another agent (assignee or task creator only). The task stays in_progress and the
-# feed records from, to and by. It does not move file locks: the old holder releases, the new one acquires.
-chemx team task handoff 1 @agent-beta --as=@agent-alpha
-
-# Mark task complete with inline AST verification gate.
-# Re-audits the target file on disk: refused on any CRITICAL/HIGH hazard, or when any rule's
-# count is higher than at HEAD (see docs/audit-gates.md):
-chemx team task done 1 --as=@agent-alpha --target=src/components/m-card.vue
-
-# Emergency override / escape hatch: complete task despite non-blocking warnings:
-chemx team task done 1 --as=@agent-alpha --target=src/components/m-card.vue --force
-
-# Inspect multi-agent swarm status and lock queues
-chemx team status
-
-# File locks are 5-minute leases that any chemx command run as the holder extends; they lapse after
-# 5 minutes without activity, and the commit hook refuses staged files another handle holds live.
-# Exact renewal, lapse and commit-guard behavior: docs/team-locks.md
-chemx team lock acquire src/components/m-card.vue --as=@agent-alpha --purpose="#1"
-
-# In a monorepo, team rows are meant to live in one db at the monorepo root; a package db keeps
-# serving its package until `chemx team migrate` merges it. Rules and runbook: docs/coordination-db.md
-chemx team task list --all-repos
-```
-
-All reference pages: [docs/INDEX.md](docs/INDEX.md).
-
-### 5. Swarm web UI
-
-`npx chemx ui` serves a local control panel (Kanban board, task pages at `/tasks/:id`, a read-only SQL console) on `127.0.0.1:4173`. Every launch prints a tokened URL; requests without the token, from other origins, non-JSON POSTs and unknown `Host` headers are refused. `--host=0.0.0.0` must be passed explicitly and prints a warning. `--port=<n>` changes the port.
-
----
-
-## Language-Agnostic Polyglot Architecture
-
-Chemical X audits more than one language. The table below lists the extensions it parses and the checks each gets; any other file type is not audited. Depth differs by language: TypeScript, JavaScript, Vue and Svelte use the Babel parser, PHP uses `php-parser`, C# uses structural patterns, and Python, Go and Rust get the universal text passes only, so they get fewer checks.
-
-### Supported Language Ecosystems
-
-| Language / Framework | Extensions | Parser Engine | Capabilities |
-| :--- | :--- | :--- | :--- |
-| **C# / .NET 10** | `.cs` | Structural Regex / AST | Line budgets, MediatR handlers, shallow catch detection, fake in-memory stubs (`UseInMemoryDatabase`), `using` namespace indexing |
-| **Python** | `.py` | Universal text passes | Line budgets, AI slop text patterns, mock data and secret scanning, fake assertions (`assert True`), `def`/`class` and `import` indexing |
-| **Go** | `.go` | Universal text passes | Line budgets, mock data scanning, tautological assertions, `func`/`type` package indexing |
-| **Rust** | `.rs` | Universal text passes | Line budgets, AI slop text patterns, secret scanning, struct and fn indexing |
-| **PHP / WordPress** | `.php` | `php-parser` AST (loaded only when a PHP file is audited) | Complexity, structural weight, nested ternary, swallowed catches, dynamic code and command execution, and in a WordPress plugin, theme or core tree: REST route permissions, missing nonces, and opt-in SQL, input, output, SSRF and redirect rules. See [docs/php-wordpress.md](docs/php-wordpress.md) |
-| **TypeScript / JavaScript** | `.ts`, `.tsx`, `.js`, `.jsx` | `@babel/parser` AST (`.vue` via `@vue/compiler-sfc`: every script block plus the template) | AST visitors across 11 audit categories, mapped to the 7 pillars; hook contracts, 2-stage booleans, lazy rule trees |
-| **Vue & Svelte** | `.vue`, `.svelte` | Babel + Template Registry | SFC template clone detection, reactive state verification |
-
-### Two-Tier Decoupled Audit Pipeline
-1. **Tier 1: Universal Polyglot Rules (Runs on ALL languages)**
-   * **Line Budgets (`LINE_BUDGET_FILE`, `LINE_BUDGET_MOLECULE`):** Line budget: soft warning at 250 lines when complexity is high (default profile); --profile=atomic-strict caps capsules at 100 lines. Any file above 500 lines is flagged (HIGH at 1,000, CRITICAL at 2,000). AGENTS.md 1.A is the policy.
-   * **AI Slop Text Patterns:** Strips conversational residue (*"Here is the code"*), leaked markdown code fences, and lazy truncation placeholders (`// ... rest of implementation`).
-   * **Synthetic Mock Data Scanners:** Catches fake emails (`@example.com`), `555-` phone numbers, and hardcoded dummy collections in services.
-   * **Security & Secret Guards:** Scans for high-entropy API keys, JWTs, AWS credentials, and unmanaged sensitive logging.
-   * **Polyglot Fake Green Tests:** Catches tautological assertions in C# (`Assert.True(true)`), Python (`assert True`), and Go (`assert.True(t, true)`).
-2. **Tier 2: Deep Language-Specific Analyzers**
-   * **Babel Engine:** Deep AST inspection for JS/TS/Vue/Svelte (runs on JS, TS, Vue and Svelte files only).
-   * **PHP Engine:** `php-parser` AST passes for `.php` files, plus WordPress passes (REST permissions, nonces, SQL, input flow) when a plugin, theme or core tree is detected. Some rules are default-off; `docs/php-wordpress.md` lists the shipped defaults, the per-plugin index and its caps.
-   * **Control Flow & Guard Disciplines (`CONTROL_FLOW_CASCADE_GUARDS`, `CONTROL_FLOW_SILENT_GUARD`):** Flags silent bare returns in side-effecting code, and detects cascading early-return clusters (>= 3 guards), recommending extraction into `ruleTree` with 1-line callback aborts (Directive 3.H).
-   * **Tailwind content coverage (`TAILWIND_UNSCANNED_CLASS_STRING`):** In a Tailwind v3 project, flags a string literal of 3 or more utility classes (2 or more of them Tailwind-shaped) in a `.js`, `.ts`, `.mjs` or `.cjs` file that no `content` glob of `tailwind.config` covers, since Tailwind purges classes it never scans. The config is read as text and never imported; Tailwind v4, a missing config or a non-literal `content` list keep the rule silent. HIGH, Directive 5.B. `options.tailwindContent` overrides the globs for tests.
-   * **C# / Clean Architecture Analyzer:** Flags empty `catch (Exception) {}` blocks, simulated delays (`Task.Delay`), and monolithic controllers.
-   * **Swallowed catches (`ERROR_SWALLOWED_EXCEPTION`, `AI_SLOP_SHALLOW_CATCH`):** Each swallowing catch site reports once, as `ERROR_SWALLOWED_EXCEPTION` when the error is discarded or `AI_SLOP_SHALLOW_CATCH` when it is only logged to the console. Both are MEDIUM by default. A JS/TS catch escalates to HIGH when a `let` or `var` assigned in the try is read after it with no default or check first (silent `undefined` propagation); C# findings stay MEDIUM. Mark an intentional swallow with a `chemx-allow: best-effort <reason>` comment on the line above the catch, on the catch line, inside its body, or after the try block's closing brace when `catch` starts the next line. Only comments count (never string literals), and the reason is mandatory: an annotation without one is still flagged and its hazard says so.
-
----
-
-## The 7 Molecular Architecture Pillars
-
-Configured via `chemx pillars`; the full directives are in AGENTS.md. In short: (1) single-purpose files under a line budget; (2) raw HTML only inside atoms (`a-*`); (3) top-level views are 10 to 20 line tables of contents; (4) composables return plain objects of 3 to 5 properties; (5) verification prints short summaries when green; (6) an AST query engine lets an agent read a file's shape before reading the file; (7) task backlogs, locks and messages live in SQLite (`.chemx/index.db`), not in markdown plans.
-
----
-
-## Model Context Protocol (MCP) Server
-
-Chemical X includes a high-performance, native Node.js JSON-RPC 2.0 Stdio MCP server that connects directly to AI agent hosts (Cursor, Claude Desktop, Windsurf, Antigravity, VS Code).
-
-### Automatic 1-Step Installation
-
-Run the interactive installer in your workspace root:
-
-```bash
-npx chemx install-mcp
-```
-
-This registers the Chemical X server in:
-- `.cursor/mcp.json` (Cursor IDE, `mcpServers` key)
-- `.vscode/mcp.json` (VS Code, `servers` key with `type: "stdio"`)
-- `~/.gemini/config/mcp_config.json` (Antigravity) only with `npx chemx install-mcp --global`
-
-Installing the npm package never edits any config: `postinstall` only prints a one-line hint (silent in CI or with `CHEMX_SKIP_POSTINSTALL=1`).
-Existing configs are merged, not replaced: other servers and keys are kept, the previous file is saved as `<file>.bak`, and a file that is not valid JSON, or that has comments a rewrite would drop, is left untouched with the entry to add by hand.
-
-### Manual MCP Server Configuration
-
-To configure manually in your MCP client settings (e.g. `claude_desktop_config.json` or `.cursor/mcp.json`):
+`npx chemx install-mcp` merges a `chemical-x` entry into `.cursor/mcp.json` and `.vscode/mcp.json` (add `--global` for Antigravity). Existing servers are kept and the old file is saved as `.bak`. Manual config for any MCP client:
 
 ```json
-{
-  "mcpServers": {
-    "chemical-x": {
-      "command": "npx",
-      "args": ["-y", "chemx", "mcp"]
-    }
-  }
-}
+{ "mcpServers": { "chemical-x": { "command": "npx", "args": ["-y", "chemx", "mcp"] } } }
 ```
 
-### The `chemx` MCP Tool
+Three call forms: `{ "action": "read", "projectRoot": "/abs/repo", "params": { "path": "src/a.ts", "outline": true } }`, a CLI string `{ "command": "q useBrandingStore --blast-radius" }`, or a batch `{ "commands": ["d", "p -s", "verify"] }`. The full contract (root resolution, write refusal, shell limits, stale-server notice) is in [docs/reference.md](docs/reference.md#the-chemx-mcp-tool).
 
-The server exposes one tool, `chemx({ action, params })`. `commands: [...]` runs several actions in one call. Mutating actions (`write`, `patch`, `autofix`, `generate`, team claims and posts) need `params.projectRoot` set to the absolute repo path.
+## The 7 architecture pillars
 
-| Actions | Scope | Purpose |
-| :--- | :--- | :--- |
-| `verify`, `typecheck`, `test`, `build` | Verification | Audit + typecheck + tests as one compact card; silent typecheck and test runners; build diagnostics grouped by category. |
-| `audit`, `check`, `autofix`, `patterns` | Quality | Architectural AST audit, single-file check, safe fixes that apply fixed rewrites, duplicated-pattern detection. |
-| `q`, `search`, `trace`, `backtrace` | Discovery | AST index queries, forward call traces and upstream caller chains. |
-| `read`, `patch`, `write` | Reading and editing | Outline, symbol or line-range reads; exact search/replace patches; whole-file writes with re-indexing. |
-| `d`, `diff`, `log`, `p`, `pkg`, `f`, `ls`, `j`, `json`, `do`, `batch` | Wrappers | Token-bounded git diff/log, package.json, file finder, JSON shape and batched commands. |
-| `team`, `team_status`, `team_feed`, `team_post`, `team_task`, `team_lock`, `project` | Coordination | Swarm task queue, feed, posts, file locks and project sessions in `.chemx/index.db`. |
-| `generate`, `issue`, `tesseract` | Other | Capsule generation, sanitized issue reports, agent onboarding payload. |
+The audit enforces these. `chemx pillars` turns them on or off per project.
 
-`tools/list` returns one tool, `chemx`. Pick the operation with `action` (the enum is generated from the live dispatcher); `{ "action": "help" }` returns every action with its parameters. The legacy `chemx_*` sub-tools are hidden from `tools/list` but still callable by name.
+1. **Molecular line budgets.** Single-purpose files; soft warning at 250 lines when complexity is high, flagged above 500.
+2. **Zero raw DOM.** Raw HTML only inside atoms (`a-*`); molecules compose atoms.
+3. **Table-of-contents views.** A top-level view is a 10 to 20 line composition.
+4. **Composable contracts.** Composables return plain objects of refs, computeds and functions, and clean up after themselves.
+5. **Silent verification.** Verify through `chemx verify`, `test` and `typecheck`, which print failures only.
+6. **AST query engine.** Search and read through the index, never by dumping files.
+7. **Swarm backlog.** Tasks, leases and costs live in SQLite, not in markdown files.
 
-Call forms:
+The audit also catches AI-slop text ("Here is the code", `// ... rest of implementation`), mock data and fake emails, leaked secrets, swallowed catches, and tests that assert nothing. Rule-by-rule detail is in [docs/reference.md](docs/reference.md#two-tier-decoupled-audit-pipeline).
 
-| Form | Example |
+## Languages
+
+| Language | Depth |
 | :--- | :--- |
-| Action + params | `{ "action": "read", "projectRoot": "/abs/repo", "params": { "path": "src/a.ts", "outline": true } }` |
-| CLI string | `{ "command": "q useBrandingStore --blast-radius" }` |
-| Batch of strings | `{ "commands": ["d", "p -s", "verify"] }` |
-| Batch of objects | `{ "batch": [{ "action": "p" }, { "action": "log" }] }` |
+| TypeScript, JavaScript, Vue, Svelte | Full AST audit (Babel and `@vue/compiler-sfc`), hook contracts, template clone detection |
+| PHP and WordPress | AST audit plus WordPress rules (REST permissions, nonces, opt-in SQL, input, output). See [docs/php-wordpress.md](docs/php-wordpress.md) |
+| C# | Structural patterns: line budgets, empty catches, in-memory stubs |
+| Python, Go, Rust | Text passes only: line budgets, slop, mock data, secrets, tautological assertions, symbol indexing |
 
-Contract:
-- **Root.** Each call resolves one project root: `projectRoot` > MCP `roots/list` > the server's start argument (`chemx mcp <dir>`) > `CHEMX_PROJECT_ROOT` > the start directory only if it has `.chemxrc`/`.chemx`. Otherwise the call is refused. An absolute path never picks its own root, and `params.cwd` never overrides it. When MCP roots or a start argument exist, `projectRoot` must sit inside one of them. Paths (including git path arguments to `d`/`log`) must resolve inside the root after following symlinks. Set `CHEMX_MCP_ALLOWED_ROOTS` (path-delimited) to pin the boundary further.
-- **Writes** (`write`, `patch`, `autofix`, `generate`, team writes, `issue` with `autoPost`, `audit` with `triage`, `check RESTART_MCP`) are refused when the root was only guessed from the start directory.
-- **Shell.** `build`/`test`/`typecheck` with `params.command` run only when the command is a `package.json` script of the project (its body, or `npm run <name>`), unless the server runs with `CHEMX_MCP_ALLOW_SHELL=1`. Children get no stdin and a timeout (`CHEMX_CHILD_TIMEOUT_MS`, default 15 min).
-- **Batch.** Every item is scope-checked before any item runs; the batch status is the worst item status (`fail` > `inconclusive` > `pass`).
-- **Results.** Plain text without ANSI. Every result ends with `chemx root: <root> (<source>) v<version>`. When the code on disk differs from the running server you also get `stale chemx MCP server (loaded X, disk Y): reconnect via /mcp`, and each call then runs in a fresh process that loads the code on disk (slower), with a notice on its own first line. If the code on disk does not import, mutating calls are refused (the call never started) and read-only calls run on the old loaded code under a WARNING. If the fresh process imports the code but dies without a result, the call fails with outcome unknown (it may have partly run): check the targeted files before retrying. A timeout kills the fresh process and also leaves the outcome unknown.
-- **Protocol.** `serverInfo.version` is `<package version>+cli.<fingerprint of cli/ sources>`, so it changes when the code on disk changes. Long calls honour `_meta.progressToken` (progress notifications) and `notifications/cancelled`.
+Any other file type is not audited. A broader language adapter layer (`cli/lang/`, with `.chemxrc` `languages` config and a `CHEMX_LANG_ENGINE=legacy` kill switch) is being rolled out in stages. With no config you get the table above.
 
-### Living Resources & Prompts
+## Limitations
 
-* **Resources**:
-  * `chemx://directives`: Mandatory Chemical X Molecular Architecture directives (AGENTS.md).
-  * `chemx://scorecard`: Live Molecular Health Index (MHI) grade, score, metrics, and active hazards.
-  * `chemx://blueprints/molecule`: Compliant molecule blueprint adhering to zero raw DOM standards.
-  * `chemx://blueprints/view-template`: Declarative 10-20 line Table-of-Contents view blueprint.
-* **Prompts**:
-  * `chemx_remediate_hotspot`: Dynamically inspects candidate file AST metrics and generates targeted decomposition instructions.
-  * `chemx_harmonize_patterns`: Generates Pre-Split Pattern Discovery instructions to extract shared capsules.
+- **Forge is not finished.** `patterns --forge` recall is 65% on its labeled set against a 70% target. `blueprint` plans and edits nothing. `heal` works only for groups matched to a library piece, and has healed one group so far.
+- **npm lags main.** The `chemx` on npm can be behind this repository. `chemx --version` tells you which build you have.
+- **Reconnect MCP after upgrading.** A running server keeps the code it loaded, reports `stale chemx MCP server` and runs each call in a slower fresh process until you reconnect (`/mcp` in Claude Code).
+- **Hooks are advice with limits.** The guard reads command text. It does not sandbox a script that writes files itself.
+- **Dispatch proves little by itself.** chemx renders the script and checks the run afterwards. It cannot show that an agent did its task.
+- **Short flags are not validated.** A mistyped `-x` is not caught.
 
----
+## Measured results
 
-## Release versioning
+Each figure is one recorded run, not a benchmark suite, and none predicts your project.
 
-Minute-precision CalVer (`YY.MM.DD-MMMM`, the minute of the day from 0 to 1439), checked with `npx chemx --version`. `create-chemx` and `chemx` publish together; pin matching versions. A new version can take a few minutes to reach every npm mirror, so an exact-version install may 404 briefly. npm can also lag this repository (see Limitations).
-
----
-
-## Privacy & network
-
-chemx itself makes no network requests outside the explicit flows in the table below. Audit, verify, search, read, patch, generate and team commands send nothing. Your own test or build tools, which verify runs, may still use the network. A spec (`cli/network-isolation.spec.js`) runs commands with `fetch` and `gh` recorded to keep it that way. `chemx ui` serves a local page on your machine. It does not call out.
-
-### What is sent, when, and to which host
-
-| Flow | When | Host | What is sent |
-| :--- | :--- | :--- | :--- |
-| License download | `chemx init`, `chemx create` / `npm create chemx`, only when a license key is supplied | `https://chemicalx.xophz.com/api/starter-kit/download` | your license key and device id |
-| License fallback check | only if the download host is unreachable | `https://mycompassconsulting.com/wp-json/compass/v1/gatekeeper/licenses/validate` | your license key and device id |
-| Audit share | `chemx audit --share`, or Share in the audit navigator | GitHub (`api.github.com` with `GH_TOKEN`/`GITHUB_TOKEN`, otherwise the `gh` CLI) | the discussion title and body, which are printed in full before you confirm |
-| Error report | only with `--post-issue`, the MCP `autoPost` flag, or `CHEMX_AUTO_POST_ISSUES=true` | GitHub Issues in `CHEMX_ISSUES_REPO`, your repo's GitHub remote, or `Chemical-X-Protocol/starter-kit` | the sanitized error report (tokens, license keys and your home path are masked), which is printed in full before it is posted and is also saved to `.chemx/issues/` |
-
-Notes:
-- **Share asks first.** It prints the target repo, category, title and body, then asks `[y/N]`, which defaults to no. In a non-interactive session it refuses unless you pass `--yes`.
-- **No implicit error posting.** A CI token on its own never posts an issue. When posting is on, chemx prints the target repo, title and body to stderr before sending. It does this even with `--json` or `--silent`, which keep stdout clean. The one exception is the MCP `chemx_report_issue` tool: it posts without printing, because its stdout is the protocol channel, and it returns the exact title, body and URL it sent to the calling agent.
-- **Secrets are masked everywhere a report goes.** Keys passed with `--license`, `CX-` keys, GitHub and npm tokens, and the values of secret-named fields in a report's extra metadata (`token`, `password`, `license`, and so on) are masked. This covers the report file, the issue title, body and prefilled URL, the failure line printed to stderr, and the swarm task that tracks a posted issue.
-- **Device id.** This is a random UUID (`crypto.randomUUID()`). It identifies an install for license seat counting and carries no hardware or personal data. Older `cli_*` ids are kept as they are.
-- **Keys travel over HTTPS only.** `CHEMICAL_X_API_URL` and `COMPASS_GATEKEEPER_URL` can point the license flow at another server, for staging or self-hosting. An override must use `https://`. Plain `http://` is accepted only for `localhost` and `127.0.0.1`. Any other override is refused, with no fallback. When an override is in use, chemx prints its host.
-
-### Where it is stored
-
-| File | Contents | Permissions |
+| Result | Date | Source |
 | :--- | :--- | :--- |
-| `$XDG_CONFIG_HOME/chemx/config.json` (default `~/.config/chemx/config.json`) | the license key you entered or verified | `0600`, in a `0700` directory |
-| `$XDG_CONFIG_HOME/chemx/device_id` | the random device id | `0600` |
-| `<project>/.chemx/discussion.json` | the number and URL of the discussion you shared, so the next share updates it | project-local |
+| Reading by outline or symbol instead of the whole file saved 25% to 97% per target, 75% in aggregate (10 targets) | 2026-10-09 | `pnpm bench`, [benchmarks/README.md](benchmarks/README.md) |
+| One dispatch run: 11 tasks, 29 agents, $5.65 against $8.51 priced at Opus, 0 lease lapses, 85.8% of tool calls through chemx | 2026-10-09 | `chemx team audit-run --run=wf_afacbbe8-24c`, feed #7240 and #7241 |
+| Ledger of 10,053 tool calls: 6.13M characters returned against 37.92M for the native counterfactual (83.8% fewer) | 2026-10-09 | `tool_calls` table in `.chemx/index.db` |
 
-On first use, chemx moves an older `~/.chemical-x/` config into the XDG directory. It tightens the permissions and deletes the old copy. Unknown files in `~/.chemical-x/` are left in place.
+The full table, with methods and reproduction steps, is in [docs/reference.md](docs/reference.md#measured-results).
 
-For CI, set `CHEMX_LICENSE_KEY`. It is read from the environment and is never written to disk.
+## Documentation map
 
-### How to turn it off
+| Need | Go to |
+| :--- | :--- |
+| Every command with flags and examples | `chemx help <command>`, [docs/reference.md](docs/reference.md) |
+| All reference pages | [docs/INDEX.md](docs/INDEX.md) |
+| What changed | [docs/CHANGELOG.md](docs/CHANGELOG.md) |
+| Rules and thresholds | [AGENTS.md](AGENTS.md), [STANDARDS.md](STANDARDS.md) |
+| Dispatching a swarm | [docs/team-dispatch.md](docs/team-dispatch.md), [docs/team-audit-run.md](docs/team-audit-run.md) |
+| Search and read details | [docs/search.md](docs/search.md), [docs/index-freshness.md](docs/index-freshness.md) |
+| Test lanes | [docs/test-lanes.md](docs/test-lanes.md) |
+| Something broken | `chemx doctor`, [docs/doctor.md](docs/doctor.md) |
 
-```bash
-export CHEMX_OFFLINE=1   # chemx's own switch
-export DO_NOT_TRACK=1    # the cross-tool convention; chemx honors it the same way
-```
+## Privacy
 
-Either variable disables every network call. The gated flows say so clearly and make no request:
-- **License download:** scaffolding continues with the bundled Community blueprints.
-- **Share:** nothing is posted.
-- **Error report:** the report is saved locally only, and chemx prints the reason and the report's path.
+Audit, verify, search, read, patch, generate and team commands send nothing over the network. Only four explicit flows do: a license download (`init` or `create` with a key), a license fallback check, `audit --share` and error reports with `--post-issue`. Share and error reports print their full content first. `CHEMX_OFFLINE=1` or `DO_NOT_TRACK=1` disables all of them. Hosts, stored files and masking rules are in [docs/reference.md](docs/reference.md#privacy--network).
 
-To remove stored data, delete `~/.config/chemx/` and the project's `.chemx/discussion.json`.
+## Versioning and license
 
----
+Versions are minute-precision CalVer (`YY.MM.DD-MMMM`), bumped by CI. `create-chemx` and `chemx` publish together.
 
-## License
-
-Core CLI tools and capsule generators are distributed under the **MIT License**.  
-Private production monorepos and extended starter suites are unlocked for verified GitHub Sponsors.  
-Explore sponsorship details at [https://chemicalx.xophz.com](https://chemicalx.xophz.com).
-
+Core CLI tools and capsule generators are MIT licensed. Private production monorepos and extended starter suites are unlocked for verified GitHub Sponsors. See [chemicalx.xophz.com](https://chemicalx.xophz.com).
