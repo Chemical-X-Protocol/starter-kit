@@ -148,6 +148,7 @@ const toPlanTask = (entry, run, routing) => ({
   target: entry.target,
   files: entry.files,
   extraFiles: entry.extraFiles ?? [],
+  briefChars: entry.briefChars ?? 0,
   snapshot: entry.snapshot,
   handle: `@${run}-${entry.id}`,
   reviewer: `@${run}-${entry.id}-review`,
