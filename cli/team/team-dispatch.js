@@ -110,6 +110,7 @@ export const selectDispatchTasks = (db, options = {}) => {
   const needsColumn = hasNeedsColumn ? 't.needs' : 'NULL';
   const repoColumn = hasColumn(db, 'agent_tasks', 'repo') ? 't.repo' : "'.'";
   const extraColumn = hasColumn(db, 'agent_tasks', 'extra_files') ? 't.extra_files' : "'[]'";
+  const briefColumn = hasColumn(db, 'agent_tasks', 'brief') ? "LENGTH(TRIM(COALESCE(t.brief, '')))" : '0';
   const { clauses, params } = selectionClauses(options);
   const hasParent = options.parent !== undefined && options.parent !== null && options.parent !== '';
   if (hasParent) {
@@ -120,7 +121,8 @@ export const selectDispatchTasks = (db, options = {}) => {
   try {
     rows = db.prepare(`
       SELECT t.id, t.title, t.description, t.target_path, t.status, t.priority, t.rule_id, t.parent_id, t.assigned_agent_id,
-        t.dependencies, t.violation_snapshot, ${needsColumn} AS needs, ${repoColumn} AS repo, ${extraColumn} AS extra_files
+        t.dependencies, t.violation_snapshot, ${needsColumn} AS needs, ${repoColumn} AS repo, ${extraColumn} AS extra_files,
+        ${briefColumn} AS brief_chars
       FROM agent_tasks t
       WHERE ${clauses.join(' AND ')}
       ORDER BY t.priority ASC, t.id ASC

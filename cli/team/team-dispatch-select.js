@@ -113,6 +113,7 @@ const toEntry = (task, options) => {
     escapes: task.escapes === true,
     mechanical: MECHANICAL.test(`${task.title || ''}\n${task.description || ''}`),
     snapshot,
+    briefChars: toNumber(task.brief_chars, 0),
     target,
     extraFiles,
     files: hasTarget ? [target, ...extraFiles] : []

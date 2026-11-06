@@ -112,6 +112,15 @@ const extraFilesNote = (task) => {
   return extras.length > 0 ? `\nYou may also edit: ${extras.join(', ')} (lock each before its first edit).` : '';
 };
 
+// Empty without a brief, so a task that has none renders the same text as before (#7134).
+// The brief is named, not embedded: three prompts per task would carry it three times.
+const briefLine = (task) => {
+  const chars = Number(task.briefChars) || 0;
+  const hasBrief = chars > 0;
+  if (!hasBrief) return '';
+  return `\nLong brief stored (${chars} characters): read it before you start with chemx team task show ${task.id} --full. It is part of the task.`;
+};
+
 /** { build, review, repair } prompts for one task of the plan. */
 export const renderTaskPrompts = (rootTask, plan) => {
   const task = repoView(rootTask);
@@ -120,7 +129,7 @@ export const renderTaskPrompts = (rootTask, plan) => {
   const claimStep = fillTemplate(CLAIM_STEP, { taskId: task.id, handle: task.handle });
   const handoffStep = fillTemplate(HANDOFF_STEP, { taskId: task.id, handle: task.repairer, builder: task.handle });
   const peers = peersFor(plan, task);
-  const description = `${clipDescription(task)}${snapshotLine(task)}`;
+  const description = `${clipDescription(task)}${briefLine(task)}${snapshotLine(task)}`;
   return {
     build: fillTemplate(BUILDER, {
       ...shared,
