@@ -48,9 +48,14 @@ const STATUS_FLAGS = [
   { flag: '--blockers', desc: 'status: also list the blocked tasks' }
 ];
 
+const CHECK_FLAGS = [
+  { flag: '--once', desc: 'check drain: run the queued jobs, then exit instead of waiting for more' },
+  { flag: '--idle-exit-s=<n>', desc: 'check drain: exit after n idle seconds (default 60)' }
+];
+
 const JSON_FLAGS = [{ flag: '--json', desc: 'Output data as JSON' }];
 
-const FLAGS = [AS_FLAGS, TASK_DONE_FLAGS, TOKENS_FLAGS, FEED_FLAGS, TASK_ADD_FLAGS, TASK_LIST_FLAGS, BRIEF_FLAGS, TASK_SHOW_FLAGS, STATUS_FLAGS, JSON_FLAGS].flat();
+const FLAGS = [AS_FLAGS, TASK_DONE_FLAGS, TOKENS_FLAGS, FEED_FLAGS, TASK_ADD_FLAGS, TASK_LIST_FLAGS, BRIEF_FLAGS, TASK_SHOW_FLAGS, STATUS_FLAGS, CHECK_FLAGS, JSON_FLAGS].flat();
 
 const TASK_EXAMPLES = [
   'chemx team task list',
@@ -70,7 +75,9 @@ const FEED_EXAMPLES = ['chemx team feed --from=@coder --type=lock'];
 
 const STATUS_EXAMPLES = ['chemx team status --mine'];
 
-const EXAMPLES = [TASK_EXAMPLES, TASK_SHOW_EXAMPLES, LOCK_EXAMPLES, TASK_DONE_EXAMPLES, FEED_EXAMPLES, STATUS_EXAMPLES].flat();
+const CHECK_EXAMPLES = ['chemx team check typecheck --as=@coder', 'chemx team check status'];
+
+const EXAMPLES = [TASK_EXAMPLES, TASK_SHOW_EXAMPLES, LOCK_EXAMPLES, TASK_DONE_EXAMPLES, FEED_EXAMPLES, STATUS_EXAMPLES, CHECK_EXAMPLES].flat();
 
 export const TEAM_COMMANDS = [
   {
@@ -78,9 +85,9 @@ export const TEAM_COMMANDS = [
     aliases: ['swarm', 'feed', 'tokens', 'telemetry', 'benchmark', 'ablation', 'memory', 'task'],
     group: 'agents',
     brief: 'Tasks, file locks, DMs and feed',
-    usage: 'chemx team <status|task|brief|lock|unlock|feed|post|inbox|dm|tokens|benchmark> [options]',
+    usage: 'chemx team <status|task|brief|lock|unlock|feed|post|inbox|dm|check|tokens|benchmark> [options]',
     summary: 'Multi-agent coordination layer backed by SQLite (.chemx/index.db).',
-    description: 'Task queues, status transitions, AST verification on completion and file locks. `tokens` and `benchmark` are team subcommands. `chemx task <action>` is the same as `chemx team task <action>`; run `chemx team task --help` (or `chemx task show --help`) for task detail. `chemx team brief <id>` stores or prints a task\'s long brief. An option with a value takes it after a space or an equals sign (`--prio 2`, `--prio=2`).',
+    description: 'Task queues, status transitions, AST verification on completion and file locks. `tokens` and `benchmark` are team subcommands. `chemx task <action>` is the same as `chemx team task <action>`; run `chemx team task --help` (or `chemx task show --help`) for task detail. `chemx team brief <id>` stores or prints a task\'s long brief. `chemx team check <typecheck|test|verify|build>` queues the check and returns at once; a detached drain worker runs it one job at a time and DMs the result (status, list, show, cancel, drain are its subcommands). An option with a value takes it after a space or an equals sign (`--prio 2`, `--prio=2`).',
     flags: FLAGS,
     examples: EXAMPLES
   }

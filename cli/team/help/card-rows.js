@@ -14,7 +14,8 @@ import * as route from './route.js';
 import * as triage from './triage.js';
 import * as benchmark from './benchmark.js';
 import * as train from './train.js';
+import * as check from './check.js';
 
-const SUBCOMMANDS_IN_CARD_ORDER = [status, task, brief, lock, unlock, feed, post, inbox, dm, tokens, route, triage, benchmark, train];
+const SUBCOMMANDS_IN_CARD_ORDER = [status, task, brief, lock, unlock, feed, post, inbox, dm, tokens, route, triage, benchmark, train, check];
 
 export const TEAM_CARD_ROWS = SUBCOMMANDS_IN_CARD_ORDER.flatMap((subcommand) => subcommand.teamCardRows);

@@ -23,5 +23,6 @@ Reference pages for behavior that specs pin. Design notes and plans live under `
 | [team-audit-run.md](team-audit-run.md) | `chemx team audit-run` |
 | [team-dispatch.md](team-dispatch.md) | `chemx team dispatch --workflow`: task selection, routing per stage, the rendered build/review/repair/gate script (chemx renders it; the host runs it), run records |
 | [team-locks.md](team-locks.md) | File locks and leases: TTL, renewal, lapse, the commit guard |
+| [team-check-queue.md](team-check-queue.md) | `chemx team check`: the async check queue, coalescing, cache, drain worker, DM delivery |
 | [team-tokens.md](team-tokens.md) | `chemx team tokens --epic`: cost, tokens and wall time per epic over its children, where each child's figures come from, and what unknown means |
 | [test-lanes.md](test-lanes.md) | Test lanes and the agent test loop; the line heavy jobs (full suite, typecheck, build) take turns in, light test runs, shared runs, `CHEMX_LIGHT_RESERVE` and `chemx test --slots` |
