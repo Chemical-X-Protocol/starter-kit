@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { initTeamSchema } from './team-schema.js';
 import { enqueueCheck } from './check-queue.js';
-import { deliverCheckResult, formatFailure } from './check-delivery.js';
+import { deliverCheckResult, formatFailure, redeliverUnnotified } from './check-delivery.js';
 import { collectFaults, createCheckExecutor, toCheckResult } from './check-executor.js';
 
 const makeJob = () => {
@@ -77,4 +77,73 @@ test('executor: it runs the audit for the job kind and refuses an unknown kind',
   assert.equal((await executor({ kind: 'typecheck', cwd: '/repo' })).status, 'pass');
   assert.deepEqual(seen, ['/repo']);
   assert.equal((await executor({ kind: 'lint', cwd: '/repo' })).status, 'inconclusive');
+});
+
+const failing = { status: 'fail', errorCount: 1, faults: [{ file: 'a.ts', line: 1, code: 'TS1', message: 'bad' }] };
+
+test('delivery: one requester whose DM fails does not stop the others, and only it is retried', () => {
+  const { db, job } = makeJob();
+  const sent = [];
+  const send = (_db, dm) => {
+    const isLocked = dm.recipient_id === '@a';
+    const reject = () => { throw new Error('inbox locked'); };
+    return isLocked ? reject() : sent.push(dm.recipient_id);
+  };
+  const outcome = deliverCheckResult(db, job, { status: 'pass' }, { send });
+  assert.deepEqual(sent, ['@b']);
+  assert.equal(outcome.dms, 1);
+  assert.deepEqual(outcome.errors, ['dm @a: inbox locked']);
+  const retry = [];
+  deliverCheckResult(db, job, { status: 'pass' }, { send: (_db, dm) => retry.push(dm.recipient_id) });
+  assert.deepEqual(retry, ['@a']);
+});
+
+test('delivery: the board post happens once, even when the first attempt failed or delivery runs again', () => {
+  const { db, job } = makeJob();
+  const posts = [];
+  const flaky = { send: () => {}, post: () => { throw new Error('feed locked'); } };
+  const first = deliverCheckResult(db, job, failing, flaky);
+  assert.equal(first.posted, false);
+  assert.equal(first.errors.length, 1);
+  const recorder2 = { send: () => {}, post: (_db, event) => posts.push(event) };
+  assert.equal(deliverCheckResult(db, job, failing, recorder2).posted, true);
+  deliverCheckResult(db, job, failing, recorder2);
+  assert.equal(posts.length, 1);
+});
+
+test('delivery: a process-scoped phantom handle is never DMed, and is not retried either', () => {
+  const db = new DatabaseSync(':memory:');
+  initTeamSchema(db);
+  const queued = enqueueCheck(db, { kind: 'test', cwd: '/repo', requester: '@agent-4242-abcdef', now: 1 });
+  enqueueCheck(db, { kind: 'test', cwd: '/repo', requester: '@real', now: 1 });
+  const { calls, send, post } = recorder();
+  const outcome = deliverCheckResult(db, queued.job, { status: 'pass' }, { send, post });
+  assert.deepEqual(calls.dms.map((dm) => dm.recipient_id), ['@real']);
+  assert.equal(outcome.skipped, 1);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM check_requesters WHERE notified_at IS NULL').get().n, 0);
+});
+
+test('delivery: a cancelled check is a one-line DM saying who cancelled it, and nothing goes to the board', () => {
+  const { db, job } = makeJob();
+  const { calls, send, post } = recorder();
+  deliverCheckResult(db, job, { status: 'cancelled', cancelledBy: '@boss' }, { send, post });
+  assert.match(calls.dms[0].message, /CANCELLED by @boss; no result will come/);
+  assert.deepEqual(calls.posts, []);
+});
+
+test('delivery: the sweep redelivers finished jobs with an un-notified requester and survives a job that throws', () => {
+  const { db, job } = makeJob();
+  const other = enqueueCheck(db, { kind: 'build', cwd: '/repo', requester: '@c', now: 1 });
+  db.prepare("UPDATE check_jobs SET status = 'done', finished_at = 2, result = ? WHERE id IN (?, ?)").run(JSON.stringify({ status: 'pass' }), job.id, other.id);
+  const seen = [];
+  const outcome = redeliverUnnotified(db, (_db, finished) => {
+    seen.push(finished.id);
+    const isFirst = finished.id === job.id;
+    const reject = () => { throw new Error('boom'); };
+    return isFirst ? reject() : undefined;
+  });
+  assert.deepEqual(seen, [job.id, other.id]);
+  assert.deepEqual(outcome, { attempted: 2, failures: [{ id: job.id, error: 'boom' }] });
+  db.prepare('UPDATE check_requesters SET notified_at = 3').run();
+  assert.equal(redeliverUnnotified(db, () => assert.fail('nothing left to deliver')).attempted, 0);
 });

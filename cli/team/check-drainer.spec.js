@@ -95,10 +95,10 @@ test('drainer: ensureDrainer spawns only when no live worker holds the lease', (
   const db = makeDb();
   const spawned = [];
   const spawnWorker = (cwd) => spawned.push(cwd);
-  assert.equal(ensureDrainer(db, { cwd: '/repo', now: 10, spawnWorker }), true);
+  assert.equal(ensureDrainer(db, { cwd: '/repo', now: 10, spawnWorker }).spawned, true);
   acquireLease(db, { pid: 1, token: 'a', now: 10, isAlive: () => true });
-  assert.equal(ensureDrainer(db, { cwd: '/repo', now: 20, isAlive: () => true, spawnWorker }), false);
-  assert.equal(ensureDrainer(db, { cwd: '/repo', now: 20, isAlive: () => false, spawnWorker }), true);
+  assert.equal(ensureDrainer(db, { cwd: '/repo', now: 20, isAlive: () => true, spawnWorker }).spawned, false);
+  assert.equal(ensureDrainer(db, { cwd: '/repo', now: 20, isAlive: () => false, spawnWorker }).spawned, true);
   assert.equal(drainerStatus(db, 20, () => true).running, true);
   assert.equal(spawned.length, 2);
 });

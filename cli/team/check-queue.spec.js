@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { initTeamSchema } from './team-schema.js';
+import { initChecksSchema } from './team-schema-checks.js';
 import { cancelCheck, countByStatus, enqueueCheck, getCheck, listChecks } from './check-queue.js';
 
 const makeDb = () => {
@@ -100,4 +101,67 @@ test('check queue: enqueueing is fast and the schema is idempotent', () => {
   const started = Date.now();
   enqueueCheck(db, { ...base, requester: '@a' });
   assert.ok(Date.now() - started < 100);
+});
+
+const deepReader = (value, counter) => () => {
+  counter.reads += 1;
+  return value;
+};
+
+test('check queue: a cached green result is trusted only when the deep fingerprint still matches, and the deep one is read only for a candidate', () => {
+  const db = makeDb();
+  const counter = { reads: 0 };
+  const first = enqueueCheck(db, { ...base, requester: '@a', deepFingerprint: deepReader('D1', counter) });
+  assert.equal(counter.reads, 0);
+  finishGreen(db, first.id, base.now);
+  db.prepare("UPDATE check_jobs SET tree_fp_deep = 'D1' WHERE id = ?").run(first.id);
+  const hit = enqueueCheck(db, { ...base, requester: '@b', now: base.now + 1000, deepFingerprint: deepReader('D1', counter) });
+  assert.equal(hit.action, 'cached');
+  assert.equal(counter.reads, 1);
+  const changedSubmodule = enqueueCheck(db, { ...base, requester: '@c', now: base.now + 1000, deepFingerprint: deepReader('D2', counter) });
+  assert.equal(changedSubmodule.action, 'queued');
+});
+
+test('check queue: a deep fingerprint git could not read never validates a cached result', () => {
+  const db = makeDb();
+  const first = enqueueCheck(db, { ...base, requester: '@a' });
+  finishGreen(db, first.id, base.now);
+  db.prepare("UPDATE check_jobs SET tree_fp_deep = '' WHERE id = ?").run(first.id);
+  const unreadable = enqueueCheck(db, { ...base, requester: '@b', now: base.now + 1000, deepFingerprint: () => '' });
+  assert.equal(unreadable.action, 'queued');
+});
+
+test('check queue: a candidate the worker never deep-stamped is not trusted when a deep fingerprint is supplied', () => {
+  const db = makeDb();
+  const first = enqueueCheck(db, { ...base, requester: '@a' });
+  finishGreen(db, first.id, base.now);
+  const again = enqueueCheck(db, { ...base, requester: '@b', now: base.now + 1000, deepFingerprint: () => 'D1' });
+  assert.equal(again.action, 'queued');
+});
+
+test('check queue: a running job is joined only while the deep fingerprint matches', () => {
+  const db = makeDb();
+  const first = enqueueCheck(db, { ...base, requester: '@a' });
+  db.prepare("UPDATE check_jobs SET status = 'running', tree_fp_deep = 'D1' WHERE id = ?").run(first.id);
+  assert.equal(enqueueCheck(db, { ...base, requester: '@b', deepFingerprint: () => 'D1' }).action, 'joined');
+  assert.equal(enqueueCheck(db, { ...base, requester: '@c', deepFingerprint: () => 'D2' }).action, 'queued');
+});
+
+test('check queue: cancelling records who cancelled and returns the job for its requesters', () => {
+  const db = makeDb();
+  const first = enqueueCheck(db, { ...base, requester: '@a' });
+  const outcome = cancelCheck(db, first.id, { by: '@boss' });
+  assert.equal(outcome.ok, true);
+  assert.equal(outcome.job.id, first.id);
+  assert.equal(getCheck(db, first.id).result.cancelledBy, '@boss');
+  assert.equal(getCheck(db, first.id).result.status, 'cancelled');
+});
+
+test('check queue: the deep fingerprint column is added to a check_jobs table created before it existed', () => {
+  const db = new DatabaseSync(':memory:');
+  db.exec("CREATE TABLE check_jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, cwd TEXT NOT NULL, command TEXT NOT NULL, args TEXT NOT NULL DEFAULT '[]', tree_fp TEXT NOT NULL DEFAULT '', release TEXT NOT NULL DEFAULT '', gate TEXT NOT NULL DEFAULT 'none', run_at INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'queued', priority INTEGER NOT NULL DEFAULT 2, requested_by TEXT NOT NULL, coalesced_into INTEGER, attempts INTEGER NOT NULL DEFAULT 0, epoch INTEGER NOT NULL DEFAULT 0, worker_token TEXT, worker_pid INTEGER NOT NULL DEFAULT 0, child_pid INTEGER NOT NULL DEFAULT 0, reason_held TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL, started_at INTEGER, finished_at INTEGER, result TEXT NOT NULL DEFAULT '{}')");
+  initChecksSchema(db);
+  initChecksSchema(db);
+  const columns = db.prepare('PRAGMA table_info(check_jobs)').all().map((column) => column.name);
+  assert.ok(columns.includes('tree_fp_deep'));
 });
