@@ -1,12 +1,7 @@
 name: Publish NPM Packages
 
+# Publishing is manual (npm 2FA). Run it from the Actions tab or `npm run publish:both` with an OTP.
 on:
-  workflow_run:
-    workflows: ["Auto Version"]
-    types:
-      - completed
-    branches:
-      - main
   workflow_dispatch:
 
 permissions:

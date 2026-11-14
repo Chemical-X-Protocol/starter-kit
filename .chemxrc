@@ -2,7 +2,7 @@
   "profile": "pragmatic",
   "scope": ".",
   "commit": {
-    "skipCi": true
+    "skipCi": false
   },
   "rules": {
     "component-max-complexity": 12,
