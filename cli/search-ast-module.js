@@ -81,7 +81,23 @@ const collectTopLevel = (node, lineInfo, filePath, out) => {
 
 const isDynamicImport = (node) => t.isCallExpression(node) && node.callee?.type === 'Import' && t.isStringLiteral(node.arguments[0]);
 
-/** Extracts { symbols, props, hooks, imports } from a Babel File AST. */
+// An identifier that names a property, not a binding or a value: `a.b` (b), `{ b: 1 }` (b), `<X b="" />` (b).
+// Shorthand `{ b }` is a real reference, so it is kept.
+const isNonReferenceName = (node, parent) => {
+  if (!parent) return false;
+  const isMemberProperty = (t.isMemberExpression(parent) || t.isOptionalMemberExpression(parent)) && parent.property === node && !parent.computed;
+  const isObjectKey = (t.isObjectProperty(parent) || t.isObjectMethod(parent) || t.isClassProperty(parent) || t.isClassMethod(parent))
+    && parent.key === node && !parent.computed && !parent.shorthand;
+  const isJsxAttributeName = t.isJSXAttribute(parent) && parent.name === node;
+  const isTypeMemberKey = (t.isTSPropertySignature(parent) || t.isTSMethodSignature(parent)) && parent.key === node && !parent.computed;
+  const isQualifiedRight = t.isTSQualifiedName(parent) && parent.right === node;
+  const isJsxMemberProperty = t.isJSXMemberExpression(parent) && parent.property === node;
+  return isMemberProperty || isObjectKey || isJsxAttributeName || isTypeMemberKey || isQualifiedRight || isJsxMemberProperty;
+};
+
+const isNameNode = (node) => t.isIdentifier(node) || t.isJSXIdentifier(node);
+
+/** Extracts { symbols, props, hooks, imports, occurrences } from a Babel File AST. */
 export const extractModuleMetadata = (ast, contentLines, filePath) => {
   const signatureAt = (lineNo) => (contentLines[lineNo - 1] || '').trim();
   const lineInfo = (node) => {
@@ -89,15 +105,22 @@ export const extractModuleMetadata = (ast, contentLines, filePath) => {
     return { startLine, endLine: node.loc?.end.line || startLine, signature: signatureAt(startLine) };
   };
   const out = { symbols: [], props: [], imports: [], hooks: new Set() };
+  const occurrenceKeys = new Set();
   for (const node of ast.program.body) collectTopLevel(node, lineInfo, filePath, out);
-  walkBabel(ast.program, (node) => {
+  walkBabel(ast.program, (node, parent) => {
     if (isDynamicImport(node)) out.imports.push({ importedSymbol: 'default', sourceModule: node.arguments[0].value, line: node.loc?.start.line || 1 });
     const isHookCall = t.isCallExpression(node) && t.isIdentifier(node.callee) && /^use[A-Z0-9]/.test(node.callee.name);
     if (isHookCall) out.hooks.add(node.callee.name);
+    const isUse = isNameNode(node) && !isNonReferenceName(node, parent);
+    if (isUse) occurrenceKeys.add(`${node.name}\u0000${node.loc?.start.line || 1}`);
   });
   for (const sym of out.symbols) {
     const isHookDefinition = /^use[A-Z0-9]/.test(sym.name);
     if (isHookDefinition) out.hooks.add(sym.name);
   }
-  return { symbols: out.symbols, props: out.props, imports: out.imports, hooks: [...out.hooks] };
+  const occurrences = [...occurrenceKeys].map((key) => {
+    const [name, line] = key.split('\u0000');
+    return { name, line: Number(line) };
+  });
+  return { symbols: out.symbols, props: out.props, imports: out.imports, hooks: [...out.hooks], occurrences };
 };

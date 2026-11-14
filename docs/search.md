@@ -63,3 +63,23 @@ chemx q -g "--gs-[a-z0-9-]+" --regex -o --unique
 ```
 
 `-l` used to print `path:line`; that is `--lines` now. `--json` for the list modes carries `files` (`-l`) or `distinct` (`-o --unique`), and `-o` rows carry `parts` instead of `text`. MCP: `filesOnly`, `onlyMatching`, `unique`, `regex`, `paths`, `bare`.
+
+## Uses: where a name is used (`--uses`)
+
+```
+chemx q resolveEngine --uses
+```
+
+Prints every indexed use of the name as `path:line:text`, the same record shape as `grep -rnw` with the comments and strings left out. It reads the `occurrences` table (task #7595), which the index fills from the same Babel pass as the symbols: one row per distinct identifier name per line. Property keys, member properties (`obj.name`'s `name`) and JSX attribute names are not uses. Comments and string literals are not uses either. The summary (`N uses of "x" in M files`) goes to stderr, so stdout is records only. `--limit N` caps the rows (default 50); `--json` returns `records` with the total and the file count.
+
+Limits: JavaScript and TypeScript (and SFC script blocks) only. Template-only uses in `.vue` files, PHP and the regex fallback have no occurrence rows, so `--uses` does not see them. Each index version bump (`INDEX_VERSION`, now 3) rebuilds the index once on the next query.
+
+`refs` is unchanged: it lists import statements of the name, not call sites.
+
+## Literal backends
+
+`q -g` picks a backend by name: the `CHEMX_LITERAL_ENGINE` environment variable, or the `engine` option. Built in: `rg` (when ripgrep is installed) and `js`. Any other module can add one with `registerLiteralBackend(name, { search, isAvailable, isBacktracking })` in `cli/search-literal.js`. A backend's `search(root, scopeDirs, options, collect)` must call `collect({ path, line, text })` per match and return `{ filesSearched, skippedBinary, skippedLarge }`, so every output mode works unchanged. An unknown or unavailable name falls back to the first available backend.
+
+## Measuring against grep
+
+`benchmarks/search-vs-grep.mjs --root <repo> --symbol <name> --text <literal> --file <path>` runs the real `grep` commands and the matching `chemx` commands and reports stdout bytes, warm wall time, and hit-set recall and precision. It writes nothing.

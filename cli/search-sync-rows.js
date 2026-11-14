@@ -24,12 +24,12 @@ export const parseIndexRecord = (fullPath, relPath, root) => {
   const stat = fs.statSync(fullPath);
   const content = fs.readFileSync(fullPath, 'utf-8');
   refuseConflicted(content, relPath);
-  const { symbols, props, hooks, imports } = extractAstMetadata(content, fullPath);
+  const { symbols, props, hooks, imports, occurrences } = extractAstMetadata(content, fullPath);
   return {
     path: relPath, root, mtime: Math.floor(stat.mtimeMs), size: stat.size,
     tier: resolveArchitectureTier(relPath), lines: content.split('\n').length, chars: content.length,
     contentHash: hashContent(content), syncedAt,
-    symbols, props, hooks, imports
+    symbols, props, hooks, imports, occurrences
   };
 };
 

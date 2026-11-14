@@ -13,6 +13,7 @@ export const SEARCH_COMMANDS = [
       { flag: '--columnar', desc: 'Token-compact columnar format (cols/rows) for agent pipelines' },
       { flag: '-i, --inspect', desc: 'Inspect props and hooks without full source' },
       { flag: '--tier=<tier>', desc: 'Filter by tier: atom, molecule, organism, hook, view' },
+      { flag: '--uses, --usages', desc: 'Every indexed use of the name as path:line:text (grep-style, from the index; no grep)' },
       { flag: '--blast-radius, --blast, --impact', desc: 'Map direct consumers, transitive dependents and impacted tiers' },
       { flag: '--trace', desc: 'Forward call trace: downstream functions invoked by target' },
       { flag: '--backtrace', desc: 'Reverse backtrace: upstream callers leading to target' },

@@ -180,10 +180,28 @@ const searchWithRipgrep = (root, scopeDirs, options, collect) => {
   return stats;
 };
 
+// Literal-search backends. A backend is { search(root, scopeDirs, options, collect) -> { filesSearched,
+// skippedBinary, skippedLarge }, isAvailable(), isBacktracking }. Every backend must call collect() with the
+// same match shape, so the report, bare, -l, -o and --json renderers work unchanged.
+// Default pick: the first registered backend that is available (rg, then js). CHEMX_LITERAL_ENGINE or
+// the engine option names one explicitly; an unknown or unavailable name falls back to the default.
+const LITERAL_BACKENDS = new Map();
+export const registerLiteralBackend = (name, { search, isAvailable = () => true, isBacktracking = false }) => {
+  LITERAL_BACKENDS.set(name, { search, isAvailable, isBacktracking });
+};
+export const literalBackendNames = () => [...LITERAL_BACKENDS.keys()];
+registerLiteralBackend('rg', { search: searchWithRipgrep, isAvailable: isRipgrepAvailable, isBacktracking: false });
+registerLiteralBackend('js', { search: searchWithJs, isBacktracking: true });
+
 const resolveEngine = (requested) => {
-  const isForcedJs = requested === 'js' || process.env.CHEMX_LITERAL_ENGINE === 'js';
-  if (isForcedJs) return 'js';
-  return isRipgrepAvailable() ? 'rg' : 'js';
+  const forced = requested || process.env.CHEMX_LITERAL_ENGINE || null;
+  const forcedBackend = forced ? LITERAL_BACKENDS.get(forced) : null;
+  const isForcedAvailable = Boolean(forcedBackend) && forcedBackend.isAvailable();
+  if (isForcedAvailable) return forced;
+  for (const [name, backend] of LITERAL_BACKENDS) {
+    if (backend.isAvailable()) return name;
+  }
+  return 'js';
 };
 
 // Returns { engine, filesSearched, filesMatched, files (every matched path), totalMatches, matches (<= limit),
@@ -202,9 +220,9 @@ export const runLiteralSearch = ({ root, scopeDirs = ['.'], pattern, isRegex = f
     if (hasRoom) matches.push(match);
   };
   const chosen = resolveEngine(engine);
-  if (isRegex) assertRegexSupported(pattern, { isBacktracking: chosen === 'js' });
-  const search = chosen === 'rg' ? searchWithRipgrep : searchWithJs;
-  const stats = search(root, scopeDirs, options, collect);
+  const backend = LITERAL_BACKENDS.get(chosen);
+  if (isRegex) assertRegexSupported(pattern, { isBacktracking: backend.isBacktracking });
+  const stats = backend.search(root, scopeDirs, options, collect);
   return {
     engine: chosen, filesSearched: stats.filesSearched, filesMatched: matchedFiles.size, files: [...matchedFiles], totalMatches,
     matches, truncated: totalMatches > matches.length, distinct: isOnlyMatching ? [...distinct].sort() : undefined,

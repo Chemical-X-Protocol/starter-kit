@@ -3,6 +3,7 @@ import { queryIndexPage } from './search-db.js';
 import {
   handleDefCommand,
   handleRefsCommand,
+  handleUsesCommand,
   handleDepsCommand,
   handleHazardsCommand,
   handlePackCommand,
@@ -94,6 +95,7 @@ const reportArgProblems = (parsed, isJson, scopeKind) => {
 };
 
 const MODE_HANDLERS = {
+  uses: (ctx) => handleUsesCommand(ctx.db, ctx.target, { ...ctx.opts, root: ctx.root, limit: ctx.limit }),
   def: (ctx) => handleDefCommand(ctx.db, ctx.second, { ...ctx.opts, isFull: ctx.parsed.flags.has('--full') }),
   refs: (ctx) => handleRefsCommand(ctx.db, ctx.second, ctx.opts),
   deps: (ctx) => handleDepsCommand(ctx.db, ctx.second, ctx.opts),
@@ -124,7 +126,8 @@ const SUBCOMMAND_MODES = {
 const FLAG_MODES = [
   [['--blast-radius', '--blast', '--impact'], 'blast'], [['--trace'], 'trace'], [['--backtrace'], 'backtrace'],
   [['--semantic'], 'semantic'], [['--hybrid'], 'hybrid'], [['--progression'], 'progression'],
-  [['--failing', '--degraded'], 'failing'], [['--crystalline', '--clean'], 'crystalline']
+  [['--failing', '--degraded'], 'failing'], [['--crystalline', '--clean'], 'crystalline'],
+  [['--uses', '--usages'], 'uses']
 ];
 
 const resolveMode = (parsed, first) => {
@@ -187,12 +190,14 @@ export const runSearch = async (rawArgs = [], isCli = true) => {
   const index = { ...session.index, argProblems: argProblems.length > 0 ? argProblems : undefined };
   applyExitStatus(indexStatusOf(index), isCli);
 
-  const limit = readIntValue(parsed, 'limit', mode === 'query' ? 50 : 20);
+  const limit = readIntValue(parsed, 'limit', mode === 'query' || mode === 'uses' ? 50 : 20);
   const opts = { index, isJson, isCli, isColumnar, root };
   const ctx = { db, parsed, first, second, root, limit, opts, target: isSubcommand ? second : first };
   const handler = MODE_HANDLERS[mode];
   if (handler) {
-    printIndexLine(index, isJson);
+    // --uses prints pipe-safe records only on stdout, so its index banner is left out (the summary is on stderr).
+    const isPipeRecords = mode === 'uses' && !isJson;
+    if (!isPipeRecords) printIndexLine(index, isJson);
     return handler(ctx);
   }
 

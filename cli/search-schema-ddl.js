@@ -54,6 +54,15 @@ const TABLES_SQL = `
     FOREIGN KEY(importer_path) REFERENCES files(path) ON DELETE CASCADE
   );
 
+  -- Identifier uses (reference positions in code). One row per distinct name per line.
+  CREATE TABLE IF NOT EXISTS occurrences (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    file_path TEXT NOT NULL,
+    name TEXT NOT NULL,
+    line INTEGER NOT NULL DEFAULT 1,
+    FOREIGN KEY(file_path) REFERENCES files(path) ON DELETE CASCADE
+  );
+
   CREATE TABLE IF NOT EXISTS violations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     file_path TEXT NOT NULL,
@@ -114,6 +123,8 @@ const INDEXES_SQL = `
   CREATE INDEX IF NOT EXISTS idx_imports_symbol ON imports(imported_symbol);
   CREATE INDEX IF NOT EXISTS idx_imports_path ON imports(importer_path);
   CREATE INDEX IF NOT EXISTS idx_imports_resolved ON imports(resolved_path);
+  CREATE INDEX IF NOT EXISTS idx_occurrences_name ON occurrences(name);
+  CREATE INDEX IF NOT EXISTS idx_occurrences_file ON occurrences(file_path);
   CREATE INDEX IF NOT EXISTS idx_embeddings_file ON embeddings(file_path);
   CREATE INDEX IF NOT EXISTS idx_embeddings_type ON embeddings(target_type);
   CREATE INDEX IF NOT EXISTS idx_violations_file ON violations(file_path);

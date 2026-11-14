@@ -5,9 +5,10 @@ import { debugNote } from './search-debug.js';
 
 // Bump whenever the extractor, module resolver, ignore rules or tier rules change meaning.
 // v2: version stamping, anchored directory exclusions, root-relative module resolution.
-export const INDEX_VERSION = 2;
+// v3: identifier occurrences table (q --uses), filled from the same Babel pass as the symbols.
+export const INDEX_VERSION = 3;
 
-const INDEX_ROW_TABLES = ['symbols', 'props', 'hooks', 'imports', 'embeddings', 'fts_index', 'files'];
+const INDEX_ROW_TABLES = ['symbols', 'props', 'hooks', 'imports', 'occurrences', 'embeddings', 'fts_index', 'files'];
 
 export const readIndexMeta = (db) => {
   const meta = { version: null, scope: null, syncedAt: null };
@@ -58,7 +59,11 @@ export const ensureIndexVersion = (db) => {
       return isForeign ? { reset: false, foreign: true, previousVersion: meta.version, droppedFiles: 0 } : { reset: false, previousVersion: meta.version, droppedFiles: 0 };
     }
     const droppedFiles = countIndexedFiles(db);
-    for (const table of INDEX_ROW_TABLES) db.exec(`DELETE FROM ${table};`);
+    // A table added in a later version may be missing from an old file until its schema runs; skip it then.
+    for (const table of INDEX_ROW_TABLES) {
+      const isPresent = Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(table));
+      if (isPresent) db.exec(`DELETE FROM ${table};`);
+    }
     db.exec("DELETE FROM index_meta WHERE key IN ('scope', 'syncedAt');");
     writeIndexMeta(db, { version: INDEX_VERSION });
     db.exec('COMMIT;');

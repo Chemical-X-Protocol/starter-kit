@@ -10,7 +10,7 @@ export const parseFileAst = (absPath, relPath) => {
   const lines = content.split('\n').length;
   const chars = content.length;
   const tier = resolveArchitectureTier(relPath);
-  const { symbols, props, hooks, imports } = extractAstMetadata(content, absPath);
+  const { symbols, props, hooks, imports, occurrences } = extractAstMetadata(content, absPath);
   return {
     path: relPath,
     mtime: Math.floor(stat.mtimeMs),
@@ -21,7 +21,8 @@ export const parseFileAst = (absPath, relPath) => {
     symbols,
     props,
     hooks,
-    imports
+    imports,
+    occurrences
   };
 };
 
