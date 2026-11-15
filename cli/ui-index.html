@@ -634,23 +634,7 @@ const App = {
 
       <!-- SETTINGS -->
       <template v-else-if="tab==='settings'">
-        <div class="xo-settings">
-          <section class="x-panel">
-            <header class="x-panel__head"><h3 class="x-panel__title">Database maintenance</h3></header>
-            <div class="x-panel__body xo-settings__row">
-              <p class="x-muted">Vacuum compacts the board's SQLite file. Heartbeat marks the UI as alive on the board.</p>
-              <div class="xo-settings__actions">
-                <v-btn variant="tonal" color="primary" prepend-icon="mdi-broom" @click="postAction('vacuum')">Vacuum database</v-btn>
-                <v-btn variant="tonal" prepend-icon="mdi-heart-pulse" @click="postAction('heartbeat')">Send heartbeat</v-btn>
-              </div>
-            </div>
-          </section>
-          <section class="x-panel">
-            <header class="x-panel__head"><h3 class="x-panel__title">Live updates</h3>
-              <span class="xo-live" :class="{ 'is-live': isLive }"><span class="xo-live__dot" />{{ isLive ? 'Connected' : 'Disconnected' }}</span></header>
-            <div class="x-panel__body"><p class="x-muted">The page receives board changes over Server-Sent Events. When the stream drops, it falls back to fetching the status once.</p></div>
-          </section>
-        </div>
+        <xo-settings />
       </template>
     </div>
   </v-main>
@@ -1116,7 +1100,7 @@ const App = {
     const onHashChange = () => navigate(currentHash());
 
     provide('chemx', {
-      posts: postsDesc, agents, leases, taskCounts, telemetry, me, route, navigate, openTaskDetail, agentById
+      posts: postsDesc, agents, leases, taskCounts, telemetry, me, route, navigate, openTaskDetail, agentById, isLive
     });
 
     onMounted(() => {

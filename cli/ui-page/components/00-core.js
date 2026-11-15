@@ -65,6 +65,13 @@
     };
   };
 
+  // Settings > Appearance density: a class on <html> the token CSS reads. Applied once at load from browser storage.
+  ChemxUi.applyDensity = (density) => {
+    const hasDocument = typeof document !== 'undefined';
+    if (hasDocument) document.documentElement.classList.toggle('x-density-comfortable', density === 'comfortable');
+  };
+  try { ChemxUi.applyDensity(localStorage.getItem('chemx_density') || 'compact'); } catch { ChemxUi.applyDensity('compact'); } // chemx-allow: storage can be blocked; compact is the default
+
   ChemxUi.getJson = async (url) => {
     const res = await fetch(url);
     if (!res.ok) throw new Error('HTTP ' + res.status + ' for ' + url);
