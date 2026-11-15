@@ -1,42 +1,51 @@
 /**
- * <xo-post-card :post="post" />: one feed post (epic #7614, task #7620). Header: avatar, handle (opens the
- * profile), event icon and verb. Chips: task (opens the task sheet), file path. DM badge when the post has a
- * recipient. The time links to the permalink #/posts/<id>. Rollup rows (eventType 'rollup', built by the
- * Story view) show their message, e.g. 'locked 3 files', in a muted style.
- * Keep the <xo-post-thread :post="post" /> slot (task threads).
+ * <xo-post-card :post="post" />: one feed post (epic #7614; #7620 rich card, #7649 tokens, #7633 mention links).
+ * Avatar column; header with the handle (opens the profile), the event icon and verb, a DM badge, and the time
+ * (links to #/posts/<id>). The message renders @handles as profile links through ChemxUi.linkMentions (no v-html).
+ * Chips: task (opens the task sheet) and file. Rollup rows (eventType 'rollup', from the Story view) are muted.
+ * Keeps the <xo-post-thread :post="post" /> slot (threads).
  */
 window.ChemxUi.components['xo-post-card'] = {
   props: { post: { type: Object, required: true } },
   setup(props) {
     const { computed, inject } = Vue;
     const chemx = inject('chemx');
-    const meta = computed(() => window.ChemxUi.eventMeta(props.post.eventType));
+    const ui = window.ChemxUi;
+    const meta = computed(() => ui.eventMeta(props.post.eventType));
     const isRollup = computed(() => props.post.eventType === 'rollup');
     const hasTask = computed(() => props.post.taskId != null && props.post.taskId !== '');
     const hasFile = computed(() => Boolean(props.post.filePath));
     const permalink = computed(() => '#/posts/' + props.post.id);
+    const segments = computed(() => {
+      const text = String(props.post.message || '');
+      const canLink = typeof ui.linkMentions === 'function';
+      return canLink ? ui.linkMentions(text) : [{ text }];
+    });
     const openAuthor = () => {
-      if (props.post.author) chemx.navigate('#/agents/' + props.post.author);
+      const hasAuthor = Boolean(props.post.author);
+      if (hasAuthor) chemx.navigate('#/agents/' + props.post.author);
     };
+    const openHandle = (handle) => chemx.navigate('#/agents/' + handle);
     const openTask = () => chemx.openTaskDetail(props.post.taskId);
-    return { meta, isRollup, hasTask, hasFile, permalink, openAuthor, openTask, relativeTime: window.ChemxUi.relativeTime };
+    const fullTime = computed(() => (props.post.timestamp ? new Date(Number(props.post.timestamp)).toLocaleString() : ''));
+    return { meta, isRollup, hasTask, hasFile, permalink, segments, fullTime, openAuthor, openHandle, openTask, relativeTime: ui.relativeTime };
   },
   template: `
-    <v-sheet color="transparent" class="xo-post vb-postbit" :class="{ 'xo-post--rollup': isRollup }" :data-post-id="post.id">
-      <v-sheet color="transparent" class="xo-post__head">
-        <xo-avatar :handle="post.author" :size="22" />
-        <span class="xo-handle" @click="openAuthor">{{ post.author }}</span>
-        <span v-if="!isRollup" class="xo-post__verb">
-          <v-icon :icon="meta.icon" :color="meta.color" size="14" />{{ meta.label }}
-        </span>
-        <v-chip v-if="post.isDirectMessage" class="xo-post__dm" size="x-small" color="pink" variant="tonal" prepend-icon="mdi-email-outline">DM</v-chip>
-      </v-sheet>
-      <v-sheet color="transparent" class="xo-post__msg">{{ post.message }}</v-sheet>
-      <v-sheet v-if="hasTask || hasFile" color="transparent" class="xo-post__chips">
-        <v-chip v-if="hasTask" class="xo-post__chip" size="x-small" color="primary" variant="tonal" prepend-icon="mdi-checkbox-marked-circle-outline" @click.stop="openTask">Task #{{ post.taskId }}</v-chip>
-        <v-chip v-if="hasFile" class="xo-post__chip xo-post__file" size="x-small" variant="tonal" prepend-icon="mdi-file-outline" :title="post.filePath">{{ post.filePath }}</v-chip>
-      </v-sheet>
-      <a class="xo-post__time" :href="permalink">{{ relativeTime(post.timestamp) }}</a>
-      <xo-post-thread :post="post" />
-    </v-sheet>`
+    <article class="xo-post vb-postbit" :class="{ 'xo-post--rollup': isRollup }" :data-post-id="post.id">
+      <xo-avatar :handle="post.author" :size="32" />
+      <div class="xo-post__body">
+        <header class="xo-post__head">
+          <button type="button" class="xo-post__author" @click="openAuthor">{{ post.author }}</button>
+          <span v-if="!isRollup" class="xo-post__verb"><v-icon :icon="meta.icon" :color="meta.color" size="14" />{{ meta.label }}</span>
+          <span v-if="post.isDirectMessage" class="xo-post__dm"><v-icon size="12">mdi-email-outline</v-icon>DM to {{ post.recipient }}</span>
+          <a class="xo-post__time" :href="permalink" :title="fullTime">{{ relativeTime(post.timestamp) }}</a>
+        </header>
+        <p class="xo-post__msg"><template v-for="(s, i) in segments" :key="i"><a v-if="s.handle" class="xo-post__mention" :href="s.href" @click.prevent="openHandle(s.handle)">{{ s.text }}</a><template v-else>{{ s.text }}</template></template></p>
+        <div v-if="hasTask || hasFile" class="xo-post__chips">
+          <button v-if="hasTask" type="button" class="xo-post__chip" @click.stop="openTask"><v-icon size="13">mdi-checkbox-marked-circle-outline</v-icon>Task #{{ post.taskId }}</button>
+          <span v-if="hasFile" class="xo-post__chip xo-post__file" :title="post.filePath"><v-icon size="13">mdi-file-outline</v-icon>{{ post.filePath }}</span>
+        </div>
+        <xo-post-thread :post="post" />
+      </div>
+    </article>`
 };

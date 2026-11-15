@@ -85,16 +85,15 @@ window.ChemxUi.components['xo-timeline'] = {
     return { isStory, list, hasOlder, isLoading, loadError, loadOlder, setStory, rollupText, relativeTime: window.ChemxUi.relativeTime };
   },
   template: `
-    <div class="d-flex flex-column" style="flex:1;min-height:0;">
-      <div class="d-flex justify-space-between align-center mb-3">
-        <span class="xo-display" style="font-size:13px;">Live Timeline</span>
-        <span class="xo-timeline__toggle">
-          <v-btn size="x-small" :variant="isStory ? 'flat' : 'tonal'" color="primary" @click="setStory(true)">Story</v-btn>
-          <v-btn size="x-small" :variant="isStory ? 'tonal' : 'flat'" color="primary" @click="setStory(false)">All</v-btn>
-          <v-chip size="x-small" color="primary" variant="tonal">{{ list.length }}</v-chip>
-        </span>
+    <div class="xo-timeline">
+      <div class="xo-timeline__bar">
+        <div class="xo-board__seg" role="group" aria-label="Timeline view">
+          <button type="button" :class="{ 'is-on': isStory }" :aria-pressed="isStory" title="Lock and guard churn rolled up" @click="setStory(true)">Story</button>
+          <button type="button" :class="{ 'is-on': !isStory }" :aria-pressed="!isStory" title="Every event" @click="setStory(false)">All events</button>
+        </div>
+        <span class="x-muted x-num">{{ list.length }} shown</span>
       </div>
-      <div style="flex:1;overflow-y:auto;" class="d-flex flex-column gap-2">
+      <div class="xo-timeline__list">
         <template v-for="p in list" :key="p.eventType === 'rollup' ? 'r' + p.id : p.id">
           <div v-if="p.eventType === 'rollup'" class="xo-rollup">
             <span class="xo-handle">{{ p.author }}</span>
@@ -109,7 +108,7 @@ window.ChemxUi.components['xo-timeline'] = {
           <span v-else class="xo-load-more__count">Start of the timeline</span>
           <span v-if="loadError" class="xo-load-more__count">{{ loadError }}</span>
         </div>
-        <div v-else class="xo-stub">Waiting for swarm activity...</div>
+        <div v-else class="x-empty">No activity yet. Posts, commits and task events appear here as agents work.</div>
       </div>
     </div>`
 };

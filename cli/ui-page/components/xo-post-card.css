@@ -1,11 +1,26 @@
-/* Rich post card (task #7620, epic #7614). */
-.xo-post__head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
-.xo-post__verb { font-size: 12px; display: inline-flex; align-items: center; gap: 4px; color: rgba(255,255,255,.6); }
-.xo-post__chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
-.xo-post__chip { cursor: pointer; max-width: 100%; }
-.xo-post__file { font-family: monospace; font-size: 11px; }
-.xo-post__dm { margin-left: auto; }
-.xo-post__msg { font-size: 13px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
-.xo-post__time { font-size: 11px; color: rgba(255,255,255,.35); margin-top: 6px; display: inline-block; text-decoration: none; }
-.xo-post__time:hover { color: #62c9ff; text-decoration: underline; }
-.xo-post--rollup { opacity: .75; }
+/* <xo-post-card> on the design tokens (#7649). Overrides the legacy .xo-post rules in cli/ui-index.html. */
+.xo-post.vb-postbit {
+  display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: var(--x-3); padding: var(--x-4) 0 !important;
+  background: none !important; border: 0 !important; border-bottom: 1px solid var(--x-border) !important; border-radius: 0 !important;
+}
+.xo-post__body { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.xo-post__head { display: flex; align-items: baseline; gap: var(--x-2); flex-wrap: wrap; min-width: 0; }
+.xo-post__author { border: 0; background: none; padding: 0; font: inherit; font-size: var(--x-fs-base); font-weight: 650; color: var(--x-text-strong); cursor: pointer; }
+.xo-post__author:hover { color: var(--x-accent); }
+.xo-post__verb { display: inline-flex; align-items: center; gap: 4px; font-size: var(--x-fs-sm); color: var(--x-text-3); }
+.xo-post__dm { display: inline-flex; align-items: center; gap: 4px; font-size: var(--x-fs-xs); font-weight: 600; color: var(--x-pink); }
+.xo-post__time { margin-left: auto; font-size: var(--x-fs-xs); color: var(--x-text-3); text-decoration: none; white-space: nowrap; }
+.xo-post__time:hover { color: var(--x-accent); text-decoration: underline; }
+.xo-post__msg { margin: 0; font-size: var(--x-fs-base); line-height: 1.6; color: var(--x-text); white-space: pre-wrap; word-break: break-word; }
+.xo-post__mention { color: var(--x-accent); text-decoration: none; font-weight: 550; }
+.xo-post__mention:hover { text-decoration: underline; }
+.xo-post__chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.xo-post__chip {
+  display: inline-flex; align-items: center; gap: 4px; max-width: 100%; padding: 2px 8px; border-radius: var(--x-r-sm);
+  border: 1px solid var(--x-border); background: var(--x-surface-2); color: var(--x-text-2); font: inherit; font-size: var(--x-fs-xs);
+}
+button.xo-post__chip { cursor: pointer; }
+button.xo-post__chip:hover { border-color: rgba(98,201,255,.4); color: var(--x-accent); }
+.xo-post__file { font-family: var(--x-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.xo-post--rollup { opacity: .7; }
+.xo-post--rollup .xo-post__msg { font-size: var(--x-fs-sm); color: var(--x-text-3); }
