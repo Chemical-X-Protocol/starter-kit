@@ -12,8 +12,9 @@ import * as mentions from './ui-social-mentions.js';
 import * as notify from './ui-social-notify.js';
 import * as directory from './ui-agents-directory.js';
 import * as dms from './ui-social-dms.js';
+import * as settings from './ui-settings.js';
 
-const MODULES = [feed, digest, posts, profile, threads, mentions, notify, directory, dms];
+const MODULES = [feed, digest, posts, profile, threads, mentions, notify, directory, dms, settings];
 
 export const SOCIAL_API_DOCS = MODULES.flatMap((m) => m.API_DOCS);
 
