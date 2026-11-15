@@ -1,5 +1,5 @@
 import { toColumnar } from '../columnar.js';
-import { registerAgent } from './team-db-agents.js';
+import { registerAgent, getAgent } from './team-db-agents.js';
 import { NOT_ARCHIVED_SQL } from './team-db-feed.js';
 import { describeLease } from './team-db-lock-promotion.js';
 import { resolveAgentId } from './agent-identity.js';
@@ -14,7 +14,10 @@ export const sendDirectMessage = (db, params = {}) => {
   const author = resolveAgentId(params.author_id);
   const recipient = normalizeHandle(params.recipient_id);
   if (!recipient) throw new Error('recipient_id is required');
-  registerAgent(db, { id: author, role: 'contributor' });
+  // Register an unknown sender only: registerAgent replaces name, role, capabilities and metadata, which would
+  // strip a crew member's crew tagging every time it sent a DM.
+  const isKnown = Boolean(getAgent(db, author));
+  if (!isKnown) registerAgent(db, { id: author, role: 'contributor' });
 
   const now = Date.now();
   const sql = `
