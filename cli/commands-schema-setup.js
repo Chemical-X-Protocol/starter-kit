@@ -12,9 +12,10 @@ export const SETUP_COMMANDS = [
       { flag: '--port=<N>', desc: 'Server port (default: 4173)' },
       { flag: '--dev', desc: 'Run the dashboard in dev mode (also -d or CHEMX_UI_DEV=1)' },
       { flag: '--allow-host=<names>', desc: 'Extra Host header names to accept, comma-separated (repeatable)' },
-      { flag: '--host=<addr>', desc: 'Bind address (default: 127.0.0.1). A non-loopback host exposes the UI beyond this machine and prints a warning.' }
+      { flag: '--host=<addr>', desc: 'Bind address (default: 127.0.0.1). A non-loopback host exposes the UI beyond this machine and prints a warning.' },
+      { flag: '--no-open', desc: 'Do not open the browser. By default chemx ui opens the token URL when stdout is a terminal with a display (also CHEMX_UI_NO_OPEN=1; never in CI).' }
     ],
-    examples: ['chemx ui', 'chemx ui --port=3000']
+    examples: ['chemx ui', 'chemx ui --port=3000', 'chemx ui --no-open']
   },
   {
     name: 'tesseract',

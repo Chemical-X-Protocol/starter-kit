@@ -49,6 +49,10 @@ Done-like columns (`done`, `completed`, `cancelled`, `duplicate`) sort most rece
 
 The code: `cli/ui-paging.js` (page params and envelope), `cli/ui-paging-tasks.js` and `cli/ui-paging-task-where.js` (task pages and board), `cli/ui-paging-agents.js` (agent pages), `cli/ui-api-index.js` (`GET /api/`), `cli/ui-handlers.js` (the live view), `cli/ui-index.html` (the page). `cli/ui-index.html` is the page `chemx ui` serves.
 
+### Opening the page
+
+`chemx ui` opens the default browser at the token URL it prints (`cli/ui-open.js`). It does not open with `--no-open` or `CHEMX_UI_NO_OPEN=1`, in CI, when stdout is not a terminal, or on Linux with no `DISPLAY`/`WAYLAND_DISPLAY`. Opening is best effort; the printed URL always works.
+
 ### Design system and pages
 
 `cli/ui-page/components/00-tokens.css` holds the design tokens (surfaces, text, accent `#62c9ff`, status colors, Inter and JetBrains Mono, a 4px spacing scale, radii) and brings Vuetify onto them; `createVuetify` in `cli/ui-index.html` mirrors the colors and sets control defaults. Pages use the shared blocks (`x-panel`, `x-row`, `x-code`, `x-empty`, `xo-table`) instead of inline styles. `10-pages.css` lays out the Timeline, Locks and Settings pages and re-skins the classes the Codebase, Prompts and Database pages still use.

@@ -4,6 +4,7 @@ import { openTeamContext, describeTeamDbFailure } from './team/coordination-db.j
 import { handleSwarmStatus } from './ui-handlers.js';
 import { generateSwarmHtml } from './ui-html.js';
 import { routeGet, routePost, parseJsonBody } from './ui-server-routes.js';
+import { openInBrowser } from './ui-open.js';
 import { handleSseConnection, broadcastSseUpdate, broadcastSseReload, closeSseHub } from './ui-sse.js';
 import { createUiAuth, checkUiRequest, createUiFetch, isLoopbackHost, resolveUiUrlHost, DEFAULT_UI_HOST } from './ui-auth.js';
 import { openConsoleDb } from './ui-sql-guard.js';
@@ -90,3 +91,4 @@ export const startUiServer = async (options = {}) => {
     });
   });
 };
+        openInBrowser(url);
