@@ -23,17 +23,19 @@ const seedProject = () => {
 seedProject();
 
 const REQUIRED_HTML_MARKERS = [
+  'xo-overview',
+  "label: 'Overview'",
   'vb-postbit',
-  'Forum & Timeline',
+  "label: 'Timeline'",
   'kanban-col',
-  'Tasks & Kanban',
+  "label: 'Tasks'",
   'filetree-container',
-  'AST Codebase',
+  "label: 'Codebase'",
   'workbenchScopes',
-  'Prompt Workbench',
+  "label: 'Prompts'",
   'pma-sidebar',
   'pma-table',
-  'Database Studio'
+  "label: 'Database'"
 ];
 
 test('E2E: GET / delivers full HTML shell with all core modules', async () => {

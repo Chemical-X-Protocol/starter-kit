@@ -4,7 +4,7 @@
   <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Chemical X: Swarm Control</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@300;400;500;600&display=swap" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/vuetify@3.7.0/dist/vuetify.min.css" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css" />
   <style>
@@ -359,29 +359,43 @@ const vuetify = createVuetify({
     themes: {
       chemx: {
         dark: true,
+        // Mirrors the tokens in cli/ui-page/components/00-tokens.css.
         colors: {
-          background: '#020617', surface: '#0b1329',
-          primary: '#38bdf8', secondary: '#8b5cf6',
-          success: '#a3e635', warning: '#fbbf24',
-          error: '#f472b6', info: '#38bdf8',
-          'on-surface': '#f1f5f9'
+          background: '#0a0c10', surface: '#111419', 'surface-variant': '#1c212a',
+          primary: '#62c9ff', secondary: '#a78bfa',
+          success: '#4ade80', warning: '#fbbf24',
+          error: '#f87171', info: '#62c9ff',
+          'on-surface': '#e6e9ef', 'on-primary': '#0a0c10'
         }
       }
     }
+  },
+  // One look for every control: compact outlined fields, flat buttons, tonal chips.
+  defaults: {
+    VBtn: { variant: 'flat', rounded: 'md' },
+    VTextField: { variant: 'outlined', density: 'compact', hideDetails: 'auto' },
+    VSelect: { variant: 'outlined', density: 'compact', hideDetails: 'auto' },
+    VTextarea: { variant: 'outlined', density: 'compact', hideDetails: 'auto' },
+    VChip: { size: 'small', variant: 'tonal', rounded: 'md' },
+    VCard: { rounded: 'lg', elevation: 0 }
   }
 });
 
+// Every page: its sidebar group, and the one line the page header shows under its title.
 const NAV_ITEMS = [
-  { id: 'social',   icon: 'mdi-antenna',        label: 'Forum & Timeline' },
-  { id: 'agents',   icon: 'mdi-account-group-outline', label: 'Agents'      },
-  { id: 'attention',icon: 'mdi-bell-outline',   label: 'Attention Inbox'  },
-  { id: 'tasks',    icon: 'mdi-clipboard-list',  label: 'Tasks & Kanban'   },
-  { id: 'locks',    icon: 'mdi-lock-outline',    label: 'File Locks Hub'   },
-  { id: 'codebase', icon: 'mdi-code-braces',     label: 'AST Codebase'     },
-  { id: 'workbench',icon: 'mdi-wrench-outline',  label: 'Prompt Workbench' },
-  { id: 'database', icon: 'mdi-database-outline', label: 'Database Studio' },
-  { id: 'settings', icon: 'mdi-tune-variant',    label: 'Settings'         },
+  { id: 'overview',  group: 'Work',   icon: 'mdi-view-dashboard-outline', label: 'Overview',  description: 'What the swarm is doing right now, and what needs you.' },
+  { id: 'attention', group: 'Work',   icon: 'mdi-inbox-outline',          label: 'Inbox',     description: 'Approvals, blocked tasks, lock requests and agent questions waiting on a person.' },
+  { id: 'tasks',     group: 'Work',   icon: 'mdi-view-column-outline',    label: 'Tasks',     description: 'Every task on the board by status. Open one to see its full record.' },
+  { id: 'social',    group: 'Team',   icon: 'mdi-message-text-outline',   label: 'Timeline',  description: 'Commits, decisions, handoffs and notes from every agent, newest first.' },
+  { id: 'agents',    group: 'Team',   icon: 'mdi-account-group-outline',  label: 'Agents',    description: 'Your crew and every session handle: what each is working on and has done.' },
+  { id: 'locks',     group: 'Team',   icon: 'mdi-lock-outline',           label: 'File locks', description: 'Who holds which file right now. A lease lapses after 5 minutes of no activity.' },
+  { id: 'codebase',  group: 'System', icon: 'mdi-file-tree-outline',      label: 'Codebase',  description: 'Indexed files with their tier and line budget.' },
+  { id: 'workbench', group: 'System', icon: 'mdi-text-box-edit-outline',  label: 'Prompts',   description: 'Build a scoped prompt for an agent from the board and the code index.' },
+  { id: 'database',  group: 'System', icon: 'mdi-database-outline',       label: 'Database',  description: 'Browse and query the code-index tables.' },
+  { id: 'settings',  group: 'System', icon: 'mdi-cog-outline',            label: 'Settings',  description: 'Maintenance actions for this board.' }
 ];
+const NAV_GROUPS = ['Work', 'Team', 'System'].map((label) => ({ label, items: NAV_ITEMS.filter((item) => item.group === label) }));
+const PAGE_META = { ...Object.fromEntries(NAV_ITEMS.map((item) => [item.id, item])), posts: { label: 'Post', description: 'One post with what came before it and its replies.' } };
 
 const TIER_FILTERS = ['all','atom','molecule','organism','template','view','utility','hook'];
 
@@ -395,64 +409,49 @@ const TASK_COLUMNS = [
 
 const App = {
   template: `
-<v-app theme="chemx">
-  <div class="xo-orb xo-orb--pink" />
-  <div class="xo-orb xo-orb--blue" />
-  <div class="xo-orb xo-orb--lime" />
-
-  <v-app-bar flat height="56" style="z-index:200;">
-    <v-app-bar-nav-icon @click="drawer = !drawer" color="rgba(255,255,255,.7)">☰</v-app-bar-nav-icon>
-    <div class="d-flex align-center gap-2 ml-1">
-      <span class="xo-display" style="font-size:15px;color:#f1f5f9;">⚡ Chemical X</span>
-      <v-chip size="x-small" color="primary" variant="tonal" class="ml-1">SWARM</v-chip>
+<v-app theme="chemx" class="xo-app">
+  <v-navigation-drawer v-model="drawer" :permanent="isWide" :temporary="!isWide" width="248" class="xo-nav" aria-label="Main navigation">
+    <div class="xo-nav__brand">
+      <span class="xo-nav__logo" aria-hidden="true">X</span>
+      <div><div class="xo-nav__name">Chemical X</div><div class="xo-nav__sub">Agent coordination board</div></div>
     </div>
-    <v-spacer />
-    <div class="d-flex align-center gap-3 mr-3">
-      <xo-notification-bell />
-      <div v-if="telemetry.totalTokens" class="xo-usage-badge" title="Tokens and cost recorded on this board (chemx team telemetry)">
-        {{ Number(telemetry.totalTokens).toLocaleString() }} tokens · \${{ Number(telemetry.totalCost || 0).toFixed(2) }}
+    <nav class="xo-nav__groups">
+      <div v-for="group in navGroups" :key="group.label">
+        <div class="xo-nav__heading">{{ group.label }}</div>
+        <button v-for="item in group.items" :key="item.id" type="button" class="xo-nav__item" :class="{ 'is-active': tab === item.id }"
+          :aria-current="tab === item.id ? 'page' : undefined" @click="handleNavClick(item.id)">
+          <v-icon size="18">{{ item.icon }}</v-icon><span>{{ item.label }}</span>
+          <span v-if="navBadge(item.id)" class="xo-nav__badge x-num">{{ navBadge(item.id) }}</span>
+        </button>
       </div>
+    </nav>
+    <div class="xo-nav__foot">
       <span class="xo-live" :class="{ 'is-live': isLive }" :title="isLive ? 'Receiving live updates' : 'Live updates disconnected; showing the last data'">
         <span class="xo-live__dot" />{{ isLive ? 'Live' : 'Offline' }}
       </span>
+      <span v-if="telemetry.totalTokens" class="x-num" title="Tokens and cost recorded on this board (chemx team telemetry)">
+        {{ Number(telemetry.totalTokens).toLocaleString() }} tokens · \${{ Number(telemetry.totalCost || 0).toFixed(2) }} recorded
+      </span>
     </div>
-  </v-app-bar>
-
-  <v-navigation-drawer v-model="drawer" :permanent="drawerPinned" width="230">
-    <div class="px-4 py-3 d-flex align-center justify-space-between border-b" style="border-color:rgba(255,255,255,.07)!important;">
-      <div class="xo-display" style="font-size:11px;color:rgba(255,255,255,.45);text-transform:uppercase;letter-spacing:.1em;font-weight:700;">Navigation</div>
-      <v-btn
-        icon
-        variant="text"
-        size="x-small"
-        :color="drawerPinned ? 'primary' : 'rgba(255,255,255,.4)'"
-        :class="{ 'xo-btn--pinned': drawerPinned }"
-        @click="togglePinDrawer"
-        :title="drawerPinned ? 'Unpin menu (closes automatically on click)' : 'Pin menu (keeps drawer open)'"
-        style="width:26px;height:26px;"
-      >
-        <v-icon size="16">{{ drawerPinned ? 'mdi-pin' : 'mdi-pin-outline' }}</v-icon>
-      </v-btn>
-    </div>
-    <v-list density="compact" nav class="pa-2 d-flex flex-column" style="gap:4px;">
-      <v-list-item
-        v-for="item in navItems" :key="item.id"
-        :prepend-icon="item.icon" :title="item.label" :value="item.id"
-        :active="tab === item.id" rounded="lg" color="primary"
-        @click="handleNavClick(item.id)"
-      >
-        <template v-if="navBadge(item.id)" #append>
-          <v-chip size="x-small" color="primary" variant="tonal">{{ navBadge(item.id) }}</v-chip>
-        </template>
-      </v-list-item>
-    </v-list>
   </v-navigation-drawer>
 
-  <v-main style="height:100vh;overflow:hidden;">
-    <div style="height:100%;overflow:hidden;display:flex;flex-direction:column;padding:16px;gap:16px;box-sizing:border-box;">
+  <v-main class="xo-main">
+    <header class="xo-topbar">
+      <v-btn v-if="!isWide" icon="mdi-menu" variant="text" size="small" aria-label="Open navigation" @click="drawer = !drawer" />
+      <div class="xo-topbar__title">
+        <h1>{{ currentNav.label }}</h1>
+        <p v-if="currentNav.description">{{ currentNav.description }}</p>
+      </div>
+      <div class="xo-topbar__actions"><xo-notification-bell /></div>
+    </header>
+    <div class="xo-page" :class="'xo-page--' + tab">
+
+      <template v-if="tab==='overview'">
+        <xo-overview />
+      </template>
 
       <!-- SOCIAL / FORUM & TIMELINE -->
-      <template v-if="tab==='social'">
+      <template v-else-if="tab==='social'">
         <div style="display:grid;grid-template-columns:260px 1fr 300px;gap:14px;flex:1;overflow:hidden;min-height:0;">
 
           <div class="xo-glass d-flex flex-column gap-2 pa-3" style="border-radius:14px;overflow-y:auto;">
@@ -835,7 +834,7 @@ const App = {
       return isKnown ? { tab: head, id: decodeURIComponent(rest.join('/')) } : null;
     };
     const currentHash = () => (typeof location !== 'undefined' ? location.hash : '');
-    const route = reactive(parseHash(currentHash()) || { tab: 'social', id: '' });
+    const route = reactive(parseHash(currentHash()) || { tab: 'overview', id: '' });
     const tab = computed({
       get: () => route.tab,
       set: (id) => { route.tab = id; route.id = ''; }
@@ -847,8 +846,12 @@ const App = {
       route.tab = next.tab;
       route.id = next.id;
     };
-    const drawerPinned = ref(typeof localStorage !== 'undefined' ? localStorage.getItem('chemx_menu_pinned') === 'true' : false);
-    const drawer       = ref(drawerPinned.value ? true : false);
+    // The sidebar is always shown on wide screens and slides over on narrow ones.
+    const display      = Vuetify.useDisplay();
+    const isWide       = computed(() => display.mdAndUp.value);
+    const drawer       = ref(isWide.value);
+    const drawerPinned = ref(true);
+    const currentNav   = computed(() => PAGE_META[route.tab] || { label: 'Chemical X', description: '' });
     const modal        = ref(false);
     const isLive       = ref(false);
 
@@ -864,9 +867,7 @@ const App = {
 
     const handleNavClick = (id) => {
       tab.value = id;
-      if (!drawerPinned.value) {
-        drawer.value = false;
-      }
+      if (!isWide.value) drawer.value = false;
     };
 
     const agents    = ref([]);
@@ -1334,7 +1335,7 @@ const App = {
       dbTable, dbPage, dbTotalPages, dbTotalRows,
       TASK_PAGE, AGENT_PAGE, CODEBASE_PAGE, DB_PAGE,
       selectedTier, codebaseSearch, tierFilters: TIER_FILTERS,
-      navItems: NAV_ITEMS, navBadge,
+      navItems: NAV_ITEMS, navGroups: NAV_GROUPS, navBadge, isWide, currentNav,
       taskColumns: TASK_COLUMNS, tasksByStatus, moveTask,
       taskSearch, taskTierFilter, hideTestTasks,
       selectedTaskDetail, selectedTaskEvents, taskUpdateMsg, isUpdatingTask,

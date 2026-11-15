@@ -53,10 +53,7 @@
     template: `
       <section class="xo-inbox">
         <header class="xo-inbox__head">
-          <div>
-            <h1 class="xo-inbox__title">Attention Inbox</h1>
-            <p class="xo-inbox__sub">{{ summary }}</p>
-          </div>
+          <p class="xo-inbox__sub">{{ summary }}</p>
           <v-text-field v-if="items.length" v-model="query" class="xo-inbox__search" placeholder="Search title, reason, agent, repo, #id"
             prepend-inner-icon="mdi-magnify" density="compact" variant="outlined" hide-details clearable />
         </header>
