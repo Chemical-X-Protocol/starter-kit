@@ -1,0 +1,5 @@
+/* <xo-notification-bell />: unread dots and the glass menu (epic #7614). */
+.xo-bell-list { min-width: 300px; max-width: 380px; max-height: 420px; overflow-y: auto; }
+.xo-bell-item { cursor: pointer; }
+.xo-bell-dot { display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; background: transparent; }
+.xo-bell-unread { background: #62c9ff; }
