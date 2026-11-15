@@ -5,7 +5,7 @@ import {
   handleSwarmStatus, handlePostFeed, handleCreateFeedPost, handleUpdateSignature,
   handleGetTopics, handleGetTopicPosts, handleCreateTopic
 } from './ui-handlers.js';
-import { queryFeed, listTasks, getTask } from './team/team-db.js';
+import { getTask } from './team/team-db.js';
 import { getForumCategories } from './ui-forum-data.js';
 import {
   handleCodebaseIndex, handleCodebaseTree, handleCodebaseFile,
@@ -18,6 +18,7 @@ import {
 import { getDatabaseMetrics, executeSqlQuery } from './ui-db-studio.js';
 import { scanAttentionItems, confirmAttentionItem } from './ui-attention.js';
 import { withFreshIndex } from './ui-fresh-index.js';
+import { pagedRoutes } from './ui-api-index.js';
 
 // db: team rows (coordination db, #2581); indexDb (default db): code index for codebase, metrics, db studio.
 export const routeGet = (pathname, db, cwd = process.cwd(), queryParams = {}, { indexDb = db } = {}) => {
@@ -26,11 +27,9 @@ export const routeGet = (pathname, db, cwd = process.cwd(), queryParams = {}, { 
   const normPath = cleanPath.replace(/^\/api\/swarm\//, '/api/');
 
   const routes = {
+    ...pagedRoutes(db, parsedParams),
     '/api/status': () => handleSwarmStatus(db, cwd, indexDb),
-    '/api/feed': () => ({ success: true, feed: queryFeed(db, parsedParams) }),
-    '/api/tasks': () => ({ success: true, tasks: listTasks(db, parsedParams) }),
     '/api/categories': () => ({ success: true, categories: getForumCategories(db) }),
-    '/api/agents': () => ({ success: true, agents: handleSwarmStatus(db, cwd, indexDb).agents }),
     '/api/codebase': () => withFreshIndex(cwd, {}, () => handleCodebaseIndex(indexDb, cwd)),
     '/api/codebase/tree': () => withFreshIndex(cwd, {}, () => handleCodebaseTree(indexDb, cwd)),
     '/api/codebase/file': () => withFreshIndex(cwd, { paths: [parsedParams.path], scope: false }, () => handleCodebaseFile(indexDb, parsedParams.path, cwd)),

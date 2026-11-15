@@ -314,6 +314,10 @@
       margin-left: auto;
       font-family: ui-monospace, monospace;
     }
+    /* Paging footers (#7604): every long list says how much is shown and offers the next page. */
+    .xo-load-more { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 0 4px; }
+    .xo-load-more__count { font-size: 11px; color: rgba(255,255,255,.4); font-variant-numeric: tabular-nums; }
+    .xo-pager { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; flex-shrink: 0; padding-top: 8px; }
   </style>
   <script src="https://unpkg.com/vue@3.5.42/dist/vue.global.prod.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/vuetify@3.7.0/dist/vuetify.min.js"></script>
@@ -321,7 +325,32 @@
 <body>
 <div id="app"></div>
 <script>
-const { createApp, ref, computed, onMounted, onUnmounted, nextTick } = Vue;
+const { createApp, ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } = Vue;
+
+// Page sizes (#7604): the server never sends a whole table; lists page on demand.
+const TASK_PAGE = 25, AGENT_PAGE = 50, CODEBASE_PAGE = 60, DB_PAGE = 25, FEED_PAGE = 50;
+
+const getJson = async (url) => {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('HTTP ' + res.status + ' for ' + url);
+  return res.json();
+};
+
+const rangeLabel = (page, size, total) => {
+  const first = total === 0 ? 0 : (page - 1) * size + 1;
+  return first.toLocaleString() + '–' + Math.min(page * size, total).toLocaleString() + ' of ' + total.toLocaleString();
+};
+
+const XoLoadMore = {
+  props: { shown: { type: Number, default: 0 }, total: { type: Number, default: 0 }, loading: Boolean, step: { type: Number, default: 25 }, noun: { type: String, default: 'items' } },
+  emits: ['more'],
+  template: `<div v-if="total > 0" class="xo-load-more" aria-live="polite">
+    <span class="xo-load-more__count">Showing {{ shown.toLocaleString() }} of {{ total.toLocaleString() }} {{ total === 1 ? noun.replace(/s$/, '') : noun }}</span>
+    <v-btn v-if="shown < total" size="x-small" variant="tonal" color="primary" :loading="loading" @click="$emit('more')">
+      Load {{ Math.min(step, total - shown) }} more
+    </v-btn>
+  </div>`
+};
 const { createVuetify } = Vuetify;
 
 const vuetify = createVuetify({
@@ -425,13 +454,14 @@ const App = {
           <div class="xo-glass d-flex flex-column gap-2 pa-3" style="border-radius:14px;overflow-y:auto;">
             <div class="d-flex justify-space-between align-center mb-1">
               <span class="xo-display" style="font-size:13px;">Swarm Agents</span>
-              <v-chip size="x-small" color="success" variant="tonal">{{ agents.length }}</v-chip>
+              <v-chip size="x-small" color="success" variant="tonal">{{ agentPage.total.toLocaleString() }}</v-chip>
             </div>
-            <div class="d-flex gap-1 flex-wrap mb-1">
+            <div class="d-flex gap-1 flex-wrap mb-1" role="group" aria-label="Filter agents by status">
               <v-chip v-for="f in agentFilters" :key="f" size="x-small" style="cursor:pointer;"
                 :color="agentFilter===f ? 'primary' : 'default'" :variant="agentFilter===f ? 'tonal' : 'outlined'"
-                class="text-capitalize" @click="agentFilter = f">{{ f }}</v-chip>
+                :aria-pressed="agentFilter===f" class="text-capitalize" @click="setAgentFilter(f)">{{ f }} {{ agentCountLabel(f) }}</v-chip>
             </div>
+            <v-progress-linear v-if="agentPage.loading" indeterminate color="primary" height="2" />
             <div v-for="a in filteredAgents" :key="a.id" class="xo-agent-card" :class="{'xo-agent-card--active': selectedAgentId===a.id}" @click="selectedAgentId=a.id">
               <div class="d-flex align-center gap-2">
                 <span class="xo-dot" :class="statusDotClass(a.status)" />
@@ -439,13 +469,14 @@ const App = {
               </div>
               <div class="xo-agent-card__role mt-1">{{ a.role||a.status||'agent' }}</div>
             </div>
-            <div v-if="!filteredAgents.length" class="text-center" style="color:rgba(255,255,255,.3);font-size:12px;padding:16px 0;">No agents</div>
+            <div v-if="!filteredAgents.length && !agentPage.loading" class="text-center" style="color:rgba(255,255,255,.3);font-size:12px;padding:16px 0;">No agents</div>
+            <xo-load-more :shown="filteredAgents.length" :total="agentPage.total" :loading="agentPage.loading" :step="AGENT_PAGE" noun="agents" @more="loadMoreAgents" />
           </div>
 
           <div class="xo-glass d-flex flex-column pa-3" style="border-radius:14px;overflow:hidden;">
             <div class="d-flex justify-space-between align-center mb-3">
               <span class="xo-display" style="font-size:13px;">Live Timeline</span>
-              <v-chip size="x-small" color="primary" variant="tonal">{{ posts.length }}</v-chip>
+              <v-chip size="x-small" color="primary" variant="tonal">{{ postsDesc.length }}</v-chip>
             </div>
             <div style="flex:1;overflow-y:auto;" class="d-flex flex-column gap-2">
               <div v-for="p in postsDesc" :key="p.id" class="xo-post vb-postbit">
@@ -456,7 +487,11 @@ const App = {
                   </v-chip>
                 </div>
                 <div class="xo-post__msg">{{ p.message }}</div>
-                <div class="xo-post__time">{{ formatTime(p.createdAt) }}</div>
+                <div class="xo-post__time">{{ formatTime(p.timestamp || p.createdAt) }}</div>
+              </div>
+              <div v-if="postsDesc.length" class="xo-load-more">
+                <v-btn v-if="feedHasOlder" size="x-small" variant="tonal" color="primary" :loading="feedLoading" @click="loadOlderPosts">Load older posts</v-btn>
+                <span v-else class="xo-load-more__count">Start of the timeline</span>
               </div>
               <div v-if="!posts.length" class="text-center" style="color:rgba(255,255,255,.3);font-size:12px;padding:32px 0;">
                 <v-icon size="32" color="rgba(255,255,255,.15)">mdi-antenna</v-icon>
@@ -560,10 +595,11 @@ const App = {
             <div class="d-flex align-center gap-2 mb-3">
               <v-icon size="16" :color="col.color">{{ col.icon }}</v-icon>
               <span class="xo-display" style="font-size:13px;">{{ col.label }}</span>
-              <v-chip size="x-small" :color="col.color" variant="tonal" class="ml-auto">{{ tasksByStatus(col.status).length }}</v-chip>
+              <v-chip size="x-small" :color="col.color" variant="tonal" class="ml-auto" :title="board[col.status].total + ' tasks match the filters'">{{ board[col.status].total.toLocaleString() }}</v-chip>
             </div>
+            <v-progress-linear v-if="board[col.status].loading" indeterminate :color="col.color" height="2" class="mb-2" />
             <div style="flex:1;overflow-y:auto;" class="d-flex flex-column pr-1 gap-2">
-              <div v-for="t in tasksByStatus(col.status)" :key="t.id" class="xo-task-card" :class="'xo-task-card--' + col.status" style="cursor:pointer;" @click="openTaskDetail(t.id)">
+              <div v-for="t in tasksByStatus(col.status)" :key="t.id" class="xo-task-card" :class="'xo-task-card--' + col.status" style="cursor:pointer;" tabindex="0" role="button" :aria-label="'Open task ' + t.id + ': ' + t.title" @click="openTaskDetail(t.id)" @keydown.enter="openTaskDetail(t.id)">
                 <div class="xo-task-card__header">
                   <span class="xo-task-card__id" style="cursor:pointer;" title="Open task details" @click.stop="openTaskDetail(t.id)">#{{ t.id }}</span>
                   <span class="v-chip v-chip--density-compact v-chip--size-x-small v-chip--variant-tonal"
@@ -596,10 +632,10 @@ const App = {
                   <span>{{ t.target_path || t.targetPath }}</span>
                 </div>
 
-                <div v-if="col.status === 'done' && (t.result_payload?.receipt?.healthAfter || t.result_payload?.healthAfter || t.diff_receipt?.verified)"
+                <div v-if="col.status === 'done' && t.isVerified"
                      class="d-flex align-center gap-2 flex-wrap" style="font-size:10px;background:rgba(163,230,53,.07);border:1px solid rgba(163,230,53,.2);color:var(--xo-lime);padding:3px 8px;border-radius:6px;">
                   <v-icon size="11" color="success">mdi-shield-check</v-icon>
-                  <span>Verified Receipt (Health: {{ t.result_payload?.healthAfter || t.result_payload?.receipt?.healthAfter || 100 }}%)</span>
+                  <span>Verified Receipt<template v-if="t.health_after != null"> (Health: {{ t.health_after }}%)</template></span>
                 </div>
 
                 <div class="xo-task-card__footer">
@@ -630,7 +666,8 @@ const App = {
                   </div>
                 </div>
               </div>
-              <div v-if="!tasksByStatus(col.status).length" class="text-center" style="color:rgba(255,255,255,.25);font-size:12px;padding:24px 0;">No tasks</div>
+              <div v-if="!tasksByStatus(col.status).length && !board[col.status].loading" class="text-center" style="color:rgba(255,255,255,.25);font-size:12px;padding:24px 0;">No tasks</div>
+              <xo-load-more :shown="board[col.status].items.length" :total="board[col.status].total" :loading="board[col.status].loading" :step="TASK_PAGE" noun="tasks" @more="loadMoreTasks(col.status)" />
             </div>
           </div>
         </div>
@@ -814,7 +851,8 @@ const App = {
               hide-details prepend-inner-icon="mdi-magnify" style="max-width:220px;font-size:12px;" bg-color="rgba(255,255,255,.04)" />
           </div>
           <div style="flex:1;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px;align-content:start;">
-            <div v-for="f in filteredCodebase" :key="f.path" class="xo-file-card">
+            <div v-if="codebaseLoading" style="grid-column:1/-1;"><v-progress-linear indeterminate color="primary" height="2" /></div>
+            <div v-for="f in codebasePageItems" :key="f.path" class="xo-file-card">
               <div class="d-flex align-center gap-2 mb-1">
                 <v-chip v-if="f.tier" size="x-small" :class="'tier-'+f.tier">{{ f.tier }}</v-chip>
                 <v-chip v-if="f.isOverBudget" size="x-small" class="xo-hazard">{{ f.lines }}L ⚠</v-chip>
@@ -824,10 +862,14 @@ const App = {
               <div class="xo-file-card__path">{{ f.path }}</div>
               <div v-if="f.exports&&f.exports.length" class="xo-file-card__meta xo-mono">{{ f.exports.slice(0,3).join(', ') }}</div>
             </div>
-            <div v-if="!filteredCodebase.length" style="grid-column:1/-1;text-align:center;padding:48px;color:rgba(255,255,255,.25);">
+            <div v-if="!filteredCodebase.length && !codebaseLoading" style="grid-column:1/-1;text-align:center;padding:48px;color:rgba(255,255,255,.25);">
               <v-icon size="40" color="rgba(255,255,255,.15)">mdi-code-braces</v-icon>
               <div class="mt-2" style="font-size:13px;">No files match filter</div>
             </div>
+          </div>
+          <div v-if="filteredCodebase.length > CODEBASE_PAGE" class="xo-pager">
+            <span class="xo-load-more__count">{{ rangeLabel(codebasePage, CODEBASE_PAGE, filteredCodebase.length) }} files</span>
+            <v-pagination v-model="codebasePage" :length="codebasePageCount" density="compact" size="small" :total-visible="7" />
           </div>
         </div>
       </template>
@@ -869,6 +911,10 @@ const App = {
                   <tr v-for="(row, idx) in dbRows" :key="idx"><td v-for="col in dbColumns" :key="col">{{ row[col] }}</td></tr>
                 </tbody>
               </table>
+            </div>
+            <div v-if="dbTotalPages > 1" class="xo-pager">
+              <span class="xo-load-more__count">{{ dbTable }} · {{ rangeLabel(dbPage, DB_PAGE, dbTotalRows) }} rows</span>
+              <v-pagination v-model="dbPage" :length="dbTotalPages" density="compact" size="small" :total-visible="7" @update:model-value="selectDbTable(dbTable, $event)" />
             </div>
           </div>
         </div>
@@ -927,7 +973,10 @@ const App = {
   `,
 
   setup() {
-    const tab          = ref('social');
+    // The open tab lives in the URL hash (#/tasks), so a reload, a bookmark or an agent's link lands on it.
+    const tabIds = new Set(NAV_ITEMS.map((item) => item.id));
+    const hashTab = () => (typeof location !== 'undefined' ? location.hash.replace(/^#\/?/, '') : '');
+    const tab          = ref(tabIds.has(hashTab()) ? hashTab() : 'social');
     const drawerPinned = ref(typeof localStorage !== 'undefined' ? localStorage.getItem('chemx_menu_pinned') === 'true' : false);
     const drawer       = ref(drawerPinned.value ? true : false);
     const modal        = ref(false);
@@ -966,47 +1015,123 @@ const App = {
 
     let timer = null;
 
-    const postsDesc = computed(() => [...posts.value].reverse());
-
-    const filteredAgents = computed(() => {
-      if (agentFilter.value === 'all') return agents.value;
-      return agents.value.filter(a => a.status === agentFilter.value);
+    // Timeline: the live view carries the newest posts; "Load older" pages back with before_id.
+    const olderPosts   = ref([]);
+    const feedHasOlder = ref(false);
+    const feedLoading  = ref(false);
+    const postsDesc = computed(() => {
+      const byId = new Map();
+      for (const p of [...olderPosts.value, ...posts.value]) byId.set(p.id, p);
+      return [...byId.values()].sort((a, b) => b.id - a.id);
     });
+    const toPost = (f) => ({ id: f.id, author: f.author_id, message: f.message, timestamp: Number(f.timestamp),
+      recipient: f.recipient_id, isDirectMessage: Boolean(f.recipient_id) });
+    const loadOlderPosts = async () => {
+      const oldest = postsDesc.value[postsDesc.value.length - 1];
+      if (!oldest || feedLoading.value) return;
+      feedLoading.value = true;
+      try {
+        const d = await getJson('/api/feed?limit=' + FEED_PAGE + '&before_id=' + oldest.id);
+        olderPosts.value = [...olderPosts.value, ...(d.feed || []).map(toPost)];
+        feedHasOlder.value = Boolean(d.hasMore);
+      } catch {} finally { feedLoading.value = false; }
+    };
 
+    // Agents: the server filters and pages; the live view refreshes only the first, unfiltered page.
+    const agentPage   = reactive({ total: 0, loading: false });
+    const agentCounts = ref({});
+    const filteredAgents = computed(() => agents.value);
+    const agentCountLabel = (f) => (agentCounts.value[f] == null ? '' : '· ' + agentCounts.value[f].toLocaleString());
+    const fetchAgents = async (offset) => {
+      agentPage.loading = true;
+      try {
+        const d = await getJson('/api/agents?status=' + agentFilter.value + '&limit=' + AGENT_PAGE + '&offset=' + offset);
+        const seen = new Set(offset ? agents.value.map((a) => a.id) : []);
+        const page = (d.agents || []).filter((a) => !seen.has(a.id));
+        agents.value = offset ? [...agents.value, ...page] : page;
+        agentPage.total = d.total || 0;
+        agentCounts.value = d.counts || agentCounts.value;
+      } catch {} finally { agentPage.loading = false; }
+    };
+    const setAgentFilter = (f) => { agentFilter.value = f; fetchAgents(0); };
+    const loadMoreAgents = () => fetchAgents(agents.value.length);
+
+    // Kanban: each column is its own server page; filters run in SQL, so search covers every task.
     const taskSearch     = ref('');
     const taskTierFilter = ref('all');
     const hideTestTasks  = ref(true);
+    const taskCounts     = ref({});
+    const board = reactive(Object.fromEntries(TASK_COLUMNS.map((c) => [c.status, { items: [], total: 0, loading: false }])));
+    let boardLoaded = false, boardRequest = 0, boardRefreshTimer = null, filterTimer = null;
 
-    const isTestTask = (t) => {
-      const title = t.title || '';
-      return title.startsWith('E2E Verify Task') || title.startsWith('API Test Task');
+    const taskQuery = (extra = {}) => {
+      const p = new URLSearchParams();
+      const q = taskSearch.value.trim();
+      if (q) p.set('q', q);
+      if (taskTierFilter.value !== 'all') p.set('tier', taskTierFilter.value);
+      if (hideTestTasks.value) p.set('hideTests', '1');
+      for (const [k, v] of Object.entries(extra)) p.set(k, String(v));
+      return p.toString();
     };
 
-    const tasksByStatus = (status) => {
-      const statuses = status === 'done' ? ['done', 'completed'] : (status === 'blocked' ? ['blocked', 'failed'] : [status]);
-      return tasks.value.filter((t) => {
-        const matchesStatus = statuses.includes(t.status);
-        if (!matchesStatus) return false;
-
-        if (hideTestTasks.value && isTestTask(t)) {
-          return false;
+    const loadBoard = async () => {
+      const request = ++boardRequest;
+      TASK_COLUMNS.forEach((c) => { board[c.status].loading = true; });
+      try {
+        const d = await getJson('/api/tasks/board?' + taskQuery({ limit: TASK_PAGE }));
+        if (request !== boardRequest) return;
+        for (const c of TASK_COLUMNS) {
+          const col = d.columns?.[c.status];
+          board[c.status].items = col?.tasks || [];
+          board[c.status].total = col?.total || 0;
         }
+        boardLoaded = true;
+      } catch {} finally {
+        if (request === boardRequest) TASK_COLUMNS.forEach((c) => { board[c.status].loading = false; });
+      }
+    };
 
-        if (taskTierFilter.value !== 'all') {
-          const tier = t.tier || 'utility';
-          if (tier !== taskTierFilter.value) return false;
-        }
+    const loadMoreTasks = async (status) => {
+      const col = board[status];
+      if (col.loading) return;
+      col.loading = true;
+      try {
+        const d = await getJson('/api/tasks?' + taskQuery({ status, limit: TASK_PAGE, offset: col.items.length }));
+        const seen = new Set(col.items.map((t) => t.id));
+        col.items = [...col.items, ...(d.tasks || []).filter((t) => !seen.has(t.id))];
+        col.total = d.total ?? col.total;
+      } catch {} finally { col.loading = false; }
+    };
 
-        if (taskSearch.value) {
-          const query = taskSearch.value.toLowerCase();
-          const titleMatch = (t.title || '').toLowerCase().includes(query);
-          const pathMatch = (t.target_path || t.targetPath || '').toLowerCase().includes(query);
-          const agentMatch = (t.assigned_agent_id || t.assignedTo || '').toLowerCase().includes(query);
-          if (!titleMatch && !pathMatch && !agentMatch) return false;
-        }
+    // A live update re-reads each column to the depth already loaded, so "Load more" progress survives.
+    const refreshBoard = async () => {
+      if (!boardLoaded) return;
+      await Promise.all(TASK_COLUMNS.map(async (c) => {
+        const col = board[c.status];
+        const limit = Math.min(200, Math.max(TASK_PAGE, col.items.length));
+        try {
+          const d = await getJson('/api/tasks?' + taskQuery({ status: c.status, limit }));
+          col.items = d.tasks || [];
+          col.total = d.total || 0;
+        } catch {}
+      }));
+    };
+    const scheduleBoardRefresh = () => {
+      clearTimeout(boardRefreshTimer);
+      boardRefreshTimer = setTimeout(refreshBoard, 600);
+    };
+    watch([taskSearch, taskTierFilter, hideTestTasks], () => {
+      clearTimeout(filterTimer);
+      filterTimer = setTimeout(loadBoard, 250);
+    });
 
-        return true;
-      });
+    const tasksByStatus = (status) => board[status].items;
+    const findLoadedTask = (id) => {
+      for (const c of TASK_COLUMNS) {
+        const hit = board[c.status].items.find((t) => t.id === id);
+        if (hit) return hit;
+      }
+      return tasks.value.find((t) => t.id === id) || null;
     };
 
     const compliantCount  = computed(() => codebase.value.filter(f => !f.isOverBudget).length);
@@ -1017,9 +1142,18 @@ const App = {
       const textMatch = f => !codebaseSearch.value || f.path.toLowerCase().includes(codebaseSearch.value.toLowerCase());
       return codebase.value.filter(f => tierMatch(f) && textMatch(f));
     });
+    // Codebase: one fetch, rendered a page at a time (the grid used to mount every file card).
+    const codebasePage    = ref(1);
+    const codebaseLoading = ref(false);
+    const codebasePageCount = computed(() => Math.max(1, Math.ceil(filteredCodebase.value.length / CODEBASE_PAGE)));
+    const codebasePageItems = computed(() => {
+      const start = (codebasePage.value - 1) * CODEBASE_PAGE;
+      return filteredCodebase.value.slice(start, start + CODEBASE_PAGE);
+    });
+    watch([selectedTier, codebaseSearch], () => { codebasePage.value = 1; });
 
     const navBadge = (id) => {
-      if (id === 'tasks')    return tasks.value.filter(t => t.status === 'in_progress').length || null;
+      if (id === 'tasks')    return taskCounts.value.in_progress || null;
       if (id === 'locks')    return leases.value.length || null;
       if (id === 'codebase') return codebase.value.length || null;
       return null;
@@ -1037,13 +1171,22 @@ const App = {
       catch { return ''; }
     };
 
+    // The live view (hydration and SSE) is bounded; paged lists re-read themselves instead of being replaced.
+    let isFirstApply = true;
     const applyData = (d = {}) => {
-      if (d.agents)    agents.value    = d.agents;
+      const isUnpagedAgentView = agentFilter.value === 'all' && agents.value.length <= AGENT_PAGE;
+      if (d.agents && isUnpagedAgentView) agents.value = d.agents;
+      if (d.agentsTotal != null && agentFilter.value === 'all') agentPage.total = d.agentsTotal;
+      if (d.agentCounts) agentCounts.value = d.agentCounts;
       if (d.posts)     posts.value     = d.posts;
+      if (d.posts && isFirstApply) feedHasOlder.value = d.posts.length >= FEED_PAGE;
       if (d.leases)    leases.value    = d.leases;
       if (d.tasks)     tasks.value     = d.tasks;
+      if (d.taskCounts) taskCounts.value = d.taskCounts;
       if (d.telemetry) telemetry.value = d.telemetry;
       if (d.savings)   savings.value   = d.savings;
+      if (!isFirstApply && tab.value === 'tasks') scheduleBoardRefresh();
+      isFirstApply = false;
     };
 
     const attentionItems = ref([]);
@@ -1065,8 +1208,9 @@ const App = {
           body: JSON.stringify({ taskId: id, status })
         });
         if (res.ok) {
-          const t = tasks.value.find(x => x.id === id);
+          const t = findLoadedTask(id);
           if (t) t.status = status;
+          scheduleBoardRefresh();
         }
       } catch {}
     };
@@ -1076,19 +1220,19 @@ const App = {
     const taskUpdateMsg = ref('');
     const isUpdatingTask = ref(false);
 
+    // Board cards are slim; the sheet opens on the card at once, then fills in the whole row.
     const openTaskDetail = async (id) => {
-      const t = tasks.value.find(x => x.id === id);
-      selectedTaskDetail.value = t || null;
+      const card = findLoadedTask(id);
+      selectedTaskDetail.value = card ? { ...card } : { id, title: 'Loading task #' + id + '…' };
       selectedTaskEvents.value = [];
-      if (t) {
-        try {
-          const res = await fetch('/api/feed?task_id=' + encodeURIComponent(id));
-          if (res.ok) {
-            const data = await res.json();
-            selectedTaskEvents.value = data.feed || [];
-          }
-        } catch {}
-      }
+      const [full, feed] = await Promise.allSettled([
+        getJson('/api/tasks/' + encodeURIComponent(id)),
+        getJson('/api/feed?task_id=' + encodeURIComponent(id))
+      ]);
+      const isStillOpen = selectedTaskDetail.value?.id === id;
+      if (!isStillOpen) return;
+      if (full.status === 'fulfilled' && full.value.task) selectedTaskDetail.value = { ...card, ...full.value.task };
+      if (feed.status === 'fulfilled') selectedTaskEvents.value = feed.value.feed || [];
     };
 
     const closeTaskDetail = () => {
@@ -1146,7 +1290,7 @@ const App = {
         });
         if (res.ok) {
           selectedTaskDetail.value.assigned_agent_id = agentId;
-          const t = tasks.value.find(x => x.id === selectedTaskDetail.value.id);
+          const t = findLoadedTask(selectedTaskDetail.value.id);
           if (t) t.assigned_agent_id = agentId;
         }
       } catch {}
@@ -1173,14 +1317,19 @@ const App = {
     const dbColumns = ref(['name', 'type']);
     const dbRows = ref([]);
     const sqlQuery = ref('SELECT name, type FROM sqlite_master WHERE type = "table"');
-    const selectDbTable = async (name) => {
+    const dbTable      = ref('');
+    const dbPage       = ref(1);
+    const dbTotalPages = ref(1);
+    const dbTotalRows  = ref(0);
+    const selectDbTable = async (name, page = 1) => {
       try {
-        const res = await fetch('/api/db/browse?table=' + encodeURIComponent(name));
-        if (res.ok) {
-          const d = await res.json();
-          dbColumns.value = d.columns || Object.keys(d.rows?.[0] || {});
-          dbRows.value = d.rows || [];
-        }
+        const d = await getJson('/api/db/browse?table=' + encodeURIComponent(name) + '&page=' + page + '&pageSize=' + DB_PAGE);
+        dbColumns.value = d.columns || Object.keys(d.rows?.[0] || {});
+        dbRows.value = d.rows || [];
+        dbTable.value = d.table || name;
+        dbPage.value = d.page || page;
+        dbTotalPages.value = d.totalPages || 1;
+        dbTotalRows.value = d.totalRows || 0;
       } catch {}
     };
 
@@ -1250,29 +1399,58 @@ const App = {
       a.click();
     };
 
-    onMounted(async () => {
+    // Each tab loads its data the first time it opens, not all at once on page load.
+    const loadedTabs = new Set();
+    const tabLoaders = {
+      tasks: loadBoard,
+      codebase: async () => {
+        codebaseLoading.value = true;
+        try { codebase.value = (await getJson('/api/swarm/codebase')).files || []; } catch {} finally { codebaseLoading.value = false; }
+      },
+      attention: async () => {
+        try { attentionItems.value = (await getJson('/api/attention')).items || []; } catch {}
+      },
+      database: async () => {
+        try { dbTables.value = (await getJson('/api/db/tables')).tables || []; } catch {}
+      },
+      workbench: () => selectWorkbenchScope('master')
+    };
+    const ensureTabData = (id) => {
+      const loader = tabLoaders[id];
+      if (!loader || loadedTabs.has(id)) return;
+      loadedTabs.add(id);
+      loader();
+    };
+    watch(tab, (id) => {
+      if (typeof history !== 'undefined') history.replaceState(null, '', '#/' + id);
+      const isReturningToBoard = id === 'tasks' && loadedTabs.has('tasks');
+      ensureTabData(id);
+      if (isReturningToBoard) scheduleBoardRefresh();
+    });
+    const onHashChange = () => { if (tabIds.has(hashTab())) tab.value = hashTab(); };
+
+    onMounted(() => {
       initSse();
-      try {
-        const r = await fetch('/api/swarm/codebase');
-        if (r.ok) { const d = await r.json(); codebase.value = d.files || []; }
-      } catch {}
-      try {
-        const r = await fetch('/api/attention');
-        if (r.ok) { const d = await r.json(); attentionItems.value = d.items || []; }
-      } catch {}
-      try {
-        const r = await fetch('/api/db/tables');
-        if (r.ok) { const d = await r.json(); dbTables.value = d.tables || []; }
-      } catch {}
-      selectWorkbenchScope('master');
+      ensureTabData(tab.value);
+      ensureTabData('attention');
+      window.addEventListener('hashchange', onHashChange);
     });
 
-    onUnmounted(() => clearTimeout(timer));
+    onUnmounted(() => {
+      clearTimeout(timer);
+      clearTimeout(boardRefreshTimer);
+      clearTimeout(filterTimer);
+      window.removeEventListener('hashchange', onHashChange);
+    });
 
     return {
       tab, drawer, modal, drawerPinned, togglePinDrawer, handleNavClick,
       agents, posts, leases, tasks, codebase, telemetry, savings,
-      agentFilter, agentFilters, selectedAgentId, filteredAgents,
+      agentFilter, agentFilters, selectedAgentId, filteredAgents, agentPage, agentCountLabel, setAgentFilter, loadMoreAgents,
+      board, loadMoreTasks, olderPosts, feedHasOlder, feedLoading, loadOlderPosts,
+      codebasePage, codebaseLoading, codebasePageCount, codebasePageItems, rangeLabel,
+      dbTable, dbPage, dbTotalPages, dbTotalRows,
+      TASK_PAGE, AGENT_PAGE, CODEBASE_PAGE, DB_PAGE,
       selectedTier, codebaseSearch, tierFilters: TIER_FILTERS,
       navItems: NAV_ITEMS, navBadge,
       taskColumns: TASK_COLUMNS, tasksByStatus, moveTask,
@@ -1289,7 +1467,7 @@ const App = {
   }
 };
 
-createApp(App).use(vuetify).mount('#app');
+createApp(App).component('xo-load-more', XoLoadMore).use(vuetify).mount('#app');
 </script>
 </body>
 </html>

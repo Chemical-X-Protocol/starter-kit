@@ -26,3 +26,4 @@ Reference pages for behavior that specs pin. Design notes and plans live under `
 | [team-check-queue.md](team-check-queue.md) | `chemx team check`: the async check queue, coalescing, cache, drain worker, DM delivery |
 | [team-tokens.md](team-tokens.md) | `chemx team tokens --epic`: cost, tokens and wall time per epic over its children, where each child's figures come from, and what unknown means |
 | [test-lanes.md](test-lanes.md) | Test lanes and the agent test loop; the line heavy jobs (full suite, typecheck, build) take turns in, light test runs, shared runs, `CHEMX_LIGHT_RESERVE` and `chemx test --slots` |
+| [ui.md](ui.md) | `chemx ui`: what loads when, the bounded live view, paged task/agent/feed/codebase/table lists, the `/api/` index and paging envelope agents use |
