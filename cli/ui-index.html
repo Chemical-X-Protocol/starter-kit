@@ -541,48 +541,34 @@ const App = {
 
       <!-- CODEBASE -->
       <template v-else-if="tab==='codebase'">
-        <div class="xo-glass d-flex flex-column pa-3 filetree-container" style="border-radius:14px;flex:1;overflow:hidden;min-height:0;">
-          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px;flex-shrink:0;">
-            <div class="xo-kpi">
-              <div class="xo-kpi__label">AST Files</div>
-              <div class="xo-kpi__value" style="color:var(--xo-cyan);">{{ codebase.length }}</div>
-            </div>
-            <div class="xo-kpi">
-              <div class="xo-kpi__label">Within line budget</div>
-              <div class="xo-kpi__value" style="color:var(--xo-lime);">{{ compliantCount }}</div>
-            </div>
-            <div class="xo-kpi">
-              <div class="xo-kpi__label">Compliance</div>
-              <div class="xo-kpi__value" style="color:var(--xo-purple);">{{ compliancePct }}%</div>
-            </div>
+        <div class="xo-cb filetree-container">
+          <div class="xo-cb__stats">
+            <div class="xo-ov__tile xo-ov__tile--plain"><span class="xo-ov__tile-label">Indexed files</span><span class="xo-ov__tile-value x-num">{{ codebase.length.toLocaleString() }}</span></div>
+            <div class="xo-ov__tile xo-ov__tile--plain"><span class="xo-ov__tile-label">Within line budget</span><span class="xo-ov__tile-value x-num">{{ compliantCount.toLocaleString() }}</span></div>
+            <div class="xo-ov__tile xo-ov__tile--plain"><span class="xo-ov__tile-label">Compliance</span><span class="xo-ov__tile-value x-num">{{ compliancePct }}%</span></div>
           </div>
-          <div class="d-flex align-center gap-2 flex-wrap mb-3" style="flex-shrink:0;">
-            <v-chip v-for="tier in tierFilters" :key="tier" size="small"
-              :class="selectedTier===tier ? 'tier-'+tier : ''"
-              :variant="selectedTier===tier ? 'tonal' : 'outlined'"
-              class="text-capitalize" style="cursor:pointer;border-color:rgba(255,255,255,.12);color:rgba(255,255,255,.5);"
-              @click="selectedTier=tier">{{ tier==='all' ? 'All' : tier }}</v-chip>
+          <div class="xo-board__bar">
+            <div class="xo-board__seg" role="group" aria-label="Filter by tier">
+              <button v-for="tier in tierFilters" :key="tier" type="button" :class="{ 'is-on': selectedTier === tier }" :aria-pressed="selectedTier === tier" @click="selectedTier = tier">{{ tier }}</button>
+            </div>
             <v-spacer />
-            <v-text-field v-model="codebaseSearch" placeholder="Filter files..." density="compact" variant="outlined"
-              hide-details prepend-inner-icon="mdi-magnify" style="max-width:220px;font-size:12px;" bg-color="rgba(255,255,255,.04)" />
+            <v-text-field v-model="codebaseSearch" class="xo-board__search" placeholder="Filter by path or export" prepend-inner-icon="mdi-magnify" clearable />
           </div>
-          <div style="flex:1;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px;align-content:start;">
-            <div v-if="codebaseLoading" style="grid-column:1/-1;"><v-progress-linear indeterminate color="primary" height="2" /></div>
-            <div v-for="f in codebasePageItems" :key="f.path" class="xo-file-card">
-              <div class="d-flex align-center gap-2 mb-1">
-                <v-chip v-if="f.tier" size="x-small" :class="'tier-'+f.tier">{{ f.tier }}</v-chip>
-                <v-chip v-if="f.isOverBudget" size="x-small" class="xo-hazard">{{ f.lines }}L ⚠</v-chip>
-                <v-chip v-else-if="f.lines" size="x-small" variant="outlined" style="border-color:rgba(255,255,255,.12);color:rgba(255,255,255,.4);">{{ f.lines }}L</v-chip>
-                <v-chip v-if="f.coverage!=null" size="x-small" color="success" variant="tonal">{{ f.coverage }}%</v-chip>
-              </div>
-              <div class="xo-file-card__path">{{ f.path }}</div>
-              <div v-if="f.exports&&f.exports.length" class="xo-file-card__meta xo-mono">{{ f.exports.slice(0,3).join(', ') }}</div>
-            </div>
-            <div v-if="!filteredCodebase.length && !codebaseLoading" style="grid-column:1/-1;text-align:center;padding:48px;color:rgba(255,255,255,.25);">
-              <v-icon size="40" color="rgba(255,255,255,.15)">mdi-code-braces</v-icon>
-              <div class="mt-2" style="font-size:13px;">No files match filter</div>
-            </div>
-          </div>
+          <section class="x-panel xo-cb__list">
+            <v-progress-linear v-if="codebaseLoading" indeterminate color="primary" height="2" />
+            <div v-if="!filteredCodebase.length && !codebaseLoading" class="x-empty">No files match.</div>
+            <table v-else class="xo-table">
+              <thead><tr><th>File</th><th>Tier</th><th class="xo-table__num">Lines</th><th>Exports</th></tr></thead>
+              <tbody>
+                <tr v-for="f in codebasePageItems" :key="f.path">
+                  <td class="xo-table__path"><v-icon size="14">mdi-file-code-outline</v-icon><span :title="f.path">{{ f.path }}</span></td>
+                  <td><span v-if="f.tier" class="xo-card__tag">{{ f.tier }}</span></td>
+                  <td class="xo-table__num" :class="{ 'xo-cb__over': f.isOverBudget }" :title="f.isOverBudget ? 'Over its line budget' : ''">{{ f.lines || '' }}</td>
+                  <td class="xo-table__muted xo-cb__exports">{{ (f.exports || []).slice(0, 4).join(', ') }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </section>
           <div v-if="filteredCodebase.length > CODEBASE_PAGE" class="xo-pager">
             <span class="xo-load-more__count">{{ rangeLabel(codebasePage, CODEBASE_PAGE, filteredCodebase.length) }} files</span>
             <v-pagination v-model="codebasePage" :length="codebasePageCount" density="compact" size="small" :total-visible="7" />
@@ -592,46 +578,57 @@ const App = {
 
       <!-- PROMPT WORKBENCH -->
       <template v-else-if="tab==='workbench'">
-        <div class="xo-glass pa-4 d-flex flex-column gap-3" style="border-radius:14px;flex:1;overflow:hidden;min-height:0;">
-          <div class="d-flex gap-2 flex-wrap">
-            <v-chip v-for="s in workbenchScopes" :key="s" size="small"
-              :color="activeWorkbenchScope === s ? 'primary' : 'default'"
-              :variant="activeWorkbenchScope === s ? 'tonal' : 'outlined'"
-              @click="selectWorkbenchScope(s)">{{ s }}</v-chip>
-          </div>
-          <textarea v-model="workbenchPrompt" class="xo-workbench-textarea" placeholder="AI Refactoring Prompt..." readonly></textarea>
+        <div class="xo-wb">
+          <aside class="x-panel">
+            <header class="x-panel__head"><h3 class="x-panel__title">Scope</h3></header>
+            <div class="x-panel__body">
+              <button v-for="s in workbenchScopes" :key="s" type="button" class="xo-nav__item" :class="{ 'is-active': activeWorkbenchScope === s }" @click="selectWorkbenchScope(s)">{{ s }}</button>
+            </div>
+          </aside>
+          <section class="x-panel xo-wb__main">
+            <header class="x-panel__head"><h3 class="x-panel__title">Prompt</h3><span class="x-panel__hint">Built from the board and the code index</span></header>
+            <div class="x-panel__body xo-wb__body">
+              <div v-if="!workbenchPrompt" class="x-empty">Pick a scope to build a prompt.</div>
+              <pre v-else class="xo-wb__prompt">{{ workbenchPrompt }}</pre>
+            </div>
+          </section>
         </div>
       </template>
 
       <!-- DATABASE STUDIO -->
       <template v-else-if="tab==='database'">
-        <div class="d-flex gap-3" style="flex:1;overflow:hidden;min-height:0;">
-          <div class="xo-glass pa-3 pma-sidebar d-flex flex-column gap-2" style="border-radius:14px;width:220px;overflow-y:auto;">
-            <div class="x-eyebrow">Tables</div>
-            <div v-for="tbl in dbTables" :key="tbl.name" class="xo-pma-table-item" @click="selectDbTable(tbl.name)">
-              <span>📁 {{ tbl.name }}</span>
+        <div class="xo-dbs">
+          <aside class="x-panel pma-sidebar xo-dbs__tables">
+            <header class="x-panel__head"><h3 class="x-panel__title">Tables</h3><span class="x-panel__hint x-num">{{ dbTables.length }}</span></header>
+            <div class="x-panel__body">
+              <button v-for="tbl in dbTables" :key="tbl.name" type="button" class="xo-nav__item" :class="{ 'is-active': dbTable === tbl.name }" @click="selectDbTable(tbl.name)">
+                <v-icon size="15">mdi-table</v-icon><span>{{ tbl.name }}</span>
+              </button>
             </div>
-          </div>
-          <div class="xo-glass pa-3 pma-main d-flex flex-column gap-3" style="border-radius:14px;flex:1;overflow:hidden;">
-            <textarea v-model="sqlQuery" class="xo-sql-input" placeholder="SELECT * FROM ..."></textarea>
-            <div style="flex:1;overflow:auto;">
-              <table class="pma-table xo-data-table">
-                <thead>
-                  <tr><th v-for="col in dbColumns" :key="col">{{ col }}</th></tr>
-                </thead>
-                <tbody>
-                  <tr v-for="(row, idx) in dbRows" :key="idx"><td v-for="col in dbColumns" :key="col">{{ row[col] }}</td></tr>
-                </tbody>
+          </aside>
+          <section class="x-panel xo-dbs__main">
+            <div class="xo-dbs__query">
+              <v-textarea v-model="sqlQuery" class="xo-dbs__sql" rows="3" auto-grow placeholder="SELECT * FROM agent_tasks LIMIT 20" @keydown.ctrl.enter="runSql" @keydown.meta.enter="runSql" />
+              <div class="xo-dbs__run">
+                <v-btn color="primary" prepend-icon="mdi-play" :loading="isRunningSql" @click="runSql">Run</v-btn>
+                <span class="x-muted">Read-only. Ctrl+Enter runs.</span>
+              </div>
+            </div>
+            <p v-if="sqlError" class="xo-dbs__error">{{ sqlError }}</p>
+            <div class="xo-dbs__meta x-muted"><template v-if="dbTable">{{ dbTable }} · {{ rangeLabel(dbPage, DB_PAGE, dbTotalRows) }} rows</template><template v-else>{{ sqlMeta }}</template></div>
+            <div class="xo-dbs__grid">
+              <div v-if="!dbRows.length" class="x-empty">Pick a table or run a query.</div>
+              <table v-else class="xo-table pma-table">
+                <thead><tr><th v-for="col in dbColumns" :key="col">{{ col }}</th></tr></thead>
+                <tbody><tr v-for="(row, idx) in dbRows" :key="idx"><td v-for="col in dbColumns" :key="col" :title="String(row[col] ?? '')">{{ row[col] }}</td></tr></tbody>
               </table>
             </div>
-            <div v-if="dbTotalPages > 1" class="xo-pager">
-              <span class="xo-load-more__count">{{ dbTable }} · {{ rangeLabel(dbPage, DB_PAGE, dbTotalRows) }} rows</span>
+            <div v-if="dbTable && dbTotalPages > 1" class="xo-pager">
               <v-pagination v-model="dbPage" :length="dbTotalPages" density="compact" size="small" :total-visible="7" @update:model-value="selectDbTable(dbTable, $event)" />
             </div>
-          </div>
+          </section>
         </div>
       </template>
-
       <!-- SETTINGS -->
       <template v-else-if="tab==='settings'">
         <xo-settings />
@@ -1009,7 +1006,33 @@ const App = {
     const dbPage       = ref(1);
     const dbTotalPages = ref(1);
     const dbTotalRows  = ref(0);
+    // The SQL box: read-only queries through POST /api/db/query (the server's SQL guard refuses writes).
+    const sqlError = ref('');
+    const sqlMeta = ref('');
+    const isRunningSql = ref(false);
+    const runSql = async () => {
+      const query = sqlQuery.value.trim();
+      const canRun = Boolean(query) && !isRunningSql.value;
+      if (!canRun) return;
+      isRunningSql.value = true;
+      sqlError.value = '';
+      try {
+        const d = await window.ChemxUi.postJson('/api/db/query', { query });
+        if (!d.success) throw new Error(d.error || 'query failed');
+        dbColumns.value = d.columns || [];
+        dbRows.value = d.rows || [];
+        dbTable.value = '';
+        dbTotalPages.value = 1;
+        sqlMeta.value = d.rowCount + ' row' + (d.rowCount === 1 ? '' : 's') + ' in ' + d.durationMs + ' ms' + (d.rowCount >= 100 ? ' (first 100 shown)' : '');
+      } catch (err) {
+        sqlError.value = err.message;
+      } finally {
+        isRunningSql.value = false;
+      }
+    };
     const selectDbTable = async (name, page = 1) => {
+      sqlMeta.value = '';
+      sqlError.value = '';
       try {
         const d = await getJson('/api/db/browse?table=' + encodeURIComponent(name) + '&page=' + page + '&pageSize=' + DB_PAGE);
         dbColumns.value = d.columns || Object.keys(d.rows?.[0] || {});
@@ -1137,7 +1160,7 @@ const App = {
       postsDesc, compliantCount, compliancePct, filteredCodebase,
       attentionItems, confirmAttention, isLive,
       workbenchScopes, activeWorkbenchScope, workbenchPrompt, selectWorkbenchScope,
-      dbTables, dbColumns, dbRows, sqlQuery, selectDbTable,
+      dbTables, dbColumns, dbRows, sqlQuery, selectDbTable, runSql, sqlError, sqlMeta, isRunningSql,
       statusDotClass, formatTime,
       postAction, openModal,
     };

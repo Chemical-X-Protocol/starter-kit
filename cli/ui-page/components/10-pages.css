@@ -63,3 +63,32 @@
 .xo-pma-table-item { border-radius: var(--x-r-sm) !important; }
 .xo-pager { color: var(--x-text-2); font-size: var(--x-fs-sm); }
 .xo-load-more__count { color: var(--x-text-3) !important; font-size: var(--x-fs-xs) !important; }
+
+/* ---- Codebase (#7646) ---- */
+.xo-cb { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: var(--x-4); }
+.xo-cb__stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--x-3); flex-shrink: 0; }
+.xo-cb__list { flex: 1; min-height: 0; overflow: auto; }
+.xo-cb__over { color: var(--x-danger) !important; font-weight: 600; }
+.xo-cb__exports { max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--x-mono); font-size: var(--x-fs-xs); }
+.xo-board__seg button { text-transform: capitalize; }
+
+/* ---- Prompts (#7647) ---- */
+.xo-wb { flex: 1; min-height: 0; display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: var(--x-5); }
+.xo-wb > aside { align-self: start; }
+.xo-wb__main { min-height: 0; display: flex; flex-direction: column; }
+.xo-wb__body { flex: 1; min-height: 0; overflow: auto; }
+.xo-wb__prompt { margin: 0; font: 12.5px/1.6 var(--x-mono); color: var(--x-text); white-space: pre-wrap; word-break: break-word; background: var(--x-bg); border: 1px solid var(--x-border); border-radius: var(--x-r); padding: var(--x-4); }
+
+/* ---- Database (#7648) ---- */
+.xo-dbs { flex: 1; min-height: 0; display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: var(--x-5); }
+.xo-dbs__tables { min-height: 0; overflow-y: auto; }
+.xo-dbs__main { min-height: 0; display: flex; flex-direction: column; padding: var(--x-4); gap: var(--x-3); }
+.xo-dbs__sql textarea { font-family: var(--x-mono) !important; font-size: var(--x-fs-sm) !important; }
+.xo-dbs__run { display: flex; align-items: center; gap: var(--x-3); margin-top: var(--x-2); }
+.xo-dbs__error { margin: 0; padding: var(--x-2) var(--x-3); border-radius: var(--x-r-sm); background: rgba(248,113,113,.1); color: #fecaca; font-size: var(--x-fs-sm); font-family: var(--x-mono); }
+.xo-dbs__grid { flex: 1; min-height: 0; overflow: auto; border: 1px solid var(--x-border); border-radius: var(--x-r); }
+.xo-dbs__grid td { max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--x-mono); font-size: var(--x-fs-xs); }
+@media (max-width: 900px) {
+  .xo-wb, .xo-dbs { grid-template-columns: minmax(0, 1fr); }
+  .xo-cb__stats { grid-template-columns: 1fr; }
+}
