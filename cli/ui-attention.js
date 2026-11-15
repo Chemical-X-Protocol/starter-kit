@@ -44,9 +44,10 @@ export const scanAttentionItems = (db, cwd = process.cwd()) => {
 
   if (db) {
     try {
-      const pendingTasks = db.prepare("SELECT id, title, status, assigned_agent_id FROM agent_tasks WHERE status IN ('pending_approval', 'blocked')").all();
+      // Newest change first; structured fields for the inbox, detail kept for older clients.
+      const pendingTasks = db.prepare("SELECT * FROM agent_tasks WHERE status IN ('pending_approval', 'blocked') ORDER BY updated_at DESC").all();
       for (const t of pendingTasks) {
-        items.push({ id: `task-${t.id}`, source: 'Swarm Task', title: t.title, detail: `Status: ${t.status} • Agent: ${t.assigned_agent_id || 'Unassigned'}`, type: 'task', timestamp: new Date().toISOString() });
+        items.push({ id: `task-${t.id}`, source: 'Swarm Task', title: t.title, detail: `Status: ${t.status} • Agent: ${t.assigned_agent_id || 'Unassigned'}`, type: 'task', taskId: t.id, status: t.status, assignee: t.assigned_agent_id || '', repo: t.repo || '', reason: t.blocked_reason || '', priority: t.priority, needs: t.needs || '', timestamp: Number(t.updated_at) || null });
       }
 
       const waitingLocks = db.prepare("SELECT id, file_path, agent_id, purpose FROM file_lock_queue WHERE status = 'waiting'").all();
@@ -67,9 +68,10 @@ export const confirmAttentionItem = (db, itemId = '', action = 'approve') => {
   const isTaskItem = itemId.startsWith('task-');
   if (isTaskItem) {
     const taskId = itemId.replace('task-', '');
-    const newStatus = action === 'approve' ? 'in_progress' : 'cancelled';
-    db.prepare('UPDATE agent_tasks SET status = ? WHERE id = ?').run(newStatus, taskId);
-    db.prepare("INSERT INTO agent_feed (timestamp, author_id, event_type, message) VALUES (?, '@user', 'task_approval', ?)").run(now, `Task #${taskId} ${action}d by user`);
+    // approve: start it; requeue: back to the queue (blocked reason cleared); dismiss or cancel: cancel it.
+    const newStatus = { approve: 'in_progress', requeue: 'queued' }[action] || 'cancelled';
+    db.prepare("UPDATE agent_tasks SET status = ?, blocked_reason = CASE WHEN ? = 'queued' THEN '' ELSE blocked_reason END, updated_at = ? WHERE id = ?").run(newStatus, newStatus, now, taskId);
+    db.prepare("INSERT INTO agent_feed (timestamp, author_id, event_type, message) VALUES (?, '@user', 'task_approval', ?)").run(now, `Task #${taskId} set to ${newStatus} from the Attention Inbox (${action})`);
     return { success: true, message: `Task #${taskId} marked as ${newStatus}` };
   }
 

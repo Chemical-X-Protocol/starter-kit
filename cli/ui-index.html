@@ -409,10 +409,12 @@ const App = {
     <v-spacer />
     <div class="d-flex align-center gap-3 mr-3">
       <xo-notification-bell />
-      <div class="xo-savings-badge" @click="openModal">
-        ⚡ Saved {{ (savings.tokensSaved||165000).toLocaleString() }} tokens / \${{ Number(savings.dollarsSaved||1.65).toFixed(2) }}
+      <div v-if="telemetry.totalTokens" class="xo-usage-badge" title="Tokens and cost recorded on this board (chemx team telemetry)">
+        {{ Number(telemetry.totalTokens).toLocaleString() }} tokens · \${{ Number(telemetry.totalCost || 0).toFixed(2) }}
       </div>
-      <v-chip size="small" color="success" variant="tonal" prepend-icon="mdi-circle" style="font-size:11px;">M3 Live</v-chip>
+      <span class="xo-live" :class="{ 'is-live': isLive }" :title="isLive ? 'Receiving live updates' : 'Live updates disconnected; showing the last data'">
+        <span class="xo-live__dot" />{{ isLive ? 'Live' : 'Offline' }}
+      </span>
     </div>
   </v-app-bar>
 
@@ -515,31 +517,8 @@ const App = {
 
       <!-- ATTENTION INBOX -->
       <template v-else-if="tab==='attention'">
-        <div class="xo-glass pa-4" style="border-radius:14px;flex:1;overflow-y:auto;min-height:0;">
-          <div class="d-flex align-center gap-2 mb-4">
-            <v-icon color="warning">mdi-bell-outline</v-icon>
-            <span class="xo-display" style="font-size:15px;">Attention Inbox</span>
-            <v-chip size="small" color="warning" variant="tonal" class="ml-auto">{{ attentionItems.length }} alerts</v-chip>
-          </div>
-          <div v-if="attentionItems.length" class="d-flex flex-column gap-3">
-            <div v-for="item in attentionItems" :key="item.id" class="xo-card">
-              <div class="d-flex justify-space-between align-center">
-                <span style="font-weight:600;font-size:13px;">{{ item.title || item.message }}</span>
-                <div class="d-flex gap-2">
-                  <v-btn size="x-small" color="success" variant="tonal" @click="confirmAttention(item.id, 'approve')">Approve</v-btn>
-                  <v-btn size="x-small" color="default" variant="outlined" @click="confirmAttention(item.id, 'dismiss')">Dismiss</v-btn>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div v-else class="text-center" style="padding:48px 0;color:rgba(255,255,255,.3);">
-            <v-icon size="48" color="rgba(255,255,255,.15)">mdi-check-circle-outline</v-icon>
-            <div class="mt-3">No pending attention requests</div>
-          </div>
-        </div>
-      </template>
-
-      <!-- TASKS & KANBAN -->
+        <xo-attention-inbox :items="attentionItems" @action="confirmAttention" @open="navigate('#/tasks/' + $event)" />
+      </template>      <!-- TASKS & KANBAN -->
       <template v-else-if="tab==='tasks'">
         <div class="d-flex align-center gap-3 mb-3 flex-wrap" style="flex-shrink:0;">
           <div style="flex:1;min-width:200px;max-width:360px;">
@@ -871,6 +850,7 @@ const App = {
     const drawerPinned = ref(typeof localStorage !== 'undefined' ? localStorage.getItem('chemx_menu_pinned') === 'true' : false);
     const drawer       = ref(drawerPinned.value ? true : false);
     const modal        = ref(false);
+    const isLive       = ref(false);
 
     const togglePinDrawer = () => {
       drawerPinned.value = !drawerPinned.value;
@@ -1221,7 +1201,9 @@ const App = {
       }
       try {
         const es = new EventSource('/api/swarm/events');
+        es.onopen = () => { isLive.value = true; };
         es.onmessage = (event) => {
+          isLive.value = true;
           try {
             applyData(JSON.parse(event.data));
           } catch {}
@@ -1230,6 +1212,7 @@ const App = {
           window.location.reload();
         });
         es.onerror = () => {
+          isLive.value = false;
           fetch('/api/swarm/status').then(r => r.json()).then(applyData).catch(() => {});
         };
       } catch {
@@ -1357,7 +1340,7 @@ const App = {
       selectedTaskDetail, selectedTaskEvents, taskUpdateMsg, isUpdatingTask,
       openTaskDetail, closeTaskDetail, submitTaskUpdate, updateTaskStatusFromSheet, reassignTaskFromSheet,
       postsDesc, compliantCount, compliancePct, filteredCodebase,
-      attentionItems, confirmAttention,
+      attentionItems, confirmAttention, isLive,
       workbenchScopes, activeWorkbenchScope, workbenchPrompt, selectWorkbenchScope,
       dbTables, dbColumns, dbRows, sqlQuery, selectDbTable,
       statusDotClass, formatTime,

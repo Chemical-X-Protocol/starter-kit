@@ -8,3 +8,14 @@
 .xo-handle:hover { color: #62c9ff; text-decoration: underline; }
 .xo-muted { color: rgba(255,255,255,.4); font-size: 11px; }
 .xo-stub { color: rgba(255,255,255,.35); font-size: 12px; padding: 16px; text-align: center; }
+
+/* App bar: recorded usage and live-connection state (#7636). */
+.xo-usage-badge {
+  font-size: 12px; padding: 5px 10px; border-radius: 999px; color: rgba(255,255,255,.75);
+  background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.08); white-space: nowrap;
+}
+.xo-live { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: rgba(255,255,255,.5); }
+.xo-live__dot { width: 8px; height: 8px; border-radius: 50%; background: #94a3b8; }
+.xo-live.is-live { color: #a3e635; }
+.xo-live.is-live .xo-live__dot { background: #a3e635; box-shadow: 0 0 0 3px rgba(163,230,53,.18); }
+@media (max-width: 720px) { .xo-usage-badge { display: none; } }
