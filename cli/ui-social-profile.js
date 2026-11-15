@@ -50,10 +50,21 @@ const readPosts = (db, id, params) => {
   return { feed, hasMore: feed.length === limit, oldestId: feed.length > 0 ? feed[0].id : null };
 };
 
-const pickAgent = (a) => ({
-  id: a.id, name: a.name, role: a.role, status: a.status, heartbeat: a.heartbeat,
-  currentTaskId: a.current_task_id, capabilities: a.capabilities
-});
+const readRecentDone = (db, id) => db.prepare(
+  "SELECT id, title, status, updated_at AS updatedAt FROM agent_tasks WHERE assigned_agent_id = ? AND status IN ('done', 'completed') ORDER BY updated_at DESC LIMIT 15"
+).all(id);
+
+// Crew rows carry model and source in metadata and "crew" / "tier:<x>" in capabilities (chemx team crew import).
+const pickAgent = (a) => {
+  const meta = a.metadata && typeof a.metadata === 'object' ? a.metadata : {};
+  const caps = Array.isArray(a.capabilities) ? a.capabilities : [];
+  const tierCap = caps.find((c) => String(c).startsWith('tier:'));
+  return {
+    id: a.id, name: a.name, role: a.role, status: a.status, heartbeat: a.heartbeat,
+    currentTaskId: a.current_task_id, capabilities: a.capabilities,
+    isCrew: caps.includes('crew'), tier: tierCap ? String(tierCap).slice(5) : '', model: meta.model || '', source: meta.source || ''
+  };
+};
 
 export const readProfile = (db, handle, params = {}) => {
   const agent = db ? getAgent(db, handle) : null;
@@ -63,6 +74,7 @@ export const readProfile = (db, handle, params = {}) => {
     agent: pickAgent(agent),
     counts: readCounts(db, agent.id),
     claims: readClaims(db, agent.id),
+    recentDone: readRecentDone(db, agent.id),
     leases: readLiveLeases(db, agent.id),
     ...readPosts(db, agent.id, params)
   };

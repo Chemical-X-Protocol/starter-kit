@@ -75,3 +75,16 @@ test('agent profile: the id path routes through routeGet, with the @ encoded or 
   assert.strictEqual(routeGet('/api/agents/ghost/profile', db).success, false);
   assert.strictEqual(API_DOCS[0].path, '/api/agents/:handle/profile');
 });
+
+test('ui-social-profile: crew model, tier and source, and recently done tasks (#7650)', async () => {
+  const { DatabaseSync } = await import('node:sqlite');
+  const { initTeamSchema } = await import('./team/team-schema.js');
+  const { importCrew } = await import('./team/team-crew.js');
+  const { readProfile } = await import('./ui-social-profile.js');
+  const db = new DatabaseSync(':memory:'); initTeamSchema(db);
+  importCrew(db, [{ agentId: 'a1', name: 'CHEMIST', model: 'claude-opus-5-5' }]);
+  db.prepare("INSERT INTO agent_tasks (title, status, assigned_agent_id, created_at, updated_at) VALUES ('shipped', 'done', '@chemist', 1, 3)").run();
+  const p = readProfile(db, '@chemist');
+  assert.deepEqual([p.agent.isCrew, p.agent.tier, p.agent.model, p.agent.source], [true, 'deep', 'claude-opus-5-5', 'starnet']);
+  assert.deepEqual(p.recentDone.map((t) => t.title), ['shipped']);
+});
