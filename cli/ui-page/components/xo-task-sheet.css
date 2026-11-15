@@ -1,7 +1,7 @@
 /* <xo-task-sheet>: task details slide-over (#7636). */
 .xo-sheet {
   position: fixed; top: 0; right: 0; bottom: 0; z-index: 300; width: min(560px, 100vw);
-  display: flex; flex-direction: column; background: #0b1220; border-left: 1px solid rgba(255,255,255,.08);
+  display: flex; flex-direction: column; background: var(--x-surface); border-left: 1px solid rgba(255,255,255,.08);
   box-shadow: -24px 0 60px rgba(0,0,0,.45); color: #e2e8f0;
 }
 .xo-sheet__head { position: relative; padding: 20px 56px 16px 24px; border-bottom: 1px solid rgba(255,255,255,.06); }
@@ -54,7 +54,7 @@
 .xo-sheet__event-main { flex: 1; min-width: 0; }
 .xo-sheet__event-head { display: flex; align-items: center; gap: 6px; font-size: 12.5px; }
 .xo-sheet__event-msg { margin-top: 4px; font-size: 13.5px; line-height: 1.55; color: #cbd5e1; white-space: pre-wrap; word-break: break-word; }
-.xo-sheet__foot { display: flex; gap: 8px; padding: 12px 24px 16px; border-top: 1px solid rgba(255,255,255,.06); background: #0b1220; }
+.xo-sheet__foot { display: flex; gap: 8px; padding: 12px 24px 16px; border-top: 1px solid rgba(255,255,255,.06); background: var(--x-surface); }
 @media (max-width: 600px) {
   .xo-sheet__head { padding: 16px 52px 12px 16px; }
   .xo-sheet__body { padding: 12px 16px 20px; }
