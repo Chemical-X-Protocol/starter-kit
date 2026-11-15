@@ -452,57 +452,42 @@ const App = {
 
       <!-- SOCIAL / FORUM & TIMELINE -->
       <template v-else-if="tab==='social'">
-        <div style="display:grid;grid-template-columns:260px 1fr 300px;gap:14px;flex:1;overflow:hidden;min-height:0;">
-
-          <div class="xo-glass d-flex flex-column gap-2 pa-3" style="border-radius:14px;overflow-y:auto;">
-            <div class="d-flex justify-space-between align-center mb-1">
-              <span class="xo-display" style="font-size:13px;">Swarm Agents</span>
-              <v-chip size="x-small" color="success" variant="tonal">{{ agentPage.total.toLocaleString() }}</v-chip>
-            </div>
-            <div class="d-flex gap-1 flex-wrap mb-1" role="group" aria-label="Filter agents by status">
-              <v-chip v-for="f in agentFilters" :key="f" size="x-small" style="cursor:pointer;"
-                :color="agentFilter===f ? 'primary' : 'default'" :variant="agentFilter===f ? 'tonal' : 'outlined'"
-                :aria-pressed="agentFilter===f" class="text-capitalize" @click="setAgentFilter(f)">{{ f }} {{ agentCountLabel(f) }}</v-chip>
-            </div>
-            <v-progress-linear v-if="agentPage.loading" indeterminate color="primary" height="2" />
-            <div v-for="a in filteredAgents" :key="a.id" class="xo-agent-card" :class="{'xo-agent-card--active': selectedAgentId===a.id}" @click="openAgent(a.id)">
-              <div class="d-flex align-center gap-2">
-                <span class="xo-dot" :class="statusDotClass(a.status)" />
-                <span class="xo-agent-card__name">{{ a.name||a.id }}</span>
-              </div>
-              <div class="xo-agent-card__role mt-1">{{ a.role||a.status||'agent' }}</div>
-            </div>
-            <div v-if="!filteredAgents.length && !agentPage.loading" class="text-center" style="color:rgba(255,255,255,.3);font-size:12px;padding:16px 0;">No agents</div>
-            <xo-load-more :shown="filteredAgents.length" :total="agentPage.total" :loading="agentPage.loading" :step="AGENT_PAGE" noun="agents" @more="loadMoreAgents" />
-          </div>
-
-          <div class="xo-glass d-flex flex-column gap-3 pa-3" style="border-radius:14px;overflow:hidden;">
+        <div class="xo-feedpage">
+          <div class="xo-feedpage__main x-panel">
             <xo-today-card />
             <xo-composer />
             <xo-timeline />
           </div>
-
-          <div class="xo-glass d-flex flex-column gap-3 pa-3" style="border-radius:14px;overflow-y:auto;">
-            <div class="xo-display" style="font-size:13px;">Telemetry</div>
-            <div class="xo-kpi">
-              <div class="xo-kpi__label">Total Tokens</div>
-              <div class="xo-kpi__value" style="color:var(--xo-cyan);">{{ (telemetry.totalTokens||0).toLocaleString() }}</div>
-            </div>
-            <div class="xo-kpi">
-              <div class="xo-kpi__label">Total Cost</div>
-              <div class="xo-kpi__value" style="color:var(--xo-lime);">\${{ Number(telemetry.totalCost||0).toFixed(4) }}</div>
-            </div>
-            <v-divider style="border-color:rgba(255,255,255,.07);" />
-            <div class="d-flex justify-space-between align-center">
-              <span class="xo-display" style="font-size:13px;">Active Locks</span>
-              <v-chip size="x-small" :color="leases.length?'warning':'default'" variant="tonal">{{ leases.length }}</v-chip>
-            </div>
-            <div v-for="l in leases.slice(0,5)" :key="l.filePath" class="d-flex align-center gap-2" style="font-size:11px;color:rgba(255,255,255,.5);">
-              <v-icon size="13" color="warning">mdi-lock</v-icon>
-              <span class="xo-mono" style="word-break:break-all;">{{ l.filePath }}</span>
-            </div>
-            <div v-if="leases.length>5" style="font-size:11px;color:rgba(255,255,255,.3);">+ {{ leases.length-5 }} more</div>
-          </div>
+          <aside class="xo-feedpage__side">
+            <section class="x-panel">
+              <header class="x-panel__head"><h3 class="x-panel__title">Agents</h3><span class="x-panel__hint x-num">{{ agentPage.total.toLocaleString() }}</span>
+                <button type="button" class="x-panel__link" @click="navigate('#/agents')">All agents</button></header>
+              <div class="x-panel__body">
+                <div class="xo-board__seg xo-feedpage__seg" role="group" aria-label="Filter agents by status">
+                  <button v-for="f in agentFilters" :key="f" type="button" :class="{ 'is-on': agentFilter === f }" :aria-pressed="agentFilter === f" @click="setAgentFilter(f)">{{ f }}</button>
+                </div>
+                <v-progress-linear v-if="agentPage.loading" indeterminate color="primary" height="2" />
+                <button v-for="a in filteredAgents" :key="a.id" type="button" class="x-row" @click="openAgent(a.id)">
+                  <xo-avatar :handle="a.id" :size="22" :link="false" />
+                  <span class="x-row__main">{{ a.name || a.id }}</span>
+                  <span class="x-dot" :class="statusDotClass(a.status)" :title="a.status" />
+                </button>
+                <div v-if="!filteredAgents.length && !agentPage.loading" class="x-empty">No {{ agentFilter === 'all' ? '' : agentFilter }} agents</div>
+                <xo-load-more :shown="filteredAgents.length" :total="agentPage.total" :loading="agentPage.loading" :step="AGENT_PAGE" noun="agents" @more="loadMoreAgents" />
+              </div>
+            </section>
+            <section class="x-panel">
+              <header class="x-panel__head"><h3 class="x-panel__title">Locks held</h3><span class="x-panel__hint x-num">{{ leases.length }}</span>
+                <button type="button" class="x-panel__link" @click="navigate('#/locks')">All locks</button></header>
+              <div class="x-panel__body">
+                <div v-if="!leases.length" class="x-empty">No file is locked.</div>
+                <div v-for="l in leases.slice(0, 8)" :key="l.filePath" class="xo-feedpage__lock">
+                  <v-icon size="14">mdi-lock-outline</v-icon><span class="xo-feedpage__path" :title="l.filePath">{{ l.filePath }}</span>
+                </div>
+                <div v-if="leases.length > 8" class="x-muted">and {{ leases.length - 8 }} more</div>
+              </div>
+            </section>
+          </aside>
         </div>
       </template>
 
@@ -519,125 +504,8 @@ const App = {
         <xo-attention-inbox :items="attentionItems" @action="confirmAttention" @open="navigate('#/tasks/' + $event)" />
       </template>      <!-- TASKS & KANBAN -->
       <template v-else-if="tab==='tasks'">
-        <div class="d-flex align-center gap-3 mb-3 flex-wrap" style="flex-shrink:0;">
-          <div style="flex:1;min-width:200px;max-width:360px;">
-            <v-text-field
-              v-model="taskSearch"
-              density="compact"
-              variant="outlined"
-              placeholder="Search tasks or files..."
-              prepend-inner-icon="mdi-magnify"
-              hide-details
-              rounded="lg"
-            />
-          </div>
-          <div class="d-flex gap-1 align-center">
-            <v-chip
-              v-for="tier in ['all', 'atom', 'molecule', 'organism', 'utility']"
-              :key="tier"
-              size="small"
-              :color="taskTierFilter === tier ? 'primary' : 'default'"
-              :variant="taskTierFilter === tier ? 'tonal' : 'outlined'"
-              style="cursor:pointer;text-transform:capitalize;"
-              @click="taskTierFilter = tier"
-            >
-              {{ tier }}
-            </v-chip>
-          </div>
-          <v-spacer />
-          <v-btn
-            size="small"
-            :color="hideTestTasks ? 'primary' : 'default'"
-            :variant="hideTestTasks ? 'tonal' : 'outlined'"
-            prepend-icon="mdi-shield-check-outline"
-            rounded="lg"
-            @click="hideTestTasks = !hideTestTasks"
-          >
-            {{ hideTestTasks ? 'Shielded: Real Tasks Only' : 'Showing All Tasks' }}
-          </v-btn>
-        </div>
-
-        <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));gap:14px;flex:1;overflow:hidden;min-height:0;">
-          <div v-for="col in taskColumns" :key="col.status" class="xo-glass d-flex flex-column pa-3 kanban-col" style="border-radius:14px;overflow:hidden;">
-            <div class="d-flex align-center gap-2 mb-3">
-              <v-icon size="16" :color="col.color">{{ col.icon }}</v-icon>
-              <span class="xo-display" style="font-size:13px;">{{ col.label }}</span>
-              <v-chip size="x-small" :color="col.color" variant="tonal" class="ml-auto" :title="board[col.status].total + ' tasks match the filters'">{{ board[col.status].total.toLocaleString() }}</v-chip>
-            </div>
-            <v-progress-linear v-if="board[col.status].loading" indeterminate :color="col.color" height="2" class="mb-2" />
-            <div style="flex:1;overflow-y:auto;" class="d-flex flex-column pr-1 gap-2">
-              <div v-for="t in tasksByStatus(col.status)" :key="t.id" class="xo-task-card" :class="'xo-task-card--' + col.status" style="cursor:pointer;" tabindex="0" role="button" :aria-label="'Open task ' + t.id + ': ' + t.title" @click="openTaskDetail(t.id)" @keydown.enter="openTaskDetail(t.id)">
-                <div class="xo-task-card__header">
-                  <span class="xo-task-card__id" style="cursor:pointer;" title="Open task details" @click.stop="openTaskDetail(t.id)">#{{ t.id }}</span>
-                  <span class="v-chip v-chip--density-compact v-chip--size-x-small v-chip--variant-tonal"
-                        :class="'xo-task-card__badge-' + (t.tier || 'utility')"
-                        style="font-size:10px;text-transform:uppercase;font-weight:700;letter-spacing:.05em;padding:0 6px;border-radius:4px;">
-                    {{ t.tier || 'utility' }}
-                  </span>
-                  <v-chip v-if="t.priority" size="x-small" :color="t.priority === 1 ? 'error' : t.priority === 2 ? 'primary' : 'default'" variant="tonal" style="font-size:10px;height:18px;">
-                    <v-icon size="10" start>{{ t.priority === 1 ? 'mdi-fire' : 'mdi-flag-outline' }}</v-icon>
-                    P{{ t.priority }}
-                  </v-chip>
-                  <v-chip v-if="t.parentId" size="x-small" color="primary" variant="tonal" style="font-size:10px;height:18px;">
-                    <v-icon size="10" start>mdi-subdirectory-arrow-right</v-icon>
-                    Sub of #{{ t.parentId }}
-                  </v-chip>
-                  <v-chip v-if="t.subtaskCount > 0" size="x-small" color="info" variant="outlined" style="font-size:10px;height:18px;">
-                    <v-icon size="10" start>mdi-file-tree</v-icon>
-                    {{ t.subtaskCount }}
-                  </v-chip>
-                  <v-chip v-if="col.status === 'done'" size="x-small" color="success" variant="tonal" style="font-size:10px;height:18px;">
-                    <v-icon size="10" start>mdi-check-circle-outline</v-icon>Done
-                  </v-chip>
-                  <v-btn size="x-small" variant="text" icon="mdi-clipboard-text-outline" color="primary" style="height:20px;width:20px;margin-left:auto;" title="Open task details sheet" @click.stop="openTaskDetail(t.id)"></v-btn>
-                </div>
-
-                <div class="xo-task-card__title">{{ t.title }}</div>
-
-                <div v-if="t.target_path || t.targetPath" class="xo-task-card__path" :title="t.target_path || t.targetPath">
-                  <v-icon size="11">mdi-file-code-outline</v-icon>
-                  <span>{{ t.target_path || t.targetPath }}</span>
-                </div>
-
-                <div v-if="col.status === 'done' && t.isVerified"
-                     class="d-flex align-center gap-2 flex-wrap" style="font-size:10px;background:rgba(163,230,53,.07);border:1px solid rgba(163,230,53,.2);color:var(--xo-lime);padding:3px 8px;border-radius:6px;">
-                  <v-icon size="11" color="success">mdi-shield-check</v-icon>
-                  <span>Verified Receipt<template v-if="t.health_after != null"> (Health: {{ t.health_after }}%)</template></span>
-                </div>
-
-                <div class="xo-task-card__footer">
-                  <div v-if="t.assigned_agent_id || t.assignedTo" class="xo-task-card__assignee">
-                    <v-icon size="12" color="primary">mdi-robot-outline</v-icon>
-                    <span>{{ t.assigned_agent_id || t.assignedTo }}</span>
-                  </div>
-                  <div v-else style="color:rgba(255,255,255,.3);font-size:10px;font-style:italic;">
-                    Unassigned
-                  </div>
-
-                  <div class="xo-task-card__meta">
-                    <span style="color:rgba(255,255,255,.45);font-size:10px;font-family:ui-monospace,monospace;">
-                      ⚡ {{ Math.round((t.total_tokens || ((t.prompt_tokens || 0) + (t.completion_tokens || 0))) / 1000) || 1 }}k
-                    </span>
-                  </div>
-
-                  <div class="d-flex align-center gap-1 ml-auto">
-                    <v-btn v-if="col.status === 'queued'" size="x-small" variant="tonal" color="primary" style="height:20px;font-size:10px;padding:0 6px;" @click.stop="moveTask(t.id, 'in_progress')">
-                      Start ▶
-                    </v-btn>
-                    <v-btn v-else-if="col.status === 'in_progress'" size="x-small" variant="tonal" color="success" style="height:20px;font-size:10px;padding:0 6px;" @click.stop="moveTask(t.id, 'done')">
-                      Complete ✓
-                    </v-btn>
-                    <v-btn v-else-if="col.status === 'done'" size="x-small" variant="text" color="warning" style="height:20px;font-size:10px;padding:0 6px;" title="Reopen task" @click.stop="moveTask(t.id, 'in_progress')">
-                      <v-icon size="11" start>mdi-restore</v-icon>Reopen
-                    </v-btn>
-                  </div>
-                </div>
-              </div>
-              <div v-if="!tasksByStatus(col.status).length && !board[col.status].loading" class="text-center" style="color:rgba(255,255,255,.25);font-size:12px;padding:24px 0;">No tasks</div>
-              <xo-load-more :shown="board[col.status].items.length" :total="board[col.status].total" :loading="board[col.status].loading" :step="TASK_PAGE" noun="tasks" @more="loadMoreTasks(col.status)" />
-            </div>
-          </div>
-        </div>
+        <xo-task-board :columns="boardColumns" v-model:search="taskSearch" v-model:tier="taskTierFilter" v-model:hide-tests="hideTestTasks" :step="TASK_PAGE"
+          @open="openTaskDetail" @move="moveTask" @more="loadMoreTasks" />
 
         <!-- Bubblegum-Style Task Details Slide-Over Sheet & Backdrop -->
         <v-fade-transition>
@@ -652,27 +520,21 @@ const App = {
 
       <!-- LOCKS -->
       <template v-else-if="tab==='locks'">
-        <div class="xo-glass pa-4" style="border-radius:14px;flex:1;overflow-y:auto;min-height:0;">
-          <div class="d-flex align-center gap-2 mb-4">
-            <v-icon color="warning">mdi-lock-outline</v-icon>
-            <span class="xo-display" style="font-size:15px;">File Lock Leases</span>
-            <v-chip size="small" color="warning" variant="tonal" class="ml-auto">{{ leases.length }} active</v-chip>
-          </div>
-          <div v-if="leases.length" class="d-flex flex-column gap-2">
-            <div v-for="l in leases" :key="l.filePath" class="d-flex align-center gap-3 pa-3" style="background:rgba(255,255,255,.04);border-radius:10px;border:1px solid rgba(255,255,255,.07);">
-              <v-icon color="warning" size="18">mdi-lock</v-icon>
-              <div style="flex:1;">
-                <div class="xo-mono" style="color:var(--xo-cyan);font-size:12px;">{{ l.filePath }}</div>
-                <div v-if="l.lockedBy" style="font-size:11px;color:rgba(255,255,255,.4);margin-top:2px;">held by {{ l.lockedBy }}</div>
-              </div>
-              <v-chip size="x-small" color="warning" variant="tonal">Locked</v-chip>
-            </div>
-          </div>
-          <div v-else class="text-center" style="padding:48px 0;">
-            <v-icon size="48" color="rgba(255,255,255,.15)">mdi-lock-open-outline</v-icon>
-            <div class="mt-3" style="color:rgba(255,255,255,.3);font-size:13px;">No active locks</div>
-          </div>
-        </div>
+        <section class="x-panel xo-locks">
+          <header class="x-panel__head"><h3 class="x-panel__title">Leases</h3><span class="x-panel__hint x-num">{{ leases.length }} held</span></header>
+          <div v-if="!leases.length" class="x-empty">No file is locked right now.</div>
+          <table v-else class="xo-table">
+            <thead><tr><th>File</th><th>Held by</th><th>Purpose</th><th class="xo-table__num">Expires</th></tr></thead>
+            <tbody>
+              <tr v-for="l in leases" :key="l.filePath">
+                <td class="xo-table__path"><v-icon size="14">mdi-lock-outline</v-icon><span :title="l.filePath">{{ l.filePath }}</span></td>
+                <td><button v-if="l.lockedBy" type="button" class="xo-table__who" @click="openAgent(l.lockedBy)"><xo-avatar :handle="l.lockedBy" :size="18" :link="false" />{{ l.lockedBy }}</button></td>
+                <td class="xo-table__muted">{{ l.purpose }}</td>
+                <td class="xo-table__num xo-table__muted">{{ l.expiresAt ? new Date(l.expiresAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
       </template>
 
       <!-- CODEBASE -->
@@ -729,10 +591,6 @@ const App = {
       <!-- PROMPT WORKBENCH -->
       <template v-else-if="tab==='workbench'">
         <div class="xo-glass pa-4 d-flex flex-column gap-3" style="border-radius:14px;flex:1;overflow:hidden;min-height:0;">
-          <div class="d-flex align-center gap-2">
-            <v-icon color="primary">mdi-wrench-outline</v-icon>
-            <span class="xo-display" style="font-size:15px;">Prompt Workbench</span>
-          </div>
           <div class="d-flex gap-2 flex-wrap">
             <v-chip v-for="s in workbenchScopes" :key="s" size="small"
               :color="activeWorkbenchScope === s ? 'primary' : 'default'"
@@ -747,7 +605,7 @@ const App = {
       <template v-else-if="tab==='database'">
         <div class="d-flex gap-3" style="flex:1;overflow:hidden;min-height:0;">
           <div class="xo-glass pa-3 pma-sidebar d-flex flex-column gap-2" style="border-radius:14px;width:220px;overflow-y:auto;">
-            <div class="xo-display" style="font-size:13px;color:rgba(255,255,255,.5);">Database Studio</div>
+            <div class="x-eyebrow">Tables</div>
             <div v-for="tbl in dbTables" :key="tbl.name" class="xo-pma-table-item" @click="selectDbTable(tbl.name)">
               <span>📁 {{ tbl.name }}</span>
             </div>
@@ -774,27 +632,24 @@ const App = {
 
       <!-- SETTINGS -->
       <template v-else-if="tab==='settings'">
-        <div class="xo-glass pa-4" style="border-radius:14px;max-width:520px;min-height:0;">
-          <div class="d-flex align-center gap-2 mb-4">
-            <v-icon color="primary">mdi-tune-variant</v-icon>
-            <span class="xo-display" style="font-size:15px;">Swarm Settings</span>
-          </div>
-          <div class="d-flex flex-column gap-3">
-            <div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:16px;">
-              <div style="font-size:13px;font-weight:500;margin-bottom:10px;">Database Maintenance</div>
-              <div class="d-flex gap-2">
-                <v-btn size="small" variant="tonal" color="primary" prepend-icon="mdi-broom" @click="postAction('vacuum')">Vacuum DB</v-btn>
-                <v-btn size="small" variant="tonal" color="success" prepend-icon="mdi-heart-pulse" @click="postAction('heartbeat')">Heartbeat</v-btn>
+        <div class="xo-settings">
+          <section class="x-panel">
+            <header class="x-panel__head"><h3 class="x-panel__title">Database maintenance</h3></header>
+            <div class="x-panel__body xo-settings__row">
+              <p class="x-muted">Vacuum compacts the board's SQLite file. Heartbeat marks the UI as alive on the board.</p>
+              <div class="xo-settings__actions">
+                <v-btn variant="tonal" color="primary" prepend-icon="mdi-broom" @click="postAction('vacuum')">Vacuum database</v-btn>
+                <v-btn variant="tonal" prepend-icon="mdi-heart-pulse" @click="postAction('heartbeat')">Send heartbeat</v-btn>
               </div>
             </div>
-            <div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:16px;">
-              <div style="font-size:13px;font-weight:500;margin-bottom:4px;">Stream Mode</div>
-              <div style="font-size:12px;color:rgba(255,255,255,.4);">Real-time live updates via Server-Sent Events (SSE)</div>
-            </div>
-          </div>
+          </section>
+          <section class="x-panel">
+            <header class="x-panel__head"><h3 class="x-panel__title">Live updates</h3>
+              <span class="xo-live" :class="{ 'is-live': isLive }"><span class="xo-live__dot" />{{ isLive ? 'Connected' : 'Disconnected' }}</span></header>
+            <div class="x-panel__body"><p class="x-muted">The page receives board changes over Server-Sent Events. When the stream drops, it falls back to fetching the status once.</p></div>
+          </section>
         </div>
       </template>
-
     </div>
   </v-main>
 
@@ -1010,6 +865,11 @@ const App = {
       return filteredCodebase.value.slice(start, start + CODEBASE_PAGE);
     });
     watch([selectedTier, codebaseSearch], () => { codebasePage.value = 1; });
+
+    // The board component's columns: each status with its loaded cards and server total.
+    const boardColumns = computed(() => TASK_COLUMNS.map((col) => ({
+      status: col.status, label: col.label, items: tasksByStatus(col.status), total: board[col.status].total, loading: board[col.status].loading
+    })));
 
     const navBadge = (id) => {
       if (id === 'tasks')    return taskCounts.value.in_progress || null;
@@ -1335,7 +1195,7 @@ const App = {
       dbTable, dbPage, dbTotalPages, dbTotalRows,
       TASK_PAGE, AGENT_PAGE, CODEBASE_PAGE, DB_PAGE,
       selectedTier, codebaseSearch, tierFilters: TIER_FILTERS,
-      navItems: NAV_ITEMS, navGroups: NAV_GROUPS, navBadge, isWide, currentNav,
+      navItems: NAV_ITEMS, navGroups: NAV_GROUPS, navBadge, isWide, currentNav, boardColumns,
       taskColumns: TASK_COLUMNS, tasksByStatus, moveTask,
       taskSearch, taskTierFilter, hideTestTasks,
       selectedTaskDetail, selectedTaskEvents, taskUpdateMsg, isUpdatingTask,

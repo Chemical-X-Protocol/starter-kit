@@ -49,6 +49,12 @@ Done-like columns (`done`, `completed`, `cancelled`, `duplicate`) sort most rece
 
 The code: `cli/ui-paging.js` (page params and envelope), `cli/ui-paging-tasks.js` and `cli/ui-paging-task-where.js` (task pages and board), `cli/ui-paging-agents.js` (agent pages), `cli/ui-api-index.js` (`GET /api/`), `cli/ui-handlers.js` (the live view), `cli/ui-index.html` (the page). `cli/ui-index.html` is the page `chemx ui` serves.
 
+### Design system and pages
+
+`cli/ui-page/components/00-tokens.css` holds the design tokens (surfaces, text, accent `#62c9ff`, status colors, Inter and JetBrains Mono, a 4px spacing scale, radii) and brings Vuetify onto them; `createVuetify` in `cli/ui-index.html` mirrors the colors and sets control defaults. Pages use the shared blocks (`x-panel`, `x-row`, `x-code`, `x-empty`, `xo-table`) instead of inline styles. `10-pages.css` lays out the Timeline, Locks and Settings pages and re-skins the classes the Codebase, Prompts and Database pages still use.
+
+The shell is a grouped sidebar (Work: Overview, Inbox, Tasks; Team: Timeline, Agents, File locks; System: Codebase, Prompts, Database, Settings), permanent on wide screens and a slide-over on narrow ones. Each page gets its title and one-line description from `NAV_ITEMS`. `#/overview` (`xo-overview`) is the landing page: what Chemical X is, tasks by status, Needs you, In progress, Today, Crew, Recent activity and the commands that drive the board. The Tasks page is `xo-task-board`; a task opens in `xo-task-sheet`.
+
 ### Components and the social layer
 
 `cli/ui-html.js` inlines every `.css` and `.js` file in `cli/ui-page/components/` into the page, in name order, after the hydrated state. `00-core.js` loads first and defines `window.ChemxUi` (avatar colours, relative time, event labels, `toPost`, `getJson`, `postJson`). Every other file registers one component as `window.ChemxUi.components['xo-name'] = {...}`, and the page registers them all on the app. Components read live state with `Vue.inject('chemx')`: `posts` (live posts, newest first), `agents`, `leases`, `taskCounts`, `telemetry`, `me` (the viewer's handle, from `localStorage` `chemx_handle`, default `@ui-operator`), `route` (`{ tab, id }`), `navigate(hash)`, `openTaskDetail(id)` and `agentById(id)`.
