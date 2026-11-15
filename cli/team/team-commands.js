@@ -14,6 +14,7 @@ import { handleLockCommand, handleUnlockCommand } from './team-commands-lock.js'
 import { runCheckStagedArgs } from './team-commands-lock-staged.js';
 import { handleProfileCommand, handleHandoffCommand } from './team-commands-profile.js';
 import { handleDispatchCommand } from './team-commands-dispatch.js';
+import { handleCrewCommand } from './team-crew.js';
 import { handleRouteCommand } from './team-route.js';
 import { handleCheckCommand } from './team-commands-check.js';
 import { handleRunTokens, parseRunArgs } from './team-commands-tokens.js';
@@ -34,7 +35,7 @@ const TEAM_COMMANDS = ['status', 'task', 'brief', 'lock', 'unlock', 'feed', 'pos
 const HELPLESS_SUBCOMMANDS = ['post', 'dm', 'inbox', 'feed', 'tokens', 'telemetry', 'profile', 'handoff', 'train', 'triage', 'audit-run', 'check'];
 
 // Subcommands whose handlers print help before using ctx.db.
-const HELP_FIRST_SUBCOMMANDS = ['task', 'lock', 'unlock', 'dispatch'];
+const HELP_FIRST_SUBCOMMANDS = ['task', 'lock', 'unlock', 'dispatch', 'crew'];
 
 // Takes arguments already through normalizeValueFlags: a value flag is one `--flag=value` word, so every word left is a positional.
 const splitPositionals = (normalizedArgs) => normalizedArgs.filter((word) => !word.startsWith('-'));
@@ -61,6 +62,7 @@ const SUB_COMMANDS = {
   handoff: (ctx, args, isCli) => handleHandoffCommand(ctx.db, args.positionals, args.flags, isCli, args.titleWords),
   dispatch: (ctx, args, isCli, cwd) => handleDispatchCommand(ctx.db, { ...args.flags, root: ctx.root, rawArgs: args.restArgs }, isCli, cwd),
   route: (ctx, args, isCli, cwd) => handleRouteCommand(ctx.db, args.positionals, args.flags, isCli, ctx.root || cwd),
+  crew: (ctx, args, isCli) => handleCrewCommand(ctx.db, args.positionals, args.restArgs, args.flags, isCli),
   check: (ctx, args, isCli, cwd) => handleCheckCommand(ctx, args, isCli, cwd)
 };
 
@@ -76,7 +78,7 @@ const runSubCommand = (ctx, args, isCli, cwd) => {
   const isKnown = Object.hasOwn(SUB_COMMANDS, subCommand);
   if (isKnown) return SUB_COMMANDS[subCommand](ctx, args, isCli, cwd);
   if (isCli) {
-    process.stderr.write(`\x1b[31m✕ Unknown team command: "${subCommand}". Available commands: status, task, brief, feed, post, lock, unlock, triage, inbox, dm, profile, handoff, dispatch, route, check, benchmark, migrate, tokens, audit-run\x1b[0m\n`);
+    process.stderr.write(`\x1b[31m✕ Unknown team command: "${subCommand}". Available commands: status, task, brief, feed, post, lock, unlock, triage, inbox, dm, profile, handoff, dispatch, route, crew, check, benchmark, migrate, tokens, audit-run\x1b[0m\n`);
   }
   return { error: `Unknown team command: ${subCommand}` };
 };
