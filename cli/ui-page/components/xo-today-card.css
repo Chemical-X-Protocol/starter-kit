@@ -1,0 +1,17 @@
+/* <xo-today-card />: compact glass summary at the top of the timeline (epic #7614). */
+.xo-today { padding: 10px 14px; margin-bottom: 12px; border-radius: 14px; }
+.xo-today-head { display: flex; align-items: center; }
+.xo-today-toggle { display: flex; width: 100%; justify-content: space-between; align-items: center; background: none; border: 0; color: inherit; cursor: pointer; padding: 0; font: inherit; }
+.xo-today-caret { font-size: 12px; color: #62c9ff; }
+.xo-today-body { margin-top: 8px; }
+.xo-today-note { font-size: 13px; opacity: 0.75; }
+.xo-today-stats { display: flex; flex-wrap: wrap; gap: 8px; }
+.xo-today-stat { display: flex; flex-direction: column; min-width: 78px; padding: 6px 10px; border-radius: 10px; text-decoration: none; color: inherit; background: rgba(255, 255, 255, 0.05); }
+.xo-today-stat:hover { background: rgba(98, 201, 255, 0.15); }
+.xo-today-stat b { font-size: 18px; line-height: 1.1; }
+.xo-today-stat span { font-size: 11px; opacity: 0.7; }
+.xo-today-agents { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; }
+.xo-today-label { font-size: 11px; opacity: 0.7; }
+.xo-today-agent { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; text-decoration: none; color: inherit; }
+.xo-today-agent:hover { color: #62c9ff; }
+.xo-today-agent em { font-style: normal; opacity: 0.6; }
