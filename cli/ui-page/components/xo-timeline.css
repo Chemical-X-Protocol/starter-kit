@@ -1,0 +1,8 @@
+/* <xo-timeline />: Story/All toggle and the lock-churn rollup row (task #7619). */
+.xo-timeline__toggle { display: inline-flex; gap: 4px; }
+.xo-rollup {
+  display: flex; align-items: center; gap: 8px; padding: 6px 12px;
+  border-radius: 8px; border: 1px dashed rgba(255,255,255,.1);
+  color: rgba(255,255,255,.5); font-size: 11px;
+}
+.xo-rollup__files { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
