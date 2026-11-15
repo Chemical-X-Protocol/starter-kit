@@ -5,7 +5,6 @@ import {
   handleSwarmStatus, handlePostFeed, handleCreateFeedPost, handleUpdateSignature,
   handleGetTopics, handleGetTopicPosts, handleCreateTopic
 } from './ui-handlers.js';
-import { getTask } from './team/team-db.js';
 import { getForumCategories } from './ui-forum-data.js';
 import {
   handleCodebaseIndex, handleCodebaseTree, handleCodebaseFile,
@@ -20,6 +19,7 @@ import { scanAttentionItems, confirmAttentionItem } from './ui-attention.js';
 import { withFreshIndex } from './ui-fresh-index.js';
 import { pagedRoutes } from './ui-api-index.js';
 import { socialPostRoutes, matchSocialGet, matchSocialPost } from './ui-social-routes.js';
+import { getTaskDetail } from './ui-task-detail.js';
 
 // db: team rows (coordination db, #2581); indexDb (default db): code index for codebase, metrics, db studio.
 export const routeGet = (pathname, db, cwd = process.cwd(), queryParams = {}, { indexDb = db } = {}) => {
@@ -46,11 +46,7 @@ export const routeGet = (pathname, db, cwd = process.cwd(), queryParams = {}, { 
   if (hasRoute) return routes[normPath]();
 
   const taskByIdMatch = normPath.match(/^\/api\/tasks\/(\d+)$/);
-  if (taskByIdMatch) {
-    const task = getTask(db, taskByIdMatch[1]);
-    if (!task) return { success: false, error: 'Task not found' };
-    return { success: true, task };
-  }
+  if (taskByIdMatch) return getTaskDetail(db, taskByIdMatch[1]);
 
   return matchSocialGet(normPath, db, parsedParams, { cwd, indexDb });
 };
