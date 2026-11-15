@@ -494,7 +494,8 @@ const App = {
 
       <!-- AGENT PROFILES (#/agents/<handle>) AND POST PERMALINKS (#/posts/<id>) -->
       <template v-else-if="tab==='agents'">
-        <xo-agent-profile :agent-id="route.id" />
+        <xo-agents-directory v-if="!route.id" />
+        <xo-agent-profile v-else :agent-id="route.id" />
       </template>
       <template v-else-if="tab==='posts'">
         <xo-post-permalink :post-id="route.id" />

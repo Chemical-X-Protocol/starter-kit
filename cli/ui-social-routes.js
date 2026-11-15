@@ -10,8 +10,9 @@ import * as profile from './ui-social-profile.js';
 import * as threads from './ui-social-threads.js';
 import * as mentions from './ui-social-mentions.js';
 import * as notify from './ui-social-notify.js';
+import * as directory from './ui-agents-directory.js';
 
-const MODULES = [feed, digest, posts, profile, threads, mentions, notify];
+const MODULES = [feed, digest, posts, profile, threads, mentions, notify, directory];
 
 export const SOCIAL_API_DOCS = MODULES.flatMap((m) => m.API_DOCS);
 
