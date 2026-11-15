@@ -432,6 +432,7 @@ const App = {
       <span v-if="telemetry.totalTokens" class="x-num" title="Tokens and cost recorded on this board (chemx team telemetry)">
         {{ Number(telemetry.totalTokens).toLocaleString() }} tokens · \${{ Number(telemetry.totalCost || 0).toFixed(2) }} recorded
       </span>
+      <button type="button" class="xo-nav__item xo-nav__item--small" @click="openModal"><v-icon size="16">mdi-chart-line</v-icon><span>Token savings</span></button>
     </div>
   </v-navigation-drawer>
 
@@ -654,28 +655,7 @@ const App = {
   </v-main>
 
   <!-- Savings Dialog -->
-  <v-dialog v-model="modal" max-width="540">
-    <v-card style="background:#0b1329;border:1px solid rgba(56,189,248,.2);border-radius:16px;">
-      <v-card-title class="d-flex align-center justify-space-between pa-4 pb-2">
-        <span class="xo-display">⚡ Token Savings Certificate</span>
-        <v-btn icon size="small" variant="text" @click="modal=false"><v-icon>mdi-close</v-icon></v-btn>
-      </v-card-title>
-      <v-card-text class="pa-4 pt-2">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
-          <div class="xo-kpi"><div class="xo-kpi__label">Tokens Saved</div><div class="xo-kpi__value" style="color:var(--xo-cyan);">{{ (savings.tokensSaved||165000).toLocaleString() }}</div></div>
-          <div class="xo-kpi"><div class="xo-kpi__label">Cost Avoided</div><div class="xo-kpi__value" style="color:var(--xo-lime);">\${{ Number(savings.dollarsSaved||1.65).toFixed(2) }}</div></div>
-          <div class="xo-kpi"><div class="xo-kpi__label">Reduction</div><div class="xo-kpi__value" style="color:var(--xo-purple);">{{ savings.reductionPct||88 }}%</div></div>
-          <div class="xo-kpi"><div class="xo-kpi__label">Actual Cost</div><div class="xo-kpi__value" style="color:var(--xo-amber);">\${{ Number(savings.actualCost||0).toFixed(4) }}</div></div>
-        </div>
-        <canvas id="cert" width="492" height="160" style="width:100%;border-radius:10px;border:1px solid rgba(56,189,248,.2);" />
-      </v-card-text>
-      <v-card-actions class="pa-4 pt-0">
-        <v-btn variant="tonal" color="primary" prepend-icon="mdi-download" @click="download">Download PNG</v-btn>
-        <v-spacer />
-        <v-btn variant="text" @click="modal=false">Close</v-btn>
-      </v-card-actions>
-    </v-card>
-  </v-dialog>
+  <xo-savings-dialog v-model="modal" />
 </v-app>
   `,
 
@@ -1090,40 +1070,9 @@ const App = {
       } catch {}
     };
 
-    const drawCert = () => {
-      const c = document.getElementById('cert');
-      if (!c) return;
-      const ctx = c.getContext('2d');
-      const w = c.width, h = c.height;
-      ctx.fillStyle = '#020617';
-      ctx.fillRect(0, 0, w, h);
-      const grad = ctx.createLinearGradient(0, 0, w, 0);
-      grad.addColorStop(0, '#8b5cf6'); grad.addColorStop(.4, '#38bdf8'); grad.addColorStop(.8, '#f472b6');
-      ctx.fillStyle = grad; ctx.fillRect(0, 0, w, 4);
-      ctx.fillStyle = '#38bdf8'; ctx.font = 'bold 13px "Space Grotesk", sans-serif';
-      ctx.fillText('⚡ CHEMICAL X TOKEN SAVINGS CERTIFICATE', 20, 30);
-      ctx.fillStyle = '#a3e635'; ctx.font = 'bold 28px "Space Grotesk", sans-serif';
-      ctx.fillText((savings.value.tokensSaved || 165000).toLocaleString() + ' TOKENS SAVED', 20, 70);
-      ctx.fillStyle = '#fbbf24'; ctx.font = 'bold 18px "Space Grotesk", sans-serif';
-      ctx.fillText('\$' + Number(savings.value.dollarsSaved || 1.65).toFixed(2) + ' USD Avoided', 20, 104);
-      ctx.fillStyle = '#8b5cf6'; ctx.font = '12px Inter, sans-serif';
-      ctx.fillText('Reduction: ' + (savings.value.reductionPct || 88) + '%  |  Chemical X Protocol', 20, 138);
-    };
 
-    const openModal = async () => {
-      modal.value = true;
-      await nextTick();
-      drawCert();
-    };
+    const openModal = () => { modal.value = true; };
 
-    const download = () => {
-      const c = document.getElementById('cert');
-      if (!c) return;
-      const a = document.createElement('a');
-      a.download = 'chemx-token-savings.png';
-      a.href = c.toDataURL('image/png');
-      a.click();
-    };
 
     // Each tab loads its data the first time it opens, not all at once on page load.
     const loadedTabs = new Set();
@@ -1205,7 +1154,7 @@ const App = {
       workbenchScopes, activeWorkbenchScope, workbenchPrompt, selectWorkbenchScope,
       dbTables, dbColumns, dbRows, sqlQuery, selectDbTable,
       statusDotClass, formatTime,
-      postAction, openModal, download,
+      postAction, openModal,
     };
   }
 };

@@ -150,3 +150,4 @@ body { font-size: var(--x-fs-base); line-height: 1.5; font-feature-settings: 'cv
   .xo-topbar { padding: var(--x-4) var(--x-4) var(--x-3); }
   .xo-page { padding: 0 var(--x-4) var(--x-4); }
 }
+.xo-nav__item--small { padding: 5px 0; font-size: var(--x-fs-sm); color: var(--x-text-3); }

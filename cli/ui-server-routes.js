@@ -20,6 +20,8 @@ import { withFreshIndex } from './ui-fresh-index.js';
 import { pagedRoutes } from './ui-api-index.js';
 import { socialPostRoutes, matchSocialGet, matchSocialPost } from './ui-social-routes.js';
 import { getTaskDetail } from './ui-task-detail.js';
+import { readBoardSavings } from './ui-savings.js';
+import { listCrew } from './team/team-crew.js';
 
 // db: team rows (coordination db, #2581); indexDb (default db): code index for codebase, metrics, db studio.
 export const routeGet = (pathname, db, cwd = process.cwd(), queryParams = {}, { indexDb = db } = {}) => {
@@ -38,6 +40,8 @@ export const routeGet = (pathname, db, cwd = process.cwd(), queryParams = {}, { 
     '/api/topics': () => handleGetTopics(db, parsedParams.category),
     '/api/topics/posts': () => handleGetTopicPosts(db, parsedParams.topicId || parsedParams.topic_id),
     '/api/attention': () => scanAttentionItems(db, cwd),
+    '/api/savings': () => readBoardSavings(db),
+    '/api/crew': () => ({ success: true, crew: listCrew(db) }),
     '/api/db/tables': () => handleDbTables(indexDb, cwd),
     '/api/db/browse': () => handleDbBrowse(indexDb, parsedParams), '/api/db/structure': () => handleDbStructure(indexDb, parsedParams)
   };

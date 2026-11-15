@@ -15,12 +15,6 @@
     { title: 'Build and verify', text: 'Tests, typecheck and the architecture audit run through one gate that prints only what failed.', cmd: 'chemx verify' },
     { title: 'Commit and close', text: 'Commit only your files, release the leases, and close the task; the gate refuses new hazards.', cmd: 'chemx commit <files> --task=<id> --release' }
   ];
-  const parseMeta = (raw) => {
-    const isParsed = Boolean(raw) && typeof raw === 'object';
-    if (isParsed) return raw;
-    try { return JSON.parse(raw || '{}') || {}; } catch { return {}; } // chemx-allow: a malformed metadata cell reads as none
-  };
-
   window.ChemxUi.components['xo-overview'] = {
     setup() {
       const { ref, computed, watch, onMounted, onUnmounted } = Vue;
@@ -41,7 +35,7 @@
         settle('/api/digest/today', (d) => { digest.value = d.success ? d : null; }),
         settle('/api/attention', (d) => { attention.value = d.items || []; }),
         settle('/api/tasks?status=in_progress&limit=8&sort=recent', (d) => { working.value = d.tasks || []; }),
-        settle('/api/agents?limit=200', (d) => { crew.value = (d.agents || []).filter((a) => parseMeta(a.metadata).source === 'starnet'); }),
+        settle('/api/crew', (d) => { crew.value = d.crew || []; }),
         settle('/api/feed/story?limit=8', (d) => { story.value = (d.feed || []).slice().reverse(); })
       ]);
       let timer = null;
@@ -68,11 +62,10 @@
         if (isRollup) return 'touched ' + row.count + ' file lock' + (row.count === 1 ? '' : 's');
         return row.message || '';
       };
-      // The crew row's model, shortened: claude-opus-5-5 -> opus.
-      const tierOf = (agent) => {
-        const model = String(parseMeta(agent.metadata).model || '');
-        const family = model.match(/(haiku|sonnet|opus|fable)/);
-        return family ? family[1] : model;
+      // The crew member's model, shortened: claude-opus-5-5 -> opus.
+      const tierOf = (member) => {
+        const family = String(member.model || '').match(/(haiku|sonnet|opus|fable)/);
+        return family ? family[1] : member.tier;
       };
       const copy = async (text) => {
         try {
@@ -162,9 +155,9 @@
               <button type="button" class="x-panel__link" @click="go('#/agents')">Agents</button></header>
             <div class="x-panel__body">
               <div v-if="!crew.length" class="x-empty">No crew imported. Run <code>chemx team crew import</code>.</div>
-              <button v-for="a in crew.slice(0, 8)" :key="a.id" type="button" class="x-row" @click="go('#/agents/' + a.id)">
-                <xo-avatar :handle="a.id" :size="22" :link="false" />
-                <span class="x-row__main">{{ a.id }}</span>
+              <button v-for="a in crew" :key="a.handle" type="button" class="x-row" @click="go('#/agents/' + a.handle)">
+                <xo-avatar :handle="a.handle" :size="22" :link="false" />
+                <span class="x-row__main" :title="a.role">{{ a.handle }}</span>
                 <span class="x-muted">{{ tierOf(a) }}</span>
               </button>
             </div>

@@ -82,11 +82,19 @@ export const importCrew = (db, roster, { dryRun = false, source = '' } = {}) => 
   return { crew, skipped };
 };
 
-/** Crew handles on the board for a tier (all tiers when tier is empty), oldest import order kept by name. */
-export const listCrew = (db, tier = '') => db.prepare('SELECT id, name, role, capabilities, metadata FROM agents').all()
+const readMeta = (raw) => {
+  try { return JSON.parse(raw || '{}') || {}; } catch { return {}; } // chemx-allow: a malformed metadata cell reads as none
+};
+
+/** Crew on the board for a tier (all tiers when tier is empty), sorted by handle: handle, name, role, tier, model, status. */
+export const listCrew = (db, tier = '') => db.prepare('SELECT id, name, role, status, capabilities, metadata FROM agents').all()
   .filter((row) => String(row.capabilities || '').includes('"crew"'))
   .filter((row) => !tier || String(row.capabilities).includes(`"tier:${tier}"`))
-  .map((row) => ({ handle: row.id, name: row.name, role: row.role }))
+  .map((row) => ({
+    handle: row.id, name: row.name, role: row.role, status: row.status,
+    tier: (String(row.capabilities).match(/"tier:(light|standard|deep)"/) || [])[1] || 'standard',
+    model: readMeta(row.metadata).model || ''
+  }))
   .sort((a, b) => a.handle.localeCompare(b.handle));
 
 const formatCrew = ({ crew, skipped }, rosterPath, dryRun) => {
