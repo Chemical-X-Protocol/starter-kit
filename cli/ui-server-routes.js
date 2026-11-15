@@ -19,7 +19,7 @@ import { getDatabaseMetrics, executeSqlQuery } from './ui-db-studio.js';
 import { scanAttentionItems, confirmAttentionItem } from './ui-attention.js';
 import { withFreshIndex } from './ui-fresh-index.js';
 import { pagedRoutes } from './ui-api-index.js';
-import { socialPostRoutes } from './ui-social-routes.js';
+import { socialPostRoutes, matchSocialGet, matchSocialPost } from './ui-social-routes.js';
 
 // db: team rows (coordination db, #2581); indexDb (default db): code index for codebase, metrics, db studio.
 export const routeGet = (pathname, db, cwd = process.cwd(), queryParams = {}, { indexDb = db } = {}) => {
@@ -52,7 +52,7 @@ export const routeGet = (pathname, db, cwd = process.cwd(), queryParams = {}, { 
     return { success: true, task };
   }
 
-  return null;
+  return matchSocialGet(normPath, db, parsedParams, { cwd, indexDb });
 };
 
 export const routePost = (pathname, db, body, cwd = process.cwd(), { consoleDb = null } = {}) => {
@@ -83,7 +83,7 @@ export const routePost = (pathname, db, body, cwd = process.cwd(), { consoleDb =
 
   const hasRoute = Object.prototype.hasOwnProperty.call(routes, normPath);
   if (hasRoute) return routes[normPath]();
-  return null;
+  return matchSocialPost(normPath, db, body, { cwd });
 };
 
 export const parseJsonBody = (req) => {
