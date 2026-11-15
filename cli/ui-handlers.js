@@ -48,6 +48,7 @@ export const handleSwarmStatus = (db, cwd = process.cwd(), indexDb = db) => {
     return {
       id: f.id, author: f.author_id, eventType: f.event_type, message: f.message, timestamp: Number(f.timestamp),
       channel: f.channel, recipient: f.recipient_id, isDirectMessage: Boolean(f.recipient_id),
+      taskId: f.task_id, threadId: f.thread_id, filePath: f.file_path,
       tokenStamp: formatTokenStamp(f.message?.length || 50), signature: authorMeta.signature, authorMeta
     };
   });

@@ -19,6 +19,7 @@ import { getDatabaseMetrics, executeSqlQuery } from './ui-db-studio.js';
 import { scanAttentionItems, confirmAttentionItem } from './ui-attention.js';
 import { withFreshIndex } from './ui-fresh-index.js';
 import { pagedRoutes } from './ui-api-index.js';
+import { socialPostRoutes } from './ui-social-routes.js';
 
 // db: team rows (coordination db, #2581); indexDb (default db): code index for codebase, metrics, db studio.
 export const routeGet = (pathname, db, cwd = process.cwd(), queryParams = {}, { indexDb = db } = {}) => {
@@ -27,7 +28,7 @@ export const routeGet = (pathname, db, cwd = process.cwd(), queryParams = {}, { 
   const normPath = cleanPath.replace(/^\/api\/swarm\//, '/api/');
 
   const routes = {
-    ...pagedRoutes(db, parsedParams),
+    ...pagedRoutes(db, parsedParams, { cwd, indexDb }),
     '/api/status': () => handleSwarmStatus(db, cwd, indexDb),
     '/api/categories': () => ({ success: true, categories: getForumCategories(db) }),
     '/api/codebase': () => withFreshIndex(cwd, {}, () => handleCodebaseIndex(indexDb, cwd)),
@@ -60,6 +61,7 @@ export const routePost = (pathname, db, body, cwd = process.cwd(), { consoleDb =
   const normPath = cleanPath.replace(/^\/api\/swarm\//, '/api/');
 
   const routes = {
+    ...socialPostRoutes(db, body, { cwd }),
     '/api/feed': () => postFeedHandler(db, body),
     '/api/tasks': () => handleCreateTask(db, body),
     '/api/tasks/claim': () => handleClaimTask(db, body),

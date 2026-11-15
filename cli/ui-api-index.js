@@ -6,6 +6,7 @@ import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, BOARD_COLUMNS } from './ui-paging.js'
 import { listTasksPage, listTaskBoard } from './ui-paging-tasks.js';
 import { listAgentsPage } from './ui-paging-agents.js';
 import { readFeedPage, readLeases } from './ui-paging-feed.js';
+import { SOCIAL_API_DOCS, socialGetRoutes } from './ui-social-routes.js';
 
 const PAGING = `limit (default ${DEFAULT_PAGE_SIZE}, max ${MAX_PAGE_SIZE}), offset or page`;
 const ENVELOPE = ['total', 'limit', 'offset', 'page', 'totalPages', 'hasMore', 'nextOffset'];
@@ -22,12 +23,14 @@ export const API_INDEX = {
     { path: '/api/agents', about: 'Agents, newest heartbeat first, paged, with counts per status.', params: `${PAGING}; status=all|active|idle|offline` },
     { path: '/api/feed', about: 'Feed posts oldest-first; hasMore and oldestId page backwards.', params: 'limit (default 50, max 200), before_id (older page), since_id (newer), task_id, thread_id, author_id, event_type' },
     { path: '/api/codebase', about: 'Indexed files with tier, lines and line budget.' },
-    { path: '/api/db/browse', about: 'Rows of one code-index table, paged.', params: 'table, page, pageSize (max 100)' }
+    { path: '/api/db/browse', about: 'Rows of one code-index table, paged.', params: 'table, page, pageSize (max 100)' },
+    ...SOCIAL_API_DOCS
   ]
 };
 
 /** The paged read routes, kept beside their description above; routeGet spreads them into its table. */
-export const pagedRoutes = (db, params) => ({
+export const pagedRoutes = (db, params, ctx = {}) => ({
+  ...socialGetRoutes(db, params, ctx),
   '/api/': () => API_INDEX,
   '/api/feed': () => readFeedPage(db, params),
   '/api/tasks': () => listTasksPage(db, params),

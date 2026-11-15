@@ -325,10 +325,10 @@
 <body>
 <div id="app"></div>
 <script>
-const { createApp, ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } = Vue;
+const { createApp, ref, reactive, computed, watch, provide, onMounted, onUnmounted, nextTick } = Vue;
 
 // Page sizes (#7604): the server never sends a whole table; lists page on demand.
-const TASK_PAGE = 25, AGENT_PAGE = 50, CODEBASE_PAGE = 60, DB_PAGE = 25, FEED_PAGE = 50;
+const TASK_PAGE = 25, AGENT_PAGE = 50, CODEBASE_PAGE = 60, DB_PAGE = 25;
 
 const getJson = async (url) => {
   const res = await fetch(url);
@@ -373,6 +373,7 @@ const vuetify = createVuetify({
 
 const NAV_ITEMS = [
   { id: 'social',   icon: 'mdi-antenna',        label: 'Forum & Timeline' },
+  { id: 'agents',   icon: 'mdi-account-group-outline', label: 'Agents'      },
   { id: 'attention',icon: 'mdi-bell-outline',   label: 'Attention Inbox'  },
   { id: 'tasks',    icon: 'mdi-clipboard-list',  label: 'Tasks & Kanban'   },
   { id: 'locks',    icon: 'mdi-lock-outline',    label: 'File Locks Hub'   },
@@ -407,6 +408,7 @@ const App = {
     </div>
     <v-spacer />
     <div class="d-flex align-center gap-3 mr-3">
+      <xo-notification-bell />
       <div class="xo-savings-badge" @click="openModal">
         ⚡ Saved {{ (savings.tokensSaved||165000).toLocaleString() }} tokens / \${{ Number(savings.dollarsSaved||1.65).toFixed(2) }}
       </div>
@@ -462,7 +464,7 @@ const App = {
                 :aria-pressed="agentFilter===f" class="text-capitalize" @click="setAgentFilter(f)">{{ f }} {{ agentCountLabel(f) }}</v-chip>
             </div>
             <v-progress-linear v-if="agentPage.loading" indeterminate color="primary" height="2" />
-            <div v-for="a in filteredAgents" :key="a.id" class="xo-agent-card" :class="{'xo-agent-card--active': selectedAgentId===a.id}" @click="selectedAgentId=a.id">
+            <div v-for="a in filteredAgents" :key="a.id" class="xo-agent-card" :class="{'xo-agent-card--active': selectedAgentId===a.id}" @click="openAgent(a.id)">
               <div class="d-flex align-center gap-2">
                 <span class="xo-dot" :class="statusDotClass(a.status)" />
                 <span class="xo-agent-card__name">{{ a.name||a.id }}</span>
@@ -473,31 +475,10 @@ const App = {
             <xo-load-more :shown="filteredAgents.length" :total="agentPage.total" :loading="agentPage.loading" :step="AGENT_PAGE" noun="agents" @more="loadMoreAgents" />
           </div>
 
-          <div class="xo-glass d-flex flex-column pa-3" style="border-radius:14px;overflow:hidden;">
-            <div class="d-flex justify-space-between align-center mb-3">
-              <span class="xo-display" style="font-size:13px;">Live Timeline</span>
-              <v-chip size="x-small" color="primary" variant="tonal">{{ postsDesc.length }}</v-chip>
-            </div>
-            <div style="flex:1;overflow-y:auto;" class="d-flex flex-column gap-2">
-              <div v-for="p in postsDesc" :key="p.id" class="xo-post vb-postbit">
-                <div class="d-flex align-center justify-space-between mb-1">
-                  <div class="xo-post__author">{{ p.author }}</div>
-                  <v-chip v-if="p.isDirectMessage" size="x-small" color="secondary" variant="tonal" style="font-size:10px;height:18px;">
-                    <v-icon start size="10">mdi-email-outline</v-icon>@DM to {{ p.recipient }}
-                  </v-chip>
-                </div>
-                <div class="xo-post__msg">{{ p.message }}</div>
-                <div class="xo-post__time">{{ formatTime(p.timestamp || p.createdAt) }}</div>
-              </div>
-              <div v-if="postsDesc.length" class="xo-load-more">
-                <v-btn v-if="feedHasOlder" size="x-small" variant="tonal" color="primary" :loading="feedLoading" @click="loadOlderPosts">Load older posts</v-btn>
-                <span v-else class="xo-load-more__count">Start of the timeline</span>
-              </div>
-              <div v-if="!posts.length" class="text-center" style="color:rgba(255,255,255,.3);font-size:12px;padding:32px 0;">
-                <v-icon size="32" color="rgba(255,255,255,.15)">mdi-antenna</v-icon>
-                <div class="mt-2">Waiting for swarm activity...</div>
-              </div>
-            </div>
+          <div class="xo-glass d-flex flex-column gap-3 pa-3" style="border-radius:14px;overflow:hidden;">
+            <xo-today-card />
+            <xo-composer />
+            <xo-timeline />
           </div>
 
           <div class="xo-glass d-flex flex-column gap-3 pa-3" style="border-radius:14px;overflow-y:auto;">
@@ -522,6 +503,14 @@ const App = {
             <div v-if="leases.length>5" style="font-size:11px;color:rgba(255,255,255,.3);">+ {{ leases.length-5 }} more</div>
           </div>
         </div>
+      </template>
+
+      <!-- AGENT PROFILES (#/agents/<handle>) AND POST PERMALINKS (#/posts/<id>) -->
+      <template v-else-if="tab==='agents'">
+        <xo-agent-profile :agent-id="route.id" />
+      </template>
+      <template v-else-if="tab==='posts'">
+        <xo-post-permalink :post-id="route.id" />
       </template>
 
       <!-- ATTENTION INBOX -->
@@ -841,10 +830,10 @@ const App = {
             </div>
           </div>
           <div class="d-flex align-center gap-2 flex-wrap mb-3" style="flex-shrink:0;">
-            <v-chip v-for="tier in tierFilters" :key="tier" size="small" style="cursor:pointer;"
+            <v-chip v-for="tier in tierFilters" :key="tier" size="small"
               :class="selectedTier===tier ? 'tier-'+tier : ''"
               :variant="selectedTier===tier ? 'tonal' : 'outlined'"
-              class="text-capitalize" style="border-color:rgba(255,255,255,.12);color:rgba(255,255,255,.5);"
+              class="text-capitalize" style="cursor:pointer;border-color:rgba(255,255,255,.12);color:rgba(255,255,255,.5);"
               @click="selectedTier=tier">{{ tier==='all' ? 'All' : tier }}</v-chip>
             <v-spacer />
             <v-text-field v-model="codebaseSearch" placeholder="Filter files..." density="compact" variant="outlined"
@@ -973,10 +962,27 @@ const App = {
   `,
 
   setup() {
-    // The open tab lives in the URL hash (#/tasks), so a reload, a bookmark or an agent's link lands on it.
-    const tabIds = new Set(NAV_ITEMS.map((item) => item.id));
-    const hashTab = () => (typeof location !== 'undefined' ? location.hash.replace(/^#\/?/, '') : '');
-    const tab          = ref(tabIds.has(hashTab()) ? hashTab() : 'social');
+    // The route lives in the URL hash, #/<tab>[/<id>] (#/tasks/42, #/agents/@x, #/posts/9), so a reload,
+    // a bookmark or an agent's link lands on it. 'posts' is routable without a nav item.
+    const tabIds = new Set([...NAV_ITEMS.map((item) => item.id), 'posts']);
+    const parseHash = (hash) => {
+      const [head = '', ...rest] = String(hash || '').replace(/^#\/?/, '').split('/');
+      const isKnown = tabIds.has(head);
+      return isKnown ? { tab: head, id: decodeURIComponent(rest.join('/')) } : null;
+    };
+    const currentHash = () => (typeof location !== 'undefined' ? location.hash : '');
+    const route = reactive(parseHash(currentHash()) || { tab: 'social', id: '' });
+    const tab = computed({
+      get: () => route.tab,
+      set: (id) => { route.tab = id; route.id = ''; }
+    });
+    const hashOf = () => '#/' + route.tab + (route.id ? '/' + encodeURIComponent(route.id) : '');
+    const navigate = (hash) => {
+      const next = parseHash(hash);
+      if (!next) return;
+      route.tab = next.tab;
+      route.id = next.id;
+    };
     const drawerPinned = ref(typeof localStorage !== 'undefined' ? localStorage.getItem('chemx_menu_pinned') === 'true' : false);
     const drawer       = ref(drawerPinned.value ? true : false);
     const modal        = ref(false);
@@ -1015,27 +1021,14 @@ const App = {
 
     let timer = null;
 
-    // Timeline: the live view carries the newest posts; "Load older" pages back with before_id.
-    const olderPosts   = ref([]);
-    const feedHasOlder = ref(false);
-    const feedLoading  = ref(false);
-    const postsDesc = computed(() => {
-      const byId = new Map();
-      for (const p of [...olderPosts.value, ...posts.value]) byId.set(p.id, p);
-      return [...byId.values()].sort((a, b) => b.id - a.id);
-    });
-    const toPost = (f) => ({ id: f.id, author: f.author_id, message: f.message, timestamp: Number(f.timestamp),
-      recipient: f.recipient_id, isDirectMessage: Boolean(f.recipient_id) });
-    const loadOlderPosts = async () => {
-      const oldest = postsDesc.value[postsDesc.value.length - 1];
-      if (!oldest || feedLoading.value) return;
-      feedLoading.value = true;
-      try {
-        const d = await getJson('/api/feed?limit=' + FEED_PAGE + '&before_id=' + oldest.id);
-        olderPosts.value = [...olderPosts.value, ...(d.feed || []).map(toPost)];
-        feedHasOlder.value = Boolean(d.hasMore);
-      } catch {} finally { feedLoading.value = false; }
+    // Live posts, newest first; <xo-timeline> pages older ones itself (cli/ui-page/components).
+    const postsDesc = computed(() => posts.value.map(window.ChemxUi.toPost).sort((a, b) => b.id - a.id));
+    const readHandle = () => {
+      try { return localStorage.getItem('chemx_handle') || '@ui-operator'; } catch { return '@ui-operator'; }
     };
+    const me = ref(readHandle());
+    const agentById = (id) => agents.value.find((a) => a.id === id || a.name === id) || null;
+    const openAgent = (id) => { selectedAgentId.value = id; navigate('#/agents/' + id); };
 
     // Agents: the server filters and pages; the live view refreshes only the first, unfiltered page.
     const agentPage   = reactive({ total: 0, loading: false });
@@ -1179,7 +1172,6 @@ const App = {
       if (d.agentsTotal != null && agentFilter.value === 'all') agentPage.total = d.agentsTotal;
       if (d.agentCounts) agentCounts.value = d.agentCounts;
       if (d.posts)     posts.value     = d.posts;
-      if (d.posts && isFirstApply) feedHasOlder.value = d.posts.length >= FEED_PAGE;
       if (d.leases)    leases.value    = d.leases;
       if (d.tasks)     tasks.value     = d.tasks;
       if (d.taskCounts) taskCounts.value = d.taskCounts;
@@ -1238,6 +1230,7 @@ const App = {
     const closeTaskDetail = () => {
       selectedTaskDetail.value = null;
       selectedTaskEvents.value = [];
+      if (route.tab === 'tasks') route.id = '';
     };
 
     const submitTaskUpdate = async () => {
@@ -1422,18 +1415,34 @@ const App = {
       loader();
     };
     watch(tab, (id) => {
-      if (typeof history !== 'undefined') history.replaceState(null, '', '#/' + id);
       const isReturningToBoard = id === 'tasks' && loadedTabs.has('tasks');
       ensureTabData(id);
       if (isReturningToBoard) scheduleBoardRefresh();
     });
-    const onHashChange = () => { if (tabIds.has(hashTab())) tab.value = hashTab(); };
+    // A route change pushes a history entry, so Back returns from a profile or a task sheet.
+    watch(() => [route.tab, route.id], () => {
+      const hasHistory = typeof history !== 'undefined';
+      const isNewHash = hashOf() !== currentHash();
+      if (hasHistory && isNewHash) history.pushState(null, '', hashOf());
+    });
+    const openRoutedTask = () => {
+      const hasTaskId = route.tab === 'tasks' && Boolean(route.id);
+      if (hasTaskId) openTaskDetail(Number(route.id) || route.id);
+    };
+    watch(() => route.id, openRoutedTask);
+    const onHashChange = () => navigate(currentHash());
+
+    provide('chemx', {
+      posts: postsDesc, agents, leases, taskCounts, telemetry, me, route, navigate, openTaskDetail, agentById
+    });
 
     onMounted(() => {
       initSse();
       ensureTabData(tab.value);
       ensureTabData('attention');
+      openRoutedTask();
       window.addEventListener('hashchange', onHashChange);
+      window.addEventListener('popstate', onHashChange);
     });
 
     onUnmounted(() => {
@@ -1441,13 +1450,14 @@ const App = {
       clearTimeout(boardRefreshTimer);
       clearTimeout(filterTimer);
       window.removeEventListener('hashchange', onHashChange);
+      window.removeEventListener('popstate', onHashChange);
     });
 
     return {
       tab, drawer, modal, drawerPinned, togglePinDrawer, handleNavClick,
       agents, posts, leases, tasks, codebase, telemetry, savings,
       agentFilter, agentFilters, selectedAgentId, filteredAgents, agentPage, agentCountLabel, setAgentFilter, loadMoreAgents,
-      board, loadMoreTasks, olderPosts, feedHasOlder, feedLoading, loadOlderPosts,
+      board, loadMoreTasks, route, navigate, openAgent,
       codebasePage, codebaseLoading, codebasePageCount, codebasePageItems, rangeLabel,
       dbTable, dbPage, dbTotalPages, dbTotalRows,
       TASK_PAGE, AGENT_PAGE, CODEBASE_PAGE, DB_PAGE,
@@ -1467,7 +1477,10 @@ const App = {
   }
 };
 
-createApp(App).component('xo-load-more', XoLoadMore).use(vuetify).mount('#app');
+const app = createApp(App).component('xo-load-more', XoLoadMore);
+// Each cli/ui-page/components file registers itself on window.ChemxUi.components (inlined by ui-html.js).
+for (const [name, def] of Object.entries(window.ChemxUi?.components || {})) app.component(name, def);
+app.use(vuetify).mount('#app');
 </script>
 </body>
 </html>
