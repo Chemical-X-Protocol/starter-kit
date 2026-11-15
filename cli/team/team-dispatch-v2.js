@@ -12,6 +12,7 @@ import { selectDispatchTasks, routeModel, loadModelRouting } from './team-dispat
 import { dispatchScope, DEFAULT_MAX_AGENTS } from './team-dispatch-batches.js';
 import { screenTasks, planLanes, readDirtyFiles, unmetDependencies, hazardWeight, SATISFIED_STATUSES } from './team-dispatch-select.js';
 import { TEMPLATE_VERSION } from './dispatch-templates/dispatch-v1.js';
+import { assignCrew } from './team-dispatch-crew.js';
 
 export const MECHANICAL_ROUTE = Object.freeze({ model: 'haiku', effort: 'low' });
 const MAX_PEER_HANDLES = 30;
@@ -183,7 +184,10 @@ export const buildRunPlan = (db, options = {}) => {
   const scope = dispatchScope(options);
   const run = runNameFor(options.runName, scope, screened.ready.map((entry) => entry.id));
   const lanes = planLanes(screened.ready, options.maxAgents ?? DEFAULT_MAX_AGENTS);
-  const tasks = lanes.flatMap((lane) => lane.tasks).map((entry) => toPlanTask(entry, run, routing));
+  const laneIds = lanes.map((lane) => lane.tasks.map((entry) => entry.id));
+  const planned = lanes.flatMap((lane) => lane.tasks).map((entry) => toPlanTask(entry, run, routing));
+  const crewing = assignCrew(db, planned, laneIds, { crew: options.crew, assign: options.assign });
+  const tasks = crewing.tasks;
   const skipped = [...screened.skipped, ...unselectedRequested(db, ids, candidates)];
   const runHandles = tasks.flatMap((task) => [task.handle, task.reviewer, task.repairer]);
   return {
@@ -198,7 +202,9 @@ export const buildRunPlan = (db, options = {}) => {
     filters: { tasks: ids, needs: options.needs || null, parent: options.parent ?? null, repo: options.repo || null, limit: options.limit ?? null, maxAgents: options.maxAgents ?? DEFAULT_MAX_AGENTS },
     dirtyCheck: dirtyFiles ? 'git' : 'unavailable',
     tasks,
-    lanes: lanes.map((lane) => lane.tasks.map((entry) => entry.id)),
+    lanes: laneIds,
+    crew: crewing.crew,
+    crewNotes: crewing.notes,
     laneWeights: lanes.map((lane) => lane.weight),
     gate: { handle: `@${run}-gate`, ...routeGate(routing) },
     peers: peerMap(db, { root, now, dispatcher, runIds: tasks.map((task) => task.id), runHandles }),

@@ -28,6 +28,8 @@ export const parseDispatchRunArgs = (args = []) => ({
   tasks: valueOf(args, 'tasks'),
   runName: valueOf(args, 'run-name'),
   goal: valueOf(args, 'goal'),
+  crew: hasFlag(args, 'crew'),
+  assign: valueOf(args, 'assign') || '',
   dryRun: hasFlag(args, 'dry-run'),
   recordRun: valueOf(args, 'record-run'),
   workflowRun: valueOf(args, 'workflow-run'),
@@ -47,11 +49,12 @@ export const renderRunSummary = (plan) => {
   const header = `chemx team dispatch run ${plan.run} (${plan.template}): ${plan.tasks.length} task(s) in ${plan.lanes.length} lane(s), ${plan.skipped.length} skipped; routing: ${plan.routingSource}; uncommitted-change check: ${plan.dirtyCheck}`;
   const taskLines = plan.lanes.flatMap((lane, index) => lane.map((id) => {
     const task = plan.tasks.find((entry) => entry.id === id);
-    return `  lane ${index + 1}: #${id} [${task.needs}] weight ${task.weight} build ${routeText(task.build)}, review ${routeText(task.review)}, repair ${routeText(task.repair)} :: ${task.target}`;
+    return `  lane ${index + 1}: #${id} [${task.needs}] ${task.handle} weight ${task.weight} build ${routeText(task.build)}, review ${routeText(task.review)}, repair ${routeText(task.repair)} :: ${task.target}`;
   }));
   const gateLine = `  gate ${plan.gate.handle} ${routeText(plan.gate)}`;
   const skippedLines = summarizeSkipped(plan.skipped).map((line) => `  skipped ${line}`);
-  return [header, ...taskLines, gateLine, ...skippedLines].join('\n');
+  const crewLines = (plan.crewNotes || []).map((note) => `  crew: ${note}`);
+  return [header, ...taskLines, gateLine, ...skippedLines, ...crewLines].join('\n');
 };
 
 /** The dry-run / --json view of a plan: routing and selection without the prompt text. */
@@ -102,7 +105,9 @@ const runWorkflow = (db, flags, parsed, isCli, cwd) => {
     limit: flags.limit,
     maxAgents: flags.maxAgents,
     runName: parsed.runName,
-    goal: parsed.goal
+    goal: parsed.goal,
+    crew: parsed.crew,
+    assign: parsed.assign
   });
   const script = renderRunScript(plan);
   const hasScript = Boolean(script);
