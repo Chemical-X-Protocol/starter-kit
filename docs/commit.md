@@ -35,6 +35,21 @@ chemx commit plugin/a.php -m "fix: a (#42)" --board=../app
 
 The committer is `--as=@handle`, else `CHEMX_AGENT_ID`, else a session handle. With none of these, any live agent lease on a listed file refuses (same rule as `chemx team lock check-staged`). A lease the committer held and lost to expiry is a warning, and the commit goes ahead.
 
+## Committing only some hunks of a file
+
+A file that several sessions edit at once cannot be committed whole without taking the others' half-finished work. `--hunks=<file>:<n,a-b>` (repeatable) commits only those hunks of the file; the rest stay in the working tree.
+
+```
+chemx commit src/shared.ts --hunks=src/shared.ts:1,3-4 -m "feat: my part of shared (#42)"
+chemx commit other.ts --hunks=src/shared.ts:2 -m "feat: both (#42)"
+```
+
+- Hunks are numbered from 1 as `git diff -U0 HEAD -- <file>` lists them. Zero context means two changes on adjoining lines are one hunk.
+- The file named in `--hunks` is a listed file: its lease is checked like any other. A file listed plainly in the same command is committed whole.
+- The commit is made on a private index that starts from HEAD, so only the listed files can differ in it and nothing another handle staged rides along (it stays staged). Afterwards the real index entries of the listed files are put level with HEAD, so `git diff` shows exactly the hunks left over.
+- Refused before anything is staged: a bad spec, a file with no changes against HEAD, and a hunk number that is not there.
+- Limit: a chosen hunk is committed as written. If it depends on a hunk you left out, the commit does not build; check with the pre-commit gate, which runs against the private index.
+
 ## Which board checks the task id
 
 A directory resolves to one board (`<root>/.chemx/index.db`), but work crosses repos: an agent claims `#1553` on the app's board and then commits from a plugin directory under another board. Without a rule, the id is checked against the wrong board and the event lands there (#6750). The id is looked up, and the commit recorded, on:
@@ -83,4 +98,4 @@ One line per fact: `sha`, `subject`, `files`, `gate` (`pre-commit hook passed`, 
 - Only index.lock failures are retried. Other git errors fail at once.
 - The `gate` line reports that a hook exists and exited 0; it does not say what the hook checks.
 
-Code: `cli/commit/`, the board lookup in `cli/team/board-resolve.js` (`resolveHandleBoard`) and `cli/team/board-claims.js`. Specs: `cli/commit/commit.spec.js`, `commit-coordination.spec.js`, `cli/team/board-resolve.spec.js`, `cli/team/board-claims.spec.js` (temp git repos, temp boards and a temp pointer directory only).
+Code: `cli/commit/`, the board lookup in `cli/team/board-resolve.js` (`resolveHandleBoard`) and `cli/team/board-claims.js`. Specs: `cli/commit/commit.spec.js`, `commit-hunks.spec.js`, `commit-coordination.spec.js`, `cli/team/board-resolve.spec.js`, `cli/team/board-claims.spec.js` (temp git repos, temp boards and a temp pointer directory only).

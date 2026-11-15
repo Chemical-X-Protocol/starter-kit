@@ -4,7 +4,7 @@
  * validator can refuse it by name instead of passing it on to git.
  */
 
-const VALUE_FLAGS = new Set(['-m', '--message', '--task', '--no-task', '--as', '--board']);
+const VALUE_FLAGS = new Set(['-m', '--message', '--task', '--no-task', '--as', '--board', '--hunks']);
 const KNOWN_FLAGS = new Set(['--release', '--json', '-a', '--all', '--no-verify', '-n', '--skip-ci', '--no-skip-ci']);
 
 // Splits `--flag=value` into its name and value; a bare token has value undefined.
@@ -16,7 +16,7 @@ const splitToken = (token) => {
 };
 
 const emptyParsed = () => ({
-  files: [], messages: [], taskId: null, noTask: null, as: null, board: null,
+  files: [], hunks: [], messages: [], taskId: null, noTask: null, as: null, board: null,
   release: false, json: false, all: false, skipVerify: false, skipCi: false, noSkipCi: false, unknown: [], missingValue: []
 });
 
@@ -26,7 +26,8 @@ const VALUE_SETTERS = {
   '--task': (parsed, value) => { parsed.taskId = String(value).replace(/^#/, ''); },
   '--no-task': (parsed, value) => { parsed.noTask = value; },
   '--as': (parsed, value) => { parsed.as = value; },
-  '--board': (parsed, value) => { parsed.board = value; }
+  '--board': (parsed, value) => { parsed.board = value; },
+  '--hunks': (parsed, value) => parsed.hunks.push(value)
 };
 
 const BOOLEAN_SETTERS = {
@@ -45,7 +46,7 @@ const applyBooleanFlag = (parsed, name) => BOOLEAN_SETTERS[name](parsed);
 
 /**
  * @param {string[]} args Everything after `chemx commit`.
- * @returns {{ files: string[], messages: string[], taskId: string|null, noTask: string|null, as: string|null,
+ * @returns {{ files: string[], hunks: string[], messages: string[], taskId: string|null, noTask: string|null, as: string|null,
  *   board: string|null, release: boolean, json: boolean, all: boolean, skipVerify: boolean, skipCi: boolean,
  *   noSkipCi: boolean, unknown: string[], missingValue: string[] }}
  */
