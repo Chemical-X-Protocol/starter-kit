@@ -10,10 +10,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export const generateSwarmHtml = (initialState = {}) => {
   const jsonState = JSON.stringify(initialState).replace(/</g, '\\u003c');
-  // cli/ui-index.html is the maintained page; src/ui/index.html is an older copy kept as a fallback.
+  // cli/ui-index.html is the page chemx ui serves; a project may supply its own src/ui/index.html.
   const candidates = [
     path.resolve(__dirname, 'ui-index.html'),
-    path.resolve(__dirname, '../src/ui/index.html'),
     path.resolve(process.cwd(), 'src/ui/index.html')
   ];
 

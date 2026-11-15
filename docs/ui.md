@@ -47,4 +47,4 @@ Repeat the call with `offset=nextOffset` until `hasMore` is false. `limit` defau
 
 Done-like columns (`done`, `completed`, `cancelled`, `duplicate`) sort most recently updated first by default; the others sort by priority, then id.
 
-The code: `cli/ui-paging.js` (page params and envelope), `cli/ui-paging-tasks.js` and `cli/ui-paging-task-where.js` (task pages and board), `cli/ui-paging-agents.js` (agent pages), `cli/ui-api-index.js` (`GET /api/`), `cli/ui-handlers.js` (the live view), `cli/ui-index.html` (the page). `cli/ui-index.html` is the page `chemx ui` serves; `src/ui/index.html` is an older copy, used only when the first is missing.
+The code: `cli/ui-paging.js` (page params and envelope), `cli/ui-paging-tasks.js` and `cli/ui-paging-task-where.js` (task pages and board), `cli/ui-paging-agents.js` (agent pages), `cli/ui-api-index.js` (`GET /api/`), `cli/ui-handlers.js` (the live view), `cli/ui-index.html` (the page). `cli/ui-index.html` is the page `chemx ui` serves.
