@@ -1,0 +1,11 @@
+/* Rich post card (task #7620, epic #7614). */
+.xo-post__head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
+.xo-post__verb { font-size: 12px; display: inline-flex; align-items: center; gap: 4px; color: rgba(255,255,255,.6); }
+.xo-post__chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.xo-post__chip { cursor: pointer; max-width: 100%; }
+.xo-post__file { font-family: monospace; font-size: 11px; }
+.xo-post__dm { margin-left: auto; }
+.xo-post__msg { font-size: 13px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+.xo-post__time { font-size: 11px; color: rgba(255,255,255,.35); margin-top: 6px; display: inline-block; text-decoration: none; }
+.xo-post__time:hover { color: #62c9ff; text-decoration: underline; }
+.xo-post--rollup { opacity: .75; }
