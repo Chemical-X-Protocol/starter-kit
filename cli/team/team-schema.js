@@ -10,6 +10,7 @@ import { initUsageSchema } from './team-schema-usage.js';
 import { initRepoSchema } from './team-schema-repo.js';
 import { initChecksSchema } from './team-schema-checks.js';
 import { initPointsSchema } from './team-points.js';
+import { initStandupSchema } from './team-standup.js';
 
 const migrateCols = (db, tbl, cols) => {
   const existing = new Set((db.prepare(`PRAGMA table_info(${tbl})`).all() || []).map((c) => c.name));
@@ -127,4 +128,5 @@ export const initTeamSchema = (db) => {
   initRepoSchema(db);
   initChecksSchema(db);
   initPointsSchema(db);
+  initStandupSchema(db);
 };
