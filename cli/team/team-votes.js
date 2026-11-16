@@ -62,6 +62,14 @@ export const spread = (votes) => {
   return { steps, isOutlier };
 };
 
+/** Reveal a round: votes sorted by points with voter names, the spread, the outlier flag and the settled estimate. */
+export const revealRound = (votes) => {
+  const list = Array.isArray(votes) ? votes : [];
+  const sorted = list.map(({ voter, points }) => ({ voter, points })).sort((a, b) => a.points - b.points);
+  const { steps, isOutlier } = spread(sorted);
+  return { votes: sorted, spread: steps, isOutlier, settled: settle(sorted) };
+};
+
 const priceVoteRun = (runDir, cwd) => {
   const run = readRun(runDir);
   return run ? { totals: priceRun(run, loadPricing(cwd)).totals, runs: run.agents.length } : null;

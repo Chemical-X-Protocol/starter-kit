@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { openIndexDb } from '../search-schema.js';
 import { createTask, getTask } from './team-db-tasks.js';
-import { costForVoteRun, initVotesSchema, recordBatch, recordVote, settle, spread, votesFor } from './team-votes.js';
+import { costForVoteRun, initVotesSchema, recordBatch, recordVote, revealRound, settle, spread, votesFor } from './team-votes.js';
 
 const freshDb = () => { const db = new DatabaseSync(':memory:'); initVotesSchema(db); return db; };
 
@@ -90,6 +90,18 @@ test('recordBatch: a run with no transcripts leaves the task unchanged', (t) => 
   assert.equal(after.telemetry_source ?? null, null);
   assert.deepEqual(after, before);
   assert.equal(votesFor(db, task.id, 1).length, 1);
+});
+
+test('revealRound: a two-step spread flags an outlier, one step does not', () => {
+  const wide = revealRound([{ voter: '@b', points: 5 }, { voter: '@a', points: 2 }, { voter: '@c', points: 3 }]);
+  assert.deepEqual(wide.votes.map((v) => v.voter), ['@a', '@c', '@b']);
+  assert.equal(wide.spread, 2);
+  assert.equal(wide.isOutlier, true);
+  assert.deepEqual(wide.settled, { average: 3.33, estimate: 5 });
+  const close = revealRound([{ voter: '@a', points: 3 }, { voter: '@b', points: 5 }]);
+  assert.equal(close.spread, 1);
+  assert.equal(close.isOutlier, false);
+  assert.equal(revealRound([]).isOutlier, false);
 });
 
 test('recordBatch: one bad row refuses the whole batch', () => {
