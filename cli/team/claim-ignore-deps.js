@@ -2,7 +2,7 @@ import { claimTask, postFeedEvent, getTask } from './team-db.js';
 import { recordClaimBoard } from './board-claim-record.js';
 import { renewHolderLeases } from './lease-activity.js';
 
-// One task_claimed row per successful claim (#7695); an ignore-deps reason rides in that same row's message and metadata.ignoreDeps.
+// One task_claimed row per successful claim made through the chemx claim command (#7695). Known gap: direct callers of claimTask (cli/team/team-projects-coordinator.js, cli/ui-actions.js) bypass this path and write no row. an ignore-deps reason rides in that same row's message and metadata.ignoreDeps.
 const postClaimRow = (db, taskId, agentHandle, ignoreReason) => {
   const hasReason = Boolean(ignoreReason);
   const message = hasReason ? `Claimed #${taskId} ignoring unmet dependencies: ${ignoreReason}` : `Claimed #${taskId}`;

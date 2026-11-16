@@ -62,7 +62,7 @@ These events land in `agent_feed` with `task_id` set, so a task's feed shows wha
 
 | Action | `event_type` |
 | :--- | :--- |
-| Successful claim | `task_claimed` |
+| Successful claim through the `chemx claim` command (direct `claimTask` callers in `team-projects-coordinator.js` and `ui-actions.js` write no row: known gap) | `task_claimed` |
 | Lock acquire | `lock_acquired` |
 | Lock release | `lock_released` |
 | Lock promoted to a waiter | `lock_granted` |
