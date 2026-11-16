@@ -4,6 +4,9 @@
  * spread() flags an outlier when the highest and lowest vote sit more than one Fibonacci step apart.
  */
 import { FIBONACCI } from './team-points.js';
+import { readRun } from './usage-reader.js';
+import { priceRun } from './usage-compute.js';
+import { loadPricing } from './usage-pricing.js';
 
 export const initVotesSchema = (db) => {
   db.exec(`CREATE TABLE IF NOT EXISTS estimate_votes (
@@ -59,7 +62,37 @@ export const spread = (votes) => {
   return { steps, isOutlier };
 };
 
-export const recordBatch = (db, voter, rows, { round = 1, now = Date.now() } = {}) => {
+const priceVoteRun = (runDir, cwd) => {
+  const run = readRun(runDir);
+  return run ? { totals: priceRun(run, loadPricing(cwd)).totals, runs: run.agents.length } : null;
+};
+
+/** Cost of a vote run, read from its subagent transcripts: {tokens, costUsd, runs}. A missing dir is zero runs. */
+export const costForVoteRun = (runDir, cwd = process.cwd()) => {
+  const priced = priceVoteRun(runDir, cwd);
+  if (!priced) return { tokens: 0, costUsd: 0, runs: 0 };
+  return { tokens: priced.totals.total, costUsd: priced.totals.cost, runs: priced.runs };
+};
+
+const writeRunTelemetry = (db, taskId, totals) => {
+  const prompt = totals.input + totals.write5m + totals.write1h;
+  db.prepare('UPDATE agent_tasks SET prompt_tokens=?, completion_tokens=?, cached_tokens=?, total_tokens=?, cost_usd=?, telemetry_source=? WHERE id=?')
+    .run(prompt, totals.output, totals.cacheRead, totals.total, totals.cost, 'run usage', taskId);
+};
+
+// A run prices the whole batch, so it is attributed only when the batch votes on a single task.
+// Unknown is never zero: a run with no transcripts or no counted tokens leaves the task alone.
+const attachRunCost = (db, list, runDir) => {
+  const taskIds = [...new Set(list.map((row) => Number(row.task)))];
+  const priced = priceVoteRun(runDir, process.cwd());
+  const isMeasured = Boolean(priced) && priced.runs > 0 && priced.totals.total > 0;
+  const isOneTask = taskIds.length === 1;
+  const canAttach = isMeasured && isOneTask;
+  if (!canAttach) return;
+  writeRunTelemetry(db, taskIds[0], priced.totals);
+};
+
+export const recordBatch = (db, voter, rows, { round = 1, now = Date.now(), runDir } = {}) => {
   const list = Array.isArray(rows) ? rows : [];
   list.forEach((row) => checkVote({ taskId: row.task, voter, points: row.points }));
   initVotesSchema(db);
@@ -71,5 +104,7 @@ export const recordBatch = (db, voter, rows, { round = 1, now = Date.now() } = {
     db.exec('ROLLBACK');
     throw err;
   }
+  const hasRun = Boolean(runDir);
+  if (hasRun) attachRunCost(db, list, runDir);
   return list.length;
 };

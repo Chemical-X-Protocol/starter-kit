@@ -1,7 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { initVotesSchema, recordBatch, recordVote, settle, spread, votesFor } from './team-votes.js';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { openIndexDb } from '../search-schema.js';
+import { createTask, getTask } from './team-db-tasks.js';
+import { costForVoteRun, initVotesSchema, recordBatch, recordVote, settle, spread, votesFor } from './team-votes.js';
 
 const freshDb = () => { const db = new DatabaseSync(':memory:'); initVotesSchema(db); return db; };
 
@@ -41,6 +46,50 @@ test('recordBatch: records every row in one transaction', () => {
   const count = recordBatch(db, '@a', [{ task: 1, points: 2, why: 'x' }, { task: 2, points: 13, why: 'y' }], { round: 2, now: 9 });
   assert.equal(count, 2);
   assert.equal(votesFor(db, 2, 2)[0].points, 13);
+});
+
+const makeRun = (t, transcripts) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-vote-run-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const runDir = path.join(root, 'run');
+  fs.mkdirSync(runDir);
+  transcripts.forEach((usage, i) => {
+    const line = { type: 'assistant', uuid: `u${i}`, message: { id: `m${i}`, model: 'claude-sonnet-4-5', usage } };
+    fs.writeFileSync(path.join(runDir, `agent-a${i}.jsonl`), `${JSON.stringify(line)}\n`);
+  });
+  return { root, runDir, db: openIndexDb(root, { fresh: true }) };
+};
+
+test('costForVoteRun: prices a run from its transcripts', (t) => {
+  const { runDir } = makeRun(t, [{ input_tokens: 1000, output_tokens: 500 }, { input_tokens: 200, output_tokens: 100 }]);
+  const cost = costForVoteRun(runDir);
+  assert.equal(cost.runs, 2);
+  assert.equal(cost.tokens, 1800);
+  assert.ok(cost.costUsd > 0);
+});
+
+test('recordBatch: a measured runDir stamps the vote task with run usage', (t) => {
+  const { db, runDir } = makeRun(t, [{ input_tokens: 1000, output_tokens: 500, cache_read_input_tokens: 300 }]);
+  const task = createTask(db, { title: 'vote task' });
+  recordBatch(db, '@a', [{ task: task.id, points: 3 }], { runDir });
+  const row = getTask(db, task.id);
+  assert.equal(row.telemetry_source, 'run usage');
+  assert.equal(row.prompt_tokens, 1000);
+  assert.equal(row.completion_tokens, 500);
+  assert.equal(row.cached_tokens, 300);
+  assert.equal(row.total_tokens, 1800);
+  assert.ok(row.cost_usd > 0);
+});
+
+test('recordBatch: a run with no transcripts leaves the task unchanged', (t) => {
+  const { db, runDir } = makeRun(t, []);
+  const task = createTask(db, { title: 'vote task' });
+  const before = getTask(db, task.id);
+  recordBatch(db, '@a', [{ task: task.id, points: 3 }], { runDir });
+  const after = getTask(db, task.id);
+  assert.equal(after.telemetry_source ?? null, null);
+  assert.deepEqual(after, before);
+  assert.equal(votesFor(db, task.id, 1).length, 1);
 });
 
 test('recordBatch: one bad row refuses the whole batch', () => {
