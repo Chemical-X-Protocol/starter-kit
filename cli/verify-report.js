@@ -21,6 +21,8 @@ export const VERIFY_HELP = [
   '  --all-packages           At a monorepo root: verify every workspace package (else refused)',
   '  --all                    In a repo with its own tests/run-tests.mjs: php -l every PHP file, not only the changed ones',
   '  --profile=<name>         Rule profile for the AST audit',
+  '  --as=@<handle>           Post a verify row (status, scope) to the feed of that handle\'s claimed task',
+  '                           (default: CHEMX_AGENT_ID; no claimed task, no row)',
   '  --json                   Output summary status card as JSON',
   '  -h, --help               Show this help message',
   '',
