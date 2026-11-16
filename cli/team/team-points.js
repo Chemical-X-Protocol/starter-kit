@@ -1,6 +1,7 @@
 /**
- * Fibonacci points on a task, and the reports that relate them to tokens, cost and time.
- * `chemx team task points <id> <n>` sets the estimate. `chemx team tokens --curve` and `--velocity` read it back.
+ * Fibonacci points on a task, the estimate of its time and tokens, and the reports that relate them to actuals.
+ * `chemx team task points <id> <n>` sets the estimate in points. `chemx team task estimate <id> <minutes> <tokens>`
+ * sets the planned time and tokens. `chemx team tokens --curve` and `--velocity` read them back.
  * Measured figures come from the same sources as `chemx team tokens --epic`: the task's own telemetry first,
  * then imported run usage. A done task with no measured figures is counted as unmeasured, never as zero.
  */
@@ -8,23 +9,30 @@ import { figuresOf, usageByTask } from './team-tokens-epic.js';
 
 export const FIBONACCI = Object.freeze([1, 2, 3, 5, 8, 13, 21]);
 const DAY_MS = 86400000;
+const MINUTE_MS = 60000;
 const SIZE_CLASS = Object.freeze({ 1: 'sand', 2: 'pebbles', 3: 'pebbles', 5: 'rocks', 8: 'boulders', 13: 'boulders' });
+const ESTIMATE_COLUMNS = Object.freeze([['points', 'INTEGER'], ['est_minutes', 'INTEGER'], ['est_tokens', 'INTEGER']]);
 
 export const sizeClassOf = (points) => (points >= 21 ? 'epic' : SIZE_CLASS[points] || 'unknown');
 
-const hasPointsColumn = (db) => db.prepare('PRAGMA table_info(agent_tasks)').all().some((col) => col.name === 'points');
+const hasColumn = (db, column) => db.prepare('PRAGMA table_info(agent_tasks)').all().some((col) => col.name === column);
 
-/** Additive: an older board gains the points column the first time it opens. */
+/** Additive: an older board gains the estimate columns the first time it opens. */
 export const initPointsSchema = (db) => {
-  const isMissing = Boolean(db) && !hasPointsColumn(db);
-  if (!isMissing) return;
-  try {
-    db.exec('ALTER TABLE agent_tasks ADD COLUMN points INTEGER');
-  } catch (err) {
-    const isDuplicate = String(err.message).includes('duplicate column');
-    if (!isDuplicate) throw err;
+  if (!db) return;
+  for (const [column, type] of ESTIMATE_COLUMNS) {
+    const isMissing = !hasColumn(db, column);
+    if (!isMissing) continue;
+    try {
+      db.exec(`ALTER TABLE agent_tasks ADD COLUMN ${column} ${type}`);
+    } catch (err) {
+      const isDuplicate = String(err.message).includes('duplicate column');
+      if (!isDuplicate) throw err;
+    }
   }
 };
+
+const findTask = (db, taskId) => db.prepare('SELECT id FROM agent_tasks WHERE id = ?').get(Number(taskId));
 
 /** Sets a task's points. Refuses any value outside the Fibonacci set. */
 export const setPoints = (db, taskId, value) => {
@@ -32,10 +40,23 @@ export const setPoints = (db, taskId, value) => {
   const points = Number(value);
   const isValid = FIBONACCI.includes(points);
   if (!isValid) return { error: `Points must be one of ${FIBONACCI.join(', ')}; got "${value}".` };
-  const task = db.prepare('SELECT id FROM agent_tasks WHERE id = ?').get(id);
-  if (!task) return { error: `Task #${taskId} not found.` };
+  const isFound = Boolean(findTask(db, id));
+  if (!isFound) return { error: `Task #${taskId} not found.` };
   db.prepare('UPDATE agent_tasks SET points = ? WHERE id = ?').run(points, id);
   return { id, points, size: sizeClassOf(points) };
+};
+
+/** Records the planned time (minutes) and tokens for a task, before it is built. Both must be positive whole numbers. */
+export const setEstimate = (db, taskId, minutes, tokens) => {
+  const id = Number(taskId);
+  const mins = Number(minutes);
+  const toks = Number(tokens);
+  const isWhole = Number.isInteger(mins) && Number.isInteger(toks) && mins > 0 && toks > 0;
+  if (!isWhole) return { error: 'Usage: chemx team task estimate <id> <minutes> <tokens> (positive whole numbers).' };
+  const isFound = Boolean(findTask(db, id));
+  if (!isFound) return { error: `Task #${taskId} not found.` };
+  db.prepare('UPDATE agent_tasks SET est_minutes = ?, est_tokens = ? WHERE id = ?').run(mins, toks, id);
+  return { id, estMinutes: mins, estTokens: toks };
 };
 
 const median = (xs) => {
@@ -50,13 +71,23 @@ const mean = (xs) => (xs.length === 0 ? null : xs.reduce((sum, x) => sum + x, 0)
 
 const doneEstimated = (db) => db.prepare("SELECT * FROM agent_tasks WHERE status = 'done' AND points IS NOT NULL ORDER BY id").all();
 
-/** One row per point value: tasks done, how many have measured figures, and the median tokens, mean cost and median wall time of those. */
+/** Actual minutes from claim to done, when the task was claimed. Null when there is no claim time. */
+export const actualMinutesOf = (task) => {
+  const hasClaim = task.claimed_at !== null && task.claimed_at !== undefined;
+  if (!hasClaim) return null;
+  return (task.updated_at - task.claimed_at) / MINUTE_MS;
+};
+
+/**
+ * One row per point value: tasks done, measured figures, and the median tokens, mean cost, and wall time.
+ * Also planned vs actual: the mean estimate in minutes and tokens, and the median actual minutes, over the tasks that have them.
+ */
 export const curveRows = (db) => {
   const tasks = doneEstimated(db);
   const usage = usageByTask(db, tasks.map((task) => task.id));
   const buckets = new Map();
   for (const task of tasks) {
-    const bucket = buckets.get(task.points) || { points: task.points, size: sizeClassOf(task.points), tasks: 0, measured: 0, tokens: [], costs: [], walls: [] };
+    const bucket = buckets.get(task.points) || { points: task.points, size: sizeClassOf(task.points), tasks: 0, measured: 0, tokens: [], costs: [], walls: [], estMinutes: [], estTokens: [], actualMinutes: [] };
     bucket.tasks += 1;
     const figures = figuresOf(task, usage.get(task.id));
     if (figures.source) {
@@ -65,11 +96,19 @@ export const curveRows = (db) => {
       bucket.costs.push(figures.costUsd);
       bucket.walls.push(task.updated_at - task.created_at);
     }
+    const hasEstimate = task.est_minutes !== null && task.est_minutes !== undefined;
+    if (hasEstimate) bucket.estMinutes.push(task.est_minutes);
+    const hasEstTokens = task.est_tokens !== null && task.est_tokens !== undefined;
+    if (hasEstTokens) bucket.estTokens.push(task.est_tokens);
+    const actual = actualMinutesOf(task);
+    const hasActual = actual !== null;
+    if (hasActual) bucket.actualMinutes.push(actual);
     buckets.set(task.points, bucket);
   }
   return [...buckets.values()].sort((a, b) => a.points - b.points).map((b) => ({
     points: b.points, size: b.size, tasks: b.tasks, measured: b.measured,
-    medianTokens: median(b.tokens), meanCostUsd: mean(b.costs), medianWallMs: median(b.walls)
+    medianTokens: median(b.tokens), meanCostUsd: mean(b.costs), medianWallMs: median(b.walls),
+    estMinutes: mean(b.estMinutes), estTokens: mean(b.estTokens), actualMinutes: median(b.actualMinutes)
   }));
 };
 
@@ -83,17 +122,21 @@ export const velocity = (db, { days = 14, now = Date.now() } = {}) => {
 
 const pad = (text, width) => String(text).padEnd(width);
 const padLeft = (text, width) => String(text).padStart(width);
+const orDash = (value, format) => (value === null ? '-' : format(value));
 
 export const renderCurve = (rows) => {
   const hasRows = rows.length > 0;
   if (!hasRows) return 'No done tasks with points yet. Set points with: chemx team task points <id> <n>\n';
-  const head = '  points  size       done  measured  median tokens  mean cost  median wall';
-  const lines = rows.map((r) => {
-    const tokens = r.medianTokens === null ? '-' : String(Math.round(r.medianTokens));
-    const cost = r.meanCostUsd === null ? '-' : `$${r.meanCostUsd.toFixed(4)}`;
-    const wall = r.medianWallMs === null ? '-' : `${Math.round(r.medianWallMs / 60000)}m`;
-    return `  ${pad(r.points, 7)} ${pad(r.size, 10)} ${padLeft(r.tasks, 4)}  ${padLeft(r.measured, 8)}  ${padLeft(tokens, 13)}  ${padLeft(cost, 9)}  ${padLeft(wall, 11)}`;
-  });
+  const head = '  points  size       done  measured  med tokens  mean cost  med wall  est min  act min  est tokens';
+  const lines = rows.map((r) => [
+    `  ${pad(r.points, 7)} ${pad(r.size, 10)} ${padLeft(r.tasks, 4)}  ${padLeft(r.measured, 8)}`,
+    `  ${padLeft(orDash(r.medianTokens, (v) => String(Math.round(v))), 10)}`,
+    `  ${padLeft(orDash(r.meanCostUsd, (v) => `$${v.toFixed(4)}`), 9)}`,
+    `  ${padLeft(orDash(r.medianWallMs, (v) => `${Math.round(v / MINUTE_MS)}m`), 8)}`,
+    `  ${padLeft(orDash(r.estMinutes, (v) => String(Math.round(v))), 7)}`,
+    `  ${padLeft(orDash(r.actualMinutes, (v) => String(Math.round(v))), 7)}`,
+    `  ${padLeft(orDash(r.estTokens, (v) => String(Math.round(v))), 10)}`
+  ].join(''));
   return [head, ...lines].join('\n') + '\n';
 };
 
