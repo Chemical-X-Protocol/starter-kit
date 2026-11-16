@@ -11,6 +11,7 @@ import { formatTaskListCard, formatTaskDetailCard, formatTaskHelpCard } from './
 import { resolveListOptions, selectTaskPage, buildTaskListView, formatTitleLines } from './task-list-view.js';
 import { markIdleClaims, claimInfoFor } from './task-claim-age.js';
 import { breakdownGate, setEstimate, setPoints } from './team-points.js';
+import { reparentTask } from './team-reparent.js';
 import { handleTaskHandoffCommand } from './team-task-handoff.js';
 import { handleTaskCloseCommand, duplicateLinks, formatDuplicateLinks } from './team-task-close.js';
 import { handleTaskSlotCommand, handleTaskTraceCommand } from './team-commands-vds.js';
@@ -33,7 +34,7 @@ import { claimWithIgnoreDeps } from './claim-ignore-deps.js';
 import { buildLabelFor } from './team-route.js';
 import { describeUnknownStatus } from './task-update-status.js';
 
-export const TASK_ACTIONS = ['list', 'show', 'add', 'brief', 'claim', 'handoff', 'close', 'done', 'update', 'comment', 'triage', 'reconcile', 'set-target', 'set-files', 'vds-slot', 'trace'];
+export const TASK_ACTIONS = ['list', 'show', 'add', 'brief', 'claim', 'handoff', 'close', 'done', 'update', 'comment', 'triage', 'reconcile', 'set-target', 'set-files', 'vds-slot', 'trace', 'parent'];
 
 // Every failure of a task action is a refusal: the reason on stderr and exit 1 on the CLI (K1b, #6765).
 const fail = (isCli, message, result = { error: message }) => {
@@ -360,6 +361,13 @@ const runPoints = (ctx, positionals, flags, isCli) => {
   return writeJsonOr(placed, flags, isCli, `\x1b[32m✔\x1b[0m Task #${placed.id} points ${placed.points} (${placed.size})\n`);
 };
 
+const runParent = (ctx, positionals, flags, isCli) => {
+  const placed = reparentTask(ctx.db, positionals[1], positionals[2]);
+  const isRefused = Boolean(placed.error);
+  if (isRefused) return fail(isCli, placed.error, { error: placed.error, refused: true });
+  return writeJsonOr(placed, flags, isCli, `\x1b[32m✔\x1b[0m Task #${placed.id} parent is #${placed.parentId}\n`);
+};
+
 const runEstimate = (ctx, positionals, flags, isCli) => {
   const placed = setEstimate(ctx.db, positionals[1], positionals[2], positionals[3]);
   const isRefused = Boolean(placed.error);
@@ -384,6 +392,7 @@ const ACTIONS = {
   reconcile: (ctx, p, flags, words, isCli, cwd) => runReconcile(ctx, flags, isCli, cwd),
   'set-target': (ctx, p, flags, words, isCli, cwd) => runSetTarget(ctx, p, flags, isCli, cwd),
   points: (ctx, p, flags, words, isCli) => runPoints(ctx, p, flags, isCli),
+  parent: (ctx, p, flags, words, isCli) => runParent(ctx, p, flags, isCli),
   estimate: (ctx, p, flags, words, isCli) => runEstimate(ctx, p, flags, isCli),
   'set-files': (ctx, p, flags, words, isCli, cwd) => runSetFiles(ctx, p, flags, isCli, cwd)
 };
