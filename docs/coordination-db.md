@@ -56,6 +56,23 @@ db it read (`board <path> (an unmerged package db ...)`).
 `chemx wait --lock-free=<file>` also reads the dbs of the file's own dir, so it sees a lease taken from
 a package below the cwd.
 
+## Auto context rows (#7698)
+
+Six kinds of event land in `agent_feed` with `task_id` set, so a task's feed shows what happened without anyone posting it. The task comes from the purpose or from the actor's claim (`contextTaskId`).
+
+| Action | `event_type` |
+| :--- | :--- |
+| Successful claim | `task_claimed` |
+| Lock acquire | `lock_acquired` |
+| Lock release | `lock_released` |
+| Lock promoted to a waiter | `lock_granted` |
+| `chemx verify` by a handle that holds a claim | `verify` |
+| `task comment` | `status_update` (or the `--type` given) |
+| `chemx commit` | `commit` |
+| `task done` | `task_complete` |
+
+`cli/team/auto-context-rows.spec.js` pins the comment, commit and done rows and checks that the standup update check counts a comment row.
+
 ## Leases before the migration
 
 A lease is keyed by the file's path relative to the root of the db that holds it. While a package db is
