@@ -58,7 +58,7 @@ a package below the cwd.
 
 ## Auto context rows (#7698)
 
-Six kinds of event land in `agent_feed` with `task_id` set, so a task's feed shows what happened without anyone posting it. The task comes from the purpose or from the actor's claim (`contextTaskId`).
+These events land in `agent_feed` with `task_id` set, so a task's feed shows what happened without anyone posting it. The task comes from the purpose or from the actor's claim (`contextTaskId`).
 
 | Action | `event_type` |
 | :--- | :--- |
