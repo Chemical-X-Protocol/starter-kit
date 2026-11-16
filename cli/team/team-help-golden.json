@@ -22,6 +22,7 @@
     "    \u001b[32mbenchmark\u001b[0m                Run memory and token reduction ablation benchmark",
     "    \u001b[32mtrain\u001b[0m                    Train/evaluate vector and pattern indices",
     "    \u001b[32mcheck\u001b[0m                    Queue a typecheck/test/verify/build and keep working (result arrives as a DM)",
+    "    \u001b[32mstandup\u001b[0m                  Run one standup: move each open task to its next light (green, yellow, red, blocked)",
     "",
     "  \u001b[1mGlobal Options:\u001b[0m",
     "    \u001b[33m--as\u001b[0m <@agent>            Execute action as specified agent handle",
