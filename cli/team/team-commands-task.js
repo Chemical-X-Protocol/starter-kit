@@ -12,6 +12,7 @@ import { resolveListOptions, selectTaskPage, buildTaskListView, formatTitleLines
 import { markIdleClaims, claimInfoFor } from './task-claim-age.js';
 import { breakdownGate, setEstimate, setPoints } from './team-points.js';
 import { reparentTask } from './team-reparent.js';
+import { planTask, formatPlan } from './team-plan.js';
 import { handleTaskHandoffCommand } from './team-task-handoff.js';
 import { handleTaskCloseCommand, duplicateLinks, formatDuplicateLinks } from './team-task-close.js';
 import { handleTaskSlotCommand, handleTaskTraceCommand } from './team-commands-vds.js';
@@ -381,6 +382,13 @@ const runParent = (ctx, positionals, flags, isCli) => {
   return writeJsonOr(placed, flags, isCli, `\x1b[32m✔\x1b[0m Task #${placed.id} parent is #${placed.parentId}\n`);
 };
 
+const runPlan = (ctx, positionals, flags, isCli, cwd) => {
+  const planned = planTask(ctx.db, positionals[1], { file: flags.file, cwd, apply: flags.apply });
+  const isRefused = Boolean(planned.error);
+  if (isRefused) return fail(isCli, planned.error, { ...planned, refused: true });
+  return writeJsonOr(planned, flags, isCli, formatPlan(planned));
+};
+
 const runEstimate = (ctx, positionals, flags, isCli) => {
   const placed = setEstimate(ctx.db, positionals[1], positionals[2], positionals[3]);
   const isRefused = Boolean(placed.error);
@@ -407,6 +415,7 @@ const ACTIONS = {
   points: (ctx, p, flags, words, isCli) => runPoints(ctx, p, flags, isCli),
   parent: (ctx, p, flags, words, isCli) => runParent(ctx, p, flags, isCli),
   estimate: (ctx, p, flags, words, isCli) => runEstimate(ctx, p, flags, isCli),
+  plan: (ctx, p, flags, words, isCli, cwd) => runPlan(ctx, p, flags, isCli, cwd),
   'set-files': (ctx, p, flags, words, isCli, cwd) => runSetFiles(ctx, p, flags, isCli, cwd)
 };
 

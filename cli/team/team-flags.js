@@ -27,7 +27,7 @@ export const PARSED_TEAM_FLAGS = Object.freeze([
   '--pid', '--tokens', '--prompt-tokens', '--completion-tokens', '--cached-tokens', '--cost', '--model', '--desc',
   '--description', '--deps', '--add-dep', '--rm-dep', '--sprint', '--moscow', '--needs', '--reason',
   '--duplicate-of', '--ignore-deps', '--cancel', '--log', '--title', '--metadata', '--kind', '--search', '--file',
-  '--curve', '--velocity', '--days'
+  '--curve', '--velocity', '--days', '--apply'
 ]);
 
 /** @returns {boolean} whether parseFlags reads this long flag (the part before any `=`) */
@@ -51,6 +51,7 @@ export const parseFlags = (rawArgs = []) => {
     withLocks: args.includes('--with-locks'),
     curve: args.includes('--curve'),
     velocity: args.includes('--velocity'),
+    apply: args.includes('--apply'),
     days: Number(args.find((arg) => arg.startsWith('--days='))?.split('=')[1]) || 14,
     help: hasHelpFlag
   };

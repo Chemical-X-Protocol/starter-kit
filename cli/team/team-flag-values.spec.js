@@ -11,7 +11,7 @@ import { REPO_VALUE_FLAGS } from './team-commands-repo.js';
 // The flags parseFlags reads that take no value. A new parsed flag must land here or in TEAM_VALUE_FLAGS.
 const BARE_PARSED_FLAGS = [
   '--json', '--compact', '--mark-read', '--force', '--with-locks', '--no-target-confirm', '--help', '--all', '--new', '--ignore-deps',
-  '--curve', '--velocity'
+  '--curve', '--velocity', '--apply'
 ];
 
 test('the flags the ticket names are all value flags', () => {
