@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { initTeamSchema } from './team-schema.js';
 import { createTask } from './team-db.js';
-import { curveRows, renderCurve, setPoints, sizeClassOf, velocity } from './team-points.js';
+import { breakdownGate, curveRows, renderCurve, setPoints, sizeClassOf, velocity } from './team-points.js';
 
 const freshDb = () => { const db = new DatabaseSync(':memory:'); initTeamSchema(db); return db; };
 const DAY_MS = 86400000;
@@ -41,6 +41,28 @@ test('team points: the curve groups done tasks by points and keeps unmeasured on
   assert.equal(rows[1].medianTokens, 1000);
   assert.equal(rows[1].meanCostUsd, 0.01);
   assert.match(renderCurve(rows), /rocks/);
+});
+
+test('team points: a task of 8 points or more is refused until it has child tasks', () => {
+  const db = freshDb();
+  const big = createTask(db, { title: 'big' });
+  const small = createTask(db, { title: 'small' });
+  setPoints(db, big.id, 8);
+  setPoints(db, small.id, 5);
+  assert.deepEqual(breakdownGate(db, small.id), { ok: true }, 'under 8 is never gated');
+  const refused = breakdownGate(db, big.id);
+  assert.match(refused.error, /Break it down first/);
+  assert.match(refused.error, new RegExp(`--parent=${big.id}`));
+  const child = createTask(db, { title: 'child of big' });
+  db.prepare('UPDATE agent_tasks SET parent_id = ? WHERE id = ?').run(big.id, child.id);
+  assert.deepEqual(breakdownGate(db, big.id), { ok: true }, 'a child task lifts the gate');
+});
+
+test('team points: a task with no points, or an unknown task, is not gated here', () => {
+  const db = freshDb();
+  const bare = createTask(db, { title: 'bare' });
+  assert.deepEqual(breakdownGate(db, bare.id), { ok: true });
+  assert.deepEqual(breakdownGate(db, 999), { ok: true });
 });
 
 test('team points: velocity sums the points finished inside the window only', () => {

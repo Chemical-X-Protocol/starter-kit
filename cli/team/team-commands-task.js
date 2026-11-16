@@ -10,7 +10,7 @@ import { completeTaskWithAudit, reconcileAuditTasks } from './team-triage.js';
 import { formatTaskListCard, formatTaskDetailCard, formatTaskHelpCard } from './team-format.js';
 import { resolveListOptions, selectTaskPage, buildTaskListView, formatTitleLines } from './task-list-view.js';
 import { markIdleClaims, claimInfoFor } from './task-claim-age.js';
-import { setEstimate, setPoints } from './team-points.js';
+import { breakdownGate, setEstimate, setPoints } from './team-points.js';
 import { handleTaskHandoffCommand } from './team-task-handoff.js';
 import { handleTaskCloseCommand, duplicateLinks, formatDuplicateLinks } from './team-task-close.js';
 import { handleTaskSlotCommand, handleTaskTraceCommand } from './team-commands-vds.js';
@@ -151,6 +151,9 @@ const runComment = (ctx, positionals, flags, isCli) => {
 };
 
 const runClaim = (ctx, taskId, flags, isCli) => {
+  const gate = breakdownGate(ctx.db, taskId);
+  const isGateRefused = Boolean(gate.error);
+  if (isGateRefused) return refuse(isCli, gate.error);
   const agentHandle = resolveCliAgent(flags, isCli);
   registerAgent(ctx.db, { id: agentHandle, role: 'executor' });
   const res = claimWithIgnoreDeps(ctx.db, taskId, agentHandle, flags.ignoreDeps, { root: ctx.root, env: process.env });
@@ -251,6 +254,11 @@ const runUpdate = (ctx, positionals, flags, isCli, cwd) => {
   const unknownStatus = describeUnknownStatus(requestedStatus);
   const isStatusRefused = Boolean(unknownStatus);
   if (isStatusRefused) return refuse(isCli, unknownStatus);
+  const isDepsOnlyCall = hasDependencyEdit(flags) && !flags.status && !positionals[2];
+  const isStartCall = !isDepsOnlyCall && (requestedStatus || 'in_progress') === 'in_progress';
+  const startGate = isStartCall ? breakdownGate(ctx.db, taskId) : { ok: true };
+  const isStartRefused = Boolean(startGate.error);
+  if (isStartRefused) return refuse(isCli, startGate.error);
   const isDepsEdit = hasDependencyEdit(flags);
   const depsResult = isDepsEdit ? runSetDependencies(ctx, taskId, flags, isCli) : null;
   const isDepsRefused = Boolean(depsResult?.refused);

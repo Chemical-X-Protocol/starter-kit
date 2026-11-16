@@ -46,6 +46,24 @@ export const setPoints = (db, taskId, value) => {
   return { id, points, size: sizeClassOf(points) };
 };
 
+const BREAKDOWN_POINTS = 8;
+
+const hasChildTasks = (db, taskId) => Boolean(db.prepare('SELECT id FROM agent_tasks WHERE parent_id = ? LIMIT 1').get(Number(taskId)));
+
+/**
+ * A task of 8 points or more must be broken down (have child tasks) before it is claimed or moved to in_progress.
+ * A task that does not exist, or has no points, is not gated here: the claim or update reports that itself.
+ * @returns {{ ok: true } | { error: string }}
+ */
+export const breakdownGate = (db, taskId) => {
+  const row = db.prepare('SELECT points FROM agent_tasks WHERE id = ?').get(Number(taskId));
+  const isLarge = Number(row?.points) >= BREAKDOWN_POINTS;
+  const isBrokenDown = hasChildTasks(db, taskId);
+  const isBlocked = isLarge && !isBrokenDown;
+  if (!isBlocked) return { ok: true };
+  return { error: `Task #${taskId} is ${row.points} points (${BREAKDOWN_POINTS} or more) and has no child tasks. Break it down first: add the child tasks with --parent=${taskId}, then claim or start it.` };
+};
+
 /** Records the planned time (minutes) and tokens for a task, before it is built. Both must be positive whole numbers. */
 export const setEstimate = (db, taskId, minutes, tokens) => {
   const id = Number(taskId);
