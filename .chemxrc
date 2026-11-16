@@ -1,8 +1,9 @@
 {
-  "profile": "pragmatic",
+  "profile": "atomic-strict",
   "scope": ".",
   "commit": {
-    "skipCi": false
+    "skipCi": false,
+    "coAuthor": "x@hallofthegods.com"
   },
   "rules": {
     "component-max-complexity": 12,
@@ -14,5 +15,6 @@
     "rule-of-three-abstractions": true,
     "ai-slop-detection": "critical"
   },
-  "nativeFileTools": "block"
+  "nativeFileTools": "block",
+  "guardNudges": "block"
 }

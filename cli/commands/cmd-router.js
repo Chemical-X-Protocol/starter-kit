@@ -402,8 +402,10 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
       const hostArg = rawArgs.find((a) => a.startsWith('--host='));
       const host = hostArg ? hostArg.split('=')[1] : undefined;
       const isDev = rawArgs.includes('--dev') || rawArgs.includes('-d') || process.env.CHEMX_UI_DEV === '1';
+      const tokenArg = rawArgs.find((a) => a.startsWith('--token='));
+      const token = (tokenArg ? tokenArg.split('=')[1] : undefined) || process.env.CHEMX_UI_TOKEN;
       const allowHosts = rawArgs.filter((a) => a.startsWith('--allow-host=')).flatMap((a) => a.slice('--allow-host='.length).split(',')).filter(Boolean);
-      const { server } = await startUiServer({ port, host, allowHosts, dev: isDev, isCli: true, cwd: process.cwd() });
+      const { server } = await startUiServer({ port, host, token, allowHosts, dev: isDev, isCli: true, cwd: process.cwd() });
       await new Promise((resolve) => {
         const shutdown = () => {
           server.close(() => resolve());
