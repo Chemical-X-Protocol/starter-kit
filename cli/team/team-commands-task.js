@@ -10,6 +10,7 @@ import { completeTaskWithAudit, reconcileAuditTasks } from './team-triage.js';
 import { formatTaskListCard, formatTaskDetailCard, formatTaskHelpCard } from './team-format.js';
 import { resolveListOptions, selectTaskPage, buildTaskListView, formatTitleLines } from './task-list-view.js';
 import { markIdleClaims, claimInfoFor } from './task-claim-age.js';
+import { setPoints } from './team-points.js';
 import { handleTaskHandoffCommand } from './team-task-handoff.js';
 import { handleTaskCloseCommand, duplicateLinks, formatDuplicateLinks } from './team-task-close.js';
 import { handleTaskSlotCommand, handleTaskTraceCommand } from './team-commands-vds.js';
@@ -344,6 +345,13 @@ const runSetFiles = (ctx, positionals, flags, isCli, cwd) => {
   return writeJsonOr(updated, flags, isCli, `\x1b[32m✔\x1b[0m Task #${taskId} extra files: ${prepared.files.join(', ') || '(none)'}\n`);
 };
 
+const runPoints = (ctx, positionals, flags, isCli) => {
+  const placed = setPoints(ctx.db, positionals[1], positionals[2]);
+  const isRefused = Boolean(placed.error);
+  if (isRefused) return fail(isCli, placed.error, { error: placed.error, refused: true });
+  return writeJsonOr(placed, flags, isCli, `\x1b[32m✔\x1b[0m Task #${placed.id} points ${placed.points} (${placed.size})\n`);
+};
+
 const ACTIONS = {
   list: (ctx, p, flags, words, isCli) => runList(ctx, flags, isCli),
   show: (ctx, p, flags, words, isCli) => runShow(ctx, p[1], flags, isCli),
@@ -360,6 +368,7 @@ const ACTIONS = {
   triage: (ctx, p, flags, words, isCli, cwd) => runTriage(ctx, flags, isCli, cwd),
   reconcile: (ctx, p, flags, words, isCli, cwd) => runReconcile(ctx, flags, isCli, cwd),
   'set-target': (ctx, p, flags, words, isCli, cwd) => runSetTarget(ctx, p, flags, isCli, cwd),
+  points: (ctx, p, flags, words, isCli) => runPoints(ctx, p, flags, isCli),
   'set-files': (ctx, p, flags, words, isCli, cwd) => runSetFiles(ctx, p, flags, isCli, cwd)
 };
 

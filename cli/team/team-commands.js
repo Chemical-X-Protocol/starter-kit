@@ -10,6 +10,7 @@ import { formatTeamHelpCard } from './team-format.js';
 import { parseFlags } from './team-flags.js';
 import { parseViewFlags } from './team-view-flags.js';
 import { handleTrainCommand } from './team-commands-vds.js';
+import { handleCurveCommand } from './team-points.js';
 import { handleLockCommand, handleUnlockCommand } from './team-commands-lock.js';
 import { runCheckStagedArgs } from './team-commands-lock-staged.js';
 import { handleProfileCommand, handleHandoffCommand } from './team-commands-profile.js';
@@ -69,6 +70,8 @@ const SUB_COMMANDS = {
 const runSubCommand = (ctx, args, isCli, cwd) => {
   const { subCommand } = args;
   const isTokens = subCommand === 'tokens' || subCommand === 'telemetry';
+  const isCurve = Boolean(isTokens && (args.flags.curve || args.flags.velocity));
+  if (isCurve) return handleCurveCommand(ctx.db, args.flags, isCli);
   const epicOptions = isTokens ? parseEpicArgs(args.restArgs) : null;
   if (epicOptions) return handleEpicTokens(ctx.db, epicOptions, args.flags.isJson, isCli);
   const runOptions = isTokens ? parseRunArgs(args.restArgs) : null;

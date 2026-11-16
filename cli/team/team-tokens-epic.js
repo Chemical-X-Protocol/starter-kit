@@ -50,7 +50,7 @@ const inTreeOrder = (byParent, parentId, depth) => (byParent.get(parentId) ?? []
   .flatMap((row) => [{ row, depth }, ...inTreeOrder(byParent, row.id, depth + 1)]);
 
 // Run usage imported by `team tokens --run --import` (task_usage), summed per mapped task.
-const usageByTask = (db, taskIds) => {
+export const usageByTask = (db, taskIds) => {
   const hasTable = Boolean(db.prepare("SELECT 1 AS ok FROM sqlite_master WHERE type = 'table' AND name = 'task_usage'").get());
   const isUnused = !hasTable || taskIds.length === 0;
   if (isUnused) return new Map();
@@ -64,7 +64,7 @@ const usageByTask = (db, taskIds) => {
 const NO_FIGURES = { source: null, promptTokens: 0, completionTokens: 0, cachedTokens: 0, totalTokens: 0, costUsd: 0 };
 
 // The task's own telemetry wins; imported run usage fills in only when the task never recorded any, so nothing counts twice.
-const figuresOf = (row, usage) => {
+export const figuresOf = (row, usage) => {
   const hasTaskTelemetry = row.telemetry_source !== null && row.telemetry_source !== undefined;
   const task = {
     source: 'task', promptTokens: row.prompt_tokens, completionTokens: row.completion_tokens, cachedTokens: row.cached_tokens,
