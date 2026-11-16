@@ -2,7 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { initTeamSchema } from './team-schema.js';
-import { crewHandle, crewTier, importCrew, listCrew } from './team-crew.js';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { catalogEntries, crewHandle, crewTier, importCrew, listCrew } from './team-crew.js';
 
 const freshDb = () => { const db = new DatabaseSync(':memory:'); initTeamSchema(db); return db; };
 const ROSTER = [
@@ -46,4 +49,20 @@ test('team crew: --dry-run writes nothing', () => {
   const { crew } = importCrew(db, ROSTER, { dryRun: true });
   assert.equal(crew.length, 4);
   assert.equal(listCrew(db).length, 0);
+});
+
+const CATALOG = path.join(os.homedir(), 'www', 'x', 'starnet', 'shared', 'specialties.js');
+
+test('team crew: a StarNet catalog imports every built-in with its persona, purpose and manual', { skip: fs.existsSync(CATALOG) ? false : 'StarNet checkout not present' }, () => {
+  const entries = catalogEntries(CATALOG);
+  assert.ok(entries.length >= 30, `expected the built-in classes, got ${entries.length}`);
+  const db = freshDb();
+  const { crew } = importCrew(db, { agents: entries });
+  assert.equal(crew.length, entries.length);
+  const strategist = crew.find((c) => c.handle === '@strategist');
+  assert.equal(strategist.tier, 'deep', 'the reasoning hint maps to the deep tier');
+  const meta = JSON.parse(db.prepare("SELECT metadata FROM agents WHERE id = '@strategist'").get().metadata);
+  assert.equal(meta.catalog.persona, 'direct');
+  assert.ok(meta.catalog.purpose.length > 0 && meta.catalog.manual.length > 0, 'identity is stored');
+  assert.ok(listCrew(db, 'deep').some((c) => c.handle === '@strategist'));
 });

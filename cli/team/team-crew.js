@@ -1,15 +1,18 @@
 /**
  * `chemx team crew import [roster.json] [--dry-run] [--json]`: a StarNet crew roster becomes stable agent
  * handles on this board (#7634), so tasks can stay with @chemist instead of a one-off session handle.
- * Reads only agentId, name, role, model and provider from each entry; never the system prompt.
+ * Reads only agentId, name, role, model and provider from each roster entry; never the system prompt.
+ * A StarNet catalog (shared/specialties.js) is a different source: each built-in class keeps its persona, purpose
+ * and manual, because those are the crew's identity and the point of importing them.
  * Re-running updates the same handles: an agent already imported keeps its handle, matched by StarNet agentId.
  */
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { createRequire } from 'node:module';
 import { registerAgent } from './team-db-agents.js';
 
-const USAGE = 'Usage: chemx team crew import [roster.json] [--dry-run] [--json]\n  Default roster: $STARNET_WORKSPACES, then the StarNet app-data workspaces (agent.roster.json).\n';
+const USAGE = 'Usage: chemx team crew import [roster.json|specialties.js] [--dry-run] [--json]\n  A specialties.js path imports the StarNet built-in catalog with each persona, purpose and manual.\n  Default roster: $STARNET_WORKSPACES, then the StarNet app-data workspaces (agent.roster.json).\n';
 
 /** Candidate roster files, newest first among those that exist. */
 export const rosterCandidates = (env = process.env, home = os.homedir()) => {
@@ -46,6 +49,22 @@ const rosterEntries = (raw) => {
   return list.filter((a) => a && typeof a === 'object' && (a.agentId || a.name));
 };
 
+// The StarNet catalog names each class's cost tier as a hint (fast, balanced, reasoning), not as a model id.
+const CATALOG_TIER = { fast: 'light', balanced: 'standard', reasoning: 'deep' };
+
+/** The built-in classes of a StarNet catalog file as roster entries. Each keeps its persona, purpose and manual. */
+export const catalogEntries = (file) => {
+  const catalog = createRequire(import.meta.url)(path.resolve(file));
+  return (catalog.BUILTINS || []).map((b) => ({
+    agentId: `catalog:${b.id}`, name: b.name, role: b.tagline, model: b.model, provider: 'starnet-catalog',
+    tier: CATALOG_TIER[b.model] || 'standard',
+    catalog: {
+      id: b.id, emoji: b.emoji || '', persona: b.persona || '', purpose: b.purpose || '', manual: b.manual || '',
+      kit: b.kit || [], skills: b.skills || [], reasoningEffort: b.reasoningEffort || null, accent: b.accent || ''
+    }
+  }));
+};
+
 const importedHandles = (db) => {
   const byStarnetId = new Map();
   for (const row of db.prepare('SELECT id, metadata FROM agents').all()) {
@@ -70,11 +89,11 @@ export const importCrew = (db, roster, { dryRun = false, source = '' } = {}) => 
     let handle = base;
     for (let n = 2; !previous && taken.has(handle); n++) handle = `${base}-${n}`;
     taken.add(handle);
-    const tier = crewTier(entry.model);
+    const tier = entry.tier || crewTier(entry.model);
     const row = {
       id: handle, name: String(entry.name || handle).trim(), role: String(entry.role || 'crew').trim(), tier,
       capabilities: ['crew', `tier:${tier}`],
-      metadata: { source: 'starnet', starnetAgentId: entry.agentId || null, model: entry.model || null, provider: entry.provider || null, roster: source || null }
+      metadata: { source: 'starnet', starnetAgentId: entry.agentId || null, model: entry.model || null, provider: entry.provider || null, roster: source || null, ...(entry.catalog ? { catalog: entry.catalog } : {}) }
     };
     if (!dryRun) registerAgent(db, row);
     crew.push({ handle, name: row.name, role: row.role, tier, model: row.metadata.model, isNew: !previous });
@@ -123,9 +142,11 @@ export const handleCrewCommand = (db, positionals, rawArgs, flags, isCli) => {
     return { error: 'roster not found' };
   }
   let roster;
-  try { roster = JSON.parse(fs.readFileSync(rosterPath, 'utf8')); } catch (err) {
-    write(`✕ ${rosterPath} is not valid JSON: ${err.message}\n`);
-    return { error: 'roster not JSON' };
+  try {
+    roster = rosterPath.endsWith('.js') ? { agents: catalogEntries(rosterPath) } : JSON.parse(fs.readFileSync(rosterPath, 'utf8'));
+  } catch (err) {
+    write(`✕ ${rosterPath} is neither a roster JSON nor a StarNet catalog: ${err.message}\n`);
+    return { error: 'roster not readable' };
   }
   const dryRun = rawArgs.includes('--dry-run');
   const result = importCrew(db, roster, { dryRun, source: rosterPath });
