@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { initTeamSchema } from './team/team-schema.js';
-import { recordVerify } from './verify-record.js';
+import { recordVerify, verifyHandleFor } from './verify-record.js';
 
 const freshDb = () => { const db = new DatabaseSync(':memory:'); initTeamSchema(db); return db; };
 
@@ -28,6 +28,27 @@ test('record verify: a handle without a claim gets no row', async () => {
   const db = freshDb();
   claim(db, 30, '@other');
   await recordVerify(db, { handle: '@me', status: 'pass', scope: { dir: 'cli' } });
+  assert.equal(verifyRows(db).length, 0);
+});
+
+test('record verify: an explicit --as handle gets its own claim task, not the inherited one', async () => {
+  const db = freshDb();
+  claim(db, 30, '@orchestrator');
+  claim(db, 31, '@sub');
+  const handle = verifyHandleFor('@sub', { CHEMX_AGENT_ID: '@orchestrator' });
+  await recordVerify(db, { handle, status: 'pass', scope: { dir: 'cli' } });
+  const rows = verifyRows(db);
+  assert.equal(handle, '@sub');
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].task_id, 31);
+});
+
+test('record verify: an inherited environment handle with no explicit identity writes nothing', async () => {
+  const db = freshDb();
+  claim(db, 30, '@orchestrator');
+  const handle = verifyHandleFor(undefined, { CHEMX_AGENT_ID: '@orchestrator' });
+  await recordVerify(db, { handle, status: 'pass', scope: { dir: 'cli' } });
+  assert.equal(handle, null);
   assert.equal(verifyRows(db).length, 0);
 });
 

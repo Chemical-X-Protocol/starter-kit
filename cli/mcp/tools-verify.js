@@ -114,6 +114,7 @@ export const handleChemxVerify = async (args = {}, cwd = process.cwd()) => {
     changed: Boolean(args.changed),
     base: args.base || null,
     allPackages: Boolean(args.allPackages),
+    as: args.agentId || null,
     print: false,
     cwd: baseCwd
   });

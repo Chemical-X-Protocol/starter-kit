@@ -173,7 +173,6 @@ export const runProjectVerify = async (rawArgs = [], isCli = false, options = {}
   const shouldPrintJson = isJson && shouldPrint;
   if (shouldPrintJson) process.stdout.write(formatAgentJson(summary) + '\n');
   if (isText) process.stdout.write(formatVerdict(status, architecturalWarning, { testsRanNothing: isEmptyAllowed(tests) }));
-  const handle = parsed.values.as || process.env.CHEMX_AGENT_ID;
-  await recordVerifyBestEffort(cwd, { handle, status, scope: summary.scope });
+  await recordVerifyBestEffort(cwd, { as: parsed.values.as || options.as, status, scope: summary.scope });
   return finish(summary, status, { isCli });
 };
