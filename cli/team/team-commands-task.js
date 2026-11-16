@@ -32,7 +32,7 @@ import { repoDir } from './coordination-repos.js';
 import { loadModelRouting } from './team-dispatch.js';
 import { claimWithIgnoreDeps } from './claim-ignore-deps.js';
 import { buildLabelFor } from './team-route.js';
-import { describeUnknownStatus } from './task-update-status.js';
+import { describeRejectedStatus, describeUnknownStatus, normalizeTaskStatus } from './task-update-status.js';
 
 export const TASK_ACTIONS = ['list', 'show', 'add', 'brief', 'claim', 'handoff', 'close', 'done', 'update', 'comment', 'triage', 'reconcile', 'set-target', 'set-files', 'vds-slot', 'trace', 'parent'];
 
@@ -247,11 +247,22 @@ const runSetDependencies = (ctx, taskId, flags, isCli) => {
   return writeJsonOr(getTask(ctx.db, taskId), flags, isCli, `\x1b[32m✔\x1b[0m Task #${taskId} dependencies: ${label}\n`);
 };
 
+// A status the database rejects is a refusal with the reason, not a thrown error (#7677).
+const tryUpdateStatus = (db, taskId, status, options) => {
+  try {
+    return updateTaskStatus(db, taskId, status, options);
+  } catch (err) {
+    const rejection = describeRejectedStatus(status, err);
+    if (!rejection) throw err;
+    return { error: rejection, refused: true };
+  }
+};
+
 const runUpdate = (ctx, positionals, flags, isCli, cwd) => {
   const taskId = positionals[1];
   // Checked before any write, so a refused status leaves a dependency edit in the same command unapplied too.
   const hasStatusFlag = flags.status !== undefined;
-  const requestedStatus = hasStatusFlag ? flags.status : positionals[2];
+  const requestedStatus = normalizeTaskStatus(hasStatusFlag ? flags.status : positionals[2]);
   const unknownStatus = describeUnknownStatus(requestedStatus);
   const isStatusRefused = Boolean(unknownStatus);
   if (isStatusRefused) return refuse(isCli, unknownStatus);
@@ -271,7 +282,9 @@ const runUpdate = (ctx, positionals, flags, isCli, cwd) => {
   if (isCompletion) return runComplete(ctx, taskId, flags, isCli, cwd, `Updated task #${taskId} to status "done"`);
   const agentHandle = resolveCliAgent(flags, isCli);
   registerAgent(ctx.db, { id: agentHandle, role: 'executor' });
-  const res = updateTaskStatus(ctx.db, taskId, targetStatus, { blockedReason: flags.reason || '' });
+  const res = tryUpdateStatus(ctx.db, taskId, targetStatus, { blockedReason: flags.reason || '' });
+  const isRejected = Boolean(res?.refused);
+  if (isRejected) return refuse(isCli, res.error);
   if (res) postFeedEvent(ctx.db, { author_id: agentHandle, task_id: Number(taskId), event_type: 'task_status_updated', message: `Updated task #${taskId} status to ${targetStatus}` });
   writeTaskResult(res, flags, isCli, () => describeStatusUpdate(res, taskId));
   return res;
