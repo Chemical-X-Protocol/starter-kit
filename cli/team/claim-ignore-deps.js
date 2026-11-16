@@ -2,6 +2,14 @@ import { claimTask, postFeedEvent, getTask } from './team-db.js';
 import { recordClaimBoard } from './board-claim-record.js';
 import { renewHolderLeases } from './lease-activity.js';
 
+// One task_claimed row per successful claim (#7695); an ignore-deps reason rides in that same row's message and metadata.ignoreDeps.
+const postClaimRow = (db, taskId, agentHandle, ignoreReason) => {
+  const hasReason = Boolean(ignoreReason);
+  const message = hasReason ? `Claimed #${taskId} ignoring unmet dependencies: ${ignoreReason}` : `Claimed #${taskId}`;
+  const metadata = hasReason ? { ignoreDeps: ignoreReason } : {};
+  return postFeedEvent(db, { author_id: agentHandle, task_id: Number(taskId), event_type: 'task_claimed', message, metadata });
+};
+
 // Shared by the CLI and MCP claim paths (#4428). Guarantees: ignoreDeps, when given, must be a non-blank string;
 // the feed event is posted only when this claim actually recorded a deps_override; a successful claim made with
 // a board ({ root, env }) records that board root on the task, the agent row and the handle's pointer (#6750)
@@ -16,7 +24,7 @@ export const claimWithIgnoreDeps = (db, taskId, agentHandle, ignoreDeps, board =
   const res = claimTask(db, taskId, agentHandle, hasFlag ? { ignoreDeps: reason } : undefined);
   const override = res.task && res.task.result_payload && res.task.result_payload.deps_override;
   const isRecorded = Boolean(res.success) && Boolean(override) && Number(override.at) >= startedAt;
-  if (isRecorded) postFeedEvent(db, { author_id: agentHandle, task_id: Number(taskId), event_type: 'status_update', message: `Claimed #${taskId} ignoring unmet dependencies: ${reason}` });
+  if (res.success) postClaimRow(db, taskId, agentHandle, isRecorded ? reason : null);
   const hasBoard = Boolean(board?.root) && Boolean(res.success);
   if (hasBoard) {
     recordClaimBoard(db, taskId, agentHandle, board);
