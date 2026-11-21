@@ -32,6 +32,7 @@ export interface RuleHazardSummary {
 export interface PathTreeNode {
   readonly dirs: Map<string, PathTreeNode>;
   readonly files: Map<string, string[]>;
+  readonly fileDetails?: Map<string, { readonly fullPath: string; readonly lines: number[] }>;
 }
 
 export declare function resolveDirectory(filePath?: string): string;

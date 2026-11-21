@@ -87,6 +87,19 @@ const TABLES_SQL = `
     low_count INTEGER NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS audit_cache (
+    path TEXT PRIMARY KEY,
+    mtime INTEGER NOT NULL,
+    size INTEGER NOT NULL,
+    content_hash TEXT,
+    ruleset_version TEXT NOT NULL,
+    config_stamp TEXT NOT NULL,
+    violations_json TEXT NOT NULL,
+    stat_json TEXT NOT NULL,
+    hook_count INTEGER NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS embeddings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     file_path TEXT NOT NULL,
@@ -131,6 +144,7 @@ const INDEXES_SQL = `
   CREATE INDEX IF NOT EXISTS idx_violations_rule ON violations(rule);
   CREATE INDEX IF NOT EXISTS idx_violations_severity ON violations(severity);
   CREATE INDEX IF NOT EXISTS idx_snapshots_time ON audit_snapshots(timestamp);
+  CREATE INDEX IF NOT EXISTS idx_audit_cache_hash ON audit_cache(content_hash);
 `;
 
 const COLUMN_MIGRATIONS = [

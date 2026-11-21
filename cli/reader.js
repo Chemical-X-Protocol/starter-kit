@@ -18,6 +18,7 @@ import { isStylesheetFile, outlineStylesheet } from './outline/style-outline.js'
 import { conflictHunksOf, describeConflicts } from './conflicts.js';
 import { resolveRevisionRead } from './read-revision.js';
 import { noteCounterfactual } from './telemetry/call-ledger.js';
+import { parseLineRanges, extractColonRanges, mergeRanges, sliceMultiRanges } from './reader-ranges.js';
 
 const assertReadableFile = (resolvedPath, rawPath, targetPath) => {
   const isMissingFile = !fs.existsSync(resolvedPath);
@@ -221,29 +222,32 @@ export const readTokenOptimized = (targetPath, options = {}) => {
   let rawPath = targetPath;
   let startLine = options.startLine;
   let endLine = options.endLine;
+  let ranges = options.ranges || null;
 
   const hasOptionsLines = Boolean(options.lines);
-  const isStartLineMissing = startLine === undefined;
-  const isEndLineMissing = endLine === undefined;
-  const shouldParseOptionsLines = hasOptionsLines && (isStartLineMissing || isEndLineMissing);
+  const shouldParseOptionsLines = hasOptionsLines && !ranges;
   if (shouldParseOptionsLines) {
-    const linesMatch = String(options.lines).match(/^(\d+)(?:[-:](\d+))?$/);
-    if (linesMatch) {
-      const needsStart = startLine === undefined;
-      if (needsStart) startLine = parseInt(linesMatch[1], 10);
-      const hasEndMatch = Boolean(linesMatch[2]);
-      const needsEnd = endLine === undefined && hasEndMatch;
-      if (needsEnd) endLine = parseInt(linesMatch[2], 10);
+    const parsed = parseLineRanges(options.lines);
+    if (parsed) {
+      ranges = parsed;
+      const isStartMissing = startLine === undefined;
+      if (isStartMissing) startLine = parsed[0].start;
+      const isEndMissing = endLine === undefined;
+      if (isEndMissing) endLine = parsed[parsed.length - 1].end;
     }
   }
 
-  const colonMatch = typeof targetPath === 'string' && targetPath.match(/^([^:]+):(\d+)(?:[-:](\d+))?$/);
-  if (colonMatch) {
-    rawPath = colonMatch[1];
-    const needsStartLine = startLine === undefined;
-    if (needsStartLine) startLine = parseInt(colonMatch[2], 10);
-    const needsEndLine = endLine === undefined && Boolean(colonMatch[3]);
-    if (needsEndLine) endLine = parseInt(colonMatch[3], 10);
+  const colonExtracted = extractColonRanges(rawPath);
+  if (colonExtracted.ranges) {
+    rawPath = colonExtracted.cleanPath;
+    const isRangesMissing = !ranges;
+    if (isRangesMissing) {
+      ranges = colonExtracted.ranges;
+      const isStartMissing = startLine === undefined;
+      if (isStartMissing) startLine = ranges[0].start;
+      const isEndMissing = endLine === undefined;
+      if (isEndMissing) endLine = ranges[ranges.length - 1].end;
+    }
   }
 
   const cwd = options.cwd || process.cwd();
@@ -377,6 +381,23 @@ export const readTokenOptimized = (targetPath, options = {}) => {
       content: notice + outlineText,
       enriched: enriched ? enriched.text : null,
     };
+  }
+
+  const mergedRanges = ranges ? mergeRanges(ranges) : null;
+  const isMultiRange = Boolean(mergedRanges && mergedRanges.length > 1);
+
+  if (isMultiRange) {
+    return sliceMultiRanges({
+      rawContent,
+      resolvedPath,
+      rawLines,
+      mergedRanges,
+      options,
+      conflictNote,
+      totalLines,
+      rawPath,
+      sliceFn: sliceWithTransforms
+    });
   }
 
   let startIdx = 0;

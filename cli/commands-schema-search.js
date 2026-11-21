@@ -138,4 +138,25 @@ export const SEARCH_COMMANDS = [
     ],
     examples: ['chemx check src/components/m-card/m-card.vue', 'chemx check <file> --profile=atomic-strict']
   },
+  {
+    name: 'arch',
+    aliases: ['map', 'structure'],
+    group: 'search',
+    brief: 'Map code structure and capsule hierarchy',
+    usage: 'chemx arch [dir] [options]',
+    summary: 'Token-compact architectural index of component capsules, tiers, contracts, and blast radius.',
+    description: 'Explains codebase architecture without raw directory dumps. Groups files into views, organisms, molecules, atoms, controllers and hooks; provides contract outlines and intent-based routing to recommend where to implement a feature.',
+    flags: [
+      { flag: '--json', desc: 'Output architecture map as minified JSON' },
+      { flag: '--intent=<text>', desc: 'Find target capsule to edit based on intent prompt' },
+      { flag: '--depth=<N>', desc: 'Maximum folder depth to map (default: 3)' },
+      { flag: '--no-cache', desc: 'Bypass cached index and force direct scan' }
+    ],
+    examples: [
+      'chemx arch src/routes/bazaar',
+      'chemx arch src/components --depth=2',
+      'chemx arch src/routes --intent="add quantity stepper to cart"',
+      'chemx arch --json'
+    ]
+  }
 ];

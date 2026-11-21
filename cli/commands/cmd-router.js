@@ -153,6 +153,13 @@ export const dispatchCommand = async (firstArg, rawArgs, runAudit, getPackageVer
       await runSearch(rawArgs.slice(1), true);
       break;
     }
+    case 'arch':
+    case 'map':
+    case 'structure': {
+      const { runArchCli } = await import('./cmd-arch.js');
+      await runArchCli(rawArgs.slice(1), true, process.cwd());
+      break;
+    }
     case 'd':
     case 'diff': {
       const { runDiff } = await import('./cmd-wrappers.js');

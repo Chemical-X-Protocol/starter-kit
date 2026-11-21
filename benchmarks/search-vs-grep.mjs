@@ -14,7 +14,8 @@ const root = path.resolve(args.get('root') || process.cwd());
 const symbol = args.get('symbol');
 const text = args.get('text');
 const file = args.get('file');
-if (!symbol || !text || !file) {
+const hasMissingArgs = !symbol || !text || !file;
+if (hasMissingArgs) {
   process.stderr.write('usage: --root <repo> --symbol <name> --text <literal> --file <path>\n');
   process.exit(2);
 }

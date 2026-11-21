@@ -4,6 +4,7 @@ import { buildReadCards } from '../reader-cards.js';
 import { formatReadHeader, formatReadBody } from '../reader-format.js';
 import { resolveSafePath } from '../path-scope.js';
 import { EXT_LANG_MAP, resolveTargetCwd } from './tools-search-util.js';
+import { parseLineRanges, extractColonRanges } from '../reader-ranges.js';
 
 /**
  * MCP read. Verbatim by default: comments are stripped and blank lines compacted only when
@@ -17,28 +18,31 @@ export const handleChemxRead = (args = {}, cwd = process.cwd()) => {
   let startLine = args.startLine;
   let endLine = args.endLine;
 
+  let ranges = null;
   const hasArgsLines = Boolean(args.lines);
-  const isStartLineMissing = startLine === undefined;
-  const isEndLineMissing = endLine === undefined;
-  const shouldParseLinesArg = hasArgsLines && (isStartLineMissing || isEndLineMissing);
+  const shouldParseLinesArg = hasArgsLines && (startLine === undefined || endLine === undefined);
   if (shouldParseLinesArg) {
-    const linesMatch = String(args.lines).match(/^(\d+)(?:[-:](\d+))?$/);
-    if (linesMatch) {
-      if (isStartLineMissing) startLine = parseInt(linesMatch[1], 10);
-      const hasEndInMatch = Boolean(linesMatch[2]);
-      const shouldSetEnd = isEndLineMissing && hasEndInMatch;
-      if (shouldSetEnd) endLine = parseInt(linesMatch[2], 10);
+    const parsed = parseLineRanges(String(args.lines));
+    if (parsed) {
+      ranges = parsed;
+      const isStartLineMissing = startLine === undefined;
+      if (isStartLineMissing) startLine = parsed[0].start;
+      const isEndLineMissing = endLine === undefined;
+      if (isEndLineMissing) endLine = parsed[parsed.length - 1].end;
     }
   }
 
-  const colonMatch = typeof rawPath === 'string' && rawPath.match(/^([^:]+):(\d+)(?:[-:](\d+))?$/);
-  const hasColonRange = Boolean(colonMatch);
-  if (hasColonRange) {
-    rawPath = colonMatch[1];
-    const isStartLineMissing = startLine === undefined;
-    if (isStartLineMissing) startLine = parseInt(colonMatch[2], 10);
-    const shouldTakeEndLine = Boolean(endLine === undefined && colonMatch[3]);
-    if (shouldTakeEndLine) endLine = parseInt(colonMatch[3], 10);
+  const colonExtracted = extractColonRanges(rawPath);
+  if (colonExtracted.ranges) {
+    rawPath = colonExtracted.cleanPath;
+    const isRangesMissing = !ranges;
+    if (isRangesMissing) {
+      ranges = colonExtracted.ranges;
+      const isStartLineMissing = startLine === undefined;
+      if (isStartLineMissing) startLine = ranges[0].start;
+      const isEndLineMissing = endLine === undefined;
+      if (isEndLineMissing) endLine = ranges[ranges.length - 1].end;
+    }
   }
 
   const targetPath = resolveSafePath(rawPath, targetCwd);
@@ -53,6 +57,7 @@ export const handleChemxRead = (args = {}, cwd = process.cwd()) => {
     compact: args.compact === true,
     startLine,
     endLine,
+    ranges,
     full: args.full === true,
     bare: Boolean(args.bare),
     rev: args.rev,

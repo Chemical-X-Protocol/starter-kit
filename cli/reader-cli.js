@@ -4,6 +4,7 @@ import { readTokenOptimized } from './reader.js';
 import { hasHelpFlag } from './help-args.js';
 import { buildRequestedReadCards } from './reader-cards-gate.js';
 import { formatReadHeader, formatReadBody } from './reader-format.js';
+import { parseLineRanges, extractColonRanges } from './reader-ranges.js';
 
 /**
  * CLI command runner for chemx read / chemx view.
@@ -81,6 +82,7 @@ export const runReaderCli = (args, isCli = false) => {
 
   let startLine;
   let endLine;
+  let explicitRanges = null;
 
   let linesRange = null;
   const linesEq = args.find((a) => a.startsWith('--lines='));
@@ -97,26 +99,27 @@ export const runReaderCli = (args, isCli = false) => {
 
   const hasLinesRange = Boolean(linesRange);
   if (hasLinesRange) {
-    const rangeMatch = linesRange.match(/^(\d+)(?:[-:](\d+))?$/);
-    if (rangeMatch) {
+    const parsed = parseLineRanges(linesRange);
+    if (parsed) {
+      explicitRanges = parsed;
       const isStartLineMissing = startLine === undefined;
-      if (isStartLineMissing) startLine = parseInt(rangeMatch[1], 10);
-      const hasEndInMatch = Boolean(rangeMatch[2]);
+      if (isStartLineMissing) startLine = parsed[0].start;
       const isEndLineMissing = endLine === undefined;
-      const shouldSetEnd = isEndLineMissing && hasEndInMatch;
-      if (shouldSetEnd) endLine = parseInt(rangeMatch[2], 10);
+      if (isEndLineMissing) endLine = parsed[parsed.length - 1].end;
     }
   }
 
-  const colonMatch = filePath.match(/^([^:]+):(\d+)(?:[-:](\d+))?$/);
-  if (colonMatch) {
-    filePath = colonMatch[1];
-    const isStartLineMissing = startLine === undefined;
-    if (isStartLineMissing) startLine = parseInt(colonMatch[2], 10);
-    const hasEndLineSuffix = Boolean(colonMatch[3]);
-    const isEndLineMissing = endLine === undefined;
-    const shouldSetEnd = hasEndLineSuffix && isEndLineMissing;
-    if (shouldSetEnd) endLine = parseInt(colonMatch[3], 10);
+  const colonExtracted = extractColonRanges(filePath);
+  if (colonExtracted.ranges) {
+    filePath = colonExtracted.cleanPath;
+    const isRangesMissing = !explicitRanges;
+    if (isRangesMissing) {
+      explicitRanges = colonExtracted.ranges;
+      const isStartLineMissing = startLine === undefined;
+      if (isStartLineMissing) startLine = explicitRanges[0].start;
+      const isEndLineMissing = endLine === undefined;
+      if (isEndLineMissing) endLine = explicitRanges[explicitRanges.length - 1].end;
+    }
   }
 
   const isJson = args.includes('--json') || args.includes('-j');
@@ -185,6 +188,7 @@ export const runReaderCli = (args, isCli = false) => {
       symbol,
       startLine,
       endLine,
+      ranges: explicitRanges,
       full: isFull,
       bare: isBare,
       hintSyntax: 'cli',
