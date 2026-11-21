@@ -52,7 +52,7 @@ const EXTRA_FLAGS = {
   audit: [
     '--staged-delta', '--delta-base', '--non-interactive', '--no-interactive', '--ci', '--headless', '--yes', '--md', '--share',
     '--post', '--prompt-on-fail', '--copy-prompt', '--stage', '--relax', '--draft', '--dir', '--output',
-    '--min-score', '--model', '--cost-per-million', '--staged', '--fast', '--quick', '--full', '--deep', '--all',
+    '--min-score', '--default-min-grade', '--default-min-score', '--model', '--cost-per-million', '--staged', '--fast', '--quick', '--full', '--deep', '--all',
     '--include-tests', '--tests', '--no-index', '--no-fingerprint', '--triage', '--clones', '--clone-threshold',
     '--hotspot-graph', '--limit', '--all-packages', '--full-only', '--concurrency', '--scope', '--since'
   ],

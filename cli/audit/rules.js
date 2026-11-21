@@ -6,6 +6,7 @@ import { recordTemplatePatterns } from './pattern-detector.js';
 import { createHookShapeRegistry } from './hook-shape-validator.js';
 import { isBabelParsable, getLanguageForFile } from '../languages.js';
 import { analyzeCSharpCode } from './csharp-analyzer.js';
+import { listCommentPositions } from './csharp-mask.js';
 import { applyAuditPostFilters } from './suppressions.js';
 import { applyRuleOverrides } from './rule-overrides.js';
 import { withTaxonomy } from './rule-pillars.js';
@@ -47,13 +48,17 @@ const parseErrorViolation = (relativePath, line, message) => {
   };
 };
 
+// Returns, for C#, the comments as its masker reads them, which place annotations for catch
+// ownership in suppressions.js; null for any other language.
 const runTextPasses = (content, lines, filePath, relativePath, ruleConfig, violations) => {
   checkTypographyEmDash(content, lines, relativePath, violations);
   checkMockDataPatterns(content, lines, relativePath, violations);
   checkSlopTextPatterns(content, lines, relativePath, violations);
   checkExtendedTextPatterns(content, lines, relativePath, filePath, violations, ruleConfig);
   const isCSharp = getLanguageForFile(filePath)?.id === 'csharp';
-  if (isCSharp) analyzeCSharpCode(content, relativePath, violations, ruleConfig);
+  if (!isCSharp) return null;
+  analyzeCSharpCode(content, relativePath, violations, ruleConfig);
+  return listCommentPositions(content);
 };
 
 const runSfcTemplatePasses = (sfc, relativePath, options, ruleConfig, violations) => {
@@ -78,6 +83,10 @@ const describeSfcCoverage = (sfc) => (sfc ? {
 
 const describeTextOnlyReason = (options) => (options.fast ? 'fast mode: AST rules skipped' : 'no AST parser for this language');
 
+// Where the parser found each comment (1-based lines, 0-based columns in the file, since an SFC
+// script overlay keeps file offsets), for catch ownership in suppressions.js.
+const listParserComments = (asts) => asts.flatMap((ast) => (ast.comments ?? []).map((comment) => ({ start: comment.loc.start, end: comment.loc.end })));
+
 /** PHP never reaches the Babel, SFC or Tailwind passes; analyzePhp owns parsing and its passes. */
 const collectPhpViolations = (content, filePath, relativePath, options, config, violations) => {
   const analysis = analyzePhp({ content, filePath, relativePath, options, config, violations });
@@ -97,8 +106,9 @@ const collectRawViolations = (content, filePath, relativePath, options, config) 
   const ruleConfig = config.rules;
   const violations = [];
   let coverageReason = null;
+  let parserComments = null;
   const lines = content.split('\n');
-  runTextPasses(content, lines, filePath, relativePath, ruleConfig, violations);
+  const maskedComments = runTextPasses(content, lines, filePath, relativePath, ruleConfig, violations);
   const isPhp = isPhpPath(filePath);
   if (isPhp) return collectPhpViolations(content, filePath, relativePath, options, config, violations);
 
@@ -124,6 +134,7 @@ const collectRawViolations = (content, filePath, relativePath, options, config) 
     } else {
       runAstPasses(parsed.asts, { relativePath, violations, ruleConfig, options, code });
       runTailwindUnscannedPass(parsed.asts, { filePath, relativePath, violations, options });
+      parserComments = listParserComments(parsed.asts);
     }
   }
 
@@ -131,7 +142,7 @@ const collectRawViolations = (content, filePath, relativePath, options, config) 
   violations.push(...checkLineBudgets({ content, relativePath, config: ruleConfig, sfc, hasHighComplexity }));
   const record = { relativePath, kind: coverageKind, sfc: describeSfcCoverage(sfc), language: getLanguageForFile(filePath)?.id ?? null, reason: coverageReason };
   recordFileCoverage(options.coverage, record);
-  return { violations, coverage: { kind: record.kind, language: record.language, reason: record.reason } };
+  return { violations, coverage: { kind: record.kind, language: record.language, reason: record.reason }, parserComments, maskedComments };
 };
 
 /**
@@ -150,8 +161,8 @@ export const auditCode = (content, filePath, relativePath, options = {}) =>
  */
 export function auditCodeDetailed(content, filePath, relativePath, options = {}) {
   const config = normalizeConfig(options.config);
-  const { violations: raw, coverage, commentRegions = null, fileHeaderEndLine = 0 } = collectRawViolations(content, filePath, relativePath, options, config);
-  const filtered = applyAuditPostFilters(raw, content.split('\n'), { commentRegions, fileHeaderEndLine });
+  const { violations: raw, coverage, commentRegions = null, fileHeaderEndLine = 0, parserComments = null, maskedComments = null } = collectRawViolations(content, filePath, relativePath, options, config);
+  const filtered = applyAuditPostFilters(raw, content.split('\n'), { commentRegions, fileHeaderEndLine, parserComments, maskedComments });
   const violations = applyRuleOverrides(filtered, relativePath, config).map(withTaxonomy);
   return { violations, coverage };
 }

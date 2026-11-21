@@ -61,20 +61,14 @@ if [ -n "$LEASE_BIN" ]; then
   esac
 fi
 
-# Grade thresholds only apply to the opt-in absolute gate (CHEMX_PRECOMMIT_GATE=grade).
-# Line budgets are not checked here: they come from cli/audit/line-budgets.js through
-# the staged-delta audit, so the hook and `chemx check` never disagree (#1476, #1716).
-CONF_MIN_GRADE=""
-CONF_MIN_SCORE=""
-CONFIG_FILE="$REPO_ROOT/.chemx/config.json"
-
-if [ -f "$CONFIG_FILE" ]; then
-  CONF_MIN_GRADE=$(grep -o '"minGrade"[[:space:]]*:[[:space:]]*"[^"]*"' "$CONFIG_FILE" 2>/dev/null | sed 's/.*"minGrade"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
-  CONF_MIN_SCORE=$(grep -o '"minScore"[[:space:]]*:[[:space:]]*[0-9]*' "$CONFIG_FILE" 2>/dev/null | grep -o '[0-9]*$')
-fi
-
-MIN_GRADE="${CHEMX_MIN_GRADE:-${CONF_MIN_GRADE:-B}}"
-MIN_SCORE="${CHEMX_MIN_SCORE:-${CONF_MIN_SCORE:-80}}"
+# Grade floors only apply to the opt-in absolute gate (CHEMX_PRECOMMIT_GATE=grade), and the
+# audit resolves them itself (cli/audit/audit-floors.js): CHEMX_MIN_GRADE/CHEMX_MIN_SCORE, then
+# minGrade/minScore in .chemx/config.json (comments allowed), then the B/80 exported below as
+# CHEMX_DEFAULT_MIN_GRADE/CHEMX_DEFAULT_MIN_SCORE. Env, not flags, so a chemx from before them
+# ignores the defaults instead of refusing a flag (#253). This script parses no config, so no
+# config value or floor variable reaches the eval-ed command (#254, #255). Line budgets are not checked
+# here: they come from cli/audit/line-budgets.js through the staged-delta audit, so the hook
+# and `chemx check` never disagree (#1476, #1716).
 
 # Nothing added, copied, modified or renamed: nothing to gate. The audit itself
 # decides which staged paths are source files.
@@ -94,21 +88,23 @@ elif command -v npx >/dev/null 2>&1; then
 fi
 
 if [ -n "$AUDIT_BIN" ]; then
-  if [ "$CHEMX_VERBOSE" = "1" ]; then
-    printf "%s[Chemical X] Verifying architectural health (Min Grade: %s, Min Score: %s)...%s\n" "$C_BLUE" "$MIN_GRADE" "$MIN_SCORE" "$C_RESET"
-  fi
-  
   # Default gate: any rule whose violation count rises in a staged file vs HEAD, at any
   # severity (#1716, #2546). This is the rule the audit ratchet applies. Whether chemx
   # verify later fails depends on chemx-ratchet.json (see docs/audit-gates.md). The delta
   # gate's failure output lists each new hazard as RULE@file:line.
   # CHEMX_PRECOMMIT_GATE=grade restores the absolute grade gate on changed files.
   if [ "$CHEMX_PRECOMMIT_GATE" = "grade" ]; then
-    AUDIT_CMD="$AUDIT_BIN audit --git --min-grade=$MIN_GRADE --min-score=$MIN_SCORE --non-interactive"
+    export CHEMX_DEFAULT_MIN_GRADE=B CHEMX_DEFAULT_MIN_SCORE=80
+    AUDIT_CMD="$AUDIT_BIN audit --git --non-interactive"
+    GATE_LABEL="grade gate; floors from CHEMX_MIN_GRADE/CHEMX_MIN_SCORE or .chemx/config.json, else B/80"
   else
     AUDIT_CMD="$AUDIT_BIN audit --staged-delta --non-interactive"
+    GATE_LABEL="staged delta"
   fi
-  
+  if [ "$CHEMX_VERBOSE" = "1" ]; then
+    printf "%s[Chemical X] Verifying architectural health (%s)...%s\n" "$C_BLUE" "$GATE_LABEL" "$C_RESET"
+  fi
+
   if ! AUDIT_OUT=$(eval "$AUDIT_CMD < /dev/null" 2>&1); then
     printf "\n%s%s[Chemical X] Commit Blocked: Architectural health verification failed%s\n" "$C_BOLD" "$C_RED" "$C_RESET"
     printf "%s\n\n" "$AUDIT_OUT"
@@ -127,6 +123,15 @@ if [ -n "$AUDIT_BIN" ]; then
     printf "   That skips only this hook. chemx verify fails on these only when a chemx-ratchet.json baseline exists and the rule is above it; without a ratchet, verify gates CRITICAL/HIGH only.\n\n"
     exit 1
   fi
+  # A passing audit's output stays hidden, but a floor it skipped (an unusable config value; an
+  # unusable CHEMX_MIN_* blocks instead, cli/audit/audit-floors.js) is still named on stderr (#253).
+  printf "%s\n" "$AUDIT_OUT" | while IFS= read -r AUDIT_LINE; do
+    case "$AUDIT_LINE" in
+      "⚠ chemx audit: ignoring "*)
+        printf "%s\n" "$AUDIT_LINE" >&2
+        ;;
+    esac
+  done
 fi
 
 if [ "$CHEMX_VERBOSE" = "1" ]; then

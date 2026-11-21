@@ -1,9 +1,9 @@
 {
   "version": 2,
-  "ruleset": 11,
+  "ruleset": 13,
   "scopes": {
     ".": {
-      "ruleset": 11,
+      "ruleset": 13,
       "allRules": true,
       "rules": {},
       "revisions": {
@@ -14,7 +14,7 @@
         "AI_SLOP_LAZY_ANY": 1,
         "AI_SLOP_LAZY_PLACEHOLDER": 1,
         "AI_SLOP_REDUNDANT_PASSTHROUGH": 1,
-        "AI_SLOP_SHALLOW_CATCH": 4,
+        "AI_SLOP_SHALLOW_CATCH": 13,
         "AI_SLOP_UTILITY_REINVENTION": 1,
         "COMBINATOR_RAW_BOOLEAN": 2,
         "COMPLEXITY_CYCLOMATIC_HIGH": 1,
@@ -26,7 +26,7 @@
         "CONTROLLER_VIEW_MISMATCH": 1,
         "COUPLING_EXCESSIVE_INJECTION": 1,
         "DATA_FLOW_OPTIONAL_CHAINING_CHURN": 2,
-        "ERROR_SWALLOWED_EXCEPTION": 4,
+        "ERROR_SWALLOWED_EXCEPTION": 12,
         "HOOK_RETURN_OVERLOAD": 1,
         "HOOK_SATURATION": 1,
         "HOOK_SHAPE_CONTRACT": 1,
@@ -102,7 +102,7 @@
       ]
     },
     "cli": {
-      "ruleset": 11,
+      "ruleset": 13,
       "allRules": true,
       "rules": {
         "CONTROL_FLOW_INLINE_BOOLEAN": 804
@@ -115,7 +115,7 @@
         "AI_SLOP_LAZY_ANY": 1,
         "AI_SLOP_LAZY_PLACEHOLDER": 1,
         "AI_SLOP_REDUNDANT_PASSTHROUGH": 1,
-        "AI_SLOP_SHALLOW_CATCH": 4,
+        "AI_SLOP_SHALLOW_CATCH": 13,
         "AI_SLOP_UTILITY_REINVENTION": 1,
         "COMBINATOR_RAW_BOOLEAN": 2,
         "COMPLEXITY_CYCLOMATIC_HIGH": 1,
@@ -127,7 +127,7 @@
         "CONTROLLER_VIEW_MISMATCH": 1,
         "COUPLING_EXCESSIVE_INJECTION": 1,
         "DATA_FLOW_OPTIONAL_CHAINING_CHURN": 2,
-        "ERROR_SWALLOWED_EXCEPTION": 4,
+        "ERROR_SWALLOWED_EXCEPTION": 12,
         "HOOK_RETURN_OVERLOAD": 1,
         "HOOK_SATURATION": 1,
         "HOOK_SHAPE_CONTRACT": 1,
