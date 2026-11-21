@@ -21,6 +21,8 @@
     "    \u001b[32mtriage\u001b[0m                   Generate tasks automatically from AST audit hazards",
     "    \u001b[32mbenchmark\u001b[0m                Run memory and token reduction ablation benchmark",
     "    \u001b[32mtrain\u001b[0m                    Train/evaluate vector and pattern indices",
+    "    \u001b[32mcheck\u001b[0m                    Queue a typecheck/test/verify/build and keep working (result arrives as a DM)",
+    "    \u001b[32mstandup\u001b[0m                  Run one standup: move each open task to its next light (green, yellow, red, blocked)",
     "",
     "  \u001b[1mGlobal Options:\u001b[0m",
     "    \u001b[33m--as\u001b[0m <@agent>            Execute action as specified agent handle",
@@ -152,9 +154,9 @@
     ],
     "group": "agents",
     "brief": "Tasks, file locks, DMs and feed",
-    "usage": "chemx team <status|task|brief|lock|unlock|feed|post|inbox|dm|tokens|benchmark> [options]",
+    "usage": "chemx team <status|task|brief|lock|unlock|feed|post|inbox|dm|check|tokens|benchmark> [options]",
     "summary": "Multi-agent coordination layer backed by SQLite (.chemx/index.db).",
-    "description": "Task queues, status transitions, AST verification on completion and file locks. `tokens` and `benchmark` are team subcommands. `chemx task <action>` is the same as `chemx team task <action>`; run `chemx team task --help` (or `chemx task show --help`) for task detail. `chemx team brief <id>` stores or prints a task's long brief. An option with a value takes it after a space or an equals sign (`--prio 2`, `--prio=2`).",
+    "description": "Task queues, status transitions, AST verification on completion and file locks. `tokens` and `benchmark` are team subcommands. `chemx task <action>` is the same as `chemx team task <action>`; run `chemx team task --help` (or `chemx task show --help`) for task detail. `chemx team brief <id>` stores or prints a task's long brief. `chemx team check <typecheck|test|verify|build>` queues the check and returns at once; a detached drain worker runs it one job at a time and DMs the result (status, list, show, cancel, drain are its subcommands). An option with a value takes it after a space or an equals sign (`--prio 2`, `--prio=2`).",
     "flags": [
       {
         "flag": "--as=<@handle>",
@@ -241,6 +243,14 @@
         "desc": "status: also list the blocked tasks"
       },
       {
+        "flag": "--once",
+        "desc": "check drain: run the queued jobs, then exit instead of waiting for more"
+      },
+      {
+        "flag": "--idle-exit-s=<n>",
+        "desc": "check drain: exit after n idle seconds (default 60)"
+      },
+      {
         "flag": "--json",
         "desc": "Output data as JSON"
       }
@@ -256,16 +266,18 @@
       "chemx team lock src/a.js src/b.js --as=@coder",
       "chemx team task done 1 --as=@coder",
       "chemx team feed --from=@coder --type=lock",
-      "chemx team status --mine"
+      "chemx team status --mine",
+      "chemx team check typecheck --as=@coder",
+      "chemx team check status"
     ]
   },
   "teamCommandHelp": [
     "USAGE",
-    "  chemx team <status|task|brief|lock|unlock|feed|post|inbox|dm|tokens|benchmark> [options]",
+    "  chemx team <status|task|brief|lock|unlock|feed|post|inbox|dm|check|tokens|benchmark> [options]",
     "  aliases: swarm, feed, tokens, telemetry, benchmark, ablation, memory, task",
     "",
     "Multi-agent coordination layer backed by SQLite (.chemx/index.db).",
-    "Task queues, status transitions, AST verification on completion and file locks. `tokens` and `benchmark` are team subcommands. `chemx task <action>` is the same as `chemx team task <action>`; run `chemx team task --help` (or `chemx task show --help`) for task detail. `chemx team brief <id>` stores or prints a task's long brief. An option with a value takes it after a space or an equals sign (`--prio 2`, `--prio=2`).",
+    "Task queues, status transitions, AST verification on completion and file locks. `tokens` and `benchmark` are team subcommands. `chemx task <action>` is the same as `chemx team task <action>`; run `chemx team task --help` (or `chemx task show --help`) for task detail. `chemx team brief <id>` stores or prints a task's long brief. `chemx team check <typecheck|test|verify|build>` queues the check and returns at once; a detached drain worker runs it one job at a time and DMs the result (status, list, show, cancel, drain are its subcommands). An option with a value takes it after a space or an equals sign (`--prio 2`, `--prio=2`).",
     "",
     "FLAGS",
     "  --as=<@handle>            Agent identity handle (e.g. @claude)",
@@ -289,6 +301,8 @@
     "  --brief                   task show: header facts and only the comments after the description",
     "  --mine                    status: only your open tasks, leases and own events",
     "  --blockers                status: also list the blocked tasks",
+    "  --once                    check drain: run the queued jobs, then exit instead of waiting for more",
+    "  --idle-exit-s=<n>         check drain: exit after n idle seconds (default 60)",
     "  --json                    Output data as JSON",
     "",
     "Only chemx's own flags are checked, and only for typos close to a known flag; any other flag is passed on unchecked (owns its subcommand parsers).",
@@ -306,6 +320,8 @@
     "  chemx team task done 1 --as=@coder",
     "  chemx team feed --from=@coder --type=lock",
     "  chemx team status --mine",
+    "  chemx team check typecheck --as=@coder",
+    "  chemx team check status",
     ""
   ]
 }

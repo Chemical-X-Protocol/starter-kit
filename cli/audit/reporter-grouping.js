@@ -10,6 +10,7 @@ import {
   RESET,
   resolveTopSectionColor
 } from './reporter-utils.js';
+import { buildBatchReadCommands } from '../reader-ranges.js';
 
 export const resolveDirectory = (filePath) => {
   const hasFilePath = Boolean(filePath);
@@ -161,7 +162,7 @@ const resolveSeverityColor = (severity) => {
 };
 
 export const buildPathTree = (violations = []) => {
-  const root = { dirs: new Map(), files: new Map() };
+  const root = { dirs: new Map(), files: new Map(), fileDetails: new Map() };
 
   for (const v of violations) {
     const rawPath = v.filePath || '';
@@ -174,7 +175,7 @@ export const buildPathTree = (violations = []) => {
       const segName = seg.endsWith('/') ? seg : `${seg}/`;
       const hasDir = current.dirs.has(segName);
       if (!hasDir) {
-        current.dirs.set(segName, { dirs: new Map(), files: new Map() });
+        current.dirs.set(segName, { dirs: new Map(), files: new Map(), fileDetails: new Map() });
       }
       current = current.dirs.get(segName);
     }
@@ -182,9 +183,13 @@ export const buildPathTree = (violations = []) => {
     const hasFile = current.files.has(fileName);
     if (!hasFile) {
       current.files.set(fileName, []);
+      current.fileDetails.set(fileName, { fullPath: normalized, lines: [] });
     }
     const loc = v.column ? `${v.line}:${v.column}` : `${v.line}`;
     current.files.get(fileName).push(loc);
+    if (v.line) {
+      current.fileDetails.get(fileName).lines.push(v.line);
+    }
   }
 
   return root;
@@ -222,7 +227,14 @@ export const renderGroupedViolationsTerminal = (violations) => {
       const colStr = v.column ? `:${v.column}` : '';
       lines.push(`   ${sevColor}[#${idx + 1} ${rg.severity}]${RESET} [${rg.rule}] ${YELLOW}${v.filePath}:${v.line}${colStr}${RESET}`);
       lines.push(`      Hazard:    ${rg.hazard}`);
-      lines.push(`      Directive: ${CYAN}${rg.directive}${RESET}\n`);
+      lines.push(`      Directive: ${CYAN}${rg.directive}${RESET}`);
+      if (v.line) {
+        const commands = buildBatchReadCommands(v.filePath, [v.line]);
+        for (const cmd of commands) {
+          lines.push(`      ${DIM}> ${CYAN}${cmd}${RESET}`);
+        }
+      }
+      lines.push('');
       return;
     }
 
@@ -247,6 +259,15 @@ export const renderGroupedViolationsTerminal = (violations) => {
       for (const [fileName, locs] of sortedFiles) {
         const uniqueLocs = Array.from(new Set(locs)).join(', ');
         lines.push(`${indent}- ${YELLOW}${fileName}:${uniqueLocs}${RESET}`);
+
+        const detail = node.fileDetails ? node.fileDetails.get(fileName) : null;
+        const hasDetailLines = Boolean(detail && detail.lines.length > 0);
+        if (hasDetailLines) {
+          const commands = buildBatchReadCommands(detail.fullPath, detail.lines);
+          for (const cmd of commands) {
+            lines.push(`${indent}  ${DIM}> ${CYAN}${cmd}${RESET}`);
+          }
+        }
       }
     };
 

@@ -13,6 +13,7 @@ export const VERIFY_COMMANDS = [
       { flag: '--build', desc: 'Include production build audit step' },
       { flag: '--changed', desc: 'Audit only changed source files and run only the affected specs; typecheck stays whole-project' },
       { flag: '--base=<rev>', desc: 'With --changed: gate each changed file per rule against the merge-base with this revision (delta gate)' },
+      { flag: '--as=<@handle>', desc: 'Your handle: the verify row lands on this handle\'s claimed task; without it, only a session identity records one (an inherited CHEMX_AGENT_ID does not)' },
       { flag: '--json', desc: 'Output the status card as JSON' },
       { flag: '--all', desc: 'In a repo with its own tests/run-tests.mjs runner: php -l every PHP file, not only the changed ones (refused in any other project)' },
       { flag: '--allow-empty', desc: 'Accepted by verify; its effect is not documented here' },

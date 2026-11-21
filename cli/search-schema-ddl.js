@@ -54,6 +54,15 @@ const TABLES_SQL = `
     FOREIGN KEY(importer_path) REFERENCES files(path) ON DELETE CASCADE
   );
 
+  -- Identifier uses (reference positions in code). One row per distinct name per line.
+  CREATE TABLE IF NOT EXISTS occurrences (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    file_path TEXT NOT NULL,
+    name TEXT NOT NULL,
+    line INTEGER NOT NULL DEFAULT 1,
+    FOREIGN KEY(file_path) REFERENCES files(path) ON DELETE CASCADE
+  );
+
   CREATE TABLE IF NOT EXISTS violations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     file_path TEXT NOT NULL,
@@ -76,6 +85,19 @@ const TABLES_SQL = `
     critical_count INTEGER NOT NULL,
     high_med_count INTEGER NOT NULL,
     low_count INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS audit_cache (
+    path TEXT PRIMARY KEY,
+    mtime INTEGER NOT NULL,
+    size INTEGER NOT NULL,
+    content_hash TEXT,
+    ruleset_version TEXT NOT NULL,
+    config_stamp TEXT NOT NULL,
+    violations_json TEXT NOT NULL,
+    stat_json TEXT NOT NULL,
+    hook_count INTEGER NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL
   );
 
   CREATE TABLE IF NOT EXISTS embeddings (
@@ -114,12 +136,15 @@ const INDEXES_SQL = `
   CREATE INDEX IF NOT EXISTS idx_imports_symbol ON imports(imported_symbol);
   CREATE INDEX IF NOT EXISTS idx_imports_path ON imports(importer_path);
   CREATE INDEX IF NOT EXISTS idx_imports_resolved ON imports(resolved_path);
+  CREATE INDEX IF NOT EXISTS idx_occurrences_name ON occurrences(name);
+  CREATE INDEX IF NOT EXISTS idx_occurrences_file ON occurrences(file_path);
   CREATE INDEX IF NOT EXISTS idx_embeddings_file ON embeddings(file_path);
   CREATE INDEX IF NOT EXISTS idx_embeddings_type ON embeddings(target_type);
   CREATE INDEX IF NOT EXISTS idx_violations_file ON violations(file_path);
   CREATE INDEX IF NOT EXISTS idx_violations_rule ON violations(rule);
   CREATE INDEX IF NOT EXISTS idx_violations_severity ON violations(severity);
   CREATE INDEX IF NOT EXISTS idx_snapshots_time ON audit_snapshots(timestamp);
+  CREATE INDEX IF NOT EXISTS idx_audit_cache_hash ON audit_cache(content_hash);
 `;
 
 const COLUMN_MIGRATIONS = [

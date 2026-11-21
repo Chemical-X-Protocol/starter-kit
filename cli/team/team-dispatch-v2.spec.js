@@ -53,6 +53,18 @@ test('selection: target_path only; skip reasons for scoping, root, claims, deps,
   assert.deepEqual(fixturePlan({ needs: 'deep' }).tasks.map((task) => task.id), [4]);
 });
 
+test('a stored brief reaches the rendered script as one line per prompt, from the db row to the script (#7147)', () => {
+  const db = makeFixtureDb();
+  db.prepare("UPDATE agent_tasks SET brief = ? WHERE id = 1").run('x'.repeat(321));
+  const plan = buildRunPlan(db, fixtureOptions({ tasks: '1,3' }));
+  assert.equal(plan.tasks.find((task) => task.id === 1).briefChars, 321);
+  assert.equal(plan.tasks.find((task) => task.id === 3).briefChars, 0);
+  const script = renderRunScript(plan);
+  const lines = script.match(/Long brief stored \(321 characters\): read it before you start with chemx team task show 1 --full/g) || [];
+  assert.equal(lines.length, 3, 'build, review and repair each name the brief');
+  assert.doesNotMatch(script, /chemx team task show 3 --full/);
+});
+
 test('selection: requested ids selection did not return are named with a reason, not dropped', () => {
   const db = makeFixtureDb();
   db.prepare("UPDATE agent_tasks SET status = 'done' WHERE id = 2").run();

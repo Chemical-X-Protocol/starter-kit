@@ -19,6 +19,8 @@ const SQL = {
   deleteImports: 'DELETE FROM imports WHERE importer_path = ?',
   deleteEmbeddings: 'DELETE FROM embeddings WHERE file_path = ?',
   deleteFts: 'DELETE FROM fts_index WHERE file_path = ?',
+  deleteOccurrences: 'DELETE FROM occurrences WHERE file_path = ?',
+  insertOccurrence: 'INSERT INTO occurrences (file_path, name, line) VALUES (?, ?, ?)',
   insertFile: 'INSERT INTO files (path, mtime, size, tier, lines, chars, extractor_version, content_hash, synced_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
   insertSymbol: 'INSERT INTO symbols (file_path, name, kind, is_export, start_line, end_line, signature) VALUES (?, ?, ?, ?, ?, ?, ?)',
   insertProp: 'INSERT INTO props (file_path, name, prop_type) VALUES (?, ?, ?)',
@@ -46,7 +48,7 @@ export const withIndexTransaction = (db, callback, maxRetries = 5) => {
 // Explicit deletes (not only ON DELETE CASCADE) so rows go even when foreign_keys is off.
 export const deleteFileRows = (db, filePath) => {
   const s = statementsFor(db);
-  for (const name of ['deleteSymbols', 'deleteProps', 'deleteHooks', 'deleteImports', 'deleteEmbeddings', 'deleteFts', 'deleteFile']) {
+  for (const name of ['deleteSymbols', 'deleteProps', 'deleteHooks', 'deleteImports', 'deleteOccurrences', 'deleteEmbeddings', 'deleteFts', 'deleteFile']) {
     s[name].run(filePath);
   }
 };
@@ -65,7 +67,7 @@ const insertEmbeddings = (s, filePath, mainName, tier, tokensText, symbols) => {
 
 const writeFileRows = (db, record) => {
   const s = statementsFor(db);
-  const { path: filePath, mtime, size, tier, lines, chars, symbols = [], props = [], hooks = [], imports = [] } = record;
+  const { path: filePath, mtime, size, tier, lines, chars, symbols = [], props = [], hooks = [], imports = [], occurrences = [] } = record;
   const root = record.root || process.cwd();
 
   deleteFileRows(db, filePath);
@@ -81,6 +83,7 @@ const writeFileRows = (db, record) => {
     const resolved = resolveModulePath(filePath, imp.sourceModule, root);
     s.insertImport.run(filePath, imp.importedSymbol, imp.sourceModule, resolved, imp.line || 1);
   }
+  for (const occ of occurrences) s.insertOccurrence.run(filePath, occ.name, occ.line || 1);
 
   const tokensText = buildFtsTokens({ symbols, props, hooks, imports, filePath });
   const mainName = symbols.find((sym) => sym.isExport)?.name || path.basename(filePath);

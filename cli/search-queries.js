@@ -29,6 +29,25 @@ export const findSymbolDefinition = (db, symbolName) => {
   };
 };
 
+// Every indexed use of a name (identifier positions, not just import statements).
+// Returns { total, files, rows } where rows are { filePath, line } ordered by path then line.
+export const findOccurrences = (db, name, { limit = 50 } = {}) => {
+  const cleanName = typeof name === 'string' ? name.trim() : '';
+  const hasInput = Boolean(db) && Boolean(cleanName);
+  if (!hasInput) return { total: 0, files: 0, rows: [] };
+  // An index built before v3 has no occurrences table; a read-only handle does not create it.
+  const hasTable = Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'occurrences'").get());
+  if (!hasTable) return { total: 0, files: 0, rows: [], isMissing: true };
+  const totals = db.prepare('SELECT COUNT(*) AS total, COUNT(DISTINCT file_path) AS files FROM occurrences WHERE name = ?').get(cleanName);
+  const rows = db.prepare(`
+    SELECT file_path, line FROM occurrences
+    WHERE name = ?
+    ORDER BY file_path, line
+    LIMIT ?
+  `).all(cleanName, Math.max(1, Number(limit) || 50)).map((row) => ({ filePath: row.file_path, line: Number(row.line) }));
+  return { total: Number(totals.total), files: Number(totals.files), rows };
+};
+
 export const findSymbolReferences = (db, symbolName) => {
   const hasInput = Boolean(db) && Boolean(symbolName);
   if (!hasInput) return [];

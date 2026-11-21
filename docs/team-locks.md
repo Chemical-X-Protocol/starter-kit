@@ -175,6 +175,10 @@ flagged)`. A live lease by another handle is still shown and flagged
 `linkedWorktree`. A worktree outside the board root sees no board, so there it has no leases to show; leases
 are keyed from the board root and a main-checkout key never names a worktree's file.
 
+## Lock rows carry the task (#7698)
+
+The `lock_acquired`, `lock_released` and `lock_granted` feed rows now carry `task_id`. It is read from the lock's purpose (`#<id>`) or, when the purpose names no task, from the holder's claim.
+
 ## What happens on a lapse
 
 A lease with no chemx activity from its holder for 5 minutes lapses (the activity window above can undo it for up to 10 more minutes while the file stays untaken): the file is free to anyone, and

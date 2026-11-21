@@ -74,7 +74,7 @@ export const TEAM_FRONT_DOORS = {
 
 // `chemx team <sub>`: task and lock depend on their action; every other word below is listed by what it does.
 export const TEAM_READS = ['status', 'tokens', 'telemetry', 'feed', 'benchmark', 'ablation', 'memory', 'route', 'audit-run', 'help'];
-export const TEAM_WRITES = ['post', 'unlock', 'triage', 'inbox', 'dm', 'train', 'profile', 'handoff', 'dispatch', 'migrate'];
+export const TEAM_WRITES = ['post', 'unlock', 'triage', 'inbox', 'dm', 'train', 'profile', 'handoff', 'dispatch', 'migrate', 'standup'];
 export const TEAM_BY_ACTION = ['task', 'lock', 'brief'];
 export const TASK_READS = ['list', 'show', 'view', 'info'];
 // `brief <id>` prints the long brief; --file, --stdin or --clear sets or removes it.

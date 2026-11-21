@@ -36,8 +36,8 @@ export const clearDbCache = () => {
   DB_CACHE.clear();
 };
 
-// Per-handle provenance: { isReadOnly, versionReset, isStaleVersion }.
-export const getIndexDbState = (db) => DB_STATE.get(db) || { isReadOnly: false, versionReset: null, isStaleVersion: false, isBusyAtOpen: false };
+// Per-handle provenance: { isReadOnly, versionReset, isStaleVersion, isForeignVersion }.
+export const getIndexDbState = (db) => DB_STATE.get(db) || { isReadOnly: false, versionReset: null, isStaleVersion: false, isBusyAtOpen: false, isForeignVersion: false };
 
 export const warmIndexDb = (cwd = process.cwd()) => {
   return openIndexDb(cwd);
@@ -59,7 +59,10 @@ const initWritableDb = (db) => {
   registerVectorFunctions(db);
   initTeamSchema(db);
   const versionReset = ensureIndexVersion(db);
-  DB_STATE.set(db, { isReadOnly: false, versionReset: versionReset.reset ? versionReset : null, isStaleVersion: false });
+  // A newer chemx's stamp keeps its rows (#6937): every sync then answers stale instead of writing.
+  const isForeignVersion = Boolean(versionReset.foreign);
+  const isReported = versionReset.reset || isForeignVersion;
+  DB_STATE.set(db, { isReadOnly: false, versionReset: isReported ? versionReset : null, isStaleVersion: false, isForeignVersion });
   return db;
 };
 

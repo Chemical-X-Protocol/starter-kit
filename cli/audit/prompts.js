@@ -2,6 +2,7 @@ import { describeLineBudgetPolicy } from '../config/profiles.js';
 import { SIZE_LABELS, hasSizeClass, isMonolithHotspot } from './line-budgets.js';
 import { groupViolationsByRule, buildPathTree } from './reporter-grouping.js';
 import { buildNeedsLine, buildActionLine } from './prompt-rule-lines.js';
+import { buildBatchReadCommands } from '../reader-ranges.js';
 import {
   CYAN,
   YELLOW,
@@ -34,6 +35,15 @@ const renderTreeLines = (node, depth = 0) => {
   for (const [fileName, locs] of sortedFiles) {
     const uniqueLocs = Array.from(new Set(locs)).join(', ');
     lines.push(`${indent}- \`${YELLOW}${fileName}:${uniqueLocs}${RESET}\``);
+
+    const detail = node.fileDetails ? node.fileDetails.get(fileName) : null;
+    const hasDetailLines = Boolean(detail && detail.lines.length > 0);
+    if (hasDetailLines) {
+      const commands = buildBatchReadCommands(detail.fullPath, detail.lines);
+      for (const cmd of commands) {
+        lines.push(`${indent}  > \`${cmd}\``);
+      }
+    }
   }
 
   return lines;

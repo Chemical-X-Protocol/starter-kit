@@ -51,6 +51,21 @@ test('taskFiles includes extra_files, so the batch plan puts tasks sharing one i
   assert.notEqual(batchOf(3), batchOf(1));
 });
 
+test('every prompt of a task with a stored brief says how to read it, and says nothing without one (#7134)', () => {
+  const { ready } = screenTasks([{ ...task(7, 't.js'), brief_chars: 1234 }, task(8, 'u.js')], ctx());
+  assert.equal(ready[0].briefChars, 1234);
+  assert.equal(ready[1].briefChars, 0);
+  const plan = (briefChars) => ({
+    run: 'r', root: '/r', dispatcher: '@d', goal: '', peers: [], lanes: [[7]],
+    tasks: [{ id: 7, title: 't', description: 'd', needs: 'light', handle: '@r-7', reviewer: '@r-7-review', repairer: '@r-7-repair', target: 'a.js', files: ['a.js'], extraFiles: [], snapshot: {}, briefChars }]
+  });
+  const briefed = plan(1234);
+  const prompts = renderTaskPrompts(briefed.tasks[0], briefed);
+  for (const stage of ['build', 'review', 'repair']) assert.match(prompts[stage], /Long brief stored \(1234 characters\): read it before you start with chemx team task show 7 --full/);
+  const plain = plan(0);
+  assert.doesNotMatch(renderTaskPrompts(plain.tasks[0], plain).build, /Long brief/);
+});
+
 test('the builder prompt names the extra files it may edit, and says nothing without extras', () => {
   const plan = (extraFiles) => ({
     run: 'r', root: '/r', dispatcher: '@d', goal: '', peers: [], lanes: [[1]],

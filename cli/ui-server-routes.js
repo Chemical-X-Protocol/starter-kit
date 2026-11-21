@@ -5,7 +5,6 @@ import {
   handleSwarmStatus, handlePostFeed, handleCreateFeedPost, handleUpdateSignature,
   handleGetTopics, handleGetTopicPosts, handleCreateTopic
 } from './ui-handlers.js';
-import { queryFeed, listTasks, getTask } from './team/team-db.js';
 import { getForumCategories } from './ui-forum-data.js';
 import {
   handleCodebaseIndex, handleCodebaseTree, handleCodebaseFile,
@@ -18,6 +17,11 @@ import {
 import { getDatabaseMetrics, executeSqlQuery } from './ui-db-studio.js';
 import { scanAttentionItems, confirmAttentionItem } from './ui-attention.js';
 import { withFreshIndex } from './ui-fresh-index.js';
+import { pagedRoutes } from './ui-api-index.js';
+import { socialPostRoutes, matchSocialGet, matchSocialPost } from './ui-social-routes.js';
+import { getTaskDetail } from './ui-task-detail.js';
+import { readBoardSavings } from './ui-savings.js';
+import { listCrew } from './team/team-crew.js';
 
 // db: team rows (coordination db, #2581); indexDb (default db): code index for codebase, metrics, db studio.
 export const routeGet = (pathname, db, cwd = process.cwd(), queryParams = {}, { indexDb = db } = {}) => {
@@ -26,11 +30,9 @@ export const routeGet = (pathname, db, cwd = process.cwd(), queryParams = {}, { 
   const normPath = cleanPath.replace(/^\/api\/swarm\//, '/api/');
 
   const routes = {
+    ...pagedRoutes(db, parsedParams, { cwd, indexDb }),
     '/api/status': () => handleSwarmStatus(db, cwd, indexDb),
-    '/api/feed': () => ({ success: true, feed: queryFeed(db, parsedParams) }),
-    '/api/tasks': () => ({ success: true, tasks: listTasks(db, parsedParams) }),
     '/api/categories': () => ({ success: true, categories: getForumCategories(db) }),
-    '/api/agents': () => ({ success: true, agents: handleSwarmStatus(db, cwd, indexDb).agents }),
     '/api/codebase': () => withFreshIndex(cwd, {}, () => handleCodebaseIndex(indexDb, cwd)),
     '/api/codebase/tree': () => withFreshIndex(cwd, {}, () => handleCodebaseTree(indexDb, cwd)),
     '/api/codebase/file': () => withFreshIndex(cwd, { paths: [parsedParams.path], scope: false }, () => handleCodebaseFile(indexDb, parsedParams.path, cwd)),
@@ -38,6 +40,8 @@ export const routeGet = (pathname, db, cwd = process.cwd(), queryParams = {}, { 
     '/api/topics': () => handleGetTopics(db, parsedParams.category),
     '/api/topics/posts': () => handleGetTopicPosts(db, parsedParams.topicId || parsedParams.topic_id),
     '/api/attention': () => scanAttentionItems(db, cwd),
+    '/api/savings': () => readBoardSavings(db),
+    '/api/crew': () => ({ success: true, crew: listCrew(db) }),
     '/api/db/tables': () => handleDbTables(indexDb, cwd),
     '/api/db/browse': () => handleDbBrowse(indexDb, parsedParams), '/api/db/structure': () => handleDbStructure(indexDb, parsedParams)
   };
@@ -46,13 +50,9 @@ export const routeGet = (pathname, db, cwd = process.cwd(), queryParams = {}, { 
   if (hasRoute) return routes[normPath]();
 
   const taskByIdMatch = normPath.match(/^\/api\/tasks\/(\d+)$/);
-  if (taskByIdMatch) {
-    const task = getTask(db, taskByIdMatch[1]);
-    if (!task) return { success: false, error: 'Task not found' };
-    return { success: true, task };
-  }
+  if (taskByIdMatch) return getTaskDetail(db, taskByIdMatch[1]);
 
-  return null;
+  return matchSocialGet(normPath, db, parsedParams, { cwd, indexDb });
 };
 
 export const routePost = (pathname, db, body, cwd = process.cwd(), { consoleDb = null } = {}) => {
@@ -61,6 +61,7 @@ export const routePost = (pathname, db, body, cwd = process.cwd(), { consoleDb =
   const normPath = cleanPath.replace(/^\/api\/swarm\//, '/api/');
 
   const routes = {
+    ...socialPostRoutes(db, body, { cwd }),
     '/api/feed': () => postFeedHandler(db, body),
     '/api/tasks': () => handleCreateTask(db, body),
     '/api/tasks/claim': () => handleClaimTask(db, body),
@@ -82,7 +83,7 @@ export const routePost = (pathname, db, body, cwd = process.cwd(), { consoleDb =
 
   const hasRoute = Object.prototype.hasOwnProperty.call(routes, normPath);
   if (hasRoute) return routes[normPath]();
-  return null;
+  return matchSocialPost(normPath, db, body, { cwd });
 };
 
 export const parseJsonBody = (req) => {

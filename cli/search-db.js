@@ -11,6 +11,7 @@ export {
 export {
   findSymbolDefinition,
   findSymbolReferences,
+  findOccurrences,
   findFileDependencies,
   findFileDependents,
   calculateBlastRadius,

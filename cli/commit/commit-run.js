@@ -16,6 +16,7 @@ import { collectRefusals } from './commit-validate.js';
 import { gatherFacts } from './commit-facts.js';
 import { openCommitDb, recordCommit, releaseLeases } from './commit-record.js';
 import { snapshotIndex, restoreIndex } from './commit-index.js';
+import { buildHunkIndex, levelIndex, parseHunkSpecs } from './commit-hunks.js';
 import {
   gitRoot, stagedAmong, shortSha, hasPreCommitHook, gitWithRetry, compactFailure
 } from './commit-git.js';
@@ -136,12 +137,19 @@ const routeToOwner = (parsed, cwd) => {
  * @returns {Promise<{ ok: boolean, exitCode: number, lines: string[], refusals: string[], json: boolean, data?: object }>}
  */
 export const runCommit = async (args, options = {}) => {
-  const parsed = parseCommitArgs(args);
+  const parsedArgs = parseCommitArgs(args);
   const startCwd = options.cwd ?? process.cwd();
+  const hunkParse = parseHunkSpecs(parsedArgs.hunks);
+  // A file named in --hunks is a listed file, whether or not it is also named plainly.
+  const hunkFiles = hunkParse.specs.map((spec) => spec.file);
+  const parsed = { ...parsedArgs, files: [...new Set([...parsedArgs.files, ...hunkFiles])], hunkSpecs: hunkParse.specs };
+  if (hunkParse.errors.length) return refused(hunkParse.errors, parsed);
   const routed = parsed.files.length ? routeToOwner(parsed, startCwd) : { cwd: startCwd, files: parsed.files };
   const isRefused = Boolean(routed.refusal);
   if (isRefused) return refused(routed.refusal, parsed);
-  return commitInRepo({ ...parsed, files: routed.files }, routed.cwd, options);
+  const moved = routed.files !== parsed.files;
+  const hunkSpecs = parsed.hunkSpecs.map((spec) => ({ ...spec, file: moved ? path.resolve(startCwd, spec.file) : spec.file }));
+  return commitInRepo({ ...parsed, files: routed.files, hunkSpecs }, routed.cwd, options);
 };
 
 const commitInRepo = async (parsed, cwd, options) => {
@@ -153,6 +161,8 @@ const commitInRepo = async (parsed, cwd, options) => {
   const gitEnv = facts?.committer ? { ...env, CHEMX_AGENT_ID: facts.committer } : env;
   const retry = { sleep: options.sleep, delaysMs: options.delaysMs, env: gitEnv };
   const isPreflightClean = preflight.length === 0;
+  const hasHunks = isPreflightClean && parsed.hunkSpecs.length > 0;
+  if (hasHunks) return commitHunks({ parsed, cwd, root, facts, env, gitEnv, retry });
   const snapshot = isPreflightClean ? snapshotIndex(root, facts.rel) : [];
   const staging = isPreflightClean ? await stageFiles(root, facts.rel, retry) : { reasons: [], isFailure: false };
   if (staging.isFailure) return failed(staging.reasons, parsed, { attempts: staging.added.attempts, lockHolder: staging.added.lockHolder });
@@ -166,4 +176,25 @@ const commitInRepo = async (parsed, cwd, options) => {
   if (isCommitFailed) return failed([...failureLines(outcome), ...restoreLines(root, facts.rel, snapshot)], parsed, { attempts: outcome.attempts, lockHolder: outcome.lockHolder });
   const data = afterCommit(root, cwd, facts, message, hasHook);
   return { ok: true, exitCode: 0, refusals: [], json: parsed.json, lines: formatSuccessLines(data, parsed.release), data };
+};
+
+// A commit of chosen hunks: made on a private index that starts from HEAD, so only the listed files differ in it.
+const commitHunks = async ({ parsed, cwd, root, facts, env, gitEnv, retry }) => {
+  const specs = parsed.hunkSpecs.map((spec) => ({ ...spec, file: path.relative(root, path.resolve(cwd, spec.file)) }));
+  const built = buildHunkIndex(root, facts.rel, specs, gitEnv);
+  const isBuildFailed = built.errors.length > 0;
+  if (isBuildFailed) return refused(built.errors, parsed);
+  const message = buildCommitMessage({ messages: parsed.messages, taskId: facts.taskId, noTask: parsed.noTask, config: facts.config, env, isSkipCi: facts.isSkipCi });
+  const hasHook = hasPreCommitHook(root);
+  const commitArgs = ['commit', '-m', message.subject, ...message.paragraphs.flatMap((paragraph) => ['-m', paragraph])];
+  const outcome = await gitWithRetry(root, commitArgs, { ...retry, env: built.env });
+  built.cleanup();
+  const isCommitFailed = outcome.status !== 0;
+  if (isCommitFailed) return failed(failureLines(outcome), parsed, { attempts: outcome.attempts, lockHolder: outcome.lockHolder });
+  const isLevel = levelIndex(root, facts.rel);
+  const data = afterCommit(root, cwd, facts, message, hasHook);
+  const lines = formatSuccessLines(data, parsed.release);
+  const hunkLines = [`hunks: ${specs.map((spec) => `${spec.file}:${spec.numbers.join(',')}`).join('; ')} (the rest of those files stays uncommitted)`];
+  const levelLines = isLevel ? [] : ['warning: could not put the index level with HEAD for the listed files (git reset -q -- <files>).'];
+  return { ok: true, exitCode: 0, refusals: [], json: parsed.json, lines: [...lines, ...hunkLines, ...levelLines], data };
 };

@@ -13,7 +13,7 @@ const VALUE_FLAGS = new Map([
 
 const BOOLEAN_FLAGS = new Set([
   '--json', '-j', '--raw-json', '--no-columnar', '--columnar', '-g', '--literal', '-i', '--inspect',
-  '-l', '--lines', '--include-internal', '--reindex', '--blast-radius', '--blast', '--impact',
+  '-l', '--lines', '--include-internal', '--reindex', '--blast-radius', '--blast', '--impact', '--uses', '--usages',
   '--trace', '--backtrace', '--semantic', '--hybrid', '--critical', '--progression', '--failing',
   '--degraded', '--crystalline', '--clean', '--regex', '-F', '--fixed-strings', '--hidden',
   '--full', '--help', '-h', '--ignore-case', '--bare', '-b', '-o', '--only-matching', '--unique', '--files-with-matches'

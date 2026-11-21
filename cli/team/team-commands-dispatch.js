@@ -16,7 +16,7 @@ import { parseDispatchRunArgs, isRunMode, handleDispatchRun } from './team-dispa
 
 const DISPATCH_USAGE = [
   'Usage: chemx team dispatch [filters] [capacity] [--json | --headless]',
-  '       chemx team dispatch --workflow[=<out.js>] [--tasks=<ids>] [filters] [--limit=N] [--max-agents=N] [--run-name=<name>] [--goal=<text>] [--dry-run] [--json]',
+  '       chemx team dispatch --workflow[=<out.js>] [--tasks=<ids>] [filters] [--limit=N] [--max-agents=N] [--run-name=<name>] [--goal=<text>] [--crew | --assign=@handle] [--dry-run] [--json]',
   '       chemx team dispatch --find-run=<name> | --record-run=<name> --workflow-run=<id>',
   '  Plans file-disjoint agent work for queued tasks and routes each task by its needs tier.',
   '  Filters:  --rule=<RULE> --needs=light|standard|deep --parent=<id> --repo=<path> --limit=<n>',
@@ -30,6 +30,8 @@ const DISPATCH_USAGE = [
   '    scriptPath). Without --dry-run the run is recorded in dispatch_runs and the plan is posted to the feed.',
   '    Selection skips tasks that are claimed, have unmet dependencies, or whose target is leased by another handle or',
   '    has uncommitted changes the dispatcher does not lease. The same db state renders the same script, byte for byte.',
+  '  --crew builds each lane as an imported crew member (chemx team crew import), matched to the lane\'s top needs tier;',
+  '    --assign=@handle gives every task to one handle (one lane only: add --max-agents=1).',
   '  --find-run prints the workflow run id: recorded, else the newest workflow transcript naming the run (evidence, not proof).'
 ].join('\n');
 

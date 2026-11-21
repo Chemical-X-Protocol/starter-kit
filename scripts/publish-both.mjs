@@ -3,9 +3,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { runFrameworkPrePublishGate } from './check-framework-generation.mjs';
 import { computePublishExitCode, formatPublishSummary } from './publish-summary.mjs';
+import { restoreOnExit } from './package-json-guard.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -69,6 +70,19 @@ const TARGETS = [
   }
 ];
 
+/** Runs one npm publish and resolves with how it ended. Sets `running` so a signal can stop it. */
+function runNpm(args) {
+  return new Promise((resolve) => {
+    running = spawn('npm', args, {
+      cwd: PKG_DIR,
+      stdio: 'inherit',
+      env: { ...process.env, CHEMX_PREPUBLISH_PASSED: '1' }
+    });
+    running.on('error', (error) => resolve({ status: null, signal: null, error }));
+    running.on('exit', (status, signal) => resolve({ status, signal, error: null }));
+  });
+}
+
 const originalContent = fs.readFileSync(PKG_JSON, 'utf-8');
 const pkg = JSON.parse(originalContent);
 const isPrerelease = Boolean(pkg.version && pkg.version.includes('-'));
@@ -79,6 +93,12 @@ const results = [];
 // Pre-publish mechanical gate: verify all frameworks compile and typecheck cleanly
 await runFrameworkPrePublishGate();
 process.env.CHEMX_PREPUBLISH_PASSED = '1';
+
+// npm is async so a signal reaches our handlers while it runs (spawnSync would hold them until it exits).
+let running = null;
+const restore = restoreOnExit(PKG_JSON, originalContent, {
+  stopChild: (signal) => running?.kill(signal),
+});
 
 try {
   for (const target of TARGETS) {
@@ -97,18 +117,16 @@ try {
     if (tag) publishArgs.push('--tag', tag);
 
     process.stdout.write(`\n\x1b[36m[starter-kit] Publishing: ${target.name} (dry-run: ${isDryRun}${tag ? `, tag: ${tag}` : ''})\x1b[0m\n`);
-    const proc = spawnSync('npm', publishArgs, {
-      cwd: PKG_DIR,
-      stdio: 'inherit',
-      env: { ...process.env, CHEMX_PREPUBLISH_PASSED: '1' }
-    });
+    const proc = await runNpm(publishArgs);
 
     results.push({ name: target.name, success: proc.status === 0 });
     const hasProcError = Boolean(proc.error);
     if (hasProcError) process.stderr.write(`\x1b[31m✕ ${target.name}: ${proc.error.message}\x1b[0m\n`);
+    // Killed by a signal (Ctrl-C at the OTP prompt): publish nothing further.
+    if (proc.signal) break;
   }
 } finally {
-  fs.writeFileSync(PKG_JSON, originalContent, 'utf-8');
+  restore();
 }
 
 process.stdout.write('\n\x1b[1m\x1b[36m--- starter-kit Publish Summary ---\x1b[0m\n');

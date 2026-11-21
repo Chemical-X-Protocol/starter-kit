@@ -172,7 +172,8 @@ const parseWithBlockFallback = (code, sfc, content) => {
     const canSplit = inlineScripts.length > 1;
     if (!canSplit) throw err;
     const programs = inlineScripts.map((block) => parseModule(buildScriptOverlay(content, [block])));
-    return { program: { body: programs.flatMap((ast) => ast.program.body) } };
+    // A typed Program node: walkBabel only visits nodes with a string `type`, so occurrences and hooks need it.
+    return { program: { type: 'Program', body: programs.flatMap((ast) => ast.program.body) } };
   }
 };
 
@@ -189,7 +190,8 @@ const extractSfcMetadata = (base, sfc, ast, filePath, contentLines) => {
     symbols: [componentSymbol, ...base.symbols],
     props: uniqueByName([...extractSfcProps(ast.program), ...base.props]),
     hooks: base.hooks,
-    imports: [...base.imports, ...extractScriptSrcImports(sfc), ...extractTemplateComponentImports(sfc, localImportNames)]
+    imports: [...base.imports, ...extractScriptSrcImports(sfc), ...extractTemplateComponentImports(sfc, localImportNames)],
+    occurrences: base.occurrences
   };
 };
 

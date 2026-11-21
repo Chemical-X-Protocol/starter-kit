@@ -9,6 +9,7 @@ import { loadProjectConfig } from './config/index.js';
 import { countLines, getLineBudgets, resolveFileTier } from './audit/line-budgets.js';
 import { listGitFiles } from './git-file-listing.js';
 import { conflictHunksOf, describeConflicts } from './conflicts.js';
+import { openAuditCache, getCachedAudit, setCachedAudit, computeContentHash } from './audit-cache.js';
 
 // One CRITICAL finding instead of a parse error: an unmerged file is never clean.
 const conflictViolation = (relativePath, hunks) => ({
@@ -76,6 +77,33 @@ export const auditFileDetailed = (filePath, relativePath, options = {}) => {
 };
 
 const auditFileEntry = (fullPath, relPath, scanOptions) => {
+  let stat = null;
+  try {
+    stat = fs.statSync(fullPath);
+  } catch {
+    stat = null;
+  }
+
+  const canUseCache = Boolean(scanOptions.auditCache && stat);
+  if (canUseCache) {
+    const cached = getCachedAudit(
+      scanOptions.auditCache,
+      relPath,
+      stat.mtimeMs,
+      stat.size,
+      scanOptions.configStamp
+    );
+    const hasCached = Boolean(cached);
+    if (hasCached) {
+      return {
+        fileStat: cached.fileStat,
+        hookCount: cached.hookCount,
+        fileViolations: cached.fileViolations,
+        isCached: true
+      };
+    }
+  }
+
   const content = fs.readFileSync(fullPath, 'utf-8');
   const hunks = conflictHunksOf(content);
   const isConflicted = hunks.length > 0;
@@ -107,7 +135,20 @@ const auditFileEntry = (fullPath, relPath, scanOptions) => {
   });
   if (fingerprint) scanOptions.forge.commitFile(fingerprint);
 
-  return { fileStat, hookCount, fileViolations };
+  if (canUseCache) {
+    const contentHash = computeContentHash(content);
+    setCachedAudit(
+      scanOptions.auditCache,
+      relPath,
+      stat.mtimeMs,
+      stat.size,
+      contentHash,
+      scanOptions.configStamp,
+      { fileStat, hookCount, fileViolations }
+    );
+  }
+
+  return { fileStat, hookCount, fileViolations, isCached: false };
 };
 
 const hasIgnoredSegment = (relPath) => relPath.split('/').some((segment) => IGNORED_DIRS.has(segment));
@@ -155,6 +196,7 @@ export const scanTree = (targetDir, baseDir, scanOptions = {}) => {
   let fileStats = [];
   let totalHooks = 0;
   let skippedConflicts = [];
+  let cachedCount = 0;
   const take = (result) => {
     const hasSkipped = Boolean(result.skipped);
     if (hasSkipped) {
@@ -164,13 +206,17 @@ export const scanTree = (targetDir, baseDir, scanOptions = {}) => {
     violations = violations.concat(result.fileViolations);
     fileStats.push(result.fileStat);
     totalHooks += result.hookCount;
+    const isFileCached = Boolean(result.isCached);
+    if (isFileCached) cachedCount += 1;
   };
 
   const targetRel = path.relative(baseDir, targetDir);
   const isTargetingTests = /(?:^|[\\/])(?:tests?|specs?)(?:[\\/]|$)/i.test(targetRel) ||
     /(?:^|[\\/])(?:tests?|specs?)(?:[\\/]|$)/i.test(targetDir);
   const includeTests = Boolean(scanOptions.includeTests || isTargetingTests);
-  const effectiveScanOptions = { ...scanOptions, includeTests };
+  const auditCache = scanOptions.noCache ? null : (scanOptions.auditCache ?? openAuditCache(baseDir));
+  const currentConfigStamp = scanOptions.configStamp || configStamp(baseDir);
+  const effectiveScanOptions = { ...scanOptions, includeTests, auditCache, configStamp: currentConfigStamp };
 
   const hasFileList = Boolean(scanOptions.fileList && scanOptions.fileList.length > 0);
   if (hasFileList) {
@@ -182,19 +228,19 @@ export const scanTree = (targetDir, baseDir, scanOptions = {}) => {
         take(auditFileEntry(fullPath, relPath, effectiveScanOptions));
       }
     }
-    return { violations, fileStats, totalHooks, skippedConflicts };
+    return { violations, fileStats, totalHooks, skippedConflicts, cachedCount };
   }
 
   const isMissingTarget = !fs.existsSync(targetDir);
   if (isMissingTarget) {
-    return { violations, fileStats, totalHooks, skippedConflicts };
+    return { violations, fileStats, totalHooks, skippedConflicts, cachedCount };
   }
 
   for (const fullPath of discoverSourceFiles(targetDir, includeTests)) {
     take(auditFileEntry(fullPath, path.relative(baseDir, fullPath), effectiveScanOptions));
   }
 
-  return { violations, fileStats, totalHooks, skippedConflicts };
+  return { violations, fileStats, totalHooks, skippedConflicts, cachedCount };
 };
 
 export const scanDirectory = (targetDir, baseDir) => {

@@ -10,11 +10,15 @@ import { formatTeamHelpCard } from './team-format.js';
 import { parseFlags } from './team-flags.js';
 import { parseViewFlags } from './team-view-flags.js';
 import { handleTrainCommand } from './team-commands-vds.js';
+import { handleCurveCommand } from './team-points.js';
+import { handleStandupCommand } from './team-standup.js';
 import { handleLockCommand, handleUnlockCommand } from './team-commands-lock.js';
 import { runCheckStagedArgs } from './team-commands-lock-staged.js';
 import { handleProfileCommand, handleHandoffCommand } from './team-commands-profile.js';
 import { handleDispatchCommand } from './team-commands-dispatch.js';
+import { handleCrewCommand } from './team-crew.js';
 import { handleRouteCommand } from './team-route.js';
+import { handleCheckCommand } from './team-commands-check.js';
 import { handleRunTokens, parseRunArgs } from './team-commands-tokens.js';
 import { handleEpicTokens, parseEpicArgs } from './team-tokens-epic.js';
 import { runAuditRunCli } from './audit-run.js';
@@ -27,13 +31,13 @@ import { resolveBoardTarget } from './team-board-target.js';
 import { normalizeValueFlags, describeMissingValue } from './team-flag-values.js';
 import { scopeLockArgs } from './lock-targets.js';
 
-const TEAM_COMMANDS = ['status', 'task', 'brief', 'lock', 'unlock', 'feed', 'post', 'inbox', 'dm', 'tokens', 'audit-run', 'triage', 'benchmark', 'train', 'migrate', 'route'];
+const TEAM_COMMANDS = ['status', 'task', 'brief', 'lock', 'unlock', 'feed', 'post', 'inbox', 'dm', 'tokens', 'audit-run', 'triage', 'benchmark', 'train', 'migrate', 'route', 'check', 'standup'];
 
 // Subcommands whose handlers do not parse --help themselves; the others print their own help.
-const HELPLESS_SUBCOMMANDS = ['post', 'dm', 'inbox', 'feed', 'tokens', 'telemetry', 'profile', 'handoff', 'train', 'triage', 'audit-run'];
+const HELPLESS_SUBCOMMANDS = ['post', 'dm', 'inbox', 'feed', 'tokens', 'telemetry', 'profile', 'handoff', 'train', 'triage', 'audit-run', 'check', 'standup'];
 
 // Subcommands whose handlers print help before using ctx.db.
-const HELP_FIRST_SUBCOMMANDS = ['task', 'lock', 'unlock', 'dispatch'];
+const HELP_FIRST_SUBCOMMANDS = ['task', 'lock', 'unlock', 'dispatch', 'crew'];
 
 // Takes arguments already through normalizeValueFlags: a value flag is one `--flag=value` word, so every word left is a positional.
 const splitPositionals = (normalizedArgs) => normalizedArgs.filter((word) => !word.startsWith('-'));
@@ -59,12 +63,17 @@ const SUB_COMMANDS = {
   profile: (ctx, args, isCli) => handleProfileCommand(ctx.db, args.positionals, args.flags, isCli),
   handoff: (ctx, args, isCli) => handleHandoffCommand(ctx.db, args.positionals, args.flags, isCli, args.titleWords),
   dispatch: (ctx, args, isCli, cwd) => handleDispatchCommand(ctx.db, { ...args.flags, root: ctx.root, rawArgs: args.restArgs }, isCli, cwd),
-  route: (ctx, args, isCli, cwd) => handleRouteCommand(ctx.db, args.positionals, args.flags, isCli, ctx.root || cwd)
+  route: (ctx, args, isCli, cwd) => handleRouteCommand(ctx.db, args.positionals, args.flags, isCli, ctx.root || cwd),
+  crew: (ctx, args, isCli) => handleCrewCommand(ctx.db, args.positionals, args.restArgs, args.flags, isCli),
+  check: (ctx, args, isCli, cwd) => handleCheckCommand(ctx, args, isCli, cwd),
+  standup: (ctx, args, isCli) => handleStandupCommand(ctx.db, args.flags, isCli)
 };
 
 const runSubCommand = (ctx, args, isCli, cwd) => {
   const { subCommand } = args;
   const isTokens = subCommand === 'tokens' || subCommand === 'telemetry';
+  const isCurve = Boolean(isTokens && (args.flags.curve || args.flags.velocity));
+  if (isCurve) return handleCurveCommand(ctx.db, args.flags, isCli);
   const epicOptions = isTokens ? parseEpicArgs(args.restArgs) : null;
   if (epicOptions) return handleEpicTokens(ctx.db, epicOptions, args.flags.isJson, isCli);
   const runOptions = isTokens ? parseRunArgs(args.restArgs) : null;
@@ -74,7 +83,7 @@ const runSubCommand = (ctx, args, isCli, cwd) => {
   const isKnown = Object.hasOwn(SUB_COMMANDS, subCommand);
   if (isKnown) return SUB_COMMANDS[subCommand](ctx, args, isCli, cwd);
   if (isCli) {
-    process.stderr.write(`\x1b[31m✕ Unknown team command: "${subCommand}". Available commands: status, task, brief, feed, post, lock, unlock, triage, inbox, dm, profile, handoff, dispatch, route, benchmark, migrate, tokens, audit-run\x1b[0m\n`);
+    process.stderr.write(`\x1b[31m✕ Unknown team command: "${subCommand}". Available commands: status, task, brief, feed, post, lock, unlock, triage, inbox, dm, profile, handoff, dispatch, route, crew, check, standup, benchmark, migrate, tokens, audit-run\x1b[0m\n`);
   }
   return { error: `Unknown team command: ${subCommand}` };
 };

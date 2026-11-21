@@ -1,0 +1,10 @@
+.xo-permalink { border-radius: 14px; display: flex; flex-direction: column; gap: 8px; }
+.xo-permalink__label { font-size: 11px; opacity: 0.7; text-transform: uppercase; letter-spacing: 0.06em; }
+.xo-permalink__before { opacity: 0.8; }
+.xo-permalink__focus { outline: 1px solid var(--x-accent); border-radius: 10px; }
+.xo-permalink__reply { margin-left: 16px; }
+
+/* Design tokens (#7649) */
+.xo-permalink { background: var(--x-surface); border: 1px solid var(--x-border); padding: var(--x-5); }
+.xo-permalink__focus { outline: 0; border: 1px solid rgba(98,201,255,.45); border-radius: var(--x-r); padding: 0 var(--x-3); background: var(--x-accent-soft); }
+.xo-permalink__label { color: var(--x-text-3); opacity: 1; }

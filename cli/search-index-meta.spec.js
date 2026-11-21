@@ -6,7 +6,9 @@ import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { openIndexDb, resolveIndexDbPath, getIndexDbState, clearDbCache } from './search-schema.js';
 import { findChemxDir, ensureChemxDir } from './audit/history.js';
-import { INDEX_VERSION, readIndexMeta } from './search-index-meta.js';
+import { INDEX_VERSION, readIndexMeta, ensureIndexVersion, writeIndexMeta, describeVersionReset } from './search-index-meta.js';
+import { syncSearchIndex, syncSingleFileIndex } from './search-sync.js';
+import { syncPathRows } from './search-sync-paths.js';
 
 const makeTmp = (label) => fs.mkdtempSync(path.join(os.tmpdir(), `chemx-g6-${label}-`));
 
@@ -71,6 +73,79 @@ test('index rows from an unversioned (older) extractor are wiped, audit data is 
     assert.equal(Number(db.prepare('SELECT COUNT(*) AS c FROM files').get().c), 0, 'stale rows are not served');
     assert.equal(Number(db.prepare('SELECT COUNT(*) AS c FROM audit_snapshots').get().c), 1, 'audit history survives');
     assert.equal(readIndexMeta(db).version, INDEX_VERSION);
+    db.close();
+    clearDbCache();
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+const makeVersionedDb = (version) => {
+  const db = new DatabaseSync(':memory:');
+  db.exec(`
+    CREATE TABLE index_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+    CREATE TABLE files (path TEXT PRIMARY KEY, mtime INTEGER NOT NULL, size INTEGER NOT NULL, tier TEXT NOT NULL, lines INTEGER NOT NULL, chars INTEGER NOT NULL);
+    CREATE TABLE symbols (id INTEGER PRIMARY KEY);
+    CREATE TABLE props (id INTEGER PRIMARY KEY);
+    CREATE TABLE hooks (id INTEGER PRIMARY KEY);
+    CREATE TABLE imports (id INTEGER PRIMARY KEY);
+    CREATE TABLE embeddings (id INTEGER PRIMARY KEY);
+    CREATE TABLE fts_index (id INTEGER PRIMARY KEY);
+    INSERT INTO files VALUES ('src/a.ts', 1, 1, 'utility', 1, 1);
+  `);
+  writeIndexMeta(db, { version });
+  return db;
+};
+
+test('a lower stored version is wiped and restamped', () => {
+  const db = makeVersionedDb(INDEX_VERSION - 1);
+  const result = ensureIndexVersion(db);
+  assert.equal(result.reset, true);
+  assert.equal(result.foreign, undefined);
+  assert.equal(result.droppedFiles, 1);
+  assert.equal(readIndexMeta(db).version, INDEX_VERSION);
+  assert.equal(Number(db.prepare('SELECT COUNT(*) AS c FROM files').get().c), 0);
+  db.close();
+});
+
+test('a higher stored version is foreign: rows and stamp are left alone', () => {
+  const higher = INDEX_VERSION + 1;
+  const db = makeVersionedDb(higher);
+  const result = ensureIndexVersion(db);
+  assert.equal(result.reset, false);
+  assert.equal(result.foreign, true);
+  assert.equal(result.previousVersion, higher);
+  assert.equal(Number(db.prepare('SELECT COUNT(*) AS c FROM files').get().c), 1, 'newer rows survive');
+  assert.equal(readIndexMeta(db).version, higher, 'stamp is not downgraded');
+  assert.match(describeVersionReset(result), /newer chemx/);
+  db.close();
+});
+
+test('every sync entry point skips an index stamped by a newer chemx and leaves its rows', () => {
+  const tmp = makeTmp('foreign');
+  try {
+    fs.mkdirSync(path.join(tmp, 'src'), { recursive: true });
+    fs.writeFileSync(path.join(tmp, 'src', 'a.ts'), 'export const a = 1;\n');
+    clearDbCache();
+    const seeded = openIndexDb(tmp, { fresh: true });
+    seeded.prepare("INSERT INTO files (path, mtime, size, tier, lines, chars) VALUES ('src/newer.ts', 1, 1, 'utility', 1, 1)").run();
+    writeIndexMeta(seeded, { version: INDEX_VERSION + 1 });
+    seeded.close();
+    clearDbCache();
+
+    const db = openIndexDb(tmp, { fresh: true });
+    assert.equal(getIndexDbState(db).isForeignVersion, true);
+    const full = syncSearchIndex('src', tmp);
+    assert.equal(full.status, 'stale');
+    assert.match(full.staleReason, /newer chemx/);
+    assert.equal(syncSingleFileIndex(path.join(tmp, 'src', 'a.ts'), tmp).status, 'foreign');
+    assert.equal(syncSingleFileIndex(path.join(tmp, 'src', 'newer.ts'), tmp).status, 'foreign', 'a missing file is not deleted from foreign rows');
+    const paths = syncPathRows(db, ['src/a.ts'], tmp);
+    assert.equal(paths.status, 'stale');
+    assert.match(paths.reason, /newer chemx/);
+    const rows = db.prepare('SELECT path FROM files ORDER BY path').all().map((r) => r.path);
+    assert.deepEqual(rows, ['src/newer.ts'], 'no row was written or removed');
+    assert.equal(readIndexMeta(db).version, INDEX_VERSION + 1);
     db.close();
     clearDbCache();
   } finally {

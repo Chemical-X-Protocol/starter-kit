@@ -13,6 +13,7 @@ export const SEARCH_COMMANDS = [
       { flag: '--columnar', desc: 'Token-compact columnar format (cols/rows) for agent pipelines' },
       { flag: '-i, --inspect', desc: 'Inspect props and hooks without full source' },
       { flag: '--tier=<tier>', desc: 'Filter by tier: atom, molecule, organism, hook, view' },
+      { flag: '--uses, --usages', desc: 'Every indexed use of the name as path:line:text (grep-style, from the index; no grep)' },
       { flag: '--blast-radius, --blast, --impact', desc: 'Map direct consumers, transitive dependents and impacted tiers' },
       { flag: '--trace', desc: 'Forward call trace: downstream functions invoked by target' },
       { flag: '--backtrace', desc: 'Reverse backtrace: upstream callers leading to target' },
@@ -137,4 +138,25 @@ export const SEARCH_COMMANDS = [
     ],
     examples: ['chemx check src/components/m-card/m-card.vue', 'chemx check <file> --profile=atomic-strict']
   },
+  {
+    name: 'arch',
+    aliases: ['map', 'structure'],
+    group: 'search',
+    brief: 'Map code structure and capsule hierarchy',
+    usage: 'chemx arch [dir] [options]',
+    summary: 'Token-compact architectural index of component capsules, tiers, contracts, and blast radius.',
+    description: 'Explains codebase architecture without raw directory dumps. Groups files into views, organisms, molecules, atoms, controllers and hooks; provides contract outlines and intent-based routing to recommend where to implement a feature.',
+    flags: [
+      { flag: '--json', desc: 'Output architecture map as minified JSON' },
+      { flag: '--intent=<text>', desc: 'Find target capsule to edit based on intent prompt' },
+      { flag: '--depth=<N>', desc: 'Maximum folder depth to map (default: 3)' },
+      { flag: '--no-cache', desc: 'Bypass cached index and force direct scan' }
+    ],
+    examples: [
+      'chemx arch src/routes/bazaar',
+      'chemx arch src/components --depth=2',
+      'chemx arch src/routes --intent="add quantity stepper to cart"',
+      'chemx arch --json'
+    ]
+  }
 ];

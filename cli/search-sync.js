@@ -45,6 +45,7 @@ export const syncSearchIndex = (targetDir = 'src', cwd = process.cwd(), options 
   const hasOutsideDirs = requested.outside.length > 0;
   if (hasOutsideDirs) return staleResult(db, root, requested, `outside project root ${root}: ${requested.outside.join(', ')}`);
   if (state.isReadOnly) return staleResult(db, root, requested, 'index db is read-only; rows were not refreshed');
+  if (state.isForeignVersion) return staleResult(db, root, requested, describeVersionReset(state.versionReset));
   // An empty index in a linked worktree starts from the parent checkout's rows (#6769): a copy for each
   // file whose bytes match, the rest parsed below. 'none' (rows already, no parent) says nothing.
   const seeded = seedIndexFromParent(db, root);
@@ -113,6 +114,7 @@ export const syncSingleFileIndex = (targetPath, cwd = process.cwd()) => {
   const root = resolveIndexRoot(cwd);
   const fullPath = path.isAbsolute(targetPath) ? targetPath : path.resolve(cwd, targetPath);
   const relPath = toRootRelative(fullPath, root);
+  if (getIndexDbState(db).isForeignVersion) return { db, status: 'foreign', path: relPath };
   const isMissing = !fs.existsSync(fullPath);
   if (isMissing) {
     deleteFileIndexRows(db, [relPath]);

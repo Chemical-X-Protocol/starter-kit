@@ -122,6 +122,27 @@ chemx team audit-run --run=<wf id>                               # the post-run 
 
 `--find-run` returns a recorded id first. Otherwise it scans the newest 200 workflow directories under `~/.claude/projects/*/*/subagents/workflows/` for the run marker in the first 64 KB of each agent transcript. A match is evidence, not proof: a transcript that quotes another run's prompt would match too.
 
+## Crew: stable handles from a StarNet roster (#7634)
+
+`chemx team crew import [roster.json] [--dry-run] [--json]` adds each member of a StarNet crew roster (`agent.roster.json`) to the board's agents table as a stable handle, so work stays with `@chemist` instead of a one-off session handle. Without a path it reads `$STARNET_WORKSPACES/agent.roster.json`, else the newest StarNet app-data roster it finds. `chemx team crew` lists the imported crew.
+
+- The handle is the name without its card badge, lowercased and hyphenated: `♥Q CHIEF OF STAFF` becomes `@chief-of-staff`. A clash with another crew handle gets `-2`, `-3`. A name with no letters or digits is skipped and reported.
+- Each row records `capabilities: ["crew", "tier:<light|standard|deep>"]` (haiku is light, opus deep, any other model standard) and `metadata: { source: "starnet", starnetAgentId, model, provider, roster }`.
+- Only agentId, name, role, model and provider are read. The system prompt and every other roster field are not copied.
+- Re-running updates the same rows: a member already imported keeps its handle (matched by StarNet agentId), even after a rename in StarNet. A member removed from the roster stays on the board; import does not delete.
+- An existing board agent with the same handle that was not imported from StarNet is updated in place to the crew row.
+
+### Building as crew: `--crew` and `--assign` (#7635)
+
+`chemx team dispatch --workflow --crew` builds each lane as one crew member instead of `@<run>-<id>`, so the work, the commits and the feed posts land on that member's profile.
+
+- A lane gets the free member whose tier matches the lane's highest `needs` (deep beats standard beats light). With no free member of that tier it takes the nearest tier, a higher one first, and the summary says so (`crew: lane 2: @engineer is standard crew on deep work`). A member with an `in_progress` task is not free. A lane with no free member keeps its run handle, also reported.
+- One member per lane: a lane's tasks run one after another, so a handle never builds two tasks at the same time.
+- The model and effort still come from the task's own routing; the crew tier only picks who.
+- A crew task's reviewer and repairer are `<crew>-<id>-review` and `<crew>-<id>-repair`, so the repair can take the task over under run authority. The gate stays `@<run>-gate`.
+- `--assign=@handle` gives every task in the run to that handle. It needs one lane (`--max-agents=1`); with more lanes the builders keep their run handles and the summary says why.
+- Not guaranteed: two runs rendered back to back can pick the same member, because a member counts as busy only once it has claimed a task.
+
 ## Identity: which calls need a handle
 
 A Bash shell inherits the orchestrator's `CHEMX_AGENT_ID`, so a subagent's `chemx team lock` or `chemx commit` would be attributed to the orchestrator. Two Claude Code hook rules ([hooks.md](hooks.md)) refuse a chemx call that names no identity of its own: `dispatch-identity` for a dispatched builder (the refusal names its `@<run>-<id>` handle) and `inherited-identity` for any other subagent (it names the orchestrator handle the call would act as). A third, `foreign-identity`, refuses a call that names another handle of the builder's own run. A call names its identity with `--as=@you`, an inline `CHEMX_AGENT_ID=@you chemx ...`, or an `export CHEMX_AGENT_ID=@you;` earlier in the same Bash command.

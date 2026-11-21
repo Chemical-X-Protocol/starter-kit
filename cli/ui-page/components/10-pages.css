@@ -1,0 +1,94 @@
+/*
+ * Page layouts on the design tokens (#7640): Timeline, Locks, Settings, and a re-skin of the classes the
+ * Codebase, Prompts and Database pages still use, so every page shares one look.
+ */
+
+/* ---- Timeline ---- */
+.xo-feedpage { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: var(--x-5); }
+.xo-feedpage__main { min-height: 0; display: flex; flex-direction: column; gap: var(--x-4); padding: var(--x-5); overflow: hidden; }
+.xo-feedpage__side { min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: var(--x-5); }
+.xo-feedpage__seg { display: flex; margin-bottom: var(--x-3); }
+.xo-feedpage__seg button { flex: 1; }
+.xo-feedpage__lock { display: flex; align-items: center; gap: var(--x-2); padding: 6px 0; color: var(--x-text-3); font-size: var(--x-fs-sm); min-width: 0; }
+.xo-feedpage__path { font-family: var(--x-mono); color: var(--x-text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }
+@media (max-width: 1100px) {
+  .xo-feedpage { grid-template-columns: minmax(0, 1fr); overflow-y: auto; }
+  .xo-feedpage__main { min-height: 70vh; }
+}
+
+/* ---- Tables (Locks, and any list of records) ---- */
+.xo-locks { flex: 1; min-height: 0; overflow: auto; }
+.xo-table { width: 100%; border-collapse: collapse; font-size: var(--x-fs-base); }
+.xo-table th {
+  position: sticky; top: 0; background: var(--x-surface); text-align: left; font-size: var(--x-fs-xs); font-weight: 600;
+  letter-spacing: .06em; text-transform: uppercase; color: var(--x-text-3); padding: var(--x-2) var(--x-5); border-bottom: 1px solid var(--x-border);
+}
+.xo-table td { padding: 10px var(--x-5); border-bottom: 1px solid var(--x-border); vertical-align: middle; }
+.xo-table tbody tr:hover { background: var(--x-hover); }
+.xo-table tbody tr:last-child td { border-bottom: 0; }
+.xo-table__path { display: flex; align-items: center; gap: var(--x-2); font-family: var(--x-mono); font-size: var(--x-fs-sm); color: var(--x-text); max-width: 520px; }
+.xo-table__path span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.xo-table__who { display: inline-flex; align-items: center; gap: 6px; border: 0; background: none; padding: 0; color: var(--x-text-2); font: inherit; cursor: pointer; }
+.xo-table__who:hover { color: var(--x-accent); }
+.xo-table__muted { color: var(--x-text-3); }
+.xo-table__num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+@media (max-width: 720px) { .xo-table th:nth-child(3), .xo-table td:nth-child(3) { display: none; } }
+
+/* ---- Settings ---- */
+.xo-settings { display: flex; flex-direction: column; gap: var(--x-5); max-width: 720px; }
+.xo-settings p { margin: 0; }
+.xo-settings__row { display: flex; flex-direction: column; gap: var(--x-4); }
+.xo-settings__actions { display: flex; gap: var(--x-2); flex-wrap: wrap; }
+.xo-settings .x-panel__head .xo-live { margin-left: auto; }
+
+/* ---- Re-skin: classes the Codebase, Prompts and Database pages still use ---- */
+.xo-dot { width: 8px; height: 8px; }
+.xo-dot--active { background: var(--x-ok) !important; box-shadow: none !important; }
+.xo-dot--idle { background: var(--x-accent) !important; }
+.xo-dot--offline { background: var(--x-text-3) !important; }
+.xo-kpi { background: var(--x-surface-2) !important; border: 1px solid var(--x-border) !important; border-radius: var(--x-r) !important; padding: var(--x-3) var(--x-4) !important; }
+.xo-kpi__label { font-size: var(--x-fs-xs) !important; font-weight: 600 !important; letter-spacing: .06em !important; text-transform: uppercase; color: var(--x-text-3) !important; }
+.xo-kpi__value { font-size: var(--x-fs-xl) !important; font-weight: 650 !important; color: var(--x-text-strong) !important; font-family: var(--x-font) !important; }
+.xo-file-card, .xo-agent-card {
+  background: var(--x-surface-2) !important; border: 1px solid var(--x-border) !important; border-radius: var(--x-r) !important; box-shadow: none !important;
+}
+.xo-file-card:hover, .xo-agent-card:hover { border-color: var(--x-border-strong) !important; background: var(--x-surface-3) !important; }
+.xo-file-card__path { font-family: var(--x-mono) !important; color: var(--x-text) !important; }
+.xo-file-card__meta { color: var(--x-text-3) !important; }
+.xo-hazard { border-radius: var(--x-r-sm) !important; }
+.pma-sidebar { background: var(--x-surface) !important; }
+.pma-table { border-collapse: collapse; font-size: var(--x-fs-sm); }
+.pma-table th { background: var(--x-surface-2) !important; color: var(--x-text-3) !important; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; font-size: var(--x-fs-xs); }
+.pma-table td, .pma-table th { border-color: var(--x-border) !important; padding: 8px 12px !important; }
+.xo-pma-table-item { border-radius: var(--x-r-sm) !important; }
+.xo-pager { color: var(--x-text-2); font-size: var(--x-fs-sm); }
+.xo-load-more__count { color: var(--x-text-3) !important; font-size: var(--x-fs-xs) !important; }
+
+/* ---- Codebase (#7646) ---- */
+.xo-cb { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: var(--x-4); }
+.xo-cb__stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--x-3); flex-shrink: 0; }
+.xo-cb__list { flex: 1; min-height: 0; overflow: auto; }
+.xo-cb__over { color: var(--x-danger) !important; font-weight: 600; }
+.xo-cb__exports { max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--x-mono); font-size: var(--x-fs-xs); }
+.xo-board__seg button { text-transform: capitalize; }
+
+/* ---- Prompts (#7647) ---- */
+.xo-wb { flex: 1; min-height: 0; display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: var(--x-5); }
+.xo-wb > aside { align-self: start; }
+.xo-wb__main { min-height: 0; display: flex; flex-direction: column; }
+.xo-wb__body { flex: 1; min-height: 0; overflow: auto; }
+.xo-wb__prompt { margin: 0; font: 12.5px/1.6 var(--x-mono); color: var(--x-text); white-space: pre-wrap; word-break: break-word; background: var(--x-bg); border: 1px solid var(--x-border); border-radius: var(--x-r); padding: var(--x-4); }
+
+/* ---- Database (#7648) ---- */
+.xo-dbs { flex: 1; min-height: 0; display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: var(--x-5); }
+.xo-dbs__tables { min-height: 0; overflow-y: auto; }
+.xo-dbs__main { min-height: 0; display: flex; flex-direction: column; padding: var(--x-4); gap: var(--x-3); }
+.xo-dbs__sql textarea { font-family: var(--x-mono) !important; font-size: var(--x-fs-sm) !important; }
+.xo-dbs__run { display: flex; align-items: center; gap: var(--x-3); margin-top: var(--x-2); }
+.xo-dbs__error { margin: 0; padding: var(--x-2) var(--x-3); border-radius: var(--x-r-sm); background: rgba(248,113,113,.1); color: #fecaca; font-size: var(--x-fs-sm); font-family: var(--x-mono); }
+.xo-dbs__grid { flex: 1; min-height: 0; overflow: auto; border: 1px solid var(--x-border); border-radius: var(--x-r); }
+.xo-dbs__grid td { max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--x-mono); font-size: var(--x-fs-xs); }
+@media (max-width: 900px) {
+  .xo-wb, .xo-dbs { grid-template-columns: minmax(0, 1fr); }
+  .xo-cb__stats { grid-template-columns: 1fr; }
+}

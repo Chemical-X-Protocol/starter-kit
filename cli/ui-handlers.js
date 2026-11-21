@@ -1,8 +1,9 @@
-import { getSwarmStatus, postFeedEvent, listTasks } from './team/team-db.js';
+import { getSwarmStatus, postFeedEvent } from './team/team-db.js';
+import { listRecentTasks } from './ui-paging-tasks.js';
+import { listAgentsPage } from './ui-paging-agents.js';
 import { calculateSavings, countIndexedFiles } from './ui-actions-helpers.js';
 import { getForumCategories, resolveAgentMeta, formatTokenStamp, updateAgentSignatureInDb } from './ui-forum-data.js';
 import { getForumTopics, getTopicPosts, createForumTopic } from './ui-forum-topics.js';
-import { formatTaskTokenStamp } from './team/team-telemetry.js';
 
 const fallbackTelemetry = { promptTokens: 0, completionTokens: 0, totalTokens: 0, totalCost: 0 };
 
@@ -19,12 +20,16 @@ export const getAggregatedTelemetry = (db) => {
   return row || fallbackTelemetry;
 };
 
+// The live view rides on every page load and SSE push, so it stays bounded (#7604): the 50 most
+// recently touched tasks and seen agents, plus totals. Full lists page through /api/tasks and /api/agents.
+export const LIVE_TASK_LIMIT = 50;
+export const LIVE_AGENT_LIMIT = 50;
+
 // Team rows come from db; the file count from indexDb, a different db once the team db is shared (#2581).
 export const handleSwarmStatus = (db, cwd = process.cwd(), indexDb = db) => {
   if (!db) return { error: 'Database unavailable' };
   const rawStatus = getSwarmStatus(db) || {};
   const rawFeed = db.prepare('SELECT * FROM agent_feed ORDER BY id DESC LIMIT 50').all() || [];
-  const rawTasks = listTasks(db) || [];
   const rawLocks = db.prepare('SELECT file_path, locked_by, acquired_at, expires_at, purpose FROM file_leases').all() || [];
   const rawWaiters = db.prepare("SELECT id, file_path, agent_id, requested_at, status, priority, purpose FROM file_lock_queue WHERE status = 'waiting'").all() || [];
   const telemetry = getAggregatedTelemetry(db);
@@ -34,8 +39,8 @@ export const handleSwarmStatus = (db, cwd = process.cwd(), indexDb = db) => {
     waitingCount: rawWaiters.filter((w) => w.file_path === l.file_path).length
   }));
 
-  const rawAgents = db.prepare('SELECT id, name, role, status, current_task_id as currentTaskId, heartbeat, metadata FROM agents').all() || [];
-  const agents = rawAgents.map((a) => resolveAgentMeta(a, leases, rawFeed));
+  const agentPage = listAgentsPage(db, { limit: LIVE_AGENT_LIMIT }, { leases, posts: rawFeed });
+  const agents = agentPage.agents;
   const agentsMap = new Map(agents.map((a) => [a.id, a]));
 
   const posts = rawFeed.map((f) => {
@@ -43,6 +48,7 @@ export const handleSwarmStatus = (db, cwd = process.cwd(), indexDb = db) => {
     return {
       id: f.id, author: f.author_id, eventType: f.event_type, message: f.message, timestamp: Number(f.timestamp),
       channel: f.channel, recipient: f.recipient_id, isDirectMessage: Boolean(f.recipient_id),
+      taskId: f.task_id, threadId: f.thread_id, filePath: f.file_path,
       tokenStamp: formatTokenStamp(f.message?.length || 50), signature: authorMeta.signature, authorMeta
     };
   });
@@ -51,27 +57,18 @@ export const handleSwarmStatus = (db, cwd = process.cwd(), indexDb = db) => {
     id: w.id, filePath: w.file_path, agentId: w.agent_id, requestedAt: Number(w.requested_at), status: w.status, priority: w.priority, purpose: w.purpose
   }));
 
-  const tasks = rawTasks.map((t) => {
-    const subtaskCount = rawTasks.filter((st) => st.parent_id === t.id).length;
-    return {
-      ...t,
-      moscow: t.moscow || 'must',
-      vds_priority: t.vds_priority || 'medium',
-      task_url: t.task_url || ('http://localhost:3000/tasks/' + t.id),
-      parentId: t.parent_id,
-      subtaskCount,
-      assignedAgentId: t.assigned_agent_id,
-      tokenStamp: formatTaskTokenStamp(t)
-    };
-  });
+  const tasks = listRecentTasks(db, LIVE_TASK_LIMIT);
+  const taskCounts = rawStatus.tasks || {};
+  const tasksTotal = Number(taskCounts.total || 0);
 
   const fileCount = countIndexedFiles(indexDb) || 59;
-  const savings = calculateSavings(telemetry, fileCount, tasks.length);
+  const savings = calculateSavings(telemetry, fileCount, tasksTotal);
   const forumCategories = getForumCategories(db);
   const topics = getForumTopics(db);
 
   return {
-    success: true, agents, forumCategories, categories: forumCategories, topics, posts, leases, waitingLocks, tasks, telemetry, savings, waitingLocksCount: waitingLocks.length, summary: rawStatus
+    success: true, agents, agentsTotal: agentPage.total, agentCounts: agentPage.counts, forumCategories, categories: forumCategories,
+    topics, posts, leases, waitingLocks, tasks, tasksTotal, taskCounts, telemetry, savings, waitingLocksCount: waitingLocks.length, summary: rawStatus
   };
 };
 

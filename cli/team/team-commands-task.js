@@ -10,6 +10,9 @@ import { completeTaskWithAudit, reconcileAuditTasks } from './team-triage.js';
 import { formatTaskListCard, formatTaskDetailCard, formatTaskHelpCard } from './team-format.js';
 import { resolveListOptions, selectTaskPage, buildTaskListView, formatTitleLines } from './task-list-view.js';
 import { markIdleClaims, claimInfoFor } from './task-claim-age.js';
+import { breakdownGate, setEstimate, setPoints } from './team-points.js';
+import { reparentTask } from './team-reparent.js';
+import { planTask, formatPlan } from './team-plan.js';
 import { handleTaskHandoffCommand } from './team-task-handoff.js';
 import { handleTaskCloseCommand, duplicateLinks, formatDuplicateLinks } from './team-task-close.js';
 import { handleTaskSlotCommand, handleTaskTraceCommand } from './team-commands-vds.js';
@@ -30,9 +33,9 @@ import { repoDir } from './coordination-repos.js';
 import { loadModelRouting } from './team-dispatch.js';
 import { claimWithIgnoreDeps } from './claim-ignore-deps.js';
 import { buildLabelFor } from './team-route.js';
-import { describeUnknownStatus } from './task-update-status.js';
+import { describeRejectedStatus, describeUnknownStatus, normalizeTaskStatus } from './task-update-status.js';
 
-export const TASK_ACTIONS = ['list', 'show', 'add', 'brief', 'claim', 'handoff', 'close', 'done', 'update', 'comment', 'triage', 'reconcile', 'set-target', 'set-files', 'vds-slot', 'trace'];
+export const TASK_ACTIONS = ['list', 'show', 'add', 'brief', 'claim', 'handoff', 'close', 'done', 'update', 'comment', 'triage', 'reconcile', 'set-target', 'set-files', 'vds-slot', 'trace', 'parent'];
 
 // Every failure of a task action is a refusal: the reason on stderr and exit 1 on the CLI (K1b, #6765).
 const fail = (isCli, message, result = { error: message }) => {
@@ -150,6 +153,9 @@ const runComment = (ctx, positionals, flags, isCli) => {
 };
 
 const runClaim = (ctx, taskId, flags, isCli) => {
+  const gate = breakdownGate(ctx.db, taskId);
+  const isGateRefused = Boolean(gate.error);
+  if (isGateRefused) return refuse(isCli, gate.error);
   const agentHandle = resolveCliAgent(flags, isCli);
   registerAgent(ctx.db, { id: agentHandle, role: 'executor' });
   const res = claimWithIgnoreDeps(ctx.db, taskId, agentHandle, flags.ignoreDeps, { root: ctx.root, env: process.env });
@@ -242,14 +248,30 @@ const runSetDependencies = (ctx, taskId, flags, isCli) => {
   return writeJsonOr(getTask(ctx.db, taskId), flags, isCli, `\x1b[32m✔\x1b[0m Task #${taskId} dependencies: ${label}\n`);
 };
 
+// A status the database rejects is a refusal with the reason, not a thrown error (#7677).
+const tryUpdateStatus = (db, taskId, status, options) => {
+  try {
+    return updateTaskStatus(db, taskId, status, options);
+  } catch (err) {
+    const rejection = describeRejectedStatus(status, err);
+    if (!rejection) throw err;
+    return { error: rejection, refused: true };
+  }
+};
+
 const runUpdate = (ctx, positionals, flags, isCli, cwd) => {
   const taskId = positionals[1];
   // Checked before any write, so a refused status leaves a dependency edit in the same command unapplied too.
   const hasStatusFlag = flags.status !== undefined;
-  const requestedStatus = hasStatusFlag ? flags.status : positionals[2];
+  const requestedStatus = normalizeTaskStatus(hasStatusFlag ? flags.status : positionals[2]);
   const unknownStatus = describeUnknownStatus(requestedStatus);
   const isStatusRefused = Boolean(unknownStatus);
   if (isStatusRefused) return refuse(isCli, unknownStatus);
+  const isDepsOnlyCall = hasDependencyEdit(flags) && !flags.status && !positionals[2];
+  const isStartCall = !isDepsOnlyCall && (requestedStatus || 'in_progress') === 'in_progress';
+  const startGate = isStartCall ? breakdownGate(ctx.db, taskId) : { ok: true };
+  const isStartRefused = Boolean(startGate.error);
+  if (isStartRefused) return refuse(isCli, startGate.error);
   const isDepsEdit = hasDependencyEdit(flags);
   const depsResult = isDepsEdit ? runSetDependencies(ctx, taskId, flags, isCli) : null;
   const isDepsRefused = Boolean(depsResult?.refused);
@@ -261,7 +283,9 @@ const runUpdate = (ctx, positionals, flags, isCli, cwd) => {
   if (isCompletion) return runComplete(ctx, taskId, flags, isCli, cwd, `Updated task #${taskId} to status "done"`);
   const agentHandle = resolveCliAgent(flags, isCli);
   registerAgent(ctx.db, { id: agentHandle, role: 'executor' });
-  const res = updateTaskStatus(ctx.db, taskId, targetStatus, { blockedReason: flags.reason || '' });
+  const res = tryUpdateStatus(ctx.db, taskId, targetStatus, { blockedReason: flags.reason || '' });
+  const isRejected = Boolean(res?.refused);
+  if (isRejected) return refuse(isCli, res.error);
   if (res) postFeedEvent(ctx.db, { author_id: agentHandle, task_id: Number(taskId), event_type: 'task_status_updated', message: `Updated task #${taskId} status to ${targetStatus}` });
   writeTaskResult(res, flags, isCli, () => describeStatusUpdate(res, taskId));
   return res;
@@ -344,6 +368,34 @@ const runSetFiles = (ctx, positionals, flags, isCli, cwd) => {
   return writeJsonOr(updated, flags, isCli, `\x1b[32m✔\x1b[0m Task #${taskId} extra files: ${prepared.files.join(', ') || '(none)'}\n`);
 };
 
+const runPoints = (ctx, positionals, flags, isCli) => {
+  const placed = setPoints(ctx.db, positionals[1], positionals[2]);
+  const isRefused = Boolean(placed.error);
+  if (isRefused) return fail(isCli, placed.error, { error: placed.error, refused: true });
+  return writeJsonOr(placed, flags, isCli, `\x1b[32m✔\x1b[0m Task #${placed.id} points ${placed.points} (${placed.size})\n`);
+};
+
+const runParent = (ctx, positionals, flags, isCli) => {
+  const placed = reparentTask(ctx.db, positionals[1], positionals[2]);
+  const isRefused = Boolean(placed.error);
+  if (isRefused) return fail(isCli, placed.error, { error: placed.error, refused: true });
+  return writeJsonOr(placed, flags, isCli, `\x1b[32m✔\x1b[0m Task #${placed.id} parent is #${placed.parentId}\n`);
+};
+
+const runPlan = (ctx, positionals, flags, isCli, cwd) => {
+  const planned = planTask(ctx.db, positionals[1], { file: flags.file, cwd, apply: flags.apply });
+  const isRefused = Boolean(planned.error);
+  if (isRefused) return fail(isCli, planned.error, { ...planned, refused: true });
+  return writeJsonOr(planned, flags, isCli, formatPlan(planned));
+};
+
+const runEstimate = (ctx, positionals, flags, isCli) => {
+  const placed = setEstimate(ctx.db, positionals[1], positionals[2], positionals[3]);
+  const isRefused = Boolean(placed.error);
+  if (isRefused) return fail(isCli, placed.error, { error: placed.error, refused: true });
+  return writeJsonOr(placed, flags, isCli, `\x1b[32m✔\x1b[0m Task #${placed.id} planned ${placed.estMinutes} min, ${placed.estTokens} tokens\n`);
+};
+
 const ACTIONS = {
   list: (ctx, p, flags, words, isCli) => runList(ctx, flags, isCli),
   show: (ctx, p, flags, words, isCli) => runShow(ctx, p[1], flags, isCli),
@@ -360,6 +412,10 @@ const ACTIONS = {
   triage: (ctx, p, flags, words, isCli, cwd) => runTriage(ctx, flags, isCli, cwd),
   reconcile: (ctx, p, flags, words, isCli, cwd) => runReconcile(ctx, flags, isCli, cwd),
   'set-target': (ctx, p, flags, words, isCli, cwd) => runSetTarget(ctx, p, flags, isCli, cwd),
+  points: (ctx, p, flags, words, isCli) => runPoints(ctx, p, flags, isCli),
+  parent: (ctx, p, flags, words, isCli) => runParent(ctx, p, flags, isCli),
+  estimate: (ctx, p, flags, words, isCli) => runEstimate(ctx, p, flags, isCli),
+  plan: (ctx, p, flags, words, isCli, cwd) => runPlan(ctx, p, flags, isCli, cwd),
   'set-files': (ctx, p, flags, words, isCli, cwd) => runSetFiles(ctx, p, flags, isCli, cwd)
 };
 

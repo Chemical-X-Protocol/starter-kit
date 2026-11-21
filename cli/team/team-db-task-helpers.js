@@ -91,8 +91,8 @@ export const executeStatusUpdate = (db, taskId, status, options, task) => {
   }
 };
 
-export const buildTaskListQuery = (filter = {}) => {
-  let query = 'SELECT * FROM agent_tasks';
+// The WHERE half of a task list, shared by listTasks and the UI's paged reads (cli/ui-paging.js).
+export const buildTaskWhere = (filter = {}) => {
   const conditions = [];
   const params = [];
   const hasStatusFilter = Boolean(filter.status);
@@ -165,10 +165,13 @@ export const buildTaskListQuery = (filter = {}) => {
     conditions.push('sprint_tag = ?');
     params.push(filter.sprint_tag);
   }
-  const hasConditions = conditions.length > 0;
-  if (hasConditions) query += ` WHERE ${conditions.join(' AND ')}`;
-  query += ' ORDER BY priority ASC, id ASC';
-  return { query, params };
+  return { conditions, params };
+};
+
+export const buildTaskListQuery = (filter = {}) => {
+  const { conditions, params } = buildTaskWhere(filter);
+  const where = conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : '';
+  return { query: `SELECT * FROM agent_tasks${where} ORDER BY priority ASC, id ASC`, params };
 };
 
 // options.schema names where agent_tasks lives on this connection ('main', or an ATTACHed team db);

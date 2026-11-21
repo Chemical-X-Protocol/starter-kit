@@ -122,7 +122,7 @@ test('seed: a parent index built by another extractor version is skipped with th
   const db = openIndexDb(worktree);
   const skipped = seedIndexFromParent(db, worktree, { locate });
   assert.equal(skipped.status, 'skipped');
-  assert.match(skipped.reason, /extractor v1.*this chemx is v2/);
+  assert.match(skipped.reason, /extractor v1.*this chemx is v\d+/);
   assert.equal(count(db, 'files'), 0);
   assert.equal(syncSearchIndex('.', worktree).updatedCount, 3);
   assert.match(describeSeed(skipped), /^seed from parent skipped: /);

@@ -9,6 +9,7 @@ import { withUnsplitHint } from './args-unsplit-hint.js';
 import {
   findSymbolDefinition,
   findSymbolReferences,
+  findOccurrences,
   findFileDependencies,
   findFileDependents,
   queryViolations,
@@ -90,6 +91,49 @@ export const handleDefCommand = (db, targetSymbol, { index = null, isJson = fals
   if (isTruncated) process.stdout.write(`${ANSI.GOLD}${truncationNote}${ANSI.RESET}\n`);
   process.stdout.write('\n');
 
+  if (isCli) process.exit();
+  return payload;
+};
+
+// `chemx q <name> --uses`: every indexed use of a name, as grep-style `path:line:text` records.
+// Records go to stdout alone (pipe-safe, same bytes shape as `grep -rn`); the summary goes to stderr.
+const USES_LINE_CAP = 1000;
+const readLineAt = (lines, lineNo) => {
+  const raw = lines[lineNo - 1] ?? '';
+  const clean = raw.replace(/\r$/, '');
+  return clean.length > USES_LINE_CAP ? clean.slice(0, USES_LINE_CAP) : clean;
+};
+
+export const handleUsesCommand = (db, name, { index = null, isJson = false, isCli = true, root = process.cwd(), limit = 50 } = {}) => {
+  const found = findOccurrences(db, name, { limit });
+  if (found.isMissing) {
+    process.stderr.write('index has no occurrences table (built before v3); run `chemx q <name> --uses --reindex` from a writable checkout\n');
+    if (isCli) process.exit(3);
+    return { symbol: name, total: 0, files: 0, shown: 0, truncated: false, records: [], isMissing: true };
+  }
+  const linesByFile = new Map();
+  const linesOf = (filePath) => {
+    if (!linesByFile.has(filePath)) {
+      let content = '';
+      try { content = fs.readFileSync(path.join(root, filePath), 'utf8'); } catch (err) { debugNote.warn('read occurrence file', err); }
+      linesByFile.set(filePath, content.split('\n'));
+    }
+    return linesByFile.get(filePath);
+  };
+  const records = found.rows.map((row) => ({ path: row.filePath, line: row.line, text: readLineAt(linesOf(row.filePath), row.line) }));
+  const payload = { symbol: name, total: found.total, files: found.files, shown: records.length, truncated: found.total > records.length, records };
+
+  if (isJson) {
+    process.stdout.write(JSON.stringify(withIndex(payload, index)) + '\n');
+    if (isCli) process.exit();
+    return payload;
+  }
+
+  for (const rec of records) process.stdout.write(`${rec.path}:${rec.line}:${rec.text}\n`);
+  const summary = found.total === 0
+    ? `no indexed uses of "${name}"`
+    : `${found.total} uses of "${name}" in ${found.files} files${payload.truncated ? ` (showing ${records.length})` : ''}`;
+  process.stderr.write(`${summary}\n`);
   if (isCli) process.exit();
   return payload;
 };

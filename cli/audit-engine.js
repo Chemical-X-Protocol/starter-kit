@@ -32,10 +32,11 @@ export const runAudit = (targetDir = 'src', options = {}) => {
   const includeTests = Boolean(options.includeTests);
   const coverageCollector = createCoverageCollector();
   const forge = openAuditForge(cwd, options);
-  const { violations, fileStats, totalHooks, skippedConflicts = [] } = scanTree(absoluteTarget, cwd, {
+  const { violations, fileStats, totalHooks, skippedConflicts = [], cachedCount = 0 } = scanTree(absoluteTarget, cwd, {
     patternRegistry,
     hookRegistry,
     fast: Boolean(options.fast),
+    noCache: Boolean(options.noCache),
     fileList: options.fileList || null,
     includeTests,
     config,
@@ -103,6 +104,7 @@ export const runAudit = (targetDir = 'src', options = {}) => {
     scoreModel: SCORE_MODEL,
     coverage: summarizeCoverage(coverageCollector),
     scannedFiles,
+    cachedFiles: cachedCount,
     totalViolations: violations.length,
     metrics,
     health,

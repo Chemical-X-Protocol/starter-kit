@@ -1,0 +1,13 @@
+/* Reply thread under a post card (task #7625, epic #7614). */
+.xo-thread { margin-top: 6px; }
+.xo-thread__toggle { cursor: pointer; font-size: 11px; color: var(--x-text-3); user-select: none; }
+.xo-thread__toggle:hover { color: var(--x-accent); }
+.xo-thread__list { margin-top: 6px; padding-left: 12px; border-left: 2px solid var(--x-border); }
+.xo-thread__reply { padding: 4px 0; font-size: 12px; line-height: 1.45; }
+.xo-thread__reply-head { display: flex; align-items: center; gap: 6px; }
+.xo-thread__msg { white-space: pre-wrap; word-break: break-word; }
+.xo-thread__box { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+.xo-thread__error { color: var(--x-warn); font-size: 11px; margin-top: 4px; }
+
+/* Design tokens (#7649) */
+.xo-thread__reply { font-size: var(--x-fs-sm); color: var(--x-text); }

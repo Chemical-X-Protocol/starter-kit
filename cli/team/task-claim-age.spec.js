@@ -34,6 +34,8 @@ const claimedTask = (root, db, handle, hoursAgo, at = NOW) => {
   const then = at - hoursAgo * HOUR;
   db.prepare('UPDATE agent_tasks SET claimed_at = ?, updated_at = ? WHERE id = ?').run(then, then, task.id);
   db.prepare('UPDATE agents SET heartbeat = ? WHERE id = ?').run(then, handle);
+  // The claim posts its own task_claimed feed row (#7695): that is a sign of life too.
+  db.prepare("UPDATE agent_feed SET timestamp = ? WHERE task_id = ? AND event_type = 'task_claimed'").run(then, task.id);
   return task.id;
 };
 

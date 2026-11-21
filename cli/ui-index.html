@@ -4,7 +4,7 @@
   <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Chemical X: Swarm Control</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@300;400;500;600&display=swap" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/vuetify@3.7.0/dist/vuetify.min.css" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css" />
   <style>
@@ -314,6 +314,10 @@
       margin-left: auto;
       font-family: ui-monospace, monospace;
     }
+    /* Paging footers (#7604): every long list says how much is shown and offers the next page. */
+    .xo-load-more { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 0 4px; }
+    .xo-load-more__count { font-size: 11px; color: rgba(255,255,255,.4); font-variant-numeric: tabular-nums; }
+    .xo-pager { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; flex-shrink: 0; padding-top: 8px; }
   </style>
   <script src="https://unpkg.com/vue@3.5.42/dist/vue.global.prod.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/vuetify@3.7.0/dist/vuetify.min.js"></script>
@@ -321,7 +325,32 @@
 <body>
 <div id="app"></div>
 <script>
-const { createApp, ref, computed, onMounted, onUnmounted, nextTick } = Vue;
+const { createApp, ref, reactive, computed, watch, provide, onMounted, onUnmounted, nextTick } = Vue;
+
+// Page sizes (#7604): the server never sends a whole table; lists page on demand.
+const TASK_PAGE = 25, AGENT_PAGE = 50, CODEBASE_PAGE = 60, DB_PAGE = 25;
+
+const getJson = async (url) => {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('HTTP ' + res.status + ' for ' + url);
+  return res.json();
+};
+
+const rangeLabel = (page, size, total) => {
+  const first = total === 0 ? 0 : (page - 1) * size + 1;
+  return first.toLocaleString() + '–' + Math.min(page * size, total).toLocaleString() + ' of ' + total.toLocaleString();
+};
+
+const XoLoadMore = {
+  props: { shown: { type: Number, default: 0 }, total: { type: Number, default: 0 }, loading: Boolean, step: { type: Number, default: 25 }, noun: { type: String, default: 'items' } },
+  emits: ['more'],
+  template: `<div v-if="total > 0" class="xo-load-more" aria-live="polite">
+    <span class="xo-load-more__count">Showing {{ shown.toLocaleString() }} of {{ total.toLocaleString() }} {{ total === 1 ? noun.replace(/s$/, '') : noun }}</span>
+    <v-btn v-if="shown < total" size="x-small" variant="tonal" color="primary" :loading="loading" @click="$emit('more')">
+      Load {{ Math.min(step, total - shown) }} more
+    </v-btn>
+  </div>`
+};
 const { createVuetify } = Vuetify;
 
 const vuetify = createVuetify({
@@ -330,28 +359,43 @@ const vuetify = createVuetify({
     themes: {
       chemx: {
         dark: true,
+        // Mirrors the tokens in cli/ui-page/components/00-tokens.css.
         colors: {
-          background: '#020617', surface: '#0b1329',
-          primary: '#38bdf8', secondary: '#8b5cf6',
-          success: '#a3e635', warning: '#fbbf24',
-          error: '#f472b6', info: '#38bdf8',
-          'on-surface': '#f1f5f9'
+          background: '#0a0c10', surface: '#111419', 'surface-variant': '#1c212a',
+          primary: '#62c9ff', secondary: '#a78bfa',
+          success: '#4ade80', warning: '#fbbf24',
+          error: '#f87171', info: '#62c9ff',
+          'on-surface': '#e6e9ef', 'on-primary': '#0a0c10'
         }
       }
     }
+  },
+  // One look for every control: compact outlined fields, flat buttons, tonal chips.
+  defaults: {
+    VBtn: { variant: 'flat', rounded: 'md' },
+    VTextField: { variant: 'outlined', density: 'compact', hideDetails: 'auto' },
+    VSelect: { variant: 'outlined', density: 'compact', hideDetails: 'auto' },
+    VTextarea: { variant: 'outlined', density: 'compact', hideDetails: 'auto' },
+    VChip: { size: 'small', variant: 'tonal', rounded: 'md' },
+    VCard: { rounded: 'lg', elevation: 0 }
   }
 });
 
+// Every page: its sidebar group, and the one line the page header shows under its title.
 const NAV_ITEMS = [
-  { id: 'social',   icon: 'mdi-antenna',        label: 'Forum & Timeline' },
-  { id: 'attention',icon: 'mdi-bell-outline',   label: 'Attention Inbox'  },
-  { id: 'tasks',    icon: 'mdi-clipboard-list',  label: 'Tasks & Kanban'   },
-  { id: 'locks',    icon: 'mdi-lock-outline',    label: 'File Locks Hub'   },
-  { id: 'codebase', icon: 'mdi-code-braces',     label: 'AST Codebase'     },
-  { id: 'workbench',icon: 'mdi-wrench-outline',  label: 'Prompt Workbench' },
-  { id: 'database', icon: 'mdi-database-outline', label: 'Database Studio' },
-  { id: 'settings', icon: 'mdi-tune-variant',    label: 'Settings'         },
+  { id: 'overview',  group: 'Work',   icon: 'mdi-view-dashboard-outline', label: 'Overview',  description: 'What the swarm is doing right now, and what needs you.' },
+  { id: 'attention', group: 'Work',   icon: 'mdi-inbox-outline',          label: 'Inbox',     description: 'Approvals, blocked tasks, lock requests and agent questions waiting on a person.' },
+  { id: 'tasks',     group: 'Work',   icon: 'mdi-view-column-outline',    label: 'Tasks',     description: 'Every task on the board by status. Open one to see its full record.' },
+  { id: 'social',    group: 'Team',   icon: 'mdi-message-text-outline',   label: 'Timeline',  description: 'Commits, decisions, handoffs and notes from every agent, newest first.' },
+  { id: 'agents',    group: 'Team',   icon: 'mdi-account-group-outline',  label: 'Agents',    description: 'Your crew and every session handle: what each is working on and has done.' },
+  { id: 'locks',     group: 'Team',   icon: 'mdi-lock-outline',           label: 'File locks', description: 'Who holds which file right now. A lease lapses after 5 minutes of no activity.' },
+  { id: 'codebase',  group: 'System', icon: 'mdi-file-tree-outline',      label: 'Codebase',  description: 'Indexed files with their tier and line budget.' },
+  { id: 'workbench', group: 'System', icon: 'mdi-text-box-edit-outline',  label: 'Prompts',   description: 'Build a scoped prompt for an agent from the board and the code index.' },
+  { id: 'database',  group: 'System', icon: 'mdi-database-outline',       label: 'Database',  description: 'Browse and query the code-index tables.' },
+  { id: 'settings',  group: 'System', icon: 'mdi-cog-outline',            label: 'Settings',  description: 'Maintenance actions for this board.' }
 ];
+const NAV_GROUPS = ['Work', 'Team', 'System'].map((label) => ({ label, items: NAV_ITEMS.filter((item) => item.group === label) }));
+const PAGE_META = { ...Object.fromEntries(NAV_ITEMS.map((item) => [item.id, item])), posts: { label: 'Post', description: 'One post with what came before it and its replies.' } };
 
 const TIER_FILTERS = ['all','atom','molecule','organism','template','view','utility','hook'];
 
@@ -365,275 +409,105 @@ const TASK_COLUMNS = [
 
 const App = {
   template: `
-<v-app theme="chemx">
-  <div class="xo-orb xo-orb--pink" />
-  <div class="xo-orb xo-orb--blue" />
-  <div class="xo-orb xo-orb--lime" />
-
-  <v-app-bar flat height="56" style="z-index:200;">
-    <v-app-bar-nav-icon @click="drawer = !drawer" color="rgba(255,255,255,.7)">☰</v-app-bar-nav-icon>
-    <div class="d-flex align-center gap-2 ml-1">
-      <span class="xo-display" style="font-size:15px;color:#f1f5f9;">⚡ Chemical X</span>
-      <v-chip size="x-small" color="primary" variant="tonal" class="ml-1">SWARM</v-chip>
+<v-app theme="chemx" class="xo-app">
+  <v-navigation-drawer v-model="drawer" :permanent="isWide" :temporary="!isWide" width="248" class="xo-nav" aria-label="Main navigation">
+    <div class="xo-nav__brand">
+      <span class="xo-nav__logo" aria-hidden="true">X</span>
+      <div><div class="xo-nav__name">Chemical X</div><div class="xo-nav__sub">Agent coordination board</div></div>
     </div>
-    <v-spacer />
-    <div class="d-flex align-center gap-3 mr-3">
-      <div class="xo-savings-badge" @click="openModal">
-        ⚡ Saved {{ (savings.tokensSaved||165000).toLocaleString() }} tokens / \${{ Number(savings.dollarsSaved||1.65).toFixed(2) }}
+    <nav class="xo-nav__groups">
+      <div v-for="group in navGroups" :key="group.label">
+        <div class="xo-nav__heading">{{ group.label }}</div>
+        <button v-for="item in group.items" :key="item.id" type="button" class="xo-nav__item" :class="{ 'is-active': tab === item.id }"
+          :aria-current="tab === item.id ? 'page' : undefined" @click="handleNavClick(item.id)">
+          <v-icon size="18">{{ item.icon }}</v-icon><span>{{ item.label }}</span>
+          <span v-if="navBadge(item.id)" class="xo-nav__badge x-num">{{ navBadge(item.id) }}</span>
+        </button>
       </div>
-      <v-chip size="small" color="success" variant="tonal" prepend-icon="mdi-circle" style="font-size:11px;">M3 Live</v-chip>
+    </nav>
+    <div class="xo-nav__foot">
+      <span class="xo-live" :class="{ 'is-live': isLive }" :title="isLive ? 'Receiving live updates' : 'Live updates disconnected; showing the last data'">
+        <span class="xo-live__dot" />{{ isLive ? 'Live' : 'Offline' }}
+      </span>
+      <span v-if="telemetry.totalTokens" class="x-num" title="Tokens and cost recorded on this board (chemx team telemetry)">
+        {{ Number(telemetry.totalTokens).toLocaleString() }} tokens · \${{ Number(telemetry.totalCost || 0).toFixed(2) }} recorded
+      </span>
+      <button type="button" class="xo-nav__item xo-nav__item--small" @click="openModal"><v-icon size="16">mdi-chart-line</v-icon><span>Token savings</span></button>
     </div>
-  </v-app-bar>
-
-  <v-navigation-drawer v-model="drawer" :permanent="drawerPinned" width="230">
-    <div class="px-4 py-3 d-flex align-center justify-space-between border-b" style="border-color:rgba(255,255,255,.07)!important;">
-      <div class="xo-display" style="font-size:11px;color:rgba(255,255,255,.45);text-transform:uppercase;letter-spacing:.1em;font-weight:700;">Navigation</div>
-      <v-btn
-        icon
-        variant="text"
-        size="x-small"
-        :color="drawerPinned ? 'primary' : 'rgba(255,255,255,.4)'"
-        :class="{ 'xo-btn--pinned': drawerPinned }"
-        @click="togglePinDrawer"
-        :title="drawerPinned ? 'Unpin menu (closes automatically on click)' : 'Pin menu (keeps drawer open)'"
-        style="width:26px;height:26px;"
-      >
-        <v-icon size="16">{{ drawerPinned ? 'mdi-pin' : 'mdi-pin-outline' }}</v-icon>
-      </v-btn>
-    </div>
-    <v-list density="compact" nav class="pa-2 d-flex flex-column" style="gap:4px;">
-      <v-list-item
-        v-for="item in navItems" :key="item.id"
-        :prepend-icon="item.icon" :title="item.label" :value="item.id"
-        :active="tab === item.id" rounded="lg" color="primary"
-        @click="handleNavClick(item.id)"
-      >
-        <template v-if="navBadge(item.id)" #append>
-          <v-chip size="x-small" color="primary" variant="tonal">{{ navBadge(item.id) }}</v-chip>
-        </template>
-      </v-list-item>
-    </v-list>
   </v-navigation-drawer>
 
-  <v-main style="height:100vh;overflow:hidden;">
-    <div style="height:100%;overflow:hidden;display:flex;flex-direction:column;padding:16px;gap:16px;box-sizing:border-box;">
+  <v-main class="xo-main">
+    <header class="xo-topbar">
+      <v-btn v-if="!isWide" icon="mdi-menu" variant="text" size="small" aria-label="Open navigation" @click="drawer = !drawer" />
+      <div class="xo-topbar__title">
+        <h1>{{ currentNav.label }}</h1>
+        <p v-if="currentNav.description">{{ currentNav.description }}</p>
+      </div>
+      <div class="xo-topbar__actions"><xo-notification-bell /></div>
+    </header>
+    <div class="xo-page" :class="'xo-page--' + tab">
+
+      <template v-if="tab==='overview'">
+        <xo-overview />
+      </template>
 
       <!-- SOCIAL / FORUM & TIMELINE -->
-      <template v-if="tab==='social'">
-        <div style="display:grid;grid-template-columns:260px 1fr 300px;gap:14px;flex:1;overflow:hidden;min-height:0;">
-
-          <div class="xo-glass d-flex flex-column gap-2 pa-3" style="border-radius:14px;overflow-y:auto;">
-            <div class="d-flex justify-space-between align-center mb-1">
-              <span class="xo-display" style="font-size:13px;">Swarm Agents</span>
-              <v-chip size="x-small" color="success" variant="tonal">{{ agents.length }}</v-chip>
-            </div>
-            <div class="d-flex gap-1 flex-wrap mb-1">
-              <v-chip v-for="f in agentFilters" :key="f" size="x-small" style="cursor:pointer;"
-                :color="agentFilter===f ? 'primary' : 'default'" :variant="agentFilter===f ? 'tonal' : 'outlined'"
-                class="text-capitalize" @click="agentFilter = f">{{ f }}</v-chip>
-            </div>
-            <div v-for="a in filteredAgents" :key="a.id" class="xo-agent-card" :class="{'xo-agent-card--active': selectedAgentId===a.id}" @click="selectedAgentId=a.id">
-              <div class="d-flex align-center gap-2">
-                <span class="xo-dot" :class="statusDotClass(a.status)" />
-                <span class="xo-agent-card__name">{{ a.name||a.id }}</span>
-              </div>
-              <div class="xo-agent-card__role mt-1">{{ a.role||a.status||'agent' }}</div>
-            </div>
-            <div v-if="!filteredAgents.length" class="text-center" style="color:rgba(255,255,255,.3);font-size:12px;padding:16px 0;">No agents</div>
+      <template v-else-if="tab==='social'">
+        <div class="xo-feedpage">
+          <div class="xo-feedpage__main x-panel">
+            <xo-today-card />
+            <xo-composer />
+            <xo-timeline />
           </div>
-
-          <div class="xo-glass d-flex flex-column pa-3" style="border-radius:14px;overflow:hidden;">
-            <div class="d-flex justify-space-between align-center mb-3">
-              <span class="xo-display" style="font-size:13px;">Live Timeline</span>
-              <v-chip size="x-small" color="primary" variant="tonal">{{ posts.length }}</v-chip>
-            </div>
-            <div style="flex:1;overflow-y:auto;" class="d-flex flex-column gap-2">
-              <div v-for="p in postsDesc" :key="p.id" class="xo-post vb-postbit">
-                <div class="d-flex align-center justify-space-between mb-1">
-                  <div class="xo-post__author">{{ p.author }}</div>
-                  <v-chip v-if="p.isDirectMessage" size="x-small" color="secondary" variant="tonal" style="font-size:10px;height:18px;">
-                    <v-icon start size="10">mdi-email-outline</v-icon>@DM to {{ p.recipient }}
-                  </v-chip>
+          <aside class="xo-feedpage__side">
+            <section class="x-panel">
+              <header class="x-panel__head"><h3 class="x-panel__title">Agents</h3><span class="x-panel__hint x-num">{{ agentPage.total.toLocaleString() }}</span>
+                <button type="button" class="x-panel__link" @click="navigate('#/agents')">All agents</button></header>
+              <div class="x-panel__body">
+                <div class="xo-board__seg xo-feedpage__seg" role="group" aria-label="Filter agents by status">
+                  <button v-for="f in agentFilters" :key="f" type="button" :class="{ 'is-on': agentFilter === f }" :aria-pressed="agentFilter === f" @click="setAgentFilter(f)">{{ f }}</button>
                 </div>
-                <div class="xo-post__msg">{{ p.message }}</div>
-                <div class="xo-post__time">{{ formatTime(p.createdAt) }}</div>
+                <v-progress-linear v-if="agentPage.loading" indeterminate color="primary" height="2" />
+                <button v-for="a in filteredAgents" :key="a.id" type="button" class="x-row" @click="openAgent(a.id)">
+                  <xo-avatar :handle="a.id" :size="22" :link="false" />
+                  <span class="x-row__main">{{ a.name || a.id }}</span>
+                  <span class="x-dot" :class="statusDotClass(a.status)" :title="a.status" />
+                </button>
+                <div v-if="!filteredAgents.length && !agentPage.loading" class="x-empty">No {{ agentFilter === 'all' ? '' : agentFilter }} agents</div>
+                <xo-load-more :shown="filteredAgents.length" :total="agentPage.total" :loading="agentPage.loading" :step="AGENT_PAGE" noun="agents" @more="loadMoreAgents" />
               </div>
-              <div v-if="!posts.length" class="text-center" style="color:rgba(255,255,255,.3);font-size:12px;padding:32px 0;">
-                <v-icon size="32" color="rgba(255,255,255,.15)">mdi-antenna</v-icon>
-                <div class="mt-2">Waiting for swarm activity...</div>
+            </section>
+            <section class="x-panel">
+              <header class="x-panel__head"><h3 class="x-panel__title">Locks held</h3><span class="x-panel__hint x-num">{{ leases.length }}</span>
+                <button type="button" class="x-panel__link" @click="navigate('#/locks')">All locks</button></header>
+              <div class="x-panel__body">
+                <div v-if="!leases.length" class="x-empty">No file is locked.</div>
+                <div v-for="l in leases.slice(0, 8)" :key="l.filePath" class="xo-feedpage__lock">
+                  <v-icon size="14">mdi-lock-outline</v-icon><span class="xo-feedpage__path" :title="l.filePath">{{ l.filePath }}</span>
+                </div>
+                <div v-if="leases.length > 8" class="x-muted">and {{ leases.length - 8 }} more</div>
               </div>
-            </div>
-          </div>
-
-          <div class="xo-glass d-flex flex-column gap-3 pa-3" style="border-radius:14px;overflow-y:auto;">
-            <div class="xo-display" style="font-size:13px;">Telemetry</div>
-            <div class="xo-kpi">
-              <div class="xo-kpi__label">Total Tokens</div>
-              <div class="xo-kpi__value" style="color:var(--xo-cyan);">{{ (telemetry.totalTokens||0).toLocaleString() }}</div>
-            </div>
-            <div class="xo-kpi">
-              <div class="xo-kpi__label">Total Cost</div>
-              <div class="xo-kpi__value" style="color:var(--xo-lime);">\${{ Number(telemetry.totalCost||0).toFixed(4) }}</div>
-            </div>
-            <v-divider style="border-color:rgba(255,255,255,.07);" />
-            <div class="d-flex justify-space-between align-center">
-              <span class="xo-display" style="font-size:13px;">Active Locks</span>
-              <v-chip size="x-small" :color="leases.length?'warning':'default'" variant="tonal">{{ leases.length }}</v-chip>
-            </div>
-            <div v-for="l in leases.slice(0,5)" :key="l.filePath" class="d-flex align-center gap-2" style="font-size:11px;color:rgba(255,255,255,.5);">
-              <v-icon size="13" color="warning">mdi-lock</v-icon>
-              <span class="xo-mono" style="word-break:break-all;">{{ l.filePath }}</span>
-            </div>
-            <div v-if="leases.length>5" style="font-size:11px;color:rgba(255,255,255,.3);">+ {{ leases.length-5 }} more</div>
-          </div>
+            </section>
+          </aside>
         </div>
+      </template>
+
+      <!-- AGENT PROFILES (#/agents/<handle>) AND POST PERMALINKS (#/posts/<id>) -->
+      <template v-else-if="tab==='agents'">
+        <xo-agents-directory v-if="!route.id" />
+        <xo-agent-profile v-else :agent-id="route.id" />
+      </template>
+      <template v-else-if="tab==='posts'">
+        <xo-post-permalink :post-id="route.id" />
       </template>
 
       <!-- ATTENTION INBOX -->
       <template v-else-if="tab==='attention'">
-        <div class="xo-glass pa-4" style="border-radius:14px;flex:1;overflow-y:auto;min-height:0;">
-          <div class="d-flex align-center gap-2 mb-4">
-            <v-icon color="warning">mdi-bell-outline</v-icon>
-            <span class="xo-display" style="font-size:15px;">Attention Inbox</span>
-            <v-chip size="small" color="warning" variant="tonal" class="ml-auto">{{ attentionItems.length }} alerts</v-chip>
-          </div>
-          <div v-if="attentionItems.length" class="d-flex flex-column gap-3">
-            <div v-for="item in attentionItems" :key="item.id" class="xo-card">
-              <div class="d-flex justify-space-between align-center">
-                <span style="font-weight:600;font-size:13px;">{{ item.title || item.message }}</span>
-                <div class="d-flex gap-2">
-                  <v-btn size="x-small" color="success" variant="tonal" @click="confirmAttention(item.id, 'approve')">Approve</v-btn>
-                  <v-btn size="x-small" color="default" variant="outlined" @click="confirmAttention(item.id, 'dismiss')">Dismiss</v-btn>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div v-else class="text-center" style="padding:48px 0;color:rgba(255,255,255,.3);">
-            <v-icon size="48" color="rgba(255,255,255,.15)">mdi-check-circle-outline</v-icon>
-            <div class="mt-3">No pending attention requests</div>
-          </div>
-        </div>
-      </template>
-
-      <!-- TASKS & KANBAN -->
+        <xo-attention-inbox :items="attentionItems" @action="confirmAttention" @open="navigate('#/tasks/' + $event)" />
+      </template>      <!-- TASKS & KANBAN -->
       <template v-else-if="tab==='tasks'">
-        <div class="d-flex align-center gap-3 mb-3 flex-wrap" style="flex-shrink:0;">
-          <div style="flex:1;min-width:200px;max-width:360px;">
-            <v-text-field
-              v-model="taskSearch"
-              density="compact"
-              variant="outlined"
-              placeholder="Search tasks or files..."
-              prepend-inner-icon="mdi-magnify"
-              hide-details
-              rounded="lg"
-            />
-          </div>
-          <div class="d-flex gap-1 align-center">
-            <v-chip
-              v-for="tier in ['all', 'atom', 'molecule', 'organism', 'utility']"
-              :key="tier"
-              size="small"
-              :color="taskTierFilter === tier ? 'primary' : 'default'"
-              :variant="taskTierFilter === tier ? 'tonal' : 'outlined'"
-              style="cursor:pointer;text-transform:capitalize;"
-              @click="taskTierFilter = tier"
-            >
-              {{ tier }}
-            </v-chip>
-          </div>
-          <v-spacer />
-          <v-btn
-            size="small"
-            :color="hideTestTasks ? 'primary' : 'default'"
-            :variant="hideTestTasks ? 'tonal' : 'outlined'"
-            prepend-icon="mdi-shield-check-outline"
-            rounded="lg"
-            @click="hideTestTasks = !hideTestTasks"
-          >
-            {{ hideTestTasks ? 'Shielded: Real Tasks Only' : 'Showing All Tasks' }}
-          </v-btn>
-        </div>
-
-        <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));gap:14px;flex:1;overflow:hidden;min-height:0;">
-          <div v-for="col in taskColumns" :key="col.status" class="xo-glass d-flex flex-column pa-3 kanban-col" style="border-radius:14px;overflow:hidden;">
-            <div class="d-flex align-center gap-2 mb-3">
-              <v-icon size="16" :color="col.color">{{ col.icon }}</v-icon>
-              <span class="xo-display" style="font-size:13px;">{{ col.label }}</span>
-              <v-chip size="x-small" :color="col.color" variant="tonal" class="ml-auto">{{ tasksByStatus(col.status).length }}</v-chip>
-            </div>
-            <div style="flex:1;overflow-y:auto;" class="d-flex flex-column pr-1 gap-2">
-              <div v-for="t in tasksByStatus(col.status)" :key="t.id" class="xo-task-card" :class="'xo-task-card--' + col.status" style="cursor:pointer;" @click="openTaskDetail(t.id)">
-                <div class="xo-task-card__header">
-                  <span class="xo-task-card__id" style="cursor:pointer;" title="Open task details" @click.stop="openTaskDetail(t.id)">#{{ t.id }}</span>
-                  <span class="v-chip v-chip--density-compact v-chip--size-x-small v-chip--variant-tonal"
-                        :class="'xo-task-card__badge-' + (t.tier || 'utility')"
-                        style="font-size:10px;text-transform:uppercase;font-weight:700;letter-spacing:.05em;padding:0 6px;border-radius:4px;">
-                    {{ t.tier || 'utility' }}
-                  </span>
-                  <v-chip v-if="t.priority" size="x-small" :color="t.priority === 1 ? 'error' : t.priority === 2 ? 'primary' : 'default'" variant="tonal" style="font-size:10px;height:18px;">
-                    <v-icon size="10" start>{{ t.priority === 1 ? 'mdi-fire' : 'mdi-flag-outline' }}</v-icon>
-                    P{{ t.priority }}
-                  </v-chip>
-                  <v-chip v-if="t.parentId" size="x-small" color="primary" variant="tonal" style="font-size:10px;height:18px;">
-                    <v-icon size="10" start>mdi-subdirectory-arrow-right</v-icon>
-                    Sub of #{{ t.parentId }}
-                  </v-chip>
-                  <v-chip v-if="t.subtaskCount > 0" size="x-small" color="info" variant="outlined" style="font-size:10px;height:18px;">
-                    <v-icon size="10" start>mdi-file-tree</v-icon>
-                    {{ t.subtaskCount }}
-                  </v-chip>
-                  <v-chip v-if="col.status === 'done'" size="x-small" color="success" variant="tonal" style="font-size:10px;height:18px;">
-                    <v-icon size="10" start>mdi-check-circle-outline</v-icon>Done
-                  </v-chip>
-                  <v-btn size="x-small" variant="text" icon="mdi-clipboard-text-outline" color="primary" style="height:20px;width:20px;margin-left:auto;" title="Open task details sheet" @click.stop="openTaskDetail(t.id)"></v-btn>
-                </div>
-
-                <div class="xo-task-card__title">{{ t.title }}</div>
-
-                <div v-if="t.target_path || t.targetPath" class="xo-task-card__path" :title="t.target_path || t.targetPath">
-                  <v-icon size="11">mdi-file-code-outline</v-icon>
-                  <span>{{ t.target_path || t.targetPath }}</span>
-                </div>
-
-                <div v-if="col.status === 'done' && (t.result_payload?.receipt?.healthAfter || t.result_payload?.healthAfter || t.diff_receipt?.verified)"
-                     class="d-flex align-center gap-2 flex-wrap" style="font-size:10px;background:rgba(163,230,53,.07);border:1px solid rgba(163,230,53,.2);color:var(--xo-lime);padding:3px 8px;border-radius:6px;">
-                  <v-icon size="11" color="success">mdi-shield-check</v-icon>
-                  <span>Verified Receipt (Health: {{ t.result_payload?.healthAfter || t.result_payload?.receipt?.healthAfter || 100 }}%)</span>
-                </div>
-
-                <div class="xo-task-card__footer">
-                  <div v-if="t.assigned_agent_id || t.assignedTo" class="xo-task-card__assignee">
-                    <v-icon size="12" color="primary">mdi-robot-outline</v-icon>
-                    <span>{{ t.assigned_agent_id || t.assignedTo }}</span>
-                  </div>
-                  <div v-else style="color:rgba(255,255,255,.3);font-size:10px;font-style:italic;">
-                    Unassigned
-                  </div>
-
-                  <div class="xo-task-card__meta">
-                    <span style="color:rgba(255,255,255,.45);font-size:10px;font-family:ui-monospace,monospace;">
-                      ⚡ {{ Math.round((t.total_tokens || ((t.prompt_tokens || 0) + (t.completion_tokens || 0))) / 1000) || 1 }}k
-                    </span>
-                  </div>
-
-                  <div class="d-flex align-center gap-1 ml-auto">
-                    <v-btn v-if="col.status === 'queued'" size="x-small" variant="tonal" color="primary" style="height:20px;font-size:10px;padding:0 6px;" @click.stop="moveTask(t.id, 'in_progress')">
-                      Start ▶
-                    </v-btn>
-                    <v-btn v-else-if="col.status === 'in_progress'" size="x-small" variant="tonal" color="success" style="height:20px;font-size:10px;padding:0 6px;" @click.stop="moveTask(t.id, 'done')">
-                      Complete ✓
-                    </v-btn>
-                    <v-btn v-else-if="col.status === 'done'" size="x-small" variant="text" color="warning" style="height:20px;font-size:10px;padding:0 6px;" title="Reopen task" @click.stop="moveTask(t.id, 'in_progress')">
-                      <v-icon size="11" start>mdi-restore</v-icon>Reopen
-                    </v-btn>
-                  </div>
-                </div>
-              </div>
-              <div v-if="!tasksByStatus(col.status).length" class="text-center" style="color:rgba(255,255,255,.25);font-size:12px;padding:24px 0;">No tasks</div>
-            </div>
-          </div>
-        </div>
+        <xo-task-board :columns="boardColumns" v-model:search="taskSearch" v-model:tier="taskTierFilter" v-model:hide-tests="hideTestTasks" :step="TASK_PAGE"
+          @open="openTaskDetail" @move="moveTask" @more="loadMoreTasks" />
 
         <!-- Bubblegum-Style Task Details Slide-Over Sheet & Backdrop -->
         <v-fade-transition>
@@ -641,296 +515,162 @@ const App = {
         </v-fade-transition>
 
         <v-slide-x-reverse-transition>
-          <aside v-if="selectedTaskDetail" class="xo-task-details-sheet">
-            <div class="xo-task-details-header">
-              <div style="flex:1; min-width:0;">
-                <div class="d-flex align-center gap-2 mb-1 flex-wrap">
-                  <span class="xo-task-card__id">#{{ selectedTaskDetail.id }}</span>
-                  <span class="v-chip v-chip--density-compact v-chip--size-x-small v-chip--variant-tonal"
-                        :class="'xo-task-card__badge-' + (selectedTaskDetail.tier || 'utility')"
-                        style="font-size:10px;text-transform:uppercase;font-weight:700;letter-spacing:.05em;padding:0 6px;border-radius:4px;">
-                    {{ selectedTaskDetail.tier || 'utility' }}
-                  </span>
-                  <v-chip v-if="selectedTaskDetail.priority" size="x-small" :color="selectedTaskDetail.priority === 1 ? 'error' : selectedTaskDetail.priority === 2 ? 'primary' : 'default'" variant="tonal" style="font-size:10px;height:18px;">
-                    <v-icon size="10" start>{{ selectedTaskDetail.priority === 1 ? 'mdi-fire' : 'mdi-flag-outline' }}</v-icon>
-                    P{{ selectedTaskDetail.priority }}
-                  </v-chip>
-                  <v-chip size="x-small" :color="(selectedTaskDetail.target_path || selectedTaskDetail.targetPath) ? 'success' : 'default'" variant="tonal" style="font-size:10px;height:18px;">
-                    {{ (selectedTaskDetail.target_path || selectedTaskDetail.targetPath) ? '🛡️ Verified' : '📝 Manual' }}
-                  </v-chip>
-                </div>
-                <h2 class="xo-display" style="font-size:16px; color:#f8fafc; margin:0; line-height:1.3; word-break:break-word;">
-                  {{ selectedTaskDetail.title }}
-                </h2>
-              </div>
-              <v-btn icon="mdi-close" variant="text" size="small" color="rgba(255,255,255,.7)" @click="closeTaskDetail"></v-btn>
-            </div>
-
-            <div class="xo-task-details-body">
-              <div class="xo-task-prop-grid">
-                <div>
-                  <div class="xo-task-prop-label">Status</div>
-                  <v-select
-                    density="compact"
-                    hide-details
-                    variant="outlined"
-                    rounded="lg"
-                    :items="['queued', 'in_progress', 'review', 'done', 'blocked']"
-                    :model-value="selectedTaskDetail.status"
-                    @update:model-value="updateTaskStatusFromSheet($event)"
-                  ></v-select>
-                </div>
-                <div>
-                  <div class="xo-task-prop-label">Assignee</div>
-                  <v-select
-                    density="compact"
-                    hide-details
-                    variant="outlined"
-                    rounded="lg"
-                    :items="['@unassigned', ...agents.map(a => a.id)]"
-                    :model-value="selectedTaskDetail.assigned_agent_id || selectedTaskDetail.assignedTo || '@unassigned'"
-                    @update:model-value="reassignTaskFromSheet($event === '@unassigned' ? null : $event)"
-                  ></v-select>
-                </div>
-
-                <div v-if="selectedTaskDetail.target_path || selectedTaskDetail.targetPath" style="grid-column: 1 / -1;">
-                  <div class="xo-task-prop-label">Target File Path</div>
-                  <div class="xo-task-card__path" style="width:100%;margin-bottom:0;">
-                    <v-icon size="11">mdi-file-code-outline</v-icon>
-                    <span>{{ selectedTaskDetail.target_path || selectedTaskDetail.targetPath }}</span>
-                  </div>
-                </div>
-
-                <div v-if="selectedTaskDetail.blocked_reason" style="grid-column: 1 / -1; background:rgba(239,68,68,.12); border:1px solid rgba(239,68,68,.3); border-radius:8px; padding:8px 12px; font-size:12px; color:#fca5a5;">
-                  <strong>⛔ Blocker:</strong> {{ selectedTaskDetail.blocked_reason }}
-                </div>
-
-                <div v-if="selectedTaskDetail.total_tokens || selectedTaskDetail.prompt_tokens" style="grid-column: 1 / -1; font-family:ui-monospace,monospace; font-size:11px; color:rgba(255,255,255,.5);">
-                  ⚡ Prompt: {{ selectedTaskDetail.prompt_tokens || 250 }} | Completion: {{ selectedTaskDetail.completion_tokens || 45 }}
-                  <span v-if="selectedTaskDetail.cost_usd"> | Cost: \${{ Number(selectedTaskDetail.cost_usd).toFixed(4) }}</span>
-                </div>
-              </div>
-
-              <div class="d-flex flex-column gap-2">
-                <div class="d-flex align-center justify-space-between mb-1">
-                  <span class="xo-display" style="font-size:13px; text-transform:uppercase; letter-spacing:0.05em; color:rgba(255,255,255,.7);">
-                    📡 Activity Stream & Status Updates ({{ selectedTaskEvents.length }})
-                  </span>
-                  <v-btn size="x-small" variant="text" color="primary" prepend-icon="mdi-refresh" @click="openTaskDetail(selectedTaskDetail.id)">
-                    Refresh
-                  </v-btn>
-                </div>
-
-                <div v-if="selectedTaskEvents.length === 0" class="text-center pa-4" style="color:rgba(255,255,255,.3); font-size:12px; font-style:italic; background:rgba(255,255,255,.02); border-radius:8px;">
-                  No status updates or comments recorded yet.
-                </div>
-
-                <div v-else class="d-flex flex-column gap-2">
-                  <div v-for="ev in selectedTaskEvents" :key="ev.id" class="xo-event-card">
-                    <div class="xo-event-author">
-                      <v-icon size="12" color="primary">
-                        {{ ev.event_type === 'task_created' ? 'mdi-clock-outline' : (ev.event_type === 'task_completed' ? 'mdi-check-circle-outline' : (ev.event_type === 'task_status_updated' ? 'mdi-sync' : 'mdi-comment-outline')) }}
-                      </v-icon>
-                      <span>{{ ev.author_id || ev.author }}</span>
-                      <v-chip size="x-small" color="primary" variant="tonal" style="font-size:9px; height:16px;">
-                        {{ ev.event_type }}
-                      </v-chip>
-                      <span class="xo-event-time">{{ new Date(ev.timestamp).toLocaleTimeString() }}</span>
-                    </div>
-                    <div class="xo-event-msg">{{ ev.message }}</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div class="xo-task-details-footer">
-              <v-text-field
-                v-model="taskUpdateMsg"
-                placeholder="Post a status update or note on this task..."
-                density="compact"
-                variant="outlined"
-                hide-details
-                rounded="lg"
-                @keydown.enter="submitTaskUpdate"
-              ></v-text-field>
-              <v-btn color="primary" variant="tonal" rounded="lg" :loading="isUpdatingTask" @click="submitTaskUpdate">
-                Post
-              </v-btn>
-            </div>
-          </aside>
+          <xo-task-sheet v-if="selectedTaskDetail" :task="selectedTaskDetail" :events="selectedTaskEvents" :agents :busy="isUpdatingTask"
+            @close="closeTaskDetail" @status="updateTaskStatusFromSheet" @assign="reassignTaskFromSheet" @post="submitTaskUpdate" @open="navigate('#/tasks/' + $event)" />
         </v-slide-x-reverse-transition>
       </template>
 
       <!-- LOCKS -->
       <template v-else-if="tab==='locks'">
-        <div class="xo-glass pa-4" style="border-radius:14px;flex:1;overflow-y:auto;min-height:0;">
-          <div class="d-flex align-center gap-2 mb-4">
-            <v-icon color="warning">mdi-lock-outline</v-icon>
-            <span class="xo-display" style="font-size:15px;">File Lock Leases</span>
-            <v-chip size="small" color="warning" variant="tonal" class="ml-auto">{{ leases.length }} active</v-chip>
-          </div>
-          <div v-if="leases.length" class="d-flex flex-column gap-2">
-            <div v-for="l in leases" :key="l.filePath" class="d-flex align-center gap-3 pa-3" style="background:rgba(255,255,255,.04);border-radius:10px;border:1px solid rgba(255,255,255,.07);">
-              <v-icon color="warning" size="18">mdi-lock</v-icon>
-              <div style="flex:1;">
-                <div class="xo-mono" style="color:var(--xo-cyan);font-size:12px;">{{ l.filePath }}</div>
-                <div v-if="l.lockedBy" style="font-size:11px;color:rgba(255,255,255,.4);margin-top:2px;">held by {{ l.lockedBy }}</div>
-              </div>
-              <v-chip size="x-small" color="warning" variant="tonal">Locked</v-chip>
-            </div>
-          </div>
-          <div v-else class="text-center" style="padding:48px 0;">
-            <v-icon size="48" color="rgba(255,255,255,.15)">mdi-lock-open-outline</v-icon>
-            <div class="mt-3" style="color:rgba(255,255,255,.3);font-size:13px;">No active locks</div>
-          </div>
-        </div>
+        <section class="x-panel xo-locks">
+          <header class="x-panel__head"><h3 class="x-panel__title">Leases</h3><span class="x-panel__hint x-num">{{ leases.length }} held</span></header>
+          <div v-if="!leases.length" class="x-empty">No file is locked right now.</div>
+          <table v-else class="xo-table">
+            <thead><tr><th>File</th><th>Held by</th><th>Purpose</th><th class="xo-table__num">Expires</th></tr></thead>
+            <tbody>
+              <tr v-for="l in leases" :key="l.filePath">
+                <td class="xo-table__path"><v-icon size="14">mdi-lock-outline</v-icon><span :title="l.filePath">{{ l.filePath }}</span></td>
+                <td><button v-if="l.lockedBy" type="button" class="xo-table__who" @click="openAgent(l.lockedBy)"><xo-avatar :handle="l.lockedBy" :size="18" :link="false" />{{ l.lockedBy }}</button></td>
+                <td class="xo-table__muted">{{ l.purpose }}</td>
+                <td class="xo-table__num xo-table__muted">{{ l.expiresAt ? new Date(l.expiresAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
       </template>
 
       <!-- CODEBASE -->
       <template v-else-if="tab==='codebase'">
-        <div class="xo-glass d-flex flex-column pa-3 filetree-container" style="border-radius:14px;flex:1;overflow:hidden;min-height:0;">
-          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px;flex-shrink:0;">
-            <div class="xo-kpi">
-              <div class="xo-kpi__label">AST Files</div>
-              <div class="xo-kpi__value" style="color:var(--xo-cyan);">{{ codebase.length }}</div>
-            </div>
-            <div class="xo-kpi">
-              <div class="xo-kpi__label">Within line budget</div>
-              <div class="xo-kpi__value" style="color:var(--xo-lime);">{{ compliantCount }}</div>
-            </div>
-            <div class="xo-kpi">
-              <div class="xo-kpi__label">Compliance</div>
-              <div class="xo-kpi__value" style="color:var(--xo-purple);">{{ compliancePct }}%</div>
-            </div>
+        <div class="xo-cb filetree-container">
+          <div class="xo-cb__stats">
+            <div class="xo-ov__tile xo-ov__tile--plain"><span class="xo-ov__tile-label">Indexed files</span><span class="xo-ov__tile-value x-num">{{ codebase.length.toLocaleString() }}</span></div>
+            <div class="xo-ov__tile xo-ov__tile--plain"><span class="xo-ov__tile-label">Within line budget</span><span class="xo-ov__tile-value x-num">{{ compliantCount.toLocaleString() }}</span></div>
+            <div class="xo-ov__tile xo-ov__tile--plain"><span class="xo-ov__tile-label">Compliance</span><span class="xo-ov__tile-value x-num">{{ compliancePct }}%</span></div>
           </div>
-          <div class="d-flex align-center gap-2 flex-wrap mb-3" style="flex-shrink:0;">
-            <v-chip v-for="tier in tierFilters" :key="tier" size="small" style="cursor:pointer;"
-              :class="selectedTier===tier ? 'tier-'+tier : ''"
-              :variant="selectedTier===tier ? 'tonal' : 'outlined'"
-              class="text-capitalize" style="border-color:rgba(255,255,255,.12);color:rgba(255,255,255,.5);"
-              @click="selectedTier=tier">{{ tier==='all' ? 'All' : tier }}</v-chip>
+          <div class="xo-board__bar">
+            <div class="xo-board__seg" role="group" aria-label="Filter by tier">
+              <button v-for="tier in tierFilters" :key="tier" type="button" :class="{ 'is-on': selectedTier === tier }" :aria-pressed="selectedTier === tier" @click="selectedTier = tier">{{ tier }}</button>
+            </div>
             <v-spacer />
-            <v-text-field v-model="codebaseSearch" placeholder="Filter files..." density="compact" variant="outlined"
-              hide-details prepend-inner-icon="mdi-magnify" style="max-width:220px;font-size:12px;" bg-color="rgba(255,255,255,.04)" />
+            <v-text-field v-model="codebaseSearch" class="xo-board__search" placeholder="Filter by path or export" prepend-inner-icon="mdi-magnify" clearable />
           </div>
-          <div style="flex:1;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px;align-content:start;">
-            <div v-for="f in filteredCodebase" :key="f.path" class="xo-file-card">
-              <div class="d-flex align-center gap-2 mb-1">
-                <v-chip v-if="f.tier" size="x-small" :class="'tier-'+f.tier">{{ f.tier }}</v-chip>
-                <v-chip v-if="f.isOverBudget" size="x-small" class="xo-hazard">{{ f.lines }}L ⚠</v-chip>
-                <v-chip v-else-if="f.lines" size="x-small" variant="outlined" style="border-color:rgba(255,255,255,.12);color:rgba(255,255,255,.4);">{{ f.lines }}L</v-chip>
-                <v-chip v-if="f.coverage!=null" size="x-small" color="success" variant="tonal">{{ f.coverage }}%</v-chip>
-              </div>
-              <div class="xo-file-card__path">{{ f.path }}</div>
-              <div v-if="f.exports&&f.exports.length" class="xo-file-card__meta xo-mono">{{ f.exports.slice(0,3).join(', ') }}</div>
-            </div>
-            <div v-if="!filteredCodebase.length" style="grid-column:1/-1;text-align:center;padding:48px;color:rgba(255,255,255,.25);">
-              <v-icon size="40" color="rgba(255,255,255,.15)">mdi-code-braces</v-icon>
-              <div class="mt-2" style="font-size:13px;">No files match filter</div>
-            </div>
+          <section class="x-panel xo-cb__list">
+            <v-progress-linear v-if="codebaseLoading" indeterminate color="primary" height="2" />
+            <div v-if="!filteredCodebase.length && !codebaseLoading" class="x-empty">No files match.</div>
+            <table v-else class="xo-table">
+              <thead><tr><th>File</th><th>Tier</th><th class="xo-table__num">Lines</th><th>Exports</th></tr></thead>
+              <tbody>
+                <tr v-for="f in codebasePageItems" :key="f.path">
+                  <td class="xo-table__path"><v-icon size="14">mdi-file-code-outline</v-icon><span :title="f.path">{{ f.path }}</span></td>
+                  <td><span v-if="f.tier" class="xo-card__tag">{{ f.tier }}</span></td>
+                  <td class="xo-table__num" :class="{ 'xo-cb__over': f.isOverBudget }" :title="f.isOverBudget ? 'Over its line budget' : ''">{{ f.lines || '' }}</td>
+                  <td class="xo-table__muted xo-cb__exports">{{ (f.exports || []).slice(0, 4).join(', ') }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </section>
+          <div v-if="filteredCodebase.length > CODEBASE_PAGE" class="xo-pager">
+            <span class="xo-load-more__count">{{ rangeLabel(codebasePage, CODEBASE_PAGE, filteredCodebase.length) }} files</span>
+            <v-pagination v-model="codebasePage" :length="codebasePageCount" density="compact" size="small" :total-visible="7" />
           </div>
         </div>
       </template>
 
       <!-- PROMPT WORKBENCH -->
       <template v-else-if="tab==='workbench'">
-        <div class="xo-glass pa-4 d-flex flex-column gap-3" style="border-radius:14px;flex:1;overflow:hidden;min-height:0;">
-          <div class="d-flex align-center gap-2">
-            <v-icon color="primary">mdi-wrench-outline</v-icon>
-            <span class="xo-display" style="font-size:15px;">Prompt Workbench</span>
-          </div>
-          <div class="d-flex gap-2 flex-wrap">
-            <v-chip v-for="s in workbenchScopes" :key="s" size="small"
-              :color="activeWorkbenchScope === s ? 'primary' : 'default'"
-              :variant="activeWorkbenchScope === s ? 'tonal' : 'outlined'"
-              @click="selectWorkbenchScope(s)">{{ s }}</v-chip>
-          </div>
-          <textarea v-model="workbenchPrompt" class="xo-workbench-textarea" placeholder="AI Refactoring Prompt..." readonly></textarea>
+        <div class="xo-wb">
+          <aside class="x-panel">
+            <header class="x-panel__head"><h3 class="x-panel__title">Scope</h3></header>
+            <div class="x-panel__body">
+              <button v-for="s in workbenchScopes" :key="s" type="button" class="xo-nav__item" :class="{ 'is-active': activeWorkbenchScope === s }" @click="selectWorkbenchScope(s)">{{ s }}</button>
+            </div>
+          </aside>
+          <section class="x-panel xo-wb__main">
+            <header class="x-panel__head"><h3 class="x-panel__title">Prompt</h3><span class="x-panel__hint">Built from the board and the code index</span></header>
+            <div class="x-panel__body xo-wb__body">
+              <div v-if="!workbenchPrompt" class="x-empty">Pick a scope to build a prompt.</div>
+              <pre v-else class="xo-wb__prompt">{{ workbenchPrompt }}</pre>
+            </div>
+          </section>
         </div>
       </template>
 
       <!-- DATABASE STUDIO -->
       <template v-else-if="tab==='database'">
-        <div class="d-flex gap-3" style="flex:1;overflow:hidden;min-height:0;">
-          <div class="xo-glass pa-3 pma-sidebar d-flex flex-column gap-2" style="border-radius:14px;width:220px;overflow-y:auto;">
-            <div class="xo-display" style="font-size:13px;color:rgba(255,255,255,.5);">Database Studio</div>
-            <div v-for="tbl in dbTables" :key="tbl.name" class="xo-pma-table-item" @click="selectDbTable(tbl.name)">
-              <span>📁 {{ tbl.name }}</span>
+        <div class="xo-dbs">
+          <aside class="x-panel pma-sidebar xo-dbs__tables">
+            <header class="x-panel__head"><h3 class="x-panel__title">Tables</h3><span class="x-panel__hint x-num">{{ dbTables.length }}</span></header>
+            <div class="x-panel__body">
+              <button v-for="tbl in dbTables" :key="tbl.name" type="button" class="xo-nav__item" :class="{ 'is-active': dbTable === tbl.name }" @click="selectDbTable(tbl.name)">
+                <v-icon size="15">mdi-table</v-icon><span>{{ tbl.name }}</span>
+              </button>
             </div>
-          </div>
-          <div class="xo-glass pa-3 pma-main d-flex flex-column gap-3" style="border-radius:14px;flex:1;overflow:hidden;">
-            <textarea v-model="sqlQuery" class="xo-sql-input" placeholder="SELECT * FROM ..."></textarea>
-            <div style="flex:1;overflow:auto;">
-              <table class="pma-table xo-data-table">
-                <thead>
-                  <tr><th v-for="col in dbColumns" :key="col">{{ col }}</th></tr>
-                </thead>
-                <tbody>
-                  <tr v-for="(row, idx) in dbRows" :key="idx"><td v-for="col in dbColumns" :key="col">{{ row[col] }}</td></tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      </template>
-
-      <!-- SETTINGS -->
-      <template v-else-if="tab==='settings'">
-        <div class="xo-glass pa-4" style="border-radius:14px;max-width:520px;min-height:0;">
-          <div class="d-flex align-center gap-2 mb-4">
-            <v-icon color="primary">mdi-tune-variant</v-icon>
-            <span class="xo-display" style="font-size:15px;">Swarm Settings</span>
-          </div>
-          <div class="d-flex flex-column gap-3">
-            <div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:16px;">
-              <div style="font-size:13px;font-weight:500;margin-bottom:10px;">Database Maintenance</div>
-              <div class="d-flex gap-2">
-                <v-btn size="small" variant="tonal" color="primary" prepend-icon="mdi-broom" @click="postAction('vacuum')">Vacuum DB</v-btn>
-                <v-btn size="small" variant="tonal" color="success" prepend-icon="mdi-heart-pulse" @click="postAction('heartbeat')">Heartbeat</v-btn>
+          </aside>
+          <section class="x-panel xo-dbs__main">
+            <div class="xo-dbs__query">
+              <v-textarea v-model="sqlQuery" class="xo-dbs__sql" rows="3" auto-grow placeholder="SELECT * FROM agent_tasks LIMIT 20" @keydown.ctrl.enter="runSql" @keydown.meta.enter="runSql" />
+              <div class="xo-dbs__run">
+                <v-btn color="primary" prepend-icon="mdi-play" :loading="isRunningSql" @click="runSql">Run</v-btn>
+                <span class="x-muted">Read-only. Ctrl+Enter runs.</span>
               </div>
             </div>
-            <div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:16px;">
-              <div style="font-size:13px;font-weight:500;margin-bottom:4px;">Stream Mode</div>
-              <div style="font-size:12px;color:rgba(255,255,255,.4);">Real-time live updates via Server-Sent Events (SSE)</div>
+            <p v-if="sqlError" class="xo-dbs__error">{{ sqlError }}</p>
+            <div class="xo-dbs__meta x-muted"><template v-if="dbTable">{{ dbTable }} · {{ rangeLabel(dbPage, DB_PAGE, dbTotalRows) }} rows</template><template v-else>{{ sqlMeta }}</template></div>
+            <div class="xo-dbs__grid">
+              <div v-if="!dbRows.length" class="x-empty">Pick a table or run a query.</div>
+              <table v-else class="xo-table pma-table">
+                <thead><tr><th v-for="col in dbColumns" :key="col">{{ col }}</th></tr></thead>
+                <tbody><tr v-for="(row, idx) in dbRows" :key="idx"><td v-for="col in dbColumns" :key="col" :title="String(row[col] ?? '')">{{ row[col] }}</td></tr></tbody>
+              </table>
             </div>
-          </div>
+            <div v-if="dbTable && dbTotalPages > 1" class="xo-pager">
+              <v-pagination v-model="dbPage" :length="dbTotalPages" density="compact" size="small" :total-visible="7" @update:model-value="selectDbTable(dbTable, $event)" />
+            </div>
+          </section>
         </div>
       </template>
-
+      <!-- SETTINGS -->
+      <template v-else-if="tab==='settings'">
+        <xo-settings />
+      </template>
     </div>
   </v-main>
 
   <!-- Savings Dialog -->
-  <v-dialog v-model="modal" max-width="540">
-    <v-card style="background:#0b1329;border:1px solid rgba(56,189,248,.2);border-radius:16px;">
-      <v-card-title class="d-flex align-center justify-space-between pa-4 pb-2">
-        <span class="xo-display">⚡ Token Savings Certificate</span>
-        <v-btn icon size="small" variant="text" @click="modal=false"><v-icon>mdi-close</v-icon></v-btn>
-      </v-card-title>
-      <v-card-text class="pa-4 pt-2">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
-          <div class="xo-kpi"><div class="xo-kpi__label">Tokens Saved</div><div class="xo-kpi__value" style="color:var(--xo-cyan);">{{ (savings.tokensSaved||165000).toLocaleString() }}</div></div>
-          <div class="xo-kpi"><div class="xo-kpi__label">Cost Avoided</div><div class="xo-kpi__value" style="color:var(--xo-lime);">\${{ Number(savings.dollarsSaved||1.65).toFixed(2) }}</div></div>
-          <div class="xo-kpi"><div class="xo-kpi__label">Reduction</div><div class="xo-kpi__value" style="color:var(--xo-purple);">{{ savings.reductionPct||88 }}%</div></div>
-          <div class="xo-kpi"><div class="xo-kpi__label">Actual Cost</div><div class="xo-kpi__value" style="color:var(--xo-amber);">\${{ Number(savings.actualCost||0).toFixed(4) }}</div></div>
-        </div>
-        <canvas id="cert" width="492" height="160" style="width:100%;border-radius:10px;border:1px solid rgba(56,189,248,.2);" />
-      </v-card-text>
-      <v-card-actions class="pa-4 pt-0">
-        <v-btn variant="tonal" color="primary" prepend-icon="mdi-download" @click="download">Download PNG</v-btn>
-        <v-spacer />
-        <v-btn variant="text" @click="modal=false">Close</v-btn>
-      </v-card-actions>
-    </v-card>
-  </v-dialog>
+  <xo-savings-dialog v-model="modal" />
 </v-app>
   `,
 
   setup() {
-    const tab          = ref('social');
-    const drawerPinned = ref(typeof localStorage !== 'undefined' ? localStorage.getItem('chemx_menu_pinned') === 'true' : false);
-    const drawer       = ref(drawerPinned.value ? true : false);
+    // The route lives in the URL hash, #/<tab>[/<id>] (#/tasks/42, #/agents/@x, #/posts/9), so a reload,
+    // a bookmark or an agent's link lands on it. 'posts' is routable without a nav item.
+    const tabIds = new Set([...NAV_ITEMS.map((item) => item.id), 'posts']);
+    const parseHash = (hash) => {
+      const [head = '', ...rest] = String(hash || '').replace(/^#\/?/, '').split('/');
+      const isKnown = tabIds.has(head);
+      return isKnown ? { tab: head, id: decodeURIComponent(rest.join('/')) } : null;
+    };
+    const currentHash = () => (typeof location !== 'undefined' ? location.hash : '');
+    const route = reactive(parseHash(currentHash()) || { tab: 'overview', id: '' });
+    const tab = computed({
+      get: () => route.tab,
+      set: (id) => { route.tab = id; route.id = ''; }
+    });
+    const hashOf = () => '#/' + route.tab + (route.id ? '/' + encodeURIComponent(route.id) : '');
+    const navigate = (hash) => {
+      const next = parseHash(hash);
+      if (!next) return;
+      route.tab = next.tab;
+      route.id = next.id;
+    };
+    // The sidebar is always shown on wide screens and slides over on narrow ones.
+    const display      = Vuetify.useDisplay();
+    const isWide       = computed(() => display.mdAndUp.value);
+    const drawer       = ref(isWide.value);
+    const drawerPinned = ref(true);
+    const currentNav   = computed(() => PAGE_META[route.tab] || { label: 'Chemical X', description: '' });
     const modal        = ref(false);
+    const isLive       = ref(false);
 
     const togglePinDrawer = () => {
       drawerPinned.value = !drawerPinned.value;
@@ -944,9 +684,7 @@ const App = {
 
     const handleNavClick = (id) => {
       tab.value = id;
-      if (!drawerPinned.value) {
-        drawer.value = false;
-      }
+      if (!isWide.value) drawer.value = false;
     };
 
     const agents    = ref([]);
@@ -966,47 +704,110 @@ const App = {
 
     let timer = null;
 
-    const postsDesc = computed(() => [...posts.value].reverse());
+    // Live posts, newest first; <xo-timeline> pages older ones itself (cli/ui-page/components).
+    const postsDesc = computed(() => posts.value.map(window.ChemxUi.toPost).sort((a, b) => b.id - a.id));
+    const readHandle = () => {
+      try { return localStorage.getItem('chemx_handle') || '@ui-operator'; } catch { return '@ui-operator'; }
+    };
+    const me = ref(readHandle());
+    const agentById = (id) => agents.value.find((a) => a.id === id || a.name === id) || null;
+    const openAgent = (id) => { selectedAgentId.value = id; navigate('#/agents/' + id); };
 
-    const filteredAgents = computed(() => {
-      if (agentFilter.value === 'all') return agents.value;
-      return agents.value.filter(a => a.status === agentFilter.value);
-    });
+    // Agents: the server filters and pages; the live view refreshes only the first, unfiltered page.
+    const agentPage   = reactive({ total: 0, loading: false });
+    const agentCounts = ref({});
+    const filteredAgents = computed(() => agents.value);
+    const agentCountLabel = (f) => (agentCounts.value[f] == null ? '' : '· ' + agentCounts.value[f].toLocaleString());
+    const fetchAgents = async (offset) => {
+      agentPage.loading = true;
+      try {
+        const d = await getJson('/api/agents?status=' + agentFilter.value + '&limit=' + AGENT_PAGE + '&offset=' + offset);
+        const seen = new Set(offset ? agents.value.map((a) => a.id) : []);
+        const page = (d.agents || []).filter((a) => !seen.has(a.id));
+        agents.value = offset ? [...agents.value, ...page] : page;
+        agentPage.total = d.total || 0;
+        agentCounts.value = d.counts || agentCounts.value;
+      } catch {} finally { agentPage.loading = false; }
+    };
+    const setAgentFilter = (f) => { agentFilter.value = f; fetchAgents(0); };
+    const loadMoreAgents = () => fetchAgents(agents.value.length);
 
+    // Kanban: each column is its own server page; filters run in SQL, so search covers every task.
     const taskSearch     = ref('');
     const taskTierFilter = ref('all');
     const hideTestTasks  = ref(true);
+    const taskCounts     = ref({});
+    const board = reactive(Object.fromEntries(TASK_COLUMNS.map((c) => [c.status, { items: [], total: 0, loading: false }])));
+    let boardLoaded = false, boardRequest = 0, boardRefreshTimer = null, filterTimer = null;
 
-    const isTestTask = (t) => {
-      const title = t.title || '';
-      return title.startsWith('E2E Verify Task') || title.startsWith('API Test Task');
+    const taskQuery = (extra = {}) => {
+      const p = new URLSearchParams();
+      const q = taskSearch.value.trim();
+      if (q) p.set('q', q);
+      if (taskTierFilter.value !== 'all') p.set('tier', taskTierFilter.value);
+      if (hideTestTasks.value) p.set('hideTests', '1');
+      for (const [k, v] of Object.entries(extra)) p.set(k, String(v));
+      return p.toString();
     };
 
-    const tasksByStatus = (status) => {
-      const statuses = status === 'done' ? ['done', 'completed'] : (status === 'blocked' ? ['blocked', 'failed'] : [status]);
-      return tasks.value.filter((t) => {
-        const matchesStatus = statuses.includes(t.status);
-        if (!matchesStatus) return false;
-
-        if (hideTestTasks.value && isTestTask(t)) {
-          return false;
+    const loadBoard = async () => {
+      const request = ++boardRequest;
+      TASK_COLUMNS.forEach((c) => { board[c.status].loading = true; });
+      try {
+        const d = await getJson('/api/tasks/board?' + taskQuery({ limit: TASK_PAGE }));
+        if (request !== boardRequest) return;
+        for (const c of TASK_COLUMNS) {
+          const col = d.columns?.[c.status];
+          board[c.status].items = col?.tasks || [];
+          board[c.status].total = col?.total || 0;
         }
+        boardLoaded = true;
+      } catch {} finally {
+        if (request === boardRequest) TASK_COLUMNS.forEach((c) => { board[c.status].loading = false; });
+      }
+    };
 
-        if (taskTierFilter.value !== 'all') {
-          const tier = t.tier || 'utility';
-          if (tier !== taskTierFilter.value) return false;
-        }
+    const loadMoreTasks = async (status) => {
+      const col = board[status];
+      if (col.loading) return;
+      col.loading = true;
+      try {
+        const d = await getJson('/api/tasks?' + taskQuery({ status, limit: TASK_PAGE, offset: col.items.length }));
+        const seen = new Set(col.items.map((t) => t.id));
+        col.items = [...col.items, ...(d.tasks || []).filter((t) => !seen.has(t.id))];
+        col.total = d.total ?? col.total;
+      } catch {} finally { col.loading = false; }
+    };
 
-        if (taskSearch.value) {
-          const query = taskSearch.value.toLowerCase();
-          const titleMatch = (t.title || '').toLowerCase().includes(query);
-          const pathMatch = (t.target_path || t.targetPath || '').toLowerCase().includes(query);
-          const agentMatch = (t.assigned_agent_id || t.assignedTo || '').toLowerCase().includes(query);
-          if (!titleMatch && !pathMatch && !agentMatch) return false;
-        }
+    // A live update re-reads each column to the depth already loaded, so "Load more" progress survives.
+    const refreshBoard = async () => {
+      if (!boardLoaded) return;
+      await Promise.all(TASK_COLUMNS.map(async (c) => {
+        const col = board[c.status];
+        const limit = Math.min(200, Math.max(TASK_PAGE, col.items.length));
+        try {
+          const d = await getJson('/api/tasks?' + taskQuery({ status: c.status, limit }));
+          col.items = d.tasks || [];
+          col.total = d.total || 0;
+        } catch {}
+      }));
+    };
+    const scheduleBoardRefresh = () => {
+      clearTimeout(boardRefreshTimer);
+      boardRefreshTimer = setTimeout(refreshBoard, 600);
+    };
+    watch([taskSearch, taskTierFilter, hideTestTasks], () => {
+      clearTimeout(filterTimer);
+      filterTimer = setTimeout(loadBoard, 250);
+    });
 
-        return true;
-      });
+    const tasksByStatus = (status) => board[status].items;
+    const findLoadedTask = (id) => {
+      for (const c of TASK_COLUMNS) {
+        const hit = board[c.status].items.find((t) => t.id === id);
+        if (hit) return hit;
+      }
+      return tasks.value.find((t) => t.id === id) || null;
     };
 
     const compliantCount  = computed(() => codebase.value.filter(f => !f.isOverBudget).length);
@@ -1017,9 +818,23 @@ const App = {
       const textMatch = f => !codebaseSearch.value || f.path.toLowerCase().includes(codebaseSearch.value.toLowerCase());
       return codebase.value.filter(f => tierMatch(f) && textMatch(f));
     });
+    // Codebase: one fetch, rendered a page at a time (the grid used to mount every file card).
+    const codebasePage    = ref(1);
+    const codebaseLoading = ref(false);
+    const codebasePageCount = computed(() => Math.max(1, Math.ceil(filteredCodebase.value.length / CODEBASE_PAGE)));
+    const codebasePageItems = computed(() => {
+      const start = (codebasePage.value - 1) * CODEBASE_PAGE;
+      return filteredCodebase.value.slice(start, start + CODEBASE_PAGE);
+    });
+    watch([selectedTier, codebaseSearch], () => { codebasePage.value = 1; });
+
+    // The board component's columns: each status with its loaded cards and server total.
+    const boardColumns = computed(() => TASK_COLUMNS.map((col) => ({
+      status: col.status, label: col.label, items: tasksByStatus(col.status), total: board[col.status].total, loading: board[col.status].loading
+    })));
 
     const navBadge = (id) => {
-      if (id === 'tasks')    return tasks.value.filter(t => t.status === 'in_progress').length || null;
+      if (id === 'tasks')    return taskCounts.value.in_progress || null;
       if (id === 'locks')    return leases.value.length || null;
       if (id === 'codebase') return codebase.value.length || null;
       return null;
@@ -1037,13 +852,21 @@ const App = {
       catch { return ''; }
     };
 
+    // The live view (hydration and SSE) is bounded; paged lists re-read themselves instead of being replaced.
+    let isFirstApply = true;
     const applyData = (d = {}) => {
-      if (d.agents)    agents.value    = d.agents;
+      const isUnpagedAgentView = agentFilter.value === 'all' && agents.value.length <= AGENT_PAGE;
+      if (d.agents && isUnpagedAgentView) agents.value = d.agents;
+      if (d.agentsTotal != null && agentFilter.value === 'all') agentPage.total = d.agentsTotal;
+      if (d.agentCounts) agentCounts.value = d.agentCounts;
       if (d.posts)     posts.value     = d.posts;
       if (d.leases)    leases.value    = d.leases;
       if (d.tasks)     tasks.value     = d.tasks;
+      if (d.taskCounts) taskCounts.value = d.taskCounts;
       if (d.telemetry) telemetry.value = d.telemetry;
       if (d.savings)   savings.value   = d.savings;
+      if (!isFirstApply && tab.value === 'tasks') scheduleBoardRefresh();
+      isFirstApply = false;
     };
 
     const attentionItems = ref([]);
@@ -1065,8 +888,9 @@ const App = {
           body: JSON.stringify({ taskId: id, status })
         });
         if (res.ok) {
-          const t = tasks.value.find(x => x.id === id);
+          const t = findLoadedTask(id);
           if (t) t.status = status;
+          scheduleBoardRefresh();
         }
       } catch {}
     };
@@ -1076,28 +900,33 @@ const App = {
     const taskUpdateMsg = ref('');
     const isUpdatingTask = ref(false);
 
+    // Board cards are slim; the sheet opens on the card at once, then fills in the whole row.
     const openTaskDetail = async (id) => {
-      const t = tasks.value.find(x => x.id === id);
-      selectedTaskDetail.value = t || null;
+      const card = findLoadedTask(id);
+      selectedTaskDetail.value = card ? { ...card } : { id, title: 'Loading task #' + id + '…' };
       selectedTaskEvents.value = [];
-      if (t) {
-        try {
-          const res = await fetch('/api/feed?task_id=' + encodeURIComponent(id));
-          if (res.ok) {
-            const data = await res.json();
-            selectedTaskEvents.value = data.feed || [];
-          }
-        } catch {}
-      }
+      const [full, feed] = await Promise.allSettled([
+        getJson('/api/tasks/' + encodeURIComponent(id)),
+        getJson('/api/feed?task_id=' + encodeURIComponent(id))
+      ]);
+      const isStillOpen = selectedTaskDetail.value?.id === id;
+      if (!isStillOpen) return;
+      const hasFull = full.status === 'fulfilled' && Boolean(full.value.task);
+      if (hasFull) selectedTaskDetail.value = { ...card, ...full.value.task, related: full.value.related || {} };
+      if (feed.status === 'fulfilled') selectedTaskEvents.value = feed.value.feed || [];
     };
 
     const closeTaskDetail = () => {
       selectedTaskDetail.value = null;
       selectedTaskEvents.value = [];
+      if (route.tab === 'tasks') route.id = '';
     };
 
-    const submitTaskUpdate = async () => {
-      if (!selectedTaskDetail.value || !taskUpdateMsg.value.trim() || isUpdatingTask.value) return;
+    // The sheet emits the note text; it posts as the viewer's handle (me), not a fixed one.
+    const submitTaskUpdate = async (text) => {
+      const message = String(text ?? taskUpdateMsg.value).trim();
+      const canPost = Boolean(selectedTaskDetail.value) && Boolean(message) && !isUpdatingTask.value;
+      if (!canPost) return;
       isUpdatingTask.value = true;
       try {
         const res = await fetch('/api/feed', {
@@ -1105,8 +934,8 @@ const App = {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             task_id: selectedTaskDetail.value.id,
-            message: taskUpdateMsg.value.trim(),
-            author_id: '@ui-operator',
+            message,
+            author_id: me.value,
             event_type: 'status_update'
           })
         });
@@ -1146,7 +975,7 @@ const App = {
         });
         if (res.ok) {
           selectedTaskDetail.value.assigned_agent_id = agentId;
-          const t = tasks.value.find(x => x.id === selectedTaskDetail.value.id);
+          const t = findLoadedTask(selectedTaskDetail.value.id);
           if (t) t.assigned_agent_id = agentId;
         }
       } catch {}
@@ -1173,14 +1002,45 @@ const App = {
     const dbColumns = ref(['name', 'type']);
     const dbRows = ref([]);
     const sqlQuery = ref('SELECT name, type FROM sqlite_master WHERE type = "table"');
-    const selectDbTable = async (name) => {
+    const dbTable      = ref('');
+    const dbPage       = ref(1);
+    const dbTotalPages = ref(1);
+    const dbTotalRows  = ref(0);
+    // The SQL box: read-only queries through POST /api/db/query (the server's SQL guard refuses writes).
+    const sqlError = ref('');
+    const sqlMeta = ref('');
+    const isRunningSql = ref(false);
+    const runSql = async () => {
+      const query = sqlQuery.value.trim();
+      const canRun = Boolean(query) && !isRunningSql.value;
+      if (!canRun) return;
+      isRunningSql.value = true;
+      sqlError.value = '';
       try {
-        const res = await fetch('/api/db/browse?table=' + encodeURIComponent(name));
-        if (res.ok) {
-          const d = await res.json();
-          dbColumns.value = d.columns || Object.keys(d.rows?.[0] || {});
-          dbRows.value = d.rows || [];
-        }
+        const d = await window.ChemxUi.postJson('/api/db/query', { query });
+        if (!d.success) throw new Error(d.error || 'query failed');
+        dbColumns.value = d.columns || [];
+        dbRows.value = d.rows || [];
+        dbTable.value = '';
+        dbTotalPages.value = 1;
+        sqlMeta.value = d.rowCount + ' row' + (d.rowCount === 1 ? '' : 's') + ' in ' + d.durationMs + ' ms' + (d.rowCount >= 100 ? ' (first 100 shown)' : '');
+      } catch (err) {
+        sqlError.value = err.message;
+      } finally {
+        isRunningSql.value = false;
+      }
+    };
+    const selectDbTable = async (name, page = 1) => {
+      sqlMeta.value = '';
+      sqlError.value = '';
+      try {
+        const d = await getJson('/api/db/browse?table=' + encodeURIComponent(name) + '&page=' + page + '&pageSize=' + DB_PAGE);
+        dbColumns.value = d.columns || Object.keys(d.rows?.[0] || {});
+        dbRows.value = d.rows || [];
+        dbTable.value = d.table || name;
+        dbPage.value = d.page || page;
+        dbTotalPages.value = d.totalPages || 1;
+        dbTotalRows.value = d.totalRows || 0;
       } catch {}
     };
 
@@ -1190,7 +1050,9 @@ const App = {
       }
       try {
         const es = new EventSource('/api/swarm/events');
+        es.onopen = () => { isLive.value = true; };
         es.onmessage = (event) => {
+          isLive.value = true;
           try {
             applyData(JSON.parse(event.data));
           } catch {}
@@ -1199,6 +1061,7 @@ const App = {
           window.location.reload();
         });
         es.onerror = () => {
+          isLive.value = false;
           fetch('/api/swarm/status').then(r => r.json()).then(applyData).catch(() => {});
         };
       } catch {
@@ -1215,81 +1078,99 @@ const App = {
       } catch {}
     };
 
-    const drawCert = () => {
-      const c = document.getElementById('cert');
-      if (!c) return;
-      const ctx = c.getContext('2d');
-      const w = c.width, h = c.height;
-      ctx.fillStyle = '#020617';
-      ctx.fillRect(0, 0, w, h);
-      const grad = ctx.createLinearGradient(0, 0, w, 0);
-      grad.addColorStop(0, '#8b5cf6'); grad.addColorStop(.4, '#38bdf8'); grad.addColorStop(.8, '#f472b6');
-      ctx.fillStyle = grad; ctx.fillRect(0, 0, w, 4);
-      ctx.fillStyle = '#38bdf8'; ctx.font = 'bold 13px "Space Grotesk", sans-serif';
-      ctx.fillText('⚡ CHEMICAL X TOKEN SAVINGS CERTIFICATE', 20, 30);
-      ctx.fillStyle = '#a3e635'; ctx.font = 'bold 28px "Space Grotesk", sans-serif';
-      ctx.fillText((savings.value.tokensSaved || 165000).toLocaleString() + ' TOKENS SAVED', 20, 70);
-      ctx.fillStyle = '#fbbf24'; ctx.font = 'bold 18px "Space Grotesk", sans-serif';
-      ctx.fillText('\$' + Number(savings.value.dollarsSaved || 1.65).toFixed(2) + ' USD Avoided', 20, 104);
-      ctx.fillStyle = '#8b5cf6'; ctx.font = '12px Inter, sans-serif';
-      ctx.fillText('Reduction: ' + (savings.value.reductionPct || 88) + '%  |  Chemical X Protocol', 20, 138);
-    };
 
-    const openModal = async () => {
-      modal.value = true;
-      await nextTick();
-      drawCert();
-    };
+    const openModal = () => { modal.value = true; };
 
-    const download = () => {
-      const c = document.getElementById('cert');
-      if (!c) return;
-      const a = document.createElement('a');
-      a.download = 'chemx-token-savings.png';
-      a.href = c.toDataURL('image/png');
-      a.click();
-    };
 
-    onMounted(async () => {
-      initSse();
-      try {
-        const r = await fetch('/api/swarm/codebase');
-        if (r.ok) { const d = await r.json(); codebase.value = d.files || []; }
-      } catch {}
-      try {
-        const r = await fetch('/api/attention');
-        if (r.ok) { const d = await r.json(); attentionItems.value = d.items || []; }
-      } catch {}
-      try {
-        const r = await fetch('/api/db/tables');
-        if (r.ok) { const d = await r.json(); dbTables.value = d.tables || []; }
-      } catch {}
-      selectWorkbenchScope('master');
+    // Each tab loads its data the first time it opens, not all at once on page load.
+    const loadedTabs = new Set();
+    const tabLoaders = {
+      tasks: loadBoard,
+      codebase: async () => {
+        codebaseLoading.value = true;
+        try { codebase.value = (await getJson('/api/swarm/codebase')).files || []; } catch {} finally { codebaseLoading.value = false; }
+      },
+      attention: async () => {
+        try { attentionItems.value = (await getJson('/api/attention')).items || []; } catch {}
+      },
+      database: async () => {
+        try { dbTables.value = (await getJson('/api/db/tables')).tables || []; } catch {}
+      },
+      workbench: () => selectWorkbenchScope('master')
+    };
+    const ensureTabData = (id) => {
+      const loader = tabLoaders[id];
+      if (!loader || loadedTabs.has(id)) return;
+      loadedTabs.add(id);
+      loader();
+    };
+    watch(tab, (id) => {
+      const isReturningToBoard = id === 'tasks' && loadedTabs.has('tasks');
+      ensureTabData(id);
+      if (isReturningToBoard) scheduleBoardRefresh();
+    });
+    // A route change pushes a history entry, so Back returns from a profile or a task sheet.
+    watch(() => [route.tab, route.id], () => {
+      const hasHistory = typeof history !== 'undefined';
+      const isNewHash = hashOf() !== currentHash();
+      if (hasHistory && isNewHash) history.pushState(null, '', hashOf());
+    });
+    const openRoutedTask = () => {
+      const hasTaskId = route.tab === 'tasks' && Boolean(route.id);
+      if (hasTaskId) openTaskDetail(Number(route.id) || route.id);
+    };
+    watch(() => route.id, openRoutedTask);
+    const onHashChange = () => navigate(currentHash());
+
+    provide('chemx', {
+      posts: postsDesc, agents, leases, taskCounts, telemetry, me, route, navigate, openTaskDetail, agentById, isLive
     });
 
-    onUnmounted(() => clearTimeout(timer));
+    onMounted(() => {
+      initSse();
+      ensureTabData(tab.value);
+      ensureTabData('attention');
+      openRoutedTask();
+      window.addEventListener('hashchange', onHashChange);
+      window.addEventListener('popstate', onHashChange);
+    });
+
+    onUnmounted(() => {
+      clearTimeout(timer);
+      clearTimeout(boardRefreshTimer);
+      clearTimeout(filterTimer);
+      window.removeEventListener('hashchange', onHashChange);
+      window.removeEventListener('popstate', onHashChange);
+    });
 
     return {
       tab, drawer, modal, drawerPinned, togglePinDrawer, handleNavClick,
       agents, posts, leases, tasks, codebase, telemetry, savings,
-      agentFilter, agentFilters, selectedAgentId, filteredAgents,
+      agentFilter, agentFilters, selectedAgentId, filteredAgents, agentPage, agentCountLabel, setAgentFilter, loadMoreAgents,
+      board, loadMoreTasks, route, navigate, openAgent,
+      codebasePage, codebaseLoading, codebasePageCount, codebasePageItems, rangeLabel,
+      dbTable, dbPage, dbTotalPages, dbTotalRows,
+      TASK_PAGE, AGENT_PAGE, CODEBASE_PAGE, DB_PAGE,
       selectedTier, codebaseSearch, tierFilters: TIER_FILTERS,
-      navItems: NAV_ITEMS, navBadge,
+      navItems: NAV_ITEMS, navGroups: NAV_GROUPS, navBadge, isWide, currentNav, boardColumns,
       taskColumns: TASK_COLUMNS, tasksByStatus, moveTask,
       taskSearch, taskTierFilter, hideTestTasks,
       selectedTaskDetail, selectedTaskEvents, taskUpdateMsg, isUpdatingTask,
       openTaskDetail, closeTaskDetail, submitTaskUpdate, updateTaskStatusFromSheet, reassignTaskFromSheet,
       postsDesc, compliantCount, compliancePct, filteredCodebase,
-      attentionItems, confirmAttention,
+      attentionItems, confirmAttention, isLive,
       workbenchScopes, activeWorkbenchScope, workbenchPrompt, selectWorkbenchScope,
-      dbTables, dbColumns, dbRows, sqlQuery, selectDbTable,
+      dbTables, dbColumns, dbRows, sqlQuery, selectDbTable, runSql, sqlError, sqlMeta, isRunningSql,
       statusDotClass, formatTime,
-      postAction, openModal, download,
+      postAction, openModal,
     };
   }
 };
 
-createApp(App).use(vuetify).mount('#app');
+const app = createApp(App).component('xo-load-more', XoLoadMore);
+// Each cli/ui-page/components file registers itself on window.ChemxUi.components (inlined by ui-html.js).
+for (const [name, def] of Object.entries(window.ChemxUi?.components || {})) app.component(name, def);
+app.use(vuetify).mount('#app');
 </script>
 </body>
 </html>

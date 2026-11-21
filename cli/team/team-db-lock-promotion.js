@@ -5,6 +5,7 @@
 
 import { postFeedEvent } from './team-db-feed.js';
 import { isPidAlive } from './team-db-transaction.js';
+import { contextTaskId } from './context-task.js';
 
 export const DEFAULT_TTL_MS = 5 * 60 * 1000; // 5 minutes
 export const WAITER_TTL_MS = 2 * DEFAULT_TTL_MS;
@@ -56,6 +57,7 @@ export const promoteNextWaiter = (db, filePath) => {
   postFeedEvent(db, {
     author_id: '@system',
     recipient_id: waiter.agent_id,
+    task_id: contextTaskId(db, { purpose: waiter.purpose, handle: waiter.agent_id }),
     event_type: 'lock_granted',
     file_path: filePath,
     message: `File lock granted to ${waiter.agent_id} for ${filePath} from FIFO queue`,

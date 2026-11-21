@@ -19,6 +19,7 @@ import { sharedRunNote } from './job-line-text.js';
 import { resolveVerifyChanges, testArgsFor, verifyWorkspace, formatVerifyLine } from './verify-changed.js';
 import { runAuditStep } from './verify-audit-step.js';
 import { runHarnessVerify } from './verify-harness.js';
+import { recordVerifyBestEffort } from './verify-record.js';
 import { workspaceAt, emitWorkspace } from './workspace-run.js';
 
 export {
@@ -34,7 +35,7 @@ export { runTestAudit } from './test-audit.js';
 
 const VERIFY_ARGS = {
   booleans: { '--json': 'json', '--build': 'build', '--allow-empty': 'allowEmpty', '--changed': 'changed', '--all-packages': 'allPackages', '--all': 'all', '--help': 'help', '-h': 'help' },
-  values: { '--dir': 'dir', '--timeout': 'timeout', '--profile': 'profile', '--base': 'base' }
+  values: { '--dir': 'dir', '--timeout': 'timeout', '--profile': 'profile', '--base': 'base', '--as': 'as' }
 };
 
 // verify takes no positional arguments; `chemx verify src` must not silently verify everything.
@@ -172,5 +173,6 @@ export const runProjectVerify = async (rawArgs = [], isCli = false, options = {}
   const shouldPrintJson = isJson && shouldPrint;
   if (shouldPrintJson) process.stdout.write(formatAgentJson(summary) + '\n');
   if (isText) process.stdout.write(formatVerdict(status, architecturalWarning, { testsRanNothing: isEmptyAllowed(tests) }));
+  await recordVerifyBestEffort(cwd, { as: parsed.values.as || options.as, status, scope: summary.scope });
   return finish(summary, status, { isCli });
 };

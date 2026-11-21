@@ -18,9 +18,13 @@ Reference pages for behavior that specs pin. Design notes and plans live under `
 | [hooks.md](hooks.md) | Claude Code hooks |
 | [index-freshness.md](index-freshness.md) | Measured index sync timings (cold, warm, file at hand, after edits), with date, load and method |
 | [php-wordpress.md](php-wordpress.md) | PHP and WordPress auditing: parse version vs `php.version`, `wordpress` key and detection, rule table with shipped defaults and `"on"`, annotations, the per-plugin index and its caps, coverage reasons, cross-file gate behavior, performance budgets, what does not cover PHP |
+| [reference.md](reference.md) | The full former README: CLI command reference, audit rules by language, the MCP tool contract, privacy and network table, measured results |
 | [search.md](search.md) | `chemx q`: the text fallback when no symbol matches, path scoping, `--regex` (the RE2 subset), `-l` files only, `-o --unique` distinct matched text, JSON and MCP fields; `chemx read`: range forms (`<file>:N-M`, `--lines a-b`, `--start=N --end=M`), `--full` for whole file without cap, and `--bare` text preservation |
 | [team-audit-run.md](team-audit-run.md) | `chemx team audit-run` |
 | [team-dispatch.md](team-dispatch.md) | `chemx team dispatch --workflow`: task selection, routing per stage, the rendered build/review/repair/gate script (chemx renders it; the host runs it), run records |
 | [team-locks.md](team-locks.md) | File locks and leases: TTL, renewal, lapse, the commit guard |
+| [team-check-queue.md](team-check-queue.md) | `chemx team check`: the async check queue, coalescing, cache, drain worker, DM delivery |
+| [team-vds.md](team-vds.md) | The VDS status flow: one status field, the refinement-to-released states, what each means, and the mapping from the old status fields |
 | [team-tokens.md](team-tokens.md) | `chemx team tokens --epic`: cost, tokens and wall time per epic over its children, where each child's figures come from, and what unknown means |
+| [ui.md](ui.md) | `chemx ui`: what loads when, the bounded live view, paged task/agent/feed/codebase/table lists, the `/api/` index and paging envelope agents use |
 | [test-lanes.md](test-lanes.md) | Test lanes and the agent test loop; the line heavy jobs (full suite, typecheck, build) take turns in, light test runs, shared runs, `CHEMX_LIGHT_RESERVE` and `chemx test --slots` |

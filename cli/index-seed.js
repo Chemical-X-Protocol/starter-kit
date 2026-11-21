@@ -30,6 +30,7 @@ const ROW_TABLES = [
   { table: 'props', pathColumn: 'file_path', columns: 'file_path, name, prop_type' },
   { table: 'hooks', pathColumn: 'file_path', columns: 'file_path, name' },
   { table: 'imports', pathColumn: 'importer_path', columns: 'importer_path, imported_symbol, source_module, resolved_path, line' },
+  { table: 'occurrences', pathColumn: 'file_path', columns: 'file_path, name, line' },
   { table: 'embeddings', pathColumn: 'file_path', columns: 'file_path, target_type, target_name, vector, dimensions, model, updated_at' },
   { table: 'fts_index', pathColumn: 'file_path', columns: 'file_path, name, kind, tier, tokens' }
 ];

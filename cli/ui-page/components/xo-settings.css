@@ -1,0 +1,30 @@
+/* <xo-settings> (#7656) */
+.xo-set { flex: 1; min-height: 0; display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: var(--x-6); }
+.xo-set__toc { position: sticky; top: 0; align-self: start; display: flex; flex-direction: column; gap: 2px; }
+.xo-set__main { min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: var(--x-5); padding-bottom: var(--x-10); max-width: 860px; }
+.xo-set__sec { scroll-margin-top: var(--x-2); }
+.xo-set__rows { display: flex; flex-direction: column; }
+.xo-set__row { display: flex; align-items: center; justify-content: space-between; gap: var(--x-6); padding: var(--x-4) 0; border-top: 1px solid var(--x-border); }
+.xo-set__rows > .xo-set__row:first-child, .xo-set__rows > dl + .xo-set__row { border-top: 0; }
+.xo-set__row b { font-weight: 600; color: var(--x-text-strong); font-size: var(--x-fs-base); }
+.xo-set__row p { margin: 4px 0 0; font-size: var(--x-fs-sm); line-height: 1.55; color: var(--x-text-2); max-width: 56ch; }
+.xo-set__row code, .xo-set__note code, .xo-set code { font-family: var(--x-mono); font-size: .92em; background: var(--x-surface-3); padding: 1px 5px; border-radius: 4px; color: var(--x-text); word-break: break-all; }
+.xo-set__ctl { flex: 0 0 300px; max-width: 300px; }
+.xo-set__inline { display: flex; align-items: center; gap: var(--x-2); }
+.xo-set__inline .v-text-field { min-width: 200px; }
+.xo-set__switch { flex: 0 0 auto; }
+.xo-set__note { margin: 0 0 var(--x-3); font-size: var(--x-fs-sm); color: var(--x-text-2); }
+.xo-set .xo-board__seg button { text-transform: capitalize; }
+.xo-set .x-panel__head .xo-live { margin-left: auto; }
+@media (max-width: 900px) {
+  .xo-set { grid-template-columns: minmax(0, 1fr); }
+  .xo-set__toc { display: none; }
+  .xo-set__row { flex-direction: column; align-items: stretch; gap: var(--x-3); }
+  .xo-set__ctl { flex: 1 1 auto; max-width: none; }
+}
+
+/* Comfortable density (Settings > Appearance), applied to <html> by ChemxUi.applyDensity. */
+html.x-density-comfortable { --x-fs-base: 14.5px; --x-fs-sm: 13px; --x-fs-md: 16px; }
+html.x-density-comfortable .x-row { padding-top: 12px; padding-bottom: 12px; }
+html.x-density-comfortable .xo-card, html.x-density-comfortable .xo-board__list { gap: var(--x-3); }
+html.x-density-comfortable .xo-table td { padding-top: 14px; padding-bottom: 14px; }

@@ -1,9 +1,12 @@
 import http from 'node:http';
+import fs from 'node:fs';
+import path from 'node:path';
 import { openIndexDb } from './search-db.js';
 import { openTeamContext, describeTeamDbFailure } from './team/coordination-db.js';
 import { handleSwarmStatus } from './ui-handlers.js';
 import { generateSwarmHtml } from './ui-html.js';
 import { routeGet, routePost, parseJsonBody } from './ui-server-routes.js';
+import { openInBrowser } from './ui-open.js';
 import { handleSseConnection, broadcastSseUpdate, broadcastSseReload, closeSseHub } from './ui-sse.js';
 import { createUiAuth, checkUiRequest, createUiFetch, isLoopbackHost, resolveUiUrlHost, DEFAULT_UI_HOST } from './ui-auth.js';
 import { openConsoleDb } from './ui-sql-guard.js';
@@ -81,10 +84,27 @@ export const startUiServer = async (options = {}) => {
       auth.cookieName = `chemx_ui_${actualPort}`;
       const urlHost = resolveUiUrlHost(host);
       const url = `http://${urlHost}:${actualPort}/?token=${auth.token}`;
+      const serverJsonPath = path.join(cwd, '.chemx', 'ui-server.json');
+      try {
+        const dotChemx = path.join(cwd, '.chemx');
+        if (fs.existsSync(dotChemx)) {
+          fs.writeFileSync(serverJsonPath, JSON.stringify({ port: actualPort, url, token: auth.token, pid: process.pid }), 'utf8');
+        }
+      } catch (err) {
+        process.stderr.write(`chemx: could not write ui-server.json: ${err.message}\n`);
+      }
+      server.on('close', () => {
+        try {
+          if (fs.existsSync(serverJsonPath)) fs.unlinkSync(serverJsonPath);
+        } catch (err) {
+          process.stderr.write(`chemx: could not remove ui-server.json: ${err.message}\n`);
+        }
+      });
       if (options.isCli) {
         if (!isLoopbackHost(host)) warnPublicBind(host);
         process.stdout.write(`\x1b[32m✔ Chemical X Live Swarm Web UI listening on ${host}:${actualPort}:\x1b[0m \x1b[36m${url}\x1b[0m\n`);
         if (isDevMode) process.stdout.write(`\x1b[35m🔥 Dev Hot Reload: ENABLED (watching UI files for instant updates)\x1b[0m\n`);
+        openInBrowser(url);
       }
       resolve({ server, port: actualPort, url, db, token: auth.token, fetch: createUiFetch(auth.token) });
     });

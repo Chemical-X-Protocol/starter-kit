@@ -13,6 +13,7 @@ import { resolveLeaseScope, toLeaseKey } from './lease-key.js';
 import { findLapse, explainNotHolder } from './lease-lapse.js';
 import { notifyHolderOfWaiter } from './lease-waiter-notice.js';
 import { lockRoots } from './lease-roots.js';
+import { contextTaskId } from './context-task.js';
 import { openTeamDbReadOnly, closeQuietly, safeGet } from './team-db-readonly.js';
 
 export { cleanExpiredLeases, promoteNextWaiter, describeLease } from './team-db-lock-promotion.js';
@@ -146,6 +147,7 @@ export const requestFileLock = (db, filePath, agentId, options = {}) => {
 
       postFeedEvent(db, {
         author_id: cleanId,
+        task_id: contextTaskId(db, { purpose, handle: cleanId }),
         event_type: 'lock_acquired',
         file_path: cleanPath,
         message: `${cleanId} acquired lock on ${cleanPath}`
@@ -192,6 +194,7 @@ export const releaseFileLock = (db, filePath, agentId, options = {}) => {
     db.prepare('DELETE FROM file_leases WHERE file_path = ?').run(cleanPath);
     postFeedEvent(db, {
       author_id: cleanId,
+      task_id: contextTaskId(db, { purpose: existingLease.purpose, handle: cleanId }),
       event_type: 'lock_released',
       file_path: cleanPath,
       message: `${cleanId} released lock on ${cleanPath}`

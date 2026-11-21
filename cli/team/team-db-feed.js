@@ -82,6 +82,12 @@ export const queryFeed = (db, filter = {}) => {
     conditions.push('id > ?');
     params.push(Number(filter.since_id));
   }
+  // before_id pages backwards: the newest rows older than that id, still returned oldest-first.
+  const hasBefore = !hasCursor && Boolean(filter.before_id);
+  if (hasBefore) {
+    conditions.push('id < ?');
+    params.push(Number(filter.before_id));
+  }
   const hasThread = Boolean(filter.thread_id);
   if (hasThread) {
     conditions.push('(thread_id = ? OR id = ?)');

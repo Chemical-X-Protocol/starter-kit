@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { getIndexDbState } from './search-schema.js';
 import { resolveIndexRoot, toRootRelative } from './search-root.js';
-import { readIndexMeta } from './search-index-meta.js';
+import { readIndexMeta, describeVersionReset } from './search-index-meta.js';
 import { parseIndexRecord } from './search-sync-rows.js';
 import { upsertFileIndex, deleteFileIndexRows, stampRowsSynced } from './search-index-write.js';
 import { readRowStamp, checkRowAgainstDisk } from './index-row-check.js';
@@ -62,8 +62,9 @@ const describeReadOnly = (tally) => ({ ...tally, status: 'stale', reason: 'index
  */
 export const syncPathRows = (db, paths, cwd = process.cwd()) => {
   const tally = newTally();
-  const isReadOnly = getIndexDbState(db).isReadOnly;
-  if (isReadOnly) return describeReadOnly(tally);
+  const state = getIndexDbState(db);
+  if (state.isReadOnly) return describeReadOnly(tally);
+  if (state.isForeignVersion) return { ...tally, status: 'stale', reason: describeVersionReset(state.versionReset) };
   const root = resolveIndexRoot(cwd);
   const ctx = { db, cwd, root, tally, touched: [], heldKey: readIndexMeta(db).scope, startedAt: Date.now() };
   try {
