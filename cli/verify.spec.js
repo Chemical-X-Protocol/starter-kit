@@ -209,3 +209,25 @@ test('Verify: runProjectVerify produces architecturalWarning when AST is clean b
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });
+
+test('Verify: runProjectVerify runs audit and skips typecheck/tests cleanly when no package.json exists in a git repo', async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chemx-no-pkg-verify-'));
+  try {
+    const subDir = path.join(tmpDir, 'apps/saltflats');
+    fs.mkdirSync(subDir, { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), JSON.stringify({ name: 'outer-workspace' }));
+    fs.mkdirSync(path.join(subDir, '.git'));
+    fs.writeFileSync(path.join(subDir, 'index.html'), `<script>const x = "${'a'.repeat(8500)}";</script>\n`);
+
+    const summary = await runProjectVerify(['--json'], false, { print: false, cwd: subDir });
+    assert.strictEqual(summary.status, 'fail');
+    assert.strictEqual(summary.typecheck.status, 'skipped');
+    assert.strictEqual(summary.typecheck.reason, 'NO_PACKAGE_JSON');
+    assert.strictEqual(summary.tests.status, 'skipped');
+    assert.strictEqual(summary.tests.reason, 'NO_PACKAGE_JSON');
+    assert.strictEqual(summary.audit.violationsCount >= 1, true);
+    assert.strictEqual(summary.error, undefined);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});

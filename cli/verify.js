@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { runBuildAudit } from './build.js';
 import { findProjectRoot, findProjectRunner } from './build/detector.js';
@@ -42,6 +43,43 @@ const VERIFY_ARGS = {
 const VERIFY_STRAY_HINT = 'use --dir=<path> to pick a directory';
 // --all means "every PHP file" and only a repo with its own harness runner has php -l to run.
 const ALL_NEEDS_RUNNER = '--all lints every PHP file in a repo with its own tests/run-tests.mjs harness runner; this project has none (--all-packages verifies every workspace package)';
+
+const skippedTypecheckSection = () => ({
+  status: SKIPPED,
+  success: true,
+  command: null,
+  reason: 'NO_PACKAGE_JSON',
+  errorCount: 0,
+  executionError: 'No package.json in project root; skipped.',
+  errors: []
+});
+
+const skippedTestsSection = () => ({
+  status: SKIPPED,
+  success: true,
+  command: null,
+  reason: 'NO_PACKAGE_JSON',
+  total: 0,
+  passed: 0,
+  failed: 0,
+  skipped: 0,
+  errors: 0,
+  executionError: 'No package.json in project root; skipped.',
+  failures: []
+});
+
+const skippedBuildSection = () => ({
+  status: SKIPPED,
+  success: true,
+  command: null,
+  reason: 'NO_PACKAGE_JSON',
+  exitCode: 0,
+  durationMs: 0,
+  totalDiagnostics: 0,
+  errors: 0,
+  executionError: 'No package.json in project root; skipped.',
+  rawTail: []
+});
 
 const finish = (summary, status, { isCli }) => {
   if (isCli) process.exit(toExitCode(status));
@@ -97,7 +135,8 @@ export const runProjectVerify = async (rawArgs = [], isCli = false, options = {}
   }
   const scope = resolveAuditScope({ projectRoot: cwd, explicitDir: explicitAbsDir, narrowWorkspaceRoot: true });
 
-  const nmStatus = checkNodeModules(cwd);
+  const hasPackageJson = fs.existsSync(path.join(cwd, 'package.json'));
+  const nmStatus = hasPackageJson ? checkNodeModules(cwd) : null;
   if (nmStatus) {
     const friendlyMsg = nmStatus.msg('verifying');
     const summary = {
@@ -141,19 +180,36 @@ export const runProjectVerify = async (rawArgs = [], isCli = false, options = {}
   const audit = runAuditStep({ cwd, scope, changes, base, rawArgs, config: options.config, progress });
 
   // Only the audit is scoped; typecheck, tests and build run project-wide, so each line names its command.
+  let typecheck;
+  let tests;
   progress.start('TypeScript');
-  const typecheck = typecheckSection(await runTypecheckAudit([], false, { print: false, cwd, timeoutMs, inWorkspace: true }));
-  progress.finish(stepLine(typecheck.status, 'TypeScript', formatTypecheckStep(typecheck), typecheck.status === SKIPPED ? '' : typecheck.command) + sharedRunNote(typecheck));
+  if (hasPackageJson) {
+    typecheck = typecheckSection(await runTypecheckAudit([], false, { print: false, cwd, timeoutMs, inWorkspace: true }));
+    progress.finish(stepLine(typecheck.status, 'TypeScript', formatTypecheckStep(typecheck), typecheck.status === SKIPPED ? '' : typecheck.command) + sharedRunNote(typecheck));
+  } else {
+    typecheck = skippedTypecheckSection();
+    progress.finish(stepLine(typecheck.status, 'TypeScript', formatTypecheckStep(typecheck)));
+  }
 
   progress.start('Test Suite');
-  const tests = testsSection(await runTestAudit(testArgsFor(changes, base), false, { print: false, cwd, timeoutMs, allowEmpty, inWorkspace: true }));
-  progress.finish(stepLine(testStepIcon(tests), 'Test Suite', formatTestStep(tests), tests.command) + sharedRunNote(tests));
+  if (hasPackageJson) {
+    tests = testsSection(await runTestAudit(testArgsFor(changes, base), false, { print: false, cwd, timeoutMs, allowEmpty, inWorkspace: true }));
+    progress.finish(stepLine(testStepIcon(tests), 'Test Suite', formatTestStep(tests), tests.command) + sharedRunNote(tests));
+  } else {
+    tests = skippedTestsSection();
+    progress.finish(stepLine(testStepIcon(tests), 'Test Suite', formatTestStep(tests)));
+  }
 
   let build = null;
   if (includeBuild) {
     progress.start('Production Build');
-    build = buildSection(await runBuildAudit(['--json'], false, { print: false, cwd, timeoutMs }));
-    progress.finish(stepLine(build.status, 'Production Build', formatBuildStep(build), build.command) + sharedRunNote(build));
+    if (hasPackageJson) {
+      build = buildSection(await runBuildAudit(['--json'], false, { print: false, cwd, timeoutMs }));
+      progress.finish(stepLine(build.status, 'Production Build', formatBuildStep(build), build.command) + sharedRunNote(build));
+    } else {
+      build = skippedBuildSection();
+      progress.finish(stepLine(build.status, 'Production Build', formatBuildStep(build)));
+    }
   }
 
   const stepStatuses = { audit: audit.status, typecheck: typecheck.status, tests: tests.status, build: build?.status };

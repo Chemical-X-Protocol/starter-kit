@@ -12,7 +12,7 @@
  * a rule without a bump fails the suite. At runtime a baseline also records every
  * registered rule's revision, so a rule it never saw is adopted, not a regression.
  */
-export const RULESET_VERSION = 13;
+export const RULESET_VERSION = 14;
 
 export const RULE_REVISIONS = Object.freeze({
   // Ruleset 2: the 40-year canon rules (a3a1ac9, 9461ed2).
@@ -58,14 +58,16 @@ export const RULE_REVISIONS = Object.freeze({
   SECURITY_WP_SHADOWED_ROUTE: 10,
   // Ruleset 11: a write route whose callback loops over an uncapped request array (task #6717).
   SECURITY_WP_UNBOUNDED_REQUEST_ARRAY: 11,
-  // Ruleset 12: catch-family annotations are owned by column (two tries on one line, a nested
+  // Ruleset 12: bundled or minified source detection (BUNDLED_MINIFIED_SOURCE).
+  BUNDLED_MINIFIED_SOURCE: 12,
+  // Ruleset 13: catch-family annotations are owned by column (two tries on one line, a nested
   // one-line try) and catch twins dedupe by column, so counts can rise (task #257).
-  // AI_SLOP_SHALLOW_CATCH moved on to ruleset 13, below.
-  ERROR_SWALLOWED_EXCEPTION: 12,
-  // Ruleset 13: C# shallow catches include comment-only bodies and when filters, read from
+  // AI_SLOP_SHALLOW_CATCH moved on to ruleset 14, below.
+  ERROR_SWALLOWED_EXCEPTION: 13,
+  // Ruleset 14: C# shallow catches include comment-only bodies and when filters, read from
   // masked content (task #259), and report the catch keyword's column, so two on one line are
   // two findings (task #253); counts can rise.
-  AI_SLOP_SHALLOW_CATCH: 13
+  AI_SLOP_SHALLOW_CATCH: 14
 });
 
 export const resolveRuleRevision = (rule) => RULE_REVISIONS[rule] ?? 1;

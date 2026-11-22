@@ -88,6 +88,22 @@ test('findProjectRoot: never falls back to another project', async () => {
   assert.strictEqual(findProjectRoot('/'), '/');
 });
 
+test('findProjectRoot: stops at .git boundary so a nested submodule without package.json stays its own root', async () => {
+  const { findProjectRoot } = await import('./detector.js');
+  const tmpDir = fs.mkdtempSync(path.join(process.cwd(), 'scratch/test-detector-git-stop-'));
+  try {
+    const subDir = path.join(tmpDir, 'apps/tox/saltflats');
+    const nestedSrc = path.join(subDir, 'src');
+    fs.mkdirSync(nestedSrc, { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), JSON.stringify({ name: 'monorepo' }), 'utf-8');
+    fs.writeFileSync(path.join(subDir, '.git'), 'gitdir: ../../../.git/modules/apps/tox/saltflats\n', 'utf-8');
+    assert.strictEqual(findProjectRoot(subDir), subDir);
+    assert.strictEqual(findProjectRoot(nestedSrc), subDir);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
 test('isHarnessRunnerSource: a runner that imports harness, registers test files and calls harness.run', () => {
   assert.equal(isHarnessRunnerSource(RUNNER), true);
 });

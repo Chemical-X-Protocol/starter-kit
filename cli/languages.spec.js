@@ -15,6 +15,7 @@ test('languages: recognizes polyglot source extensions', () => {
   assert.equal(isSourceFile('App.tsx'), true);
   assert.equal(isSourceFile('Component.vue'), true);
   assert.equal(isSourceFile('Widget.svelte'), true);
+  assert.equal(isSourceFile('index.html'), true);
   assert.equal(isSourceFile('Service.java'), true);
 });
 
@@ -28,6 +29,7 @@ test('languages: rejects minified and declaration files', () => {
 test('languages: resolves parser capabilities correctly', () => {
   assert.equal(isBabelParsable('App.tsx'), true);
   assert.equal(isBabelParsable('Component.vue'), true);
+  assert.equal(isBabelParsable('index.html'), true);
   assert.equal(isBabelParsable('Program.cs'), false);
   assert.equal(isBabelParsable('main.py'), false);
   assert.equal(isBabelParsable('server.go'), false);

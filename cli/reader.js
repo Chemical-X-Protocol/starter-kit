@@ -13,6 +13,8 @@ import { isMarkdownFile, generateMarkdownOutline } from './reader-markdown.js';
 import { locateSymbols } from './symbol-locator.js';
 import { stripCommentsKeepingLines } from './comment-ranges.js';
 import { parseSfc } from './sfc/sfc-parse.js';
+import { detectMinifiedSource } from './audit/minified-detector.js';
+import { formatMinifiedOutline } from './outline/minified-outline.js';
 import { outlineModuleAst } from './outline/ast-outline.js';
 import { isStylesheetFile, outlineStylesheet } from './outline/style-outline.js';
 import { conflictHunksOf, describeConflicts } from './conflicts.js';
@@ -67,11 +69,6 @@ const OUTLINE_KIND_LABELS = {
 };
 
 // Vue and Svelte both go through the shared SFC layer: every script block, line geometry kept.
-const resolveSfcScript = (code, filePath) => {
-  const sfc = parseSfc(code, filePath);
-  return { scriptContent: sfc.scriptOverlay, externalSrc: sfc.scripts.find((s) => s.src)?.src ?? null };
-};
-
 const findCompanionController = (filePath) => {
   const dir = path.dirname(filePath);
   const base = path.basename(filePath, path.extname(filePath));
@@ -95,14 +92,20 @@ export const generateAstOutline = (code, filePath) => {
   if (isStylesheetFile(filePath)) return [`// Outline: ${filePath}`, ...outlineStylesheet(code)].join('\n');
   if (isPhpPath(filePath)) return generatePhpOutline(code, filePath);
   const isComponentFile = filePath.endsWith('.vue') || filePath.endsWith('.svelte');
-  const sfcScript = isComponentFile ? resolveSfcScript(code, filePath) : { scriptContent: code, externalSrc: null };
-  const { scriptContent } = sfcScript;
-  const companionAnnotation = isComponentFile ? describeCompanion(filePath, scriptContent, sfcScript.externalSrc) : null;
+  const isHtmlFile = /\.html?$/i.test(filePath);
+  const hasSfcBlocks = isComponentFile || isHtmlFile;
+  const sfc = hasSfcBlocks ? parseSfc(code, filePath) : null;
+  const scriptContent = sfc ? sfc.scriptOverlay : code;
+  const externalSrc = sfc ? (sfc.scripts.find((s) => s.src)?.src ?? null) : null;
+  const companionAnnotation = isComponentFile ? describeCompanion(filePath, scriptContent, externalSrc) : null;
 
   const lines = [`// Outline: ${filePath}`];
   if (companionAnnotation) lines.push(companionAnnotation);
   const hasNoScript = !scriptContent.trim();
   if (hasNoScript) return lines.join('\n');
+
+  const minified = detectMinifiedSource(scriptContent);
+  if (minified.isMinified) return formatMinifiedOutline(filePath, sfc, minified);
 
   // Babel cannot parse C/C++, Python, Go, Rust, Java, C# or Kotlin. It also does not
   // throw on them, because errorRecovery swallows the failure and yields an empty AST.

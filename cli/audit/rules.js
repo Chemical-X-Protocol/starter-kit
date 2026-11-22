@@ -19,6 +19,7 @@ import { parseScriptAsts, runAstPasses } from './ast-passes.js';
 import { runTailwindUnscannedPass } from './tailwind-unscanned.js';
 import { isPhpPath } from '../php/php-parse.js';
 import { analyzePhp } from '../php/php-analyzer.js';
+import { detectMinifiedSource } from './minified-detector.js';
 
 export { PILLARS, RULE_REGISTRY, createHookShapeRegistry };
 
@@ -48,17 +49,41 @@ const parseErrorViolation = (relativePath, line, message) => {
   };
 };
 
+const MEGA_LINE_CHAR_THRESHOLD = 4000;
+
+const maskMegaLines = (lines) => {
+  const hasMegaLine = lines.some((line) => line.length > MEGA_LINE_CHAR_THRESHOLD);
+  if (!hasMegaLine) return lines;
+  return lines.map((line) => (line.length > MEGA_LINE_CHAR_THRESHOLD ? '' : line));
+};
+
 // Returns, for C#, the comments as its masker reads them, which place annotations for catch
 // ownership in suppressions.js; null for any other language.
 const runTextPasses = (content, lines, filePath, relativePath, ruleConfig, violations) => {
+  const textLines = maskMegaLines(lines);
   checkTypographyEmDash(content, lines, relativePath, violations);
-  checkMockDataPatterns(content, lines, relativePath, violations);
-  checkSlopTextPatterns(content, lines, relativePath, violations);
-  checkExtendedTextPatterns(content, lines, relativePath, filePath, violations, ruleConfig);
+  checkMockDataPatterns(content, textLines, relativePath, violations);
+  checkSlopTextPatterns(content, textLines, relativePath, violations);
+  checkExtendedTextPatterns(content, textLines, relativePath, filePath, violations, ruleConfig);
   const isCSharp = getLanguageForFile(filePath)?.id === 'csharp';
   if (!isCSharp) return null;
   analyzeCSharpCode(content, relativePath, violations, ruleConfig);
   return listCommentPositions(content);
+};
+
+const minifiedBundleViolation = (relativePath, minified) => {
+  const meta = RULE_REGISTRY.BUNDLED_MINIFIED_SOURCE;
+  const kb = (minified.longLineChars / 1024).toFixed(1);
+  return {
+    filePath: relativePath,
+    line: minified.firstLongLine || 1,
+    column: 1,
+    hazard: `Minified or bundled script detected (${minified.longLineCount} long line(s), ${kb} KB, max ${minified.maxLineLength} chars)`,
+    rule: 'BUNDLED_MINIFIED_SOURCE',
+    severity: meta.severity,
+    pillar: meta.pillar,
+    directive: meta.directive
+  };
 };
 
 const runSfcTemplatePasses = (sfc, relativePath, options, ruleConfig, violations) => {
@@ -124,7 +149,15 @@ const collectRawViolations = (content, filePath, relativePath, options, config) 
   const isEmptyScript = isAstEligible && !hasCode && !sfc?.template;
   if (isEmptyScript) coverageKind = COVERAGE_KINDS.EMPTY;
 
-  if (hasCode) {
+  const minified = hasCode ? detectMinifiedSource(code) : null;
+  const isMinifiedBundle = Boolean(minified && minified.isMinified);
+  const shouldParseAst = hasCode && !isMinifiedBundle;
+  if (isMinifiedBundle) {
+    violations.push(minifiedBundleViolation(relativePath, minified));
+    coverageKind = COVERAGE_KINDS.TEXT_ONLY;
+    coverageReason = 'minified or bundled script skipped for AST passes';
+  }
+  if (shouldParseAst) {
     const parsed = parseScriptAsts(code, sfc, content, relativePath);
     const hasParseError = Boolean(parsed.error);
     if (hasParseError) {

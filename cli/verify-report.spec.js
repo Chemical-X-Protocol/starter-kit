@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { formatTestStep, testStepIcon, formatVerdict, createProgress, formatPhpLintStep, formatPhpLintErrors, lintScopeNote } from './verify-report.js';
+import { formatTestStep, formatTypecheckStep, formatBuildStep, testStepIcon, formatVerdict, createProgress, formatPhpLintStep, formatPhpLintErrors, lintScopeNote } from './verify-report.js';
 import { formatTestHeadline } from './test-report.js';
 import { stripAnsi } from './terminal.js';
 import { STATUS } from './result-status.js';
@@ -91,4 +91,12 @@ test('verify-report: syntax errors print under the step as file:line message, wi
 test('verify-report: the php -l step note names why the scope is not the changed files', () => {
   assert.equal(lintScopeNote(lint), 'php -l');
   assert.equal(lintScopeNote({ ...lint, note: 'not a git repository; linted every PHP file' }), 'php -l; not a git repository; linted every PHP file');
+});
+
+test('verify-report: skipped typecheck, test, and build steps without package.json print cleanly', () => {
+  const skipped = { status: SKIPPED, reason: 'NO_PACKAGE_JSON' };
+  assert.equal(formatTypecheckStep(skipped), 'Skipped (no package.json)');
+  assert.equal(formatTestStep(skipped), 'Skipped (no package.json)');
+  assert.equal(formatBuildStep(skipped), 'Skipped (no package.json)');
+  assert.equal(testStepIcon(skipped), SKIPPED);
 });
