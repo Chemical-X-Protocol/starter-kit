@@ -41,6 +41,7 @@ const FACADE_PATHS = [
   ['App.vue', 'vue', true, true, true],
   ['App.Vue', 'vue', true, true, true],
   ['Widget.svelte', 'svelte', true, true, true],
+  ['index.html', 'html', true, true, true],
   ['Program.cs', 'csharp', true, true, false],
   ['Test.cs', 'csharp', true, false, false],
   ['FooTest.cs', 'csharp', true, false, false],
@@ -93,6 +94,7 @@ const FACADE_EXTENSIONS = [
   ['.d.ts', null],
   ['.js', 'javascript'],
   ['.vue', 'vue'],
+  ['.html', 'html'],
   ['.cs', 'csharp'],
   ['.php', null],
   ['.h', 'cpp'],
@@ -111,6 +113,7 @@ const FACADE_DEFINITIONS = {
   javascript: ['JavaScript', 'babel', '//', '/*', '*/', ['.js', '.jsx', '.mjs', '.cjs']],
   vue: ['Vue SFC', 'babel', '//', '/*', '*/', ['.vue']],
   svelte: ['Svelte', 'babel', '//', '/*', '*/', ['.svelte']],
+  html: ['HTML', 'babel', '//', '/*', '*/', ['.html']],
   csharp: ['C# / .NET', 'csharp', '//', '/*', '*/', ['.cs']],
   python: ['Python', 'python', '#', '"""', '"""', ['.py']],
   go: ['Go', 'go', '//', '/*', '*/', ['.go']],
@@ -166,8 +169,8 @@ test('facade: LANGUAGE_DEFINITIONS keeps today\'s keys, shapes and mutability', 
   assert.equal(getLanguageByExtension('.zz'), null);
 });
 
-test('registry: the 13 shipped records, by id and by extension', () => {
-  assert.equal(allLanguages().length, 13);
+test('registry: the 14 shipped records, by id and by extension', () => {
+  assert.equal(allLanguages().length, 14);
   assert.equal(getLanguage('php'), php);
   assert.equal(getLanguage('nope'), null);
   assert.deepEqual(languagesForExtension('.h').map((r) => r.id), ['c', 'cpp']);
@@ -188,7 +191,7 @@ test('static table: source extensions skip dark languages; globs compile', () =>
 test('seam: registerTestLanguage makes PHP a source language; reset restores the facade', () => {
   registerTestLanguage(PHP_AS_SOURCE);
   assert.equal(getLanguage('php'), PHP_AS_SOURCE);
-  assert.equal(allLanguages().length, 13);
+  assert.equal(allLanguages().length, 14);
   assert.equal(getLanguageByExtension('.php').id, 'php');
   assert.equal(LANGUAGE_DEFINITIONS.php.parser, 'php');
   assert.equal(getLanguageForFile('plugin/a.php').name, 'PHP');
@@ -202,7 +205,7 @@ test('seam: registerTestLanguage makes PHP a source language; reset restores the
 
 test('seam: a new test language joins the facade and leaves with reset', () => {
   registerTestLanguage(testRecord('ruby', { extensions: ['.rb'] }, { stages: { source: 'on' } }));
-  assert.equal(allLanguages().length, 14);
+  assert.equal(allLanguages().length, 15);
   assert.equal(getLanguageForFile('a.rb').id, 'ruby');
   assert.equal(isSourceFile('a.rb'), true);
   resetTestLanguages();

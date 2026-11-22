@@ -1,11 +1,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-export const findFileUpward = (fileName, startDir) => {
+export const findFileUpward = (fileName, startDir, { stopAtGit = false } = {}) => {
   let currentDir = path.resolve(startDir);
   while (true) {
     const candidate = path.join(currentDir, fileName);
     if (fs.existsSync(candidate)) return candidate;
+    const isGitRoot = stopAtGit && fs.existsSync(path.join(currentDir, '.git'));
+    if (isGitRoot) return null;
     const parent = path.dirname(currentDir);
     if (parent === currentDir) break;
     currentDir = parent;
@@ -14,10 +16,12 @@ export const findFileUpward = (fileName, startDir) => {
 };
 
 export const findProjectRoot = (startDir = process.cwd()) => {
-  const pkgFile = findFileUpward('package.json', startDir);
+  const pkgFile = findFileUpward('package.json', startDir, { stopAtGit: true });
   if (pkgFile) return path.dirname(pkgFile);
-  const chemxDir = findFileUpward('.chemx', startDir);
+  const chemxDir = findFileUpward('.chemx', startDir, { stopAtGit: true });
   if (chemxDir) return path.dirname(chemxDir);
+  const gitEntry = findFileUpward('.git', startDir, { stopAtGit: true });
+  if (gitEntry) return path.dirname(gitEntry);
   return startDir;
 };
 

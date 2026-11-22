@@ -1,6 +1,7 @@
 import { parse } from './babel-lazy.js';
 import { parseSfc } from './sfc/sfc-parse.js';
 import { stripCommentsKeepingLines } from './comment-ranges.js';
+import { detectMinifiedSource } from './audit/minified-detector.js';
 
 /**
  * Removes comments using real token ranges (strings, regexes and URLs are safe) and keeps
@@ -125,18 +126,21 @@ export const summarizeTemplate = (code, filePath = '') => {
 export const extractTemplateContent = (code, filePath = '') => {
   const isVue = filePath.endsWith('.vue');
   const isSvelte = filePath.endsWith('.svelte');
+  const isHtml = /\.html?$/i.test(filePath);
 
   if (isVue) {
     const template = parseSfc(code, filePath).template;
     return template ? `<template>${template.content}</template>`.trim() : '// No <template> block found in Vue file.';
   }
 
-  if (isSvelte) {
+  const isMarkupSfc = isSvelte || isHtml;
+  if (isMarkupSfc) {
+    const label = isHtml ? 'HTML' : 'Svelte';
     const cleaned = code
       .replace(/<script[\s\S]*?<\/script>/gi, '')
       .replace(/<style[\s\S]*?<\/style>/gi, '')
       .trim();
-    return cleaned || '// No template markup found in Svelte file.';
+    return cleaned || `// No template markup found in ${label} file.`;
   }
 
   const isJsxFile = filePath.endsWith('.tsx') || filePath.endsWith('.jsx');
@@ -191,9 +195,12 @@ const isLogicStatement = (stmt) => {
 export const generateAstLogicSkeleton = (code, filePath) => {
   const isPhp = /\.php$/i.test(filePath);
   if (isPhp) return `// Logic Skeleton: ${filePath}\nlogic skeleton not available for PHP; use --outline or --symbol`;
-  const isSfc = filePath.endsWith('.vue') || filePath.endsWith('.svelte');
+  const isSfc = /\.(?:vue|svelte|html)$/i.test(filePath);
   const scriptContent = isSfc ? parseSfc(code, filePath).scriptOverlay : code;
   const lines = [`// Logic Skeleton: ${filePath} (${SKELETON_LABEL})`];
+  if (detectMinifiedSource(scriptContent).isMinified) {
+    return [...lines, '// [Minified or bundled script detected. Logic skeleton omitted.]'].join('\n');
+  }
   const src = (node) => scriptContent.slice(node.start, node.end).trim();
   const origin = (node) => `  // L${node.loc.start.line}-${node.loc.end.line}`;
 

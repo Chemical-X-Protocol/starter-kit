@@ -37,6 +37,7 @@ const FIXTURES = {
   NAMING_BARE_BOOLEAN: { path: 'src/n.ts', bad: 'export const make = () => { const loading = true; return loading; };\n', good: 'export const make = () => { const isLoading = true; return [isLoading]; };\n' },
   NAMING_HANDLER_PREFIX: { path: 'src/b.tsx', bad: 'export const B = () => <button onClick={submit}>x</button>;\n', good: 'export const B = () => <button onClick={handleSubmit}>x</button>;\n' },
   LINE_BUDGET_FILE: { path: 'src/big.ts', bad: lines(501), good: lines(500) },
+  BUNDLED_MINIFIED_SOURCE: { path: 'src/bundle.js', bad: `export const a = "${'x'.repeat(8500)}";\n`, good: 'export const ok = 1;\n' },
   LINE_BUDGET_MOLECULE: { path: 'src/molecules/m-x/m-x.ts', config: STRICT, bad: lines(120), good: lines(90) },
   VIEW_MONOLITH: { path: 'src/views/home.vue', bad: `<template>\n<div>\n${lines(205, () => '  <p>row</p>')}</div>\n</template>\n`, good: '<template>\n  <home-layout />\n</template>\n' },
   CONTROL_FLOW_INLINE_BOOLEAN: { path: 'src/f.ts', bad: 'export function f(a, b) {\n  if (a && b) run();\n}\n', good: 'export function f(isReady) {\n  if (isReady) run();\n}\n' },

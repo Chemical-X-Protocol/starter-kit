@@ -10,12 +10,12 @@ import { validateLanguageRecord } from './schema.js';
 import { LANGUAGE_RECORDS } from './records/index.js';
 
 const IDS = [
-  'javascript', 'typescript', 'vue', 'svelte', 'php', 'csharp', 'python', 'go', 'rust', 'java', 'kotlin', 'c', 'cpp'
+  'javascript', 'typescript', 'vue', 'svelte', 'html', 'php', 'csharp', 'python', 'go', 'rust', 'java', 'kotlin', 'c', 'cpp'
 ];
-const JS_FAMILY = ['javascript', 'typescript', 'vue', 'svelte'];
+const JS_FAMILY = ['javascript', 'typescript', 'vue', 'svelte', 'html'];
 const byId = (id) => LANGUAGE_RECORDS.find((r) => r.id === id);
 
-test('the registry holds the 13 records, frozen, one per id', () => {
+test('the registry holds the 14 records, frozen, one per id', () => {
   assert.deepEqual(LANGUAGE_RECORDS.map((r) => r.id).sort(), [...IDS].sort());
   assert.ok(Object.isFrozen(LANGUAGE_RECORDS));
   LANGUAGE_RECORDS.forEach((r) => assert.ok(Object.isFrozen(r), `${r.id} is frozen`));
@@ -78,6 +78,7 @@ test('JS family keeps its babel and sfc engines', () => {
   assert.equal(byId('typescript').engines.index, 'babel');
   assert.equal(byId('vue').engines.index, 'sfc');
   assert.equal(byId('svelte').engines.index, 'sfc');
+  assert.equal(byId('html').engines.index, 'sfc');
 });
 
 test('parse.grammar maps are set', () => {

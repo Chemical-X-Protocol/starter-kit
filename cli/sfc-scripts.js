@@ -12,7 +12,7 @@ const LANG_ATTR_REGEX = /\blang\s*=\s*["']([a-z]+)["']/i;
 
 export const isSfcFile = (filePath = '') => {
   const lower = String(filePath).toLowerCase();
-  return lower.endsWith('.vue') || lower.endsWith('.svelte');
+  return lower.endsWith('.vue') || lower.endsWith('.svelte') || lower.endsWith('.html');
 };
 
 const blankPrefix = (text) => text.replace(/[^\n]/g, ' ');

@@ -10,6 +10,7 @@
  */
 import { createRequire } from 'node:module';
 import { parseSvelteSfc } from './svelte-parse.js';
+import { parseHtmlSfc } from './html-parse.js';
 
 const requireCjs = createRequire(import.meta.url);
 let compilerSfc = null;
@@ -61,8 +62,11 @@ export const buildScriptOverlay = (content, blocks) => {
 };
 
 const parseUncached = (content, filename) => {
-  const isSvelte = filename.endsWith('.svelte');
+  const lower = filename.toLowerCase();
+  const isSvelte = lower.endsWith('.svelte');
   if (isSvelte) return parseSvelteSfc(content, buildScriptOverlay);
+  const isHtml = lower.endsWith('.html');
+  if (isHtml) return parseHtmlSfc(content, buildScriptOverlay);
   const { parse } = loadCompilerSfc();
   const { descriptor, errors } = parse(content, { filename, sourceMap: false, ignoreEmpty: false });
   const scripts = [descriptor.script, descriptor.scriptSetup]
@@ -97,5 +101,5 @@ export const parseSfc = (content, filename = 'component.vue') => {
   return result;
 };
 
-/** True when the file should go through the SFC layer (Vue and Svelte components). */
-export const isSfcFile = (filePath = '') => filePath.endsWith('.vue') || filePath.endsWith('.svelte');
+/** True when the file should go through the SFC layer (Vue, Svelte, and HTML files). */
+export const isSfcFile = (filePath = '') => /\.(?:vue|svelte|html)$/i.test(filePath);

@@ -8,6 +8,7 @@
  */
 export const RULE_PRODUCT_PILLARS = Object.freeze({
   LINE_BUDGET_FILE: 'lineBudgets',
+  BUNDLED_MINIFIED_SOURCE: 'lineBudgets',
   LINE_BUDGET_MOLECULE: 'lineBudgets',
   STRUCTURAL_WEIGHT_EXCEEDED: 'lineBudgets',
   VIEW_MONOLITH: 'tableOfContentsViews',

@@ -60,7 +60,7 @@ export const stepLine = (status, label, text, dimNote = '') => {
 
 export const formatTypecheckStep = (section) => {
   const isSkipped = section.status === SKIPPED;
-  if (isSkipped) return 'Skipped (no typecheck script or tsconfig.json)';
+  if (isSkipped) return section.reason === 'NO_PACKAGE_JSON' ? 'Skipped (no package.json)' : 'Skipped (no typecheck script or tsconfig.json)';
   if (isPass(section.status)) return 'Clean (0 errors)';
   if (isInconclusive(section.status)) return `Inconclusive (${section.executionError || section.reason})`;
   const hasNoDiagnostics = section.errorCount === 0;
@@ -86,6 +86,8 @@ const firstFailureNote = (section) => {
 };
 
 export const formatTestStep = (section) => {
+  const isSkipped = section.status === SKIPPED;
+  if (isSkipped) return section.reason === 'NO_PACKAGE_JSON' ? 'Skipped (no package.json)' : 'Skipped';
   if (isEmptyAllowed(section)) return 'No tests ran (allowed by --allow-empty)';
   const skippedNote = section.skipped > 0 ? `, ${section.skipped} skipped` : '';
   if (isPass(section.status)) return `Passed (${section.passed}/${section.total}${skippedNote})`;
@@ -120,6 +122,8 @@ export const formatPhpLintErrors = (section) => {
 };
 
 export const formatBuildStep = (section) => {
+  const isSkipped = section.status === SKIPPED;
+  if (isSkipped) return section.reason === 'NO_PACKAGE_JSON' ? 'Skipped (no package.json)' : 'Skipped';
   if (isPass(section.status)) return `Success (${section.totalDiagnostics} diagnostics)`;
   if (isInconclusive(section.status)) return `Inconclusive (${section.executionError || 'timed out'})`;
   return `Failed (exit ${section.exitCode}, ${section.errors} error(s))`;

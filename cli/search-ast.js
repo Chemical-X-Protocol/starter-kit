@@ -6,6 +6,7 @@ import { extractSfcProps, extractTemplateComponentImports, extractScriptSrcImpor
 import { extractModuleMetadata } from './search-ast-module.js';
 import { isPhpPath } from './php/php-parse.js';
 import { phpIndexMetadata } from './php/php-symbols.js';
+import { detectMinifiedSource } from './audit/minified-detector.js';
 
 const TIER_PATTERNS = [
   { tier: 'atom', test: (p, b) => p.includes('atoms/') || p.includes('/a-') || b.startsWith('a-') || /(?:^|[\\/])(?:Domain|Entities|Models)[\\/]/i.test(p) },
@@ -37,7 +38,7 @@ const RESERVED_SYMBOL_NAMES = new Set([
   'namespace', 'typename', 'template', 'public', 'private', 'protected', 'static', 'const'
 ]);
 
-const JS_FAMILY_FILE = /\.(?:[cm]?[jt]sx?|vue|svelte)$/;
+const JS_FAMILY_FILE = /\.(?:[cm]?[jt]sx?|vue|svelte|html)$/;
 
 const extractRegexFallback = (content, filePath = '') => {
   const symbols = [];
@@ -204,6 +205,8 @@ export const extractAstMetadata = (content, filePath) => {
   const contentLines = content.split('\n');
   const sfc = isSfcFile(filePath) ? parseSfc(content, filePath) : null;
   const code = sfc ? sfc.scriptOverlay : content;
+  const isMinifiedCode = detectMinifiedSource(code).isMinified;
+  if (isMinifiedCode) return { symbols: [], props: [], hooks: [], imports: [], occurrences: [] };
   try {
     const ast = parseWithBlockFallback(code, sfc, content);
     const base = extractModuleMetadata(ast, contentLines, filePath);

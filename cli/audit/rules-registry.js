@@ -210,6 +210,12 @@ export const RULE_REGISTRY = {
     needs: 'deep',
     directive: 'Decompose monolith into domain capsules and molecules'
   },
+  BUNDLED_MINIFIED_SOURCE: {
+    pillar: PILLARS.PILLAR_1,
+    severity: 'CRITICAL',
+    needs: 'deep',
+    directive: 'Unbundle vendored or minified code into package dependencies and decompose source into modular files (Directive 1.A)'
+  },
   LINE_BUDGET_MOLECULE: {
     pillar: PILLARS.PILLAR_1,
     severity: 'MEDIUM',

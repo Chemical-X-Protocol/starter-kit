@@ -12,7 +12,7 @@
  * a rule without a bump fails the suite. At runtime a baseline also records every
  * registered rule's revision, so a rule it never saw is adopted, not a regression.
  */
-export const RULESET_VERSION = 11;
+export const RULESET_VERSION = 12;
 
 export const RULE_REVISIONS = Object.freeze({
   // Ruleset 2: the 40-year canon rules (a3a1ac9, 9461ed2).
@@ -59,7 +59,9 @@ export const RULE_REVISIONS = Object.freeze({
   // Ruleset 10: a literal route registered after a regex route that matches it (task #6711).
   SECURITY_WP_SHADOWED_ROUTE: 10,
   // Ruleset 11: a write route whose callback loops over an uncapped request array (task #6717).
-  SECURITY_WP_UNBOUNDED_REQUEST_ARRAY: 11
+  SECURITY_WP_UNBOUNDED_REQUEST_ARRAY: 11,
+  // Ruleset 12: bundled or minified source detection (BUNDLED_MINIFIED_SOURCE).
+  BUNDLED_MINIFIED_SOURCE: 12
 });
 
 export const resolveRuleRevision = (rule) => RULE_REVISIONS[rule] ?? 1;
