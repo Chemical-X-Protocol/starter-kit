@@ -26,12 +26,25 @@ export const OUT_OF_BAND_RULE = 'out_of_band_edit';
 const SEEN_FILE = ['.chemx', 'post-bash-seen.json'];
 const MAX_LISTED = 5;
 
-// True only when every simple command in the call is a chemx invocation. A chemx command chained
-// with anything else (`chemx test && node x.mjs`) is not exempt.
+// Read-only output filters allowed after a chemx command in a pipeline (`chemx lint --fix 2>&1 | grep x`).
+const PIPE_FILTERS = new Set(['grep', 'egrep', 'fgrep', 'rg', 'head', 'tail', 'wc', 'cat', 'sort', 'uniq', 'cut', 'tr', 'less', 'more', 'jq']);
+
+// Commands joined by a pipe share a pipeline number, so a filter qualifies when a chemx command shares it.
+const isPipeFilter = (parsed, chemxPipelines) => {
+  const isPiped = chemxPipelines.has(parsed.pipeline) && parsed.argv.length > 0 && parsed.redirects.length === 0;
+  return isPiped && PIPE_FILTERS.has(parsed.argv[0].split('/').pop());
+};
+
+// True only when every simple command in the call is a chemx invocation (env prefixes and cd
+// prefixes are parsed away) or a read-only filter piped after one. A chemx command chained with
+// anything else (`chemx test && node x.mjs`) is not exempt.
 export const callsChemx = (command) => {
   try {
     const commands = parseShell(String(command ?? '')).commands;
-    return commands.length > 0 && commands.every((parsed) => parsed.argv.length > 0 && isChemxInvocation(resolveInvocation(parsed.argv)));
+    const isChemx = (parsed) => parsed.argv.length > 0 && isChemxInvocation(resolveInvocation(parsed.argv));
+    const chemxPipelines = new Set(commands.filter(isChemx).map((parsed) => parsed.pipeline));
+    const isCd = (parsed) => ['cd', 'pushd'].includes(parsed.argv[0]) && parsed.redirects.length === 0;
+    return chemxPipelines.size > 0 && commands.every((parsed) => isChemx(parsed) || isCd(parsed) || isPipeFilter(parsed, chemxPipelines));
   } catch { // chemx-allow: best-effort an unparsable command is judged not to be a chemx call
     return false;
   }

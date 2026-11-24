@@ -103,6 +103,31 @@ test('a script write chained after a chemx command is still flagged', async () =
   assert.equal(logged.length, 1);
 });
 
+test('chemx writes behind an env prefix, a cd prefix or a read-only pipe filter are not flagged (#7811)', async () => {
+  const commands = [
+    'CHEMX_AGENT_ID=@x chemx lint a.js --fix 2>&1 | grep -v ok',
+    'cd /tmp && chemx lint a.js --fix',
+    'chemx format a.js | tail -5',
+  ];
+  for (const command of commands) {
+    const root = tempRepo();
+    const logged = [];
+    await bash(root, 'ls', logged);
+    put(path.join(root, 'a.js'), 'export const a = 6;\n');
+    assert.equal(await bash(root, command, logged), null, command);
+    assert.equal(logged.length, 0, command);
+  }
+});
+
+test('a non-chemx command piped into a writer is still flagged (#7811)', async () => {
+  const root = tempRepo();
+  const logged = [];
+  await bash(root, 'ls', logged);
+  put(path.join(root, 'a.js'), 'export const a = 7;\n');
+  const output = await bash(root, 'chemx q foo | tee a.js', logged);
+  assert.match(output.hookSpecificOutput.additionalContext, /a\.js was changed/);
+});
+
 test('files outside the repo, ignored files and non-write extensions are not flagged', async () => {
   const root = tempRepo();
   const logged = [];
