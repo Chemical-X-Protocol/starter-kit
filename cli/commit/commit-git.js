@@ -35,11 +35,18 @@ export const stagedPaths = (root) => splitNul(runGit(root, ['diff', '--cached', 
 export const stagedAmong = (root, files) => splitNul(runGit(root, ['diff', '--cached', '--name-only', '-z', '--', ...files]).stdout);
 
 /** Whether a file is known to git or present on disk; a typo is neither. */
+const isInIndex = (root, file) => runGit(root, ['ls-files', '--error-unmatch', '--', file]).status === 0;
+
+// A file at HEAD whose deletion is staged (git rm) is in neither the index nor the worktree (#7813).
+const isInHead = (root, file) => runGit(root, ['cat-file', '-e', `HEAD:${file}`]).status === 0;
+
 export const isKnownFile = (root, file) => {
   const isOnDisk = fs.existsSync(path.resolve(root, file));
-  const isTracked = runGit(root, ['ls-files', '--error-unmatch', '--', file]).status === 0;
-  return isOnDisk || isTracked;
+  return isOnDisk || isInIndex(root, file) || isInHead(root, file);
 };
+
+// `git add -- <file>` fails for a path gone from both the worktree and the index; its staged deletion needs no add.
+export const needsAdd = (root, file) => fs.existsSync(path.resolve(root, file)) || isInIndex(root, file);
 
 export const shortSha = (root) => runGit(root, ['rev-parse', '--short', 'HEAD']).stdout.trim();
 
