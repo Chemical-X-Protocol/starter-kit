@@ -12,7 +12,7 @@
  * a rule without a bump fails the suite. At runtime a baseline also records every
  * registered rule's revision, so a rule it never saw is adopted, not a regression.
  */
-export const RULESET_VERSION = 13;
+export const RULESET_VERSION = 15;
 
 export const RULE_REVISIONS = Object.freeze({
   // Ruleset 2: the 40-year canon rules (a3a1ac9, 9461ed2).
@@ -31,10 +31,8 @@ export const RULE_REVISIONS = Object.freeze({
   SYNTAX_PARSE_ERROR: 3,
   RENDER_TREE_DEPTH_EXCEEDED: 3,
   A11Y_CLICKABLE_NON_SEMANTIC: 3,
-  // Ruleset 4: catch family per truth spec 4.2 (binding-read escalation), annotations count
-  // only inside comments and need a real reason, Stroustrup try-brace annotations.
-  ERROR_SWALLOWED_EXCEPTION: 4,
-  AI_SLOP_SHALLOW_CATCH: 4,
+  // Ruleset 4 (catch family per truth spec 4.2, comment-only annotations with a real reason)
+  // moved on to ruleset 12 for ERROR_SWALLOWED_EXCEPTION and AI_SLOP_SHALLOW_CATCH, below.
   // Ruleset 5: cascading guard detection and domain validator extraction (Directive 3.H).
   CONTROL_FLOW_CASCADE_GUARDS: 5,
   // Ruleset 6: Tailwind content-glob coverage (review 2026-10-15).
@@ -63,7 +61,15 @@ export const RULE_REVISIONS = Object.freeze({
   // Ruleset 12: bundled or minified source detection (BUNDLED_MINIFIED_SOURCE).
   BUNDLED_MINIFIED_SOURCE: 12,
   // Ruleset 13: controls that bypass the configured atoms (ATOM_BYPASS_CONTROL, task #7817).
-  ATOM_BYPASS_CONTROL: 13
+  ATOM_BYPASS_CONTROL: 13,
+  // Ruleset 14: catch-family annotations are owned by column (two tries on one line, a nested
+  // one-line try) and catch twins dedupe by column, so counts can rise (task #257).
+  // AI_SLOP_SHALLOW_CATCH moved on to ruleset 15, below.
+  ERROR_SWALLOWED_EXCEPTION: 14,
+  // Ruleset 15: C# shallow catches include comment-only bodies and when filters, read from
+  // masked content (task #259), and report the catch keyword's column, so two on one line are
+  // two findings (task #253); counts can rise.
+  AI_SLOP_SHALLOW_CATCH: 15
 });
 
 export const resolveRuleRevision = (rule) => RULE_REVISIONS[rule] ?? 1;

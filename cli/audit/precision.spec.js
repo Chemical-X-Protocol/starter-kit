@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { auditCode } from './rules.js';
+import { RULE_REGISTRY } from './rules-registry.js';
 
 const rulesAt = (violations, rule) => violations.filter((v) => v.rule === rule);
 const audit = (code, rel = 'src/lib/sample.ts') => auditCode(code, rel, rel);
@@ -163,4 +164,277 @@ test('a reasonless annotation on an escalated catch keeps HIGH and both notes', 
 
 test('an annotation inside a multi-line console-only catch body exempts it', () => {
   assertExempt('try {\n  a();\n} catch (e) {\n  // chemx-allow: best-effort logged elsewhere\n  console.error(e);\n}\n');
+});
+
+// Built from its code point: TYPOGRAPHY_EM_DASH holds this file at zero em dashes.
+const EM_DASH = String.fromCharCode(0x2014);
+
+test('any non-word separator after best-effort still reads as the annotation (C1)', () => {
+  for (const separator of [', ', '. ', '(', '/', ': ', '-- ', EM_DASH, ' - ']) {
+    assertExempt(`try { a(); } catch {} // chemx-allow: best-effort${separator}warm cache is optional\n`);
+  }
+  for (const bare of ['best-effort,', 'best-effort.', 'best-effort:', 'best-effort--', 'best-effort()']) {
+    const hit = assertFlagged(`try { a(); } catch {} // chemx-allow: ${bare}\n`);
+    assert.ok(hit.hazard.includes('needs a reason'), hit.hazard);
+  }
+});
+
+test('a block annotation whose marker line carries the reason counts when its closer is on a later line (SC-4)', () => {
+  assertExempt('/* chemx-allow: best-effort warm cache is optional\n */\ntry { a(); } catch {}\n');
+  assertExempt('/*\n * chemx-allow: best-effort warm cache is optional\n */\ntry { a(); } catch {}\n');
+  assertExempt('/**\n * chemx-allow: best-effort warm cache is optional\n */\ntry { a(); } catch {}\n');
+  assertExempt('/*\r\n * chemx-allow: best-effort warm cache is optional\r\n */\r\ntry { a(); } catch {}\r\n');
+  assertFlagged('doThing(); /*\n * chemx-allow: best-effort the comment trails code\n */\ntry { b(); } catch {}\n');
+  // The parser places the block, so a regex holding /* on the line above it changes nothing.
+  assertExempt("const t = s.replace(/\\/*$/, '');\n/* chemx-allow: best-effort warm cache is optional\n */\ntry { a(); } catch {}\n");
+  assertExempt("const t = s.replace(/\\/*$/, '');\n/**\n * chemx-allow: best-effort warm cache is optional\n */\ntry { a(); } catch {}\n");
+});
+
+test('a block annotation whose closer shares a line with the flagged code still covers it (SC-4)', () => {
+  const lazyAny = (code) => rulesAt(audit(code, 'src/x.ts'), 'AI_SLOP_LAZY_ANY');
+  assert.deepEqual(lazyAny('/* chemx-allow: AI_SLOP_LAZY_ANY legacy api\n */ try { a(); } catch (e: any) { handle(e); }\n'), []);
+  assert.deepEqual(lazyAny('/* chemx-allow: AI_SLOP_LAZY_ANY\n * legacy api */ try { a(); } catch (e: any) { handle(e); }\n'), []);
+  assert.equal(lazyAny('/* chemx-allow: AI_SLOP_LAZY_ANY legacy api\n */\nconst ok = 1;\ntry { a(); } catch (e: any) { handle(e); }\n').length, 1);
+  assertExempt('export const g = () => {\n  /* chemx-allow: best-effort warm\n     more */ try { a(); } catch {}\n};\n');
+  assertExempt('/* chemx-allow: best-effort warm cache is optional\n */ try { a(); } catch {}\n');
+  assertExempt('/*\n * chemx-allow: best-effort warm cache is optional\n */ try { a(); } catch {}\n');
+  const later = '/* chemx-allow: best-effort the first catch\n */ try { a(); } catch {} try { b(); } catch {}\n';
+  assert.deepEqual(catchColumns(later), [[2, later.split('\n')[1].lastIndexOf('catch')]]);
+  const trailing = 'try { a(); } catch {} /* chemx-allow: best-effort the first catch\n */ try { b(); } catch {}\n';
+  assert.deepEqual(catchColumns(trailing), [[2, trailing.split('\n')[1].indexOf('catch')]]);
+  // The marker line sits right above the catch's line, so main covers it whatever line opened the block.
+  assertExempt('doThing(); /*\n * chemx-allow: best-effort the comment trails code\n */ try { b(); } catch {}\n');
+});
+
+test('a block annotation covers a finding on any of its own comment lines (SC-4)', () => {
+  const emDash = (code) => rulesAt(audit(code, 'src/x.ts'), 'TYPOGRAPHY_EM_DASH');
+  const comment = `/* chemx-allow: TYPOGRAPHY_EM_DASH quoting a title\n * Foo ${EM_DASH} Bar\n */\nexport const a = 1;\n`;
+  assert.equal(emDash(comment.replace(/chemx-allow: TYPOGRAPHY_EM_DASH quoting a title/, 'plain')).length, 1);
+  assert.deepEqual(emDash(comment), []);
+});
+
+test('a block annotation on a continuation line covers the code below when its comment opened after code (SC-4)', () => {
+  const lazyAny = (code) => rulesAt(audit(code, 'src/x.ts'), 'AI_SLOP_LAZY_ANY');
+  const below = 'doThing(); /* first\n * chemx-allow: AI_SLOP_LAZY_ANY legacy api */\ntry { a(); } catch (e: any) { h(e); }\n';
+  assert.deepEqual(lazyAny(below), []);
+  assert.deepEqual(lazyAny('doThing(); /* first\n * chemx-allow: AI_SLOP_LAZY_ANY legacy api\n */ try { a(); } catch (e: any) { h(e); }\n'), []);
+  assert.equal(lazyAny(below.replace('chemx-allow: ', '')).length, 1);
+  const emDash = (code) => rulesAt(audit(code, 'src/x.ts'), 'TYPOGRAPHY_EM_DASH');
+  const title = `export const a = 1; /* first\n * chemx-allow: TYPOGRAPHY_EM_DASH quoting a title */\nexport const t = 'Foo ${EM_DASH} Bar';\n`;
+  assert.deepEqual(emDash(title), []);
+  assert.equal(emDash(title.replace('chemx-allow: ', '')).length, 1);
+});
+
+// A rule outside the catch family has no revision for C4 or SC-4, so it keeps the reading
+// 4ea6eb2 gave the first marker on a line, and each row here is [] there too: the reason runs
+// past a later marker, and an empty one comes from a block comment still open at the line end.
+const FLAGGED_LINES = Object.freeze({
+  TYPOGRAPHY_EM_DASH: `export const t = 'Foo ${EM_DASH} Bar';`,
+  UNGUARDED_LOGGING: "export const f = () => console.log('x');",
+  AI_SLOP_LAZY_ANY: 'try { a(); } catch (e: any) { h(e); }'
+});
+const MAIN_READINGS = [
+  (rule, line, other) => `${line} // chemx-allow: ${rule} chemx-allow: ${other} quoting\n`,
+  (rule, line) => `/* chemx-allow: ${rule} */ x(); /* still\n open reason */\n${line}\n`,
+  (rule, line) => `${line} /* chemx-allow: ${rule} */ /* tail\n reason here */\n`
+];
+
+test('a rule outside the catch family keeps main\'s reading of the first marker on a line (C4, SC-4)', () => {
+  for (const [rule, line] of Object.entries(FLAGGED_LINES)) {
+    const hits = (code) => rulesAt(audit(code, 'src/x.ts'), rule);
+    assert.equal(hits(`${line}\n`).length, 1, rule);
+    const other = rule === 'UNGUARDED_LOGGING' ? 'TYPOGRAPHY_EM_DASH' : 'UNGUARDED_LOGGING';
+    for (const shape of MAIN_READINGS) assert.deepEqual(hits(shape(rule, line, other)), [], shape(rule, line, other));
+    const [reasonless] = hits(`/* chemx-allow: ${rule} */ x(); /* still\n */\n${line}\n`);
+    assert.ok(reasonless.hazard.includes('needs a reason'), reasonless.hazard);
+  }
+});
+
+test('the catch family reads each marker on a line alone, as its revisions record (C4)', () => {
+  const twoMarkers = assertFlagged('try { a(); } catch {} // chemx-allow: best-effort chemx-allow: UNGUARDED_LOGGING quoting\n');
+  assert.ok(twoMarkers.hazard.includes('needs a reason'), twoMarkers.hazard);
+  assertFlagged('/* chemx-allow: best-effort */ x(); /* still\n open reason */\ntry { a(); } catch {}\n');
+});
+
+// C4: an annotation is owned by the catch it is written for, by column as well as by line.
+const catchColumns = (code) => catchHits(code).map((hit) => [hit.line, hit.column]);
+
+test('two tries on one line: the annotated first one is exempt and the second is flagged (C4)', () => {
+  const inside = 'try { a(); } catch { /* chemx-allow: best-effort first is optional */ } try { b(); } catch {}\n';
+  assert.deepEqual(catchColumns(inside), [[1, inside.lastIndexOf('catch')]]);
+  const above = '// chemx-allow: best-effort first is optional\ntry { a(); } catch {} try { b(); } catch {}\n';
+  assert.deepEqual(catchColumns(above), [[2, above.split('\n')[1].lastIndexOf('catch')]]);
+  const trailing = 'try { a(); } catch {} try { b(); } catch {} // chemx-allow: best-effort second is optional\n';
+  assert.deepEqual(catchColumns(trailing), [[1, trailing.indexOf('catch')]]);
+});
+
+test('two annotated tries on one line are each exempt by their own annotation (C4)', () => {
+  assertExempt('try { a(); } catch { /* chemx-allow: best-effort one */ } try { b(); } catch { /* chemx-allow: best-effort two */ }\n');
+  const code = 'try { a(); } catch { /* chemx-allow: best-effort one */ } try { b(); } catch { /* chemx-allow: best-effort */ }\n';
+  const hit = assertFlagged(code);
+  assert.equal(hit.column, code.lastIndexOf('catch'));
+  assert.ok(hit.hazard.includes('needs a reason'), hit.hazard);
+});
+
+test('a one-line nested try annotated after the outer try brace exempts only the outer catch (C4)', () => {
+  const code = 'try { try { a(); } catch {} } // chemx-allow: best-effort outer reason\ncatch {}\n';
+  assert.deepEqual(catchColumns(code), [[1, code.indexOf('catch')]]);
+  const handledOuter = 'try { try { a(); } catch {} } catch (e) { report(e); } // chemx-allow: best-effort inner\n';
+  assert.deepEqual(catchColumns(handledOuter), [[1, handledOuter.indexOf('catch')]]);
+});
+
+test('a trailing annotation still owns its catch past code, a callback brace or a comment before catch (C4)', () => {
+  assertExempt('try { a(); } catch {} const s = "x"; // chemx-allow: best-effort after a sibling statement\n');
+  assertExempt('items.forEach((item) => { try { item(); } catch {} }); // chemx-allow: best-effort per-item failures are optional\n');
+  assertExempt('try { a(); } /* chemx-allow: best-effort between the try brace and catch */ catch {}\n');
+});
+
+test('a comment before the catch keyword on its own line counts unless another try or catch sits between (C4)', () => {
+  assertExempt('try { /* chemx-allow: best-effort inside the one-line try */ a(); } catch {}\n');
+  assertExempt('/* chemx-allow: best-effort leading the one-line try */ try { a(); } catch {}\n');
+  assertExempt('const warm = () => { /* chemx-allow: best-effort leading the try */ try { a(); } catch {} };\n');
+  const afterInner = 'try { try { a(); } catch {} /* chemx-allow: best-effort the inner catch */ } catch {}\n';
+  assert.deepEqual(catchColumns(afterInner), [[1, afterInner.lastIndexOf('catch')]]);
+  const between = 'try { a(); } catch {} /* chemx-allow: best-effort the first catch */ try { b(); } catch {}\n';
+  assert.deepEqual(catchColumns(between), [[1, between.lastIndexOf('catch')]]);
+});
+
+test('a console-only catch next to an empty catch on the same line keeps its own finding (C4)', () => {
+  const code = 'try { a(); } catch {} try { b(); } catch (e) { console.error(e); }\n';
+  const hits = catchHits(code).map((hit) => [hit.rule, hit.column]);
+  assert.deepEqual(hits, [['ERROR_SWALLOWED_EXCEPTION', code.indexOf('catch')], ['AI_SLOP_SHALLOW_CATCH', code.lastIndexOf('catch')]]);
+});
+
+test('try or catch in a string, a template or a member name keeps the annotation its catch\'s (C4)', () => {
+  const reason = 'best-effort warm cache is optional';
+  for (const code of [
+    `// chemx-allow: ${reason}\np.catch(h); try { a(); } catch {}\n`,
+    `// chemx-allow: ${reason}\np?.catch(h); try { a(); } catch {}\n`,
+    `// chemx-allow: ${reason}\nlog('try'); try { a(); } catch {}\n`,
+    `// chemx-allow: ${reason}\nlog(\`catch\`); try { a(); } catch {}\n`,
+    `log('catch'); /* chemx-allow: ${reason} */ try { a(); } catch {}\n`,
+    `try { a('catch'); /* chemx-allow: ${reason} */ } catch {}\n`,
+    `try { p.catch(h); /* chemx-allow: ${reason} */ } catch {}\n`,
+    `const s = \`x\ntry catch\`; /* chemx-allow: ${reason} */ try { a(); } catch {}\n`
+  ]) {
+    assertExempt(code);
+  }
+  const csharp = `class S\n{\n    void M()\n    {\n        // chemx-allow: ${reason}\n        Log("catch"); try { A(); } catch { }\n    }\n}\n`;
+  assert.deepEqual(catchHits(csharp, 'src/Svc.cs'), []);
+});
+
+// EXT-1: ownership reads the try and catch keywords themselves (TryStatement and CatchClause
+// positions, C# keywords in masked code), so no other token spelled try or catch ends it.
+test('try or catch as a key, method, $/#/@ name, regex, type member or JSX text keeps the annotation its catch\'s (C4)', () => {
+  const reason = 'best-effort warm cache is optional';
+  const above = `// chemx-allow: ${reason}\n`;
+  const shapes = [
+    `${above}const o = { catch: h }; try { a(); } catch {}`,
+    `${above}const o = { try: 1 }; try { a(); } catch {}`,
+    `${above}const t = { then() {}, catch() {} }; try { a(); } catch {}`,
+    `${above}class P { catch(h) { return this; } m() { try { a(); } catch {} } }`,
+    `${above}const $catch = 1; try { a(); } catch {}`,
+    `${above}const try$ = 1; try { a(); } catch {}`,
+    `${above}if (/try/.test(s)) { try { a(); } catch {} }`,
+    `class K {\n  #catch() {}\n  m() {\n    // chemx-allow: ${reason}\n    this.#catch(); try { a(); } catch {}\n  }\n}`,
+    `try { o.x = { catch: 1 }; /* chemx-allow: ${reason} */ } catch {}`,
+    `try { s.replace(/catch/g, ""); /* chemx-allow: ${reason} */ } catch {}`,
+    `try { if (/catch/.test(s)) a(); /* chemx-allow: ${reason} */ } catch {}`,
+    `try { $try(); /* chemx-allow: ${reason} */ } catch {}`,
+    `const o = { catch: h }; /* chemx-allow: ${reason} */ try { a(); } catch {}`
+  ];
+  for (const code of shapes) {
+    assertExempt(code);
+    assert.deepEqual(catchHits(code, 'src/x.js'), [], code);
+    assertExempt(code.replace(/\n/g, '\r\n'));
+    assert.deepEqual(catchHits(`<template>\n  <p />\n</template>\n<script setup>\n${code}\n</script>\n`, 'src/C.vue'), [], code);
+  }
+  assertExempt(`${above}type P = { catch: () => void }; try { a(); } catch {}`);
+  const jsx = `export const C = () => {\n  // chemx-allow: ${reason}\n  const el = <p>try</p>; try { a(); } catch {}\n  return el;\n};`;
+  assert.deepEqual(catchHits(jsx, 'src/C.tsx'), []);
+  const csharp = (...statements) => `class S\n{\n    void M()\n    {\n${statements.map((statement) => `        ${statement}\n`).join('')}    }\n}`;
+  const annotation = `// chemx-allow: ${reason}`;
+  for (const statement of ['var @catch = 1; try { A(); } catch { }', 'var @try = 1; try { A(); } catch { }']) {
+    assert.deepEqual(catchHits(csharp(annotation, statement), 'src/Svc.cs'), [], statement);
+  }
+  assert.deepEqual(catchHits(csharp(`if (@catch) { try { A(); } catch { } } ${annotation}`), 'src/Svc.cs'), []);
+  const columns = (code) => catchHits(code, 'src/Svc.cs').map((hit) => [hit.line, hit.column]);
+  const trailing = csharp(`try { A(); } catch { } var @try = 1; /* chemx-allow: ${reason} */ try { B(); } catch { }`);
+  assert.deepEqual(columns(trailing), [[5, trailing.split('\n')[4].lastIndexOf('catch')]]);
+  const twoTries = csharp(annotation, 'try { A(); } catch when (x) { } try { B(); } catch (E e) { }');
+  assert.deepEqual(columns(twoTries), [[6, twoTries.split('\n')[5].lastIndexOf('catch')]]);
+});
+
+// C4 reads ownership by column only where another try or catch keyword shares the catch's line or
+// its last line. Elsewhere the catch family keeps 4ea6eb2's line window, so code the line scanner
+// misreads as a comment (a # name, a regex holding // or /*, JSX text) changes nothing there.
+const GAP_REASON = 'best-effort warm cache is optional';
+const vueSetup = (code) => `<template>\n  <p />\n</template>\n<script setup>\n${code}\n</script>\n`;
+const SCANNER_GAP_SHAPES = [
+  ['src/x.ts', `class A4 { #try = 1; } /* chemx-allow: ${GAP_REASON} */ try { a(); } catch {}`],
+  ['src/x.ts', `try { class A4 { #try = 1; } /* chemx-allow: ${GAP_REASON} */ } catch {}`],
+  ['src/x.ts', `class Q { #brand; static is(o) { if (#brand in o) { /* chemx-allow: ${GAP_REASON} */ try { a(); } catch {} } } }`],
+  ['src/x.ts', `class Q { #run() {} m() { /* chemx-allow: ${GAP_REASON} */ try { a(); } catch {} } }`],
+  ['src/x.ts', `class Q { #x = 1; m() { try { a(); } catch {} } } // chemx-allow: ${GAP_REASON}`],
+  ['src/C.tsx', `export const C = () => { const el = <h2>Item #1</h2>; /* chemx-allow: ${GAP_REASON} */ try { a(); } catch {} return el; };`],
+  ['src/C.tsx', `export const C = () => { const el = <a>http://x/try</a>; try { a(); } catch {} // chemx-allow: ${GAP_REASON}\n  return el; };`],
+  ['src/x.ts', `const r = /^https?:\\/\\//.test(u); /* chemx-allow: ${GAP_REASON} */ try { a(); } catch {}`],
+  ['src/x.ts', `if (/^https?:\\/\\//.test(u)) { try { a(); } catch {} } // chemx-allow: ${GAP_REASON}`],
+  ['src/x.ts', `const r = /^https?:\\/\\//; try { a(); } catch {} // chemx-allow: ${GAP_REASON}`],
+  ['src/x.ts', `const ok = /\\/\\//.test(u); /* chemx-allow: ${GAP_REASON} */ try { a(); } catch {}`],
+  ['src/x.ts', `try { ok = /^https?:\\/\\//.test(u); /* chemx-allow: ${GAP_REASON} */ } catch {}`],
+  ['src/C.vue', vueSetup(`const ok = /^https?:\\/\\//.test(u); /* chemx-allow: ${GAP_REASON} */ try { a(); } catch {}`)],
+  ['src/x.ts', `const t = s.replace(/\\/*$/, ''); try { a(); } catch {} // chemx-allow: ${GAP_REASON}`],
+  ['src/x.ts', `const t = s.replace(/\\/*$/, '');\n// chemx-allow: ${GAP_REASON}\ntry { a(); } catch {}`],
+  ['src/x.ts', `const t = s.replace(/\\/*$/, '');\nconst u = 1;\n// chemx-allow: ${GAP_REASON}\ntry { a(); } catch {}`]
+];
+
+test('a catch whose lines hold no other try or catch keyword reads its annotation as on main, whatever the line scanner makes of the code (C4)', () => {
+  for (const [file, code] of SCANNER_GAP_SHAPES) {
+    assert.deepEqual(catchHits(code, file), [], code);
+    assert.equal(catchHits(code.replace('chemx-allow: ', ''), file).length, 1, code);
+  }
+  assertExempt('f(); /*\n * chemx-allow: best-effort\n * reason here */\ntry { b(); } catch {}\n');
+  assertExempt(`try {\n  try { a(); } catch {} } // chemx-allow: ${GAP_REASON}\ncatch (e) { h(e); }\n`);
+  assertFlagged(`try {\n  a();\n}\n// chemx-allow: ${GAP_REASON}\n// one line too far\ncatch {}\n`);
+});
+
+test('where tries share a line, ownership reads each annotation\'s comment from the parser, not the line scanner (C4)', () => {
+  const columnsIn = (code, file) => catchHits(code, file).map((hit) => [hit.line, hit.column]);
+  const lastCatch = (code, line) => [line, code.split('\n')[line - 1].lastIndexOf('catch')];
+  const firstCatch = (code, line) => [line, code.split('\n')[line - 1].indexOf('catch')];
+  const trailing = `const r = /^https?:\\/\\//; try { a(); } catch {} try { b(); } catch {} // chemx-allow: ${GAP_REASON}`;
+  assert.deepEqual(columnsIn(trailing, 'src/x.ts'), [firstCatch(trailing, 1)]);
+  const leading = `class A4 { #try = 1; } /* chemx-allow: ${GAP_REASON} */ try { a(); } catch {} try { b(); } catch {}`;
+  assert.deepEqual(columnsIn(leading, 'src/x.ts'), [lastCatch(leading, 1)]);
+  const inside = `const r = /^https?:\\/\\//; try { a(); } catch { /* chemx-allow: ${GAP_REASON} */ } try { b(); } catch {}`;
+  assert.deepEqual(columnsIn(inside, 'src/x.ts'), [lastCatch(inside, 1)]);
+  const above = `const t = s.replace(/\\/*$/, '');\n// chemx-allow: ${GAP_REASON}\ntry { a(); } catch {} try { b(); } catch {}`;
+  assert.deepEqual(columnsIn(above, 'src/x.ts'), [lastCatch(above, 3)]);
+  const jsx = `export const C = () => { const el = <h2>Item #1</h2>; /* chemx-allow: ${GAP_REASON} */ try { a(); } catch {} try { b(); } catch {} return el; };`;
+  assert.deepEqual(columnsIn(jsx, 'src/C.tsx'), [lastCatch(jsx, 1)]);
+  const vue = vueSetup(`const ok = /^https?:\\/\\//.test(u); /* chemx-allow: ${GAP_REASON} */ try { a(); } catch {} try { b(); } catch {}`);
+  assert.deepEqual(columnsIn(vue, 'src/C.vue'), [lastCatch(vue, 5)]);
+});
+
+test('AI_SLOP_LAZY_ANY still fires on a handled catch and on an annotated shallow catch (SC-12)', () => {
+  const lazyAny = (code) => rulesAt(audit(code, 'src/x.ts'), 'AI_SLOP_LAZY_ANY');
+  assert.equal(lazyAny('try { a(); } catch (e: any) { handle(e); }\n').length, 1);
+  const annotated = 'try { a(); } catch (e: any) { /* chemx-allow: best-effort optional */ }\n';
+  assert.equal(lazyAny(annotated).length, 1);
+  assert.deepEqual(catchHits(annotated, 'src/x.ts'), []);
+});
+
+test('an annotation in a Vue SFC script keeps its file line number (SC-14)', () => {
+  const sfc = (body) => `<template>\n  <section />\n</template>\n\n<script setup>\ntry {\n  load();\n} catch {\n${body}}\n</script>\n`;
+  const plain = catchHits(sfc(''), 'src/x.vue');
+  assert.deepEqual(plain.map((hit) => [hit.rule, hit.line]), [['ERROR_SWALLOWED_EXCEPTION', 8]]);
+  assert.deepEqual(catchHits(sfc('  // chemx-allow: best-effort optional preload\n'), 'src/x.vue'), []);
+  const aboveCatch = '<template>\n  <section />\n</template>\n\n<script setup>\ntry {\n  load();\n// chemx-allow: best-effort optional preload\n} catch {}\n</script>\n';
+  assert.deepEqual(catchHits(aboveCatch, 'src/x.vue'), []);
+});
+
+test('the AI_SLOP_SHALLOW_CATCH directive names the best-effort annotation (SC-8)', () => {
+  assert.match(RULE_REGISTRY.AI_SLOP_SHALLOW_CATCH.directive, /chemx-allow: best-effort <reason>/);
+  assert.match(RULE_REGISTRY.ERROR_SWALLOWED_EXCEPTION.directive, /chemx-allow: best-effort <reason>/);
 });

@@ -1,9 +1,9 @@
 {
   "version": 2,
-  "ruleset": 13,
+  "ruleset": 15,
   "scopes": {
     ".": {
-      "ruleset": 13,
+      "ruleset": 15,
       "allRules": true,
       "rules": {
         "A11Y_CLICKABLE_NON_SEMANTIC": 1,
@@ -20,7 +20,7 @@
         "AI_SLOP_LAZY_ANY": 1,
         "AI_SLOP_LAZY_PLACEHOLDER": 1,
         "AI_SLOP_REDUNDANT_PASSTHROUGH": 1,
-        "AI_SLOP_SHALLOW_CATCH": 4,
+        "AI_SLOP_SHALLOW_CATCH": 15,
         "AI_SLOP_UTILITY_REINVENTION": 1,
         "ATOM_BYPASS_CONTROL": 13,
         "BUNDLED_MINIFIED_SOURCE": 12,
@@ -34,7 +34,7 @@
         "CONTROLLER_VIEW_MISMATCH": 1,
         "COUPLING_EXCESSIVE_INJECTION": 1,
         "DATA_FLOW_OPTIONAL_CHAINING_CHURN": 2,
-        "ERROR_SWALLOWED_EXCEPTION": 4,
+        "ERROR_SWALLOWED_EXCEPTION": 14,
         "HOOK_RETURN_OVERLOAD": 1,
         "HOOK_SATURATION": 1,
         "HOOK_SHAPE_CONTRACT": 1,
@@ -120,7 +120,7 @@
       }
     },
     "cli": {
-      "ruleset": 13,
+      "ruleset": 15,
       "allRules": true,
       "rules": {
         "A11Y_CLICKABLE_NON_SEMANTIC": 1,
@@ -137,7 +137,7 @@
         "AI_SLOP_LAZY_ANY": 1,
         "AI_SLOP_LAZY_PLACEHOLDER": 1,
         "AI_SLOP_REDUNDANT_PASSTHROUGH": 1,
-        "AI_SLOP_SHALLOW_CATCH": 4,
+        "AI_SLOP_SHALLOW_CATCH": 15,
         "AI_SLOP_UTILITY_REINVENTION": 1,
         "ATOM_BYPASS_CONTROL": 13,
         "BUNDLED_MINIFIED_SOURCE": 12,
@@ -151,7 +151,7 @@
         "CONTROLLER_VIEW_MISMATCH": 1,
         "COUPLING_EXCESSIVE_INJECTION": 1,
         "DATA_FLOW_OPTIONAL_CHAINING_CHURN": 2,
-        "ERROR_SWALLOWED_EXCEPTION": 4,
+        "ERROR_SWALLOWED_EXCEPTION": 14,
         "HOOK_RETURN_OVERLOAD": 1,
         "HOOK_SATURATION": 1,
         "HOOK_SHAPE_CONTRACT": 1,

@@ -11,10 +11,10 @@ export const EXTENDED_SYSTEM_LAYERS: readonly SystemLayer[] = [
     tone: 'lime',
     icon: 'i-lucide-wand-2',
     thesis: 'Deterministic scaffolding guaranteed to comply with all 7 pillars on creation.',
-    description: 'Scaffolds complete crystalline capsules containing SFC (<100 LOC), reactive controller hook, mixin SCSS, and types.',
+    description: 'Scaffolds complete crystalline capsules containing SFC, reactive controller hook, mixin SCSS, and types; each generated file stays under 100 LOC, so it passes even atomic-strict.',
     agentImpact: 'Agents generate clean, bounded components instantly without hallucinating boilerplate or violating line budgets.',
     headlineCommand: 'npm create chemx / pnpm chemx gen',
-    keyMechanisms: ['Greenfield project generation via npm create chemx', 'In-repo capsule synthesis via pnpm chemx gen', 'Separation of template (<100 LOC), controller, and types', 'Pre-wired result tuple error handling & cleanup']
+    keyMechanisms: ['Greenfield project generation via npm create chemx', 'In-repo capsule synthesis via pnpm chemx gen', 'Separation of template, controller, and types (each file under 100 LOC, so it passes even atomic-strict)', 'Pre-wired result tuple error handling & cleanup']
   },
   {
     id: 'evidence',

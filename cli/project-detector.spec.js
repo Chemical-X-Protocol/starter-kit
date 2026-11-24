@@ -122,3 +122,40 @@ test('project-detector: detectInstalledFamily falls back to local components/ato
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
+// #255: the config is read through cli/config/loader.js, so // and /* */ comments are allowed.
+test('project-detector: a commented .chemx/config.json still sets the framework', () => {
+  const tmpDir = path.resolve(process.cwd(), 'scratch/test-detector-commented');
+  if (fs.existsSync(tmpDir)) fs.rmSync(tmpDir, { recursive: true, force: true });
+  fs.mkdirSync(path.join(tmpDir, '.chemx'), { recursive: true });
+
+  fs.writeFileSync(
+    path.join(tmpDir, '.chemx/config.json'),
+    '// team settings\n{\n  /* scaffold target */ "framework": "svelte"\n}\n',
+    'utf-8'
+  );
+  fs.writeFileSync(
+    path.join(tmpDir, 'package.json'),
+    JSON.stringify({ dependencies: { react: '^19.0.0' } }),
+    'utf-8'
+  );
+
+  assert.deepStrictEqual(loadProjectConfig(tmpDir), { framework: 'svelte' });
+  assert.strictEqual(detectFramework(tmpDir), 'svelte');
+
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+});
+
+test('project-detector: a missing config, or one that is not a JSON object, reads as {}', () => {
+  const tmpDir = path.resolve(process.cwd(), 'scratch/test-detector-unusable');
+  if (fs.existsSync(tmpDir)) fs.rmSync(tmpDir, { recursive: true, force: true });
+  fs.mkdirSync(path.join(tmpDir, '.chemx'), { recursive: true });
+
+  assert.deepStrictEqual(loadProjectConfig(tmpDir), {});
+  for (const content of ['[1]', '{nope', ' \n']) {
+    fs.writeFileSync(path.join(tmpDir, '.chemx/config.json'), content, 'utf-8');
+    assert.deepStrictEqual(loadProjectConfig(tmpDir), {}, JSON.stringify(content));
+  }
+
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+});
+

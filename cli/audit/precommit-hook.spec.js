@@ -47,10 +47,9 @@ const withHookRepo = (variant, files, fn) => {
     VARIANTS[variant](root);
     fs.mkdirSync(bin);
     fs.writeFileSync(path.join(bin, 'chemx'), `#!/bin/sh\nexec "${process.execPath}" "${CLI}" "$@"\n`, { mode: 0o755 });
-    const env = { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH}`, NO_COLOR: '1' };
-    delete env.CHEMX_SKIP_PRECOMMIT;
-    delete env.CHEMX_FORCE_COMMIT;
-    delete env.CHEMX_PRECOMMIT_GATE;
+    // The runner's own CHEMX_* and GIT_* never reach the hook; each row sets only what it tests (#253).
+    const kept = Object.entries(process.env).filter(([key]) => !/^(CHEMX_|GIT_)/.test(key));
+    const env = { ...Object.fromEntries(kept), PATH: `${bin}${path.delimiter}${process.env.PATH}`, NO_COLOR: '1' };
     const commit = (extra = {}) => spawnSync('git', ['commit', '-q', '-m', 'change'], { cwd: root, encoding: 'utf-8', env: { ...env, ...extra } });
     fn(root, commit);
   } finally {
@@ -97,4 +96,59 @@ for (const variant of Object.keys(VARIANTS)) {
       assert.equal(result.status, 0, result.stdout + result.stderr);
     });
   });
+
+  // #255: the audit reads the config through the shared loader, so a commented-out line is no floor.
+  test(`${variant}: the grade gate takes minGrade from a commented .chemx/config.json`, () => {
+    const config = '{\n  // "minGrade": "F",\n  "minGrade": "A+"\n}\n';
+    withHookRepo(variant, { 'src/svc.js': lines(20), '.chemx/config.json': config }, (root, commit) => {
+      append(root, 'src/svc.js', NESTED);
+      const result = commit({ CHEMX_PRECOMMIT_GATE: 'grade' });
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.match(result.stdout + result.stderr, /Grade B is below required minimum tier A\+/);
+    });
+  });
+
+  // #253: the hook captures the audit's output and prints it only when it blocks, so a skipped
+  // floor went unseen on a passing commit. Its warning lines now reach stderr either way. A value
+  // from a cloned repo's config prints as printable ASCII, C1 controls and bidi overrides included.
+  const FLOOR_WARNINGS = [
+    ['minGrade "Q"', '{"minGrade":"Q"}\n', 'minGrade value "Q" in .chemx/config.json'],
+    ['minScore "85.5"', '{"minScore":"85.5"}\n', 'minScore value "85.5" in .chemx/config.json'],
+    ['minGrade with a C1 CSI and a bidi override', '{"minGrade":"Q\u009b2J‮X"}\n', 'minGrade value "Q\\u009b2J\\u202eX" in .chemx/config.json']
+  ];
+  for (const [label, config, named] of FLOOR_WARNINGS) {
+    test(`${variant}: a passing grade gate still shows the warning for an unusable ${label} in .chemx/config.json`, () => {
+      withHookRepo(variant, { 'src/svc.js': lines(20), '.chemx/config.json': config }, (root, commit) => {
+        append(root, 'src/svc.js', 'export const extra = 1;\n');
+        const result = commit({ CHEMX_PRECOMMIT_GATE: 'grade' });
+        assert.equal(result.status, 0, result.stdout + result.stderr);
+        const shown = result.stderr.split('\n').filter(Boolean);
+        assert.equal(shown.length, 1, result.stderr);
+        assert.ok(shown[0].startsWith(`⚠ chemx audit: ignoring ${named} (`), result.stderr);
+        assert.match(shown[0].slice(1), /^[\x20-\x7e]*$/, 'only printable ASCII after the warning sign');
+      });
+    });
+  }
+
+  // #253: CHEMX_MIN_SCORE is the committer's own setting, so an unusable one blocks the grade gate
+  // as --min-score=85.5 would. 4ea6eb2 enforced it as 85; skipping it fell back to B/80.
+  test(`${variant}: an unusable CHEMX_MIN_SCORE blocks the grade gate with a usage error naming it`, () => {
+    withHookRepo(variant, { 'src/svc.js': lines(20) }, (root, commit) => {
+      append(root, 'src/svc.js', 'export const extra = 1;\n');
+      const result = commit({ CHEMX_PRECOMMIT_GATE: 'grade', CHEMX_MIN_SCORE: '85.5' });
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.match(result.stdout + result.stderr, /CHEMX_MIN_SCORE value "85\.5" is not a usable floor/);
+    });
+  });
 }
+
+// #253: the hook hands its rendered floors to the real audit as CHEMX_DEFAULT_MIN_*, not as flags.
+test('template: with no config the grade gate applies the floors the hook was rendered with', () => {
+  withHookRepo('template', { 'src/svc.js': lines(20) }, (root, commit) => {
+    fs.writeFileSync(path.join(root, '.git', 'hooks', 'pre-commit'), buildPreCommitHookScript('A+', 100), { mode: 0o755 });
+    append(root, 'src/svc.js', NESTED);
+    const result = commit({ CHEMX_PRECOMMIT_GATE: 'grade' });
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.match(result.stdout + result.stderr, /Grade B is below required minimum tier A\+/);
+  });
+});
