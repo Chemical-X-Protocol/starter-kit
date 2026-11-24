@@ -25,6 +25,7 @@ const CTOR_ARGS = (n) => Array.from({ length: n }, (_, i) => `IService${i} s${i}
 
 const FIXTURES = {
   A11Y_CLICKABLE_NON_SEMANTIC: { path: 'src/c.vue', bad: '<template>\n  <div @click="go">x</div>\n</template>\n', good: '<template>\n  <button type="button" @click="go">x</button>\n</template>\n' },
+  ATOM_BYPASS_CONTROL: { path: 'src/c.vue', config: { atoms: { replacements: { button: 'x-btn' } } }, bad: '<template>\n  <button type="button">x</button>\n</template>\n', good: '<template>\n  <x-btn>x</x-btn>\n</template>\n' },
   A11Y_IMAGE_MISSING_ALT: { path: 'src/c.vue', bad: '<template>\n  <img src="a.png">\n</template>\n', good: '<template>\n  <img src="a.png" alt="">\n</template>\n' },
   SECURITY_RAW_HTML_INJECTION: { path: 'src/c.vue', bad: '<template>\n  <div v-html="userHtml"></div>\n</template>\n', good: '<template>\n  <div>{{ userText }}</div>\n</template>\n' },
   SECURITY_HARDCODED_SECRET: { path: 'src/k.ts', bad: `export const key = 'sk-${'a'.repeat(30)}';\n`, good: 'export const key = process.env.API_KEY;\n' },

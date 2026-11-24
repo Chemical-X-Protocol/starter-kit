@@ -19,10 +19,11 @@ import { runTailwindUnscannedPass } from './tailwind-unscanned.js';
 import { isPhpPath } from '../php/php-parse.js';
 import { analyzePhp } from '../php/php-analyzer.js';
 import { detectMinifiedSource } from './minified-detector.js';
+import { checkAtomBypassControl } from './atom-bypass.js';
 
 export { PILLARS, RULE_REGISTRY, createHookShapeRegistry };
 
-const FULL_CONFIG_KEYS = ['rules', 'overrides', 'wordpress', 'php'];
+const FULL_CONFIG_KEYS = ['rules', 'overrides', 'wordpress', 'php', 'atoms'];
 
 /**
  * Accepts either a loaded project config (an object with any of rules, overrides, wordpress, php)
@@ -56,12 +57,13 @@ const maskMegaLines = (lines) => {
   return lines.map((line) => (line.length > MEGA_LINE_CHAR_THRESHOLD ? '' : line));
 };
 
-const runTextPasses = (content, lines, filePath, relativePath, ruleConfig, violations) => {
+const runTextPasses = (content, lines, filePath, relativePath, ruleConfig, violations, atoms) => {
   const textLines = maskMegaLines(lines);
   checkTypographyEmDash(content, lines, relativePath, violations);
   checkMockDataPatterns(content, textLines, relativePath, violations);
   checkSlopTextPatterns(content, textLines, relativePath, violations);
-  checkExtendedTextPatterns(content, textLines, relativePath, filePath, violations, ruleConfig);
+  checkExtendedTextPatterns(content, textLines, relativePath, filePath, violations, ruleConfig, atoms);
+  checkAtomBypassControl(content, filePath, relativePath, violations, atoms);
   const isCSharp = getLanguageForFile(filePath)?.id === 'csharp';
   if (isCSharp) analyzeCSharpCode(content, relativePath, violations, ruleConfig);
 };
@@ -123,7 +125,7 @@ const collectRawViolations = (content, filePath, relativePath, options, config) 
   const violations = [];
   let coverageReason = null;
   const lines = content.split('\n');
-  runTextPasses(content, lines, filePath, relativePath, ruleConfig, violations);
+  runTextPasses(content, lines, filePath, relativePath, ruleConfig, violations, config.atoms);
   const isPhp = isPhpPath(filePath);
   if (isPhp) return collectPhpViolations(content, filePath, relativePath, options, config, violations);
 

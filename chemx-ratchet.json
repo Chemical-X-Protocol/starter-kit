@@ -1,9 +1,9 @@
 {
   "version": 2,
-  "ruleset": 12,
+  "ruleset": 13,
   "scopes": {
     ".": {
-      "ruleset": 12,
+      "ruleset": 13,
       "allRules": true,
       "rules": {
         "A11Y_CLICKABLE_NON_SEMANTIC": 1,
@@ -22,6 +22,7 @@
         "AI_SLOP_REDUNDANT_PASSTHROUGH": 1,
         "AI_SLOP_SHALLOW_CATCH": 4,
         "AI_SLOP_UTILITY_REINVENTION": 1,
+        "ATOM_BYPASS_CONTROL": 13,
         "BUNDLED_MINIFIED_SOURCE": 12,
         "COMBINATOR_RAW_BOOLEAN": 2,
         "COMPLEXITY_CYCLOMATIC_HIGH": 1,
@@ -119,7 +120,7 @@
       }
     },
     "cli": {
-      "ruleset": 12,
+      "ruleset": 13,
       "allRules": true,
       "rules": {
         "A11Y_CLICKABLE_NON_SEMANTIC": 1,
@@ -138,6 +139,7 @@
         "AI_SLOP_REDUNDANT_PASSTHROUGH": 1,
         "AI_SLOP_SHALLOW_CATCH": 4,
         "AI_SLOP_UTILITY_REINVENTION": 1,
+        "ATOM_BYPASS_CONTROL": 13,
         "BUNDLED_MINIFIED_SOURCE": 12,
         "COMBINATOR_RAW_BOOLEAN": 2,
         "COMPLEXITY_CYCLOMATIC_HIGH": 1,
