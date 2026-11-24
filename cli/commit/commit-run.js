@@ -18,7 +18,7 @@ import { openCommitDb, recordCommit, releaseLeases } from './commit-record.js';
 import { snapshotIndex, restoreIndex } from './commit-index.js';
 import { buildHunkIndex, levelIndex, parseHunkSpecs } from './commit-hunks.js';
 import {
-  gitRoot, stagedAmong, shortSha, hasPreCommitHook, gitWithRetry, compactFailure
+  gitRoot, stagedAmong, shortSha, hasPreCommitHook, gitWithRetry, compactFailure, needsAdd
 } from './commit-git.js';
 
 const NOT_A_REPO = 'Refused: not inside a git repository.';
@@ -51,7 +51,8 @@ const restoreLines = (root, rel, snapshot) => (restoreIndex(root, rel, snapshot)
 const addFailureLines = (added) => (added.lockedOut ? lockedOutLines(added) : ['Failed: git add did not complete. Nothing was committed. Findings:', ...compactFailure(added.output)]);
 
 const stageFiles = async (root, rel, retry) => {
-  const added = await gitWithRetry(root, ['add', '--', ...rel], retry);
+  const toAdd = rel.filter((file) => needsAdd(root, file));
+  const added = toAdd.length ? await gitWithRetry(root, ['add', '--', ...toAdd], retry) : { status: 0, output: '' };
   const isAddFailed = added.status !== 0;
   if (isAddFailed) return { reasons: addFailureLines(added), isFailure: true, added };
   const hasChanges = stagedAmong(root, rel).length > 0;

@@ -36,7 +36,10 @@ test('an existing path is granted and allowNew-style callers may lease a file to
   const { root, db } = makeProject(t);
   assert.equal(requestFileLock(db, 'lanes.json', '@spec', { cwd: path.join(root, 'kit'), requireExisting: true }).granted, true);
   assert.equal(requestFileLock(db, 'kit/new.js', '@spec', { cwd: root, requireExisting: false }).granted, true);
-  assert.equal(requestFileLock(db, 'kit/never.js', '@spec', { cwd: root, requireExisting: true }).reason, 'path_not_found');
+  const created = requestFileLock(db, 'kit/never.js', '@spec', { cwd: root, requireExisting: true });
+  assert.equal(created.granted, true);
+  assert.equal(created.newFile, true);
+  assert.equal(requestFileLock(db, 'nodir/never.js', '@spec', { cwd: root, requireExisting: true }).reason, 'path_not_found');
 });
 
 test('handleLockCommand from a subdirectory suggests a cwd-relative path, not the input', (t) => {

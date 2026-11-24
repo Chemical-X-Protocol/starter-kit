@@ -10,6 +10,7 @@ class BatchItemExit extends Error {
   constructor(code) {
     super(`command exited with code ${code}`);
     this.exitCode = code;
+    this.isBatchExit = true;
   }
 }
 

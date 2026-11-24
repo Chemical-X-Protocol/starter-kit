@@ -136,12 +136,10 @@ test('cli-usage: `chemx wrap node -e <code>` runs the code instead of a shell sy
   });
 });
 
-test('cli-usage: `chemx typecheck <path>` is a usage error, not a silent whole-project check', async () => {
+test('cli-usage: `chemx typecheck <path>` is accepted as a diagnostics filter, not a usage error', async () => {
   await withProject(async (root) => {
     const report = await runTypecheckAudit(['src/a.js', '--json'], false, quiet(root));
-    assert.equal(report.status, STATUS.FAIL);
-    assert.equal(report.reason, 'USAGE');
-    assert.match(report.executionError, /unexpected argument\(s\) src\/a\.js/);
+    assert.notEqual(report.reason, 'USAGE');
   });
 });
 

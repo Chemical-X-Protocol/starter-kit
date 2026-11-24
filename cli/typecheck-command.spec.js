@@ -45,6 +45,21 @@ test('typecheck: type errors inside .vue files fail the check (was a false green
   });
 });
 
+test('typecheck: positional paths filter diagnostics; errors elsewhere do not fail the scoped check', async () => {
+  await withProject({ pkg: VUE_PKG, bins: { 'vue-tsc': VUE_TSC_FAILING } }, async (root) => {
+    const hit = await runTypecheckAudit(['src', '--json'], false, { cwd: root, print: false });
+    assert.equal(hit.status, STATUS.FAIL);
+    assert.equal(hit.errorCount, 1);
+    assert.deepEqual(hit.filter, ['src']);
+    const miss = await runTypecheckAudit(['other/dir', '--json'], false, { cwd: root, print: false });
+    assert.equal(miss.status, STATUS.PASS);
+    assert.equal(miss.errorCount, 0);
+    assert.equal(miss.outsideFilterCount, 1);
+    const sibling = await runTypecheckAudit(['src/Com', '--json'], false, { cwd: root, print: false });
+    assert.equal(sibling.status, STATUS.PASS, 'a path prefix must match whole segments');
+  });
+});
+
 test('typecheck: a Vue project without vue-tsc installed is inconclusive and names the missing checker', async () => {
   await withProject({ pkg: VUE_PKG, bins: { tsc: '#!/bin/sh\nexit 0\n' } }, async (root) => {
     const report = await runTypecheckAudit(['--json'], false, { cwd: root, print: false });

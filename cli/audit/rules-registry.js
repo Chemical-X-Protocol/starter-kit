@@ -27,6 +27,12 @@ export const RULE_REGISTRY = {
     needs: 'standard',
     directive: 'Replace clickable generic container with native interactive element (<button> or <a>)'
   },
+  ATOM_BYPASS_CONTROL: {
+    pillar: PILLARS.PILLAR_5,
+    severity: 'MEDIUM',
+    needs: 'standard',
+    directive: 'Use the project atom (configured in .chemxrc atoms.replacements) instead of a raw button, button-styled link or framework button'
+  },
   A11Y_IMAGE_MISSING_ALT: {
     pillar: PILLARS.PILLAR_8,
     severity: 'MEDIUM',

@@ -20,10 +20,11 @@ import { runTailwindUnscannedPass } from './tailwind-unscanned.js';
 import { isPhpPath } from '../php/php-parse.js';
 import { analyzePhp } from '../php/php-analyzer.js';
 import { detectMinifiedSource } from './minified-detector.js';
+import { checkAtomBypassControl } from './atom-bypass.js';
 
 export { PILLARS, RULE_REGISTRY, createHookShapeRegistry };
 
-const FULL_CONFIG_KEYS = ['rules', 'overrides', 'wordpress', 'php'];
+const FULL_CONFIG_KEYS = ['rules', 'overrides', 'wordpress', 'php', 'atoms'];
 
 /**
  * Accepts either a loaded project config (an object with any of rules, overrides, wordpress, php)
@@ -59,12 +60,13 @@ const maskMegaLines = (lines) => {
 
 // Returns, for C#, the comments as its masker reads them, which place annotations for catch
 // ownership in suppressions.js; null for any other language.
-const runTextPasses = (content, lines, filePath, relativePath, ruleConfig, violations) => {
+const runTextPasses = (content, lines, filePath, relativePath, ruleConfig, violations, atoms) => {
   const textLines = maskMegaLines(lines);
   checkTypographyEmDash(content, lines, relativePath, violations);
   checkMockDataPatterns(content, textLines, relativePath, violations);
   checkSlopTextPatterns(content, textLines, relativePath, violations);
-  checkExtendedTextPatterns(content, textLines, relativePath, filePath, violations, ruleConfig);
+  checkExtendedTextPatterns(content, textLines, relativePath, filePath, violations, ruleConfig, atoms);
+  checkAtomBypassControl(content, filePath, relativePath, violations, atoms);
   const isCSharp = getLanguageForFile(filePath)?.id === 'csharp';
   if (!isCSharp) return null;
   analyzeCSharpCode(content, relativePath, violations, ruleConfig);
@@ -133,7 +135,7 @@ const collectRawViolations = (content, filePath, relativePath, options, config) 
   let coverageReason = null;
   let parserComments = null;
   const lines = content.split('\n');
-  const maskedComments = runTextPasses(content, lines, filePath, relativePath, ruleConfig, violations);
+  const maskedComments = runTextPasses(content, lines, filePath, relativePath, ruleConfig, violations, config.atoms);
   const isPhp = isPhpPath(filePath);
   if (isPhp) return collectPhpViolations(content, filePath, relativePath, options, config, violations);
 

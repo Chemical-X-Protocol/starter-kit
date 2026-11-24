@@ -1,4 +1,5 @@
 // `chemx typecheck`: run the project's type checker silently and report a tri-state verdict.
+import path from 'node:path';
 import { executeBuild } from './build/executor.js';
 import { findProjectRoot } from './build/detector.js';
 import { ANSI } from './theme.js';
@@ -19,7 +20,10 @@ const TYPECHECK_ARGS = {
 
 const TYPECHECK_HELP = [
   `${ANSI.BOLD}USAGE${ANSI.RESET}`,
-  '  chemx typecheck [options] [-- <command>]',
+  '  chemx typecheck [path...] [options] [-- <command>]',
+  '',
+  '  Optional paths (files or folders) filter the diagnostics: the checker still runs over the whole',
+  '  project, but only errors under those paths are reported and decide the verdict.',
   '',
   '  Uses the "typecheck" script when present, else the local vue-tsc / svelte-check / tsc.',
   '  A missing checker is reported as inconclusive (exit 3), never as clean.',
@@ -51,11 +55,37 @@ const typecheckBody = (report) => {
   if (hasNoDiagnostics) {
     return `\n  ${ANSI.RED}✖${ANSI.RESET} ${ANSI.BOLD}TypeScript Execution Error:${ANSI.RESET} ${report.executionError}\n\n`;
   }
-  const out = [`\n  ${ANSI.RED}✖${ANSI.RESET} ${ANSI.BOLD}TypeScript Errors (${report.errorCount} found)${ANSI.RESET}`];
-  for (const err of report.errors.slice(0, 10)) out.push(`    ${ANSI.CYAN}${err.file}:${err.line}:${err.column}${ANSI.RESET} [${err.code}] ${err.message}`);
-  const hasMore = report.errors.length > 10;
-  if (hasMore) out.push(`    ${ANSI.DIM}...and ${report.errors.length - 10} more diagnostics${ANSI.RESET}`);
+  const scope = report.filter ? ` under ${report.filter.join(', ')}` : '';
+  const out = [`\n  ${ANSI.RED}✖${ANSI.RESET} ${ANSI.BOLD}TypeScript Errors (${report.errorCount} found${scope})${ANSI.RESET}`];
+  const byFile = countByFile(report.errors);
+  for (const [file, count] of byFile.slice(0, MAX_FILES)) out.push(`    ${ANSI.CYAN}${file}${ANSI.RESET} ${ANSI.DIM}(${count})${ANSI.RESET}`);
+  const hasMoreFiles = byFile.length > MAX_FILES;
+  if (hasMoreFiles) out.push(`    ${ANSI.DIM}...${byFile.length - MAX_FILES} more files${ANSI.RESET}`);
+  for (const err of report.errors.slice(0, MAX_DIAGNOSTICS)) out.push(`    ${ANSI.CYAN}${err.file}:${err.line}:${err.column}${ANSI.RESET} [${err.code}] ${err.message}`);
+  const hasMore = report.errors.length > MAX_DIAGNOSTICS;
+  if (hasMore) out.push(`    ${ANSI.DIM}...${report.errors.length - MAX_DIAGNOSTICS} more${ANSI.RESET}`);
+  const hiddenOutside = report.outsideFilterCount > 0;
+  if (hiddenOutside) out.push(`    ${ANSI.DIM}(${report.outsideFilterCount} more errors outside the filter)${ANSI.RESET}`);
   return `${out.join('\n')}\n\n`;
+};
+
+const MAX_FILES = 20;
+const MAX_DIAGNOSTICS = 30;
+
+const countByFile = (errors) => {
+  const counts = new Map();
+  for (const err of errors) counts.set(err.file, (counts.get(err.file) || 0) + 1);
+  return [...counts.entries()].sort((a, b) => b[1] - a[1]);
+};
+
+const toFilterPrefix = (base, cwd, raw) => {
+  const relative = path.relative(cwd, path.resolve(base, raw)).split(path.sep).join('/');
+  return relative.replace(/\/+$/, '');
+};
+
+const isUnderFilter = (file, prefixes) => {
+  const normalized = String(file).replace(/\\/g, '/').replace(/^\.\//, '');
+  return prefixes.some((prefix) => prefix === '' || normalized === prefix || normalized.startsWith(`${prefix}/`));
 };
 
 const formatTypecheckReport = (report) => `${typecheckBody(report)}${sharedRunNote(report)}`;
@@ -100,7 +130,7 @@ export const runTypecheckAudit = async (rawArgs = [], isCli = false, options = {
   }
 
   const customCmd = parsed.command || options.command;
-  const argError = describeArgErrors(parsed, 'typecheck', { strayHint: 'typecheck always checks the whole project (use -- <command> for a custom checker)' });
+  const argError = describeArgErrors(parsed, 'typecheck');
   if (argError) return emit(earlyReport(STATUS.FAIL, customCmd || 'typecheck', { reason: 'USAGE', executionError: argError }), output);
 
   const cwd = findProjectRoot(options.cwd || process.cwd());
@@ -136,8 +166,14 @@ export const runTypecheckAudit = async (rawArgs = [], isCli = false, options = {
   const isQueued = line.queued === true;
   if (isQueued) return emit(earlyReport(STATUS.INCONCLUSIVE, plan.command, queuedFields(line, 'typecheck')), output);
   const { execution } = line;
-  const errors = parseTypecheckOutput(execution.stdout, execution.stderr);
-  const status = typecheckStatusOf(execution, errors);
+  const allErrors = parseTypecheckOutput(execution.stdout, execution.stderr);
+  const hasFilter = parsed.positionals.length > 0;
+  const prefixes = parsed.positionals.map((p) => toFilterPrefix(options.cwd || process.cwd(), cwd, p));
+  const errors = hasFilter ? allErrors.filter((e) => isUnderFilter(e.file, prefixes)) : allErrors;
+  const outsideFilterCount = allErrors.length - errors.length;
+  // Filtered-out diagnostics are not this caller's failures: a non-zero exit explained by them is a pass for the scope.
+  const isScopedClean = hasFilter && errors.length === 0 && allErrors.length > 0 && !execution.timedOut;
+  const status = isScopedClean ? STATUS.PASS : typecheckStatusOf(execution, errors);
   const hasBareFailure = status === STATUS.FAIL && errors.length === 0;
 
   // A `script:<name>` checker repeats `<pm> run <name>` from command; leave it out so the
@@ -154,6 +190,8 @@ export const runTypecheckAudit = async (rawArgs = [], isCli = false, options = {
     errorCount: errors.length,
     executionError: describeExecutionError(execution, hasBareFailure, timeoutMs),
     errors,
+    filter: hasFilter ? prefixes.map((p) => p || '.') : null,
+    outsideFilterCount: hasFilter ? outsideFilterCount : null,
     ...sharedRunField(line.shared)
   };
   return emit(report, output);

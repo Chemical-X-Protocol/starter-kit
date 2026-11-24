@@ -103,6 +103,7 @@ export const loadProjectConfig = (cwd = process.cwd(), rawArgs = []) => {
     pillars: readPillarSelection(cwd, fileConfig),
     wordpress: fileConfig.raw?.wordpress,
     php: fileConfig.raw?.php,
+    atoms: fileConfig.raw?.atoms,
     languages: normalizeLanguagesConfig(fileConfig.raw?.languages),
     raw: fileConfig.raw || {},
     stage: fileConfig.raw?.stage || 'strict'

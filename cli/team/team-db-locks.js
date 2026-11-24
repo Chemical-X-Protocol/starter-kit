@@ -91,15 +91,22 @@ export const adviseMissingPath = (db, filePath, options = {}) => {
   return { absPath, suggestion, from: scope.from };
 };
 
+// A missing file in a directory that exists is the normal "about to create it" case (#7812): it is
+// leased and flagged newFile. Still refused: a missing parent directory (a doubled prefix or typo)
+// and any path with a "did you mean" hit elsewhere (#4544).
 const missingPathRefusal = (db, filePath, options) => {
   const advice = adviseMissingPath(db, filePath, options);
   if (!advice) return null;
+  const hasParent = fs.existsSync(path.dirname(advice.absPath));
+  const isNewFile = hasParent && !advice.suggestion;
+  if (isNewFile) return { newFile: true };
   const hint = advice.suggestion ? ` Did you mean ${advice.suggestion}? (relative to ${advice.from})` : '';
+  const reason = hasParent ? '' : ' Its directory does not exist either.';
   return {
     granted: false,
     reason: 'path_not_found',
     suggestion: advice.suggestion,
-    message: `${filePath} does not exist (looked for ${advice.absPath}); no lease was taken.${hint} Pass --new to lease a file you are about to create.`
+    message: `${filePath} does not exist (looked for ${advice.absPath}); no lease was taken.${reason}${hint} Pass --new to lease a file whose directory you are about to create.`
   };
 };
 
@@ -117,7 +124,9 @@ export const requestFileLock = (db, filePath, agentId, options = {}) => {
 
   const mustExist = options.requireExisting === true;
   const missing = mustExist ? missingPathRefusal(db, filePath, options) : null;
-  if (missing) return missing;
+  const isRefused = Boolean(missing) && !missing.newFile;
+  if (isRefused) return missing;
+  const newFileNote = missing ? { newFile: true } : {};
 
   const cleanId = normalizeAgentId(agentId);
   const pid = typeof options.pid === 'number' ? options.pid : 0;
@@ -154,7 +163,7 @@ export const requestFileLock = (db, filePath, agentId, options = {}) => {
       });
 
       const lapseNote = lapse ? { previousLapse: lapse } : {};
-      return { granted: true, lease: { file_path: cleanPath, locked_by: cleanId, expires_at: expiresAt, pid }, ...lapseNote };
+      return { granted: true, lease: { file_path: cleanPath, locked_by: cleanId, expires_at: expiresAt, pid }, ...newFileNote, ...lapseNote };
     }
 
     const queued = enqueueWaiter(db, cleanPath, cleanId, existingLease, options, now);

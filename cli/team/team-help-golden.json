@@ -132,7 +132,7 @@
     "    \u001b[33m--as\u001b[0m <@agent>            Agent handle (default: CHEMX_AGENT_ID, then the session handle)",
     "    \u001b[33m--root\u001b[0m <dir>             Run as if from <dir>: relative paths and the board come from it",
     "    \u001b[33m--purpose\u001b[0m \"<reason>\"      Reason or intent for acquiring lock",
-    "    \u001b[33m--new\u001b[0m                    acquire: lease a file that does not exist yet",
+    "    \u001b[33m--new\u001b[0m                    acquire: also lease a path whose directory is missing",
     "    \u001b[33m--priority\u001b[0m <1-5>         Priority in FIFO wait queue (1 = highest, default: 2)",
     "    \u001b[33m--pid\u001b[0m <pid>              Optional process PID for crash-recovery lease reclamation",
     "    \u001b[33m--json\u001b[0m                   Output machine-readable JSON format",

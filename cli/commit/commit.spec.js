@@ -86,6 +86,24 @@ test('refuses a file that is neither tracked nor on disk, and one outside the re
   assert.match(outside.refusals.join('\n'), /outside this repository/);
 });
 
+test('commits a deletion, whether staged with git rm or only removed from disk (#7813)', async (t) => {
+  const { root, taskId } = makeRepo(t);
+  write(root, 'gone1.txt', '1\n');
+  write(root, 'gone2.txt', '2\n');
+  git(root, ['add', 'gone1.txt', 'gone2.txt']);
+  git(root, ['commit', '-q', '-m', 'add gones']);
+  git(root, ['rm', '-q', 'gone1.txt']);
+  const staged = await run(root, ['gone1.txt', '-m', `drop 1 (#${taskId})`]);
+  assert.equal(staged.ok, true, (staged.refusals || []).join('\n'));
+  assert.deepEqual(headFiles(root), ['gone1.txt']);
+  fs.rmSync(path.join(root, 'gone2.txt'));
+  const unstaged = await run(root, ['gone2.txt', '-m', `drop 2 (#${taskId})`]);
+  assert.equal(unstaged.ok, true, (unstaged.refusals || []).join('\n'));
+  assert.deepEqual(headFiles(root), ['gone2.txt']);
+  const never = await run(root, ['nope.txt', '-m', `x (#${taskId})`]);
+  assert.match(never.refusals.join('\n'), /not tracked and not on disk: nope\.txt/);
+});
+
 test('a peer\'s staged path is warned about, left staged and never committed', async (t) => {
   const { root, taskId } = makeRepo(t);
   write(root, 'other.txt', 'o\n');

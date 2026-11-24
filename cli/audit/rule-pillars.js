@@ -11,6 +11,7 @@ export const RULE_PRODUCT_PILLARS = Object.freeze({
   BUNDLED_MINIFIED_SOURCE: 'lineBudgets',
   LINE_BUDGET_MOLECULE: 'lineBudgets',
   STRUCTURAL_WEIGHT_EXCEEDED: 'lineBudgets',
+  ATOM_BYPASS_CONTROL: 'zeroRawDom',
   VIEW_MONOLITH: 'tableOfContentsViews',
   RENDER_TREE_DEPTH_EXCEEDED: 'tableOfContentsViews',
   HOOK_SATURATION: 'composableContracts',

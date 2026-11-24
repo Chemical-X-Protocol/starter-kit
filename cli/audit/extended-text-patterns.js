@@ -3,6 +3,7 @@ import path from 'node:path';
 import { RULE_REGISTRY } from './rules-registry.js';
 import { ruleTree } from '../rules.js';
 import { toResultSync } from './rules-helpers.js';
+import { normalizeAtomsConfig } from './atom-bypass.js';
 import {
   isComponentExtension,
   isTemplateExtension,
@@ -247,7 +248,13 @@ export const checkControllerViewContract = (filePath, relativePath, content, vio
   }
 };
 
-export const checkExtendedTextPatterns = (content, lines, relativePath, filePath, violations, config = {}) => {
+const clickableContainerDirective = (fallback, atoms) => {
+  const atom = normalizeAtomsConfig(atoms)?.replacements.button;
+  const isAtomConfigured = Boolean(atom) && Boolean(atoms?.replacements?.button);
+  return isAtomConfigured ? `Use <${atom}> (or role="button" + keyboard handling inside an atom)` : fallback;
+};
+
+export const checkExtendedTextPatterns = (content, lines, relativePath, filePath, violations, config = {}, atoms = null) => {
   checkMoleculeCoLocatedTest(filePath, relativePath, violations, config);
   checkControllerViewContract(filePath, relativePath, content, violations);
 
@@ -358,7 +365,7 @@ export const checkExtendedTextPatterns = (content, lines, relativePath, filePath
         rule: 'A11Y_CLICKABLE_NON_SEMANTIC',
         severity: meta.severity,
         pillar: meta.pillar,
-        directive: meta.directive
+        directive: clickableContainerDirective(meta.directive, atoms)
       });
     }
 
