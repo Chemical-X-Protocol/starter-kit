@@ -27,7 +27,9 @@ const holderNotice = (res) => {
 
 const lapseNote = (res) => (res.previousLapse ? ` (your earlier lease expired ${clockTime(res.previousLapse.expiredAt)})` : '');
 
-const grantedLine = (file, res) => `${GREEN}✔${RESET} ${file} granted until ${hhmm(res.lease.expires_at)}${lapseNote(res)}`;
+const newNote = (res) => (res.newFile ? ' (new file)' : '');
+
+const grantedLine = (file, res) => `${GREEN}✔${RESET} ${file} granted until ${hhmm(res.lease.expires_at)}${newNote(res)}${lapseNote(res)}`;
 
 const queuedLine = (file, res) => `${YELLOW}⏳${RESET} ${file} ${res.requeued ? 'still queued' : 'queued'} behind ${res.currentHolder} (position ${res.position}, ${holderNotice(res)})`;
 

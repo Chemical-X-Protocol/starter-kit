@@ -42,7 +42,7 @@ export const lockCardOptions = [
   '    \x1b[33m--as\x1b[0m <@agent>            Agent handle (default: CHEMX_AGENT_ID, then the session handle)',
   '    \x1b[33m--root\x1b[0m <dir>             Run as if from <dir>: relative paths and the board come from it',
   '    \x1b[33m--purpose\x1b[0m "<reason>"      Reason or intent for acquiring lock',
-  '    \x1b[33m--new\x1b[0m                    acquire: lease a file that does not exist yet',
+  '    \x1b[33m--new\x1b[0m                    acquire: also lease a path whose directory is missing',
   '    \x1b[33m--priority\x1b[0m <1-5>         Priority in FIFO wait queue (1 = highest, default: 2)',
   '    \x1b[33m--pid\x1b[0m <pid>              Optional process PID for crash-recovery lease reclamation',
   '    \x1b[33m--json\x1b[0m                   Output machine-readable JSON format',

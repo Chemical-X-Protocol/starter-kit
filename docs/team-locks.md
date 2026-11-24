@@ -19,6 +19,13 @@ and what each tool tells you. Every behavior below is covered by a spec in `cli/
 | `chemx run [--as=@me] -- <command...>` | Runs the command with your own terminal and renews your leases every 60 seconds while it runs (see below). |
 | `--root=<dir>` (or `--root <dir>`) on `lock` and `unlock` | Run as if from `<dir>`: relative paths resolve from it and the board is the one that directory belongs to. A `<dir>` that is not a directory is refused (`root_not_found`, exit 1). |
 
+## Leasing a file you are about to create (#7812)
+
+`lock acquire` leases a file that does not exist yet when its directory exists; the line reads
+`✔ src/new.js granted until 14:05 (new file)` (`newFile: true` in JSON). The typo protection of #4544 stays:
+a path whose directory is missing (a doubled prefix such as `kit/kit/x.js`) or that has a "did you mean" hit
+elsewhere is refused with no lease. `--new` still allows a missing directory (it creates nothing itself).
+
 ## Several paths and one line each (#6747)
 
 `lock acquire` (and `release`, `unlock`) take any number of paths, each its own argument; a repeated path is
@@ -27,7 +34,7 @@ handled once. Every path gets exactly one line on stdout, in the order given, so
 ```
 ✔ src/a.js granted until 14:05
 ⏳ src/b.js queued behind @sonnet-k1 (position 1, holder notified)
-✕ src/nope.js refused: does not exist (looked for /repo/src/nope.js); no lease was taken. Pass --new to lease a file you are about to create.
+✕ src/nope.js refused: does not exist (looked for /repo/src/nope.js); no lease was taken. Its directory does not exist either. Pass --new to lease a file whose directory you are about to create.
 Any chemx command run as this handle extends it to 5 minutes from then; with no chemx activity it lapses. If someone queues ...
 ```
 

@@ -76,12 +76,12 @@ test('three paths in one call lease all three: one line each, the renewal note o
 test('mixed call: granted, queued behind the holder and refused each get a line on stdout', (t) => {
   const { root, db } = makeProject(t);
   requestFileLock(db, 'b.js', '@spec-holder', { cwd: root });
-  const run = lockCli(db, root, ['a.js', 'b.js', 'nope.js']);
+  const run = lockCli(db, root, ['a.js', 'b.js', 'nodir/nope.js']);
   const lines = linesOf(run.out);
   assert.equal(lines.length, 4, run.out);
   assert.match(lines[0], /^✔ a\.js granted until \d\d:\d\d$/);
   assert.match(lines[1], /^⏳ b\.js queued behind @spec-holder \(position 1, holder notified\)$/);
-  assert.match(lines[2], /^✕ nope\.js refused: .*does not exist/);
+  assert.match(lines[2], /^✕ nodir\/nope\.js refused: .*does not exist/);
   assert.match(lines[3], /^Any chemx command/);
   assert.equal(run.err, '', 'every path line is on stdout');
   assert.equal(run.exit, 1, 'a refused path sets exit 1; a queued one does not');
