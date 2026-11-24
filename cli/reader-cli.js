@@ -223,6 +223,8 @@ export const runReaderCli = (args, isCli = false) => {
     if (isCli) process.exit(0);
     return res;
   } catch (err) {
+    const isContainedBatchExit = Boolean(err && err.isBatchExit);
+    if (isContainedBatchExit) throw err; // a contained process.exit() inside a chemx do batch is not a failure to report
     const msg = err instanceof Error ? err.message : String(err);
     process.stderr.write(`${ANSI.RED}✕ ${msg}${ANSI.RESET}\n`);
     if (isCli) process.exit(1);
