@@ -1,7 +1,21 @@
 {
   "name": "@chemx/starter-kit",
   "version": "26.11.24-178",
-  "description": "Chemical X Protocol: Private drop-in architecture starter kit and capsule generator",
+  "description": "Local SQLite AST index, failures-only verify, MCP server, and multi-agent swarm coordinator for AI coding agents (Claude Code, Cursor, Codex).",
+  "keywords": [
+    "chemx",
+    "mcp",
+    "model-context-protocol",
+    "claude-code",
+    "cursor",
+    "codex",
+    "ai-coding-agent",
+    "ast",
+    "codebase-index",
+    "token-optimization",
+    "multi-agent",
+    "cli"
+  ],
   "type": "module",
   "bin": {
     "create-chemx": "cli/create.js",
